@@ -56,11 +56,8 @@
 //   Note: This has changed from `GURL origin` to StorageKey but the name will
 //   be updated in the future to avoid a migration.
 //   TODO(crbug.com/1199077): Update name during a migration to Version 3.
-//   key: "INITDATA_UNIQUE_ORIGIN:" + <StorageKey 'key'.origin> + "/" + [ "^0" +
-//   <StorageKey `key`.top_level_site> ]
-//   - or -
-//   key: "INITDATA_UNIQUE_ORIGIN:" + <StorageKey 'key'.origin> + "/" + "^1" +
-//   <StorageKey 'nonce'.High64Bits> + "^2" + <StorageKey 'nonce'.Low64Bits>
+//   See StorageKey::Deserialize() for more information on the format.
+//   key: "INITDATA_UNIQUE_ORIGIN:" + <StorageKey>
 //   value: <empty>
 //
 //   key: "PRES:" + <int64_t 'purgeable_resource_id'>
@@ -69,14 +66,9 @@
 //   Note: This has changed from `GURL origin` to StorageKey but the name will
 //   be updated in the future to avoid a migration.
 //   TODO(crbug.com/1199077): Update name during a migration to Version 3.
-//   key: "REG:" + <StorageKey 'key'.origin> + "/" + [ "^0" + <StorageKey
-//   `key`.top_level_site> + "^3" + <StorageKey `key`.ancestor_chain_bit> ] +
-//   '\x00' + <int64_t 'registration_id'>
-//   - or -
-//   key: "REG:" + <StorageKey 'key'.origin> + "/" + "^1" + <StorageKey
-//   'nonce'.High64Bits> + "^2" + <StorageKey 'nonce'.Low64Bits> + '\x00' +
-//   <int64_t 'registration_id'>
-//    (ex. "REG:http://example.com\x00123456")
+//   See StorageKey::Deserialize() for more information on the format.
+//   key: "REG:" + <StorageKey> + '\x00' + <int64_t 'registration_id'>
+//    (ex. "REG:https://example.com/\x00123456")
 //   value: <ServiceWorkerRegistrationData (except for the StorageKey)
 //   serialized as a string>
 //
@@ -101,12 +93,9 @@
 //   Note: This has changed from `GURL origin` to StorageKey but the name will
 //   be updated in the future to avoid a migration.
 //   TODO(crbug.com/1199077): Update name during a migration to Version 3.
+//   See StorageKey::Deserialize() for more information on the format.
 //   key: "REGID_TO_ORIGIN:" + <int64_t 'registration_id'>
-//   value: <StorageKey 'key'.origin> + "/" + [ "^0" + <StorageKey
-//   `key`.top_level_site> + "^3" + <StorageKey `key`.ancestor_chain_bit>]
-//   - or -
-//   value: <StorageKey 'key'.origin> + "/" + "^1" + <StorageKey
-//   'nonce'.High64Bits> + "^2" + <StorageKey 'nonce'.Low64Bits>
+//   value: <StorageKey>
 //
 //   OBSOLETE: https://crbug.com/539713
 //   key: "INITDATA_DISKCACHE_MIGRATION_NOT_NEEDED"
@@ -894,6 +883,56 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::UpdateFetchHandlerType(
   return WriteBatch(&batch);
 }
 
+ServiceWorkerDatabase::Status
+ServiceWorkerDatabase::UpdateResourceSha256Checksums(
+    int64_t registration_id,
+    const blink::StorageKey& key,
+    const base::flat_map<int64_t, std::string>& updated_sha256_checksums) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  leveldb::WriteBatch batch;
+
+  Status status = LazyOpen(false);
+  if (IsNewOrNonexistentDatabase(status)) {
+    return Status::kErrorNotFound;
+  }
+  if (status != Status::kOk) {
+    return status;
+  }
+
+  mojom::ServiceWorkerRegistrationDataPtr registration;
+  status = ReadRegistrationData(registration_id, key, &registration);
+  if (status != Status::kOk) {
+    return status;
+  }
+
+  std::vector<mojom::ServiceWorkerResourceRecordPtr> resources;
+  status = ReadResourceRecords(*registration, &resources);
+  if (status != Status::kOk) {
+    return status;
+  }
+
+  std::set<int64_t> updated_resource_ids;
+  for (const auto& resource : resources) {
+    if (!updated_resource_ids.insert(resource->resource_id).second) {
+      // The database wrongly contains the same resource id.
+      return Status::kErrorCorrupted;
+    }
+    auto itr = updated_sha256_checksums.find(resource->resource_id);
+    if (itr == updated_sha256_checksums.end()) {
+      return Status::kErrorNotFound;
+    }
+    resource->sha256_checksum = itr->second;
+    WriteResourceRecordInBatch(*resource, registration->version_id, &batch);
+  }
+
+  // Check if all updated_sha256_checksums are used.
+  if (updated_resource_ids.size() != updated_sha256_checksums.size()) {
+    return Status::kErrorNotFound;
+  }
+
+  return WriteBatch(&batch);
+}
+
 ServiceWorkerDatabase::Status ServiceWorkerDatabase::DeleteRegistration(
     int64_t registration_id,
     const blink::StorageKey& key,
@@ -1453,29 +1492,43 @@ ServiceWorkerDatabase::DeleteAllDataForStorageKeys(
     return status;
   leveldb::WriteBatch batch;
 
-  for (const blink::StorageKey& key : keys) {
-    if (key.origin().opaque())
-      return Status::kErrorFailed;
+  std::vector<mojom::ServiceWorkerRegistrationDataPtr> registrations;
+  status = GetAllRegistrations(&registrations);
+  if (status != Status::kOk) {
+    return status;
+  }
 
-    // Delete from the unique origin list.
-    batch.Delete(CreateUniqueOriginKey(key));
+  // Filter all registrations, using the criteria in the doc comment to
+  // determine which keys match.
+  for (const mojom::ServiceWorkerRegistrationDataPtr& reg : registrations) {
+    blink::StorageKey& key = reg->key;
 
-    std::vector<mojom::ServiceWorkerRegistrationDataPtr> registrations;
-    status = GetRegistrationsForStorageKey(key, &registrations, nullptr);
-    if (status != Status::kOk)
-      return status;
+    for (const blink::StorageKey& requested_key : keys) {
+      // Only the origin of the requested key is relevant.
+      const url::Origin& requested_origin = requested_key.origin();
 
-    // Delete registrations, resource records and user data.
-    for (const auto& data : registrations) {
-      batch.Delete(CreateRegistrationKey(data->registration_id, key));
-      batch.Delete(CreateRegistrationIdToStorageKey(data->registration_id));
+      if (requested_origin.opaque()) {
+        return Status::kErrorFailed;
+      }
 
-      status = DeleteResourceRecords(data->version_id,
-                                     newly_purgeable_resources, &batch);
+      auto match = key.origin() == requested_origin;
+      match = match ||
+              (key.IsThirdPartyContext() &&
+               key.top_level_site() == net::SchemefulSite(requested_origin));
+      if (!match) {
+        continue;
+      }
+
+      batch.Delete(CreateUniqueOriginKey(key));
+      batch.Delete(CreateRegistrationKey(reg->registration_id, key));
+      batch.Delete(CreateRegistrationIdToStorageKey(reg->registration_id));
+
+      status = DeleteResourceRecords(reg->version_id, newly_purgeable_resources,
+                                     &batch);
       if (status != Status::kOk)
         return status;
 
-      status = DeleteUserDataForRegistration(data->registration_id, &batch);
+      status = DeleteUserDataForRegistration(reg->registration_id, &batch);
       if (status != Status::kOk)
         return status;
     }
@@ -1803,48 +1856,52 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::ParseRegistrationData(
     }
     switch (data.cross_origin_embedder_policy_value()) {
       case ServiceWorkerRegistrationData::REQUIRE_CORP:
-        (*out)->cross_origin_embedder_policy.value =
-            network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp;
-        (*out)->policy_container_policies->cross_origin_embedder_policy =
+        (*out)->policy_container_policies->cross_origin_embedder_policy.value =
             network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp;
         break;
       case ServiceWorkerRegistrationData::CREDENTIALLESS:
-        (*out)->cross_origin_embedder_policy.value =
-            network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless;
-        (*out)->policy_container_policies->cross_origin_embedder_policy =
+        (*out)->policy_container_policies->cross_origin_embedder_policy.value =
             network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless;
         break;
       case ServiceWorkerRegistrationData::NONE_OR_NOT_EXIST:
-        (*out)->cross_origin_embedder_policy.value =
-            network::mojom::CrossOriginEmbedderPolicyValue::kNone;
-        (*out)->policy_container_policies->cross_origin_embedder_policy =
+        (*out)->policy_container_policies->cross_origin_embedder_policy.value =
             network::mojom::CrossOriginEmbedderPolicyValue::kNone;
     }
   }
 
   if (data.has_cross_origin_embedder_policy_reporting_endpoint()) {
-    (*out)->cross_origin_embedder_policy.reporting_endpoint =
+    (*out)
+        ->policy_container_policies->cross_origin_embedder_policy
+        .reporting_endpoint =
         data.cross_origin_embedder_policy_reporting_endpoint();
   }
 
   if (data.has_cross_origin_embedder_policy_report_only_value()) {
     switch (data.cross_origin_embedder_policy_report_only_value()) {
       case ServiceWorkerRegistrationData::REQUIRE_CORP:
-        (*out)->cross_origin_embedder_policy.report_only_value =
+        (*out)
+            ->policy_container_policies->cross_origin_embedder_policy
+            .report_only_value =
             network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp;
         break;
       case ServiceWorkerRegistrationData::CREDENTIALLESS:
-        (*out)->cross_origin_embedder_policy.report_only_value =
+        (*out)
+            ->policy_container_policies->cross_origin_embedder_policy
+            .report_only_value =
             network::mojom::CrossOriginEmbedderPolicyValue::kCredentialless;
         break;
-      default:
-        (*out)->cross_origin_embedder_policy.report_only_value =
+      case ServiceWorkerRegistrationData::NONE_OR_NOT_EXIST:
+        (*out)
+            ->policy_container_policies->cross_origin_embedder_policy
+            .report_only_value =
             network::mojom::CrossOriginEmbedderPolicyValue::kNone;
     }
   }
 
   if (data.has_cross_origin_embedder_policy_report_only_reporting_endpoint()) {
-    (*out)->cross_origin_embedder_policy.report_only_reporting_endpoint =
+    (*out)
+        ->policy_container_policies->cross_origin_embedder_policy
+        .report_only_reporting_endpoint =
         data.cross_origin_embedder_policy_report_only_reporting_endpoint();
   }
 
@@ -1906,7 +1963,7 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::ParseRegistrationData(
 }
 
 ServiceWorkerRegistrationData::CrossOriginEmbedderPolicyValue
-ConvertCrossOriginEmbedderPolicyFromMojomToProtocolBuffer(
+ConvertCrossOriginEmbedderPolicyValueFromMojomToProtocolBuffer(
     network::mojom::CrossOriginEmbedderPolicyValue value) {
   switch (value) {
     case network::mojom::CrossOriginEmbedderPolicyValue::kNone:
@@ -2033,24 +2090,6 @@ void ServiceWorkerDatabase::WriteRegistrationDataInBatch(
           ServiceWorkerRegistrationData_ServiceWorkerUpdateViaCacheType>(
           registration.update_via_cache));
 
-  data.set_cross_origin_embedder_policy_value(
-      ConvertCrossOriginEmbedderPolicyFromMojomToProtocolBuffer(
-          registration.cross_origin_embedder_policy.value));
-
-  if (registration.cross_origin_embedder_policy.reporting_endpoint) {
-    data.set_cross_origin_embedder_policy_reporting_endpoint(
-        registration.cross_origin_embedder_policy.reporting_endpoint.value());
-  }
-  data.set_cross_origin_embedder_policy_report_only_value(
-      ConvertCrossOriginEmbedderPolicyFromMojomToProtocolBuffer(
-          registration.cross_origin_embedder_policy.report_only_value));
-  if (registration.cross_origin_embedder_policy
-          .report_only_reporting_endpoint) {
-    data.set_cross_origin_embedder_policy_report_only_reporting_endpoint(
-        registration.cross_origin_embedder_policy.report_only_reporting_endpoint
-            .value());
-  }
-
   switch (registration.ancestor_frame_type) {
     case blink::mojom::AncestorFrameType::kNormalFrame:
       data.set_ancestor_frame_type(ServiceWorkerRegistrationData::NORMAL_FRAME);
@@ -2061,6 +2100,28 @@ void ServiceWorkerDatabase::WriteRegistrationDataInBatch(
   }
 
   if (registration.policy_container_policies) {
+    data.set_cross_origin_embedder_policy_value(
+        ConvertCrossOriginEmbedderPolicyValueFromMojomToProtocolBuffer(
+            registration.policy_container_policies->cross_origin_embedder_policy
+                .value));
+
+    if (registration.policy_container_policies->cross_origin_embedder_policy
+            .reporting_endpoint) {
+      data.set_cross_origin_embedder_policy_reporting_endpoint(
+          registration.policy_container_policies->cross_origin_embedder_policy
+              .reporting_endpoint.value());
+    }
+    data.set_cross_origin_embedder_policy_report_only_value(
+        ConvertCrossOriginEmbedderPolicyValueFromMojomToProtocolBuffer(
+            registration.policy_container_policies->cross_origin_embedder_policy
+                .report_only_value));
+    if (registration.policy_container_policies->cross_origin_embedder_policy
+            .report_only_reporting_endpoint) {
+      data.set_cross_origin_embedder_policy_report_only_reporting_endpoint(
+          registration.policy_container_policies->cross_origin_embedder_policy
+              .report_only_reporting_endpoint.value());
+    }
+
     ServiceWorkerRegistrationData::PolicyContainerPolicies* policies =
         data.mutable_policy_container_policies();
     policies->set_referrer_policy(
@@ -2153,6 +2214,9 @@ ServiceWorkerDatabase::Status ServiceWorkerDatabase::ParseResourceRecord(
   (*out)->resource_id = record.resource_id();
   (*out)->url = url;
   (*out)->size_bytes = record.size_bytes();
+  if (record.has_sha256_checksum()) {
+    (*out)->sha256_checksum = record.sha256_checksum();
+  }
   return Status::kOk;
 }
 
@@ -2177,6 +2241,9 @@ void ServiceWorkerDatabase::WriteResourceRecordInBatch(
   data.set_resource_id(resource.resource_id);
   data.set_url(resource.url.spec());
   data.set_size_bytes(resource.size_bytes);
+  if (resource.sha256_checksum) {
+    data.set_sha256_checksum(*resource.sha256_checksum);
+  }
 
   std::string value;
   bool success = data.SerializeToString(&value);

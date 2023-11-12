@@ -61,7 +61,6 @@ class CursorManager;
 class RenderWidgetHost;
 class RenderWidgetHostViewMac;
 class WebContents;
-class WebCursor;
 
 ///////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewMac
@@ -131,8 +130,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
                    const gfx::Rect& pos,
                    const gfx::Rect& anchor_rect) override;
   void Focus() override;
-  void UpdateCursor(const WebCursor& cursor) override;
-  void DisplayCursor(const WebCursor& cursor) override;
+  void UpdateCursor(const ui::Cursor& cursor) override;
+  void DisplayCursor(const ui::Cursor& cursor) override;
   CursorManager* GetCursorManager() override;
   void OnDidNavigateMainFrameToNewPage() override;
   void SetIsLoading(bool is_loading) override;
@@ -313,7 +312,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   }
 
   // RenderWidgetHostNSViewHostHelper implementation.
-  id GetAccessibilityElement() override;
   id GetRootBrowserAccessibilityElement() override;
   id GetFocusedBrowserAccessibilityElement() override;
   void SetAccessibilityWindow(NSWindow* window) override;
@@ -411,8 +409,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void StopSpeaking() override;
   bool SyncIsSpeaking(bool* is_speaking) override;
   void SyncIsSpeaking(SyncIsSpeakingCallback callback) override;
-  void GetRenderWidgetAccessibilityToken(
-      GetRenderWidgetAccessibilityTokenCallback callback) override;
   void SetRemoteAccessibilityWindowToken(
       const std::vector<uint8_t>& window_token) override;
 
@@ -540,10 +536,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void NotifyHostAndDelegateOnWasShown(
       blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
       final;
-  void RequestPresentationTimeFromHostOrDelegate(
+  void RequestSuccessfulPresentationTimeFromHostOrDelegate(
       blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
       final;
-  void CancelPresentationTimeRequestForHostAndDelegate() final;
+  void CancelSuccessfulPresentationTimeRequestForHostAndDelegate() final;
 
   // Gets a textual view of the page's contents, and passes it to the callback
   // provided.

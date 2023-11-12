@@ -132,10 +132,12 @@ function(absl_cc_library)
   if (${ABSL_BUILD_DLL})
     if(ABSL_ENABLE_INSTALL)
       absl_internal_dll_contains(TARGET ${_NAME} OUTPUT _in_dll)
+      absl_internal_test_dll_contains(TARGET ${_NAME} OUTPUT _in_test_dll)
     else()
       absl_internal_dll_contains(TARGET ${ABSL_CC_LIB_NAME} OUTPUT _in_dll)
+      absl_internal_test_dll_contains(TARGET ${ABSL_CC_LIB_NAME} OUTPUT _in_test_dll)
     endif()
-    if (${_in_dll})
+    if (${_in_dll} OR ${_in_test_dll})
       # This target should be replaced by the DLL
       set(_build_type "dll")
       set(ABSL_CC_LIB_IS_INTERFACE 1)
@@ -150,21 +152,39 @@ function(absl_cc_library)
   endif()
 
   # Generate a pkg-config file for every library:
-  if((_build_type STREQUAL "static" OR _build_type STREQUAL "shared")
-     AND ABSL_ENABLE_INSTALL)
+  if(ABSL_ENABLE_INSTALL)
     if(NOT ABSL_CC_LIB_TESTONLY)
       if(absl_VERSION)
         set(PC_VERSION "${absl_VERSION}")
       else()
         set(PC_VERSION "head")
       endif()
+      if(NOT _build_type STREQUAL "dll")
+        set(LNK_LIB "${LNK_LIB} -labsl_${_NAME}")
+      endif()
       foreach(dep ${ABSL_CC_LIB_DEPS})
         if(${dep} MATCHES "^absl::(.*)")
-	  # Join deps with commas.
-          if(PC_DEPS)
-            set(PC_DEPS "${PC_DEPS},")
+          # for DLL builds many libs are not created, but add
+          # the pkgconfigs nevertheless, pointing to the dll.
+          if(_build_type STREQUAL "dll")
+            # hide this MATCHES in an if-clause so it doesn't overwrite
+            # the CMAKE_MATCH_1 from (${dep} MATCHES "^absl::(.*)")
+            if(NOT PC_DEPS MATCHES "abseil_dll")
+              # Join deps with commas.
+              if(PC_DEPS)
+                set(PC_DEPS "${PC_DEPS},")
+              endif()
+              # don't duplicate dll-dep if it exists already
+              set(PC_DEPS "${PC_DEPS} abseil_dll = ${PC_VERSION}")
+              set(LNK_LIB "${LNK_LIB} -labseil_dll")
+            endif()
+          else()
+            # Join deps with commas.
+            if(PC_DEPS)
+              set(PC_DEPS "${PC_DEPS},")
+            endif()
+            set(PC_DEPS "${PC_DEPS} absl_${CMAKE_MATCH_1} = ${PC_VERSION}")
           endif()
-          set(PC_DEPS "${PC_DEPS} absl_${CMAKE_MATCH_1} = ${PC_VERSION}")
         endif()
       endforeach()
       foreach(cflag ${ABSL_CC_LIB_COPTS})
@@ -192,7 +212,7 @@ Description: Abseil ${_NAME} library\n\
 URL: https://abseil.io/\n\
 Version: ${PC_VERSION}\n\
 Requires:${PC_DEPS}\n\
-Libs: -L\${libdir} ${PC_LINKOPTS} $<$<NOT:$<BOOL:${ABSL_CC_LIB_IS_INTERFACE}>>:-labsl_${_NAME}>\n\
+Libs: -L\${libdir} ${PC_LINKOPTS} $<$<NOT:$<BOOL:${ABSL_CC_LIB_IS_INTERFACE}>>:${LNK_LIB}>\n\
 Cflags: -I\${includedir}${PC_CFLAGS}\n")
       INSTALL(FILES "${CMAKE_BINARY_DIR}/lib/pkgconfig/absl_${_NAME}.pc"
               DESTINATION "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
@@ -394,7 +414,7 @@ function(absl_cc_test)
   target_sources(${_NAME} PRIVATE ${ABSL_CC_TEST_SRCS})
   target_include_directories(${_NAME}
     PUBLIC ${ABSL_COMMON_INCLUDE_DIRS}
-    PRIVATE ${GMOCK_INCLUDE_DIRS} ${GTEST_INCLUDE_DIRS}
+    PRIVATE ${absl_gtest_src_dir}/googletest/include ${absl_gtest_src_dir}/googlemock/include
   )
 
   if (${ABSL_BUILD_DLL})
@@ -402,6 +422,7 @@ function(absl_cc_test)
       PUBLIC
         ${ABSL_CC_TEST_DEFINES}
         ABSL_CONSUME_DLL
+        ABSL_CONSUME_TEST_DLL
         GTEST_LINKED_AS_SHARED_LIBRARY=1
     )
 

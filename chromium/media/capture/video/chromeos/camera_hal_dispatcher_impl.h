@@ -19,6 +19,7 @@
 #include "base/observer_list_types.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread.h"
 #include "base/unguessable_token.h"
@@ -131,6 +132,19 @@ class CAPTURE_EXPORT CameraPrivacySwitchObserver
       cros::mojom::CameraPrivacySwitchState state) {}
 };
 
+// CameraEffectObserver is the interface to observe the change of camera
+// effects, the observers will be notified with the new effect configurations.
+class CAPTURE_EXPORT CameraEffectObserver : public base::CheckedObserver {
+ public:
+  ~CameraEffectObserver() override = default;
+
+  // Expose the current camera effects to the observers. If the new_effect is
+  // null, it indicates that something goes wrong and the set camera effects
+  // request is rejected before the mojo call.
+  virtual void OnCameraEffectChanged(
+      const cros::mojom::EffectsConfigPtr& new_effects) {}
+};
+
 // The CameraHalDispatcherImpl hosts and waits on the unix domain socket
 // /var/run/camera3.sock.  CameraHalServer and CameraHalClients connect to the
 // unix domain socket to create the initial Mojo connections with the
@@ -159,6 +173,9 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   using CameraEffectsControllerCallback =
       base::RepeatingCallback<void(cros::mojom::EffectsConfigPtr,
                                    cros::mojom::SetEffectResult)>;
+
+  using CameraEffectObserverCallback =
+      base::OnceCallback<void(cros::mojom::EffectsConfigPtr)>;
 
   static CameraHalDispatcherImpl* GetInstance();
 
@@ -199,6 +216,17 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   // Removes the observer. A previously-added observer must be removed before
   // being destroyed.
   void RemoveCameraPrivacySwitchObserver(CameraPrivacySwitchObserver* observer);
+
+  // Adds an observer that watches for camera effect configuration change.
+  // Observer would be immediately notified of the current camera effect
+  // configuration changes.
+  void AddCameraEffectObserver(
+      CameraEffectObserver* observer,
+      CameraEffectObserverCallback camera_effect_observer_callback);
+
+  // Removes the observer. A previously-added observer must be removed before
+  // being destroyed.
+  void RemoveCameraEffectObserver(CameraEffectObserver* observer);
 
   // Gets the current camera software privacy switch state.
   void GetCameraSWPrivacySwitchState(
@@ -338,7 +366,8 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
       cros::mojom::CameraHalServer::GetAutoFramingSupportedCallback callback);
 
   // Calls the `camera_hal_server_` to set the camera effects.
-  void SetCameraEffectsOnProxyThread(cros::mojom::EffectsConfigPtr config);
+  void SetCameraEffectsOnProxyThread(cros::mojom::EffectsConfigPtr config,
+                                     bool is_from_register);
 
   // Calls the `camera_hal_server_` to set the initial camera effects.
   void SetInitialCameraEffectsOnProxyThread(
@@ -347,7 +376,12 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
   // Called when camera_hal_server_->SetCameraEffect returns.
   void OnSetCameraEffectsCompleteOnProxyThread(
       cros::mojom::EffectsConfigPtr config,
+      bool is_from_register,
       cros::mojom::SetEffectResult result);
+
+  // Called when new camera effects observer is added.
+  void OnCameraEffectsObserverAddOnProxyThread(
+      CameraEffectObserverCallback camera_effect_observer_callback);
 
   std::string GetDeviceIdFromCameraId(int32_t camera_id);
   base::flat_set<std::string> GetDeviceIdsFromCameraIds(
@@ -414,6 +448,9 @@ class CAPTURE_EXPORT CameraHalDispatcherImpl final
 
   scoped_refptr<base::ObserverListThreadSafe<CameraPrivacySwitchObserver>>
       privacy_switch_observers_;
+
+  scoped_refptr<base::ObserverListThreadSafe<CameraEffectObserver>>
+      camera_effect_observers_;
 
   bool sensor_enabled_ = true;
   std::map<CameraClientObserver*, std::unique_ptr<CameraClientObserver>>

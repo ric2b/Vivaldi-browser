@@ -11,14 +11,14 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
@@ -123,6 +123,47 @@ UpdateService::ErrorCategory ToErrorCategory(
 }
 
 update_client::UpdateClient::CrxStateChangeCallback
+MakeUpdateClientCrxStateChangeCallbackForUpdateCheck(
+    scoped_refptr<update_client::Configurator> config,
+    UpdateService::StateChangeCallback callback) {
+  struct RefCountedState : public base::RefCountedThreadSafe<RefCountedState> {
+   public:
+    RefCountedState() : value(UpdateService::UpdateState::State::kUnknown) {}
+
+    RefCountedState(const RefCountedState&) = delete;
+    RefCountedState& operator=(const RefCountedState&) = delete;
+
+    UpdateService::UpdateState::State value;
+
+   protected:
+    friend class base::RefCountedThreadSafe<RefCountedState>;
+    virtual ~RefCountedState() {}
+  };
+
+  return base::BindRepeating(
+      [](scoped_refptr<update_client::Configurator> config,
+         UpdateService::StateChangeCallback callback,
+         scoped_refptr<RefCountedState> previous_state,
+         update_client::CrxUpdateItem crx_update_item) {
+        // Ignore any state after `kUpdateAvailable`.
+        if (previous_state->value ==
+            UpdateService::UpdateState::State::kUpdateAvailable) {
+          return;
+        }
+
+        UpdateService::UpdateState update_state;
+        update_state.app_id = crx_update_item.id;
+        update_state.state = ToUpdateState(crx_update_item.state);
+        update_state.next_version = crx_update_item.next_version;
+
+        previous_state->value = update_state.state;
+
+        callback.Run(update_state);
+      },
+      config, callback, base::MakeRefCounted<RefCountedState>());
+}
+
+update_client::UpdateClient::CrxStateChangeCallback
 MakeUpdateClientCrxStateChangeCallback(
     scoped_refptr<update_client::Configurator> config,
     UpdateService::StateChangeCallback callback) {
@@ -219,7 +260,8 @@ std::vector<absl::optional<update_client::CrxComponent>> GetComponents(
 UpdateServiceImpl::UpdateServiceImpl(scoped_refptr<Configurator> config)
     : config_(config),
       persisted_data_(
-          base::MakeRefCounted<PersistedData>(config_->GetPrefService())),
+          base::MakeRefCounted<PersistedData>(GetUpdaterScope(),
+                                              config_->GetPrefService())),
       main_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       update_client_(update_client::UpdateClientFactory(config)) {}
 
@@ -245,15 +287,6 @@ void UpdateServiceImpl::RegisterApp(const RegistrationRequest& request,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (request.app_id != kUpdaterAppId) {
     persisted_data_->SetHadApps();
-  }
-  base::Version current_version =
-      persisted_data_->GetProductVersion(request.app_id);
-  if (current_version.IsValid() &&
-      current_version.CompareTo(request.version) == 1) {
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), kRegistrationAlreadyRegistered));
-    return;
   }
   persisted_data_->RegisterApp(request);
   std::move(callback).Run(kRegistrationSuccess);
@@ -315,16 +348,18 @@ void UpdateServiceImpl::RunPeriodicTasks(base::OnceClosure callback) {
             std::move(callback)));
       },
       base::WrapRefCounted(this)));
-  new_tasks.push_back(base::BindOnce(
-      &CheckForUpdatesTask::Run,
-      base::MakeRefCounted<CheckForUpdatesTask>(
-          config_, base::BindOnce(&UpdateServiceImpl::ForceInstall, this,
-                                  base::DoNothing()))));
   new_tasks.push_back(
       base::BindOnce(&CheckForUpdatesTask::Run,
                      base::MakeRefCounted<CheckForUpdatesTask>(
-                         config_, base::BindOnce(&UpdateServiceImpl::UpdateAll,
-                                                 this, base::DoNothing()))));
+                         config_, GetUpdaterScope(),
+                         base::BindOnce(&UpdateServiceImpl::ForceInstall, this,
+                                        base::DoNothing()))));
+  new_tasks.push_back(
+      base::BindOnce(&CheckForUpdatesTask::Run,
+                     base::MakeRefCounted<CheckForUpdatesTask>(
+                         config_, GetUpdaterScope(),
+                         base::BindOnce(&UpdateServiceImpl::UpdateAll, this,
+                                        base::DoNothing()))));
   new_tasks.push_back(
       base::BindOnce(&AutoRunOnOsUpgradeTask::Run,
                      base::MakeRefCounted<AutoRunOnOsUpgradeTask>(
@@ -431,6 +466,7 @@ void UpdateServiceImpl::Update(
     const std::string& install_data_index,
     Priority priority,
     PolicySameVersionUpdate policy_same_version_update,
+    bool do_update_check_only,
     StateChangeCallback state_update,
     Callback callback) {
   VLOG(1) << __func__;
@@ -440,6 +476,25 @@ void UpdateServiceImpl::Update(
   if (IsUpdateDisabledByPolicy(app_id, priority, false, policy)) {
     HandleUpdateDisabledByPolicy(app_id, policy, false, state_update,
                                  std::move(callback));
+    return;
+  }
+
+  if (do_update_check_only) {
+    main_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            &update_client::UpdateClient::Update, update_client_,
+            std::vector<std::string>{app_id},
+            base::BindOnce(&GetComponents, config_, persisted_data_,
+                           AppClientInstallData(),
+                           AppInstallDataIndex(
+                               {std::make_pair(app_id, install_data_index)}),
+                           priority == Priority::kForeground,
+                           /*update_blocked=*/true, policy_same_version_update),
+            MakeUpdateClientCrxStateChangeCallbackForUpdateCheck(config_,
+                                                                 state_update),
+            priority == Priority::kForeground,
+            MakeUpdateClientCallback(std::move(callback))));
     return;
   }
 
@@ -512,7 +567,8 @@ void UpdateServiceImpl::RunInstaller(const std::string& app_id,
                                      const std::string& install_settings,
                                      StateChangeCallback state_update,
                                      Callback callback) {
-  VLOG(1) << __func__;
+  VLOG(1) << __func__ << ": " << app_id << ": " << installer_path << ": "
+          << install_args << ": " << install_data << ": " << install_settings;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   int policy = kPolicyEnabled;
@@ -529,8 +585,9 @@ void UpdateServiceImpl::RunInstaller(const std::string& app_id,
                        ? persisted_data_->GetExistenceCheckerPath(app_id)
                        : base::FilePath());
 
-  // Create a thread runner that:
-  //   1) has SequencedTaskRunnerHandle set, to run `state_update` callback.
+  // Create a task runner that:
+  //   1) has SequencedTaskRunner::CurrentDefaultHandle set, to run
+  //      `state_update` callback.
   //   2) may block, since `RunApplicationInstaller` blocks.
   //   3) has `base::WithBaseSyncPrimitives()`, since `RunApplicationInstaller`
   //      waits on process.
@@ -542,7 +599,7 @@ void UpdateServiceImpl::RunInstaller(const std::string& app_id,
       base::BindOnce(
           [](const AppInfo& app_info, const base::FilePath& installer_path,
              const std::string& install_args, const std::string& install_data,
-             StateChangeCallback state_update) {
+             StateChangeCallback state_update, bool usage_stats_enabled) {
             base::ScopedTempDir temp_dir;
             if (!temp_dir.CreateUniqueTempDir()) {
               return InstallerResult(kErrorApplicationInstallerFailed,
@@ -552,7 +609,7 @@ void UpdateServiceImpl::RunInstaller(const std::string& app_id,
             return RunApplicationInstaller(
                 app_info, installer_path, install_args,
                 WriteInstallerDataToTempFile(temp_dir.GetPath(), install_data),
-                kWaitForAppInstaller,
+                usage_stats_enabled, kWaitForAppInstaller,
                 base::BindRepeating(
                     [](StateChangeCallback state_update,
                        const std::string& app_id, int progress) {
@@ -565,7 +622,8 @@ void UpdateServiceImpl::RunInstaller(const std::string& app_id,
                     },
                     state_update, app_info.app_id));
           },
-          app_info, installer_path, install_args, install_data, state_update),
+          app_info, installer_path, install_args, install_data, state_update,
+          persisted_data_->GetUsageStatsEnabled()),
       base::BindOnce(
           [](StateChangeCallback state_update, const std::string& app_id,
              Callback callback, const InstallerResult& result) {

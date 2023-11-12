@@ -81,7 +81,9 @@ class BASE_EXPORT CheckError {
   // Stream for adding optional details to the error message.
   std::ostream& stream();
 
-  NOMERGE NOT_TAIL_CALLED ~CheckError();
+  // Try really hard to get the call site and callee as separate stack frames in
+  // crash reports.
+  NOMERGE NOINLINE NOT_TAIL_CALLED ~CheckError();
 
   CheckError(const CheckError&) = delete;
   CheckError& operator=(const CheckError&) = delete;
@@ -91,7 +93,7 @@ class BASE_EXPORT CheckError {
     return stream() << streamed_type;
   }
 
- private:
+ protected:
   LogMessage* const log_message_;
 };
 
@@ -99,12 +101,25 @@ class BASE_EXPORT NotReachedError : public CheckError {
  public:
   static NotReachedError NotReached(const char* file, int line);
 
+  // Used to trigger a NOTREACHED() without providing file or line while also
+  // discarding log-stream arguments. See base/notreached.h.
+  NOMERGE NOINLINE NOT_TAIL_CALLED static void TriggerNotReached();
+
   // TODO(crbug.com/851128): Mark [[noreturn]] once this is CHECK-fatal on all
   // builds.
-  NOMERGE NOT_TAIL_CALLED ~NotReachedError();
+  NOMERGE NOINLINE NOT_TAIL_CALLED ~NotReachedError();
 
  private:
   using CheckError::CheckError;
+};
+
+// TODO(crbug.com/851128): This should take the name of the above class once all
+// callers of NOTREACHED() have migrated to the CHECK-fatal version.
+class BASE_EXPORT NotReachedNoreturnError : public CheckError {
+ public:
+  NotReachedNoreturnError(const char* file, int line);
+
+  [[noreturn]] NOMERGE NOINLINE NOT_TAIL_CALLED ~NotReachedNoreturnError();
 };
 
 // The 'switch' is used to prevent the 'else' from being ambiguous when the

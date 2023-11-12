@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "chrome/browser/ash/extensions/speech/speech_recognition_private_delegate.h"
 #include "chrome/browser/speech/speech_recognition_constants.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -59,6 +59,8 @@ class SpeechRecognitionPrivateManager
                    OnStartCallback callback);
   // Handles a call to stop speech recognition.
   void HandleStop(const std::string& key, OnStopCallback callback);
+
+  static void EnsureFactoryBuilt();
 
  private:
   friend class SpeechRecognitionPrivateManagerTest;

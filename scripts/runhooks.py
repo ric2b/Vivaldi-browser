@@ -34,9 +34,9 @@ parser.add_argument("--checkout-os")
 args = parser.parse_args()
 
 def RunHooks():
-  global_vars = vivdeps.get_variables(args.checkout_os)
+  global_vars, gn_vars = vivdeps.get_variables(args.checkout_os)
 
-  if args.download_pgo_profiles:
+  if args.download_pgo_profiles or gn_vars.get("is_official_build", False) in ["true", 1, "1", "True", True]:
     global_vars["checkout_pgo_profiles"] = True
 
   update_hooks = {}

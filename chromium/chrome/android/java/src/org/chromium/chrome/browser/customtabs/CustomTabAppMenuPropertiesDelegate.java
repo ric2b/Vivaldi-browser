@@ -30,7 +30,6 @@ import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntent
 import org.chromium.chrome.browser.browserservices.ui.controller.Verifier;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
-import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
@@ -102,6 +101,9 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
 
     @Override
     public int getAppMenuLayoutId() {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD)
+            return R.menu.oem_custom_tabs_menu;
         return R.menu.custom_tabs_menu;
     }
 
@@ -132,8 +134,7 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
             shareItem.setVisible(mShowShare);
             shareItem.setEnabled(mShowShare);
             if (mShowShare) {
-                ShareHelper.configureDirectShareMenuItem(
-                        mContext, menu.findItem(R.id.direct_share_menu_id));
+                updateDirectShareMenuItem(menu.findItem(R.id.direct_share_menu_id));
             }
 
             boolean openInChromeItemVisible = true;

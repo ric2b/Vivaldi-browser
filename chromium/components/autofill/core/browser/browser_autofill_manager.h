@@ -11,8 +11,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/containers/circular_deque.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -27,8 +27,8 @@
 #include "components/autofill/core/browser/autofill_driver.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_manager.h"
-#include "components/autofill/core/browser/fast_checkout_delegate.h"
 #include "components/autofill/core/browser/field_filler.h"
+#include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/metrics/form_events/address_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
@@ -83,9 +83,6 @@ constexpr uint32_t kWebOTPUsed = 1 << 1;
 constexpr uint32_t kPhoneCollected = 1 << 2;
 }  // namespace phone_collection_metric
 
-// We show the credit card signin promo only a certain number of times.
-constexpr int kCreditCardSigninPromoImpressionLimit = 3;
-
 // Enum for the value patterns metric. Don't renumerate existing value. They are
 // used for metrics.
 enum class ValuePatternsMetric {
@@ -103,15 +100,14 @@ class BrowserAutofillManager : public AutofillManager,
  public:
   BrowserAutofillManager(AutofillDriver* driver,
                          AutofillClient* client,
-                         const std::string& app_locale,
-                         EnableDownloadManager enable_download_manager);
+                         const std::string& app_locale);
 
   BrowserAutofillManager(const BrowserAutofillManager&) = delete;
   BrowserAutofillManager& operator=(const BrowserAutofillManager&) = delete;
 
   ~BrowserAutofillManager() override;
 
-  void ShowAutofillSettings(bool show_credit_card_settings);
+  void ShowAutofillSettings(PopupType popup_type);
 
   // Whether the |field| should show an entry to scan a credit card.
   virtual bool ShouldShowScanCreditCard(const FormData& form,
@@ -151,8 +147,6 @@ class BrowserAutofillManager : public AutofillManager,
 #endif
 
   // Called from our external delegate so they cannot be private.
-  // FillCreditCardForm() is also called by Autofill Assistant through
-  // ContentAutofillDriver::FillFormForAssistant().
   // TODO(crbug.com/1330108): Clean up the API.
   virtual void FillOrPreviewForm(mojom::RendererFormDataAction action,
                                  const FormData& form,
@@ -162,9 +156,10 @@ class BrowserAutofillManager : public AutofillManager,
                               const FormFieldData& field,
                               const CreditCard& credit_card,
                               const std::u16string& cvc) override;
-  void DidShowSuggestions(bool has_autofill_suggestions,
-                          const FormData& form,
-                          const FormFieldData& field);
+  // Virtual for testing
+  virtual void DidShowSuggestions(bool has_autofill_suggestions,
+                                  const FormData& form,
+                                  const FormFieldData& field);
 
   // Fills or previews the credit card form.
   // Assumes the form and field are valid.
@@ -175,8 +170,6 @@ class BrowserAutofillManager : public AutofillManager,
                                            const FormFieldData& field,
                                            const CreditCard* credit_card);
 
-  // Called only from Autofill Assistant through
-  // ContentAutofillDriver::FillFormForAssistant().
   // TODO(crbug.com/1330108): Clean up the API.
   void FillProfileFormImpl(const FormData& form,
                            const FormFieldData& field,
@@ -211,7 +204,9 @@ class BrowserAutofillManager : public AutofillManager,
   // Invoked when the user selected |value| in a suggestions list from single
   // field filling. |frontend_id| is the PopupItemId of the suggestion.
   void OnSingleFieldSuggestionSelected(const std::u16string& value,
-                                       int frontend_id);
+                                       int frontend_id,
+                                       const FormData& form,
+                                       const FormFieldData& field);
 
   // Invoked when the user selects the "Hide Suggestions" item in the
   // Autocomplete drop-down.
@@ -313,7 +308,13 @@ class BrowserAutofillManager : public AutofillManager,
   // then logs that the promo code suggestions footer was selected.
   void OnSeePromoCodeOfferDetailsSelected(const GURL& offer_details_url,
                                           const std::u16string& value,
-                                          int frontend_id);
+                                          int frontend_id,
+                                          const FormData& form,
+                                          const FormFieldData& field);
+
+  // Set Fast Checkout run ID on the corresponding form event logger.
+  virtual void SetFastCheckoutRunId(FieldTypeGroup field_type_group,
+                                    int64_t run_id);
 
   void SetExternalDelegateForTest(
       std::unique_ptr<AutofillExternalDelegate> external_delegate) {
@@ -323,11 +324,6 @@ class BrowserAutofillManager : public AutofillManager,
   void SetTouchToFillDelegateImplForTest(
       std::unique_ptr<TouchToFillDelegateImpl> touch_to_fill_delegate) {
     touch_to_fill_delegate_ = std::move(touch_to_fill_delegate);
-  }
-
-  void SetFastCheckoutDelegateForTest(
-      std::unique_ptr<FastCheckoutDelegate> fast_checkout_delegate) {
-    fast_checkout_delegate_ = std::move(fast_checkout_delegate);
   }
 
   static void DeterminePossibleFieldTypesForUploadForTest(
@@ -459,7 +455,8 @@ class BrowserAutofillManager : public AutofillManager,
   void OnAfterProcessParsedForms(const DenseSet<FormType>& form_types) override;
 
  private:
-  // Keeps track of the filling context for a form, used to make refill attemps.
+  // Keeps track of the filling context for a form, used to make refill
+  // attempts.
   struct FillingContext {
     // |profile_or_credit_card| contains either AutofillProfile or CreditCard
     // and must be non-null.
@@ -566,8 +563,9 @@ class BrowserAutofillManager : public AutofillManager,
   [[nodiscard]] AutofillField* GetAutofillField(const FormData& form,
                                                 const FormFieldData& field);
 
-  // Returns true if any form in the field corresponds to an address
+  // Returns true if any field in the form corresponds to an address
   // |FieldTypeGroup|.
+  // TODO(crbug.com/1411352): Consider moving to form_types.h.
   [[nodiscard]] bool FormHasAddressField(const FormData& form);
 
   // Returns Suggestions corresponding to both the |autofill_field| type and
@@ -709,10 +707,18 @@ class BrowserAutofillManager : public AutofillManager,
   void SetDataList(const std::vector<std::u16string>& values,
                    const std::vector<std::u16string>& labels);
 
+  // Iterate through all the fields in the form to process the log events for
+  // each field and record into FieldInfo UKM event.
+  void ProcessFieldLogEventsInForm(const FormStructure& form_structure);
+
+  // Log the number of log events of all types which have been recorded until
+  // the FieldInfo metric is recorded into UKM at form submission or form
+  // destruction time (whatever comes first).
+  void LogEventCountsUMAMetric(const FormStructure& form_structure);
+
   // Delegates to perform external processing (display, selection) on
   // our behalf.
   std::unique_ptr<AutofillExternalDelegate> external_delegate_;
-  std::unique_ptr<FastCheckoutDelegate> fast_checkout_delegate_;
   std::unique_ptr<TouchToFillDelegateImpl> touch_to_fill_delegate_;
 
   std::string app_locale_;
@@ -828,6 +834,9 @@ class BrowserAutofillManager : public AutofillManager,
   // processed before form submission votes. This is important so that a
   // submission can trigger the upload of blur votes.
   scoped_refptr<base::SequencedTaskRunner> vote_upload_task_runner_;
+
+  // When the form was submitted.
+  base::TimeTicks form_submitted_timestamp_;
 
   base::WeakPtrFactory<BrowserAutofillManager> weak_ptr_factory_{this};
 };

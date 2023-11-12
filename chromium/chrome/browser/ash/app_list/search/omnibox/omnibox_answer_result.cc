@@ -89,8 +89,9 @@ absl::optional<std::pair<std::u16string, std::u16string>> GetTemperature(
 void AppendTextItem(const std::u16string& line,
                     const CrosApiSearchResult::TextType type,
                     std::vector<TextItem>& text_vector) {
-  if (line.empty())
+  if (line.empty()) {
     return;
+  }
 
   if (!text_vector.empty()) {
     text_vector.push_back(CreateStringTextItem(u" "));
@@ -197,7 +198,7 @@ void OmniboxAnswerResult::UpdateTitleAndDetails() {
           {CreateStringTextItem(temperature->second)});
     } else {
       // If the temperature can't be parsed, don't display this result.
-      scoring().filter = true;
+      scoring().set_filtered(true);
     }
 
     if (search_result_->description_a11y_label.has_value()) {

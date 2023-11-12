@@ -10,9 +10,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -136,6 +136,10 @@ ChannelError CastSocketImpl::error_state() const {
   return error_state_;
 }
 
+CastChannelFlags CastSocketImpl::flags() const {
+  return flags_;
+}
+
 const net::IPEndPoint& CastSocketImpl::ip_endpoint() const {
   return open_params_.ip_endpoint;
 }
@@ -171,6 +175,7 @@ bool CastSocketImpl::VerifyChallengeReply() {
   DCHECK(peer_cert_);
   AuthResult result =
       AuthenticateChallengeReply(*challenge_reply_, *peer_cert_, auth_context_);
+  flags_ = result.flags;
   logger_->LogSocketChallengeReplyEvent(channel_id_, result);
   if (result.success()) {
     VLOG(1) << result.error_message;

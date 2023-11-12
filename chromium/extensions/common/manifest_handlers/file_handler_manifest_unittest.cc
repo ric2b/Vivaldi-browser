@@ -4,6 +4,7 @@
 
 #include "components/services/app_service/public/cpp/file_handler_info.h"
 
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
@@ -12,6 +13,7 @@
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/file_handler_info.h"
+#include "extensions/common/manifest_handlers/web_file_handlers_info.h"
 #include "extensions/common/manifest_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -89,10 +91,10 @@ TEST_F(FileHandlersManifestTest, NotPlatformApp) {
   ASSERT_TRUE(handlers == nullptr);
 }
 
-class FileHandlersManifestV3Test : public ManifestTest {
+class WebFileHandlersTest : public ManifestTest {
  public:
-  FileHandlersManifestV3Test() : channel_(version_info::Channel::CANARY) {
-    feature_list_.InitAndEnableFeature(extensions_features::kFileHandlersMV3);
+  WebFileHandlersTest() : channel_(version_info::Channel::DEV) {
+    feature_list_.InitAndEnableFeature(extensions_features::kWebFileHandlers);
   }
 
  protected:
@@ -106,17 +108,17 @@ class FileHandlersManifestV3Test : public ManifestTest {
         })";
     base::Value manifest_value =
         base::test::ParseJson(base::StringPrintf(kManifestStub, manifest_part));
-    EXPECT_EQ(base::Value::Type::DICTIONARY, manifest_value.type());
-    return ManifestData(std::move(manifest_value));
+    EXPECT_EQ(base::Value::Type::DICT, manifest_value.type());
+    return ManifestData(std::move(manifest_value).TakeDict());
   }
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  extensions::ScopedCurrentChannel channel_{version_info::Channel::CANARY};
+  extensions::ScopedCurrentChannel channel_;
 };
 
 // `file_handlers` examples.
-TEST_F(FileHandlersManifestV3Test, GeneralSuccess) {
+TEST_F(WebFileHandlersTest, GeneralSuccess) {
   struct {
     const char* title;
     const char* file_handler;
@@ -201,14 +203,22 @@ TEST_F(FileHandlersManifestV3Test, GeneralSuccess) {
 
   for (const auto& test_case : test_cases) {
     SCOPED_TRACE(test_case.title);
+
+    // Load extension and get file handlers.
     scoped_refptr<Extension> extension(LoadAndExpectSuccess(
         std::move(GetManifestData(test_case.file_handler))));
-    ASSERT_TRUE(FileHandlers::GetFileHandlersMV3(extension.get()));
+    auto* file_handlers = WebFileHandlers::GetFileHandlers(*extension.get());
+    ASSERT_TRUE(file_handlers);
+
+    // Exercise the web `file_handlers` key with a subkey introduced in MV3.
+    for (const auto& file_handler : *file_handlers) {
+      EXPECT_TRUE(file_handler.action.size() > 0);
+    }
   }
 }
 
 // General usage verification.
-TEST_F(FileHandlersManifestV3Test, GeneralErrors) {
+TEST_F(WebFileHandlersTest, GeneralErrors) {
   struct {
     const char* title;
     const char* file_handler;
@@ -302,7 +312,7 @@ TEST_F(FileHandlersManifestV3Test, GeneralErrors) {
 }
 
 // `accept` property verification.
-TEST_F(FileHandlersManifestV3Test, AcceptErrors) {
+TEST_F(WebFileHandlersTest, AcceptErrors) {
   struct {
     const char* title;
     const char* file_handler;
@@ -328,7 +338,6 @@ TEST_F(FileHandlersManifestV3Test, AcceptErrors) {
           }])",
           "Invalid value for 'file_handlers[0]'. `accept` mime type "
           "must have exactly one slash.",
-
       },
       {
           "Error if `accept` has a mime type in the wrong format.",
@@ -339,7 +348,6 @@ TEST_F(FileHandlersManifestV3Test, AcceptErrors) {
           }])",
           "Invalid value for 'file_handlers[0]'. `accept` mime type "
           "must have exactly one slash.",
-
       },
       {
           "`accept` must have the correct type to represent the file "
@@ -351,7 +359,6 @@ TEST_F(FileHandlersManifestV3Test, AcceptErrors) {
           }])",
           "Invalid value for 'file_handlers[0]'. `accept` must have "
           "a valid file extension.",
-
       },
       {
           "Error if `accept` is empty.",
@@ -361,7 +368,6 @@ TEST_F(FileHandlersManifestV3Test, AcceptErrors) {
             "accept": {}
           }])",
           "Invalid value for 'file_handlers[0]'. `accept` cannot be empty.",
-
       },
       {
           "Error if `accept` is empty.",
@@ -372,7 +378,6 @@ TEST_F(FileHandlersManifestV3Test, AcceptErrors) {
           }])",
           "Invalid value for 'file_handlers[0]'. `accept` file "
           "extension must have a value.",
-
       },
       {
           "Error if `accept` is empty.",
@@ -393,7 +398,7 @@ TEST_F(FileHandlersManifestV3Test, AcceptErrors) {
 }
 
 // `icon` property verification.
-TEST_F(FileHandlersManifestV3Test, IconErrors) {
+TEST_F(WebFileHandlersTest, IconErrors) {
   struct {
     const char* title;
     const char* file_handler;
@@ -461,5 +466,8 @@ TEST_F(FileHandlersManifestV3Test, IconErrors) {
                        test_case.expected_error);
   }
 }
+
+// TODO(crbug/1179530): Add tests for MV2, MV3, and missing the flag.
+// crrev.com/c/4215992/comment/5c5148e7_2b24c9d3
 
 }  // namespace extensions

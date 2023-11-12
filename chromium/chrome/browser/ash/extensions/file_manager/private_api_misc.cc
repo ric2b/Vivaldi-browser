@@ -18,10 +18,10 @@
 #include "ash/public/cpp/style/dark_light_mode_controller.h"
 #include "ash/public/cpp/style/scoped_light_mode_as_default.h"
 #include "ash/public/cpp/tablet_mode.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
@@ -251,6 +251,10 @@ FileManagerPrivateGetPreferencesFunction::Run() {
     folder_shortcuts.push_back(value.is_string() ? value.GetString() : "");
   }
   result.folder_shortcuts = folder_shortcuts;
+  result.office_file_moved_one_drive =
+      service->GetTime(prefs::kOfficeFileMovedToOneDrive).ToJsTime();
+  result.office_file_moved_google_drive =
+      service->GetTime(prefs::kOfficeFileMovedToGoogleDrive).ToJsTime();
 
   return RespondNow(WithArguments(result.ToValue()));
 }
@@ -1209,25 +1213,9 @@ FileManagerPrivateInternalGetRecentFilesFunction::Run() {
   ash::RecentModel* model = ash::RecentModel::GetForProfile(profile);
 
   ash::RecentModel::FileType file_type;
-  switch (params->file_type) {
-    case api::file_manager_private::RECENT_FILE_TYPE_ALL:
-      file_type = ash::RecentModel::FileType::kAll;
-      break;
-    case api::file_manager_private::RECENT_FILE_TYPE_AUDIO:
-      file_type = ash::RecentModel::FileType::kAudio;
-      break;
-    case api::file_manager_private::RECENT_FILE_TYPE_IMAGE:
-      file_type = ash::RecentModel::FileType::kImage;
-      break;
-    case api::file_manager_private::RECENT_FILE_TYPE_VIDEO:
-      file_type = ash::RecentModel::FileType::kVideo;
-      break;
-    case api::file_manager_private::RECENT_FILE_TYPE_DOCUMENT:
-      file_type = ash::RecentModel::FileType::kDocument;
-      break;
-    default:
-      NOTREACHED();
-      return RespondNow(Error("Unknown recent file type is specified."));
+  if (!file_manager::util::ToRecentSourceFileType(params->file_category,
+                                                  &file_type)) {
+    return RespondNow(Error("Cannot convert category to file type"));
   }
 
   model->GetRecentFiles(

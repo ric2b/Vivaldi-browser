@@ -35,12 +35,12 @@
 #include <utility>
 
 #include "base/metrics/histogram_functions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/unguessable_token.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/data_decoder/public/mojom/resource_snapshot_for_web_bundle.mojom-blink.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink.h"
 #include "services/network/public/mojom/source_location.mojom-blink.h"
@@ -66,7 +66,6 @@
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
 #include "third_party/blink/public/platform/interface_registry.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/scheduler/web_resource_loading_task_runner_handle.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -179,6 +178,7 @@
 #include "third_party/blink/renderer/core/scroll/scroll_snapshot_client.h"
 #include "third_party/blink/renderer/core/scroll/smooth_scroll_sequencer.h"
 #include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
+#include "third_party/blink/renderer/core/timing/dom_window_performance.h"
 #include "third_party/blink/renderer/platform/back_forward_cache_utils.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/source_location.h"
@@ -228,6 +228,28 @@
 namespace blink {
 
 namespace {
+
+const AtomicString& ConvertElementTypeToInitiatorType(
+    blink::FrameOwnerElementType frame_owner_elem_type) {
+  switch (frame_owner_elem_type) {
+    case blink::FrameOwnerElementType::kFrame:
+      return blink::html_names::kFrameTag.LocalName();
+    case blink::FrameOwnerElementType::kIframe:
+      return blink::html_names::kIFrameTag.LocalName();
+    case blink::FrameOwnerElementType::kObject:
+      return blink::html_names::kObjectTag.LocalName();
+    case blink::FrameOwnerElementType::kFencedframe:
+      return blink::html_names::kFencedframeTag.LocalName();
+    case blink::FrameOwnerElementType::kEmbed:
+      return blink::html_names::kEmbedTag.LocalName();
+    case blink::FrameOwnerElementType::kPortal:
+      return blink::html_names::kPortalTag.LocalName();
+    case blink::FrameOwnerElementType::kNone:
+      NOTREACHED();
+  }
+  NOTREACHED();
+  return blink::html_names::kFrameTag.LocalName();
+}
 
 // Maintain a global (statically-allocated) hash map indexed by the the result
 // of hashing the |frame_token| passed on creation of a LocalFrame object.
@@ -460,9 +482,60 @@ void LocalFrame::Navigate(FrameLoadRequest& request,
     probe::FrameClearedScheduledNavigation(this);
 }
 
+// Much of this function is redundant with the browser process
+// (NavigationRequest::ShouldReplaceCurrentEntryForSameUrlNavigation), but in
+// the event that this navigation is handled synchronously because it is
+// same-document, we need to apply it immediately. Also, we will synchronously
+// fire the NavigateEvent, which exposes whether the navigation will push or
+// replace to JS.
+bool LocalFrame::ShouldReplaceForSameUrlNavigation(
+    const FrameLoadRequest& request) {
+  const KURL& request_url = request.GetResourceRequest().Url();
+  if (request_url != GetDocument()->Url()) {
+    return false;
+  }
+
+  // Forms should push even to the same URL.
+  if (request.Form()) {
+    return false;
+  }
+
+  // Don't replace if the navigation originated from a cross-origin iframe (so
+  // that cross-origin iframes can't guess the URL of this frame based on
+  // whether a history entry was added).
+  if (request.GetOriginWindow() &&
+      !request.GetOriginWindow()->GetSecurityOrigin()->CanAccess(
+          DomWindow()->GetSecurityOrigin())) {
+    return false;
+  }
+
+  // WebUI URLs and non-current-tab navigations go through the OpenURL path
+  // rather than the BeginNavigation path, which converts same-URL navigations
+  // to reloads if not already marked replacing. Defer to the browser process
+  // in those cases.
+  if (SchemeRegistry::IsWebUIScheme(request_url.Protocol()) ||
+      request.GetNavigationPolicy() != kNavigationPolicyCurrentTab) {
+    return false;
+  }
+
+  return true;
+}
+
 bool LocalFrame::NavigationShouldReplaceCurrentHistoryEntry(
     const FrameLoadRequest& request,
     WebFrameLoadType frame_load_type) {
+  if (frame_load_type != WebFrameLoadType::kStandard) {
+    return false;
+  }
+
+  // When a navigation is requested via the navigation API with
+  // { history: "push" } specified, this should override all implicit
+  // conversions to a replacing navigation.
+  if (request.ForceHistoryPush() == mojom::blink::ForceHistoryPush::kYes) {
+    DCHECK(!ShouldMaintainTrivialSessionHistory());
+    return false;
+  }
+
   // Non-user navigation before the page has finished firing onload should not
   // create a new back/forward item. The spec only explicitly mentions this in
   // the context of navigating an iframe.
@@ -471,8 +544,13 @@ bool LocalFrame::NavigationShouldReplaceCurrentHistoryEntry(
       !HasTransientUserActivation(this) &&
       request.ClientRedirectReason() != ClientNavigationReason::kAnchorClick)
     return true;
-  return frame_load_type == WebFrameLoadType::kStandard &&
-         ShouldMaintainTrivialSessionHistory();
+
+  // In most cases, we will treat a navigation to the current URL as replacing.
+  if (ShouldReplaceForSameUrlNavigation(request)) {
+    return true;
+  }
+
+  return ShouldMaintainTrivialSessionHistory();
 
   // TODO(http://crbug.com/1197384): We may want to assert that
   // WebFrameLoadType is never kStandard in prerendered pages/portals before
@@ -671,6 +749,15 @@ ClipPathPaintImageGenerator* LocalFrame::GetClipPathPaintImageGenerator() {
   return local_root.clip_path_paint_image_generator_.Get();
 }
 
+void LocalFrame::AddResourceTimingEntryFromNonNavigatedFrame(
+    mojom::blink::ResourceTimingInfoPtr timing,
+    blink::FrameOwnerElementType initiator_type) {
+  auto* local_dom_window = DomWindow();
+  DOMWindowPerformance::performance(*local_dom_window)
+      ->AddResourceTiming(std::move(timing),
+                          ConvertElementTypeToInitiatorType(initiator_type));
+}
+
 const SecurityContext* LocalFrame::GetSecurityContext() const {
   return DomWindow() ? &DomWindow()->GetSecurityContext() : nullptr;
 }
@@ -705,8 +792,8 @@ void LocalFrame::PrintNavigationWarning(const String& message) {
 }
 
 bool LocalFrame::ShouldClose() {
-  // TODO(dcheng): This should be fixed to dispatch beforeunload events to
-  // both local and remote frames.
+  // TODO(crbug.com/1407078): This should be fixed to dispatch beforeunload
+  // events to both local and remote frames.
   return loader_.ShouldClose();
 }
 
@@ -1440,6 +1527,10 @@ String LocalFrame::SelectedText() const {
   return Selection().SelectedText();
 }
 
+String LocalFrame::SelectedText(const TextIteratorBehavior& behavior) const {
+  return Selection().SelectedText(behavior);
+}
+
 String LocalFrame::SelectedTextForClipboard() const {
   if (!GetDocument())
     return g_empty_string;
@@ -1537,7 +1628,6 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
       event_handler_(MakeGarbageCollected<EventHandler>(*this)),
       console_(MakeGarbageCollected<FrameConsole>(*this)),
       navigation_disable_count_(0),
-      should_send_resource_timing_info_to_parent_(true),
       in_view_source_mode_(false),
       frozen_(false),
       paused_(false),
@@ -1662,26 +1752,13 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
                       WebFeature::kOpenerNavigationWithoutGesture);
   }
 
-  const bool target_escapes_fenced_frame =
-      IsInFencedFrameTree() && (Tree().Top() != Tree().Top());
-
-  // If the target frame is outside the fenced frame, the only way that should
-  // be possible is through the '_unfencedTop' reserved frame name.
-  if (target_escapes_fenced_frame) {
-    CHECK(target_frame == Tree().Top());
-  }
-
   if (destination_url.ProtocolIsJavaScript() &&
       (!GetSecurityContext()->GetSecurityOrigin()->CanAccess(
-           target_frame.GetSecurityContext()->GetSecurityOrigin()) ||
-       target_escapes_fenced_frame)) {
+          target_frame.GetSecurityContext()->GetSecurityOrigin()))) {
     PrintNavigationErrorMessage(
         target_frame,
-        target_escapes_fenced_frame
-            ? "The frame attempting navigation must be in the same fenced "
-              "frame tree as the target if navigating to a javascript: url"
-            : "The frame attempting navigation must be same-origin with the "
-              "target if navigating to a javascript: url");
+        "The frame attempting navigation must be same-origin with the target "
+        "if navigating to a javascript: url");
     return false;
   }
 
@@ -1764,15 +1841,6 @@ bool LocalFrame::CanNavigate(const Frame& target_frame,
               "flag, but has no user activation (aka gesture). See "
               "https://www.chromestatus.com/feature/5629582019395584.");
           return false;
-        }
-
-        // If we are in a fenced frame and there is user activation, then we
-        // know the navigation is allowed. Fenced frames do not propagate
-        // user activation into their ancestors outside of the fence, but we
-        // want to pretend that they do; upon recursing it would pass the check
-        // below for whether the source frame has sticky activation.
-        if (target_escapes_fenced_frame) {
-          return true;
         }
       }
 
@@ -1974,10 +2042,13 @@ LocalFrame::LazyLoadImageSetting LocalFrame::GetLazyLoadImageSetting() const {
   return LocalFrame::LazyLoadImageSetting::kEnabledExplicit;
 }
 
-WebURLLoaderFactory* LocalFrame::GetURLLoaderFactory() {
-  if (!url_loader_factory_)
-    url_loader_factory_ = Client()->CreateURLLoaderFactory();
-  return url_loader_factory_.get();
+scoped_refptr<network::SharedURLLoaderFactory>
+LocalFrame::GetURLLoaderFactory() {
+  return Client()->GetURLLoaderFactory();
+}
+
+std::unique_ptr<URLLoader> LocalFrame::CreateURLLoaderForTesting() {
+  return Client()->CreateURLLoaderForTesting();
 }
 
 WebPluginContainerImpl* LocalFrame::GetWebPluginContainer(Node* node) const {
@@ -2370,7 +2441,6 @@ void LocalFrame::NotifyUserActivation(
                                                       notification_type);
   Client()->NotifyUserActivation();
   NotifyUserActivationInFrameTree(notification_type);
-  DomWindow()->history_user_activation_state().Activate();
 }
 
 bool LocalFrame::ConsumeTransientUserActivation(
@@ -2381,6 +2451,17 @@ bool LocalFrame::ConsumeTransientUserActivation(
         mojom::blink::UserActivationNotificationType::kNone);
   }
   return ConsumeTransientUserActivationInFrameTree();
+}
+
+void LocalFrame::ConsumeHistoryUserActivation() {
+  // Notify the frame in the browser process, which will consume the activation
+  // in all frames of the page (consistent with the loop below).
+  GetLocalFrameHostRemote().DidConsumeHistoryUserActivation();
+  for (Frame* node = &Tree().Top(); node; node = node->Tree().TraverseNext()) {
+    if (LocalFrame* local_frame_node = DynamicTo<LocalFrame>(node)) {
+      local_frame_node->history_user_activation_state_.Consume();
+    }
+  }
 }
 
 namespace {
@@ -2526,8 +2607,9 @@ bool LocalFrame::SwapIn() {
 
   // First, check if there's a previous main frame to be used for a main frame
   // LocalFrame <-> LocalFrame swap.
-  if (Frame* previous_local_main_frame =
-          GetPage()->TakePreviousMainFrameForLocalSwap()) {
+  Frame* previous_local_main_frame =
+      GetPage()->TakePreviousMainFrameForLocalSwap();
+  if (previous_local_main_frame && !previous_local_main_frame->IsDetached()) {
     // We're about to do a LocalFrame <-> LocalFrame swap for a provisional
     // main frame, where the previous main frame and the provisional main frame
     // are in different Pages. The provisional frame's owner is set to the
@@ -2678,11 +2760,7 @@ void LocalFrame::DidResume() {
   GetDocument()->Fetcher()->SetDefersLoading(LoaderFreezeMode::kNone);
   Loader().SetDefersLoading(LoaderFreezeMode::kNone);
 
-  const base::TimeTicks resume_event_start = base::TimeTicks::Now();
   GetDocument()->DispatchEvent(*Event::Create(event_type_names::kResume));
-  const base::TimeTicks resume_event_end = base::TimeTicks::Now();
-  base::UmaHistogramMicrosecondsTimes("DocumentEventTiming.ResumeDuration",
-                                      resume_event_end - resume_event_start);
   // TODO(fmeawad): Move the following logic to the page once we have a
   // PageResourceCoordinator in Blink
   if (auto* document_resource_coordinator =
@@ -3105,8 +3183,8 @@ void LocalFrame::AdvanceFocusForIME(mojom::blink::FocusType focus_type) {
     return;
 
   Element* next_element =
-      GetPage()->GetFocusController().NextFocusableElementForIME(element,
-                                                                 focus_type);
+      GetPage()->GetFocusController().NextFocusableElementForImeAndAutofill(
+          element, focus_type);
   if (!next_element)
     return;
 

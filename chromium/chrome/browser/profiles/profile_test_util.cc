@@ -15,9 +15,17 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/profiles/profile_window.h"
-#include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #endif  // BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chromeos/ash/components/login/login_state/login_state.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/startup/browser_init_params.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace profiles::testing {
 
@@ -40,12 +48,12 @@ void SwitchToProfileSync(const base::FilePath& path, bool always_create) {
 
 ScopedNonEnterpriseDomainSetterForTesting::
     ScopedNonEnterpriseDomainSetterForTesting(const char* domain) {
-  policy::BrowserPolicyConnector::SetNonEnterpriseDomainForTesting(domain);
+  signin::AccountManagedStatusFinder::SetNonEnterpriseDomainForTesting(domain);
 }
 
 ScopedNonEnterpriseDomainSetterForTesting::
     ~ScopedNonEnterpriseDomainSetterForTesting() {
-  policy::BrowserPolicyConnector::SetNonEnterpriseDomainForTesting(nullptr);
+  signin::AccountManagedStatusFinder::SetNonEnterpriseDomainForTesting(nullptr);
 }
 
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -62,5 +70,37 @@ ScopedProfileSelectionsForFactoryTesting::
     ~ScopedProfileSelectionsForFactoryTesting() {
   factory_->profile_selections_ = old_selections_;
 }
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+ScopedTestManagedGuestSession::ScopedTestManagedGuestSession() {
+  init_params_ = chromeos::BrowserInitParams::GetForTests()->Clone();
+  auto init_params = crosapi::mojom::BrowserInitParams::New();
+  init_params->session_type = crosapi::mojom::SessionType::kPublicSession;
+  chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
+}
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
+ScopedTestManagedGuestSession::ScopedTestManagedGuestSession() {
+  ash::LoginState::Initialize();
+  ash::LoginState::Get()->SetLoggedInState(
+      ash::LoginState::LOGGED_IN_ACTIVE,
+      ash::LoginState::LOGGED_IN_USER_PUBLIC_ACCOUNT);
+}
+#else
+ScopedTestManagedGuestSession::ScopedTestManagedGuestSession() = default;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+ScopedTestManagedGuestSession::~ScopedTestManagedGuestSession() {
+  chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params_));
+}
+#elif BUILDFLAG(IS_CHROMEOS_ASH)
+ScopedTestManagedGuestSession::~ScopedTestManagedGuestSession() {
+  if (ash::LoginState::IsInitialized()) {
+    ash::LoginState::Shutdown();
+  }
+}
+#else
+ScopedTestManagedGuestSession::~ScopedTestManagedGuestSession() = default;
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 }  // namespace profiles::testing

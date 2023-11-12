@@ -68,7 +68,8 @@ void CookieJar::SetCookie(const String& value) {
   bool site_for_cookies_ok = true;
   bool top_frame_origin_ok = true;
   backend_->SetCookieFromString(cookie_url, document_->SiteForCookies(),
-                                document_->TopFrameOrigin(), value,
+                                document_->TopFrameOrigin(),
+                                document_->HasStorageAccess(), value,
                                 &site_for_cookies_ok, &top_frame_origin_ok);
   last_operation_was_set_ = true;
   LogCookieHistogram("Blink.SetCookieTime.", requested, timer.Elapsed());
@@ -121,7 +122,8 @@ String CookieJar::Cookies() {
   bool requested = RequestRestrictedCookieManagerIfNeeded();
   String value;
   backend_->GetCookiesString(cookie_url, document_->SiteForCookies(),
-                             document_->TopFrameOrigin(), &value);
+                             document_->TopFrameOrigin(),
+                             document_->HasStorageAccess(), &value);
   LogCookieHistogram("Blink.CookiesTime.", requested, timer.Elapsed());
   UpdateCacheAfterGetRequest(cookie_url, value);
 
@@ -138,7 +140,8 @@ bool CookieJar::CookiesEnabled() {
   bool requested = RequestRestrictedCookieManagerIfNeeded();
   bool cookies_enabled = false;
   backend_->CookiesEnabledFor(cookie_url, document_->SiteForCookies(),
-                              document_->TopFrameOrigin(), &cookies_enabled);
+                              document_->TopFrameOrigin(),
+                              document_->HasStorageAccess(), &cookies_enabled);
   LogCookieHistogram("Blink.CookiesEnabledTime.", requested, timer.Elapsed());
   return cookies_enabled;
 }
@@ -164,9 +167,9 @@ bool CookieJar::RequestRestrictedCookieManagerIfNeeded() {
 
 void CookieJar::UpdateCacheAfterGetRequest(const KURL& cookie_url,
                                            const String& cookie_string) {
-  absl::optional<unsigned> new_hash = WTF::HashInts(
-      KURLHash::GetHash(cookie_url),
-      cookie_string.IsNull() ? 0 : StringHash::GetHash(cookie_string));
+  absl::optional<unsigned> new_hash =
+      WTF::HashInts(WTF::GetHash(cookie_url),
+                    cookie_string.IsNull() ? 0 : WTF::GetHash(cookie_string));
 
   CookieCacheLookupResult result =
       CookieCacheLookupResult::kCacheMissFirstAccess;

@@ -50,8 +50,10 @@ align-content: normal
 align-items: normal
 align-self: auto
 alignment-baseline: auto
+anchor-default: implicit
 anchor-name: none
 anchor-scroll: none
+animation-composition: replace
 animation-delay-end: 0s
 animation-delay-start: 0s
 animation-direction: normal
@@ -60,6 +62,8 @@ animation-fill-mode: none
 animation-iteration-count: 1
 animation-name: none
 animation-play-state: running
+animation-range-end: auto
+animation-range-start: auto
 animation-timeline: auto
 animation-timing-function: ease
 app-region: none
@@ -343,11 +347,13 @@ text-shadow: none
 text-size-adjust: auto
 text-transform: none
 text-underline-position: auto
+text-wrap: wrap
 toggle-group: none
 toggle-root: none
 toggle-trigger: none
 toggle-visibility: normal
 top: auto
+top-layer: none
 touch-action: auto
 transform: none
 transform-origin: 384.5px 0px
@@ -364,6 +370,7 @@ vertical-align: baseline
 view-timeline-axis: block
 view-timeline-inset: 0px
 view-timeline-name: none
+view-transition-name: none
 visibility: visible
 white-space: normal
 widows: 2

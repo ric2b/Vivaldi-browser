@@ -49,8 +49,8 @@
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/scoped_backlights_forced_off.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -169,6 +169,35 @@ constexpr const char* const kCopiedOnSigninAccessibilityPrefs[]{
     prefs::kAccessibilityAutoclickDelayMs,
     prefs::kAccessibilityAutoclickEnabled,
     prefs::kAccessibilityCaretHighlightEnabled,
+    prefs::kAccessibilityChromeVoxAutoRead,
+    prefs::kAccessibilityChromeVoxAnnounceDownloadNotifications,
+    prefs::kAccessibilityChromeVoxAnnounceRichTextAttributes,
+    prefs::kAccessibilityChromeVoxAudioStrategy,
+    prefs::kAccessibilityChromeVoxBrailleSideBySide,
+    prefs::kAccessibilityChromeVoxBrailleTable,
+    prefs::kAccessibilityChromeVoxBrailleTable6,
+    prefs::kAccessibilityChromeVoxBrailleTable8,
+    prefs::kAccessibilityChromeVoxBrailleTableType,
+    prefs::kAccessibilityChromeVoxBrailleWordWrap,
+    prefs::kAccessibilityChromeVoxCapitalStrategy,
+    prefs::kAccessibilityChromeVoxCapitalStrategyBackup,
+    prefs::kAccessibilityChromeVoxEnableBrailleLogging,
+    prefs::kAccessibilityChromeVoxEnableEarconLogging,
+    prefs::kAccessibilityChromeVoxEnableEventStreamLogging,
+    prefs::kAccessibilityChromeVoxEnableSpeechLogging,
+    prefs::kAccessibilityChromeVoxEventStreamFilters,
+    prefs::kAccessibilityChromeVoxLanguageSwitching,
+    prefs::kAccessibilityChromeVoxMenuBrailleCommands,
+    prefs::kAccessibilityChromeVoxNumberReadingStyle,
+    prefs::kAccessibilityChromeVoxPreferredBrailleDisplayAddress,
+    prefs::kAccessibilityChromeVoxPunctuationEcho,
+    prefs::kAccessibilityChromeVoxSmartStickyMode,
+    prefs::kAccessibilityChromeVoxSpeakTextUnderMouse,
+    prefs::kAccessibilityChromeVoxUsePitchChanges,
+    prefs::kAccessibilityChromeVoxUseVerboseMode,
+    prefs::kAccessibilityChromeVoxVirtualBrailleColumns,
+    prefs::kAccessibilityChromeVoxVirtualBrailleRows,
+    prefs::kAccessibilityChromeVoxVoiceName,
     prefs::kAccessibilityCursorHighlightEnabled,
     prefs::kAccessibilityCursorColorEnabled,
     prefs::kAccessibilityCursorColor,
@@ -196,6 +225,10 @@ constexpr const char* const kCopiedOnSigninAccessibilityPrefs[]{
     prefs::kScreenMagnifierAcceleratorDialogHasBeenAccepted,
     prefs::kDockedMagnifierAcceleratorDialogHasBeenAccepted,
     prefs::kDictationAcceleratorDialogHasBeenAccepted,
+    prefs::kDictationDlcSuccessNotificationHasBeenShown,
+    prefs::kDictationDlcOnlyPumpkinDownloadedNotificationHasBeenShown,
+    prefs::kDictationDlcOnlySodaDownloadedNotificationHasBeenShown,
+    prefs::kDictationNoDlcsDownloadedNotificationHasBeenShown,
     prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2,
 };
 
@@ -951,9 +984,83 @@ void AccessibilityControllerImpl::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kDictationAcceleratorDialogHasBeenAccepted, false);
   registry->RegisterBooleanPref(
+      prefs::kDictationDlcSuccessNotificationHasBeenShown, false);
+  registry->RegisterBooleanPref(
+      prefs::kDictationDlcOnlyPumpkinDownloadedNotificationHasBeenShown, false);
+  registry->RegisterBooleanPref(
+      prefs::kDictationDlcOnlySodaDownloadedNotificationHasBeenShown, false);
+  registry->RegisterBooleanPref(
+      prefs::kDictationNoDlcsDownloadedNotificationHasBeenShown, false);
+  registry->RegisterBooleanPref(
       prefs::kDisplayRotationAcceleratorDialogHasBeenAccepted2, false);
   registry->RegisterBooleanPref(prefs::kShouldAlwaysShowAccessibilityMenu,
                                 false);
+
+  // TODO(b/266816160): Make ChromeVox prefs are syncable, to so that ChromeOS
+  // backs up users' ChromeVox settings and reflects across their devices.
+  registry->RegisterBooleanPref(prefs::kAccessibilityChromeVoxAutoRead, false);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxAnnounceDownloadNotifications, true);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxAnnounceRichTextAttributes, true);
+  registry->RegisterStringPref(prefs::kAccessibilityChromeVoxAudioStrategy,
+                               kDefaultAccessibilityChromeVoxAudioStrategy);
+  registry->RegisterBooleanPref(prefs::kAccessibilityChromeVoxBrailleSideBySide,
+                                true);
+  registry->RegisterStringPref(prefs::kAccessibilityChromeVoxBrailleTable,
+                               kDefaultAccessibilityChromeVoxBrailleTable);
+  registry->RegisterStringPref(prefs::kAccessibilityChromeVoxBrailleTable6,
+                               kDefaultAccessibilityChromeVoxBrailleTable6);
+  registry->RegisterStringPref(prefs::kAccessibilityChromeVoxBrailleTable8,
+                               kDefaultAccessibilityChromeVoxBrailleTable8);
+  registry->RegisterStringPref(prefs::kAccessibilityChromeVoxBrailleTableType,
+                               kDefaultAccessibilityChromeVoxBrailleTableType);
+  registry->RegisterBooleanPref(prefs::kAccessibilityChromeVoxBrailleWordWrap,
+                                true);
+  registry->RegisterStringPref(prefs::kAccessibilityChromeVoxCapitalStrategy,
+                               kDefaultAccessibilityChromeVoxCapitalStrategy);
+  registry->RegisterStringPref(
+      prefs::kAccessibilityChromeVoxCapitalStrategyBackup,
+      kDefaultAccessibilityChromeVoxCapitalStrategyBackup);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxEnableBrailleLogging, false);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxEnableEarconLogging, false);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxEnableEventStreamLogging, false);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxEnableSpeechLogging, false);
+  registry->RegisterDictionaryPref(
+      prefs::kAccessibilityChromeVoxEventStreamFilters,
+      base::Value(base::Value::Type::DICT));
+  registry->RegisterBooleanPref(prefs::kAccessibilityChromeVoxLanguageSwitching,
+                                false);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxMenuBrailleCommands, false);
+  registry->RegisterStringPref(
+      prefs::kAccessibilityChromeVoxNumberReadingStyle,
+      kDefaultAccessibilityChromeVoxNumberReadingStyle);
+  registry->RegisterStringPref(
+      prefs::kAccessibilityChromeVoxPreferredBrailleDisplayAddress,
+      kDefaultAccessibilityChromeVoxPreferredBrailleDisplayAddress);
+  registry->RegisterIntegerPref(prefs::kAccessibilityChromeVoxPunctuationEcho,
+                                kDefaultAccessibilityChromeVoxPunctuationEcho);
+  registry->RegisterBooleanPref(prefs::kAccessibilityChromeVoxSmartStickyMode,
+                                true);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityChromeVoxSpeakTextUnderMouse, false);
+  registry->RegisterBooleanPref(prefs::kAccessibilityChromeVoxUsePitchChanges,
+                                true);
+  registry->RegisterBooleanPref(prefs::kAccessibilityChromeVoxUseVerboseMode,
+                                true);
+  registry->RegisterIntegerPref(
+      prefs::kAccessibilityChromeVoxVirtualBrailleColumns,
+      kDefaultAccessibilityChromeVoxVirtualBrailleColumns);
+  registry->RegisterIntegerPref(
+      prefs::kAccessibilityChromeVoxVirtualBrailleRows,
+      kDefaultAccessibilityChromeVoxVirtualBrailleRows);
+  registry->RegisterStringPref(prefs::kAccessibilityChromeVoxVoiceName,
+                               kDefaultAccessibilityChromeVoxVoiceName);
 
   //
   // Syncable prefs.
@@ -1008,15 +1115,15 @@ void AccessibilityControllerImpl::RegisterProfilePrefs(
                                std::numeric_limits<double>::min());
   registry->RegisterDictionaryPref(
       prefs::kAccessibilitySwitchAccessSelectDeviceKeyCodes,
-      base::Value(base::Value::Type::DICTIONARY),
+      base::Value(base::Value::Type::DICT),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterDictionaryPref(
       prefs::kAccessibilitySwitchAccessNextDeviceKeyCodes,
-      base::Value(base::Value::Type::DICTIONARY),
+      base::Value(base::Value::Type::DICT),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterDictionaryPref(
       prefs::kAccessibilitySwitchAccessPreviousDeviceKeyCodes,
-      base::Value(base::Value::Type::DICTIONARY),
+      base::Value(base::Value::Type::DICT),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
       prefs::kAccessibilitySwitchAccessAutoScanEnabled, false,

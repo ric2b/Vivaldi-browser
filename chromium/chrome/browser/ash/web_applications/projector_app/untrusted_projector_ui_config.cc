@@ -32,8 +32,6 @@ void ChromeUntrustedProjectorUIDelegate::PopulateLoadTimeData(
                      ash::features::IsProjectorCustomThumbnailEnabled());
   source->AddBoolean("isShowShortPseudoTranscriptEnabled",
                      ash::features::IsProjectorShowShortPseudoTranscript());
-  source->AddBoolean("isAnnotatorEnabled",
-                     ash::features::IsProjectorAnnotatorEnabled());
   source->AddBoolean(
       "isUseOAuthForGetVideoInfoEnabled",
       ash::features::IsProjectorUseOAuthForGetVideoInfoEnabled());
@@ -57,6 +55,9 @@ void ChromeUntrustedProjectorUIDelegate::PopulateLoadTimeData(
   source->AddBoolean(
       "isInternalServerSideSpeechRecognitionEnabled",
       ash::features::IsInternalServerSideSpeechRecognitionEnabled());
+  source->AddBoolean(
+      "isFoldShortGapIntoPreviousTranscriptEnabled",
+      ash::features::IsProjectorFoldShortGapIntoPreviousTranscriptEnabled());
   source->AddString("appLocale", g_browser_process->GetApplicationLocale());
 }
 

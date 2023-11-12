@@ -9,7 +9,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
 #include "components/optimization_guide/core/prediction_manager.h"
@@ -34,24 +33,4 @@ void ChromeBrowserMainExtraPartsOptimizationGuide::PreCreateThreads() {
   // Create and initialize the install-wide model store.
   optimization_guide::PredictionModelStore::GetInstance()->Initialize(
       g_browser_process->local_state(), model_downloads_dir);
-}
-
-void ChromeBrowserMainExtraPartsOptimizationGuide::PostProfileInit(
-    Profile* profile,
-    bool is_initial_profile) {
-  if (!optimization_guide::features::IsInstallWideModelStoreEnabled())
-    return;
-
-  if (profile->IsOffTheRecord())
-    return;
-
-  auto* optimization_guide_keyed_service =
-      OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
-  if (!optimization_guide_keyed_service)
-    return;
-
-  optimization_guide_keyed_service->GetPredictionManager()
-      ->MaybeInitializeModelDownloads(
-          optimization_guide_keyed_service
-              ->BackgroundDownloadServiceProvider());
 }

@@ -5,7 +5,7 @@
 #ifndef MEDIA_CAPTURE_VIDEO_VIDEO_FRAME_RECEIVER_H_
 #define MEDIA_CAPTURE_VIDEO_VIDEO_FRAME_RECEIVER_H_
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "media/capture/capture_export.h"
 #include "media/capture/mojom/video_capture_buffer.mojom.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
@@ -89,6 +89,8 @@ class CAPTURE_EXPORT VideoFrameReceiver {
   // immediately reuse the retired |buffer_id| with a new buffer via a call to
   // OnNewBuffer().
   virtual void OnBufferRetired(int buffer_id) = 0;
+
+  virtual void OnCaptureConfigurationChanged() = 0;
 
   virtual void OnError(VideoCaptureError error) = 0;
   virtual void OnFrameDropped(VideoCaptureFrameDropReason reason) = 0;

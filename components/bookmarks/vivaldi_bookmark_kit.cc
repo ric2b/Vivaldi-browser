@@ -3,7 +3,7 @@
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 #include <string>
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/escape.h"
@@ -288,6 +288,10 @@ bool IsSeparator(const BookmarkNode* node) {
          GetDescription(node) == GetMetaNames().separator;
 }
 
+bool IsTrash(const BookmarkNode* node) {
+  return node->type() == bookmarks::BookmarkNode::TRASH;
+}
+
 void InitModelNonClonedKeys(BookmarkModel* model) {
   model->AddNonClonedKey(GetMetaNames().nickname);
   model->AddNonClonedKey(GetMetaNames().partner);
@@ -363,23 +367,23 @@ void SetNodeThumbnail(BookmarkModel* model,
       model, node, GetMetaNames().thumbnail, thumbnail);
 }
 
-bool WriteBookmarkData(const base::Value& value,
+bool WriteBookmarkData(const base::Value::Dict& value,
                        BookmarkWriteFunc write_func,
                        BookmarkWriteFunc write_func_att) {
   static const char kNickLabel[] = "\" NICKNAME=\"";
   static const char kDescriptionLabel[] = "\" DESCRIPTION=\"";
   static const char kSpeedDialLabel[] = "\" SPEEDDIAL=\"";
 
-  const base::Value* meta_info =
-      value.FindDictKey(bookmarks::BookmarkCodec::kMetaInfo);
+  const base::Value::Dict* meta_info =
+      value.FindDict(bookmarks::BookmarkCodec::kMetaInfo);
   if (!meta_info)
     return true;
 
-  const std::string* nick_name = meta_info->FindStringKey(GetMetaNames().nickname);
+  const std::string* nick_name = meta_info->FindString(GetMetaNames().nickname);
   const std::string* description=
-      meta_info->FindStringKey(GetMetaNames().description);
+      meta_info->FindString(GetMetaNames().description);
   const std::string* speed_dial =
-      meta_info->FindStringKey(GetMetaNames().speeddial);
+      meta_info->FindString(GetMetaNames().speeddial);
 
   if (nick_name &&
       (!write_func.Run(kNickLabel) || !write_func_att.Run(*nick_name))) {

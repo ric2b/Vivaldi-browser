@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/webui/signin/ash/inline_login_handler_impl.h"
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/test/bind.h"
@@ -18,7 +18,6 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/signin/signin_promo.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/webui/ash/edu_coexistence/edu_coexistence_login_handler.h"
 #include "chrome/common/pref_names.h"
@@ -28,6 +27,7 @@
 #include "components/account_manager_core/mock_account_manager_facade.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/storage_partition.h"
@@ -90,7 +90,7 @@ DeviceAccountInfo GetGaiaDeviceAccountInfo() {
 }
 
 DeviceAccountInfo GetChildDeviceAccountInfo() {
-  return {supervised_users::kChildAccountSUID /*id*/,
+  return {supervised_user::kChildAccountSUID /*id*/,
           "child@gmail.com" /*email*/,
           user_manager::USER_TYPE_CHILD /*user_type*/,
           account_manager::AccountType::kGaia /*account_type*/,
@@ -98,12 +98,12 @@ DeviceAccountInfo GetChildDeviceAccountInfo() {
 }
 
 base::Value GetCompleteLoginArgs(const std::string& email) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetKey(kEmailKey, base::Value(email));
-  dict.SetKey(kPasswordKey, base::Value("fake password"));
-  dict.SetKey(kGaiaIdKey, base::Value(signin::GetTestGaiaIdForEmail(email)));
-  dict.SetKey(kIsAvailableInArcKey, base::Value(true));
-  return dict;
+  base::Value::Dict dict;
+  dict.Set(kEmailKey, base::Value(email));
+  dict.Set(kPasswordKey, base::Value("fake password"));
+  dict.Set(kGaiaIdKey, base::Value(signin::GetTestGaiaIdForEmail(email)));
+  dict.Set(kIsAvailableInArcKey, base::Value(true));
+  return base::Value(std::move(dict));
 }
 
 MATCHER_P(AccountEmailEq, expected_email, "") {

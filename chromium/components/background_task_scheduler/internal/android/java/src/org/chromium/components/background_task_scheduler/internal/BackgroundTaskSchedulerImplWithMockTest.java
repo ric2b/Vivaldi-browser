@@ -23,8 +23,7 @@ import java.util.concurrent.TimeUnit;
  * Tests for {@link BackgroundTaskSchedulerImpl}.
  */
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(manifest = Config.NONE,
-        shadows = {ShadowGcmNetworkManager.class, ShadowChromiumPlayServicesAvailability.class})
+@Config(manifest = Config.NONE, shadows = {ShadowChromiumPlayServicesAvailability.class})
 public class BackgroundTaskSchedulerImplWithMockTest {
     private static final int TEST_MINUTES = 10;
 
@@ -34,8 +33,7 @@ public class BackgroundTaskSchedulerImplWithMockTest {
     @Before
     public void setUp() {
         mDelegate = new MockBackgroundTaskSchedulerDelegate();
-        mTaskScheduler = new BackgroundTaskSchedulerImpl(
-                mDelegate, new BackgroundTaskSchedulerAlarmManager());
+        mTaskScheduler = new BackgroundTaskSchedulerImpl(mDelegate);
     }
 
     @Test

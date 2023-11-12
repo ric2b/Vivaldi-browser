@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "gin/array_buffer.h"
@@ -64,7 +65,8 @@ class FakeAutomationV8Router : public AutomationV8Router {
           gin::ArrayBufferAllocator::SharedInstance());
     }
     isolate_holder_ = std::make_unique<gin::IsolateHolder>(
-        base::ThreadTaskRunnerHandle::Get(), gin::IsolateHolder::kSingleThread,
+        base::SingleThreadTaskRunner::GetCurrentDefault(),
+        gin::IsolateHolder::kSingleThread,
         gin::IsolateHolder::IsolateType::kUtility);
   }
   FakeAutomationV8Router(const FakeAutomationV8Router&) = delete;
@@ -165,6 +167,10 @@ class AutomationTreeManagerOwnerTest : public testing::Test {
     tree_manager_owner_->SetAutomationV8Bindings(bindings_.get());
   }
 
+  void TearDown() override {
+    tree_manager_owner_->SetAutomationV8Bindings(nullptr);
+  }
+
  protected:
   std::map<ui::AXTreeID, std::unique_ptr<ui::AutomationAXTreeWrapper>>&
   GetTreeIDToTreeMap() {
@@ -202,9 +208,9 @@ class AutomationTreeManagerOwnerTest : public testing::Test {
 
  private:
   base::test::TaskEnvironment task_environment_;
+  std::unique_ptr<FakeAutomationTreeManagerOwner> tree_manager_owner_;
   std::unique_ptr<FakeAutomationV8Router> router_;
   std::unique_ptr<AutomationV8Bindings> bindings_;
-  std::unique_ptr<FakeAutomationTreeManagerOwner> tree_manager_owner_;
 };
 
 TEST_F(AutomationTreeManagerOwnerTest, GetDesktop) {

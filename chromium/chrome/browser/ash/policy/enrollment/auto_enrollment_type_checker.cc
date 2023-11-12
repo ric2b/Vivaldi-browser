@@ -13,15 +13,6 @@
 #include "chromeos/ash/components/system/factory_ping_embargo_check.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
 
-namespace ash::system {
-// TODO(https://crbug.com/1164001): remove when migrated to ash::
-using ::chromeos::system::FactoryPingEmbargoState;
-using ::chromeos::system::GetEnterpriseManagementPingEmbargoState;
-using ::chromeos::system::kFirmwareTypeKey;
-using ::chromeos::system::kFirmwareTypeValueNonchrome;
-using ::chromeos::system::kRlzBrandCodeKey;
-}  // namespace ash::system
-
 namespace policy {
 
 namespace {
@@ -49,9 +40,9 @@ std::string FRERequirementToString(
     case FRERequirement::kNotRequired:
       return "Forced Re-Enrollment disabled: first setup.";
     case FRERequirement::kExplicitlyRequired:
-      return "Forced Re-Enrollment required: flag in VPD.";
+      return "Forced Re-Enrollment explicitly required.";
     case FRERequirement::kExplicitlyNotRequired:
-      return "Forced Re-Enrollment disabled: flag in VPD.";
+      return "Forced Re-Enrollment explicitly not required.";
   }
 }
 
@@ -112,16 +103,18 @@ bool AutoEnrollmentTypeChecker::IsEnabled() {
 // static
 AutoEnrollmentTypeChecker::FRERequirement
 AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD(
-    chromeos::system::StatisticsProvider* statistics_provider) {
+    ash::system::StatisticsProvider* statistics_provider) {
   const absl::optional<base::StringPiece> check_enrollment_value =
       statistics_provider->GetMachineStatistic(
           ash::system::kCheckEnrollmentKey);
 
   if (check_enrollment_value) {
-    if (check_enrollment_value == "0")
+    if (check_enrollment_value == "0") {
       return FRERequirement::kExplicitlyNotRequired;
-    if (check_enrollment_value == "1")
+    }
+    if (check_enrollment_value == "1") {
       return FRERequirement::kExplicitlyRequired;
+    }
 
     LOG(ERROR) << "Unexpected value for " << ash::system::kCheckEnrollmentKey
                << ": " << check_enrollment_value.value();
@@ -177,18 +170,13 @@ AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD(
 // static
 AutoEnrollmentTypeChecker::FRERequirement
 AutoEnrollmentTypeChecker::GetFRERequirement(
-    chromeos::system::StatisticsProvider* statistics_provider) {
+    ash::system::StatisticsProvider* statistics_provider,
+    bool dev_disable_boot) {
   // Skip FRE check if it is not enabled by command-line switches.
   if (!IsFREEnabled()) {
     LOG(WARNING) << "FRE disabled.";
     return FRERequirement::kDisabled;
   }
-
-  const auto fre_vpd_requirement =
-      AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD(
-          statistics_provider);
-  if (fre_vpd_requirement == FRERequirement::kExplicitlyNotRequired)
-    return fre_vpd_requirement;
 
   // Skip FRE check if modulus configuration is not present.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -200,14 +188,22 @@ AutoEnrollmentTypeChecker::GetFRERequirement(
     return FRERequirement::kNotRequired;
   }
 
-  return fre_vpd_requirement;
+  // The FWMP flag DEVELOPER_DISABLE_BOOT indicates that FRE was configured
+  // in the previous OOBE. We need to force FRE checks to prevent enrollment
+  // escapes, see b/268267865.
+  if (dev_disable_boot) {
+    return FRERequirement::kExplicitlyRequired;
+  }
+
+  return AutoEnrollmentTypeChecker::GetFRERequirementAccordingToVPD(
+      statistics_provider);
 }
 
 // static
 AutoEnrollmentTypeChecker::InitialStateDeterminationRequirement
 AutoEnrollmentTypeChecker::GetInitialStateDeterminationRequirement(
     bool is_system_clock_synchronized,
-    chromeos::system::StatisticsProvider* statistics_provider) {
+    ash::system::StatisticsProvider* statistics_provider) {
   // Skip Initial State Determination if it is not enabled according to
   // command-line flags.
   if (!IsInitialEnrollmentEnabled()) {
@@ -268,7 +264,8 @@ AutoEnrollmentTypeChecker::GetInitialStateDeterminationRequirement(
 AutoEnrollmentTypeChecker::CheckType
 AutoEnrollmentTypeChecker::DetermineAutoEnrollmentCheckType(
     bool is_system_clock_synchronized,
-    chromeos::system::StatisticsProvider* statistics_provider) {
+    ash::system::StatisticsProvider* statistics_provider,
+    bool dev_disable_boot) {
   // Skip everything if neither FRE nor Initial Enrollment are enabled.
   if (!IsEnabled()) {
     LOG(WARNING) << "Auto-enrollment disabled.";
@@ -284,7 +281,8 @@ AutoEnrollmentTypeChecker::DetermineAutoEnrollmentCheckType(
 
   // Determine whether to do an FRE check or an initial state determination.
   // FRE has precedence since managed devices must go through an FRE check.
-  FRERequirement fre_requirement = GetFRERequirement(statistics_provider);
+  const FRERequirement fre_requirement =
+      GetFRERequirement(statistics_provider, dev_disable_boot);
   LOG(WARNING) << FRERequirementToString(fre_requirement);
 
   switch (fre_requirement) {

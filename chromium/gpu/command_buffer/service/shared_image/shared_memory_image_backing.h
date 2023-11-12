@@ -12,13 +12,14 @@
 #include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/shared_memory_region_wrapper.h"
+#include "gpu/gpu_gles2_export.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace gpu {
 
 // Implementation of SharedImageBacking that uses Shared Memory GMB.
-class SharedMemoryImageBacking : public SharedImageBacking {
+class GPU_GLES2_EXPORT SharedMemoryImageBacking : public SharedImageBacking {
  public:
   SharedMemoryImageBacking(const Mailbox& mailbox,
                            viz::SharedImageFormat format,
@@ -38,6 +39,7 @@ class SharedMemoryImageBacking : public SharedImageBacking {
   void SetClearedRect(const gfx::Rect& cleared_rect) override;
 
   const SharedMemoryRegionWrapper& shared_memory_wrapper();
+  const std::vector<SkPixmap>& pixmaps();
 
  protected:
   std::unique_ptr<DawnImageRepresentation> ProduceDawn(
@@ -68,13 +70,17 @@ class SharedMemoryImageBacking : public SharedImageBacking {
       MemoryTypeTracker* tracker) override;
 
  private:
-  void OnMemoryDump(const std::string& dump_name,
-                    base::trace_event::MemoryAllocatorDumpGuid client_guid,
-                    base::trace_event::ProcessMemoryDump* pmd,
-                    uint64_t client_tracing_id) override;
+  base::trace_event::MemoryAllocatorDump* OnMemoryDump(
+      const std::string& dump_name,
+      base::trace_event::MemoryAllocatorDumpGuid client_guid,
+      base::trace_event::ProcessMemoryDump* pmd,
+      uint64_t client_tracing_id) override;
 
   // Set for shared memory GMB.
   SharedMemoryRegionWrapper shared_memory_wrapper_;
+
+  // SkPixmap(s) for accessing memory.
+  std::vector<SkPixmap> pixmaps_;
 };
 
 }  // namespace gpu

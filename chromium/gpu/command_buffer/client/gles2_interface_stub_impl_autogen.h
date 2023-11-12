@@ -1130,6 +1130,25 @@ void GLES2InterfaceStub::BeginSharedImageAccessDirectCHROMIUM(
     GLenum /* mode */) {}
 void GLES2InterfaceStub::EndSharedImageAccessDirectCHROMIUM(
     GLuint /* texture */) {}
+void GLES2InterfaceStub::ConvertRGBAToYUVAMailboxesINTERNAL(
+    GLenum /* planes_yuv_color_space */,
+    GLenum /* plane_config */,
+    GLenum /* subsampling */,
+    const GLbyte* /* mailboxes */) {}
+void GLES2InterfaceStub::ConvertYUVAMailboxesToRGBINTERNAL(
+    GLenum /* planes_yuv_color_space */,
+    GLenum /* plane_config */,
+    GLenum /* subsampling */,
+    const GLbyte* /* mailboxes */) {}
+void GLES2InterfaceStub::CopySharedImageINTERNAL(
+    GLint /* xoffset */,
+    GLint /* yoffset */,
+    GLint /* x */,
+    GLint /* y */,
+    GLsizei /* width */,
+    GLsizei /* height */,
+    GLboolean /* unpack_flip_y */,
+    const GLbyte* /* mailboxes */) {}
 void GLES2InterfaceStub::EnableiOES(GLenum /* target */, GLuint /* index */) {}
 void GLES2InterfaceStub::DisableiOES(GLenum /* target */, GLuint /* index */) {}
 void GLES2InterfaceStub::BlendEquationiOES(GLuint /* buf */,

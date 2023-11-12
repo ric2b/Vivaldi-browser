@@ -31,6 +31,8 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
+#include "third_party/blink/renderer/core/dom/focus_params.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -38,6 +40,7 @@
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
+#include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
@@ -58,7 +61,7 @@ void HTMLDialogElement::SetFocusForDialogLegacy(HTMLDialogElement* dialog) {
           document.GetExecutionContext())) {
     HTMLElement::HideAllPopoversUntil(
         nullptr, document, HidePopoverFocusBehavior::kNone,
-        HidePopoverForcingLevel::kHideAfterAnimations);
+        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions);
   }
 
   dialog->previously_focused_element_ = document.FocusedElement();
@@ -86,7 +89,7 @@ void HTMLDialogElement::SetFocusForDialogLegacy(HTMLDialogElement* dialog) {
 
   // 3. Run the focusing steps for control.
   if (control->IsFocusable())
-    control->Focus();
+    control->Focus(FocusParams(/*gate_on_user_activation=*/true));
   else
     document.ClearFocusedElement();
 
@@ -147,12 +150,14 @@ void HTMLDialogElement::close(const String& return_value) {
 
   if (!FastHasAttribute(html_names::kOpenAttr))
     return;
-  SetBooleanAttribute(html_names::kOpenAttr, false);
-  SetIsModal(false);
 
   Document& document = GetDocument();
   HTMLDialogElement* old_modal_dialog = document.ActiveModalDialog();
-  document.RemoveFromTopLayer(this);
+
+  SetBooleanAttribute(html_names::kOpenAttr, false);
+  SetIsModal(false);
+
+  document.ScheduleForTopLayerRemoval(this);
   InertSubtreesChanged(document, old_modal_dialog);
 
   if (!return_value.IsNull())
@@ -167,7 +172,9 @@ void HTMLDialogElement::close(const String& return_value) {
     focus_options->setPreventScroll(true);
     Element* previously_focused_element = previously_focused_element_;
     previously_focused_element_ = nullptr;
-    previously_focused_element->Focus(focus_options);
+    previously_focused_element->Focus(FocusParams(
+        SelectionBehaviorOnFocus::kNone, mojom::blink::FocusType::kScript,
+        nullptr, focus_options, /*gate_on_user_activation=*/true));
   }
 
   if (close_watcher_) {
@@ -350,10 +357,13 @@ void HTMLDialogElement::SetFocusForDialog() {
           GetDocument().GetExecutionContext())) {
     HTMLElement::HideAllPopoversUntil(
         nullptr, GetDocument(), HidePopoverFocusBehavior::kNone,
-        HidePopoverForcingLevel::kHideAfterAnimations);
+        HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions);
   }
 
   Element* control = GetFocusDelegate(/*autofocus_only=*/false);
+  if (is_modal_ && IsAutofocusable()) {
+    control = this;
+  }
   if (!control)
     control = this;
 

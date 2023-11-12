@@ -17,7 +17,7 @@
 #include "base/traits_bag.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
-#include "chrome/browser/web_applications/isolation_data.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
 #include "chrome/browser/web_applications/test/fake_os_integration_manager.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
@@ -38,7 +38,6 @@
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "url/gurl.h"
@@ -81,15 +80,13 @@ class WebAppInstallFinalizerUnitTest
       public ::testing::WithParamInterface<OsIntegrationSubManagersState> {
  public:
   WebAppInstallFinalizerUnitTest() {
-    if (GetParam() == OsIntegrationSubManagersState::kEnabled) {
+    if (GetParam() == OsIntegrationSubManagersState::kSaveStateToDB) {
       scoped_feature_list_.InitWithFeaturesAndParameters(
-          {{blink::features::kFileHandlingAPI, {}},
-           {features::kOsIntegrationSubManagers, {{"stage", "write_config"}}}},
+          {{features::kOsIntegrationSubManagers, {{"stage", "write_config"}}}},
           /*disabled_features=*/{});
     } else {
       scoped_feature_list_.InitWithFeatures(
-          {blink::features::kFileHandlingAPI},
-          {features::kOsIntegrationSubManagers});
+          {}, {features::kOsIntegrationSubManagers});
     }
   }
   WebAppInstallFinalizerUnitTest(const WebAppInstallFinalizerUnitTest&) =
@@ -268,6 +265,44 @@ TEST_P(WebAppInstallFinalizerUnitTest, OnWebAppManifestUpdatedTriggered) {
   EXPECT_TRUE(install_manager_observer_->web_app_manifest_updated_called());
 }
 
+TEST_P(WebAppInstallFinalizerUnitTest,
+       NonLocalThenLocalInstallSetsInstallTime) {
+  auto info = std::make_unique<WebAppInstallInfo>();
+  info->start_url = GURL("https://foo.example");
+  info->title = u"Foo Title";
+  WebAppInstallFinalizer::FinalizeOptions options(
+      webapps::WebappInstallSource::INTERNAL_DEFAULT);
+  options.locally_installed = false;
+  // OS Hooks must be disabled for non-locally installed app.
+  options.add_to_applications_menu = false;
+  options.add_to_desktop = false;
+  options.add_to_quick_launch_bar = false;
+
+  {
+    FinalizeInstallResult result = AwaitFinalizeInstall(*info, options);
+
+    ASSERT_EQ(webapps::InstallResultCode::kSuccessNewInstall, result.code);
+    const WebApp* installed_app =
+        registrar().GetAppById(result.installed_app_id);
+
+    EXPECT_FALSE(installed_app->is_locally_installed());
+    EXPECT_TRUE(installed_app->install_time().is_null());
+  }
+
+  options.locally_installed = true;
+
+  {
+    FinalizeInstallResult result = AwaitFinalizeInstall(*info, options);
+
+    ASSERT_EQ(webapps::InstallResultCode::kSuccessNewInstall, result.code);
+    const WebApp* installed_app =
+        registrar().GetAppById(result.installed_app_id);
+
+    EXPECT_TRUE(installed_app->is_locally_installed());
+    EXPECT_FALSE(installed_app->install_time().is_null());
+  }
+}
+
 TEST_P(WebAppInstallFinalizerUnitTest, InstallNoDesktopShortcut) {
   auto info = std::make_unique<WebAppInstallInfo>();
   info->start_url = GURL("https://foo.example");
@@ -441,11 +476,11 @@ TEST_P(WebAppInstallFinalizerUnitTest, IsolationDataSetInWebAppDB) {
   info.start_url = GURL("https://foo.example");
   info.title = u"Foo Title";
 
-  const IsolationData isolation_data{IsolationData::DevModeBundle{
-      .path = base::FilePath(FILE_PATH_LITERAL("p"))}};
+  const IsolatedWebAppLocation location =
+      DevModeBundle{.path = base::FilePath(FILE_PATH_LITERAL("p"))};
   WebAppInstallFinalizer::FinalizeOptions options(
       webapps::WebappInstallSource::EXTERNAL_POLICY);
-  options.isolation_data = isolation_data;
+  options.isolated_web_app_location = location;
 
   FinalizeInstallResult result = AwaitFinalizeInstall(info, options);
 
@@ -454,13 +489,13 @@ TEST_P(WebAppInstallFinalizerUnitTest, IsolationDataSetInWebAppDB) {
             GenerateAppId(/*manifest_id=*/absl::nullopt, info.start_url));
 
   const WebApp* installed_app = registrar().GetAppById(result.installed_app_id);
-  EXPECT_EQ(isolation_data, installed_app->isolation_data());
+  EXPECT_EQ(location, installed_app->isolation_data()->location);
 }
 
 INSTANTIATE_TEST_SUITE_P(
     All,
     WebAppInstallFinalizerUnitTest,
-    ::testing::Values(OsIntegrationSubManagersState::kEnabled,
+    ::testing::Values(OsIntegrationSubManagersState::kSaveStateToDB,
                       OsIntegrationSubManagersState::kDisabled),
     test::GetOsIntegrationSubManagersTestName);
 

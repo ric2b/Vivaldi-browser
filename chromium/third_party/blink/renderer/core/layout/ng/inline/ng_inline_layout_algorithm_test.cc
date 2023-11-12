@@ -92,7 +92,6 @@ TEST_F(NGInlineLayoutAlgorithmTest, TypesForFirstLine) {
 }
 
 TEST_F(NGInlineLayoutAlgorithmTest, TypesForBlockInInline) {
-  ScopedLayoutNGBlockInInlineForTest block_in_inline_scope(true);
   SetBodyInnerHTML(R"HTML(
     <!DOCTYPE html>
     <div id="block-in-inline">
@@ -588,7 +587,6 @@ TEST_F(NGInlineLayoutAlgorithmTest,
 
 // Block-in-inline is not reusable. See |EndOfReusableItems|.
 TEST_F(NGInlineLayoutAlgorithmTest, BlockInInlineAppend) {
-  ScopedLayoutNGBlockInInlineForTest scoped_for_test(true);
   SetBodyInnerHTML(R"HTML(
     <!DOCTYPE html>
     <style>
@@ -673,7 +671,6 @@ TEST_F(NGInlineLayoutAlgorithmTest, InkOverflow) {
 
 // See also NGInlineLayoutAlgorithmTest.TextCombineFake
 TEST_F(NGInlineLayoutAlgorithmTest, TextCombineBasic) {
-  ScopedLayoutNGForTest enable_layout_ng(true);
   LoadAhem();
   InsertStyleElement(
       "body { margin: 0px; font: 100px/110px Ahem; }"
@@ -701,7 +698,6 @@ TEST_F(NGInlineLayoutAlgorithmTest, TextCombineBasic) {
 
 // See also NGInlineLayoutAlgorithmTest.TextCombineBasic
 TEST_F(NGInlineLayoutAlgorithmTest, TextCombineFake) {
-  ScopedLayoutNGForTest enable_layout_ng(true);
   LoadAhem();
   InsertStyleElement(
       "body { margin: 0px; font: 100px/110px Ahem; }"
@@ -728,6 +724,21 @@ TEST_F(NGInlineLayoutAlgorithmTest, TextCombineFake) {
 )DUMP",
             AsFragmentItemsString(
                 *To<LayoutBlockFlow>(GetLayoutObjectByElementId("target"))));
+}
+
+// http://crbug.com/1413969
+TEST_F(NGInlineLayoutAlgorithmTest, EmptyInitialLetter) {
+  LoadAhem();
+  InsertStyleElement(
+      "body { font: 10px/15px Ahem; }"
+      "#sample::first-letter { initial-letter: 3; }");
+  SetBodyInnerHTML("<div id=sample><span> </span></div>");
+  const char* const expected = R"DUMP(
+{Line #descendants=2 LTR Standard} "0,0 0x15"
+{Box #descendants=1 AtomicInlineLTR Standard} "0,40 0x0"
+)DUMP";
+  EXPECT_EQ(expected, AsFragmentItemsString(*To<LayoutBlockFlow>(
+                          GetLayoutObjectByElementId("sample"))));
 }
 
 TEST_F(NGInlineLayoutAlgorithmTest, LineBoxWithHangingWidthRTLRightAligned) {

@@ -41,7 +41,9 @@ class AutofillProfile : public AutofillDataModel {
     // A profile synced down from the server. These are read-only locally.
     SERVER_PROFILE,
   };
+
   // Describes where the profile is stored and how it is synced.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.autofill
   enum class Source {
     // Not synced at all or synced through the `AutofillProfileSyncBridge`. This
     // corresponds to profiles that local to Autofill only.
@@ -52,9 +54,14 @@ class AutofillProfile : public AutofillDataModel {
     kMaxValue = kAccount,
   };
 
+  // The values used to represent Autofill in the `initial_creator_id()` and
+  // `last_modifier_id()`.
+  static constexpr int kInitialCreatorOrModifierChrome = 70073;
+
   AutofillProfile(const std::string& guid,
                   const std::string& origin,
                   Source source = Source::kLocalOrSyncable);
+  explicit AutofillProfile(Source source);
 
   // Server profile constructor. The type must be SERVER_PROFILE (this serves
   // to differentiate this constructor). |server_id| can be empty. If empty,
@@ -70,6 +77,7 @@ class AutofillProfile : public AutofillDataModel {
 
   // AutofillDataModel:
   AutofillMetadata GetMetadata() const override;
+  double GetRankingScore(base::Time current_time) const override;
   bool SetMetadata(const AutofillMetadata& metadata) override;
   // Returns whether the profile is deletable: if it is not verified and has not
   // been used for longer than |kDisusedAddressDeletionTimeDelta|.
@@ -84,15 +92,14 @@ class AutofillProfile : public AutofillDataModel {
 
   int GetRawInfoAsInt(ServerFieldType type) const override;
 
-  void SetRawInfoWithVerificationStatus(
-      ServerFieldType type,
-      const std::u16string& value,
-      structured_address::VerificationStatus status) override;
+  void SetRawInfoWithVerificationStatus(ServerFieldType type,
+                                        const std::u16string& value,
+                                        VerificationStatus status) override;
 
   void SetRawInfoAsIntWithVerificationStatus(
       ServerFieldType type,
       int value,
-      structured_address::VerificationStatus status) override;
+      VerificationStatus status) override;
 
   void GetSupportedTypes(ServerFieldTypeSet* supported_types) const override;
 
@@ -269,6 +276,21 @@ class AutofillProfile : public AutofillDataModel {
     source_ = source;
   }
 
+  int initial_creator_id() const { return initial_creator_id_; }
+  void set_initial_creator_id(int creator_id) {
+    initial_creator_id_ = creator_id;
+  }
+
+  int last_modifier_id() const { return last_modifier_id_; }
+  void set_last_modifier_id(int modifier_id) {
+    last_modifier_id_ = modifier_id;
+  }
+
+  // Converts a kLocalOrSyncable profile to a kAccount profile and returns it.
+  // The converted profile shares the same content, but with a different GUID
+  // and with `source_` kAccount. Additional kAccount-specific metadata is set.
+  AutofillProfile ConvertToAccountProfile() const;
+
   // Checks for non-empty setting-inaccessible fields and returns all that were
   // found.
   ServerFieldTypeSet FindInaccessibleProfileValues() const;
@@ -281,14 +303,13 @@ class AutofillProfile : public AutofillDataModel {
   std::u16string GetInfoImpl(const AutofillType& type,
                              const std::string& app_locale) const override;
 
-  structured_address::VerificationStatus GetVerificationStatusImpl(
+  VerificationStatus GetVerificationStatusImpl(
       const ServerFieldType type) const override;
 
-  bool SetInfoWithVerificationStatusImpl(
-      const AutofillType& type,
-      const std::u16string& value,
-      const std::string& app_locale,
-      structured_address::VerificationStatus status) override;
+  bool SetInfoWithVerificationStatusImpl(const AutofillType& type,
+                                         const std::u16string& value,
+                                         const std::string& app_locale,
+                                         VerificationStatus status) override;
 
   // Creates inferred labels for |profiles| at indices corresponding to
   // |indices|, and stores the results to the corresponding elements of
@@ -353,6 +374,17 @@ class AutofillProfile : public AutofillDataModel {
   bool has_converted_;
 
   Source source_;
+
+  // Indicates the application that initially created the profile and the
+  // application that performed the last non-metadata modification of it.
+  // Only relevant for `source_ == kAccount` profiles, since `kLocalOrSyncable`
+  // profiles are only used within Autofill.
+  // The integer values represent a server-side enum `BillableService`, which is
+  // not duplicated in Chromium. For Autofill, the exact application that
+  // created/modified the profile is thus opaque. However, Autofill is
+  // represented by the value `kInitialCreatorOrModifierChrome`.
+  int initial_creator_id_ = 0;
+  int last_modifier_id_ = 0;
 };
 
 // So we can compare AutofillProfiles with EXPECT_EQ().

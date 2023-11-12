@@ -11,14 +11,15 @@
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/remote_frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 namespace blink {
 
 void FakeLocalFrameHost::Init(blink::AssociatedInterfaceProvider* provider) {
   provider->OverrideBinderForTesting(
       mojom::blink::LocalFrameHost::Name_,
-      base::BindRepeating(&FakeLocalFrameHost::BindFrameHostReceiver,
-                          base::Unretained(this)));
+      WTF::BindRepeating(&FakeLocalFrameHost::BindFrameHostReceiver,
+                         base::Unretained(this)));
 }
 
 void FakeLocalFrameHost::EnterFullscreen(
@@ -244,10 +245,20 @@ void FakeLocalFrameHost::DidChangeSrcDoc(
     const blink::FrameToken& child_frame_token,
     const WTF::String& srcdoc_value) {}
 
-void FakeLocalFrameHost::DidChangeBaseURL(const ::blink::KURL& url) {}
-
 void FakeLocalFrameHost::ReceivedDelegatedCapability(
     blink::mojom::DelegatedCapability delegated_capability) {}
+
+void FakeLocalFrameHost::SendFencedFrameReportingBeacon(
+    const WTF::String& event_data,
+    const WTF::String& event_type,
+    blink::FencedFrame::ReportingDestination destination) {}
+
+void FakeLocalFrameHost::SetFencedFrameAutomaticBeaconReportEventData(
+    const WTF::String& event_data,
+    const WTF::Vector<blink::FencedFrame::ReportingDestination>& destination) {}
+
+void FakeLocalFrameHost::SendPrivateAggregationRequestsForFencedFrameEvent(
+    const WTF::String& event_type) {}
 
 void FakeLocalFrameHost::CreatePortal(
     mojo::PendingAssociatedReceiver<mojom::blink::Portal> portal,

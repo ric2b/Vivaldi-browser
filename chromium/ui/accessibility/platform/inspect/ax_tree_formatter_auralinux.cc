@@ -21,20 +21,6 @@
 #include "ui/accessibility/platform/inspect/ax_property_node.h"
 #include "ui/accessibility/platform/inspect/ax_script_instruction.h"
 
-#define CHECK_ATSPI_ERROR(error)                       \
-  if (error) {                                         \
-    LOG(ERROR) << error->message;                      \
-    g_clear_error(&error);                             \
-    return base::Value(base::Value::Type::DICTIONARY); \
-  }
-
-#define CHECK_ATSPI_ERROR_NULLPTR(error) \
-  if (error) {                           \
-    LOG(ERROR) << error->message;        \
-    g_clear_error(&error);               \
-    return nullptr;                      \
-  }
-
 namespace ui {
 
 // Used in dictionary to disambiguate property vs object attribute when they
@@ -243,13 +229,9 @@ void AXTreeFormatterAuraLinux::AddHypertextProperties(
       gchar* link_start = g_utf8_offset_to_pointer(character_text, utf8_offset);
       int offset = link_start - character_text;
 
-      gchar* character_substring =
-          g_utf8_substring(character_text, utf8_offset, utf8_offset + 1);
-      DCHECK(std::string(character_substring) == "\uFFFC");
-
-      base::ReplaceFirstSubstringAfterOffset(&text, offset, character_substring,
+      std::string replacement_char = "\uFFFC";
+      base::ReplaceFirstSubstringAfterOffset(&text, offset, replacement_char,
                                              link_str);
-      g_free(character_substring);
     }
   }
 

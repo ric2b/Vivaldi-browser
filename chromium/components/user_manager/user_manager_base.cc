@@ -10,11 +10,11 @@
 #include <set>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -321,7 +321,6 @@ void UserManagerBase::SwitchActiveUser(const AccountId& account_id) {
   // Move the user to the front.
   SetLRUUser(active_user_);
 
-  NotifyActiveUserHashChanged(active_user_->username_hash());
   NotifyActiveUserChanged(active_user_);
   CallUpdateLoginState();
 }
@@ -381,6 +380,16 @@ void UserManagerBase::RemoveNonOwnerUserInternal(AccountId account_id,
 }
 
 void UserManagerBase::RemoveUserFromList(const AccountId& account_id) {
+  RemoveUserFromListImpl(account_id, /* notify=*/true);
+}
+
+void UserManagerBase::RemoveUserFromListForRecreation(
+    const AccountId& account_id) {
+  RemoveUserFromListImpl(account_id, /* notify=*/false);
+}
+
+void UserManagerBase::RemoveUserFromListImpl(const AccountId& account_id,
+                                             bool notify) {
   DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
   RemoveNonCryptohomeData(account_id);
   KnownUser(GetLocalState()).RemovePrefs(account_id);
@@ -388,8 +397,7 @@ void UserManagerBase::RemoveUserFromList(const AccountId& account_id) {
     // After the User object is deleted from memory in DeleteUser() here,
     // the account_id reference will be invalid if the reference points
     // to the account_id in the User object.
-    DeleteUser(
-        RemoveRegularOrSupervisedUserFromList(account_id, true /* notify */));
+    DeleteUser(RemoveRegularOrSupervisedUserFromList(account_id, notify));
   } else {
     NOTREACHED() << "Users are not loaded yet.";
     return;
@@ -612,6 +620,38 @@ void UserManagerBase::ParseUserList(const base::Value::List& users_list,
     }
     users_vector->push_back(account_id);
   }
+}
+
+bool UserManagerBase::IsOwnerUser(const User* user) const {
+  DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
+  return user && !owner_account_id_.empty() &&
+         user->GetAccountId() == owner_account_id_;
+}
+
+bool UserManagerBase::IsPrimaryUser(const User* user) const {
+  DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
+  return user && user == primary_user_;
+}
+
+bool UserManagerBase::IsEphemeralUser(const User* user) const {
+  DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
+  if (!user) {
+    return false;
+  }
+
+  // Owner user is always persistent.
+  if (IsOwnerUser(user)) {
+    return false;
+  }
+
+  // Guest and public account is ephemeral.
+  if (auto user_type = user->GetType();
+      user_type == USER_TYPE_GUEST || user_type == USER_TYPE_PUBLIC_ACCOUNT) {
+    return true;
+  }
+
+  // Otherwise, if ephemeral_users policy is enabled, it is ephemeral.
+  return AreEphemeralUsersEnabled();
 }
 
 bool UserManagerBase::IsCurrentUserOwner() const {
@@ -913,6 +953,18 @@ void UserManagerBase::EnsureUsersLoaded() {
       // Hide legacy supervised users from the login screen if not removed.
       continue;
     }
+
+    UserDirectoryIntegrityManager integrity_manager(GetLocalState());
+    absl::optional<AccountId> incomplete_user =
+        integrity_manager.GetMisconfiguredUser();
+    if (incomplete_user.has_value() &&
+        incomplete_user->GetUserEmail() == it->GetUserEmail()) {
+      // Skip misconfigured user.
+      VLOG(1) << "Encountered misconfigured user while loading list of "
+                 "users, skipping";
+      continue;
+    }
+
     base::UmaHistogramEnumeration(
         kLegacySupervisedUsersHistogramName,
         LegacySupervisedUserStatus::kGaiaUserDisplayed);
@@ -1051,7 +1103,6 @@ void UserManagerBase::NotifyActiveUserChanged(User* active_user) {
 void UserManagerBase::NotifyOnLogin() {
   DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
 
-  NotifyActiveUserHashChanged(active_user_->username_hash());
   NotifyActiveUserChanged(active_user_);
   CallUpdateLoginState();
 }
@@ -1135,12 +1186,6 @@ void UserManagerBase::NotifyUserAddedToSession(const User* added_user,
   DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
   for (auto& observer : session_state_observer_list_)
     observer.UserAddedToSession(added_user);
-}
-
-void UserManagerBase::NotifyActiveUserHashChanged(const std::string& hash) {
-  DCHECK(!task_runner_ || task_runner_->RunsTasksInCurrentSequence());
-  for (auto& observer : session_state_observer_list_)
-    observer.ActiveUserHashChanged(hash);
 }
 
 void UserManagerBase::Initialize() {

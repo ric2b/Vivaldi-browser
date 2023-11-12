@@ -7,49 +7,60 @@
 #include "base/cxx17_backports.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
+#include "chrome/browser/profiles/profile_selections.h"
+#include "content/public/browser/browser_context.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
-bool TimestampRange::Update(base::Time time) {
-  bool modified = false;
-
-  if (!first.has_value() || time < first.value()) {
-    first = time;
-    modified = true;
-  }
-
-  if (!last.has_value() || time > last.value()) {
-    last = time;
-    modified = true;
-  }
-
-  return modified;
+base::FilePath GetDIPSFilePath(content::BrowserContext* context) {
+  return context->GetPath().Append(kDIPSFilename);
 }
 
-bool TimestampRange::IsNullOrWithin(TimestampRange other) const {
-  if (first.has_value()) {
-    if (!other.first.has_value() || other.first.value() > first.value()) {
-      return false;
-    }
-  }
-  if (last.has_value()) {
-    if (!other.last.has_value() || other.last.value() < last.value()) {
-      return false;
-    }
-  }
-
-  return true;
+ProfileSelections GetHumanProfileSelections() {
+  return ProfileSelections::Builder()
+      .WithRegular(ProfileSelection::kOwnInstance)
+      .WithGuest(ProfileSelection::kOffTheRecordOnly)
+      .WithSystem(ProfileSelection::kNone)
+      .WithAshInternals(ProfileSelection::kNone)
+      .Build();
 }
 
-std::ostream& operator<<(std::ostream& os, absl::optional<base::Time> time) {
-  if (time.has_value()) {
-    return os << time.value();
+bool UpdateTimestampRange(TimestampRange& range, base::Time time) {
+  if (!range.has_value()) {
+    range = {time, time};
+    return true;
   }
-  return os << "NULL";
+
+  if (time < range->first) {
+    range->first = time;
+    return true;
+  }
+
+  if (time > range->second) {
+    range->second = time;
+    return true;
+  }
+
+  return false;
+}
+
+bool IsNullOrWithin(const TimestampRange& inner, const TimestampRange& outer) {
+  if (!inner.has_value()) {
+    return true;
+  }
+
+  if (!outer.has_value()) {
+    return false;
+  }
+
+  return outer->first <= inner->first && inner->second <= outer->second;
 }
 
 std::ostream& operator<<(std::ostream& os, TimestampRange range) {
-  return os << "[" << range.first << ", " << range.last << "]";
+  if (!range.has_value()) {
+    return os << "[NULL, NULL]";
+  }
+  return os << "[" << range->first << ", " << range->second << "]";
 }
 
 // CookieAccessType:

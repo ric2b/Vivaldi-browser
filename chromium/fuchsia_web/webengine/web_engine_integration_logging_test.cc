@@ -11,16 +11,10 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
 #include "fuchsia_web/common/test/frame_test_util.h"
+#include "fuchsia_web/webengine/test/context_provider_for_test.h"
+#include "fuchsia_web/webengine/test/isolated_archivist.h"
 #include "fuchsia_web/webengine/web_engine_integration_test_base.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-#if defined(USE_CFV1_LAUNCHER)
-#include "fuchsia_web/webengine/test/context_provider_for_test_v1.h"  // nogncheck
-#include "fuchsia_web/webengine/test/isolated_archivist_v1.h"  // nogncheck
-#else
-#include "fuchsia_web/webengine/test/context_provider_for_test_v2.h"  // nogncheck
-#include "fuchsia_web/webengine/test/isolated_archivist_v2.h"  // nogncheck
-#endif
 
 namespace {
 
@@ -53,11 +47,16 @@ class WebEngineIntegrationLoggingTest : public WebEngineIntegrationTestBase {
       : isolated_archivist_(
             *filtered_service_directory().outgoing_directory()) {}
 
+  ~WebEngineIntegrationLoggingTest() override {
+    // We're about to shut down the realm; unbind to unhook the error handler.
+    frame_.Unbind();
+    context_.Unbind();
+  }
+
   void StartWebEngine(base::CommandLine command_line) override {
-    context_provider_.emplace(
-        ContextProviderForTest::Create(std::move(command_line)));
+    context_provider_.emplace(command_line);
     context_provider_->ptr().set_error_handler(
-        [](zx_status_t status) { ADD_FAILURE(); });
+        [](zx_status_t status) { FAIL() << zx_status_get_string(status); });
   }
 
   fuchsia::web::ContextProvider* GetContextProvider() override {

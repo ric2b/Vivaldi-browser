@@ -14,10 +14,10 @@
 #include <utility>
 
 #include "base/base_switches.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
@@ -531,6 +531,13 @@ void MetricsStateManager::CheckForClonedInstall() {
 
 bool MetricsStateManager::ShouldResetClientIdsOnClonedInstall() {
   return cloned_install_detector_.ShouldResetClientIds(local_state_);
+}
+
+base::CallbackListSubscription
+MetricsStateManager::AddOnClonedInstallDetectedCallback(
+    base::OnceClosure callback) {
+  return cloned_install_detector_.AddOnClonedInstallDetectedCallback(
+      std::move(callback));
 }
 
 std::unique_ptr<const variations::EntropyProviders>

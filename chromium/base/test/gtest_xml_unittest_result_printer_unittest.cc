@@ -14,7 +14,18 @@
 
 namespace base {
 
-TEST(XmlUnitTestResultPrinterTest, LinkInXmlFile) {
+class XmlUnitTestResultPrinterTest : public ::testing::Test {
+ public:
+  void SetUp() override {
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kTestLauncherOutput)) {
+      GTEST_SKIP() << "XmlUnitTestResultPrinterTest is not initialized "
+                   << "for single process tests.";
+    }
+  }
+};
+
+TEST_F(XmlUnitTestResultPrinterTest, LinkInXmlFile) {
   XmlUnitTestResultPrinter::Get()->AddLink("unique_link", "http://google.com");
   std::string file_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -31,7 +42,7 @@ TEST(XmlUnitTestResultPrinterTest, LinkInXmlFile) {
       << expected_content << " not found in " << content;
 }
 
-TEST(XmlUnitTestResultPrinterTest, EscapedLinkInXmlFile) {
+TEST_F(XmlUnitTestResultPrinterTest, EscapedLinkInXmlFile) {
   XmlUnitTestResultPrinter::Get()->AddLink(
       "unique_link", "http://google.com/path?id=\"'<>&\"");
   std::string file_path =
@@ -49,7 +60,7 @@ TEST(XmlUnitTestResultPrinterTest, EscapedLinkInXmlFile) {
       << expected_content << " not found in " << content;
 }
 
-TEST(XmlUnitTestResultPrinterTest, TagInXmlFile) {
+TEST_F(XmlUnitTestResultPrinterTest, TagInXmlFile) {
   XmlUnitTestResultPrinter::Get()->AddTag("tag_name", "tag_value");
   std::string file_path =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -64,6 +75,54 @@ TEST(XmlUnitTestResultPrinterTest, TagInXmlFile) {
                     "tag_value", "</tag>"});
   EXPECT_TRUE(content.find(expected_content) != std::string::npos)
       << expected_content << " not found in " << content;
+}
+
+TEST_F(XmlUnitTestResultPrinterTest, MultiTagsInXmlFile) {
+  XmlUnitTestResultPrinter::Get()->AddTag("tag_name1", "tag_value1");
+  XmlUnitTestResultPrinter::Get()->AddTag("tag_name2", "tag_value2");
+  std::string file_path =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kTestLauncherOutput);
+  std::string content;
+  ASSERT_TRUE(
+      base::ReadFileToString(FilePath::FromUTF8Unsafe(file_path), &content));
+  std::string expected_content_1 =
+      "<tag name=\"MultiTagsInXmlFile\" "
+      "classname=\"XmlUnitTestResultPrinterTest\" "
+      "tag_name=\"tag_name1\">tag_value1</tag>";
+  EXPECT_TRUE(content.find(expected_content_1) != std::string::npos)
+      << expected_content_1 << " not found in " << content;
+
+  std::string expected_content_2 =
+      "<tag name=\"MultiTagsInXmlFile\" "
+      "classname=\"XmlUnitTestResultPrinterTest\" "
+      "tag_name=\"tag_name2\">tag_value2</tag>";
+  EXPECT_TRUE(content.find(expected_content_2) != std::string::npos)
+      << expected_content_2 << " not found in " << content;
+}
+
+TEST_F(XmlUnitTestResultPrinterTest, MultiTagsWithSameNameInXmlFile) {
+  XmlUnitTestResultPrinter::Get()->AddTag("tag_name", "tag_value1");
+  XmlUnitTestResultPrinter::Get()->AddTag("tag_name", "tag_value2");
+  std::string file_path =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kTestLauncherOutput);
+  std::string content;
+  ASSERT_TRUE(
+      base::ReadFileToString(FilePath::FromUTF8Unsafe(file_path), &content));
+  std::string expected_content_1 =
+      "<tag name=\"MultiTagsWithSameNameInXmlFile\" "
+      "classname=\"XmlUnitTestResultPrinterTest\" "
+      "tag_name=\"tag_name\">tag_value1</tag>";
+  EXPECT_TRUE(content.find(expected_content_1) != std::string::npos)
+      << expected_content_1 << " not found in " << content;
+
+  std::string expected_content_2 =
+      "<tag name=\"MultiTagsWithSameNameInXmlFile\" "
+      "classname=\"XmlUnitTestResultPrinterTest\" "
+      "tag_name=\"tag_name\">tag_value2</tag>";
+  EXPECT_TRUE(content.find(expected_content_2) != std::string::npos)
+      << expected_content_2 << " not found in " << content;
 }
 
 class XmlUnitTestResultPrinterTimestampTest : public ::testing::Test {

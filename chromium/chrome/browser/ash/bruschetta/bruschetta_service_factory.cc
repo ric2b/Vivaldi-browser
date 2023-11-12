@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ash/bruschetta/bruschetta_service_factory.h"
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/ash/bruschetta/bruschetta_service.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -27,12 +27,14 @@ BruschettaServiceFactory* BruschettaServiceFactory::GetInstance() {
 }
 
 BruschettaServiceFactory::BruschettaServiceFactory()
-    : ProfileKeyedServiceFactory("BruschettaService",
-                                 // Takes care of not creating the service for
-                                 // OTR and non user profiles.
-                                 ProfileSelections::Builder()
-                                     .WithAshInternals(ProfileSelection::kNone)
-                                     .Build()) {}
+    : ProfileKeyedServiceFactory(
+          "BruschettaService",
+          // Takes care of not creating the service for OTR and non user
+          // profiles.
+          ProfileSelections::Builder()
+              .WithGuest(ProfileSelections::kRegularProfileDefault)
+              .WithAshInternals(ProfileSelection::kNone)
+              .Build()) {}
 
 BruschettaServiceFactory::~BruschettaServiceFactory() = default;
 

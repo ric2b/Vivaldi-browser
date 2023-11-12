@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright 2012 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -265,7 +265,7 @@ class XtbHandler(sax.handler.ContentHandler):
       self.__characters_callback(self.__element_stack[-1], content)
 
   def __OnLanguage(self, lang):
-    self.lang = lang.replace('-', '_').upper()
+    self.lang = lang.replace('-', '_').replace('@', '_').upper()
 
   def __OnOpenTranslation(self, translation_id):
     assert self.__string_ids is None

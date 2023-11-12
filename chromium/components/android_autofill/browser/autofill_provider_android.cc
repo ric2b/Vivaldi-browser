@@ -151,12 +151,14 @@ void AutofillProviderAndroid::StartNewSession(AndroidAutofillManager* manager,
 
   form_ = std::make_unique<FormDataAndroid>(form);
   field_id_ = field.global_id();
+  field_type_group_ = manager->ComputeFieldTypeGroupForField(form, field);
   triggered_origin_ = field.origin;
 
   size_t index;
   if (!form_->GetFieldIndex(field, &index)) {
     form_.reset();
     field_id_ = {};
+    field_type_group_ = FieldTypeGroup::kNoGroup;
     triggered_origin_ = {};
     return;
   }
@@ -182,8 +184,11 @@ void AutofillProviderAndroid::OnAutofillAvailable(JNIEnv* env,
                                                   jobject formData) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (manager_ && form_) {
-    const FormData& form = form_->GetAutofillValues();
-    FillOrPreviewForm(manager_.get(), form, triggered_origin_);
+    form_->UpdateFromJava();
+    const FormData& form = form_->form();
+
+    FillOrPreviewForm(manager_.get(), form, field_type_group_,
+                      triggered_origin_);
   }
 }
 
@@ -360,9 +365,6 @@ void AutofillProviderAndroid::OnDidFillAutofillFormData(
   Java_AutofillProvider_onDidFillAutofillFormData(env, obj);
 }
 
-void AutofillProviderAndroid::OnFormsSeen(AndroidAutofillManager* manager,
-                                          const std::vector<FormData>& forms) {}
-
 void AutofillProviderAndroid::OnHidePopup(AndroidAutofillManager* manager) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (manager == manager_.get()) {
@@ -382,7 +384,7 @@ void AutofillProviderAndroid::OnServerPredictionsAvailable(
     return;
 
   if (auto* form_structure =
-          manager_->FindCachedFormByRendererId(form_->form().global_id())) {
+          manager_->FindCachedFormById(form_->form().global_id())) {
     form_->UpdateFieldTypes(*form_structure);
 
     JNIEnv* env = AttachCurrentThread();
@@ -401,7 +403,7 @@ void AutofillProviderAndroid::OnServerQueryRequestError(
     return;
 
   if (auto* form_structure =
-          manager_->FindCachedFormByRendererId(form_->form().global_id())) {
+          manager_->FindCachedFormById(form_->form().global_id())) {
     if (form_structure->form_signature() != form_signature)
       return;
 
@@ -434,6 +436,13 @@ void AutofillProviderAndroid::Reset(AndroidAutofillManager* manager) {
   }
 }
 
+bool AutofillProviderAndroid::GetCachedIsAutofilled(
+    const FormFieldData& field) const {
+  size_t field_index = 0u;
+  return form_ && form_->GetFieldIndex(field, &field_index) &&
+         form_->form().fields[field_index].is_autofilled;
+}
+
 bool AutofillProviderAndroid::IsCurrentlyLinkedManager(
     AndroidAutofillManager* manager) {
   return manager == manager_.get();
@@ -452,6 +461,7 @@ gfx::RectF AutofillProviderAndroid::ToClientAreaBound(
 void AutofillProviderAndroid::Reset() {
   form_.reset(nullptr);
   field_id_ = {};
+  field_type_group_ = FieldTypeGroup::kNoGroup;
   triggered_origin_ = {};
   check_submission_ = false;
 }

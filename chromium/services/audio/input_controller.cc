@@ -11,8 +11,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -255,11 +255,12 @@ void InputController::MaybeSetUpAudioProcessing(
 
   // If the required processing is lightweight, there is no need to offload work
   // to a new thread.
-  if (!processing_config->settings.NeedPlayoutReference())
+  if (!audio_processor_handler_->needs_playout_reference()) {
     return;
+  }
 
   int fifo_size =
-      base::FeatureList::IsEnabled(media::kChromeWideEchoCancellation)
+      media::IsChromeWideEchoCancellationEnabled()
           ? media::kChromeWideEchoCancellationProcessingFifoSize.Get()
           : 0;
 

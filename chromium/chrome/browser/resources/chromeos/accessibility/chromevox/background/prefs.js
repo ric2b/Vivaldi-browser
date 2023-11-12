@@ -10,6 +10,7 @@ import {LocalStorage} from '../../common/local_storage.js';
 import {BridgeConstants} from '../common/bridge_constants.js';
 import {BridgeHelper} from '../common/bridge_helper.js';
 import {Msgs} from '../common/msgs.js';
+import {SettingsManager} from '../common/settings_manager.js';
 import {Personality} from '../common/tts_types.js';
 
 import {ChromeVox} from './chromevox.js';
@@ -19,6 +20,9 @@ import {LogUrlWatcher} from './logging/log_url_watcher.js';
 import {Output} from './output/output.js';
 import {TtsBackground} from './tts_background.js';
 
+const Action = BridgeConstants.ChromeVoxPrefs.Action;
+const TARGET = BridgeConstants.ChromeVoxPrefs.TARGET;
+
 /**
  * This object has default values of preferences and contains the common
  * code for working with preferences shared by the Options and Background
@@ -26,12 +30,6 @@ import {TtsBackground} from './tts_background.js';
  */
 export class ChromeVoxPrefs {
   constructor() {
-    LocalStorage.set('lastRunVersion', chrome.runtime.getManifest().version);
-
-    // Clear per session preferences.
-    // This is to keep the position dictionary from growing excessively large.
-    LocalStorage.set('position', {});
-
     // Default per session sticky to off.
     LocalStorage.set('sticky', false);
   }
@@ -43,7 +41,7 @@ export class ChromeVoxPrefs {
   static init() {
     ChromeVoxPrefs.instance = new ChromeVoxPrefs();
 
-    ChromeVoxPrefs.isStickyPrefOn = LocalStorage.get('sticky');
+    ChromeVoxPrefs.isStickyPrefOn = LocalStorage.getBoolean('sticky');
 
     // Set the default value of any pref that isn't already in LocalStorage.
     for (const pref in ChromeVoxPrefs.DEFAULT_PREFS) {
@@ -51,37 +49,33 @@ export class ChromeVoxPrefs {
         LocalStorage.set(pref, ChromeVoxPrefs.DEFAULT_PREFS[pref]);
       }
     }
-    ChromeVoxPrefs.instance.enableOrDisableLogUrlWatcher_();
 
     BridgeHelper.registerHandler(
-        BridgeConstants.ChromeVoxPrefs.TARGET,
-        BridgeConstants.ChromeVoxPrefs.Action.GET_PREFS,
-        () => ChromeVoxPrefs.instance.getPrefs());
+        TARGET, Action.GET_PREFS, () => ChromeVoxPrefs.instance.getPrefs());
     BridgeHelper.registerHandler(
-        BridgeConstants.ChromeVoxPrefs.TARGET,
-        BridgeConstants.ChromeVoxPrefs.Action.GET_STICKY_PREF,
-        () => ChromeVoxPrefs.isStickyPrefOn);
+        TARGET, Action.GET_STICKY_PREF, () => ChromeVoxPrefs.isStickyPrefOn);
     BridgeHelper.registerHandler(
-        BridgeConstants.ChromeVoxPrefs.TARGET,
-        BridgeConstants.ChromeVoxPrefs.Action.SET_LOGGING_PREFS,
+        TARGET, Action.SET_LOGGING_PREFS,
         (key, value) => ChromeVoxPrefs.instance.setLoggingPrefs(key, value));
     BridgeHelper.registerHandler(
-        BridgeConstants.ChromeVoxPrefs.TARGET,
-        BridgeConstants.ChromeVoxPrefs.Action.SET_PREF,
+        TARGET, Action.SET_PREF,
         (key, value) => ChromeVoxPrefs.instance.setPref(key, value));
   }
 
   /**
    * Get the prefs (not including keys).
    * @return {Object<string, *>} A map of all prefs except the key map from
-   *     LocalStorage.
+   *     LocalStorage and SettingsManager.
    */
   getPrefs() {
-    const prefs = {};
+    let prefs = {};
     for (const pref in ChromeVoxPrefs.DEFAULT_PREFS) {
       prefs[pref] = LocalStorage.get(pref);
     }
-    prefs['version'] = chrome.runtime.getManifest().version;
+    for (const pref of SettingsManager.PREFS) {
+      prefs[pref] = SettingsManager.get(pref);
+    }
+    prefs = {...prefs, ...SettingsManager.getEventStreamFilters()};
     return prefs;
   }
 
@@ -91,6 +85,14 @@ export class ChromeVoxPrefs {
    * @param {Object|string|number|boolean} value The new value of the pref.
    */
   setPref(key, value) {
+    if (SettingsManager.EVENT_STREAM_FILTERS.includes(key)) {
+      SettingsManager.setEventStreamFilter(key, Boolean(value));
+      return;
+    }
+    if (SettingsManager.PREFS.includes(key)) {
+      SettingsManager.set(key, value);
+      return;
+    }
     if (LocalStorage.get(key) !== value) {
       LocalStorage.set(key, value);
     }
@@ -102,11 +104,11 @@ export class ChromeVoxPrefs {
    * @param {boolean} value The new value of the pref.
    */
   setLoggingPrefs(key, value) {
-    LocalStorage.set(key, value);
+    SettingsManager.set(key, value);
     if (key === 'enableSpeechLogging') {
       TtsBackground.console.setEnabled(value);
     } else if (key === 'enableEventStreamLogging') {
-      EventStreamLogger.instance.notifyEventStreamFilterChangedAll(value);
+      EventStreamLogger.instance.updateAllFilters(value);
     }
     this.enableOrDisableLogUrlWatcher_();
   }
@@ -153,7 +155,7 @@ export class ChromeVoxPrefs {
 
   enableOrDisableLogUrlWatcher_() {
     for (const pref of Object.values(ChromeVoxPrefs.loggingPrefs)) {
-      if (LocalStorage.get(pref)) {
+      if (SettingsManager.getBoolean(pref)) {
         LogUrlWatcher.create();
         return;
       }
@@ -164,93 +166,17 @@ export class ChromeVoxPrefs {
 
 
 /**
- * The default value of all preferences except the key map.
+ * The default value of all preferences in LocalStorage except the key map.
+ *
+ * TODO(b/262786141): Move each of these to SettingsManager.
  * @const
  * @type {Object<Object>}
  */
 ChromeVoxPrefs.DEFAULT_PREFS = {
-  'announceDownloadNotifications': true,
-  'announceRichTextAttributes': true,
-  'audioStrategy': 'audioNormal',
-  'autoRead': false,
   'brailleCaptions': false,
-  'brailleSideBySide': true,
-  'brailleTableType': 'brailleTable8',
-  'brailleTable6': 'en-UEB-g2',
-  'brailleTable8': 'en-nabcc',
-  'capitalStrategy': 'increasePitch',
-  'cvoxKey': '',
-  'enableBrailleLogging': false,
-  'enableEarconLogging': false,
-  'enableSpeechLogging': false,
   'earcons': true,
-  'enableEventStreamLogging': false,
-  'focusFollowsMouse': false,
-  'granularity': undefined,
-  'languageSwitching': false,
-  'menuBrailleCommands': false,
-  'numberReadingStyle': 'asWords',
-  'position': {},
-  'smartStickyMode': true,
-  'speakTextUnderMouse': false,
   'sticky': false,
   'typingEcho': 0,
-  'useClassic': false,
-  'usePitchChanges': true,
-  'useVerboseMode': true,
-
-  // eventStreamFilters
-  'activedescendantchanged': true,
-  'alert': true,
-  'ariaAttributeChanged': true,
-  'autocorrectionOccured': true,
-  'blur': true,
-  'checkedStateChanged': true,
-  'childrenChanged': true,
-  'clicked': true,
-  'documentSelectionChanged': true,
-  'documentTitleChanged': true,
-  'expandedChanged': true,
-  'focus': true,
-  'focusContext': true,
-  'imageFrameUpdated': true,
-  'hide': true,
-  'hitTestResult': true,
-  'hover': true,
-  'invalidStatusChanged': true,
-  'layoutComplete': true,
-  'liveRegionCreated': true,
-  'liveRegionChanged': true,
-  'loadComplete': true,
-  'locationChanged': true,
-  'mediaStartedPlaying': true,
-  'mediaStoppedPlaying': true,
-  'menuEnd': true,
-  'menuListItemSelected': true,
-  'menuListValueChanged': true,
-  'menuPopupEnd': true,
-  'menuPopupStart': true,
-  'menuStart': true,
-  'mouseCanceled': true,
-  'mouseDragged': true,
-  'mouseMoved': true,
-  'mousePressed': true,
-  'mouseReleased': true,
-  'rowCollapsed': true,
-  'rowCountChanged': true,
-  'rowExpanded': true,
-  'scrollPositionChanged': true,
-  'scrolledToAnchor': true,
-  'selectedChildrenChanged': true,
-  'selection': true,
-  'selectionAdd': true,
-  'selectionRemove': true,
-  'show': true,
-  'stateChanged': true,
-  'textChanged': true,
-  'textSelectionChanged': true,
-  'treeChanged': true,
-  'valueInTextFieldChanged': true,
 };
 
 

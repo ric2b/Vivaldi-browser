@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ash/extensions/file_manager/private_api_sharesheet.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/extensions/file_manager/private_api_util.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
@@ -114,7 +114,7 @@ void FileManagerPrivateInternalSharesheetHasTargetsFunction::
     if (connection_status == drive::util::DRIVE_CONNECTED_METERED ||
         connection_status == drive::util::DRIVE_CONNECTED) {
       file_manager::util::SingleEntryPropertiesGetterForDriveFs::Start(
-          file_system_urls_[0], profile_,
+          file_system_urls_[0], profile_, /*requested_properties=*/{},
           base::BindOnce(
               &FileManagerPrivateInternalSharesheetHasTargetsFunction::
                   OnDrivePropertyCollected,
@@ -190,6 +190,10 @@ FileManagerPrivateInternalInvokeSharesheetFunction::Run() {
   if (params->urls.empty())
     return RespondNow(Error("No URLs provided"));
 
+  if (params->dlp_source_urls.size() != params->urls.size()) {
+    return RespondNow(Error("Mismatching URLs and DLP source URLs provided"));
+  }
+
   profile_ = Profile::FromBrowserContext(browser_context());
 
   const scoped_refptr<storage::FileSystemContext> file_system_context =
@@ -209,6 +213,8 @@ FileManagerPrivateInternalInvokeSharesheetFunction::Run() {
     urls_.push_back(url);
     file_system_urls_.push_back(file_system_url);
   }
+
+  dlp_source_urls_ = std::move(params->dlp_source_urls);
 
   mime_type_collector_ =
       std::make_unique<app_file_handler_util::MimeTypeCollector>(profile_);
@@ -240,7 +246,7 @@ void FileManagerPrivateInternalInvokeSharesheetFunction::OnMimeTypesCollected(
     if (connection_status == drive::util::DRIVE_CONNECTED_METERED ||
         connection_status == drive::util::DRIVE_CONNECTED) {
       file_manager::util::SingleEntryPropertiesGetterForDriveFs::Start(
-          file_system_urls_[0], profile_,
+          file_system_urls_[0], profile_, /*requested_properties=*/{},
           base::BindOnce(&FileManagerPrivateInternalInvokeSharesheetFunction::
                              OnDrivePropertyCollected,
                          this, launch_source, std::move(mime_types)));
@@ -249,7 +255,8 @@ void FileManagerPrivateInternalInvokeSharesheetFunction::OnMimeTypesCollected(
   }
 
   sharesheet_service->ShowBubble(
-      GetSenderWebContents(), apps_util::MakeShareIntent(urls_, *mime_types),
+      GetSenderWebContents(),
+      apps_util::MakeShareIntent(urls_, *mime_types, dlp_source_urls_),
       contains_hosted_document_, launch_source, base::NullCallback());
   Respond(NoArguments());
 }

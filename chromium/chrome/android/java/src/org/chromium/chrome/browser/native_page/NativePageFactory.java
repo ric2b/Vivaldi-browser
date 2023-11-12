@@ -18,7 +18,6 @@ import org.chromium.chrome.browser.app.download.home.DownloadPage;
 import org.chromium.chrome.browser.bookmarks.BookmarkPage;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsMarginSupplier;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.explore_sites.ExploreSitesPage;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.history.HistoryManagerUtils;
 import org.chromium.chrome.browser.history.HistoryPage;
@@ -55,7 +54,6 @@ import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
-import org.vivaldi.browser.panels.PanelPage;
 import org.vivaldi.browser.panels.PanelUtils;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
 
@@ -202,12 +200,6 @@ public class NativePageFactory {
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector));
         }
 
-        protected NativePage buildExploreSitesPage(Tab tab) {
-            return new ExploreSitesPage(mActivity,
-                    new TabShim(tab, mBrowserControlsManager, mTabModelSelector), tab,
-                    mTabModelSelector);
-        }
-
         protected NativePage buildHistoryPage(Tab tab, String url) {
             return new HistoryPage(mActivity,
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
@@ -239,12 +231,6 @@ public class NativePageFactory {
             return new SpeedDialPage(mActivity,
                     new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
                     mTabModelSelector, ((ChromeActivity)mActivity).getToolbarManager());
-        }
-
-        protected NativePage buildPanelsPage(Tab tab) {
-            return new PanelPage(mActivity,
-                    new TabShim(tab, mBrowserControlsManager, mTabModelSelector),
-                    mSnackbarManagerSupplier.get());
         }
     }
 
@@ -290,9 +276,6 @@ public class NativePageFactory {
                 break;
             case NativePageType.RECENT_TABS:
                 page = getBuilder().buildRecentTabsPage(tab);
-                break;
-            case NativePageType.EXPLORE:
-                page = getBuilder().buildExploreSitesPage(tab);
                 break;
             case NativePageType.MANAGEMENT:
                 page = getBuilder().buildManagementPage(tab);
@@ -401,9 +384,6 @@ public class NativePageFactory {
                 break;
             case NativePageType.RECENT_TABS:
                 page = getBuilder().buildRecentTabsPage(tab);
-                break;
-            case NativePageType.EXPLORE:
-                page = getBuilder().buildExploreSitesPage(tab);
                 break;
             case NativePageType.VIVALDI_NOTES:
                 PanelUtils.showPanelAsync(mActivity, VivaldiUrlConstants.VIVALDI_NATIVE_NOTES_URL);

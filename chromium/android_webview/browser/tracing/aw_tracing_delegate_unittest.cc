@@ -80,13 +80,34 @@ TEST_F(AwTracingDelegateTest, IsAllowedToBeginSessionEndedUnexpectedly) {
   tracing::BackgroundTracingStateManager::GetInstance().SaveState(
       {}, tracing::BackgroundTracingState::STARTED);
 
-  base::Value dict(base::Value::Type::DICTIONARY);
+  base::Value dict(base::Value::Type::DICT);
   tracing::BackgroundTracingStateManager::GetInstance().Initialize(nullptr);
 
   auto config = CreateValidConfig();
 
   EXPECT_FALSE(delegate_.IsAllowedToBeginBackgroundScenario(
       *config, /*requires_anonymized_data=*/false));
+}
+
+TEST_F(AwTracingDelegateTest, IsAllowedToBeginRecentlyUploaded) {
+  tracing::BackgroundTracingStateManager::GetInstance().Initialize(nullptr);
+  tracing::BackgroundTracingStateManager::GetInstance().OnScenarioUploaded(
+      "TestScenario");
+
+  auto config = CreateValidConfig();
+  EXPECT_FALSE(delegate_.IsAllowedToBeginBackgroundScenario(
+      *config, /*requires_anonymized_data=*/false));
+}
+
+TEST_F(AwTracingDelegateTest, IsAllowedToEndRecentlyUploaded) {
+  tracing::BackgroundTracingStateManager::GetInstance().Initialize(nullptr);
+  tracing::BackgroundTracingStateManager::GetInstance().OnScenarioUploaded(
+      "TestScenario");
+
+  auto config = CreateValidConfig();
+  EXPECT_FALSE(delegate_.IsAllowedToEndBackgroundScenario(
+      *config, /*requires_anonymized_data=*/false,
+      /*is_crash_scenario*/ false));
 }
 
 }  // namespace android_webview

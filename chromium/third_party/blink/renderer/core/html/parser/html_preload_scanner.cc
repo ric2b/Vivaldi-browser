@@ -29,6 +29,7 @@
 
 #include <memory>
 
+#include "base/task/sequenced_task_runner.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
@@ -203,7 +204,7 @@ class TokenPreloadScanner::StartTagScanner {
       return;
     for (const HTMLToken::Attribute& html_token_attribute : attributes) {
       AtomicString attribute_name(html_token_attribute.GetName());
-      String attribute_value = html_token_attribute.Value8BitIfNecessary();
+      String attribute_value = html_token_attribute.Value();
       ProcessAttribute(attribute_name, attribute_value);
     }
     PostProcessAfterAttributes();
@@ -914,6 +915,9 @@ void TokenPreloadScanner::ScanCommon(
           --template_count_;
         return;
       }
+      if (template_count_) {
+        return;
+      }
       if (Match(tag_impl, html_names::kStyleTag)) {
         if (in_style_)
           css_scanner_.Reset();
@@ -934,8 +938,21 @@ void TokenPreloadScanner::ScanCommon(
     case HTMLToken::kStartTag: {
       const StringImpl* tag_impl = TagImplFor(token.Data());
       if (Match(tag_impl, html_names::kTemplateTag)) {
-        ++template_count_;
-        return;
+        bool is_declarative_shadow_root = false;
+        const HTMLToken::Attribute* shadowrootmode_attribute =
+            token.GetAttributeItem(html_names::kShadowrootmodeAttr);
+        if (shadowrootmode_attribute) {
+          String shadowrootmode_value(shadowrootmode_attribute->Value());
+          is_declarative_shadow_root =
+              EqualIgnoringASCIICase(shadowrootmode_value, "open") ||
+              EqualIgnoringASCIICase(shadowrootmode_value, "closed");
+        }
+        // If this is a declarative shadow root <template shadowrootmode>
+        // element *and* we're not already inside a non-DSD <template> element,
+        // then we leave the template count at zero. Otherwise, increment it.
+        if (!(is_declarative_shadow_root && !template_count_)) {
+          ++template_count_;
+        }
       }
       if (template_count_)
         return;
@@ -1051,8 +1068,8 @@ void TokenPreloadScanner::UpdatePredictedBaseURL(const HTMLToken& token) {
   DCHECK(predicted_base_element_url_.IsEmpty());
   if (const HTMLToken::Attribute* href_attribute =
           token.GetAttributeItem(html_names::kHrefAttr)) {
-    KURL url(document_url_, StripLeadingAndTrailingHTMLSpaces(
-                                href_attribute->Value8BitIfNecessary()));
+    KURL url(document_url_,
+             StripLeadingAndTrailingHTMLSpaces(href_attribute->Value()));
     bool is_valid_base_url =
         url.IsValid() && !url.ProtocolIsData() && !url.ProtocolIsJavaScript();
     predicted_base_element_url_ = is_valid_base_url ? url : KURL();

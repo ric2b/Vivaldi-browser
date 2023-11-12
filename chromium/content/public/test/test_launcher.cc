@@ -13,13 +13,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump_type.h"
@@ -385,7 +385,7 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
   // custom system tracing service.
   tracing::PerfettoTracedProcess::SetSystemProducerEnabledForTesting(false);
 
-#if !BUILDFLAG(IS_ANDROID)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // This needs to be before trying to run tests as otherwise utility processes
   // end up being launched as a test, which leads to rerunning the test.
   // ContentMain is not run on Android in the test process, and is run via

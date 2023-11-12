@@ -47,7 +47,9 @@ class TrainingDataCollectorImpl : public TrainingDataCollector,
   void OnDecisionTime(proto::SegmentId id,
                       scoped_refptr<InputContext> input_context,
                       DecisionType type) override;
-  void OnObservationTrigger(TrainingDataCache::RequestId request_id,
+
+  void OnObservationTrigger(const absl::optional<ImmediaCollectionParam>& param,
+                            TrainingDataCache::RequestId request_id,
                             const proto::SegmentInfo& segment_info) override;
 
   // HistogramSignalHandler::Observer implementation.
@@ -55,12 +57,7 @@ class TrainingDataCollectorImpl : public TrainingDataCollector,
                                 base::HistogramBase::Sample sample) override;
 
  private:
-  // Parameters used for reporting immediate output collections.
-  struct ImmediaCollectionParam {
-    uint64_t output_metric_hash;  // Hash of the output metric name.
-    int output_index;             // Index of the output metric in metadata.
-    float output_value;           // Value of the output.
-  };
+  struct TrainingTimings;
 
   void OnGetSegmentsInfoList(DefaultModelManager::SegmentInfoList segment_list);
 
@@ -69,6 +66,7 @@ class TrainingDataCollectorImpl : public TrainingDataCollector,
       std::unique_ptr<SegmentInfoDatabase::SegmentInfoList> segments);
 
   void OnHistogramUpdatedReportForSegmentInfo(
+      const absl::optional<ImmediaCollectionParam>& param,
       absl::optional<proto::SegmentInfo> segment);
 
   void OnGetSegmentInfoAtDecisionTime(
@@ -80,12 +78,14 @@ class TrainingDataCollectorImpl : public TrainingDataCollector,
 
   void OnGetTrainingTensorsAtDecisionTime(
       TrainingDataCache::RequestId request_id,
+      const TrainingTimings& training_request,
       const proto::SegmentInfo& segment_info,
       bool has_error,
       const ModelProvider::Request& input_tensors,
       const ModelProvider::Response& output_tensors);
 
-  void onGetOutputsOnObservationTrigger(
+  void OnGetOutputsOnObservationTrigger(
+      const absl::optional<ImmediaCollectionParam>& param,
       TrainingDataCache::RequestId request_id,
       const proto::SegmentInfo& segment_info,
       const ModelProvider::Request& cached_input_tensors,
@@ -104,6 +104,10 @@ class TrainingDataCollectorImpl : public TrainingDataCollector,
   // meet the collection requirement.
   bool CanReportTrainingData(const proto::SegmentInfo& segment_info,
                              bool include_output);
+
+  TrainingTimings ComputeDecisionTiming(const proto::SegmentInfo& info) const;
+  base::Time ComputeObservationTiming(const proto::SegmentInfo& info,
+                                      base::Time prediction_time) const;
 
   const raw_ptr<SegmentInfoDatabase> segment_info_database_;
   const raw_ptr<processing::FeatureListQueryProcessor>
@@ -134,6 +138,11 @@ class TrainingDataCollectorImpl : public TrainingDataCollector,
 
   // A list of segment IDs that needs to report metrics continuously.
   base::flat_set<SegmentId> continuous_collection_segments_;
+
+  // List of all segments that need to upload training data.
+  // TODO(ssid): Clean up the list of segment IDs in this class to be a single
+  // list.
+  base::flat_set<SegmentId> all_segments_for_training_;
 
   base::WeakPtrFactory<TrainingDataCollectorImpl> weak_ptr_factory_{this};
 };

@@ -8,11 +8,12 @@
 #include <sstream>
 #include <utility>
 
-#include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback.h"
 #include "base/ranges/algorithm.h"
 #include "base/values.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/install_bounce_metric.h"
 #include "chrome/browser/web_applications/locks/shared_web_contents_with_app_lock.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_url_loader.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
@@ -44,28 +46,23 @@ std::string StreamableToString(const Streamable& value) {
   return ss.str();
 }
 
-blink::mojom::SubAppsServiceAddResultCode InstallResultCodeToMojo(
+blink::mojom::SubAppsServiceResultCode InstallResultCodeToMojo(
     webapps::InstallResultCode install_result_code) {
   switch (install_result_code) {
+    // Success result codes.
     case webapps::InstallResultCode::kSuccessNewInstall:
-      return blink::mojom::SubAppsServiceAddResultCode::kSuccessNewInstall;
     case webapps::InstallResultCode::kSuccessAlreadyInstalled:
-      return blink::mojom::SubAppsServiceAddResultCode::
-          kSuccessAlreadyInstalled;
+      return blink::mojom::SubAppsServiceResultCode::kSuccess;
+    // Failure result codes.
     case webapps::InstallResultCode::kUserInstallDeclined:
-      return blink::mojom::SubAppsServiceAddResultCode::kUserInstallDeclined;
     case webapps::InstallResultCode::kExpectedAppIdCheckFailed:
-      return blink::mojom::SubAppsServiceAddResultCode::
-          kExpectedAppIdCheckFailed;
     case webapps::InstallResultCode::kInstallURLRedirected:
     case webapps::InstallResultCode::kInstallURLLoadTimeOut:
     case webapps::InstallResultCode::kInstallURLLoadFailed:
-      return blink::mojom::SubAppsServiceAddResultCode::kInstallUrlInvalid;
     case webapps::InstallResultCode::kNotValidManifestForWebApp:
-      return blink::mojom::SubAppsServiceAddResultCode::
-          kNotValidManifestForWebApp;
+      return blink::mojom::SubAppsServiceResultCode::kFailure;
     default:
-      return blink::mojom::SubAppsServiceAddResultCode::kFailure;
+      return blink::mojom::SubAppsServiceResultCode::kFailure;
   }
 }
 
@@ -76,7 +73,6 @@ WebAppInstallFinalizer::FinalizeOptions GetFinalizerOptionsForSubApps(
 
   finalize_options.locally_installed = true;
   finalize_options.overwrite_existing_manifest_fields = false;
-  finalize_options.parent_app_id = parent_app_id;
   if (IsChromeOsDataMandatory()) {
     // Default values for ChromeOS installation.
     finalize_options.chromeos_data.emplace();
@@ -130,7 +126,7 @@ SubAppInstallCommand::SubAppInstallCommand(
 
 SubAppInstallCommand::~SubAppInstallCommand() = default;
 
-LockDescription& SubAppInstallCommand::lock_description() const {
+const LockDescription& SubAppInstallCommand::lock_description() const {
   return *lock_description_;
 }
 
@@ -160,13 +156,15 @@ void SubAppInstallCommand::StartWithLock(
 
   DCHECK(state_ == State::kNotStarted);
 
-  if (!lock_->registrar().IsInstalled(parent_app_id_)) {
+  // Abort if parent app is not installed or the calling app is itself a sub
+  // app.
+  if (!lock_->registrar().IsInstalled(parent_app_id_) ||
+      lock_->registrar().GetAppById(parent_app_id_)->IsSubAppInstalledApp()) {
     base::ranges::transform(
         requested_installs_, std::inserter(results_, results_.begin()),
         [](auto const& pair) {
-          return std::pair{
-              pair.first,
-              blink::mojom::SubAppsServiceAddResultCode::kParentAppUninstalled};
+          return std::pair{pair.first,
+                           blink::mojom::SubAppsServiceResultCode::kFailure};
         });
     SignalCompletionAndSelfDestruct(
         CommandResult::kFailure,
@@ -264,6 +262,7 @@ void SubAppInstallCommand::OnGetWebAppInstallInfo(
                        webapps::InstallResultCode::kGetWebAppInstallInfoFailed);
     return;
   }
+  install_info->parent_app_id = parent_app_id_;
 
   DCHECK(base::Contains(pending_installs_map_, unhashed_app_id));
   const GURL& install_url = pending_installs_map_[unhashed_app_id];
@@ -273,7 +272,7 @@ void SubAppInstallCommand::OnGetWebAppInstallInfo(
     install_info->start_url = install_url;
     install_info->install_url = install_url;
   }
-  install_info->user_display_mode = UserDisplayMode::kStandalone;
+  install_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
 
   data_retriever_->CheckInstallabilityAndRetrieveManifest(
       &lock_->shared_web_contents(), /*bypass_service_worker_check=*/false,
@@ -288,7 +287,7 @@ void SubAppInstallCommand::OnDidPerformInstallableCheck(
     blink::mojom::ManifestPtr opt_manifest,
     const GURL& manifest_url,
     bool valid_manifest_for_web_app,
-    bool is_installable) {
+    webapps::InstallableStatusCode error_code) {
   DCHECK(web_app_info);
   if (!valid_manifest_for_web_app) {
     LOG(WARNING) << "Did not install " << web_app_info->start_url.spec()
@@ -365,7 +364,7 @@ void SubAppInstallCommand::OnDialogCompleted(
     return;
   }
 
-  web_app_info->user_display_mode = UserDisplayMode::kStandalone;
+  web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
 
   lock_->install_finalizer().FinalizeInstall(
       *web_app_info, GetFinalizerOptionsForSubApps(parent_app_id_),
@@ -431,10 +430,11 @@ void SubAppInstallCommand::MaybeShowDialog() {
   // acceptance below with a permissions dialog shown to the user.
   for (auto& [unhashed_app_id, web_app_info, acceptance_callback] :
        acceptance_callbacks_) {
-    if (dialog_not_accepted_for_testing_)
+    if (dialog_not_accepted_for_testing_) {
       std::move(acceptance_callback).Run(false, std::move(web_app_info));
-    else
+    } else {
       std::move(acceptance_callback).Run(true, std::move(web_app_info));
+    }
   }
   acceptance_callbacks_.clear();
   // This needs to happen to measure the state where all acceptance
@@ -460,7 +460,8 @@ void SubAppInstallCommand::AddResultAndRemoveFromPendingInstalls(
   auto mojo_result = InstallResultCodeToMojo(result);
   std::pair result_pair(unhashed_app_id, mojo_result);
   AddResultToDebugData(unhashed_app_id, pending_installs_map_[unhashed_app_id],
-                       GenerateAppIdFromUnhashed(unhashed_app_id), mojo_result);
+                       GenerateAppIdFromUnhashed(unhashed_app_id), result,
+                       mojo_result);
   results_.emplace_back(result_pair);
   pending_installs_map_.erase(unhashed_app_id);
 }
@@ -473,11 +474,13 @@ void SubAppInstallCommand::AddResultToDebugData(
     const UnhashedAppId& unhashed_app_id,
     const GURL& install_url,
     const AppId& installed_app_id,
-    const blink::mojom::SubAppsServiceAddResultCode& code) {
+    webapps::InstallResultCode detailed_code,
+    const blink::mojom::SubAppsServiceResultCode& result_code) {
   base::Value::Dict install_info;
   install_info.Set("unhashed_app_id", unhashed_app_id);
   install_info.Set("install_url", install_url.spec());
-  install_info.Set("result_code", StreamableToString(code));
+  install_info.Set("detailed_result_code", StreamableToString(detailed_code));
+  install_info.Set("result_code", StreamableToString(result_code));
   debug_install_results_.Set(installed_app_id,
                              base::Value(std::move(install_info)));
 }

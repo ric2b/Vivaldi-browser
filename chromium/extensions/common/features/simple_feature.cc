@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -41,16 +41,7 @@ struct AllowlistInfo {
     const std::string& allowlisted_extension_id =
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
             switches::kAllowlistedExtensionID);
-
-    if (!allowlisted_extension_id.empty()) {
-      hashed_id = HashedIdInHex(allowlisted_extension_id);
-    } else {
-      // Check the deprecated switch if the main one is not set. If both of them
-      // are empty, `hash_id` will contain the hash of an empty string.
-      hashed_id = HashedIdInHex(
-          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-              switches::kDEPRECATED_AllowlistedExtensionID));
-    }
+    hashed_id = HashedIdInHex(allowlisted_extension_id);
   }
   std::string hashed_id;
 };
@@ -227,7 +218,7 @@ SimpleFeature::SimpleFeature()
       is_internal_(false),
       disallow_for_service_workers_(false) {}
 
-SimpleFeature::~SimpleFeature() {}
+SimpleFeature::~SimpleFeature() = default;
 
 Feature::Availability SimpleFeature::IsAvailableToManifest(
     const HashedExtensionId& hashed_id,
@@ -524,6 +515,10 @@ bool SimpleFeature::MatchesSessionTypes(
   // rejecting session type that is not present in |session_types_|
   return session_type == mojom::FeatureSessionType::kAutolaunchedKiosk &&
          base::Contains(session_types_, mojom::FeatureSessionType::kKiosk);
+}
+
+bool SimpleFeature::RequiresDelegatedAvailabilityCheck() const {
+  return requires_delegated_availability_check_;
 }
 
 Feature::Availability SimpleFeature::CheckDependencies(

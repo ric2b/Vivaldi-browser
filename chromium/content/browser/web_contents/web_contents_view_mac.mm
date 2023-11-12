@@ -145,6 +145,15 @@ void WebContentsViewMac::OnCapturerCountChanged() {}
 
 void WebContentsViewMac::FullscreenStateChanged(bool is_fullscreen) {}
 
+void WebContentsViewMac::UpdateWindowControlsOverlay(
+    const gfx::Rect& bounding_rect) {
+  if (remote_ns_view_) {
+    remote_ns_view_->UpdateWindowControlsOverlay(bounding_rect);
+  } else {
+    in_process_ns_view_bridge_->UpdateWindowControlsOverlay(bounding_rect);
+  }
+}
+
 void WebContentsViewMac::StartDragging(
     const DropData& drop_data,
     DragOperationsMask allowed_operations,
@@ -167,16 +176,20 @@ void WebContentsViewMac::StartDragging(
   [drag_dest_ setDragStartTrackersForProcess:source_rwh->GetProcess()->GetID()];
   drag_source_start_rwh_ = source_rwh->GetWeakPtr();
 
+  WebContentsDelegate* contents_delegate = web_contents_->GetDelegate();
+  bool is_privileged =
+      contents_delegate ? contents_delegate->IsPrivileged() : false;
+
   // TODO(crbug.com/1302094): The param `drag_obj_rect` is unused.
 
   if (remote_ns_view_) {
     // TODO(https://crbug.com/898608): Non-trivial gfx::ImageSkias fail to
     // serialize.
-    remote_ns_view_->StartDrag(drop_data, mask, gfx::ImageSkia(),
-                               cursor_offset);
+    remote_ns_view_->StartDrag(drop_data, mask, gfx::ImageSkia(), cursor_offset,
+                               is_privileged);
   } else {
-    in_process_ns_view_bridge_->StartDrag(drop_data, mask, image,
-                                          cursor_offset);
+    in_process_ns_view_bridge_->StartDrag(drop_data, mask, image, cursor_offset,
+                                          is_privileged);
   }
 }
 
@@ -416,7 +429,7 @@ bool WebContentsViewMac::CloseTabAfterEventTrackingIfNeeded() {
 }
 
 void WebContentsViewMac::CloseTab() {
-  web_contents_->Close(web_contents_->GetRenderViewHost());
+  web_contents_->Close();
 }
 
 std::list<RenderWidgetHostViewMac*> WebContentsViewMac::GetChildViews() {

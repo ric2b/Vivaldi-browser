@@ -31,7 +31,6 @@
 #include "ash/components/arc/property/arc_property_bridge.h"
 #include "ash/components/arc/rotation_lock/arc_rotation_lock_bridge.h"
 #include "ash/components/arc/sensor/arc_iio_sensor_bridge.h"
-#include "ash/components/arc/sensor/arc_sensor_bridge.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_session.h"
 #include "ash/components/arc/session/arc_session_runner.h"
@@ -42,11 +41,14 @@
 #include "ash/components/arc/volume_mounter/arc_volume_mounter_bridge.h"
 #include "ash/components/arc/wake_lock/arc_wake_lock_bridge.h"
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/apps/app_service/publishers/arc_apps_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_package_syncable_service_factory.h"
 #include "chrome/browser/ash/app_list/arc/arc_usb_host_permission_manager.h"
+#include "chrome/browser/ash/app_list/arc/arc_usb_host_permission_manager_factory.h"
 #include "chrome/browser/ash/app_restore/app_restore_arc_task_handler.h"
 #include "chrome/browser/ash/apps/apk_web_app_service.h"
 #include "chrome/browser/ash/arc/accessibility/arc_accessibility_helper_bridge.h"
@@ -58,8 +60,10 @@
 #include "chrome/browser/ash/arc/enterprise/arc_enterprise_reporting_service.h"
 #include "chrome/browser/ash/arc/enterprise/cert_store/cert_store_service.h"
 #include "chrome/browser/ash/arc/file_system_watcher/arc_file_system_watcher_service.h"
+#include "chrome/browser/ash/arc/fileapi/arc_documents_provider_root_map_factory.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_bridge.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_mounter.h"
+#include "chrome/browser/ash/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/ash/arc/idle_manager/arc_idle_manager.h"
 #include "chrome/browser/ash/arc/input_method_manager/arc_input_method_manager_service.h"
 #include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_manager.h"
@@ -81,7 +85,6 @@
 #include "chrome/browser/ash/arc/privacy_items/arc_privacy_items_bridge.h"
 #include "chrome/browser/ash/arc/process/arc_process_service.h"
 #include "chrome/browser/ash/arc/screen_capture/arc_screen_capture_bridge.h"
-#include "chrome/browser/ash/arc/session/arc_demo_mode_preference_handler.h"
 #include "chrome/browser/ash/arc/session/arc_disk_space_monitor.h"
 #include "chrome/browser/ash/arc/session/arc_initial_optin_notifier.h"
 #include "chrome/browser/ash/arc/session/arc_play_store_enabled_preference_handler.h"
@@ -93,6 +96,7 @@
 #include "chrome/browser/ash/arc/tts/arc_tts_service.h"
 #include "chrome/browser/ash/arc/user_session/arc_user_session_service.h"
 #include "chrome/browser/ash/arc/video/gpu_arc_video_service_host.h"
+#include "chrome/browser/ash/arc/vmm/arc_vmm_manager.h"
 #include "chrome/browser/ash/arc/wallpaper/arc_wallpaper_service.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -125,8 +129,7 @@ ArcServiceLauncher* g_arc_service_launcher = nullptr;
 std::unique_ptr<ArcSessionManager> CreateArcSessionManager(
     ArcBridgeService* arc_bridge_service,
     version_info::Channel channel,
-    chromeos::SchedulerConfigurationManagerBase*
-        scheduler_configuration_manager) {
+    ash::SchedulerConfigurationManagerBase* scheduler_configuration_manager) {
   auto delegate = std::make_unique<AdbSideloadingAvailabilityDelegateImpl>();
   auto runner = std::make_unique<ArcSessionRunner>(
       base::BindRepeating(ArcSession::Create, arc_bridge_service, channel,
@@ -138,8 +141,7 @@ std::unique_ptr<ArcSessionManager> CreateArcSessionManager(
 }  // namespace
 
 ArcServiceLauncher::ArcServiceLauncher(
-    chromeos::SchedulerConfigurationManagerBase*
-        scheduler_configuration_manager)
+    ash::SchedulerConfigurationManagerBase* scheduler_configuration_manager)
     : arc_service_manager_(std::make_unique<ArcServiceManager>()),
       arc_session_manager_(
           CreateArcSessionManager(arc_service_manager_->arc_bridge_service(),
@@ -148,11 +150,6 @@ ArcServiceLauncher::ArcServiceLauncher(
       scheduler_configuration_manager_(scheduler_configuration_manager) {
   DCHECK(g_arc_service_launcher == nullptr);
   g_arc_service_launcher = this;
-
-  if (!ash::StartupUtils::IsOobeCompleted()) {
-    arc_demo_mode_preference_handler_ =
-        ArcDemoModePreferenceHandler::Create(arc_session_manager_.get());
-  }
 
   if (base::FeatureList::IsEnabled(kEnableVirtioBlkForData))
     arc_disk_space_monitor_ = std::make_unique<ArcDiskSpaceMonitor>();
@@ -292,7 +289,6 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   ArcResizeLockManager::GetForBrowserContext(profile);
   ArcRotationLockBridge::GetForBrowserContext(profile);
   ArcScreenCaptureBridge::GetForBrowserContext(profile);
-  ArcSensorBridge::GetForBrowserContext(profile);
   ArcSettingsService::GetForBrowserContext(profile);
   ArcSharesheetBridge::GetForBrowserContext(profile);
   ArcSurveyService::GetForBrowserContext(profile);
@@ -316,6 +312,8 @@ void ArcServiceLauncher::OnPrimaryUserProfilePrepared(Profile* profile) {
   if (arc::IsArcVmEnabled()) {
     // ARCVM-only services.
     ArcMemoryPressureBridge::GetForBrowserContext(profile);
+    ArcVmmManager::GetForBrowserContext(profile)->set_user_id_hash(
+        user_id_hash);
 
     if (base::FeatureList::IsEnabled(kEnableArcVmDataMigration)) {
       arc_vm_data_migration_notifier_ =
@@ -405,5 +403,73 @@ void ArcServiceLauncher::OnGetTpmStatus(
       kTpmOwnershipCheckDelay);
 }
 #endif  // BUILDFLAG(USE_ARC_PROTECTED_MEDIA)
+
+// static
+void ArcServiceLauncher::EnsureFactoriesBuilt() {
+  ArcAccessibilityHelperBridge::EnsureFactoryBuilt();
+  ArcAdbdMonitorBridge::EnsureFactoryBuilt();
+  ArcAppPerformanceTracing::EnsureFactoryBuilt();
+  ArcAppfuseBridge::EnsureFactoryBuilt();
+  ArcAudioBridge::EnsureFactoryBuilt();
+  ArcAuthService::EnsureFactoryBuilt();
+  ArcBluetoothBridge::EnsureFactoryBuilt();
+  ArcBootErrorNotification::EnsureFactoryBuilt();
+  ArcBootPhaseMonitorBridgeFactory::GetInstance();
+  ArcCameraBridge::EnsureFactoryBuilt();
+  ArcClipboardBridge::EnsureFactoryBuilt();
+  ArcCrashCollectorBridge::EnsureFactoryBuilt();
+  ArcDigitalGoodsBridge::EnsureFactoryBuilt();
+  ArcDiskQuotaBridge::EnsureFactoryBuilt();
+  ArcDocumentsProviderRootMapFactory::GetInstance();
+  ArcEnterpriseReportingService::EnsureFactoryBuilt();
+  ArcFileSystemMounter::EnsureFactoryBuilt();
+  ArcFileSystemOperationRunner::EnsureFactoryBuilt();
+  ArcFileSystemWatcherService::EnsureFactoryBuilt();
+  ArcIioSensorBridge::EnsureFactoryBuilt();
+  ArcImeService::EnsureFactoryBuilt();
+  ArcInitialOptInNotifier::EnsureFactoryBuilt();
+  ArcInstanceThrottle::EnsureFactoryBuilt();
+  ArcKeyboardShortcutBridge::EnsureFactoryBuilt();
+  ArcKeymasterBridge::EnsureFactoryBuilt();
+  ArcKioskBridge::EnsureFactoryBuilt();
+  ArcLockScreenBridge::EnsureFactoryBuilt();
+  ArcMediaSessionBridge::EnsureFactoryBuilt();
+  ArcMetricsServiceFactory::GetInstance();
+  ArcMetricsServiceProxy::EnsureFactoryBuilt();
+  ArcMidisBridge::EnsureFactoryBuilt();
+  ArcNearbyShareBridge::EnsureFactoryBuilt();
+  ArcNetHostImpl::EnsureFactoryBuilt();
+  ArcObbMounterBridge::EnsureFactoryBuilt();
+  ArcOemCryptoBridge::EnsureFactoryBuilt();
+  ArcPackageSyncableServiceFactory::GetInstance();
+  ArcPaymentAppBridge::EnsureFactoryBuilt();
+  ArcPipBridge::EnsureFactoryBuilt();
+  ArcPolicyBridge::EnsureFactoryBuilt();
+  ArcPowerBridge::EnsureFactoryBuilt();
+  ArcPrintSpoolerBridge::EnsureFactoryBuilt();
+  ArcPrivacyItemsBridge::EnsureFactoryBuilt();
+  ArcProcessService::EnsureFactoryBuilt();
+  ArcPropertyBridge::EnsureFactoryBuilt();
+  ArcProvisionNotificationService::EnsureFactoryBuilt();
+  ArcResizeLockManager::EnsureFactoryBuilt();
+  ArcRotationLockBridge::EnsureFactoryBuilt();
+  ArcScreenCaptureBridge::EnsureFactoryBuilt();
+  ArcSettingsService::EnsureFactoryBuilt();
+  ArcSharesheetBridge::EnsureFactoryBuilt();
+  ArcSurveyService::EnsureFactoryBuilt();
+  ArcSystemUIBridge::EnsureFactoryBuilt();
+  ArcTimerBridge::EnsureFactoryBuilt();
+  ArcTracingBridge::EnsureFactoryBuilt();
+  ArcTtsService::EnsureFactoryBuilt();
+  ArcUsbHostBridge::EnsureFactoryBuilt();
+  ArcUsbHostPermissionManagerFactory::GetInstance();
+  ArcUserSessionService::EnsureFactoryBuilt();
+  ArcVolumeMounterBridge::EnsureFactoryBuilt();
+  ArcWakeLockBridge::EnsureFactoryBuilt();
+  ArcWallpaperService::EnsureFactoryBuilt();
+  CertStoreService::EnsureFactoryBuilt();
+  GpuArcVideoKeyedService::EnsureFactoryBuilt();
+  input_overlay::ArcInputOverlayManager::EnsureFactoryBuilt();
+}
 
 }  // namespace arc

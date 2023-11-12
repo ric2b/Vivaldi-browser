@@ -41,6 +41,7 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
     ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED,
     ATOMIC_CHANGED,
     AUTO_COMPLETE_CHANGED,
+    AUTOFILL_AVAILABILITY_CHANGED,
     BUSY_CHANGED,
     CARET_BOUNDS_CHANGED,
     CHECKED_STATE_CHANGED,
@@ -360,8 +361,8 @@ class AX_EXPORT AXEventGenerator : public AXTreeObserver {
   // previously unknown to ATs.
   std::set<AXNodeID> nodes_to_suppress_parent_changed_on_;
 
-  // Please make sure that this ScopedObserver is always declared last in order
-  // to prevent any use-after-free.
+  // Please make sure that this ScopedObservation is always declared last in
+  // order to prevent any use-after-free.
   base::ScopedObservation<AXTree, AXTreeObserver> tree_event_observation_{this};
 };
 

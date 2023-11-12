@@ -468,9 +468,6 @@ HRESULT AXPlatformNodeTextRangeProviderWin::FindText(
     BOOL backwards,
     BOOL ignore_case,
     ITextRangeProvider** result) {
-  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_FINDTEXT);
-  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_FINDTEXT);
-  UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_IN_1_OUT(string, result);
   // On Windows, there's a dichotomy in the definition of a text offset in a
   // text position between different APIs:
   //   - on UIA, a text offset translates to the offset in the text itself
@@ -493,6 +490,17 @@ HRESULT AXPlatformNodeTextRangeProviderWin::FindText(
   // value of the global variable to what is really expected on UIA.
   ScopedAXEmbeddedObjectBehaviorSetter ax_embedded_object_behavior(
       AXEmbeddedObjectBehavior::kSuppressCharacter);
+
+  WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_TEXTRANGE_FINDTEXT);
+  WIN_ACCESSIBILITY_API_PERF_HISTOGRAM(UMA_API_TEXTRANGE_FINDTEXT);
+  // The following has to be called after setting the
+  // ax_embedded_object_behavior. This is because it can modify `this`'s `start`
+  // and `end`, and it will do so assuming
+  // `AXEmbeddedObjectBehavior::kExposeCharacter` if we do not set it to
+  // `kSuppressCharacter' above. This would lead to incorrect behavior where the
+  // `text_range` length = 1, since that is the length of the embedded object
+  // character.
+  UIA_VALIDATE_TEXTRANGEPROVIDER_CALL_1_IN_1_OUT(string, result);
 
   std::u16string search_string = base::WideToUTF16(string);
   if (search_string.length() <= 0)
@@ -1629,6 +1637,18 @@ AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::~TextRangeEndpoints() {
   SetEnd(AXNodePosition::CreateNullPosition());
 }
 
+const AXPlatformNodeTextRangeProviderWin::AXPositionInstance&
+AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::GetStart() {
+  ValidateEndpointsAfterNodeDeletionIfNeeded();
+  return start_;
+}
+
+const AXPlatformNodeTextRangeProviderWin::AXPositionInstance&
+AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::GetEnd() {
+  ValidateEndpointsAfterNodeDeletionIfNeeded();
+  return end_;
+}
+
 void AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::SetStart(
     AXPositionInstance new_start) {
   bool did_tree_change = start_->tree_id() != new_start->tree_id();
@@ -1693,6 +1713,9 @@ void AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::
   DCHECK(tree);
   DCHECK(node);
   DCHECK_EQ(tree->GetAXTreeID(), node->tree()->GetAXTreeID());
+
+  // Validate now if we haven't done so yet.
+  ValidateEndpointsAfterNodeDeletionIfNeeded();
 
   AdjustEndpointForSubtreeDeletion(tree, node, true /* is_start_endpoint */);
   AdjustEndpointForSubtreeDeletion(tree, node, false /* is_start_endpoint */);
@@ -1790,27 +1813,20 @@ void AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::OnNodeDeleted(
     AXTree* tree,
     AXNodeID node_id) {
   DCHECK(tree);
+  // We only need validation in the case where a deleted node matches the
+  // previously stored |validation_necessary_for_*|. If this is the case,
+  // mark this any needed so that we force validation before using the endpoint.
 
   if (validation_necessary_for_start_.has_value() &&
       validation_necessary_for_start_->tree_id == tree->GetAXTreeID() &&
       validation_necessary_for_start_->node_id == node_id) {
-    if (!start_->IsNullPosition() && start_->GetAnchor()->IsDataValid())
-      SetStart(start_->AsValidPosition());
-    else
-      SetStart(AXNodePosition::CreateNullPosition());
-
-    validation_necessary_for_start_ = absl::nullopt;
+    validation_necessary_for_start_->validation_needed = true;
   }
 
   if (validation_necessary_for_end_.has_value() &&
       validation_necessary_for_end_->tree_id == tree->GetAXTreeID() &&
       validation_necessary_for_end_->node_id == node_id) {
-    if (!end_->IsNullPosition() && end_->GetAnchor()->IsDataValid())
-      SetEnd(end_->AsValidPosition());
-    else
-      SetEnd(AXNodePosition::CreateNullPosition());
-
-    validation_necessary_for_end_ = absl::nullopt;
+    validation_necessary_for_end_->validation_needed = true;
   }
 }
 
@@ -1819,6 +1835,31 @@ void AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::
   if (start_->tree_id() == previous_tree_id ||
       end_->tree_id() == previous_tree_id) {
     RemoveObserver(previous_tree_id);
+  }
+}
+
+// Ensures that our endpoints are always valid (step 2, all scenarios). See
+// comment in header file for more details.
+void AXPlatformNodeTextRangeProviderWin::TextRangeEndpoints::
+    ValidateEndpointsAfterNodeDeletionIfNeeded() {
+  if (validation_necessary_for_start_.has_value() &&
+      validation_necessary_for_start_->validation_needed) {
+    if (!start_->IsNullPosition() && start_->GetAnchor()->IsDataValid()) {
+      SetStart(start_->AsValidPosition());
+    } else {
+      SetStart(AXNodePosition::CreateNullPosition());
+    }
+    validation_necessary_for_start_ = absl::nullopt;
+  }
+
+  if (validation_necessary_for_end_.has_value() &&
+      validation_necessary_for_end_->validation_needed) {
+    if (!end_->IsNullPosition() && end_->GetAnchor()->IsDataValid()) {
+      SetEnd(end_->AsValidPosition());
+    } else {
+      SetEnd(AXNodePosition::CreateNullPosition());
+    }
+    validation_necessary_for_end_ = absl::nullopt;
   }
 }
 

@@ -12,6 +12,7 @@
 #include "base/android/build_info.h"
 #include "base/feature_list.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "components/cdm/common/cdm_messages_android.h"
 #include "content/public/browser/android/android_overlay_provider.h"
@@ -79,6 +80,7 @@ const CodecInfo<media::AudioCodec> kMP4AudioCodecsToQuery[] = {
 #if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
     {media::EME_CODEC_DTS, media::AudioCodec::kDTS},
     {media::EME_CODEC_DTSXP2, media::AudioCodec::kDTSXP2},
+    {media::EME_CODEC_DTSE, media::AudioCodec::kDTSE},
 #endif
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 };

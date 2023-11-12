@@ -4,7 +4,7 @@
 
 #include "ash/public/cpp/accelerators.h"
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/no_destructor.h"
 
 namespace ash {
@@ -359,6 +359,20 @@ const AcceleratorData kEnableWithSameAppWindowCycleAcceleratorData[] = {
 
 const size_t kEnableWithSameAppWindowCycleAcceleratorDataLength =
     std::size(kEnableWithSameAppWindowCycleAcceleratorData);
+
+const AcceleratorData kEnableWithFloatWindowAcceleratorData[] = {
+    {true, ui::VKEY_Z, ui::EF_COMMAND_DOWN, TOGGLE_MULTITASK_MENU},
+};
+
+const size_t kEnableWithFloatWindowAcceleratorDataLength =
+    std::size(kEnableWithFloatWindowAcceleratorData);
+
+const AcceleratorData kToggleGameDashboardAcceleratorData[] = {
+    {true, ui::VKEY_G, ui::EF_COMMAND_DOWN, TOGGLE_GAME_DASHBOARD},
+};
+
+const size_t kToggleGameDashboardAcceleratorDataLength =
+    std::size(kToggleGameDashboardAcceleratorData);
 
 // static
 AcceleratorController* AcceleratorController::Get() {

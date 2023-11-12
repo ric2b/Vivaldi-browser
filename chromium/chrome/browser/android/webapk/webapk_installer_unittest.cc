@@ -8,10 +8,10 @@
 #include <utility>
 
 #include "base/android/scoped_java_ref.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -97,8 +97,7 @@ class TestWebApkInstaller : public WebApkInstaller {
 
  private:
   void CheckFreeSpace() override {
-    OnGotSpaceStatus(nullptr, base::android::JavaParamRef<jobject>(nullptr),
-                     static_cast<int>(test_space_status_));
+    OnGotSpaceStatus(nullptr, static_cast<int>(test_space_status_));
   }
 
   // The space status used in tests.
@@ -543,7 +542,7 @@ TEST_F(WebApkInstallerTest, UpdateSuccessWithEmptyTokenInResponse) {
 TEST_F(WebApkInstallerTest, UpdateFailsUpdateRequestWrongFormat) {
   ScopedTempFile scoped_file;
   base::FilePath update_request_path = scoped_file.GetFilePath();
-  base::WriteFile(update_request_path, "😀", 1);
+  base::WriteFile(update_request_path, "😀");
 
   WebApkInstallerRunner runner;
   runner.RunUpdateWebApk(CreateDefaultWebApkInstaller(), update_request_path);

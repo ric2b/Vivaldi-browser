@@ -5,18 +5,22 @@
 #include "content/browser/attribution_reporting/attribution_host.h"
 
 #include <memory>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/attribution_reporting/registration_type.mojom.h"
 #include "components/attribution_reporting/suitable_origin.h"
+#include "content/browser/attribution_reporting/attribution_beacon_id.h"
 #include "content/browser/attribution_reporting/attribution_data_host_manager.h"
+#include "content/browser/attribution_reporting/attribution_features.h"
 #include "content/browser/attribution_reporting/attribution_manager.h"
-#include "content/browser/attribution_reporting/attribution_source_type.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/navigation_simulator_impl.h"
@@ -28,8 +32,11 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/permissions_policy/origin_with_possible_wildcards.h"
+#include "third_party/blink/public/common/permissions_policy/permissions_policy_declaration.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/conversions/conversions.mojom.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-shared.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -49,11 +56,13 @@ namespace {
 
 using ::attribution_reporting::SuitableOrigin;
 
-using testing::_;
-using testing::Return;
+using ::testing::_;
+using ::testing::Optional;
+using ::testing::Return;
+using ::testing::VariantWith;
 
+using ::attribution_reporting::mojom::RegistrationType;
 using ::blink::mojom::AttributionNavigationType;
-using ::blink::mojom::AttributionRegistrationType;
 
 const char kConversionUrl[] = "https://b.com";
 
@@ -68,7 +77,8 @@ class MockDataHostManager : public AttributionDataHostManager {
       (mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
        SuitableOrigin context_origin,
        bool is_within_fenced_frame,
-       AttributionRegistrationType),
+       RegistrationType,
+       GlobalRenderFrameHostId),
       (override));
 
   MOCK_METHOD(
@@ -76,8 +86,7 @@ class MockDataHostManager : public AttributionDataHostManager {
       RegisterNavigationDataHost,
       (mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
        const blink::AttributionSrcToken& attribution_src_token,
-       AttributionInputEvent input_event,
-       AttributionNavigationType),
+       AttributionInputEvent input_event),
       (override));
 
   MOCK_METHOD(void,
@@ -87,19 +96,52 @@ class MockDataHostManager : public AttributionDataHostManager {
                SuitableOrigin reporting_origin,
                const SuitableOrigin& source_origin,
                AttributionInputEvent input_event,
-               AttributionNavigationType),
+               AttributionNavigationType,
+               bool is_within_fenced_frame,
+               GlobalRenderFrameHostId),
               (override));
 
   MOCK_METHOD(void,
               NotifyNavigationForDataHost,
               (const blink::AttributionSrcToken& attribution_src_token,
                const SuitableOrigin& source_origin,
-               AttributionNavigationType),
+               AttributionNavigationType,
+               bool is_within_fenced_frame,
+               GlobalRenderFrameHostId),
+              (override));
+
+  MOCK_METHOD(
+      void,
+      NotifyNavigationFailure,
+      (const absl::optional<blink::AttributionSrcToken>& attribution_src_token,
+       int64_t navigation_id),
+      (override));
+
+  MOCK_METHOD(void,
+              NotifyNavigationSuccess,
+              (int64_t navigation_id),
               (override));
 
   MOCK_METHOD(void,
-              NotifyNavigationFailure,
-              (const blink::AttributionSrcToken& attribution_src_token),
+              NotifyFencedFrameReportingBeaconStarted,
+              (BeaconId beacon_id,
+               SuitableOrigin source_origin,
+               bool is_within_fenced_frame,
+               absl::optional<AttributionInputEvent> input_event,
+               GlobalRenderFrameHostId),
+              (override));
+
+  MOCK_METHOD(void,
+              NotifyFencedFrameReportingBeaconSent,
+              (BeaconId beacon_id),
+              (override));
+
+  MOCK_METHOD(void,
+              NotifyFencedFrameReportingBeaconData,
+              (BeaconId beacon_id,
+               url::Origin reporting_origin,
+               const net::HttpResponseHeaders* headers,
+               bool is_final_response),
               (override));
 };
 
@@ -177,7 +219,8 @@ TEST_F(AttributionHostTest, ValidAttributionSrc_ForwardedToManager) {
               NotifyNavigationForDataHost(
                   impression.attribution_src_token,
                   *SuitableOrigin::Deserialize("https://secure_impression.com"),
-                  impression.nav_type));
+                  impression.nav_type,
+                  /*is_within_fenced_frame=*/false, main_rfh()->GetGlobalId()));
 
   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
   auto navigation = NavigationSimulatorImpl::CreateRendererInitiated(
@@ -252,8 +295,9 @@ TEST_F(AttributionHostTest,
        AttributionSrcNavigationCommitsToErrorPage_Ignored) {
   blink::Impression impression;
 
-  EXPECT_CALL(*mock_data_host_manager(),
-              NotifyNavigationFailure(impression.attribution_src_token));
+  EXPECT_CALL(
+      *mock_data_host_manager(),
+      NotifyNavigationFailure(Optional(impression.attribution_src_token), _));
 
   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
 
@@ -280,8 +324,9 @@ TEST_F(AttributionHostTest, ImpressionNavigationAborts_Ignored) {
 TEST_F(AttributionHostTest, AttributionSrcNavigationAborts_Ignored) {
   blink::Impression impression;
 
-  EXPECT_CALL(*mock_data_host_manager(),
-              NotifyNavigationFailure(impression.attribution_src_token));
+  EXPECT_CALL(
+      *mock_data_host_manager(),
+      NotifyNavigationFailure(Optional(impression.attribution_src_token), _));
 
   contents()->NavigateAndCommit(GURL("https://secure_impression.com"));
 
@@ -367,7 +412,7 @@ TEST_F(AttributionHostTest, DataHost_RegisteredWithContext) {
       *mock_data_host_manager(),
       RegisterDataHost(_, *SuitableOrigin::Deserialize("https://top.example"),
                        /*is_within_fenced_frame=*/false,
-                       AttributionRegistrationType::kSource));
+                       RegistrationType::kSource, main_rfh()->GetGlobalId()));
 
   contents()->NavigateAndCommit(GURL("https://top.example"));
   SetCurrentTargetFrameForTesting(main_rfh());
@@ -378,8 +423,7 @@ TEST_F(AttributionHostTest, DataHost_RegisteredWithContext) {
 
   mojo::Remote<blink::mojom::AttributionDataHost> data_host_remote;
   conversion_host_mojom()->RegisterDataHost(
-      data_host_remote.BindNewPipeAndPassReceiver(),
-      AttributionRegistrationType::kSource);
+      data_host_remote.BindNewPipeAndPassReceiver(), RegistrationType::kSource);
 
   // Run loop to allow the bad message code to run if a bad message was
   // triggered.
@@ -398,8 +442,7 @@ TEST_F(AttributionHostTest, DISABLED_DataHostOnInsecurePage_BadMessage) {
 
   mojo::Remote<blink::mojom::AttributionDataHost> data_host_remote;
   conversion_host_mojom()->RegisterDataHost(
-      data_host_remote.BindNewPipeAndPassReceiver(),
-      AttributionRegistrationType::kSource);
+      data_host_remote.BindNewPipeAndPassReceiver(), RegistrationType::kSource);
 
   EXPECT_EQ(
       "blink.mojom.ConversionHost can only be used with a secure top-level "
@@ -420,7 +463,7 @@ TEST_F(AttributionHostTest,
   mojo::Remote<blink::mojom::AttributionDataHost> data_host_remote;
   conversion_host_mojom()->RegisterNavigationDataHost(
       data_host_remote.BindNewPipeAndPassReceiver(),
-      blink::AttributionSrcToken(), AttributionNavigationType::kAnchor);
+      blink::AttributionSrcToken());
 
   EXPECT_EQ(
       "blink.mojom.ConversionHost can only be used with a secure top-level "
@@ -442,7 +485,7 @@ TEST_F(AttributionHostTest, DuplicateAttributionSrcToken_BadMessage) {
   mojo::Remote<blink::mojom::AttributionDataHost> data_host_remote;
   conversion_host_mojom()->RegisterNavigationDataHost(
       data_host_remote.BindNewPipeAndPassReceiver(),
-      blink::AttributionSrcToken(), AttributionNavigationType::kAnchor);
+      blink::AttributionSrcToken());
 
   EXPECT_EQ(
       "Renderer attempted to register a data host with a duplicate "
@@ -455,7 +498,7 @@ TEST_F(AttributionHostTest, DataHostInSubframe_ContextIsOutermostFrame) {
       *mock_data_host_manager(),
       RegisterDataHost(_, *SuitableOrigin::Deserialize("https://top.example"),
                        /*is_within_fenced_frame=*/false,
-                       AttributionRegistrationType::kSource));
+                       RegistrationType::kSource, main_rfh()->GetGlobalId()));
 
   contents()->NavigateAndCommit(GURL("https://top.example"));
 
@@ -472,8 +515,7 @@ TEST_F(AttributionHostTest, DataHostInSubframe_ContextIsOutermostFrame) {
 
   mojo::Remote<blink::mojom::AttributionDataHost> data_host_remote;
   conversion_host_mojom()->RegisterDataHost(
-      data_host_remote.BindNewPipeAndPassReceiver(),
-      AttributionRegistrationType::kSource);
+      data_host_remote.BindNewPipeAndPassReceiver(), RegistrationType::kSource);
 
   // Run loop to allow the bad message code to run if a bad message was
   // triggered.
@@ -499,8 +541,7 @@ TEST_F(AttributionHostTest,
 
   mojo::Remote<blink::mojom::AttributionDataHost> data_host_remote;
   conversion_host_mojom()->RegisterDataHost(
-      data_host_remote.BindNewPipeAndPassReceiver(),
-      AttributionRegistrationType::kSource);
+      data_host_remote.BindNewPipeAndPassReceiver(), RegistrationType::kSource);
 
   EXPECT_EQ(
       "blink.mojom.ConversionHost can only be used with a secure top-level "
@@ -513,7 +554,7 @@ TEST_F(AttributionHostTest, DataHost_RegisteredWithFencedFrame) {
       *mock_data_host_manager(),
       RegisterDataHost(_, *SuitableOrigin::Deserialize("https://top.example"),
                        /*is_within_fenced_frame=*/true,
-                       AttributionRegistrationType::kSource));
+                       RegistrationType::kSource, main_rfh()->GetGlobalId()));
 
   contents()->NavigateAndCommit(GURL("https://top.example"));
   RenderFrameHost* fenced_frame =
@@ -529,13 +570,116 @@ TEST_F(AttributionHostTest, DataHost_RegisteredWithFencedFrame) {
 
   mojo::Remote<blink::mojom::AttributionDataHost> data_host_remote;
   conversion_host_mojom()->RegisterDataHost(
-      data_host_remote.BindNewPipeAndPassReceiver(),
-      AttributionRegistrationType::kSource);
+      data_host_remote.BindNewPipeAndPassReceiver(), RegistrationType::kSource);
 
   // Run loop to allow the bad message code to run if a bad message was
   // triggered.
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(bad_message_observer.got_bad_message());
+}
+
+TEST_F(AttributionHostTest, FeatureDisabled_FencedFrameReportingBeaconDropped) {
+  contents()->NavigateAndCommit(GURL("https:/secure.com"));
+
+  EXPECT_CALL(*mock_data_host_manager(),
+              NotifyFencedFrameReportingBeaconStarted)
+      .Times(0);
+
+  RenderFrameHost* fenced_frame =
+      RenderFrameHostTester::For(main_rfh())
+          ->AppendFencedFrame(blink::mojom::FencedFrameMode::kOpaqueAds);
+  fenced_frame = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
+      GURL("https://fencedframe.example"), fenced_frame);
+
+  conversion_host()->NotifyFencedFrameReportingBeaconStarted(
+      NavigationBeaconId(123), static_cast<RenderFrameHostImpl*>(fenced_frame));
+}
+
+TEST_F(AttributionHostTest, NotifyFencedFrameReportingBeaconStarted) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      kAttributionFencedFrameReportingBeacon);
+
+  const struct {
+    const char* source_origin;
+    bool expected_valid;
+  } kTestCases[] = {
+      {kLocalHost, true},
+      {"http://127.0.0.1", true},
+      {"http://insecure.com", false},
+      {"https:/secure.com", true},
+  };
+
+  NavigationBeaconId navigation_id(123);
+
+  for (const auto& test_case : kTestCases) {
+    contents()->NavigateAndCommit(GURL(test_case.source_origin));
+    if (test_case.expected_valid) {
+      EXPECT_CALL(
+          *mock_data_host_manager(),
+          NotifyFencedFrameReportingBeaconStarted(
+              VariantWith<NavigationBeaconId>(navigation_id),
+              *SuitableOrigin::Deserialize(test_case.source_origin),
+              /*is_within_fenced_frame=*/true, _, main_rfh()->GetGlobalId()));
+    } else {
+      EXPECT_CALL(*mock_data_host_manager(),
+                  NotifyFencedFrameReportingBeaconStarted)
+          .Times(0);
+    }
+
+    RenderFrameHost* fenced_frame =
+        RenderFrameHostTester::For(main_rfh())
+            ->AppendFencedFrame(blink::mojom::FencedFrameMode::kOpaqueAds);
+    fenced_frame = NavigationSimulatorImpl::NavigateAndCommitFromDocument(
+        GURL("https://fencedframe.example"), fenced_frame);
+
+    conversion_host()->NotifyFencedFrameReportingBeaconStarted(
+        navigation_id, static_cast<RenderFrameHostImpl*>(fenced_frame));
+  }
+}
+
+TEST_F(AttributionHostTest, FencedFrameReportingBeacon_FeaturePolicyChecked) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      kAttributionFencedFrameReportingBeacon);
+
+  contents()->NavigateAndCommit(GURL("https://secure.com"));
+
+  RenderFrameHost* fenced_frame =
+      RenderFrameHostTester::For(main_rfh())
+          ->AppendFencedFrame(blink::mojom::FencedFrameMode::kOpaqueAds);
+
+  static constexpr char kAllowedOriginUrl[] = "https://a.test";
+
+  const struct {
+    const char* fenced_frame_url;
+    bool expected;
+  } kTestCases[] = {
+      {kAllowedOriginUrl, true},
+      {"https://b.test", false},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    EXPECT_CALL(*mock_data_host_manager(),
+                NotifyFencedFrameReportingBeaconStarted)
+        .Times(test_case.expected);
+
+    auto simulator = NavigationSimulatorImpl::CreateRendererInitiated(
+        GURL(test_case.fenced_frame_url), fenced_frame);
+    simulator->SetPermissionsPolicyHeader(
+        {blink::ParsedPermissionsPolicyDeclaration(
+            blink::mojom::PermissionsPolicyFeature::kAttributionReporting,
+            /*allowed_origins=*/
+            {blink::OriginWithPossibleWildcards(
+                url::Origin::Create(GURL(kAllowedOriginUrl)),
+                /*has_subdomain_wildcard=*/false)},
+            /*matches_all_origins=*/false, /*matches_opaque_src=*/false)});
+    simulator->Commit();
+    fenced_frame = simulator->GetFinalRenderFrameHost();
+
+    conversion_host()->NotifyFencedFrameReportingBeaconStarted(
+        EventBeaconId(123), static_cast<RenderFrameHostImpl*>(fenced_frame));
+  }
 }
 
 }  // namespace

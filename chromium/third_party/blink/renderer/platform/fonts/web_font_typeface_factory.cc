@@ -13,11 +13,10 @@
 #include "third_party/skia/include/core/SkTypeface.h"
 
 #if BUILDFLAG(IS_WIN)
-#include "third_party/blink/public/common/dwrite_rasterizer_support/dwrite_rasterizer_support.h"
 #include "third_party/blink/renderer/platform/fonts/win/dwrite_font_format_support.h"
 #endif
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
 #include "third_party/skia/include/ports/SkFontMgr_empty.h"
 #endif
 
@@ -149,7 +148,7 @@ sk_sp<SkFontMgr> WebFontTypefaceFactory::DefaultFontManager() {
 }
 
 sk_sp<SkFontMgr> WebFontTypefaceFactory::FreeTypeFontManager() {
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
   return sk_sp<SkFontMgr>(SkFontMgr_New_Custom_Empty());
 #else
   return DefaultFontManager();
@@ -157,12 +156,7 @@ sk_sp<SkFontMgr> WebFontTypefaceFactory::FreeTypeFontManager() {
 }
 
 sk_sp<SkFontMgr> WebFontTypefaceFactory::FontManagerForColrCpal() {
-#if BUILDFLAG(IS_WIN)
-  if (!blink::DWriteRasterizerSupport::IsDWriteFactory2Available())
-    return FreeTypeFontManager();
-#endif
-
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   return FreeTypeFontManager();
 #else
   return DefaultFontManager();
@@ -171,9 +165,9 @@ sk_sp<SkFontMgr> WebFontTypefaceFactory::FontManagerForColrCpal() {
 
 sk_sp<SkFontMgr> WebFontTypefaceFactory::FontManagerForColrV0Variations() {
 #if BUILDFLAG(IS_WIN)
-  if (DWriteVersionSupportsVariations() &&
-      blink::DWriteRasterizerSupport::IsDWriteFactory2Available())
+  if (DWriteVersionSupportsVariations()) {
     return DefaultFontManager();
+  }
 #endif
   return FreeTypeFontManager();
 }

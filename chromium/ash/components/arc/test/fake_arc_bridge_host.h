@@ -47,8 +47,6 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
           boot_phase_monitor_remote) override;
   void OnCameraInstanceReady(
       mojo::PendingRemote<mojom::CameraInstance> camera_remote) override;
-  void OnCertStoreInstanceReady(
-      mojo::PendingRemote<mojom::CertStoreInstance> instance_remote) override;
   void OnClipboardInstanceReady(
       mojo::PendingRemote<mojom::ClipboardInstance> clipboard_remote) override;
   void OnCompatibilityModeInstanceReady(
@@ -82,6 +80,9 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
           keyboard_shortcut_remote) override;
   void OnKeymasterInstanceReady(
       mojo::PendingRemote<mojom::KeymasterInstance> keymaster_remote) override;
+  void OnKeyMintInstanceReady(
+      mojo::PendingRemote<mojom::keymint::KeyMintInstance> keymint_remote)
+      override;
   void OnKioskInstanceReady(
       mojo::PendingRemote<mojom::KioskInstance> kiosk_remote) override;
   void OnLockScreenInstanceReady(mojo::PendingRemote<mojom::LockScreenInstance>
@@ -131,13 +132,8 @@ class FakeArcBridgeHost : public mojom::ArcBridgeHost {
   void OnScreenCaptureInstanceReady(
       mojo::PendingRemote<mojom::ScreenCaptureInstance> screen_capture_remote)
       override;
-  void OnSensorInstanceReady(
-      mojo::PendingRemote<mojom::SensorInstance> sensor_remote) override;
   void OnSharesheetInstanceReady(mojo::PendingRemote<mojom::SharesheetInstance>
                                      sharesheet_remote) override;
-  void OnSmartCardManagerInstanceReady(
-      mojo::PendingRemote<mojom::SmartCardManagerInstance>
-          smart_card_manager_remote) override;
   void OnStorageManagerInstanceReady(
       mojo::PendingRemote<mojom::StorageManagerInstance> storage_manager_remote)
       override;

@@ -9,6 +9,7 @@
 
 #include "components/viz/common/resources/resource_format.h"
 #include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/config/gpu_preferences.h"
@@ -22,11 +23,13 @@ namespace gpu {
 // GLCommonImageBackingFactory
 
 GLCommonImageBackingFactory::GLCommonImageBackingFactory(
+    uint32_t supported_usages,
     const GpuPreferences& gpu_preferences,
     const GpuDriverBugWorkarounds& workarounds,
     const gles2::FeatureInfo* feature_info,
     gl::ProgressReporter* progress_reporter)
-    : use_passthrough_(gpu_preferences.use_passthrough_cmd_decoder &&
+    : SharedImageBackingFactory(supported_usages),
+      use_passthrough_(gpu_preferences.use_passthrough_cmd_decoder &&
                        gles2::PassthroughCommandDecoderSupported()),
       workarounds_(workarounds),
       use_webgpu_adapter_(gpu_preferences.use_webgpu_adapter),
@@ -44,7 +47,6 @@ GLCommonImageBackingFactory::GLCommonImageBackingFactory(
   const gles2::Validators* validators = feature_info->validators();
   for (int i = 0; i <= viz::RESOURCE_FORMAT_MAX; ++i) {
     auto format = static_cast<viz::ResourceFormat>(i);
-    FormatInfo& info = format_info_[i];
     if (!viz::GLSupportsFormat(format))
       continue;
     const GLuint image_internal_format = viz::GLInternalFormat(format);
@@ -55,65 +57,81 @@ GLCommonImageBackingFactory::GLCommonImageBackingFactory(
         validators->texture_format.IsValid(gl_format);
     const bool compressed_format_valid =
         validators->compressed_texture_format.IsValid(image_internal_format);
-    if ((uncompressed_format_valid || compressed_format_valid) &&
-        validators->pixel_type.IsValid(gl_type)) {
-      info.enabled = true;
-      info.is_compressed = compressed_format_valid;
-      info.gl_format = gl_format;
-      info.gl_type = gl_type;
-      info.swizzle = gles2::TextureManager::GetCompatibilitySwizzle(
-          feature_info, gl_format);
-      info.image_internal_format =
-          gles2::TextureManager::AdjustTexInternalFormat(
-              feature_info, image_internal_format, gl_type);
-      info.adjusted_format =
-          gles2::TextureManager::AdjustTexFormat(feature_info, gl_format);
-    }
-    if (!info.enabled)
+
+    if (!(uncompressed_format_valid || compressed_format_valid) ||
+        !validators->pixel_type.IsValid(gl_type)) {
       continue;
-    if (enable_texture_storage && !info.is_compressed) {
-      GLuint storage_internal_format = viz::TextureStorageFormat(
-          format, feature_info->feature_flags().angle_rgbx_internal_format);
-      if (validators->texture_internal_format_storage.IsValid(
-              storage_internal_format)) {
-        info.supports_storage = true;
-        info.storage_internal_format =
-            gles2::TextureManager::AdjustTexStorageFormat(
-                feature_info, storage_internal_format);
-      }
+    }
+
+    FormatInfo& info =
+        supported_formats_[viz::SharedImageFormat::SinglePlane(format)]
+            .emplace_back();
+    info.is_compressed = compressed_format_valid;
+    info.gl_format = gl_format;
+    info.gl_type = gl_type;
+    info.swizzle =
+        gles2::TextureManager::GetCompatibilitySwizzle(feature_info, gl_format);
+    info.image_internal_format = gles2::TextureManager::AdjustTexInternalFormat(
+        feature_info, image_internal_format, gl_type);
+    info.storage_internal_format = viz::TextureStorageFormat(
+        format, feature_info->feature_flags().angle_rgbx_internal_format);
+    info.adjusted_format =
+        gles2::TextureManager::AdjustTexFormat(feature_info, gl_format);
+
+    if (enable_texture_storage && !info.is_compressed &&
+        validators->texture_internal_format_storage.IsValid(
+            info.storage_internal_format)) {
+      info.supports_storage = true;
+      info.adjusted_storage_internal_format =
+          gles2::TextureManager::AdjustTexStorageFormat(
+              feature_info, info.storage_internal_format);
     }
   }
 }
 
 GLCommonImageBackingFactory::~GLCommonImageBackingFactory() = default;
 
-bool GLCommonImageBackingFactory::CanCreateSharedImage(
+std::vector<GLCommonImageBackingFactory::FormatInfo>
+GLCommonImageBackingFactory::GetFormatInfo(
+    viz::SharedImageFormat format) const {
+  auto iter = supported_formats_.find(format);
+  if (iter == supported_formats_.end()) {
+    return {};
+  }
+  return iter->second;
+}
+
+bool GLCommonImageBackingFactory::CanCreateTexture(
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     base::span<const uint8_t> pixel_data,
-    const FormatInfo& format_info,
     GLenum target) {
-  if (!format_info.enabled) {
-    LOG(ERROR) << "CreateSharedImage: invalid format";
+  auto iter = supported_formats_.find(format);
+  if (iter == supported_formats_.end()) {
+    DVLOG(2) << "CreateSharedImage: unsupported format";
     return false;
   }
 
   if (size.width() < 1 || size.height() < 1 ||
       size.width() > max_texture_size_ || size.height() > max_texture_size_) {
-    LOG(ERROR) << "CreateSharedImage: invalid size: " << size.ToString()
-               << ", max_texture_size_=" << max_texture_size_;
+    DVLOG(2) << "CreateSharedImage: invalid size: " << size.ToString()
+             << ", max_texture_size_=" << max_texture_size_;
     return false;
   }
 
   // If we have initial data to upload, ensure it is sized appropriately.
   if (!pixel_data.empty()) {
+    DCHECK_EQ(iter->second.size(), 1u);
+    const FormatInfo& format_info = iter->second[0];
+
     if (format_info.is_compressed) {
       const char* error_message = "unspecified";
       if (!gles2::ValidateCompressedTexDimensions(
               target, 0 /* level */, size.width(), size.height(), 1 /* depth */,
               format_info.image_internal_format, &error_message)) {
-        LOG(ERROR) << "CreateSharedImage: "
-                      "ValidateCompressedTexDimensionsFailed with error: "
-                   << error_message;
+        DVLOG(2) << "CreateSharedImage: "
+                    "ValidateCompressedTexDimensionsFailed with error: "
+                 << error_message;
         return false;
       }
 
@@ -122,15 +140,15 @@ bool GLCommonImageBackingFactory::CanCreateSharedImage(
               nullptr /* function_name */, size.width(), size.height(),
               1 /* depth */, format_info.image_internal_format, &bytes_required,
               nullptr /* error_state */)) {
-        LOG(ERROR) << "CreateSharedImage: Unable to compute required size for "
-                      "initial texture upload.";
+        DVLOG(2) << "CreateSharedImage: Unable to compute required size for "
+                    "initial texture upload.";
         return false;
       }
 
       if (bytes_required < 0 ||
           pixel_data.size() != static_cast<size_t>(bytes_required)) {
-        LOG(ERROR) << "CreateSharedImage: Initial data does not have expected "
-                      "size.";
+        DVLOG(2) << "CreateSharedImage: Initial data does not have expected "
+                    "size.";
         return false;
       }
     } else {

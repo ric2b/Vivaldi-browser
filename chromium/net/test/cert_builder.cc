@@ -6,6 +6,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -24,6 +25,7 @@
 #include "net/der/parse_values.h"
 #include "net/der/parser.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/key_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -121,7 +123,7 @@ std::unique_ptr<CertBuilder> CertBuilder::FromFile(
     return nullptr;
 
   bssl::UniquePtr<EVP_PKEY> private_key(
-      LoadPrivateKeyFromFile(cert_and_key_file));
+      key_util::LoadEVP_PKEYFromPEM(cert_and_key_file));
   if (!private_key)
     return nullptr;
 
@@ -154,7 +156,7 @@ std::unique_ptr<CertBuilder> CertBuilder::FromStaticCertFile(
     return nullptr;
 
   bssl::UniquePtr<EVP_PKEY> private_key(
-      LoadPrivateKeyFromFile(cert_and_key_file));
+      key_util::LoadEVP_PKEYFromPEM(cert_and_key_file));
   if (!private_key)
     return nullptr;
 
@@ -360,6 +362,11 @@ std::vector<uint8_t> CertBuilder::BuildNameWithCommonNameOfType(
   return FinishCBBToVector(cbb.get());
 }
 
+void CertBuilder::SetCertificateVersion(CertificateVersion version) {
+  version_ = version;
+  Invalidate();
+}
+
 void CertBuilder::SetExtension(const der::Input& oid,
                                std::string value,
                                bool critical) {
@@ -373,6 +380,11 @@ void CertBuilder::SetExtension(const der::Input& oid,
 void CertBuilder::EraseExtension(const der::Input& oid) {
   extensions_.erase(oid.AsString());
 
+  Invalidate();
+}
+
+void CertBuilder::ClearExtensions() {
+  extensions_.clear();
   Invalidate();
 }
 
@@ -702,6 +714,48 @@ void CertBuilder::SetCertificatePolicies(
   SetExtension(der::Input(kCertificatePoliciesOid), FinishCBB(cbb.get()));
 }
 
+void CertBuilder::SetPolicyMappings(
+    const std::vector<std::pair<std::string, std::string>>& policy_mappings) {
+  // From RFC 5280:
+  //   PolicyMappings ::= SEQUENCE SIZE (1..MAX) OF SEQUENCE {
+  //        issuerDomainPolicy      CertPolicyId,
+  //        subjectDomainPolicy     CertPolicyId }
+  if (policy_mappings.empty()) {
+    EraseExtension(der::Input(kPolicyMappingsOid));
+    return;
+  }
+
+  bssl::ScopedCBB cbb;
+  CBB mappings_sequence;
+  ASSERT_TRUE(CBB_init(cbb.get(), 64));
+  ASSERT_TRUE(CBB_add_asn1(cbb.get(), &mappings_sequence, CBS_ASN1_SEQUENCE));
+  for (const auto& [issuer_domain_policy, subject_domain_policy] :
+       policy_mappings) {
+    CBB mapping_sequence;
+    CBB issuer_policy_object;
+    CBB subject_policy_object;
+    ASSERT_TRUE(
+        CBB_add_asn1(&mappings_sequence, &mapping_sequence, CBS_ASN1_SEQUENCE));
+
+    ASSERT_TRUE(CBB_add_asn1(&mapping_sequence, &issuer_policy_object,
+                             CBS_ASN1_OBJECT));
+    ASSERT_TRUE(CBB_add_asn1_oid_from_text(&issuer_policy_object,
+                                           issuer_domain_policy.data(),
+                                           issuer_domain_policy.size()));
+
+    ASSERT_TRUE(CBB_add_asn1(&mapping_sequence, &subject_policy_object,
+                             CBS_ASN1_OBJECT));
+    ASSERT_TRUE(CBB_add_asn1_oid_from_text(&subject_policy_object,
+                                           subject_domain_policy.data(),
+                                           subject_domain_policy.size()));
+
+    ASSERT_TRUE(CBB_flush(&mappings_sequence));
+  }
+
+  SetExtension(der::Input(kPolicyMappingsOid), FinishCBB(cbb.get()),
+               /*critical=*/true);
+}
+
 void CertBuilder::SetPolicyConstraints(
     absl::optional<uint64_t> require_explicit_policy,
     absl::optional<uint64_t> inhibit_policy_mapping) {
@@ -961,6 +1015,12 @@ std::string CertBuilder::GetPEMFullChain() {
   return base::JoinString(pems, "\n");
 }
 
+std::string CertBuilder::GetPrivateKeyPEM() {
+  std::string pem_encoded = key_util::PEMFromPrivateKey(GetKey());
+  EXPECT_FALSE(pem_encoded.empty());
+  return pem_encoded;
+}
+
 CertBuilder::CertBuilder(CRYPTO_BUFFER* orig_cert,
                          CertBuilder* issuer,
                          bool unique_subject_key_identifier)
@@ -995,7 +1055,8 @@ void CertBuilder::GenerateRSAKey() {
 }
 
 bool CertBuilder::UseKeyFromFile(const base::FilePath& key_file) {
-  bssl::UniquePtr<EVP_PKEY> private_key(LoadPrivateKeyFromFile(key_file));
+  bssl::UniquePtr<EVP_PKEY> private_key(
+      key_util::LoadEVP_PKEYFromPEM(key_file));
   if (!private_key)
     return false;
   key_ = std::move(private_key);
@@ -1053,9 +1114,17 @@ void CertBuilder::InitFromCert(const der::Input& cert) {
   ASSERT_TRUE(certificate.ReadSequence(&tbs_certificate));
 
   // version
-  bool unused;
+  bool has_version;
   ASSERT_TRUE(tbs_certificate.SkipOptionalTag(
-      der::kTagConstructed | der::kTagContextSpecific | 0, &unused));
+      der::kTagConstructed | der::kTagContextSpecific | 0, &has_version));
+  if (has_version) {
+    // TODO(mattm): could actually parse the version here instead of assuming
+    // V3.
+    version_ = CertificateVersion::V3;
+  } else {
+    version_ = CertificateVersion::V1;
+  }
+
   // serialNumber
   ASSERT_TRUE(tbs_certificate.SkipTag(der::kInteger));
 
@@ -1085,6 +1154,7 @@ void CertBuilder::InitFromCert(const der::Input& cert) {
   default_pkey_id_ = EVP_PKEY_id(public_key.get());
 
   // issuerUniqueID
+  bool unused;
   ASSERT_TRUE(tbs_certificate.SkipOptionalTag(der::ContextSpecificPrimitive(1),
                                               &unused));
   // subjectUniqueID
@@ -1114,11 +1184,21 @@ void CertBuilder::BuildTBSCertificate(base::StringPiece signature_algorithm_tlv,
 
   ASSERT_TRUE(CBB_init(cbb.get(), 64));
   ASSERT_TRUE(CBB_add_asn1(cbb.get(), &tbs_cert, CBS_ASN1_SEQUENCE));
-  ASSERT_TRUE(
-      CBB_add_asn1(&tbs_cert, &version,
-                   CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0));
-  // Always use v3 certificates.
-  ASSERT_TRUE(CBB_add_asn1_uint64(&version, 2));
+  if (version_ != CertificateVersion::V1) {
+    ASSERT_TRUE(
+        CBB_add_asn1(&tbs_cert, &version,
+                     CBS_ASN1_CONTEXT_SPECIFIC | CBS_ASN1_CONSTRUCTED | 0));
+    switch (version_) {
+      case CertificateVersion::V2:
+        ASSERT_TRUE(CBB_add_asn1_uint64(&version, 1));
+        break;
+      case CertificateVersion::V3:
+        ASSERT_TRUE(CBB_add_asn1_uint64(&version, 2));
+        break;
+      case CertificateVersion::V1:
+        NOTREACHED_NORETURN();
+    }
+  }
   ASSERT_TRUE(CBB_add_asn1_uint64(&tbs_cert, GetSerialNumber()));
   ASSERT_TRUE(CBBAddBytes(&tbs_cert, signature_algorithm_tlv));
   ASSERT_TRUE(CBBAddBytes(&tbs_cert, issuer_tlv_.has_value()

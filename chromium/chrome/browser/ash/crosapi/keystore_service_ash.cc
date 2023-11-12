@@ -20,9 +20,9 @@
 #include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_service_factory.h"
 #include "chrome/browser/ash/platform_keys/platform_keys_service.h"
 #include "chrome/browser/ash/platform_keys/platform_keys_service_factory.h"
-#include "chrome/browser/platform_keys/extension_platform_keys_service.h"
-#include "chrome/browser/platform_keys/extension_platform_keys_service_factory.h"
-#include "chrome/browser/platform_keys/platform_keys.h"
+#include "chrome/browser/chromeos/platform_keys/extension_platform_keys_service.h"
+#include "chrome/browser/chromeos/platform_keys/extension_platform_keys_service_factory.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chromeos/crosapi/cpp/keystore_service_util.h"
 #include "chromeos/crosapi/mojom/keystore_error.mojom.h"
@@ -683,13 +683,12 @@ void KeystoreServiceAsh::GenerateKey(
 // static
 void KeystoreServiceAsh::DidGenerateKey(
     GenerateKeyCallback callback,
-    const std::string& public_key,
+    std::vector<uint8_t> public_key,
     chromeos::platform_keys::Status status) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   crosapi::mojom::KeystoreBinaryResultPtr result_ptr;
   if (status == chromeos::platform_keys::Status::kSuccess) {
-    result_ptr = mojom::KeystoreBinaryResult::NewBlob(
-        std::vector<uint8_t>(public_key.begin(), public_key.end()));
+    result_ptr = mojom::KeystoreBinaryResult::NewBlob(std::move(public_key));
   } else {
     result_ptr = mojom::KeystoreBinaryResult::NewError(
         chromeos::platform_keys::StatusToKeystoreError(status));
@@ -712,7 +711,7 @@ void KeystoreServiceAsh::RemoveKey(KeystoreType keystore,
   }
 
   GetPlatformKeys()->RemoveKey(
-      token_id.value(), std::string(public_key.begin(), public_key.end()),
+      token_id.value(), public_key,
       base::BindOnce(&KeystoreServiceAsh::DidRemoveKey, std::move(callback)));
 }
 
@@ -758,36 +757,33 @@ void KeystoreServiceAsh::Sign(bool is_keystore_provided,
   }
 
   PlatformKeysService* service = GetPlatformKeys();
-  std::string data_str(data.begin(), data.end());
-  std::string public_key_str(public_key.begin(), public_key.end());
   auto cb = base::BindOnce(&KeystoreServiceAsh::DidSign, std::move(callback));
 
   switch (key_type) {
     case chromeos::platform_keys::KeyType::kRsassaPkcs1V15:
       if (hash_algorithm == chromeos::platform_keys::HASH_ALGORITHM_NONE) {
-        service->SignRSAPKCS1Raw(token_id, data_str, public_key_str,
-                                 std::move(cb));
+        service->SignRSAPKCS1Raw(token_id, data, public_key, std::move(cb));
         return;
       }
-      service->SignRSAPKCS1Digest(token_id, data_str, public_key_str,
-                                  hash_algorithm, std::move(cb));
+      service->SignRSAPKCS1Digest(token_id, data, public_key, hash_algorithm,
+                                  std::move(cb));
       return;
     case chromeos::platform_keys::KeyType::kEcdsa:
-      service->SignECDSADigest(token_id, data_str, public_key_str,
-                               hash_algorithm, std::move(cb));
+      service->SignECDSADigest(token_id, data, public_key, hash_algorithm,
+                               std::move(cb));
       return;
   }
 }
 
 // static
 void KeystoreServiceAsh::DidSign(SignCallback callback,
-                                 const std::string& signature,
+                                 std::vector<uint8_t> signature,
                                  chromeos::platform_keys::Status status) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (status == chromeos::platform_keys::Status::kSuccess) {
-    std::move(callback).Run(mojom::KeystoreBinaryResult::NewBlob(
-        std::vector<uint8_t>(signature.begin(), signature.end())));
+    std::move(callback).Run(
+        mojom::KeystoreBinaryResult::NewBlob(std::move(signature)));
   } else {
     std::move(callback).Run(mojom::KeystoreBinaryResult::NewError(
         chromeos::platform_keys::StatusToKeystoreError(status)));

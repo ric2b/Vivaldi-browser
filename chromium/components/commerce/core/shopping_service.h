@@ -10,16 +10,18 @@
 #include <string>
 #include <tuple>
 
-#include "base/callback.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/scoped_observation_traits.h"
 #include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
 #include "components/commerce/core/account_checker.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
+#include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
@@ -95,6 +97,7 @@ class BookmarkUpdateManager;
 class ShoppingPowerBookmarkDataProvider;
 class ShoppingBookmarkModelObserver;
 class SubscriptionsManager;
+class SubscriptionsObserver;
 class WebWrapper;
 struct CommerceSubscription;
 
@@ -128,8 +131,8 @@ struct ProductInfo {
 // Information returned by the merchant info APIs.
 struct MerchantInfo {
   MerchantInfo();
-  MerchantInfo(const MerchantInfo&) = delete;
-  MerchantInfo& operator=(const MerchantInfo&) = delete;
+  MerchantInfo(const MerchantInfo&);
+  MerchantInfo& operator=(const MerchantInfo&);
   MerchantInfo(MerchantInfo&&);
   MerchantInfo& operator=(MerchantInfo&&) = default;
   ~MerchantInfo();
@@ -191,6 +194,7 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // Get updated product info (including price) for the provided list of
   // bookmark IDs. The information for each bookmark will be provided via a
   // repeating callback that provides the bookmark's ID, URL, and product info.
+  // Currently this API should only be used in the BookmarkUpdateManager.
   virtual void GetUpdatedProductInfoForBookmarks(
       const std::vector<int64_t>& bookmark_ids,
       BookmarkProductInfoUpdatedCallback info_updated_callback);
@@ -214,6 +218,26 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
       base::OnceCallback<void(bool)> callback);
 
+  // Gets all subscriptions for the specified type. The list of subscriptions
+  // will be provided as input to the |callback| passed to this function.
+  virtual void GetAllSubscriptions(
+      SubscriptionType type,
+      base::OnceCallback<void(std::vector<CommerceSubscription>)> callback);
+
+  // Methods to register or remove SubscriptionsObserver, which will be notified
+  // when a (un)subscribe request has finished.
+  void AddSubscriptionsObserver(SubscriptionsObserver* observer);
+  void RemoveSubscriptionsObserver(SubscriptionsObserver* observer);
+
+  // Check if the specified subscription exists.
+  virtual void IsSubscribed(CommerceSubscription subscription,
+                            base::OnceCallback<void(bool)> callback);
+
+  // Checks if a subscription exists from the in-memory cache. Use of the the
+  // callback-based version |IsSubscribed| is preferred. Information provided
+  // by this API is not guaranteed to be correct.
+  virtual bool IsSubscribedFromCache(const CommerceSubscription& subscription);
+
   // Fetch users' pref from server on whether to receive price tracking emails.
   void FetchPriceEmailPref();
 
@@ -223,7 +247,10 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 
   // This is a feature check for the "shopping list". This will only return true
   // if the user has the feature flag enabled, is signed-in, has MSBB enabled,
-  // has webapp activity enabled, and is allowed by enterprise policy.
+  // has webapp activity enabled, is allowed by enterprise policy, and (if
+  // applicable) in an eligible country and locale. The value returned by this
+  // method can change at runtime, so it should not be used when deciding
+  // whether to create critical, feature-related infrastructure.
   virtual bool IsShoppingListEligible();
 
   // Check whether a product (based on cluster ID) is explicitly price tracked
@@ -231,6 +258,11 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   virtual void IsClusterIdTrackedByUser(
       uint64_t cluster_id,
       base::OnceCallback<void(bool)> callback);
+
+  // This is a feature check for the "merchant viewer", which will return true
+  // if the user has the feature flag enabled or (if applicable) is in an
+  // enabled country and locale.
+  virtual bool IsMerchantViewerEnabled();
 
   // Get a weak pointer for this service instance.
   base::WeakPtr<ShoppingService> AsWeakPtr();
@@ -285,10 +317,6 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
       optimization_guide::OptimizationGuideDecision decision,
       const optimization_guide::OptimizationMetadata& metadata);
 
-  // Whether APIs like |GetMerchantInfoForURL| are enabled and allowed to be
-  // used.
-  bool IsMerchantInfoApiEnabled();
-
   void HandleOptGuideProductInfoResponse(
       const GURL& url,
       ProductInfoCallback callback,
@@ -333,7 +361,9 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
   // whether the user is signed in. The value returned here can change during
   // runtime so it should not be used when deciding to build infrastructure.
   static bool IsShoppingListEligible(AccountChecker* account_checker,
-                                     PrefService* prefs);
+                                     PrefService* prefs,
+                                     const std::string& country_code,
+                                     const std::string& locale);
 
   void HandleOptGuideMerchantInfoResponse(
       const GURL& url,
@@ -405,5 +435,22 @@ class ShoppingService : public KeyedService, public base::SupportsUserData {
 };
 
 }  // namespace commerce
+
+namespace base {
+
+template <>
+struct ScopedObservationTraits<commerce::ShoppingService,
+                               commerce::SubscriptionsObserver> {
+  static void AddObserver(commerce::ShoppingService* source,
+                          commerce::SubscriptionsObserver* observer) {
+    source->AddSubscriptionsObserver(observer);
+  }
+  static void RemoveObserver(commerce::ShoppingService* source,
+                             commerce::SubscriptionsObserver* observer) {
+    source->RemoveSubscriptionsObserver(observer);
+  }
+};
+
+}  // namespace base
 
 #endif  // COMPONENTS_COMMERCE_CORE_SHOPPING_SERVICE_H_

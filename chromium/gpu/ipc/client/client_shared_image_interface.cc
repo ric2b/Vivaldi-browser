@@ -5,6 +5,7 @@
 #include "gpu/ipc/client/client_shared_image_interface.h"
 
 #include "build/build_config.h"
+#include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/client/shared_image_interface_proxy.h"
 #include "ui/gfx/gpu_fence.h"
@@ -76,7 +77,7 @@ scoped_refptr<gfx::NativePixmap> ClientSharedImageInterface::GetNativePixmap(
 }
 
 Mailbox ClientSharedImageInterface::CreateSharedImage(
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -85,22 +86,22 @@ Mailbox ClientSharedImageInterface::CreateSharedImage(
     gpu::SurfaceHandle surface_handle) {
   DCHECK_EQ(surface_handle, kNullSurfaceHandle);
   DCHECK(gpu::IsValidClientUsage(usage));
-  auto si_format = viz::SharedImageFormat::SinglePlane(format);
   return AddMailbox(proxy_->CreateSharedImage(
-      si_format, size, color_space, surface_origin, alpha_type, usage));
+      format, size, color_space, surface_origin, alpha_type, usage));
 }
 
 Mailbox ClientSharedImageInterface::CreateSharedImage(
-    viz::ResourceFormat format,
+    viz::SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
     SkAlphaType alpha_type,
     uint32_t usage,
     base::span<const uint8_t> pixel_data) {
+  // Pixel upload path only supports single-planar formats.
+  DCHECK(format.is_single_plane());
   DCHECK(gpu::IsValidClientUsage(usage));
-  auto si_format = viz::SharedImageFormat::SinglePlane(format);
-  return AddMailbox(proxy_->CreateSharedImage(si_format, size, color_space,
+  return AddMailbox(proxy_->CreateSharedImage(format, size, color_space,
                                               surface_origin, alpha_type, usage,
                                               pixel_data));
 }
@@ -114,6 +115,7 @@ Mailbox ClientSharedImageInterface::CreateSharedImage(
     uint32_t usage,
     gfx::GpuMemoryBufferHandle buffer_handle) {
   DCHECK(gpu::IsValidClientUsage(usage));
+  DCHECK(viz::HasEquivalentBufferFormat(format));
   DCHECK(format.is_multi_plane());
   return AddMailbox(proxy_->CreateSharedImage(format, size, color_space,
                                               surface_origin, alpha_type, usage,
@@ -130,8 +132,9 @@ Mailbox ClientSharedImageInterface::CreateSharedImage(
     uint32_t usage) {
   DCHECK(gpu::IsValidClientUsage(usage));
   return AddMailbox(proxy_->CreateSharedImage(
-      gpu_memory_buffer, gpu_memory_buffer_manager, plane, color_space,
-      surface_origin, alpha_type, usage));
+      gpu_memory_buffer->GetFormat(), plane, gpu_memory_buffer->GetSize(),
+      color_space, surface_origin, alpha_type, usage,
+      gpu_memory_buffer->CloneHandle()));
 }
 
 #if BUILDFLAG(IS_WIN)

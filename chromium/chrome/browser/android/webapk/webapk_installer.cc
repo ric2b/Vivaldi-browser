@@ -14,11 +14,11 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/path_utils.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_number_conversions.h"
@@ -208,10 +208,7 @@ void WebApkInstaller::SetTimeoutMs(int timeout_ms) {
   webapk_server_timeout_ms_ = timeout_ms;
 }
 
-void WebApkInstaller::OnInstallFinished(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
-    jint result) {
+void WebApkInstaller::OnInstallFinished(JNIEnv* env, jint result) {
   OnResult(static_cast<webapps::WebApkInstallResult>(result));
 }
 
@@ -376,10 +373,7 @@ void WebApkInstaller::CheckFreeSpace() {
   Java_WebApkInstaller_checkFreeSpace(env, java_ref_);
 }
 
-void WebApkInstaller::OnGotSpaceStatus(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
-    jint status) {
+void WebApkInstaller::OnGotSpaceStatus(JNIEnv* env, jint status) {
   SpaceStatus space_status = static_cast<SpaceStatus>(status);
   if (space_status == SpaceStatus::NOT_ENOUGH_SPACE) {
     OnResult(webapps::WebApkInstallResult::NOT_ENOUGH_SPACE);

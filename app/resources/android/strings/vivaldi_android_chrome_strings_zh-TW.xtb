@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
 <translation id="1397811292916898096">透過 <ph name="PRODUCT_NAME" /> 搜尋</translation>
-<translation id="1456207338570705181">觸控搜尋功能需要在 Vivaldi 中把 Google 設定為預設搜尋引擎。這個功能會傳送詞彙周圍的文字至 Google 搜尋。你可以在<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />關閉這項功能。</translation>
+<translation id="1456207338570705181">觸控搜尋功能需要在 Vivaldi 中把 Google 設定為預設搜尋引擎。這個功能會傳送詞彙周圍的文字至 Google 搜尋。您可以在<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />關閉這項功能。</translation>
 <translation id="1598449788754183301">切換正常/無痕分頁</translation>
 <translation id="1644574205037202324">瀏覽紀錄</translation>
 <translation id="17513872634828108">開啟的分頁</translation>
@@ -32,7 +32,7 @@
 <translation id="4167670741834902166">新增無痕分頁</translation>
 <translation id="4243710787042215766">在無痕分頁中開啟</translation>
 <translation id="4526803704855831732">無痕分頁</translation>
-<translation id="4719086422742491124">選取網頁上的單字或詞彙並搜尋，讓你不用離開頁面就能了解更多資訊。
+<translation id="4719086422742491124">選取網頁上的單字或詞彙並搜尋，讓您不用離開頁面就能了解更多資訊。
 
 觸控搜尋功能需要在 Vivaldi 中把 Google 設定為預設搜尋引擎。</translation>
 <translation id="4759238208242260848">下載</translation>
@@ -45,7 +45,7 @@
 <translation id="5233638681132016545">新增分頁</translation>
 <translation id="5375131951310889874">不用離開頁面就能了解更多頁面上的資訊，這個觸控搜尋功能需要在 Vivaldi 中把 Google 設定為預設搜尋引擎。這個功能會傳送詞彙周圍的文字至 Google 搜尋，並返回定義、圖片、搜尋結果以及其他詳細訊息。
 
-要調整你的搜尋關鍵字，請長按並選取。要改善搜尋，請將面板向上滑動並點選搜尋框。</translation>
+要調整您的搜尋關鍵字，請長按並選取。要改善搜尋，請將面板向上滑動並點選搜尋框。</translation>
 <translation id="572328651809341494">最近開啟的分頁</translation>
 <translation id="6150320133806434356">已儲存書籤</translation>
 <translation id="6336451774241870485">新增無痕分頁</translation>

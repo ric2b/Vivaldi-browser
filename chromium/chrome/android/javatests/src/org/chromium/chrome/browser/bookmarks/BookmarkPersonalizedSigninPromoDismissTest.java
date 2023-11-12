@@ -31,12 +31,10 @@ import org.junit.Test;
 import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
@@ -47,7 +45,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.BookmarkTestRule;
 import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.ChromeTabUtils;
-import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
@@ -57,8 +54,6 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group",
         "force-fieldtrial-params=Study.Group:use_root_bookmark_as_default/false"})
-@Features.DisableFeatures({ChromeFeatureList.INTEREST_FEEDV1_CLICKS_AND_VIEWS_CONDITIONAL_UPLOAD,
-        ChromeFeatureList.INTEREST_FEED_V2})
 public class BookmarkPersonalizedSigninPromoDismissTest {
     private final SyncTestRule mSyncTestRule = new SyncTestRule();
 
@@ -109,6 +104,12 @@ public class BookmarkPersonalizedSigninPromoDismissTest {
     @Test
     @MediumTest
     public void testPromoDismissedHistogramRecordedAfterBeingDismissed() {
+        var histogramWatcher =
+                HistogramWatcher.newBuilder()
+                        .expectAnyRecord("Signin.SyncPromo.Dismissed.Count.Bookmarks")
+                        .allowExtraRecordsForHistogramsAbove()
+                        .build();
+
         mBookmarkTestRule.showBookmarkManager(mSyncTestRule.getActivity());
         onActiveViewId(R.id.signin_promo_view_container).check(matches(isDisplayed()));
         onActiveViewId(R.id.sync_promo_close_button).perform(click());
@@ -117,10 +118,7 @@ public class BookmarkPersonalizedSigninPromoDismissTest {
         closeBookmarkManager();
         mBookmarkTestRule.showBookmarkManager(mSyncTestRule.getActivity());
         onActiveViewId(R.id.signin_promo_view_container).check(doesNotExist());
-        int histogramRecordCount = RecordHistogram.getHistogramTotalCountForTesting(
-                "Signin.SyncPromo.Dismissed.Count.Bookmarks");
-        assertTrue("Expected at least one, but found " + histogramRecordCount,
-                histogramRecordCount >= 1);
+        histogramWatcher.assertExpected();
     }
 
     @Test
@@ -144,8 +142,8 @@ public class BookmarkPersonalizedSigninPromoDismissTest {
                 SharedPreferencesManager.getInstance().readInt(
                         SyncPromoController.getPromoShowCountPreferenceName(
                                 SigninAccessPoint.BOOKMARK_MANAGER)));
-        HistogramDelta showCountHistogram =
-                new HistogramDelta("Signin.SyncPromo.Shown.Count.Bookmarks", 1);
+        var histogramWatcher = HistogramWatcher.newSingleRecordWatcher(
+                "Signin.SyncPromo.Shown.Count.Bookmarks", 1);
 
         mBookmarkTestRule.showBookmarkManager(mSyncTestRule.getActivity());
         onActiveViewId(R.id.signin_promo_view_container).check(matches(isDisplayed()));
@@ -161,7 +159,7 @@ public class BookmarkPersonalizedSigninPromoDismissTest {
         int totalShownCount = SharedPreferencesManager.getInstance().readInt(
                 ChromePreferenceKeys.SYNC_PROMO_TOTAL_SHOW_COUNT);
         assertTrue("Expected at least one, but found " + totalShownCount, totalShownCount >= 1);
-        Assert.assertEquals(1, showCountHistogram.getDelta());
+        histogramWatcher.assertExpected();
     }
 
     private void closeBookmarkManager() {

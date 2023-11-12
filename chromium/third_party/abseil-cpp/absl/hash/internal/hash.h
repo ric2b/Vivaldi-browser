@@ -49,6 +49,7 @@
 #include "absl/hash/internal/city.h"
 #include "absl/hash/internal/low_level_hash.h"
 #include "absl/meta/type_traits.h"
+#include "absl/numeric/bits.h"
 #include "absl/numeric/int128.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
@@ -968,7 +969,8 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   // The result should be the same as running the whole algorithm, but faster.
   template <typename T, absl::enable_if_t<IntegralFastPath<T>::value, int> = 0>
   static size_t hash(T value) {
-    return static_cast<size_t>(Mix(Seed(), static_cast<uint64_t>(value)));
+    return static_cast<size_t>(
+        Mix(Seed(), static_cast<std::make_unsigned_t<T>>(value)));
   }
 
   // Overload of MixingHashState::hash()
@@ -1052,7 +1054,7 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
     uint64_t most_significant = low_mem;
     uint64_t least_significant = high_mem;
 #endif
-    return {least_significant, most_significant >> (128 - len * 8)};
+    return {least_significant, most_significant};
   }
 
   // Reads 4 to 8 bytes from p. Zero pads to fill uint64_t.
@@ -1134,7 +1136,8 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   // probably per-build and not per-process.
   ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Seed() {
 #if (!defined(__clang__) || __clang_major__ > 11) && \
-    !defined(__apple_build_version__)
+    (!defined(__apple_build_version__) ||            \
+     __apple_build_version__ >= 19558921)  // Xcode 12
     return static_cast<uint64_t>(reinterpret_cast<uintptr_t>(&kSeed));
 #else
     // Workaround the absence of
@@ -1183,9 +1186,22 @@ inline uint64_t MixingHashState::CombineContiguousImpl(
     }
     v = Hash64(first, len);
   } else if (len > 8) {
+    // This hash function was constructed by the ML-driven algorithm discovery
+    // using reinforcement learning. We fed the agent lots of inputs from
+    // microbenchmarks, SMHasher, low hamming distance from generated inputs and
+    // picked up the one that was good on micro and macrobenchmarks.
     auto p = Read9To16(first, len);
-    state = Mix(state, p.first);
-    v = p.second;
+    uint64_t lo = p.first;
+    uint64_t hi = p.second;
+    // Rotation by 53 was found to be most often useful when discovering these
+    // hashing algorithms with ML techniques.
+    lo = absl::rotr(lo, 53);
+    state += kMul;
+    lo += state;
+    state ^= hi;
+    uint128 m = state;
+    m *= lo;
+    return static_cast<uint64_t>(m ^ (m >> 64));
   } else if (len >= 4) {
     v = Read4To8(first, len);
   } else if (len > 0) {

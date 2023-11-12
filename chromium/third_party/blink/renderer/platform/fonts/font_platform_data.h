@@ -136,8 +136,7 @@ class PLATFORM_EXPORT FontPlatformData {
   const WebFontRenderStyle& GetFontRenderStyle() const { return style_; }
 #endif
 
-  SkFont CreateSkFont(bool should_use_subpixel_positioning = false,
-                      const FontDescription* = nullptr) const;
+  SkFont CreateSkFont(const FontDescription* = nullptr) const;
 
   scoped_refptr<OpenTypeVerticalData> CreateVerticalData() const;
 
@@ -186,7 +185,7 @@ class PLATFORM_EXPORT FontPlatformData {
   WebFontRenderStyle style_;
 #endif
 
-  mutable std::unique_ptr<HarfBuzzFace> harfbuzz_face_;
+  mutable scoped_refptr<HarfBuzzFace> harfbuzz_face_;
   bool is_hash_table_deleted_value_ = false;
 };
 

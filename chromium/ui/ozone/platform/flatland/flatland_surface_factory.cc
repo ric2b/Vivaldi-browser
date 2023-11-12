@@ -8,11 +8,12 @@
 #include <lib/zx/event.h>
 #include <memory>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/fuchsia/process_context.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
 #include "third_party/angle/src/common/fuchsia_egl/fuchsia_egl.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -23,6 +24,7 @@
 #include "ui/ozone/common/gl_ozone_egl.h"
 #include "ui/ozone/platform/flatland/flatland_gpu_service.h"
 #include "ui/ozone/platform/flatland/flatland_surface.h"
+#include "ui/ozone/platform/flatland/flatland_surface_canvas.h"
 #include "ui/ozone/platform/flatland/flatland_sysmem_buffer_collection.h"
 #include "ui/ozone/platform/flatland/flatland_window.h"
 #include "ui/ozone/platform/flatland/flatland_window_manager.h"
@@ -54,8 +56,9 @@ class GLOzoneEGLFlatland : public GLOzoneEGL {
   scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
       gl::GLDisplay* display,
       const gfx::Size& size) override {
-    return gl::InitializeGLSurface(base::MakeRefCounted<gl::SurfacelessEGL>(
-        display->GetAs<gl::GLDisplayEGL>(), size));
+    return gl::InitializeGLSurface(
+        base::MakeRefCounted<gl::PbufferGLSurfaceEGL>(
+            display->GetAs<gl::GLDisplayEGL>(), size));
   }
 
   gl::EGLDisplayPlatform GetNativeDisplay() override {
@@ -121,7 +124,6 @@ std::vector<gl::GLImplementationParts>
 FlatlandSurfaceFactory::GetAllowedGLImplementations() {
   return std::vector<gl::GLImplementationParts>{
       gl::GLImplementationParts(gl::kGLImplementationEGLANGLE),
-      gl::GLImplementationParts(gl::ANGLEImplementation::kSwiftShader),
       gl::GLImplementationParts(gl::kGLImplementationEGLGLES2),
       gl::GLImplementationParts(gl::kGLImplementationStubGL),
   };
@@ -151,10 +153,16 @@ FlatlandSurfaceFactory::CreatePlatformWindowSurface(
 }
 
 std::unique_ptr<SurfaceOzoneCanvas>
-FlatlandSurfaceFactory::CreateCanvasForWidget(gfx::AcceleratedWidget widget) {
-  // TODO(fxbug.dev/93998): Add FlatlandWindowCanvas implementation.
-  NOTREACHED();
-  return nullptr;
+FlatlandSurfaceFactory::CreateCanvasForWidget(gfx::AcceleratedWidget window) {
+  DCHECK_NE(window, gfx::kNullAcceleratedWidget);
+  auto result = std::make_unique<FlatlandSurfaceCanvas>(
+      flatland_sysmem_buffer_manager_.sysmem_allocator(),
+      flatland_sysmem_buffer_manager_.flatland_allocator());
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&FlatlandSurfaceFactory::AttachSurfaceToWindow,
+                                weak_ptr_factory_.GetWeakPtr(), window,
+                                result->CreateView()));
+  return result;
 }
 
 scoped_refptr<gfx::NativePixmap> FlatlandSurfaceFactory::CreateNativePixmap(

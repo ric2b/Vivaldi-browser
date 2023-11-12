@@ -6,12 +6,12 @@
 
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
@@ -25,6 +25,7 @@
 #include "chrome/browser/extensions/data_deleter.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/launch_util.h"
+#include "chrome/browser/extensions/profile_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
@@ -185,10 +186,24 @@ ComponentLoader::~ComponentLoader() = default;
 
 void ComponentLoader::LoadAll() {
   TRACE_EVENT0("browser,startup", "ComponentLoader::LoadAll");
-  SCOPED_UMA_HISTOGRAM_TIMER("Extensions.LoadAllComponentTime");
+  bool is_user_profile =
+      profile_util::ProfileCanUseNonComponentExtensions(profile_);
+  const base::TimeTicks load_start_time = base::TimeTicks::Now();
 
   for (const auto& component_extension : component_extensions_)
     Load(component_extension);
+
+  const base::TimeDelta load_all_component_time =
+      base::TimeTicks::Now() - load_start_time;
+  UMA_HISTOGRAM_TIMES("Extensions.LoadAllComponentTime",
+                      load_all_component_time);
+  if (is_user_profile) {
+    UMA_HISTOGRAM_TIMES("Extensions.LoadAllComponentTime.User",
+                        load_all_component_time);
+  } else {
+    UMA_HISTOGRAM_TIMES("Extensions.LoadAllComponentTime.NonUser",
+                        load_all_component_time);
+  }
 }
 
 absl::optional<base::Value::Dict> ComponentLoader::ParseManifest(

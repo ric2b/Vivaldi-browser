@@ -7,14 +7,14 @@
 #include "ash/login/ui/login_button.h"
 #include "ash/login/ui/login_remove_account_dialog.h"
 #include "ash/login/ui/login_test_base.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/user_manager/user_type.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/animation/ink_drop.h"
-#include "ui/views/animation/test/ink_drop_host_view_test_api.h"
+#include "ui/views/animation/test/ink_drop_host_test_api.h"
 #include "ui/views/layout/box_layout.h"
 
 namespace ash {

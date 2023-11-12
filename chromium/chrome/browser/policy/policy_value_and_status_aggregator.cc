@@ -10,15 +10,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "build/branding_buildflags.h"
-#include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/value_provider/chrome_policies_value_provider.h"
 #include "chrome/browser/policy/value_provider/policy_value_provider.h"
 #include "components/policy/core/browser/webui/policy_status_provider.h"
 #include "components/policy/core/browser/webui/policy_webui_constants.h"
+#include "components/policy/core/common/policy_logger.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/policy/active_directory/active_directory_policy_manager.h"
@@ -211,9 +209,17 @@ PolicyValueAndStatusAggregator::CreateDefaultPolicyValueAndStatusAggregator(
   policy::MachineLevelUserCloudPolicyManager* manager =
       g_browser_process->browser_policy_connector()
           ->machine_level_user_cloud_policy_manager();
-  if (manager)
+  if (manager) {
+    policy::BrowserDMTokenStorage* dmTokenStorage =
+        policy::BrowserDMTokenStorage::Get();
+    LOG_POLICY(INFO, POLICY_PROCESSING)
+        << "Retrieved Enrollment Token = "
+        << dmTokenStorage->RetrieveEnrollmentToken()
+        << " and client ID = " << dmTokenStorage->RetrieveClientId();
+
     aggregator->AddPolicyStatusProvider(
         kMachineStatusKey, GetMachinePolicyStatusProvider(manager));
+  }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
     // Updater policies.
@@ -231,6 +237,9 @@ PolicyValueAndStatusAggregator::~PolicyValueAndStatusAggregator() = default;
 base::Value::Dict PolicyValueAndStatusAggregator::GetAggregatedPolicyStatus() {
   base::Value::Dict status;
   for (auto& status_provider_description_pair : status_providers_) {
+    DVLOG_POLICY(3, POLICY_PROCESSING)
+        << status_provider_description_pair.first
+        << " status: " << status_provider_description_pair.second->GetStatus();
     status.Set(status_provider_description_pair.first,
                status_provider_description_pair.second->GetStatus());
   }
@@ -273,6 +282,9 @@ base::Value::Dict PolicyValueAndStatusAggregator::GetAggregatedPolicyNames() {
 }
 
 void PolicyValueAndStatusAggregator::Refresh() {
+  for (auto* value_provider : value_providers_unowned_) {
+    value_provider->Refresh();
+  }
   for (auto& value_provider : value_providers_) {
     value_provider->Refresh();
   }

@@ -1654,6 +1654,33 @@ void GL_APIENTRY GLES2BeginSharedImageAccessDirectCHROMIUM(GLuint texture,
 void GL_APIENTRY GLES2EndSharedImageAccessDirectCHROMIUM(GLuint texture) {
   gles2::GetGLContext()->EndSharedImageAccessDirectCHROMIUM(texture);
 }
+void GL_APIENTRY
+GLES2ConvertRGBAToYUVAMailboxesINTERNAL(GLenum planes_yuv_color_space,
+                                        GLenum plane_config,
+                                        GLenum subsampling,
+                                        const GLbyte* mailboxes) {
+  gles2::GetGLContext()->ConvertRGBAToYUVAMailboxesINTERNAL(
+      planes_yuv_color_space, plane_config, subsampling, mailboxes);
+}
+void GL_APIENTRY
+GLES2ConvertYUVAMailboxesToRGBINTERNAL(GLenum planes_yuv_color_space,
+                                       GLenum plane_config,
+                                       GLenum subsampling,
+                                       const GLbyte* mailboxes) {
+  gles2::GetGLContext()->ConvertYUVAMailboxesToRGBINTERNAL(
+      planes_yuv_color_space, plane_config, subsampling, mailboxes);
+}
+void GL_APIENTRY GLES2CopySharedImageINTERNAL(GLint xoffset,
+                                              GLint yoffset,
+                                              GLint x,
+                                              GLint y,
+                                              GLsizei width,
+                                              GLsizei height,
+                                              GLboolean unpack_flip_y,
+                                              const GLbyte* mailboxes) {
+  gles2::GetGLContext()->CopySharedImageINTERNAL(
+      xoffset, yoffset, x, y, width, height, unpack_flip_y, mailboxes);
+}
 void GL_APIENTRY GLES2EnableiOES(GLenum target, GLuint index) {
   gles2::GetGLContext()->EnableiOES(target, index);
 }
@@ -3031,6 +3058,20 @@ extern const NameToFunc g_gles2_function_table[] = {
         "glEndSharedImageAccessDirectCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glEndSharedImageAccessDirectCHROMIUM),
+    },
+    {
+        "glConvertRGBAToYUVAMailboxesINTERNAL",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glConvertRGBAToYUVAMailboxesINTERNAL),
+    },
+    {
+        "glConvertYUVAMailboxesToRGBINTERNAL",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glConvertYUVAMailboxesToRGBINTERNAL),
+    },
+    {
+        "glCopySharedImageINTERNAL",
+        reinterpret_cast<GLES2FunctionPointer>(glCopySharedImageINTERNAL),
     },
     {
         "glEnableiOES",

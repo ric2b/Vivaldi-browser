@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/message_loop/message_pump.h"
@@ -16,6 +16,7 @@
 #include "base/run_loop.h"
 #include "base/task/current_thread.h"
 #include "base/task/sequence_manager/sequence_manager.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/sequenced_task_runner_helpers.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/mock_callback.h"
@@ -26,6 +27,7 @@
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/scheduler/browser_io_thread_delegate.h"
 #include "content/browser/scheduler/browser_task_executor.h"
+#include "content/browser/scheduler/browser_task_priority.h"
 #include "content/browser/scheduler/browser_ui_thread_scheduler.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -40,8 +42,10 @@ using ::testing::Invoke;
 class SequenceManagerThreadDelegate : public base::Thread::Delegate {
  public:
   SequenceManagerThreadDelegate() {
-    ui_sequence_manager_ =
-        base::sequence_manager::CreateUnboundSequenceManager();
+    ui_sequence_manager_ = base::sequence_manager::CreateUnboundSequenceManager(
+        base::sequence_manager::SequenceManager::Settings::Builder()
+            .SetPrioritySettings(internal::CreateBrowserTaskPrioritySettings())
+            .Build());
     auto browser_ui_thread_scheduler =
         BrowserUIThreadScheduler::CreateForTesting(ui_sequence_manager_.get());
 
@@ -273,7 +277,9 @@ class BrowserThreadWithCustomSchedulerTest : public testing::Test {
       : public base::test::TaskEnvironment {
    public:
     TaskEnvironmentWithCustomScheduler()
-        : base::test::TaskEnvironment(SubclassCreatesDefaultTaskRunner{}) {
+        : base::test::TaskEnvironment(
+              internal::CreateBrowserTaskPrioritySettings(),
+              SubclassCreatesDefaultTaskRunner{}) {
       std::unique_ptr<BrowserUIThreadScheduler> browser_ui_thread_scheduler =
           BrowserUIThreadScheduler::CreateForTesting(sequence_manager());
       DeferredInitFromSubclass(

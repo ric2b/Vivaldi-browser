@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/platform_shared_memory_region.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/ranges/algorithm.h"
@@ -238,6 +238,13 @@ mojo::Remote<mojom::VideoFrameHandler> BroadcastingReceiver::RemoveClient(
   auto client = std::move(clients_.at(client_id));
   clients_.erase(client_id);
   return std::move(client.client());
+}
+
+void BroadcastingReceiver::OnCaptureConfigurationChanged() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (auto& client : clients_) {
+    client.second.client()->OnCaptureConfigurationChanged();
+  }
 }
 
 void BroadcastingReceiver::OnNewBuffer(

@@ -8,7 +8,6 @@
 
 #include "base/strings/stringprintf.h"
 #include "components/crx_file/id_util.h"
-#include "content/public/common/child_process_host.h"
 #include "extensions/common/api/messaging/serialization_format.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
@@ -63,7 +62,8 @@ class RuntimeHooksDelegateTest : public NativeExtensionBindingsSystemUnittest {
     messaging_service_ =
         std::make_unique<NativeRendererMessagingService>(bindings_system());
 
-    bindings_system()->api_system()->GetHooksForAPI("runtime")->SetDelegate(
+    bindings_system()->api_system()->RegisterHooksDelegate(
+        "runtime",
         std::make_unique<RuntimeHooksDelegate>(messaging_service_.get()));
 
     extension_ = BuildExtension();

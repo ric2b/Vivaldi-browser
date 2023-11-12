@@ -15,9 +15,8 @@
 #include "ui/base/ime/ash/text_input_method.h"
 
 namespace ui {
-class TextInputMethod;
 class KeyEvent;
-}  // namespace ui
+}
 
 namespace ash {
 namespace ime {
@@ -26,7 +25,7 @@ struct AssistiveWindow;
 
 namespace input_method {
 
-class MockInputMethodEngine : public ui::TextInputMethod {
+class MockInputMethodEngine : public TextInputMethod {
  public:
   MockInputMethodEngine();
   ~MockInputMethodEngine() override;
@@ -41,10 +40,8 @@ class MockInputMethodEngine : public ui::TextInputMethod {
   void ProcessKeyEvent(const ui::KeyEvent& key_event,
                        KeyEventDoneCallback callback) override;
   void SetSurroundingText(const std::u16string& text,
-                          uint32_t cursor_pos,
-                          uint32_t anchor_pos,
+                          gfx::Range selection_range,
                           uint32_t offset_pos) override;
-  void SetCompositionBounds(const std::vector<gfx::Rect>& bounds) override;
   void SetCaretBounds(const gfx::Rect& caret_bounds) override;
   ui::VirtualKeyboardController* GetVirtualKeyboardController() const override;
   void PropertyActivate(const std::string& property_name) override;

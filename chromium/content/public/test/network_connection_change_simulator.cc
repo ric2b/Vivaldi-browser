@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/network_service_instance.h"
@@ -92,7 +92,7 @@ void NetworkConnectionChangeSimulator::SimulateNetworkChange(
     network::mojom::ConnectionType type) {
   if (IsOutOfProcessNetworkService()) {
     mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
-    content::GetNetworkService()->BindTestInterface(
+    content::GetNetworkService()->BindTestInterfaceForTesting(
         network_service_test.BindNewPipeAndPassReceiver());
     base::RunLoop run_loop(kRunLoopType);
     network_service_test->SimulateNetworkChange(type, run_loop.QuitClosure());

@@ -4,7 +4,7 @@
 
 #include "components/optimization_guide/content/browser/page_content_annotations_web_contents_observer.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/google/core/common/google_util.h"
@@ -24,6 +24,16 @@
 namespace optimization_guide {
 
 namespace {
+
+// Creates a HistoryVisit based on the current state of |web_contents|.
+HistoryVisit CreateHistoryVisitFromWebContents(
+    content::WebContents* web_contents,
+    int64_t navigation_id) {
+  HistoryVisit visit(
+      web_contents->GetController().GetLastCommittedEntry()->GetTimestamp(),
+      web_contents->GetLastCommittedURL(), navigation_id);
+  return visit;
+}
 
 // Data scoped to a single page. PageData has the same lifetime as the page's
 // main document. Contains information for whether we annotated the title for
@@ -72,9 +82,15 @@ PageContentAnnotationsWebContentsObserver::
       no_state_prefetch_manager_(no_state_prefetch_manager) {
   DCHECK(page_content_annotations_service_);
 
-  if (features::RemotePageMetadataEnabled() && optimization_guide_decider_) {
-    optimization_guide_decider_->RegisterOptimizationTypes(
-        {proto::PAGE_ENTITIES});
+  std::vector<proto::OptimizationType> optimization_types;
+  if (features::RemotePageMetadataEnabled()) {
+    optimization_types.emplace_back(proto::PAGE_ENTITIES);
+  }
+  if (features::ShouldPersistSalientImageMetadata()) {
+    optimization_types.emplace_back(proto::SALIENT_IMAGE);
+  }
+  if (optimization_guide_decider_ && !optimization_types.empty()) {
+    optimization_guide_decider_->RegisterOptimizationTypes(optimization_types);
   }
 }
 
@@ -108,15 +124,25 @@ void PageContentAnnotationsWebContentsObserver::DidFinishNavigation(
       PageData::GetOrCreateForPage(web_contents()->GetPrimaryPage());
   page_data->set_navigation_id(navigation_handle->GetNavigationId());
 
-  optimization_guide::HistoryVisit history_visit = optimization_guide::
-      PageContentAnnotationsService::CreateHistoryVisitFromWebContents(
-          web_contents(), navigation_handle->GetNavigationId());
+  optimization_guide::HistoryVisit history_visit =
+      CreateHistoryVisitFromWebContents(web_contents(),
+                                        navigation_handle->GetNavigationId());
   if (features::RemotePageMetadataEnabled() && optimization_guide_decider_) {
     optimization_guide_decider_->CanApplyOptimizationAsync(
         navigation_handle, proto::PAGE_ENTITIES,
         base::BindOnce(&PageContentAnnotationsWebContentsObserver::
-                           OnRemotePageMetadataReceived,
-                       weak_ptr_factory_.GetWeakPtr(), history_visit));
+                           OnOptimizationGuideResponseReceived,
+                       weak_ptr_factory_.GetWeakPtr(), history_visit,
+                       proto::PAGE_ENTITIES));
+  }
+  if (features::ShouldPersistSalientImageMetadata() &&
+      optimization_guide_decider_) {
+    optimization_guide_decider_->CanApplyOptimizationAsync(
+        navigation_handle, proto::SALIENT_IMAGE,
+        base::BindOnce(&PageContentAnnotationsWebContentsObserver::
+                           OnOptimizationGuideResponseReceived,
+                       weak_ptr_factory_.GetWeakPtr(), history_visit,
+                       proto::SALIENT_IMAGE));
   }
 
   bool is_google_search_url =
@@ -189,9 +215,9 @@ void PageContentAnnotationsWebContentsObserver::TitleWasSet(
     return;
 
   page_data->set_annotation_was_requested();
-  optimization_guide::HistoryVisit history_visit = optimization_guide::
-      PageContentAnnotationsService::CreateHistoryVisitFromWebContents(
-          web_contents(), page_data->navigation_id());
+  optimization_guide::HistoryVisit history_visit =
+      CreateHistoryVisitFromWebContents(web_contents(),
+                                        page_data->navigation_id());
   history_visit.text_to_annotate =
       base::UTF16ToUTF8(entry->GetTitleForDisplay());
   page_content_annotations_service_->Annotate(history_visit);
@@ -209,9 +235,9 @@ void PageContentAnnotationsWebContentsObserver::
   if (!page_data)
     return;
 
-  optimization_guide::HistoryVisit history_visit = optimization_guide::
-      PageContentAnnotationsService::CreateHistoryVisitFromWebContents(
-          web_contents(), page_data->navigation_id());
+  optimization_guide::HistoryVisit history_visit =
+      CreateHistoryVisitFromWebContents(web_contents(),
+                                        page_data->navigation_id());
   bool is_google_search_url =
       google_util::IsGoogleSearchUrl(web_contents()->GetLastCommittedURL());
   if (is_google_search_url &&
@@ -221,21 +247,38 @@ void PageContentAnnotationsWebContentsObserver::
   }
 }
 
-void PageContentAnnotationsWebContentsObserver::OnRemotePageMetadataReceived(
-    const HistoryVisit& history_visit,
-    OptimizationGuideDecision decision,
-    const OptimizationMetadata& metadata) {
-  if (decision != OptimizationGuideDecision::kTrue)
+void PageContentAnnotationsWebContentsObserver::
+    OnOptimizationGuideResponseReceived(
+        const HistoryVisit& history_visit,
+        proto::OptimizationType optimization_type,
+        OptimizationGuideDecision decision,
+        const OptimizationMetadata& metadata) {
+  if (decision != OptimizationGuideDecision::kTrue) {
     return;
+  }
 
-  absl::optional<proto::PageEntitiesMetadata> page_entities_metadata =
-      metadata.ParsedMetadata<proto::PageEntitiesMetadata>();
-  if (!page_entities_metadata)
-    return;
-
-  // Persist remote page metadata.
-  page_content_annotations_service_->PersistRemotePageMetadata(
-      history_visit, *page_entities_metadata);
+  switch (optimization_type) {
+    case proto::OptimizationType::PAGE_ENTITIES: {
+      absl::optional<proto::PageEntitiesMetadata> page_entities_metadata =
+          metadata.ParsedMetadata<proto::PageEntitiesMetadata>();
+      if (page_entities_metadata) {
+        page_content_annotations_service_->PersistRemotePageMetadata(
+            history_visit, *page_entities_metadata);
+      }
+      break;
+    }
+    case proto::OptimizationType::SALIENT_IMAGE: {
+      absl::optional<proto::SalientImageMetadata> salient_image_metadata =
+          metadata.ParsedMetadata<proto::SalientImageMetadata>();
+      if (salient_image_metadata) {
+        page_content_annotations_service_->PersistSalientImageMetadata(
+            history_visit, *salient_image_metadata);
+      }
+      break;
+    }
+    default:
+      NOTREACHED();
+  }
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(PageContentAnnotationsWebContentsObserver);

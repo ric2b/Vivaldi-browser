@@ -30,7 +30,7 @@
 #include "base/values.h"
 #include "chromeos/ash/components/system/kiosk_oem_manifest_parser.h"
 
-namespace chromeos::system {
+namespace ash::system {
 
 namespace {
 
@@ -69,19 +69,19 @@ const char kKeyboardMechanicalLayoutPath[] = "keyboard_mechanical_layout";
 // Timeout that we should wait for statistics to get loaded.
 constexpr base::TimeDelta kLoadTimeout = base::Seconds(3);
 
-// Gets ListValue from given `dictionary` by given `key`, and returns it as a
+// Gets the list from the given `dictionary` by given `key`, and returns it as a
 // string with all list values joined by ','. Returns nullopt if `key` is not
 // found.
 absl::optional<std::string> JoinListValuesToString(
-    const base::Value& dictionary,
+    const base::Value::Dict& dictionary,
     base::StringPiece key) {
-  const base::Value* list_value = dictionary.FindListKey(key);
+  const base::Value::List* list_value = dictionary.FindList(key);
   if (list_value == nullptr)
     return absl::nullopt;
 
   std::string buffer;
   bool first = true;
-  for (const auto& v : list_value->GetList()) {
+  for (const auto& v : *list_value) {
     const std::string* value = v.GetIfString();
     if (!value)
       return absl::nullopt;
@@ -97,16 +97,17 @@ absl::optional<std::string> JoinListValuesToString(
   return buffer;
 }
 
-// Gets ListValue from given `dictionary` by given `key`, and returns the first
-// value of the list as string. Returns nullopt if `key` is not found.
+// Gets the list from the given `dictionary` by given `key`, and returns the
+// first value of the list as string. Returns nullopt if `key` is not found.
 absl::optional<std::string> GetFirstListValueAsString(
-    const base::Value& dictionary,
+    const base::Value::Dict& dictionary,
     base::StringPiece key) {
-  const base::Value* list_value = dictionary.FindListKey(key);
-  if (list_value == nullptr || list_value->GetList().empty())
+  const base::Value::List* list_value = dictionary.FindList(key);
+  if (list_value == nullptr || list_value->empty()) {
     return absl::nullopt;
+  }
 
-  const std::string* value = list_value->GetList()[0].GetIfString();
+  const std::string* value = list_value->begin()->GetIfString();
   if (value == nullptr)
     return absl::nullopt;
 
@@ -114,14 +115,14 @@ absl::optional<std::string> GetFirstListValueAsString(
 }
 
 absl::optional<std::string> GetKeyboardLayoutFromRegionalData(
-    const base::Value& region_dict) {
+    const base::Value::Dict& region_dict) {
   return JoinListValuesToString(region_dict, kKeyboardsPath);
 }
 
 absl::optional<std::string> GetKeyboardMechanicalLayoutFromRegionalData(
-    const base::Value& region_dict) {
+    const base::Value::Dict& region_dict) {
   const std::string* value =
-      region_dict.FindStringPath(kKeyboardMechanicalLayoutPath);
+      region_dict.FindString(kKeyboardMechanicalLayoutPath);
   if (value == nullptr)
     return absl::nullopt;
 
@@ -129,18 +130,18 @@ absl::optional<std::string> GetKeyboardMechanicalLayoutFromRegionalData(
 }
 
 absl::optional<std::string> GetInitialTimezoneFromRegionalData(
-    const base::Value& region_dict) {
+    const base::Value::Dict& region_dict) {
   return GetFirstListValueAsString(region_dict, kTimeZonesPath);
 }
 
 absl::optional<std::string> GetInitialLocaleFromRegionalData(
-    const base::Value& region_dict) {
+    const base::Value::Dict& region_dict) {
   return JoinListValuesToString(region_dict, kLocalesPath);
 }
 
 // Array mapping region keys to their extracting functions.
 constexpr std::pair<const char*,
-                    absl::optional<std::string> (*)(const base::Value&)>
+                    absl::optional<std::string> (*)(const base::Value::Dict&)>
     kRegionKeysToExtractors[] = {
         {kInitialLocaleKey, &GetInitialLocaleFromRegionalData},
         {kKeyboardLayoutKey, &GetKeyboardLayoutFromRegionalData},
@@ -306,7 +307,7 @@ absl::optional<base::StringPiece> StatisticsProviderImpl::GetMachineStatistic(
 
   // Test region should override any other value.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ash::switches::kCrosRegion)) {
+          switches::kCrosRegion)) {
     if (const absl::optional<base::StringPiece> region_result =
             GetRegionalInformation(name))
       return region_result;
@@ -473,9 +474,9 @@ void StatisticsProviderImpl::LoadMachineStatistics(bool load_oem_manifest) {
 
   // Set region from command line if present.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(ash::switches::kCrosRegion)) {
+  if (command_line->HasSwitch(switches::kCrosRegion)) {
     const std::string region =
-        command_line->GetSwitchValueASCII(ash::switches::kCrosRegion);
+        command_line->GetSwitchValueASCII(switches::kCrosRegion);
     machine_info_[kRegionKey] = region;
     VLOG(1) << "CrOS region set to '" << region << "'";
   }
@@ -507,8 +508,14 @@ void StatisticsProviderImpl::LoadCrossystemTool() {
 }
 
 void StatisticsProviderImpl::LoadMachineInfoFile() {
-  if (!base::SysInfo::IsRunningOnChromeOS() &&
-      !base::PathExists(sources_.machine_info_filepath)) {
+  if (!base::PathExists(sources_.machine_info_filepath)) {
+    if (base::SysInfo::IsRunningOnChromeOS()) {
+      // This is unexpected, since the file is supposed to always be populated
+      // by write-machine-info script on ui start.
+      LOG(ERROR) << "Missing machine info: " << sources_.machine_info_filepath;
+      return;
+    }
+
     // Use time value to create an unique stub serial because clashes of the
     // same serial for the same domain invalidate earlier enrollments. Persist
     // to disk to keep it constant across restarts (required for re-enrollment
@@ -615,7 +622,7 @@ void StatisticsProviderImpl::LoadRegionsFile(const base::FilePath& filename,
     return;
   }
 
-  base::Value* region_dict = json_value->FindDictKey(region);
+  base::Value::Dict* region_dict = json_value->GetDict().FindDict(region);
   if (region_dict == nullptr) {
     LOG(ERROR) << "Bad regional data: '" << region << "' << not found.";
     return;
@@ -640,4 +647,4 @@ StatisticsProviderImpl::GetRegionalInformation(base::StringPiece name) const {
   return absl::nullopt;
 }
 
-}  // namespace chromeos::system
+}  // namespace ash::system

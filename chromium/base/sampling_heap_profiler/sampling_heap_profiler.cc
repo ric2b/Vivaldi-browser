@@ -10,10 +10,10 @@
 
 #include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/allocator/partition_allocator/shim/allocator_shim.h"
-#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
@@ -32,25 +32,11 @@
 #include <sys/prctl.h>
 #endif
 
-#if BUILDFLAG(IS_ANDROID) && BUILDFLAG(CAN_UNWIND_WITH_CFI_TABLE) && \
-    defined(OFFICIAL_BUILD)
-#include "base/trace_event/cfi_backtrace_android.h"  // no-presubmit-check
-#define CFI_BACKTRACE_AVAILABLE 1
-#else
-#define CFI_BACKTRACE_AVAILABLE 0
-#endif
-
 namespace base {
 
 constexpr uint32_t kMaxStackEntries = 256;
 
 namespace {
-
-#if CFI_BACKTRACE_AVAILABLE
-BASE_FEATURE(kAvoidCFIBacktrace,
-             "AndroidHeapSamplerAvoidCFIBacktrace",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
 
 #if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
 BASE_FEATURE(kAvoidFramePointers,
@@ -59,6 +45,7 @@ BASE_FEATURE(kAvoidFramePointers,
 #endif
 
 using StackUnwinder = SamplingHeapProfiler::StackUnwinder;
+using base::allocator::dispatcher::AllocationSubsystem;
 
 // If a thread name has been set from ThreadIdNameManager, use that. Otherwise,
 // gets the thread name from kernel if available or returns a string with id.
@@ -114,16 +101,6 @@ const char* UpdateAndGetThreadName(const char* name) {
 }
 
 StackUnwinder ChooseStackUnwinder() {
-#if CFI_BACKTRACE_AVAILABLE
-  // Only check the kAvoidCFIBacktrace feature if CFIBacktrace would actually be
-  // used, so the experiment group directly measures what happens when it's
-  // disabled.
-  if (trace_event::CFIBacktraceAndroid::GetInitializedInstance()
-          ->can_unwind_stack_frames() &&
-      !base::FeatureList::IsEnabled(kAvoidCFIBacktrace)) {
-    return StackUnwinder::kCFIBacktrace;
-  }
-#endif
 #if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
   // Use frame pointers if available, since they can be faster than the default.
   if (!base::FeatureList::IsEnabled(kAvoidFramePointers)) {
@@ -216,13 +193,6 @@ void** SamplingHeapProfiler::CaptureStackTrace(void** frames,
   size_t skip_frames = 3;
   size_t frame_count = 0;
   switch (unwinder_) {
-#if CFI_BACKTRACE_AVAILABLE
-    case StackUnwinder::kCFIBacktrace:
-      frame_count =
-          base::trace_event::CFIBacktraceAndroid::GetInitializedInstance()
-              ->Unwind(const_cast<const void**>(frames), max_entries);
-      break;
-#endif
 #if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
     case StackUnwinder::kFramePointers:
       frame_count = base::debug::TraceStackFramePointers(
@@ -247,12 +217,11 @@ void** SamplingHeapProfiler::CaptureStackTrace(void** frames,
   return frames + skip_frames;
 }
 
-void SamplingHeapProfiler::SampleAdded(
-    void* address,
-    size_t size,
-    size_t total,
-    PoissonAllocationSampler::AllocatorType type,
-    const char* context) {
+void SamplingHeapProfiler::SampleAdded(void* address,
+                                       size_t size,
+                                       size_t total,
+                                       AllocationSubsystem type,
+                                       const char* context) {
   // CaptureStack and allocation context tracking may use TLS.
   // Bail out if it has been destroyed.
   if (UNLIKELY(base::ThreadLocalStorage::HasBeenDestroyed()))
@@ -263,7 +232,7 @@ void SamplingHeapProfiler::SampleAdded(
   CaptureNativeStack(context, &sample);
   AutoLock lock(mutex_);
   if (UNLIKELY(PoissonAllocationSampler::AreHookedSamplesMuted() &&
-               type != PoissonAllocationSampler::kManualForTesting)) {
+               type != AllocationSubsystem::kManualForTesting)) {
     // Throw away any non-test samples that were being collected before
     // ScopedMuteHookedSamplesForTesting was enabled. This is done inside the
     // lock to catch any samples that were being collected while
@@ -271,7 +240,12 @@ void SamplingHeapProfiler::SampleAdded(
     return;
   }
   RecordString(sample.context);
-  samples_.emplace(address, std::move(sample));
+
+  // If a sample is already present with the same address, then that means that
+  // the sampling heap profiler failed to observe the destruction -- possibly
+  // because the sampling heap profiler was temporarily disabled. We should
+  // override the old entry.
+  samples_.insert_or_assign(address, std::move(sample));
 }
 
 void SamplingHeapProfiler::CaptureNativeStack(const char* context,

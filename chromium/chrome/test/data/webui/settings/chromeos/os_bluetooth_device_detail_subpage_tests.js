@@ -4,15 +4,16 @@
 
 import 'chrome://os-settings/strings.m.js';
 
-import {Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
+import {OsBluetoothDevicesSubpageBrowserProxyImpl, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
 import {setBluetoothConfigForTesting} from 'chrome://resources/ash/common/bluetooth/cros_bluetooth_config.js';
 import {AudioOutputCapability, BluetoothSystemProperties, DeviceConnectionState, DeviceType, SystemPropertiesObserverInterface} from 'chrome://resources/mojo/chromeos/ash/services/bluetooth_config/public/mojom/cros_bluetooth_config.mojom-webui.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {createDefaultBluetoothDevice, FakeBluetoothConfig} from 'chrome://webui-test/cr_components/chromeos/bluetooth/fake_bluetooth_config.js';
 import {waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
-import {assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
+import {TestOsBluetoothDevicesSubpageBrowserProxy} from './test_os_bluetooth_subpage_browser_proxy.js';
 
 suite('OsBluetoothDeviceDetailPageTest', function() {
   /** @type {!FakeBluetoothConfig} */
@@ -26,12 +27,19 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
    */
   let propertiesObserver;
 
+  /** @type {?OsBluetoothDevicesSubpageBrowserProxy} */
+  let browserProxy = null;
+
   setup(function() {
     bluetoothConfig = new FakeBluetoothConfig();
     setBluetoothConfigForTesting(bluetoothConfig);
   });
 
   function init() {
+    browserProxy = new TestOsBluetoothDevicesSubpageBrowserProxy();
+    OsBluetoothDevicesSubpageBrowserProxyImpl.setInstanceForTesting(
+        browserProxy);
+
     bluetoothDeviceDetailPage =
         document.createElement('os-settings-bluetooth-device-detail-subpage');
     document.body.appendChild(bluetoothDeviceDetailPage);
@@ -154,7 +162,59 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
     assertFalse(!!getManagedIcon());
   });
 
+  test(
+      'True Wireless Images not shown when Fast pair disabled',
+      async function() {
+        loadTimeData.overrideValues({'enableFastPairFlag': false});
+        init();
+        bluetoothConfig.setBluetoothEnabledState(/*enabled=*/ true);
+
+        const getTrueWirelessImages = () =>
+            bluetoothDeviceDetailPage.shadowRoot.querySelector(
+                '#trueWirelessImages');
+
+        const navigateToDeviceDetailPage = () => {
+          const params = new URLSearchParams();
+          params.append('id', '12345/6789&');
+          Router.getInstance().navigateTo(
+              routes.BLUETOOTH_DEVICE_DETAIL, params);
+        };
+
+        const device = createDefaultBluetoothDevice(
+            /*id=*/ '12345/6789&',
+            /*publicName=*/ 'BeatsX',
+            /*connectionState=*/
+            DeviceConnectionState.kNotConnected,
+            /*opt_nickname=*/ 'device1',
+            /*opt_audioCapability=*/
+            AudioOutputCapability.kCapableOfAudioOutput,
+            /*opt_deviceType=*/ DeviceType.kMouse,
+            /*opt_isBlockedByPolicy=*/ true);
+        const fakeUrl = {url: 'fake_image'};
+        // Emulate missing the right bud image.
+        device.deviceProperties.imageInfo = {
+          trueWirelessImages: {
+            leftBudImageUrl: fakeUrl,
+            caseImageUrl: fakeUrl,
+            rightBudImageUrl: fakeUrl,
+          },
+        };
+        device.deviceProperties.batteryInfo = {
+          leftBudInfo: {batteryPercentage: 90},
+        };
+
+        bluetoothConfig.appendToPairedDeviceList([device]);
+        await flushAsync();
+
+        navigateToDeviceDetailPage();
+
+        // Since Fast Pair flag is false, we don't show the component.
+        await flushAsync();
+        assertFalse(!!getTrueWirelessImages());
+      });
+
   test('True Wireless Images shown when expected', async function() {
+    loadTimeData.overrideValues({'enableFastPairFlag': true});
     init();
     bluetoothConfig.setBluetoothEnabledState(/*enabled=*/ true);
 
@@ -181,7 +241,6 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
     const fakeUrl = {url: 'fake_image'};
     // Emulate missing the right bud image.
     device.deviceProperties.imageInfo = {
-      defaultImageUrl: fakeUrl,
       trueWirelessImages: {leftBudImageUrl: fakeUrl, caseImageUrl: fakeUrl},
     };
     device.deviceProperties.batteryInfo = {
@@ -193,12 +252,22 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
 
     navigateToDeviceDetailPage();
 
-    // Don't display component unless all images are present.
+    // Don't display component unless either the default image is
+    // present OR all of the true wireless images are present.
     await flushAsync();
     assertFalse(!!getTrueWirelessImages());
 
+    // Try again with all 3 True Wireless images.
     device.deviceProperties.imageInfo.trueWirelessImages.rightBudImageUrl =
         fakeUrl;
+    bluetoothConfig.updatePairedDevice(device);
+    await flushAsync();
+    assertTrue(!!getTrueWirelessImages());
+
+    // Try again with just default image.
+    device.deviceProperties.imageInfo = {
+      defaultImageUrl: fakeUrl,
+    };
     bluetoothConfig.updatePairedDevice(device);
     await flushAsync();
     assertTrue(!!getTrueWirelessImages());
@@ -293,7 +362,7 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
     getChangeMouseSettings().click();
     await flushAsync();
 
-    assertEquals(Router.getInstance().getCurrentRoute(), routes.POINTERS);
+    assertEquals(Router.getInstance().currentRoute, routes.POINTERS);
 
     // Navigate back to the detail page.
     assertNotEquals(
@@ -331,7 +400,7 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
     getChangeKeyboardSettings().click();
     await flushAsync();
 
-    assertEquals(Router.getInstance().getCurrentRoute(), routes.KEYBOARD);
+    assertEquals(Router.getInstance().currentRoute, routes.KEYBOARD);
 
     // Navigate back to the detail page.
     assertNotEquals(
@@ -747,6 +816,15 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
 
     // Disconnect device and check that connection error is not shown.
     getBluetoothConnectDisconnectBtn().click();
+
+    // Disconnecting.
+    assertUIState(
+        /*isShowingConnectionFailed=*/ false,
+        /*isConnectDisconnectBtnDisabled=*/ true,
+        /*bluetoothStateText=*/
+        bluetoothDeviceDetailPage.i18n('bluetoothDeviceDetailConnected'),
+        /*connectDisconnectBtnText=*/
+        bluetoothDeviceDetailPage.i18n('bluetoothDisconnect'));
     await flushAsync();
     bluetoothConfig.completeDisconnect(/*success=*/ true);
     await flushAsync();
@@ -884,5 +962,16 @@ suite('OsBluetoothDeviceDetailPageTest', function() {
     // Device and device Id should be null after navigating backward.
     assertFalse(!!bluetoothDeviceDetailPage.getDeviceForTest());
     assertFalse(!!bluetoothDeviceDetailPage.getDeviceIdForTest());
+  });
+
+  test('Route to device details page', function() {
+    init();
+    assertEquals(0, browserProxy.getShowBluetoothRevampHatsSurveyCount());
+    const params = new URLSearchParams();
+    params.append('id', 'id');
+    Router.getInstance().navigateTo(routes.BLUETOOTH_DEVICE_DETAIL, params);
+    assertEquals(
+        1, browserProxy.getShowBluetoothRevampHatsSurveyCount(),
+        'Count failed to increase');
   });
 });

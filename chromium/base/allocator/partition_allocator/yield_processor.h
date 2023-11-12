@@ -5,6 +5,7 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_YIELD_PROCESSOR_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_YIELD_PROCESSOR_H_
 
+#include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "build/build_config.h"
 
 // The PA_YIELD_PROCESSOR macro wraps an architecture specific-instruction that
@@ -13,13 +14,12 @@
 // other hyper-thread on this core. See the following for context:
 // https://software.intel.com/en-us/articles/benefitting-power-and-performance-sleep-loops
 
-#if BUILDFLAG(IS_NACL)
-// Inline assembly not allowed.
-#define PA_YIELD_PROCESSOR ((void)0)
-#elif defined(COMPILER_MSVC) && !defined(__clang__)
+#if PA_CONFIG(IS_NONCLANG_MSVC)
+
 // MSVC is in its own assemblyless world (crbug.com/1351310#c6).
 #include <windows.h>
 #define PA_YIELD_PROCESSOR (YieldProcessor())
+
 #else
 
 #if defined(ARCH_CPU_X86_64) || defined(ARCH_CPU_X86)
@@ -46,6 +46,6 @@
 #define PA_YIELD_PROCESSOR ((void)0)
 #endif
 
-#endif  // BUILDFLAG(IS_NACL)
+#endif  // PA_CONFIG(IS_NONCLANG_MSVC)
 
 #endif  // BASE_ALLOCATOR_PARTITION_ALLOCATOR_YIELD_PROCESSOR_H_

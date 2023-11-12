@@ -14,11 +14,11 @@
 #include <vector>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/i18n/icu_util.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -599,7 +599,8 @@ void BrowserTestBase::SetUp() {
   tracing::EnableStartupTracingIfNeeded();
 
   {
-    SetBrowserClientForTesting(delegate->CreateContentBrowserClient());
+    ContentClient::SetBrowserClientAlwaysAllowForTesting(
+        delegate->CreateContentBrowserClient());
     if (command_line->HasSwitch(switches::kSingleProcess))
       SetRendererClientForTesting(delegate->CreateContentRendererClient());
 
@@ -749,7 +750,7 @@ void BrowserTestBase::SimulateNetworkServiceCrash() {
   // SimulateNetworkServiceCrash from SetUpOnMainThread, before
   // InitializeNetworkProcess has been called.
   mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
-  content::GetNetworkService()->BindTestInterface(
+  content::GetNetworkService()->BindTestInterfaceForTesting(
       network_service_test.BindNewPipeAndPassReceiver());
 
   base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
@@ -1020,7 +1021,13 @@ void BrowserTestBase::InitializeNetworkProcess() {
                 network::NetworkService::GetNetworkServiceForTesting();
             ASSERT_TRUE(network_service);
             if (replace_system_dns_config_) {
-              network_service->ReplaceSystemDnsConfigForTesting();
+              // The test must not run before the system DNS config has been
+              // successfully replaced, see https://crrev.com/c/4247942.
+              base::RunLoop run_loop_dns_config_service(
+                  base::RunLoop::Type::kNestableTasksAllowed);
+              network_service->ReplaceSystemDnsConfigForTesting(
+                  run_loop_dns_config_service.QuitClosure());
+              run_loop_dns_config_service.Run();
             }
             if (test_doh_config_) {
               network_service->SetTestDohConfigForTesting(
@@ -1034,7 +1041,7 @@ void BrowserTestBase::InitializeNetworkProcess() {
   }
 
   network_service_test_.reset();
-  content::GetNetworkService()->BindTestInterface(
+  content::GetNetworkService()->BindTestInterfaceForTesting(
       network_service_test_.BindNewPipeAndPassReceiver());
 
   // Do not set up host resolver rules if we allow the test to access

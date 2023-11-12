@@ -10,7 +10,6 @@
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/bind_post_task.h"
 #import "base/task/sequenced_task_runner.h"
-#import "base/threading/sequenced_task_runner_handle.h"
 #import "ios/net/cookies/system_cookie_util.h"
 #import "ios/web/common/user_agent.h"
 #import "ios/web/download/download_result.h"
@@ -422,13 +421,11 @@ Session::Session(base::File file,
   };
 
   // Invoked when data is received from NSURLSessionTask.
-  DataReceivedHandler data_received = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
+  DataReceivedHandler data_received = base::BindPostTaskToCurrentDefault(
       base::BindRepeating(&Session::DataReceived, weak_factory_.GetWeakPtr()));
 
   // Invoked when NSURLSessionTask complete.
-  TaskFinishedHandler task_finished = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
+  TaskFinishedHandler task_finished = base::BindPostTaskToCurrentDefault(
       base::BindRepeating(&Session::TaskFinished, weak_factory_.GetWeakPtr()));
 
   // The delegate passed to NSURLSession. It is strongly retained by the
@@ -640,12 +637,10 @@ void DownloadSessionTaskImpl::OnFileCreated(base::File file) {
   using download::internal::GetCookiesFromContextGetter;
   GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          &GetCookiesFromContextGetter, context_getter,
-          base::BindPostTask(
-              base::SequencedTaskRunnerHandle::Get(),
-              base::BindOnce(&DownloadSessionTaskImpl::OnCookiesFetched,
-                             weak_factory_.GetWeakPtr(), std::move(file)))));
+      base::BindOnce(&GetCookiesFromContextGetter, context_getter,
+                     base::BindPostTaskToCurrentDefault(base::BindOnce(
+                         &DownloadSessionTaskImpl::OnCookiesFetched,
+                         weak_factory_.GetWeakPtr(), std::move(file)))));
 }
 
 void DownloadSessionTaskImpl::OnCookiesFetched(

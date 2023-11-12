@@ -27,6 +27,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
 #include "chrome/browser/ash/settings/scoped_cros_settings_test_helper.h"
 #endif
@@ -163,6 +164,12 @@ class ExtensionServiceTestBase : public testing::Test {
   }
   policy::PolicyService* policy_service() { return policy_service_.get(); }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  ash::ScopedCrosSettingsTestHelper& cros_settings_test_helper() {
+    return cros_settings_test_helper_;
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
   // If a test uses a feature list, it should be destroyed after
   // |task_environment_|, to avoid tsan data races between the ScopedFeatureList
   // destructor, and any tasks running on different threads that check if a
@@ -219,6 +226,7 @@ class ExtensionServiceTestBase : public testing::Test {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   ash::ScopedCrosSettingsTestHelper cros_settings_test_helper_;
+  std::unique_ptr<ash::KioskAppManager> kiosk_app_manager_;
   ash::ScopedTestUserManager test_user_manager_;
 #endif
 

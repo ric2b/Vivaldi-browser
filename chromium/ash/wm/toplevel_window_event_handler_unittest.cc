@@ -26,8 +26,8 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
-#include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -82,8 +82,9 @@ class ResizeLoopWindowObserver : public aura::WindowObserver {
   ResizeLoopWindowObserver& operator=(const ResizeLoopWindowObserver&) = delete;
 
   ~ResizeLoopWindowObserver() override {
-    if (window_)
+    if (window_) {
       window_->RemoveObserver(this);
+    }
   }
 
   bool in_resize_loop() const { return in_resize_loop_; }
@@ -514,6 +515,8 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDrag) {
   std::unique_ptr<aura::Window> target(CreateTestWindowInShellWithDelegate(
       new TestWindowDelegate(HTCAPTION), 0, gfx::Rect(0, 0, 100, 100)));
   WindowState* window_state = WindowState::Get(target.get());
+  EXPECT_EQ(WindowStateType::kDefault, window_state->GetStateType());
+  EXPECT_EQ(gfx::Rect(), window_state->GetRestoreBoundsInScreen());
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow(),
                                      target.get());
   gfx::Rect old_bounds = target->bounds();
@@ -531,6 +534,8 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDrag) {
   // Verify that the window has moved after the gesture.
   EXPECT_NE(old_bounds.ToString(), target->bounds().ToString());
   EXPECT_EQ(WindowStateType::kSecondarySnapped, window_state->GetStateType());
+  EXPECT_EQ(gfx::Rect(0, 0, 100, 100),
+            window_state->GetRestoreBoundsInScreen());
 
   old_bounds = target->bounds();
 
@@ -542,8 +547,12 @@ TEST_F(ToplevelWindowEventHandlerTest, GestureDrag) {
 
   EXPECT_NE(old_bounds.ToString(), target->bounds().ToString());
   EXPECT_EQ(WindowStateType::kPrimarySnapped, window_state->GetStateType());
+  EXPECT_EQ(gfx::Rect(0, 0, 100, 100),
+            window_state->GetRestoreBoundsInScreen());
 
   window_state->Restore();
+  EXPECT_EQ(WindowStateType::kNormal, window_state->GetStateType());
+  EXPECT_EQ(gfx::Rect(), window_state->GetRestoreBoundsInScreen());
   gfx::Rect bounds_before_maximization = target->bounds();
   bounds_before_maximization.Offset(0, 100);
   target->SetBounds(bounds_before_maximization);
@@ -1085,7 +1094,7 @@ TEST_F(ToplevelWindowEventHandlerTest, DragSnappedWindowToExternalDisplay) {
   // Snap the window to the right.
   WindowState* window_state = WindowState::Get(w1.get());
   ASSERT_TRUE(window_state->CanSnap());
-  const WindowSnapWMEvent event(WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WMEvent event(WM_EVENT_CYCLE_SNAP_SECONDARY);
   window_state->OnWMEvent(&event);
   ASSERT_TRUE(window_state->IsSnapped());
 
@@ -1176,6 +1185,35 @@ TEST_F(ToplevelWindowEventHandlerTest, ExplicitDragWithChildWindow) {
   EXPECT_EQ(gfx::Rect(21, 11, 100, 100), w1->bounds());
   generator.MoveMouseBy(20, 10);
   EXPECT_EQ(gfx::Rect(41, 21, 100, 100), w1->bounds());
+}
+
+// Test that if a display is detached during dragging, the drag will be ended.
+TEST_F(ToplevelWindowEventHandlerTest, DetachDisplayDuringDragging) {
+  UpdateDisplay("800x600,1200x800");
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+  ASSERT_EQ(2U, root_windows.size());
+  const display::Display display1 =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(root_windows[1]);
+
+  // Move the window to the second display and start drag the window.
+  std::unique_ptr<aura::Window> dragged_window(CreateWindow(HTCAPTION));
+  dragged_window->SetBoundsInScreen(gfx::Rect(900, 0, 50, 60), display1);
+  EXPECT_EQ(dragged_window->GetRootWindow(), root_windows[1]);
+
+  ui::test::EventGenerator generator(root_windows[1], dragged_window.get());
+  generator.PressLeftButton();
+  generator.MoveMouseBy(20, 10);
+
+  EXPECT_TRUE(WindowState::Get(dragged_window.get())->is_dragged());
+  ToplevelWindowEventHandler* event_handler =
+      Shell::Get()->toplevel_window_event_handler();
+  EXPECT_TRUE(event_handler->is_drag_in_progress());
+  EXPECT_EQ(dragged_window->GetRootWindow(), root_windows[1]);
+
+  // Detach the display.
+  UpdateDisplay("800x600");
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(WindowState::Get(dragged_window.get())->is_dragged());
 }
 
 namespace {

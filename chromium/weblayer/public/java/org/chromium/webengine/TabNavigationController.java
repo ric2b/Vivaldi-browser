@@ -41,9 +41,9 @@ public class TabNavigationController {
         }
     };
 
-    TabNavigationController(ITabNavigationControllerProxy tabNavigationControllerProxy, Tab tab) {
+    TabNavigationController(ITabNavigationControllerProxy tabNavigationControllerProxy) {
         mTabNavigationControllerProxy = tabNavigationControllerProxy;
-        mNavigationObserverDelegate = new NavigationObserverDelegate(tab);
+        mNavigationObserverDelegate = new NavigationObserverDelegate();
         try {
             mTabNavigationControllerProxy.setNavigationObserverDelegate(
                     mNavigationObserverDelegate);
@@ -88,6 +88,32 @@ public class TabNavigationController {
         }
         try {
             mTabNavigationControllerProxy.goForward();
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * Reloads this Tab. Does nothing if there are no navigations.
+     */
+    public void reload() {
+        if (mTabNavigationControllerProxy == null) {
+            throw new IllegalStateException("WebSandbox has been destroyed");
+        }
+        try {
+            mTabNavigationControllerProxy.reload();
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * Stops in progress loading. Does nothing if not in the process of loading.
+     */
+    public void stop() {
+        if (mTabNavigationControllerProxy == null) {
+            throw new IllegalStateException("WebSandbox has been destroyed");
+        }
+        try {
+            mTabNavigationControllerProxy.stop();
         } catch (RemoteException e) {
         }
     }

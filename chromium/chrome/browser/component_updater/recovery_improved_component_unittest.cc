@@ -8,12 +8,12 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/test/scoped_run_loop_timeout.h"
@@ -56,6 +56,8 @@ class TestActionHandler : public RecoveryComponentActionHandler {
       : RecoveryComponentActionHandler(
             {std::begin(kKeyHashTest), std::end(kKeyHashTest)},
             crx_file::VerifierFormat::CRX3) {}
+  TestActionHandler(const TestActionHandler&) = delete;
+  TestActionHandler& operator=(const TestActionHandler&) = delete;
 
  protected:
   ~TestActionHandler() override = default;
@@ -65,9 +67,6 @@ class TestActionHandler : public RecoveryComponentActionHandler {
   base::CommandLine MakeCommandLine(
       const base::FilePath& unpack_path) const override;
   void Elevate(Callback callback) override;
-
-  TestActionHandler(const TestActionHandler&) = delete;
-  TestActionHandler& operator=(const TestActionHandler&) = delete;
 };
 
 base::CommandLine TestActionHandler::MakeCommandLine(
@@ -147,6 +146,6 @@ TEST_F(RecoveryImprovedActionHandlerTest, HandleSuccess) {
     runloop.Run();
   }
 }
-#endif  //  OS_WIN
+#endif  // BUILDFLAG(IS_WIN)
 
 }  // namespace component_updater

@@ -92,6 +92,9 @@ const char kReleaseLtsTag[] = "cros.system.releaseLtsTag";
 const char kDeviceChannelDowngradeBehavior[] =
     "cros.system.channelDowngradeBehavior";
 
+// This setting is used to enforce usage of system audio echo cancellation.
+const char kDeviceSystemAecEnabled[] = "cros.audio.device_system_aec_enabled";
+
 // A boolean pref that indicates whether OS & firmware version info should be
 // reported along with device policy requests.
 const char kReportDeviceVersionInfo[] =
@@ -234,6 +237,14 @@ const char kReportDeviceLoginLogout[] = "cros.reporting.report_login_logout";
 
 // Determines whether CRD session events are reported.
 const char kReportCRDSessions[] = "cros.reporting.report_crd_sessions";
+
+// Determines the device activity heartbeat collection rate (in milliseconds).
+const char kDeviceActivityHeartbeatCollectionRateMs[] =
+    "cros.reporting.device_activity_heartbeat_collection_rate_ms";
+
+// Determines whether device activity state heartbeat should be reported.
+const char kDeviceActivityHeartbeatEnabled[] =
+    "cros.reporting.device_activity_heartbeat_enabled";
 
 // Determines whether heartbeats should be sent to the policy service via
 // the GCM channel.
@@ -483,10 +494,6 @@ const char kDeviceUnaffiliatedCrostiniAllowed[] =
 // device.
 const char kPluginVmAllowed[] = "cros.device.plugin_vm_allowed";
 
-// A boolean pref that indicates whether Borealis is allowed to run on this
-// device.
-const char kBorealisAllowedForDevice[] = "cros.device.borealis_allowed";
-
 // An enum pref specifying the case when device needs to reboot on user sign
 // out.
 const char kDeviceRebootOnUserSignout[] = "cros.device.reboot_on_user_signout";
@@ -575,5 +582,11 @@ const char kDeviceEncryptedReportingPipelineEnabled[] =
 
 // A boolean pref that indicates whether reporting XDR events is enabled or not.
 const char kDeviceReportXDREvents[] = "cros.device.device_report_xdr_events";
+
+// String representing a template for the 'client-name' member of the
+// 'client-info' IPP attribute that will be sent to IPP printers in case they
+// support it. Maps to the `DevicePrintingClientNameTemplate` policy.
+const char kDevicePrintingClientNameTemplate[] =
+    "cros.device.printing.client_name_template";
 
 }  // namespace ash

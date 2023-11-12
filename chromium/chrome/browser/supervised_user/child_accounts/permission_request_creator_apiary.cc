@@ -4,9 +4,9 @@
 
 #include "chrome/browser/supervised_user/child_accounts/permission_request_creator_apiary.h"
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -15,14 +15,13 @@
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/supervised_user/child_accounts/kids_management_api.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_access_token_fetcher.h"
 #include "components/signin/public/identity_manager/scope_set.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -38,8 +37,6 @@
 #include "url/gurl.h"
 
 namespace {
-
-const char kPermissionRequestApiPath[] = "people/me/permissionRequests";
 
 const int kNumPermissionRequestRetries = 1;
 
@@ -115,7 +112,7 @@ void PermissionRequestCreatorApiary::CreateURLAccessRequest(
 }
 
 GURL PermissionRequestCreatorApiary::GetApiUrl() const {
-  return kids_management_api::GetURL(kPermissionRequestApiPath);
+  return supervised_user::KidsManagementPermissionRequestsURL();
 }
 
 std::string PermissionRequestCreatorApiary::GetApiScope() const {
@@ -210,7 +207,7 @@ void PermissionRequestCreatorApiary::OnAccessTokenFetchComplete(
   resource_request->method = "POST";
   resource_request->headers.SetHeader(
       net::HttpRequestHeaders::kAuthorization,
-      base::StringPrintf(supervised_users::kAuthorizationHeaderFormat,
+      base::StringPrintf(supervised_user::kAuthorizationHeaderFormat,
                          token_info.token.c_str()));
   (*it)->simple_url_loader = network::SimpleURLLoader::Create(
       std::move(resource_request), traffic_annotation);

@@ -72,7 +72,6 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
         synthetic_begin_frame_source;
     UnboundMessagePipes pipes;
     bool wants_animate_only_begin_frames = false;
-    const char* client_name = nullptr;
     base::PlatformThreadId io_thread_id = base::kInvalidThreadId;
   };
 
@@ -110,7 +109,9 @@ class CC_MOJO_EMBEDDER_EXPORT AsyncLayerTreeFrameSink
   void DidReceiveCompositorFrameAck(
       std::vector<viz::ReturnedResource> resources) override;
   void OnBeginFrame(const viz::BeginFrameArgs& begin_frame_args,
-                    const viz::FrameTimingDetailsMap& timing_details) override;
+                    const viz::FrameTimingDetailsMap& timing_details,
+                    bool frame_ack,
+                    std::vector<viz::ReturnedResource> resources) override;
   void OnBeginFramePausedChanged(bool paused) override;
   void ReclaimResources(std::vector<viz::ReturnedResource> resources) override;
   void OnCompositorFrameTransitionDirectiveProcessed(

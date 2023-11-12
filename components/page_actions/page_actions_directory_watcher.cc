@@ -5,7 +5,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 
@@ -69,7 +68,7 @@ void GetApkAssets(base::FilePath& apk_assets,
 DirectoryWatcher::DirectoryWatcher(ChangesCallback callback,
                                    base::FilePath apk_assets)
     : callback_(std::move(callback)),
-      callback_task_runner_(base::SequencedTaskRunnerHandle::Get()),
+      callback_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       apk_assets_(apk_assets),
       task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::MayBlock(), base::TaskPriority::USER_BLOCKING})) {

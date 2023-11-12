@@ -113,15 +113,6 @@
 
 namespace blink {
 
-namespace {
-
-// Default value is set to 15 as the default
-// minimum size used by firefox is 15x15.
-static const int kDefaultMinimumWidthForResizing = 15;
-static const int kDefaultMinimumHeightForResizing = 15;
-
-}  // namespace
-
 PaintLayerScrollableAreaRareData::PaintLayerScrollableAreaRareData() = default;
 
 void PaintLayerScrollableAreaRareData::Trace(Visitor* visitor) const {
@@ -522,8 +513,13 @@ void PaintLayerScrollableArea::UpdateScrollOffset(
     anchor->DidScroll(scroll_type);
 
   if (IsExplicitScrollType(scroll_type)) {
-    if (scroll_type != mojom::blink::ScrollType::kCompositor)
+    // We don't need to show scrollbars for kCompositor scrolls unless the
+    // scrollbar is non-composited (!NeedsCompositorScrolling). See
+    // PaintLayerScrollableArea::ShouldDirectlyCompositeScrollbar.
+    if (scroll_type != mojom::blink::ScrollType::kCompositor ||
+        !NeedsCompositedScrolling()) {
       ShowNonMacOverlayScrollbars();
+    }
     GetScrollAnchor()->Clear();
   }
   if (ContentCaptureManager* manager = frame_view->GetFrame()
@@ -708,7 +704,7 @@ gfx::Size PaintLayerScrollableArea::PixelSnappedContentsSize(
     if (auto* transition = ViewTransitionUtils::GetActiveTransition(
             GetLayoutBox()->GetDocument());
         transition && transition->IsRootTransitioning()) {
-      PhysicalSize container_size(transition->GetSnapshotViewportRect().size());
+      PhysicalSize container_size(transition->GetSnapshotRootSize());
       size.width = std::max(container_size.width, size.width);
       size.height = std::max(container_size.height, size.height);
     }
@@ -1125,10 +1121,6 @@ void PaintLayerScrollableArea::DelayableClampScrollOffsetAfterOverflowChange() {
 }
 
 void PaintLayerScrollableArea::ClampScrollOffsetAfterOverflowChange() {
-  if (!RuntimeEnabledFeatures::LayoutNGDelayScrollOffsetClampingEnabled()) {
-    DelayableClampScrollOffsetAfterOverflowChange();
-    return;
-  }
   ClampScrollOffsetAfterOverflowChangeInternal();
 }
 
@@ -1896,11 +1888,13 @@ bool PaintLayerScrollableArea::ShouldOverflowControlsPaintAsOverlay() const {
   if (HasOverlayOverflowControls())
     return true;
 
-  // The global root scrollbars and corner also paint as overlay so that they
-  // appear on top of all content within the viewport. This is important since
-  // these scrollbar's transform state is
+  // Frame and global root scroller (which can be a non-frame) scrollbars and
+  // corner also paint as overlay so that they appear on top of all content
+  // within their viewport. This is important for global root scrollers since
+  // these scrollbars' transform state is
   // VisualViewport::TransformNodeForViewportScrollbars().
-  return GetLayoutBox() && GetLayoutBox()->IsGlobalRootScroller();
+  return layer_->IsRootLayer() ||
+         (GetLayoutBox() && GetLayoutBox()->IsGlobalRootScroller());
 }
 
 void PaintLayerScrollableArea::PositionOverflowControls() {
@@ -1948,7 +1942,7 @@ void PaintLayerScrollableArea::UpdateScrollCornerStyle() {
     return;
   }
   const LayoutObject& style_source = ScrollbarStyleSource(*GetLayoutBox());
-  scoped_refptr<ComputedStyle> corner =
+  scoped_refptr<const ComputedStyle> corner =
       GetLayoutBox()->IsScrollContainer()
           ? style_source.GetUncachedPseudoElementStyle(
                 StyleRequest(kPseudoIdScrollbarCorner, style_source.Style()))
@@ -2087,7 +2081,7 @@ void PaintLayerScrollableArea::UpdateResizerStyle(
 
   // Update custom resizer style.
   const LayoutObject& style_source = ScrollbarStyleSource(*GetLayoutBox());
-  scoped_refptr<ComputedStyle> resizer =
+  scoped_refptr<const ComputedStyle> resizer =
       GetLayoutBox()->IsScrollContainer()
           ? style_source.GetUncachedPseudoElementStyle(
                 StyleRequest(kPseudoIdResizer, style_source.Style()))
@@ -2151,20 +2145,6 @@ gfx::Vector2d PaintLayerScrollableArea::OffsetFromResizeCorner(
                        local_point.y() - element_size.height());
 }
 
-LayoutSize PaintLayerScrollableArea::MinimumSizeForResizing(float zoom_factor) {
-  LayoutUnit min_width =
-      MinimumValueForLength(GetLayoutBox()->StyleRef().MinWidth(),
-                            GetLayoutBox()->ContainingBlock()->Size().Width());
-  LayoutUnit min_height =
-      MinimumValueForLength(GetLayoutBox()->StyleRef().MinHeight(),
-                            GetLayoutBox()->ContainingBlock()->Size().Height());
-  min_width = std::max(LayoutUnit(min_width / zoom_factor),
-                       LayoutUnit(kDefaultMinimumWidthForResizing));
-  min_height = std::max(LayoutUnit(min_height / zoom_factor),
-                        LayoutUnit(kDefaultMinimumHeightForResizing));
-  return LayoutSize(min_width, min_height);
-}
-
 void PaintLayerScrollableArea::Resize(const gfx::Point& pos,
                                       const LayoutSize& old_offset) {
   // FIXME: This should be possible on generated content but is not right now.
@@ -2193,10 +2173,15 @@ void PaintLayerScrollableArea::Resize(const gfx::Point& pos,
     adjusted_old_offset.SetWidth(-adjusted_old_offset.Width());
   }
 
-  LayoutSize difference(
-      (current_size + LayoutSize(new_offset) - adjusted_old_offset)
-          .ExpandedTo(MinimumSizeForResizing(zoom_factor)) -
-      current_size);
+  LayoutSize new_size(current_size + LayoutSize(new_offset) -
+                      adjusted_old_offset);
+
+  // Ensure the new size is at least as large as the resize corner.
+  gfx::SizeF corner_rect(CornerRect().size());
+  corner_rect.InvScale(zoom_factor);
+  new_size.ClampToMinimumSize(LayoutSize(corner_rect));
+
+  LayoutSize difference(new_size - current_size);
 
   bool is_box_sizing_border =
       GetLayoutBox()->StyleRef().BoxSizing() == EBoxSizing::kBorderBox;
@@ -2419,15 +2404,6 @@ bool PaintLayerScrollableArea::ShouldScrollOnMainThread() const {
   if (HasBeenDisposed())
     return true;
 
-  // TODO(crbug.com/985127, crbug.com/1015833): We should just use the main
-  // thread scrolling reasons on the scroll node which should have all required
-  // reasons. If it was not, we would have inconsistent results here and
-  // ScrollNode::GetMainThreadScrollingReasons().
-  if (LocalFrame* frame = GetLayoutBox()->GetFrame()) {
-    if (frame->View()->GetMainThreadScrollingReasons())
-      return true;
-  }
-
   // Property tree state is not available until the PrePaint lifecycle stage.
   // PaintPropertyTreeBuilder needs to get the old status during PrePaint.
   DCHECK_GE(GetDocument()->Lifecycle().GetState(),
@@ -2490,16 +2466,6 @@ bool PaintLayerScrollableArea::ComputeNeedsCompositedScrollingInternal(
     return false;
 
   const auto* box = GetLayoutBox();
-
-  // Although trivial 3D transforms are not always a direct compositing reason
-  // (see CompositingReasonFinder::RequiresCompositingFor3DTransform), we treat
-  // them as one for composited scrolling. This is because of the amount of
-  // content that depends on this optimization, and because of the long-term
-  // desire to use composited scrolling whenever possible.
-  if (box->HasTransformRelatedProperty() &&
-      box->StyleRef().Has3DTransformOperation()) {
-    return true;
-  }
 
   if (!force_prefer_compositing_to_lcd_text &&
       (RuntimeEnabledFeatures::PreferNonCompositedScrollingEnabled() ||

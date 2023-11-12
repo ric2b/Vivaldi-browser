@@ -9,8 +9,8 @@
 #include "base/android/callback_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/path_utils.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/ranges/algorithm.h"
@@ -110,9 +110,7 @@ void DownloadManagerService::CreateAutoResumptionHandler() {
   auto config = std::make_unique<download::AutoResumptionHandler::Config>();
   config->auto_resumption_size_limit =
       DownloadUtils::GetAutoResumptionSizeLimit();
-  config->is_auto_resumption_enabled_in_native =
-      chrome::android::IsJavaDrivenFeatureEnabled(
-          download::features::kDownloadAutoResumptionNative);
+  config->is_auto_resumption_enabled_in_native = true;
   download::AutoResumptionHandler::Create(
       std::move(network_listener), std::move(task_manager), std::move(config),
       base::DefaultClock::GetInstance());
@@ -819,8 +817,7 @@ void DownloadManagerService::CreateInterruptedDownloadForTest(
           download::DOWNLOAD_INTERRUPT_REASON_CRASH, false, false, false,
           base::Time(), false,
           std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo(), download::kInvalidRange,
-          download::kInvalidRange, nullptr));
+          download::kInvalidRange, download::kInvalidRange, nullptr));
 }
 
 void DownloadManagerService::InitializeForProfile(ProfileKey* profile_key) {

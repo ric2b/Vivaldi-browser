@@ -94,6 +94,7 @@
 
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -117,7 +118,6 @@
 #include "third_party/blink/public/platform/web_isolated_world_info.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url_error.h"
-#include "third_party/blink/public/platform/web_url_loader_factory.h"
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_associated_url_loader_options.h"
@@ -181,6 +181,7 @@
 #include "third_party/blink/renderer/core/events/after_print_event.h"
 #include "third_party/blink/renderer/core/events/before_print_event.h"
 #include "third_party/blink/renderer/core/events/touch_event.h"
+#include "third_party/blink/renderer/core/execution_context/window_agent.h"
 #include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
@@ -263,6 +264,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_request.h"
+#include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader_factory.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/scheduler/public/scheduling_policy.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
@@ -299,7 +301,6 @@ class ChromePrintContext : public PrintContext {
   void BeginPrintMode(float width, float height) override {
     DCHECK(!printed_page_width_);
     printed_page_width_ = width;
-    printed_page_height_ = height;
     PrintContext::BeginPrintMode(printed_page_width_, height);
   }
 
@@ -404,13 +405,11 @@ class ChromePrintContext : public PrintContext {
         current_height += page_size_in_pixels.width() + 1;
       }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
       // Account for the disabling of scaling in spoolPage. In the context of
       // SpoolPagesWithBoundariesForTesting the scale HAS NOT been
       // pre-applied.
       float scale = GetPageShrink(page_index);
       transform.Scale(scale, scale);
-#endif
       context.Save();
       context.ConcatCTM(transform);
 
@@ -423,19 +422,11 @@ class ChromePrintContext : public PrintContext {
   }
 
  protected:
-  // Spools the printed page, a subrect of frame(). Skip the scale step.
-  // NativeTheme doesn't play well with scaling. Scaling is done browser side
-  // instead. Returns the scale to be applied.
-  // On Linux, we don't have the problem with NativeTheme, hence we let WebKit
-  // do the scaling and ignore the return value.
   virtual float SpoolPage(GraphicsContext& context, int page_number) {
     gfx::Rect page_rect = page_rects_[page_number];
     float scale = printed_page_width_ / page_rect.width();
 
     AffineTransform transform;
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
-    transform.Scale(scale);
-#endif
     transform.Translate(static_cast<float>(-page_rect.x()),
                         static_cast<float>(-page_rect.y()));
     context.Save();
@@ -483,7 +474,6 @@ class ChromePrintContext : public PrintContext {
 
   // Set when printing.
   float printed_page_width_;
-  float printed_page_height_;
 };
 
 // Simple class to override some of PrintContext behavior. This is used when
@@ -1876,10 +1866,7 @@ void WebLocalFrameImpl::PrintEnd() {
 bool WebLocalFrameImpl::GetPrintPresetOptionsForPlugin(
     const WebNode& node,
     WebPrintPresetOptions* preset_options) {
-  WebPluginContainerImpl* plugin_container =
-      node.IsNull() ? GetFrame()->GetWebPluginContainer()
-                    : To<WebPluginContainerImpl>(node.PluginContainer());
-
+  WebPluginContainerImpl* plugin_container = GetPluginToPrintHelper(node);
   if (!plugin_container || !plugin_container->SupportsPaginatedPrint())
     return false;
 
@@ -2318,7 +2305,9 @@ LocalFrame* WebLocalFrameImpl::CreateChildFrame(
   policy_container_data->sandbox_flags |= frame_policy.sandbox_flags;
   frame_policy.sandbox_flags = policy_container_data->sandbox_flags;
 
-  ukm::SourceId document_ukm_source_id = ukm::UkmRecorder::GetNewSourceID();
+  // No URL is associated with this frame, but we can still assign UKM events to
+  // this identifier.
+  ukm::SourceId document_ukm_source_id = ukm::NoURLSourceId();
 
   auto complete_initialization = [this, owner_element, &policy_container_remote,
                                   &policy_container_data, &name,
@@ -2653,6 +2642,18 @@ void WebLocalFrameImpl::CommitNavigation(
     navigation_params->storage_key = GetFrame()->DomWindow()->GetStorageKey();
     navigation_params->document_ukm_source_id =
         GetFrame()->DomWindow()->UkmSourceID();
+
+    // This corresponds to step 8 of
+    // https://html.spec.whatwg.org/multipage/browsers.html#creating-a-new-browsing-context.
+    // Most of these steps are handled in the caller
+    // (RenderFrameImpl::SynchronouslyCommitAboutBlankForBug778318) but the
+    // caller doesn't have access to the core frame (LocalFrame).
+    // The actual agent is determined downstream, but here we need to request
+    // whether an origin-keyed agent is needed. Since this case is only
+    // for about:blank navigations this reduces to copying the agent flag from
+    // the current document.
+    navigation_params->origin_agent_cluster =
+        GetFrame()->GetDocument()->GetAgent().IsOriginKeyedForInheritance();
   }
   if (GetTextFinder())
     GetTextFinder()->ClearActiveFindMatch();
@@ -2704,7 +2705,6 @@ void WebLocalFrameImpl::SetIsNotOnInitialEmptyDocument() {
   DCHECK(GetFrame());
   GetFrame()->GetDocument()->OverrideIsInitialEmptyDocument();
   GetFrame()->Loader().SetIsNotOnInitialEmptyDocument();
-  GetFrame()->SetShouldSendResourceTimingInfoToParent(false);
 }
 
 bool WebLocalFrameImpl::IsOnInitialEmptyDocument() {
@@ -3123,11 +3123,17 @@ WebLocalFrameImpl::ConvertNotRestoredReasons(
     not_restored_reasons =
         mojom::blink::BackForwardCacheNotRestoredReasons::New();
     not_restored_reasons->blocked = reasons_to_copy->blocked;
-    auto details = mojom::blink::SameOriginBfcacheNotRestoredDetails::New();
+    if (reasons_to_copy->id) {
+      not_restored_reasons->id = reasons_to_copy->id.value().c_str();
+    }
+    if (reasons_to_copy->name) {
+      not_restored_reasons->name = reasons_to_copy->name.value().c_str();
+    }
+    if (reasons_to_copy->src) {
+      not_restored_reasons->src = reasons_to_copy->src.value().c_str();
+    }
     if (reasons_to_copy->same_origin_details) {
-      details->id = reasons_to_copy->same_origin_details->id.c_str();
-      details->name = reasons_to_copy->same_origin_details->name.c_str();
-      details->src = reasons_to_copy->same_origin_details->src.c_str();
+      auto details = mojom::blink::SameOriginBfcacheNotRestoredDetails::New();
       details->url = reasons_to_copy->same_origin_details->url.c_str();
       for (const auto& reason : reasons_to_copy->same_origin_details->reasons) {
         details->reasons.push_back(reason.c_str());
@@ -3135,8 +3141,8 @@ WebLocalFrameImpl::ConvertNotRestoredReasons(
       for (const auto& child : reasons_to_copy->same_origin_details->children) {
         details->children.push_back(ConvertNotRestoredReasons(child));
       }
+      not_restored_reasons->same_origin_details = std::move(details);
     }
-    not_restored_reasons->same_origin_details = std::move(details);
   }
   return not_restored_reasons;
 }

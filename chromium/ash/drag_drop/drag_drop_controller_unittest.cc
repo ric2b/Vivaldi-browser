@@ -15,9 +15,9 @@
 #include "ash/test_shell_delegate.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/notreached.h"
 #include "base/run_loop.h"
@@ -1714,7 +1714,7 @@ class MockDataTransferPolicyController
                     content::RenderFrameHost* rfh,
                     base::OnceCallback<void(bool)> callback));
   MOCK_METHOD3(DropIfAllowed,
-               void(const ui::DataTransferEndpoint* data_src,
+               void(const ui::OSExchangeData* drag_data,
                     const ui::DataTransferEndpoint* data_dst,
                     base::OnceClosure drop_cb));
 };
@@ -1738,7 +1738,7 @@ TEST_F(DragDropControllerTest, DlpAllowDragDrop) {
 
   // Drop.
   EXPECT_CALL(dlp_contoller, DropIfAllowed(_, _, _))
-      .WillOnce([&](const ui::DataTransferEndpoint* data_src,
+      .WillOnce([&](const ui::OSExchangeData* drag_data,
                     const ui::DataTransferEndpoint* data_dst,
                     base::OnceClosure drop_cb) { std::move(drop_cb).Run(); });
 
@@ -1811,7 +1811,7 @@ TEST_F(DragDropControllerTest, DlpAsyncDrop) {
 
   // Hold Drop.
   EXPECT_CALL(dlp_contoller, DropIfAllowed(_, _, _))
-      .WillOnce([&](const ui::DataTransferEndpoint* data_src,
+      .WillOnce([&](const ui::OSExchangeData* drag_data,
                     const ui::DataTransferEndpoint* data_dst,
                     base::OnceClosure drop_cb) {
         drop_callback = std::move(drop_cb);

@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_SHARING_HUB_SHARING_HUB_BUBBLE_ACTION_BUTTON_H_
 #define CHROME_BROWSER_UI_VIEWS_SHARING_HUB_SHARING_HUB_BUBBLE_ACTION_BUTTON_H_
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/views/controls/button/button.h"
 
@@ -31,7 +31,6 @@ class SharingHubBubbleActionButton : public views::Button {
   ~SharingHubBubbleActionButton() override;
 
   int action_command_id() const { return action_command_id_; }
-  bool action_is_first_party() const { return action_is_first_party_; }
   std::string action_name_for_metrics() const {
     return action_name_for_metrics_;
   }
@@ -46,7 +45,6 @@ class SharingHubBubbleActionButton : public views::Button {
 
  private:
   const int action_command_id_;
-  const bool action_is_first_party_;
   const std::string action_name_for_metrics_;
 
   raw_ptr<views::Label> title_;

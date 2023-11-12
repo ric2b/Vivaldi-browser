@@ -11,10 +11,6 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 
-#if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/build_info.h"
 #endif
@@ -140,6 +136,15 @@ BASE_FEATURE(kPointerLockOptions,
              "PointerLockOptions",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Uses a stylus-specific tap slop region parameter for gestures.  Stylus taps
+// tend to slip more than touch taps (presumably because the user doesn't feel
+// the movement friction with a stylus).  As a result, it is harder to tap with
+// a stylus. This feature makes the slop region for stylus input bigger than the
+// touch slop.
+BASE_FEATURE(kStylusSpecificTapSlop,
+             "StylusSpecificTapSlop",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Allows system caption style for WebVTT Captions.
 BASE_FEATURE(kSystemCaptionStyle,
              "SystemCaptionStyle",
@@ -245,8 +250,7 @@ BASE_FEATURE(kPointerEventsForTouch,
 BASE_FEATURE(kTSFImeSupport, "TSFImeSupport", base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsUsingWMPointerForTouch() {
-  return base::win::GetVersion() >= base::win::Version::WIN8 &&
-         base::FeatureList::IsEnabled(kPointerEventsForTouch);
+  return base::FeatureList::IsEnabled(kPointerEventsForTouch);
 }
 
 #endif  // BUILDFLAG(IS_WIN)
@@ -414,6 +418,19 @@ double RawDrawTileSizeFactor() {
 bool IsRawDrawUsingMSAA() {
   return kIsRawDrawUsingMSAA.Get();
 }
+
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kUseToastManager,
+             "UseToastManager",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+bool UseToastManager() {
+  return base::FeatureList::IsEnabled(kUseToastManager);
+}
+
+BASE_FEATURE(kKeepAndroidTintedResources,
+             "KeepAndroidTintedResources",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 BASE_FEATURE(kEnableVariableRefreshRate,
              "EnableVariableRefreshRate",

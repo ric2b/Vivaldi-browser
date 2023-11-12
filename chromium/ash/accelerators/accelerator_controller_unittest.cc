@@ -23,9 +23,11 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/display/screen_orientation_controller.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
+#include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/ime/test_ime_controller_client.h"
 #include "ash/media/media_controller_impl.h"
+#include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/capture_mode/capture_mode_test_api.h"
 #include "ash/public/cpp/ime_info.h"
 #include "ash/public/cpp/test/shell_test_api.h"
@@ -56,11 +58,13 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
+#include "base/system/sys_info.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/ui/base/window_state_type.h"
+#include "chromeos/ui/frame/caption_buttons/frame_size_button.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "media/base/media_switches.h"
@@ -68,6 +72,7 @@
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/accessibility/accessibility_features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -88,6 +93,7 @@
 #include "ui/events/keycodes/keyboard_codes_posix.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/accelerator_filter.h"
 
@@ -329,6 +335,13 @@ class AcceleratorControllerTest : public AshTestBase {
   bool ContainsFullscreenMagnifierNotification() const {
     return nullptr != message_center()->FindVisibleNotificationById(
                           kFullscreenMagnifierToggleAccelNotificationId);
+  }
+
+  bool IsNotificationPinned(const std::string& id) const {
+    auto* notification = message_center()->FindVisibleNotificationById(id);
+    DCHECK(notification);
+    return notification->pinned() ||
+           notification->priority() == message_center::SYSTEM_PRIORITY;
   }
 
   AccessibilityConfirmationDialog* GetConfirmationDialog() {
@@ -1414,6 +1427,37 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleQuickSettings) {
   EXPECT_FALSE(tray->IsBubbleShown());
 }
 
+TEST_F(AcceleratorControllerTest, ToggleMultitaskMenu) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  // Accelerators behind a flag should also be accompanied by the
+  // `kShortcutCustomization` to support dynamic accelerator registration.
+  scoped_feature_list.InitWithFeatures(
+      {chromeos::wm::features::kWindowLayoutMenu,
+       ::features::kShortcutCustomization},
+      {});
+  // Enabling `kShortcutCustomization` will start letting
+  // `AcceleratorControllerImpl` to observe changes to the accelerator list.
+  // This includes accelerators added by enabling flags.
+  test_api_->ObserveAcceleratorUpdates();
+
+  // Typically updating flags will restart chrome and re-initialize accelerator
+  // targeting.
+  Shell::Get()->ash_accelerator_configuration()->Initialize();
+
+  std::unique_ptr<aura::Window> window = CreateAppWindow();
+  ui::Accelerator accelerator(ui::VKEY_Z, ui::EF_COMMAND_DOWN);
+  // Pressing accelerator once should show the multitask menu.
+  EXPECT_TRUE(ProcessInController(accelerator));
+  auto* frame_view = NonClientFrameViewAsh::Get(window.get());
+  auto* size_button = static_cast<chromeos::FrameSizeButton*>(
+      frame_view->GetHeaderView()->caption_button_container()->size_button());
+  ASSERT_TRUE(size_button->IsMultitaskMenuShown());
+
+  // Pressing accelerator a second time should close the menu.
+  EXPECT_TRUE(ProcessInController(accelerator));
+  ASSERT_FALSE(size_button->IsMultitaskMenuShown());
+}
+
 class GlobalAcceleratorsToggleLauncher
     : public AcceleratorControllerTest,
       public testing::WithParamInterface<
@@ -1559,9 +1603,9 @@ TEST_F(AcceleratorControllerTest, SideVolumeButtonLocation) {
 
   // Tests that |side_volume_button_location_| is read correctly if the location
   // file exists.
-  base::DictionaryValue location;
-  location.SetString(kVolumeButtonRegion, kVolumeButtonRegionScreen);
-  location.SetString(kVolumeButtonSide, kVolumeButtonSideLeft);
+  base::Value::Dict location;
+  location.Set(kVolumeButtonRegion, kVolumeButtonRegionScreen);
+  location.Set(kVolumeButtonSide, kVolumeButtonSideLeft);
   std::string json_location;
   base::JSONWriter::Write(location, &json_location);
   base::ScopedTempDir file_tmp_dir;
@@ -2131,6 +2175,10 @@ TEST_F(AcceleratorControllerTest, TestDialogCancel) {
 }
 
 TEST_F(AcceleratorControllerTest, TestToggleHighContrast) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      ::features::kAccessibilityAcceleratorNotificationsTimeout);
+
   ui::Accelerator accelerator(ui::VKEY_H,
                               ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
   // High Contrast Mode Enabled dialog and notification should be shown.
@@ -2143,6 +2191,7 @@ TEST_F(AcceleratorControllerTest, TestToggleHighContrast) {
   AcceptConfirmationDialog();
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(ContainsHighContrastNotification());
+  EXPECT_FALSE(IsNotificationPinned(kHighContrastToggleAccelNotificationId));
   EXPECT_TRUE(accessibility_controller->high_contrast().WasDialogAccepted());
   EXPECT_FALSE(IsConfirmationDialogOpen());
 
@@ -2158,6 +2207,16 @@ TEST_F(AcceleratorControllerTest, TestToggleHighContrast) {
   EXPECT_FALSE(IsConfirmationDialogOpen());
   EXPECT_TRUE(ContainsHighContrastNotification());
   RemoveAllNotifications();
+}
+
+TEST_F(AcceleratorControllerTest, TestToggleHighContrastPinned) {
+  ui::Accelerator accelerator(ui::VKEY_H,
+                              ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
+  EXPECT_TRUE(ProcessInController(accelerator));
+  AcceptConfirmationDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(ContainsHighContrastNotification());
+  EXPECT_TRUE(IsNotificationPinned(kHighContrastToggleAccelNotificationId));
 }
 
 TEST_F(AcceleratorControllerTest, CalculatorKey) {
@@ -2535,6 +2594,10 @@ class FakeMagnificationManager {
 };
 
 TEST_F(MagnifiersAcceleratorsTester, TestToggleFullscreenMagnifier) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      ::features::kAccessibilityAcceleratorNotificationsTimeout);
+
   FakeMagnificationManager manager;
   manager.SetPrefs(user_pref_service());
   EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
@@ -2557,6 +2620,8 @@ TEST_F(MagnifiersAcceleratorsTester, TestToggleFullscreenMagnifier) {
   EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
   EXPECT_TRUE(fullscreen_magnifier_controller()->IsEnabled());
   EXPECT_TRUE(ContainsFullscreenMagnifierNotification());
+  EXPECT_FALSE(
+      IsNotificationPinned(kFullscreenMagnifierToggleAccelNotificationId));
 
   EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
   EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
@@ -2579,6 +2644,10 @@ TEST_F(MagnifiersAcceleratorsTester, TestToggleFullscreenMagnifier) {
 }
 
 TEST_F(MagnifiersAcceleratorsTester, TestToggleDockedMagnifier) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      ::features::kAccessibilityAcceleratorNotificationsTimeout);
+
   EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
   EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
   EXPECT_FALSE(IsConfirmationDialogOpen());
@@ -2597,6 +2666,7 @@ TEST_F(MagnifiersAcceleratorsTester, TestToggleDockedMagnifier) {
   EXPECT_TRUE(docked_magnifier_controller()->GetEnabled());
   EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
   EXPECT_TRUE(ContainsDockedMagnifierNotification());
+  EXPECT_FALSE(IsNotificationPinned(kDockedMagnifierToggleAccelNotificationId));
 
   EXPECT_TRUE(ProcessInController(docked_magnifier_accelerator));
   EXPECT_FALSE(docked_magnifier_controller()->GetEnabled());
@@ -2611,6 +2681,30 @@ TEST_F(MagnifiersAcceleratorsTester, TestToggleDockedMagnifier) {
   EXPECT_TRUE(docked_magnifier_controller()->GetEnabled());
   EXPECT_FALSE(fullscreen_magnifier_controller()->IsEnabled());
   EXPECT_TRUE(ContainsDockedMagnifierNotification());
+
+  RemoveAllNotifications();
+}
+
+TEST_F(MagnifiersAcceleratorsTester, TestToggleMagnifiersPinned) {
+  FakeMagnificationManager manager;
+  manager.SetPrefs(user_pref_service());
+
+  const ui::Accelerator fullscreen_magnifier_accelerator(
+      ui::VKEY_M, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
+  EXPECT_TRUE(ProcessInController(fullscreen_magnifier_accelerator));
+  AcceptConfirmationDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(ContainsFullscreenMagnifierNotification());
+  EXPECT_TRUE(
+      IsNotificationPinned(kFullscreenMagnifierToggleAccelNotificationId));
+
+  const ui::Accelerator docked_magnifier_accelerator(
+      ui::VKEY_D, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN);
+  EXPECT_TRUE(ProcessInController(docked_magnifier_accelerator));
+  AcceptConfirmationDialog();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(ContainsDockedMagnifierNotification());
+  EXPECT_TRUE(IsNotificationPinned(kDockedMagnifierToggleAccelNotificationId));
 
   RemoveAllNotifications();
 }
@@ -3122,6 +3216,54 @@ TEST_P(MediaSessionAcceleratorTest,
     EXPECT_EQ(2, client()->handle_media_next_track_count());
     EXPECT_EQ(0, controller()->next_track_count());
   }
+}
+
+class AcceleratorControllerGameDashboardTests
+    : public AcceleratorControllerTest {
+ public:
+  AcceleratorControllerGameDashboardTests() = default;
+  ~AcceleratorControllerGameDashboardTests() override = default;
+
+  void SetUp() override {
+    EXPECT_FALSE(features::IsGameDashboardEnabled());
+    base::SysInfo::SetChromeOSVersionInfoForTest(
+        "CHROMEOS_RELEASE_TRACK=testimage-channel",
+        base::SysInfo::GetLsbReleaseTime());
+    scoped_feature_list_.InitAndEnableFeature(features::kGameDashboard);
+    AcceleratorControllerTest::SetUp();
+    EXPECT_TRUE(features::IsGameDashboardEnabled());
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(AcceleratorControllerGameDashboardTests,
+       ToggleGameDashboardAccelerator) {
+  const ui::Accelerator accelerator(ui::VKEY_G, ui::EF_COMMAND_DOWN);
+
+  // No active window.
+  EXPECT_FALSE(ProcessInController(accelerator));
+
+  // Create a new window.
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
+  wm::ActivateWindow(window.get());
+
+  // Verify cannot toggle for unsupported app types.
+  const AppType unsupported_window_types[] = {
+      AppType::NON_APP,      AppType::BROWSER,    AppType::CHROME_APP,
+      AppType::CROSTINI_APP, AppType::SYSTEM_APP, AppType::LACROS};
+  for (AppType unsupported_window_type : unsupported_window_types) {
+    window->SetProperty(aura::client::kAppType,
+                        static_cast<int>(unsupported_window_type));
+    EXPECT_FALSE(ProcessInController(accelerator));
+  }
+
+  // Set the window's app type to ARC.
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(AppType::ARC_APP));
+  EXPECT_TRUE(ProcessInController(accelerator));
 }
 
 }  // namespace ash

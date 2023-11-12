@@ -8,13 +8,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/notifications/blink_notification_service_impl.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
@@ -131,7 +130,8 @@ class BlinkNotificationServiceImplTest : public ::testing::Test {
 
     contents_ = CreateTestWebContents();
 
-    storage_key_ = blink::StorageKey(url::Origin::Create(GURL(kTestOrigin)));
+    storage_key_ = blink::StorageKey::CreateFirstParty(
+        url::Origin::Create(GURL(kTestOrigin)));
 
     notification_service_ = std::make_unique<BlinkNotificationServiceImpl>(
         notification_context_.get(), &browser_context_,

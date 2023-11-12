@@ -241,15 +241,6 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   // Used by NativeWidgetPrivate::GetGlobalCapture.
   static NSView* GetGlobalCaptureView();
 
-  // Add, update and remove the remote window controls overlay view for a PWA.
-  void AddRemoteWindowControlsOverlayView(
-      remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
-  void UpdateRemoteWindowControlsOverlayView(
-      const gfx::Rect& bounds,
-      remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
-  void RemoveRemoteWindowControlsOverlayView(
-      remote_cocoa::mojom::WindowControlsOverlayNSViewType overlay_type);
-
   // Notify PWA whether can GoBack/GoForward.
   void CanGoBack(bool can_go_back);
   void CanGoForward(bool can_go_forward);
@@ -348,7 +339,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void SetRemoteAccessibilityTokens(
       const std::vector<uint8_t>& window_token,
       const std::vector<uint8_t>& view_token) override;
-  bool GetRootViewAccessibilityToken(base::ProcessId* pid,
+  bool GetRootViewAccessibilityToken(int64_t* pid,
                                      std::vector<uint8_t>* token) override;
   bool ValidateUserInterfaceItem(
       int32_t command,
@@ -365,6 +356,8 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   bool HandleAccelerator(const ui::Accelerator& accelerator,
                          bool require_priority_handler,
                          bool* was_handled) override;
+  bool BubbleAnchorViewContainedInWidget(uint64_t widget_id,
+                                         bool* contained) override;
 
   // remote_cocoa::mojom::NativeWidgetNSWindowHost, synchronous callbacks:
   void GetSheetOffsetY(GetSheetOffsetYCallback callback) override;
@@ -412,6 +405,9 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
   void HandleAccelerator(const ui::Accelerator& accelerator,
                          bool require_priority_handler,
                          HandleAcceleratorCallback callback) override;
+  void BubbleAnchorViewContainedInWidget(
+      uint64_t widget_id,
+      BubbleAnchorViewContainedInWidgetCallback callback) override;
 
   // DialogObserver:
   void OnDialogChanged() override;

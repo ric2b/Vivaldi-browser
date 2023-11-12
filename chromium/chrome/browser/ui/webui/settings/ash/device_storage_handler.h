@@ -81,6 +81,7 @@ class StorageHandler : public ::settings::SettingsPageUIHandler,
   void HandleOpenMyFiles(const base::Value::List& unused_args);
   void HandleOpenArcStorage(const base::Value::List& unused_args);
   void HandleUpdateExternalStorages(const base::Value::List& unused_args);
+  void HandleOpenBrowsingDataSettings(const base::Value::List& unused_args);
 
   // Updates storage row on the UI.
   void UpdateStorageItem(
@@ -103,6 +104,7 @@ class StorageHandler : public ::settings::SettingsPageUIHandler,
   // Instances calculating the size of each storage items.
   TotalDiskSpaceCalculator total_disk_space_calculator_;
   FreeDiskSpaceCalculator free_disk_space_calculator_;
+  DriveOfflineSizeCalculator drive_offline_size_calculator_;
   MyFilesSizeCalculator my_files_size_calculator_;
   BrowsingDataSizeCalculator browsing_data_size_calculator_;
   AppsSizeCalculator apps_size_calculator_;

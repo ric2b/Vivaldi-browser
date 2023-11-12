@@ -10,8 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -177,14 +177,14 @@ class TestModelTypeSyncBridge : public FakeModelTypeSyncBridge {
     return FakeModelTypeSyncBridge::GetStorageKey(entity_data);
   }
 
-  sync_pb::EntitySpecifics TrimRemoteSpecificsForCaching(
+  sync_pb::EntitySpecifics TrimAllSupportedFieldsFromRemoteSpecifics(
       const sync_pb::EntitySpecifics& entity_specifics) const override {
     if (entity_specifics.has_preference()) {
       sync_pb::EntitySpecifics trimmed_specifics = entity_specifics;
       trimmed_specifics.mutable_preference()->clear_value();
       return trimmed_specifics;
     }
-    return FakeModelTypeSyncBridge::TrimRemoteSpecificsForCaching(
+    return FakeModelTypeSyncBridge::TrimAllSupportedFieldsFromRemoteSpecifics(
         entity_specifics);
   }
 
@@ -366,6 +366,8 @@ class ClientTagBasedModelTypeProcessorTest : public ::testing::Test {
     request.sync_mode = sync_mode;
     request.configuration_start_time = base::Time::Now();
 
+    error_reported_ = false;
+
     // |run_loop_| may exist here if OnSyncStarting is called without resetting
     // state. But it is safe to remove it.
     ASSERT_TRUE(!run_loop_ || !run_loop_->running());
@@ -505,6 +507,7 @@ class ClientTagBasedModelTypeProcessorTest : public ::testing::Test {
     histogram_tester_->ExpectBucketCount("Sync.ModelTypeErrorSite.PREFERENCE",
                                          *expect_error_, /*count=*/1);
     expect_error_ = absl::nullopt;
+    error_reported_ = true;
     // Do not expect for a start callback anymore.
     if (run_loop_) {
       run_loop_->Quit();
@@ -522,12 +525,14 @@ class ClientTagBasedModelTypeProcessorTest : public ::testing::Test {
     run_loop_->Run();
   }
 
+  bool error_reported() const { return error_reported_; }
+
  private:
   std::unique_ptr<TestModelTypeSyncBridge> bridge_;
   sync_pb::ModelTypeState model_type_state_;
 
-  // This sets SequencedTaskRunnerHandle on the current thread, which the type
-  // processor will pick up as the sync task runner.
+  // This sets SequencedTaskRunner::CurrentDefaultHandle on the current thread,
+  // which the type processor will pick up as the sync task runner.
   base::test::SingleThreadTaskEnvironment task_environment_;
 
   // This run loop is used to wait for OnReadyToConnect is called.
@@ -539,6 +544,7 @@ class ClientTagBasedModelTypeProcessorTest : public ::testing::Test {
   // Whether to expect an error from the processor (and from which site).
   absl::optional<ClientTagBasedModelTypeProcessor::ErrorSite> expect_error_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
+  bool error_reported_ = false;
 };
 
 TEST_F(ClientTagBasedModelTypeProcessorTest,
@@ -695,7 +701,8 @@ TEST_F(ClientTagBasedModelTypeProcessorTest,
       type_processor()->GetPossiblyTrimmedRemoteSpecifics(kKey1).preference();
 
   // Below verifies that
-  // TestModelTypeSyncBridge::TrimRemoteSpecificsForCaching() is honored.
+  // TestModelTypeSyncBridge::TrimAllSupportedFieldsFromRemoteSpecifics() is
+  // honored.
   // Preserved fields.
   EXPECT_EQ(cached_preference.name(), kKey1);
   EXPECT_EQ(cached_preference.unknown_fields(), kValue2);
@@ -2941,6 +2948,45 @@ TEST_F(ClientTagBasedModelTypeProcessorTest, ShouldResetOnInvalidDataTypeId) {
 }
 
 TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldResetForEntityMetadataWithoutInitialSyncDone) {
+  base::HistogramTester histogram_tester;
+
+  const syncer::ClientTagHash kClientTagHash =
+      ClientTagHash::FromUnhashed(AUTOFILL, "tag");
+  sync_pb::EntityMetadata entity_metadata1;
+  entity_metadata1.set_client_tag_hash(kClientTagHash.value());
+  entity_metadata1.set_creation_time(0);
+  sync_pb::EntityMetadata entity_metadata2;
+  entity_metadata2.set_client_tag_hash(kClientTagHash.value());
+  entity_metadata2.set_creation_time(0);
+  sync_pb::EntityMetadata entity_metadata3;
+  entity_metadata3.set_client_tag_hash(kClientTagHash.value());
+  entity_metadata3.set_creation_time(0);
+
+  db()->PutMetadata(kKey1, std::move(entity_metadata1));
+  db()->PutMetadata(kKey2, std::move(entity_metadata2));
+  db()->PutMetadata(kKey3, std::move(entity_metadata3));
+
+  InitializeToMetadataLoaded(/*initial_sync_done=*/false);
+  OnSyncStarting();
+
+  // Since initial_sync_done was false, metadata should have been cleared.
+  EXPECT_EQ(0U, db()->metadata_count());
+  EXPECT_EQ(0U, ProcessorEntityCount());
+  EXPECT_FALSE(type_processor()->IsTrackingMetadata());
+  // Initial update.
+  worker()->UpdateFromServer();
+  EXPECT_TRUE(type_processor()->IsTrackingMetadata());
+
+  // There were three entities with the same client-tag-hash which indicates
+  // that two of them were metadata oprhans.
+  histogram_tester.ExpectBucketCount(
+      "Sync.ModelTypeEntityMetadataWithoutInitialSync",
+      /*sample=*/ModelTypeHistogramValue(GetModelType()),
+      /*expected_count=*/1);
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
        ShouldResetForDuplicateClientTagHash) {
   base::HistogramTester histogram_tester;
 
@@ -2974,8 +3020,196 @@ TEST_F(ClientTagBasedModelTypeProcessorTest,
   // that two of them were metadata oprhans.
   histogram_tester.ExpectBucketCount(
       "Sync.ModelTypeOrphanMetadata.ModelReadyToSync",
+      /*sample=*/ModelTypeHistogramValue(GetModelType()),
+      /*expected_count=*/2);
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldNotProcessInvalidRemoteIncrementalUpdate) {
+  // To ensure the update is not ignored because of empty storage key.
+  bridge()->SetSupportsGetStorageKey(false);
+
+  InitializeToReadyState();
+  UpdateResponseDataList updates;
+  updates.push_back(worker()->GenerateUpdateData(
+      GetPrefHash(kKey1), GeneratePrefSpecifics(kKey1, kValue1)));
+
+  // Force invalidate the next remote update.
+  bridge()->TreatRemoteUpdateAsInvalid(GetPrefHash(kKey1));
+
+  worker()->UpdateFromServer(std::move(updates));
+
+  // Verify that the data wasn't actually stored.
+  EXPECT_EQ(0U, db()->metadata_count());
+  EXPECT_EQ(0U, db()->data_count());
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldNotProcessInvalidRemoteFullUpdate) {
+  InitializeToMetadataLoaded(/*initial_sync_done=*/false);
+  OnSyncStarting();
+
+  UpdateResponseDataList updates;
+  updates.push_back(worker()->GenerateUpdateData(
+      GetPrefHash(kKey1), GeneratePrefSpecifics(kKey1, kValue1)));
+
+  // Force invalidate the next remote update.
+  bridge()->TreatRemoteUpdateAsInvalid(GetPrefHash(kKey1));
+
+  base::HistogramTester histogram_tester;
+  worker()->UpdateFromServer(std::move(updates));
+
+  // Verify that the data wasn't actually stored.
+  EXPECT_EQ(0U, db()->metadata_count());
+  EXPECT_EQ(0U, db()->data_count());
+
+  // Update was dropped by the bridge.
+  histogram_tester.ExpectBucketCount(
+      "Sync.ModelTypeUpdateDrop.DroppedByBridge",
       /*bucket=*/ModelTypeHistogramValue(GetModelType()),
-      /*count=*/2);
+      /*count=*/1);
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldNotReportErrorAfterOnSyncStopping) {
+  InitializeToReadyState();
+  // This should reset activation_request and consequently, the error_handler.
+  type_processor()->OnSyncStopping(KEEP_METADATA);
+  ASSERT_FALSE(error_reported());
+
+  ModelError error{FROM_HERE, "boom"};
+  type_processor()->ReportError(error);
+  // Error was raised but did not trigger ErrorReceived().
+  // Note: If an error is issued to the error_handler but the expectation is not
+  // set via ExpectError(), the test fails.
+  ASSERT_TRUE(type_processor()->GetError().has_value());
+  ASSERT_EQ(type_processor()->GetError()->location(), error.location());
+
+  // No call to error_handler since ErrorReceived() was not triggered.
+  EXPECT_FALSE(error_reported());
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldNotInvokeBridgeOnSyncStartingFromOnSyncStopping) {
+  InitializeToReadyState();
+  ASSERT_TRUE(bridge()->sync_started());
+  // OnSyncStopping() calls bridge's ApplyStopSyncChanges(), which should reset
+  // `sync_started_` flag.
+  type_processor()->OnSyncStopping(CLEAR_METADATA);
+  // OnSyncStopping() should clear the activation request, hence avoiding call
+  // to bridge's OnSyncStarting().
+  EXPECT_FALSE(bridge()->sync_started());
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest, ShouldClearMetadataWhileStopped) {
+  // Bring the processor to a stopped state.
+  InitializeToReadyState();
+  WritePrefItem(bridge(), kKey1, kValue1);
+  type_processor()->OnSyncStopping(KEEP_METADATA);
+
+  // Metadata is still being kept and tracked.
+  ASSERT_TRUE(type_processor()->IsTrackingMetadata());
+  ASSERT_EQ(1U, db()->metadata_count());
+
+  base::HistogramTester histogram_tester;
+
+  // Should clear the metadata even if already stopped.
+  type_processor()->ClearMetadataWhileStopped();
+  EXPECT_FALSE(type_processor()->IsTrackingMetadata());
+  EXPECT_EQ(0U, db()->metadata_count());
+  // Expect an entry to the histogram.
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.ImmediateClear", 1);
+
+  // Metadata clearing logic should not trigger bridge's OnSyncStarting().
+  EXPECT_FALSE(bridge()->sync_started());
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldClearMetadataWhileStoppedUponModelReadyToSync) {
+  base::HistogramTester histogram_tester;
+
+  // Called before ModelReadyToSync().
+  type_processor()->ClearMetadataWhileStopped();
+
+  // Nothing recorded to the histograms yet.
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.ImmediateClear", 0);
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.DelayedClear", 0);
+
+  // Prepare metadata.
+  const syncer::ClientTagHash kClientTagHash =
+      ClientTagHash::FromUnhashed(AUTOFILL, "tag");
+  sync_pb::EntityMetadata entity_metadata1;
+  entity_metadata1.set_client_tag_hash(kClientTagHash.value());
+  entity_metadata1.set_creation_time(0);
+
+  db()->PutMetadata(kKey1, std::move(entity_metadata1));
+  ASSERT_EQ(1U, db()->metadata_count());
+
+  InitializeToMetadataLoaded();
+  // Tracker should have not been set.
+  EXPECT_FALSE(type_processor()->IsTrackingMetadata());
+  // Metadata was cleared from the persistent storage.
+  EXPECT_EQ(0U, db()->metadata_count());
+  // Expect recording of the delayed clear.
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.ImmediateClear", 0);
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.DelayedClear", 1);
+
+  // Metadata clearing logic should not trigger bridge's OnSyncStarting().
+  EXPECT_FALSE(bridge()->sync_started());
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldNotClearMetadataWhileStoppedIfNotTracking) {
+  // Bring the processor to a stopped state.
+  InitializeToReadyState();
+  type_processor()->OnSyncStopping(CLEAR_METADATA);
+
+  // Metadata is not being tracked anymore.
+  ASSERT_FALSE(type_processor()->IsTrackingMetadata());
+
+  base::HistogramTester histogram_tester;
+
+  // Should do nothing since there's nothing to clear.
+  type_processor()->ClearMetadataWhileStopped();
+  // Expect no entry to the histogram.
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.ImmediateClear", 0);
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldNotClearMetadataWhileStoppedWithoutMetadataInitially) {
+  InitializeToMetadataLoaded(/*initial_sync_done=*/false);
+  ASSERT_FALSE(type_processor()->IsTrackingMetadata());
+
+  base::HistogramTester histogram_tester;
+
+  // Call ClearMetadataWhileStopped() without a prior call to OnSyncStopping().
+  // Since there's no metadata, this should do nothing.
+  type_processor()->ClearMetadataWhileStopped();
+  // Expect no entry to the histogram.
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.ImmediateClear", 0);
+}
+
+TEST_F(ClientTagBasedModelTypeProcessorTest,
+       ShouldNotClearMetadataWhileStoppedUponModelReadyToSyncWithoutMetadata) {
+  base::HistogramTester histogram_tester;
+
+  // Called before ModelReadyToSync().
+  type_processor()->ClearMetadataWhileStopped();
+
+  InitializeToMetadataLoaded(/*initial_sync_done=*/false);
+  ASSERT_FALSE(type_processor()->IsTrackingMetadata());
+  // Nothing recorded to the histograms.
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.ImmediateClear", 0);
+  histogram_tester.ExpectTotalCount(
+      "Sync.ClearMetadataWhileStopped.DelayedClear", 0);
 }
 
 // The param indicates whether the password notes feature is enabled.

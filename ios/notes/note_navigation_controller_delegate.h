@@ -14,9 +14,6 @@
 @interface NoteNavigationControllerDelegate
     : NSObject <UINavigationControllerDelegate>
 
-// An object which controls the modal presentation of the navigation controller.
-@property(nonatomic, weak) id<TableViewModalPresenting> modalController;
-
 @end
 
 #endif  // IOS_NOTES_NOTE_NAVIGATION_CONTROLLER_DELEGATE_H_

@@ -2,10 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/test/scoped_feature_list.h"
-
 #include "ash/app_list/model/app_list_model.h"
-#include "ash/constants/ash_features.h"
 #include "base/containers/cxx20_erase_vector.h"
 #include "chrome/browser/ash/app_list/app_list_model_updater.h"
 #include "chrome/browser/ash/app_list/app_list_test_util.h"
@@ -17,7 +14,6 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
 #include "components/sync/test/fake_sync_change_processor.h"
-#include "components/sync/test/sync_error_factory_mock.h"
 
 namespace app_list {
 
@@ -25,11 +21,7 @@ using crx_file::id_util::GenerateId;
 
 class TemporaryAppListSortTest : public test::AppListSyncableServiceTestBase {
  public:
-  TemporaryAppListSortTest() {
-    feature_list_.InitWithFeatures(
-        {ash::features::kLauncherAppSort, ash::features::kProductivityLauncher},
-        {});
-  }
+  TemporaryAppListSortTest() = default;
   ~TemporaryAppListSortTest() override = default;
 
   void SetUp() override {
@@ -70,7 +62,6 @@ class TemporaryAppListSortTest : public test::AppListSyncableServiceTestBase {
   }
 
  private:
-  base::test::ScopedFeatureList feature_lists_;
   std::unique_ptr<test::TestAppListController> app_list_controller_;
 };
 
@@ -418,8 +409,7 @@ TEST_F(TemporaryAppListSortTest, ReparentingItemToRootResetsSortOrder) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
 
   // Sort with name alphabetical order.
@@ -556,8 +546,7 @@ TEST_F(TemporaryAppListSortTest, ReparentingItemToFolderDoesNotResetSortOrder) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
 
   // Sort with name alphabetical order.
@@ -698,8 +687,7 @@ TEST_F(TemporaryAppListSortTest, HandlePositionSyncUpdate) {
   // Start syncing.
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, syncer::SyncDataList(),
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
   RemoveAllExistingItems();
 
@@ -846,8 +834,7 @@ TEST_F(TemporaryAppListSortTest, HandleFolderRename) {
       kItemId2, "B", kFolderItemId, child_position.ToInternalValue(), kUnset));
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
 
   // Install four apps.
@@ -939,8 +926,7 @@ TEST_F(TemporaryAppListSortTest, HandleMoveItemToFolder) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
 
   // Install three apps.
@@ -1014,8 +1000,7 @@ TEST_F(TemporaryAppListSortTest, HandleMoveItemToRootGrid) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
 
   // Install test apps that were added to the folder.
@@ -1142,8 +1127,7 @@ TEST_F(TemporaryAppListSortTest, InstallAppRemotely) {
   // Start syncing.
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, syncer::SyncDataList(),
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
   RemoveAllExistingItems();
 
@@ -1221,8 +1205,7 @@ TEST_F(TemporaryAppListSortTest, RemoveItemRemotely) {
   // Start syncing.
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, syncer::SyncDataList(),
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
   RemoveAllExistingItems();
 
@@ -1390,8 +1373,7 @@ TEST_F(TemporaryAppListSortTest, AlphabeticalEphemeralAppFirstSort) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
   content::RunAllTasksUntilIdle();
 
   // Verify the default order.

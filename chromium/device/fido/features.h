@@ -36,11 +36,6 @@ BASE_DECLARE_FEATURE(kWebAuthnGoogleCorpRemoteDesktopClientPrivilege);
 // Enable some experimental UI changes
 COMPONENT_EXPORT(DEVICE_FIDO) BASE_DECLARE_FEATURE(kWebAuthPasskeysUI);
 
-// Reshuffle WebAuthn request UI to put account selection for discoverable
-// credentials on platform authenticators first, where applicable.
-COMPONENT_EXPORT(DEVICE_FIDO)
-BASE_DECLARE_FEATURE(kWebAuthnNewDiscoverableCredentialsUi);
-
 // Don't send empty displayName values to security keys when creating
 // credentials.
 BASE_DECLARE_FEATURE(kWebAuthnNoEmptyDisplayNameCBOR);
@@ -56,6 +51,14 @@ BASE_DECLARE_FEATURE(kDisableWebAuthnWithBrokenCerts);
 // Enable a special-case dialog for when there are no internal credentials.
 COMPONENT_EXPORT(DEVICE_FIDO)
 BASE_DECLARE_FEATURE(kWebAuthnNoPasskeysError);
+
+// Set credProtect=3 when rk=required and uv=preferred.
+COMPONENT_EXPORT(DEVICE_FIDO)
+BASE_DECLARE_FEATURE(kWebAuthnCredProtectThree);
+
+// Advertise support for the `prf` extension as a hybrid authenticator.
+COMPONENT_EXPORT(DEVICE_FIDO)
+BASE_DECLARE_FEATURE(kWebAuthnPRFAsAuthenticator);
 
 }  // namespace device
 

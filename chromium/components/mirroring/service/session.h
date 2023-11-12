@@ -17,6 +17,7 @@
 #include "components/mirroring/service/mirror_settings.h"
 #include "components/mirroring/service/rpc_dispatcher_impl.h"
 #include "components/mirroring/service/rtp_stream.h"
+#include "components/mirroring/service/session_logger.h"
 #include "gpu/config/gpu_info.h"
 #include "media/capture/video/video_capture_feedback.h"
 #include "media/cast/cast_environment.h"
@@ -28,6 +29,9 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
+namespace base {
+class OneShotTimer;
+}
 namespace media {
 class AudioInputDevice;
 namespace cast {
@@ -157,6 +161,10 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) Session final
 
   // Initialize `media_remoter_` and `rpc_dispatcher_`.
   void InitMediaRemoter(const std::vector<std::string>& caps);
+  // Called 5 seconds after the `media_remoter_` is initialized for Remote
+  // Playabck sessions. It terminates the streaming session if remoting is not
+  // started when it's called.
+  void OnRemotingStartTimeout();
 
   void OnAsyncInitializeDone(const SupportedProfiles& profiles);
 
@@ -199,12 +207,21 @@ class COMPONENT_EXPORT(MIRRORING_SERVICE) Session final
   std::unique_ptr<viz::Gpu> gpu_;
   SupportedProfiles supported_profiles_;
   mojo::Remote<media::mojom::VideoEncodeAcceleratorProvider> vea_provider_;
+  std::unique_ptr<SessionLogger> session_logger_;
 
   // A callback to call after initialization is completed
   AsyncInitializeDoneCB init_done_cb_;
 
   // Indicates whether we're in the middle of switching tab sources.
   bool switching_tab_source_ = false;
+
+  // This timer is used to stop the session in case Remoting is not started
+  // before timeout. The timer is stopped when Remoting session successfully
+  // starts.
+  base::OneShotTimer remote_playback_start_timer_;
+  // Records the time when the streaming session is started and `media_remoter_`
+  // is initialized.
+  absl::optional<base::Time> remote_playback_start_time_;
 
   base::WeakPtrFactory<Session> weak_factory_{this};
 };

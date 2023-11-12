@@ -33,6 +33,8 @@ extern const CGSize vSpeedDialFolderIconSizeList;
 extern const CGSize vSpeedDialItemFaviconSizeRegularLayout;
 // Speed Dial item favicon size for layout 'Small'
 extern const CGSize vSpeedDialItemFaviconSizeSmallLayout;
+// Speed Dial item favicon size for layout 'Small' on tablet.
+extern const CGSize vSpeedDialItemFaviconSizeSmallLayoutTablet;
 // Speed Dial item favicon size for layout 'List'
 extern const CGSize vSpeedDialItemFaviconSizeListLayout;
 // Speed Dial favicon corner radius
@@ -105,5 +107,9 @@ extern NSString* vNTPAddNewSpeedDialIcon;
 extern NSString* vNTPSpeedDialFolderIcon;
 // Image name for the icon on the speed dial empty view
 extern NSString* vNTPSDEmptyViewIcon;
+// Image name for the icon for favicon fallback
+extern NSString* vNTPSDFallbackFavicon;
+// Image name for the icon for internal pages.
+extern NSString* vNTPSDInternalPageFavicon;
 
 #endif  // IOS_CHROME_BROWSER_UI_NTP_VIVALDI_SPEED_DIAL_CONSTANTS_H_

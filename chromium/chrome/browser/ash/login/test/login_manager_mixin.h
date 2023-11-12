@@ -8,9 +8,9 @@
 #include <memory>
 #include <vector>
 
-#include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/ash/login/test/local_state_mixin.h"
 #include "chrome/browser/ash/login/test/session_flags_manager.h"
+#include "chrome/test/base/fake_gaia_mixin.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
 #include "components/account_id/account_id.h"
@@ -147,7 +147,12 @@ class LoginManagerMixin : public InProcessBrowserTestMixin,
   bool LoginAndWaitForActiveSession(const UserContext& user_context);
 
   // Logs in a user using with CreateDefaultUserContext(user_info) context.
-  void LoginWithDefaultContext(const TestUserInfo& user_info);
+  // When |wait_for_profile_prepared| is true, it waits until user profile is
+  // fully initialized. This is used for regular user login. When user profile
+  // initialization is expected to never complete (i.e. restart request),
+  // |wait_for_profile_prepared| should be false.
+  void LoginWithDefaultContext(const TestUserInfo& user_info,
+                               bool wait_for_profile_prepared = true);
 
   // Logs in as a regular user with default user context. Should be used for
   // proceeding into the session from the login screen.

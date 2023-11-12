@@ -7,9 +7,9 @@
 #include <iterator>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
@@ -31,6 +31,8 @@
 #include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/features.h"
 #include "device/fido/fido_authenticator.h"
+#include "device/fido/fido_transport_protocol.h"
+#include "device/fido/fido_types.h"
 #include "device/fido/pin.h"
 #include "device/fido/public_key_credential_user_entity.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -183,8 +185,9 @@ AuthenticatorRequestDialogModel::AuthenticatorRequestDialogModel(
 }
 
 AuthenticatorRequestDialogModel::~AuthenticatorRequestDialogModel() {
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnModelDestroyed(this);
+  }
 }
 
 void AuthenticatorRequestDialogModel::HideDialog() {
@@ -215,8 +218,9 @@ void AuthenticatorRequestDialogModel::StartFlow(
 void AuthenticatorRequestDialogModel::StartOver() {
   ResetEphemeralState();
 
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnStartOver();
+  }
 
   current_mechanism_.reset();
   current_step_ = Step::kNotStarted;
@@ -301,7 +305,9 @@ void AuthenticatorRequestDialogModel::
          current_step() == Step::kPreSelectAccount ||
          current_step() == Step::kSelectAccount ||
          current_step() == Step::kMechanismSelection ||
-         current_step() == Step::kNotStarted);
+         current_step() == Step::kConditionalMediation ||
+         current_step() == Step::kNotStarted)
+      << "Invalid step " << static_cast<int>(current_step());
 
 #if BUILDFLAG(IS_MAC)
   if (transport_availability()->ble_access_denied) {
@@ -348,8 +354,9 @@ void AuthenticatorRequestDialogModel::ContinueWithFlowAfterBleAdapterPowered() {
 
 void AuthenticatorRequestDialogModel::PowerOnBleAdapter() {
   DCHECK_EQ(current_step(), Step::kBlePowerOnAutomatic);
-  if (!bluetooth_adapter_power_on_callback_)
+  if (!bluetooth_adapter_power_on_callback_) {
     return;
+  }
 
   bluetooth_adapter_power_on_callback_.Run();
 }
@@ -382,9 +389,7 @@ void AuthenticatorRequestDialogModel::StartPlatformAuthenticatorFlow() {
 
     // For empty allow list requests, let the user select one of the silently
     // enumerated credentials before dispatching to the platform authenticator.
-    if (base::FeatureList::IsEnabled(
-            device::kWebAuthnNewDiscoverableCredentialsUi) &&
-        transport_availability_.has_empty_allow_list &&
+    if (transport_availability_.has_empty_allow_list &&
         !transport_availability_.recognized_platform_authenticator_credentials
              .empty()) {
       ephemeral_state_.creds_ =
@@ -398,9 +403,7 @@ void AuthenticatorRequestDialogModel::StartPlatformAuthenticatorFlow() {
 
   if (transport_availability_.request_type ==
       device::FidoRequestType::kMakeCredential) {
-    if (kShowCreatePlatformPasskeyStep &&
-        base::FeatureList::IsEnabled(
-            device::kWebAuthnNewDiscoverableCredentialsUi)) {
+    if (kShowCreatePlatformPasskeyStep) {
       SetCurrentStep(Step::kCreatePasskey);
       return;
     }
@@ -427,19 +430,7 @@ void AuthenticatorRequestDialogModel::OnOffTheRecordInterstitialAccepted() {
 
 void AuthenticatorRequestDialogModel::ShowCableUsbFallback() {
   DCHECK_EQ(current_step(), Step::kCableActivate);
-
-  switch (experiment_server_link_sheet_) {
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::CONTROL:
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_2:
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_5:
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_6:
-      SetCurrentStep(Step::kAndroidAccessory);
-      break;
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_3:
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_4:
-      Cancel();
-      break;
-  }
+  SetCurrentStep(Step::kAndroidAccessory);
 }
 
 void AuthenticatorRequestDialogModel::ShowCable() {
@@ -451,8 +442,9 @@ void AuthenticatorRequestDialogModel::Cancel() {
   if (use_conditional_mediation_) {
     // Conditional UI requests are never cancelled, they restart silently.
     ResetEphemeralState();
-    for (auto& observer : observers_)
+    for (auto& observer : observers_) {
       observer.OnStartOver();
+    }
     StartConditionalMediationRequest();
     return;
   }
@@ -473,8 +465,9 @@ void AuthenticatorRequestDialogModel::ManageDevices() {
 }
 
 void AuthenticatorRequestDialogModel::OnSheetModelDidChange() {
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnSheetModelChanged();
+  }
 }
 
 void AuthenticatorRequestDialogModel::AddObserver(Observer* observer) {
@@ -536,6 +529,8 @@ void AuthenticatorRequestDialogModel::OnAuthenticatorMissingUserVerification() {
 }
 
 void AuthenticatorRequestDialogModel::OnAuthenticatorMissingLargeBlob() {
+  // TODO(nsatragno): on Windows we should have a more accurate message if large
+  // blob is missing.
   SetCurrentStep(Step::kMissingCapability);
 }
 
@@ -597,12 +592,14 @@ void AuthenticatorRequestDialogModel::OnBluetoothPoweredStateChanged(
     bool powered) {
   transport_availability_.is_ble_powered = powered;
 
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnBluetoothPoweredStateChanged();
+  }
 
   // For the manual flow, the user has to click the "next" button explicitly.
-  if (current_step() == Step::kBlePowerOnAutomatic)
+  if (current_step() == Step::kBlePowerOnAutomatic) {
     ContinueWithFlowAfterBleAdapterPowered();
+  }
 }
 
 void AuthenticatorRequestDialogModel::SetRequestCallback(
@@ -683,14 +680,9 @@ void AuthenticatorRequestDialogModel::SelectAccount(
         relying_party_id_, response.credential->id, *response.user_entity);
   }
   selection_callback_ = std::move(callback);
-  if (base::FeatureList::IsEnabled(
-          device::kWebAuthnNewDiscoverableCredentialsUi)) {
-    SetCurrentStep(ephemeral_state_.creds_.size() == 1
-                       ? Step::kSelectSingleAccount
-                       : Step::kSelectAccount);
-    return;
-  }
-  SetCurrentStep(Step::kSelectAccount);
+  SetCurrentStep(ephemeral_state_.creds_.size() == 1
+                     ? Step::kSelectSingleAccount
+                     : Step::kSelectAccount);
 }
 
 void AuthenticatorRequestDialogModel::OnAccountSelected(size_t index) {
@@ -771,25 +763,10 @@ void AuthenticatorRequestDialogModel::SetCurrentStepForTesting(Step step) {
 }
 
 bool AuthenticatorRequestDialogModel::cable_should_suggest_usb() const {
-  if (base::FeatureList::IsEnabled(
-          device::kWebAuthnNewDiscoverableCredentialsUi)) {
-    // Offer AoA only for linked caBLEv2 authenticators, not caBLEv1.
-    return cable_ui_type_ != CableUIType::CABLE_V1 &&
-           base::Contains(transport_availability_.available_transports,
-                          AuthenticatorTransport::kAndroidAccessory);
-  }
-  switch (experiment_server_link_sheet_) {
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::CONTROL:
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_2:
-      return base::Contains(transport_availability_.available_transports,
-                            AuthenticatorTransport::kAndroidAccessory);
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_3:
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_4:
-      return true;
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_5:
-    case AuthenticatorRequestDialogModel::ExperimentServerLinkSheet::ARM_6:
-      return false;
-  }
+  // Offer AoA only for linked caBLEv2 authenticators, not caBLEv1.
+  return cable_ui_type_ != CableUIType::CABLE_V1 &&
+         base::Contains(transport_availability_.available_transports,
+                        AuthenticatorTransport::kAndroidAccessory);
 }
 
 void AuthenticatorRequestDialogModel::CollectPIN(
@@ -923,8 +900,9 @@ void AuthenticatorRequestDialogModel::SetCurrentStep(Step step) {
     }
   }
 
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnStepTransition();
+  }
 }
 
 void AuthenticatorRequestDialogModel::StartGuidedFlowForTransport(
@@ -1057,8 +1035,9 @@ void AuthenticatorRequestDialogModel::DispatchRequestAsync(
 
 void AuthenticatorRequestDialogModel::DispatchRequestAsyncInternal(
     const std::string& authenticator_id) {
-  if (!request_callback_)
+  if (!request_callback_) {
     return;
+  }
 
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(request_callback_, authenticator_id));
@@ -1092,28 +1071,36 @@ void AuthenticatorRequestDialogModel::PopulateMechanisms(
     bool prefer_native_api) {
   const bool is_get_assertion = transport_availability_.request_type ==
                                 device::FidoRequestType::kGetAssertion;
+  const bool is_passkey_request =
+      ((is_get_assertion &&
+        (transport_availability_.has_empty_allow_list ||
+         transport_availability_.is_only_hybrid_or_internal)) ||
+       (!is_get_assertion && resident_key_requirement() !=
+                                 device::ResidentKeyRequirement::kDiscouraged));
   // priority_transport contains the transport that should be activated
   // immediately, if this is a getAssertion.
   absl::optional<AuthenticatorTransport> priority_transport;
 
-  const bool show_create_passkey_step =
-      !is_get_assertion && kShowCreatePlatformPasskeyStep &&
-      base::FeatureList::IsEnabled(
-          device::kWebAuthnNewDiscoverableCredentialsUi);
-  if (base::Contains(transport_availability_.available_transports,
-                     AuthenticatorTransport::kInternal) &&
-      (transport_availability_.has_platform_authenticator_credential ==
-           device::FidoRequestHandlerBase::RecognizedCredential::
-               kHasRecognizedCredential ||
-       show_create_passkey_step) &&
-      !use_conditional_mediation_) {
-    priority_transport = AuthenticatorTransport::kInternal;
-  }
-
   std::vector<AuthenticatorTransport> transports_to_list_if_active;
-  if (!use_conditional_mediation_) {
+  if (!use_conditional_mediation_ &&
+      base::Contains(transport_availability_.available_transports,
+                     AuthenticatorTransport::kInternal)) {
     // Conditional requests offer platform credentials through the autofill UI.
     transports_to_list_if_active.push_back(AuthenticatorTransport::kInternal);
+    bool make_credential_prefer_internal =
+        !is_get_assertion && kShowCreatePlatformPasskeyStep;
+    if (base::FeatureList::IsEnabled(device::kWebAuthPasskeysUI)) {
+      // Do not prefer the internal authenticator for passkeys requests if the
+      // QR-code first flow is enabled.
+      make_credential_prefer_internal =
+          make_credential_prefer_internal && !is_passkey_request;
+    }
+    if (transport_availability_.has_platform_authenticator_credential ==
+            device::FidoRequestHandlerBase::RecognizedCredential::
+                kHasRecognizedCredential ||
+        make_credential_prefer_internal) {
+      priority_transport = AuthenticatorTransport::kInternal;
+    }
   }
   transports_to_list_if_active.push_back(
       AuthenticatorTransport::kUsbHumanInterfaceDevice);
@@ -1159,30 +1146,19 @@ void AuthenticatorRequestDialogModel::PopulateMechanisms(
   if (win_native_api_enabled()) {
     const std::u16string desc = l10n_util::GetStringUTF16(
         IDS_WEBAUTHN_TRANSPORT_POPUP_DIFFERENT_AUTHENTICATOR_WIN);
-    bool win_api_should_be_priority;
-    if (base::FeatureList::IsEnabled(
-            device::kWebAuthnNewDiscoverableCredentialsUi)) {
-      // Prefer going straight to Windows native UI for requests that are not
-      // clearly passkeys related, i.e. getAssertion with a non-empty allow
-      // list and makeCredential with rk=false except for:
-      //  - conditional UI
-      //  - "legacy" caBLE (caBLEv1 and server-link caBLEv2 on a.g.c)
-      bool is_legacy_cable =
-          cable_ui_type_ && cable_ui_type_ != CableUIType::CABLE_V2_2ND_FACTOR;
-      win_api_should_be_priority =
-          !use_conditional_mediation_ && !is_legacy_cable &&
-          ((is_get_assertion &&
-            !transport_availability_.has_empty_allow_list) ||
-           (!is_get_assertion &&
-            resident_key_requirement() ==
-                device::ResidentKeyRequirement::kDiscouraged));
-    } else {
-      // The Windows API should have priority when requested unless caBLE does
-      // because it's v1 or server-link.
-      win_api_should_be_priority =
-          prefer_native_api ||
-          (!include_add_phone_option && paired_phone_names().empty());
-    }
+    // Prefer going straight to Windows native UI for requests that are not
+    // clearly passkeys related, or where a platform credential may satisfy the
+    // request, except for:
+    //  - conditional UI
+    //  - "legacy" caBLE (caBLEv1 and server-link caBLEv2 on a.g.c)
+    bool is_legacy_cable =
+        cable_ui_type_ && cable_ui_type_ != CableUIType::CABLE_V2_2ND_FACTOR;
+    bool win_api_should_be_priority =
+        !use_conditional_mediation_ && !is_legacy_cable &&
+        (!is_passkey_request ||
+         transport_availability_.has_platform_authenticator_credential ==
+             device::FidoRequestHandlerBase::RecognizedCredential::
+                 kHasRecognizedCredential);
     mechanisms_.emplace_back(
         Mechanism::WindowsAPI(/*unused*/ true), desc, desc,
         GetTransportIcon(AuthenticatorTransport::kUsbHumanInterfaceDevice),
@@ -1191,6 +1167,7 @@ void AuthenticatorRequestDialogModel::PopulateMechanisms(
         !priority_transport.has_value() && win_api_should_be_priority);
   }
 
+  bool specific_phones_listed = false;
   if (base::Contains(transport_availability_.available_transports, kCable)) {
     for (const auto& phone_name : paired_phone_names()) {
       const std::u16string name16 = base::UTF8ToUTF16(phone_name);
@@ -1207,7 +1184,39 @@ void AuthenticatorRequestDialogModel::PopulateMechanisms(
                               base::Unretained(this), phone_name,
                               mechanisms_.size()),
           /*priority=*/false);
+      specific_phones_listed = true;
     }
+  }
+
+  if (include_add_phone_option) {
+    // If there's no other priority mechanism, no phones, no platform
+    // credentials, and this is a passkey request, jump directly to showing a QR
+    // code.
+    bool is_priority = false;
+    if (base::FeatureList::IsEnabled(device::kWebAuthPasskeysUI)) {
+      // On Windows<=10, we cannot tell in advance if the platform authenticator
+      // can fulfill a get assertion request. In that case, don't jump to the QR
+      // code.
+      bool platform_authenticator_could_fulfill_get_assertion =
+          is_get_assertion && !use_conditional_mediation_ &&
+          transport_availability_.has_platform_authenticator_credential !=
+              device::FidoRequestHandlerBase::RecognizedCredential::
+                  kNoRecognizedCredential;
+      is_priority = !priority_transport.has_value() &&
+                    !base::ranges::any_of(mechanisms_, &Mechanism::priority) &&
+                    paired_phone_names().empty() && is_passkey_request &&
+                    !platform_authenticator_could_fulfill_get_assertion;
+    }
+    const std::u16string label = l10n_util::GetStringUTF16(
+        specific_phones_listed
+            ? IDS_WEBAUTHN_PASSKEY_DIFFERENT_PHONE_OR_TABLET_LABEL
+            : IDS_WEBAUTHN_PASSKEY_PHONE_OR_TABLET_LABEL);
+    mechanisms_.emplace_back(
+        Mechanism::AddPhone(), label, label, kQrcodeGeneratorIcon,
+        base::BindRepeating(
+            &AuthenticatorRequestDialogModel::StartGuidedFlowForAddPhone,
+            base::Unretained(this), mechanisms_.size()),
+        is_priority);
   }
 
   for (const auto transport : transports_to_list_if_active) {
@@ -1223,39 +1232,6 @@ void AuthenticatorRequestDialogModel::PopulateMechanisms(
             &AuthenticatorRequestDialogModel::StartGuidedFlowForTransport,
             base::Unretained(this), transport, mechanisms_.size()),
         priority_transport.has_value() && *priority_transport == transport);
-  }
-
-  if (include_add_phone_option) {
-    // If there's no other priority mechanism, and no phones, jump directly to
-    // showing a QR code.
-    bool is_priority = false;
-    if (base::FeatureList::IsEnabled(device::kWebAuthPasskeysUI)) {
-      if (base::ranges::any_of(mechanisms_,
-                               [](const Mechanism& m) { return m.priority; })) {
-        LOG(ERROR) << "Not jumping to QR because of other priority";
-      } else if (!paired_phone_names().empty()) {
-        LOG(ERROR) << "Not jumping to QR because linked phones exist";
-      } else if (!is_get_assertion) {
-        LOG(ERROR)
-            << "Not jumping to QR because this is not a getAssertion request";
-      } else if (!transport_availability_.has_empty_allow_list) {
-        LOG(ERROR) << "Not jumping to QR because of non-empty allow list";
-      } else {
-        is_priority = true;
-      }
-    }
-
-    const std::u16string label = l10n_util::GetStringUTF16(
-        base::FeatureList::IsEnabled(
-            device::kWebAuthnNewDiscoverableCredentialsUi)
-            ? IDS_WEBAUTHN_PASSKEY_DIFFERENT_DEVICE_LABEL
-            : IDS_WEBAUTHN_CABLEV2_ADD_PHONE);
-    mechanisms_.emplace_back(
-        Mechanism::AddPhone(), label, label, kQrcodeGeneratorIcon,
-        base::BindRepeating(
-            &AuthenticatorRequestDialogModel::StartGuidedFlowForAddPhone,
-            base::Unretained(this), mechanisms_.size()),
-        is_priority);
   }
 
   // At most one mechanism has priority.

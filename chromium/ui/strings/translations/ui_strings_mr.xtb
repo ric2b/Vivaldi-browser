@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 महिना}other{# महिने}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 तास आणि }other{# तास आणि }}</translation>
+<translation id="185013357618350178">&amp;Select</translation>
 <translation id="1859234291848436338">लिहिण्याची दिशा</translation>
 <translation id="1860796786778352021">सूचना बंद</translation>
 <translation id="186476001994626254">वेब स्‍मार्ट पेस्ट आशय</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{१ता मध्ये}other{#ता मध्ये}}</translation>
 <translation id="2583543531130364912">तुमची टचस्क्रीन कॅलिब्रेट करा</translation>
 <translation id="2586657967955657006">क्लिपबोर्ड</translation>
+<translation id="2653844658857826081">नवीन</translation>
 <translation id="2666092431469916601">शीर्ष</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> वरून शेअर केले</translation>
 <translation id="271033894570825754">नवीन</translation>
@@ -150,7 +152,7 @@
 <translation id="6503257047630241175">RTF आशय</translation>
 <translation id="6539092367496845964">काहीतरी चूक झाली. पुन्हा प्रयत्न करा.</translation>
 <translation id="654149438358937226">सर्व सूचना ब्लॉक करा</translation>
-<translation id="6612467943526193239">कॅलिब्रेशनमधून बाहेर पडण्‍यासाठी Esc दाबा.</translation>
+<translation id="6612467943526193239">कॅलिब्रेशनमधून बाहेर पडण्‍यासाठी Esc प्रेस करा.</translation>
 <translation id="6620110761915583480">फाइल सेव्ह करा</translation>
 <translation id="6699343763173986273">मीडिया पुढील ट्रॅक</translation>
 <translation id="6808150112686056157">मीडिया थांबवा</translation>

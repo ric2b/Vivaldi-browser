@@ -6,17 +6,15 @@
 
 #include <lib/sys/cpp/component_context.h>
 
-#include "base/bind.h"
 #include "base/fuchsia/fuchsia_logging.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/renderer_client.h"
-#include "media/fuchsia/cdm/fuchsia_cdm_context.h"
+#include "media/cdm/fuchsia/fuchsia_cdm_context.h"
 #include "media/fuchsia/common/decrypting_sysmem_buffer_stream.h"
 #include "media/fuchsia/common/passthrough_sysmem_buffer_stream.h"
 
@@ -476,6 +474,8 @@ void WebEngineAudioRenderer::OnError(media::PipelineStatus status) {
   audio_consumer_.Unbind();
   stream_sink_.Unbind();
   sysmem_buffer_stream_.reset();
+  read_timer_.Stop();
+  renderer_started_ = false;
 
   if (is_demuxer_read_pending_) {
     drop_next_demuxer_read_result_ = true;
@@ -590,15 +590,17 @@ void WebEngineAudioRenderer::ReadDemuxerStream() {
 
   is_demuxer_read_pending_ = true;
   demuxer_stream_->Read(
-      base::BindOnce(&WebEngineAudioRenderer::OnDemuxerStreamReadDone,
-                     weak_factory_.GetWeakPtr()));
+      1, base::BindOnce(&WebEngineAudioRenderer::OnDemuxerStreamReadDone,
+                        weak_factory_.GetWeakPtr()));
 }
 
 void WebEngineAudioRenderer::OnDemuxerStreamReadDone(
     media::DemuxerStream::Status read_status,
-    scoped_refptr<media::DecoderBuffer> buffer) {
+    media::DemuxerStream::DecoderBufferVector buffers) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(is_demuxer_read_pending_);
+  DCHECK_LE(buffers.size(), 1u)
+      << "ReadDemuxerStream() only reads a single buffer.";
 
   is_demuxer_read_pending_ = false;
 
@@ -627,6 +629,9 @@ void WebEngineAudioRenderer::OnDemuxerStreamReadDone(
     }
     return;
   }
+
+  scoped_refptr<media::DecoderBuffer> buffer = std::move(buffers[0]);
+  DCHECK(buffer);
 
   if (buffer->end_of_stream()) {
     is_at_end_of_stream_ = true;

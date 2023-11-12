@@ -11,28 +11,26 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
-#include "base/strings/escape.h"
+#include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/types/pass_key.h"
-#include "storage/browser/blob/shareable_file_reference.h"
 #include "storage/browser/file_system/async_file_util.h"
 #include "storage/browser/file_system/copy_or_move_hook_delegate.h"
 #include "storage/browser/file_system/copy_or_move_operation_delegate.h"
 #include "storage/browser/file_system/file_observers.h"
 #include "storage/browser/file_system/file_system_backend.h"
 #include "storage/browser/file_system/file_system_context.h"
+#include "storage/browser/file_system/file_system_features.h"
 #include "storage/browser/file_system/file_system_file_util.h"
 #include "storage/browser/file_system/file_system_util.h"
 #include "storage/browser/file_system/remove_operation_delegate.h"
-#include "storage/browser/file_system/sandbox_file_system_backend.h"
+#include "storage/browser/file_system/sandbox_file_system_backend_delegate.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/common/file_system/file_system_types.h"
-#include "storage/common/file_system/file_system_util.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 
 namespace storage {
@@ -343,8 +341,14 @@ void FileSystemOperationImpl::CopyFileLocal(
   // Don't just DCHECK src_url.IsInSameFileSystem(dest_url). We don't care if
   // the two URLs are mounted in two different isolated file systems. As long
   // as their origin and type are the same, they are part of the same file
-  // system, and local operations are allowed.
-  DCHECK_EQ(src_url.origin(), dest_url.origin());
+  // system, and local operations are allowed. See https://crbug.com/1396116.
+  if (base::FeatureList::IsEnabled(
+          features::kFileSystemURLComparatorsTreatOpaqueOriginAsNoOrigin)) {
+    DCHECK(src_url.origin() == dest_url.origin() ||
+           (src_url.origin().opaque() && dest_url.origin().opaque()));
+  } else {
+    DCHECK_EQ(src_url.origin(), dest_url.origin());
+  }
   DCHECK_EQ(src_url.type(), dest_url.type());
 
   auto split_callback = base::SplitOnceCallback(std::move(callback));
@@ -365,8 +369,14 @@ void FileSystemOperationImpl::MoveFileLocal(const FileSystemURL& src_url,
   // Don't just DCHECK src_url.IsInSameFileSystem(dest_url). We don't care if
   // the two URLs are mounted in two different isolated file systems. As long
   // as their origin and type are the same, they are part of the same file
-  // system, and local operations are allowed.
-  DCHECK_EQ(src_url.origin(), dest_url.origin());
+  // system, and local operations are allowed. See https://crbug.com/1396116.
+  if (base::FeatureList::IsEnabled(
+          features::kFileSystemURLComparatorsTreatOpaqueOriginAsNoOrigin)) {
+    DCHECK(src_url.origin() == dest_url.origin() ||
+           (src_url.origin().opaque() && dest_url.origin().opaque()));
+  } else {
+    DCHECK_EQ(src_url.origin(), dest_url.origin());
+  }
   DCHECK_EQ(src_url.type(), dest_url.type());
 
   auto split_callback = base::SplitOnceCallback(std::move(callback));
@@ -403,7 +413,6 @@ FileSystemOperationImpl::FileSystemOperationImpl(
   weak_ptr_ = weak_factory_.GetWeakPtr();
 
   DCHECK(operation_context_.get());
-  operation_context_->DetachFromSequence();
   async_file_util_ = file_system_context_->GetAsyncFileUtil(url.type());
   DCHECK(async_file_util_);
 }
@@ -426,7 +435,7 @@ void FileSystemOperationImpl::GetUsageAndQuotaThenRunTask(
 
   DCHECK(quota_manager_proxy);
   quota_manager_proxy->GetUsageAndQuota(
-      blink::StorageKey(url.origin()),
+      blink::StorageKey::CreateFirstParty(url.origin()),
       FileSystemTypeToQuotaStorageType(url.type()),
       base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(&FileSystemOperationImpl::DidGetUsageAndQuotaAndRunTask,

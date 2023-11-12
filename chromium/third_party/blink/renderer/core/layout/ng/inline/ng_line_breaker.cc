@@ -205,7 +205,7 @@ bool NeedsAccurateEndPosition(const NGInlineItem& line_end_item) {
   DCHECK(line_end_item.Style());
   const ComputedStyle& line_end_style = *line_end_item.Style();
   return line_end_style.HasBoxDecorationBackground() ||
-         !line_end_style.AppliedTextDecorations().empty();
+         line_end_style.HasAppliedTextDecorations();
 }
 
 inline bool NeedsAccurateEndPosition(const NGLineInfo& line_info,
@@ -319,7 +319,7 @@ inline bool NGLineBreaker::ShouldAutoWrap(const ComputedStyle& style) const {
   //  <p>(A) punctuation characters can be part of ::first-letter.</p>
   if (UNLIKELY(is_initial_letter_box_))
     return false;
-  return style.AutoWrap();
+  return style.ShouldWrapLine();
 }
 
 LayoutUnit NGLineBreaker::ComputeAvailableWidth() const {
@@ -1061,7 +1061,7 @@ void NGLineBreaker::HandleText(const NGInlineItem& item,
     // Hanging trailing spaces may resolve the overflow.
     if (item_result->has_only_trailing_spaces) {
       state_ = LineBreakState::kTrailing;
-      if (item_result->item->Style()->WhiteSpace() == EWhiteSpace::kPreWrap &&
+      if (!item_result->item->Style()->CollapseWhiteSpace() &&
           IsBreakableSpace(Text()[item_result->EndOffset() - 1])) {
         unsigned end_index = base::checked_cast<unsigned>(
             item_result - line_info->Results().begin());
@@ -1125,7 +1125,6 @@ void NGLineBreaker::HandleText(const NGInlineItem& item,
 // NGInlineItems to NGInlineItemResults.
 void NGLineBreaker::SplitTextIntoSegments(const NGInlineItem& item,
                                           NGLineInfo* line_info) {
-  DCHECK(RuntimeEnabledFeatures::SVGTextNGEnabled());
   DCHECK(is_svg_text_);
   DCHECK_EQ(offset_, item.StartOffset());
 
@@ -1365,7 +1364,7 @@ bool NGLineBreaker::BreakTextAtPreviousBreakOpportunity(
   DCHECK(item_result->may_break_inside);
   const NGInlineItem& item = *item_result->item;
   DCHECK_EQ(item.Type(), NGInlineItem::kText);
-  DCHECK(item.Style() && item.Style()->AutoWrap());
+  DCHECK(item.Style() && item.Style()->ShouldWrapLine());
   DCHECK(!is_text_combine_);
 
   // TODO(jfernandez): Should we use the non-hangable-run-end instead ?
@@ -1445,7 +1444,7 @@ bool NGLineBreaker::HandleTextForFastMinContent(NGInlineItemResult* item_result,
         break_iterator_.NextBreakOpportunity(end_offset, item.EndOffset());
 
     unsigned non_hangable_run_end = end_offset;
-    if (item.Style()->WhiteSpace() != EWhiteSpace::kBreakSpaces) {
+    if (item.Style()->ShouldWrapLineTrailingSpaces()) {
       while (non_hangable_run_end > start_offset &&
              IsBreakableSpace(text[non_hangable_run_end - 1])) {
         --non_hangable_run_end;
@@ -1666,7 +1665,7 @@ void NGLineBreaker::HandleTrailingSpaces(const NGInlineItem& item,
     NGInlineItemResults* item_results = line_info->MutableResults();
     DCHECK(!item_results->empty());
     item_results->back().can_break_after = true;
-  } else if (style.WhiteSpace() != EWhiteSpace::kBreakSpaces) {
+  } else if (style.ShouldWrapLineTrailingSpaces()) {
     // Find the end of the run of space characters in this item.
     // Other white space characters (e.g., tab) are not included in this item.
     DCHECK(style.BreakOnlyAfterWhiteSpace() ||
@@ -2539,11 +2538,26 @@ void NGLineBreaker::HandleCloseTag(const NGInlineItem& item,
       item_result->can_break_after = last->can_break_after;
       return;
     }
-    if (was_auto_wrap || last->can_break_after) {
-      item_result->can_break_after =
-          last->can_break_after ||
-          IsBreakableSpace(Text()[item_result->EndOffset()]);
+    if (last->can_break_after) {
+      // A break opportunity before a close tag always propagates to after the
+      // close tag.
+      item_result->can_break_after = true;
       last->can_break_after = false;
+      return;
+    }
+    if (was_auto_wrap) {
+      // We can break before a breakable space if we either:
+      //   a) allow breaking before a white space, or
+      //   b) the break point is preceded by another breakable space.
+      // TODO(abotella): What if the following breakable space is after an
+      // open tag which has a different white-space value?
+      bool preceded_by_breakable_space =
+          item_result->EndOffset() > 0 &&
+          IsBreakableSpace(Text()[item_result->EndOffset() - 1]);
+      item_result->can_break_after =
+          IsBreakableSpace(Text()[item_result->EndOffset()]) &&
+          (!current_style_->BreakOnlyAfterWhiteSpace() ||
+           preceded_by_breakable_space);
       return;
     }
     if (auto_wrap_ && !IsBreakableSpace(Text()[item_result->EndOffset() - 1]))
@@ -2727,9 +2741,7 @@ void NGLineBreaker::RewindOverflow(unsigned new_end, NGLineInfo* line_info) {
       if (item_result.shape_result ||  // kNoResultIfOverflow if 'break-word'
           (break_anywhere_if_overflow_ && !override_break_anywhere_)) {
         DCHECK(item.Style());
-        const EWhiteSpace white_space = item.Style()->WhiteSpace();
-        if (ComputedStyle::AutoWrap(white_space) &&
-            white_space != EWhiteSpace::kBreakSpaces &&
+        if (item.Style()->ShouldWrapLineTrailingSpaces() &&
             IsBreakableSpace(text[item_result.StartOffset()])) {
           // If all characters are trailable spaces, check the next item.
           if (item_result.shape_result &&
@@ -2754,10 +2766,9 @@ void NGLineBreaker::RewindOverflow(unsigned new_end, NGLineInfo* line_info) {
       // controls are trailable.
       DCHECK_NE(text[item_result.StartOffset()], kNewlineCharacter);
       DCHECK(item.Style());
-      const EWhiteSpace white_space = item.Style()->WhiteSpace();
-      if (ComputedStyle::AutoWrap(white_space) &&
-          white_space != EWhiteSpace::kBreakSpaces)
+      if (item.Style()->ShouldWrapLineTrailingSpaces()) {
         continue;
+      }
     } else if (item.Type() == NGInlineItem::kOpenTag) {
       // Open tags are ambiguous. This open tag is not trailable:
       //   <span>text
@@ -2993,8 +3004,9 @@ void NGLineBreaker::SetCurrentStyle(const ComputedStyle& style) {
     enable_soft_hyphen_ = style.GetHyphens() != Hyphens::kNone;
     hyphenation_ = style.GetHyphenationWithLimits();
 
-    if (style.WhiteSpace() == EWhiteSpace::kBreakSpaces)
+    if (style.ShouldWrapLineBreakingSpaces()) {
       break_iterator_.SetBreakSpace(BreakSpaceType::kAfterEverySpace);
+    }
 
     break_iterator_.SetLocale(style.LocaleForLineBreakIterator());
   }

@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -100,7 +100,7 @@ void CheckCapturedNetLogEntries(const std::vector<net::NetLogEntry>& entries) {
   }
   ASSERT_LT(i, entries.size());
   EXPECT_EQ("alert: foo", net::GetStringValueFromParams(entries[i], "message"));
-  ASSERT_FALSE(entries[i].params.FindKey("line_number"));
+  ASSERT_FALSE(entries[i].params.GetDict().contains("line_number"));
 
   while (i < entries.size() &&
          entries[i].type != net::NetLogEventType::PAC_JAVASCRIPT_ERROR) {

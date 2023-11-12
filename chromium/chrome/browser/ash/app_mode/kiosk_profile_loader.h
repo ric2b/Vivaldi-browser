@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager_base.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
@@ -37,7 +37,7 @@ class KioskProfileLoader : public LoginPerformer::Delegate,
         std::unique_ptr<UserContext> user_context) = 0;
 
    protected:
-    virtual ~Delegate() {}
+    virtual ~Delegate() = default;
   };
 
   KioskProfileLoader(const AccountId& app_account_id,

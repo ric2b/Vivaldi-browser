@@ -15,20 +15,25 @@ namespace arc::input_overlay {
 // MenuEntryView is for GIO menu entry button.
 class MenuEntryView : public views::ImageButton {
  public:
-  using OnDragEndCallback =
-      base::RepeatingCallback<void(absl::optional<gfx::Point>)>;
+  using OnPositionChangedCallback =
+      base::RepeatingCallback<void(bool, absl::optional<gfx::Point>)>;
 
   MenuEntryView(PressedCallback pressed_callback,
-                OnDragEndCallback on_position_changed_callback);
+                OnPositionChangedCallback on_position_changed_callback);
   MenuEntryView(const MenuEntryView&) = delete;
   MenuEntryView& operator=(const MenuEntryView&) = delete;
   ~MenuEntryView() override;
+
+  // Change hover state for menu entry button.
+  void ChangeHoverState(bool is_hovered);
 
   // views::View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
+  bool OnKeyReleased(const ui::KeyEvent& event) override;
 
   // Used for testing.
   void set_allow_reposition(bool allow) { allow_reposition_ = allow; }
@@ -39,7 +44,18 @@ class MenuEntryView : public views::ImageButton {
   void OnDragUpdate(const ui::LocatedEvent& event);
   void OnDragEnd();
 
-  OnDragEndCallback on_drag_end_callback_;
+  // TODO(b/260937747) For Alpha version, this view is not movable. Cancel
+  // located event and reset event target when the located event doesn't
+  // released on top of this view. This can be removed when removing the AlphaV2
+  // flag.
+  void MayCancelLocatedEvent(const ui::LocatedEvent& event);
+
+  OnPositionChangedCallback on_position_changed_callback_;
+
+  // Change menu entry properties if currently in dragging state.
+  void ChangeMenuEntryOnDrag(bool is_dragging);
+  // Set cusor type.
+  void SetCursor(ui::mojom::CursorType cursor_type);
 
   // LocatedEvent's position when drag starts.
   gfx::Point start_drag_event_pos_;
@@ -47,6 +63,9 @@ class MenuEntryView : public views::ImageButton {
   gfx::Point start_drag_view_pos_;
   // If this view is in a dragging state.
   bool is_dragging_ = false;
+
+  // The current hover state for the menu entry.
+  bool hover_state_ = false;
 
   // TODO(b/260937747): Update or remove when removing flags
   // |kArcInputOverlayAlphaV2| or |kArcInputOverlayBeta|.

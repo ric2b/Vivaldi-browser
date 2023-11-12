@@ -493,6 +493,19 @@ field **WiFi** must be set to an object of type [WiFi](#WiFi-type).
     * Indicating that the network should be connected to automatically when in
       range.
 
+* **BSSIDAllowlist**
+    * (optional) - **array of string**
+    * Array of BSSIDs that control what APs can be connected to. BSSIDs
+      should be formatted as colon-separated octets (e.g.
+      `"00:01:02:03:04:05"`).
+    * Values are:
+        * *Empty list*: The WiFi network can associate with any AP.
+        * *Non-empty list*: The Wifi network will only associate with the
+          specified BSSes.
+        * *["00:00:00:00:00:00"]*: Special value indicating the network
+          shouldn't associate with any AP. `"00:00:00:00:00:00"` shouldn't be a
+          part of any other list of values, otherwise it may cause an error.
+
 * **EAP**
     * (required if **Security** is
         *WEP-8021X* or *WPA-EAP*, otherwise ignored) - [EAP](#EAP-type)
@@ -1066,6 +1079,11 @@ L2TP over IPsec with pre-shared key:
 
 ### WireGuard type
 
+* **IPAddresses**
+    * (required) - **array of string**
+    * Array of IP addresses in string representation (case-insensitive for IPv6)
+      to be configured on the local WireGuard interface.
+
 * **PrivateKey**
     * (optional) - **string**
     * The base64 private key of the wireguard client peer. If not set, a random
@@ -1506,6 +1524,16 @@ ONC configuration of of **Cellular** networks is not yet supported.
     * (optional, read-only, provided only if **Family** is *GSM*) - **string**
     * For GSM modems, the International Mobile Subscriber Identity of the SIM
       card installed in the device.
+
+* **LastConnectedAttachApnProperty**
+    * (optional, read-only) - [APN](#APN-type)
+    * The attach APN information used in the last successful connection
+    * attempt. This value is not cleared if the connection fails.
+
+* **LastConnectedDefaultApnProperty**
+    * (optional, read-only) - [APN](#APN-type)
+    * The default APN information used in the last successful connection
+    * attempt. This value is not cleared if the connection fails.
 
 * **LastGoodAPN**
     * (optional, read-only) - [APN](#APN-type)
@@ -2295,7 +2323,7 @@ In this simplified format, a descriptive enum is used to describe the effective
 policy source and whether it is enforced or recommended.
 
 The conversion code can be found in cros_network_config.cc:GetManagedDictionary
-https://source.chromium.org/chromium/chromium/src/+/main:chromeos/services/network_config/cros_network_config.cc
+https://source.chromium.org/chromium/chromium/src/+/main:chromeos/ash/services/network_config/cros_network_config.cc
 
 ```
 enum PolicySource {

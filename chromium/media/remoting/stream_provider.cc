@@ -5,16 +5,16 @@
 #include "media/remoting/stream_provider.h"
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/cast_streaming/public/remoting_proto_enum_utils.h"
 #include "components/cast_streaming/public/remoting_proto_utils.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/demuxer.h"
 #include "media/base/video_transformation.h"
@@ -138,7 +138,7 @@ void StreamProvider::MediaStream::ReceiveFrame(uint32_t count,
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(decoder_buffer_reader_);
 
-  auto callback = BindToCurrentLoop(
+  auto callback = base::BindPostTaskToCurrentDefault(
       base::BindOnce(&MediaStream::AppendBuffer, media_weak_this_, count));
   decoder_buffer_reader_->ReadDecoderBuffer(std::move(buffer),
                                             std::move(callback));
@@ -324,7 +324,8 @@ void StreamProvider::MediaStream::SendReadUntil() {
   read_until_sent_ = true;
 }
 
-void StreamProvider::MediaStream::Read(ReadCB read_cb) {
+// Only return one buffer at a time so we ignore the count.
+void StreamProvider::MediaStream::Read(uint32_t /*count*/, ReadCB read_cb) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(read_complete_callback_.is_null());
   DCHECK(read_cb);
@@ -358,11 +359,11 @@ void StreamProvider::MediaStream::CompleteRead(DemuxerStream::Status status) {
         video_decoder_config_ = next_video_decoder_config_;
         next_video_decoder_config_ = media::VideoDecoderConfig();
       }
-      std::move(read_complete_callback_).Run(status, nullptr);
+      std::move(read_complete_callback_).Run(status, {});
       return;
     case DemuxerStream::kAborted:
     case DemuxerStream::kError:
-      std::move(read_complete_callback_).Run(status, nullptr);
+      std::move(read_complete_callback_).Run(status, {});
       return;
     case DemuxerStream::kOk:
       DCHECK(read_complete_callback_);
@@ -371,7 +372,7 @@ void StreamProvider::MediaStream::CompleteRead(DemuxerStream::Status status) {
       scoped_refptr<DecoderBuffer> frame_data = buffers_.front();
       buffers_.pop_front();
       ++current_frame_count_;
-      std::move(read_complete_callback_).Run(status, frame_data);
+      std::move(read_complete_callback_).Run(status, {frame_data});
       return;
   }
 }
@@ -480,6 +481,10 @@ void StreamProvider::Seek(base::TimeDelta time,
                                base::BindOnce(std::move(seek_cb), PIPELINE_OK));
 }
 
+bool StreamProvider::IsSeekable() const {
+  return false;
+}
+
 void StreamProvider::Stop() {}
 
 base::TimeDelta StreamProvider::GetStartTime() const {
@@ -561,7 +566,7 @@ void StreamProvider::OnAcquireDemuxer(
   DCHECK(has_audio_ || has_video_);
 
   if (has_audio_) {
-    auto callback = BindToCurrentLoop(base::BindOnce(
+    auto callback = base::BindPostTaskToCurrentDefault(base::BindOnce(
         &StreamProvider::OnAudioStreamCreated, media_weak_this_));
     main_task_runner_->PostTask(
         FROM_HERE,
@@ -571,7 +576,7 @@ void StreamProvider::OnAcquireDemuxer(
   }
 
   if (has_video_) {
-    auto callback = BindToCurrentLoop(base::BindOnce(
+    auto callback = base::BindPostTaskToCurrentDefault(base::BindOnce(
         &StreamProvider::OnVideoStreamCreated, media_weak_this_));
     main_task_runner_->PostTask(
         FROM_HERE,

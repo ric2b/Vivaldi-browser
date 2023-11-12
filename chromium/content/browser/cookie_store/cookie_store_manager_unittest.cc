@@ -4,8 +4,8 @@
 
 #include <memory>
 
-#include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/bind.h"
@@ -205,7 +205,8 @@ class CookieStoreManagerTest
     int64_t registration_id;
     blink::mojom::ServiceWorkerRegistrationOptions options;
     options.scope = GURL(scope);
-    blink::StorageKey key(url::Origin::Create(GURL(scope)));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(GURL(scope)));
     base::RunLoop run_loop;
     worker_test_helper_->context()->RegisterServiceWorker(
         GURL(script_url), key, options,
@@ -368,19 +369,19 @@ class CookieStoreManagerTest
 
     cookie_store_manager_->BindReceiver(
         example_service_remote_.BindNewPipeAndPassReceiver(),
-        url::Origin::Create(GURL(kExampleScope)));
+        blink::StorageKey::CreateFromStringForTesting(kExampleScope));
     example_service_ =
         std::make_unique<CookieStoreSync>(example_service_remote_.get());
 
     cookie_store_manager_->BindReceiver(
         google_service_remote_.BindNewPipeAndPassReceiver(),
-        url::Origin::Create(GURL(kGoogleScope)));
+        blink::StorageKey::CreateFromStringForTesting(kGoogleScope));
     google_service_ =
         std::make_unique<CookieStoreSync>(google_service_remote_.get());
 
     cookie_store_manager_->BindReceiver(
         legacy_service_remote_.BindNewPipeAndPassReceiver(),
-        url::Origin::Create(GURL(kLegacyScope)));
+        blink::StorageKey::CreateFromStringForTesting(kLegacyScope));
     legacy_service_ =
         std::make_unique<CookieStoreSync>(legacy_service_remote_.get());
 
@@ -1768,7 +1769,7 @@ TEST_F(CookieStoreManagerTest, UnTrustworthyOrigin) {
 
   cookie_store_manager_->BindReceiver(
       untrustworthy_service_remote.BindNewPipeAndPassReceiver(),
-      url::Origin::Create(GURL("http://insecure.com")));
+      blink::StorageKey::CreateFromStringForTesting("http://insecure.com"));
 
   untrustworthy_service_remote.FlushForTesting();
   EXPECT_FALSE(untrustworthy_service_remote.is_connected());

@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/time.h"
@@ -477,6 +476,11 @@ void NigoriModelTypeProcessor::ClearMetadataAndReset() {
   model_type_state_ = sync_pb::ModelTypeState();
   model_type_state_.mutable_progress_marker()->set_data_type_id(
       sync_pb::EntitySpecifics::kNigoriFieldNumber);
+}
+
+void NigoriModelTypeProcessor::ClearMetadataWhileStopped() {
+  NOTREACHED() << "Nigori has a separate load callback and way to clear data. "
+                  "This method should not have been called.";
 }
 
 }  // namespace syncer

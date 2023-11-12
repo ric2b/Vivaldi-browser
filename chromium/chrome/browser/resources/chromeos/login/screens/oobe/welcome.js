@@ -9,17 +9,17 @@
 import '//resources/cr_elements/cr_input/cr_input.js';
 import '//resources/cr_elements/cr_shared_vars.css.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
-import '../../components/oobe_icons.m.js';
+import '../../components/oobe_icons.html.js';
 import '../../components/oobe_i18n_dropdown.js';
-import '../../components/common_styles/oobe_common_styles.m.js';
-import '../../components/common_styles/oobe_dialog_host_styles.m.js';
+import '../../components/common_styles/oobe_common_styles.css.js';
+import '../../components/common_styles/oobe_dialog_host_styles.css.js';
 import '../../components/dialogs/oobe_adaptive_dialog.js';
 
 import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.m.js';
-import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.m.js';
+import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
+import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.js';
 import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
 import {OobeModalDialog} from '../../components/dialogs/oobe_modal_dialog.js';
 import {getSelectedTitle, SelectListType} from '../../components/oobe_select.js';
@@ -166,6 +166,32 @@ class OobeWelcomeScreen extends OobeWelcomeScreenBase {
        * @private
        */
       chromeVoxHintGiven_: Boolean,
+
+      /**
+       * If it is a meet device.
+       * @private
+       */
+      isMeet_: {
+        type: Boolean,
+        value: function() {
+          return (
+              loadTimeData.valueExists('deviceFlowType') &&
+              loadTimeData.getString('deviceFlowType') == 'meet');
+        },
+        readOnly: true,
+      },
+
+      /**
+       * If device requisition is configurable.
+       * @private
+       */
+      isDeviceRequisitionConfigurable_: {
+        type: Boolean,
+        value: function() {
+          return loadTimeData.getBoolean('isDeviceRequisitionConfigurable');
+        },
+        readOnly: true,
+      },
     };
   }
 
@@ -833,6 +859,13 @@ class OobeWelcomeScreen extends OobeWelcomeScreenBase {
         (this.voicesChangedListenerMaybeGiveChromeVoxHint_),
         /* useCapture */ false);
     this.voicesChangedListenerMaybeGiveChromeVoxHint_ = null;
+  }
+
+  /**
+   * If it is possible to set up CFM.
+   */
+  hideCFMSetupButton_(isDeviceRequisitionConfigurable, isMeet) {
+    return !isDeviceRequisitionConfigurable && !isMeet;
   }
 }
 

@@ -72,7 +72,8 @@ public class BookmarkFolderRow extends BookmarkRow {
             if (bookmarkId.equals(mDelegate.getModel().getTrashFolderId())) {
                 setStartIconDrawable(VivaldiBookmarkUtils.getTrashFolderIcon(getContext()));
             } else {
-                setStartIconDrawable(VivaldiBookmarkUtils.getFolderIcon(getContext()));
+                setStartIconDrawable(VivaldiBookmarkUtils.getFolderIcon(getContext(),
+                        item.getId()));
             }
         }
         else {

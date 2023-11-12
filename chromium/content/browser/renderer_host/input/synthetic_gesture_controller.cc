@@ -6,9 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target.h"
 #include "content/common/input/synthetic_smooth_scroll_gesture_params.h"
@@ -83,9 +82,13 @@ void SyntheticGestureController::QueueSyntheticGesture(
 
   bool was_empty = pending_gesture_queue_.IsEmpty();
 
+  SyntheticGesture* raw_gesture = synthetic_gesture.get();
+
   pending_gesture_queue_.Push(std::move(synthetic_gesture),
                               std::move(completion_callback),
                               complete_immediately);
+
+  raw_gesture->DidQueue(weak_ptr_factory_.GetWeakPtr());
 
   if (was_empty)
     StartGesture();
@@ -113,7 +116,11 @@ bool SyntheticGestureController::DispatchNextEvent(base::TimeTicks timestamp) {
         pending_gesture_queue_.FrontGesture()->ForwardInputEvents(
             timestamp, gesture_target_.get());
 
-    if (result == SyntheticGesture::GESTURE_RUNNING) {
+    if (result == SyntheticGesture::GESTURE_ABORT) {
+      // This means we've been destroyed from the call to ForwardInputEvents,
+      // return immediately.
+      return false;
+    } else if (result == SyntheticGesture::GESTURE_RUNNING) {
       return true;
     }
     pending_gesture_queue_.mark_current_gesture_complete(result);

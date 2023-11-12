@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/values.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
@@ -25,7 +25,7 @@ void JsonSanitizer::Sanitize(const std::string& json, Callback callback) {
             }
 
             const base::Value::Type type = parse_result->type();
-            if (type != base::Value::Type::DICTIONARY &&
+            if (type != base::Value::Type::DICT &&
                 type != base::Value::Type::LIST) {
               std::move(callback).Run(Result::Error("Invalid top-level type"));
               return;

@@ -16,6 +16,7 @@
 <translation id="1128128132059598906">EAP-TTLS</translation>
 <translation id="1145018782460575098">La fenêtre de mise à jour du micrologiciel pour les appareils externes est ouverte. <ph name="NUM_UPDATES" /> mises à jour disponibles.</translation>
 <translation id="1145516343487477149">Trouvez des articles d'aide et des réponses aux questions fréquentes sur les Chromebooks</translation>
+<translation id="1167755866710282443">Ouvrez le menu pour personnaliser les touches. Faites-le glisser pour le déplacer.</translation>
 <translation id="1175697296044146566">Votre <ph name="DEVICE_TYPE" /> est géré par <ph name="MANAGER" />.</translation>
 <translation id="1175951029573070619">Moyenne (<ph name="SIGNAL_STRENGTH" />)</translation>
 <translation id="1181037720776840403">Supprimer</translation>
@@ -116,6 +117,7 @@
 <translation id="1908234395526491708">Échec de la requête UDP</translation>
 <translation id="1947737735496445907">Impression terminée</translation>
 <translation id="1951012854035635156">Assistant</translation>
+<translation id="1962550982027027473">Veuillez indiquer un APN par défaut</translation>
 <translation id="1977994649430373166">Photo du profil Google</translation>
 <translation id="1979103255016296513">Mot de passe à modifier</translation>
 <translation id="1999615961760456652">Portail captif</translation>
@@ -195,6 +197,7 @@
 <translation id="2713444072780614174">Blanc</translation>
 <translation id="2717139507051041123">Activer le mode couleur sombre</translation>
 <translation id="2740531572673183784">OK</translation>
+<translation id="2744221223678373668">Partagés</translation>
 <translation id="2751739896257479635">Authentification EAP phase 2</translation>
 <translation id="2783010256799387990">RÉUSSI</translation>
 <translation id="2789486458103222910">OK</translation>
@@ -235,6 +238,7 @@
 <translation id="3226405216343213872">Recherche de scanners…</translation>
 <translation id="3246869037381808805">Les tâches d'impression de plus d'un jour seront supprimées</translation>
 <translation id="3268178239013324452">Échec – Capot de l'imprimante ouvert</translation>
+<translation id="3275506277319227640">Épingler à <ph name="DIRECTION" /></translation>
 <translation id="3275729367986477355">Image d'avatar</translation>
 <translation id="3283504360622356314">{0,plural, =1{Modifier le fichier}one{Modifier le fichier}other{Modifier les fichiers}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
@@ -250,6 +254,7 @@
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" /> %</translation>
 <translation id="3435738964857648380">Sécurité</translation>
 <translation id="3435896845095436175">Activer</translation>
+<translation id="345256797477978759">Épingler la fenêtre sur la plus grande partie <ph name="DIRECTION" /> de l'écran</translation>
 <translation id="3456078764689556234">Page imprimée : <ph name="PRINTED_PAGES" /> sur <ph name="TOTAL_PAGES" />.</translation>
 <translation id="345898999683440380">Numérisation de la page <ph name="PAGE_NUM" />… Numérisation terminée à <ph name="PERCENTAGE_VALUE" /> %.</translation>
 <translation id="3459509316159669723">Impression</translation>
@@ -269,12 +274,15 @@
 <translation id="3583278742022654445">Signal faible. Rapprochez-vous de la source du signal Wi-Fi.</translation>
 <translation id="3595596368722241419">Batterie pleine</translation>
 <translation id="3600339377155080675">Duplication d'écran</translation>
+<translation id="3602290021589620013">Aperçu</translation>
+<translation id="360282891121575443">Les photos des albums partagés peuvent être mises à jour par d'autres utilisateurs. La fonctionnalité Modifier tous les jours peut afficher les fonds d'écran qui ne figurent pas dans l'album.</translation>
 <translation id="3603829704940252505">Avatar</translation>
 <translation id="3604713164406837697">Changer de fond d'écran</translation>
 <translation id="360565022852130722">Le réseau Wi-Fi est protégé par le protocole peu sécurisé WEP 802.1x</translation>
 <translation id="3606583719724308068">Latence élevée avec les sites HTTPS</translation>
 <translation id="361575905210396100">Merci pour vos commentaires</translation>
 <translation id="3632579075709132555">Activer/Désactiver l'écran de confidentialité</translation>
+<translation id="3639846061339007994">haut</translation>
 <translation id="3651050199673793219">Sélectionner une unité de température</translation>
 <translation id="3689839747745352263">Test de <ph name="TEST_NAME" /></translation>
 <translation id="370665806235115550">Chargement en cours...</translation>
@@ -292,6 +300,7 @@
 <translation id="385051799172605136">Retour</translation>
 <translation id="3858860766373142691">Nom</translation>
 <translation id="3862598938296403232">Veuillez saisir une description</translation>
+<translation id="3865289341173661845">Le contenu d'aide n'est pas disponible.</translation>
 <translation id="3865414814144988605">Résolution</translation>
 <translation id="3866249974567520381">Description</translation>
 <translation id="387301095347517405">Nombre de cycles de charge complets effectués sur votre batterie</translation>
@@ -314,12 +323,15 @@
 <translation id="4044093238444069296">Impossible de contacter la passerelle</translation>
 <translation id="4046123991198612571">Piste suivante</translation>
 <translation id="404928562651467259">AVERTISSEMENT</translation>
+<translation id="4054683689023980771">Téléchargement de l'image…</translation>
 <translation id="4060260348856573701">Nouvel APN</translation>
 <translation id="4093865285251893588">Image de profil</translation>
 <translation id="409427325554347132">Enregistrer les résultats du test</translation>
+<translation id="4095829376260267438">WPA2WPA3</translation>
 <translation id="4110686435123617899">Sélectionner l'album "<ph name="TITLE" />" (<ph name="DESC" />)</translation>
 <translation id="4111761024568264522">Pavé tactile USB</translation>
 <translation id="4117637339509843559">Mode sombre</translation>
+<translation id="4130035430755296270">Continuez à pointer pour plus d'options de mise en page</translation>
 <translation id="4131410914670010031">Noir et blanc</translation>
 <translation id="4145784616224233563">Pare-feu HTTP</translation>
 <translation id="4147897805161313378">Google Photos</translation>
@@ -345,6 +357,7 @@
 <translation id="4311195029067684288">Plein écran</translation>
 <translation id="4333390807948134856">Touche <ph name="KEY_NAME" /> appuyée</translation>
 <translation id="435692326371619097">Gérer les paramètres APN du réseau. Les APN établissent une connexion entre un réseau mobile et Internet. <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
+<translation id="4370033095251616914">Épingler sur le côté le plus petit</translation>
 <translation id="4378373042927530923">Non exécuté</translation>
 <translation id="4378551569595875038">Connexion</translation>
 <translation id="4382484599443659549">PDF</translation>
@@ -408,6 +421,7 @@
 <translation id="484790837831576105">(Android) Résolution DNS</translation>
 <translation id="4848429997038228357">EN COURS</translation>
 <translation id="4854586501323951986">Écran tactile intégré</translation>
+<translation id="4855250849489639581">Balayez l'écran vers le bas pour voir plus d'options de mise en page</translation>
 <translation id="4861758251032006121">{ATTEMPTS_LEFT,plural, =1{<ph name="ERROR_MESSAGE" /> {0} tentative restante}one{<ph name="ERROR_MESSAGE" /> {0} tentative restante}other{<ph name="ERROR_MESSAGE" /> {0} tentatives restantes}}</translation>
 <translation id="4873827928179867585">Algorithme d'authentification</translation>
 <translation id="4880328057631981605">Nom du point d'accès</translation>
@@ -447,8 +461,6 @@
 <translation id="5168185087976003268">État de la batterie</translation>
 <translation id="5170568018924773124">Afficher le dossier</translation>
 <translation id="5190187232518914472">Revivez vos souvenirs préférés. Pour ajouter ou modifier un album, accédez à <ph name="LINK_BEGIN" />Google Photos<ph name="LINK_END" />.</translation>
-<translation id="5212543919916444558">Je ne parviens pas à détecter d'éléments sur votre écran pour lesquels je peux vous aider.
-Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="5212593641110061691">Tabloïd</translation>
 <translation id="5222676887888702881">Déconnexion</translation>
 <translation id="522307662484862935">Ne pas inclure d'adresse e-mail</translation>
@@ -513,6 +525,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="576835345334454681">Augmenter la luminosité de l'écran</translation>
 <translation id="57838592816432529">Couper le son</translation>
 <translation id="5784136236926853061">Latence HTTP élevée</translation>
+<translation id="5826644637650799838">À propos de l'art</translation>
 <translation id="5832805196449965646">Ajouter une personne</translation>
 <translation id="583281660410589416">Inconnu</translation>
 <translation id="5843706793424741864">Fahrenheit</translation>
@@ -621,6 +634,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="6657585470893396449">Mot de passe</translation>
 <translation id="6659594942844771486">Onglet</translation>
 <translation id="6692996468359469499">Obtenir des informations sur votre sélection</translation>
+<translation id="6698459586333070823">Les albums partagés peuvent être mis à jour par d'autres utilisateurs</translation>
 <translation id="6704062477274546131">Résolution DNS</translation>
 <translation id="6723839937902243910">Alimentation</translation>
 <translation id="6723847290197874913">Rétroéclairage du clavier</translation>
@@ -635,6 +649,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="6791471867139427246">couleur éclairage clavier</translation>
 <translation id="680983167891198932">Clé</translation>
 <translation id="6816797338148849397">Informations sur le texte sélectionné disponibles. Pour y accéder, utilisez la flèche vers le haut.</translation>
+<translation id="6838167112108853532">Impossible de désactiver ou de supprimer cet APN. Assurez-vous que les APN connectés sont désactivés ou supprimés.</translation>
 <translation id="6853312040151791195">Vitesse de décharge</translation>
 <translation id="6889786074662672253">Vous ne devez pas débrancher cet appareil externe ni éteindre votre ordinateur pendant le redémarrage. Vous pouvez réduire cette fenêtre. Le redémarrage peut prendre quelques minutes, durant lesquelles le fonctionnement de l'appareil externe est compromis.</translation>
 <translation id="6905724422583748843">Revenir à <ph name="PAGE_NAME" /></translation>
@@ -665,9 +680,11 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="7155171745945906037">Photo existante au niveau de l'appareil photo ou dans les fichiers</translation>
 <translation id="7162487448488904999">Galerie</translation>
 <translation id="7170236477717446850">Photo de profil</translation>
+<translation id="7171919371520438592">Épingler la fenêtre sur la plus petite partie <ph name="DIRECTION" /> de l'écran</translation>
 <translation id="7172721935181587524">1 image</translation>
 <translation id="7177485034254901881">Votre <ph name="DEVICE_TYPE" /> est géré par <ph name="MANAGER" />. Les administrateurs peuvent le configurer à distance.</translation>
 <translation id="7180611975245234373">Actualiser</translation>
+<translation id="7180865173735832675">Personnaliser</translation>
 <translation id="7212734716605298123">Mises à jour du micrologiciel pour les appareils externes</translation>
 <translation id="7216409898977639127">Opérateur de téléphonie mobile</translation>
 <translation id="725133483556299729">Sélectionnez une adresse e-mail</translation>
@@ -700,6 +717,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="7497215489070763236">Certificat de l'autorité de certification du serveur</translation>
 <translation id="7502658306369382406">Adresse IPv6</translation>
 <translation id="7515998400212163428">Android</translation>
+<translation id="7528507600602050979">Le contenu d'aide n'est pas disponible</translation>
 <translation id="7535791657097741517">Appliquer le thème clair</translation>
 <translation id="7550715992156305117">Routines de diagnostics</translation>
 <translation id="7551123448725492271">L'appareil est de type audio.</translation>
@@ -717,6 +735,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="7690294790491645610">Confirmer le nouveau mot de passe</translation>
 <translation id="7701040980221191251">Rien</translation>
 <translation id="7705524343798198388">VPN</translation>
+<translation id="7716280709122323042">WPA3</translation>
 <translation id="773153675489693198">Nombre de cycles</translation>
 <translation id="7747039790905080783">Clé pré-partagée</translation>
 <translation id="7762130827864645708">Votre mot de passe a bien été modifié. Veuillez désormais utiliser le nouveau mot de passe.</translation>
@@ -724,6 +743,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="7769672763586021400">ID du modèle</translation>
 <translation id="7778717409420828014">Vos commentaires nous aideront à améliorer l'expérience Chromebook et seront examinés par notre équipe. Étant donné le nombre élevé de rapports que nous recevons, nous ne sommes pas en mesure d'y répondre.</translation>
 <translation id="7784116172884276937">Aucun serveur DNS configuré</translation>
+<translation id="7791543448312431591">Ajouter</translation>
 <translation id="779591286616261875">Envoyer un nouveau rapport</translation>
 <translation id="7799817062559422778">Mode clair</translation>
 <translation id="780301667611848630">Non, merci</translation>
@@ -736,6 +756,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Type de fournisseur</translation>
 <translation id="7882501334836096755">Clé publique</translation>
+<translation id="78957024357676568">gauche</translation>
 <translation id="7915220255123750251">Gérer les paramètres APN du réseau. Les APN établissent une connexion entre un réseau mobile et Internet.</translation>
 <translation id="7936303884198020182">Aucun serveur de noms trouvé</translation>
 <translation id="7942349550061667556">Rouge</translation>
@@ -764,9 +785,11 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="8183974620058026102">Joindre</translation>
 <translation id="8206859287963243715">Mobile</translation>
 <translation id="8208861521865154048">Avantages</translation>
+<translation id="8210733748736414123">bas</translation>
 <translation id="8226628635270268143">Choisir vos photos et vos albums préférés</translation>
 <translation id="8227119283605456246">Joindre un fichier</translation>
 <translation id="8230672074305416752">Impossible de pinguer la passerelle du réseau par défaut</translation>
+<translation id="8242426110754782860">Continuer</translation>
 <translation id="8246209727385807362">Opérateur inconnu</translation>
 <translation id="827422111966801947">Indigo</translation>
 <translation id="8286154143153872371">Connectez-vous à un réseau et actualisez la page pour voir le fond d'écran.</translation>
@@ -780,6 +803,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="8352772353338965963">Ajoutez un compte à la connexion multicompte. Tous les comptes connectés sont accessibles sans mot de passe. Nous vous recommandons donc de n'utiliser cette fonctionnalité qu'avec des comptes fiables.</translation>
 <translation id="8364946094152050673">Serveurs de noms vides</translation>
 <translation id="8372477600026034341">Hôtes supplémentaires</translation>
+<translation id="8380114448424469341">Épingler la fenêtre sur la moitié <ph name="DIRECTION" /> de l'écran</translation>
 <translation id="8395584934117017006">Votre <ph name="DEVICE_TYPE" /> est géré par une entreprise</translation>
 <translation id="8398927464629426868">Taux auquel l'appareil se recharge ou se décharge actuellement</translation>
 <translation id="8410244574650205435">Détecté automatiquement</translation>
@@ -799,6 +823,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="8503836310948963452">Plus que quelques minutes…</translation>
 <translation id="8508640263392900755">Informations sur l'APN</translation>
 <translation id="8528615187455571738">Crosvm</translation>
+<translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Votre opérateur peut exiger ce réglage pour la connexion à son réseau. Contactez-le pour en savoir plus.</translation>
 <translation id="8576249514688522074">Non initialisé</translation>
 <translation id="8620617069779373398">État d'itinérance</translation>
@@ -843,6 +868,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="8930622219860340959">Sans fil</translation>
 <translation id="8936793075252196307">Adresse IP du client</translation>
 <translation id="894617464444543719">L'appareil est un téléphone.</translation>
+<translation id="8957423540740801332">droite</translation>
 <translation id="8968751544471797276">Vitesse de recharge</translation>
 <translation id="8970109610781093811">Exécuter à nouveau</translation>
 <translation id="8983038754672563810">3G+</translation>
@@ -870,6 +896,7 @@ Veuillez appuyer sur le micro pour me poser une question.</translation>
 <translation id="9137526406337347448">Google Services</translation>
 <translation id="9138630967333032450">Maj gauche</translation>
 <translation id="9149391708638971077">Lancer le test de mémoire</translation>
+<translation id="9157515863513902090">Épingler sur le côté plus grand</translation>
 <translation id="9173638680043580060">Moins d'une minute restante</translation>
 <translation id="917720651393141712">Tester</translation>
 <translation id="9188992814426075118">Votre clavier peut être automatiquement assorti à votre fond d'écran</translation>

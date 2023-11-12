@@ -15,9 +15,9 @@
 #include <unordered_set>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_piece_forward.h"
@@ -717,14 +717,14 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   FRIEND_TEST_ALL_PREFIXES(BluetoothTest, RemoveOutdatedDeviceGattConnect);
 
   FRIEND_TEST_ALL_PREFIXES(
-      BluetoothTestWinrtOnly,
+      BluetoothTestWinrt,
       BluetoothGattConnection_DisconnectGatt_SimulateConnect);
   FRIEND_TEST_ALL_PREFIXES(
-      BluetoothTestWinrtOnly,
+      BluetoothTestWinrt,
       BluetoothGattConnection_DisconnectGatt_SimulateDisconnect);
-  FRIEND_TEST_ALL_PREFIXES(BluetoothTestWinrtOnly,
+  FRIEND_TEST_ALL_PREFIXES(BluetoothTestWinrt,
                            BluetoothGattConnection_ErrorAfterConnection);
-  FRIEND_TEST_ALL_PREFIXES(BluetoothTestWinrtOnly,
+  FRIEND_TEST_ALL_PREFIXES(BluetoothTestWinrt,
                            BluetoothGattConnection_DisconnectGatt_Cleanup);
 
   // Helper class to easily update the sets of UUIDs and keep them in sync with

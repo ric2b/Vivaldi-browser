@@ -45,9 +45,7 @@ PairedBluetoothDevicePropertiesPtr CreatePairedDevice(
 class BluetoothDetailedViewLegacyPixelTest : public AshTestBase {
  public:
   BluetoothDetailedViewLegacyPixelTest() {
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{},
-        /*disabled_features=*/{features::kQsRevamp, features::kQsRevampWip});
+    feature_list_.InitAndDisableFeature(features::kQsRevamp);
   }
 
   // AshTestBase:
@@ -93,7 +91,8 @@ TEST_F(BluetoothDetailedViewLegacyPixelTest, Basics) {
 
   // Compare pixels.
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "bluetooth_detailed_view_legacy.rev_0", detailed_view));
+      "bluetooth_detailed_view_legacy",
+      /*revision_number=*/0, detailed_view));
 }
 
 }  // namespace ash

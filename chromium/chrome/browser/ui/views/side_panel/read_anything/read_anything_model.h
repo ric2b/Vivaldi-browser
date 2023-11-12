@@ -12,14 +12,17 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ui/views/side_panel/read_anything/read_anything_constants.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_menu_model.h"
 #include "chrome/common/accessibility/read_anything.mojom.h"
-#include "ui/accessibility/ax_node_id_forward.h"
-#include "ui/accessibility/ax_tree_update.h"
+#include "chrome/common/accessibility/read_anything_constants.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
+#include "content/public/browser/ax_event_notification_details.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "ui/base/models/combobox_model.h"
 
-using read_anything::mojom::Spacing;
+using read_anything::mojom::LetterSpacing;
+using read_anything::mojom::LineSpacing;
 
 ///////////////////////////////////////////////////////////////////////////////
 // ReadAnythingFontModel
@@ -84,6 +87,10 @@ class ReadAnythingColorsModel : public ReadAnythingMenuModel {
 
     // The background color, used for text background.
     ui::ColorId background_color_id;
+
+    // The separator color, used for visual separators between elements in the
+    // toolbar.
+    ui::ColorId separator_color_id;
   };
 
   bool IsValidIndex(size_t index) override;
@@ -110,16 +117,25 @@ class ReadAnythingLineSpacingModel : public ReadAnythingMenuModel {
       delete;
   ~ReadAnythingLineSpacingModel() override;
 
+  // Simple struct to hold the various spacings to keep code cleaner.
+  struct LineSpacingInfo {
+    // The enum value of the line spacing.
+    read_anything::mojom::LineSpacing enum_value;
+
+    // The name of the line spacing, e.g. Standard, Loose, Very Loose.
+    std::u16string name;
+
+    // The resources value/identifier for the icon image asset.
+    const gfx::VectorIcon& icon_asset;
+  };
+
   bool IsValidIndex(size_t index) override;
-  read_anything::mojom::Spacing GetLineSpacingAt(size_t index);
+  size_t GetIndexForLineSpacing(read_anything::mojom::LineSpacing line_spacing);
+  read_anything::mojom::LineSpacing GetLineSpacingAt(size_t index);
 
  private:
   // Names for the drop down options in front-end.
-  std::vector<read_anything::mojom::Spacing> lines_choices_;
-
-  // Display names for line spacing choices
-  std::u16string GetLineSpacingName(
-      read_anything::mojom::Spacing line_spacing) const;
+  std::vector<LineSpacingInfo> lines_choices_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -139,16 +155,26 @@ class ReadAnythingLetterSpacingModel : public ReadAnythingMenuModel {
       const ReadAnythingLetterSpacingModel&) = delete;
   ~ReadAnythingLetterSpacingModel() override;
 
+  // Simple struct to hold the various spacings to keep code cleaner.
+  struct LetterSpacingInfo {
+    // The enum value of the letter spacing.
+    read_anything::mojom::LetterSpacing enum_value;
+
+    // The name of the letter spacing, e.g. Standard, Wide, Very Wide.
+    std::u16string name;
+
+    // The resources value/identifier for the icon image asset.
+    const gfx::VectorIcon& icon_asset;
+  };
+
   bool IsValidIndex(size_t index) override;
-  read_anything::mojom::Spacing GetLetterSpacingAt(size_t index);
+  size_t GetIndexForLetterSpacing(
+      read_anything::mojom::LetterSpacing letter_spacing);
+  read_anything::mojom::LetterSpacing GetLetterSpacingAt(size_t index);
 
  private:
   // Letter spacing choices for the drop down options in front-end.
-  std::vector<read_anything::mojom::Spacing> choices_;
-
-  // Display names for each letter spacing choice
-  std::u16string GetLetterSpacingName(
-      read_anything::mojom::Spacing letter_spacing) const;
+  std::vector<LetterSpacingInfo> letters_choices_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -162,16 +188,22 @@ class ReadAnythingModel {
  public:
   class Observer : public base::CheckedObserver {
    public:
-    virtual void OnAXTreeDistilled(
-        const ui::AXTreeUpdate& snapshot,
-        const std::vector<ui::AXNodeID>& content_node_ids) {}
+    virtual void AccessibilityEventReceived(
+        const content::AXEventNotificationDetails& details) {}
+    virtual void OnActiveAXTreeIDChanged(const ui::AXTreeID& tree_id,
+                                         const ukm::SourceId& ukm_source_id) {}
+    virtual void OnAXTreeDestroyed(const ui::AXTreeID& tree_id) {}
     virtual void OnReadAnythingThemeChanged(
         const std::string& font_name,
         double font_scale,
         ui::ColorId foreground_color_id,
         ui::ColorId background_color_id,
-        read_anything::mojom::Spacing line_spacing,
-        read_anything::mojom::Spacing letter_spacing) = 0;
+        ui::ColorId separator_color_id,
+        read_anything::mojom::LineSpacing line_spacing,
+        read_anything::mojom::LetterSpacing letter_spacing) = 0;
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+    virtual void ScreenAIServiceReady() {}
+#endif
   };
 
   ReadAnythingModel();
@@ -182,14 +214,20 @@ class ReadAnythingModel {
   void Init(const std::string& font_name,
             double font_scale,
             read_anything::mojom::Colors colors,
-            read_anything::mojom::Spacing line_spacing,
-            read_anything::mojom::Spacing letter_spacing);
+            read_anything::mojom::LineSpacing line_spacing,
+            read_anything::mojom::LetterSpacing letter_spacing);
 
   void AddObserver(Observer* obs);
   void RemoveObserver(Observer* obs);
 
-  void SetDistilledAXTree(ui::AXTreeUpdate snapshot,
-                          std::vector<ui::AXNodeID> content_node_ids);
+  void AccessibilityEventReceived(
+      const content::AXEventNotificationDetails& details);
+  void OnActiveAXTreeIDChanged(const ui::AXTreeID& tree_id,
+                               const ukm::SourceId& ukm_source_id);
+  void OnAXTreeDestroyed(const ui::AXTreeID& tree_id);
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  void ScreenAIServiceReady();
+#endif
 
   void SetSelectedFontByIndex(size_t new_index);
   double GetValidFontScale(double font_scale);
@@ -210,29 +248,25 @@ class ReadAnythingModel {
   }
 
  private:
-  void NotifyAXTreeDistilled();
   void NotifyThemeChanged();
 
   // State:
 
   // Members of read_anything::mojom::ReadAnythingTheme:
   std::string font_name_ = kReadAnythingDefaultFontName;
-  ui::ColorId foreground_color_id_ = ui::kColorReadAnythingForeground;
-  ui::ColorId background_color_id_ = ui::kColorReadAnythingBackground;
+  ui::ColorId foreground_color_id_ = kColorReadAnythingForeground;
+  ui::ColorId background_color_id_ = kColorReadAnythingBackground;
+  ui::ColorId separator_color_id_ = kColorReadAnythingSeparator;
 
   // A scale multiplier for font size (internal use only, not shown to user).
   float font_scale_ = kReadAnythingDefaultFontScale;
 
-  read_anything::mojom::Spacing line_spacing_ = Spacing::kDefault;
-  read_anything::mojom::Spacing letter_spacing_ = Spacing::kDefault;
+  read_anything::mojom::LineSpacing line_spacing_ = LineSpacing::kDefaultValue;
+  read_anything::mojom::LetterSpacing letter_spacing_ =
+      LetterSpacing::kDefaultValue;
 
   // Currently selected index for colors combobox
   int colors_combobox_index_ = 0;
-
-  // TODO(crbug.com/1266555): Use |snapshot_| and |content_node_ids_| to keep
-  // scrolls in sync.
-  ui::AXTreeUpdate snapshot_;
-  std::vector<ui::AXNodeID> content_node_ids_;
 
   base::ObserverList<Observer> observers_;
   const std::unique_ptr<ReadAnythingFontModel> font_model_;

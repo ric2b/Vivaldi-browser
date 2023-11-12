@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_split.h"
@@ -188,8 +188,10 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
 
   for (auto i(log.result->begin()); i != log.result->end(); ++i) {
     OmniboxEventProto::Suggestion* suggestion = omnibox_event->add_suggestion();
-    const auto provider_type = i->provider->AsOmniboxEventProviderType();
-    suggestion->set_provider(provider_type);
+    if (i->provider) {
+      const auto provider_type = i->provider->AsOmniboxEventProviderType();
+      suggestion->set_provider(provider_type);
+    }
     suggestion->set_result_type(i->AsOmniboxEventResultType());
     suggestion->set_relevance(i->relevance);
     if (i->typed_count != -1)
@@ -203,22 +205,26 @@ void OmniboxMetricsProvider::RecordOmniboxOpenedURL(const OmniboxLog& log) {
     suggestion->set_has_tab_match(i->has_tab_match.value_or(false));
     suggestion->set_is_keyword_suggestion(i->from_keyword);
 
+    // Scoring signals are not logged for search suggestions or in incognito
+    // mode.
     if (OmniboxFieldTrial::IsLogUrlScoringSignalsEnabled() &&
-        !AutocompleteMatch::IsSearchType(i->type)) {
+        !AutocompleteMatch::IsSearchType(i->type) && !log.is_incognito) {
       suggestion->mutable_scoring_signals()->CopyFrom(i->scoring_signals);
     }
   }
-  for (auto i(log.providers_info.begin()); i != log.providers_info.end(); ++i) {
+  for (const auto& info : log.providers_info) {
     OmniboxEventProto::ProviderInfo* provider_info =
         omnibox_event->add_provider_info();
-    provider_info->CopyFrom(*i);
+    provider_info->CopyFrom(info);
   }
   omnibox_event->set_in_keyword_mode(log.in_keyword_mode);
   if (log.in_keyword_mode)
     omnibox_event->set_keyword_mode_entry_method(log.keyword_mode_entry_method);
   if (log.is_query_started_from_tile)
     omnibox_event->set_is_query_started_from_tile(true);
-  for (auto feature : log.feature_triggered_in_session) {
+  for (auto feature : log.features_triggered)
+    omnibox_event->add_feature_triggered(static_cast<size_t>(feature));
+  for (auto feature : log.features_triggered_in_session) {
     omnibox_event->add_feature_triggered_in_session(
         static_cast<size_t>(feature));
   }

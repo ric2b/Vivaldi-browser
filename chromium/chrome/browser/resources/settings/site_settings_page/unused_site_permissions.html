@@ -31,7 +31,8 @@
       </div>
     </template>
     <div class="cr-row first">
-      <cr-button class="bulk-action-button" on-click="onGotItClick_">
+      <cr-button class="action-button bulk-action-button"
+          on-click="onGotItClick_">
         $i18n{safetyCheckUnusedSitePermissionsGotItLabel}
       </cr-button>
     </div>
@@ -50,5 +51,7 @@
 </template>
 <cr-toast id="undoToast" duration="5000">
   <div>[[toastText_]]</div>
-  <cr-button>$i18n{safetyCheckUnusedSitePermissionsUndoLabel}</cr-button>
+  <cr-button on-click="onUndoClick_">
+    $i18n{safetyCheckUnusedSitePermissionsUndoLabel}
+  </cr-button>
 </cr-toast>

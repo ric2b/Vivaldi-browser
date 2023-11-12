@@ -11,6 +11,7 @@
 #import "ios/web/public/js_messaging/java_script_feature_util.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frame_util.h"
+#import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "ios/web/web_view/wk_security_origin_util.h"
 
@@ -115,7 +116,7 @@ void WebFramesManagerJavaScriptFeature::FrameAvailableMessageReceived(
   }
 
   std::string frame_id = base::SysNSStringToUTF8(message.body[@"crwFrameId"]);
-  if (web_state->GetWebFramesManager()->GetFrameWithId(frame_id)) {
+  if (web_state->GetPageWorldWebFramesManager()->GetFrameWithId(frame_id)) {
     return;
   }
 
@@ -134,7 +135,7 @@ void WebFramesManagerJavaScriptFeature::FrameAvailableMessageReceived(
       message.frameInfo, frame_id, message.frameInfo.mainFrame,
       message_frame_origin, web_state);
 
-  static_cast<web::WebStateImpl*>(web_state)->WebFrameBecameAvailable(
+  web::WebStateImpl::FromWebState(web_state)->WebFrameBecameAvailable(
       std::move(new_frame));
 }
 
@@ -155,7 +156,7 @@ void WebFramesManagerJavaScriptFeature::FrameUnavailableMessageReceived(
     return;
   }
   std::string frame_id = base::SysNSStringToUTF8(message.body);
-  static_cast<web::WebStateImpl*>(web_state)->WebFrameBecameUnavailable(
+  web::WebStateImpl::FromWebState(web_state)->WebFrameBecameUnavailable(
       frame_id);
 }
 

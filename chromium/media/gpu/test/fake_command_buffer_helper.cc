@@ -5,6 +5,7 @@
 #include "media/gpu/test/fake_command_buffer_helper.h"
 
 #include "base/logging.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
@@ -26,8 +27,9 @@ void FakeCommandBufferHelper::StubLost() {
   DCHECK(task_runner_->BelongsToCurrentThread());
   // Keep a reference to |this| in case the destruction cb drops the last one.
   scoped_refptr<CommandBufferHelper> thiz(this);
-  if (will_destroy_stub_cb_)
-    std::move(will_destroy_stub_cb_).Run(!is_context_lost_);
+  for (auto& callback : will_destroy_stub_callbacks_) {
+    std::move(callback).Run(!is_context_lost_);
+  }
   has_stub_ = false;
   is_context_lost_ = true;
   is_context_current_ = false;
@@ -89,6 +91,14 @@ FakeCommandBufferHelper::GetDXGISharedHandleManager() {
 }
 #endif
 
+gpu::MemoryTypeTracker* FakeCommandBufferHelper::GetMemoryTypeTracker() {
+  return nullptr;
+}
+
+gpu::SharedImageManager* FakeCommandBufferHelper::GetSharedImageManager() {
+  return nullptr;
+}
+
 bool FakeCommandBufferHelper::HasStub() {
   return has_stub_;
 }
@@ -143,7 +153,7 @@ void FakeCommandBufferHelper::SetCleared(GLuint service_id) {
   DCHECK(service_ids_.count(service_id));
 }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
 bool FakeCommandBufferHelper::BindDecoderManagedImage(GLuint service_id,
                                                       gl::GLImage* image) {
   return BindImageInternal(service_id, image);
@@ -163,19 +173,17 @@ bool FakeCommandBufferHelper::BindImageInternal(GLuint service_id,
   return has_stub_;
 }
 
-gpu::Mailbox FakeCommandBufferHelper::CreateMailbox(GLuint service_id) {
+gpu::Mailbox FakeCommandBufferHelper::CreateLegacyMailbox(GLuint service_id) {
   DVLOG(2) << __func__ << "(" << service_id << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(service_ids_.count(service_id));
   if (!has_stub_)
     return gpu::Mailbox();
-  return gpu::Mailbox::Generate();
+  return gpu::Mailbox::GenerateLegacyMailboxForTesting();
 }
 
-void FakeCommandBufferHelper::SetWillDestroyStubCB(
-    WillDestroyStubCB will_destroy_stub_cb) {
-  DCHECK(!will_destroy_stub_cb_);
-  will_destroy_stub_cb_ = std::move(will_destroy_stub_cb);
+void FakeCommandBufferHelper::AddWillDestroyStubCB(WillDestroyStubCB callback) {
+  will_destroy_stub_callbacks_.push_back(std::move(callback));
 }
 
 bool FakeCommandBufferHelper::IsPassthrough() const {

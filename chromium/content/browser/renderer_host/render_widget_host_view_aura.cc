@@ -10,10 +10,10 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
@@ -75,6 +75,7 @@
 #include "ui/aura_extra/window_position_in_root_monitor.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
@@ -647,8 +648,10 @@ void RenderWidgetHostViewAura::WasOccluded() {
   HideImpl();
 }
 
-void RenderWidgetHostViewAura::RequestPresentationTimeFromHostOrDelegate(
-    blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request) {
+void RenderWidgetHostViewAura::
+    RequestSuccessfulPresentationTimeFromHostOrDelegate(
+        blink::mojom::RecordContentToVisibleTimeRequestPtr
+            visible_time_request) {
   DCHECK(delegated_frame_host_) << "Cannot be invoked during destruction.";
   DCHECK(!host_->is_hidden());
   DCHECK_EQ(visibility_, Visibility::VISIBLE);
@@ -658,25 +661,26 @@ void RenderWidgetHostViewAura::RequestPresentationTimeFromHostOrDelegate(
 
   // No need to check for saved frames for the case of bfcache restore.
   if (visible_time_request->show_reason_bfcache_restore || !has_saved_frame) {
-    host()->RequestPresentationTimeForNextFrame(visible_time_request.Clone());
+    host()->RequestSuccessfulPresentationTimeForNextFrame(
+        visible_time_request.Clone());
   }
 
   // If the frame for the renderer is already available, then the
   // tab-switching time is the presentation time for the browser-compositor.
   if (has_saved_frame) {
-    delegated_frame_host_->RequestPresentationTimeForNextFrame(
+    delegated_frame_host_->RequestSuccessfulPresentationTimeForNextFrame(
         std::move(visible_time_request));
   }
 }
 
 void RenderWidgetHostViewAura::
-    CancelPresentationTimeRequestForHostAndDelegate() {
+    CancelSuccessfulPresentationTimeRequestForHostAndDelegate() {
   DCHECK(delegated_frame_host_) << "Cannot be invoked during destruction.";
   DCHECK(!host_->is_hidden());
   DCHECK_EQ(visibility_, Visibility::VISIBLE);
 
-  host()->CancelPresentationTimeRequest();
-  delegated_frame_host_->CancelPresentationTimeRequest();
+  host()->CancelSuccessfulPresentationTimeRequest();
+  delegated_frame_host_->CancelSuccessfulPresentationTimeRequest();
 }
 
 bool RenderWidgetHostViewAura::ShouldSkipCursorUpdate() const {
@@ -775,12 +779,12 @@ void RenderWidgetHostViewAura::SetInsets(const gfx::Insets& insets) {
   }
 }
 
-void RenderWidgetHostViewAura::UpdateCursor(const WebCursor& cursor) {
+void RenderWidgetHostViewAura::UpdateCursor(const ui::Cursor& cursor) {
   GetCursorManager()->UpdateCursor(this, cursor);
 }
 
-void RenderWidgetHostViewAura::DisplayCursor(const WebCursor& cursor) {
-  current_cursor_ = cursor;
+void RenderWidgetHostViewAura::DisplayCursor(const ui::Cursor& cursor) {
+  current_cursor_ = WebCursor(cursor);
   const display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(window_);
   current_cursor_.SetDisplayInfo(display);
@@ -1294,18 +1298,13 @@ void RenderWidgetHostViewAura::InsertText(
   DCHECK_NE(GetTextInputType(), ui::TEXT_INPUT_TYPE_NONE);
 
   if (text_input_manager_ && text_input_manager_->GetActiveWidget()) {
-    if (text.length() > 0 || !has_composition_text_) {
-      const int relative_cursor_position =
-          cursor_behavior == InsertTextCursorBehavior::kMoveCursorBeforeText
-              ? -text.length()
-              : 0;
-      text_input_manager_->GetActiveWidget()->ImeCommitText(
-          text, std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(),
-          relative_cursor_position);
-    } else {
-      DCHECK(has_composition_text_);
-      text_input_manager_->GetActiveWidget()->ImeFinishComposingText(false);
-    }
+    const int relative_cursor_position =
+        cursor_behavior == InsertTextCursorBehavior::kMoveCursorBeforeText
+            ? -text.length()
+            : 0;
+    text_input_manager_->GetActiveWidget()->ImeCommitText(
+        text, std::vector<ui::ImeTextSpan>(), gfx::Range::InvalidRange(),
+        relative_cursor_position);
   }
   has_composition_text_ = false;
 }

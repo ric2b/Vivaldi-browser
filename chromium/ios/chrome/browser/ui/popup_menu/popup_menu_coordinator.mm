@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 
+#import <MaterialComponents/MaterialSnackbar.h>
+
 #import "base/check.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
@@ -22,6 +24,7 @@
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
+#import "ios/chrome/browser/tabs/features.h"
 #import "ios/chrome/browser/ui/browser_container/browser_container_mediator.h"
 #import "ios/chrome/browser/ui/bubble/bubble_presenter.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_controller_presenter.h"
@@ -35,6 +38,7 @@
 #import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
 #import "ios/chrome/browser/ui/commands/price_notifications_commands.h"
 #import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_mediator.h"
@@ -55,6 +59,15 @@
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/web/public/web_state.h"
+#import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -113,6 +126,14 @@ enum class IOSOverflowMenuActionType {
 
 @property(nonatomic, strong) PopupMenuHelpCoordinator* popupMenuHelpCoordinator;
 
+// Vivaldi
+// Reference of overflow menu provided. This is only required for iPhones with
+// iOS < 15, as we have to show a 'Done' button on the right corner of the menu.
+// sheets on iOS 14.x devices takes full screen on the landscape mode which
+// disables the swipe down gesture to dimiss the view.
+@property(nonatomic, weak) UIViewController* vivaldiMenuProvider;
+// End Vivaldi
+
 @end
 
 @implementation PopupMenuCoordinator
@@ -124,6 +145,10 @@ enum class IOSOverflowMenuActionType {
 @synthesize bubblePresenter = _bubblePresenter;
 @synthesize viewController = _viewController;
 @synthesize baseViewController = _baseViewController;
+
+// Vivaldi
+@synthesize vivaldiMenuProvider = _vivaldiMenuProvider;
+// End Vivaldi
 
 - (instancetype)initWithBrowser:(Browser*)browser {
   DCHECK(browser);
@@ -251,6 +276,39 @@ enum class IOSOverflowMenuActionType {
   [self.mediator disconnect];
   self.mediator = nil;
   self.viewController = nil;
+}
+
+- (void)showSnackbarForPinnedState:(BOOL)pinnedState
+                          webState:(web::WebState*)webState {
+  DCHECK(IsPinnedTabsOverflowEnabled());
+
+  int messageId = pinnedState ? IDS_IOS_SNACKBAR_MESSAGE_PINNED_TAB
+                              : IDS_IOS_SNACKBAR_MESSAGE_UNPINNED_TAB;
+
+  base::WeakPtr<web::WebState> weakWebState = webState->GetWeakPtr();
+  base::WeakPtr<Browser> weakBrowser = self.browser->AsWeakPtr();
+
+  void (^undoAction)() = ^{
+    Browser* browser = weakBrowser.get();
+    if (!browser) {
+      return;
+    }
+    [OverflowMenuMediator setTabPinned:!pinnedState
+                              webState:weakWebState.get()
+                          webStateList:browser->GetWebStateList()];
+  };
+
+  MDCSnackbarMessage* message =
+      [MDCSnackbarMessage messageWithText:l10n_util::GetNSString(messageId)];
+
+  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+  action.handler = undoAction;
+  action.title = l10n_util::GetNSString(IDS_IOS_SNACKBAR_ACTION_UNDO);
+  message.action = action;
+
+  id<SnackbarCommands> snackbarCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), SnackbarCommands);
+  [snackbarCommandsHandler showSnackbarMessage:message];
 }
 
 #pragma mark - PopupMenuLongPressDelegate
@@ -387,9 +445,33 @@ enum class IOSOverflowMenuActionType {
     self.toolsMenuWasScrolledVertically = NO;
     self.toolsMenuWasScrolledHorizontally = NO;
     self.toolsMenuUserTookAction = NO;
+
+    // Vivaldi: We will use same overflow menu for all iOS devices while chrome
+    // has an old popup menu for iOS < 15 devices. Initiate our code here and
+    // return early.
+    if (IsVivaldiRunning()) {
+      [self prepareAndPresentMenuViewController:type
+                           fromLayoutGuideNamed:guideName
+                               overlayPresenter:overlayPresenter];
+      return;
+    } // End Vivaldi
+
     if (IsNewOverflowMenuEnabled()) {
       if (@available(iOS 15, *)) {
         self.overflowMenuMediator = [[OverflowMenuMediator alloc] init];
+
+        CGFloat screenWidth = self.baseViewController.view.frame.size.width;
+        UIContentSizeCategory contentSizeCategory =
+            self.baseViewController.traitCollection
+                .preferredContentSizeCategory;
+
+        self.overflowMenuMediator
+            .visibleDestinationsCount = [OverflowMenuUIConfiguration
+            numDestinationsVisibleWithoutHorizontalScrollingForScreenWidth:
+                screenWidth
+                                                    forContentSizeCategory:
+                                                        contentSizeCategory];
+
         self.overflowMenuMediator.dispatcher = static_cast<
             id<ActivityServiceCommands, ApplicationCommands, BrowserCommands,
                BrowserCoordinatorCommands, FindInPageCommands,
@@ -444,8 +526,7 @@ enum class IOSOverflowMenuActionType {
             makeViewControllerWithModel:self.overflowMenuMediator
                                             .overflowMenuModel
                         uiConfiguration:uiConfiguration
-                         metricsHandler:self
-                carouselMetricsDelegate:self.overflowMenuMediator];
+                         metricsHandler:self];
 
         LayoutGuideCenter* layoutGuideCenter =
             LayoutGuideCenterForBrowser(self.browser);
@@ -596,6 +677,164 @@ enum class IOSOverflowMenuActionType {
 
   tracker->NotifyEvent(
       feature_engagement::events::kOverflowMenuNoHorizontalScrollOrAction);
+}
+
+#pragma mark: VIVALDI
+
+- (void)menuProviderDoneButtonTapped {
+  if (!_vivaldiMenuProvider)
+    return;
+  [_vivaldiMenuProvider dismissViewControllerAnimated:true completion:nil];
+}
+
+- (BOOL)isDeviceIPad {
+    return [UIDevice currentDevice].userInterfaceIdiom
+        == UIUserInterfaceIdiomPad;
+}
+
+/// This is forked from the chromium 'presentPopupOfType' method
+/// and modified accordingly to avoid several changes within chromium
+/// base.
+- (void)prepareAndPresentMenuViewController:(PopupMenuType)type
+                       fromLayoutGuideNamed:(GuideName*)guideName
+                           overlayPresenter:(OverlayPresenter*)overlayPresenter
+  {
+
+  self.overflowMenuMediator = [[OverflowMenuMediator alloc] init];
+  self.overflowMenuMediator.dispatcher = static_cast<
+      id<ActivityServiceCommands, ApplicationCommands, BrowserCommands,
+         BrowserCoordinatorCommands, FindInPageCommands,
+         PriceNotificationsCommands, TextZoomCommands>>(
+      self.browser->GetCommandDispatcher());
+  self.overflowMenuMediator.bookmarksCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), BookmarksCommands);
+  self.overflowMenuMediator.pageInfoCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PageInfoCommands);
+  self.overflowMenuMediator.popupMenuCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PopupMenuCommands);
+  self.overflowMenuMediator.webStateList =
+      self.browser->GetWebStateList();
+  self.overflowMenuMediator.navigationAgent =
+      WebNavigationBrowserAgent::FromBrowser(self.browser);
+  self.overflowMenuMediator.baseViewController = self.baseViewController;
+  self.overflowMenuMediator.isIncognito =
+      self.browser->GetBrowserState()->IsOffTheRecord();
+  self.overflowMenuMediator.bookmarkModel =
+      ios::BookmarkModelFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  self.overflowMenuMediator.browserStatePrefs =
+      self.browser->GetBrowserState()->GetPrefs();
+  self.overflowMenuMediator.localStatePrefs =
+      GetApplicationContext()->GetLocalState();
+  self.overflowMenuMediator.engagementTracker =
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  self.overflowMenuMediator.webContentAreaOverlayPresenter =
+      overlayPresenter;
+  self.overflowMenuMediator.browserPolicyConnector =
+      GetApplicationContext()->GetBrowserPolicyConnector();
+
+  if (IsWebChannelsEnabled()) {
+    self.overflowMenuMediator.followBrowserAgent =
+        FollowBrowserAgent::FromBrowser(self.browser);
+  }
+
+  self.contentBlockerMediator.consumer = self.overflowMenuMediator;
+
+  OverflowMenuUIConfiguration* uiConfiguration =
+      [[OverflowMenuUIConfiguration alloc]
+          initWithPresentingViewControllerHorizontalSizeClass:
+              self.baseViewController.traitCollection.horizontalSizeClass
+                    presentingViewControllerVerticalSizeClass:
+                        self.baseViewController.traitCollection
+                            .verticalSizeClass];
+
+  self.popupMenuHelpCoordinator.uiConfiguration = uiConfiguration;
+
+  UIViewController* menu = [VivaldiOverflowMenuViewProvider
+      makeViewControllerWithModel:self.overflowMenuMediator
+                                      .overflowMenuModel
+                  uiConfiguration:uiConfiguration];
+
+  LayoutGuideCenter* layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
+  UILayoutGuide* layoutGuide =
+      [layoutGuideCenter makeLayoutGuideNamed:guideName];
+  [self.baseViewController.view addLayoutGuide:layoutGuide];
+
+  menu.modalPresentationStyle = UIModalPresentationPopover;
+
+  UIPopoverPresentationController* popoverPresentationController =
+      menu.popoverPresentationController;
+  popoverPresentationController.sourceView = self.baseViewController.view;
+  popoverPresentationController.sourceRect = layoutGuide.layoutFrame;
+  popoverPresentationController.permittedArrowDirections =
+      UIPopoverArrowDirectionUp;
+  popoverPresentationController.delegate = self;
+  popoverPresentationController.backgroundColor =
+      [UIColor colorNamed:kBackgroundColor];
+
+  // The adaptive controller adjusts styles based on window size: sheet
+  // for slim windows on iPhone and iPad, popover for larger windows on
+  // ipad.
+  if (@available(iOS 15, *)) {
+    UISheetPresentationController* sheetPresentationController =
+        popoverPresentationController.adaptiveSheetPresentationController;
+    if (sheetPresentationController) {
+      sheetPresentationController.delegate = self;
+      sheetPresentationController.prefersGrabberVisible = YES;
+      sheetPresentationController.prefersEdgeAttachedInCompactHeight = YES;
+      sheetPresentationController
+          .widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+
+      NSArray<UISheetPresentationControllerDetent*>* regularDetents = @[
+        [UISheetPresentationControllerDetent mediumDetent],
+        [UISheetPresentationControllerDetent largeDetent]
+      ];
+
+      NSArray<UISheetPresentationControllerDetent*>* largeTextDetents =
+          @[ [UISheetPresentationControllerDetent largeDetent] ];
+
+      BOOL hasLargeText = UIContentSizeCategoryIsAccessibilityCategory(
+          menu.traitCollection.preferredContentSizeCategory);
+      sheetPresentationController.detents =
+          hasLargeText ? largeTextDetents : regularDetents;
+    }
+
+    [self presentController:menu type:type];
+  } else {
+    if (self.isDeviceIPad ||
+        !UIDeviceOrientationIsLandscape([UIDevice currentDevice].orientation)
+        ) {
+      [self presentController:menu type:type];
+    } else {
+      // Done button on top right corner is only visible for the iPhone in
+      // landscape mode.
+      UINavigationController* wrapper =
+        [[UINavigationController alloc] initWithRootViewController:menu];
+      _vivaldiMenuProvider = menu;
+      UIBarButtonItem* doneButton =
+        [[UIBarButtonItem alloc]
+         initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+         target:self
+         action:@selector(menuProviderDoneButtonTapped)];
+      menu.navigationItem.rightBarButtonItem = doneButton;
+      [self presentController:wrapper type:type];
+    }
+  }
+}
+
+- (void)presentController:(UIViewController*)controller
+                     type:(PopupMenuType)type {
+  __weak __typeof(self) weakSelf = self;
+  [self.UIUpdater updateUIForMenuDisplayed:type];
+  [self.baseViewController
+      presentViewController:controller
+                   animated:YES
+                 completion:^{
+                   [weakSelf.popupMenuHelpCoordinator
+                       showOverflowMenuIPHInViewController:controller];
+                 }];
 }
 
 @end

@@ -59,17 +59,6 @@ async function addPlayFileEntries() {
 }
 
 /**
- * Checks if the #file-filters-in-recents-v2 flag has been enabled or not.
- *
- * @return {!Promise<boolean>} Flag enabled or not.
- */
-async function isFiltersInRecentsV2Enabled() {
-  const isFiltersInRecentsV2Enabled =
-      await sendTestMessage({name: 'isFiltersInRecentsEnabledV2'});
-  return isFiltersInRecentsV2Enabled === 'true';
-}
-
-/**
  * Navigate to Recent folder with specific type and verify the breadcrumb path.
  *
  * @param {string} appId Files app windowId.
@@ -119,13 +108,8 @@ async function verifyCurrentEntries(appId, expectedEntries) {
 
   // Test that the delete button's visibility based on v2 flag.
   const deleteButton = await remoteCall.waitForElement(appId, '#delete-button');
-  if (await isFiltersInRecentsV2Enabled()) {
-    chrome.test.assertFalse(
-        deleteButton.hidden, 'delete button should be visible');
-  } else {
-    chrome.test.assertTrue(
-        deleteButton.hidden, 'delete button should be hidden');
-  }
+  chrome.test.assertFalse(
+      deleteButton.hidden, 'delete button should be visible');
 }
 
 /**
@@ -508,11 +492,11 @@ testcase.recentAudioDownloads = async () => {
 testcase.recentAudioDownloadsAndDrive = async () => {
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, BASIC_LOCAL_ENTRY_SET, BASIC_DRIVE_ENTRY_SET);
+  // TODO(b:267515423): Fix MIME type for Entries.beautiful.
   // ENTRIES.beautiful in BASIC_DRIVE_ENTRY_SET does not have mime type.
-  // Since Drive files should be filtered based on mime types, only the file in
-  // Downloads should be shown even though the Drive one also has .ogg file
-  // extension.
-  await verifyRecentAudio(appId, [ENTRIES.beautiful]);
+  // The implementation of drivefs used in tests accepts files if the
+  // MIME type cannot be determined, erring on the side of acceptance.
+  await verifyRecentAudio(appId, [ENTRIES.beautiful, ENTRIES.beautiful]);
 
   // Tests that selecting "Go to file location" for the file navigates to
   // Downloads since the same file from My Drive doesn't appear in Recent
@@ -531,10 +515,13 @@ testcase.recentAudioDownloadsAndDriveAndPlayFiles = async () => {
   await addPlayFileEntries();
   const appId = await setupAndWaitUntilReady(
       RootPath.DOWNLOADS, BASIC_LOCAL_ENTRY_SET, BASIC_DRIVE_ENTRY_SET);
-  // ENTRIES.beautiful in BASIC_DRIVE_ENTRY_SET does not have mime type, so it
-  // won't be included. Also, Play Files recents doesn't support audio root,
-  // so audio file in Play Files won't be included.
-  await verifyRecentAudio(appId, [ENTRIES.beautiful]);
+  // TODO(b:267515423): Fix MIME type for Entries.beautiful.
+  // ENTRIES.beautiful in BASIC_DRIVE_ENTRY_SET does not have mime type.
+  // The implementation of drivefs used in tests accepts files if the
+  // MIME type cannot be determined, erring on the side of acceptance.
+  // Play Files recents doesn't support audio root, so audio file in Play
+  // Files won't be included.
+  await verifyRecentAudio(appId, [ENTRIES.beautiful, ENTRIES.beautiful]);
 };
 
 /**
@@ -556,9 +543,14 @@ testcase.recentImagesDownloads = async () => {
  */
 testcase.recentImagesDownloadsAndDrive = async () => {
   const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+  // TODO(b:267515423): Fix MIME type for Entries.beautiful.
   // ENTRIES.desktop has 'image/png' mime type, too. Both the file in Downloads
   // and the file in Drive should be shown in Images.
-  await verifyRecentImages(appId, [ENTRIES.desktop, ENTRIES.desktop]);
+  await verifyRecentImages(appId, [
+    ENTRIES.beautiful,
+    ENTRIES.desktop,
+    ENTRIES.desktop,
+  ]);
 };
 
 /**
@@ -568,8 +560,12 @@ testcase.recentImagesDownloadsAndDrive = async () => {
 testcase.recentImagesDownloadsAndDriveAndPlayFiles = async () => {
   await addPlayFileEntries();
   const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
-  await verifyRecentImages(
-      appId, [ENTRIES.desktop, ENTRIES.desktop, RECENT_MODIFIED_ANDROID_IMAGE]);
+  await verifyRecentImages(appId, [
+    ENTRIES.beautiful,
+    ENTRIES.desktop,
+    ENTRIES.desktop,
+    RECENT_MODIFIED_ANDROID_IMAGE,
+  ]);
 };
 
 /**
@@ -601,8 +597,14 @@ testcase.recentVideosDownloadsAndDrive = async () => {
       BASIC_DRIVE_ENTRY_SET.concat([RECENTLY_MODIFIED_VIDEO]));
   // RECENTLY_MODIFIED_VIDEO has video mime type (video/ogg) too, so the file
   // from Drive should be shown too.
-  await verifyRecentVideos(
-      appId, [RECENTLY_MODIFIED_VIDEO, RECENTLY_MODIFIED_VIDEO]);
+  // The implementation of drivefs used in tests accepts files if the MIME type
+  // cannot be determined, erring on the side of acceptance, hence
+  // ENTRIES.beautiful presence in this group.
+  await verifyRecentVideos(appId, [
+    ENTRIES.beautiful,
+    RECENTLY_MODIFIED_VIDEO,
+    RECENTLY_MODIFIED_VIDEO,
+  ]);
 };
 
 /**
@@ -615,7 +617,11 @@ testcase.recentVideosDownloadsAndDriveAndPlayFiles = async () => {
       RootPath.DOWNLOADS,
       BASIC_LOCAL_ENTRY_SET.concat([RECENTLY_MODIFIED_VIDEO]),
       BASIC_DRIVE_ENTRY_SET.concat([RECENTLY_MODIFIED_VIDEO]));
+  // The implementation of drivefs used in tests accepts files if the MIME type
+  // cannot be determined, erring on the side of acceptance, hence
+  // ENTRIES.beautiful presence in this group.
   await verifyRecentVideos(appId, [
+    ENTRIES.beautiful,
     RECENTLY_MODIFIED_VIDEO,
     RECENTLY_MODIFIED_VIDEO,
     RECENT_MODIFIED_ANDROID_VIDEO,

@@ -2,7 +2,7 @@
 
 #include "content/public/browser/web_contents_delegate.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 
 namespace content {
 

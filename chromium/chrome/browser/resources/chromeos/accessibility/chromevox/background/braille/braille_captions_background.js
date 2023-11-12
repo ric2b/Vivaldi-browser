@@ -12,6 +12,7 @@ import {BrailleDisplayState} from '../../common/braille/braille_key_types.js';
 import {NavBraille} from '../../common/braille/nav_braille.js';
 import {Msgs} from '../../common/msgs.js';
 import {PanelCommand, PanelCommandType} from '../../common/panel_command.js';
+import {SettingsManager} from '../../common/settings_manager.js';
 import {QueueMode} from '../../common/tts_types.js';
 import {ChromeVox} from '../chromevox.js';
 import {ChromeVoxPrefs} from '../prefs.js';
@@ -41,7 +42,7 @@ export class BrailleCaptionsBackground {
    * @return {boolean}
    */
   static isEnabled() {
-    return LocalStorage.get(BrailleCaptionsBackground.PREF_KEY);
+    return Boolean(LocalStorage.get(BrailleCaptionsBackground.PREF_KEY));
   }
 
   /**
@@ -149,25 +150,16 @@ export class BrailleCaptionsBackground {
    * Asynchronously returns a display state representing the state of the
    * captions feature. This is used when no actual hardware display is
    * connected.
-   * @return {!Promise<!BrailleDisplayState>}
+   * @return {!BrailleDisplayState}
    */
-  static async getVirtualDisplayState() {
-    return new Promise(async resolve => {
-      if (BrailleCaptionsBackground.isEnabled()) {
-        let items = await new Promise(
-            resolve =>
-                chrome.storage.local.get({'virtualBrailleRows': 1}, resolve));
-        const rows = items['virtualBrailleRows'];
-        items = await new Promise(
-            resolve => chrome.storage.local.get(
-                {'virtualBrailleColumns': 40}, resolve));
-        const columns = items['virtualBrailleColumns'];
-        resolve(
-            {available: true, textRowCount: rows, textColumnCount: columns});
-      } else {
-        resolve({available: false, textRowCount: 0, textColumnCount: 0});
-      }
-    });
+  static getVirtualDisplayState() {
+    if (BrailleCaptionsBackground.isEnabled()) {
+      const rows = Number(SettingsManager.get('virtualBrailleRows'));
+      const columns = Number(SettingsManager.get('virtualBrailleColumns'));
+      return {available: true, textRowCount: rows, textColumnCount: columns};
+    } else {
+      return {available: false, textRowCount: 0, textColumnCount: 0};
+    }
   }
 
   /** @private */

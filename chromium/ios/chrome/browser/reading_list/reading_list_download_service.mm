@@ -7,12 +7,15 @@
 #import <memory>
 #import <utility>
 
-#import "base/bind.h"
 #import "base/files/file_enumerator.h"
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
+#import "base/functional/bind.h"
+#import "base/memory/scoped_refptr.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/string_util.h"
+#import "base/task/sequenced_task_runner.h"
+#import "base/task/single_thread_task_runner.h"
 #import "base/task/thread_pool.h"
 #import "components/reading_list/core/offline_url_utils.h"
 #import "components/reading_list/core/reading_list_entry.h"
@@ -141,7 +144,8 @@ void ReadingListDownloadService::Clear() {
 }
 
 void ReadingListDownloadService::ProcessNewEntry(const GURL& url) {
-  const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+  scoped_refptr<const ReadingListEntry> entry =
+      reading_list_model_->GetEntryByURL(url);
   if (!entry || entry->IsRead()) {
     url_downloader_->CancelDownloadOfflineURL(url);
   } else {
@@ -154,7 +158,8 @@ void ReadingListDownloadService::SyncWithModel() {
   std::set<std::string> processed_directories;
   std::set<GURL> unprocessed_entries;
   for (const auto& url : reading_list_model_->GetKeys()) {
-    const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+    scoped_refptr<const ReadingListEntry> entry =
+        reading_list_model_->GetEntryByURL(url);
     switch (entry->DistilledState()) {
       case ReadingListEntry::PROCESSED:
         processed_directories.insert(reading_list::OfflineURLDirectoryID(url));
@@ -186,13 +191,14 @@ void ReadingListDownloadService::DownloadUnprocessedEntries(
 
 void ReadingListDownloadService::ScheduleDownloadEntry(const GURL& url) {
   DCHECK(reading_list_model_->loaded());
-  const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+  scoped_refptr<const ReadingListEntry> entry =
+      reading_list_model_->GetEntryByURL(url);
   if (!entry ||
       entry->DistilledState() == ReadingListEntry::DISTILLATION_ERROR ||
       entry->DistilledState() == ReadingListEntry::PROCESSED || entry->IsRead())
     return;
   GURL local_url(url);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ReadingListDownloadService::DownloadEntry,
                      weak_ptr_factory_.GetWeakPtr(), local_url),
@@ -201,7 +207,8 @@ void ReadingListDownloadService::ScheduleDownloadEntry(const GURL& url) {
 
 void ReadingListDownloadService::DownloadEntry(const GURL& url) {
   DCHECK(reading_list_model_->loaded());
-  const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+  scoped_refptr<const ReadingListEntry> entry =
+      reading_list_model_->GetEntryByURL(url);
   if (!entry ||
       entry->DistilledState() == ReadingListEntry::DISTILLATION_ERROR ||
       entry->DistilledState() == ReadingListEntry::PROCESSED || entry->IsRead())
@@ -275,7 +282,8 @@ void ReadingListDownloadService::OnDownloadEnd(
       if (!trimmed_title.empty())
         reading_list_model_->SetEntryTitleIfExists(url, trimmed_title);
 
-      const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+      scoped_refptr<const ReadingListEntry> entry =
+          reading_list_model_->GetEntryByURL(url);
       if (entry)
         UMA_HISTOGRAM_COUNTS_100("ReadingList.Download.Failures",
                                  entry->FailedDownloadCounter());
@@ -285,7 +293,8 @@ void ReadingListDownloadService::OnDownloadEnd(
     }
     case URLDownloader::ERROR:
     case URLDownloader::PERMANENT_ERROR: {
-      const ReadingListEntry* entry = reading_list_model_->GetEntryByURL(url);
+      scoped_refptr<const ReadingListEntry> entry =
+          reading_list_model_->GetEntryByURL(url);
       // Add this failure to the total failure count.
       if (entry && real_success_value == URLDownloader::ERROR &&
           entry->FailedDownloadCounter() + 1 < kNumberOfFailsBeforeStop) {

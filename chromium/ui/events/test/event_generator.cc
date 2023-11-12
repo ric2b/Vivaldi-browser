@@ -10,10 +10,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -731,6 +730,50 @@ gfx::Point EventGenerator::GetLocationInCurrentRoot() const {
 
 gfx::Point EventGenerator::CenterOfWindow(const EventTarget* window) const {
   return delegate()->CenterOfTarget(window);
+}
+
+void EmulateFullKeyPressReleaseSequence(test::EventGenerator* generator,
+                                        KeyboardCode key,
+                                        bool control,
+                                        bool shift,
+                                        bool alt,
+                                        bool command) {
+  int flags = ui::EF_FINAL;
+  if (control) {
+    flags |= ui::EF_CONTROL_DOWN;
+    generator->PressKey(ui::VKEY_CONTROL, flags);
+  }
+  if (shift) {
+    flags |= ui::EF_SHIFT_DOWN;
+    generator->PressKey(ui::VKEY_SHIFT, flags);
+  }
+  if (alt) {
+    flags |= ui::EF_ALT_DOWN;
+    generator->PressKey(ui::VKEY_MENU, flags);
+  }
+  if (command) {
+    flags |= ui::EF_COMMAND_DOWN;
+    generator->PressKey(ui::VKEY_COMMAND, flags);
+  }
+
+  generator->PressAndReleaseKey(key, flags);
+
+  if (command) {
+    flags &= ~ui::EF_COMMAND_DOWN;
+    generator->ReleaseKey(ui::VKEY_COMMAND, flags);
+  }
+  if (alt) {
+    flags &= ~ui::EF_ALT_DOWN;
+    generator->ReleaseKey(ui::VKEY_MENU, flags);
+  }
+  if (shift) {
+    flags &= ~ui::EF_SHIFT_DOWN;
+    generator->ReleaseKey(ui::VKEY_SHIFT, flags);
+  }
+  if (control) {
+    flags &= ~ui::EF_CONTROL_DOWN;
+    generator->ReleaseKey(ui::VKEY_CONTROL, flags);
+  }
 }
 
 }  // namespace test

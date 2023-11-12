@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
@@ -50,7 +50,7 @@ PrinterProviderInternalAPI::GetFactoryInstance() {
 PrinterProviderInternalAPI::PrinterProviderInternalAPI(
     content::BrowserContext* browser_context) {}
 
-PrinterProviderInternalAPI::~PrinterProviderInternalAPI() {}
+PrinterProviderInternalAPI::~PrinterProviderInternalAPI() = default;
 
 void PrinterProviderInternalAPI::AddObserver(
     PrinterProviderInternalAPIObserver* observer) {

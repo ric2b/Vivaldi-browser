@@ -9,8 +9,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/no_destructor.h"
@@ -251,7 +251,7 @@ void TestPlugin::UpdateGeometry(const gfx::Rect& window_rect,
     DCHECK(context_provider_);
     auto* sii = context_provider_->data->SharedImageInterface();
     mailbox_ = sii->CreateSharedImage(
-        viz::ResourceFormat::RGBA_8888, rect_.size(), gfx::ColorSpace(),
+        viz::SinglePlaneFormat::kRGBA_8888, rect_.size(), gfx::ColorSpace(),
         kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType,
         gpu::SHARED_IMAGE_USAGE_GLES2 | gpu::SHARED_IMAGE_USAGE_DISPLAY_READ,
         gpu::kNullSurfaceHandle);

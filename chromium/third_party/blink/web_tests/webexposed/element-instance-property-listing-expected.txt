@@ -27,6 +27,7 @@ namespace http://www.w3.org/1999/xhtml
     property accessibleNode
     property addEventListener
     property after
+    property anchorElement
     property animate
     property append
     property appendChild
@@ -250,8 +251,6 @@ namespace http://www.w3.org/1999/xhtml
     property onpointerover
     property onpointerrawupdate
     property onpointerup
-    property onpopoverhide
-    property onpopovershow
     property onprogress
     property onratechange
     property onreset
@@ -505,9 +504,9 @@ html element button
     property formTarget
     property labels
     property name
-    property popoverHideTarget
-    property popoverShowTarget
-    property popoverToggleTarget
+    property popoverHideTargetElement
+    property popoverShowTargetElement
+    property popoverToggleTargetElement
     property reportValidity
     property setCustomValidity
     property type
@@ -754,9 +753,9 @@ html element input
     property name
     property pattern
     property placeholder
-    property popoverHideTarget
-    property popoverShowTarget
-    property popoverToggleTarget
+    property popoverHideTargetElement
+    property popoverShowTargetElement
+    property popoverToggleTargetElement
     property readOnly
     property reportValidity
     property required
@@ -1483,8 +1482,6 @@ namespace http://www.w3.org/2000/svg
     property onpointerover
     property onpointerrawupdate
     property onpointerup
-    property onpopoverhide
-    property onpopovershow
     property onprogress
     property onratechange
     property onreset

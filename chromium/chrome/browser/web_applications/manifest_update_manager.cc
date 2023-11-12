@@ -21,12 +21,12 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/manifest_update_utils.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
-#include "chrome/browser/web_applications/web_app_system_web_app_delegate_map_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -35,6 +35,10 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/web_applications/web_app_system_web_app_delegate_map_utils.h"
+#endif
 
 class Profile;
 
@@ -50,7 +54,23 @@ GetUpdatePendingCallbackMutableForTesting() {
   return g_update_pending_callback.get();
 }
 
+ManifestUpdateManager::ResultCallback* GetResultCallbackMutableForTesting() {
+  static base::NoDestructor<ManifestUpdateManager::ResultCallback>
+      g_result_callback;
+  return g_result_callback.get();
+}
+
 }  // namespace
+
+ManifestUpdateManager::ScopedBypassWindowCloseWaitingForTesting::
+    ScopedBypassWindowCloseWaitingForTesting() {
+  BypassWindowCloseWaitingForTesting() = true;  // IN-TEST
+}
+
+ManifestUpdateManager::ScopedBypassWindowCloseWaitingForTesting::
+    ~ScopedBypassWindowCloseWaitingForTesting() {
+  BypassWindowCloseWaitingForTesting() = false;  // IN-TEST
+}
 
 class ManifestUpdateManager::PreUpdateWebContentsObserver
     : public content::WebContentsObserver {
@@ -103,6 +123,13 @@ void ManifestUpdateManager::SetUpdatePendingCallbackForTesting(
 }
 
 // static
+void ManifestUpdateManager::SetResultCallbackForTesting(
+    ResultCallback callback) {
+  *GetResultCallbackMutableForTesting() =  // IN-TEST
+      std::move(callback);
+}
+
+// static
 bool& ManifestUpdateManager::BypassWindowCloseWaitingForTesting() {
   static bool bypass_window_close_waiting_for_testing_ = false;
   return bypass_window_close_waiting_for_testing_;
@@ -115,26 +142,20 @@ ManifestUpdateManager::~ManifestUpdateManager() = default;
 void ManifestUpdateManager::SetSubsystems(
     WebAppInstallManager* install_manager,
     WebAppRegistrar* registrar,
-    WebAppIconManager* icon_manager,
     WebAppUiManager* ui_manager,
-    WebAppInstallFinalizer* install_finalizer,
-    OsIntegrationManager* os_integration_manager,
-    WebAppSyncBridge* sync_bridge,
     WebAppCommandScheduler* command_scheduler) {
   install_manager_ = install_manager;
   registrar_ = registrar;
-  icon_manager_ = icon_manager;
   ui_manager_ = ui_manager;
-  install_finalizer_ = install_finalizer;
-  os_integration_manager_ = os_integration_manager;
-  sync_bridge_ = sync_bridge;
   command_scheduler_ = command_scheduler;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void ManifestUpdateManager::SetSystemWebAppDelegateMap(
     const ash::SystemWebAppDelegateMap* system_web_apps_delegate_map) {
   system_web_apps_delegate_map_ = system_web_apps_delegate_map;
 }
+#endif
 
 void ManifestUpdateManager::Start() {
   install_manager_observation_.Observe(install_manager_.get());
@@ -162,11 +183,13 @@ void ManifestUpdateManager::MaybeUpdate(const GURL& url,
     return;
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (system_web_apps_delegate_map_ &&
       IsSystemWebApp(*registrar_, *system_web_apps_delegate_map_, *app_id)) {
     NotifyResult(url, *app_id, ManifestUpdateResult::kAppIsSystemWebApp);
     return;
   }
+#endif
 
   if (registrar_->IsPlaceholderApp(*app_id, WebAppManagement::kPolicy) ||
       registrar_->IsPlaceholderApp(*app_id, WebAppManagement::kKiosk)) {
@@ -238,7 +261,7 @@ void ManifestUpdateManager::OnManifestDataFetchAwaitAppWindowClose(
     base::WeakPtr<content::WebContents> contents,
     const GURL& url,
     const AppId& app_id,
-    absl::optional<ManifestUpdateResult> result,
+    absl::optional<ManifestUpdateResult> early_exit_result,
     absl::optional<WebAppInstallInfo> install_info,
     bool app_identity_update_allowed) {
   auto update_stage_it = update_stages_.find(app_id);
@@ -252,11 +275,8 @@ void ManifestUpdateManager::OnManifestDataFetchAwaitAppWindowClose(
   DCHECK_EQ(update_stage.stage, UpdateStage::Stage::kFetchingManifestData);
   update_stage.stage = UpdateStage::Stage::kPendingAppWindowClose;
 
-  if (result.has_value()) {
-    // Stop the manifest update process if there already is a result, which
-    // means that there were issues during the manifest fetching and can
-    // early exit.
-    OnUpdateStopped(url, app_id, result.value());
+  if (early_exit_result.has_value()) {
+    OnUpdateStopped(url, app_id, early_exit_result.value());
     return;
   }
 
@@ -272,7 +292,9 @@ void ManifestUpdateManager::OnManifestDataFetchAwaitAppWindowClose(
         profile, ProfileKeepAliveOrigin::kWebAppUpdate);
   }
 
-  if (BypassWindowCloseWaitingForTesting()) {
+  if (base::FeatureList::IsEnabled(
+          features::kWebAppManifestImmediateUpdating) ||
+      BypassWindowCloseWaitingForTesting()) {
     StartManifestWriteAfterWindowsClosed(
         url, app_id, std::move(keep_alive), std::move(profile_keep_alive),
         std::move(install_info.value()), app_identity_update_allowed);
@@ -386,12 +408,6 @@ void ManifestUpdateManager::OnUpdateStopped(const GURL& url,
   NotifyResult(url, app_id, result);
 }
 
-void ManifestUpdateManager::SetResultCallbackForTesting(
-    ResultCallback callback) {
-  DCHECK(result_callback_for_testing_.is_null());
-  result_callback_for_testing_ = std::move(callback);
-}
-
 void ManifestUpdateManager::NotifyResult(const GURL& url,
                                          const absl::optional<AppId>& app_id,
                                          ManifestUpdateResult result) {
@@ -400,8 +416,9 @@ void ManifestUpdateManager::NotifyResult(const GURL& url,
   if (result != ManifestUpdateResult::kNoAppInScope) {
     base::UmaHistogramEnumeration("Webapp.Update.ManifestUpdateResult", result);
   }
-  if (result_callback_for_testing_)
-    std::move(result_callback_for_testing_).Run(url, result);
+  if (*GetResultCallbackMutableForTesting()) {
+    std::move(*GetResultCallbackMutableForTesting()).Run(url, result);
+  }
 }
 
 void ManifestUpdateManager::ResetManifestThrottleForTesting(

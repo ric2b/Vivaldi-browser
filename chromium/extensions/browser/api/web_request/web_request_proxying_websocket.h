@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -104,6 +104,8 @@ class WebRequestProxyingWebSocket
       const url::Origin& origin,
       content::BrowserContext* browser_context,
       WebRequestAPI::ProxySet* proxies);
+
+  static void EnsureAssociatedFactoryBuilt();
 
  private:
   void OnBeforeRequestComplete(int error_code);

@@ -112,6 +112,7 @@ build_recipe(
 
 build_recipe(
     name = "recipe:branch_configuration/tester",
+    bootstrappable = True,
 )
 
 build_recipe(
@@ -160,6 +161,10 @@ build_recipe(
 
 build_recipe(
     name = "recipe:chromium_clang_coverage_tot",
+)
+
+build_recipe(
+    name = "recipe:chromium_fuzz_coverage",
 )
 
 build_recipe(
@@ -216,6 +221,10 @@ build_recipe(
 build_recipe(
     name = "recipe:gofindit/chromium/single_revision",
     bootstrappable = POLYMORPHIC,
+)
+
+build_recipe(
+    name = "recipe:perf/crossbench",
 )
 
 build_recipe(

@@ -8,7 +8,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
@@ -347,8 +347,9 @@ void FakeBluetoothAdapterClient::SetSecondUUIDs(
   second_properties_->uuids.ReplaceValue(uuids);
 }
 
-void FakeBluetoothAdapterClient::SetDiscoverableTimeout(uint32_t timeout) {
-  properties_->discoverable_timeout.ReplaceValue(timeout);
+void FakeBluetoothAdapterClient::SetDiscoverableTimeout(
+    base::TimeDelta timeout) {
+  properties_->discoverable_timeout.ReplaceValue(timeout.InSeconds());
 }
 
 void FakeBluetoothAdapterClient::OnPropertyChanged(

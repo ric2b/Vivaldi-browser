@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/functional/callback.h"
 #include "chromeos/ash/components/dbus/shill/shill_client_helper.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -69,7 +69,7 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillDeviceClient {
         absl::optional<base::TimeDelta> time_delay) = 0;
 
    protected:
-    virtual ~TestInterface() {}
+    virtual ~TestInterface() = default;
   };
 
   // Creates and initializes the global instance. |bus| must not be null.
@@ -102,7 +102,7 @@ class COMPONENT_EXPORT(SHILL_CLIENT) ShillDeviceClient {
   // success or nullopt on failure.
   virtual void GetProperties(
       const dbus::ObjectPath& device_path,
-      chromeos::DBusMethodCallback<base::Value> callback) = 0;
+      chromeos::DBusMethodCallback<base::Value::Dict> callback) = 0;
 
   // Calls SetProperty method.
   // |callback| is called after the method call finishes.

@@ -8,10 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_registration.h"
 #include "chrome/browser/web_applications/test/fake_web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
@@ -24,7 +23,6 @@
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/features.h"
 #include "url/gurl.h"
 
 namespace web_app {
@@ -161,13 +159,6 @@ TEST(FileHandlerUtilsTest, GetMimeTypesFromFileHandlers) {
 }
 
 class WebAppFileHandlerManagerTest : public WebAppTest {
- public:
-  WebAppFileHandlerManagerTest() {
-    // |features_| needs to be initialized before SetUp kicks off tasks that
-    // check if a feature is enabled.
-    features_.InitAndEnableFeature(blink::features::kFileHandlingAPI);
-  }
-
  protected:
   void SetUp() override {
     WebAppTest::SetUp();
@@ -195,7 +186,7 @@ class WebAppFileHandlerManagerTest : public WebAppTest {
 
   WebAppProvider& provider() { return *provider_; }
 
-  WebAppSyncBridge& sync_bridge() { return provider_->sync_bridge(); }
+  WebAppSyncBridge& sync_bridge() { return provider_->sync_bridge_unsafe(); }
 
   const AppId& app_id() const { return app_id_; }
 
@@ -203,7 +194,6 @@ class WebAppFileHandlerManagerTest : public WebAppTest {
   raw_ptr<FakeWebAppProvider> provider_;
   std::unique_ptr<FakeWebAppFileHandlerManager> file_handler_manager_;
 
-  base::test::ScopedFeatureList features_;
   AppId app_id_;
 };
 
@@ -291,6 +281,20 @@ TEST_F(WebAppFileHandlerManagerTest,
 
   // Matches on single valid extension.
   const base::FilePath path(FILE_PATH_LITERAL("file.foo"));
+  WebAppFileHandlerManager::LaunchInfos launch_infos =
+      file_handler_manager().GetMatchingFileHandlerUrls(app_id(), {path});
+  ASSERT_EQ(1u, launch_infos.size());
+  EXPECT_EQ(url, std::get<GURL>(launch_infos[0]));
+}
+
+TEST_F(WebAppFileHandlerManagerTest, ExtensionCaseInsensitive) {
+  const GURL url("https://app.site/handle-foo");
+
+  file_handler_manager().InstallFileHandler(
+      app_id(), url, {{"application/foo", {".foo"}}}, absl::nullopt);
+
+  // Matches on single valid extension.
+  const base::FilePath path(FILE_PATH_LITERAL("file.FOO"));
   WebAppFileHandlerManager::LaunchInfos launch_infos =
       file_handler_manager().GetMatchingFileHandlerUrls(app_id(), {path});
   ASSERT_EQ(1u, launch_infos.size());

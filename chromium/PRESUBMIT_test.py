@@ -6,6 +6,7 @@
 import io
 import os.path
 import subprocess
+import textwrap
 import unittest
 
 import PRESUBMIT
@@ -1313,6 +1314,70 @@ class AndroidDeprecatedTestAnnotationTest(unittest.TestCase):
     self.assertTrue('UsedDeprecatedSmokeAnnotation.java:1' in msgs[0].items,
                     'UsedDeprecatedSmokeAnnotation not found in errors')
 
+class AndroidBannedImportTest(unittest.TestCase):
+  def testCheckAndroidNoBannedImports(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    test_files = [
+      MockAffectedFile('RandomStufff.java', [
+        'random stuff'
+      ]),
+      MockAffectedFile('NoBannedImports.java', [
+        'import android.support.test.filters.LargeTest;',
+        'import android.support.test.filters.MediumTest;',
+        'import android.support.test.filters.SmallTest;',
+      ]),
+      MockAffectedFile('BannedUri.java', [
+        'import java.net.URI;',
+      ]),
+      MockAffectedFile('BannedTargetApi.java', [
+        'import android.annotation.TargetApi;',
+      ]),
+      MockAffectedFile('BannedUiThreadTestRule.java', [
+        'import android.support.test.rule.UiThreadTestRule;',
+      ]),
+      MockAffectedFile('BannedUiThreadTest.java', [
+        'import android.support.test.annotation.UiThreadTest;',
+      ]),
+      MockAffectedFile('BannedActivityTestRule.java', [
+        'import android.support.test.rule.ActivityTestRule;',
+      ]),
+      MockAffectedFile('BannedVectorDrawableCompat.java', [
+        'import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;',
+      ])
+    ]
+    msgs = []
+    for file in test_files:
+      mock_input_api.files = [file]
+      msgs.append(PRESUBMIT._CheckAndroidNoBannedImports(
+        mock_input_api, mock_output_api))
+    self.assertEqual(0, len(msgs[0]))
+    self.assertEqual(0, len(msgs[1]))
+    self.assertTrue(msgs[2][0].message.startswith(textwrap.dedent("""\
+      Banned imports were used.
+          BannedUri.java:1:"""
+    )))
+    self.assertTrue(msgs[3][0].message.startswith(textwrap.dedent("""\
+      Banned imports were used.
+          BannedTargetApi.java:1:"""
+    )))
+    self.assertTrue(msgs[4][0].message.startswith(textwrap.dedent("""\
+      Banned imports were used.
+          BannedUiThreadTestRule.java:1:"""
+    )))
+    self.assertTrue(msgs[5][0].message.startswith(textwrap.dedent("""\
+      Banned imports were used.
+          BannedUiThreadTest.java:1:"""
+    )))
+    self.assertTrue(msgs[6][0].message.startswith(textwrap.dedent("""\
+      Banned imports were used.
+          BannedActivityTestRule.java:1:"""
+    )))
+    self.assertTrue(msgs[7][0].message.startswith(textwrap.dedent("""\
+      Banned imports were used.
+          BannedVectorDrawableCompat.java:1:"""
+    )))
 
 class CheckNoDownstreamDepsTest(unittest.TestCase):
   def testInvalidDepFromUpstream(self):
@@ -2781,6 +2846,45 @@ class BannedTypeCheckTest(unittest.TestCase):
     self.assertEqual(1, len(results))
     self.assertTrue('ash/webui/file.js' in results[0].message)
     self.assertFalse('some/js/ok/file.js' in results[0].message)
+
+  def testBannedJavaFunctions(self):
+    input_api = MockInputApi()
+    input_api.files = [
+      MockFile('some/java/problematic/diskread.java',
+               ['StrictMode.allowThreadDiskReads();']),
+      MockFile('some/java/problematic/diskwrite.java',
+               ['StrictMode.allowThreadDiskWrites();']),
+      MockFile('some/java/ok/diskwrite.java',
+               ['StrictModeContext.allowDiskWrites();']),
+      MockFile('some/java/problematic/waitidleforsync.java',
+               ['instrumentation.waitForIdleSync();']),
+      MockFile('some/java/problematic/registerreceiver.java',
+               ['context.registerReceiver();']),
+      MockFile('some/java/problematic/property.java',
+               ['new Property<abc, Integer>;']),
+      MockFile('some/java/problematic/requestlayout.java',
+               ['requestLayout();']),
+      MockFile('some/java/problematic/lastprofile.java',
+               ['Profile.getLastUsedRegularProfile();']),
+      MockFile('some/java/problematic/getdrawable1.java',
+               ['ResourcesCompat.getDrawable();']),
+      MockFile('some/java/problematic/getdrawable2.java',
+               ['getResources().getDrawable();']),
+    ]
+
+    errors = PRESUBMIT.CheckNoBannedFunctions(input_api, MockOutputApi())
+    self.assertEqual(2, len(errors))
+    self.assertTrue('some/java/problematic/diskread.java' in errors[0].message)
+    self.assertTrue('some/java/problematic/diskwrite.java' in errors[0].message)
+    self.assertFalse('some/java/ok/diskwrite.java' in errors[0].message)
+    self.assertFalse('some/java/ok/diskwrite.java' in errors[1].message)
+    self.assertTrue('some/java/problematic/waitidleforsync.java' in errors[0].message)
+    self.assertTrue('some/java/problematic/registerreceiver.java' in errors[1].message)
+    self.assertTrue('some/java/problematic/property.java' in errors[0].message)
+    self.assertTrue('some/java/problematic/requestlayout.java' in errors[0].message)
+    self.assertTrue('some/java/problematic/lastprofile.java' in errors[0].message)
+    self.assertTrue('some/java/problematic/getdrawable1.java' in errors[0].message)
+    self.assertTrue('some/java/problematic/getdrawable2.java' in errors[0].message)
 
   def testBannedCppFunctions(self):
     input_api = MockInputApi()
@@ -4412,101 +4516,53 @@ class CheckDeprecationOfPreferencesTest(unittest.TestCase):
         'Broken .*MIGRATE_OBSOLETE_.*_PREFS markers in browser_prefs.cc.',
         errors[0].message)
 
-class MPArchApiUsage(unittest.TestCase):
-  def _assert_notify(
-      self, expected_uses, expect_fyi, msg, local_path, new_contents):
-    mock_input_api = MockInputApi()
-    mock_output_api = MockOutputApi()
-    mock_input_api.files = [
-        MockFile(local_path, new_contents),
-    ]
-    result = PRESUBMIT.CheckMPArchApiUsage(mock_input_api, mock_output_api)
+class CheckCrosApiNeedBrowserTestTest(unittest.TestCase):
+    def testWarning(self):
+        mock_input_api = MockInputApi()
+        mock_output_api = MockOutputApi()
+        mock_input_api.files = [
+            MockAffectedFile('chromeos/crosapi/mojom/example.mojom', [], action='A'),
+        ]
+        result = PRESUBMIT.CheckCrosApiNeedBrowserTest(mock_input_api, mock_output_api)
+        self.assertEqual(1, len(result))
+        self.assertEqual(result[0].type, 'warning')
 
-    watchlist_email = ('mparch-reviews+watchfyi@chromium.org'
-        if expect_fyi else 'mparch-reviews+watch@chromium.org')
-    self.assertEqual(
-        bool(expected_uses or expect_fyi),
-        watchlist_email in mock_output_api.more_cc,
-        msg)
-    if expected_uses:
-        self.assertEqual(1, len(result), msg)
-        self.assertEqual(result[0].type, 'notify', msg)
-        self.assertEqual(sorted(result[0].items), sorted(expected_uses), msg)
-    else:
-        self.assertEqual(0, len(result), msg)
+    def testNoWarningWithBrowserTest(self):
+        mock_input_api = MockInputApi()
+        mock_output_api = MockOutputApi()
+        mock_input_api.files = [
+            MockAffectedFile('chromeos/crosapi/mojom/example.mojom', [], action='A'),
+            MockAffectedFile('chrome/example_browsertest.cc', [], action='A'),
+        ]
+        result = PRESUBMIT.CheckCrosApiNeedBrowserTest(mock_input_api, mock_output_api)
+        self.assertEqual(0, len(result))
 
-  def testNotify(self):
-    self._assert_notify(
-        ['IsInMainFrame'],
-        False,
-        'Introduce IsInMainFrame',
-        'chrome/my_feature.cc',
-        ['void DoSomething(content::NavigationHandle* navigation_handle) {',
-         '  if (navigation_handle->IsInMainFrame())',
-         '    all_of_our_page_state.reset();',
-         '}',
-        ])
-    self._assert_notify(
-        ['FromRenderFrameHost'],
-        False,
-        'Introduce WC::FromRenderFrameHost',
-        'chrome/my_feature.cc',
-        ['void DoSomething(content::RenderFrameHost* rfh) {',
-         '  auto* wc = content::WebContents::FromRenderFrameHost(rfh);',
-         '  ChangeTabState(wc);',
-         '}',
-        ])
+    def testNoWarningModifyCrosapi(self):
+        mock_input_api = MockInputApi()
+        mock_output_api = MockOutputApi()
+        mock_input_api.files = [
+            MockAffectedFile('chromeos/crosapi/mojom/example.mojom', [], action='M'),
+        ]
+        result = PRESUBMIT.CheckCrosApiNeedBrowserTest(mock_input_api, mock_output_api)
+        self.assertEqual(0, len(result))
 
-  def testFyi(self):
-    self._assert_notify(
-        [],
-        True,
-        'Introduce WCO and WCUD',
-        'chrome/my_feature.h',
-        ['class MyFeature',
-         '    : public content::WebContentsObserver,',
-         '      public content::WebContentsUserData<MyFeature> {};',
-        ])
-    self._assert_notify(
-        [],
-        True,
-        'Introduce WCO override',
-        'chrome/my_feature.h',
-        ['void DidFinishNavigation(',
-         '    content::NavigationHandle* navigation_handle) override;',
-        ])
+    def testNoWarningAddNonMojomFile(self):
+        mock_input_api = MockInputApi()
+        mock_output_api = MockOutputApi()
+        mock_input_api.files = [
+            MockAffectedFile('chromeos/crosapi/mojom/example.cc', [], action='A'),
+        ]
+        result = PRESUBMIT.CheckCrosApiNeedBrowserTest(mock_input_api, mock_output_api)
+        self.assertEqual(0, len(result))
 
-  def testNoNotify(self):
-    self._assert_notify(
-        [],
-        False,
-        'No API usage',
-        'chrome/my_feature.cc',
-        ['void DoSomething() {',
-         '  // TODO: Something',
-         '}',
-        ])
-    # Something under a top level directory we're not concerned about happens
-    # to share a name with a content API.
-    self._assert_notify(
-        [],
-        False,
-        'Uninteresting top level directory',
-        'third_party/my_dep/my_code.cc',
-        ['bool HasParent(Node* node) {',
-         '  return node->GetParent();',
-         '}',
-        ])
-    # We're not concerned with usage in test code.
-    self._assert_notify(
-        [],
-        False,
-        'Usage in test code',
-        'chrome/my_feature_unittest.cc',
-        ['TEST_F(MyFeatureTest, DoesSomething) {',
-         '  EXPECT_TRUE(rfh()->GetMainFrame());',
-         '}',
-        ])
+    def testNoWarningNoneRelatedMojom(self):
+        mock_input_api = MockInputApi()
+        mock_output_api = MockOutputApi()
+        mock_input_api.files = [
+            MockAffectedFile('random/folder/example.mojom', [], action='A'),
+        ]
+        result = PRESUBMIT.CheckCrosApiNeedBrowserTest(mock_input_api, mock_output_api)
+        self.assertEqual(0, len(result))
 
 
 class AssertAshOnlyCodeTest(unittest.TestCase):

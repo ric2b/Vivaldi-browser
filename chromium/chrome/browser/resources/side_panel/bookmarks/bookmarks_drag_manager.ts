@@ -136,17 +136,16 @@ class DragSession {
 
     if (isBookmarkFolderElement(this.lastDragOverElement_) &&
         dropPosition === DropPosition.INTO) {
-      chrome.bookmarkManagerPrivate.drop(
-          dropTargetBookmark.id, /* index */ undefined,
-          () => this.delegate_.onFinishDrop(this.dragData_.elements!));
+      chrome.bookmarkManagerPrivate
+          .drop(dropTargetBookmark.id, /* index */ undefined)
+          .then(() => this.delegate_.onFinishDrop(this.dragData_.elements!));
       return;
     }
 
     let toIndex = this.delegate_.getIndex(dropTargetBookmark);
     toIndex += dropPosition === DropPosition.BELOW ? 1 : 0;
-    chrome.bookmarkManagerPrivate.drop(
-        dropTargetBookmark.parentId!, toIndex,
-        () => this.delegate_.onFinishDrop(this.dragData_.elements!));
+    chrome.bookmarkManagerPrivate.drop(dropTargetBookmark.parentId!, toIndex)
+        .then(() => this.delegate_.onFinishDrop(this.dragData_.elements!));
   }
 
   private resetState_() {
@@ -192,7 +191,7 @@ export class BookmarksDragManager {
     this.eventTracker_.add(
         this.delegate_, 'drop', (e: Event) => this.onDrop_(e as DragEvent));
 
-    if (loadTimeData.getBoolean('bookmarksDragAndDropEnabled')) {
+    if (loadTimeData.getBoolean('editBookmarksEnabled')) {
       chrome.bookmarkManagerPrivate.onDragEnter.addListener(
           (dragData: chrome.bookmarkManagerPrivate.DragData) =>
               this.onChromeDragEnter_(dragData));
@@ -224,7 +223,7 @@ export class BookmarksDragManager {
 
   private onDragStart_(e: DragEvent) {
     e.preventDefault();
-    if (!loadTimeData.getBoolean('bookmarksDragAndDropEnabled')) {
+    if (!loadTimeData.getBoolean('editBookmarksEnabled')) {
       return;
     }
 

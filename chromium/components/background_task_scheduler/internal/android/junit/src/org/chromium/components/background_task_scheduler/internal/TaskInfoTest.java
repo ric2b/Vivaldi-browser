@@ -30,7 +30,6 @@ public class TaskInfoTest {
 
     @Before
     public void setUp() {
-        TestBackgroundTask.reset();
         BackgroundTaskSchedulerFactoryInternal.setBackgroundTaskFactory(
                 new TestBackgroundTaskFactory());
     }
@@ -94,7 +93,7 @@ public class TaskInfoTest {
     public void testOneOffNoParamsSet() {
         TaskInfo.TimingInfo timingInfo = TaskInfo.OneOffInfo.create().build();
         TaskInfo oneOffTask = TaskInfo.createTask(TaskIds.TEST, timingInfo).build();
-        CheckTimingInfoVisitor visitor = new CheckTimingInfoVisitor(null, new Long(0), false);
+        CheckTimingInfoVisitor visitor = new CheckTimingInfoVisitor(null, Long.valueOf(0), false);
         oneOffTask.getTimingInfo().accept(visitor);
     }
 
@@ -129,18 +128,8 @@ public class TaskInfoTest {
     public void testPeriodicNoParamsSet() {
         TaskInfo.TimingInfo timingInfo = TaskInfo.PeriodicInfo.create().build();
         TaskInfo periodicTask = TaskInfo.createTask(TaskIds.TEST, timingInfo).build();
-        CheckTimingInfoVisitor visitor = new CheckTimingInfoVisitor(new Long(0), null, false);
+        CheckTimingInfoVisitor visitor = new CheckTimingInfoVisitor(Long.valueOf(0), null, false);
         periodicTask.getTimingInfo().accept(visitor);
-    }
-
-    @Test
-    @Feature({"BackgroundTaskScheduler"})
-    public void testExact() {
-        TaskInfo.TimingInfo timingInfo =
-                TaskInfo.ExactInfo.create().setTriggerAtMs(TEST_END_MS).build();
-        TaskInfo exactOneOffTask = TaskInfo.createTask(TaskIds.TEST, timingInfo).build();
-        CheckTimingInfoVisitor visitor = new CheckTimingInfoVisitor(TEST_END_MS, null, false);
-        exactOneOffTask.getTimingInfo().accept(visitor);
     }
 
     private class CheckTimingInfoVisitor implements TaskInfo.TimingInfoVisitor {
@@ -178,11 +167,6 @@ public class TaskInfoTest {
                 assertTrue(periodicInfo.hasFlex());
                 assertEquals(mEndOrFlexMs.longValue(), periodicInfo.getFlexMs());
             }
-        }
-
-        @Override
-        public void visit(TaskInfo.ExactInfo exactInfo) {
-            assertEquals(mStartOrIntervalOrTriggerMs.longValue(), exactInfo.getTriggerAtMs());
         }
     }
 }

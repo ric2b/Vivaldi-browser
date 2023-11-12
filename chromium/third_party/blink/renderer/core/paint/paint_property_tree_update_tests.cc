@@ -1203,47 +1203,6 @@ TEST_P(PaintPropertyTreeUpdateTest, SVGForeignObjectOverflowChange) {
 }
 
 TEST_P(PaintPropertyTreeUpdateTest,
-       FragmentClipUpdateOnMulticolContainerWidthChange) {
-  if (RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled())
-    return;
-
-  SetBodyInnerHTML(R"HTML(
-    <style>body {margin: 0}</style>
-    <div id="container" style="width: 100px">
-      <div id="multicol" style="columns: 2; column-gap: 0; line-height: 500px">
-        <div><br></div>
-        <div><br></div>
-      </div>
-    </div>
-  )HTML");
-
-  auto* flow_thread = GetLayoutObjectByElementId("multicol")->SlowFirstChild();
-  ASSERT_EQ(2u, NumFragments(flow_thread));
-  const auto* clip0 =
-      FragmentAt(flow_thread, 0).PaintProperties()->FragmentClip();
-  EXPECT_EQ(1000000, clip0->LayoutClipRect().Rect().right());
-  EXPECT_EQ(1000000, clip0->PaintClipRect().Rect().right());
-  const auto* clip1 =
-      FragmentAt(flow_thread, 1).PaintProperties()->FragmentClip();
-  EXPECT_EQ(-999950, clip1->LayoutClipRect().Rect().x());
-  EXPECT_EQ(-999950, clip1->PaintClipRect().Rect().x());
-
-  GetDocument()
-      .getElementById("container")
-      ->setAttribute(html_names::kStyleAttr, "width: 500px");
-  UpdateAllLifecyclePhasesForTest();
-  ASSERT_EQ(2u, NumFragments(flow_thread));
-  EXPECT_EQ(clip0,
-            FragmentAt(flow_thread, 0).PaintProperties()->FragmentClip());
-  EXPECT_EQ(1000000, clip0->LayoutClipRect().Rect().right());
-  EXPECT_EQ(1000000, clip0->PaintClipRect().Rect().right());
-  EXPECT_EQ(clip1,
-            FragmentAt(flow_thread, 1).PaintProperties()->FragmentClip());
-  EXPECT_EQ(-999750, clip1->LayoutClipRect().Rect().x());
-  EXPECT_EQ(-999750, clip1->PaintClipRect().Rect().x());
-}
-
-TEST_P(PaintPropertyTreeUpdateTest,
        PropertyTreesRebuiltAfterSVGBlendModeChange) {
   SetBodyInnerHTML(R"HTML(
     <style>
@@ -2081,6 +2040,25 @@ TEST_P(PaintPropertyTreeUpdateTest,
 
   UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_EQ(200, div_properties->Transform()->Get2dTranslation().x());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest, BackdropFilterBounds) {
+  SetBodyInnerHTML(R"HTML(
+    <div id="target"
+         style="width: 100px; height: 100px; backdrop-filter: blur(5px)">
+  )HTML");
+
+  auto* properties = PaintPropertiesForElement("target");
+  ASSERT_TRUE(properties);
+  ASSERT_TRUE(properties->Effect());
+  EXPECT_EQ(gfx::RRectF(0, 0, 100, 100, 0),
+            properties->Effect()->BackdropFilterBounds());
+
+  GetDocument().getElementById("target")->SetInlineStyleProperty(
+      CSSPropertyID::kWidth, "200px");
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_EQ(gfx::RRectF(0, 0, 200, 100, 0),
+            properties->Effect()->BackdropFilterBounds());
 }
 
 }  // namespace blink

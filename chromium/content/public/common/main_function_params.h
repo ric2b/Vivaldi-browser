@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/callback.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 
@@ -50,6 +50,17 @@ struct CONTENT_EXPORT MainFunctionParams {
   base::mac::ScopedNSAutoreleasePool* autorelease_pool = nullptr;
 #elif BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID)
   bool zygote_child = false;
+#endif
+
+  // Set to true if this content process's main function should enable startup
+  // tracing after initializing Mojo.
+  bool needs_startup_tracing_after_mojo_init = false;
+
+#if BUILDFLAG(IS_IOS)
+  // For iOS in order to enter the UIApplication we must store the initial
+  // argc/argv from main().
+  int argc = 0;
+  const char** argv = nullptr;
 #endif
 
   // Used by BrowserTestBase. If set, BrowserMainLoop runs this task instead of

@@ -1,15 +1,21 @@
-// Copyright 2022 Vivaldi Technologies. All rights reserved.
+// Copyright 2022-2023 Vivaldi Technologies. All rights reserved.
 
 #import "ios/ui/settings/sync/vivaldi_sync_mediator.h"
 
+#import "base/base64.h"
 #import "base/containers/flat_map.h"
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/values.h"
+#import "components/language/core/browser/pref_names.h"
+#import "components/os_crypt/os_crypt.h"
+#import "components/prefs/pref_service.h"
 #import "components/sync/base/command_line_switches.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/driver/sync_service_observer.h"
 #import "components/sync/driver/sync_service.h"
 #import "components/sync/driver/sync_user_settings.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
@@ -18,15 +24,17 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h"
+#import "ios/ui/settings/sync/vivaldi_create_account_ui_helper.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_view_controller.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_segmented_control_item.h"
 #import "ios/ui/table_view/cells/vivaldi_table_view_text_button_item.h"
+#import "prefs/vivaldi_pref_names.h"
 #import "sync/vivaldi_sync_service_impl.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi_account/vivaldi_account_manager.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using syncer::ClientAction;
 using syncer::SyncProtocolErrorType;
@@ -38,10 +46,19 @@ using vivaldi::EngineState;
 using vivaldi::VivaldiAccountManager;
 using vivaldi::VivaldiSyncServiceImpl;
 using vivaldi::VivaldiSyncUIHelper;
+using base::SysUTF8ToNSString;
+using base::SysNSStringToUTF8;
 
 namespace {
   const std::string ERROR_ACCOUNT_NOT_ACTIVATED = "17006";
 }
+
+struct PendingRegistration {
+std::string username;
+int age;
+std::string recoveryEmailAddress;
+std::string password;
+};
 
 @protocol AccountManagerObserver
 // Called by VivaldiAccountManagerObserverBridge
@@ -58,10 +75,13 @@ namespace {
 @end
 
 @interface VivaldiSyncMediator () <VivaldiSyncServiceObserver,
-                                   AccountManagerObserver> {}
+                                   AccountManagerObserver> {
+PendingRegistration pendingRegistration;
+}
 
 @property(nonatomic, assign) VivaldiSyncServiceImpl* syncService;
 @property(nonatomic, assign) VivaldiAccountManager* vivaldiAccountManager;
+@property(nonatomic, assign) PrefService* prefService;
 
 // Model
 @property(nonatomic, strong) NSArray* segmentedControlLabels;
@@ -75,6 +95,8 @@ namespace {
 @property(nonatomic, strong) VivaldiTableViewSyncUserInfoItem* userInfoItem;
 @property(nonatomic, strong) VivaldiTableViewSyncStatusItem* syncStatusItem;
 @property(nonatomic, strong) NSDateFormatter* formatter;
+
+@property(nonatomic, copy) NSURLSessionDataTask* task;
 
 @end
 
@@ -164,12 +186,14 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 
 - (instancetype)initWithAccountManager:
                   (VivaldiAccountManager*)vivaldiAccountManager
-                syncService:(VivaldiSyncServiceImpl*)syncService {
+                syncService:(VivaldiSyncServiceImpl*)syncService
+                prefService:(PrefService*)prefService {
 
   self = [super init];
   if (self) {
     _vivaldiAccountManager = vivaldiAccountManager;
     _syncService = syncService;
+    _prefService = prefService;
     loggingOut = false;
 
     _accountManagerObserver =
@@ -207,17 +231,69 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   DCHECK(self.commandHandler);
   // TODO(tomas@vivaldi.com): Implement missing account states
   switch ([self getSimplifiedAccountState]) {
-    case LOGGED_IN:
+    case LOGGED_IN: {
       [self onSyncStateChanged];
       break;
-    case LOGGED_OUT:
+    }
+    case LOGGED_OUT: {
       [self.commandHandler showSyncLoginView];
       break;
-    case NOT_ACTIVATED:
-      [self.commandHandler showActivateAccountView];
+    }
+    case NOT_ACTIVATED: {
+      [self handleNotActivated];
       break;
-    case CREDENTIALS_MISSING:
-    case LOGIN_FAILED:
+    }
+    case CREDENTIALS_MISSING: {
+      NSString* errorMessage;
+      if (_vivaldiAccountManager->has_encrypted_refresh_token()) {
+        errorMessage = l10n_util::GetNSString(
+          IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_ENCRYPTED);
+      } else {
+        errorMessage = l10n_util::GetNSString(
+          IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_MISSING);
+      }
+      [self.commandHandler loginFailed:errorMessage];
+      break;
+    }
+    case LOGIN_FAILED: {
+      NSString* errorMessage;
+      std::string serverMessage =
+          _vivaldiAccountManager->last_token_fetch_error().server_message;
+      int errorCode =
+          _vivaldiAccountManager->last_token_fetch_error().error_code;
+
+      NSMutableParagraphStyle* paragraphStyle =
+        [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
+      paragraphStyle.alignment = NSTextAlignmentCenter;
+      NSDictionary* textAttributes = @{
+        NSForegroundColorAttributeName :
+            [UIColor colorNamed:kTextSecondaryColor],
+        NSFontAttributeName :
+            [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline],
+        NSParagraphStyleAttributeName : paragraphStyle
+      };
+      if (!serverMessage.empty()) {
+        NSAttributedString* errorMsg = [[NSAttributedString alloc]
+          initWithString:l10n_util::GetNSStringF(
+                IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_1,
+              base::UTF8ToUTF16(serverMessage),
+              base::SysNSStringToUTF16([@(errorCode) stringValue]))
+          attributes:textAttributes];
+        errorMessage = [errorMsg string];
+      } else if (errorCode == -1) {
+        errorMessage = l10n_util::GetNSString(
+            IDS_VIVALDI_ACCOUNT_ERROR_WRONG_DOMAIN);
+      } else {
+        NSAttributedString* errorMsg = [[NSAttributedString alloc]
+          initWithString:l10n_util::GetNSStringF(
+                IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_2,
+              base::SysNSStringToUTF16([@(errorCode) stringValue]))
+          attributes:textAttributes];
+        errorMessage = [errorMsg string];
+      }
+      [self.commandHandler loginFailed:errorMessage];
+      break;
+    }
     case LOGGING_IN:
       break;
     default:
@@ -233,9 +309,39 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   self.settingsConsumer = nil;
 }
 
+
+- (void)requestPendingRegistrationLogin {
+  [self login:pendingRegistration.username
+      password:pendingRegistration.password
+      save_password:false];
+}
+
+- (NSString*)getPendingRegistrationUsername {
+  return SysUTF8ToNSString(pendingRegistration.username);
+}
+
+- (NSString*)getPendingRegistrationEmail{
+  return SysUTF8ToNSString(pendingRegistration.recoveryEmailAddress);
+}
+
+- (void)clearPendingRegistration {
+  _prefService->ClearPref(vivaldiprefs::kVivaldiAccountPendingRegistration);
+  pendingRegistration.username = "";
+  pendingRegistration.age = 0;
+  pendingRegistration.recoveryEmailAddress = "";
+  pendingRegistration.password = "";
+}
+
 - (void)login:(std::string)username
         password:(std::string)password
         save_password:(BOOL)save_password {
+  // If the user has started registration on another device, and tries to log in
+  // here, we store the username and password in case we get a NOT_ACTIVE
+  // reply from the server. There will not be a pending registration in prefs
+  pendingRegistration.username = username;
+  pendingRegistration.password = password;
+  pendingRegistration.recoveryEmailAddress = SysNSStringToUTF8(
+      l10n_util::GetNSString(IDS_SYNC_DEFAULT_RECOVERY_EMAIL_ADDRESS));
   _vivaldiAccountManager->Login(username, password, save_password);
   _syncService->GetUserSettings()->SetSyncRequested(true);
 }
@@ -247,6 +353,31 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   }
 }
 
+- (void)storeUsername:(NSString*)username
+                  age:(int)age
+                email:(NSString*)recoveryEmailAddress {
+  pendingRegistration.username = SysNSStringToUTF8(username);
+  pendingRegistration.age = age;
+  pendingRegistration.recoveryEmailAddress =
+      SysNSStringToUTF8(recoveryEmailAddress);
+}
+
+- (void)createAccount:(NSString*)password
+           deviceName:(NSString*)deviceName
+      wantsNewsletter:(BOOL)wantsNewsletter {
+  pendingRegistration.password = [password UTF8String];
+  __weak __typeof__(self) weakSelf = self;
+  [self sendCreateAccountRequestToServer:wantsNewsletter
+    completionHandler:^(NSData* data,NSURLResponse* response, NSError* error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [weakSelf onCreateAccountResponse:data
+                                response:response
+                                  error:error
+                             deviceName:deviceName];
+    });
+  }];
+}
+
 #pragma mark - SyncObserverModelBridge
 
 - (void)onSyncStateChanged {
@@ -256,6 +387,19 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 
   engineData = _syncService->ui_helper()->GetEngineData();
   cycleData = _syncService->ui_helper()->GetCycleData();
+
+  if ([self getSimplifiedAccountState] == NOT_ACTIVATED ||
+      (_vivaldiAccountManager->last_token_fetch_error().server_message.empty()
+      && [self hasPendingRegistration])) {
+    if ([self getSimplifiedAccountState] == NOT_ACTIVATED &&
+        ![self hasPendingRegistration] &&
+        !pendingRegistration.username.empty()) {
+      // The user may have started registartion on another device
+      [self setPendingRegistration];
+    }
+    [self handleNotActivated];
+    return;
+  }
 
   switch(engineData.engine_state) {
     case EngineState::STOPPED:
@@ -278,13 +422,12 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     case EngineState::CONFIGURATION_PENDING:
     case EngineState::STARTED:
       if (engineData.needs_decryption_password) {
-        [self.commandHandler showSyncEncryptionPasswordView];
+        [self.commandHandler showSyncEncryptionPasswordView:NO];
       } else if (!engineData.uses_encryption_password) {
-        // TODO(tomas@vivaldi.com): There should be a different message
-        // displayed when creating the encryption key for the first time.
-        // The same backend call is used so this works for now.
+        // There is a different message displayed when creating the
+        // encryption key for the first time.
         // We land here when the server has no encryption password set
-        [self.commandHandler showSyncEncryptionPasswordView];
+        [self.commandHandler showSyncEncryptionPasswordView:YES];
       } else {
         [self.commandHandler showSyncSettingsView];
         [self reloadSyncStatusItem:engineData];
@@ -293,7 +436,6 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
     default:
       NOTREACHED();
       break;
-
   }
 }
 
@@ -318,7 +460,8 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
 
 -(void)onTokenFetchFailed {
   if ([self getSimplifiedAccountState] == LOGIN_FAILED) {
-    [self.commandHandler loginFailed];
+    [self.commandHandler loginFailed:l10n_util::GetNSString(
+        IDS_VIVALDI_ACCOUNT_LOG_IN_FAILED)];
     return;
   }
   [self onSyncStateChanged];
@@ -331,7 +474,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   // pick where to save the file and show a warning, similar to
   // export passwords.
 
-  NSString* key = base::SysUTF8ToNSString(
+  NSString* key = SysUTF8ToNSString(
     _syncService->ui_helper()->GetBackupEncryptionToken());
 
   [key writeToFile:GetBackupEncryptionKeyPath()
@@ -354,6 +497,7 @@ class VivaldiSyncServiceObserverBridge : public syncer::SyncServiceObserver {
   _syncService->GetUserSettings()->SetSyncRequested(false);
   _syncService->StopAndClear();
   _vivaldiAccountManager->Logout();
+  [self clearPendingRegistration];
   [self.commandHandler showSyncLoginView];
 }
 
@@ -468,7 +612,7 @@ NSString* FormattedString(int message_id) {
         default:
           statusText = @"Sync must be restarted: ";
           statusText = [statusText stringByAppendingString:
-              base::SysUTF8ToNSString(engineData.protocol_error_description)];
+              SysUTF8ToNSString(engineData.protocol_error_description)];
       }
     }
   } else if (engineData.engine_state == EngineState::CLEARING_DATA) {
@@ -511,11 +655,11 @@ NSString* FormattedString(int message_id) {
             @"Sync server data was reset"];
       } else {
         statusText = [statusText stringByAppendingString:
-            base::SysUTF8ToNSString(engineData.protocol_error_description)];
+            SysUTF8ToNSString(engineData.protocol_error_description)];
       }
     } else {
       statusText = [statusText stringByAppendingString:
-            base::SysUTF8ToNSString(engineData.protocol_error_description)];
+            SysUTF8ToNSString(engineData.protocol_error_description)];
     }
   } else {
     NOTREACHED();
@@ -608,13 +752,13 @@ NSString* FormattedString(int message_id) {
       _vivaldiAccountManager->account_info();
   self.userInfoItem = [[VivaldiTableViewSyncUserInfoItem alloc]
       initWithType:ItemTypeSyncUserInfo];
-  self.userInfoItem.userName = base::SysUTF8ToNSString(account_info.username);
+  self.userInfoItem.userName = SysUTF8ToNSString(account_info.username);
   [self.settingsConsumer.tableViewModel setHeader:self.userInfoItem
       forSectionWithIdentifier:SectionIdentifierSyncUserInfo];
 
   __weak VivaldiSyncMediator* weakSelf = self;
   NSURL* profileImageURL =
-      [NSURL URLWithString:base::SysUTF8ToNSString(account_info.picture_url)];
+      [NSURL URLWithString:SysUTF8ToNSString(account_info.picture_url)];
   dispatch_async(dispatch_get_main_queue(), ^{
     NSData * imageData = [[NSData alloc] initWithContentsOfURL:profileImageURL];
     weakSelf.userInfoItem.userAvatar = [UIImage imageWithData:imageData];
@@ -881,6 +1025,129 @@ NSString* GetBackupEncryptionKeyPath() {
   NSString* documents_directory_path = [paths objectAtIndex:0];
   return [documents_directory_path
       stringByAppendingPathComponent:@"BackupEncryptionKey.txt"];
+}
+
+#pragma mark Private - Create Account Server Request Handling
+
+- (void)sendCreateAccountRequestToServer:(BOOL)wantsNewsletter
+                    completionHandler:(ServerRequestCompletionHandler)handler {
+  PrefService* pref_service = GetApplicationContext()->GetLocalState();
+  std::string locale =
+    pref_service->HasPrefPath(language::prefs::kApplicationLocale)
+        ? pref_service->GetString(language::prefs::kApplicationLocale)
+        : GetApplicationContext()->GetApplicationLocale();
+
+  base::Value::Dict dict;
+  dict.Set(vParamUsername, pendingRegistration.username);
+  dict.Set(vParamPassword, pendingRegistration.password);
+  dict.Set(vParamEmailAddress, pendingRegistration.recoveryEmailAddress);
+  dict.Set(vParamAge, pendingRegistration.age);
+  dict.Set(vParamLanguage, locale);
+  dict.Set(vParamDisableNonce, vDisableNonceValue);
+  dict.Set(vParamSubscribeNewletter, wantsNewsletter);
+
+  NSURL* url = [NSURL URLWithString:vVivaldiSyncRegistrationUrl];
+  sendRequestToServer(std::move(dict), url, handler, self.task);
+}
+
+- (void)onCreateAccountResponse:(NSData*)data
+                       response:(NSURLResponse*)response
+                          error:(NSError*)error
+                     deviceName:(NSString*)deviceName {
+  absl::optional<base::Value> readResult = NSDataToDict(data);
+  if (!readResult.has_value()) {
+    [self.commandHandler createAccountFailed:vErrorCodeOther];
+    return;
+  }
+
+  base::Value val = std::move(readResult).value();
+  const base::Value::Dict& dict = val.GetDict();
+  if (!error && dict.FindString(vSuccessKey)) {
+    [self setPendingRegistration];
+    [self setSessionName:deviceName];
+    // NOTE(tomas@vivaldi.com): The login request fails since the account is
+    // not verified yet. This will trigger the activation process
+    // and be handled accordingly
+    _vivaldiAccountManager->Login(
+        pendingRegistration.username, pendingRegistration.password, false);
+    _syncService->GetUserSettings()->SetSyncRequested(true);
+  } else {
+    const std::string* err = dict.FindString(vErrorKey);
+    [self.commandHandler createAccountFailed:SysUTF8ToNSString(*err)];
+  }
+
+}
+
+- (void)handleNotActivated {
+  auto pr = [self getPendingRegistration];
+  if (pr) {
+    pendingRegistration.username = *pr->FindString(kUsernameKey);
+    pendingRegistration.password = *pr->FindString(kPasswordKey);
+    pendingRegistration.recoveryEmailAddress = *pr->FindString(kRecoveryEmailKey);
+  }
+  [self.commandHandler showActivateAccountView];
+}
+
+- (void)setPendingRegistration {
+  std::string encrypted_password;
+  // iOS uses the posix implementation, which is non-blocking.
+  if (!OSCrypt::EncryptString(
+        pendingRegistration.password, &encrypted_password)) {
+    return;
+  }
+
+  std::string encoded_password;
+  base::Base64Encode(encrypted_password, &encoded_password);
+  base::Value pending_registration(base::Value::Type::DICT);
+
+  pending_registration.SetStringKey(kRecoveryEmailKey,
+      pendingRegistration.recoveryEmailAddress);
+  pending_registration.SetStringKey(kUsernameKey, pendingRegistration.username);
+  pending_registration.SetStringKey(kPasswordKey, encoded_password);
+
+  _prefService->Set(vivaldiprefs::kVivaldiAccountPendingRegistration,
+              pending_registration);
+}
+
+- (std::unique_ptr<base::Value::Dict>)getPendingRegistration {
+  const base::Value& pref_value = _prefService->GetValue(
+      vivaldiprefs::kVivaldiAccountPendingRegistration);
+
+  const std::string* username =
+      pref_value.FindStringKey(kUsernameKey);
+  const std::string* encoded_password =
+      pref_value.FindStringKey(kPasswordKey);
+  const std::string* recovery_email =
+      pref_value.FindStringKey(kRecoveryEmailKey);
+
+  if (!username || !encoded_password || !recovery_email)
+    return nullptr;
+
+  std::string encrypted_password;
+  if (!base::Base64Decode(*encoded_password, &encrypted_password) ||
+      encrypted_password.empty()) {
+    return nullptr;
+  }
+  std::string password;
+  // iOS uses the posix implementation, which is non-blocking.
+  if (!OSCrypt::DecryptString(encrypted_password, &password)) {
+    return nullptr;
+  }
+  auto pending_registration = std::make_unique<base::Value::Dict>();
+  pending_registration->Set(kUsernameKey, *username);
+  pending_registration->Set(kPasswordKey, password);
+  pending_registration->Set(kRecoveryEmailKey, *recovery_email);
+  return pending_registration;
+}
+
+- (bool)hasPendingRegistration {
+  return _prefService->HasPrefPath(
+      vivaldiprefs::kVivaldiAccountPendingRegistration);
+}
+
+- (void)setSessionName:(NSString*)name {
+  _prefService->SetString(
+      vivaldiprefs::kSyncSessionName, SysNSStringToUTF8(name));
 }
 
 @end

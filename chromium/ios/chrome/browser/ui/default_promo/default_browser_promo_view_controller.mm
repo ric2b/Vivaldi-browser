@@ -11,6 +11,14 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/promos/vivaldi_promo_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -20,7 +28,13 @@
 #pragma mark - Public
 
 - (void)loadView {
+
+  if (IsVivaldiRunning()) {
+    self.image = [UIImage imageNamed:vSwitchToVivaldi];
+  } else {
   self.image = [UIImage imageNamed:@"default_browser_illustration"];
+  } // End Vivaldi
+
   self.customSpacingAfterImage = 30;
 
   self.helpButtonAvailable = YES;
@@ -29,10 +43,20 @@
 
   self.showDismissBarButton = NO;
   self.titleString = GetDefaultBrowserPromoTitle();
+
+  if (IsVivaldiRunning()) {
+    self.subtitleString =
+        IsInModifiedStringsGroup()
+            ? l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_LEARN_MORE_MESSAGE)
+            : l10n_util::GetNSString(
+                IDS_VIVALDI_IOS_DEFAULT_BROWSER_NON_MODAL_DESCRIPTION);
+  } else {
   self.subtitleString =
       IsInModifiedStringsGroup()
           ? l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_LEARN_MORE_MESSAGE)
           : l10n_util::GetNSString(IDS_IOS_DEFAULT_BROWSER_DESCRIPTION);
+  } // End Vivaldi
+
   self.primaryActionString = l10n_util::GetNSString(IDS_IOS_OPEN_SETTINGS);
   if (IsInRemindMeLaterGroup() &&
       !ShouldShowRemindMeLaterDefaultBrowserFullscreenPromo()) {

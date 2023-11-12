@@ -46,7 +46,7 @@ interface DrmDevice {
 
   // Transfers ownership of a DRM device to the GPU process.
   AddGraphicsDevice(mojo_base.mojom.FilePath path,
-                    mojo_base.mojom.File file);
+                    handle<platform> fd_mojo_handle);
 
   // Instructs the GPU to abandon a DRM device.
   RemoveGraphicsDevice(mojo_base.mojom.FilePath path);
@@ -65,6 +65,10 @@ interface DrmDevice {
       array<display.mojom.DisplayConfigurationParams> config_requests,
       uint32 modeset_flag) =>
     (bool config_success);
+
+  // Sets the HDCP Key Property in the connector attached to the |display_id|.
+  SetHdcpKeyProp(int64 display_id, string key) =>
+      (int64 display_id, bool success);
 
   // Gets high-definition content protection (HDCP) (DRM as in
   // digital rights management) state.

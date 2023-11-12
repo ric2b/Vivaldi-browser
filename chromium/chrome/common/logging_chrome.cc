@@ -33,7 +33,6 @@
 #include <string>   // NOLINT
 
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/debug/debugger.h"
@@ -41,6 +40,7 @@
 #include "base/environment.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -63,6 +63,7 @@
 #if BUILDFLAG(IS_WIN)
 #include <initguid.h>
 #include "base/logging_win.h"
+#include "base/process/process_info.h"
 #include "base/syslog_logging.h"
 #include "chrome/common/win/eventlog_messages.h"
 #include "chrome/install_static/install_details.h"
@@ -172,6 +173,13 @@ LoggingDestination DetermineLoggingDestination(
       return LOG_TO_SYSTEM_DEBUG_LOG | LOG_TO_STDERR;
     } else if (logging_destination != "") {
       PLOG(ERROR) << "Invalid logging destination: " << logging_destination;
+#if BUILDFLAG(IS_WIN)
+    } else if (base::IsCurrentProcessInAppContainer() &&
+               !command_line.HasSwitch(switches::kLogFile)) {
+      // Sandboxed appcontainer processes are unable to resolve the default log
+      // file path without asserting.
+      return kDefaultLoggingMode & ~LOG_TO_FILE;
+#endif
     }
   }
   return kDefaultLoggingMode;
@@ -190,7 +198,7 @@ bool RotateLogFile(const base::FilePath& target_path) {
   {
     // Opens a file, only if it exists.
     base::File fp(target_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
-    if (!fp.GetInfo(&info)) {
+    if (!fp.IsValid() || !fp.GetInfo(&info)) {
       // On failure, keep using the same file.
       return false;
     }
@@ -485,15 +493,38 @@ void CleanupChromeLogging() {
 }
 
 base::FilePath GetLogFileName(const base::CommandLine& command_line) {
+  // Try the command line.
   auto filename = command_line.GetSwitchValueNative(switches::kLogFile);
-  if (!filename.empty())
-    return base::FilePath(filename);
+  // Try the environment.
+  if (filename.empty()) {
+    std::string env_filename;
+    base::Environment::Create()->GetVar(env_vars::kLogFileName, &env_filename);
+#if BUILDFLAG(IS_WIN)
+    filename = base::UTF8ToWide(env_filename);
+#else
+    filename = env_filename;
+#endif  // BUILDFLAG(IS_WIN)
+  }
 
-  std::string env_filename;
-  base::Environment::Create()->GetVar(env_vars::kLogFileName, &env_filename);
-  if (!env_filename.empty())
-    return base::FilePath::FromUTF8Unsafe(env_filename);
+  if (!filename.empty()) {
+    base::FilePath candidate_path(filename);
+#if BUILDFLAG(IS_WIN)
+    // Windows requires an absolute path for the --log-file switch. Windows
+    // cannot log to the current directory as it cds() to the exe's directory
+    // earlier than this function runs.
+    candidate_path = candidate_path.NormalizePathSeparators();
+    if (candidate_path.IsAbsolute()) {
+      return candidate_path;
+    } else {
+      PLOG(ERROR) << "Invalid logging destination: " << filename;
+    }
+#else
+    return candidate_path;
+#endif  // BUILDFLAG(IS_WIN)
+  }
 
+  // If command line and environment do not provide a log file we can use,
+  // fallback to the default.
   const base::FilePath log_filename(FILE_PATH_LITERAL("chrome_debug.log"));
   base::FilePath log_path;
 
@@ -501,8 +532,13 @@ base::FilePath GetLogFileName(const base::CommandLine& command_line) {
     log_path = log_path.Append(log_filename);
     return log_path;
   } else {
-    // error with path service, just use some default file somewhere
+#if BUILDFLAG(IS_WIN)
+    // On Windows we cannot use a non-absolute path so we cannot provide a file.
+    return base::FilePath();
+#else
+    // Error with path service, just use the default in our current directory.
     return log_filename;
+#endif  // BUILDFLAG(IS_WIN)
   }
 }
 

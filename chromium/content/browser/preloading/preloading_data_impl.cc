@@ -3,15 +3,58 @@
 // found in the LICENSE file.
 
 #include "content/browser/preloading/preloading_data_impl.h"
+#include <limits>
 
+#include "base/metrics/histogram_functions.h"
+#include "base/rand_util.h"
+#include "base/strings/strcat.h"
 #include "content/browser/preloading/prefetch/no_vary_search_helper.h"
 #include "content/browser/preloading/prefetch/prefetch_document_manager.h"
+#include "content/browser/preloading/preloading.h"
 #include "content/browser/preloading/preloading_attempt_impl.h"
+#include "content/browser/preloading/preloading_config.h"
 #include "content/browser/preloading/preloading_prediction.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 
+#if DCHECK_IS_ON()
+#include "base/no_destructor.h"
+#endif  // DCHECK_IS_ON()
+
 namespace content {
+
+namespace {
+// Called by `AddPreloadingAttempt` and `AddPreloadingPrediction`. Fails
+// the callers if the predictor is redefined. This method can be racy due to the
+// static variable.
+static void CheckPreloadingPredictorValidity(PreloadingPredictor predictor) {
+#if DCHECK_IS_ON()
+  // Use `std::string` because we can't guarantee base::StringPiece has a static
+  // lifetime.
+  static base::NoDestructor<std::vector<std::pair<int64_t, std::string>>>
+      seen_predictors;
+  std::pair<int64_t, std::string> new_predictor(predictor.ukm_value(),
+                                                predictor.name());
+  bool found = false;
+  for (const auto& seen : *seen_predictors) {
+    if ((seen.first == new_predictor.first) ^
+        (seen.second == new_predictor.second)) {
+      // We cannot have two `PreloadingPredictor`s that only differ in either
+      // the ukm int value or the string description - each new
+      // `PreloadingPredictor` needs to be unique in both.
+      DCHECK(false) << new_predictor.second << "/" << new_predictor.first
+                    << " vs " << seen.second << "/" << seen.first;
+    } else if (seen == new_predictor) {
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    seen_predictors->push_back(new_predictor);
+  }
+#endif  // DCHECK_IS_ON()
+}
+}  // namespace
 
 // static
 PreloadingURLMatchCallback PreloadingData::GetSameURLMatcher(
@@ -76,7 +119,7 @@ PreloadingAttempt* PreloadingDataImpl::AddPreloadingAttempt(
 
   auto attempt = std::make_unique<PreloadingAttemptImpl>(
       predictor, preloading_type, triggered_primary_page_source_id,
-      std::move(url_match_predicate));
+      std::move(url_match_predicate), sampling_seed_);
   preloading_attempts_.push_back(std::move(attempt));
 
   return preloading_attempts_.back().get();
@@ -104,7 +147,8 @@ void PreloadingDataImpl::AddPreloadingPrediction(
 
 PreloadingDataImpl::PreloadingDataImpl(WebContents* web_contents)
     : WebContentsUserData<PreloadingDataImpl>(*web_contents),
-      WebContentsObserver(web_contents) {}
+      WebContentsObserver(web_contents),
+      sampling_seed_(static_cast<uint32_t>(base::RandUint64())) {}
 
 PreloadingDataImpl::~PreloadingDataImpl() = default;
 
@@ -126,10 +170,10 @@ void PreloadingDataImpl::DidFinishNavigation(
   ukm::SourceId navigated_page_source_id =
       navigation_handle->GetNextPageUkmSourceId();
 
-  // Log the UKMs also on navigation when the user ends up navigating. Please
+  // Log the metrics also on navigation when the user ends up navigating. Please
   // note that we currently log the metrics on the primary page to analyze
   // preloading impact on user-visible primary pages.
-  RecordUKMForPreloadingAttempts(navigated_page_source_id);
+  RecordMetricsForPreloadingAttempts(navigated_page_source_id);
   RecordUKMForPreloadingPredictions(navigated_page_source_id);
 
   // Delete the user data after logging.
@@ -160,30 +204,65 @@ void PreloadingDataImpl::DidStartNavigation(
 }
 
 void PreloadingDataImpl::WebContentsDestroyed() {
-  // Log the UKMs also on WebContentsDestroyed event to avoid losing the data
+  // Log the metrics also on WebContentsDestroyed event to avoid losing the data
   // in case the user doesn't end up navigating. When the WebContents is
   // destroyed before navigation, we pass ukm::kInvalidSourceId and empty URL to
   // avoid the UKM associated to wrong page.
-  RecordUKMForPreloadingAttempts(ukm::kInvalidSourceId);
+  RecordMetricsForPreloadingAttempts(ukm::kInvalidSourceId);
   RecordUKMForPreloadingPredictions(ukm::kInvalidSourceId);
 
   // Delete the user data after logging.
   web_contents()->RemoveUserData(UserDataKey());
 }
 
-void PreloadingDataImpl::SetIsAccurateTriggeringAndPrediction(
-    const GURL& navigated_url) {
-  for (auto& attempt : preloading_attempts_)
-    attempt->SetIsAccurateTriggering(navigated_url);
+void PreloadingDataImpl::RecordPreloadingAttemptPrecisionToUMA(
+    const PreloadingAttemptImpl& attempt) {
+  bool is_true_positive = attempt.IsAccurateTriggering();
+  const auto uma_attempt_precision = base::StrCat(
+      {"Preloading.", PreloadingTypeToString(attempt.preloading_type()),
+       ".Attempt.", attempt.predictor_type().name(), ".Precision"});
 
-  for (auto& prediction : preloading_predictions_)
-    prediction->SetIsAccuratePrediction(navigated_url);
+  base::UmaHistogramEnumeration(uma_attempt_precision,
+                                is_true_positive
+                                    ? PredictorConfusionMatrix::kTruePositive
+                                    : PredictorConfusionMatrix::kFalsePositive);
 }
 
-void PreloadingDataImpl::RecordUKMForPreloadingAttempts(
+void PreloadingDataImpl::RecordPredictionPrecisionToUMA(
+    const PreloadingPrediction& prediction) {
+  bool is_true_positive = prediction.IsAccuratePrediction();
+  const auto uma_predictor_precision =
+      base::StrCat({"Preloading.Predictor.", prediction.predictor_type().name(),
+                    ".Precision"});
+  base::UmaHistogramEnumeration(uma_predictor_precision,
+                                is_true_positive
+                                    ? PredictorConfusionMatrix::kTruePositive
+                                    : PredictorConfusionMatrix::kFalsePositive);
+}
+
+void PreloadingDataImpl::SetIsAccurateTriggeringAndPrediction(
+    const GURL& navigated_url) {
+  for (auto& attempt : preloading_attempts_) {
+    attempt->SetIsAccurateTriggering(navigated_url);
+    RecordPreloadingAttemptPrecisionToUMA(*attempt);
+  }
+
+  for (auto& prediction : preloading_predictions_) {
+    prediction->SetIsAccuratePrediction(navigated_url);
+    RecordPredictionPrecisionToUMA(*prediction);
+  }
+}
+
+void PreloadingDataImpl::RecordMetricsForPreloadingAttempts(
     ukm::SourceId navigated_page_source_id) {
-  for (auto& attempt : preloading_attempts_)
-    attempt->RecordPreloadingAttemptUKMs(navigated_page_source_id);
+  for (auto& attempt : preloading_attempts_) {
+    // Check the validity at the time of UKMs reporting, as the UKMs are
+    // reported from the same thread (whichever thread calls
+    // `PreloadingDataImpl::WebContentsDestroyed` or
+    // `PreloadingDataImpl::DidFinishNavigation`).
+    CheckPreloadingPredictorValidity(attempt->predictor_type());
+    attempt->RecordPreloadingAttemptMetrics(navigated_page_source_id);
+  }
 
   // Clear all records once we record the UKMs.
   preloading_attempts_.clear();
@@ -191,8 +270,14 @@ void PreloadingDataImpl::RecordUKMForPreloadingAttempts(
 
 void PreloadingDataImpl::RecordUKMForPreloadingPredictions(
     ukm::SourceId navigated_page_source_id) {
-  for (auto& prediction : preloading_predictions_)
+  for (auto& prediction : preloading_predictions_) {
+    // Check the validity at the time of UKMs reporting, as the UKMs are
+    // reported from the same thread (whichever thread calls
+    // `PreloadingDataImpl::WebContentsDestroyed` or
+    // `PreloadingDataImpl::DidFinishNavigation`).
+    CheckPreloadingPredictorValidity(prediction->predictor_type());
     prediction->RecordPreloadingPredictionUKMs(navigated_page_source_id);
+  }
 
   // Clear all records once we record the UKMs.
   preloading_predictions_.clear();

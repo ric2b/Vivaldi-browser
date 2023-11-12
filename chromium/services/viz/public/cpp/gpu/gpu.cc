@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -133,7 +133,9 @@ class Gpu::EstablishRequest
   // request. This must be called from main thread.
   void SetWaitableEvent(base::WaitableEvent* establish_event) {
     DCHECK(main_task_runner_->BelongsToCurrentThread());
+    DCHECK(establish_event);
     base::AutoLock mutex(lock_);
+    DCHECK(!establish_event_);
 
     // If we've already received a response then don't reset |establish_event|.
     // The caller won't block and will immediately process the response.
@@ -329,7 +331,7 @@ void Gpu::EstablishGpuChannel(gpu::GpuChannelEstablishedCallback callback) {
   }
 
   establish_callbacks_.push_back(std::move(callback));
-  SendEstablishGpuChannelRequest();
+  SendEstablishGpuChannelRequest(/*waitable_event=*/nullptr);
 }
 
 scoped_refptr<gpu::GpuChannelHost> Gpu::EstablishGpuChannelSync() {
@@ -341,10 +343,9 @@ scoped_refptr<gpu::GpuChannelHost> Gpu::EstablishGpuChannelSync() {
     return channel;
 
   SCOPED_UMA_HISTOGRAM_TIMER("GPU.EstablishGpuChannelSyncTime");
-  SendEstablishGpuChannelRequest();
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
                             base::WaitableEvent::InitialState::SIGNALED);
-  pending_request_->SetWaitableEvent(&event);
+  SendEstablishGpuChannelRequest(&event);
   event.Wait();
 
   // Running FinishOnMain() will create |gpu_channel_| and run any callbacks
@@ -373,12 +374,19 @@ scoped_refptr<gpu::GpuChannelHost> Gpu::GetGpuChannel() {
   return gpu_channel_;
 }
 
-void Gpu::SendEstablishGpuChannelRequest() {
-  if (pending_request_)
+void Gpu::SendEstablishGpuChannelRequest(base::WaitableEvent* waitable_event) {
+  if (pending_request_) {
+    if (waitable_event) {
+      pending_request_->SetWaitableEvent(waitable_event);
+    }
     return;
+  }
 
   pending_request_ =
       base::MakeRefCounted<EstablishRequest>(this, main_task_runner_);
+  if (waitable_event) {
+    pending_request_->SetWaitableEvent(waitable_event);
+  }
   io_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&EstablishRequest::SendRequest, pending_request_,

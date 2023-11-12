@@ -118,15 +118,13 @@ void AddMediaStreamSourceConstraints(content::WebContents* target_contents,
 // include incognito profile browsers.
 Browser* GetLastActiveBrowser(const Profile* profile,
                               const bool match_incognito_profile) {
-  BrowserList* browser_list = BrowserList::GetInstance();
   Browser* target_browser = nullptr;
-  for (auto iter = browser_list->begin_browsers_ordered_by_activation();
-       iter != browser_list->end_browsers_ordered_by_activation(); ++iter) {
-    Profile* browser_profile = (*iter)->profile();
+  for (Browser* browser : BrowserList::GetInstance()->OrderedByActivation()) {
+    Profile* browser_profile = browser->profile();
     if (browser_profile == profile ||
         (match_incognito_profile &&
          browser_profile->GetOriginalProfile() == profile)) {
-      target_browser = *iter;
+      target_browser = browser;
       break;
     }
   }
@@ -134,16 +132,10 @@ Browser* GetLastActiveBrowser(const Profile* profile,
   return target_browser;
 }
 
-// Get the id of the allowlisted extension. At the moment two switches can
-// contain it. Prioritize the non-deprecated one.
+// Get the id of the allowlisted extension.
 std::string GetAllowlistedExtensionID() {
-  std::string id = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+  return base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
       switches::kAllowlistedExtensionID);
-  if (id.empty()) {
-    id = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-        switches::kDEPRECATED_AllowlistedExtensionID);
-  }
-  return id;
 }
 
 }  // namespace

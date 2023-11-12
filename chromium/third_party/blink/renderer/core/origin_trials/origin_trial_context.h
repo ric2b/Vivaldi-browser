@@ -9,8 +9,11 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/origin_trials/trial_token.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature_state.mojom-shared.h"
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature_state_controller.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_hash.h"
@@ -47,6 +50,13 @@ struct OriginTrialResult {
   String trial_name;
   OriginTrialStatus status;
   Vector<OriginTrialTokenResult> token_results;
+};
+
+// `status` is kEnabled if one or more OriginTrialFeatures are enabled.
+// `features` is a Vector containing all of the enabled features.
+struct OriginTrialFeaturesEnabled {
+  OriginTrialStatus status;
+  Vector<OriginTrialFeature> features;
 };
 
 // The Origin Trials Framework provides limited access to experimental features,
@@ -177,6 +187,11 @@ class CORE_EXPORT OriginTrialContext final
     return trial_results_;
   }
 
+  const HashMap<OriginTrialFeature, Vector<String>>
+  GetFeatureToTokensForTesting() const {
+    return feature_to_tokens_;
+  }
+
  private:
   struct OriginInfo {
     const scoped_refptr<const SecurityOrigin> origin;
@@ -200,10 +215,11 @@ class CORE_EXPORT OriginTrialContext final
   Vector<OriginTrialFeature> RestrictedFeaturesForTrial(
       const String& trial_name);
 
-  // Enable features by trial name. Returns true or false to indicate whether
-  // some features are enabled as the result.
-  OriginTrialStatus EnableTrialFromName(const String& trial_name,
-                                        base::Time expiry_time);
+  // Enable features by trial name. Returns a OriginTrialFeaturesEnabled struct
+  // containing whether one or more trials were enabled, and a Vector of the
+  // OriginTrialFeatures representing those trials.
+  OriginTrialFeaturesEnabled EnableTrialFromName(const String& trial_name,
+                                                 base::Time expiry_time);
 
   // Validate the trial token. If valid, the trial named in the token is
   // added to the list of enabled trials. Returns true or false to indicate if
@@ -238,16 +254,30 @@ class CORE_EXPORT OriginTrialContext final
   bool IsSecureContext();
   OriginInfo GetCurrentOriginInfo();
 
+  // Send the token to the browser process to update persistent origin trial
+  // tokens. Will check if |parsed_token| is persistable before sending to the
+  // browser, and |parsed_token| should be the parsed version of |raw_token|.
+  void SendTokenToBrowser(const OriginInfo& origin_info,
+                          const TrialToken& parsed_token,
+                          const String& raw_token,
+                          const Vector<OriginInfo>* script_origin_info);
+
   HashSet<OriginTrialFeature> enabled_features_;
   HashSet<OriginTrialFeature> installed_features_;
   HashSet<OriginTrialFeature> navigation_activated_features_;
   WTF::HashMap<OriginTrialFeature, base::Time> feature_expiry_times_;
   std::unique_ptr<TrialTokenValidator> trial_token_validator_;
   Member<ExecutionContext> context_;
+  HeapMojoRemote<mojom::blink::RuntimeFeatureStateController>
+      runtime_feature_state_controller_remote_;
   // Stores raw origin trial token along with the parse result.
   // This field is mainly used for devtools support, but
   // `OriginTrialContext::GetTokens` also depends on the structure.
   HashMap</* Trial Name */ String, OriginTrialResult> trial_results_;
+  // Stores the OriginTrialFeature enum value along with its corresponding
+  // validated and parsed trial tokens. Used for security checks in the
+  // browser's RuntimeFeatureChangeImpl.
+  HashMap<OriginTrialFeature, Vector</*Raw Token*/ String>> feature_to_tokens_;
 };
 
 }  // namespace blink

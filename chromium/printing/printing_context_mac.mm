@@ -21,6 +21,7 @@
 #include "printing/buildflags/buildflags.h"
 #include "printing/metafile.h"
 #include "printing/mojom/print.mojom.h"
+#include "printing/print_job_constants_cups.h"
 #include "printing/print_settings_initializer_mac.h"
 #include "printing/printing_features.h"
 #include "printing/units.h"
@@ -413,41 +414,12 @@ bool PrintingContextMac::SetOutputColor(int color_mode) {
     return false;
   }
 
-  struct PpdColorSetting {
-    constexpr PpdColorSetting(base::StringPiece name,
-                              base::StringPiece bw,
-                              base::StringPiece color)
-        : name(name), bw(bw), color(color) {}
-    base::StringPiece name;
-    base::StringPiece bw;
-    base::StringPiece color;
-  };
-
-  // TODO(crbug.com/1210992): Move `kKnownPpdColorSettings` elsewhere so it can
-  // be used for general CUPS printing code (e.g., for parsing PPDs).
-  static constexpr PpdColorSetting kKnownPpdColorSettings[] = {
-      {"ARCMode", "CMBW", "CMColor"},                         // Sharp
-      {"BLW", "TrueM", "FalseM"},                             // Lexmark
-      {"BRMonoColor", "Mono", "FullColor"},                   // Brother
-      {"BRPrintQuality", "Black", "Color"},                   // Brother
-      {"CNIJGrayScale", "1", "0"},                            // Canon
-      {"ColorMode", "Monochrome", "Color"},                   // Samsung
-      {"ColorModel", "Gray", "Color"},                        // Generic
-      {"HPColorMode", "GrayscalePrint", "ColorPrint"},        // HP
-      {"Ink", "MONO", "COLOR"},                               // Epson
-      {"OKControl", "Gray", "Auto"},                          // Oki
-      {"PrintoutMode", "Normal.Gray", "Normal"},              // Foomatic
-      {"SelectColor", "Grayscale", "Color"},                  // Konica Minolta
-      {"XRXColor", "BW", "Automatic"},                        // Xerox
-      {"XROutputColor", "PrintAsGrayscale", "PrintAsColor"},  // Xerox
-  };
-
   // Even when interfacing with printer settings using CUPS IPP, the print job
   // may still expect PPD color values if the printer was added to the system
   // with a PPD. To avoid parsing PPDs (which is the point of using CUPS IPP),
   // set every single known PPD color setting and hope that one of them sticks.
   const bool is_color = IsColorModelSelected(color_model).value_or(false);
-  for (const auto& setting : kKnownPpdColorSettings) {
+  for (const auto& setting : GetKnownPpdColorSettings()) {
     const base::StringPiece& color_setting_name = setting.name;
     const base::StringPiece& color_value =
         is_color ? setting.color : setting.bw;

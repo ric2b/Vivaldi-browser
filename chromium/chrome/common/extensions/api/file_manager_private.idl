@@ -168,6 +168,8 @@ enum DriveSyncErrorType {
   no_server_space_organization,
   // There is no local space to sync a file.
   no_local_space,
+  // There is no space left on a shared drive.
+  no_shared_drive_space,
   // Miscellaneous errors other than listed above.
   misc
 };
@@ -271,8 +273,8 @@ enum SourceRestriction {
   native_source
 };
 
-// Recent file types to filter results from getRecentFiles().
-enum RecentFileType {
+// File categories to filter results from getRecentFiles().
+enum FileCategory {
   all,
   audio,
   image,
@@ -304,6 +306,7 @@ enum IOTaskState {
   queued,
   scanning,
   in_progress,
+  paused,
   success,
   error,
   need_password,
@@ -358,6 +361,8 @@ enum SyncStatus {
   queued,
   // File is currently being synced.
   in_progress,
+  // File is done syncing.
+  completed,
   // There was an error syncing the file.
   error
 };
@@ -397,6 +402,9 @@ dictionary FileTask {
   // types: ["*/*"]). Partial wild card (e.g. types: ["image/*"]) is not
   // generic file handler.
   boolean isGenericFileHandler;
+
+  // True if this is task is blocked by Data Leak Prevention (DLP).
+  boolean isDlpBlocked;
 };
 
 // Represents a set of tasks capable of handling file entries.
@@ -533,10 +541,10 @@ dictionary MountPointSizeStats {
 dictionary DriveQuotaMetadata {
   UserType userType;
 
-  // How much space the individual user has used.
-  double usedUserBytes;
-  // The individual limit of a user. -1 means infinite.
-  double totalUserBytes;
+  // How much space the individual user, or shared drive has used.
+  double usedBytes;
+  // The individual user, or shared drive limit. -1 means infinite.
+  double totalBytes;
 
   // The following two fields only have meaning if user_type is kOrganization.
   // Whether the organization has exceeded its storage limit.
@@ -688,19 +696,16 @@ dictionary FileTransferStatus {
   boolean hideWhenZeroJobs;
 };
 
-// Information about the transfer status of an individual file.
-dictionary IndividualFileTransferStatus {
-  // File that is being transferred.
-  [instanceOf=Entry] object entry;
+// Information about the syncing state of an individual file.
+dictionary SyncState {
+  // URL of file that is being transferred.
+  DOMString fileUrl;
 
   // File transfer progress state.
-  TransferState transferState;
+  SyncStatus syncStatus;
 
-  // Number of bytes transferred so far.
-  double processed;
-
-  // Total size of the file in bytes.
-  double total;
+  // Transfer progress so far. Ranges from 0 to 1.
+  double progress;
 };
 
 // Error during the drive sync.
@@ -710,6 +715,9 @@ dictionary DriveSyncErrorEvent {
 
   // File URL of the entry that the error happens to.
   DOMString fileUrl;
+
+  // Shared drive name if the error relates to a shared drive.
+  DOMString? sharedDrive;
 };
 
 // Confirmation dialog from Drive asking the user to accept or reject an
@@ -769,6 +777,8 @@ dictionary Preferences {
   boolean arcRemovableMediaAccessEnabled;
   DOMString[] folderShortcuts;
   boolean trashEnabled;
+  double officeFileMovedOneDrive;
+  double officeFileMovedGoogleDrive;
 };
 
 dictionary PreferencesChange {
@@ -782,6 +792,9 @@ dictionary SearchParams {
   // Search query.
   DOMString query;
 
+  // The category of files to which the search is limited.
+  FileCategory? category;
+
   // ID of the search feed that should be fetched next. Value passed here should
   // be gotten from previous searchDrive call. It can be empty for the initial
   // search request.
@@ -789,6 +802,10 @@ dictionary SearchParams {
 };
 
 dictionary SearchMetadataParams {
+  // Optional root directory from which to start the search. If not present,
+  // the search begins at the local root.
+  [instanceof=DirectoryEntry] object? rootDir;
+
   // Search query. It can be empty. Any filename matches to an empty query.
   DOMString query;
 
@@ -797,6 +814,13 @@ dictionary SearchMetadataParams {
 
   // Maximum number of results.
   long maxResults;
+
+  // Modified timestamp. The file must have modified timestamp more recent
+  // than this to be included in results.
+  double? timestamp;
+
+  // The category of files to which the search is limited.
+  FileCategory? category;
 };
 
 // Entry and Drive-related properties representing a search result.
@@ -988,6 +1012,31 @@ dictionary IOTaskParams {
   boolean? showNotification;
 };
 
+// IO task state::PAUSED parameters, see file_manager::io_task::PauseParams.
+dictionary PauseParams {
+  // The conflict file name.
+  DOMString? conflictName;
+
+  // True if the conflict file name is a directory.
+  boolean? conflictIsDirectory;
+
+  // Set true if there are potentially multiple conflicted file names.
+  boolean? conflictMultiple;
+
+  // The conflict copy or move target URL.
+  DOMString? conflictTargetUrl;
+};
+
+// Resume IO Task parameters, see file_manager::io_task::ResumeParams.
+dictionary ResumeParams {
+  // How to resolve a CopyOrMoveIOTask file name conflict: either 'keepboth'
+  // or 'replace'.
+  DOMString? conflictResolve;
+
+  // Set true if conflictResolve should apply to future file name conflicts.
+  boolean? conflictApplyToAll;
+};
+
 // IO Task Progress status, see file_manager::io_task::ProgressStatus.
 dictionary ProgressStatus {
 
@@ -1027,6 +1076,9 @@ dictionary ProgressStatus {
 
   // The name of the last error that happened.
   DOMString errorName;
+
+  // I/O task state::PAUSED parameters.
+  PauseParams? pauseParams;
 
   // The files affected by the IOTask. Currently only returned for TrashIOTask.
   [instanceOf=Entry] object[]? outputs;
@@ -1291,9 +1343,12 @@ interface Functions {
 
   // Gets the list of tasks that can be performed over selected files.
   // |entries| Array of selected entries
+  // |dlpSourceUrls| Array of source URLs corresponding to the entries, used to
+  // check Data Leak Prevention (DLP) restrictions
   // |callback|
   [nocompile]
   static void getFileTasks([instanceof=Entry] object[] entries,
+                           DOMString[] dlpSourceUrls,
                            GetFileTasksCallback callback);
 
   // Gets the MIME type of an entry.
@@ -1469,8 +1524,12 @@ interface Functions {
 
 
   // Retrieves metadata about the user's Drive volume's quota.
+  // |entry| If entry is within a Shared Drive, then the applicable shared
+  // drive quota is returned, else the overall Drive quota is returned.
   // |callback|
-  static void getDriveQuotaMetadata(GetDriveQuotaMetadataCallback callback);
+  [nocompile]
+  static void getDriveQuotaMetadata([instanceOf=Entry] object entry,
+                                    GetDriveQuotaMetadataCallback callback);
 
   // Formats a mounted volume.
   // |volumeId| ID of the volume to be formatted.
@@ -1520,6 +1579,7 @@ interface Functions {
                                   SearchFilesByHashesCallback callback);
 
   // Search files in My Files.
+  [nocompile]
   static void searchFiles(SearchMetadataParams searchParams,
                           SearchFilesCallback callback);
 
@@ -1634,7 +1694,7 @@ interface Functions {
   // |callback|
   [nocompile]
   static void getRecentFiles(SourceRestriction restriction,
-                             RecentFileType fileType,
+                             FileCategory fileCategory,
                              boolean invalidateCache,
                              GetRecentFilesCallback callback);
 
@@ -1737,10 +1797,13 @@ interface Functions {
   // Invoke Sharesheet for selected files.
   // |entries| Array of selected entries.
   // |launchSource| Source from which sharesheet was invoked.
+  // |dlpSourceUrls| Array of source URLs corresponding to the entries, used to
+  // check Data Leak Prevention (DLP) restrictions
   // |callback|
   [nocompile]
   static void invokeSharesheet([instanceof=Entry] object[] entries,
                                SharesheetLaunchSource launchSource,
+                               DOMString[] dlpSourceUrls,
                                SimpleCallback callback);
 
   // Adds or removes a list of entries to temporary holding space. Any entries
@@ -1788,6 +1851,14 @@ interface Functions {
   // each I/O task's progress status.
   static void cancelIOTask(long taskId);
 
+  // Resumes an I/O task by id. Task ids are communicated to the Files App in
+  // each I/O task's progress status.
+  static void resumeIOTask(long taskId, ResumeParams params);
+
+  // Makes I/O tasks in state::PAUSED emit (broadcast) their current I/O task
+  // progress status.
+  static void progressPausedTasks();
+
   // Lists mountable Guest OSs.
   static void listMountableGuests(ListMountableGuestsCallback callback);
 
@@ -1817,9 +1888,7 @@ interface Events {
 
   static void onPinTransfersUpdated(FileTransferStatus event);
 
-  static void onIndividualFileTransfersUpdated(IndividualFileTransferStatus[] event);
-
-  static void onIndividualPinTransfersUpdated(IndividualFileTransferStatus[] event);
+  static void onIndividualFileTransfersUpdated(SyncState[] event);
 
   static void onDirectoryChanged(FileWatchEvent event);
 

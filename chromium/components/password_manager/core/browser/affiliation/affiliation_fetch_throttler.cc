@@ -6,11 +6,10 @@
 
 #include <stdint.h>
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/rand_util.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_fetch_throttler_delegate.h"
@@ -89,6 +88,10 @@ void AffiliationFetchThrottler::InformOfNetworkRequestComplete(bool success) {
   DCHECK_EQ(state_, FETCH_IN_FLIGHT);
   state_ = IDLE;
   exponential_backoff_->InformOfRequest(success);
+}
+
+bool AffiliationFetchThrottler::HasInternetConnection() const {
+  return !network_connection_tracker_->IsOffline();
 }
 
 void AffiliationFetchThrottler::EnsureCallbackIsScheduled() {

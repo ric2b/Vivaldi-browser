@@ -16,15 +16,19 @@ enum ReportingDestination {
   kSeller,
   kComponentSeller,
   kSharedStorageSelectUrl,
+  kDirectSeller,
 };
 
-struct FencedFrameReporting {
-  // If this is an "opaque-ads" mode fenced frame, there might be an associated
-  // reporting metadata. This is a map from destination type to reporting
-  // metadata which in turn is a map from the event type (registered by the
-  // associated worklet) to the reporting url.
-  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
-  map<ReportingDestination, map<string, url.mojom.Url>> metadata;
+// The fenced frame config's "mode" describes a set of functionalities that it
+// should have. (In the future, the concept of a "mode" will be removed, and
+// replaced with individual fields controlling each functionality.)
+// The mode is a function of the API that creates the config. FLEDGE and
+// sharedStorage use kOpaqueAds mode, and the WebIDL FencedFrameConfig()
+// constructor uses kDefault mode.
+// https://github.com/WICG/fenced-frame/blob/master/explainer/modes.md
+enum DeprecatedFencedFrameMode {
+  kDefault = 0,
+  kOpaqueAds = 1,
 };
 
 // In order to represent that a value exists in a different process but is
@@ -79,15 +83,12 @@ union PotentiallyOpaqueURNConfigVector {
 struct SharedStorageBudgetMetadata {
   url.mojom.Origin origin;
   double budget_to_charge;
+  bool top_navigated;
+  bool report_event_called;
 };
 
 union PotentiallyOpaqueSharedStorageBudgetMetadata {
   SharedStorageBudgetMetadata transparent;
-  Opaque opaque;
-};
-
-union PotentiallyOpaqueReportingMetadata {
-  FencedFrameReporting transparent;
   Opaque opaque;
 };
 
@@ -126,8 +127,6 @@ struct FencedFrameConfig {
 
   PotentiallyOpaqueSharedStorageBudgetMetadata? shared_storage_budget_metadata;
 
-  PotentiallyOpaqueReportingMetadata? reporting_metadata;
-
   // This is the internal URN that represents this config in the browser-side
   // `FencedFrameURLMapping`. When this config is navigated to via a fenced
   // frame, it is this internal urn:uuid that we send to the browser to navigate
@@ -135,6 +134,13 @@ struct FencedFrameConfig {
   // represents this instance of this struct. `blink::IsValidUrnUuidURL()` will
   // always be true when called with this urn.
   url.mojom.Url urn_uuid;
+
+  // The fenced frame's mode (default or opaque-ads).
+  // TODO(crbug.com/1347953): This field is not yet used.
+  // TODO(crbug.com/1347953): Decompose this field into flags that directly
+  // control the frame's behavior, e.g. sandbox flags. We don't want the
+  // concept of a mode to stick around in the future.
+  DeprecatedFencedFrameMode mode;
 };
 
 // The `FencedFrameProperties` struct is used to transfer a redacted version
@@ -169,9 +175,9 @@ struct FencedFrameProperties {
 
   PotentiallyOpaqueSharedStorageBudgetMetadata? shared_storage_budget_metadata;
 
-  // If this is an "opaque-ads" mode fenced frame, there might be an associated
-  // reporting metadata. This is a map from destination type to reporting
-  // metadata which in turn is a map from the event type to the reporting url.
-  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
-  PotentiallyOpaqueReportingMetadata? reporting_metadata;
+  // Whether the fenced frame potentially has any fenced frame reporting
+  // information associated with it.
+  bool has_fenced_frame_reporting;
+
+  DeprecatedFencedFrameMode mode;
 };

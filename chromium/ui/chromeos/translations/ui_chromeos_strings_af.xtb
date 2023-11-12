@@ -27,12 +27,12 @@
 <translation id="1201402288615127009">Volgende</translation>
 <translation id="1209796539517632982">Outomatiese naambedieners</translation>
 <translation id="1210831758834677569">Lao</translation>
+<translation id="1221555006497674479">Berging is min; daar is <ph name="REMAINING_PERCENTAGE" />% van jou <ph name="TOTAL_SPACE" /> gedeelde Drive-berging oor.</translation>
 <translation id="1243314992276662751">Laai op</translation>
 <translation id="1249250836236328755">Genre</translation>
 <translation id="1254593899333212300">Direkte internetverbinding</translation>
 <translation id="1272293450992660632">PIN-waardes stem nie ooreen nie.</translation>
 <translation id="1280820357415527819">Soek tans vir mobiele netwerke …</translation>
-<translation id="1291603679744561561">SIM is gesluit</translation>
 <translation id="1293556467332435079">Lêers</translation>
 <translation id="1297922636971898492">Google Drive is nie nou beskikbaar nie. Oplaai sal outomaties herbegin wanneer Google Drive terug is.</translation>
 <translation id="1307931752636661898">Kan nie Linux-lêers bekyk nie</translation>
@@ -51,6 +51,7 @@
 <translation id="1433628812591023318">Die lêer moet na Windows-lêers geskuif word om in Parallels Desktop gelos te word.</translation>
 <translation id="1435838927755162558">Deel vouer met Parallels Desktop</translation>
 <translation id="1439919885608649279">Persoon met blomme</translation>
+<translation id="1458457385801829801">Maak <ph name="TARGET_NAME" /> los</translation>
 <translation id="1471718551822868769">Slowaaks</translation>
 <translation id="1482884275703521657">Fins</translation>
 <translation id="148466539719134488">Switsers</translation>
@@ -73,6 +74,7 @@
 <translation id="1641780993263690097">Chinees-Pinjin</translation>
 <translation id="1646019627374511909">Maak tans <ph name="NUMBER_OF_ITEMS" /> lêers vanlyn beskikbaar</translation>
 <translation id="164969095109328410">Chrome-toestel</translation>
+<translation id="1661207570040737402">Jy het al die Google Workspace-berging in jou gedeelde Drive gebruik.</translation>
 <translation id="1661867754829461514">PIN ontbreek</translation>
 <translation id="166439687370499867">Gedeeldenetwerkopstellings mag nie verander word nie</translation>
 <translation id="1665611772925418501">Die lêer kon nie verander word nie.</translation>
@@ -145,6 +147,7 @@
 <translation id="2208919847696382164">Installeer met Linux</translation>
 <translation id="2225536596944493418">Is jy seker jy wil <ph name="NUMBER_OF_ITEMS" /> items uitvee?</translation>
 <translation id="2230062665678605299">Kon nie vouer "<ph name="FOLDER_NAME" />" skep nie. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2236732657580416950">Jou Google Drive-kasgeheue is uitgevee.</translation>
 <translation id="2239068707900391003">Persoon met koffie</translation>
 <translation id="2251368349685848079">Laai uit asblik terug</translation>
 <translation id="2282155092769082568">Outo-opstelling-URL:</translation>
@@ -190,6 +193,7 @@
 <translation id="2574327434504608656">1 vouer is met Bruschetta gedeel</translation>
 <translation id="2578394532502990878">Tamil-foneties</translation>
 <translation id="2579959351793446050">Odia</translation>
+<translation id="2587195714949534472">Berei tans voor om <ph name="FILE_NAME" /> te sinkroniseer …</translation>
 <translation id="2602810353103180630">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, Seinsterkte <ph name="SIGNAL_STRENGTH" />%, Geblokkeer deur jou administrateur, Besonderhede</translation>
 <translation id="2614589611416690597"><ph name="VIDEO_TYPE" />-video</translation>
 <translation id="2620090360073999360">Google Drive kan nie op hierdie oomblik bereik word nie.</translation>
@@ -219,6 +223,7 @@
 <translation id="2888807692577297075">Geen items stem met &lt;b&gt;"<ph name="SEARCH_STRING" />"&lt;/b&gt; ooreen nie</translation>
 <translation id="2894654529758326923">Inligting</translation>
 <translation id="2902734494705624966">VSA uitgebreid</translation>
+<translation id="2904378509913846215">’n Vouer met die naam “<ph name="FILENAME" />” bestaan reeds. Wil jy dit vervang met die lêer wat jy tans skuif?</translation>
 <translation id="290843123675549676">Mahratti</translation>
 <translation id="2923240520113693977">Esties</translation>
 <translation id="2938685643439809023">Mongolees</translation>
@@ -290,6 +295,7 @@
 <translation id="3486821258960016770">Mongools</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> foute.</translation>
 <translation id="3509680540198371098">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, seinsterkte <ph name="SIGNAL_STRENGTH" />%, besonderhede</translation>
+<translation id="3511705761158917664">Berei tans voor om <ph name="NUMBER_OF_ITEMS" /> items te sinkroniseer …</translation>
 <translation id="3522708245912499433">Portugees</translation>
 <translation id="3524311639100184459">Wees versigtig: Hierdie lêers is tydelik en kan outomaties uitgevee word om skyfspasie beskikbaar te maak.  <ph name="BEGIN_LINK" />Kom meer te wete<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Vouer</translation>
@@ -349,6 +355,7 @@
 <translation id="3971140002794351170">Laai mobiele profiel af, netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
 <translation id="3973925058222872294">Engels (VK)</translation>
 <translation id="3975895378829046965">Bangla-foneties</translation>
+<translation id="3999574733850440202">Microsoft-lêers wat onlangs oopgemaak is, het na OneDrive toe geskuif</translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4017788180641807848">Engels (VSA) met Workman-sleutelbord</translation>
 <translation id="4019998208269143058">Speld aan kitslêers vas</translation>
@@ -357,6 +364,7 @@
 <translation id="4092890906744441904">Iers</translation>
 <translation id="4124935795427217608">Eenhoring</translation>
 <translation id="4131235941541910880">Skuif onnodige items na asblik</translation>
+<translation id="4134804435730168042">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />; aktiveer ná toestelopstelling</translation>
 <translation id="4153015322587141338">Regsklik ’n lêer en kies "<ph name="PIN_COMMAND" />" vir kitstoegang tot jou lêers in die rak.</translation>
 <translation id="4157569377477607576">Administrateursbeleid beveel nie die volgende aan nie:</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> is geskuif.</translation>
@@ -399,11 +407,13 @@
 <translation id="4414834425328380570">“<ph name="FILE_NAME" />” sal uitgevee word en jy sal dit nie kan terugstel nie.</translation>
 <translation id="4418686080762064601">Skep 'n kortpad vir jou lêers</translation>
 <translation id="4425149324548788773">My Drive</translation>
+<translation id="4432921877815220091">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />; aktiveer ná toestelopstelling; bestuur deur jou admin</translation>
 <translation id="4439427728133035643">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, seinsterkte <ph name="SIGNAL_STRENGTH" />%, koppel</translation>
 <translation id="4442424173763614572">DNS-opsoek het misluk</translation>
 <translation id="4462159676511157176">Gepasmaakte naambedieners</translation>
 <translation id="4465725236958772856">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, deur jou administrateur bestuur, koppel</translation>
 <translation id="4470564870223067757">Hangul 2 Stel</translation>
+<translation id="4474142134969976028">Geen passende resultate nie</translation>
 <translation id="4477002475007461989">Roemeens</translation>
 <translation id="4477219268485577442">Bulgaars foneties</translation>
 <translation id="4508265954913339219">Kon nie aktiveer nie</translation>
@@ -475,6 +485,7 @@
 <translation id="4973523518332075481">Gebruik 'n naam wat <ph name="MAX_LENGTH" /> karakters of minder bevat</translation>
 <translation id="4973970068702235170">Kon nie kompakteer nie; onverwagte fout: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4984616446166309645">Japannees</translation>
+<translation id="4987699874727873250">Engels (Indië)</translation>
 <translation id="4988205478593450158">Is jy seker jy wil "<ph name="FILE_NAME" />" uitvee?</translation>
 <translation id="498902553138568924">Rooi skoenlapper</translation>
 <translation id="4992066212339426712">Ontdemp</translation>
@@ -605,6 +616,7 @@
 <translation id="5913638992615760742">Kon nie kopieer nie; 'n onverwagse fout: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="5926082595146149752">Nederlands met Internasionale VSA- (rekenaar-) sleutelbord</translation>
 <translation id="5932901536148835538">Chromebit</translation>
+<translation id="5948255720516436063">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />; aktiveer ná toestelopstelling</translation>
 <translation id="5955954492236143329"><ph name="NUMBER_OF_ITEMS" /> items</translation>
 <translation id="5957366693331451795">Chromeboxes</translation>
 <translation id="5982621672636444458">Rangskikopsies</translation>
@@ -639,6 +651,7 @@
 <translation id="6241349547798190358">Nederlands (België)</translation>
 <translation id="6267547857941397424">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="PHONE_NAME" />, seinsterkte <ph name="SIGNAL_STRENGTH" />%, foonbattery <ph name="BATTERY_STATUS" />%, koppel</translation>
 <translation id="6269630227984243955">Maleis</translation>
+<translation id="6271903698064569429">Lêers kan nie opgelaai word nie omdat “<ph name="SHARED_DRIVE_NAME" />” nie genoeg bergingspasie het nie.</translation>
 <translation id="6287852322318138013">Kies 'n program om hierdie lêer oop te maak</translation>
 <translation id="6295542640242147836">Sluit SIM</translation>
 <translation id="6296410173147755564">Ongeldige PUK</translation>
@@ -684,6 +697,7 @@
 <translation id="6657585470893396449">Wagwoord</translation>
 <translation id="6658865850469097484">Lêers wat meer as 30 dae lank in die asblik is, sal outomaties uitgevee word.</translation>
 <translation id="6673674183150363784">Frans (Frankryk) met Bépo-sleutelbord</translation>
+<translation id="670380500182402678">Vervang alles</translation>
 <translation id="6710022688720561421">Robot</translation>
 <translation id="6710213216561001401">Vorige</translation>
 <translation id="6732801395666424405">Sertifikate is nie gelaai nie</translation>
@@ -749,6 +763,7 @@
 <translation id="7126604456862387217">'&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;' - &lt;em&gt;deursoek Drive&lt;/em&gt;</translation>
 <translation id="7135561821015524160">Kannada-foneties</translation>
 <translation id="714034171374937760">Chromebase</translation>
+<translation id="7162080671816799010">“Passing vir onderwerp se alternatiewe naam” of “Passing vir domein-agtervoegsel” ontbreek om die stawingbedieneridentiteit te bekragtig</translation>
 <translation id="7165320105431587207">Kon nie netwerk opstel nie</translation>
 <translation id="7170041865419449892">Buite bereik</translation>
 <translation id="7180611975245234373">Herlaai</translation>
@@ -781,6 +796,7 @@
 <translation id="7458955835361612701">Geen onlangse prente nie</translation>
 <translation id="7460898608667578234">Oekraïens</translation>
 <translation id="7469894403370665791">Koppel outomaties aan hierdie netwerk</translation>
+<translation id="7481358317100446445">Gereed</translation>
 <translation id="7486315294984620427">Die lêer moet na Windows-lêers gekopieer word om in Parallels Desktop gelos te word.</translation>
 <translation id="749452993132003881">Hiragana</translation>
 <translation id="7495372004724182530">Malabaars-foneties</translation>
@@ -806,6 +822,7 @@
 <translation id="7655441028674523381">Gaan maklik na Google Foto's</translation>
 <translation id="7658239707568436148">Kanselleer</translation>
 <translation id="7663224033570512922">Hindi</translation>
+<translation id="7665680517722058469">Probeer nog ’n soektog</translation>
 <translation id="7689532716264131859"><ph name="NUMBER_OF_ITEMS" /> items is na die asblik geskuif</translation>
 <translation id="7693909743393669729">Alle data wat op 'n skyf geberg is, sal uitgevee word wanneer dit geformateer word en alle bestaande verdelings sal verwyder word, insluitend die verdelings wat nie sigbaar is nie. Hierdie handeling kan nie ontdoen word nie.</translation>
 <translation id="7695430100978772476">Kon nie <ph name="DRIVE_NAME" /> formateer nie</translation>
@@ -817,6 +834,7 @@
 <translation id="7724603315864178912">Knip</translation>
 <translation id="7732111077498238432">Netwerk word deur beleid beheer</translation>
 <translation id="7736003208887389532">Wil jy hierdie lêers permanent uitvee?</translation>
+<translation id="7740287852186792672">Soekresultate</translation>
 <translation id="7748626145866214022">Meer opsies is op die aksiebalk beskikbaar. Druk Alt + A om op die aksiebalk te fokus.</translation>
 <translation id="7760449188139285140">Chinees-Wubi</translation>
 <translation id="7765158879357617694">Skuif</translation>
@@ -868,6 +886,7 @@
 <translation id="8116072619078571545">Yswater</translation>
 <translation id="8128733386027980860">Engels (VK) met Dvorak-sleutelbord</translation>
 <translation id="8137331602592933310">"<ph name="FILENAME" />" is met jou gedeel. Jy kan dit nie uitvee nie, want dit behoort nie aan jou nie.</translation>
+<translation id="8138705869659070104">Aktiveer ná toestelopstelling</translation>
 <translation id="813913629614996137">Inisialiseer tans …</translation>
 <translation id="8147028810663464959">Karakterbreedte is vol</translation>
 <translation id="8151638057146502721">Stel op</translation>
@@ -893,6 +912,7 @@
 <translation id="8300849813060516376">OTASP het misluk</translation>
 <translation id="8312871300878166382">Plak in vouer</translation>
 <translation id="8329978297633540474">Gewone teks</translation>
+<translation id="8332007959299458842">Microsoft-lêers wat onlangs oopgemaak is, het na Google Drive toe geskuif</translation>
 <translation id="8335587457941836791">Ontspeld van rak af</translation>
 <translation id="8335837413233998004">Belarussies</translation>
 <translation id="8336153091935557858">Gister <ph name="YESTERDAY_DAYTIME" /></translation>
@@ -902,6 +922,7 @@
 <translation id="8386903983509584791">Skandering voltooi</translation>
 <translation id="8387733224523483503"><ph name="FILE_NAME" /> is onttrek.</translation>
 <translation id="8395901698320285466">Afmetings</translation>
+<translation id="8404498045299006085">Hou alles</translation>
 <translation id="8408068190360279472"><ph name="NETWORK_TYPE" />-netwerk; koppel tans</translation>
 <translation id="8425213833346101688">Verander</translation>
 <translation id="8431909052837336408">Verander SIM-PIN</translation>
@@ -918,6 +939,7 @@
 <translation id="8487700953926739672">Vanlyn beskikbaar</translation>
 <translation id="8492972329130824181">Tuisnetwerk is nie beskikbaar nie. Mobiele dataswerwing moet geaktiveer wees om te kan koppel.</translation>
 <translation id="8499098729323186194">Onttrek tans <ph name="NUMBER_OF_ITEMS" /> items …</translation>
+<translation id="8502913769543567768">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />; aktiveer ná toestelopstelling; bestuur deur jou admin</translation>
 <translation id="8521441079177373948">VK</translation>
 <translation id="853494022971700746">Frans (Frankryk)</translation>
 <translation id="8540608333167683902">Netwerk <ph name="NETWORK_INDEX" /> van <ph name="NETWORK_COUNT" />, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, seinsterkte <ph name="SIGNAL_STRENGTH" />%, besonderhede</translation>
@@ -961,6 +983,7 @@
 <translation id="8866284467018526531">Arabiese transliterasie</translation>
 <translation id="8873014196523807561">Sleep hierdie items na ’n nuwe vouer om hulle terug te stel. Die oorspronklike vouers vir sommige van hierdie items is uitgevee.</translation>
 <translation id="8874184842967597500">Nie gekoppel nie</translation>
+<translation id="8876368061475701452">Op waglys</translation>
 <translation id="8900820606136623064">Hongaars</translation>
 <translation id="8903931173357132290">Gegradueerde</translation>
 <translation id="8912078710089354287">Hond waai stert</translation>
@@ -978,6 +1001,7 @@
 <translation id="9046895021617826162">Kon nie koppel nie</translation>
 <translation id="9065512565307033593">Jou netwerktoegang sal gedeaktiveer word as jy nie verifieer nie.</translation>
 <translation id="908378762078012445">Russies met fonetiese AATSEEL-sleutelbord</translation>
+<translation id="9086302186042011942">Sinkroniseer tans</translation>
 <translation id="9099674669267916096">Aantal bladsye</translation>
 <translation id="9100610230175265781">Wagwoordfrase word vereis</translation>
 <translation id="9110990317705400362">Ons soek gedurig na maniere om jou blaai-ervaring veiliger te maak. Voorheen kon enige webwerf jou vra om 'n uitbreiding by jou blaaier te voeg. In die nuutste weergawes van Google Chrome moet jy Chrome spesifiek aansê dat jy hierdie uitbreidings wil installeer deur hulle via die uitbreidingbladsy by te voeg. <ph name="BEGIN_LINK" />Kom meer te wete<ph name="END_LINK" /></translation>

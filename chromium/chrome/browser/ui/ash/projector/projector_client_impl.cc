@@ -12,13 +12,15 @@
 #include "ash/public/cpp/projector/projector_new_screencast_precondition.h"
 #include "ash/webui/projector_app/projector_app_client.h"
 #include "ash/webui/projector_app/public/cpp/projector_app_constants.h"
-#include "base/bind.h"
+#include "ash/webui/system_apps/public/system_web_app_type.h"
+#include "base/check.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,6 +38,7 @@
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
+#include "media/audio/audio_device_description.h"
 #include "media/base/media_switches.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -52,31 +55,54 @@ inline const std::string& GetLocale() {
 
 inline const std::string GetLocaleOrLanguageForServerSideRecognition() {
   const std::string& locale = g_browser_process->GetApplicationLocale();
-
   // Some languages and locales need to be mapped to the default
   // languages/locales provided by the server side speech recognition service.
-  static constexpr auto kSupportedLanguagesAndLocales =
-      base::MakeFixedFlatMap<base::StringPiece, base::StringPiece>(
-          {{"zh", "cmn-hant-tw"},
-           {"zh-tw", "cmn-hant-tw"},
-           {"ar", "ar-x-maghrebi"}});
+  if (locale == "ar") {
+    return "ar-x-maghrebi";
+  }
+  return locale;
+}
 
-  base::fixed_flat_map<base::StringPiece, base::StringPiece,
-                       /*size_t=*/3>::const_iterator it =
-      kSupportedLanguagesAndLocales.find(base::ToLowerASCII(locale));
-  if (it != kSupportedLanguagesAndLocales.end()) {
-    return std::string(it->second);
+ash::OnDeviceToServerSpeechRecognitionFallbackReason GetFallbackReason(
+    ash::OnDeviceRecognitionAvailability availability) {
+  if (ash::features::ShouldForceEnableServerSideSpeechRecognitionForDev()) {
+    return ash::OnDeviceToServerSpeechRecognitionFallbackReason::
+        kEnforcedByFlag;
   }
 
-  return locale;
+  DCHECK_NE(availability, ash::OnDeviceRecognitionAvailability::kAvailable);
+  switch (availability) {
+    case ash::OnDeviceRecognitionAvailability::kSodaNotAvailable:
+      return ash::OnDeviceToServerSpeechRecognitionFallbackReason::
+          kSodaNotAvailable;
+    case ash::OnDeviceRecognitionAvailability::kUserLanguageNotAvailable:
+      return ash::OnDeviceToServerSpeechRecognitionFallbackReason::
+          kUserLanguageNotAvailableForSoda;
+    case ash::OnDeviceRecognitionAvailability::kSodaNotInstalled:
+      return ash::OnDeviceToServerSpeechRecognitionFallbackReason::
+          kSodaNotInstalled;
+    case ash::OnDeviceRecognitionAvailability::kSodaInstalling:
+      return ash::OnDeviceToServerSpeechRecognitionFallbackReason::
+          kSodaInstalling;
+    case ash::OnDeviceRecognitionAvailability::
+        kSodaInstallationErrorUnspecified:
+      return ash::OnDeviceToServerSpeechRecognitionFallbackReason::
+          kSodaInstallationErrorUnspecified;
+    case ash::OnDeviceRecognitionAvailability::
+        kSodaInstallationErrorNeedsReboot:
+      return ash::OnDeviceToServerSpeechRecognitionFallbackReason::
+          kSodaInstallationErrorNeedsReboot;
+    case ash::OnDeviceRecognitionAvailability::kAvailable:
+      break;
+  }
+  NOTREACHED();
+  return ash::OnDeviceToServerSpeechRecognitionFallbackReason::kMaxValue;
 }
 
 }  // namespace
 
 // static
 void ProjectorClientImpl::InitForProjectorAnnotator(views::WebView* web_view) {
-  if (!ash::features::IsProjectorAnnotatorEnabled())
-    return;
   web_view->LoadInitialURL(GURL(ash::kChromeUITrustedAnnotatorUrl));
 }
 
@@ -143,15 +169,24 @@ void ProjectorClientImpl::StartSpeechRecognition() {
 
   speech_recognizer_ = std::make_unique<SpeechRecognitionRecognizerClientImpl>(
       weak_ptr_factory_.GetWeakPtr(), ProfileManager::GetActiveUserProfile(),
+      media::AudioDeviceDescription::kDefaultDeviceId,
       media::mojom::SpeechRecognitionOptions::New(
           media::mojom::SpeechRecognitionMode::kCaption,
           /*enable_formatting=*/true, locale,
           /*is_server_based=*/!availability.use_on_device,
           media::mojom::RecognizerClientType::kProjector));
+  if (!availability.use_on_device) {
+    RecordOnDeviceToServerSpeechRecognitionFallbackReason(
+        GetFallbackReason(availability.on_device_availability));
+  }
 }
 
 void ProjectorClientImpl::StopSpeechRecognition() {
   speech_recognizer_->Stop();
+}
+
+void ProjectorClientImpl::ForceEndSpeechRecognition() {
+  SpeechRecognitionEnded(/*forced=*/true);
 }
 
 bool ProjectorClientImpl::GetBaseStoragePath(base::FilePath* result) const {
@@ -251,9 +286,7 @@ void ProjectorClientImpl::OnSpeechRecognitionStateChanged(
 }
 
 void ProjectorClientImpl::OnSpeechRecognitionStopped() {
-  speech_recognizer_.reset();
-  recognizer_status_ = SPEECH_RECOGNIZER_OFF;
-  controller_->OnSpeechRecognitionStopped();
+  SpeechRecognitionEnded(/*forced=*/false);
 }
 
 void ProjectorClientImpl::SetTool(const ash::AnnotatorTool& tool) {
@@ -310,6 +343,12 @@ void ProjectorClientImpl::MaybeSwitchDriveIntegrationServiceObservation() {
 
   drive_observation_.Reset();
   drive_observation_.Observe(drive_service);
+}
+
+void ProjectorClientImpl::SpeechRecognitionEnded(bool forced) {
+  speech_recognizer_.reset();
+  recognizer_status_ = SPEECH_RECOGNIZER_OFF;
+  controller_->OnSpeechRecognitionStopped(forced);
 }
 
 void ProjectorClientImpl::OnEnablementPolicyChanged() {

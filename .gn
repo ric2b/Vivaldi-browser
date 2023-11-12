@@ -38,12 +38,10 @@ default_args.is_component_build = true
 default_args.enable_remoting = false
 default_args.enable_nacl = false
 default_args.enable_ipc_fuzzer = false
+default_args.angle_enable_commit_id = false
 
 # We don't need the Chrome field trials
 default_args.disable_fieldtrial_testing_config = true
-
-# Don't need this normally
-default_args.chrome_pgo_phase = 0
 
 # These are the targets to check headers for by default. The files in targets
 # matching these patterns (see "gn help label_pattern" for format) will have

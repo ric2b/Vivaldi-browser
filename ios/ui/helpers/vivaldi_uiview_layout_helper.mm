@@ -21,7 +21,8 @@
   if (top) {
     NSLayoutConstraint* topAnchor =
       [self.topAnchor
-        constraintEqualToAnchor:top constant:padding.top == 0 ? 0 : padding.top];
+        constraintEqualToAnchor:top
+          constant:padding.top];
     [constraints addObject:topAnchor];
   }
 
@@ -30,7 +31,7 @@
     NSLayoutConstraint* leadingAnchor =
       [self.leadingAnchor
         constraintEqualToAnchor:leading
-          constant:padding.left == 0 ? 0 : padding.left];
+          constant:padding.left];
     [constraints addObject: leadingAnchor];
   }
 
@@ -39,7 +40,7 @@
     NSLayoutConstraint* bottomAnchor =
       [self.bottomAnchor
         constraintEqualToAnchor:bottom
-          constant:padding.bottom == 0 ? 0 : -padding.bottom];
+          constant:-padding.bottom];
     [constraints addObject:bottomAnchor];
   }
 
@@ -48,7 +49,7 @@
     NSLayoutConstraint* trailingAnchor =
       [self.trailingAnchor
         constraintEqualToAnchor:trailing
-          constant:padding.right == 0 ? 0 : -padding.right];
+          constant:-padding.right];
     [constraints addObject:trailingAnchor];
   }
 
@@ -143,28 +144,28 @@
   NSLayoutConstraint* topAnchor =
     [self.topAnchor
       constraintEqualToAnchor:superViewTopAnchor
-        constant:padding.top == 0 ? 0 : padding.top];
+        constant:padding.top];
   [constraints addObject:topAnchor];
 
   // Leading/Left anchor
   NSLayoutConstraint* leadingAnchor =
     [self.leadingAnchor
       constraintEqualToAnchor:superViewLeadingAnchor
-        constant:padding.left == 0 ? 0 : padding.left];
+        constant:padding.left];
   [constraints addObject: leadingAnchor];
 
   // Bottom anchor
   NSLayoutConstraint* bottomAnchor =
     [self.bottomAnchor
       constraintEqualToAnchor:superViewBottomAnchor
-        constant:padding.bottom == 0 ? 0 : -padding.bottom];
+        constant:-padding.bottom];
   [constraints addObject:bottomAnchor];
 
   // Trailing/Right anchor
   NSLayoutConstraint* trailingAnchor =
     [self.trailingAnchor
       constraintEqualToAnchor:superViewTrailingAnchor
-        constant:padding.right == 0 ? 0 : -padding.right];
+        constant:-padding.right];
   [constraints addObject:trailingAnchor];
 
   // Activate constraints
@@ -275,6 +276,13 @@
 
 // Match the constraints of a given view
 - (void) matchToView:(UIView*)view {
+  [self matchToView:view
+            padding:UIEdgeInsetsZero];
+}
+
+// Match the constraints of a given view with provided padding.
+- (void) matchToView:(UIView*)view
+             padding:(UIEdgeInsets)padding {
   self.translatesAutoresizingMaskIntoConstraints = NO;
 
   if (!view)
@@ -284,22 +292,30 @@
 
   // Top anchor
   NSLayoutConstraint* topAnchor =
-  [self.topAnchor constraintEqualToAnchor:view.topAnchor];
+    [self.topAnchor
+      constraintEqualToAnchor:view.topAnchor
+        constant:padding.top];
   [constraints addObject:topAnchor];
 
   // Leading/Left anchor
   NSLayoutConstraint* leadingAnchor =
-  [self.leadingAnchor constraintEqualToAnchor:view.leadingAnchor];
+    [self.leadingAnchor
+      constraintEqualToAnchor:view.leadingAnchor
+        constant:padding.left];
   [constraints addObject: leadingAnchor];
 
   // Bottom anchor
   NSLayoutConstraint* bottomAnchor =
-  [self.bottomAnchor constraintEqualToAnchor:view.bottomAnchor];
+    [self.bottomAnchor
+      constraintEqualToAnchor:view.bottomAnchor
+        constant:-padding.bottom];
   [constraints addObject:bottomAnchor];
 
   // Trailing/Right anchor
   NSLayoutConstraint* trailingAnchor =
-  [self.trailingAnchor constraintEqualToAnchor:view.trailingAnchor];
+    [self.trailingAnchor
+      constraintEqualToAnchor:view.trailingAnchor
+        constant:-padding.right];
   [constraints addObject:trailingAnchor];
 
   // Activate constraints
@@ -341,6 +357,10 @@
 
 - (NSLayoutYAxisAnchor*)safeBottomAnchor {
   return self.safeAreaLayoutGuide.bottomAnchor;
+}
+
+- (BOOL)isiPadOrientationPortrait {
+  return self.bounds.size.height > self.bounds.size.width;
 }
 
 @end

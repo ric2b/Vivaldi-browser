@@ -51,6 +51,8 @@ typedef NS_ENUM(NSInteger, TableViewNoteFolderAccessoryType) {
 @property(nonatomic, strong) UIImageView* folderImageView;
 // The folder title displayed by this cell.
 @property(nonatomic, strong) UITextField* folderTitleTextField;
+// The folder child count displayed by this cell
+@property(nonatomic, strong) UILabel* folderItemsLabel;
 // Accessory Type.
 @property(nonatomic, assign)
     TableViewNoteFolderAccessoryType noteAccessoryType;

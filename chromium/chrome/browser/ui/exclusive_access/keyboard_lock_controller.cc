@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/exclusive_access/keyboard_lock_controller.h"
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
@@ -93,9 +93,7 @@ bool KeyboardLockController::RequiresPressAndHoldEscToExit() const {
 
 void KeyboardLockController::RequestKeyboardLock(WebContents* web_contents,
                                                  bool esc_key_locked) {
-  if (!exclusive_access_manager()
-           ->fullscreen_controller()
-           ->IsFullscreenForTabOrPending(web_contents)) {
+  if (!web_contents->IsFullscreen()) {
     return;
   }
 

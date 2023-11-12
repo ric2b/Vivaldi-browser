@@ -170,6 +170,25 @@ export function createCreditCardEntry():
 }
 
 /**
+ * Creates a new valid IBAN entry for testing.
+ * If `value` is not empty, set guid when creating the IBAN entry, otherwise,
+ * leave it undefined, as it is an empty IBAN.
+ */
+export function createIbanEntry(
+    value?: string, nickname?: string): chrome.autofillPrivate.IbanEntry {
+  return {
+    guid: value ? makeGuid() : undefined,
+    value: (value || value === '') ? value : 'CR99 0000 0000 0000 8888 88',
+    nickname: (nickname || nickname === '') ? nickname : 'My doctor\'s IBAN',
+    metadata: {
+      isLocal: true,
+      summaryLabel: ibanPatternMaker(value || 'CR99 0000 0000 0000 8888 88'),
+      summarySublabel: nickname || 'My doctor\'s IBAN',
+    },
+  };
+}
+
+/**
  * Creates a new insecure credential.
  */
 export function makeInsecureCredential(
@@ -219,7 +238,7 @@ export function makePasswordCheckStatus(
 /**
  * Creates a new random GUID for testing.
  */
-function makeGuid(): string {
+export function makeGuid(): string {
   return patternMaker('xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', 16);
 }
 
@@ -232,6 +251,31 @@ function patternMaker(pattern: string, base: number): string {
   return pattern.replace(/x/g, function() {
     return Math.floor(Math.random() * base).toString(base);
   });
+}
+
+/**
+ * Converts value (E.g., CH12 1234 1234 1234 1234) of IBAN to a partially masked
+ * text formatted by the following rules:
+ * 1. Reveal the first and the last four characters.
+ * 2. Mask the remaining digits.
+ * 3. The identifier string will be arranged in groups of four with a space
+ *    between each group.
+ * Examples: BE71 0961 2345 6769 will be shown as: BE71 **** **** 6769.
+ */
+function ibanPatternMaker(ibanValue: string): string {
+  let output = '';
+  const strippedValue = ibanValue.replace(/\s/g, '');
+  for (let i = 0; i < strippedValue.length; ++i) {
+    if (i % 4 === 0 && i > 0) {
+      output += ' ';
+    }
+    if (i < 4 || i >= strippedValue.length - 4) {
+      output += strippedValue.charAt(i);
+    } else {
+      output += `*`;
+    }
+  }
+  return output;
 }
 
 /**
@@ -383,6 +427,7 @@ export class TestAutofillManager extends TestBrowserProxy implements
     AutofillManagerProxy {
   data: {
     addresses: chrome.autofillPrivate.AddressEntry[],
+    accountInfo: chrome.autofillPrivate.AccountInfo,
   };
 
   lastCallback:
@@ -390,6 +435,7 @@ export class TestAutofillManager extends TestBrowserProxy implements
 
   constructor() {
     super([
+      'getAccountInfo',
       'getAddressList',
       'removeAddress',
       'removePersonalDataManagerListener',
@@ -399,6 +445,10 @@ export class TestAutofillManager extends TestBrowserProxy implements
     // Set these to have non-empty data.
     this.data = {
       addresses: [],
+      accountInfo: {
+        email: 'stub-user@example.com',
+        isSyncEnabledForAutofillProfiles: true,
+      },
     };
 
     // Holds the last callbacks so they can be called when needed.
@@ -414,6 +464,11 @@ export class TestAutofillManager extends TestBrowserProxy implements
 
   removePersonalDataManagerListener(_listener: PersonalDataChangedListener) {
     this.methodCalled('removePersonalDataManagerListener');
+  }
+
+  getAccountInfo() {
+    this.methodCalled('getAccountInfo');
+    return Promise.resolve(this.data.accountInfo);
   }
 
   getAddressList() {
@@ -449,6 +504,8 @@ export class PaymentsManagerExpectations {
   removedCreditCards: number = 0;
   clearedCachedCreditCards: number = 0;
   addedVirtualCards: number = 0;
+  requestedIbans: number = 0;
+  removedIbans: number = 0;
 }
 
 /**
@@ -460,6 +517,7 @@ export class TestPaymentsManager extends TestBrowserProxy implements
 
   data: {
     creditCards: chrome.autofillPrivate.CreditCardEntry[],
+    ibans: chrome.autofillPrivate.IbanEntry[],
     upiIds: string[],
   };
 
@@ -471,15 +529,18 @@ export class TestPaymentsManager extends TestBrowserProxy implements
       'setPersonalDataManagerListener',
       'removePersonalDataManagerListener',
       'getCreditCardList',
+      'getIbanList',
       'getUpiIdList',
       'clearCachedCreditCard',
       'removeCreditCard',
+      'removeIban',
       'addVirtualCard',
     ]);
 
     // Set these to have non-empty data.
     this.data = {
       creditCards: [],
+      ibans: [],
       upiIds: [],
     };
 
@@ -530,6 +591,18 @@ export class TestPaymentsManager extends TestBrowserProxy implements
 
   removeVirtualCard(_cardId: string) {}
 
+  saveIban(_iban: chrome.autofillPrivate.IbanEntry) {}
+
+  removeIban(_guid: string) {
+    this.methodCalled('removeIban');
+  }
+
+  getIbanList() {
+    this.methodCalled('getIbanList');
+    return Promise.resolve(this.data.ibans);
+  }
+
+
   setIsUserVerifyingPlatformAuthenticatorAvailable(available: boolean|null) {
     this.isUserVerifyingPlatformAuthenticatorAvailable_ = available;
   }
@@ -543,17 +616,28 @@ export class TestPaymentsManager extends TestBrowserProxy implements
    */
   assertExpectations(expected: PaymentsManagerExpectations) {
     assertEquals(
-        expected.requestedCreditCards, this.getCallCount('getCreditCardList'));
+        expected.requestedCreditCards, this.getCallCount('getCreditCardList'),
+        'requestedCreditCards mismatch');
     assertEquals(
         expected.listeningCreditCards,
         this.getCallCount('setPersonalDataManagerListener') -
-            this.getCallCount('removePersonalDataManagerListener'));
+            this.getCallCount('removePersonalDataManagerListener'),
+        'listeningCreditCards mismatch');
     assertEquals(
-        expected.removedCreditCards, this.getCallCount('removeCreditCard'));
+        expected.removedCreditCards, this.getCallCount('removeCreditCard'),
+        'removedCreditCards mismatch');
     assertEquals(
         expected.clearedCachedCreditCards,
-        this.getCallCount('clearCachedCreditCard'));
+        this.getCallCount('clearCachedCreditCard'),
+        'clearedCachedCreditCards mismatch');
     assertEquals(
-        expected.addedVirtualCards, this.getCallCount('addVirtualCard'));
+        expected.addedVirtualCards, this.getCallCount('addVirtualCard'),
+        'addedVirtualCards mismatch');
+    assertEquals(
+        expected.requestedIbans, this.getCallCount('getIbanList'),
+        'requestedIbans mismatch');
+    assertEquals(
+        expected.removedIbans, this.getCallCount('removeIban'),
+        'removedIbans mismatch');
   }
 }

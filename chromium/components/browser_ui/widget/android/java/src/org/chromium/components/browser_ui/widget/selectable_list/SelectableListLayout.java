@@ -25,6 +25,8 @@ import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver;
 import androidx.recyclerview.widget.RecyclerView.ItemAnimator;
 import androidx.recyclerview.widget.RecyclerView.OnScrollListener;
 
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.components.browser_ui.widget.FadingShadow;
 import org.chromium.components.browser_ui.widget.FadingShadowView;
 import org.chromium.components.browser_ui.widget.R;
@@ -32,6 +34,7 @@ import org.chromium.components.browser_ui.widget.displaystyle.DisplayStyleObserv
 import org.chromium.components.browser_ui.widget.displaystyle.HorizontalDisplayStyle;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig.DisplayStyle;
+import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate.SelectionObserver;
 import org.chromium.ui.widget.LoadingView;
 
@@ -52,8 +55,8 @@ import org.chromium.build.BuildConfig;
  *
  * @param <E> The type of the selectable items this layout holds.
  */
-public class SelectableListLayout<E>
-        extends FrameLayout implements DisplayStyleObserver, SelectionObserver<E> {
+public class SelectableListLayout<E> extends FrameLayout
+        implements DisplayStyleObserver, SelectionObserver<E>, BackPressHandler {
     private static final int WIDE_DISPLAY_MIN_PADDING_DP = 16;
     private RecyclerView.Adapter mAdapter;
     private ViewStub mToolbarStub;
@@ -68,6 +71,9 @@ public class SelectableListLayout<E>
     private int mEmptyStringResId;
 
     private UiConfig mUiConfig;
+
+    private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
+            new ObservableSupplierImpl<>();
 
     // Vivaldi
     private boolean mIsNotes;
@@ -102,6 +108,7 @@ public class SelectableListLayout<E>
 
     public SelectableListLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
+        onBackPressStateChanged(); // Initialize back press state.
     }
 
     @Override
@@ -294,6 +301,7 @@ public class SelectableListLayout<E>
 
     @Override
     public void onSelectionStateChange(List<E> selectedItems) {
+        onBackPressStateChanged();
         setToolbarShadowVisibility();
     }
 
@@ -315,6 +323,7 @@ public class SelectableListLayout<E>
         mRecyclerView.setItemAnimator(null);
         mToolbarShadow.setVisibility(View.VISIBLE);
         mEmptyView.setText(searchEmptyString);
+        onBackPressStateChanged();
 
         if (BuildConfig.IS_VIVALDI) // Vivaldi
             mEmptyView.setTag(TAG_SEARCH);
@@ -327,6 +336,8 @@ public class SelectableListLayout<E>
         mRecyclerView.setItemAnimator(mItemAnimator);
         setToolbarShadowVisibility();
         mEmptyView.setText(mEmptyStringResId);
+        onBackPressStateChanged();
+
         if (BuildConfig.IS_VIVALDI) // Vivaldi
             mEmptyView.setTag(TAG_NORMAL);
     }
@@ -403,6 +414,27 @@ public class SelectableListLayout<E>
         }
 
         return false;
+    }
+
+    @Override
+    public @BackPressResult int handleBackPress() {
+        var ret = onBackPressed();
+        assert ret;
+        return ret ? BackPressResult.SUCCESS : BackPressResult.FAILURE;
+    }
+
+    @Override
+    public ObservableSupplier<Boolean> getHandleBackPressChangedSupplier() {
+        return mBackPressStateSupplier;
+    }
+
+    private void onBackPressStateChanged() {
+        if (mToolbar == null) {
+            mBackPressStateSupplier.set(false);
+            return;
+        }
+        mBackPressStateSupplier.set(
+                mToolbar.getSelectionDelegate().isSelectionEnabled() || mToolbar.isSearching());
     }
 
     /** Vivaldi **/

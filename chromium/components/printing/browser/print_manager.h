@@ -18,7 +18,7 @@
 #if BUILDFLAG(IS_ANDROID)
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #endif
 
 namespace printing {
@@ -48,7 +48,6 @@ class PrintManager : public content::WebContentsObserver,
                         DidPrintDocumentCallback callback) override;
   void IsPrintingEnabled(IsPrintingEnabledCallback callback) override;
   void DidShowPrintDialog() override;
-  void ShowInvalidPrinterSettingsError() override;
   void PrintingFailed(int32_t cookie,
                       mojom::PrintFailureReason reason) override;
 

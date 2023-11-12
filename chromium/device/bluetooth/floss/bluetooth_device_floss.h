@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -17,7 +18,7 @@
 #include "device/bluetooth/floss/bluetooth_pairing_floss.h"
 #include "device/bluetooth/floss/bluetooth_socket_floss.h"
 #include "device/bluetooth/floss/floss_adapter_client.h"
-#include "device/bluetooth/floss/floss_gatt_client.h"
+#include "device/bluetooth/floss/floss_gatt_manager_client.h"
 
 namespace floss {
 
@@ -122,7 +123,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceFloss
   BluetoothPairingFloss* pairing() const { return pairing_.get(); }
 
   void InitializeDeviceProperties(base::OnceClosure callback);
-  bool HasReadProperties() const { return property_reads_triggered_; }
+  bool IsReadingProperties() const { return property_reads_triggered_; }
+  bool HasReadProperties() const { return property_reads_completed_; }
 
   // FlossGattClientObserver overrides
   void GattClientConnectionState(GattStatus status,
@@ -198,7 +200,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceFloss
 
   // Transport type of device.
   // TODO(b/204708206): Update with property framework when available
-  device::BluetoothTransport transport_;
+  device::BluetoothTransport transport_ =
+      device::BluetoothTransport::BLUETOOTH_TRANSPORT_CLASSIC;
 
   // Class of device.
   // TODO(b/204708206): Update with property framework when available
@@ -225,6 +228,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceFloss
 
   // Have we triggered initial property reads?
   bool property_reads_triggered_ = false;
+
+  // Have we completed reading properties?
+  bool property_reads_completed_ = false;
 
   // Specific uuid to search for after gatt connection is established. If this
   // is not set, then we do full discovery.

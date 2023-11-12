@@ -301,7 +301,7 @@ bool RuleParser::ParseScriptletInjectionRule(
       } else if (in_quotes || !base::IsAsciiWhitespace(c)) {
         argument += c;
       } else if (!argument.empty() || after_quotes) {
-        arguments.Append(std::move(argument));
+        arguments.GetList().Append(std::move(argument));
       }
 
       if (c != '\'')
@@ -309,14 +309,14 @@ bool RuleParser::ParseScriptletInjectionRule(
     }
 
     if (!argument.empty() || after_quotes) {
-      arguments.Append(std::move(argument));
+      arguments.GetList().Append(std::move(argument));
     }
 
     // Can happen if we have an argument string containing only a '\\' or a '\''
     if (arguments.GetList().size() == 0)
       continue;
 
-    arguments_list.Append(std::move(arguments));
+    arguments_list.GetList().Append(std::move(arguments));
   }
 
   std::string serialized_arguments;

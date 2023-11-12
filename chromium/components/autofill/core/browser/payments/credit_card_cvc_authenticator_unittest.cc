@@ -24,7 +24,6 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autocomplete_history_manager.h"
@@ -73,9 +72,9 @@ const char16_t kTestNumber16[] = u"4234567890123456";
 
 }  // namespace
 
-class CreditCardCVCAuthenticatorTest : public testing::Test {
+class CreditCardCvcAuthenticatorTest : public testing::Test {
  public:
-  CreditCardCVCAuthenticatorTest() {}
+  CreditCardCvcAuthenticatorTest() {}
 
   void SetUp() override {
     autofill_client_.SetPrefs(test::PrefServiceForTesting());
@@ -95,13 +94,13 @@ class CreditCardCVCAuthenticatorTest : public testing::Test {
         std::make_unique<testing::NiceMock<TestAutofillDriver>>();
 
     payments::TestPaymentsClient* payments_client =
-        new payments::TestPaymentsClient(
-            autofill_driver_->GetURLLoaderFactory(),
-            autofill_client_.GetIdentityManager(), &personal_data_manager_);
+        new payments::TestPaymentsClient(autofill_client_.GetURLLoaderFactory(),
+                                         autofill_client_.GetIdentityManager(),
+                                         &personal_data_manager_);
     autofill_client_.set_test_payments_client(
         std::unique_ptr<payments::TestPaymentsClient>(payments_client));
     cvc_authenticator_ =
-        std::make_unique<CreditCardCVCAuthenticator>(&autofill_client_);
+        std::make_unique<CreditCardCvcAuthenticator>(&autofill_client_);
   }
 
   void TearDown() override {
@@ -161,10 +160,10 @@ class CreditCardCVCAuthenticatorTest : public testing::Test {
   scoped_refptr<AutofillWebDataService> database_;
   TestPersonalDataManager personal_data_manager_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  std::unique_ptr<CreditCardCVCAuthenticator> cvc_authenticator_;
+  std::unique_ptr<CreditCardCvcAuthenticator> cvc_authenticator_;
 };
 
-TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateServerCardSuccess) {
+TEST_F(CreditCardCvcAuthenticatorTest, AuthenticateServerCardSuccess) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
 
@@ -183,20 +182,19 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateServerCardSuccess) {
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateVirtualCardSuccess) {
+TEST_F(CreditCardCvcAuthenticatorTest, AuthenticateVirtualCardSuccess) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
   card.set_record_type(CreditCard::RecordType::VIRTUAL_CARD);
   autofill_client_.set_last_committed_primary_main_frame_url(
       GURL("https://vcncvcretrievaltest.com/"));
+  CardUnmaskChallengeOption cvc_challenge_option =
+      test::GetCardUnmaskChallengeOptions(
+          {CardUnmaskChallengeOptionType::kCvc})[0];
 
   cvc_authenticator_->Authenticate(
       &card, requester_->GetWeakPtr(), &personal_data_manager_,
-      "test_vcn_context_token",
-      CardUnmaskChallengeOption{.id = "test_challenge_option_id",
-                                .type = CardUnmaskChallengeOptionType::kCvc,
-                                .challenge_input_length = 3U,
-                                .cvc_position = CvcPosition::kBackOfCard});
+      "test_vcn_context_token", cvc_challenge_option);
 
   payments::FullCardRequest* full_card_request = GetFullCardRequest();
   ASSERT_TRUE(full_card_request->GetShouldUnmaskCardForTesting());
@@ -204,10 +202,11 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateVirtualCardSuccess) {
       full_card_request->GetUnmaskRequestDetailsForTesting()
           ->selected_challenge_option;
   ASSERT_TRUE(challenge_option);
-  EXPECT_EQ(challenge_option->id, "test_challenge_option_id");
+  EXPECT_EQ(challenge_option->id.value(), cvc_challenge_option.id.value());
   EXPECT_EQ(challenge_option->type, CardUnmaskChallengeOptionType::kCvc);
-  EXPECT_EQ(challenge_option->challenge_input_length, 3U);
-  EXPECT_EQ(challenge_option->cvc_position, CvcPosition::kBackOfCard);
+  EXPECT_EQ(challenge_option->challenge_input_length,
+            cvc_challenge_option.challenge_input_length);
+  EXPECT_EQ(challenge_option->cvc_position, cvc_challenge_option.cvc_position);
 
   OnDidGetRealPan(AutofillClient::PaymentsRpcResult::kSuccess, kTestNumber,
                   /*is_virtual_card=*/true);
@@ -222,19 +221,18 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateVirtualCardSuccess) {
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateVirtualCard_InvalidURL) {
+TEST_F(CreditCardCvcAuthenticatorTest, AuthenticateVirtualCard_InvalidURL) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
   card.set_record_type(CreditCard::RecordType::VIRTUAL_CARD);
   autofill_client_.set_last_committed_primary_main_frame_url(GURL());
+  CardUnmaskChallengeOption cvc_challenge_option =
+      test::GetCardUnmaskChallengeOptions(
+          {CardUnmaskChallengeOptionType::kCvc})[0];
 
   cvc_authenticator_->Authenticate(
       &card, requester_->GetWeakPtr(), &personal_data_manager_,
-      "test_vcn_context_token",
-      CardUnmaskChallengeOption{.id = "test_challenge_option_id",
-                                .type = CardUnmaskChallengeOptionType::kCvc,
-                                .challenge_input_length = 3U,
-                                .cvc_position = CvcPosition::kBackOfCard});
+      "test_vcn_context_token", cvc_challenge_option);
 
   ASSERT_FALSE(GetFullCardRequest()->GetShouldUnmaskCardForTesting());
   EXPECT_FALSE(*requester_->did_succeed());
@@ -248,7 +246,7 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateVirtualCard_InvalidURL) {
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateNetworkError) {
+TEST_F(CreditCardCvcAuthenticatorTest, AuthenticateNetworkError) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
 
@@ -267,7 +265,7 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateNetworkError) {
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(CreditCardCVCAuthenticatorTest, AuthenticatePermanentFailure) {
+TEST_F(CreditCardCvcAuthenticatorTest, AuthenticatePermanentFailure) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
 
@@ -286,7 +284,7 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticatePermanentFailure) {
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateTryAgainFailure) {
+TEST_F(CreditCardCvcAuthenticatorTest, AuthenticateTryAgainFailure) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
 
@@ -313,7 +311,7 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticateTryAgainFailure) {
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(CreditCardCVCAuthenticatorTest, AuthenticatePromptClosed) {
+TEST_F(CreditCardCvcAuthenticatorTest, AuthenticatePromptClosed) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
 
@@ -332,7 +330,7 @@ TEST_F(CreditCardCVCAuthenticatorTest, AuthenticatePromptClosed) {
       /*expected_bucket_count=*/1);
 }
 
-TEST_F(CreditCardCVCAuthenticatorTest, VirtualCardAuthenticatePromptClosed) {
+TEST_F(CreditCardCvcAuthenticatorTest, VirtualCardAuthenticatePromptClosed) {
   base::HistogramTester histogram_tester;
   CreditCard card = CreateServerCard(kTestGUID, kTestNumber);
   card.set_record_type(CreditCard::VIRTUAL_CARD);
@@ -342,10 +340,8 @@ TEST_F(CreditCardCVCAuthenticatorTest, VirtualCardAuthenticatePromptClosed) {
   cvc_authenticator_->Authenticate(
       &card, requester_->GetWeakPtr(), &personal_data_manager_,
       "test_vcn_context_token",
-      CardUnmaskChallengeOption{.id = "test_challenge_option_id",
-                                .type = CardUnmaskChallengeOptionType::kCvc,
-                                .challenge_input_length = 3U,
-                                .cvc_position = CvcPosition::kBackOfCard});
+      test::GetCardUnmaskChallengeOptions(
+          {CardUnmaskChallengeOptionType::kCvc})[0]);
   cvc_authenticator_->OnFullCardRequestFailed(
       card.record_type(), payments::FullCardRequest::PROMPT_CLOSED);
 

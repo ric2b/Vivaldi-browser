@@ -9,14 +9,16 @@
 #include <utility>
 #include <vector>
 
+#include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/autofill_agent_test_api.h"
-#include "components/autofill/content/renderer/autofill_assistant_agent.h"
 #include "components/autofill/content/renderer/password_generation_agent.h"
 #include "components/autofill/content/renderer/test_password_autofill_agent.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "content/public/renderer/render_frame.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/render_view_test.h"
 #include "content/public/test/test_utils.h"
@@ -170,17 +172,13 @@ class AutofillAgentTest : public content::RenderViewTest {
     password_generation_ = std::make_unique<PasswordGenerationAgent>(
         GetMainRenderFrame(), password_autofill_agent_.get(),
         &associated_interfaces_);
-    autofill_assistant_agent_ =
-        std::make_unique<AutofillAssistantAgent>(GetMainRenderFrame());
     autofill_agent_ = std::make_unique<AutofillAgent>(
         GetMainRenderFrame(), password_autofill_agent_.get(),
-        password_generation_.get(), autofill_assistant_agent_.get(),
-        &associated_interfaces_);
+        password_generation_.get(), &associated_interfaces_);
   }
 
   void TearDown() override {
     autofill_agent_.reset();
-    autofill_assistant_agent_.reset();
     password_generation_.reset();
     password_autofill_agent_.reset();
     RenderViewTest::TearDown();
@@ -198,7 +196,6 @@ class AutofillAgentTest : public content::RenderViewTest {
   blink::AssociatedInterfaceRegistry associated_interfaces_;
   std::unique_ptr<PasswordAutofillAgent> password_autofill_agent_;
   std::unique_ptr<PasswordGenerationAgent> password_generation_;
-  std::unique_ptr<AutofillAssistantAgent> autofill_assistant_agent_;
 };
 
 // Enables AutofillAcrossIframes.
@@ -280,6 +277,24 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_RemovedForm) {
     // Called explicitly because the event is throttled.
     test_api().DidAssociateFormControlsDynamically();
   }
+}
+
+TEST_F(AutofillAgentTestWithFeatures, TriggerReparseWithResponse) {
+  base::MockOnceCallback<void(bool)> mock_callback;
+  EXPECT_CALL(autofill_driver_, FormsSeen).Times(0);
+  EXPECT_CALL(mock_callback, Run).Times(0);
+  autofill_agent_->TriggerReparseWithResponse(mock_callback.Get());
+  task_environment_.FastForwardBy(base::Milliseconds(50));
+  EXPECT_CALL(autofill_driver_, FormsSeen);
+  EXPECT_CALL(mock_callback, Run(true));
+  task_environment_.FastForwardBy(base::Milliseconds(50));
+}
+
+TEST_F(AutofillAgentTestWithFeatures, TriggerReparseWithResponse_CalledTwice) {
+  base::MockOnceCallback<void(bool)> mock_callback;
+  autofill_agent_->TriggerReparseWithResponse(mock_callback.Get());
+  EXPECT_CALL(mock_callback, Run(false));
+  autofill_agent_->TriggerReparseWithResponse(mock_callback.Get());
 }
 
 }  // namespace autofill

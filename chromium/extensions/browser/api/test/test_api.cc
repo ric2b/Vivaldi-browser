@@ -34,7 +34,7 @@ namespace NotifyFail = api::test::NotifyFail;
 namespace PassMessage = api::test::PassMessage;
 namespace WaitForRoundTrip = api::test::WaitForRoundTrip;
 
-TestExtensionFunction::~TestExtensionFunction() {}
+TestExtensionFunction::~TestExtensionFunction() = default;
 
 bool TestExtensionFunction::PreRunValidation(std::string* error) {
   if (!ExtensionFunction::PreRunValidation(error))
@@ -46,14 +46,14 @@ bool TestExtensionFunction::PreRunValidation(std::string* error) {
   return true;
 }
 
-TestNotifyPassFunction::~TestNotifyPassFunction() {}
+TestNotifyPassFunction::~TestNotifyPassFunction() = default;
 
 ExtensionFunction::ResponseAction TestNotifyPassFunction::Run() {
   TestApiObserverRegistry::GetInstance()->NotifyTestPassed(browser_context());
   return RespondNow(NoArguments());
 }
 
-TestNotifyFailFunction::~TestNotifyFailFunction() {}
+TestNotifyFailFunction::~TestNotifyFailFunction() = default;
 
 ExtensionFunction::ResponseAction TestNotifyFailFunction::Run() {
   std::unique_ptr<NotifyFail::Params> params(
@@ -64,7 +64,7 @@ ExtensionFunction::ResponseAction TestNotifyFailFunction::Run() {
   return RespondNow(NoArguments());
 }
 
-TestLogFunction::~TestLogFunction() {}
+TestLogFunction::~TestLogFunction() = default;
 
 ExtensionFunction::ResponseAction TestLogFunction::Run() {
   std::unique_ptr<Log::Params> params(Log::Params::Create(args()));
@@ -85,11 +85,11 @@ ExtensionFunction::ResponseAction TestSendMessageFunction::Run() {
   // If none of the listeners intend to respond, or one has already responded,
   // finish the function. We always reply to the message, even if it's just an
   // empty string.
-  if (!listener_will_respond || response_.get()) {
+  if (!listener_will_respond || response_) {
     if (!response_) {
-      response_ = OneArgument(base::Value(std::string()));
+      response_.emplace(WithArguments(std::string()));
     }
-    return RespondNow(std::move(response_));
+    return RespondNow(std::move(*response_));
   }
   // Otherwise, wait for a reply.
   waiting_ = true;
@@ -100,16 +100,16 @@ TestSendMessageFunction::~TestSendMessageFunction() = default;
 
 void TestSendMessageFunction::Reply(const std::string& message) {
   DCHECK(!response_);
-  response_ = OneArgument(base::Value(message));
+  response_.emplace(WithArguments(message));
   if (waiting_)
-    Respond(std::move(response_));
+    Respond(std::move(*response_));
 }
 
 void TestSendMessageFunction::ReplyWithError(const std::string& error) {
   DCHECK(!response_);
-  response_ = Error(error);
+  response_.emplace(Error(error));
   if (waiting_)
-    Respond(std::move(response_));
+    Respond(std::move(*response_));
 }
 
 TestSendScriptResultFunction::TestSendScriptResultFunction() = default;
@@ -139,7 +139,7 @@ TestGetConfigFunction::TestConfigState::GetInstance() {
   return base::Singleton<TestConfigState>::get();
 }
 
-TestGetConfigFunction::~TestGetConfigFunction() {}
+TestGetConfigFunction::~TestGetConfigFunction() = default;
 
 ExtensionFunction::ResponseAction TestGetConfigFunction::Run() {
   TestConfigState* test_config_state = TestConfigState::GetInstance();
@@ -149,7 +149,7 @@ ExtensionFunction::ResponseAction TestGetConfigFunction::Run() {
       OneArgument(base::Value(test_config_state->config_state()->Clone())));
 }
 
-TestWaitForRoundTripFunction::~TestWaitForRoundTripFunction() {}
+TestWaitForRoundTripFunction::~TestWaitForRoundTripFunction() = default;
 
 ExtensionFunction::ResponseAction TestWaitForRoundTripFunction::Run() {
   std::unique_ptr<WaitForRoundTrip::Params> params(

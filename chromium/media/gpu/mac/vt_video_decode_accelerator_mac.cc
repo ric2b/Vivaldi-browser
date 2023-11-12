@@ -14,14 +14,13 @@
 #include <memory>
 
 #include "base/atomic_sequence_num.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/mac_util.h"
-#include "base/mac/sdk_forward_declarations.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_policy.h"
 #include "base/metrics/histogram_macros.h"
@@ -32,6 +31,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/system/sys_info.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -1064,12 +1064,31 @@ void VTVideoDecodeAccelerator::DecodeTaskH264(
         if (result != H264Parser::kOk)
           break;
         for (auto& sei_msg : sei.msgs) {
-          if (sei_msg.type == H264SEIMessage::kSEIRecoveryPoint &&
-              sei_msg.recovery_point.recovery_frame_cnt == 0) {
-            // We only support immediate recovery points. Supporting
-            // future points would require dropping |recovery_frame_cnt|
-            // frames when needed.
-            frame->has_recovery_point = true;
+          switch (sei_msg.type) {
+            case H264SEIMessage::kSEIRecoveryPoint:
+              if (sei_msg.recovery_point.recovery_frame_cnt == 0) {
+                // We only support immediate recovery points. Supporting
+                // future points would require dropping |recovery_frame_cnt|
+                // frames when needed.
+                frame->has_recovery_point = true;
+              }
+              break;
+            case H264SEIMessage::kSEIMasteringDisplayInfo:
+              if (!config_.hdr_metadata) {
+                config_.hdr_metadata = gfx::HDRMetadata();
+              }
+              sei_msg.mastering_display_info.PopulateColorVolumeMetadata(
+                  config_.hdr_metadata->color_volume_metadata);
+              break;
+            case H264SEIMessage::kSEIContentLightLevelInfo:
+              if (!config_.hdr_metadata) {
+                config_.hdr_metadata = gfx::HDRMetadata();
+              }
+              sei_msg.content_light_level_info.PopulateHDRMetadata(
+                  config_.hdr_metadata.value());
+              break;
+            default:
+              break;
           }
         }
         break;
@@ -1157,6 +1176,7 @@ void VTVideoDecodeAccelerator::DecodeTaskH264(
 
   if (frame->is_idr || frame->has_recovery_point)
     waiting_for_idr_ = false;
+  frame->hdr_metadata = config_.hdr_metadata;
 
   // If no IDR has been seen yet, skip decoding. Note that Flash sends
   // configuration changes as a bitstream with only SPS/PPS; we don't print
@@ -2240,9 +2260,9 @@ bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
 
       gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
       bool success = shared_image_stub->CreateSharedImage(
-          mailbox, /*client_id=*/0, std::move(handle), buffer_format_,
-          planes[plane], frame_size, color_space, kTopLeft_GrSurfaceOrigin,
-          kOpaque_SkAlphaType, shared_image_usage);
+          mailbox, std::move(handle), buffer_format_, planes[plane], frame_size,
+          color_space, kTopLeft_GrSurfaceOrigin, kOpaque_SkAlphaType,
+          shared_image_usage);
       if (!success) {
         DLOG(ERROR) << "Failed to create shared image";
         NotifyError(PLATFORM_FAILURE, SFT_PLATFORM_ERROR);
@@ -2395,9 +2415,9 @@ void VTVideoDecodeAccelerator::Destroy() {
   QueueFlush(TASK_DESTROY);
 }
 
-bool VTVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
+bool VTVideoDecodeAccelerator::TryToSetupDecodeOnSeparateSequence(
     const base::WeakPtr<Client>& decode_client,
-    const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
+    const scoped_refptr<base::SequencedTaskRunner>& decode_task_runner) {
   return false;
 }
 

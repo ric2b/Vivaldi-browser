@@ -23,14 +23,13 @@ BASE_FEATURE(kCastDisableModelNameCheck,
              "CastDisableModelNameCheck",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// This changes the default interval for refresh frame requests when the capture
-// source is showing static content from the slower default to a faster one.
+// This flag enables HiDPI capture during Cast Streaming mirroring sessions.
 //
-// This feature is overridden by the Chrome command line flag
-// --mirroring-refresh-interval-ms=<num>.
-BASE_FEATURE(kCastFastRefreshFrames,
-             "CastFastRefreshFrames",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+// This feature is enabled by the Chrome command line flag
+// --enable-cast-streaming-with-hidpi.
+BASE_FEATURE(kCastEnableStreamingWithHiDPI,
+             "CastEnableStreamingWithHiDPI",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
 }  // namespace mirroring

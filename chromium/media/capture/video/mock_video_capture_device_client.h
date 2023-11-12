@@ -5,6 +5,8 @@
 #ifndef MEDIA_CAPTURE_VIDEO_MOCK_VIDEO_CAPTURE_DEVICE_CLIENT_H_
 #define MEDIA_CAPTURE_VIDEO_MOCK_VIDEO_CAPTURE_DEVICE_CLIENT_H_
 
+#include <memory>
+
 #include "media/capture/video/video_capture_device.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -18,6 +20,7 @@ class MockVideoCaptureDeviceClient : public VideoCaptureDevice::Client {
   MockVideoCaptureDeviceClient();
   ~MockVideoCaptureDeviceClient() override;
 
+  MOCK_METHOD0(OnCaptureConfigurationChanged, void(void));
   MOCK_METHOD9(OnIncomingCapturedData,
                void(const uint8_t* data,
                     int length,

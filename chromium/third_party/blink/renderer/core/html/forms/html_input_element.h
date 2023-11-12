@@ -40,6 +40,7 @@
 namespace blink {
 
 class AXObject;
+class ComputedStyleBuilder;
 class DragData;
 class ExceptionState;
 class FileList;
@@ -171,8 +172,6 @@ class CORE_EXPORT HTMLInputElement
   // WebAutofillState::kNotFilled otherwise.
   void SetSuggestedValue(const String& value) override;
 
-  void SetEditingValue(const String&);
-
   ScriptValue valueAsDate(ScriptState* script_state) const;
   void setValueAsDate(ScriptState* script_state,
                       const ScriptValue& value,
@@ -216,7 +215,7 @@ class CORE_EXPORT HTMLInputElement
                                    unsigned end,
                                    ExceptionState&);
 
-  bool LayoutObjectIsNeeded(const ComputedStyle&) const final;
+  bool LayoutObjectIsNeeded(const DisplayStyle&) const final;
   LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout) override;
   void DetachLayoutTree(bool performing_reattach) final;
   void UpdateSelectionOnFocus(SelectionBehaviorOnFocus,
@@ -464,8 +463,7 @@ class CORE_EXPORT HTMLInputElement
 
   void AddToRadioButtonGroup();
   void RemoveFromRadioButtonGroup();
-  scoped_refptr<ComputedStyle> CustomStyleForLayoutObject(
-      const StyleRecalcContext&) override;
+  void AdjustStyle(ComputedStyleBuilder&) override;
 
   void MaybeReportPiiMetrics();
 

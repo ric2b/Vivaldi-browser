@@ -10,17 +10,17 @@
 import '../../css/common.css.js';
 import './albums_subpage_element.js';
 import './ambient_weather_element.js';
-import './ambient_preview_element.js';
+import './ambient_preview_small_element.js';
 import './animation_theme_list_element.js';
 import './toggle_row_element.js';
 import './topic_source_list_element.js';
 
-import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {afterNextRender} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {AmbientModeAlbum, AnimationTheme, TemperatureUnit, TopicSource} from '../personalization_app.mojom-webui.js';
-import {isAmbientModeAllowed, Paths} from '../personalization_router_element.js';
+import {AmbientModeAlbum, AnimationTheme, TemperatureUnit, TopicSource} from '../../personalization_app.mojom-webui.js';
+import {isAmbientModeAllowed, isPersonalizationJellyEnabled} from '../load_time_booleans.js';
+import {Paths} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 
 import {setAmbientModeEnabled} from './ambient_controller.js';
@@ -51,24 +51,40 @@ export class AmbientSubpage extends WithPersonalizationStore {
         type: Object,
         value: null,
       },
-      ambientModeEnabled_: Boolean,
-      temperatureUnit_: Number,
-      topicSource_: Number,
-      loadingSettings_: {
+      ambientModeEnabled_: {
+        type: Boolean,
+        value: null,
+      },
+      temperatureUnit_: {
+        type: Number,
+        value: null,
+      },
+      topicSource_: {
+        type: Number,
+        value: null,
+      },
+      loading_: {
         type: Boolean,
         computed:
-            'computeLoadingSettings_(albums_, temperatureUnit_, topicSource_)',
+            'computeLoading_(ambientModeEnabled_, albums_, temperatureUnit_, topicSource_)',
+      },
+      isPersonalizationJellyEnabled_: {
+        type: Boolean,
+        value() {
+          return isPersonalizationJellyEnabled();
+        },
       },
     };
   }
 
   path: Paths;
   queryParams: Record<string, string>;
-  private albums_: AmbientModeAlbum[]|null = null;
-  private ambientModeEnabled_: boolean|null = null;
-  private animationTheme_: AnimationTheme|null = null;
-  private temperatureUnit_: TemperatureUnit|null = null;
-  private topicSource_: TopicSource|null = null;
+  private albums_: AmbientModeAlbum[]|null;
+  private ambientModeEnabled_: boolean|null;
+  private animationTheme_: AnimationTheme|null;
+  private temperatureUnit_: TemperatureUnit|null;
+  private topicSource_: TopicSource|null;
+  private isPersonalizationJellyEnabled_: boolean;
 
   // Refetch albums if the user is currently viewing ambient subpage, focuses
   // another window, and then re-focuses personalization app.
@@ -175,13 +191,19 @@ export class AmbientSubpage extends WithPersonalizationStore {
     return path === Paths.AMBIENT_ALBUMS;
   }
 
-  private loadingAmbientMode_(): boolean {
+  private shouldShowZeroState_(): boolean {
+    // TODO(b/253470693): Remove after Ambient subpage UI change is released.
+    return this.ambientModeEnabled_ === false &&
+        !this.isPersonalizationJellyEnabled_;
+  }
+
+  private isLoadingAmbientMode_(): boolean {
     return this.ambientModeEnabled_ === null;
   }
 
-  private computeLoadingSettings_(): boolean {
-    return this.albums_ === null || this.topicSource_ === null ||
-        this.temperatureUnit_ === null;
+  private computeLoading_(): boolean {
+    return this.ambientModeEnabled_ === null || this.albums_ === null ||
+        this.topicSource_ === null || this.temperatureUnit_ === null;
   }
 
   private getPlaceholders_(x: number): number[] {
@@ -190,14 +212,6 @@ export class AmbientSubpage extends WithPersonalizationStore {
 
   private getClassContainer_(x: number): string {
     return `ambient-text-placeholder-${x}`;
-  }
-
-  /**
-   * Determines whether ambient subpage UI restructure is enabled. Value can be
-   * mocked in tests.
-   */
-  private isAmbientSubpageUiChangeEnabled_(): boolean {
-    return loadTimeData.getBoolean('isAmbientSubpageUIChangeEnabled');
   }
 }
 

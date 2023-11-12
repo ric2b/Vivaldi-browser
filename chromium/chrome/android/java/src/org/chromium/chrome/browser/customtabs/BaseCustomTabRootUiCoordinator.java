@@ -37,8 +37,13 @@ import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabController;
 import org.chromium.chrome.browser.customtabs.features.branding.BrandingController;
+import org.chromium.chrome.browser.customtabs.features.partialcustomtab.CustomTabHeightStrategy;
+import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabBottomSheetStrategy;
+import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabDisplayManager;
+import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabTabObserver;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarCoordinator;
+import org.chromium.chrome.browser.desktop_site.DesktopSiteSettingsIPHController;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ActivityType;
@@ -85,6 +90,8 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
     // Created only when ChromeFeatureList.CctBrandTransparency is enabled.
     // TODO(https://crbug.com/1343056): Make it part of the ctor.
     private @Nullable BrandingController mBrandingController;
+
+    private @Nullable DesktopSiteSettingsIPHController mDesktopSiteSettingsIPHController;
 
     /**
      * Construct a new BaseCustomTabRootUiCoordinator.
@@ -207,9 +214,16 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             mBrandingController.onToolbarInitialized(toolbar.getBrandingDelegate());
         }
         toolbar.setCloseButtonPosition(mIntentDataProvider.get().getCloseButtonPosition());
-        if (mIntentDataProvider.get().isPartialHeightCustomTab()) {
-            Callback<Runnable> softInputCallback =
-                    ((PartialCustomTabHeightStrategy) mCustomTabHeightStrategy)::onShowSoftInput;
+        if (mIntentDataProvider.get().isPartialCustomTab()) {
+            Callback<Runnable> softInputCallback;
+            if (ChromeFeatureList.sCctResizableSideSheet.isEnabled()) {
+                softInputCallback = ((
+                        PartialCustomTabDisplayManager) mCustomTabHeightStrategy)::onShowSoftInput;
+            } else {
+                softInputCallback = ((PartialCustomTabBottomSheetStrategy)
+                                mCustomTabHeightStrategy)::onShowSoftInput;
+            }
+
             mTabController.get().registerTabObserver(
                     new PartialCustomTabTabObserver(softInputCallback));
             mTabController.get().registerTabObserver(new EmptyTabObserver() {
@@ -249,7 +263,6 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         return new IncognitoReauthCoordinatorFactory(mActivity, mTabModelSelectorSupplier.get(),
                 mModalDialogManagerSupplier.get(), new IncognitoReauthManager(),
                 new SettingsLauncherImpl(),
-                /*tabSwitcherCustomViewManagerOneshotSupplier= */ null,
                 /*incognitoReauthTopToolbarDelegate= */ null,
                 /*layoutManager=*/null,
                 /*showRegularOverviewIntent= */ showRegularOverviewIntent,
@@ -278,11 +291,17 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
 
         mCustomTabHeightStrategy = CustomTabHeightStrategy.createStrategy(mActivity,
                 intentDataProvider.getInitialActivityHeight(),
+                intentDataProvider.getInitialActivityWidth(),
+                intentDataProvider.getActivityBreakPoint(),
                 intentDataProvider.isPartialCustomTabFixedHeight(),
                 CustomTabsConnection.getInstance(), intentDataProvider.getSession(),
                 mActivityLifecycleDispatcher, mFullscreenManager,
                 DeviceFormFactor.isWindowOnTablet(mWindowAndroid),
-                intentDataProvider.canInteractWithBackground());
+                intentDataProvider.canInteractWithBackground(),
+                intentDataProvider.showSideSheetMaximizeButton(),
+                intentDataProvider.getActivitySideSheetDecorationType(),
+                intentDataProvider.getSideSheetPosition(),
+                intentDataProvider.getSideSheetSlideInBehavior());
     }
 
     @Override
@@ -303,7 +322,7 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
         // This is necessary if app handler cannot rely on the popup window that ensures the menu
         // will not be clipped off the screen, which can happen in partial CCT.
         // TODO(crbug.com/1382010): Add a render test to prevent regressions.
-        if (mIntentDataProvider.get().isPartialHeightCustomTab()) {
+        if (mIntentDataProvider.get().isPartialCustomTab()) {
             View coord = mActivity.findViewById(R.id.coordinator);
             int[] location = new int[2];
             coord.getLocationInWindow(location);
@@ -334,6 +353,11 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
             mBrandingController = null;
         }
 
+        if (mDesktopSiteSettingsIPHController != null) {
+            mDesktopSiteSettingsIPHController.destroy();
+            mDesktopSiteSettingsIPHController = null;
+        }
+
         mCustomTabHeightStrategy.destroy();
     }
 
@@ -359,7 +383,13 @@ public class BaseCustomTabRootUiCoordinator extends RootUiCoordinator {
      * Runs a set of deferred startup tasks.
      */
     void onDeferredStartup() {
-        RequestDesktopUtils.maybeShowDefaultEnableGlobalSettingMessage(
+        boolean didShowPrompt = RequestDesktopUtils.maybeShowDefaultEnableGlobalSettingMessage(
                 Profile.getLastUsedRegularProfile(), mMessageDispatcher, mActivity);
+        if (!didShowPrompt && mAppMenuCoordinator != null) {
+            mDesktopSiteSettingsIPHController = DesktopSiteSettingsIPHController.create(mActivity,
+                    mWindowAndroid, mActivityTabProvider, Profile.getLastUsedRegularProfile(),
+                    getToolbarManager().getMenuButtonView(),
+                    mAppMenuCoordinator.getAppMenuHandler(), getPrimaryDisplaySizeInInches());
+        }
     }
 }

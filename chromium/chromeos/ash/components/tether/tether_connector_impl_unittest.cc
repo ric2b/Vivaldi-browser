@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
@@ -158,7 +158,7 @@ class TetherConnectorImplTest : public testing::Test {
     fake_secure_channel_client_ =
         std::make_unique<secure_channel::FakeSecureChannelClient>();
     fake_wifi_hotspot_connector_ = std::make_unique<FakeWifiHotspotConnector>(
-        helper_.network_state_handler());
+        helper_.network_state_handler(), helper_.technology_state_controller());
     fake_active_host_ = std::make_unique<FakeActiveHost>();
     fake_tether_host_fetcher_ =
         std::make_unique<FakeTetherHostFetcher>(test_devices_);

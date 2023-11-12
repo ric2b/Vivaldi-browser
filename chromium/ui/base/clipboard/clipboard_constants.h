@@ -84,6 +84,17 @@ extern NSString* const kUTTypeChromiumImageAndHTML;
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
 extern NSString* const kUTTypeChromiumInitiatedDrag;
 
+// Data type placed on dragging pasteboards when the drag is initiated from a
+// renderer that is privileged. There is never any data associated with this
+// type.
+COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
+extern NSString* const kUTTypeChromiumPrivilegedInitiatedDrag;
+
+// Data type placed on dragging pasteboards when the drag is initiated from a
+// renderer. There is never any data associated with this type.
+COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
+extern NSString* const kUTTypeChromiumRendererInitiatedDrag;
+
 // A type specifying web custom data. The data is pickled.
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
 extern NSString* const kUTTypeChromiumWebCustomData;
@@ -111,10 +122,10 @@ extern NSString* const kUTTypeWebKitWebURLsWithTitles;
 
 // ----- ANDROID MIME TYPES -----
 
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(UI_BASE_CLIPBOARD_TYPES)
 extern const char kMimeTypeImageURI[];
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 
 // ----- OTHER RELATED CONSTANTS -----
 

@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
@@ -191,9 +191,6 @@ class OwnerSettingsServiceAsh : public ownership::OwnerSettingsService,
 
   // Whether TPM token still needs to be initialized.
   bool waiting_for_tpm_token_ = true;
-
-  // Whether easy unlock operation is finished.
-  bool waiting_for_easy_unlock_operation_finshed_ = true;
 
   // True if local-owner policy fixups are still pending.
   bool has_pending_fixups_ = false;

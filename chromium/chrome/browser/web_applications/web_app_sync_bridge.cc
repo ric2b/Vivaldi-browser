@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
@@ -17,7 +17,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/types/pass_key.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
@@ -26,6 +26,7 @@
 #include "chrome/browser/web_applications/web_app_database_factory.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_id.h"
+#include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_prefs_utils.h"
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
@@ -138,7 +139,8 @@ WebAppSyncBridge::~WebAppSyncBridge() = default;
 void WebAppSyncBridge::SetSubsystems(
     AbstractWebAppDatabaseFactory* database_factory,
     WebAppCommandManager* command_manager,
-    WebAppCommandScheduler* command_scheduler) {
+    WebAppCommandScheduler* command_scheduler,
+    WebAppInstallManager* install_manager) {
   DCHECK(database_factory);
   database_ = std::make_unique<WebAppDatabase>(
       database_factory,
@@ -146,6 +148,7 @@ void WebAppSyncBridge::SetSubsystems(
                           base::Unretained(this)));
   command_manager_ = command_manager;
   command_scheduler_ = command_scheduler;
+  install_manager_ = install_manager;
 }
 
 std::unique_ptr<WebAppRegistryUpdate> WebAppSyncBridge::BeginUpdate() {
@@ -164,15 +167,32 @@ void WebAppSyncBridge::CommitUpdate(
   DCHECK(is_in_update_);
   is_in_update_ = false;
 
-  if (update == nullptr || update->update_data().IsEmpty()) {
+  if (update == nullptr) {
     std::move(callback).Run(/*success*/ true);
     return;
   }
 
-  if (!disable_checks_for_testing_)
-    CheckRegistryUpdateData(update->update_data());
-
   std::unique_ptr<RegistryUpdateData> update_data = update->TakeUpdateData();
+
+  // Remove all unchanged apps.
+  RegistryUpdateData::Apps changed_apps_to_update;
+  for (std::unique_ptr<WebApp>& app_to_update : update_data->apps_to_update) {
+    const AppId& app_id = app_to_update->app_id();
+    if (*app_to_update != *registrar().GetAppById(app_id)) {
+      changed_apps_to_update.push_back(std::move(app_to_update));
+    }
+  }
+  update_data->apps_to_update = std::move(changed_apps_to_update);
+
+  if (update_data->IsEmpty()) {
+    std::move(callback).Run(/*success*/ true);
+    return;
+  }
+
+  if (!disable_checks_for_testing_) {
+    CheckRegistryUpdateData(*update_data);
+  }
+
   std::unique_ptr<syncer::MetadataChangeList> metadata_change_list =
       CreateMetadataChangeList();
 
@@ -192,19 +212,20 @@ void WebAppSyncBridge::Init(base::OnceClosure callback) {
                                          std::move(callback)));
 }
 
-void WebAppSyncBridge::SetAppUserDisplayMode(const AppId& app_id,
-                                             UserDisplayMode user_display_mode,
-                                             bool is_user_action) {
+void WebAppSyncBridge::SetAppUserDisplayMode(
+    const AppId& app_id,
+    mojom::UserDisplayMode user_display_mode,
+    bool is_user_action) {
   if (is_user_action) {
     switch (user_display_mode) {
-      case UserDisplayMode::kStandalone:
+      case mojom::UserDisplayMode::kStandalone:
         base::RecordAction(
             base::UserMetricsAction("WebApp.SetWindowMode.Window"));
         break;
-      case UserDisplayMode::kBrowser:
+      case mojom::UserDisplayMode::kBrowser:
         base::RecordAction(base::UserMetricsAction("WebApp.SetWindowMode.Tab"));
         break;
-      case UserDisplayMode::kTabbed:
+      case mojom::UserDisplayMode::kTabbed:
         base::RecordAction(
             base::UserMetricsAction("WebApp.SetWindowMode.Tabbed"));
         break;
@@ -261,18 +282,6 @@ void WebAppSyncBridge::UpdateAppsDisableMode() {
     return;
 
   registrar_->NotifyWebAppsDisabledModeChanged();
-}
-
-void WebAppSyncBridge::SetAppIsLocallyInstalled(const AppId& app_id,
-                                                bool is_locally_installed) {
-  {
-    ScopedRegistryUpdate update(this);
-    WebApp* web_app = update->UpdateApp(app_id);
-    if (web_app)
-      web_app->SetIsLocallyInstalled(is_locally_installed);
-  }
-  registrar_->NotifyWebAppLocallyInstalledStateChanged(app_id,
-                                                       is_locally_installed);
 }
 
 void WebAppSyncBridge::SetAppLastBadgingTime(const AppId& app_id,
@@ -345,42 +354,6 @@ void WebAppSyncBridge::SetUserLaunchOrdinal(
   WebApp* web_app = update->UpdateApp(app_id);
   if (web_app)
     web_app->SetUserLaunchOrdinal(std::move(launch_ordinal));
-}
-
-void WebAppSyncBridge::RemoveAllowedLaunchProtocol(
-    const AppId& app_id,
-    const std::string& protocol_scheme) {
-  // Use a scope here, so that the web app registry is updated when
-  // `update` goes out of scope. If it doesn't then observers will
-  // examine stale data.
-  {
-    ScopedRegistryUpdate update(this);
-    WebApp* app_to_update = update->UpdateApp(app_id);
-    base::flat_set<std::string> protocol_handlers(
-        app_to_update->allowed_launch_protocols());
-    protocol_handlers.erase(protocol_scheme);
-    app_to_update->SetAllowedLaunchProtocols(std::move(protocol_handlers));
-  }
-  // Notify observers that the list of allowed protocols was updated.
-  registrar_->NotifyWebAppProtocolSettingsChanged();
-}
-
-void WebAppSyncBridge::RemoveDisallowedLaunchProtocol(
-    const AppId& app_id,
-    const std::string& protocol_scheme) {
-  // Use a scope here, so that the web app registry is updated when
-  // `update` goes out of scope. If it doesn't then observers will
-  // examine stale data.
-  {
-    ScopedRegistryUpdate update(this);
-    WebApp* app_to_update = update->UpdateApp(app_id);
-    base::flat_set<std::string> protocol_handlers(
-        app_to_update->disallowed_launch_protocols());
-    protocol_handlers.erase(protocol_scheme);
-    app_to_update->SetDisallowedLaunchProtocols(std::move(protocol_handlers));
-  }
-  // Notify observers that the list of disallowed protocols was updated.
-  registrar_->NotifyWebAppProtocolSettingsChanged();
 }
 
 #if BUILDFLAG(IS_MAC)
@@ -709,8 +682,9 @@ absl::optional<syncer::ModelError> WebAppSyncBridge::MergeSyncData(
 absl::optional<syncer::ModelError> WebAppSyncBridge::ApplySyncChanges(
     std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
     syncer::EntityChangeList entity_changes) {
-  if (!disable_checks_for_testing_)
-    CHECK(change_processor()->IsTrackingMetadata());
+  // `change_processor()->IsTrackingMetadata()` may be false if
+  // the sync database is invalid and CheckForInvalidPersistedMetadata()
+  // is resetting it.
 
   auto update_local_data = std::make_unique<RegistryUpdateData>();
 
@@ -786,6 +760,19 @@ void WebAppSyncBridge::SetUninstallFromSyncCallbackForTesting(
     UninstallFromSyncCallback callback) {
   uninstall_from_sync_before_registry_update_callback_for_testing_ =
       std::move(callback);
+}
+
+void WebAppSyncBridge::SetAppIsLocallyInstalledForTesting(
+    const AppId& app_id,
+    bool is_locally_installed) {
+  {
+    ScopedRegistryUpdate update(this);
+    WebApp* web_app = update->UpdateApp(app_id);
+    if (web_app) {
+      web_app->SetIsLocallyInstalled(is_locally_installed);
+    }
+  }
+  install_manager_->NotifyWebAppInstalledWithOsHooks(app_id);
 }
 
 void WebAppSyncBridge::MaybeUninstallAppsPendingUninstall() {

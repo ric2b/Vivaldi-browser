@@ -10,7 +10,6 @@ import static org.junit.Assert.assertTrue;
 import static org.chromium.chrome.browser.browserservices.TrustedWebActivityTestUtil.isTrustedWebActivity;
 
 import android.net.Uri;
-import android.os.Build;
 import android.os.RemoteException;
 
 import androidx.test.filters.MediumTest;
@@ -25,8 +24,7 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
-import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityTestUtil;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -49,8 +47,8 @@ import java.util.concurrent.TimeoutException;
  * Tests TrustedWebActivity location delegation.
  */
 @RunWith(BaseJUnit4ClassRunner.class)
+@DoNotBatch(reason = "Tasks run at TWA startup.")
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@DisabledTest(message = "crbug.com/1116518")
 public class TrustedWebActivityLocationDelegationTest {
     public final CustomTabActivityTestRule mCustomTabActivityTestRule =
             new CustomTabActivityTestRule();
@@ -62,6 +60,8 @@ public class TrustedWebActivityLocationDelegationTest {
     public final RuleChain mRuleChain =
             RuleChain.emptyRuleChain().around(mCustomTabActivityTestRule).around(mCertVerifierRule);
 
+    // Origin of the test_trusted_web_activity.
+    private static final String TEST_ORIGIN = "www.example.com";
     private static final String TEST_FILE = "/content/test/data/android/geolocation.html";
     private static final String TEST_SUPPORT_PACKAGE = "org.chromium.chrome.tests.support";
 
@@ -69,6 +69,7 @@ public class TrustedWebActivityLocationDelegationTest {
 
     @Before
     public void setUp() throws TimeoutException, RemoteException {
+        mCustomTabActivityTestRule.setFinishActivity(true);
         // Initialize native.
         LibraryLoader.getInstance().ensureInitialized();
 
@@ -78,8 +79,7 @@ public class TrustedWebActivityLocationDelegationTest {
                 ContentSwitches.HOST_RESOLVER_RULES, "MAP * " + mapToUri.getAuthority());
 
         mTestPage = mCustomTabActivityTestRule.getTestServer().getURLWithHostName(
-                "www.example.com", TEST_FILE);
-
+                TEST_ORIGIN, TEST_FILE);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(
                 TrustedWebActivityTestUtil.createTrustedWebActivityIntentAndVerifiedSession(
                         mTestPage, TEST_SUPPORT_PACKAGE));
@@ -87,19 +87,17 @@ public class TrustedWebActivityLocationDelegationTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1113325")
     public void getLocationFromTestTwaService() throws TimeoutException, Exception {
         Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
         PermissionUpdateWaiter updateWaiter =
                 new PermissionUpdateWaiter("Count:", mCustomTabActivityTestRule.getActivity());
-        tab.addObserver(updateWaiter);
+        TestThreadUtils.runOnUiThreadBlocking(() -> { tab.addObserver(updateWaiter); });
         getGeolocation();
         updateWaiter.waitForNumUpdates(1);
     }
 
     @Test
     @MediumTest
-    @DisableIf.Build(sdk_is_less_than = Build.VERSION_CODES.M, message = "crbug.com/1115568")
     public void getLocationFromChrome_noTwaService() throws TimeoutException, Exception {
         String packageName = "other.package.name";
         String testPage = mCustomTabActivityTestRule.getTestServer().getURLWithHostName(
@@ -148,20 +146,20 @@ public class TrustedWebActivityLocationDelegationTest {
         });
     }
 
-    private void verifyLocationFromChrome() throws TimeoutException, Exception {
+    private void verifyLocationFromChrome() throws Exception {
         Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
 
         setAllowChromeSiteLocation(false);
         PermissionUpdateWaiter errorWaiter =
                 new PermissionUpdateWaiter("deny", mCustomTabActivityTestRule.getActivity());
-        tab.addObserver(errorWaiter);
+        TestThreadUtils.runOnUiThreadBlocking(() -> { tab.addObserver(errorWaiter); });
         getGeolocation();
         errorWaiter.waitForNumUpdates(0);
 
         setAllowChromeSiteLocation(true);
         PermissionUpdateWaiter updateWaiter =
                 new PermissionUpdateWaiter("Count:", mCustomTabActivityTestRule.getActivity());
-        tab.addObserver(updateWaiter);
+        TestThreadUtils.runOnUiThreadBlocking(() -> { tab.addObserver(updateWaiter); });
         getGeolocation();
         errorWaiter.waitForNumUpdates(1);
     }

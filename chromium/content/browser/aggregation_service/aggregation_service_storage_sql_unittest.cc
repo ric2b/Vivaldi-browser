@@ -9,11 +9,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -444,8 +444,8 @@ TEST_F(AggregationServiceStorageSqlTest, VersionTooNew_RazesDB) {
     // The values here are irrelevant, as the meta table already exists.
     ASSERT_TRUE(meta.Init(&raw_db, /*version=*/1, /*compatible_version=*/1));
 
-    meta.SetVersionNumber(meta.GetVersionNumber() + 1);
-    meta.SetCompatibleVersionNumber(meta.GetVersionNumber() + 1);
+    ASSERT_TRUE(meta.SetVersionNumber(meta.GetVersionNumber() + 1));
+    ASSERT_TRUE(meta.SetCompatibleVersionNumber(meta.GetVersionNumber() + 1));
   }
 
   // The DB should be razed because the version is too new.
@@ -831,7 +831,8 @@ TEST_F(AggregationServiceStorageSqlTest,
       base::Time::Min(), base::Time::Max(),
       base::BindLambdaForTesting(
           [&reporting_origins](const blink::StorageKey& storage_key) {
-            return storage_key != blink::StorageKey(reporting_origins[2]);
+            return storage_key !=
+                   blink::StorageKey::CreateFirstParty(reporting_origins[2]);
           }));
 
   std::vector<AggregationServiceStorage::RequestAndId> stored_reports =

@@ -26,16 +26,16 @@ import {CrContainerShadowMixin} from 'chrome://resources/cr_elements/cr_containe
 import {CrDrawerElement} from 'chrome://resources/cr_elements/cr_drawer/cr_drawer.js';
 import {FindShortcutMixin} from 'chrome://resources/cr_elements/find_shortcut_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {listenOnce} from 'chrome://resources/js/util_ts.js';
 import {Debouncer, DomIf, microTask, PolymerElement, timeOut} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {loadTimeData} from '../../i18n_setup.js';
 import {SettingsPrefsElement} from '../../prefs/prefs.js';
 import {castExists} from '../assert_extras.js';
-import {setGlobalScrollTarget} from '../global_scroll_target_behavior.js';
+import {setGlobalScrollTarget} from '../common/global_scroll_target_mixin.js';
 import {recordClick, recordNavigation, recordPageBlur, recordPageFocus, recordSettingChange} from '../metrics_recorder.js';
 import {convertPrefToSettingMetric} from '../metrics_utils.js';
-import {OSPageVisibility, osPageVisibility} from '../os_page_visibility.js';
+import {OsPageVisibility, osPageVisibility} from '../os_page_visibility.js';
 import {OsToolbarElement} from '../os_toolbar/os_toolbar.js';
 import {RouteObserverMixin} from '../route_observer_mixin.js';
 import {Route, Router} from '../router.js';
@@ -164,7 +164,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
   private advancedOpenedInMain_: boolean;
   private advancedOpenedInMenu_: boolean;
   private toolbarSpinnerActive_: boolean;
-  private pageVisibility_: OSPageVisibility;
+  private pageVisibility_: OsPageVisibility;
   private havePlayStoreApp_: boolean;
   private showAndroidApps_: boolean;
   private showArcvmManageUsb_: boolean;
@@ -347,7 +347,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
     }
   }
 
-  // Override FindShortcutBehavior methods.
+  // Override FindShortcutMixin methods.
   override handleFindShortcut(modalContextOpen: boolean) {
     if (modalContextOpen || !this.showToolbar_) {
       return false;
@@ -358,7 +358,7 @@ class OsSettingsUiElement extends OsSettingsUiElementBase {
     return true;
   }
 
-  // Override FindShortcutBehavior methods.
+  // Override FindShortcutMixin methods.
   override searchInputHasFocus() {
     if (!this.showToolbar_) {
       return false;

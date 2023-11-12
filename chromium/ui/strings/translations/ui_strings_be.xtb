@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 месяц}one{# месяц}few{# месяцы}many{# месяцаў}other{# месяца}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> МБ/с</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 гадзіна і }one{# гадзіна і }few{# гадзіны і }many{# гадзін і }other{# гадзіны і }}</translation>
+<translation id="185013357618350178">&amp;Вылучыць</translation>
 <translation id="1859234291848436338">Напрамак пісьма</translation>
 <translation id="1860796786778352021">Закрыць апавяшчэнне</translation>
 <translation id="186476001994626254">Змесціва разумнай вэб-устаўкі</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{праз 1 гадз}one{праз # гадз}few{праз # гадз}many{праз # гадз}other{праз # гадз}}</translation>
 <translation id="2583543531130364912">Адкалібруйце сэнсарны экран</translation>
 <translation id="2586657967955657006">Буфер абмену</translation>
+<translation id="2653844658857826081">НОВАЕ</translation>
 <translation id="2666092431469916601">Зверху</translation>
 <translation id="2701330563083355633">Абагулена з прылады <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Новае</translation>

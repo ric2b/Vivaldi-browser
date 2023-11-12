@@ -12,6 +12,7 @@
 #include "extensions/common/features/simple_feature.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
+#include "extensions/common/manifest_handlers/app_display_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -43,7 +44,7 @@ class ExtensionSyncTypeTest : public testing::Test {
     if (type == APP && launch_url.is_empty())
       source.Set(keys::kApp, "true");
     if (type == THEME)
-      source.Set(keys::kTheme, base::Value(base::Value::Type::DICTIONARY));
+      source.Set(keys::kTheme, base::Value(base::Value::Type::DICT));
     if (!update_url.is_empty()) {
       source.Set(keys::kUpdateURL, update_url.spec());
     }
@@ -134,15 +135,15 @@ TEST_F(ExtensionSyncTypeTest, OnlyDisplayAppsInLauncher) {
       EXTENSION, GURL(), GURL(), mojom::ManifestLocation::kInternal,
       base::FilePath(), Extension::NO_FLAGS));
 
-  EXPECT_FALSE(extension->ShouldDisplayInAppLauncher());
-  EXPECT_FALSE(extension->ShouldDisplayInNewTabPage());
+  EXPECT_FALSE(AppDisplayInfo::ShouldDisplayInAppLauncher(*extension));
+  EXPECT_FALSE(AppDisplayInfo::ShouldDisplayInNewTabPage(*extension));
 
   scoped_refptr<Extension> app(
       MakeSyncTestExtension(APP, GURL(), GURL("http://www.google.com"),
                             mojom::ManifestLocation::kInternal,
                             base::FilePath(), Extension::NO_FLAGS));
-  EXPECT_TRUE(app->ShouldDisplayInAppLauncher());
-  EXPECT_TRUE(app->ShouldDisplayInNewTabPage());
+  EXPECT_TRUE(AppDisplayInfo::ShouldDisplayInAppLauncher(*app));
+  EXPECT_TRUE(AppDisplayInfo::ShouldDisplayInNewTabPage(*app));
 }
 
 TEST_F(ExtensionSyncTypeTest, DisplayInXManifestProperties) {
@@ -157,24 +158,24 @@ TEST_F(ExtensionSyncTypeTest, DisplayInXManifestProperties) {
       Extension::Create(base::FilePath(), mojom::ManifestLocation::kComponent,
                         manifest, 0, &error);
   EXPECT_EQ(error, std::string());
-  EXPECT_TRUE(app->ShouldDisplayInAppLauncher());
-  EXPECT_TRUE(app->ShouldDisplayInNewTabPage());
+  EXPECT_TRUE(AppDisplayInfo::ShouldDisplayInAppLauncher(*app));
+  EXPECT_TRUE(AppDisplayInfo::ShouldDisplayInNewTabPage(*app));
 
   // Value display_in_NTP defaults to display_in_launcher.
   manifest.Set(keys::kDisplayInLauncher, false);
   app = Extension::Create(base::FilePath(), mojom::ManifestLocation::kComponent,
                           manifest, 0, &error);
   EXPECT_EQ(error, std::string());
-  EXPECT_FALSE(app->ShouldDisplayInAppLauncher());
-  EXPECT_FALSE(app->ShouldDisplayInNewTabPage());
+  EXPECT_FALSE(AppDisplayInfo::ShouldDisplayInAppLauncher(*app));
+  EXPECT_FALSE(AppDisplayInfo::ShouldDisplayInNewTabPage(*app));
 
   // Value display_in_NTP = true overriding display_in_launcher = false.
   manifest.Set(keys::kDisplayInNewTabPage, true);
   app = Extension::Create(base::FilePath(), mojom::ManifestLocation::kComponent,
                           manifest, 0, &error);
   EXPECT_EQ(error, std::string());
-  EXPECT_FALSE(app->ShouldDisplayInAppLauncher());
-  EXPECT_TRUE(app->ShouldDisplayInNewTabPage());
+  EXPECT_FALSE(AppDisplayInfo::ShouldDisplayInAppLauncher(*app));
+  EXPECT_TRUE(AppDisplayInfo::ShouldDisplayInNewTabPage(*app));
 
   // Value display_in_NTP = false only, overrides default = true.
   manifest.Remove(keys::kDisplayInLauncher);
@@ -182,8 +183,8 @@ TEST_F(ExtensionSyncTypeTest, DisplayInXManifestProperties) {
   app = Extension::Create(base::FilePath(), mojom::ManifestLocation::kComponent,
                           manifest, 0, &error);
   EXPECT_EQ(error, std::string());
-  EXPECT_TRUE(app->ShouldDisplayInAppLauncher());
-  EXPECT_FALSE(app->ShouldDisplayInNewTabPage());
+  EXPECT_TRUE(AppDisplayInfo::ShouldDisplayInAppLauncher(*app));
+  EXPECT_FALSE(AppDisplayInfo::ShouldDisplayInNewTabPage(*app));
 
   // Error checking.
   manifest.Set(keys::kDisplayInNewTabPage, "invalid");

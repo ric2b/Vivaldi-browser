@@ -6,9 +6,9 @@
 
 #include <stddef.h>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -18,17 +18,17 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/supervised_user/supervised_user_features/supervised_user_features.h"
 #include "chrome/browser/supervised_user/supervised_user_navigation_observer.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/web_approvals_manager.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/prefs/pref_service.h"
+#include "components/supervised_user/core/common/features.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
@@ -159,7 +159,7 @@ std::u16string GetActiveUserFirstName() {
 std::unique_ptr<SupervisedUserInterstitial> SupervisedUserInterstitial::Create(
     WebContents* web_contents,
     const GURL& url,
-    supervised_user_error_page::FilteringBehaviorReason reason,
+    supervised_user::FilteringBehaviorReason reason,
     int frame_id,
     int64_t interstitial_navigation_id) {
   std::unique_ptr<SupervisedUserInterstitial> interstitial =
@@ -176,7 +176,7 @@ std::unique_ptr<SupervisedUserInterstitial> SupervisedUserInterstitial::Create(
 SupervisedUserInterstitial::SupervisedUserInterstitial(
     WebContents* web_contents,
     const GURL& url,
-    supervised_user_error_page::FilteringBehaviorReason reason,
+    supervised_user::FilteringBehaviorReason reason,
     int frame_id,
     int64_t interstitial_navigation_id)
     : web_contents_(web_contents),
@@ -186,7 +186,7 @@ SupervisedUserInterstitial::SupervisedUserInterstitial(
       frame_id_(frame_id),
       interstitial_navigation_id_(interstitial_navigation_id) {
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (supervised_users::IsLocalWebApprovalsEnabled()) {
+  if (supervised_user::IsLocalWebApprovalsEnabled()) {
     favicon_handler_ = std::make_unique<SupervisedUserFaviconRequestHandler>(
         url_.GetWithEmptyPath(),
         LargeIconServiceFactory::GetForBrowserContext(profile_));
@@ -204,7 +204,7 @@ SupervisedUserInterstitial::~SupervisedUserInterstitial() {}
 // static
 std::string SupervisedUserInterstitial::GetHTMLContents(
     Profile* profile,
-    supervised_user_error_page::FilteringBehaviorReason reason,
+    supervised_user::FilteringBehaviorReason reason,
     bool already_sent_request,
     bool is_main_frame) {
   SupervisedUserService* supervised_user_service =
@@ -225,7 +225,7 @@ std::string SupervisedUserInterstitial::GetHTMLContents(
   bool allow_access_requests = supervised_user_service->web_approvals_manager()
                                    .AreRemoteApprovalRequestsEnabled();
 
-  return supervised_user_error_page::BuildHtml(
+  return supervised_user::BuildErrorPageHtml(
       allow_access_requests, profile_image_url, profile_image_url2, custodian,
       custodian_email, second_custodian, second_custodian_email, reason,
       g_browser_process->GetApplicationLocale(), already_sent_request,
@@ -280,9 +280,8 @@ void SupervisedUserInterstitial::ShowFeedback() {
   std::string second_custodian =
       supervised_user_service->GetSecondCustodianName();
 
-  std::u16string reason =
-      l10n_util::GetStringUTF16(supervised_user_error_page::GetBlockMessageID(
-          reason_, second_custodian.empty()));
+  std::u16string reason = l10n_util::GetStringUTF16(
+      supervised_user::GetBlockMessageID(reason_, second_custodian.empty()));
   std::string message = l10n_util::GetStringFUTF8(
       IDS_BLOCK_INTERSTITIAL_DEFAULT_FEEDBACK_TEXT, reason);
 #if BUILDFLAG(IS_ANDROID)

@@ -15,6 +15,9 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "content/public/browser/native_web_keyboard_event.h"
+#endif
+
+#if BUILDFLAG(IS_APPLE)
 #include "ui/display/screen.h"
 #endif
 
@@ -115,14 +118,16 @@ class ShellPlatformDelegate {
                                    const NativeWebKeyboardEvent& event);
 #endif
 
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   void ToggleFullscreenModeForTab(Shell* shell,
                                   WebContents* web_contents,
                                   bool enter_fullscreen);
 
   bool IsFullscreenForTabOrPending(Shell* shell,
                                    const WebContents* web_contents) const;
+#endif
 
+#if BUILDFLAG(IS_ANDROID)
   // Forwarded from WebContentsDelegate.
   void SetOverlayMode(Shell* shell, bool use_overlay_mode);
 
@@ -140,7 +145,7 @@ class ShellPlatformDelegate {
 #endif
 
  private:
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   std::unique_ptr<display::ScopedNativeScreen> screen_;
 #endif
   // Data held for each Shell instance, since there is one ShellPlatformDelegate

@@ -17,9 +17,9 @@
 #include "ash/components/arc/session/arc_management_transition.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -936,6 +936,11 @@ void ArcAuthService::DispatchAccountsInArc(
 void ArcAuthService::OnMainAccountResolutionStatus(
     mojom::MainAccountResolutionStatus status) {
   UpdateMainAccountResolutionStatus(profile_, status);
+}
+
+// static
+void ArcAuthService::EnsureFactoryBuilt() {
+  ArcAuthServiceFactory::GetInstance();
 }
 
 }  // namespace arc

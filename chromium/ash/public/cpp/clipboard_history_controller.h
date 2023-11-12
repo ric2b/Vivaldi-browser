@@ -9,7 +9,7 @@
 #include <set>
 
 #include "ash/public/cpp/ash_public_export.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/observer_list_types.h"
 #include "base/values.h"
 #include "chromeos/crosapi/mojom/clipboard_history.mojom.h"
@@ -36,13 +36,13 @@ class ASH_PUBLIC_EXPORT ClipboardHistoryController {
   class Observer : public base::CheckedObserver {
    public:
     // Called when the clipboard history menu is shown.
-    virtual void OnClipboardHistoryMenuShown() {}
+    virtual void OnClipboardHistoryMenuShown(
+        crosapi::mojom::ClipboardHistoryControllerShowSource show_source) {}
     // Called when the user pastes from the clipboard history menu.
     virtual void OnClipboardHistoryPasted() {}
     // Called when the clipboard history changes.
     virtual void OnClipboardHistoryItemListAddedOrRemoved() {}
     // Called when existing clipboard items in the history have changes.
-    // virtual void OnClipboardHistoryItemsUpdated(
     virtual void OnClipboardHistoryItemsUpdated(
         const std::vector<base::UnguessableToken>& menu_item_ids) {}
   };

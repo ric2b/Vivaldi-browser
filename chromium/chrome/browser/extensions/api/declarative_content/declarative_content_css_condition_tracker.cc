@@ -6,8 +6,8 @@
 
 #include <stddef.h>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
@@ -127,11 +127,7 @@ WebContentsDestroyed() {
 
 DeclarativeContentCssConditionTracker::DeclarativeContentCssConditionTracker(
     Delegate* delegate)
-    : delegate_(delegate) {
-  registrar_.Add(this,
-                 content::NOTIFICATION_RENDERER_PROCESS_CREATED,
-                 content::NotificationService::AllBrowserContextsAndSources());
-}
+    : delegate_(delegate) {}
 
 DeclarativeContentCssConditionTracker::
     ~DeclarativeContentCssConditionTracker() = default;
@@ -242,16 +238,9 @@ bool DeclarativeContentCssConditionTracker::EvaluatePredicate(
   return true;
 }
 
-void DeclarativeContentCssConditionTracker::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  DCHECK_EQ(content::NOTIFICATION_RENDERER_PROCESS_CREATED, type);
-
-  content::RenderProcessHost* process =
-      content::Source<content::RenderProcessHost>(source).ptr();
-  InstructRenderProcessIfManagingBrowserContext(process,
-                                                GetWatchedCssSelectors());
+void DeclarativeContentCssConditionTracker::OnRenderProcessHostCreated(
+    content::RenderProcessHost* host) {
+  InstructRenderProcessIfManagingBrowserContext(host, GetWatchedCssSelectors());
 }
 
 void DeclarativeContentCssConditionTracker::

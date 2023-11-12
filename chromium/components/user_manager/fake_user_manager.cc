@@ -7,9 +7,9 @@
 #include <utility>
 
 #include "ash/constants/ash_switches.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/callback.h"
 #include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -42,8 +42,7 @@ class FakeTaskRunner : public base::SingleThreadTaskRunner {
 
 namespace user_manager {
 
-FakeUserManager::FakeUserManager()
-    : UserManagerBase(new FakeTaskRunner()), primary_user_(nullptr) {}
+FakeUserManager::FakeUserManager() : UserManagerBase(new FakeTaskRunner()) {}
 
 FakeUserManager::~FakeUserManager() {
 }
@@ -111,6 +110,11 @@ void FakeUserManager::RemoveUserFromList(const AccountId& account_id) {
   }
 }
 
+void FakeUserManager::RemoveUserFromListForRecreation(
+    const AccountId& account_id) {
+  RemoveUserFromList(account_id);
+}
+
 const UserList& FakeUserManager::GetUsers() const {
   return users_;
 }
@@ -139,6 +143,9 @@ void FakeUserManager::UpdateUserAccountData(
 void FakeUserManager::LogoutAllUsers() {
   primary_user_ = nullptr;
   active_user_ = nullptr;
+
+  logged_in_users_.clear();
+  lru_logged_in_users_.clear();
 }
 
 void FakeUserManager::SetUserNonCryptohomeDataEphemeral(
@@ -249,10 +256,6 @@ const User* FakeUserManager::FindUser(const AccountId& account_id) const {
 
 User* FakeUserManager::FindUserAndModify(const AccountId& account_id) {
   return nullptr;
-}
-
-const User* FakeUserManager::GetPrimaryUser() const {
-  return primary_user_;
 }
 
 std::u16string FakeUserManager::GetUserDisplayName(

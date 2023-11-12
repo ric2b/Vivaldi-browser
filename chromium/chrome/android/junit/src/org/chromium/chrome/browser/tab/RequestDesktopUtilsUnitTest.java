@@ -17,7 +17,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.res.Resources;
+import android.os.Build;
+import android.view.Display;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -33,10 +36,12 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
+import org.robolectric.util.ReflectionHelpers;
 
 import org.chromium.base.FeatureList;
 import org.chromium.base.FeatureList.TestValues;
 import org.chromium.base.SysUtils;
+import org.chromium.base.UserDataHost;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
@@ -48,9 +53,10 @@ import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tab.RequestDesktopUtilsUnitTest.ShadowDisplayAndroid;
+import org.chromium.chrome.browser.tab.RequestDesktopUtilsUnitTest.ShadowDisplayAndroidManager;
 import org.chromium.chrome.browser.tab.RequestDesktopUtilsUnitTest.ShadowSysUtils;
 import org.chromium.chrome.browser.tab.RequestDesktopUtilsUnitTest.ShadowUmaSessionStats;
-import org.chromium.chrome.browser.tab.TabUtilsUnitTest.ShadowCriticalPersistedTabData;
 import org.chromium.chrome.browser.tab.TabUtilsUnitTest.ShadowProfile;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -71,6 +77,8 @@ import org.chromium.components.messages.MessageIdentifier;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.display.DisplayAndroid;
+import org.chromium.ui.display.DisplayAndroidManager;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogManager.ModalDialogType;
@@ -93,49 +101,18 @@ import java.util.Map.Entry;
  */
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(manifest = Config.NONE,
-        shadows = {ShadowGURL.class, ShadowSysUtils.class, ShadowCriticalPersistedTabData.class,
-                ShadowProfile.class, ShadowUmaSessionStats.class})
+        shadows = {ShadowGURL.class, ShadowSysUtils.class, ShadowProfile.class,
+                ShadowUmaSessionStats.class, ShadowDisplayAndroid.class,
+                ShadowDisplayAndroidManager.class})
 public class RequestDesktopUtilsUnitTest {
     @Rule
     public JniMocker mJniMocker = new JniMocker();
-    @Mock
-    private WebsitePreferenceBridge.Natives mWebsitePreferenceBridgeJniMock;
-    @Mock
-    private MessageDispatcher mMessageDispatcher;
-    @Mock
-    private Activity mActivity;
-    @Mock
-    private Profile mProfile;
-    @Mock
-    private ModalDialogManager mModalDialogManager;
-    @Mock
-    private Tracker mTracker;
-    @Mock
-    private Tab mTab;
-    @Mock
-    private CriticalPersistedTabData mCriticalPersistedTabData;
-    @Mock
-    private TabModelSelector mTabModelSelector;
-    @Mock
-    private TabModel mRegularTabModel;
-    @Mock
-    private TabModel mIncognitoTabModel;
-    @Mock
-    private ObservableSupplier<Tab> mCurrentTabSupplier;
 
-    private @ContentSettingValues int mRdsDefaultValue;
-    private SharedPreferencesManager mSharedPreferencesManager;
-
-    private final Map<String, Integer> mContentSettingMap = new HashMap<>();
-    private final GURL mGoogleUrl = new GURL(JUnitTestGURLs.GOOGLE_URL);
-    private final GURL mMapsUrl = new GURL(JUnitTestGURLs.MAPS_URL);
-
-    private Resources mResources;
-
-    private final TestValues mTestValues = new TestValues();
-
+    /**
+     * Shadows {@link SysUtils} class for testing.
+     */
     @Implements(SysUtils.class)
-    static class ShadowSysUtils {
+    public static class ShadowSysUtils {
         private static boolean sLowEndDevice;
         private static int sMemoryInMB;
 
@@ -178,11 +155,79 @@ public class RequestDesktopUtilsUnitTest {
         }
 
         @Implementation
-        public static void registerSyntheticFieldTrial(String trialName, String groupName) {
+        public static void registerSyntheticFieldTrial(
+                String trialName, String groupName, int annotationMode) {
             sGlobalDefaultsExperimentTrialName = trialName;
             sGlobalDefaultsExperimentGroupName = groupName;
         }
     }
+
+    @Implements(DisplayAndroid.class)
+    static class ShadowDisplayAndroid {
+        private static DisplayAndroid sDisplayAndroid;
+
+        public static void setDisplayAndroid(DisplayAndroid displayAndroid) {
+            sDisplayAndroid = displayAndroid;
+        }
+
+        @Implementation
+        public static DisplayAndroid getNonMultiDisplay(Context context) {
+            return sDisplayAndroid;
+        }
+    }
+
+    @Implements(DisplayAndroidManager.class)
+    static class ShadowDisplayAndroidManager {
+        private static Display sDisplay;
+
+        public static void setDisplay(Display display) {
+            sDisplay = display;
+        }
+
+        @Implementation
+        public static Display getDefaultDisplayForContext(Context context) {
+            return sDisplay;
+        }
+    }
+
+    @Mock
+    private WebsitePreferenceBridge.Natives mWebsitePreferenceBridgeJniMock;
+    @Mock
+    private MessageDispatcher mMessageDispatcher;
+    @Mock
+    private Activity mActivity;
+    @Mock
+    private Profile mProfile;
+    @Mock
+    private ModalDialogManager mModalDialogManager;
+    @Mock
+    private Tracker mTracker;
+    @Mock
+    private CriticalPersistedTabData mCriticalPersistedTabData;
+    @Mock
+    private TabModelSelector mTabModelSelector;
+    @Mock
+    private TabModel mRegularTabModel;
+    @Mock
+    private TabModel mIncognitoTabModel;
+    @Mock
+    private ObservableSupplier<Tab> mCurrentTabSupplier;
+    @Mock
+    private DisplayAndroid mDisplayAndroid;
+    @Mock
+    private Display mDisplay;
+
+    private Tab mTab;
+    private @ContentSettingValues int mRdsDefaultValue;
+    private SharedPreferencesManager mSharedPreferencesManager;
+
+    private final Map<String, Integer> mContentSettingMap = new HashMap<>();
+    private final GURL mGoogleUrl = new GURL(JUnitTestGURLs.GOOGLE_URL);
+    private final GURL mMapsUrl = new GURL(JUnitTestGURLs.MAPS_URL);
+
+    private Resources mResources;
+
+    private final TestValues mTestValues = new TestValues();
 
     private static final String ANY_SUBDOMAIN_PATTERN = "[*.]";
     private static final String GOOGLE_COM = "[*.]google.com/";
@@ -192,11 +237,11 @@ public class RequestDesktopUtilsUnitTest {
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
-
         mJniMocker.mock(WebsitePreferenceBridgeJni.TEST_HOOKS, mWebsitePreferenceBridgeJniMock);
-        ShadowCriticalPersistedTabData.setCriticalPersistedTabData(mCriticalPersistedTabData);
         ShadowProfile.setProfile(mProfile);
         ShadowUmaSessionStats.setMetricsServiceAvailable(true);
+
+        mTab = createTab();
 
         doAnswer(invocation -> mRdsDefaultValue)
                 .when(mWebsitePreferenceBridgeJniMock)
@@ -241,24 +286,35 @@ public class RequestDesktopUtilsUnitTest {
         disableGlobalDefaultsExperimentFeatures();
 
         ShadowSysUtils.setMemoryInMB(2048);
+        ShadowDisplayAndroid.setDisplayAndroid(mDisplayAndroid);
+        when(mDisplayAndroid.getDisplayWidth()).thenReturn(1600);
+        when(mDisplayAndroid.getDisplayHeight()).thenReturn(2560);
+        when(mDisplayAndroid.getXdpi()).thenReturn(275.5f);
+        when(mDisplayAndroid.getYdpi()).thenReturn(276.5f);
+        ShadowDisplayAndroidManager.setDisplay(mDisplay);
+        when(mDisplay.getDisplayId()).thenReturn(Display.DEFAULT_DISPLAY);
+        enableFeatureWithParams(
+                ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS_LOGGING, null, false);
     }
 
     @After
     public void tearDown() {
         FeatureList.setTestValues(null);
         ShadowSysUtils.setLowEndDevice(false);
-        ShadowCriticalPersistedTabData.reset();
         ShadowProfile.reset();
         ShadowUmaSessionStats.reset();
-        mSharedPreferencesManager.removeKey(
-                ChromePreferenceKeys.DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING);
-        mSharedPreferencesManager.removeKey(
-                SingleCategorySettingsConstants
-                        .USER_ENABLED_DESKTOP_SITE_GLOBAL_SETTING_PREFERENCE_KEY);
-        mSharedPreferencesManager.removeKey(
-                ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_TAB_SETTING_SET);
-        mSharedPreferencesManager.removeKey(
-                ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_GLOBAL_SETTING_ENABLED);
+        ShadowDisplayAndroid.setDisplayAndroid(null);
+        if (mSharedPreferencesManager != null) {
+            mSharedPreferencesManager.removeKey(
+                    ChromePreferenceKeys.DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING);
+            mSharedPreferencesManager.removeKey(
+                    SingleCategorySettingsConstants
+                            .USER_ENABLED_DESKTOP_SITE_GLOBAL_SETTING_PREFERENCE_KEY);
+            mSharedPreferencesManager.removeKey(
+                    ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_TAB_SETTING_SET);
+            mSharedPreferencesManager.removeKey(
+                    ChromePreferenceKeys.DESKTOP_SITE_EXCEPTIONS_DOWNGRADE_GLOBAL_SETTING_ENABLED);
+        }
         TrackerFactory.setTrackerForTests(null);
     }
 
@@ -421,6 +477,59 @@ public class RequestDesktopUtilsUnitTest {
     }
 
     @Test
+    public void testShouldDefaultEnableGlobalSetting_ExternalDisplay() {
+        Map<String, String> params = new HashMap<>();
+        enableFeatureWithParams(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS, params, true);
+        when(mDisplay.getDisplayId()).thenReturn(/*non built-in display*/ 2);
+        boolean shouldDefaultEnable = RequestDesktopUtils.shouldDefaultEnableGlobalSetting(
+                RequestDesktopUtils.DEFAULT_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES,
+                mActivity);
+        Assert.assertFalse(
+                "Desktop site global setting should not be default-enabled on external display",
+                shouldDefaultEnable);
+
+        when(mDisplay.getDisplayId()).thenReturn(Display.DEFAULT_DISPLAY);
+        shouldDefaultEnable = RequestDesktopUtils.shouldDefaultEnableGlobalSetting(
+                RequestDesktopUtils.DEFAULT_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES,
+                mActivity);
+        Assert.assertTrue(
+                "Desktop site global setting should be default-enabled on built-in display",
+                shouldDefaultEnable);
+    }
+
+    @Test
+    public void testShouldDefaultEnableGlobalSetting_WithLogging() {
+        Map<String, String> params = new HashMap<>();
+        params.put(
+                RequestDesktopUtils.PARAM_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES,
+                "10.0");
+        enableFeatureWithParams(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS, params, true);
+        enableFeatureWithParams(
+                ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS_LOGGING, null, true);
+        boolean shouldDefaultEnable =
+                RequestDesktopUtils.shouldDefaultEnableGlobalSetting(11.0, mActivity);
+        Assert.assertTrue("Desktop site global setting should be default-enabled on 10\"+ devices.",
+                shouldDefaultEnable);
+        Assert.assertTrue(
+                "SharedPreference DESKTOP_SITE_GLOBAL_SETTING_DEFAULT_ON_COHORT_DISPLAY_SPEC "
+                        + "should not be empty.",
+                mSharedPreferencesManager.contains(
+                        ChromePreferenceKeys
+                                .DESKTOP_SITE_GLOBAL_SETTING_DEFAULT_ON_COHORT_DISPLAY_SPEC)
+                        && !mSharedPreferencesManager
+                                    .readString(
+                                            ChromePreferenceKeys
+                                                    .DESKTOP_SITE_GLOBAL_SETTING_DEFAULT_ON_COHORT_DISPLAY_SPEC,
+                                            "")
+                                    .isEmpty());
+
+        shouldDefaultEnable = RequestDesktopUtils.shouldDefaultEnableGlobalSetting(9.0, mActivity);
+        Assert.assertFalse(
+                "Desktop site global setting should only be default-enabled on 10\"+ devices.",
+                shouldDefaultEnable);
+    }
+
+    @Test
     public void testShouldDefaultEnableGlobalSetting_UserPreviouslyUpdatedSetting() {
         enableFeatureWithParams(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS, null, true);
         // This SharedPreference key will ideally be updated when the user explicitly requests for
@@ -460,7 +569,7 @@ public class RequestDesktopUtilsUnitTest {
 
     @Test
     public void testMaybeRegisterSyntheticFieldTrials_DefaultOnEnabled12Inches() {
-        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 12.0, false);
+        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 12.0, 0, false);
         Assert.assertEquals("Trial name is incorrect.", "RequestDesktopSiteDefaultsSynthetic",
                 sGlobalDefaultsExperimentTrialName);
         Assert.assertEquals("Group name is incorrect.", "DefaultOn_12_0_Enabled",
@@ -468,8 +577,17 @@ public class RequestDesktopUtilsUnitTest {
     }
 
     @Test
+    public void testMaybeRegisterSyntheticFieldTrials_DefaultOnEnabled12Inches_WithCohortId() {
+        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 12.0, 2, false);
+        Assert.assertEquals("Trial name is incorrect.", "RequestDesktopSiteDefaultsCohort2",
+                sGlobalDefaultsExperimentTrialName);
+        Assert.assertEquals(
+                "Group name is incorrect.", "DefaultOn_12_0_2", sGlobalDefaultsExperimentGroupName);
+    }
+
+    @Test
     public void testMaybeRegisterSyntheticFieldTrials_DefaultOnControl12Inches() {
-        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(true, 12.0, false);
+        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(true, 12.0, 0, false);
         Assert.assertEquals("Trial name is incorrect.",
                 "RequestDesktopSiteDefaultsControlSynthetic", sGlobalDefaultsExperimentTrialName);
         Assert.assertEquals("Group name is incorrect.", "DefaultOn_12_0_Control",
@@ -477,8 +595,17 @@ public class RequestDesktopUtilsUnitTest {
     }
 
     @Test
+    public void testMaybeRegisterSyntheticFieldTrials_DefaultOnControl12Inches_WithCohortId() {
+        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(true, 12.0, 2, false);
+        Assert.assertEquals("Trial name is incorrect.", "RequestDesktopSiteDefaultsCohort2",
+                sGlobalDefaultsExperimentTrialName);
+        Assert.assertEquals(
+                "Group name is incorrect.", "DefaultOn_12_0_2", sGlobalDefaultsExperimentGroupName);
+    }
+
+    @Test
     public void testMaybeRegisterSyntheticFieldTrials_OptInEnabled10Inches() {
-        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 10.0, true);
+        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 10.0, 0, true);
         Assert.assertEquals("Trial name is incorrect.", "RequestDesktopSiteOptInSynthetic",
                 sGlobalDefaultsExperimentTrialName);
         Assert.assertEquals("Group name is incorrect.", "OptIn_10_0_Enabled",
@@ -488,10 +615,20 @@ public class RequestDesktopUtilsUnitTest {
     @Test
     public void testMaybeRegisterSyntheticFieldTrials_DoNothingWhenExperimentIsActive() {
         enableFeatureWithParams("RequestDesktopSiteDefaultsSynthetic", null, true);
-        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 12.0, false);
+        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 12.0, 0, false);
         Assert.assertTrue("Synthetic trial should not be registered.",
                 sGlobalDefaultsExperimentTrialName == null
                         && sGlobalDefaultsExperimentGroupName == null);
+    }
+
+    @Test
+    public void testMaybeRegisterSyntheticFieldTrials_ExperimentIsActive_WithCohortId() {
+        enableFeatureWithParams("RequestDesktopSiteDefaultsEnabledCohort2", null, true);
+        RequestDesktopUtils.maybeRegisterSyntheticFieldTrials(false, 12.0, 2, false);
+        Assert.assertEquals("Trial name is incorrect.", "RequestDesktopSiteDefaultsCohort2",
+                sGlobalDefaultsExperimentTrialName);
+        Assert.assertEquals(
+                "Group name is incorrect.", "DefaultOn_12_0_2", sGlobalDefaultsExperimentGroupName);
     }
 
     @Test
@@ -660,6 +797,88 @@ public class RequestDesktopUtilsUnitTest {
                 "SharedPreference DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING should be removed.",
                 mSharedPreferencesManager.contains(
                         ChromePreferenceKeys.DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING));
+        Assert.assertFalse(
+                "SharedPreference DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT should be removed.",
+                mSharedPreferencesManager.contains(
+                        ChromePreferenceKeys.DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT));
+    }
+
+    @Test
+    public void testMaybeDisableGlobalSetting_FinchParamChanged_Memory() {
+        // Default-enable the global setting.
+        Map<String, String> params = new HashMap<>();
+        params.put(RequestDesktopUtils.PARAM_GLOBAL_SETTING_DEFAULT_ON_MEMORY_LIMIT, "1000");
+        enableFeatureWithParams(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS, params, true);
+        RequestDesktopUtils.maybeDefaultEnableGlobalSetting(
+                RequestDesktopUtils.DEFAULT_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES,
+                mProfile, mActivity);
+
+        // Update finch param and initiate downgrade.
+        params.put(RequestDesktopUtils.PARAM_GLOBAL_SETTING_DEFAULT_ON_MEMORY_LIMIT, "4000");
+        enableFeatureWithParams(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS, params, true);
+        RequestDesktopUtils.maybeDefaultEnableGlobalSetting(
+                RequestDesktopUtils.DEFAULT_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES,
+                mProfile, mActivity);
+        enableFeatureWithParams(
+                ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS_DOWNGRADE, null, true);
+        boolean didDisable = RequestDesktopUtils.maybeDisableGlobalSetting(mProfile);
+
+        Assert.assertTrue(
+                "Desktop site global setting should be disabled on downgrade.", didDisable);
+        Assert.assertEquals("Desktop site content setting should be set correctly.",
+                ContentSettingValues.BLOCK, mRdsDefaultValue);
+        Assert.assertFalse(
+                "SharedPreference DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING should be removed.",
+                mSharedPreferencesManager.contains(
+                        ChromePreferenceKeys.DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING));
+        Assert.assertFalse(
+                "SharedPreference DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT should be removed.",
+                mSharedPreferencesManager.contains(
+                        ChromePreferenceKeys.DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT));
+    }
+
+    @Test
+    public void testMaybeDisableGlobalSetting_FinchParamChanged_CPUArch() {
+        // Default-enable the global setting.
+        Map<String, String> params = new HashMap<>();
+        params.put(RequestDesktopUtils.PARAM_GLOBAL_SETTING_DEFAULT_ON_ON_X86_DEVICES, "true");
+        enableFeatureWithParams(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS, params, true);
+        String[] originalAbis = Build.SUPPORTED_ABIS;
+        try {
+            ReflectionHelpers.setStaticField(
+                    Build.class, "SUPPORTED_ABIS", new String[] {"x86", "armeabi-v7a"});
+            RequestDesktopUtils.maybeDefaultEnableGlobalSetting(
+                    RequestDesktopUtils
+                            .DEFAULT_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES,
+                    mProfile, mActivity);
+
+            // Update finch param and initiate downgrade.
+            params.put(RequestDesktopUtils.PARAM_GLOBAL_SETTING_DEFAULT_ON_ON_X86_DEVICES, "false");
+            enableFeatureWithParams(ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS, params, true);
+            RequestDesktopUtils.maybeDefaultEnableGlobalSetting(
+                    RequestDesktopUtils
+                            .DEFAULT_GLOBAL_SETTING_DEFAULT_ON_DISPLAY_SIZE_THRESHOLD_INCHES,
+                    mProfile, mActivity);
+            enableFeatureWithParams(
+                    ChromeFeatureList.REQUEST_DESKTOP_SITE_DEFAULTS_DOWNGRADE, null, true);
+            boolean didDisable = RequestDesktopUtils.maybeDisableGlobalSetting(mProfile);
+
+            Assert.assertTrue(
+                    "Desktop site global setting should be disabled on downgrade.", didDisable);
+            Assert.assertEquals("Desktop site content setting should be set correctly.",
+                    ContentSettingValues.BLOCK, mRdsDefaultValue);
+            Assert.assertFalse(
+                    "SharedPreference DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING should be removed.",
+                    mSharedPreferencesManager.contains(
+                            ChromePreferenceKeys.DEFAULT_ENABLED_DESKTOP_SITE_GLOBAL_SETTING));
+            Assert.assertFalse(
+                    "SharedPreference DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT should be removed.",
+                    mSharedPreferencesManager.contains(
+                            ChromePreferenceKeys
+                                    .DEFAULT_ENABLE_DESKTOP_SITE_GLOBAL_SETTING_COHORT));
+        } finally {
+            ReflectionHelpers.setStaticField(Build.class, "SUPPORTED_ABIS", originalAbis);
+        }
     }
 
     @Test
@@ -969,13 +1188,21 @@ public class RequestDesktopUtilsUnitTest {
                         .isEmpty());
     }
 
+    private Tab createTab() {
+        Tab tab = mock(Tab.class);
+        UserDataHost tabDataHost = new UserDataHost();
+        when(tab.getUserDataHost()).thenReturn(tabDataHost);
+        tabDataHost.setUserData(CriticalPersistedTabData.class, mCriticalPersistedTabData);
+        return tab;
+    }
+
     private List<Tab> createTabsForDesktopSiteExceptionsDowngradeTest(
             TabModel tabModel, int lastUsedTabId, int tabCount, Boolean... lastUsedUserAgents) {
         assert tabCount == lastUsedUserAgents.length;
         List<Tab> tabs = new ArrayList<>();
         int tabIndex = 0;
         for (int i = lastUsedTabId + 1; i <= lastUsedTabId + tabCount; i++) {
-            Tab tab = mock(Tab.class);
+            Tab tab = createTab();
             WebContents webContents = mock(WebContents.class);
             NavigationController navigationController = mock(NavigationController.class);
             when(tab.getId()).thenReturn(i);
@@ -1032,5 +1259,7 @@ public class RequestDesktopUtilsUnitTest {
         enableFeatureWithParams("RequestDesktopSiteDefaultsSynthetic", null, false);
         enableFeatureWithParams("RequestDesktopSiteOptInControlSynthetic", null, false);
         enableFeatureWithParams("RequestDesktopSiteOptInSynthetic", null, false);
+        enableFeatureWithParams("RequestDesktopSiteDefaultsControlCohort2", null, false);
+        enableFeatureWithParams("RequestDesktopSiteDefaultsEnabledCohort2", null, false);
     }
 }

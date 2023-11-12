@@ -8,19 +8,18 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "components/headless/policy/headless_mode_policy_handler.h"
 #include "components/policy/core/browser/configuration_policy_handler.h"  // nogncheck http://crbug.com/1227148
 #include "components/policy/core/browser/url_blocklist_policy_handler.h"  // nogncheck http://crbug.com/1227148
 #include "components/policy/core/common/async_policy_provider.h"  // nogncheck http://crbug.com/1227148
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/policy/policy_constants.h"
-#include "headless/lib/browser/headless_pref_names.h"
-#include "headless/lib/browser/policy/headless_mode_policy.h"
-#include "headless/lib/browser/policy/headless_policies.h"
+#include "headless/lib/browser/policy/headless_prefs.h"
 
 #if BUILDFLAG(IS_WIN)
 #include "base/win/registry.h"
@@ -46,10 +45,11 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   auto handlers = std::make_unique<ConfigurationPolicyHandlerList>(
       base::BindRepeating(&PopulatePolicyHandlerParameters),
       base::BindRepeating(&GetChromePolicyDetails),
-      /*allow_future_policies=*/false);
+      /*are_future_policies_allowed_by_default=*/false);
 
+// TODO(kvitekp): remove #ifdef when ChromeOS is supported by //headless.
 #if !BUILDFLAG(IS_CHROMEOS)
-  handlers->AddHandler(std::make_unique<HeadlessModePolicyHandler>());
+  handlers->AddHandler(std::make_unique<headless::HeadlessModePolicyHandler>());
 #endif
 
   handlers->AddHandler(

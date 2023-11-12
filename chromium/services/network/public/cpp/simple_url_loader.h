@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/component_export.h"
+#include "base/functional/callback_forward.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -115,10 +115,12 @@ class COMPONENT_EXPORT(NETWORK_CPP) SimpleURLLoader {
 
   // Callback used when a redirect is being followed. It is safe to delete the
   // SimpleURLLoader during the callback.
+  // |url_before_redirect| is the url before redirect that sent the response.
   // |removed_headers| is used to set variations headers that need to be
   // removed for requests when a redirect to a non-Google URL occurs.
   using OnRedirectCallback =
-      base::RepeatingCallback<void(const net::RedirectInfo& redirect_info,
+      base::RepeatingCallback<void(const GURL& url_before_redirect,
+                                   const net::RedirectInfo& redirect_info,
                                    const mojom::URLResponseHead& response_head,
                                    std::vector<std::string>* removed_headers)>;
 

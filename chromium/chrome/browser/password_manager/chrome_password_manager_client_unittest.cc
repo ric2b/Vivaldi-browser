@@ -9,8 +9,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -222,6 +222,9 @@ class FakePasswordAutofillAgent
   // autofill::mojom::PasswordAutofillAgent:
   void SetPasswordFillData(
       const autofill::PasswordFormFillData& form_data) override {}
+
+  void PasswordFieldHasNoAssociatedUsername(
+      ::autofill::FieldRendererId password_element_renderer_id) override {}
 
   void InformNoSavedCredentials(
       bool should_show_popup_without_passwords) override {}

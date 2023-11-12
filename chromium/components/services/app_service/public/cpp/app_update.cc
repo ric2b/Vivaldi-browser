@@ -5,6 +5,7 @@
 #include "components/services/app_service/public/cpp/app_update.h"
 
 #include "base/logging.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
@@ -23,146 +24,18 @@ static const std::vector<std::string>& EmptyStringVector() {
   return g_empty_string_vector;
 }
 
-void CloneMojomPermissions(
-    const std::vector<apps::mojom::PermissionPtr>& clone_from,
-    std::vector<apps::mojom::PermissionPtr>* clone_to) {
-  for (const auto& permission : clone_from) {
-    clone_to->push_back(permission->Clone());
-  }
-}
-
-void CloneMojomIntentFilters(
-    const std::vector<apps::mojom::IntentFilterPtr>& clone_from,
-    std::vector<apps::mojom::IntentFilterPtr>* clone_to) {
-  for (const auto& intent_filter : clone_from) {
-    clone_to->push_back(intent_filter->Clone());
-  }
-}
-
 absl::optional<apps::RunOnOsLogin> CloneRunOnOsLogin(
     const apps::RunOnOsLogin& login_data) {
   return apps::RunOnOsLogin(login_data.login_mode, login_data.is_managed);
 }
 
+std::string FormatBytes(absl::optional<uint64_t> bytes) {
+  return bytes.has_value() ? base::NumberToString(bytes.value()) : "null";
+}
+
 }  // namespace
 
 namespace apps {
-
-// static
-void AppUpdate::Merge(apps::mojom::App* state, const apps::mojom::App* delta) {
-  DCHECK(state);
-  if (!delta) {
-    return;
-  }
-
-  if ((delta->app_type != state->app_type) ||
-      (delta->app_id != state->app_id)) {
-    LOG(ERROR) << "inconsistent (app_type, app_id): (" << delta->app_type
-               << ", " << delta->app_id << ") vs (" << state->app_type << ", "
-               << state->app_id << ") ";
-    DCHECK(false);
-    return;
-  }
-
-  // You can not merge removed states.
-  DCHECK(state->readiness != mojom::Readiness::kRemoved);
-  DCHECK(delta->readiness != mojom::Readiness::kRemoved);
-
-  if (delta->readiness != apps::mojom::Readiness::kUnknown) {
-    state->readiness = delta->readiness;
-  }
-  if (delta->name.has_value()) {
-    state->name = delta->name;
-  }
-  if (delta->short_name.has_value()) {
-    state->short_name = delta->short_name;
-  }
-  if (delta->publisher_id.has_value()) {
-    state->publisher_id = delta->publisher_id;
-  }
-  if (delta->description.has_value()) {
-    state->description = delta->description;
-  }
-  if (delta->version.has_value()) {
-    state->version = delta->version;
-  }
-  if (!delta->additional_search_terms.empty()) {
-    state->additional_search_terms.clear();
-    state->additional_search_terms = delta->additional_search_terms;
-  }
-  if (!delta->icon_key.is_null()) {
-    state->icon_key = delta->icon_key.Clone();
-  }
-  if (delta->last_launch_time.has_value()) {
-    state->last_launch_time = delta->last_launch_time;
-  }
-  if (delta->install_time.has_value()) {
-    state->install_time = delta->install_time;
-  }
-  if (!delta->permissions.empty()) {
-    state->permissions.clear();
-    ::CloneMojomPermissions(delta->permissions, &state->permissions);
-  }
-  if (delta->install_reason != apps::mojom::InstallReason::kUnknown) {
-    state->install_reason = delta->install_reason;
-  }
-  if (delta->install_source != apps::mojom::InstallSource::kUnknown) {
-    state->install_source = delta->install_source;
-  }
-  if (!delta->policy_ids.empty()) {
-    state->policy_ids.clear();
-    state->policy_ids = delta->policy_ids;
-  }
-  if (delta->is_platform_app != apps::mojom::OptionalBool::kUnknown) {
-    state->is_platform_app = delta->is_platform_app;
-  }
-  if (delta->recommendable != apps::mojom::OptionalBool::kUnknown) {
-    state->recommendable = delta->recommendable;
-  }
-  if (delta->searchable != apps::mojom::OptionalBool::kUnknown) {
-    state->searchable = delta->searchable;
-  }
-  if (delta->show_in_launcher != apps::mojom::OptionalBool::kUnknown) {
-    state->show_in_launcher = delta->show_in_launcher;
-  }
-  if (delta->show_in_shelf != apps::mojom::OptionalBool::kUnknown) {
-    state->show_in_shelf = delta->show_in_shelf;
-  }
-  if (delta->show_in_search != apps::mojom::OptionalBool::kUnknown) {
-    state->show_in_search = delta->show_in_search;
-  }
-  if (delta->show_in_management != apps::mojom::OptionalBool::kUnknown) {
-    state->show_in_management = delta->show_in_management;
-  }
-  if (delta->handles_intents != apps::mojom::OptionalBool::kUnknown) {
-    state->handles_intents = delta->handles_intents;
-  }
-  if (delta->allow_uninstall != apps::mojom::OptionalBool::kUnknown) {
-    state->allow_uninstall = delta->allow_uninstall;
-  }
-  if (delta->has_badge != apps::mojom::OptionalBool::kUnknown) {
-    state->has_badge = delta->has_badge;
-  }
-  if (delta->paused != apps::mojom::OptionalBool::kUnknown) {
-    state->paused = delta->paused;
-  }
-  if (!delta->intent_filters.empty()) {
-    state->intent_filters.clear();
-    ::CloneMojomIntentFilters(delta->intent_filters, &state->intent_filters);
-  }
-  if (delta->resize_locked != apps::mojom::OptionalBool::kUnknown) {
-    state->resize_locked = delta->resize_locked;
-  }
-  if (delta->window_mode != apps::mojom::WindowMode::kUnknown) {
-    state->window_mode = delta->window_mode;
-  }
-  if (!delta->run_on_os_login.is_null()) {
-    state->run_on_os_login = delta->run_on_os_login.Clone();
-  }
-
-  // When adding new fields to the App Mojo type, this function should also be
-  // updated.
-}
 
 // static
 void AppUpdate::Merge(App* state, const App* delta) {
@@ -173,7 +46,10 @@ void AppUpdate::Merge(App* state, const App* delta) {
 
   if ((delta->app_type != state->app_type) ||
       (delta->app_id != state->app_id)) {
-    NOTREACHED();
+    LOG(ERROR) << "inconsistent (app_type, app_id): ("
+               << EnumToString(delta->app_type) << ", " << delta->app_id
+               << ") vs (" << EnumToString(state->app_type) << ", "
+               << state->app_id << ") ";
     return;
   }
 
@@ -235,11 +111,6 @@ void AppUpdate::Merge(App* state, const App* delta) {
 
   if (delta->run_on_os_login.has_value()) {
     state->run_on_os_login = CloneRunOnOsLogin(delta->run_on_os_login.value());
-  }
-
-  if (!delta->shortcuts.empty()) {
-    state->shortcuts.clear();
-    state->shortcuts = CloneShortcuts(delta->shortcuts);
   }
 
   SET_OPTIONAL_VALUE(app_size_in_bytes);
@@ -552,20 +423,6 @@ bool AppUpdate::RunOnOsLoginChanged() const {
   RETURN_OPTIONAL_VALUE_CHANGED(run_on_os_login);
 }
 
-apps::Shortcuts AppUpdate::Shortcuts() const {
-  if (delta_ && !delta_->shortcuts.empty()) {
-    return CloneShortcuts(delta_->shortcuts);
-  } else if (state_ && !state_->shortcuts.empty()) {
-    return CloneShortcuts(state_->shortcuts);
-  }
-  return std::vector<ShortcutPtr>{};
-}
-
-bool AppUpdate::ShortcutsChanged() const {
-  return delta_ && !delta_->shortcuts.empty() &&
-         (!state_ || !IsEqual(delta_->shortcuts, state_->shortcuts));
-}
-
 const ::AccountId& AppUpdate::AccountId() const {
   return *account_id_;
 }
@@ -641,13 +498,8 @@ std::ostream& operator<<(std::ostream& out, const AppUpdate& app) {
         << EnumToString(app.RunOnOsLogin().value().login_mode) << std::endl;
   }
 
-  out << "Shortcuts: " << std::endl;
-  for (const auto& shortcut : app.Shortcuts()) {
-    out << shortcut->ToString() << std::endl;
-  }
-
-  out << "App Size: " << app.AppSizeInBytes().value_or(-1) << std::endl;
-  out << "Data Size: " << app.DataSizeInBytes().value_or(-1) << std::endl;
+  out << "App Size: " << FormatBytes(app.AppSizeInBytes()) << std::endl;
+  out << "Data Size: " << FormatBytes(app.DataSizeInBytes()) << std::endl;
 
   return out;
 }

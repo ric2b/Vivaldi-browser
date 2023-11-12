@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 
 #import "base/ios/ios_util.h"
+#import "base/memory/scoped_refptr.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
@@ -22,7 +23,6 @@
 #import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
 #import "ios/chrome/browser/reading_list/offline_url_utils.h"
 #import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
-#import "ios/chrome/browser/ui/activity_services/activity_params.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
@@ -38,10 +38,9 @@
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_provider.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_table_view_controller.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
-#import "ios/chrome/browser/ui/table_view/table_view_animator.h"
+#import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
-#import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
@@ -56,6 +55,10 @@
 #import "ui/strings/grit/ui_strings.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -63,16 +66,19 @@
 @interface ReadingListCoordinator () <ReadingListMenuProvider,
                                       ReadingListListItemFactoryDelegate,
                                       ReadingListListViewControllerAudience,
-                                      ReadingListListViewControllerDelegate,
-                                      UIViewControllerTransitioningDelegate>
+                                      ReadingListListViewControllerDelegate>
 
 // Whether the coordinator is started.
 @property(nonatomic, assign, getter=isStarted) BOOL started;
 // The mediator that updates the table for model changes.
 @property(nonatomic, strong) ReadingListMediator* mediator;
+
+#if !(defined(VIVALDI_BUILD))
 // The navigation controller displaying self.tableViewController.
 @property(nonatomic, strong)
     TableViewNavigationController* navigationController;
+#endif
+
 // The view controller used to display the reading list.
 @property(nonatomic, strong)
     ReadingListTableViewController* tableViewController;
@@ -134,22 +140,29 @@
   // everything correctly.
   [self readingListHasItems:self.mediator.hasElements];
 
-  BOOL useCustomPresentation = YES;
-      [self.navigationController
-          setModalPresentationStyle:UIModalPresentationFormSheet];
-      self.navigationController.presentationController.delegate =
-          self.tableViewController;
-      useCustomPresentation = NO;
+  if (vivaldi::IsVivaldiRunning()) {
+    UINavigationBarAppearance* transparentAppearance =
+        [[UINavigationBarAppearance alloc] init];
+    [transparentAppearance configureWithTransparentBackground];
+    self.navigationController.navigationBar.standardAppearance =
+      transparentAppearance;
+    self.navigationController.navigationBar.compactAppearance =
+      transparentAppearance;
+    self.navigationController.navigationBar.scrollEdgeAppearance =
+      transparentAppearance;
+  } // End Vivaldi
 
-  if (useCustomPresentation) {
-    self.navigationController.transitioningDelegate = self;
-    self.navigationController.modalPresentationStyle =
-        UIModalPresentationCustom;
-  }
+  [self.navigationController
+      setModalPresentationStyle:UIModalPresentationFormSheet];
+  self.navigationController.presentationController.delegate =
+      self.tableViewController;
 
+  // Vivaldi
+  if (!vivaldi::IsVivaldiRunning())
   [self.baseViewController presentViewController:self.navigationController
                                         animated:YES
                                       completion:nil];
+  // End Vivaldi
 
   // Send the "Viewed Reading List" event to the feature_engagement::Tracker
   // when the user opens their reading list.
@@ -169,6 +182,15 @@
 - (void)stop {
   if (!self.started)
     return;
+
+  if (vivaldi::IsVivaldiRunning()) {
+    [self.navigationController dismissViewControllerAnimated:YES
+                                                    completion:nil];
+    [self.panelDelegate panelDismissed];
+    self.panelDelegate = nil;
+    return;
+  } // End Vivaldi
+
   [self.tableViewController willBeDismissed];
   [self.navigationController.presentingViewController
       dismissViewControllerAnimated:YES
@@ -200,7 +222,8 @@
 - (void)readingListListViewController:(UIViewController*)viewController
                              openItem:(id<ReadingListListItem>)item {
   DCHECK_EQ(self.tableViewController, viewController);
-  const ReadingListEntry* entry = [self.mediator entryFromItem:item];
+  scoped_refptr<const ReadingListEntry> entry =
+      [self.mediator entryFromItem:item];
   if (!entry) {
     [self.tableViewController reloadData];
     return;
@@ -216,7 +239,8 @@
                      openItemInNewTab:(id<ReadingListListItem>)item
                             incognito:(BOOL)incognito {
   DCHECK_EQ(self.tableViewController, viewController);
-  const ReadingListEntry* entry = [self.mediator entryFromItem:item];
+  scoped_refptr<const ReadingListEntry> entry =
+      [self.mediator entryFromItem:item];
   if (!entry) {
     [self.tableViewController reloadData];
     return;
@@ -232,47 +256,6 @@
               openItemOfflineInNewTab:(id<ReadingListListItem>)item {
   DCHECK_EQ(self.tableViewController, viewController);
   [self openItemOfflineInNewTab:item];
-}
-
-#pragma mark - UIViewControllerTransitioningDelegate
-
-- (UIPresentationController*)
-presentationControllerForPresentedViewController:(UIViewController*)presented
-                        presentingViewController:(UIViewController*)presenting
-                            sourceViewController:(UIViewController*)source {
-  return [[TableViewPresentationController alloc]
-      initWithPresentedViewController:presented
-             presentingViewController:presenting];
-}
-
-- (id<UIViewControllerAnimatedTransitioning>)
-animationControllerForPresentedController:(UIViewController*)presented
-                     presentingController:(UIViewController*)presenting
-                         sourceController:(UIViewController*)source {
-  UITraitCollection* traitCollection = presenting.traitCollection;
-  if (traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact &&
-      traitCollection.verticalSizeClass != UIUserInterfaceSizeClassCompact) {
-    // Use the default animator for fullscreen presentations.
-    return nil;
-  }
-
-  TableViewAnimator* animator = [[TableViewAnimator alloc] init];
-  animator.presenting = YES;
-  return animator;
-}
-
-- (id<UIViewControllerAnimatedTransitioning>)
-animationControllerForDismissedController:(UIViewController*)dismissed {
-  UITraitCollection* traitCollection = dismissed.traitCollection;
-  if (traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact &&
-      traitCollection.verticalSizeClass != UIUserInterfaceSizeClassCompact) {
-    // Use the default animator for fullscreen presentations.
-    return nil;
-  }
-
-  TableViewAnimator* animator = [[TableViewAnimator alloc] init];
-  animator.presenting = NO;
-  return animator;
 }
 
 #pragma mark - URL Loading Helpers
@@ -367,7 +350,8 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
 }
 
 - (void)openItemOfflineInNewTab:(id<ReadingListListItem>)item {
-  const ReadingListEntry* entry = [self.mediator entryFromItem:item];
+  scoped_refptr<const ReadingListEntry> entry =
+      [self.mediator entryFromItem:item];
   if (!entry)
     return;
 
@@ -452,7 +436,8 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
         }
         [menuElements addObject:openInNewIncognitoTab];
 
-        const ReadingListEntry* entry = [self.mediator entryFromItem:item];
+        scoped_refptr<const ReadingListEntry> entry =
+            [self.mediator entryFromItem:item];
         if (entry && entry->DistilledState() == ReadingListEntry::PROCESSED) {
           [menuElements
               addObject:[actionFactory
@@ -509,10 +494,10 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
 - (void)shareURL:(const GURL&)URL
            title:(NSString*)title
         fromView:(UIView*)view {
-  ActivityParams* params =
-      [[ActivityParams alloc] initWithURL:URL
-                                    title:title
-                                 scenario:ActivityScenario::ReadingListEntry];
+  SharingParams* params =
+      [[SharingParams alloc] initWithURL:URL
+                                   title:title
+                                scenario:SharingScenario::ReadingListEntry];
   self.sharingCoordinator = [[SharingCoordinator alloc]
       initWithBaseViewController:self.tableViewController
                          browser:self.browser

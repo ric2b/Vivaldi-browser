@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Tika konstatēta nesaderīga protokola versija. Lūdzu, pārbaudiet, vai abos datoros ir instalēta programmatūras jaunākā versija, un mēģiniet vēlreiz.</translation>
 <translation id="1008557486741366299">Vēlāk</translation>
 <translation id="1201402288615127009">Tālāk</translation>
+<translation id="1296511125400541222">Autortiesības: Chromium autori (2023). Visas tiesības paturētas.</translation>
 <translation id="1297009705180977556">Kļūda, veidojot savienojumu ar “<ph name="HOSTNAME" />”</translation>
 <translation id="1450760146488584666">Pieprasītais objekts nepastāv.</translation>
 <translation id="1480046233931937785">Titri</translation>
@@ -36,7 +37,6 @@ Ja kastīte “<ph name="SERVICE_SCRIPT_NAME" />” jau ir atzīmēta, noņemiet
 <translation id="2599300881200251572">Izmantojot šo pakalpojumu, tiek iespējota ienākošo savienojumu izveide no Chrome attālās darbvirsmas klientiem.</translation>
 <translation id="2647232381348739934">Chrome saites pakalpojums</translation>
 <translation id="2676780859508944670">Notiek apstrāde...</translation>
-<translation id="2692522824157224199">Autortiesības: Google LLC (2022). Visas tiesības paturētas.</translation>
 <translation id="2699970397166997657">Chrome saite</translation>
 <translation id="2758123043070977469">Autentificēšanas laikā radās problēma. Lūdzu, piesakieties vēlreiz.</translation>
 <translation id="2803375539583399270">Ievadiet PIN</translation>
@@ -73,7 +73,6 @@ Ja kastīte “<ph name="SERVICE_SCRIPT_NAME" />” jau ir atzīmēta, noņemiet
 <translation id="4257751272692708833">Produkta “<ph name="PRODUCT_NAME" />” URL pāradresēšanas rīks</translation>
 <translation id="4277736576214464567">Piekļuves kods nav derīgs. Lūdzu, mēģiniet vēlreiz.</translation>
 <translation id="4281844954008187215">Google pakalpojumu noteikumi</translation>
-<translation id="4372650392690220936">Autortiesības: Chromium autori (2022). Visas tiesības paturētas.</translation>
 <translation id="4405930547258349619">Galvenā bibliotēka</translation>
 <translation id="443560535555262820">Atvērt pieejamības preferences</translation>
 <translation id="4450893287417543264">Vairs nerādīt</translation>
@@ -90,6 +89,7 @@ Ja kastīte “<ph name="SERVICE_SCRIPT_NAME" />” jau ir atzīmēta, noņemiet
 <translation id="4808503597364150972">Lūdzu, ievadiet saimniekdatora <ph name="HOSTNAME" /> PIN.</translation>
 <translation id="4812684235631257312">Saimniekdators</translation>
 <translation id="4867841927763172006">Sūtīt PrtScn</translation>
+<translation id="4960795469833295568">Autortiesības: Google LLC (2023). Visas tiesības paturētas.</translation>
 <translation id="4974476491460646149">Savienojums ar “<ph name="HOSTNAME" />” ir pārtraukts</translation>
 <translation id="4985296110227979402">Vispirms datorā ir jāiestata attālā piekļuve.</translation>
 <translation id="4987330545941822761">Chrome attālā darbvirsma nevarēja noteikt pārlūkprogrammas veidu lokālai URL atvēršanai. Izvēlieties pārlūkprogrammu no tālāk norādītā saraksta.</translation>
@@ -99,7 +99,7 @@ Ja kastīte “<ph name="SERVICE_SCRIPT_NAME" />” jau ir atzīmēta, noņemiet
 <translation id="5204575267916639804">Bieži uzdotie jautājumi</translation>
 <translation id="5222676887888702881">Izrakstīties</translation>
 <translation id="5234764350956374838">Nerādīt</translation>
-<translation id="5308380583665731573">Pievienošana</translation>
+<translation id="5308380583665731573">Pievienot</translation>
 <translation id="533625276787323658">Nav neviena datora, ar kuru izveidot savienojumu.</translation>
 <translation id="5397086374758643919">Chrome attālās darbvirsmas saimniekdatora atinstalēšanas programma</translation>
 <translation id="5419418238395129586">Pēdējoreiz tiešsaistē: <ph name="DATE" /></translation>

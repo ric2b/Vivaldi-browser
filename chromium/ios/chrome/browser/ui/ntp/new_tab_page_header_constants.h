@@ -17,7 +17,7 @@ extern const CGFloat kFakeLocationBarTopConstraint;
 
 extern const CGFloat kScrolledToTopOmniboxBottomMargin;
 
-extern const CGFloat kHintLabelSidePadding;
+extern const CGFloat kCenteredHintLabelSidePadding;
 
 extern const CGFloat kHintLabelHeightMargin;
 

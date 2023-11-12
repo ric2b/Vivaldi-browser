@@ -27,12 +27,16 @@
 #include "chrome/browser/ui/views/profiles/profile_picker_signed_in_flow_controller.h"
 #include "chrome/browser/ui/views/profiles/profile_picker_web_contents_host.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/signin/public/base/signin_metrics.h"
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 #include "chrome/browser/ui/views/profiles/profile_picker_dice_sign_in_provider.h"
 #endif
 
 namespace {
+
+const signin_metrics::AccessPoint kAccessPoint =
+    signin_metrics::AccessPoint::ACCESS_POINT_USER_MANAGER;
 
 // Returns the URL to load as initial content for the profile picker. If an
 // empty URL is returned, the profile picker should not be shown until
@@ -41,7 +45,8 @@ namespace {
 GURL GetInitialURL(ProfilePicker::EntryPoint entry_point) {
   GURL base_url = GURL(chrome::kChromeUIProfilePickerUrl);
   switch (entry_point) {
-    case ProfilePicker::EntryPoint::kOnStartup: {
+    case ProfilePicker::EntryPoint::kOnStartup:
+    case ProfilePicker::EntryPoint::kOnStartupNoProfile: {
       GURL::Replacements replacements;
       replacements.SetQueryStr(chrome::kChromeUIProfilePickerStartupQuery);
       return base_url.ReplaceComponents(replacements);
@@ -53,6 +58,7 @@ GURL GetInitialURL(ProfilePicker::EntryPoint entry_point) {
     case ProfilePicker::EntryPoint::kUnableToCreateBrowser:
     case ProfilePicker::EntryPoint::kBackgroundModeManager:
     case ProfilePicker::EntryPoint::kProfileIdle:
+    case ProfilePicker::EntryPoint::kNewSessionOnExistingProcessNoProfile:
       return base_url;
     case ProfilePicker::EntryPoint::kProfileMenuAddNewProfile:
       return base_url.Resolve("new-profile");
@@ -123,6 +129,7 @@ class ProfileCreationSignedInFlowController
       : ProfilePickerSignedInFlowController(host,
                                             profile,
                                             std::move(contents),
+                                            kAccessPoint,
                                             profile_color),
         finish_flow_callback_(std::move(finish_flow_callback)) {}
 
@@ -313,9 +320,11 @@ void ProfilePickerFlowController::CancelPostSignInFlow() {
 
   switch (entry_point_) {
     case ProfilePicker::EntryPoint::kOnStartup:
+    case ProfilePicker::EntryPoint::kOnStartupNoProfile:
     case ProfilePicker::EntryPoint::kProfileMenuManageProfiles:
     case ProfilePicker::EntryPoint::kOpenNewWindowAfterProfileDeletion:
     case ProfilePicker::EntryPoint::kNewSessionOnExistingProcess:
+    case ProfilePicker::EntryPoint::kNewSessionOnExistingProcessNoProfile:
     case ProfilePicker::EntryPoint::kProfileLocked:
     case ProfilePicker::EntryPoint::kUnableToCreateBrowser:
     case ProfilePicker::EntryPoint::kBackgroundModeManager:
@@ -344,7 +353,8 @@ void ProfilePickerFlowController::CancelPostSignInFlow() {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 std::unique_ptr<ProfilePickerDiceSignInProvider>
 ProfilePickerFlowController::CreateDiceSignInProvider() {
-  return std::make_unique<ProfilePickerDiceSignInProvider>(host());
+  return std::make_unique<ProfilePickerDiceSignInProvider>(host(),
+                                                           kAccessPoint);
 }
 
 absl::optional<SkColor> ProfilePickerFlowController::GetProfileColor() {

@@ -10,7 +10,6 @@ import "mojo/public/mojom/base/text_direction.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
 import "mojo/public/mojom/base/values.mojom";
-import "services/data_decoder/public/mojom/resource_snapshot_for_web_bundle.mojom";
 import "services/network/public/mojom/content_security_policy.mojom";
 import "services/network/public/mojom/cross_origin_opener_policy.mojom";
 import "services/network/public/mojom/fetch_api.mojom";
@@ -27,6 +26,7 @@ import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
 import "third_party/blink/public/mojom/devtools/inspector_issue.mojom";
 import "third_party/blink/public/mojom/favicon/favicon_url.mojom";
 import "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom";
+import "third_party/blink/public/mojom/fenced_frame/fenced_frame_config.mojom";
 import "third_party/blink/public/mojom/fetch/fetch_api_request.mojom";
 import "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom";
 import "third_party/blink/public/mojom/frame/frame_owner_properties.mojom";
@@ -45,6 +45,7 @@ import "third_party/blink/public/mojom/frame/view_transition_state.mojom";
 import "third_party/blink/public/mojom/input/focus_type.mojom";
 import "third_party/blink/public/mojom/input/scroll_direction.mojom";
 import "third_party/blink/public/mojom/loader/referrer.mojom";
+import "third_party/blink/public/mojom/loader/keep_alive_handle_factory.mojom";
 import "third_party/blink/public/mojom/messaging/delegated_capability.mojom";
 import "third_party/blink/public/mojom/messaging/task_attribution_id.mojom";
 import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
@@ -146,6 +147,25 @@ enum JavaScriptExecutionResultType {
 enum TraverseCancelledReason {
   kNotFound,
   kSandboxViolation,
+  kAbortedBeforeCommit,
+};
+
+// The ViewTransitionOnNavigation opt-in state for a Document. This indicates
+// whether this Document wants to enable a ViewTransition for same-origin
+// cross-document navigations initiated from it.
+enum ViewTransitionSameOriginOptIn {
+  kDisabled,
+  kEnabled,
+};
+
+enum FrameOwnerElementType {
+  kNone,
+  kIframe,
+  kObject,
+  kEmbed,
+  kFrame,
+  kPortal,
+  kFencedframe
 };
 
 // The maximum number of characters of the document's title that we're willing
@@ -163,25 +183,13 @@ struct IframeAttributes {
   network.mojom.ContentSecurityPolicy? parsed_csp_attribute;
   // 'credentialless' attribute of the iframe.
   bool credentialless;
-  // 'id' attribute of the iframe.
-  string id;
+  // 'id' attribute of the iframe. This can be optional because id might not be set.
+  string? id;
   // 'name' attribute of the iframe. This is different from window.name, which is
-  // tracked in FrameReplicationState.
-  string name;
-  // 'src' attribute of the iframe.
-  string src;
-};
-
-// An opaque handle that keeps alive the associated render process even after
-// the frame is detached. Used by resource requests with "keepalive" specified.
-interface KeepAliveHandle {};
-
-// A factory interface for KeepAliveHandle. This is separate from LocalFrameHost
-// because LocalFrameHost may not be usable when the frame is about to be gone.
-interface KeepAliveHandleFactory {
-  // Creates and returns a KeepAliveHandle.
-  IssueKeepAliveHandle(
-      pending_receiver<blink.mojom.KeepAliveHandle> keep_alive_handle);
+  // tracked in FrameReplicationState. Optional because it might not be set.
+  string? name;
+  // 'src' attribute of the iframe. Optional because it might not be set.
+  string? src;
 };
 
 // Implemented in Browser, this interface defines frame-specific methods that
@@ -346,6 +354,10 @@ interface LocalFrameHost {
   NavigateToNavigationApiKey(string key, bool has_user_gesture,
                     TaskAttributionId? soft_navigation_heuristics_task_id);
 
+  // Called with |true| when the first navigate event handler is added, and with
+  // |false| when the last navigate event handler is removed.
+  NavigateEventHandlerPresenceChanged(bool present);
+
   // Changes the title for the page in the UI when the page is navigated or the
   // title changes. Sent for top-level frames. This can be null when loading an
   // initial empty document (and in some tests).
@@ -360,6 +372,11 @@ interface LocalFrameHost {
   // |update_state == kNotifyActivation|.
   UpdateUserActivationState(UserActivationUpdateType update_type,
                             UserActivationNotificationType notification_type);
+
+  // Called when a history navigation action that could potentially be used to
+  // back-trap a user is invoked. Keeps HistoryUserActivationState in sync
+  // between renderer and browser.
+  DidConsumeHistoryUserActivation();
 
   // Provides accessibility information about a find in page result.
   HandleAccessibilityFindInPageResult(FindInPageResultAXParams params);
@@ -548,21 +565,45 @@ interface LocalFrameHost {
   DidChangeSrcDoc(blink.mojom.FrameToken child_frame_token,
                   string srcdoc_value);
 
-  // Notifies the browser that a document's base url has changed, and sends the
-  // new value to the browser. The base url is subsequently shared with srcdoc
-  // subframes. The base url is only sent if (1) the frame's base url is changed
-  // from the default value the browser would expect (e.g. it sets a <base>
-  // element), or (2) if the value is reset to the default the browser would
-  // expect, in which case an empty url is sent to 'reset' the previously sent
-  // value.
-  // Note: this is currently only used when IsolateSandboxedIframes is enabled.
-  DidChangeBaseURL(url.mojom.Url base_url);
-
   // Notifies the browser that this frame received a message from a local frame
   // with a delegated capability (https://wicg.github.io/capability-delegation).
   // `delegated_capability` is the capability delegated via postMessage().
   // RemoteFrameHost messages already signal the browser via RouteMessageEvent.
   ReceivedDelegatedCapability(DelegatedCapability delegated_capability);
+
+  // See:
+  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
+  //
+  // This implements the API:
+  // window.fence.reportEvent({eventType, eventData, destination})
+  //
+  // A document in a fenced frame can invoke the reportEvent API to request the
+  // browser to send `eventData` in a beacon toward the URL registered against
+  // `eventType` by the worklet in registerAdBeacon. Depending on the declared
+  // `destination`, the beacon is sent to either the buyer's or the seller's
+  // registered URL.
+  SendFencedFrameReportingBeacon(string event_data,
+                                 string event_type,
+                                 ReportingDestination destination);
+
+  // Fenced frames can send beacons automatically when an event happens.
+  //
+  // For now, only "reserved.top_navigation" is supported. The `event_data` is
+  // installed in the RenderFrameHost and will be sent toward `destination` on
+  // the next cross-document top-frame navigation.
+  SetFencedFrameAutomaticBeaconReportEventData(
+      string event_data,
+      array<ReportingDestination> destination);
+
+  // See:
+  // https://github.com/WICG/turtledove/blob/main/FLEDGE_extended_PA_reporting.md
+  //
+  // This implements the API:
+  // window.fence.reportEvent(eventType)
+  //
+  // A document in a fenced frame can invoke the reportEvent API to request the
+  // browser to send private aggregation requests associated with `event_type`.
+  SendPrivateAggregationRequestsForFencedFrameEvent(string event_type);
 
   // Sent by the renderer process to request the creation of a new portal.
   // |portal| is the pipe to be used for the Portal object, |client| is the pipe
@@ -611,6 +652,12 @@ interface LocalFrameHost {
       RemoteFrameInterfacesFromRenderer remote_frame_interfaces,
       blink.mojom.RemoteFrameToken frame_token,
       mojo_base.mojom.UnguessableToken devtools_frame_token);
+
+  // Notifies when the ViewTransition opt-in state for the current Document
+  // changes.
+  // See https://github.com/WICG/view-transitions/blob/main/explainer.md#declarative-opt-in-to-transitions.
+  OnViewTransitionOptInChanged(
+    ViewTransitionSameOriginOptIn view_transition_opt_in);
 };
 
 // Implemented in Browser, this interface defines frame-specific methods
@@ -647,6 +694,22 @@ interface LocalFrame {
   GetTextSurroundingSelection(uint32 max_length)
       => (mojo_base.mojom.String16 content, uint32 start_offset,
           uint32 end_offset);
+
+  // Report ResourceTiming information about cancelled navigation in iframe
+  // initiated from this document. This is required to prevent revealing
+  // information about the status codes to the parent frame. (See crbug.com/1346924)
+  //
+  // Example of cancelled navigations:
+  // - 204 - No Content
+  // - 205 - Reset Content
+  // - Extension blocking navigation (e.g. Ad blocker)
+  // - etc
+  //
+  // |parent_frame_element_type| is used on the blink side to determine the
+  // 'initiator_type' of the entry.
+  AddResourceTimingEntryFromNonNavigatedFrame(
+    ResourceTimingInfo timing,
+    blink.mojom.FrameOwnerElementType parent_frame_element_type);
 
   // Creates an intervention report in the frame with contents |id| and
   // |message|, returns once the report has been queued. |id| identifies the
@@ -710,13 +773,6 @@ interface LocalFrame {
 
   // Notifies this frame to clear the focused element (if any).
   ClearFocusedElement();
-
-  // Gets the resource snapshot of the frame for creating Web Bundle.
-  // The instance of ResourceSnapshotForWebBundle in the renderer process will
-  // be kept alive as far as the Mojo endpoint is held and the renderer process
-  // is alive.
-  GetResourceSnapshotForWebBundle(
-      pending_receiver<data_decoder.mojom.ResourceSnapshotForWebBundle> receiver);
 
   // Copies the image at |window_point| to the clipboard (if there indeed is an
   // image at that |window_point|).

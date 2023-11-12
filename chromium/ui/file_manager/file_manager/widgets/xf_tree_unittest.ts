@@ -11,6 +11,7 @@ import {TreeSelectedChangedEvent, XfTree} from './xf_tree.js';
 import {TreeItemCollapsedEvent, TreeItemExpandedEvent, XfTreeItem} from './xf_tree_item.js';
 
 export function setUp() {
+  document.body.setAttribute('theme', 'refresh23');
   document.body.innerHTML = '<xf-tree></xf-tree>';
 }
 
@@ -665,7 +666,7 @@ export async function testAddRemoveTreeItems(done: () => void) {
   done();
 }
 
-/** Tests removing a selected tree item should update selected properly. */
+/** Tests removing a selected tree item should update selectedItem properly. */
 export async function testSelectionUpdateAfterRemoving(done: () => void) {
   const tree = await getTree();
   await appendDirectTreeItems(tree);
@@ -679,10 +680,8 @@ export async function testSelectionUpdateAfterRemoving(done: () => void) {
   tree.removeChild(item2);
   await waitForElementUpdate(tree);
 
-  // The selected item should be item1 now.
-  const item1 = getTreeItemById('item1');
-  assertTrue(item1.selected);
-  assertEquals(item1, tree.selectedItem);
+  // The selected item should be null now.
+  assertEquals(null, tree.selectedItem);
 
   done();
 }

@@ -6,25 +6,27 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/time/default_clock.h"
 #include "components/reading_list/core/fake_reading_list_model_storage.h"
 #include "components/reading_list/core/proto/reading_list.pb.h"
 #include "components/reading_list/core/reading_list_model_impl.h"
+#include "components/sync/base/storage_type.h"
 
 namespace {
 
 // Testing factories use RepeatingCallbacks, which can't possibly work with
 // move-only arguments. Instead, let's implement copy semantics that should be
 // good enough for testing purposes.
-std::vector<ReadingListEntry> CloneEntries(
-    const std::vector<ReadingListEntry>& entries) {
-  std::vector<ReadingListEntry> copied_entries;
+std::vector<scoped_refptr<ReadingListEntry>> CloneEntries(
+    const std::vector<scoped_refptr<ReadingListEntry>>& entries) {
+  std::vector<scoped_refptr<ReadingListEntry>> copied_entries;
   const base::Time now = base::Time::Now();
-  for (const ReadingListEntry& entry : entries) {
+  for (const auto& entry : entries) {
     std::unique_ptr<reading_list::ReadingListLocal> entry_as_local =
-        entry.AsReadingListLocal(now);
-    copied_entries.emplace_back(std::move(
-        *ReadingListEntry::FromReadingListLocal(*entry_as_local, now)));
+        entry->AsReadingListLocal(now);
+    copied_entries.push_back(
+        ReadingListEntry::FromReadingListLocal(*entry_as_local, now));
   }
   return copied_entries;
 }
@@ -32,12 +34,13 @@ std::vector<ReadingListEntry> CloneEntries(
 }  // namespace
 
 std::unique_ptr<KeyedService> BuildReadingListModelWithFakeStorage(
-    const std::vector<ReadingListEntry>& initial_entries,
+    const std::vector<scoped_refptr<ReadingListEntry>>& initial_entries,
     web::BrowserState* context) {
   auto storage = std::make_unique<FakeReadingListModelStorage>();
   base::WeakPtr<FakeReadingListModelStorage> storage_ptr = storage->AsWeakPtr();
   auto reading_list_model = std::make_unique<ReadingListModelImpl>(
-      std::move(storage), base::DefaultClock::GetInstance());
+      std::move(storage), syncer::StorageType::kUnspecified,
+      base::DefaultClock::GetInstance());
   // Complete the initial model load from storage.
   storage_ptr->TriggerLoadCompletion(CloneEntries(initial_entries));
   return reading_list_model;

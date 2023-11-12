@@ -8,7 +8,7 @@
 #include <map>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observation_traits.h"
@@ -50,7 +50,7 @@ class POLICY_EXPORT PolicyService {
     // ready. If IsInitializationComplete() is false, then this will be invoked
     // once all the policy providers have finished loading their policies for
     // |domain|. This does not handle failure to load policies from some
-    // providers, so it is possible for for the policy service to be initialised
+    // providers, so it is possible for the policy service to be initialised
     // if the providers failed for example to load its policies cache.
     virtual void OnPolicyServiceInitialized(PolicyDomain domain) {}
 

@@ -9,9 +9,9 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -238,29 +238,29 @@ class AutoConnectHandlerTest : public testing::Test {
   }
 
   void SetupUserPolicy(const std::string& network_configs_json) {
-    base::Value network_configs(base::Value::Type::LIST);
+    base::Value::List network_configs;
     if (!network_configs_json.empty()) {
       auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(
           network_configs_json, base::JSON_ALLOW_TRAILING_COMMAS);
       ASSERT_TRUE(parsed_json.has_value()) << parsed_json.error().message;
       ASSERT_TRUE(parsed_json->is_list());
-      network_configs = std::move(*parsed_json);
+      network_configs = std::move(parsed_json->GetList());
     }
     managed_config_handler_->SetPolicy(
         ::onc::ONC_SOURCE_USER_POLICY, helper_.UserHash(), network_configs,
-        /*global_config=*/base::Value(base::Value::Type::DICTIONARY));
+        /*global_network_config=*/base::Value::Dict());
     task_environment_.RunUntilIdle();
   }
 
   void SetupDevicePolicy(const std::string& network_configs_json,
-                         const base::Value& global_config) {
-    base::Value network_configs(base::Value::Type::LIST);
+                         const base::Value::Dict& global_config) {
+    base::Value::List network_configs;
     if (!network_configs_json.empty()) {
       auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(
           network_configs_json, base::JSON_ALLOW_TRAILING_COMMAS);
       ASSERT_TRUE(parsed_json.has_value()) << parsed_json.error().message;
       ASSERT_TRUE(parsed_json->is_list());
-      network_configs = std::move(*parsed_json);
+      network_configs = std::move(parsed_json->GetList());
     }
     managed_config_handler_->SetPolicy(::onc::ONC_SOURCE_DEVICE_POLICY,
                                        std::string(),  // no username hash
@@ -274,10 +274,10 @@ class AutoConnectHandlerTest : public testing::Test {
 
   void CheckServiceAutoConnectProperty(const std::string& service_path,
                                        bool expected_auto_connect) {
-    const base::Value* properties =
+    const base::Value::Dict* properties =
         helper().service_test()->GetServiceProperties(service_path);
     absl::optional<bool> auto_connect =
-        properties->FindBoolKey(shill::kAutoConnectProperty);
+        properties->FindBool(shill::kAutoConnectProperty);
     EXPECT_TRUE(auto_connect);
     EXPECT_EQ(*auto_connect, expected_auto_connect);
   }
@@ -385,10 +385,10 @@ TEST_F(AutoConnectHandlerTest, ReconnectOnCertLoading) {
 
   // Applying the policy which restricts autoconnect should disconnect from the
   // shared, unmanaged network.
-  base::Value global_config(base::Value::Type::DICTIONARY);
-  global_config.SetKey(
+  base::Value::Dict global_config;
+  global_config.Set(
       ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
-      base::Value(true));
+      true);
 
   SetupUserPolicy(/*network_configs_json=*/std::string());
   SetupDevicePolicy(kPolicy, global_config);
@@ -416,7 +416,7 @@ TEST_F(AutoConnectHandlerTest, ReconnectOnCertPatternResolved) {
 
   SetupDevicePolicy(
       /*network_configs_json=*/std::string(),
-      /*global_config=*/base::Value(base::Value::Type::DICTIONARY));
+      /*global_config=*/base::Value::Dict());
   EXPECT_EQ(0, test_observer_->num_auto_connect_events());
 
   LoginToRegularUser();
@@ -462,7 +462,7 @@ TEST_F(AutoConnectHandlerTest, NoReconnectIfNoCertResolved) {
 
   SetupDevicePolicy(
       /*network_configs_json=*/std::string(),
-      /*global_config=*/base::Value(base::Value::Type::DICTIONARY));
+      /*global_config=*/base::Value::Dict());
   LoginToRegularUser();
   StartNetworkCertLoader();
   SetupUserPolicy(kPolicy);
@@ -501,10 +501,10 @@ TEST_F(AutoConnectHandlerTest, DisconnectOnPolicyLoading) {
   EXPECT_EQ(shill::kStateOnline, GetServiceState(wifi0_service_path));
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi1_service_path));
 
-  base::Value global_config(base::Value::Type::DICTIONARY);
-  global_config.SetKey(
+  base::Value::Dict global_config;
+  global_config.Set(
       ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
-      base::Value(true));
+      true);
 
   // Applying the policy which restricts autoconnect should disconnect from the
   // shared, unmanaged network.
@@ -540,8 +540,8 @@ TEST_F(AutoConnectHandlerTest, AutoConnectOnDevicePolicyApplied) {
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi1_service_path));
 
   // Apply device policy which should trigger ConnectToBestServices.
-  SetupDevicePolicy(
-      kPolicy, /*global_config=*/base::Value(base::Value::Type::DICTIONARY));
+  SetupDevicePolicy(kPolicy,
+                    /*global_config=*/base::Value::Dict());
 
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi0_service_path));
   EXPECT_EQ(shill::kStateOnline, GetServiceState(wifi1_service_path));
@@ -557,8 +557,8 @@ TEST_F(AutoConnectHandlerTest, AutoConnectOnUserPolicyApplied) {
       ConfigureService(kConfigWifi1ManagedSharedConnectable);
   ASSERT_FALSE(wifi1_service_path.empty());
   // Device policy has already been applied.
-  SetupDevicePolicy(std::string(), /*global_config=*/base::Value(
-                        base::Value::Type::DICTIONARY));
+  SetupDevicePolicy(std::string(),
+                    /*global_config=*/base::Value::Dict());
 
   // When shill's ConnectToBestServices is called, wifi1 should be come online.
   helper().manager_test()->SetBestServiceToConnect(wifi1_service_path);
@@ -593,10 +593,9 @@ TEST_F(AutoConnectHandlerTest,
   EXPECT_EQ(shill::kStateOnline, GetServiceState(wifi0_service_path));
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi1_service_path));
 
-  base::Value global_config(base::Value::Type::DICTIONARY);
-  global_config.SetKey(
-      ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnect,
-      base::Value(true));
+  base::Value::Dict global_config;
+  global_config.Set(::onc::global_network_config::kAllowOnlyPolicyWiFiToConnect,
+                    true);
 
   // Applying the policy which restricts connections should disconnect from the
   // shared, unmanaged network.
@@ -633,8 +632,8 @@ TEST_F(AutoConnectHandlerTest, ReconnectAfterLogin) {
 
   // Applying an empty device policy will not trigger anything yet, until also
   // the user policy is applied.
-  SetupDevicePolicy(std::string(), /*global_config=*/base::Value(
-                        base::Value::Type::DICTIONARY));
+  SetupDevicePolicy(std::string(),
+                    /*global_config=*/base::Value::Dict());
   EXPECT_EQ(shill::kStateOnline, GetServiceState(wifi0_service_path));
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi1_service_path));
 
@@ -661,9 +660,8 @@ TEST_F(AutoConnectHandlerTest, ManualConnectAbortsReconnectAfterLogin) {
   // policy is loaded.
   LoginToRegularUser();
   StartNetworkCertLoader();
-  SetupDevicePolicy(
-      std::string(),
-      /*global_config=*/base::Value(base::Value::Type::DICTIONARY));
+  SetupDevicePolicy(std::string(),
+                    /*global_config=*/base::Value::Dict());
 
   EXPECT_EQ(shill::kStateOnline, GetServiceState(wifi0_service_path));
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi1_service_path));
@@ -709,10 +707,10 @@ TEST_F(AutoConnectHandlerTest,
   // Apply 'AllowOnlyPolicyNetworksToAutoconnect' policy as a device
   // policy and provide a network configuration for cellular2 to make it
   // managed.
-  base::Value global_config(base::Value::Type::DICTIONARY);
-  global_config.SetKey(
+  base::Value::Dict global_config;
+  global_config.Set(
       ::onc::global_network_config::kAllowOnlyPolicyNetworksToAutoconnect,
-      base::Value(true));
+      true);
   SetupDevicePolicy(kCellularPolicy, global_config);
   // cellular1 and cellular3's service state should be set to idle and
   // autoconnect property should be set false.
@@ -753,10 +751,9 @@ TEST_F(AutoConnectHandlerTest,
 
   // Apply 'AllowOnlyPolicyCellularNetworks' policy as a device policy and
   // provide a network configuration for cellular2 to make it managed.
-  base::Value global_config(base::Value::Type::DICTIONARY);
-  global_config.SetKey(
-      ::onc::global_network_config::kAllowOnlyPolicyCellularNetworks,
-      base::Value(true));
+  base::Value::Dict global_config;
+  global_config.Set(
+      ::onc::global_network_config::kAllowOnlyPolicyCellularNetworks, true);
   SetupDevicePolicy(kCellularPolicy, global_config);
 
   // Cellular1 and Cellular3's service configuration should be not removed
@@ -796,7 +793,7 @@ TEST_F(AutoConnectHandlerTest, DisconnectFromBlockedNetwork) {
   base::Value::Dict global_config;
   global_config.Set(::onc::global_network_config::kBlockedHexSSIDs,
                     std::move(blocked));
-  SetupDevicePolicy(std::string(), base::Value(std::move(global_config)));
+  SetupDevicePolicy(std::string(), global_config);
   EXPECT_EQ(shill::kStateOnline, GetServiceState(wifi0_service_path));
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi1_service_path));
   EXPECT_TRUE(helper().profile_test()->HasService(wifi0_service_path));
@@ -827,10 +824,10 @@ TEST_F(AutoConnectHandlerTest, AllowOnlyPolicyWiFiToConnectIfAvailable) {
 
   // Apply 'AllowOnlyPolicyWiFiToConnectIfAvailable' policy as a device
   // policy and provide a network configuration for wifi1 to make it managed.
-  base::Value global_config(base::Value::Type::DICTIONARY);
-  global_config.SetKey(
+  base::Value::Dict global_config;
+  global_config.Set(
       ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnectIfAvailable,
-      base::Value(true));
+      true);
   SetupDevicePolicy(kPolicy, global_config);
   EXPECT_EQ(shill::kStateOnline, GetServiceState(wifi0_service_path));
   EXPECT_EQ(shill::kStateIdle, GetServiceState(wifi1_service_path));

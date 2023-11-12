@@ -7,12 +7,13 @@
 
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "components/bookmarks/browser/base_bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PrefService;
 
@@ -35,6 +36,12 @@ bool IsBookmarkPriceTracked(bookmarks::BookmarkModel* model,
 bool IsProductBookmark(bookmarks::BookmarkModel* model,
                        const bookmarks::BookmarkNode* node);
 
+// Return the last timestamp when the product is successfully tracked or
+// untracked by the user.
+absl::optional<int64_t> GetBookmarkLastSubscriptionChangeTime(
+    bookmarks::BookmarkModel* model,
+    const bookmarks::BookmarkNode* node);
+
 // Set the price tracking state for a particular cluster ID. This function
 // assumes that a bookmark with the specified cluster ID already exists and
 // will search for that bookmark (or the first instance of it). The logic
@@ -52,11 +59,13 @@ void SetPriceTrackingStateForClusterId(ShoppingService* service,
 // |callback| will be called with a bool representing whether the operation was
 // successful iff all of |service|, |model|, and |node| are non-null and the
 // bookmark has been determined to be a product.
-void SetPriceTrackingStateForBookmark(ShoppingService* service,
-                                      bookmarks::BookmarkModel* model,
-                                      const bookmarks::BookmarkNode* node,
-                                      bool enabled,
-                                      base::OnceCallback<void(bool)> callback);
+void SetPriceTrackingStateForBookmark(
+    ShoppingService* service,
+    bookmarks::BookmarkModel* model,
+    const bookmarks::BookmarkNode* node,
+    bool enabled,
+    base::OnceCallback<void(bool)> callback,
+    bool was_bookmark_created_by_price_tracking = false);
 
 // Get all bookmarks with the specified product cluster ID. If |max_count| is
 // specified, this function will return that number of bookmarks at most,

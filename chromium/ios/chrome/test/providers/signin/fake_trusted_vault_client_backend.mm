@@ -6,8 +6,8 @@
 
 #import <UIKit/UIKit.h>
 
-#import "base/callback.h"
 #import "base/check.h"
+#import "base/functional/callback.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -72,6 +72,11 @@ void FakeTrustedVaultClientBackend::RemoveObserver(Observer* observer) {
   // Do nothing.
 }
 
+void FakeTrustedVaultClientBackend::
+    SetDeviceRegistrationPublicKeyVerifierForUMA(VerifierCallback verifier) {
+  // Do nothing.
+}
+
 void FakeTrustedVaultClientBackend::FetchKeys(id<SystemIdentity> identity,
                                               KeyFetchedCallback callback) {
   // Do nothing.
@@ -115,6 +120,18 @@ void FakeTrustedVaultClientBackend::CancelDialog(BOOL animated,
       dismissViewControllerAnimated:animated
                          completion:callback];
   view_controller_ = nil;
+}
+
+void FakeTrustedVaultClientBackend::ClearLocalData(
+    id<SystemIdentity> identity,
+    base::OnceCallback<void(bool)> callback) {
+  // Do nothing.
+}
+
+void FakeTrustedVaultClientBackend::GetPublicKeyForIdentity(
+    id<SystemIdentity> identity,
+    GetPublicKeyCallback callback) {
+  // Do nothing.
 }
 
 void FakeTrustedVaultClientBackend::SimulateUserCancel() {

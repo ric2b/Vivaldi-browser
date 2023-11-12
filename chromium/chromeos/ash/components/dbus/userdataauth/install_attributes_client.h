@@ -5,8 +5,8 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_DBUS_USERDATAAUTH_INSTALL_ATTRIBUTES_CLIENT_H_
 #define CHROMEOS_ASH_COMPONENTS_DBUS_USERDATAAUTH_INSTALL_ATTRIBUTES_CLIENT_H_
 
-#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/functional/callback.h"
 #include "base/observer_list_types.h"
 #include "chromeos/ash/components/dbus/cryptohome/UserDataAuth.pb.h"
 #include "chromeos/ash/components/dbus/cryptohome/rpc.pb.h"
@@ -38,6 +38,8 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) InstallAttributesClient {
           ::user_data_auth::RemoveFirmwareManagementParametersReply>;
   using SetFirmwareManagementParametersCallback = chromeos::DBusMethodCallback<
       ::user_data_auth::SetFirmwareManagementParametersReply>;
+  using GetFirmwareManagementParametersCallback = chromeos::DBusMethodCallback<
+      ::user_data_auth::GetFirmwareManagementParametersReply>;
 
   // Not copyable or movable.
   InstallAttributesClient(const InstallAttributesClient&) = delete;
@@ -86,6 +88,11 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) InstallAttributesClient {
   virtual void SetFirmwareManagementParameters(
       const ::user_data_auth::SetFirmwareManagementParametersRequest& request,
       SetFirmwareManagementParametersCallback callback) = 0;
+
+  // Get the firmware management parameters.
+  virtual void GetFirmwareManagementParameters(
+      const ::user_data_auth::GetFirmwareManagementParametersRequest& request,
+      GetFirmwareManagementParametersCallback callback) = 0;
 
   // Blocking version of InstallAttributesGet().
   virtual absl::optional<::user_data_auth::InstallAttributesGetReply>

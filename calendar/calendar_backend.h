@@ -92,7 +92,9 @@ class CalendarBackend
   void Commit();
 
   // Creates an Event
-  void CreateCalendarEvent(EventRow ev, std::shared_ptr<EventResultCB> result);
+  void CreateCalendarEvent(EventRow ev,
+                           bool notify,
+                           std::shared_ptr<EventResultCB> result);
 
   // Creates multiple events
   void CreateCalendarEvents(std::vector<calendar::EventRow> events,

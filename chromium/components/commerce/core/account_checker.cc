@@ -12,6 +12,8 @@
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/account_capabilities.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/unified_consent/url_keyed_data_collection_consent_helper.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -20,22 +22,22 @@
 
 namespace {
 
-const char kOAuthScope[] = "https://www.googleapis.com/auth/chromememex";
-const char kOAuthName[] = "chromememex_svc";
-const char kGetHttpMethod[] = "GET";
-const char kPostHttpMethod[] = "POST";
-const char kContentType[] = "application/json; charset=UTF-8";
-const char kEmptyPostData[] = "";
 const int64_t kTimeoutMs = 10000;
-
-const char kNotificationsPrefUrl[] =
-    "https://memex-pa.googleapis.com/v1/notifications/preferences";
 const char kPriceTrackEmailPref[] = "price_track_email";
 const char kPreferencesKey[] = "preferences";
 
 }  // namespace
 
 namespace commerce {
+
+const char kOAuthScope[] = "https://www.googleapis.com/auth/chromememex";
+const char kOAuthName[] = "chromememex_svc";
+const char kGetHttpMethod[] = "GET";
+const char kPostHttpMethod[] = "POST";
+const char kContentType[] = "application/json; charset=UTF-8";
+const char kEmptyPostData[] = "";
+const char kNotificationsPrefUrl[] =
+    "https://memex-pa.googleapis.com/v1/notifications/preferences";
 
 AccountChecker::AccountChecker(
     PrefService* pref_service,
@@ -56,7 +58,7 @@ AccountChecker::AccountChecker(
     pref_change_registrar_->Init(pref_service);
     pref_change_registrar_->Add(
         kPriceEmailNotificationsEnabled,
-        base::BindRepeating(&AccountChecker::SendPriceEmailPref,
+        base::BindRepeating(&AccountChecker::OnPriceEmailPrefChanged,
                             weak_ptr_factory_.GetWeakPtr()));
   }
 }
@@ -80,16 +82,31 @@ bool AccountChecker::IsWebAndAppActivityEnabled() {
          pref_service_->GetBoolean(kWebAndAppActivityEnabledForShopping);
 }
 
+bool AccountChecker::IsSubjectToParentalControls() {
+  if (!identity_manager_) {
+    return false;
+  }
+
+  AccountCapabilities capabilities =
+      identity_manager_
+          ->FindExtendedAccountInfo(identity_manager_->GetPrimaryAccountInfo(
+              signin::ConsentLevel::kSignin))
+          .capabilities;
+
+  return capabilities.is_subject_to_parental_controls() ==
+         signin::Tribool::kTrue;
+}
+
 void AccountChecker::OnPrimaryAccountChanged(
     const signin::PrimaryAccountChangeEvent& event_details) {
   FetchWaaStatus();
 }
 
 void AccountChecker::FetchWaaStatus() {
-  // For now we need to update users' consent status on web and app activity
-  // only when ShoppingList feature is enabled.
-  if (!base::FeatureList::IsEnabled(kShoppingList) || !IsSignedIn())
+  // For now we need to update users' consent status on web and app activity.
+  if (!IsSignedIn()) {
     return;
+  }
   // TODO(crbug.com/1311754): These parameters (url, oauth_scope, etc.) are
   // copied from web_history_service.cc directly, it works now but we should
   // figure out a better way to keep these parameters in sync.
@@ -132,10 +149,10 @@ void AccountChecker::FetchWaaStatus() {
             }
           }
         })");
-  auto endpoint_fetcher = std::make_unique<EndpointFetcher>(
-      url_loader_factory_, waa_oauth_name, GURL(waa_query_url), waa_get_method,
-      waa_content_type, std::vector<std::string>{waa_oauth_scope},
-      waa_timeout_ms, waa_post_data, traffic_annotation, identity_manager_);
+  auto endpoint_fetcher = CreateEndpointFetcher(
+      waa_oauth_name, GURL(waa_query_url), waa_get_method, waa_content_type,
+      std::vector<std::string>{waa_oauth_scope}, waa_timeout_ms, waa_post_data,
+      traffic_annotation);
   endpoint_fetcher.get()->Fetch(base::BindOnce(
       &AccountChecker::HandleFetchWaaResponse, weak_ptr_factory_.GetWeakPtr(),
       std::move(endpoint_fetcher)));
@@ -161,8 +178,9 @@ void AccountChecker::OnFetchWaaJsonParsed(
 }
 
 void AccountChecker::FetchPriceEmailPref() {
-  if (!base::FeatureList::IsEnabled(kShoppingList) || !IsSignedIn())
+  if (!IsSignedIn()) {
     return;
+  }
 
   is_waiting_for_pref_fetch_completion_ = true;
   net::NetworkTrafficAnnotationTag traffic_annotation =
@@ -196,10 +214,10 @@ void AccountChecker::FetchPriceEmailPref() {
             }
           }
         })");
-  auto endpoint_fetcher = std::make_unique<EndpointFetcher>(
-      url_loader_factory_, kOAuthName, GURL(kNotificationsPrefUrl),
-      kGetHttpMethod, kContentType, std::vector<std::string>{kOAuthScope},
-      kTimeoutMs, kEmptyPostData, traffic_annotation, identity_manager_);
+  auto endpoint_fetcher = CreateEndpointFetcher(
+      kOAuthName, GURL(kNotificationsPrefUrl), kGetHttpMethod, kContentType,
+      std::vector<std::string>{kOAuthScope}, kTimeoutMs, kEmptyPostData,
+      traffic_annotation);
   endpoint_fetcher.get()->Fetch(base::BindOnce(
       &AccountChecker::HandleFetchPriceEmailPrefResponse,
       weak_ptr_factory_.GetWeakPtr(), std::move(endpoint_fetcher)));
@@ -221,13 +239,14 @@ void AccountChecker::OnFetchPriceEmailPrefJsonParsed(
   // the fetched result should be discarded.
   if (pref_service_ && is_waiting_for_pref_fetch_completion_ &&
       result.has_value() && result->is_dict()) {
-    if (auto* preferences_map = result->FindKey(kPreferencesKey)) {
+    if (auto* preferences_map = result->GetDict().FindDict(kPreferencesKey)) {
       if (absl::optional<bool> price_email_pref =
-              preferences_map->FindBoolKey(kPriceTrackEmailPref)) {
+              preferences_map->FindBool(kPriceTrackEmailPref)) {
         // Only set the pref value when necessary since it could affect
         // PrefService::Preference::IsDefaultValue().
         if (pref_service_->GetBoolean(kPriceEmailNotificationsEnabled) !=
             *price_email_pref) {
+          ignore_next_email_pref_change_ = true;
           pref_service_->SetBoolean(kPriceEmailNotificationsEnabled,
                                     *price_email_pref);
         }
@@ -237,19 +256,25 @@ void AccountChecker::OnFetchPriceEmailPrefJsonParsed(
   is_waiting_for_pref_fetch_completion_ = false;
 }
 
-void AccountChecker::SendPriceEmailPref() {
-  if (!base::FeatureList::IsEnabled(kShoppingList) || !IsSignedIn() ||
-      !pref_service_)
-    return;
-
+void AccountChecker::OnPriceEmailPrefChanged() {
   // If users update the pref faster than we hear back from the server fetch,
   // the fetched result should be discarded.
   is_waiting_for_pref_fetch_completion_ = false;
-  base::Value preferences_map(base::Value::Type::DICTIONARY);
+  if (ignore_next_email_pref_change_) {
+    ignore_next_email_pref_change_ = false;
+    return;
+  }
+
+  if (!IsSignedIn() || !pref_service_) {
+    return;
+  }
+
+  // Send the new value to server.
+  base::Value preferences_map(base::Value::Type::DICT);
   preferences_map.SetBoolKey(
       kPriceTrackEmailPref,
       pref_service_->GetBoolean(kPriceEmailNotificationsEnabled));
-  base::Value post_json(base::Value::Type::DICTIONARY);
+  base::Value post_json(base::Value::Type::DICT);
   post_json.SetKey(kPreferencesKey, std::move(preferences_map));
   std::string post_data;
   base::JSONWriter::Write(post_json, &post_data);
@@ -284,10 +309,10 @@ void AccountChecker::SendPriceEmailPref() {
             }
           }
         })");
-  auto endpoint_fetcher = std::make_unique<EndpointFetcher>(
-      url_loader_factory_, kOAuthName, GURL(kNotificationsPrefUrl),
-      kPostHttpMethod, kContentType, std::vector<std::string>{kOAuthScope},
-      kTimeoutMs, post_data, traffic_annotation, identity_manager_);
+  auto endpoint_fetcher = CreateEndpointFetcher(
+      kOAuthName, GURL(kNotificationsPrefUrl), kPostHttpMethod, kContentType,
+      std::vector<std::string>{kOAuthScope}, kTimeoutMs, post_data,
+      traffic_annotation);
   endpoint_fetcher.get()->Fetch(base::BindOnce(
       &AccountChecker::HandleSendPriceEmailPrefResponse,
       weak_ptr_factory_.GetWeakPtr(), std::move(endpoint_fetcher)));
@@ -305,9 +330,9 @@ void AccountChecker::HandleSendPriceEmailPrefResponse(
 void AccountChecker::OnSendPriceEmailPrefJsonParsed(
     data_decoder::DataDecoder::ValueOrError result) {
   if (pref_service_ && result.has_value() && result->is_dict()) {
-    if (auto* preferences_map = result->FindKey(kPreferencesKey)) {
+    if (auto* preferences_map = result->GetDict().FindDict(kPreferencesKey)) {
       if (auto price_email_pref =
-              preferences_map->FindBoolKey(kPriceTrackEmailPref)) {
+              preferences_map->FindBool(kPriceTrackEmailPref)) {
         if (pref_service_->GetBoolean(kPriceEmailNotificationsEnabled) !=
             *price_email_pref) {
           VLOG(1) << "Fail to update the price email pref";
@@ -315,6 +340,20 @@ void AccountChecker::OnSendPriceEmailPrefJsonParsed(
       }
     }
   }
+}
+
+std::unique_ptr<EndpointFetcher> AccountChecker::CreateEndpointFetcher(
+    const std::string& oauth_consumer_name,
+    const GURL& url,
+    const std::string& http_method,
+    const std::string& content_type,
+    const std::vector<std::string>& scopes,
+    int64_t timeout_ms,
+    const std::string& post_data,
+    const net::NetworkTrafficAnnotationTag& annotation_tag) {
+  return std::make_unique<EndpointFetcher>(
+      url_loader_factory_, oauth_consumer_name, url, http_method, content_type,
+      scopes, timeout_ms, post_data, annotation_tag, identity_manager_);
 }
 
 }  // namespace commerce

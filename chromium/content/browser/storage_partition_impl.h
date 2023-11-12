@@ -39,6 +39,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
+#include "services/network/public/cpp/network_service_buildflags.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "storage/browser/blob/blob_url_registry.h"
@@ -69,6 +70,7 @@ class BlobRegistryWrapper;
 class BluetoothAllowedDevicesMap;
 class BroadcastChannelService;
 class BrowsingDataFilterBuilder;
+class BrowsingTopicsURLLoaderService;
 class BucketManager;
 class CacheStorageControlWrapper;
 class CookieStoreManager;
@@ -84,7 +86,6 @@ class LockManager;
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 class MediaLicenseManager;
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
-class NativeIOContextImpl;
 class PaymentAppContextImpl;
 class PrefetchURLLoaderService;
 class PrivateAggregationManager;
@@ -189,7 +190,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   DevToolsBackgroundServicesContext* GetDevToolsBackgroundServicesContext()
       override;
   ContentIndexContextImpl* GetContentIndexContext() override;
-  NativeIOContext* GetNativeIOContext() override;
   HostZoomMap* GetHostZoomMap() override;
   HostZoomLevelContext* GetHostZoomLevelContext() override;
   ZoomLevelDelegate* GetZoomLevelDelegate() override;
@@ -197,6 +197,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   InterestGroupManager* GetInterestGroupManager() override;
   BrowsingTopicsSiteDataManager* GetBrowsingTopicsSiteDataManager() override;
   leveldb_proto::ProtoDatabaseProvider* GetProtoDatabaseProvider() override;
+  // Use outside content.
+  AttributionDataModel* GetAttributionDataModel() override;
+
   void SetProtoDatabaseProvider(
       std::unique_ptr<leveldb_proto::ProtoDatabaseProvider> proto_db_provider)
       override;
@@ -206,6 +209,8 @@ class CONTENT_EXPORT StoragePartitionImpl
                           uint32_t quota_storage_remove_mask,
                           const GURL& storage_origin,
                           base::OnceClosure callback) override;
+  void ClearDataForAllBuckets(const blink::StorageKey& storage_key,
+                              base::OnceClosure callback) override;
   void ClearDataForBuckets(const blink::StorageKey& storage_key,
                            const std::set<std::string>& storage_buckets,
                            base::OnceClosure callback) override;
@@ -243,7 +248,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   void ResetAttributionManagerForTesting(
       base::OnceCallback<void(bool)> callback) override;
 
-  base::WeakPtr<StoragePartition> GetWeakPtr();
+  base::WeakPtr<StoragePartitionImpl> GetWeakPtr();
   BackgroundFetchContext* GetBackgroundFetchContext();
   PaymentAppContextImpl* GetPaymentAppContext();
   BroadcastChannelService* GetBroadcastChannelService();
@@ -251,10 +256,12 @@ class CONTENT_EXPORT StoragePartitionImpl
   BlobRegistryWrapper* GetBlobRegistry();
   storage::BlobUrlRegistry* GetBlobUrlRegistry();
   PrefetchURLLoaderService* GetPrefetchURLLoaderService();
+  BrowsingTopicsURLLoaderService* GetBrowsingTopicsURLLoaderService();
   CookieStoreManager* GetCookieStoreManager();
   FileSystemAccessManagerImpl* GetFileSystemAccessManager();
   BucketManager* GetBucketManager();
   QuotaContext* GetQuotaContext();
+  // Use inside content.
   AttributionManager* GetAttributionManager();
   void SetFontAccessManagerForTesting(
       std::unique_ptr<FontAccessManager> font_access_manager);
@@ -306,9 +313,11 @@ class CONTENT_EXPORT StoragePartitionImpl
 #if BUILDFLAG(IS_CHROMEOS)
   void OnTrustAnchorUsed() override;
 #endif
+#if BUILDFLAG(IS_CT_SUPPORTED)
   void OnCanSendSCTAuditingReport(
       OnCanSendSCTAuditingReportCallback callback) override;
   void OnNewSCTAuditingReportSent() override;
+#endif
 
   // network::mojom::URLLoaderNetworkServiceObserver interface.
   void OnSSLCertificateError(const GURL& url,
@@ -567,6 +576,11 @@ class CONTENT_EXPORT StoragePartitionImpl
       const base::Time end,
       base::OnceClosure callback);
 
+  void RetrieveBucketsForClearingDone(
+      const blink::StorageKey& storage_key,
+      base::OnceClosure callback,
+      storage::QuotaErrorOr<std::set<storage::BucketInfo>> buckets);
+
   void ClearDataForBucketsDone(
       const blink::StorageKey& storage_key,
       const std::set<std::string>& storage_buckets,
@@ -636,6 +650,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<BlobRegistryWrapper> blob_registry_;
   std::unique_ptr<storage::BlobUrlRegistry> blob_url_registry_;
   std::unique_ptr<PrefetchURLLoaderService> prefetch_url_loader_service_;
+  std::unique_ptr<BrowsingTopicsURLLoaderService>
+      browsing_topics_url_loader_service_;
   std::unique_ptr<CookieStoreManager> cookie_store_manager_;
   std::unique_ptr<BucketManager> bucket_manager_;
   scoped_refptr<GeneratedCodeCacheContext> generated_code_cache_context_;
@@ -645,7 +661,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   std::unique_ptr<leveldb_proto::ProtoDatabaseProvider>
       proto_database_provider_;
   scoped_refptr<ContentIndexContextImpl> content_index_context_;
-  scoped_refptr<NativeIOContextImpl> native_io_context_;
   std::unique_ptr<AttributionManager> attribution_manager_;
   std::unique_ptr<FontAccessManager> font_access_manager_;
   std::unique_ptr<InterestGroupManagerImpl> interest_group_manager_;

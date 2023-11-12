@@ -4,15 +4,17 @@
 
 #include "content/browser/media/capture/frame_sink_video_capture_device.h"
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/token.h"
@@ -24,7 +26,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/device_service.h"
 #include "gpu/command_buffer/common/capabilities.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/video_types.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
 #include "media/capture/video_capture_types.h"
@@ -97,7 +98,7 @@ class ContextProviderObserver : viz::ContextLostObserver {
   explicit ContextProviderObserver(
       OnGpuCapabilitiesFetched on_gpu_capabilities_fetched)
       : on_gpu_capabilities_fetched_(
-            media::BindToCurrentLoop(on_gpu_capabilities_fetched)) {
+            base::BindPostTaskToCurrentDefault(on_gpu_capabilities_fetched)) {
     DETACH_FROM_SEQUENCE(main_sequence_checker_);
 
     content::GetUIThreadTaskRunner({})->PostTask(
@@ -225,6 +226,15 @@ void FrameSinkVideoCaptureDevice::SetGpuCapabilitiesOnDevice(
 
   gpu_capabilities_ = capabilities;
 
+  if (!receiver_) {
+    // It seems that we're being called after the receiver was already reset in
+    // `StopAndDeAllocate()` but before the dtor ran. If that's the case, we
+    // don't need to do anything here since either the dtor will be called
+    // shortly, or the observer will be re-initialized to a new instance in
+    // `AllocateAndStartWithReceiver()`.
+    return;
+  }
+
   if (capturer_) {
     RestartCapturerIfNeeded();
   } else {
@@ -267,6 +277,7 @@ void FrameSinkVideoCaptureDevice::AllocateAndStartWithReceiver(
 
 void FrameSinkVideoCaptureDevice::AllocateAndStartWithReceiverInternal() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(receiver_);
 
   WillStart();
 
@@ -403,6 +414,7 @@ void FrameSinkVideoCaptureDevice::StopAndDeAllocate() {
 
   MaybeStopConsuming();
   capturer_.reset();
+  context_provider_observer_.reset();
   if (receiver_) {
     receiver_.reset();
     DidStop();

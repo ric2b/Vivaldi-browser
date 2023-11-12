@@ -31,6 +31,8 @@ namespace ash {
 
 namespace video_conference {
 class BubbleViewTest;
+class ReturnToAppPanelTest;
+class ResourceDependencyTest;
 }  // namespace video_conference
 
 class Shelf;
@@ -53,14 +55,23 @@ class VideoConferenceTrayButton : public IconButton {
   ~VideoConferenceTrayButton() override;
 
   bool show_privacy_indicator() const { return show_privacy_indicator_; }
+  bool is_capturing() const { return is_capturing_; }
 
-  // Sets the state of showing the privacy indicator in the button.
-  void SetShowPrivacyIndicator(bool show);
+  // Set the state of `is_capturing_`.
+  void SetIsCapturing(bool is_capturing);
+
+  // Updates the capturing state and show/hide the privacy indicator
+  // accordingly.
+  void UpdateCapturingState();
 
   // IconButton:
   void PaintButtonContents(gfx::Canvas* canvas) override;
 
  private:
+  // Cache of the capturing state received from `VideoConferenceManagerAsh`.
+  bool is_capturing_ = false;
+
+  // Indicates whether we are showing the privacy indicator in the button.
   bool show_privacy_indicator_ = false;
 };
 
@@ -79,6 +90,7 @@ class ASH_EXPORT VideoConferenceTray
 
   VideoConferenceTrayButton* audio_icon() { return audio_icon_; }
   VideoConferenceTrayButton* camera_icon() { return camera_icon_; }
+  VideoConferenceTrayButton* screen_share_icon() { return screen_share_icon_; }
 
   // TrayBackgroundView:
   void CloseBubble() override;
@@ -88,19 +100,28 @@ class ASH_EXPORT VideoConferenceTray
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
   void HandleLocaleChange() override;
-  void UpdateAfterLoginStatusChange() override;
 
   // VideoConferenceTrayController::Observer:
+  void OnHasMediaAppStateChange() override;
+  void OnCameraPermissionStateChange() override;
+  void OnMicrophonePermissionStateChange() override;
   void OnCameraCapturingStateChange(bool is_capturing) override;
   void OnMicrophoneCapturingStateChange(bool is_capturing) override;
+  void OnScreenSharingStateChange(bool is_capturing_screen) override;
 
   // The expand indicator of the toggle bubble button needs to rotate according
   // to shelf alignment and whether the bubble is opened. This function will
   // calculate that rotation value.
   SkScalar GetRotationValueForToggleBubbleButton();
 
+  // Update the visibility and capturing state of the tray and icons according
+  // to the state in `VideoConferenceTrayController`.
+  void UpdateTrayAndIconsState();
+
  private:
   friend class video_conference::BubbleViewTest;
+  friend class video_conference::ReturnToAppPanelTest;
+  friend class video_conference::ResourceDependencyTest;
   friend class VideoConferenceTrayTest;
 
   // Callback function for `toggle_bubble_button_`.

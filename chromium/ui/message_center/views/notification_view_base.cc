@@ -10,8 +10,8 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -38,10 +38,12 @@
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/notification_list.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_types.h"
 #include "ui/message_center/vector_icons.h"
+#include "ui/message_center/views/large_image_view.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/notification_header_view.h"
 #include "ui/message_center/views/proportional_image_view.h"
@@ -179,93 +181,6 @@ void CompactTitleMessageView::set_title(const std::u16string& title) {
 
 void CompactTitleMessageView::set_message(const std::u16string& message) {
   message_->SetText(message);
-}
-
-// LargeImageView //////////////////////////////////////////////////////////////
-
-LargeImageView::LargeImageView(const gfx::Size& max_size)
-    : max_size_(max_size), min_size_(max_size_.width(), /*height=*/0) {}
-
-LargeImageView::~LargeImageView() = default;
-
-void LargeImageView::SetImage(const gfx::ImageSkia& image) {
-  image_ = image;
-  gfx::Size preferred_size = GetResizedImageSize();
-  preferred_size.SetToMax(min_size_);
-  preferred_size.SetToMin(max_size_);
-  SetPreferredSize(preferred_size);
-  SchedulePaint();
-  Layout();
-}
-
-void LargeImageView::OnPaint(gfx::Canvas* canvas) {
-  views::View::OnPaint(canvas);
-
-  gfx::Size resized_size = GetResizedImageSize();
-  gfx::Size drawn_size = resized_size;
-  drawn_size.SetToMin(max_size_);
-  gfx::Rect drawn_bounds = GetContentsBounds();
-  drawn_bounds.ClampToCenteredSize(drawn_size);
-
-  gfx::ImageSkia resized_image = gfx::ImageSkiaOperations::CreateResizedImage(
-      image_, skia::ImageOperations::RESIZE_BEST, resized_size);
-
-  // Cut off the overflown part.
-  gfx::ImageSkia drawn_image = gfx::ImageSkiaOperations::ExtractSubset(
-      resized_image, gfx::Rect(drawn_size));
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (ash::features::IsNotificationsRefreshEnabled()) {
-    SkPath path;
-    const SkScalar corner_radius = SkIntToScalar(kImageCornerRadius);
-    const SkScalar kRadius[8] = {corner_radius, corner_radius, corner_radius,
-                                 corner_radius, corner_radius, corner_radius,
-                                 corner_radius, corner_radius};
-    path.addRoundRect(gfx::RectToSkRect(drawn_bounds), kRadius);
-
-    cc::PaintFlags flags;
-    flags.setAntiAlias(true);
-
-    canvas->DrawImageInPath(drawn_image, drawn_bounds.x(), drawn_bounds.y(),
-                            path, flags);
-    return;
-  }
-#endif  // IS_CHROMEOS_ASH
-
-  canvas->DrawImageInt(drawn_image, drawn_bounds.x(), drawn_bounds.y());
-}
-
-const char* LargeImageView::GetClassName() const {
-  return "LargeImageView";
-}
-
-void LargeImageView::OnThemeChanged() {
-  View::OnThemeChanged();
-  bool set_background = true;
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  set_background = !ash::features::IsNotificationsRefreshEnabled();
-#endif  // IS_CHROMEOS_ASH
-  if (!set_background)
-    return;
-
-  SetBackground(views::CreateSolidBackground(
-      GetColorProvider()->GetColor(ui::kColorNotificationImageBackground)));
-}
-
-// Returns expected size of the image right after resizing.
-// The GetResizedImageSize().width() <= max_size_.width() holds, but
-// GetResizedImageSize().height() may be larger than max_size_.height().
-// In this case, the overflown part will be just cut off from the view.
-gfx::Size LargeImageView::GetResizedImageSize() {
-  gfx::Size original_size = image_.size();
-  if (original_size.width() <= max_size_.width())
-    return image_.size();
-
-  const double proportion =
-      original_size.height() / static_cast<double>(original_size.width());
-  gfx::Size resized_size;
-  resized_size.SetSize(max_size_.width(), max_size_.width() * proportion);
-  return resized_size;
 }
 
 // ////////////////////////////////////////////////////////////
@@ -927,11 +842,12 @@ void NotificationViewBase::SetExpanded(bool expanded) {
 }
 
 bool NotificationViewBase::IsManuallyExpandedOrCollapsed() const {
-  return manually_expanded_or_collapsed_;
+  return MessageCenter::Get()->GetNotificationExpandState(notification_id()) !=
+         ExpandState::DEFAULT;
 }
 
-void NotificationViewBase::SetManuallyExpandedOrCollapsed(bool value) {
-  manually_expanded_or_collapsed_ = value;
+void NotificationViewBase::SetManuallyExpandedOrCollapsed(ExpandState state) {
+  MessageCenter::Get()->SetNotificationExpandState(notification_id(), state);
 }
 
 void NotificationViewBase::OnSettingsButtonPressed(const ui::Event& event) {

@@ -11,7 +11,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "content/common/content_export.h"
@@ -79,7 +79,8 @@ class CONTENT_EXPORT WebContentsFrameTracker final
 
   ~WebContentsFrameTracker() override;
 
-  void WillStartCapturingWebContents(const gfx::Size& capture_size);
+  void WillStartCapturingWebContents(const gfx::Size& capture_size,
+                                     bool is_high_dpi_enabled);
   void DidStopCapturingWebContents();
 
   void SetCapturedContentSize(const gfx::Size& content_size);
@@ -233,6 +234,10 @@ class CONTENT_EXPORT WebContentsFrameTracker final
   // so the |current_content_size| passed into |CalculatePreferredScaleFactor|
   // may differ from this value.
   gfx::Size capture_size_;
+
+  // When false, effectively disables HiDPI capture mode by making
+  // CalculatePreferredScaleFactor always return 1.0f.
+  bool is_high_dpi_enabled_ = true;
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

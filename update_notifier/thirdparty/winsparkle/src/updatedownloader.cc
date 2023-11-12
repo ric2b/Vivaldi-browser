@@ -818,7 +818,7 @@ std::wstring GetInstallHash(bool for_task_scheduler) {
   bool base64 = !for_task_scheduler;
   if (base64) {
     hash = base::Base64Encode(
-        base::as_bytes(base::make_span(install_sha256.data(), 16)));
+        base::as_bytes(base::make_span(install_sha256.data(), 16UL)));
     // Use URL-safe encoding to avoid +/=
     DCHECK_EQ(hash.length(), 24U);
     hash.resize(22);  // strip '='
@@ -826,7 +826,7 @@ std::wstring GetInstallHash(bool for_task_scheduler) {
     base::ReplaceChars(hash, "/", "_", &hash);
   } else {
     hash = base::HexEncode(
-        base::as_bytes(base::make_span(install_sha256.data(), 8)));
+        base::as_bytes(base::make_span(install_sha256.data(), 8UL)));
   }
   return base::ASCIIToWide(base::ToLowerASCII(hash));
 }

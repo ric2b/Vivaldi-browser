@@ -6,7 +6,7 @@
 #define ASH_COMPONENTS_ARC_MEMORY_ARC_MEMORY_BRIDGE_H_
 
 #include "ash/components/arc/mojom/memory.mojom.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/threading/thread_checker.h"
 #include "components/keyed_service/core/keyed_service.h"
 
@@ -36,6 +36,10 @@ class ArcMemoryBridge : public KeyedService {
   // Drops the guest kernel's page caches.
   using DropCachesCallback = base::OnceCallback<void(bool)>;
   void DropCaches(DropCachesCallback callback);
+
+  // Reclaims all pages from all processes.
+  using ReclaimAllCallback = base::OnceCallback<void(uint32_t, uint32_t)>;
+  void ReclaimAll(ReclaimAllCallback);
 
  private:
   THREAD_CHECKER(thread_checker_);

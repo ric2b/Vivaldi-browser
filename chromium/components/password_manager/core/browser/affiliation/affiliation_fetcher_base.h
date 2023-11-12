@@ -8,11 +8,10 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
-#include "components/password_manager/core/browser/affiliation/affiliation_fetcher_interface.h"
-
 #include "base/memory/ref_counted.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_api.pb.h"
+#include "components/password_manager/core/browser/affiliation/affiliation_fetcher_interface.h"
 
 namespace net {
 struct NetworkTrafficAnnotationTag;
@@ -80,6 +79,9 @@ class AffiliationFetcherBase : public virtual AffiliationFetcherInterface {
 
   std::unique_ptr<network::SimpleURLLoader> simple_url_loader_;
 };
+
+bool operator==(const AffiliationFetcherInterface::RequestInfo& lhs,
+                const AffiliationFetcherInterface::RequestInfo& rhs);
 
 }  // namespace password_manager
 

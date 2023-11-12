@@ -15,6 +15,7 @@
 #include <windows.devices.enumeration.h>
 #include <wrl.h>
 
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "media/base/win/dxgi_device_manager.h"
 #include "media/capture/video/video_capture_device_factory.h"
@@ -105,7 +106,10 @@ class CAPTURE_EXPORT VideoCaptureDeviceFactoryWin
   std::vector<VideoCaptureDeviceInfo> GetDevicesInfoMediaFoundation();
   void AugmentDevicesListWithDirectShowOnlyDevices(
       std::vector<VideoCaptureDeviceInfo>* devices_info);
-  std::vector<VideoCaptureDeviceInfo> GetDevicesInfoDirectShow();
+  // Queries DirectShow devices, skips over devices listed in |known_devices|
+  // with non-empty supported formats.
+  std::vector<VideoCaptureDeviceInfo> GetDevicesInfoDirectShow(
+      const std::vector<VideoCaptureDeviceInfo>& known_devices);
 
   bool use_media_foundation_;
   bool use_d3d11_with_media_foundation_;

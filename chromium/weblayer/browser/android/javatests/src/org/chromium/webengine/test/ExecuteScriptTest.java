@@ -6,6 +6,9 @@ package org.chromium.webengine.test;
 
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
+import android.util.Pair;
+
+import androidx.core.content.ContextCompat;
 import androidx.test.filters.SmallTest;
 
 import com.google.common.util.concurrent.FutureCallback;
@@ -19,19 +22,25 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.test.util.Batch;
+import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.webengine.RestrictedAPIException;
 import org.chromium.webengine.Tab;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 /**
  * Tests executing JavaScript in a Tab.
  */
-@Batch(Batch.PER_CLASS)
+@DoNotBatch(reason = "Tests need separate Activities and WebFragments")
 @RunWith(WebEngineJUnit4ClassRunner.class)
 public class ExecuteScriptTest {
+    private static final String sRequestPath = "/page.html";
+    private static final String sResponseString =
+            "<html><head></head><body>contents!</body><script>window.foo = 42;</script></html>";
+
     @Rule
     public InstrumentationActivityTestRule mActivityTestRule =
             new InstrumentationActivityTestRule();
@@ -47,9 +56,9 @@ public class ExecuteScriptTest {
         mServer = mDALServerRule.getServer();
         mActivityTestRule.launchShell();
 
-        mDefaultUrl = mServer.setResponse("/page.html",
-                "<html><head></head><body>contents!</body><script>window.foo = 42;</script></html>",
-                null);
+        List<Pair<String, String>> embedderAncestorHeader = new ArrayList();
+        embedderAncestorHeader.add(new Pair("X-embedder-ancestors", "none"));
+        mDefaultUrl = mServer.setResponse(sRequestPath, sResponseString, embedderAncestorHeader);
     }
 
     @After
@@ -58,8 +67,8 @@ public class ExecuteScriptTest {
     }
 
     private Tab navigate() throws Exception {
-        mActivityTestRule.attachNewFragmentThenNavigateAndWait(mDefaultUrl);
-        return mActivityTestRule.getFragment().getTabManager().get().getActiveTab().get();
+        mActivityTestRule.createWebEngineAttachThenNavigateAndWait(mDefaultUrl);
+        return mActivityTestRule.getFragment().getWebEngine().getTabManager().getActiveTab();
     }
 
     @Test
@@ -87,15 +96,40 @@ public class ExecuteScriptTest {
                 }
                 executeLatch.countDown();
             }
-        }, mActivityTestRule.getContext().getMainExecutor());
+        }, ContextCompat.getMainExecutor(mActivityTestRule.getContext()));
 
         executeLatch.await();
     }
 
     @Test
     @SmallTest
-    public void executeScriptSucceedsWithVerification() throws Exception {
+    public void executeScriptSucceedsWithDALVerification() throws Exception {
         mDALServerRule.setUpDigitalAssetLinks();
+        Tab activeTab = navigate();
+
+        ListenableFuture<String> future =
+                runOnUiThreadBlocking(() -> activeTab.executeScript("1+1", true));
+        Assert.assertEquals(future.get(), "2");
+    }
+
+    @Test
+    @SmallTest
+    public void executeScriptSucceedsWithHeaderVerification() throws Exception {
+        List<Pair<String, String>> embedderAncestorHeader = new ArrayList();
+        embedderAncestorHeader.add(
+                new Pair("X-embedder-ancestors", mActivityTestRule.getPackageName()));
+        mDefaultUrl = mServer.setResponse(sRequestPath, sResponseString, embedderAncestorHeader);
+        Tab activeTab = navigate();
+
+        ListenableFuture<String> future =
+                runOnUiThreadBlocking(() -> activeTab.executeScript("1+1", true));
+        Assert.assertEquals(future.get(), "2");
+    }
+
+    @Test
+    @SmallTest
+    public void executeScriptSucceedsWithoutHeader() throws Exception {
+        mDefaultUrl = mServer.setResponse(sRequestPath, sResponseString, null);
         Tab activeTab = navigate();
 
         ListenableFuture<String> future =

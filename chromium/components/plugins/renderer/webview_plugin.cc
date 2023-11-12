@@ -10,8 +10,8 @@
 #include <string>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -364,13 +364,13 @@ void WebViewPlugin::WebViewHelper::ScheduleNonCompositedAnimation() {
   }
 }
 
-std::unique_ptr<blink::WebURLLoaderFactory>
-WebViewPlugin::WebViewHelper::CreateURLLoaderFactory() {
+scoped_refptr<network::SharedURLLoaderFactory>
+WebViewPlugin::WebViewHelper::GetURLLoaderFactory() {
   return plugin_->Container()
       ->GetDocument()
       .GetFrame()
       ->Client()
-      ->CreateURLLoaderFactory();
+      ->GetURLLoaderFactory();
 }
 
 void WebViewPlugin::WebViewHelper::BindToFrame(

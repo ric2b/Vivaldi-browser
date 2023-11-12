@@ -5,8 +5,8 @@
 
 #import <UIKit/UIKit.h>
 
-#include <set>
-#include <vector>
+#import <set>
+#import <vector>
 
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
 #import "ios/panel/panel_interaction_controller.h"

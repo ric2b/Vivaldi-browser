@@ -14,11 +14,11 @@
 #include <vector>
 
 #include "base/barrier_callback.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/id_map.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/hash/sha1.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
@@ -215,7 +215,8 @@ void ValidateAndAddUsageFromPath(
     // a storage key yet. For now, fall back to creating the storage key
     // from the origin. Once enough time has passed it should be safe to treat
     // this case as an index validation error.
-    storage_key = blink::StorageKey(url::Origin::Create(GURL(index.origin())));
+    storage_key = blink::StorageKey::CreateFirstParty(
+        url::Origin::Create(GURL(index.origin())));
   }
   DCHECK(!storage_key.origin().GetURL().is_empty());
 

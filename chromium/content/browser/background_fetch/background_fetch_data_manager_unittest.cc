@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -450,8 +450,6 @@ class BackgroundFetchDataManagerTest
                      const std::string& value) {
     std::vector<std::string> data;
 
-    // TODO(crbug.com/1199077): Update this when BackgroundFetchTestBase
-    // implements StorageKey.
     base::RunLoop run_loop;
     embedded_worker_test_helper()->context_wrapper()->StoreRegistrationUserData(
         service_worker_registration_id, storage_key(), {{key, value}},
@@ -1162,7 +1160,7 @@ TEST_F(BackgroundFetchDataManagerTest, GetMetadata) {
   // Verify that the metadata can be retrieved.
   auto metadata = GetMetadata(sw_id, kExampleUniqueId);
   ASSERT_TRUE(metadata);
-  EXPECT_EQ(metadata->origin(), storage_key().origin().Serialize());
+  EXPECT_EQ(metadata->storage_key(), storage_key().Serialize());
   EXPECT_NE(metadata->creation_microseconds_since_unix_epoch(), 0);
   EXPECT_EQ(metadata->num_fetches(), static_cast<int>(num_requests));
 
@@ -1171,7 +1169,7 @@ TEST_F(BackgroundFetchDataManagerTest, GetMetadata) {
   // After a restart, GetMetadata should still find the registration.
   metadata = GetMetadata(sw_id, kExampleUniqueId);
   ASSERT_TRUE(metadata);
-  EXPECT_EQ(metadata->origin(), storage_key().origin().Serialize());
+  EXPECT_EQ(metadata->storage_key(), storage_key().Serialize());
   EXPECT_NE(metadata->creation_microseconds_since_unix_epoch(), 0);
   EXPECT_EQ(metadata->num_fetches(), static_cast<int>(num_requests));
 }
@@ -1237,7 +1235,7 @@ TEST_F(BackgroundFetchDataManagerTest, LargeIconNotPersisted) {
   // Verify that the metadata can be retrieved.
   auto metadata = GetMetadata(sw_id, kExampleUniqueId);
   ASSERT_TRUE(metadata);
-  EXPECT_EQ(metadata->origin(), storage_key().origin().Serialize());
+  EXPECT_EQ(metadata->storage_key(), storage_key().Serialize());
   EXPECT_NE(metadata->creation_microseconds_since_unix_epoch(), 0);
   EXPECT_EQ(metadata->num_fetches(), static_cast<int>(num_requests));
   EXPECT_TRUE(GetUIOptions(sw_id).second.isNull());
@@ -2418,7 +2416,7 @@ TEST_F(BackgroundFetchDataManagerTest, StorageErrorsReported) {
 
   BackgroundFetchRegistrationId registration_id2(
       sw_id,
-      blink::StorageKey(url::Origin::Create(GURL("https://examplebad.com"))),
+      blink::StorageKey::CreateFromStringForTesting("https://examplebad.com"),
       kAlternativeDeveloperId, kAlternativeUniqueId);
 
   {

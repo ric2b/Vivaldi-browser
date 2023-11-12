@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/test/test_system_tray_client.h"
 #include "ash/shell.h"
 #include "ash/system/network/network_utils.h"
@@ -15,13 +14,12 @@
 #include "base/strings/strcat.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "chromeos/ash/components/network/network_connect.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/services/bluetooth_config/fake_adapter_state_controller.h"
 #include "chromeos/ash/services/bluetooth_config/scoped_bluetooth_config_test_helper.h"
-#include "chromeos/services/network_config/public/cpp/cros_network_config_test_helper.h"
+#include "chromeos/ash/services/network_config/public/cpp/cros_network_config_test_helper.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace ash {
@@ -79,7 +77,8 @@ class NetworkConnectTestDelegate : public NetworkConnect::Delegate {
   }
   void ShowMobileSetupDialog(const std::string& network_id) override {}
   void ShowCarrierAccountDetail(const std::string& network_id) override {}
-  void ShowPortalSignin(const std::string& network_id) override {
+  void ShowPortalSignin(const std::string& network_id,
+                        NetworkConnect::Source source) override {
     portal_signin_guid_ = network_id;
   }
   void ShowNetworkConnectError(const std::string& error_name,
@@ -100,8 +99,8 @@ class NetworkDetailedViewControllerTest : public AshTestBase {
     // Initialize CrosNetworkConfigTestHelper here, so we can initialize
     // a unique network handler and also use NetworkConnectTestDelegate to
     // initialize NetworkConnect.
-    network_config_helper_ = std::make_unique<
-        chromeos::network_config::CrosNetworkConfigTestHelper>();
+    network_config_helper_ =
+        std::make_unique<network_config::CrosNetworkConfigTestHelper>();
 
     NetworkHandler::Initialize();
     base::RunLoop().RunUntilIdle();
@@ -109,8 +108,6 @@ class NetworkDetailedViewControllerTest : public AshTestBase {
     network_connect_delegate_ = std::make_unique<NetworkConnectTestDelegate>();
     NetworkConnect::Initialize(network_connect_delegate_.get());
     AshTestBase::SetUp();
-
-    feature_list_.InitAndEnableFeature(features::kQuickSettingsNetworkRevamp);
 
     network_detailed_view_controller_ =
         std::make_unique<NetworkDetailedViewController>(
@@ -248,7 +245,6 @@ class NetworkDetailedViewControllerTest : public AshTestBase {
   const std::string& portal_signin_guid() const {
     return network_connect_delegate_->portal_signin_guid();
   }
-  base::test::ScopedFeatureList feature_list_;
 
  private:
   NetworkStateHandler* network_state_handler() {
@@ -263,7 +259,7 @@ class NetworkDetailedViewControllerTest : public AshTestBase {
     return ash_test_helper()->bluetooth_config_test_helper();
   }
 
-  std::unique_ptr<chromeos::network_config::CrosNetworkConfigTestHelper>
+  std::unique_ptr<network_config::CrosNetworkConfigTestHelper>
       network_config_helper_;
   std::unique_ptr<NetworkConnectTestDelegate> network_connect_delegate_;
   std::unique_ptr<NetworkDetailedViewController>
@@ -610,12 +606,6 @@ TEST_F(NetworkDetailedViewControllerTest, MobileToggleClicked) {
 
 TEST_F(NetworkDetailedViewControllerTest,
        PortalNetworkListItemSelectedWithFlagEnabled) {
-  feature_list_.Reset();
-  feature_list_.InitWithFeatures(
-      /*enabled_features=*/{features::kCaptivePortalUI2022,
-                            features::kQuickSettingsNetworkRevamp},
-      /*disabled_features=*/{});
-
   AddWifiService(shill::kStateRedirectFound);
 
   NetworkStatePropertiesPtr wifi_network = CreateStandaloneNetworkProperties(

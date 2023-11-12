@@ -5,8 +5,8 @@
 #include <memory>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -71,10 +71,11 @@ class NetworkDeviceHandlerTest : public testing::Test {
                            "cellular1");
     device_test->AddDevice(kDefaultWifiDevicePath, shill::kTypeWifi, "wifi1");
 
-    base::Value test_ip_configs(base::Value::Type::LIST);
+    base::Value::List test_ip_configs;
     test_ip_configs.Append("ip_config1");
     device_test->SetDeviceProperty(kDefaultWifiDevicePath,
-                                   shill::kIPConfigsProperty, test_ip_configs,
+                                   shill::kIPConfigsProperty,
+                                   base::Value(std::move(test_ip_configs)),
                                    /*notify_changed=*/true);
 
     base::RunLoop().RunUntilIdle();
@@ -106,13 +107,13 @@ class NetworkDeviceHandlerTest : public testing::Test {
   void SuccessCallback() { result_ = kResultSuccess; }
 
   void GetPropertiesCallback(const std::string& device_path,
-                             absl::optional<base::Value> properties) {
+                             absl::optional<base::Value::Dict> properties) {
     if (!properties) {
       result_ = kResultFailure;
       return;
     }
     result_ = kResultSuccess;
-    properties_ = std::move(*properties);
+    properties_ = std::move(properties.value());
   }
 
   void StringSuccessCallback(const std::string& result) {
@@ -134,7 +135,7 @@ class NetworkDeviceHandlerTest : public testing::Test {
                             const std::string& property_name,
                             const std::string& expected_value) {
     GetDeviceProperties(device_path, kResultSuccess);
-    std::string* value = properties_.FindStringKey(property_name);
+    std::string* value = properties_.FindString(property_name);
     ASSERT_NE(value, nullptr);
     ASSERT_EQ(*value, expected_value);
   }
@@ -146,12 +147,12 @@ class NetworkDeviceHandlerTest : public testing::Test {
   std::unique_ptr<NetworkDeviceHandler> network_device_handler_;
   std::unique_ptr<NetworkStateHandler> network_state_handler_;
   std::unique_ptr<NetworkHandlerTestHelper> network_handler_test_helper_;
-  base::Value properties_;
+  base::Value::Dict properties_;
 };
 
 TEST_F(NetworkDeviceHandlerTest, GetDeviceProperties) {
   GetDeviceProperties(kDefaultWifiDevicePath, kResultSuccess);
-  std::string* type = properties_.FindStringKey(shill::kTypeProperty);
+  std::string* type = properties_.FindString(shill::kTypeProperty);
   ASSERT_TRUE(type);
   EXPECT_EQ(shill::kTypeWifi, *type);
 }
@@ -169,7 +170,7 @@ TEST_F(NetworkDeviceHandlerTest, SetDeviceProperty) {
   GetDeviceProperties(kDefaultCellularDevicePath, kResultSuccess);
 
   absl::optional<int> interval =
-      properties_.FindIntKey(shill::kScanIntervalProperty);
+      properties_.FindInt(shill::kScanIntervalProperty);
   EXPECT_TRUE(interval.has_value());
   EXPECT_EQ(1, interval.value());
 
@@ -182,7 +183,7 @@ TEST_F(NetworkDeviceHandlerTest, SetDeviceProperty) {
 
   GetDeviceProperties(kDefaultCellularDevicePath, kResultSuccess);
 
-  interval = properties_.FindIntKey(shill::kScanIntervalProperty);
+  interval = properties_.FindInt(shill::kScanIntervalProperty);
   EXPECT_TRUE(interval.has_value());
   EXPECT_EQ(2, interval.value());
 
@@ -215,7 +216,7 @@ TEST_F(NetworkDeviceHandlerTest, CellularAllowRoaming) {
   GetDeviceProperties(kDefaultCellularDevicePath, kResultSuccess);
 
   absl::optional<bool> policy_allow_roaming =
-      properties_.FindBoolKey(shill::kCellularPolicyAllowRoamingProperty);
+      properties_.FindBool(shill::kCellularPolicyAllowRoamingProperty);
   EXPECT_TRUE(policy_allow_roaming.has_value());
   EXPECT_TRUE(policy_allow_roaming.value());
 
@@ -225,7 +226,7 @@ TEST_F(NetworkDeviceHandlerTest, CellularAllowRoaming) {
   GetDeviceProperties(kDefaultCellularDevicePath, kResultSuccess);
 
   policy_allow_roaming =
-      properties_.FindBoolKey(shill::kCellularPolicyAllowRoamingProperty);
+      properties_.FindBool(shill::kCellularPolicyAllowRoamingProperty);
   EXPECT_TRUE(policy_allow_roaming.has_value());
   EXPECT_FALSE(policy_allow_roaming.value());
 }

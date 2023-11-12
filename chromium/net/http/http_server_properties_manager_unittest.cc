@@ -6,10 +6,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
-#include "base/json/json_reader.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -20,7 +19,6 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/values_test_util.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -29,6 +27,7 @@
 #include "net/base/schemeful_site.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
+#include "net/quic/quic_context.h"
 #include "net/test/test_with_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -1251,19 +1250,17 @@ TEST_F(HttpServerPropertiesManagerTest, UpdatePrefsWithCache) {
 TEST_F(HttpServerPropertiesManagerTest, ParseAlternativeServiceInfo) {
   InitializePrefs();
 
-  std::unique_ptr<base::Value> server_dict = base::JSONReader::ReadDeprecated(
+  base::Value::Dict server_dict = base::test::ParseJsonDict(
       "{\"alternative_service\":[{\"port\":443,\"protocol_str\":\"h2\"},"
       "{\"port\":123,\"protocol_str\":\"quic\","
       "\"expiration\":\"9223372036854775807\"},{\"host\":\"example.org\","
       "\"port\":1234,\"protocol_str\":\"h2\","
       "\"expiration\":\"13758804000000000\"}]}");
-  ASSERT_TRUE(server_dict);
-  ASSERT_TRUE(server_dict->is_dict());
 
   const url::SchemeHostPort server("https", "example.com", 443);
   HttpServerProperties::ServerInfo server_info;
   EXPECT_TRUE(HttpServerPropertiesManager::ParseAlternativeServiceInfo(
-      server, server_dict->GetDict(), &server_info));
+      server, server_dict, &server_info));
 
   ASSERT_TRUE(server_info.alternative_services.has_value());
   AlternativeServiceInfoVector alternative_service_info_vector =
@@ -1308,16 +1305,14 @@ TEST_F(HttpServerPropertiesManagerTest, ParseAlternativeServiceInfo) {
 TEST_F(HttpServerPropertiesManagerTest, DoNotLoadAltSvcForInsecureOrigins) {
   InitializePrefs();
 
-  std::unique_ptr<base::Value> server_dict = base::JSONReader::ReadDeprecated(
+  base::Value::Dict server_dict = base::test::ParseJsonDict(
       "{\"alternative_service\":[{\"port\":443,\"protocol_str\":\"h2\","
       "\"expiration\":\"9223372036854775807\"}]}");
-  ASSERT_TRUE(server_dict);
-  ASSERT_TRUE(server_dict->is_dict());
 
   const url::SchemeHostPort server("http", "example.com", 80);
   HttpServerProperties::ServerInfo server_info;
   EXPECT_FALSE(HttpServerPropertiesManager::ParseAlternativeServiceInfo(
-      server, server_dict->GetDict(), &server_info));
+      server, server_dict, &server_info));
   EXPECT_TRUE(server_info.empty());
 }
 
@@ -1556,7 +1551,7 @@ TEST_F(HttpServerPropertiesManagerTest, PersistAdvertisedVersionsToPref) {
 TEST_F(HttpServerPropertiesManagerTest, ReadAdvertisedVersionsFromPref) {
   InitializePrefs();
 
-  std::unique_ptr<base::Value> server_dict = base::JSONReader::ReadDeprecated(
+  base::Value::Dict server_dict = base::test::ParseJsonDict(
       "{\"alternative_service\":["
       "{\"port\":443,\"protocol_str\":\"quic\"},"
       "{\"port\":123,\"protocol_str\":\"quic\","
@@ -1564,13 +1559,11 @@ TEST_F(HttpServerPropertiesManagerTest, ReadAdvertisedVersionsFromPref) {
       // Add 33 which we know is not supported, as regression test for
       // https://crbug.com/1061509
       "\"advertised_alpns\":[\"h3-Q033\",\"h3-Q046\",\"h3-Q043\"]}]}");
-  ASSERT_TRUE(server_dict);
-  ASSERT_TRUE(server_dict->is_dict());
 
   const url::SchemeHostPort server("https", "example.com", 443);
   HttpServerProperties::ServerInfo server_info;
   EXPECT_TRUE(HttpServerPropertiesManager::ParseAlternativeServiceInfo(
-      server, server_dict->GetDict(), &server_info));
+      server, server_dict, &server_info));
 
   ASSERT_TRUE(server_info.alternative_services.has_value());
   AlternativeServiceInfoVector alternative_service_info_vector =
@@ -3018,7 +3011,7 @@ TEST_F(HttpServerPropertiesManagerTest,
 }
 
 TEST_F(HttpServerPropertiesManagerTest, AdvertisedVersionsRoundTrip) {
-  for (const quic::ParsedQuicVersion& version : quic::AllSupportedVersions()) {
+  for (const quic::ParsedQuicVersion& version : AllSupportedQuicVersions()) {
     if (version.AlpnDeferToRFCv1()) {
       // These versions currently do not support Alt-Svc.
       continue;
@@ -3054,12 +3047,11 @@ TEST_F(HttpServerPropertiesManagerTest, AdvertisedVersionsRoundTrip) {
     SetUp();
     InitializePrefs();
     // Read from JSON.
-    std::unique_ptr<base::Value> preferences_dict =
-        base::JSONReader::ReadDeprecated(preferences_json);
-    ASSERT_TRUE(preferences_dict);
-    ASSERT_TRUE(preferences_dict->is_dict());
+    base::Value::Dict preferences_dict =
+        base::test::ParseJsonDict(preferences_json);
+    ASSERT_FALSE(preferences_dict.empty());
     const base::Value::List* servers_list =
-        preferences_dict->GetDict().FindList("servers");
+        preferences_dict.FindList("servers");
     ASSERT_TRUE(servers_list);
     ASSERT_EQ(servers_list->size(), 1u);
     const base::Value& server_dict = (*servers_list)[0];

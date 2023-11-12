@@ -2,35 +2,33 @@
 
 #import "ios/notes/note_utils_ios.h"
 
-#include <stdint.h>
-
-#include <memory>
-#include <vector>
+#import <memory>
+#import <stdint.h>
+#import <vector>
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
-#include "base/check.h"
-#include "base/hash/hash.h"
-#include "base/i18n/string_compare.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/strings/utf_string_conversions.h"
-#include "notes/notes_model.h"
-#include "components/query_parser/query_parser.h"
-#include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/flags/system_flags.h"
+#import "base/check.h"
+#import "base/hash/hash.h"
+#import "base/i18n/string_compare.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/strings/utf_string_conversions.h"
+#import "components/query_parser/query_parser.h"
+#import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#include "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
-#include "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "third_party/skia/include/core/SkColor.h"
-#include "ui/base/l10n/l10n_util.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-#include "ui/base/models/tree_node_iterator.h"
-
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
-#include "notes/notes_model.h"
-#include "notes/note_node.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "notes/note_node.h"
+#import "notes/notes_model.h"
+#import "notes/notes_model.h"
+#import "third_party/skia/include/core/SkColor.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/models/tree_node_iterator.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -84,7 +82,6 @@ const NoteNode* FindFolderById(vivaldi::NotesModel* model,
 
 NSString* TitleForNoteNode(const NoteNode* node) {
   NSString* title;
-    title = base::SysUTF16ToNSString(node->GetContent());
 
   if (node->is_main()) {
     title = l10n_util::GetNSString(IDS_VIVALDI_NOTE_NEW_NOTES_BAR_TITLE);
@@ -95,8 +92,11 @@ NSString* TitleForNoteNode(const NoteNode* node) {
   } else {
     title = base::SysUTF16ToNSString(node->GetTitle());
   }
+
   if (node->is_folder()){
-      title = base::SysUTF16ToNSString(node->GetTitle());
+    title = base::SysUTF16ToNSString(node->GetTitle());
+  } else {
+    title = base::SysUTF16ToNSString(node->GetContent());
   }
 
   // Assign a default note name if it is at top level.
@@ -120,6 +120,10 @@ NSString* subtitleForNoteNode(const NoteNode* node) {
                                 base::SysNSStringToUTF16(childCountString));
   }
   return subtitle;
+}
+
+NSDate* createdAtForNoteNode(const vivaldi::NoteNode* node) {
+  return node->GetCreationTime().ToNSDate();
 }
 
 #pragma mark - Updating Notes
@@ -523,7 +527,6 @@ std::vector<const NoteNode*> PrimaryPermanentNodes(NotesModel* model) {
   DCHECK(model->loaded());
   std::vector<const NoteNode*> nodes;
   nodes.push_back(model->main_node());
-  nodes.push_back(model->other_node());
   return nodes;
 }
 

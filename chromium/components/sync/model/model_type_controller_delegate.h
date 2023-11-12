@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/values.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_stop_metadata_fate.h"
@@ -54,6 +54,9 @@ class ModelTypeControllerDelegate {
   // Records entities count and estimated memory usage of the type into
   // histograms.
   virtual void RecordMemoryUsageAndCountsHistograms() = 0;
+
+  // Clear metadata given the model is stopped.
+  virtual void ClearMetadataWhileStopped() = 0;
 };
 
 }  // namespace syncer

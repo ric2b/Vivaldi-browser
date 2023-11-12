@@ -85,7 +85,7 @@ TEST(StatsReporterTest, FirstRunNormal) {
   StatsReporterImpl::ReportingData local_state_reporting_data;
   local_state_reporting_data.installation_time = time;
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   std::string request_url;
   std::string body;
   base::TimeDelta next_reporting_time_interval;
@@ -200,7 +200,7 @@ TEST(StatsReporterTest, RejectEarlyAttempt) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
   os_profile_reporting_data_json->SetKey(
@@ -272,7 +272,7 @@ TEST(StatsReporterTest, NewInstallation) {
   local_state_reporting_data.installation_time = time;
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
   os_profile_reporting_data_json->SetKey(
@@ -369,7 +369,7 @@ TEST(StatsReporterTest, MovedStandalone) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", other_uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 6);
   os_profile_reporting_data_json->SetKey(
@@ -419,7 +419,7 @@ TEST(StatsReporterTest, UseLegacyUserId) {
   StatsReporterImpl::ReportingData local_state_reporting_data;
   local_state_reporting_data.installation_time = time;
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   std::string request_url;
   std::string body;
   base::TimeDelta next_reporting_time_interval;
@@ -491,7 +491,7 @@ TEST(StatsReporterTest, IgnoreLegacyUserId) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 2);
   os_profile_reporting_data_json->SetKey(
@@ -564,7 +564,7 @@ TEST(StatsReporterTest, DifferentPingsSinceLastMonth) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 7);
   os_profile_reporting_data_json->SetKey(
@@ -637,7 +637,7 @@ TEST(StatsReporterTest, OsMonthlyPingAhead) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(360);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 0);
   os_profile_reporting_data_json->SetKey(
@@ -708,7 +708,7 @@ TEST(StatsReporterTest, LongRun) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(5);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 20);
   os_profile_reporting_data_json->SetKey(
@@ -1064,7 +1064,7 @@ TEST(StatsReporterTest, CorrectMonthSemestrialPing) {
   local_state_reporting_data.next_pings.yearly = time + base::Days(50);
 
   absl::optional<base::Value> os_profile_reporting_data_json(
-      base::Value::Type::DICTIONARY);
+    base::Value::Type::DICT);
   os_profile_reporting_data_json->SetStringKey("unique_user_id", uid);
   os_profile_reporting_data_json->SetIntKey("pings_since_last_month", 10);
   os_profile_reporting_data_json->SetKey(

@@ -377,7 +377,6 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void TabDraggingStatusChanged(bool is_dragging) override {}
   void LinkOpeningFromGesture(WindowOpenDisposition disposition) override {}
   // Shows in-product help for the given feature.
-  void UpdateFrameColor() override {}
 #if !BUILDFLAG(IS_ANDROID)
   void ShowIntentPickerBubble(
       std::vector<apps::IntentPickerAppInfo> app_info,
@@ -445,7 +444,26 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   // windows and close the one with pinned/workspace tabs.
   void MovePersistentTabsToOtherWindowIfNeeded();
 
+  // Instructs window to show a dialog on quit (if other requirements are
+  // fullfilled.
+  static void SetPromptOnQuit(bool prompt);
+
+  // Called from unload handler during the close sequence if the sequence is
+  // aborted.
+  static void CancelWindowClose();
+
  private:
+  // Ensures only one window can display a quit dialog on exit.
+  bool AcquireQuitDialog();
+  // Signals all windows that the quit dialog confirms the action.
+  void AcceptQuitForAllWindows();
+  // Sets the owner of the quit dialog (the window that shows the dialog).
+  void SetQuitDialogOwner(VivaldiBrowserWindow* owner);
+  // Determines if a quit confirmation dialog should be shown on exit.
+  bool ShouldShowDialogOnQuit();
+  // Determines if a window close confirmation dialog should be shown.
+  bool ShouldShowDialogOnCloseWindow();
+
   // Implementation of various interface-like Chromium classes is in this inner
   // class not to pollute with extra details the main class.
   class InterfaceHelper;
@@ -494,6 +512,12 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void SetupShellIntegration(const VivaldiBrowserWindowParams& create_params);
   int GetCommandIDForAppCommandID(int app_command_id) const;
 
+
+  void CloseCleanup();
+
+  // Saved session history. To be called when last window closes before content
+  // is removed.
+  void AutoSaveSession();
   // This must be the first field for the class to ensure that it outlives any
   // other field that use the class as a delegate and embeds a raw pointer to
   // it.
@@ -526,6 +550,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
 
   bool quit_dialog_shown_ = false;
   bool close_dialog_shown_ = false;
+  bool prompt_on_quit_ = true;
+  // Only the owner can show a dialog.
+  VivaldiBrowserWindow* quit_dialog_owner_ = nullptr;
 
   // When true, use the system frame with OS-rendered titlebar and window
   // control buttons.

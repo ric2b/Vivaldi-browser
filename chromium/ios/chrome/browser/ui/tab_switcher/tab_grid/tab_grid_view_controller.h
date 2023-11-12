@@ -21,18 +21,20 @@
 @protocol PriceCardDataSource;
 @protocol GridShareableItemsProvider;
 class GURL;
+@protocol InactiveTabsCountConsumer;
 @protocol IncognitoReauthCommands;
 @protocol IncognitoReauthConsumer;
 @class LayoutGuideCenter;
 @protocol PopupMenuCommands;
 @protocol RecentTabsConsumer;
 @class RecentTabsTableViewController;
+@protocol TabCollectionCommands;
 @protocol TabCollectionConsumer;
 @protocol TabCollectionDragDropHandler;
+@protocol TabContextMenuProvider;
 @class TabGridViewController;
 @protocol ThumbStripCommands;
 @protocol ViewControllerTraitCollectionObserver;
-@protocol GridContextMenuProvider;
 
 // Configurations for tab grid pages.
 enum class TabGridPageConfiguration {
@@ -85,6 +87,9 @@ enum class TabGridPageConfiguration {
 // Sets BVC accessibilityViewIsModal to `modal` (for thumbstrip mode).
 - (void)setBVCAccessibilityViewModal:(BOOL)modal;
 
+// Asks the delegate to show the inactive tabs.
+- (void)showInactiveTabs;
+
 @end
 
 // View controller representing a tab switcher. The tab switcher has an
@@ -114,11 +119,14 @@ enum class TabGridPageConfiguration {
 @property(nonatomic, weak) id<TabGridViewControllerDelegate> delegate;
 
 // Consumers send updates from the model layer to the UI layer.
-@property(nonatomic, readonly) id<TabCollectionConsumer> regularTabsConsumer;
+@property(nonatomic, readonly)
+    id<TabCollectionConsumer, InactiveTabsCountConsumer>
+        regularTabsConsumer;
 @property(nonatomic, readonly)
     id<TabCollectionConsumer, IncognitoReauthConsumer>
         incognitoTabsConsumer;
 @property(nonatomic, readonly) id<RecentTabsConsumer> remoteTabsConsumer;
+@property(nonatomic, readonly) id<TabCollectionConsumer> pinnedTabsConsumer;
 
 // Vivaldi
 @property(nonatomic, readonly) id<RecentTabsConsumer> closedTabsConsumer;
@@ -127,15 +135,19 @@ enum class TabGridPageConfiguration {
 // Delegates send updates from the UI layer to the model layer.
 @property(nonatomic, weak) id<GridCommands> regularTabsDelegate;
 @property(nonatomic, weak) id<GridCommands> incognitoTabsDelegate;
+@property(nonatomic, weak) id<TabCollectionCommands> pinnedTabsDelegate;
 
 // Handles drag and drop interactions that require the model layer.
 @property(nonatomic, weak) id<TabCollectionDragDropHandler>
     regularTabsDragDropHandler;
 @property(nonatomic, weak) id<TabCollectionDragDropHandler>
     incognitoTabsDragDropHandler;
+@property(nonatomic, weak) id<TabCollectionDragDropHandler>
+    pinnedTabsDragDropHandler;
 
 // Data sources provide lazy access to heavy-weight resources.
 @property(nonatomic, weak) id<GridImageDataSource> regularTabsImageDataSource;
+@property(nonatomic, weak) id<GridImageDataSource> pinnedTabsImageDataSource;
 @property(nonatomic, weak) id<GridImageDataSource> incognitoTabsImageDataSource;
 
 // Data source for acquiring data which power the PriceCardView
@@ -170,9 +182,9 @@ enum class TabGridPageConfiguration {
 // End Vivaldi
 
 // Provides the context menu for the tabs on the grid.
-@property(nonatomic, weak) id<GridContextMenuProvider>
+@property(nonatomic, weak) id<TabContextMenuProvider>
     regularTabsContextMenuProvider;
-@property(nonatomic, weak) id<GridContextMenuProvider>
+@property(nonatomic, weak) id<TabContextMenuProvider>
     incognitoTabsContextMenuProvider;
 
 // The layout guide center to use to refer to the bottom toolbar.
@@ -205,9 +217,6 @@ enum class TabGridPageConfiguration {
 // Sets both the current page and page control's selected page to `page`.
 // Animation is used if `animated` is YES.
 - (void)setCurrentPageAndPageControl:(TabGridPage)page animated:(BOOL)animated;
-
-// YES if it is possible to undo the close all conditions.
-@property(nonatomic, assign) BOOL undoCloseAllAvailable;
 
 @end
 

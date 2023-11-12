@@ -24,6 +24,9 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_large_blob_inputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_large_blob_outputs.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_payment_inputs.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_prf_inputs.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_prf_outputs.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_authentication_extensions_prf_values.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_authenticator_selection_criteria.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_credential_creation_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_credential_properties_output.h"
@@ -70,6 +73,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
@@ -467,8 +471,11 @@ DOMException* AuthenticatorStatusToDOMException(
     case AuthenticatorStatus::INVALID_PROTOCOL:
       return MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kSecurityError,
-          "Public-key credentials are only available to HTTPS origin or HTTP "
-          "origins that fall under 'localhost'. See https://crbug.com/824383");
+          "Public-key credentials are only available to HTTPS origins with "
+          "valid certificates, HTTP origins that fall under 'localhost', or "
+          "pages served from an extension. See "
+          "https://chromium.googlesource.com/chromium/src/+/main/content/"
+          "browser/webauth/origins.md for details");
     case AuthenticatorStatus::BAD_RELYING_PARTY_ID:
       return MakeGarbageCollected<DOMException>(
           DOMExceptionCode::kSecurityError,
@@ -699,6 +706,11 @@ void OnMakePublicKeyCredentialComplete(
         std::move(credential->device_public_key->signature)));
     extension_outputs->setDevicePubKey(device_public_key_outputs);
   }
+  if (credential->echo_prf) {
+    auto* prf_outputs = AuthenticationExtensionsPRFOutputs::Create();
+    prf_outputs->setEnabled(credential->prf);
+    extension_outputs->setPrf(prf_outputs);
+  }
   resolver->Resolve(MakeGarbageCollected<PublicKeyCredential>(
       credential->info->id, raw_id, authenticator_response,
       credential->authenticator_attachment, extension_outputs));
@@ -842,6 +854,24 @@ void OnGetAssertionComplete(
           std::move(credential->device_public_key->signature)));
       extension_outputs->setDevicePubKey(device_public_key_outputs);
     }
+    if (credential->echo_prf) {
+      auto* prf_outputs = AuthenticationExtensionsPRFOutputs::Create();
+      if (credential->prf_results) {
+        auto* values = AuthenticationExtensionsPRFValues::Create();
+        values->setFirst(
+            MakeGarbageCollected<V8UnionArrayBufferOrArrayBufferView>(
+                VectorToDOMArrayBuffer(
+                    std::move(credential->prf_results->first))));
+        if (credential->prf_results->second) {
+          values->setSecond(
+              MakeGarbageCollected<V8UnionArrayBufferOrArrayBufferView>(
+                  VectorToDOMArrayBuffer(
+                      std::move(credential->prf_results->second.value()))));
+        }
+        prf_outputs->setResults(values);
+      }
+      extension_outputs->setPrf(prf_outputs);
+    }
     resolver->Resolve(MakeGarbageCollected<PublicKeyCredential>(
         credential->info->id,
         VectorToDOMArrayBuffer(std::move(credential->info->raw_id)),
@@ -954,40 +984,42 @@ bool IsPaymentExtensionValid(const CredentialCreationOptions* options,
     return false;
   }
 
-  // Currently discoverable credentials on Android do not support the payment
-  // extension. As such, we only allow residentKey=preferred, and later
-  // internally map it to discouraged to receive a non-discoverable credential.
-  //
-  // We do not allow developers to directly specify residentKey=discouraged for
-  // Android, in order to align behavior with desktop platforms.
-  //
-  // TODO(crbug.com/1393662): Remove Android-specific code once OS-level support
-  // is available.
-#if BUILDFLAG(IS_ANDROID)
-  if (!authenticator->hasResidentKey() ||
-      authenticator->residentKey() != "preferred") {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kNotSupportedError,
-        "A resident key must be 'preferred' for 'payment' extension "
-        "('required' is not supported on Android at this time: "
-        "https://crbug.com/1393662)."));
-    return false;
+  if (RuntimeEnabledFeatures::
+          AllowDiscoverableCredentialsForSecurePaymentConfirmationEnabled()) {
+    if ((!authenticator->hasResidentKey() &&
+         !authenticator->hasRequireResidentKey()) ||
+        (authenticator->hasResidentKey() &&
+         authenticator->residentKey() == "discouraged") ||
+        (!authenticator->hasResidentKey() &&
+         authenticator->hasRequireResidentKey() &&
+         !authenticator->requireResidentKey())) {
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "A resident key must be 'preferred' or 'required' for 'payment' "
+          "extension."));
+      return false;
+    }
+  } else {
+    // Currently discoverable credentials on Android do not support the payment
+    // extension. As such, we only allow residentKey=preferred, and later
+    // internally map it to discouraged to receive a non-discoverable
+    // credential.
+    //
+    // We do not allow developers to directly specify residentKey=discouraged
+    // for Android, in order to align behavior with desktop platforms.
+    //
+    // TODO(crbug.com/1393662): Remove Android-specific code once OS-level
+    // support is available.
+    if (!authenticator->hasResidentKey() ||
+        authenticator->residentKey() != "preferred") {
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotSupportedError,
+          "A resident key must be 'preferred' for 'payment' extension "
+          "('required' is not supported on Android at this time: "
+          "https://crbug.com/1393662)."));
+      return false;
+    }
   }
-#else
-  if ((!authenticator->hasResidentKey() &&
-       !authenticator->hasRequireResidentKey()) ||
-      (authenticator->hasResidentKey() &&
-       authenticator->residentKey() == "discouraged") ||
-      (!authenticator->hasResidentKey() &&
-       authenticator->hasRequireResidentKey() &&
-       !authenticator->requireResidentKey())) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kNotSupportedError,
-        "A resident key must be 'preferred' or 'required' for 'payment' "
-        "extension."));
-    return false;
-  }
-#endif
 
   if (!authenticator->hasAuthenticatorAttachment() ||
       authenticator->authenticatorAttachment() != "platform") {
@@ -998,6 +1030,25 @@ bool IsPaymentExtensionValid(const CredentialCreationOptions* options,
   }
 
   return true;
+}
+
+const char* validateGetPublicKeyCredentialPRFExtension(
+    const AuthenticationExtensionsPRFInputs& prf) {
+  if (prf.hasEvalByCredential()) {
+    for (const auto& pair : prf.evalByCredential()) {
+      Vector<char> cred_id;
+      if (!pair.first.Is8Bit() ||
+          !WTF::Base64UnpaddedURLDecode(pair.first, cred_id)) {
+        return "'prf' extension contains invalid base64url data in "
+               "'evalByCredential'";
+      }
+      if (cred_id.empty()) {
+        return "'prf' extension contains an empty credential ID in "
+               "'evalByCredential'";
+      }
+    }
+  }
+  return nullptr;
 }
 
 }  // namespace
@@ -1173,6 +1224,26 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
           return promise;
         }
       }
+      if (options->publicKey()->extensions()->hasPrf()) {
+        const char* error = validateGetPublicKeyCredentialPRFExtension(
+            *options->publicKey()->extensions()->prf());
+        if (error != nullptr) {
+          resolver->Reject(MakeGarbageCollected<DOMException>(
+              DOMExceptionCode::kSyntaxError, error));
+          return promise;
+        }
+
+        if (options->publicKey()->extensions()->prf()->hasEvalByCredential() &&
+            options->publicKey()->allowCredentials().empty()) {
+          resolver->Reject(MakeGarbageCollected<DOMException>(
+              DOMExceptionCode::kNotSupportedError,
+              "'prf' extension has 'evalByCredential' with an empty allow "
+              "list"));
+          return promise;
+        }
+        // Prohibiting uv=preferred is omitted. See
+        // https://github.com/w3c/webauthn/pull/1836.
+      }
       if (RuntimeEnabledFeatures::SecurePaymentConfirmationEnabled(context) &&
           options->publicKey()->extensions()->hasPayment()) {
         resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -1329,7 +1400,10 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
       identity_provider_ptrs.push_back(std::move(identity_provider));
     }
 
-    DCHECK(options->identity()->hasPreferAutoSignIn());
+    // |autoReauthn| is default to false and can only be set when the feature
+    // is enabled.
+    DCHECK(RuntimeEnabledFeatures::FedCmAutoReauthnEnabled(context) ||
+           !options->identity()->autoReauthn());
     std::unique_ptr<ScopedAbortState> scoped_abort_state = nullptr;
     if (auto* signal = options->getSignalOr(nullptr)) {
       if (signal->aborted()) {
@@ -1342,14 +1416,26 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
       scoped_abort_state = std::make_unique<ScopedAbortState>(signal, handle);
     }
 
-    bool prefer_auto_sign_in = options->identity()->preferAutoSignIn();
+    bool auto_reauthn = options->identity()->autoReauthn();
+
+    mojom::blink::RpContext rp_context = mojom::blink::RpContext::kSignIn;
+    if (RuntimeEnabledFeatures::FedCmRpContextEnabled() &&
+        options->identity()->hasContext()) {
+      rp_context = mojo::ConvertTo<mojom::blink::RpContext>(
+          options->identity()->context());
+    }
+
+    if (!web_identity_requester_) {
+      web_identity_requester_ =
+          MakeGarbageCollected<WebIdentityRequester>(WrapPersistent(context));
+    }
 
     if (!RuntimeEnabledFeatures::FedCmMultipleIdentityProvidersEnabled(
             context)) {
       Vector<mojom::blink::IdentityProviderGetParametersPtr> idp_get_params;
       mojom::blink::IdentityProviderGetParametersPtr get_params =
           mojom::blink::IdentityProviderGetParameters::New(
-              std::move(identity_provider_ptrs), prefer_auto_sign_in);
+              std::move(identity_provider_ptrs), auto_reauthn, rp_context);
       idp_get_params.push_back(std::move(get_params));
 
       auto* auth_request =
@@ -1359,17 +1445,23 @@ ScriptPromise CredentialsContainer::get(ScriptState* script_state,
           WTF::BindOnce(&OnRequestToken, WrapPersistent(resolver),
                         std::move(scoped_abort_state),
                         WrapPersistent(options)));
+
+      // Start recording the duration from when RequestToken is called directly
+      // to when RequestToken would be called if invoked through
+      // web_identity_requester_.
+      web_identity_requester_->StartDelayTimer(WrapPersistent(resolver));
+
       return promise;
     }
 
-    if (!web_identity_requester_) {
-      web_identity_requester_ = MakeGarbageCollected<WebIdentityRequester>(
-          WrapPersistent(context), std::move(scoped_abort_state));
+    if (scoped_abort_state) {
+      web_identity_requester_->InsertScopedAbortState(
+          std::move(scoped_abort_state));
     }
 
     web_identity_requester_->AppendGetCall(WrapPersistent(resolver),
                                            options->identity()->providers(),
-                                           prefer_auto_sign_in);
+                                           auto_reauthn, rp_context);
 
     return promise;
   }
@@ -1601,6 +1693,16 @@ ScriptPromise CredentialsContainer::create(
     if (options->publicKey()->extensions()->hasPayment() &&
         !IsPaymentExtensionValid(options, resolver)) {
       return promise;
+    }
+    if (options->publicKey()->extensions()->hasPrf()) {
+      const auto& prf = *options->publicKey()->extensions()->prf();
+      if (prf.hasEvalByCredential()) {
+        resolver->Reject(MakeGarbageCollected<DOMException>(
+            DOMExceptionCode::kNotSupportedError,
+            "The 'evalByCredential' field cannot be set when creating a "
+            "credential."));
+        return promise;
+      }
     }
   }
 

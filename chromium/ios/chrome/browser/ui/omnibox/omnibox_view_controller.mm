@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/omnibox/omnibox_view_controller.h"
 
-#import "base/bind.h"
 #import "base/containers/contains.h"
+#import "base/functional/bind.h"
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
@@ -124,6 +124,7 @@ const CGFloat kClearButtonSize = 28.0f;
                                             textFieldTint:textFieldTintColor
                                                  iconTint:iconTintColor];
   self.view.incognito = self.incognito;
+  self.view.layoutGuideCenter = self.layoutGuideCenter;
 
   self.view.shouldGroupAccessibilityChildren = YES;
 
@@ -175,8 +176,6 @@ const CGFloat kClearButtonSize = 28.0f;
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
-
-  [self.view attachLayoutGuides];
 
   [NSNotificationCenter.defaultCenter
       addObserver:self
@@ -280,7 +279,9 @@ const CGFloat kClearButtonSize = 28.0f;
 - (void)textFieldDidChange:(id)sender {
   // If the text is empty, update the leading image.
   if (self.textField.text.length == 0) {
-    [self.view setLeadingImage:self.emptyTextLeadingImage];
+    [self.view setLeadingImage:self.emptyTextLeadingImage
+        withAccessibilityIdentifier:
+            kOmniboxLeadingImageEmptyTextAccessibilityIdentifier];
   }
 
   [self updateClearButtonVisibility];
@@ -325,9 +326,15 @@ const CGFloat kClearButtonSize = 28.0f;
 
   // Update the clear button state.
   [self updateClearButtonVisibility];
-  [self.view setLeadingImage:self.textField.text.length
-                                 ? self.defaultLeadingImage
-                                 : self.emptyTextLeadingImage];
+  UIImage* image = self.textField.text.length ? self.defaultLeadingImage
+                                              : self.emptyTextLeadingImage;
+
+  NSString* accessibilityID =
+      self.textField.text.length
+          ? kOmniboxLeadingImageDefaultAccessibilityIdentifier
+          : kOmniboxLeadingImageEmptyTextAccessibilityIdentifier;
+
+  [self.view setLeadingImage:image withAccessibilityIdentifier:accessibilityID];
 
   self.semanticContentAttribute = [self.textField bestSemanticContentAttribute];
   self.isTextfieldEditing = YES;
@@ -442,10 +449,11 @@ const CGFloat kClearButtonSize = 28.0f;
 
 #pragma mark - OmniboxConsumer
 
-- (void)updateAutocompleteIcon:(UIImage*)icon {
-  [self.view setLeadingImage:icon];
+- (void)updateAutocompleteIcon:(UIImage*)icon
+    withAccessibilityIdentifier:(NSString*)accessibilityIdentifier {
+  [self.view setLeadingImage:icon
+      withAccessibilityIdentifier:accessibilityIdentifier];
 }
-
 - (void)updateSearchByImageSupported:(BOOL)searchByImageSupported {
   self.searchByImageEnabled = searchByImageSupported;
 }

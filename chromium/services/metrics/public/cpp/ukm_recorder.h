@@ -5,8 +5,8 @@
 #ifndef SERVICES_METRICS_PUBLIC_CPP_UKM_RECORDER_H_
 #define SERVICES_METRICS_PUBLIC_CPP_UKM_RECORDER_H_
 
-#include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/functional/callback.h"
 #include "base/threading/thread_checker.h"
 #include "base/types/pass_key.h"
 #include "services/metrics/public/cpp/metrics_export.h"
@@ -16,6 +16,7 @@
 #include "url/gurl.h"
 
 class DIPSNavigationHandle;
+class DIPSService;
 class PermissionUmaUtil;
 class WebApkUkmRecorder;
 
@@ -35,6 +36,10 @@ class RenderFrameHostImpl;
 
 namespace web_app {
 class DesktopWebAppUkmRecorder;
+}
+
+namespace extensions {
+class ExtensionMessagePort;
 }
 
 namespace weblayer {
@@ -114,6 +119,19 @@ class METRICS_EXPORT UkmRecorder {
   // DIPSNavigationHandle class.
   static SourceId GetSourceIdForRedirectUrl(base::PassKey<DIPSNavigationHandle>,
                                             const GURL& redirect_url);
+
+  // Gets a new SourceId of EXTENSION_ID type and updates the source url
+  // from the extension message port. This method should only be called in the
+  // ExtensionMessagePort class.
+  static SourceId GetSourceIdForExtensionUrl(
+      base::PassKey<extensions::ExtensionMessagePort>,
+      const GURL& extension_url);
+
+  // Gets a new SourceId of REDIRECT_ID type and updates the source URL to the
+  // given domain. This method should only be called in the DIPSService class
+  // for sites in the DIPS database. `site` must be a registrable domain.
+  static SourceId GetSourceIdForDipsSite(base::PassKey<DIPSService>,
+                                         const std::string& site);
 
   // Gets a new SourceId of CHROMEOS_WEBSITE_ID type. This should be only
   // used for recording ChromeOS website stats.

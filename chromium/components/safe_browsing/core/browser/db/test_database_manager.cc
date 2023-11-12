@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/notreached.h"
+#include "base/task/sequenced_task_runner.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace safe_browsing {
@@ -42,7 +43,8 @@ bool TestSafeBrowsingDatabaseManager::ChecksAreAlwaysAsync() const {
 bool TestSafeBrowsingDatabaseManager::CheckBrowseUrl(
     const GURL& url,
     const SBThreatTypeSet& threat_types,
-    Client* client) {
+    Client* client,
+    MechanismExperimentHashDatabaseCache experiment_cache_selection) {
   NOTIMPLEMENTED();
   return true;
 }
@@ -68,7 +70,8 @@ bool TestSafeBrowsingDatabaseManager::CheckResourceUrl(const GURL& url,
 }
 
 bool TestSafeBrowsingDatabaseManager::CheckUrlForHighConfidenceAllowlist(
-    const GURL& url) {
+    const GURL& url,
+    const std::string& metric_variation) {
   NOTIMPLEMENTED();
   return false;
 }

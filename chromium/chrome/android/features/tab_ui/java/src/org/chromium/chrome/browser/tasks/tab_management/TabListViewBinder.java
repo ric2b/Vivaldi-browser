@@ -15,9 +15,9 @@ import android.widget.TextView;
 import androidx.annotation.Nullable;
 import androidx.core.content.res.ResourcesCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.widget.ImageViewCompat;
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -35,10 +35,24 @@ class TabListViewBinder {
             String title = model.get(TabProperties.TITLE);
             ((TextView) fastView.findViewById(R.id.title)).setText(title);
         } else if (TabProperties.FAVICON == propertyKey) {
+            if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) return;
+
             Drawable favicon = model.get(TabProperties.FAVICON).getDefaultDrawable();
-            ImageView faviconView = (ImageView) fastView.findViewById(R.id.start_icon);
-            faviconView.setBackgroundResource(R.drawable.list_item_icon_modern_bg);
-            faviconView.setImageDrawable(favicon);
+            setFavicon(fastView, favicon);
+        } else if (TabProperties.FAVICON_FETCHER == propertyKey) {
+            if (!TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) return;
+
+            final TabListFaviconProvider.TabFaviconFetcher fetcher =
+                    model.get(TabProperties.FAVICON_FETCHER);
+            if (fetcher == null) {
+                setFavicon(view, null);
+                return;
+            }
+            fetcher.fetch(tabFavicon -> {
+                if (fetcher != model.get(TabProperties.FAVICON_FETCHER)) return;
+
+                setFavicon(fastView, tabFavicon.getDefaultDrawable());
+            });
         } else if (TabProperties.TAB_CLOSED_LISTENER == propertyKey) {
             if (model.get(TabProperties.TAB_CLOSED_LISTENER) == null) {
                 fastView.findViewById(R.id.end_button).setOnClickListener(null);
@@ -119,9 +133,15 @@ class TabListViewBinder {
 
             // The check should be invisible if not selected.
             actionButton.getDrawable().setAlpha(isSelected ? 255 : 0);
-            ApiCompatibilityUtils.setImageTintList(actionButton,
+            ImageViewCompat.setImageTintList(actionButton,
                     isSelected ? model.get(TabProperties.CHECKED_DRAWABLE_STATE_LIST) : null);
             if (isSelected) ((AnimatedVectorDrawableCompat) actionButton.getDrawable()).start();
         }
+    }
+
+    private static void setFavicon(View view, Drawable favicon) {
+        ImageView faviconView = (ImageView) view.findViewById(R.id.start_icon);
+        faviconView.setBackgroundResource(R.drawable.list_item_icon_modern_bg);
+        faviconView.setImageDrawable(favicon);
     }
 }

@@ -10,8 +10,9 @@
 #include <vector>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
+#include "base/check_deref.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
@@ -23,6 +24,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -56,6 +58,7 @@
 #include "ipc/ipc_logging.h"
 #include "ipc/ipc_message_macros.h"
 #include "ipc/ipc_sync_message.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -121,10 +124,35 @@ and then write commands into it:
   $ echo where   >%1$s  # prints the current position
   $ echo show -1 >%1$s  # prints last 1 actions
   $ echo show 1  >%1$s  # prints next 1 actions
+  $ echo failure >%1$s  # unpauses execution until failure
   $ echo help    >%1$s  # prints this text
 )";
   LOG(INFO) << base::StringPrintf(msg,
                                   command_file_path.AsUTF8Unsafe().c_str());
+}
+
+absl::optional<autofill::ServerFieldType> StringToFieldType(
+    const std::string& str) {
+  static auto map = []() {
+    std::map<std::string, autofill::ServerFieldType> map;
+    for (size_t i = autofill::NO_SERVER_DATA;
+         i < autofill::MAX_VALID_FIELD_TYPE; ++i) {
+      auto field_type = static_cast<autofill::ServerFieldType>(i);
+      map[autofill::AutofillType(field_type).ToString()] = field_type;
+    }
+    for (size_t i = static_cast<size_t>(autofill::HtmlFieldType::kUnspecified);
+         i <= static_cast<size_t>(autofill::HtmlFieldType::kMaxValue); ++i) {
+      autofill::AutofillType field_type(static_cast<autofill::HtmlFieldType>(i),
+                                        autofill::HtmlFieldMode::kNone);
+      map[field_type.ToString()] = field_type.GetStorableType();
+    }
+    return map;
+  }();
+  auto it = map.find(str);
+  if (it == map.end()) {
+    return absl::nullopt;
+  }
+  return it->second;
 }
 
 // Command types to control and debug execution.
@@ -141,6 +169,7 @@ enum class ExecutionCommandType {
   kSkipAction,
   kShowAction,
   kWhereAmI,
+  kRunUntilFailure
 };
 
 struct ExecutionCommand {
@@ -180,6 +209,11 @@ std::vector<ExecutionCommand> ReadExecutionCommands(
         commands.push_back({ExecutionCommandType::kShowAction, GetParamOr(1)});
       } else if (base::StartsWith(command, "where")) {
         commands.push_back({ExecutionCommandType::kWhereAmI});
+      } else if (base::StartsWith(command, "failure")) {
+        commands.push_back({ExecutionCommandType::kRunUntilFailure});
+        // also add an absolute max limit (like a" run" command).
+        commands.push_back({ExecutionCommandType::kAbsoluteLimit,
+                            std::numeric_limits<int>::max()});
       } else if (base::StartsWith(command, "help")) {
         PrintDebugInstructions(command_file_path);
       }
@@ -195,6 +229,8 @@ struct ExecutionState {
   int limit = std::numeric_limits<int>::max();
   // The number of actions to be executed.
   int length = 0;
+  // Whether to stop at a step if a failure is detected.
+  bool pause_on_failure = false;
 };
 
 // Blockingly reads the commands from |command_file_path| and executes them.
@@ -239,6 +275,12 @@ ExecutionState ProcessCommands(ExecutionState execution_state,
           LOG(INFO) << "Next action is at position " << execution_state.index
                     << ", limit (excl) is at " << execution_state.limit
                     << ", last (excl) is at " << execution_state.length;
+          break;
+        }
+        case ExecutionCommandType::kRunUntilFailure: {
+          LOG(INFO) << "Will stop when a failure is found.";
+          execution_state.pause_on_failure = true;
+          break;
         }
       }
     }
@@ -329,7 +371,7 @@ std::vector<CapturedSiteParams> GetCapturedSites(
     }
   }
   // Parse json text content to json value node.
-  base::Value root_node;
+  base::Value::Dict root_node;
   {
     auto value_with_error = JSONReader::ReadAndReturnValueWithError(
         json_text, JSONParserOptions::JSON_PARSE_RFC);
@@ -339,29 +381,36 @@ std::vector<CapturedSiteParams> GetCapturedSites(
                    << value_with_error.error().message;
       return sites;
     }
-    root_node = std::move(*value_with_error);
+    root_node = std::move(*value_with_error).TakeDict();
   }
-  base::Value* list_node = root_node.FindListKey("tests");
+  const base::Value::List* list_node = root_node.FindList("tests");
   if (!list_node) {
     LOG(WARNING) << "No tests found in `testcases.json` config";
     return sites;
   }
 
   bool also_run_disabled = testing::FLAGS_gtest_also_run_disabled_tests == 1;
-  for (auto& item : list_node->GetList()) {
-    if (!item.is_dict())
+  for (auto& item_val : *list_node) {
+    if (!item_val.is_dict()) {
       continue;
+    }
+    const base::Value::Dict& item = item_val.GetDict();
     CapturedSiteParams param;
-    param.site_name = *(item.FindStringKey("site_name"));
-    if (item.FindKey("scenario_dir"))
-      param.scenario_dir = *(item.FindStringKey("scenario_dir"));
-    param.is_disabled = item.FindBoolKey("disabled").value_or(false);
-    if (item.FindKey("bug_number"))
-      param.bug_number = item.FindIntKey("bug_number");
+    param.site_name = CHECK_DEREF(item.FindString("site_name"));
+
+    if (const std::string* scenario_dir = item.FindString("scenario_dir")) {
+      param.scenario_dir = *scenario_dir;
+    }
+    param.is_disabled = item.FindBool("disabled").value_or(false);
+
+    const absl::optional<int> bug_number = item.FindInt("bug_number");
+    if (bug_number) {
+      param.bug_number = bug_number.value();
+    }
     if (param.is_disabled && !also_run_disabled)
       continue;
 
-    const std::string* expectation_string = item.FindStringKey("expectation");
+    const std::string* expectation_string = item.FindString("expectation");
     if (expectation_string && *expectation_string == "FAIL") {
       param.expectation = kFail;
     } else {
@@ -801,6 +850,9 @@ bool ProfileDataController::AddAutofillProfileInfo(
                        base::CompareCase::INSENSITIVE_ASCII) ||
       base::StartsWith(field_type, "CREDIT_CARD_",
                        base::CompareCase::INSENSITIVE_ASCII)) {
+    if (type == autofill::CREDIT_CARD_VERIFICATION_CODE) {
+      cvc_ = base::UTF8ToUTF16(field_value);
+    }
     if (type == autofill::CREDIT_CARD_NAME_FIRST ||
         type == autofill::CREDIT_CARD_NAME_LAST) {
       card_.SetRawInfo(autofill::CREDIT_CARD_NAME_FULL, u"");
@@ -811,15 +863,6 @@ bool ProfileDataController::AddAutofillProfileInfo(
   }
 
   return true;
-}
-
-absl::optional<autofill::ServerFieldType>
-ProfileDataController::StringToFieldType(const std::string& str) const {
-  auto it = string_to_field_type_map_.find(str);
-  if (it == string_to_field_type_map_.end()) {
-    return absl::nullopt;
-  }
-  return it->second;
 }
 
 // TestRecipeReplayer ---------------------------------------------------------
@@ -872,13 +915,14 @@ bool TestRecipeReplayer::OverrideAutofillClock(
     return false;
   }
 
-  base::Value* time_value = parsed_json->FindKey("DeterministicTimeSeedMs");
+  const absl::optional<double> time_value =
+      parsed_json->GetDict().FindDouble("DeterministicTimeSeedMs");
   if (!time_value) {
     VLOG(1) << kClockNotSetMessage << "No DeterministicTimeSeedMs found";
     return false;
   }
   // wpr archive stores time seed in ms, clock is set in seconds.
-  test_clock_.SetNow(base::Time::FromDoubleT(time_value->GetDouble() / 1000));
+  test_clock_.SetNow(base::Time::FromDoubleT(*time_value / 1000));
   return true;
 }
 
@@ -1070,6 +1114,14 @@ bool TestRecipeReplayer::ReplayRecordedActions(
   }
 
   while (execution_state.index < execution_state.length) {
+    if (execution_state.pause_on_failure &&
+        (testing::Test::HasNonfatalFailure() ||
+         testing::Test::HasFatalFailure() || validation_failures_.size() > 0)) {
+      // If set to pause on a failure, move limit to current, but then reset
+      // `pause_on_failure` so it can continue if the user requests.
+      execution_state.limit = execution_state.index;
+      execution_state.pause_on_failure = false;
+    }
     if (command_file_path.has_value()) {
       while (execution_state.limit <= execution_state.index) {
         bool thread_finished = false;
@@ -1268,9 +1320,21 @@ bool TestRecipeReplayer::ExecuteAutofillAction(base::Value::Dict action) {
     return false;
   }
 
+  std::string autofill_triggered_field_type;
+  if (GetElementProperty(frame, xpath,
+                         "return target.getAttribute('autofill-prediction');",
+                         &autofill_triggered_field_type)) {
+    VLOG(1) << "The field's Chrome Autofill annotation: "
+            << autofill_triggered_field_type << " during autofill form step.";
+  } else {
+    VLOG(1) << "Failed to obtain the field's Chrome Autofill annotation during "
+               "autofill form step!";
+  }
   if (!feature_action_executor()->AutofillForm(
-          xpath, frame_path, kAutofillActionNumRetries, frame))
+          xpath, frame_path, kAutofillActionNumRetries, frame,
+          StringToFieldType(autofill_triggered_field_type))) {
     return false;
+  }
   WaitTillPageIsIdle(kAutofillActionWaitForVisualUpdateTimeout);
   return true;
 }
@@ -2365,7 +2429,8 @@ bool TestRecipeReplayChromeFeatureActionExecutor::AutofillForm(
     const std::string& focus_element_css_selector,
     const std::vector<std::string>& iframe_path,
     const int attempts,
-    content::RenderFrameHost* frame) {
+    content::RenderFrameHost* frame,
+    absl::optional<autofill::ServerFieldType> triggered_field_type) {
   ADD_FAILURE() << "TestRecipeReplayChromeFeatureActionExecutor::AutofillForm "
                    "is not implemented!";
   return false;

@@ -4,10 +4,12 @@
 
 #include "media/gpu/chromeos/gl_image_processor_backend.h"
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/format_utils.h"
 #include "media/base/video_frame.h"
@@ -19,10 +21,12 @@
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_enums.h"
-#include "ui/gl/gl_image_native_pixmap.h"
 #include "ui/gl/gl_surface_egl.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
+#include "ui/ozone/public/native_pixmap_gl_binding.h"
+#include "ui/ozone/public/ozone_platform.h"
+#include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace media {
 
@@ -50,9 +54,10 @@ bool CreateAndAttachShader(GLuint program,
   return true;
 }
 
-scoped_refptr<gl::GLImageNativePixmap> CreateAndBindImage(
+std::unique_ptr<ui::NativePixmapGLBinding> CreateAndBindImage(
     const VideoFrame* video_frame,
-    GLuint target) {
+    GLenum target,
+    GLuint texture_id) {
   if (video_frame->format() != PIXEL_FORMAT_NV12) {
     LOG(ERROR) << "The frame's format is not NV12";
     return nullptr;
@@ -83,18 +88,13 @@ scoped_refptr<gl::GLImageNativePixmap> CreateAndBindImage(
   DCHECK(native_pixmap->AreDmaBufFdsValid());
 
   // Import the NativePixmap into GL.
-  auto image = gl::GLImageNativePixmap::Create(
-      video_frame->coded_size(), gfx::BufferFormat::YUV_420_BIPLANAR,
-      std::move(native_pixmap));
-  if (!image) {
-    LOG(ERROR) << "Could not initialize the GL image";
-    return nullptr;
-  }
-  if (!image->BindTexImage(target)) {
-    LOG(ERROR) << "Could not bind the GL image to the texture";
-    return nullptr;
-  }
-  return image;
+  return ui::OzonePlatform::GetInstance()
+      ->GetSurfaceFactoryOzone()
+      ->GetCurrentGLOzone()
+      ->ImportNativePixmap(std::move(native_pixmap),
+                           gfx::BufferFormat::YUV_420_BIPLANAR,
+                           gfx::BufferPlane::DEFAULT, video_frame->coded_size(),
+                           gfx::ColorSpace(), target, texture_id);
 }
 
 }  // namespace
@@ -104,14 +104,22 @@ GLImageProcessorBackend::GLImageProcessorBackend(
     const PortConfig& output_config,
     OutputMode output_mode,
     VideoRotation relative_rotation,
-    ErrorCB error_cb,
-    scoped_refptr<base::SequencedTaskRunner> backend_task_runner)
-    : ImageProcessorBackend(input_config,
-                            output_config,
-                            output_mode,
-                            relative_rotation,
-                            std::move(error_cb),
-                            std::move(backend_task_runner)) {}
+    ErrorCB error_cb)
+    : ImageProcessorBackend(
+          input_config,
+          output_config,
+          output_mode,
+          relative_rotation,
+          std::move(error_cb),
+          // Note: we use a single thread task runner because the GL context is
+          // thread local, so we need to make sure we run the
+          // GLImageProcessorBackend on the same thread always.
+          base::ThreadPool::CreateSingleThreadTaskRunner(
+              {base::TaskPriority::USER_VISIBLE})) {}
+
+std::string GLImageProcessorBackend::type() const {
+  return "GLImageProcessor";
+}
 
 bool GLImageProcessorBackend::IsSupported(const PortConfig& input_config,
                                           const PortConfig& output_config,
@@ -171,8 +179,7 @@ std::unique_ptr<ImageProcessorBackend> GLImageProcessorBackend::Create(
     const PortConfig& output_config,
     OutputMode output_mode,
     VideoRotation relative_rotation,
-    ErrorCB error_cb,
-    scoped_refptr<base::SequencedTaskRunner> backend_task_runner) {
+    ErrorCB error_cb) {
   DCHECK_EQ(output_mode, OutputMode::IMPORT);
 
   if (!IsSupported(input_config, output_config, relative_rotation))
@@ -183,8 +190,7 @@ std::unique_ptr<ImageProcessorBackend> GLImageProcessorBackend::Create(
                       std::default_delete<ImageProcessorBackend>>(
           new GLImageProcessorBackend(input_config, output_config,
                                       OutputMode::IMPORT, relative_rotation,
-                                      std::move(error_cb),
-                                      std::move(backend_task_runner)));
+                                      std::move(error_cb)));
 
   // Initialize GLImageProcessorBackend on the |backend_task_runner_| so that
   // the GL context is bound to the right thread and all the shaders are
@@ -414,7 +420,9 @@ void GLImageProcessorBackend::Process(scoped_refptr<VideoFrame> input_frame,
                                       scoped_refptr<VideoFrame> output_frame,
                                       FrameReadyCB cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(backend_sequence_checker_);
-  TRACE_EVENT0("media", "GLImageProcessorBackend::Process");
+  TRACE_EVENT2("media", "GLImageProcessorBackend::Process", "input_frame",
+               input_frame->AsHumanReadableString(), "output_frame",
+               output_frame->AsHumanReadableString());
   SCOPED_UMA_HISTOGRAM_TIMER("GLImageProcessorBackend::Process");
 
   if (!gl_context_->MakeCurrent(gl_surface_.get())) {
@@ -433,9 +441,9 @@ void GLImageProcessorBackend::Process(scoped_refptr<VideoFrame> input_frame,
   // didn't work: it generates a GL error. I guess this means the texture must
   // have a valid image prior to attaching it to the framebuffer.
   glBindTexture(GL_TEXTURE_EXTERNAL_OES, dst_texture_id_);
-  auto output_image =
-      CreateAndBindImage(output_frame.get(), GL_TEXTURE_EXTERNAL_OES);
-  if (!output_image) {
+  auto output_image_binding = CreateAndBindImage(
+      output_frame.get(), GL_TEXTURE_EXTERNAL_OES, dst_texture_id_);
+  if (!output_image_binding) {
     LOG(ERROR) << "Could not import the output buffer into GL";
     error_cb_.Run();
     return;
@@ -454,9 +462,9 @@ void GLImageProcessorBackend::Process(scoped_refptr<VideoFrame> input_frame,
   // unit 0 (otherwise, the sampler would be sampling out of the output texture
   // which wouldn't make sense).
   glBindTexture(GL_TEXTURE_EXTERNAL_OES, src_texture_id_);
-  auto input_image =
-      CreateAndBindImage(input_frame.get(), GL_TEXTURE_EXTERNAL_OES);
-  if (!input_image) {
+  auto input_image_binding = CreateAndBindImage(
+      input_frame.get(), GL_TEXTURE_EXTERNAL_OES, src_texture_id_);
+  if (!input_image_binding) {
     LOG(ERROR) << "Could not import the input buffer into GL";
     error_cb_.Run();
     return;

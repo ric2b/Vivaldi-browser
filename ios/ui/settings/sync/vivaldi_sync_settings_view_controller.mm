@@ -15,7 +15,6 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

@@ -11,8 +11,8 @@
 #include <set>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -57,9 +57,10 @@ class TestListener : public internal::ShillPropertyHandler::Listener {
     UpdateEntries(GetTypeString(type), entries);
   }
 
-  void UpdateManagedStateProperties(ManagedState::ManagedType type,
-                                    const std::string& path,
-                                    const base::Value& properties) override {
+  void UpdateManagedStateProperties(
+      ManagedState::ManagedType type,
+      const std::string& path,
+      const base::Value::Dict& properties) override {
     VLOG(2) << "UpdateManagedStateProperties: " << GetTypeString(type);
     initial_property_updates(GetTypeString(type))[path] += 1;
   }
@@ -86,7 +87,7 @@ class TestListener : public internal::ShillPropertyHandler::Listener {
   void UpdateIPConfigProperties(ManagedState::ManagedType type,
                                 const std::string& path,
                                 const std::string& ip_config_path,
-                                base::Value properties) override {
+                                base::Value::Dict properties) override {
     AddPropertyUpdate(shill::kIPConfigsProperty, ip_config_path);
   }
 
@@ -489,12 +490,12 @@ TEST_F(ShillPropertyHandlerTest, ShillPropertyHandlerIPConfigPropertyChanged) {
   ShillIPConfigClient::Get()->SetProperty(dbus::ObjectPath(kTestIPConfigPath),
                                           shill::kAddressProperty, ip_address,
                                           base::DoNothing());
-  base::Value dns_servers(base::Value::Type::LIST);
+  base::Value::List dns_servers;
   dns_servers.Append("192.168.1.100");
   dns_servers.Append("192.168.1.101");
-  ShillIPConfigClient::Get()->SetProperty(dbus::ObjectPath(kTestIPConfigPath),
-                                          shill::kNameServersProperty,
-                                          dns_servers, base::DoNothing());
+  ShillIPConfigClient::Get()->SetProperty(
+      dbus::ObjectPath(kTestIPConfigPath), shill::kNameServersProperty,
+      base::Value(std::move(dns_servers)), base::DoNothing());
   base::Value prefixlen(8);
   ShillIPConfigClient::Get()->SetProperty(dbus::ObjectPath(kTestIPConfigPath),
                                           shill::kPrefixlenProperty, prefixlen,

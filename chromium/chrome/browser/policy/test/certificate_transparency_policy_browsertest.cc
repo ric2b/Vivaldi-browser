@@ -23,6 +23,7 @@
 #include "net/cert/x509_util.h"
 #include "net/http/transport_security_state.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -33,7 +34,7 @@ namespace policy {
 void SetRequireCTForTesting(bool required) {
   if (content::IsOutOfProcessNetworkService()) {
     mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
-    content::GetNetworkService()->BindTestInterface(
+    content::GetNetworkService()->BindTestInterfaceForTesting(
         network_service_test.BindNewPipeAndPassReceiver());
     network::mojom::NetworkServiceTest::RequireCT required_ct =
         required ? network::mojom::NetworkServiceTest::RequireCT::REQUIRE
@@ -89,13 +90,13 @@ IN_PROC_BROWSER_TEST_F(CertificateTransparencyPolicyTest,
   EXPECT_NE(u"OK", chrome_test_utils::GetActiveWebContents(this)->GetTitle());
 
   // Now exempt the URL from being blocked by setting policy.
-  base::Value disabled_urls(base::Value::Type::LIST);
+  base::Value::List disabled_urls;
   disabled_urls.Append(https_server_ok.host_port_pair().HostForURL());
 
   PolicyMap policies;
   policies.Set(key::kCertificateTransparencyEnforcementDisabledForUrls,
                POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               std::move(disabled_urls), nullptr);
+               base::Value(std::move(disabled_urls)), nullptr);
   UpdateProviderPolicy(policies);
   FlushBlocklistPolicy();
 
@@ -160,13 +161,13 @@ IN_PROC_BROWSER_TEST_F(CertificateTransparencyPolicyTest,
   net::HashValue leaf_hash;
   ASSERT_TRUE(net::x509_util::CalculateSha256SpkiHash(
       https_server_ok.GetCertificate()->cert_buffer(), &leaf_hash));
-  base::Value disabled_spkis(base::Value::Type::LIST);
+  base::Value::List disabled_spkis;
   disabled_spkis.Append(leaf_hash.ToString());
 
   PolicyMap policies;
   policies.Set(key::kCertificateTransparencyEnforcementDisabledForCas,
                POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               std::move(disabled_spkis), nullptr);
+               base::Value(std::move(disabled_spkis)), nullptr);
   UpdateProviderPolicy(policies);
   FlushBlocklistPolicy();
 

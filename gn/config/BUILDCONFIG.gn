@@ -4,10 +4,11 @@ declare_args() {
   is_vivaldi_renault = false
   is_vivaldi_lynkco = false
   is_vivaldi_mercedes = false
+  is_vivaldi_volvo = false
 }
 
 declare_args() {
-  is_vivaldi_automotive = is_vivaldi_polestar || is_vivaldi_renault || is_vivaldi_lynkco || is_vivaldi_mercedes
+  is_vivaldi_automotive = is_vivaldi_polestar || is_vivaldi_renault || is_vivaldi_lynkco || is_vivaldi_mercedes || is_vivaldi_volvo
   is_vivaldi_preloaded = is_vivaldi_mercedes
 }
 
@@ -24,7 +25,8 @@ declare_args() {
 }
 
 if (is_win) {
-  vivaldi_win_sdk_version = "10.0.20348.0"
+  _vivaldi_sdk_config = read_file("//vivaldi/build/toolchain.json", "json")
+  vivaldi_win_sdk_version = _vivaldi_sdk_config.version
 }
 
 default_chrome_lint_targets = ["//chrome/android:chrome_public_apk__lint"]

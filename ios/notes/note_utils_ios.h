@@ -5,13 +5,13 @@
 
 #import <UIKit/UIKit.h>
 
-#include <memory>
-#include <set>
-#include <string>
-#include <vector>
+#import <memory>
+#import <set>
+#import <string>
+#import <vector>
 
-#include "base/time/time.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#import "base/time/time.h"
+#import "third_party/abseil-cpp/absl/types/optional.h"
 
 class ChromeBrowserState;
 class GURL;
@@ -47,6 +47,9 @@ NSString* TitleForNoteNode(const vivaldi::NoteNode* node);
 
 // Returns the subtitle relevant to the note navigation ui.
 NSString* subtitleForNoteNode(const vivaldi::NoteNode* node);
+
+// Returns the noted create date and time from the node.
+NSDate* createdAtForNoteNode(const vivaldi::NoteNode* node);
 
 #pragma mark - Updating Notes
 

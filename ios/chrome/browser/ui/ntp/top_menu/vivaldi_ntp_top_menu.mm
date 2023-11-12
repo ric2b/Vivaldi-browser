@@ -78,7 +78,8 @@ CGFloat lineSpacing = 12.0;
 
 #pragma mark - SETTERS
 - (void)setMenuItemsWithSDFolders:(NSArray*)folders
-                  selectedIndex:(NSInteger)selectedIndex {
+                    selectedIndex:(NSInteger)selectedIndex {
+
   self.menuItems = folders;
   [CATransaction begin];
   [CATransaction setValue:(id)kCFBooleanTrue
@@ -87,8 +88,8 @@ CGFloat lineSpacing = 12.0;
     [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:0]];
   } completion: ^(BOOL finished){
     [self selectItemWithIndex:selectedIndex animated:NO];
-    [CATransaction commit];
   }];
+  [CATransaction commit];
 }
 
 - (void)selectItemWithIndex:(NSInteger)index

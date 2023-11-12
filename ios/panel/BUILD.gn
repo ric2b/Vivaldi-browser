@@ -33,7 +33,6 @@ source_set("panel") {
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/table_view",
-    "//ios/chrome/browser/ui/table_view:presentation",
     "//ios/chrome/browser/ui/table_view:styler",
     "//ios/chrome/browser/ui/table_view:utils",
     "//ios/chrome/browser/ui/table_view:views",
@@ -52,9 +51,11 @@ source_set("panel") {
     "resources:bookmark_panel",
     "resources:history_panel",
     "resources:notes_panel",
+    "resources:readinglist_panel",
     "resources:bookmark_panel_active",
     "resources:history_panel_active",
-    "resources:notes_panel_active"
+    "resources:notes_panel_active",
+    "resources:readinglist_panel_active",
  ]
  frameworks = [ "UIKit.framework" ]
 

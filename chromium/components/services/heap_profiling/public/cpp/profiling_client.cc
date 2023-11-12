@@ -6,16 +6,15 @@
 
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
-#include "base/allocator/buildflags.h"
-#include "base/bind.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/debug/stack_trace.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/sampling_heap_profiler/poisson_allocation_sampler.h"
 #include "base/sampling_heap_profiler/sampling_heap_profiler.h"
-#include "base/task/thread_pool.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
 #include "base/trace_event/malloc_dump_provider.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -25,14 +24,11 @@
 #include "components/services/heap_profiling/public/cpp/heap_profiling_trace_source.h"
 #endif
 
-#if BUILDFLAG(IS_ANDROID) && BUILDFLAG(CAN_UNWIND_WITH_CFI_TABLE) && \
-    defined(OFFICIAL_BUILD)
-#include "base/trace_event/cfi_backtrace_android.h"
-#endif
-
 #if BUILDFLAG(IS_APPLE)
 #include "base/allocator/partition_allocator/shim/allocator_interception_mac.h"
 #endif
+
+using base::allocator::dispatcher::AllocationSubsystem;
 
 namespace heap_profiling {
 
@@ -60,25 +56,7 @@ void ProfilingClient::StartProfiling(mojom::ProfilingParamsPtr params,
   allocator_shim::PeriodicallyShimNewMallocZones();
 #endif  // BUILDFLAG(IS_APPLE) && !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
 
-#if BUILDFLAG(IS_ANDROID) && BUILDFLAG(CAN_UNWIND_WITH_CFI_TABLE) && \
-    defined(OFFICIAL_BUILD)
-  // On Android the unwinder initialization requires file reading before
-  // initializing shim. So, post task on background thread.
-  base::ThreadPool::PostTaskAndReply(
-      FROM_HERE,
-      {base::TaskPriority::BEST_EFFORT, base::MayBlock(),
-       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce([]() {
-        base::trace_event::CFIBacktraceAndroid::GetInitializedInstance()
-            ->can_unwind_stack_frames();
-        // Ignore failures since the default unwind tables are used as backup.
-      }),
-      base::BindOnce(&ProfilingClient::StartProfilingInternal,
-                     base::Unretained(this), std::move(params),
-                     std::move(callback)));
-#else
   StartProfilingInternal(std::move(params), std::move(callback));
-#endif
 
 #if !BUILDFLAG(IS_IOS)
   // Create trace source so that it registers itself to the tracing system.
@@ -139,14 +117,13 @@ void AllocatorHooksHaveBeenInitialized() {
       FROM_HERE, std::move(GetOnInitAllocatorShimCallback()));
 }
 
-mojom::AllocatorType ConvertType(
-    base::PoissonAllocationSampler::AllocatorType type) {
+mojom::AllocatorType ConvertType(AllocationSubsystem type) {
   switch (type) {
-    case base::PoissonAllocationSampler::AllocatorType::kMalloc:
+    case AllocationSubsystem::kAllocatorShim:
       return mojom::AllocatorType::kMalloc;
-    case base::PoissonAllocationSampler::AllocatorType::kPartitionAlloc:
+    case AllocationSubsystem::kPartitionAllocator:
       return mojom::AllocatorType::kPartitionAlloc;
-    case base::PoissonAllocationSampler::AllocatorType::kManualForTesting:
+    case AllocationSubsystem::kManualForTesting:
       NOTREACHED();
       return mojom::AllocatorType::kMalloc;
   }

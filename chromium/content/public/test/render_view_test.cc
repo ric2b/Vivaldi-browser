@@ -9,8 +9,8 @@
 #include <cctype>
 #include <tuple>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -39,7 +39,9 @@
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
@@ -55,10 +57,7 @@
 #include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
-#include "third_party/blink/public/platform/web_back_forward_cache_loader_helper.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
-#include "third_party/blink/public/platform/web_url_loader.h"
-#include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_request_extra_data.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -95,99 +94,53 @@ namespace content {
 
 namespace {
 
-class FakeWebURLLoader : public blink::WebURLLoader {
+class FailingURLLoaderFactory : public network::SharedURLLoaderFactory {
  public:
-  FakeWebURLLoader(
-      std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
-          freezable_task_runner_handle,
-      std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
-          unfreezable_task_runner_handle)
-      : freezable_task_runner_handle_(std::move(freezable_task_runner_handle)),
-        unfreezable_task_runner_handle_(
-            std::move(unfreezable_task_runner_handle)) {}
+  FailingURLLoaderFactory() = default;
 
-  void LoadSynchronously(
-      std::unique_ptr<network::ResourceRequest> request,
-      scoped_refptr<blink::WebURLRequestExtraData> url_request_extra_data,
-      bool pass_response_pipe_to_client,
-      bool no_mime_sniffing,
-      base::TimeDelta timeout_interval,
-      blink::WebURLLoaderClient* client,
-      blink::WebURLResponse&,
-      absl::optional<blink::WebURLError>&,
-      blink::WebData&,
-      int64_t&,
-      int64_t&,
-      blink::WebBlobInfo&,
-      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>) override {
-    client->DidFail(blink::WebURLError(kFailureReason, request->url),
-                    base::TimeTicks::Now(), 0, 0, 0);
-  }
+  FailingURLLoaderFactory(const FailingURLLoaderFactory&) = delete;
+  FailingURLLoaderFactory& operator=(const FailingURLLoaderFactory&) = delete;
 
-  void LoadAsynchronously(
-      std::unique_ptr<network::ResourceRequest> request,
-      scoped_refptr<blink::WebURLRequestExtraData> url_request_extra_data,
-      bool no_mime_sniffing,
-      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>,
-      blink::WebURLLoaderClient* client) override {
-    DCHECK(freezable_task_runner_handle_);
-    async_client_ = client;
-    freezable_task_runner_handle_->GetTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&FakeWebURLLoader::DidFail, weak_factory_.GetWeakPtr(),
-                       blink::WebURLError(kFailureReason, request->url),
-                       base::TimeTicks::Now(), 0, 0, 0));
-  }
-
-  void Freeze(blink::WebLoaderFreezeMode) override {}
-  void DidChangePriority(WebURLRequest::Priority, int) override {}
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunnerForBodyLoader()
+  // SharedURLLoaderFactory:
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> loader,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
       override {
-    return nullptr;
+    mojo::Remote<network::mojom::URLLoaderClient> remote(std::move(client));
+    remote->OnComplete(network::URLLoaderCompletionStatus(net::ERR_FAILED));
   }
-
-  void DidFail(const blink::WebURLError& error,
-               base::TimeTicks response_end,
-               int64_t total_encoded_data_length,
-               int64_t total_encoded_body_length,
-               int64_t total_decoded_body_length) {
-    DCHECK(async_client_);
-    async_client_->DidFail(error, response_end, total_encoded_data_length,
-                           total_encoded_body_length,
-                           total_decoded_body_length);
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory> receiver)
+      override {
+    receivers_.Add(this, std::move(receiver), this);
+  }
+  std::unique_ptr<network::PendingSharedURLLoaderFactory> Clone() override {
+    return std::make_unique<PendingFactory>();
   }
 
  private:
-  static const int kFailureReason = net::ERR_FAILED;
-  std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
-      freezable_task_runner_handle_;
-  std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
-      unfreezable_task_runner_handle_;
-  raw_ptr<blink::WebURLLoaderClient> async_client_ = nullptr;
+  class PendingFactory : public network::PendingSharedURLLoaderFactory {
+   public:
+    PendingFactory() = default;
 
-  base::WeakPtrFactory<FakeWebURLLoader> weak_factory_{this};
-};
+    PendingFactory(const PendingFactory&) = delete;
+    PendingFactory& operator=(const PendingFactory&) = delete;
 
-class FakeWebURLLoaderFactory : public blink::WebURLLoaderFactoryForTest {
- public:
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
-      const WebURLRequest&,
-      std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
-          freezable_task_runner_handle,
-      std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
-          unfreezable_task_runner_handle,
-      blink::CrossVariantMojoRemote<blink::mojom::KeepAliveHandleInterfaceBase>
-          keep_alive_handle,
-      blink::WebBackForwardCacheLoaderHelper back_forward_cache_loader_helper)
-      override {
-    return std::make_unique<FakeWebURLLoader>(
-        std::move(freezable_task_runner_handle),
-        std::move(unfreezable_task_runner_handle));
-  }
+    ~PendingFactory() override = default;
 
-  std::unique_ptr<WebURLLoaderFactoryForTest> Clone() override {
-    return std::make_unique<FakeWebURLLoaderFactory>();
-  }
+    scoped_refptr<SharedURLLoaderFactory> CreateFactory() override {
+      return base::MakeRefCounted<FailingURLLoaderFactory>();
+    }
+  };
+
+  ~FailingURLLoaderFactory() override = default;
+
+  mojo::ReceiverSet<network::mojom::URLLoaderFactory,
+                    scoped_refptr<FailingURLLoaderFactory>>
+      receivers_;
 };
 
 // Converts |ascii_character| into |key_code| and returns true on success.
@@ -228,6 +181,11 @@ class RendererBlinkPlatformImplTestOverrideImpl
   // Get rid of the dependency to the sandbox, which is not available in
   // RenderViewTest.
   blink::WebSandboxSupport* GetSandboxSupport() override { return nullptr; }
+
+#if BUILDFLAG(IS_ANDROID)
+  void SetPrivateMemoryFootprint(
+      uint64_t private_memory_footprint_bytes) override {}
+#endif
 };
 
 class RenderFrameWasShownWaiter : public RenderFrameObserver {
@@ -725,7 +683,8 @@ void RenderViewTest::ChangeFocusToNull(const blink::WebDocument& document) {
 
 void RenderViewTest::Reload(const GURL& url) {
   auto common_params = blink::mojom::CommonNavigationParams::New(
-      url, absl::nullopt, blink::mojom::Referrer::New(),
+      url, /* initiator_origin= */ absl::nullopt,
+      /* initiator_base_url= */ absl::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_LINK, blink::mojom::NavigationType::RELOAD,
       blink::NavigationDownloadPolicy(), false, GURL(), base::TimeTicks::Now(),
       "GET", nullptr, network::mojom::SourceLocation::New(),
@@ -734,7 +693,8 @@ void RenderViewTest::Reload(const GURL& url) {
       network::mojom::CSPDisposition::CHECK, std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */,
       base::TimeTicks() /* input_start */,
-      network::mojom::RequestDestination::kDocument);
+      network::mojom::RequestDestination::kDocument,
+      false /* has_storage_access */);
   auto commit_params = blink::CreateCommitNavigationParams();
   TestRenderFrame* frame = static_cast<TestRenderFrame*>(GetMainRenderFrame());
   FrameLoadWaiter waiter(frame);
@@ -855,7 +815,8 @@ void RenderViewTest::GoToOffset(int offset,
   int pending_offset = offset + webview->HistoryBackListCount();
 
   auto common_params = blink::mojom::CommonNavigationParams::New(
-      url, absl::nullopt, blink::mojom::Referrer::New(),
+      url, /* initiator_origin= */ absl::nullopt,
+      /* initiator_base_url= */ absl::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_FORWARD_BACK,
       blink::mojom::NavigationType::HISTORY_DIFFERENT_DOCUMENT,
       blink::NavigationDownloadPolicy(), false, GURL(), base::TimeTicks::Now(),
@@ -865,7 +826,8 @@ void RenderViewTest::GoToOffset(int offset,
       network::mojom::CSPDisposition::CHECK, std::vector<int>(), std::string(),
       false /* is_history_navigation_in_new_child_frame */,
       base::TimeTicks() /* input_start */,
-      network::mojom::RequestDestination::kDocument);
+      network::mojom::RequestDestination::kDocument,
+      false /* has_storage_access */);
   auto commit_params = blink::CreateCommitNavigationParams();
   commit_params->page_state = state.ToEncodedData();
   commit_params->nav_entry_id = pending_offset + 1;
@@ -883,12 +845,12 @@ void RenderViewTest::GoToOffset(int offset,
       blink::DocumentUpdateReason::kTest);
 }
 
-void RenderViewTest::CreateFakeWebURLLoaderFactory() {
+void RenderViewTest::CreateFakeURLLoaderFactory() {
   RenderFrameImpl* main_frame =
       static_cast<RenderFrameImpl*>(GetMainRenderFrame());
   DCHECK(main_frame);
-  main_frame->SetWebURLLoaderFactoryOverrideForTest(
-      std::make_unique<FakeWebURLLoaderFactory>());
+  main_frame->SetURLLoaderFactoryOverrideForTest(
+      base::MakeRefCounted<FailingURLLoaderFactory>());
 }
 
 }  // namespace content

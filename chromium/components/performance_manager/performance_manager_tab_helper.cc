@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/observer_list.h"
 #include "components/performance_manager/graph/frame_node_impl.h"
 #include "components/performance_manager/graph/page_node_impl.h"
@@ -474,6 +474,19 @@ void PerformanceManagerTabHelper::DidUpdateFaviconURL(
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE, base::BindOnce(&PageNodeImpl::OnFaviconUpdated,
                                 base::Unretained(primary_page_node())));
+}
+
+void PerformanceManagerTabHelper::AboutToBeDiscarded(
+    content::WebContents* new_contents) {
+  DCHECK(primary_page_);
+
+  base::WeakPtr<PageNode> new_page_node =
+      PerformanceManager::GetPrimaryPageNodeForWebContents(new_contents);
+
+  PerformanceManagerImpl::CallOnGraphImpl(
+      FROM_HERE,
+      base::BindOnce(&PageNodeImpl::OnAboutToBeDiscarded,
+                     base::Unretained(primary_page_node()), new_page_node));
 }
 
 void PerformanceManagerTabHelper::BindDocumentCoordinationUnit(

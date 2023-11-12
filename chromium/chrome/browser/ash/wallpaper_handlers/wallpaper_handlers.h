@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom-forward.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/scoped_observation.h"
 #include "base/values.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -239,6 +239,39 @@ class GooglePhotosAlbumsFetcher
       const base::Value::Dict* response) override;
   absl::optional<size_t> GetResultCount(
       const GooglePhotosAlbumsCbkArgs& result) override;
+
+ private:
+  int albums_api_refresh_counter_ = 0;
+};
+
+using GooglePhotosAlbumsCbkArgs =
+    ash::personalization_app::mojom::FetchGooglePhotosAlbumsResponsePtr;
+// Downloads the Google Photos albums a user has created.
+class GooglePhotosSharedAlbumsFetcher
+    : public GooglePhotosFetcher<GooglePhotosAlbumsCbkArgs> {
+ public:
+  explicit GooglePhotosSharedAlbumsFetcher(Profile* profile);
+
+  GooglePhotosSharedAlbumsFetcher(const GooglePhotosSharedAlbumsFetcher&) =
+      delete;
+  GooglePhotosSharedAlbumsFetcher& operator=(
+      const GooglePhotosSharedAlbumsFetcher&) = delete;
+
+  ~GooglePhotosSharedAlbumsFetcher() override;
+
+  virtual void AddRequestAndStartIfNecessary(
+      const absl::optional<std::string>& resume_token,
+      base::OnceCallback<void(GooglePhotosAlbumsCbkArgs)> callback);
+
+ protected:
+  // GooglePhotosFetcher:
+  GooglePhotosAlbumsCbkArgs ParseResponse(
+      const base::Value::Dict* response) override;
+  absl::optional<size_t> GetResultCount(
+      const GooglePhotosAlbumsCbkArgs& result) override;
+
+ private:
+  int shared_albums_api_refresh_counter_ = 0;
 };
 
 using ash::personalization_app::mojom::GooglePhotosEnablementState;
@@ -293,6 +326,9 @@ class GooglePhotosPhotosFetcher
       const base::Value::Dict* response) override;
   absl::optional<size_t> GetResultCount(
       const GooglePhotosPhotosCbkArgs& result) override;
+
+ private:
+  int photos_api_refresh_counter_ = 0;
 };
 
 }  // namespace wallpaper_handlers

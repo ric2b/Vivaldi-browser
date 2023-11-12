@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.offlinepages;
 
-import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.text.format.DateUtils;
 
 import org.chromium.base.ContextUtils;
@@ -58,13 +58,14 @@ public class BackgroundScheduler {
      * needed.
      */
     public void reschedule() {
+        // TODO(crbug.com/1414628): Investigate if this can be deleted.
         TriggerConditions triggerConditions = new TriggerConditions(false, 0, false);
         scheduleBackup(triggerConditions, DateUtils.MINUTE_IN_MILLIS * 5);
     }
 
     protected void scheduleImpl(TriggerConditions triggerConditions, long delayStartMs,
             long executionDeadlineMs, boolean overwrite) {
-        Bundle taskExtras = new Bundle();
+        PersistableBundle taskExtras = new PersistableBundle();
         TaskExtrasPacker.packTimeInBundle(taskExtras);
         TaskExtrasPacker.packTriggerConditionsInBundle(taskExtras, triggerConditions);
 

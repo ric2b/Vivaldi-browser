@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/time/time.h"
 #include "base/unguessable_token.h"
@@ -27,6 +28,8 @@
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/policy_container.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/triggering_event_info.mojom-shared.h"
+#include "third_party/blink/public/mojom/navigation/navigation_params.mojom-shared.h"
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature_state.mojom-shared.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
@@ -43,7 +46,6 @@
 #include "third_party/blink/public/web/web_form_element.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_history_item.h"
-#include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_navigation_timings.h"
 #include "third_party/blink/public/web/web_navigation_type.h"
@@ -71,6 +73,10 @@ struct BLINK_EXPORT WebNavigationInfo {
   // The main resource request.
   WebURLRequest url_request;
 
+  // The base url of the requestor. Only used for about:srcdoc and about:blank
+  // navigations, and if NewBaseUrlInheritanceBehavior is enabled.
+  WebURL requestor_base_url;
+
   // The frame type. This must not be kNone. See RequestContextFrameType.
   // TODO(dgozman): enforce this is not kNone.
   mojom::RequestContextFrameType frame_type =
@@ -90,6 +96,10 @@ struct BLINK_EXPORT WebNavigationInfo {
 
   // The load type. See WebFrameLoadType.
   WebFrameLoadType frame_load_type = WebFrameLoadType::kStandard;
+
+  // If true, will override cases where a WebFrameLoadType::kStandard navigation
+  // is implicitly converted to a kReplaceCurrentItem navigation.
+  mojom::ForceHistoryPush force_history_push = mojom::ForceHistoryPush::kNo;
 
   // During a history load, a child frame can be initially navigated
   // to an url from the history state. This flag indicates it.
@@ -178,6 +188,9 @@ struct BLINK_EXPORT WebNavigationInfo {
   // alive until we create the NavigationRequest.
   CrossVariantMojoRemote<mojom::PolicyContainerHostKeepAliveHandleInterfaceBase>
       initiator_policy_container_keep_alive_handle;
+
+  // The initiator frame's LocalDOMWindow's has_storage_access state.
+  bool has_storage_access = false;
 };
 
 // This structure holds all information provided by the embedder that is
@@ -260,10 +273,10 @@ struct BLINK_EXPORT WebNavigationParams {
   WebURL pre_redirect_url_for_failed_navigations;
 
   // If `url` is about:srcdoc, this is the default base URL to use for the new
-  // document. It corresponds to the parent's base URL snapshotted when the
+  // document. It corresponds to the initiator's base URL snapshotted when the
   // navigation started.
-  // Note: this value is only used when the IsolateSandboxedIframes feature is
-  // enabled in the embedder.
+  // Note: this value is only used when the NewBaseUrlInheritanceBehavior
+  // feature is enabled in the embedder.
   // TODO(wjmaclean): Revisit the naming here when we expand to sending base
   // URLs for about:blank.
   WebURL fallback_srcdoc_base_url;
@@ -345,6 +358,15 @@ struct BLINK_EXPORT WebNavigationParams {
   // taking into account the origin computed by the renderer.
   StorageKey storage_key;
 
+  // The storage key here is the one the browser process believes the renderer
+  // should use when binding session storage. This may differ from `storage_key`
+  // as a deprecation trial can prevent the partitioning of session storage.
+  // The document loader should verify this storage key is (1) the same as
+  // `storage_key` or (2) a first-party storage key at `storage_key.origin`.
+  //
+  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  StorageKey session_storage_key;
+
   blink::DocumentToken document_token;
   // The devtools token for this navigation. See DocumentLoader
   // for details.
@@ -406,15 +428,6 @@ struct BLINK_EXPORT WebNavigationParams {
   // navigation that should be applied in the document being navigated to.
   WebVector<int> initiator_origin_trial_features;
 
-  // The physical URL of Web Bundle from which the document is loaded.
-  // Used as an additional identifier for MemoryCache.
-  WebURL web_bundle_physical_url;
-
-  // The claimed URL inside Web Bundle file from which the document is loaded.
-  // This URL is used for window.location and document.URL and relative path
-  // computation in the document.
-  WebURL web_bundle_claimed_url;
-
   // UKM source id to be associated with the Document that will be installed
   // in the current frame.
   ukm::SourceId document_ukm_source_id = ukm::kInvalidSourceId;
@@ -470,12 +483,10 @@ struct BLINK_EXPORT WebNavigationParams {
   // Null, otherwise.
   absl::optional<WebVector<WebURL>> ad_auction_components;
 
-  // If this is a navigation to a "opaque-ads" mode fenced frame, there might
-  // be associated reporting metadata. This is a map from destination type to
-  // reporting metadata which in turn is a map from the event type to the
-  // reporting url. Null, otherwise.
+  // This boolean flag indicates whether there is associated reporting metadata
+  // with the fenced frame.
   // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md
-  absl::optional<FencedFrame::FencedFrameReporting> fenced_frame_reporting;
+  bool has_fenced_frame_reporting = false;
 
   // Whether the current context would be allowed to create an opaque-ads
   //  frame (based on the browser-side calculations). See
@@ -514,6 +525,15 @@ struct BLINK_EXPORT WebNavigationParams {
   // components associated with the winning bid in an auction.
   absl::optional<FencedFrame::RedactedFencedFrameProperties>
       fenced_frame_properties;
+
+  // Maps the blink runtime-enabled features modified in the browser process to
+  // their new enabled/disabled status:
+  // <enum_representing_runtime_enabled_feature, enabled/disabled>
+  base::flat_map<::blink::mojom::RuntimeFeatureState, bool>
+      modified_runtime_features;
+
+  // Whether the document should be loaded with the has_storage_access bit set.
+  bool has_storage_access = false;
 };
 
 }  // namespace blink

@@ -56,6 +56,10 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -266,6 +270,9 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
         ui::GetDeviceFormFactor() != ui::DEVICE_FORM_FACTOR_TABLET;
 
     if (useLens) {
+
+      // Vivaldi: Disable Google Lens
+      if (!vivaldi::IsVivaldiRunning()) {
       UIAction* searchImageWithLensAction =
           [actionFactory actionToSearchImageUsingLensWithBlock:^{
             [weakSelf searchImageWithURL:imageURL
@@ -275,6 +282,8 @@ const NSUInteger kContextMenuMaxTitleLength = 30;
       [menuElements addObject:searchImageWithLensAction];
       UMA_HISTOGRAM_ENUMERATION(kIOSLensSupportStatusHistogram,
                                 LensSupportStatus::LensSearchSupported);
+      } // End Vivaldi
+
     } else if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
       UMA_HISTOGRAM_ENUMERATION(kIOSLensSupportStatusHistogram,
                                 LensSupportStatus::DeviceFormFactorTablet);

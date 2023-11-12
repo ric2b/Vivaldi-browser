@@ -142,6 +142,20 @@ class NewCertVerifyProcChromeRootStoreFactory
     trust_store =
         net::CreateSslSystemTrustStoreChromeRoot(std::move(chrome_root));
 #endif
+#if BUILDFLAG(IS_WIN)
+    // Start initialization of TrustStoreWin on a separate thread if it hasn't
+    // been done already. We do this here instead of in the TrustStoreWin
+    // constructor to avoid any unnecessary threading in unit tests that don't
+    // use threads otherwise.
+    net::InitializeTrustStoreWinSystem();
+#endif
+#if BUILDFLAG(IS_ANDROID)
+    // Start initialization of TrustStoreAndroid on a separate thread if it
+    // hasn't been done already. We do this here instead of in the
+    // TrustStoreAndroid constructor to avoid any unnecessary threading in unit
+    // tests that don't use threads otherwise.
+    net::InitializeTrustStoreAndroid();
+#endif
     return net::CreateCertVerifyProcBuiltin(std::move(cert_net_fetcher),
                                             std::move(trust_store));
   }

@@ -36,6 +36,8 @@ class IOSPasswordManagerDriver
   int GetId() const override;
   void SetPasswordFillData(
       const autofill::PasswordFormFillData& form_data) override;
+  void PasswordFieldHasNoAssociatedUsername(
+      autofill::FieldRendererId password_element_renderer_id) override;
   void InformNoSavedCredentials(
       bool should_show_popup_without_passwords) override;
   void FormEligibleForGenerationFound(
@@ -47,6 +49,9 @@ class IOSPasswordManagerDriver
                          const std::u16string& password) override;
   void PreviewGenerationSuggestion(const std::u16string& password) override;
   void ClearPreviewedForm() override;
+  void SetSuggestionAvailability(
+      autofill::FieldRendererId generation_element_id,
+      const autofill::mojom::AutofillState state) override;
   password_manager::PasswordGenerationFrameHelper* GetPasswordGenerationHelper()
       override;
   password_manager::PasswordManagerInterface* GetPasswordManager() override;

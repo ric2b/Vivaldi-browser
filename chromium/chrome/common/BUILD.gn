@@ -45,7 +45,6 @@ buildflag_header("buildflags") {
     "ENABLE_HANGOUT_SERVICES_EXTENSION=$enable_hangout_services_extension",
     "ENABLE_SERVICE_DISCOVERY=$enable_service_discovery",
     "ENABLE_SESSION_SERVICE=$enable_session_service",
-    "ENABLE_SUPERVISED_USERS=$enable_supervised_users",
     "ENABLE_SYSTEM_NOTIFICATIONS=$enable_system_notifications",
     "ENABLE_WAYLAND_SERVER=$enable_wayland_server",
     "ENABLE_WEBUI_CERTIFICATE_VIEWER=$enable_webui_certificate_viewer",
@@ -116,7 +115,6 @@ static_library("common_lib") {
   ]
   sources = [
     "all_messages.h",
-    "child_process_host_flags.h",
     "child_process_logging.h",
     "chrome_content_client.cc",
     "chrome_content_client.h",
@@ -199,6 +197,7 @@ static_library("common_lib") {
     "//components/flags_ui:switches",
     "//components/gcm_driver/common",
     "//components/history_clusters/history_clusters_internals/webui",
+    "//components/lens:buildflags",
     "//components/metrics",
     "//components/metrics:net",
     "//components/nacl/common:buildflags",
@@ -222,6 +221,8 @@ static_library("common_lib") {
     "//components/services/app_service/public/cpp:app_types",
     "//components/services/heap_profiling/public/cpp",
     "//components/strings",
+    "//components/supervised_user/core/common",
+    "//components/supervised_user/core/common:buildflags",
     "//components/translate/content/common",
     "//components/translate/core/common",
     "//components/url_formatter",
@@ -331,7 +332,6 @@ static_library("common_lib") {
     deps += [
       "//chrome/common/apps/platform_apps",
       "//components/app_constants",
-      "//components/services/app_service/public/mojom",
     ]
     public_deps += [
       "//chrome/common/extensions/api",
@@ -407,6 +407,7 @@ static_library("common_lib") {
   } else {
     # Non-Android.
     public_deps += [ "//chrome/common/importer" ]
+    sources += [ "accessibility/read_anything_constants.h" ]
   }
 
   if (is_win) {
@@ -595,6 +596,8 @@ static_library("constants") {
     "//components/bookmarks/common",
     "//components/nacl/common:switches",
     "//components/offline_pages/buildflags",
+    "//components/supervised_user/core/common",
+    "//components/supervised_user/core/common:buildflags",
     "//extensions/buildflags",
     "//media:media_buildflags",
     "//ppapi/buildflags",
@@ -719,6 +722,7 @@ mojom("mojo_bindings") {
   sources = [
     "chrome_render_frame.mojom",
     "draggable_regions.mojom",
+    "google_accounts_private_api_extension.mojom",
     "media/webrtc_logging.mojom",
     "metrics.mojom",
     "net/net_error_page_support.mojom",

@@ -18,9 +18,9 @@
 #include <string>
 
 #include "base/atomic_sequence_num.h"
-#include "base/bind.h"
 #include "base/bits.h"
 #include "base/compiler_specific.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
@@ -349,7 +349,7 @@ class RasterImplementation::PaintOpSerializer {
 
  private:
   const raw_ptr<RasterImplementation> ri_;
-  raw_ptr<char> buffer_;
+  raw_ptr<char, AllowPtrArithmetic> buffer_;
   const raw_ptr<cc::DecodeStashingImageProvider> stashing_image_provider_;
   const raw_ptr<TransferCacheSerializeHelperImpl> transfer_cache_helper_;
   raw_ptr<ClientFontManager> font_manager_;
@@ -1148,25 +1148,25 @@ void RasterImplementation::UnmapRasterCHROMIUM(uint32_t raster_written_size,
 // instead of having to edit some template or the code generator.
 #include "gpu/command_buffer/client/raster_implementation_impl_autogen.h"
 
-void RasterImplementation::CopySubTexture(const gpu::Mailbox& source_mailbox,
-                                          const gpu::Mailbox& dest_mailbox,
-                                          GLenum dest_target,
-                                          GLint xoffset,
-                                          GLint yoffset,
-                                          GLint x,
-                                          GLint y,
-                                          GLsizei width,
-                                          GLsizei height,
-                                          GLboolean unpack_flip_y,
-                                          GLboolean unpack_premultiply_alpha) {
+void RasterImplementation::CopySharedImage(const gpu::Mailbox& source_mailbox,
+                                           const gpu::Mailbox& dest_mailbox,
+                                           GLenum dest_target,
+                                           GLint xoffset,
+                                           GLint yoffset,
+                                           GLint x,
+                                           GLint y,
+                                           GLsizei width,
+                                           GLsizei height,
+                                           GLboolean unpack_flip_y,
+                                           GLboolean unpack_premultiply_alpha) {
   GPU_CLIENT_SINGLE_THREAD_CHECK();
-  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glCopySubTexture("
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] glCopySharedImage("
                      << source_mailbox.ToDebugString() << ", "
                      << dest_mailbox.ToDebugString() << ", " << xoffset << ", "
                      << yoffset << ", " << x << ", " << y << ", " << width
                      << ", " << height << ")");
   if (!source_mailbox.IsSharedImage()) {
-    SetGLError(GL_INVALID_VALUE, "glCopySubTexture",
+    SetGLError(GL_INVALID_VALUE, "glCopySharedImage",
                "source_mailbox is not a shared image.");
     // TODO(crbug.com/1229479): This call to NOTREACHED is temporary while we
     // investigate crbug.com/1229479. The failure with test
@@ -1178,24 +1178,24 @@ void RasterImplementation::CopySubTexture(const gpu::Mailbox& source_mailbox,
     return;
   }
   if (!dest_mailbox.IsSharedImage()) {
-    SetGLError(GL_INVALID_VALUE, "glCopySubTexture",
+    SetGLError(GL_INVALID_VALUE, "glCopySharedImage",
                "dest_mailbox is not a shared image.");
     return;
   }
   if (width < 0) {
-    SetGLError(GL_INVALID_VALUE, "glCopySubTexture", "width < 0");
+    SetGLError(GL_INVALID_VALUE, "glCopySharedImage", "width < 0");
     return;
   }
   if (height < 0) {
-    SetGLError(GL_INVALID_VALUE, "glCopySubTexture", "height < 0");
+    SetGLError(GL_INVALID_VALUE, "glCopySharedImage", "height < 0");
     return;
   }
   GLbyte mailboxes[sizeof(source_mailbox.name) * 2];
   memcpy(mailboxes, source_mailbox.name, sizeof(source_mailbox.name));
   memcpy(mailboxes + sizeof(source_mailbox.name), dest_mailbox.name,
          sizeof(dest_mailbox.name));
-  helper_->CopySubTextureINTERNALImmediate(xoffset, yoffset, x, y, width,
-                                           height, unpack_flip_y, mailboxes);
+  helper_->CopySharedImageINTERNALImmediate(xoffset, yoffset, x, y, width,
+                                            height, unpack_flip_y, mailboxes);
   CheckGLError();
 }
 
@@ -1389,8 +1389,7 @@ void RasterImplementation::RasterCHROMIUM(const cc::DisplayItemList* list,
           raster_properties_->can_use_lcd_text,
           capabilities().context_supports_distance_field_text,
           capabilities().max_texture_size));
-  serializer.Serialize(&list->paint_op_buffer_, &temp_raster_offsets_,
-                       preamble);
+  serializer.Serialize(list->paint_op_buffer_, &temp_raster_offsets_, preamble);
   // TODO(piman): raise error if !serializer.valid()?
   op_serializer.SendSerializedData();
 }
@@ -1434,6 +1433,7 @@ void RasterImplementation::ReadbackImagePixelsINTERNAL(
     GLuint dst_row_bytes,
     int src_x,
     int src_y,
+    int plane_index,
     base::OnceCallback<void(bool)> readback_done,
     void* dst_pixels) {
   DCHECK_GE(dst_row_bytes, dst_info.minRowBytes());
@@ -1500,9 +1500,9 @@ void RasterImplementation::ReadbackImagePixelsINTERNAL(
   }
 
   helper_->ReadbackARGBImagePixelsINTERNALImmediate(
-      src_x, src_y, dst_info.width(), dst_info.height(), dst_row_bytes,
-      dst_info.colorType(), dst_info.alphaType(), shm_id, shm_offset,
-      color_space_offset, pixels_offset, source_mailbox.name);
+      src_x, src_y, plane_index, dst_info.width(), dst_info.height(),
+      dst_row_bytes, dst_info.colorType(), dst_info.alphaType(), shm_id,
+      shm_offset, color_space_offset, pixels_offset, source_mailbox.name);
 
   if (is_async) {
     EndQueryEXT(GL_COMMANDS_ISSUED_CHROMIUM);
@@ -1514,7 +1514,12 @@ void RasterImplementation::ReadbackImagePixelsINTERNAL(
     argb_request_queue_.push(std::move(request));
     SignalQuery(query,
                 base::BindOnce(&RasterImplementation::OnAsyncARGBReadbackDone,
-                               base::Unretained(this), request_ptr));
+                               // We know that at least one or both pointers
+                               // were dangling. Crash reports was not precise
+                               // enough to determine which was it was. Marking
+                               // the two so that the study can move forward.
+                               base::UnsafeDanglingUntriaged(this),
+                               base::UnsafeDanglingUntriaged(request_ptr)));
   } else {
     WaitForCmd();
 
@@ -1596,9 +1601,10 @@ void RasterImplementation::ReadbackARGBPixelsAsync(
     return;
   }
 
-  ReadbackImagePixelsINTERNAL(
-      source_mailbox, dst_info, dst_row_bytes, source_starting_point.x(),
-      source_starting_point.y(), std::move(readback_done), out);
+  ReadbackImagePixelsINTERNAL(source_mailbox, dst_info, dst_row_bytes,
+                              source_starting_point.x(),
+                              source_starting_point.y(), /*plane_index=*/0,
+                              std::move(readback_done), out);
 }
 
 void RasterImplementation::ReadbackImagePixels(
@@ -1607,11 +1613,12 @@ void RasterImplementation::ReadbackImagePixels(
     GLuint dst_row_bytes,
     int src_x,
     int src_y,
+    int plane_index,
     void* dst_pixels) {
   TRACE_EVENT0("gpu", "RasterImplementation::ReadbackImagePixels");
   ReadbackImagePixelsINTERNAL(source_mailbox, dst_info, dst_row_bytes, src_x,
-                              src_y, base::OnceCallback<void(bool)>(),
-                              dst_pixels);
+                              src_y, plane_index,
+                              base::OnceCallback<void(bool)>(), dst_pixels);
 }
 
 void RasterImplementation::ReadbackYUVPixelsAsync(

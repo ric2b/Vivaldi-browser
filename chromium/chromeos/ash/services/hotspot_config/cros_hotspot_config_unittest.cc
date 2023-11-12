@@ -30,7 +30,7 @@ const char kCellularServiceName[] = "cellular_name0";
 mojom::HotspotConfigPtr GenerateTestConfig() {
   auto mojom_config = mojom::HotspotConfig::New();
   mojom_config->auto_disable = false;
-  mojom_config->band = mojom::WiFiBand::k5GHz;
+  mojom_config->band = mojom::WiFiBand::kAutoChoose;
   mojom_config->security = mojom::WiFiSecurityMode::kWpa2;
   mojom_config->ssid = kHotspotConfigSSID;
   mojom_config->passphrase = kHotspotConfigPassphrase;
@@ -59,7 +59,8 @@ class CrosHotspotConfigTest : public testing::Test {
     // Use absl::WrapUnique(new CrosHotspotConfig(...)) instead of
     // std::make_unique<CrosHotspotConfig> to access a private constructor.
     cros_hotspot_config_ = absl::WrapUnique(
-        new CrosHotspotConfig(network_handler->hotspot_state_handler(),
+        new CrosHotspotConfig(network_handler->hotspot_capabilities_provider(),
+                              network_handler->hotspot_state_handler(),
                               network_handler->hotspot_controller()));
     base::RunLoop().RunUntilIdle();
   }
@@ -76,24 +77,25 @@ class CrosHotspotConfigTest : public testing::Test {
   }
 
   void SetValidHotspotCapabilities() {
-    base::Value capabilities_dict(base::Value::Type::DICTIONARY);
-    base::Value upstream_list(base::Value::Type::LIST);
-    upstream_list.Append(base::Value(shill::kTypeCellular));
-    capabilities_dict.GetDict().Set(shill::kTetheringCapUpstreamProperty,
-                                    std::move(upstream_list));
+    base::Value::Dict capabilities_dict;
+    base::Value::List upstream_list;
+    upstream_list.Append(shill::kTypeCellular);
+    capabilities_dict.Set(shill::kTetheringCapUpstreamProperty,
+                          std::move(upstream_list));
     // Add WiFi to the downstream technology list in Shill
-    base::Value downstream_list(base::Value::Type::LIST);
-    downstream_list.Append(base::Value(shill::kTypeWifi));
-    capabilities_dict.GetDict().Set(shill::kTetheringCapDownstreamProperty,
-                                    std::move(downstream_list));
+    base::Value::List downstream_list;
+    downstream_list.Append(shill::kTypeWifi);
+    capabilities_dict.Set(shill::kTetheringCapDownstreamProperty,
+                          std::move(downstream_list));
     // Add allowed WiFi security mode in Shill
-    base::Value security_list(base::Value::Type::LIST);
-    security_list.Append(base::Value(shill::kSecurityWpa2));
-    security_list.Append(base::Value(shill::kSecurityWpa3));
-    capabilities_dict.GetDict().Set(shill::kTetheringCapSecurityProperty,
-                                    std::move(security_list));
+    base::Value::List security_list;
+    security_list.Append(shill::kSecurityWpa2);
+    security_list.Append(shill::kSecurityWpa3);
+    capabilities_dict.Set(shill::kTetheringCapSecurityProperty,
+                          std::move(security_list));
     network_handler_test_helper_->manager_test()->SetManagerProperty(
-        shill::kTetheringCapabilitiesProperty, capabilities_dict);
+        shill::kTetheringCapabilitiesProperty,
+        base::Value(std::move(capabilities_dict)));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -106,11 +108,10 @@ class CrosHotspotConfigTest : public testing::Test {
 
   void SetHotspotStateInShill(const std::string& state) {
     // Update tethering status to active in Shill.
-    base::Value status_dict(base::Value::Type::DICTIONARY);
-    status_dict.GetDict().Set(shill::kTetheringStatusStateProperty,
-                              base::Value(state));
+    base::Value::Dict status_dict;
+    status_dict.Set(shill::kTetheringStatusStateProperty, state);
     network_handler_test_helper_->manager_test()->SetManagerProperty(
-        shill::kTetheringStatusProperty, status_dict);
+        shill::kTetheringStatusProperty, base::Value(std::move(status_dict)));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -247,7 +248,7 @@ TEST_F(CrosHotspotConfigTest, SetHotspotConfig) {
   auto hotspot_info = GetHotspotInfo();
   EXPECT_TRUE(hotspot_info->config);
   EXPECT_FALSE(hotspot_info->config->auto_disable);
-  EXPECT_EQ(hotspot_info->config->band, mojom::WiFiBand::k5GHz);
+  EXPECT_EQ(hotspot_info->config->band, mojom::WiFiBand::kAutoChoose);
   EXPECT_EQ(hotspot_info->config->security, mojom::WiFiSecurityMode::kWpa2);
   EXPECT_EQ(hotspot_info->config->ssid, kHotspotConfigSSID);
   EXPECT_EQ(hotspot_info->config->passphrase, kHotspotConfigPassphrase);
@@ -260,6 +261,8 @@ TEST_F(CrosHotspotConfigTest, EnableHotspot) {
   SetReadinessCheckResultReady();
   SetValidHotspotCapabilities();
   AddActiveCellularService();
+  helper()->manager_test()->SetSimulateTetheringEnableResult(
+      FakeShillSimulatedResult::kSuccess, shill::kTetheringEnableResultSuccess);
   base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(mojom::HotspotControlResult::kSuccess, EnableHotspot());
@@ -275,6 +278,10 @@ TEST_F(CrosHotspotConfigTest, EnableHotspot) {
 }
 
 TEST_F(CrosHotspotConfigTest, DisableHotspot) {
+  helper()->manager_test()->SetSimulateTetheringEnableResult(
+      FakeShillSimulatedResult::kSuccess, shill::kTetheringEnableResultSuccess);
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_EQ(mojom::HotspotControlResult::kSuccess, DisableHotspot());
 }
 

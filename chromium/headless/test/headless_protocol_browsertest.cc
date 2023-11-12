@@ -13,8 +13,9 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
-#include "headless/app/headless_shell_switches.h"
+#include "content/public/common/content_switches.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
+#include "headless/public/switches.h"
 #include "headless/test/headless_browser_test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "services/network/public/cpp/network_switches.h"
@@ -145,9 +146,7 @@ void HeadlessProtocolBrowserTest::OnLoadEventFired(
 void HeadlessProtocolBrowserTest::OnEvaluateResult(base::Value::Dict params) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDumpTestResult)) {
-    std::string json_params;
-    base::JSONWriter::Write(params, &json_params);
-    LOG(ERROR) << "Test result: " << json_params;
+    LOG(ERROR) << "Test result:\n" << params.DebugString();
   }
 
   ProcessTestResult(DictString(params, "result.result.value"));
@@ -269,6 +268,26 @@ HEADLESS_PROTOCOL_TEST(VirtualTimeHistoryNavigation,
 HEADLESS_PROTOCOL_TEST(VirtualTimeHistoryNavigationSameDoc,
                        "emulation/virtual-time-history-navigation-same-doc.js")
 
+// Flaky on Mac. TODO(crbug.com/1419801): Re-enable.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_VirtualTimeWorkerBasic DISABLED_VirtualTimeWorkerBasic
+#else
+#define MAYBE_VirtualTimeWorkerBasic VirtualTimeWorkerBasic
+#endif
+HEADLESS_PROTOCOL_TEST(MAYBE_VirtualTimeWorkerBasic,
+                       "emulation/virtual-time-worker-basic.js")
+HEADLESS_PROTOCOL_TEST(VirtualTimeWorkerLockstep,
+                       "emulation/virtual-time-worker-lockstep.js")
+
+// Flaky on Mac. TODO(crbug.com/1419801): Re-enable.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_VirtualTimeWorkerFetch DISABLED_VirtualTimeWorkerFetch
+#else
+#define MAYBE_VirtualTimeWorkerFetch VirtualTimeWorkerFetch
+#endif
+HEADLESS_PROTOCOL_TEST(MAYBE_VirtualTimeWorkerFetch,
+                       "emulation/virtual-time-worker-fetch.js")
+
 // Flaky on Mac. TODO(crbug.com/1164173): Re-enable.
 #if BUILDFLAG(IS_MAC)
 #define MAYBE_VirtualTimeFetchKeepalive DISABLED_VirtualTimeFetchKeepalive
@@ -303,13 +322,19 @@ HEADLESS_PROTOCOL_TEST(Geolocation, "emulation/geolocation-crash.js")
 
 HEADLESS_PROTOCOL_TEST(DragStarted, "input/dragIntercepted.js")
 
-// https://crbug.com/1204620
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+// https://crbug.com/1414190
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #define MAYBE_InputClipboardOps DISABLED_InputClipboardOps
 #else
 #define MAYBE_InputClipboardOps InputClipboardOps
 #endif
 HEADLESS_PROTOCOL_TEST(MAYBE_InputClipboardOps, "input/input-clipboard-ops.js")
+
+HEADLESS_PROTOCOL_TEST(ClipboardApiCopyPaste,
+                       "input/clipboard-api-copy-paste.js")
+
+HEADLESS_PROTOCOL_TEST(FocusBlurNotifications,
+                       "input/focus-blur-notifications.js")
 
 HEADLESS_PROTOCOL_TEST(HeadlessSessionBasicsTest,
                        "sessions/headless-session-basics.js")
@@ -328,6 +353,10 @@ HEADLESS_PROTOCOL_TEST(ShowDirectoryPickerNoCrash,
 
 HEADLESS_PROTOCOL_TEST(ShowFilePickerInterception,
                        "sanity/show-file-picker-interception.js")
+
+HEADLESS_PROTOCOL_TEST(WindowSizeOnStart, "sanity/window-size-on-start.js")
+
+HEADLESS_PROTOCOL_TEST(ScreencastBasics, "sanity/screencast-basics.js")
 
 class HeadlessProtocolBrowserTestWithProxy
     : public HeadlessProtocolBrowserTest {
@@ -427,15 +456,9 @@ class HeadlessProtocolBrowserTestWithDataPath
     RunTest();                                                              \
   }
 
-// TODO(crbug.com/1396402)  Re-enable after resolving MSAN flaky failures.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_FileInputDirectoryUpload DISABLED_FileInputDirectoryUpload
-#else
-#define MAYBE_FileInputDirectoryUpload FileInputDirectoryUpload
-#endif
-
+// TODO(crbug.com/1399463)  Re-enable after resolving flaky failures.
 HEADLESS_PROTOCOL_TEST_WITH_DATA_PATH(
-    MAYBE_FileInputDirectoryUpload,
+    FileInputDirectoryUpload,
     "sanity/file-input-directory-upload.js",
     "sanity/resources/file-input-directory-upload")
 

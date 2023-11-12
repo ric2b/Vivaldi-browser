@@ -14,8 +14,8 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_observer.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -25,13 +25,13 @@
 #include "components/exo/shell_surface_util.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
-#include "components/exo/wm_helper_chromeos.h"
 #include "components/fullscreen_control/fullscreen_control_popup.h"
 #include "components/fullscreen_control/subtle_notification_view.h"
 #include "components/strings/grit/components_strings.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_observer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/user_activity/user_activity_detector.h"
 #include "ui/base/user_activity/user_activity_observer.h"
@@ -171,11 +171,14 @@ void ExitFullscreen(aura::Window* window) {
 // the exit popup. Owned as a window property.
 class ExitNotifier : public ui::EventHandler,
                      public exo::UILockController::Notifier,
+                     public aura::WindowObserver,
                      public ash::WindowStateObserver {
  public:
   explicit ExitNotifier(exo::UILockController* controller, aura::Window* window)
       : window_(window) {
     controller_observation_.Observe(controller);
+    window_observation_.Observe(window);
+
     ash::WindowState* window_state = ash::WindowState::Get(window);
     window_state_observation_.Observe(window_state);
     if (window_state->IsFullscreen())
@@ -211,6 +214,11 @@ class ExitNotifier : public ui::EventHandler,
     } else if (pointer_is_captured_) {
       MaybeShowPointerCaptureNotification();
     }
+  }
+
+  void OnWindowDestroying(aura::Window* window) override {
+    window_observation_.Reset();
+    window_state_observation_.Reset();
   }
 
   void OnUILockControllerDestroying() override {
@@ -443,6 +451,8 @@ class ExitNotifier : public ui::EventHandler,
   base::OneShotTimer pointer_capture_notify_timer_;
   base::TimeTicks next_pointer_notify_time_;
   base::OneShotTimer exit_popup_timer_;
+  base::ScopedObservation<aura::Window, aura::WindowObserver>
+      window_observation_{this};
   base::ScopedObservation<ash::WindowState, ash::WindowStateObserver>
       window_state_observation_{this};
   base::ScopedObservation<exo::UILockController,

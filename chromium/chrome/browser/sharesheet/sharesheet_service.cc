@@ -6,20 +6,22 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_util.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/sharesheet/share_action/share_action.h"
 #include "chrome/browser/sharesheet/sharesheet_service_delegator.h"
+#include "chrome/browser/sharesheet/sharesheet_types.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/app_types.h"
-#include "components/services/app_service/public/cpp/intent_util.h"
+#include "components/services/app_service/public/cpp/intent.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -225,6 +227,7 @@ void SharesheetService::ShowBubbleForTesting(
     DeliveredCallback delivered_callback,
     CloseCallback close_callback,
     int num_actions_to_add) {
+  CHECK(views::Widget::GetWidgetForNativeWindow(native_window));
   SharesheetMetrics::RecordSharesheetLaunchSource(source);
   for (int i = 0; i < num_actions_to_add; ++i) {
     share_action_cache_->AddShareActionForTesting();  // IN-TEST
@@ -277,7 +280,7 @@ std::vector<TargetInfo> SharesheetService::GetActionsForIntent(
     if ((*iter)->ShouldShowAction(intent, contains_hosted_document)) {
       targets.emplace_back(TargetType::kAction, absl::nullopt,
                            (*iter)->GetActionName(), (*iter)->GetActionName(),
-                           absl::nullopt, absl::nullopt);
+                           absl::nullopt, absl::nullopt, false);
     }
     ++iter;
   }
@@ -296,13 +299,24 @@ void SharesheetService::LoadAppIcons(
 
   // Making a copy because we move |intent_launch_info| out below.
   auto app_id = intent_launch_info[index].app_id;
-  app_service_proxy_->LoadIcon(
-      app_service_proxy_->AppRegistryCache().GetAppType(app_id), app_id,
-      apps::IconType::kStandard, kIconSize,
-      /*allow_placeholder_icon=*/false,
-      base::BindOnce(&SharesheetService::OnIconLoaded,
-                     weak_factory_.GetWeakPtr(), std::move(intent_launch_info),
-                     std::move(targets), index, std::move(callback)));
+  absl::optional<apps::IconKey> icon_key =
+      app_service_proxy_->GetIconKey(app_id);
+  if (icon_key.has_value()) {
+    if (intent_launch_info[index].is_dlp_blocked) {
+      icon_key->icon_effects |= apps::IconEffects::kBlocked;
+    }
+    app_service_proxy_->LoadIconFromIconKey(
+        app_service_proxy_->AppRegistryCache().GetAppType(app_id), app_id,
+        icon_key.value(), apps::IconType::kStandard, kIconSize,
+        /*allow_placeholder_icon=*/false,
+        base::BindOnce(&SharesheetService::OnIconLoaded,
+                       weak_factory_.GetWeakPtr(),
+                       std::move(intent_launch_info), std::move(targets), index,
+                       std::move(callback)));
+  } else {
+    OnIconLoaded(std::move(intent_launch_info), std::move(targets), index,
+                 std::move(callback), std::make_unique<apps::IconValue>());
+  }
 }
 
 void SharesheetService::OnIconLoaded(
@@ -329,11 +343,11 @@ void SharesheetService::OnIconLoaded(
             (icon_value && icon_value->icon_type == apps::IconType::kStandard)
                 ? icon_value->uncompressed
                 : gfx::ImageSkia();
-        targets.emplace_back(target_type, image_skia,
-                             base::UTF8ToUTF16(launch_entry.app_id),
-                             base::UTF8ToUTF16(update.Name()),
-                             base::UTF8ToUTF16(launch_entry.activity_label),
-                             launch_entry.activity_name);
+        targets.emplace_back(
+            target_type, image_skia, base::UTF8ToUTF16(launch_entry.app_id),
+            base::UTF8ToUTF16(update.Name()),
+            base::UTF8ToUTF16(launch_entry.activity_label),
+            launch_entry.activity_name, launch_entry.is_dlp_blocked);
       });
 
   LoadAppIcons(std::move(intent_launch_info), std::move(targets), index + 1,
@@ -347,7 +361,12 @@ void SharesheetService::OnAppIconsLoaded(
     CloseCallback close_callback,
     std::vector<TargetInfo> targets) {
   gfx::NativeWindow native_window = std::move(get_native_window_callback).Run();
-  if (!native_window) {
+  // Note that checking |native_window| is not sufficient: |widget| can be null
+  // even when |native_window| is 'true': https://crbug.com/1375887#c11
+  views::Widget* const widget =
+      views::Widget::GetWidgetForNativeWindow(native_window);
+  if (!widget) {
+    LOG(WARNING) << "Window has been closed";
     std::move(delivered_callback).Run(SharesheetResult::kErrorWindowClosed);
     return;
   }
@@ -468,6 +487,7 @@ void SharesheetService::RecordUserActionMetrics(
       case apps::AppType::kStandaloneBrowser:
       case apps::AppType::kRemote:
       case apps::AppType::kBorealis:
+      case apps::AppType::kBruschetta:
       case apps::AppType::kStandaloneBrowserChromeApp:
       case apps::AppType::kExtension:
       case apps::AppType::kStandaloneBrowserExtension:

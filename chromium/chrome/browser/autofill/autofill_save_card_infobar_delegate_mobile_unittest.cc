@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -124,37 +124,25 @@ AutofillSaveCardInfoBarDelegateMobileTest::
         CreditCard credit_card) {
   LegalMessageLines legal_message_lines;
   if (!legal_message_string.empty()) {
-    std::unique_ptr<base::Value> value(
-        base::JSONReader::ReadDeprecated(legal_message_string));
+    absl::optional<base::Value> value =
+        base::JSONReader::Read(legal_message_string);
     EXPECT_TRUE(value);
-    LegalMessageLine::Parse(*value, &legal_message_lines,
+    LegalMessageLine::Parse(value->GetDict(), &legal_message_lines,
                             /*escape_apostrophes=*/true);
   }
-  if (is_uploading) {
-    // Upload save infobar delegate:
-    credit_card_to_save_ = credit_card;
-    std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile> delegate(
-        new AutofillSaveCardInfoBarDelegateMobile(
-            is_uploading, options, credit_card, legal_message_lines,
-            /*upload_save_card_callback=*/
-            base::BindOnce(&AutofillSaveCardInfoBarDelegateMobileTest::
-                               UploadSaveCardPromptCallback,
-                           base::Unretained(this)),
-            /*local_save_card_callback=*/{}, AccountInfo()));
-    return delegate;
-  }
-  // Local save infobar delegate:
   credit_card_to_save_ = credit_card;
-  std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile> delegate(
-      new AutofillSaveCardInfoBarDelegateMobile(
-          is_uploading, options, credit_card, legal_message_lines,
-          /*upload_save_card_callback=*/{},
-          /*local_save_card_callback=*/
-          base::BindOnce(&AutofillSaveCardInfoBarDelegateMobileTest::
-                             LocalSaveCardPromptCallback,
-                         base::Unretained(this)),
-          AccountInfo()));
-  return delegate;
+  return is_uploading
+             ? AutofillSaveCardInfoBarDelegateMobile::CreateForUploadSave(
+                   options, credit_card,
+                   base::BindOnce(&AutofillSaveCardInfoBarDelegateMobileTest::
+                                      UploadSaveCardPromptCallback,
+                                  base::Unretained(this)),
+                   legal_message_lines, AccountInfo())
+             : AutofillSaveCardInfoBarDelegateMobile::CreateForLocalSave(
+                   options, credit_card,
+                   base::BindOnce(&AutofillSaveCardInfoBarDelegateMobileTest::
+                                      LocalSaveCardPromptCallback,
+                                  base::Unretained(this)));
 }
 
 // Test that local credit card save infobar metrics are logged correctly.

@@ -9,8 +9,8 @@
 #include <utility>
 
 #include "ash/constants/ash_switches.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/callback.h"
 #include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -166,9 +166,12 @@ user_manager::User* FakeChromeUserManager::AddGuestUser() {
 }
 
 user_manager::User* FakeChromeUserManager::AddPublicAccountUser(
-    const AccountId& account_id) {
+    const AccountId& account_id,
+    bool with_saml) {
   user_manager::User* user =
-      user_manager::User::CreatePublicAccountUser(account_id);
+      with_saml ? user_manager::User::CreatePublicAccountUserForTestingWithSAML(
+                      account_id)
+                : user_manager::User::CreatePublicAccountUser(account_id);
   user->set_username_hash(
       user_manager::FakeUserManager::GetFakeUsernameHash(account_id));
   user->SetStubImage(
@@ -265,8 +268,6 @@ void FakeChromeUserManager::ResetUserFlow(const AccountId& account_id) {
 
 void FakeChromeUserManager::SwitchActiveUser(const AccountId& account_id) {
   active_account_id_ = account_id;
-  ProfileHelper::Get()->ActiveUserHashChanged(
-      user_manager::FakeUserManager::GetFakeUsernameHash(account_id));
   active_user_ = nullptr;
   if (!users_.empty() && active_account_id_.is_valid()) {
     for (user_manager::User* const user : users_) {
@@ -293,7 +294,7 @@ void FakeChromeUserManager::RemoveUserFromList(const AccountId& account_id) {
       WallpaperControllerClientImpl::Get();
   // `wallpaper_client` could be nullptr in tests.
   if (wallpaper_client)
-    wallpaper_client->RemoveUserWallpaper(account_id);
+    wallpaper_client->RemoveUserWallpaper(account_id, base::DoNothing());
   ProfileHelper::Get()->RemoveUserFromListForTesting(account_id);
 
   const user_manager::UserList::iterator it =
@@ -665,7 +666,7 @@ bool FakeChromeUserManager::IsUserAllowed(
 
 void FakeChromeUserManager::CreateLocalState() {
   local_state_ = std::make_unique<TestingPrefServiceSimple>();
-  user_manager::KnownUser::RegisterPrefs(local_state_->registry());
+  ChromeUserManager::RegisterPrefs(local_state_->registry());
 }
 
 void FakeChromeUserManager::SimulateUserProfileLoad(
@@ -679,7 +680,10 @@ void FakeChromeUserManager::SimulateUserProfileLoad(
 }
 
 PrefService* FakeChromeUserManager::GetLocalState() const {
-  return local_state_.get();
+  if (local_state_.get()) {
+    return local_state_.get();
+  }
+  return g_browser_process ? g_browser_process->local_state() : nullptr;
 }
 
 void FakeChromeUserManager::SetIsCurrentUserNew(bool is_new) {
@@ -728,10 +732,6 @@ void FakeChromeUserManager::OnUserRemoved(const AccountId& account_id) {
 void FakeChromeUserManager::SetUserAffiliation(
     const AccountId& account_id,
     const AffiliationIDSet& user_affiliation_ids) {}
-
-bool FakeChromeUserManager::ShouldReportUser(const std::string& user_id) const {
-  return false;
-}
 
 bool FakeChromeUserManager::IsFullManagementDisclosureNeeded(
     policy::DeviceLocalAccountPolicyBroker* broker) const {

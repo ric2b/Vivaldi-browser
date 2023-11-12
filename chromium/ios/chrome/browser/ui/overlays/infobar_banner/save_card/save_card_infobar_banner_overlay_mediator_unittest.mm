@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/overlays/infobar_banner/save_card/save_card_infobar_banner_overlay_mediator.h"
 
-#import "base/bind.h"
 #import "base/feature_list.h"
+#import "base/functional/bind.h"
 #import "base/guid.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/autofill/core/browser/autofill_client.h"
@@ -50,16 +50,9 @@ TEST_F(SaveCardInfobarBannerOverlayMediatorTest, SetUpConsumer) {
                                    "https://www.example.com/");
   std::unique_ptr<autofill::AutofillSaveCardInfoBarDelegateMobile>
       passed_delegate =
-          std::make_unique<autofill::AutofillSaveCardInfoBarDelegateMobile>(
-              /*upload=*/false,
+          autofill::AutofillSaveCardInfoBarDelegateMobile::CreateForLocalSave(
               autofill::AutofillClient::SaveCreditCardOptions(), credit_card,
-              autofill::LegalMessageLines(),
-              autofill::AutofillClient::UploadSaveCardPromptCallback(),
-              base::BindOnce(
-                  ^(autofill::AutofillClient::SaveCardOfferUserDecision
-                        user_decision){
-                  }),
-              AccountInfo());
+              base::DoNothing());
   autofill::AutofillSaveCardInfoBarDelegateMobile* delegate =
       passed_delegate.get();
   InfoBarIOS infobar(InfobarType::kInfobarTypeSaveCard,
@@ -93,18 +86,9 @@ TEST_F(SaveCardInfobarBannerOverlayMediatorTest, PresentModalWhenUploadOn) {
                                    "https://www.example.com/");
   std::unique_ptr<autofill::AutofillSaveCardInfoBarDelegateMobile>
       passed_delegate =
-          std::make_unique<autofill::AutofillSaveCardInfoBarDelegateMobile>(
-              /*upload=*/true,
+          autofill::AutofillSaveCardInfoBarDelegateMobile::CreateForUploadSave(
               autofill::AutofillClient::SaveCreditCardOptions(), credit_card,
-              autofill::LegalMessageLines(),
-              base::BindOnce(
-                  ^(autofill::AutofillClient::SaveCardOfferUserDecision
-                        user_decision,
-                    const autofill::AutofillClient::UserProvidedCardDetails&
-                        user_provided_card_details){
-                  }),
-              autofill::AutofillClient::LocalSaveCardPromptCallback(),
-              AccountInfo());
+              base::DoNothing(), autofill::LegalMessageLines(), AccountInfo());
 
   InfoBarIOS infobar(InfobarType::kInfobarTypeSaveCard,
                      std::move(passed_delegate));
@@ -133,16 +117,9 @@ TEST_F(SaveCardInfobarBannerOverlayMediatorTest, PresentModalWhenUploadOff) {
                                    "https://www.example.com/");
   std::unique_ptr<autofill::AutofillSaveCardInfoBarDelegateMobile>
       passed_delegate =
-          std::make_unique<autofill::AutofillSaveCardInfoBarDelegateMobile>(
-              /*upload=*/false,
+          autofill::AutofillSaveCardInfoBarDelegateMobile::CreateForLocalSave(
               autofill::AutofillClient::SaveCreditCardOptions(), credit_card,
-              autofill::LegalMessageLines(),
-              autofill::AutofillClient::UploadSaveCardPromptCallback(),
-              base::BindOnce(
-                  ^(autofill::AutofillClient::SaveCardOfferUserDecision
-                        user_decision){
-                  }),
-              AccountInfo());
+              base::DoNothing());
 
   InfoBarIOS infobar(InfobarType::kInfobarTypeSaveCard,
                      std::move(passed_delegate));

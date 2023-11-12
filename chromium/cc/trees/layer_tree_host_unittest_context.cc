@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "cc/layers/heads_up_display_layer.h"
@@ -466,8 +466,10 @@ class MultipleCompositeDoesNotCreateLayerTreeFrameSink
   }
 
   void BeginTest() override {
-    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(1), false);
-    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(2), false);
+    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(1), false,
+                                        base::OnceClosure());
+    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(2), false,
+                                        base::OnceClosure());
   }
 
   void DidInitializeLayerTreeFrameSink() override { EXPECT_TRUE(false); }
@@ -508,12 +510,14 @@ class FailedCreateDoesNotCreateExtraLayerTreeFrameSink
 
   void BeginTest() override {
     // First composite tries to create a surface.
-    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(1), false);
+    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(1), false,
+                                        base::OnceClosure());
     EXPECT_EQ(num_requests_, 2);
     EXPECT_TRUE(has_failed_);
 
     // Second composite should not request or fail.
-    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(2), false);
+    layer_tree_host()->CompositeForTest(TicksFromMicroseconds(2), false,
+                                        base::OnceClosure());
     EXPECT_EQ(num_requests_, 2);
     EndTest();
   }
@@ -826,7 +830,7 @@ class LayerTreeHostContextTestDontUseLostResources
   void SetupTree() override {
     gpu::gles2::GLES2Interface* gl = child_context_provider_->ContextGL();
 
-    gpu::Mailbox mailbox = gpu::Mailbox::Generate();
+    gpu::Mailbox mailbox = gpu::Mailbox::GenerateForSharedImage();
 
     gpu::SyncToken sync_token;
     gl->GenSyncTokenCHROMIUM(sync_token.GetData());
@@ -1676,10 +1680,6 @@ class LayerTreeHostContextTestLoseAfterSendingBeginMainFrame
       return;
     deferred_ = true;
 
-    // TODO(schenney): This should switch back to defer_commits_ because there
-    // is no way in the real code to start deferring main frame updates when
-    // inside WillBeginMainFrame. Defer commits before the BeginFrame completes,
-    // causing it to be delayed.
     scoped_defer_main_frame_update_ = layer_tree_host()->DeferMainFrameUpdate();
     // Meanwhile, lose the context while we are in defer BeginMainFrame.
     ImplThreadTaskRunner()->PostTask(
@@ -1702,8 +1702,6 @@ class LayerTreeHostContextTestLoseAfterSendingBeginMainFrame
   void LoseContextOnImplThread() {
     LoseContext();
 
-    // TODO(schenney): This should switch back to defer_commits_ to match the
-    // change above.
     // After losing the context, stop deferring commits.
     PostReturnDeferMainFrameUpdateToMainThread(
         std::move(scoped_defer_main_frame_update_));

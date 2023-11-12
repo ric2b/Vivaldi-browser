@@ -67,10 +67,25 @@ const char kBottomToolbarOpened[] = "bottom_toolbar_opened";
 const char kDiscoverFeedLoaded[] = "discover_feed_loaded";
 const char kDesktopVersionRequested[] = "desktop_version_requested";
 const char kDefaultSiteViewUsed[] = "default_site_view_used";
-const char kPasswordSuggestionsShown[] = "password_suggestions_shown";
-const char kPasswordSuggestionSelected[] = "password_suggestion_selected";
 const char kOverflowMenuNoHorizontalScrollOrAction[] =
     "overflow_menu_no_horizontal_scroll_or_action";
+const char kPriceNotificationsUsed[] = "price_notifications_used";
+const char kDefaultBrowserPromoShown[] = "default_browser_promo_shown";
+
+// Default browser blue dot promo.
+const char kBlueDotPromoCriterionMet[] = "blue_dot_promo_criterion_met";
+const char kBlueDotPromoEligibilityMet[] = "blue_dot_promo_eligibility_met";
+const char kBlueDotPromoOverflowMenuShown[] =
+    "blue_dot_promo_overflow_menu_shown";
+const char kBlueDotPromoOverflowMenuShownNewSession[] =
+    "blue_dot_promo_overflow_menu_shown_new_session";
+const char kBlueDotPromoSettingsShown[] = "blue_dot_promo_settings_shown";
+const char kBlueDotPromoSettingsShownNewSession[] =
+    "blue_dot_promo_settings_shown_new_session";
+const char kBlueDotPromoOverflowMenuDismissed[] =
+    "blue_dot_promo_overflow_menu_dismissed";
+const char kBlueDotPromoSettingsDismissed[] =
+    "blue_dot_promo_settings_dismissed";
 #endif  // BUILDFLAG(IS_IOS)
 
 #if BUILDFLAG(IS_ANDROID)

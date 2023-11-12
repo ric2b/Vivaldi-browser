@@ -141,7 +141,7 @@ class MockSystemTrustStore : public SystemTrustStore {
 class BlockingTrustStore : public TrustStore {
  public:
   CertificateTrust GetTrust(const ParsedCertificate* cert,
-                            base::SupportsUserData* debug_data) const override {
+                            base::SupportsUserData* debug_data) override {
     return backing_trust_store_.GetTrust(cert, debug_data);
   }
 
@@ -231,8 +231,11 @@ class CertVerifyProcBuiltinTest : public ::testing::Test {
 
   CertVerifier::Config config_;
   std::unique_ptr<net::URLRequestContext> context_;
-  raw_ptr<MockSystemTrustStore> mock_system_trust_store_ = nullptr;
+
+  // Must outlive `mock_system_trust_store_`.
   scoped_refptr<CertVerifyProc> verify_proc_;
+
+  raw_ptr<MockSystemTrustStore> mock_system_trust_store_ = nullptr;
   scoped_refptr<CertNetFetcherURLRequest> cert_net_fetcher_;
 };
 
@@ -515,7 +518,7 @@ TEST_F(CertVerifyProcBuiltinTest, EVNoOCSPRevocationChecks) {
   ASSERT_NE(event, events.end());
   EXPECT_EQ(net::NetLogEventPhase::BEGIN, event->phase);
   ASSERT_TRUE(event->params.is_dict());
-  EXPECT_EQ(true, event->params.FindBoolKey("is_ev_attempt"));
+  EXPECT_EQ(true, event->params.GetDict().FindBool("is_ev_attempt"));
 
   event = base::ranges::find(++event, events.end(),
                              NetLogEventType::CERT_VERIFY_PROC_PATH_BUILT,
@@ -523,7 +526,7 @@ TEST_F(CertVerifyProcBuiltinTest, EVNoOCSPRevocationChecks) {
   ASSERT_NE(event, events.end());
   EXPECT_EQ(net::NetLogEventPhase::NONE, event->phase);
   ASSERT_TRUE(event->params.is_dict());
-  EXPECT_FALSE(event->params.FindStringKey("errors"));
+  EXPECT_FALSE(event->params.GetDict().FindString("errors"));
 
   event = base::ranges::find(
       ++event, events.end(),
@@ -531,7 +534,7 @@ TEST_F(CertVerifyProcBuiltinTest, EVNoOCSPRevocationChecks) {
   ASSERT_NE(event, events.end());
   EXPECT_EQ(net::NetLogEventPhase::END, event->phase);
   ASSERT_TRUE(event->params.is_dict());
-  EXPECT_EQ(true, event->params.FindBoolKey("has_valid_path"));
+  EXPECT_EQ(true, event->params.GetDict().FindBool("has_valid_path"));
 }
 #endif  // defined(PLATFORM_USES_CHROMIUM_EV_METADATA)
 

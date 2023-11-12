@@ -4,8 +4,8 @@
 
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -127,7 +127,7 @@ void PerfettoTracedProcess::DataSourceBase::StopTracingImpl(
 void PerfettoTracedProcess::DataSourceBase::Flush(
     base::RepeatingClosure flush_complete_callback) {
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-  perfetto::TrackEvent::Flush();
+  base::TrackEvent::Flush();
 #endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
   if (flush_complete_callback)
     std::move(flush_complete_callback).Run();
@@ -291,7 +291,7 @@ void PerfettoTracedProcess::RequestStartupTracing(
     const perfetto::TraceConfig& config,
     const perfetto::Tracing::SetupStartupTracingOpts& opts) {
   if (platform_->did_start_task_runner()) {
-    perfetto::Tracing::SetupStartupTracing(config, opts);
+    perfetto::Tracing::SetupStartupTracingBlocking(config, opts);
   } else {
     saved_config_ = config;
     saved_opts_ = opts;
@@ -305,6 +305,7 @@ void PerfettoTracedProcess::SetupClientLibrary(bool enable_consumer) {
   init_args.custom_backend = tracing_backend_.get();
   init_args.backends |= perfetto::kCustomBackend;
   init_args.supports_multiple_data_source_instances = false;
+  init_args.shmem_batch_commits_duration_ms = 1000;
 // TODO(eseckler): Not yet supported on Android to avoid binary size regression
 // of the consumer IPC messages. We'll need a way to exclude them.
 #if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID)
@@ -330,16 +331,11 @@ void PerfettoTracedProcess::SetupClientLibrary(bool enable_consumer) {
   perfetto::Tracing::Initialize(init_args);
 
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-  perfetto::TrackEvent::Register();
+  base::TrackEvent::Register();
   tracing::TracingSamplerProfiler::RegisterDataSource();
   TrackNameRecorder::GetInstance();
   CustomEventRecorder::GetInstance();
 #endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-
-  if (startup_tracing_needed_) {
-    perfetto::Tracing::SetupStartupTracing(saved_config_, saved_opts_);
-    startup_tracing_needed_ = false;
-  }
 }
 
 void PerfettoTracedProcess::OnThreadPoolAvailable(bool enable_consumer) {
@@ -355,6 +351,11 @@ void PerfettoTracedProcess::OnThreadPoolAvailable(bool enable_consumer) {
     system_producer_->OnThreadPoolAvailable();
   if (!platform_->did_start_task_runner())
     platform_->StartTaskRunner(GetTaskRunner()->GetOrCreateTaskRunner());
+
+  if (startup_tracing_needed_) {
+    perfetto::Tracing::SetupStartupTracingBlocking(saved_config_, saved_opts_);
+    startup_tracing_needed_ = false;
+  }
 }
 
 void PerfettoTracedProcess::SetAllowSystemTracingConsumerCallback(

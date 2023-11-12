@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "ash/components/arc/arc_util.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
@@ -78,6 +78,8 @@ const char kScriptGetElements[] =
 
 namespace {
 
+constexpr char kRecentAllFakePath[] = "/.fake-entry/recent/all";
+
 void ConvertToElementVector(
     const base::Value* list_value,
     std::vector<mojom::FileSelectorElementPtr>* elements) {
@@ -96,9 +98,10 @@ void OnGetElementsScriptResults(
     base::Value value) {
   mojom::FileSelectorElementsPtr result = mojom::FileSelectorElements::New();
   if (value.is_dict()) {
-    ConvertToElementVector(value.FindKey("dirNames"),
+    ConvertToElementVector(value.GetDict().Find("dirNames"),
                            &result->directory_elements);
-    ConvertToElementVector(value.FindKey("fileNames"), &result->file_elements);
+    ConvertToElementVector(value.GetDict().Find("fileNames"),
+                           &result->file_elements);
     // TODO(niwa): Fill result->search_query.
   }
   std::move(callback).Run(std::move(result));
@@ -133,11 +136,11 @@ ui::SelectFileDialog::Type GetDialogType(
 base::FilePath GetInitialFilePath(const mojom::SelectFilesRequestPtr& request) {
   const mojom::DocumentPathPtr& document_path = request->initial_document_path;
   if (!document_path)
-    return base::FilePath();
+    return base::FilePath(kRecentAllFakePath);
 
   if (document_path->path.empty()) {
     LOG(ERROR) << "path should at least contain root Document ID.";
-    return base::FilePath();
+    return base::FilePath(kRecentAllFakePath);
   }
 
   const std::string& root_document_id = document_path->path[0];
@@ -150,16 +153,16 @@ void BuildFileTypeInfo(const mojom::SelectFilesRequestPtr& request,
                        ui::SelectFileDialog::FileTypeInfo* file_type_info) {
   file_type_info->allowed_paths = ui::SelectFileDialog::FileTypeInfo::ANY_PATH;
   for (const std::string& mime_type : request->mime_types) {
-    std::vector<base::FilePath::StringType> extensions;
-    net::GetExtensionsForMimeType(mime_type, &extensions);
+    const std::vector<base::FilePath::StringType> extensions =
+        GetExtensionsForArcMimeType(mime_type);
     if (!extensions.empty()) {
       file_type_info->extensions.push_back(extensions);
     }
 
-    // Enable "Select from all files" option if GetExtensionsForMimeType
+    // Enable "Select from all files" option if GetExtensionsForArcMimeType
     // can't find any matching extensions or specified MIME type contains an
-    // asterisk. This is because some extensions used in Android (e.g. .DNG) are
-    // not covered by GetExtensionsForMimeType. (crbug.com/1034874)
+    // asterisk. This is to support extensions that are not covered by
+    // GetExtensionsForArcMimeType. (crbug.com/1034874)
     if (extensions.empty() ||
         base::EndsWith(mime_type, "/*", base::CompareCase::SENSITIVE)) {
       file_type_info->include_all_files = true;

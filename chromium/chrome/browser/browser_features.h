@@ -20,12 +20,12 @@ namespace features {
 
 BASE_DECLARE_FEATURE(kClosedTabCache);
 
-BASE_DECLARE_FEATURE(kColorProviderRedirectionForThemeProvider);
-
 BASE_DECLARE_FEATURE(kDestroyProfileOnBrowserClose);
 BASE_DECLARE_FEATURE(kDestroySystemProfiles);
 
 BASE_DECLARE_FEATURE(kDevToolsTabTarget);
+
+BASE_DECLARE_FEATURE(kKeepToolbarTexture);
 
 BASE_DECLARE_FEATURE(kNukeProfileBeforeCreateMultiAsync);
 
@@ -81,6 +81,8 @@ BASE_DECLARE_FEATURE(kAppBoundEncryptionMetrics);
 BASE_DECLARE_FEATURE(kFlexOrgManagementDisclosure);
 
 BASE_DECLARE_FEATURE(kFedCmWithoutThirdPartyCookies);
+
+BASE_DECLARE_FEATURE(kIncomingCallNotifications);
 
 }  // namespace features
 

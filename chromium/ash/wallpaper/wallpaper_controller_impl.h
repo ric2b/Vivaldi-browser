@@ -24,13 +24,11 @@
 #include "ash/shell_observer.h"
 #include "ash/wallpaper/online_wallpaper_variant_info_fetcher.h"
 #include "ash/wallpaper/wallpaper_utils/wallpaper_calculated_colors.h"
-#include "ash/wallpaper/wallpaper_utils/wallpaper_color_calculator_observer.h"
 #include "ash/wallpaper/wallpaper_utils/wallpaper_resizer_observer.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom-forward.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
-#include "base/files/file_path_watcher.h"
 #include "base/gtest_prod_util.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
@@ -80,7 +78,6 @@ class ASH_EXPORT WallpaperControllerImpl
       public WindowTreeHostManager::Observer,
       public ShellObserver,
       public WallpaperResizerObserver,
-      public WallpaperColorCalculatorObserver,
       public SessionObserver,
       public TabletModeObserver,
       public OverviewObserver,
@@ -88,11 +85,6 @@ class ASH_EXPORT WallpaperControllerImpl
       public ui::NativeThemeObserver,
       public ColorModeObserver {
  public:
-  enum WallpaperResolution {
-    WALLPAPER_RESOLUTION_LARGE,
-    WALLPAPER_RESOLUTION_SMALL
-  };
-
   // Directory names of custom wallpapers.
   static const char kSmallWallpaperSubDir[];
   static const char kLargeWallpaperSubDir[];
@@ -137,7 +129,9 @@ class ASH_EXPORT WallpaperControllerImpl
   // Returns the k mean color of the current wallpaper.
   SkColor GetKMeanColor() const;
 
-  const WallpaperCalculatedColors& calculated_colors() const {
+  // Returns the set of calculated colors. If the colors have not yet been
+  // calculated yet, returns an empty object.
+  const absl::optional<WallpaperCalculatedColors>& calculated_colors() const {
     return calculated_colors_;
   }
 
@@ -231,6 +225,10 @@ class ASH_EXPORT WallpaperControllerImpl
                            bool show_wallpaper,
                            const base::FilePath& wallpaper_path);
 
+  // Returns false when the color extraction algorithm shouldn't be run based on
+  // system state (e.g. wallpaper image, SessionState, etc.).
+  bool ShouldCalculateColors() const;
+
   // WallpaperController:
   void SetClient(WallpaperControllerClient* client) override;
   void SetDriveFsDelegate(
@@ -239,6 +237,7 @@ class ASH_EXPORT WallpaperControllerImpl
             const base::FilePath& wallpapers,
             const base::FilePath& custom_wallpapers,
             const base::FilePath& device_policy_wallpaper) override;
+  bool CanSetUserWallpaper(const AccountId& account_id) const override;
   void SetCustomWallpaper(const AccountId& account_id,
                           const base::FilePath& file_path,
                           WallpaperLayout layout,
@@ -253,8 +252,6 @@ class ASH_EXPORT WallpaperControllerImpl
                                  const gfx::ImageSkia& image) override;
   void SetOnlineWallpaper(const OnlineWallpaperParams& params,
                           SetWallpaperCallback callback) override;
-  void SetOnlineWallpaperIfExists(const OnlineWallpaperParams& params,
-                                  SetWallpaperCallback callback) override;
   void SetGooglePhotosWallpaper(const GooglePhotosWallpaperParams& params,
                                 SetWallpaperCallback callback) override;
   void SetGooglePhotosDailyRefreshAlbumId(const AccountId& account_id,
@@ -296,10 +293,9 @@ class ASH_EXPORT WallpaperControllerImpl
   void ShowOneShotWallpaper(const gfx::ImageSkia& image) override;
   void ShowAlwaysOnTopWallpaper(const base::FilePath& image_path) override;
   void RemoveAlwaysOnTopWallpaper() override;
-  void RemoveUserWallpaper(const AccountId& account_id) override;
+  void RemoveUserWallpaper(const AccountId& account_id,
+                           base::OnceClosure on_removed) override;
   void RemovePolicyWallpaper(const AccountId& account_id) override;
-  void GetOfflineWallpaperList(
-      GetOfflineWallpaperListCallback callback) override;
   void SetAnimationDuration(base::TimeDelta animation_duration) override;
   void OpenWallpaperPickerIfAllowed() override;
   void MinimizeInactiveWindows(const std::string& user_id_hash) override;
@@ -331,9 +327,6 @@ class ASH_EXPORT WallpaperControllerImpl
 
   // WallpaperResizerObserver:
   void OnWallpaperResized() override;
-
-  // WallpaperColorCalculatorObserver:
-  void OnColorCalculationComplete() override;
 
   // SessionObserver:
   void OnSessionStateChanged(session_manager::SessionState state) override;
@@ -432,10 +425,12 @@ class ASH_EXPORT WallpaperControllerImpl
 
   // Implementation of |RemoveUserWallpaper|, which deletes |account_id|'s
   // custom wallpapers and directories.
-  void RemoveUserWallpaperImpl(const AccountId& account_id);
+  void RemoveUserWallpaperImpl(const AccountId& account_id,
+                               base::OnceClosure on_removed);
 
   void RemoveUserWallpaperImplWithFilesId(
       const AccountId& account_id,
+      base::OnceClosure on_removed,
       const std::string& wallpaper_files_id);
 
   // Implementation of |SetDefaultWallpaper|. Sets wallpaper to default if
@@ -444,10 +439,6 @@ class ASH_EXPORT WallpaperControllerImpl
   void SetDefaultWallpaperImpl(user_manager::UserType user_type,
                                bool show_wallpaper,
                                SetWallpaperCallback callback);
-
-  // When kiosk app is running or policy is enforced, setting a user wallpaper
-  // is not allowed.
-  bool CanSetUserWallpaper(const AccountId& account_id) const;
 
   // Returns true if the specified wallpaper is already stored in
   // |current_wallpaper_|. If |compare_layouts| is false, layout is ignored.
@@ -466,7 +457,7 @@ class ASH_EXPORT WallpaperControllerImpl
                                const base::Time& date);
 
   // Used as the callback of checking `WallpaperType::kOnline` wallpaper
-  // existence in `SetOnlineWallpaperIfExists`. Initiates reading and decoding
+  // existence in `SetOnlineWallpaper`. Initiates reading and decoding
   // the wallpaper if `file_path` is not empty.
   void SetOnlineWallpaperFromPath(SetWallpaperCallback callback,
                                   const OnlineWallpaperParams& params,
@@ -641,9 +632,11 @@ class ASH_EXPORT WallpaperControllerImpl
   // If an existing calculation is in progress it is destroyed.
   void CalculateWallpaperColors();
 
-  // Returns false when the color extraction algorithm shouldn't be run based on
-  // system state (e.g. wallpaper image, SessionState, etc.).
-  bool ShouldCalculateColors() const;
+  // Callback to handle the completed color computation for the wallpaper
+  // matching `info`. Caches `colors` locally and saves the result to local
+  // state.
+  void OnColorCalculationComplete(const WallpaperInfo& info,
+                                  const WallpaperCalculatedColors& colors);
 
   // The callback when decoding of the always-on-top wallpaper completes.
   void OnAlwaysOnTopWallpaperDecoded(const WallpaperInfo& info,
@@ -744,12 +737,11 @@ class ASH_EXPORT WallpaperControllerImpl
   void HandleCustomWallpaperInfoSyncedIn(const AccountId& account_id,
                                          const WallpaperInfo& info);
 
-  void DriveFsWallpaperChanged(const base::FilePath& path, bool error);
+  void OnDriveFsWallpaperChange(const AccountId& account_id, bool success);
 
   void OnGetDriveFsWallpaperModificationTime(
       const AccountId& account_id,
       const WallpaperInfo& wallpaper_info,
-      const base::FilePath& drivefs_path,
       base::Time modification_time);
 
   PrefService* GetUserPrefServiceSyncable(const AccountId& account_id) const;
@@ -800,8 +792,8 @@ class ASH_EXPORT WallpaperControllerImpl
   std::unique_ptr<OnlineWallpaperVariantInfoFetcher> variant_info_fetcher_;
 
   // The calculated colors extracted from the current wallpaper.
-  // kInvalidWallpaperColor is used by default or if extracting colors fails.
-  WallpaperCalculatedColors calculated_colors_;
+  // Empty state is used to denote when colors have not yet been calculated.
+  absl::optional<WallpaperCalculatedColors> calculated_colors_;
 
   // Caches the color profiles that need to do wallpaper color extracting.
   const std::vector<color_utils::ColorProfile> color_profiles_;
@@ -865,8 +857,6 @@ class ASH_EXPORT WallpaperControllerImpl
   // size change). Non-empty if and only if |is_always_on_top_wallpaper_| is
   // true.
   base::RepeatingClosure reload_always_on_top_wallpaper_callback_;
-
-  base::FilePathWatcher drive_fs_wallpaper_watcher_;
 
   // Transient storage for the wallpaper variant (out of the N total variants
   // that may exist for a given "unit") that was requested by the client. The

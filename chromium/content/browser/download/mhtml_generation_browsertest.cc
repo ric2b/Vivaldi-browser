@@ -5,11 +5,11 @@
 #include <stdint.h>
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -46,6 +46,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "base/functional/callback_helpers.h"
+#include "base/test/bind.h"
+#endif  // BUILDFLAG(IS_WIN)
 
 using testing::ContainsRegex;
 using testing::HasSubstr;
@@ -524,6 +529,51 @@ IN_PROC_BROWSER_TEST_P(MHTMLGenerationTest, GenerateMHTML) {
       "PageSerialization.MhtmlGeneration.FinalSaveStatus",
       static_cast<int>(mojom::MhtmlSaveStatus::kSuccess), 1);
 }
+
+#if BUILDFLAG(IS_WIN)
+// This Windows only test generates an MHTML file in a path that is explicitly
+// not in the temp directory and not in the user data dir. This is to test that
+// the mojo security constraints correctly allow this writeable handle to a
+// renderer process. See `mojo/core/platform_handle_security_util_win.cc`.
+IN_PROC_BROWSER_TEST_P(MHTMLGenerationTest, GenerateMHTMLInNonTempDir) {
+  base::FilePath local_app_data;
+  // This test creates a temporary directory in %LocalAppData% then deletes it
+  // afterwards.
+  EXPECT_TRUE(
+      base::PathService::Get(base::DIR_LOCAL_APP_DATA, &local_app_data));
+  base::FilePath new_dir;
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    EXPECT_TRUE(base::CreateTemporaryDirInDir(
+        local_app_data, FILE_PATH_LITERAL("MHTMLGenerationTest"), &new_dir));
+  }
+  base::ScopedClosureRunner delete_dir(base::BindLambdaForTesting([new_dir]() {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::DeletePathRecursively(new_dir);
+  }));
+
+  base::FilePath path = new_dir.Append(FILE_PATH_LITERAL("test.mht"));
+
+  GenerateMHTML(path, embedded_test_server()->GetURL("/simple_page.html"));
+
+  // Make sure the actual generated file has some contents.
+  EXPECT_GT(file_size(), 0);  // Verify the size reported by the callback.
+  EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
+
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    std::string mhtml;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+    EXPECT_THAT(mhtml,
+                HasSubstr("Content-Transfer-Encoding: quoted-printable"));
+  }
+
+  // Checks that the final status reported to UMA is correct.
+  histogram_tester()->ExpectUniqueSample(
+      "PageSerialization.MhtmlGeneration.FinalSaveStatus",
+      static_cast<int>(mojom::MhtmlSaveStatus::kSuccess), 1);
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 // Regression test for the crash/race from https://crbug.com/612098.
 //

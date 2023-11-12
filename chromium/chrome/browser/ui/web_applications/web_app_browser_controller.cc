@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ui/web_applications/web_app_browser_controller.h"
 
-#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -37,10 +37,10 @@
 #include "chrome/browser/web_applications/web_app_tab_helper.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
-#include "components/services/app_service/public/mojom/types.mojom-forward.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/native_theme/native_theme.h"
@@ -64,15 +64,15 @@
 #include "chromeos/startup/browser_params_proxy.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS)
 namespace {
+
+const int kMinimumHomeTabIconSizeInPx = 16;
+
+#if BUILDFLAG(IS_CHROMEOS)
 constexpr char kRelationship[] = "delegate_permission/common.handle_all_urls";
-}
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-namespace {
-
 // SystemWebAppDelegate provides menu.
 class SystemAppTabMenuModelFactory : public TabMenuModelFactory {
  public:
@@ -95,9 +95,19 @@ class SystemAppTabMenuModelFactory : public TabMenuModelFactory {
  private:
   raw_ptr<const ash::SystemWebAppDelegate> system_app_;
 };
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+base::OnceClosure& IconLoadCallbackForTesting() {
+  static base::NoDestructor<base::OnceClosure> callback;
+  return *callback;
+}
+
+base::OnceClosure& ManifestUpdateAppliedCallbackForTesting() {
+  static base::NoDestructor<base::OnceClosure> callback;
+  return *callback;
+}
 
 }  // namespace
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace web_app {
 
@@ -116,6 +126,10 @@ WebAppBrowserController::WebAppBrowserController(
       system_app_(system_app)
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 {
+  manifest_display_mode_ =
+      registrar().GetEffectiveDisplayModeFromManifest(this->app_id());
+  effective_display_mode_ =
+      registrar().GetAppEffectiveDisplayMode(this->app_id());
   install_manager_observation_.Observe(&provider.install_manager());
   PerformDigitalAssetLinkVerification(browser);
 }
@@ -125,10 +139,8 @@ WebAppBrowserController::~WebAppBrowserController() = default;
 bool WebAppBrowserController::HasMinimalUiButtons() const {
   if (has_tab_strip())
     return false;
-  DisplayMode app_display_mode =
-      registrar().GetEffectiveDisplayModeFromManifest(app_id());
-  return app_display_mode == DisplayMode::kBrowser ||
-         app_display_mode == DisplayMode::kMinimalUi;
+  return manifest_display_mode_ == DisplayMode::kBrowser ||
+         manifest_display_mode_ == DisplayMode::kMinimalUi;
 }
 
 bool WebAppBrowserController::IsHostedApp() const {
@@ -146,8 +158,7 @@ WebAppBrowserController::GetTabMenuModelFactory() const {
 }
 
 bool WebAppBrowserController::AppUsesWindowControlsOverlay() const {
-  DisplayMode display = registrar().GetAppEffectiveDisplayMode(app_id());
-  return display == DisplayMode::kWindowControlsOverlay;
+  return effective_display_mode_ == DisplayMode::kWindowControlsOverlay;
 }
 
 bool WebAppBrowserController::IsWindowControlsOverlayEnabled() const {
@@ -161,7 +172,7 @@ void WebAppBrowserController::ToggleWindowControlsOverlayEnabled(
 
   provider_->scheduler().ScheduleCallbackWithLock<AppLock>(
       "WebAppBrowserController::ToggleWindowControlsOverlayEnabled",
-      std::make_unique<AppLockDescription, base::flat_set<AppId>>({app_id()}),
+      std::make_unique<AppLockDescription>(app_id()),
       base::BindOnce(
           [](base::OnceClosure on_complete, const AppId& app_id,
              AppLock& lock) {
@@ -174,12 +185,14 @@ void WebAppBrowserController::ToggleWindowControlsOverlayEnabled(
 }
 
 bool WebAppBrowserController::AppUsesBorderlessMode() const {
-  DisplayMode display = registrar().GetAppEffectiveDisplayMode(app_id());
-  return display == DisplayMode::kBorderless;
+  return effective_display_mode_ == DisplayMode::kBorderless;
 }
 
 bool WebAppBrowserController::AppUsesTabbed() const {
-  return registrar().IsTabbedWindowModeEnabled(app_id());
+  if (!base::FeatureList::IsEnabled(features::kDesktopPWAsTabStrip)) {
+    return false;
+  }
+  return effective_display_mode_ == DisplayMode::kTabbed;
 }
 
 bool WebAppBrowserController::IsIsolatedWebApp() const {
@@ -220,7 +233,7 @@ bool WebAppBrowserController::AlwaysShowToolbarInFullscreen() const {
 void WebAppBrowserController::ToggleAlwaysShowToolbarInFullscreen() {
   provider_->scheduler().ScheduleCallbackWithLock<AppLock>(
       "WebAppBrowserController::ToggleAlwaysShowToolbarInFullscreen",
-      std::make_unique<AppLockDescription, base::flat_set<AppId>>({app_id()}),
+      std::make_unique<AppLockDescription>(app_id()),
       base::BindOnce(
           [](const AppId& app_id, AppLock& lock) {
             lock.sync_bridge().SetAlwaysShowToolbarInFullscreen(
@@ -289,13 +302,22 @@ void WebAppBrowserController::OnWebAppUninstalled(
     chrome::CloseWindow(browser());
 }
 
-void WebAppBrowserController::OnWebAppInstallManagerDestroyed() {
-  install_manager_observation_.Reset();
+void WebAppBrowserController::OnWebAppManifestUpdated(
+    const AppId& updated_app_id,
+    base::StringPiece old_name) {
+  if (updated_app_id == app_id()) {
+    UpdateThemePack();
+    app_icon_.reset();
+    browser()->window()->UpdateTitleBar();
+
+    if (ManifestUpdateAppliedCallbackForTesting()) {
+      std::move(ManifestUpdateAppliedCallbackForTesting()).Run();
+    }
+  }
 }
 
-void WebAppBrowserController::SetReadIconCallbackForTesting(
-    base::OnceClosure callback) {
-  callback_for_testing_ = std::move(callback);
+void WebAppBrowserController::OnWebAppInstallManagerDestroyed() {
+  install_manager_observation_.Reset();
 }
 
 ui::ImageModel WebAppBrowserController::GetWindowAppIcon() const {
@@ -320,6 +342,45 @@ ui::ImageModel WebAppBrowserController::GetWindowAppIcon() const {
   }
 
   return *app_icon_;
+}
+
+bool WebAppBrowserController::DoesHomeTabIconExist() const {
+  const web_app::WebApp* web_app = registrar().GetAppById(app_id());
+  if (web_app && web_app->tab_strip()) {
+    web_app::TabStrip tab_strip = web_app->tab_strip().value();
+    if (const auto* params =
+            absl::get_if<blink::Manifest::HomeTabParams>(&tab_strip.home_tab)) {
+      return !params->icons.empty();
+    }
+  }
+  return false;
+}
+
+gfx::ImageSkia WebAppBrowserController::GetHomeTabIcon() const {
+  if (home_tab_icon_) {
+    return *home_tab_icon_;
+  }
+
+  const web_app::WebApp* web_app = registrar().GetAppById(app_id());
+  if (web_app && web_app->tab_strip()) {
+    web_app::TabStrip tab_strip = web_app->tab_strip().value();
+    if (const auto* params =
+            absl::get_if<blink::Manifest::HomeTabParams>(&tab_strip.home_tab)) {
+      if (!params->icons.empty()) {
+        provider_->icon_manager().ReadBestHomeTabIcon(
+            app_id(), params->icons, kMinimumHomeTabIconSizeInPx,
+            base::BindOnce(&WebAppBrowserController::OnReadHomeTabIcon,
+                           weak_ptr_factory_.GetWeakPtr()));
+      }
+    }
+  }
+  if (!home_tab_icon_) {
+    home_tab_icon_ = provider_->icon_manager().GetMonochromeFavicon(app_id());
+  }
+  if (home_tab_icon_->width() == 0 || home_tab_icon_->height() == 0) {
+    home_tab_icon_ = *(GetWindowAppIcon().GetImage().ToImageSkia());
+  }
+  return *home_tab_icon_;
 }
 
 ui::ImageModel WebAppBrowserController::GetWindowIcon() const {
@@ -502,6 +563,22 @@ bool WebAppBrowserController::IsInstalled() const {
   return registrar().IsInstalled(app_id());
 }
 
+base::CallbackListSubscription
+WebAppBrowserController::AddHomeTabIconLoadCallbackForTesting(
+    base::OnceClosure callback) {
+  return home_tab_callback_list_.Add(std::move(callback));
+}
+
+void WebAppBrowserController::SetIconLoadCallbackForTesting(
+    base::OnceClosure callback) {
+  IconLoadCallbackForTesting() = std::move(callback);
+}
+
+void WebAppBrowserController::SetManifestUpdateAppliedCallbackForTesting(
+    base::OnceClosure callback) {
+  ManifestUpdateAppliedCallbackForTesting() = std::move(callback);
+}
+
 void WebAppBrowserController::OnTabInserted(content::WebContents* contents) {
   AppBrowserController::OnTabInserted(contents);
   SetAppPrefsForWebContents(contents);
@@ -512,9 +589,8 @@ void WebAppBrowserController::OnTabInserted(content::WebContents* contents) {
   // considered "appy".
   WebAppTabHelper::FromWebContents(contents)->set_acting_as_app(true);
 
-  if (registrar().IsTabbedWindowModeEnabled(app_id()) &&
-      IsPinnedHomeTabUrl(registrar(), app_id(),
-                         contents->GetLastCommittedURL())) {
+  if (AppUsesTabbed() && IsPinnedHomeTabUrl(registrar(), app_id(),
+                                            contents->GetLastCommittedURL())) {
     WebAppTabHelper::FromWebContents(contents)->set_is_pinned_home_tab(true);
   }
 }
@@ -553,8 +629,24 @@ void WebAppBrowserController::OnLoadIcon(apps::IconValuePtr icon_value) {
 
   if (auto* contents = web_contents())
     contents->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
-  if (callback_for_testing_)
-    std::move(callback_for_testing_).Run();
+  if (IconLoadCallbackForTesting()) {
+    std::move(IconLoadCallbackForTesting()).Run();
+  }
+}
+
+void WebAppBrowserController::OnReadHomeTabIcon(
+    SkBitmap home_tab_icon_bitmap) const {
+  if (home_tab_icon_bitmap.empty()) {
+    DLOG(ERROR) << "Failed to read icon for the pinned home tab";
+    return;
+  }
+
+  home_tab_icon_ = gfx::ImageSkia::CreateFrom1xBitmap(home_tab_icon_bitmap);
+  if (auto* contents = web_contents()) {
+    contents->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
+  }
+
+  home_tab_callback_list_.Notify();
 }
 
 void WebAppBrowserController::OnReadIcon(IconPurpose purpose, SkBitmap bitmap) {
@@ -570,8 +662,9 @@ void WebAppBrowserController::OnReadIcon(IconPurpose purpose, SkBitmap bitmap) {
       ui::ImageModel::FromImageSkia(gfx::ImageSkia::CreateFrom1xBitmap(bitmap));
   if (auto* contents = web_contents())
     contents->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TAB);
-  if (callback_for_testing_)
-    std::move(callback_for_testing_).Run();
+  if (IconLoadCallbackForTesting()) {
+    std::move(IconLoadCallbackForTesting()).Run();
+  }
 }
 
 void WebAppBrowserController::PerformDigitalAssetLinkVerification(

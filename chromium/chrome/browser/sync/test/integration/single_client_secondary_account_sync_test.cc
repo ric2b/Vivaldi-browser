@@ -11,7 +11,6 @@
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/test/integration/secondary_account_helper.h"
-#include "chrome/browser/sync/test/integration/single_client_status_change_checker.h"
 #include "chrome/browser/sync/test/integration/sync_service_impl_harness.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
 #include "chrome/common/chrome_paths.h"
@@ -53,6 +52,8 @@ class SingleClientSecondaryAccountSyncTest : public SyncTest {
   ~SingleClientSecondaryAccountSyncTest() override = default;
 
   void SetUpInProcessBrowserTestFixture() override {
+    SyncTest::SetUpInProcessBrowserTestFixture();
+
     test_signin_client_subscription_ =
         secondary_account_helper::SetUpSigninClient(&test_url_loader_factory_);
   }
@@ -180,8 +181,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientSecondaryAccountSyncTest,
   // Save the cache GUID to file to remember after restart, for test
   // verification purposes only.
   base::ScopedAllowBlockingForTesting allow_blocking;
-  ASSERT_NE(-1, base::WriteFile(GetTestFilePathForCacheGuid(),
-                                cache_guid.c_str(), cache_guid.size()));
+  ASSERT_TRUE(base::WriteFile(GetTestFilePathForCacheGuid(), cache_guid));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientSecondaryAccountSyncTest,

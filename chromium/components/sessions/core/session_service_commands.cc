@@ -61,6 +61,7 @@ static const SessionCommand::id_type kCommandSessionStorageAssociated = 19;
 static const SessionCommand::id_type kCommandSetActiveWindow = 20;
 
 // VIVALDI SPECIFIC below, must not change or we must migrate data!
+// Note: These are duplicated in browser/sessions/vivaldi_session_utils.cc
 static const SessionCommand::id_type kCommandSetExtData = 21;
 static const SessionCommand::id_type kCommandSetWindowExtData = 22;
 // VIVALDI SPECIFIC above

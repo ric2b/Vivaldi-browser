@@ -12,9 +12,9 @@
 #include "ash/public/cpp/test/app_list_test_api.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/shell.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback.h"
 #include "base/run_loop.h"
 #include "base/strings/safe_sprintf.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -1095,8 +1095,17 @@ IN_PROC_BROWSER_TEST_F(AppListSortBrowserTest,
 // Verify that switching to clamshell mode when the fade in animation in tablet
 // mode is running, and gets aborted during tablet mode transition works as
 // expected.
-IN_PROC_BROWSER_TEST_F(AppListSortBrowserTest,
-                       TransitionToClamshellModeDuringAbortedFadeInAnimation) {
+// TODO(crbug.com/1404129): flaky on linux-chromeos-dbg.
+#if (BUILDFLAG(IS_CHROMEOS) && !defined(NDEBUG))
+#define MAYBE_TransitionToClamshellModeDuringAbortedFadeInAnimation \
+  DISABLED_TransitionToClamshellModeDuringAbortedFadeInAnimation
+#else
+#define MAYBE_TransitionToClamshellModeDuringAbortedFadeInAnimation \
+  TransitionToClamshellModeDuringAbortedFadeInAnimation
+#endif  // BUILDFLAG(IS_CHROMEOS) && !defined(NDEBUG))
+IN_PROC_BROWSER_TEST_F(
+    AppListSortBrowserTest,
+    MAYBE_TransitionToClamshellModeDuringAbortedFadeInAnimation) {
   ash::ShellTestApi().SetTabletModeEnabledForTest(true);
 
   ash::AcceleratorController::Get()->PerformActionIfEnabled(
@@ -1565,8 +1574,9 @@ class AppListSortLoginTalbetTest : public ash::LoginManagerTest {
   ash::LoginManagerMixin login_mixin_{&mixin_host_};
 };
 
+// TODO(https://crbug.com/1411204): Flaky test.
 IN_PROC_BROWSER_TEST_F(AppListSortLoginTalbetTest,
-                       PRE_SwitchUnderTemporarySort) {
+                       DISABLED_PRE_SwitchUnderTemporarySort) {
   LoginUser(account_id1_);
 
   // Because Account 1 is new, the reorder education nudge should show.
@@ -1588,7 +1598,10 @@ IN_PROC_BROWSER_TEST_F(AppListSortLoginTalbetTest,
 
 // Verifies that the active account switch works as expected when the app list
 // is under temporary sort.
-IN_PROC_BROWSER_TEST_F(AppListSortLoginTalbetTest, SwitchUnderTemporarySort) {
+//
+// TODO(https://crbug.com/1411204): Flaky test.
+IN_PROC_BROWSER_TEST_F(AppListSortLoginTalbetTest,
+                       DISABLED_SwitchUnderTemporarySort) {
   LoginUser(account_id1_);
 
   // Reorder has been triggered in the pretest so the toast should not show.

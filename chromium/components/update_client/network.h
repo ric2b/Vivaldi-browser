@@ -10,8 +10,8 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/ref_counted.h"
 
 class GURL;
@@ -36,6 +36,7 @@ class NetworkFetcher {
       base::OnceCallback<void(int net_error, int64_t content_size)>;
   using ResponseStartedCallback =
       base::OnceCallback<void(int response_code, int64_t content_length)>;
+  // `current` is the number of bytes received thus far.
   using ProgressCallback = base::RepeatingCallback<void(int64_t current)>;
 
   // The following two headers carry the ECSDA signature of the POST response,

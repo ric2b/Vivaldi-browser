@@ -9,13 +9,14 @@
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
 
-import {AudioDevice, AudioDeviceType, AudioSystemProperties as AudioSystemPropertiesMojom, CrosAudioConfigInterface, MuteState} from '../../mojom-webui/audio/cros_audio_config.mojom-webui.js';
+import {AudioDevice, AudioDeviceType, AudioEffectState, AudioSystemProperties, CrosAudioConfigInterface, MuteState} from '../../mojom-webui/cros_audio_config.mojom-webui.js';
 
 export const defaultFakeMicJack: AudioDevice = {
   id: BigInt(1),
   displayName: 'Mic Jack',
   isActive: true,
   deviceType: AudioDeviceType.kInternalMic,
+  noiseCancellationState: AudioEffectState.kNotSupported,
 };
 
 export const fakeSpeakerActive: AudioDevice = {
@@ -23,6 +24,7 @@ export const fakeSpeakerActive: AudioDevice = {
   displayName: 'Speaker',
   isActive: true,
   deviceType: AudioDeviceType.kInternalSpeaker,
+  noiseCancellationState: AudioEffectState.kNotSupported,
 };
 
 export const fakeMicJackInactive: AudioDevice = {
@@ -30,6 +32,7 @@ export const fakeMicJackInactive: AudioDevice = {
   displayName: 'Mic Jack',
   isActive: false,
   deviceType: AudioDeviceType.kInternalSpeaker,
+  noiseCancellationState: AudioEffectState.kNotSupported,
 };
 
 export const defaultFakeSpeaker: AudioDevice = {
@@ -37,6 +40,7 @@ export const defaultFakeSpeaker: AudioDevice = {
   displayName: 'Speaker',
   isActive: false,
   deviceType: AudioDeviceType.kInternalSpeaker,
+  noiseCancellationState: AudioEffectState.kNotSupported,
 };
 
 export const fakeInternalFrontMic: AudioDevice = {
@@ -44,6 +48,7 @@ export const fakeInternalFrontMic: AudioDevice = {
   displayName: 'FrontMic',
   isActive: true,
   deviceType: AudioDeviceType.kFrontMic,
+  noiseCancellationState: AudioEffectState.kNotEnabled,
 };
 
 export const fakeBluetoothMic: AudioDevice = {
@@ -51,15 +56,16 @@ export const fakeBluetoothMic: AudioDevice = {
   displayName: 'Bluetooth Mic',
   isActive: false,
   deviceType: AudioDeviceType.kBluetoothNbMic,
+  noiseCancellationState: AudioEffectState.kNotSupported,
 };
 
-// TODO(b/260277007): Remove type alias and unused types when mojo updated to
-// handle audio input.
-export interface AudioSystemProperties extends AudioSystemPropertiesMojom {
-  inputDevices: AudioDevice[];
-  inputMuteState: MuteState;
-  inputVolumePercent: number;
-}
+export const fakeInternalMicActive: AudioDevice = {
+  id: BigInt(7),
+  displayName: 'Internal Mic',
+  isActive: true,
+  deviceType: AudioDeviceType.kInternalMic,
+  noiseCancellationState: AudioEffectState.kNotSupported,
+};
 
 export interface FakePropertiesObserverInterface {
   onPropertiesUpdated(properties: AudioSystemProperties): void;
@@ -68,10 +74,10 @@ export interface FakePropertiesObserverInterface {
 export const defaultFakeAudioSystemProperties: AudioSystemProperties = {
   outputDevices: [defaultFakeSpeaker, defaultFakeMicJack],
   outputVolumePercent: 75,
+  inputGainPercent: 87,
   outputMuteState: MuteState.kNotMuted,
   inputDevices: [fakeInternalFrontMic, fakeBluetoothMic],
   inputMuteState: MuteState.kNotMuted,
-  inputVolumePercent: 57,
 };
 
 /** Creates an audio device based on provided device and isActive override. */
@@ -82,10 +88,7 @@ export function createAudioDevice(
 }
 
 export interface FakeCrosAudioConfigInterface extends CrosAudioConfigInterface {
-  setActiveDevice(outputDevice: AudioDevice): void;
-  setOutputMuted(muted: boolean): void;
-  setInputMuted(muted: boolean): void;
-  setInputVolumePercent(percent: number): void;
+  setInputGainPercent(percent: number): void;
 }
 
 export class FakeCrosAudioConfig implements FakeCrosAudioConfigInterface {
@@ -102,23 +105,23 @@ export class FakeCrosAudioConfig implements FakeCrosAudioConfigInterface {
   /**
    * Sets the active output or input device and notifies observers.
    */
-  setActiveDevice(nextActiveDevice: AudioDevice): void {
+  setActiveDevice(deviceId: bigint): void {
     const isOutputDevice: boolean =
         !!(this.audioSystemProperties.outputDevices.find(
-            (device: AudioDevice) => device.id === nextActiveDevice.id));
+            (device: AudioDevice) => device.id === deviceId));
     if (isOutputDevice) {
       const devices = this.audioSystemProperties.outputDevices.map(
           (device: AudioDevice): AudioDevice =>
-              createAudioDevice(device, device.id === nextActiveDevice.id));
+              createAudioDevice(device, device.id === deviceId));
       this.audioSystemProperties.outputDevices = devices;
     } else {
       // Device must be an input device otherwise an invalid device was
       // provided.
       assert(this.audioSystemProperties.inputDevices.find(
-          (device: AudioDevice) => device.id === nextActiveDevice.id));
+          (device: AudioDevice) => device.id === deviceId));
       const devices = this.audioSystemProperties.inputDevices.map(
           (device: AudioDevice): AudioDevice =>
-              createAudioDevice(device, device.id === nextActiveDevice.id));
+              createAudioDevice(device, device.id === deviceId));
       this.audioSystemProperties.inputDevices = devices;
     }
     this.notifyAudioSystemPropertiesUpdated();
@@ -130,6 +133,25 @@ export class FakeCrosAudioConfig implements FakeCrosAudioConfigInterface {
    */
   setAudioSystemProperties(properties: AudioSystemProperties): void {
     this.audioSystemProperties = properties;
+    this.notifyAudioSystemPropertiesUpdated();
+  }
+
+  /** Handle updating active input device noise cancellation state. */
+  setNoiseCancellationEnabled(enabled: boolean): void {
+    if (!this.audioSystemProperties.inputDevices) {
+      return;
+    }
+
+    const activeIndex = this.audioSystemProperties.inputDevices.findIndex(
+        (device: AudioDevice) => device.isActive &&
+            device.noiseCancellationState !== AudioEffectState.kNotSupported);
+    if (activeIndex === -1) {
+      return;
+    }
+    const nextState: AudioEffectState =
+        enabled ? AudioEffectState.kEnabled : AudioEffectState.kNotEnabled;
+    this.audioSystemProperties.inputDevices[activeIndex]
+        .noiseCancellationState = nextState;
     this.notifyAudioSystemPropertiesUpdated();
   }
 
@@ -153,12 +175,12 @@ export class FakeCrosAudioConfig implements FakeCrosAudioConfigInterface {
   }
 
   /**
-   * Sets the `inputVolumePercent` to the desired volume and notifies
+   * Sets the `inputGainPercent` to the desired volume and notifies
    * observers.
    */
-  setInputVolumePercent(volume: number): void {
-    assert(volume >= 0 && volume <= 100);
-    this.audioSystemProperties.inputVolumePercent = volume;
+  setInputGainPercent(gain: number): void {
+    assert(gain >= 0 && gain <= 100);
+    this.audioSystemProperties.inputGainPercent = Math.round(gain);
     this.notifyAudioSystemPropertiesUpdated();
   }
 
@@ -167,7 +189,7 @@ export class FakeCrosAudioConfig implements FakeCrosAudioConfigInterface {
    * observers.
    */
   setOutputVolumePercent(volume: number): void {
-    this.audioSystemProperties.outputVolumePercent = volume;
+    this.audioSystemProperties.outputVolumePercent = Math.round(volume);
     this.notifyAudioSystemPropertiesUpdated();
   }
 

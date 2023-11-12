@@ -158,6 +158,10 @@ constexpr bool kPrintSettingsSendUserInfo1 = true;
 constexpr bool kPrintSettingsSendUserInfo2 = false;
 #endif
 
+struct GenerationParams {
+  bool set_printable_area = true;
+};
+
 PrintSettings GenerateSamplePrintSettingsCommon() {
   PrintSettings settings;
 
@@ -214,7 +218,8 @@ PrintSettings GenerateSamplePrintSettingsDefaultMargins() {
   return settings;
 }
 
-PrintSettings GenerateSamplePrintSettingsCustomMargins() {
+PrintSettings GenerateSamplePrintSettingsCustomMarginsWithParams(
+    GenerationParams params) {
   PrintSettings settings = GenerateSamplePrintSettingsCommon();
 
   settings.set_selection_only(kPrintSettingsSetSelection2);
@@ -243,7 +248,18 @@ PrintSettings GenerateSamplePrintSettingsCustomMargins() {
   settings.set_send_user_info(kPrintSettingsSendUserInfo2);
 #endif
 
+  if (params.set_printable_area) {
+    settings.SetPrinterPrintableArea(kPageSetupPhysicalSize,
+                                     kPageSetupPrintableArea,
+                                     /*landscape_needs_flip=*/true);
+  }
+
   return settings;
+}
+
+PrintSettings GenerateSamplePrintSettingsCustomMargins() {
+  const GenerationParams kParams;
+  return GenerateSamplePrintSettingsCustomMarginsWithParams(kParams);
 }
 
 bool RequestedMediasEqual(const PrintSettings::RequestedMedia& lhs,
@@ -260,11 +276,11 @@ bool PageMarginsEqual(const PageMargins& lhs, const PageMargins& rhs) {
 }  // namespace
 
 TEST(PrintingContextMojomTraitsTest, TestSerializeAndDeserializePageMargins) {
-  PageMargins input = kPageMarginNonzero;
+  const PageMargins kInput = kPageMarginNonzero;
   PageMargins output;
 
   EXPECT_TRUE(
-      mojo::test::SerializeAndDeserialize<mojom::PageMargins>(input, output));
+      mojo::test::SerializeAndDeserialize<mojom::PageMargins>(kInput, output));
 
   EXPECT_EQ(kPageMarginNonzero.header, output.header);
   EXPECT_EQ(kPageMarginNonzero.footer, output.footer);
@@ -336,11 +352,11 @@ TEST(PrintingContextMojomTraitsTest,
 }
 
 TEST(PrintingContextMojomTraitsTest, TestSerializeAndDeserializePageSetup) {
-  PageSetup input = kPageSetupAsymmetricalMargins;
+  const PageSetup kInput = kPageSetupAsymmetricalMargins;
   PageSetup output;
 
   EXPECT_TRUE(
-      mojo::test::SerializeAndDeserialize<mojom::PageSetup>(input, output));
+      mojo::test::SerializeAndDeserialize<mojom::PageSetup>(kInput, output));
 
   EXPECT_EQ(kPageSetupAsymmetricalMargins.physical_size(),
             output.physical_size());
@@ -350,10 +366,10 @@ TEST(PrintingContextMojomTraitsTest, TestSerializeAndDeserializePageSetup) {
             output.overlay_area());
   EXPECT_EQ(kPageSetupAsymmetricalMargins.content_area(),
             output.content_area());
-  EXPECT_TRUE(kPageSetupAsymmetricalMargins.effective_margins().Equals(
-      output.effective_margins()));
-  EXPECT_TRUE(kPageSetupAsymmetricalMargins.requested_margins().Equals(
-      output.requested_margins()));
+  EXPECT_EQ(kPageSetupAsymmetricalMargins.effective_margins(),
+            output.effective_margins());
+  EXPECT_EQ(kPageSetupAsymmetricalMargins.requested_margins(),
+            output.requested_margins());
   EXPECT_EQ(kPageSetupAsymmetricalMargins.forced_margins(),
             output.forced_margins());
   EXPECT_EQ(kPageSetupAsymmetricalMargins.text_height(), output.text_height());
@@ -361,20 +377,20 @@ TEST(PrintingContextMojomTraitsTest, TestSerializeAndDeserializePageSetup) {
 
 TEST(PrintingContextMojomTraitsTest,
      TestSerializeAndDeserializePageSetupForcedMargins) {
-  PageSetup input = kPageSetupForcedMargins;
+  const PageSetup kInput = kPageSetupForcedMargins;
   PageSetup output;
 
   EXPECT_TRUE(
-      mojo::test::SerializeAndDeserialize<mojom::PageSetup>(input, output));
+      mojo::test::SerializeAndDeserialize<mojom::PageSetup>(kInput, output));
 
   EXPECT_EQ(kPageSetupForcedMargins.physical_size(), output.physical_size());
   EXPECT_EQ(kPageSetupForcedMargins.printable_area(), output.printable_area());
   EXPECT_EQ(kPageSetupForcedMargins.overlay_area(), output.overlay_area());
   EXPECT_EQ(kPageSetupForcedMargins.content_area(), output.content_area());
-  EXPECT_TRUE(kPageSetupForcedMargins.effective_margins().Equals(
-      output.effective_margins()));
-  EXPECT_TRUE(kPageSetupForcedMargins.requested_margins().Equals(
-      output.requested_margins()));
+  EXPECT_EQ(kPageSetupForcedMargins.effective_margins(),
+            output.effective_margins());
+  EXPECT_EQ(kPageSetupForcedMargins.requested_margins(),
+            output.requested_margins());
   EXPECT_EQ(kPageSetupForcedMargins.forced_margins(), output.forced_margins());
   EXPECT_EQ(kPageSetupForcedMargins.text_height(), output.text_height());
 }
@@ -422,11 +438,11 @@ TEST(PrintingContextMojomTraitsTest,
 
 TEST(PrintingContextMojomTraitsTest,
      TestSerializeAndDeserializeRequestedMedia) {
-  PrintSettings::RequestedMedia input = GenerateSampleRequestedMedia();
+  const PrintSettings::RequestedMedia kInput = GenerateSampleRequestedMedia();
   PrintSettings::RequestedMedia output;
 
   EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::RequestedMedia>(
-      input, output));
+      kInput, output));
 
   EXPECT_EQ(kRequestedMediaSize, output.size_microns);
   EXPECT_EQ(kRequestedMediaVendorId, output.vendor_id);
@@ -448,16 +464,11 @@ TEST(PrintingContextMojomTraitsTest,
 
 TEST(PrintingContextMojomTraitsTest,
      TestSerializeAndDeserializePrintSettingsDefaultMargins) {
-  PrintSettings input = GenerateSamplePrintSettingsDefaultMargins();
+  const PrintSettings kInput = GenerateSamplePrintSettingsDefaultMargins();
   PrintSettings output;
 
-  // `page_setup_device_units` is set programmatically by PrintSettings based
-  // upon all other parameters.  Capture its initial value before letting
-  // `input` be touched by the serializer.
-  const PageSetup kPageSetupDeviceUnits = input.page_setup_device_units();
-
-  EXPECT_TRUE(
-      mojo::test::SerializeAndDeserialize<mojom::PrintSettings>(input, output));
+  EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::PrintSettings>(
+      kInput, output));
 
   EXPECT_EQ(output.ranges(), kPrintSettingsPageRanges);
   EXPECT_EQ(output.selection_only(), kPrintSettingsSetSelection1);
@@ -474,7 +485,9 @@ TEST(PrintingContextMojomTraitsTest,
   EXPECT_EQ(output.device_name(), kPrintSettingsDeviceName);
   EXPECT_TRUE(RequestedMediasEqual(output.requested_media(),
                                    kPrintSettingsRequestedMedia));
-  EXPECT_TRUE(output.page_setup_device_units().Equals(kPageSetupDeviceUnits));
+  // `page_setup_device_units` is set programmatically by PrintSettings based
+  // upon all other parameters, so rely upon the value from the constant input.
+  EXPECT_EQ(output.page_setup_device_units(), kInput.page_setup_device_units());
   EXPECT_EQ(output.dpi_size(), kPrintSettingsDpi1);
   EXPECT_EQ(output.scale_factor(), kPrintSettingsScaleFactor1);
   EXPECT_EQ(output.rasterize_pdf(), kPrintSettingsRasterizePdf1);
@@ -507,16 +520,11 @@ TEST(PrintingContextMojomTraitsTest,
 
 TEST(PrintingContextMojomTraitsTest,
      TestSerializeAndDeserializePrintSettingsCustomMargins) {
-  PrintSettings input = GenerateSamplePrintSettingsCustomMargins();
+  const PrintSettings kInput = GenerateSamplePrintSettingsCustomMargins();
   PrintSettings output;
 
-  // `page_setup_device_units` is set programmatically by PrintSettings based
-  // upon all other parameters.  Capture its initial value before letting
-  // `input` be touched by the serializer.
-  const PageSetup kPageSetupDeviceUnits = input.page_setup_device_units();
-
-  EXPECT_TRUE(
-      mojo::test::SerializeAndDeserialize<mojom::PrintSettings>(input, output));
+  EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::PrintSettings>(
+      kInput, output));
 
   EXPECT_EQ(output.ranges(), kPrintSettingsPageRanges);
   EXPECT_EQ(output.selection_only(), kPrintSettingsSetSelection2);
@@ -533,7 +541,9 @@ TEST(PrintingContextMojomTraitsTest,
   EXPECT_EQ(output.device_name(), kPrintSettingsDeviceName);
   EXPECT_TRUE(RequestedMediasEqual(output.requested_media(),
                                    kPrintSettingsRequestedMedia));
-  EXPECT_TRUE(output.page_setup_device_units().Equals(kPageSetupDeviceUnits));
+  // `page_setup_device_units` is set programmatically by PrintSettings based
+  // upon all other parameters, so rely upon the value from the constant input.
+  EXPECT_EQ(output.page_setup_device_units(), kInput.page_setup_device_units());
   EXPECT_EQ(output.dpi_size(), kPrintSettingsDpi2);
   EXPECT_EQ(output.scale_factor(), kPrintSettingsScaleFactor2);
   EXPECT_EQ(output.rasterize_pdf(), kPrintSettingsRasterizePdf2);
@@ -573,6 +583,19 @@ TEST(PrintingContextMojomTraitsTest,
       mojo::test::SerializeAndDeserialize<mojom::PrintSettings>(input, output));
 
   EXPECT_EQ(output.ranges(), kEmptyPageRanges);
+}
+
+TEST(PrintingContextMojomTraitsTest,
+     TestSerializeAndDeserializePrintSettingsEmptyPrintableArea) {
+  const GenerationParams kParams{.set_printable_area = false};
+  const PrintSettings kInput =
+      GenerateSamplePrintSettingsCustomMarginsWithParams(kParams);
+  PrintSettings output;
+
+  EXPECT_TRUE(mojo::test::SerializeAndDeserialize<mojom::PrintSettings>(
+      kInput, output));
+
+  EXPECT_EQ(output.page_setup_device_units(), kInput.page_setup_device_units());
 }
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)

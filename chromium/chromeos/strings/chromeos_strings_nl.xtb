@@ -16,6 +16,7 @@
 <translation id="1128128132059598906">EAP-TTLS</translation>
 <translation id="1145018782460575098">Het venster voor het updaten van firmware voor externe apparaten is geopend. <ph name="NUM_UPDATES" /> updates beschikbaar.</translation>
 <translation id="1145516343487477149">Help-artikelen en antwoorden op veelgestelde vragen over Chromebooks bekijken</translation>
+<translation id="1167755866710282443">Open het menu om sleutels aan te passen. Sleep het menu om te verplaatsen.</translation>
 <translation id="1175697296044146566">Deze <ph name="DEVICE_TYPE" /> wordt beheerd door <ph name="MANAGER" />.</translation>
 <translation id="1175951029573070619">Gemiddeld (<ph name="SIGNAL_STRENGTH" />)</translation>
 <translation id="1181037720776840403">Verwijderen</translation>
@@ -116,6 +117,7 @@
 <translation id="1908234395526491708">Mislukte UDP-verzoeken</translation>
 <translation id="1947737735496445907">Afgedrukt</translation>
 <translation id="1951012854035635156">Assistent</translation>
+<translation id="1962550982027027473">Een standaard APN is vereist</translation>
 <translation id="1977994649430373166">Google-profielfoto</translation>
 <translation id="1979103255016296513">Wachtwoord moet dringend worden gewijzigd</translation>
 <translation id="1999615961760456652">Captive portal</translation>
@@ -195,6 +197,7 @@
 <translation id="2713444072780614174">Wit</translation>
 <translation id="2717139507051041123">Modus voor donkere kleuren aanzetten</translation>
 <translation id="2740531572673183784">OK</translation>
+<translation id="2744221223678373668">Gedeeld</translation>
 <translation id="2751739896257479635">EAP Phase 2-verificatie</translation>
 <translation id="2783010256799387990">GESLAAGD</translation>
 <translation id="2789486458103222910">OK</translation>
@@ -235,6 +238,7 @@
 <translation id="3226405216343213872">Zoeken naar scanners</translation>
 <translation id="3246869037381808805">Afdruktaken ouder dan 1 dag worden verwijderd</translation>
 <translation id="3268178239013324452">Mislukt - Klep geopend</translation>
+<translation id="3275506277319227640">Vastzetten op <ph name="DIRECTION" /></translation>
 <translation id="3275729367986477355">Avatar-afbeelding</translation>
 <translation id="3283504360622356314">{0,plural, =1{Bestand bewerken}other{Bestanden bewerken}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
@@ -250,6 +254,7 @@
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" />%</translation>
 <translation id="3435738964857648380">Beveiliging</translation>
 <translation id="3435896845095436175">Aanzetten</translation>
+<translation id="345256797477978759">Venster vastzetten op het grotere <ph name="DIRECTION" />gedeelte van het scherm</translation>
 <translation id="3456078764689556234">Pagina <ph name="PRINTED_PAGES" /> van <ph name="TOTAL_PAGES" /> afgedrukt.</translation>
 <translation id="345898999683440380">Pagina <ph name="PAGE_NUM" /> scannen. <ph name="PERCENTAGE_VALUE" />% voltooid.</translation>
 <translation id="3459509316159669723">Afdrukken</translation>
@@ -269,12 +274,15 @@
 <translation id="3583278742022654445">Zwak signaal. Ga dichter bij de wifi-signaalbron staan.</translation>
 <translation id="3595596368722241419">Batterij is vol</translation>
 <translation id="3600339377155080675">Scherm spiegelen</translation>
+<translation id="3602290021589620013">Voorbeeld</translation>
+<translation id="360282891121575443">Foto's in gedeelde albums kunnen door andere gebruikers worden geüpdatet. Met Dagelijks wijzigen kunnen achtergronden worden getoond die momenteel niet in het album staan.</translation>
 <translation id="3603829704940252505">Avatar</translation>
 <translation id="3604713164406837697">Achtergrond wijzigen</translation>
 <translation id="360565022852130722">Wifi-netwerk is beveiligd met het zwakke protocol WEP 802.1x</translation>
 <translation id="3606583719724308068">Lange vertraging voor HTTPS-websites</translation>
 <translation id="361575905210396100">Bedankt voor je feedback</translation>
 <translation id="3632579075709132555">Privacyscherm schakelen</translation>
+<translation id="3639846061339007994">boven</translation>
 <translation id="3651050199673793219">Een temperatuureenheid selecteren</translation>
 <translation id="3689839747745352263">Test <ph name="TEST_NAME" /></translation>
 <translation id="370665806235115550">Bezig met laden...</translation>
@@ -292,6 +300,7 @@
 <translation id="385051799172605136">Terug</translation>
 <translation id="3858860766373142691">Naam</translation>
 <translation id="3862598938296403232">Beschrijving is vereist</translation>
+<translation id="3865289341173661845">Help-content is niet beschikbaar.</translation>
 <translation id="3865414814144988605">Resolutie</translation>
 <translation id="3866249974567520381">Beschrijving</translation>
 <translation id="387301095347517405">Het aantal keren dat de batterij een volledige oplaadcyclus heeft doorlopen</translation>
@@ -314,12 +323,15 @@
 <translation id="4044093238444069296">Kan geen verbinding maken met de gateway</translation>
 <translation id="4046123991198612571">Volgend nummer</translation>
 <translation id="404928562651467259">WAARSCHUWING</translation>
+<translation id="4054683689023980771">Afbeelding downloaden</translation>
 <translation id="4060260348856573701">Nieuwe APN</translation>
 <translation id="4093865285251893588">Profielafbeelding</translation>
 <translation id="409427325554347132">Testgegevens opslaan</translation>
+<translation id="4095829376260267438">WPA2WPA3</translation>
 <translation id="4110686435123617899">Album selecteren: <ph name="TITLE" /> (<ph name="DESC" />)</translation>
 <translation id="4111761024568264522">USB-touchpad</translation>
 <translation id="4117637339509843559">Donkere modus</translation>
+<translation id="4130035430755296270">Plaats de muisaanwijzer voor meer lay-outopties.</translation>
 <translation id="4131410914670010031">Zwart/wit</translation>
 <translation id="4145784616224233563">HTTP-firewall</translation>
 <translation id="4147897805161313378">Google Foto's</translation>
@@ -345,6 +357,7 @@
 <translation id="4311195029067684288">Volledig</translation>
 <translation id="4333390807948134856">Er is op de toets <ph name="KEY_NAME" /> gedrukt</translation>
 <translation id="435692326371619097">Beheer de APN-instellingen voor het netwerk. APN's maken verbinding tussen een mobiel netwerk en internet. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
+<translation id="4370033095251616914">Vastzetten op kleinere kant</translation>
 <translation id="4378373042927530923">Niet uitgevoerd</translation>
 <translation id="4378551569595875038">Verbinden...</translation>
 <translation id="4382484599443659549">Pdf</translation>
@@ -408,6 +421,7 @@
 <translation id="484790837831576105">(Android) DNS-omzetting</translation>
 <translation id="4848429997038228357">ACTIEF</translation>
 <translation id="4854586501323951986">Geïntegreerd touchscreen</translation>
+<translation id="4855250849489639581">Swipe omlaag voor meer indelingsopties</translation>
 <translation id="4861758251032006121">{ATTEMPTS_LEFT,plural, =1{<ph name="ERROR_MESSAGE" /> Nog {0} poging}other{<ph name="ERROR_MESSAGE" /> Nog {0} pogingen}}</translation>
 <translation id="4873827928179867585">Verificatiealgoritme</translation>
 <translation id="4880328057631981605">Naam van toegangspunt</translation>
@@ -447,8 +461,6 @@
 <translation id="5168185087976003268">Batterijprestaties</translation>
 <translation id="5170568018924773124">Tonen in map</translation>
 <translation id="5190187232518914472">Beleef je favoriete herinneringen opnieuw. Ga naar <ph name="LINK_BEGIN" />Google Foto's<ph name="LINK_END" /> om albums toe te voegen of te bewerken.</translation>
-<translation id="5212543919916444558">Ik heb niets gevonden op je scherm waarmee ik kan helpen.
-Tik op de microfoon om me iets te vragen.</translation>
 <translation id="5212593641110061691">Tabloid</translation>
 <translation id="5222676887888702881">Uitloggen</translation>
 <translation id="522307662484862935">E-mailadres niet opnemen</translation>
@@ -513,6 +525,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="576835345334454681">Helderheid van scherm verhogen</translation>
 <translation id="57838592816432529">Geluid uitzetten</translation>
 <translation id="5784136236926853061">Hoge HTTP-vertraging</translation>
+<translation id="5826644637650799838">Over de achtergrond</translation>
 <translation id="5832805196449965646">Persoon toevoegen</translation>
 <translation id="583281660410589416">Onbekend</translation>
 <translation id="5843706793424741864">Fahrenheit</translation>
@@ -621,6 +634,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="6657585470893396449">Wachtwoord</translation>
 <translation id="6659594942844771486">Browsertabblad</translation>
 <translation id="6692996468359469499">Informatie over je selectie bekijken</translation>
+<translation id="6698459586333070823">Gedeelde albums kunnen worden geüpdatet door andere gebruikers</translation>
 <translation id="6704062477274546131">DNS-resolutie</translation>
 <translation id="6723839937902243910">Voeding</translation>
 <translation id="6723847290197874913">Achtergrondverlichting toetsenbord</translation>
@@ -635,6 +649,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="6791471867139427246">kleur van toetsenbordverlichting</translation>
 <translation id="680983167891198932">Sleutel</translation>
 <translation id="6816797338148849397">Er is informatie met betrekking tot je selectie beschikbaar. Gebruik de pijl-omhoog om deze te openen.</translation>
+<translation id="6838167112108853532">Kan deze APN niet uitzetten of verwijderen. Zorg dat aangezette gekoppelde APN's uitstaan of worden verwijderd.</translation>
 <translation id="6853312040151791195">Ontlaadsnelheid</translation>
 <translation id="6889786074662672253">Koppel dit externe apparaat niet los en zet je computer niet uit tijdens het opnieuw opstarten. Je kunt dit venster minimaliseren. Dit kan een paar minuten duren en je externe apparaat werkt misschien niet tijdens dit proces.</translation>
 <translation id="6905724422583748843">Terug naar <ph name="PAGE_NAME" /></translation>
@@ -665,9 +680,11 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="7155171745945906037">Bestaande foto van camera of uit bestand</translation>
 <translation id="7162487448488904999">Galerij</translation>
 <translation id="7170236477717446850">Profielfoto</translation>
+<translation id="7171919371520438592">Venster vastzetten op het kleinere <ph name="DIRECTION" />gedeelte van het scherm</translation>
 <translation id="7172721935181587524">1 afbeelding</translation>
 <translation id="7177485034254901881">Dit <ph name="DEVICE_TYPE" /> wordt beheerd door <ph name="MANAGER" />. Beheerders kunnen het apparaat op afstand instellen.</translation>
 <translation id="7180611975245234373">Vernieuwen</translation>
+<translation id="7180865173735832675">Aanpassen</translation>
 <translation id="7212734716605298123">Firmware-updates voor externe apparaten</translation>
 <translation id="7216409898977639127">Mobiele provider</translation>
 <translation id="725133483556299729">E-mailadres selecteren</translation>
@@ -700,6 +717,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="7497215489070763236">CA-certificaat van server</translation>
 <translation id="7502658306369382406">IPv6-adres</translation>
 <translation id="7515998400212163428">Android</translation>
+<translation id="7528507600602050979">Help-content is niet beschikbaar</translation>
 <translation id="7535791657097741517">Licht thema aanzetten</translation>
 <translation id="7550715992156305117">Diagnostische routines</translation>
 <translation id="7551123448725492271">Apparaat is een audioapparaat.</translation>
@@ -717,6 +735,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="7690294790491645610">Nieuw wachtwoord bevestigen</translation>
 <translation id="7701040980221191251">Geen</translation>
 <translation id="7705524343798198388">VPN</translation>
+<translation id="7716280709122323042">WPA3</translation>
 <translation id="773153675489693198">Aantal oplaadbeurten</translation>
 <translation id="7747039790905080783">Eerder gedeelde sleutel</translation>
 <translation id="7762130827864645708">Je wachtwoord is gewijzigd. Gebruik vanaf nu je nieuwe wachtwoord.</translation>
@@ -724,6 +743,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="7769672763586021400">Model-ID</translation>
 <translation id="7778717409420828014">Met jouw feedback kunnen we de functionaliteit van de Chromebook verbeteren. Je feedback wordt beoordeeld door ons team. Vanwege het grote aantal rapporten kunnen we je geen antwoord sturen.</translation>
 <translation id="7784116172884276937">Er zijn geen DNS-servers ingesteld</translation>
+<translation id="7791543448312431591">Toevoegen</translation>
 <translation id="779591286616261875">Nieuw rapport sturen</translation>
 <translation id="7799817062559422778">Lichte modus</translation>
 <translation id="780301667611848630">Nee, bedankt</translation>
@@ -736,6 +756,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Type provider</translation>
 <translation id="7882501334836096755">Openbare sleutel</translation>
+<translation id="78957024357676568">links</translation>
 <translation id="7915220255123750251">Beheer de APN-instellingen voor het netwerk. APN's maken verbinding tussen een mobiel netwerk en internet.</translation>
 <translation id="7936303884198020182">Geen naamservers gevonden</translation>
 <translation id="7942349550061667556">Rood</translation>
@@ -764,9 +785,11 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="8183974620058026102">Bijvoegen</translation>
 <translation id="8206859287963243715">Mobiel</translation>
 <translation id="8208861521865154048">Speciale voordelen</translation>
+<translation id="8210733748736414123">onder</translation>
 <translation id="8226628635270268143">Kies je favoriete foto's en albums</translation>
 <translation id="8227119283605456246">Bestand bijvoegen</translation>
 <translation id="8230672074305416752">Kan de standaard netwerkgateway niet pingen</translation>
+<translation id="8242426110754782860">Doorgaan</translation>
 <translation id="8246209727385807362">Onbekende provider</translation>
 <translation id="827422111966801947">Indigo</translation>
 <translation id="8286154143153872371">Maak verbinding met een netwerk en laad de pagina opnieuw om de achtergrond te bekijken.</translation>
@@ -780,6 +803,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="8352772353338965963">Een account toevoegen aan Toegang tot meerdere accounts. Alle ingelogde accounts zijn toegankelijk zonder wachtwoord, dus deze functie moet alleen worden gebruikt voor vertrouwde accounts.</translation>
 <translation id="8364946094152050673">Lege naamservers</translation>
 <translation id="8372477600026034341">Extra hosts</translation>
+<translation id="8380114448424469341">Venster vastzetten op de <ph name="DIRECTION" />helft van het scherm</translation>
 <translation id="8395584934117017006">Deze <ph name="DEVICE_TYPE" /> wordt zakelijk beheerd</translation>
 <translation id="8398927464629426868">De snelheid waarmee het apparaat op dit moment wordt opgeladen of ontladen</translation>
 <translation id="8410244574650205435">Automatisch gevonden</translation>
@@ -799,6 +823,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="8503836310948963452">Nog een paar minuten...</translation>
 <translation id="8508640263392900755">APN-gegevens</translation>
 <translation id="8528615187455571738">Crosvm</translation>
+<translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Je provider kan deze optie vereisen om verbinding te maken met hun netwerk. Neem contact op met je provider voor meer informatie.</translation>
 <translation id="8576249514688522074">Niet geïnitialiseerd</translation>
 <translation id="8620617069779373398">Roamingstatus</translation>
@@ -843,6 +868,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="8930622219860340959">Draadloos</translation>
 <translation id="8936793075252196307">IP-adres van client</translation>
 <translation id="894617464444543719">Apparaat is een telefoon.</translation>
+<translation id="8957423540740801332">rechts</translation>
 <translation id="8968751544471797276">Oplaadsnelheid</translation>
 <translation id="8970109610781093811">Opnieuw uitvoeren</translation>
 <translation id="8983038754672563810">HSPA</translation>
@@ -870,6 +896,7 @@ Tik op de microfoon om me iets te vragen.</translation>
 <translation id="9137526406337347448">Google-services</translation>
 <translation id="9138630967333032450">Shift links</translation>
 <translation id="9149391708638971077">Geheugentest uitvoeren</translation>
+<translation id="9157515863513902090">Vastzetten op grotere kant</translation>
 <translation id="9173638680043580060">Nog minder dan een minuut</translation>
 <translation id="917720651393141712">Test</translation>
 <translation id="9188992814426075118">Je toetsenbord kan automatisch worden afgestemd op je achtergrond</translation>

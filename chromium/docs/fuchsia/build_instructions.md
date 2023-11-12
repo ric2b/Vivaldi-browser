@@ -244,7 +244,7 @@ arguments passed to `ninja`.)
 
 Once you've built a package, you'll want to run it!
 
-### (Recommended)(Linux-only) Enable KVM acceleration
+### (Linux-only) Enable KVM acceleration (strongly recommended)
 
 Under Linux, if your host and target CPU architectures are the same (e.g. you're
 building for Fuchsia/x64 on a Linux/x64 host) then you can benefit from QEMU's
@@ -259,13 +259,17 @@ support for the KVM hypervisor:
 
 ### Running test suites
 
-There are three types of tests available to run on Fuchsia:
+There are four types of tests available to run on Fuchsia:
 
 1.  [Gtests](gtests.md)
 2.  [GPU integration tests](gpu_testing.md)
 3.  [Blink tests](web_tests.md)
+4.  [Webpage tests](webpage_tests.md)
 
 Check the documentations to learn more about how to run these tests.
+
+Documentation for the underlying testing scripts work can be found
+[here](test_scripts.md).
 
 ### Working with the Fuchsia tree
 
@@ -276,7 +280,7 @@ that make working with both Fuchsia and Chromium checkouts easier.
   directory in Fuchsia. For instance. `/path/to/src/fuchsia/out/qemu-x64`. This
   will automatically add the `--fuchsia-out-dir` flag to wrapper scripts.
 * `default_fuchsia_device_node_name`. Set this to a Fuchsia device node name.
-  This will automatically add the `--node-name` flag to most wrapper scripts.
+  This will automatically add the `--target-id` flag to most wrapper scripts.
 * Finally, use the `-d` flag when running the <test_target_name> wrappers to
   execute them on an already running device or emulator, rather than starting an
   ephemeral emulator instance. This speeds up subsequent runs since the runner

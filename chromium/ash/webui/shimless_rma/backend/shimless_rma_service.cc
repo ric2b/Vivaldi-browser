@@ -11,32 +11,30 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/network_config_service.h"
+#include "ash/system/diagnostics/diagnostics_log_controller.h"
 #include "ash/webui/shimless_rma/backend/shimless_rma_delegate.h"
 #include "ash/webui/shimless_rma/backend/version_updater.h"
 #include "ash/webui/shimless_rma/mojom/shimless_rma.mojom.h"
 #include "ash/webui/shimless_rma/mojom/shimless_rma_mojom_traits.h"
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "chromeos/ash/components/dbus/rmad/rmad.pb.h"
 #include "chromeos/ash/components/dbus/rmad/rmad_client.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
+#include "chromeos/ash/components/network/technology_state_controller.h"
+#include "chromeos/ash/services/network_config/in_process_instance.h"
 #include "chromeos/dbus/power/power_manager_client.h"
-#include "chromeos/services/network_config/in_process_instance.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "chromeos/version/version_loader.h"
 #include "third_party/skia/include/core/SkBitmap.h"
-
-using chromeos::network_config::mojom::ConnectionStateType;
-using chromeos::network_config::mojom::FilterType;
-using chromeos::network_config::mojom::NetworkFilter;
-using chromeos::network_config::mojom::NetworkStatePropertiesPtr;
-using chromeos::network_config::mojom::NetworkType;
 
 namespace ash {
 namespace shimless_rma {
@@ -64,7 +62,7 @@ bool HaveAllowedNetworkConnection() {
   return network && network->IsConnectedState() && !metered;
 }
 
-chromeos::network_config::mojom::NetworkFilterPtr GetConfiguredWiFiFilter() {
+network_mojom::NetworkFilterPtr GetConfiguredWiFiFilter() {
   return network_mojom::NetworkFilter::New(
       network_mojom::FilterType::kConfigured, network_mojom::NetworkType::kWiFi,
       network_mojom::kNoLimit);
@@ -74,7 +72,9 @@ chromeos::network_config::mojom::NetworkFilterPtr GetConfiguredWiFiFilter() {
 
 ShimlessRmaService::ShimlessRmaService(
     std::unique_ptr<ShimlessRmaDelegate> shimless_rma_delegate)
-    : shimless_rma_delegate_(std::move(shimless_rma_delegate)) {
+    : shimless_rma_delegate_(std::move(shimless_rma_delegate)),
+      task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
   RmadClient::Get()->AddObserver(this);
 
   // Enable accessibility features.
@@ -197,12 +197,14 @@ void ShimlessRmaService::BeginFinalization(BeginFinalizationCallback callback) {
   if (features::IsShimlessRMAOsUpdateEnabled()) {
     if (!HaveAllowedNetworkConnection()) {
       // Enable WiFi on the device.
-      chromeos::NetworkStateHandler* network_state_handler =
-          chromeos::NetworkHandler::Get()->network_state_handler();
+      NetworkStateHandler* network_state_handler =
+          NetworkHandler::Get()->network_state_handler();
+      TechnologyStateController* technology_state_controller =
+          NetworkHandler::Get()->technology_state_controller();
       if (!network_state_handler->IsTechnologyEnabled(
-              chromeos::NetworkTypePattern::WiFi())) {
-        network_state_handler->SetTechnologyEnabled(
-            chromeos::NetworkTypePattern::WiFi(), /*enabled=*/true,
+              NetworkTypePattern::WiFi())) {
+        technology_state_controller->SetTechnologiesEnabled(
+            NetworkTypePattern::WiFi(), /*enabled=*/true,
             network_handler::ErrorCallback());
       }
 
@@ -273,8 +275,7 @@ void ShimlessRmaService::ForgetNewNetworkConnections(
 }
 
 void ShimlessRmaService::OnForgetNewNetworkConnections(
-    std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>
-        networks) {
+    std::vector<network_mojom::NetworkStatePropertiesPtr> networks) {
   DCHECK(existing_saved_network_guids_.has_value());
   DCHECK(pending_network_guids_to_forget_.empty());
 
@@ -931,9 +932,32 @@ void ShimlessRmaService::GetLog(GetLogCallback callback) {
 }
 
 void ShimlessRmaService::SaveLog(SaveLogCallback callback) {
-  RmadClient::Get()->SaveLog(base::BindOnce(&ShimlessRmaService::OnSaveLog,
-                                            weak_ptr_factory_.GetWeakPtr(),
-                                            std::move(callback)));
+  if (features::IsLogControllerForDiagnosticsAppEnabled() &&
+      diagnostics::DiagnosticsLogController::IsInitialized()) {
+    task_runner_->PostTaskAndReplyWithResult(
+        FROM_HERE,
+        base::BindOnce(
+            &diagnostics::DiagnosticsLogController::
+                GenerateSessionStringOnBlockingPool,
+            // base::Unretained safe here because ~DiagnosticsLogController is
+            // called during shutdown of ash::Shell and will out-live
+            // ShimlessRmaService.
+            base::Unretained(diagnostics::DiagnosticsLogController::Get())),
+        base::BindOnce(&ShimlessRmaService::OnDiagnosticsLogReady,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+    return;
+  }
+
+  OnDiagnosticsLogReady(std::move(callback), "");
+}
+
+void ShimlessRmaService::OnDiagnosticsLogReady(
+    SaveLogCallback callback,
+    const std::string& diagnostics_log_text) {
+  RmadClient::Get()->SaveLog(
+      diagnostics_log_text,
+      base::BindOnce(&ShimlessRmaService::OnSaveLog,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void ShimlessRmaService::OnGetLog(GetLogCallback callback,

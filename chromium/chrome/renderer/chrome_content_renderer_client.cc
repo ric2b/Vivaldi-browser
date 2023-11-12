@@ -8,10 +8,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics_action.h"
@@ -51,8 +51,8 @@
 #include "chrome/renderer/chrome_content_settings_agent_delegate.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
+#include "chrome/renderer/google_accounts_private_api_extension.h"
 #include "chrome/renderer/loadtimes_extension_bindings.h"
-#include "chrome/renderer/media/chrome_key_systems.h"
 #include "chrome/renderer/media/flash_embed_rewrite.h"
 #include "chrome/renderer/media/webrtc_logging_agent_impl.h"
 #include "chrome/renderer/net/net_error_helper.h"
@@ -67,7 +67,6 @@
 #include "chrome/renderer/worker_content_settings_client.h"
 #include "chrome/services/speech/buildflags/buildflags.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
-#include "components/autofill/content/renderer/autofill_assistant_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/password_generation_agent.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -103,6 +102,7 @@
 #include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
 #include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
 #include "components/subresource_filter/core/common/common_features.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "components/translate/content/renderer/per_frame_translate_agent.h"
 #include "components/translate/core/common/translate_util.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -180,7 +180,6 @@
 #endif  // BUILDFLAG(ENABLE_SPEECH_SERVICE)
 
 #if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
 #include "chrome/renderer/render_frame_font_family_accessor.h"
 #endif
 
@@ -245,6 +244,10 @@
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/renderer/supervised_user/supervised_user_error_page_controller_delegate_impl.h"
+#endif
+
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+#include "chrome/renderer/media/chrome_key_systems.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -332,12 +335,6 @@ std::unique_ptr<base::Unwinder> CreateV8Unwinder(v8::Isolate* isolate) {
 // made available in other clients of content/ that do not have a Web Share
 // Mojo implementation (e.g. WebView).
 void MaybeEnableWebShare() {
-#if BUILDFLAG(IS_WIN)
-  if (base::win::GetVersion() < base::win::Version::WIN10) {
-    // Web Share API is not functional for non-UWP apps prior to Windows 10.
-    return;
-  }
-#endif
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   if (base::FeatureList::IsEnabled(features::kWebShare))
 #endif
@@ -487,7 +484,11 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   WebString chrome_search_scheme(
       WebString::FromASCII(chrome::kChromeSearchScheme));
 
-  if (base::FeatureList::IsEnabled(features::kIsolatedWebApps)) {
+  // IWAs can be enabled by either the feature flag or by enterprise
+  // policy. In either case the kEnableIsolatedWebAppsInRenderer flag is passed
+  // to the renderer process.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableIsolatedWebAppsInRenderer)) {
     // isolated-app: is the scheme used for Isolated Web Apps, which are web
     // applications packaged in Signed Web Bundles.
     WebString isolated_app_scheme(
@@ -622,6 +623,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
 #endif
 
   SyncEncryptionKeysExtension::Create(render_frame);
+  if (base::FeatureList::IsEnabled(features::kWebAuthFlowInBrowserTab)) {
+    GoogleAccountsPrivateApiExtension::Create(render_frame);
+  }
 
   if (render_frame->IsMainFrame())
     new webapps::WebPageMetadataAgent(render_frame);
@@ -668,21 +672,22 @@ void ChromeContentRendererClient::RenderFrameCreated(
       render_frame_observer->associated_interfaces();
 
   if (!render_frame->IsInFencedFrameTree() ||
-      base::FeatureList::IsEnabled(
-          autofill::features::kAutofillEnableWithinFencedFrame) ||
-      base::FeatureList::IsEnabled(
-          password_manager::features::
-              kEnablePasswordManagerWithinFencedFrame)) {
+      (base::FeatureList::IsEnabled(
+           autofill::features::kAutofillEnableWithinFencedFrame) &&
+       base::FeatureList::IsEnabled(
+           blink::features::kFencedFramesAPIChanges)) ||
+      (base::FeatureList::IsEnabled(
+           password_manager::features::
+               kEnablePasswordManagerWithinFencedFrame) &&
+       base::FeatureList::IsEnabled(
+           blink::features::kFencedFramesAPIChanges))) {
     PasswordAutofillAgent* password_autofill_agent =
         new PasswordAutofillAgent(render_frame, associated_interfaces);
     PasswordGenerationAgent* password_generation_agent =
         new PasswordGenerationAgent(render_frame, password_autofill_agent,
                                     associated_interfaces);
-    autofill::AutofillAssistantAgent* autofill_assistant_agent =
-        new autofill::AutofillAssistantAgent(render_frame);
     new AutofillAgent(render_frame, password_autofill_agent,
-                      password_generation_agent, autofill_assistant_agent,
-                      associated_interfaces);
+                      password_generation_agent, associated_interfaces);
   }
 
   if (content_capture::features::IsContentCaptureEnabled()) {
@@ -1088,8 +1093,8 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
                   blink::mojom::PreferredColorScheme::kLight);
             }
           }
-        } else if (info.name ==
-                   ASCIIToUTF16(ChromeContentClient::kPDFExtensionPluginName)) {
+        } else if (info.path.value() ==
+                   ChromeContentClient::kPDFExtensionPluginPath) {
           // Report PDF load metrics. Since the PDF plugin is comprised of an
           // extension that loads a second plugin, avoid double counting by
           // ignoring the creation of the second plugin.
@@ -1120,8 +1125,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         }
 
 #if BUILDFLAG(ENABLE_PDF)
-        if (info.name ==
-            ASCIIToUTF16(ChromeContentClient::kPDFInternalPluginName)) {
+        if (info.path.value() == ChromeContentClient::kPDFInternalPluginPath) {
           return pdf::CreateInternalPlugin(
               std::move(params), render_frame,
               std::make_unique<ChromePdfInternalPluginDelegate>());
@@ -1133,8 +1137,7 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
       case chrome::mojom::PluginStatus::kDisabled: {
         PluginUMAReporter::GetInstance()->ReportPluginDisabled(orig_mime_type,
                                                                url);
-        if (info.name ==
-            ASCIIToUTF16(ChromeContentClient::kPDFExtensionPluginName)) {
+        if (info.path.value() == ChromeContentClient::kPDFExtensionPluginPath) {
           ReportPDFLoadStatus(
               PDFLoadStatus::kShowedDisabledPluginPlaceholderForEmbeddedPdf);
 
@@ -1548,7 +1551,11 @@ ChromeContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
 
 void ChromeContentRendererClient::GetSupportedKeySystems(
     media::GetSupportedKeySystemsCB cb) {
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
   GetChromeKeySystems(std::move(cb));
+#else
+  std::move(cb).Run({});
+#endif
 }
 
 bool ChromeContentRendererClient::ShouldReportDetailedMessageForSource(

@@ -4,8 +4,9 @@
 
 #include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -224,8 +225,8 @@ class MockHandledEventCallback {
                       absl::optional<cc::TouchAction>));
 
   WidgetBaseInputHandler::HandledEventCallback GetCallback() {
-    return base::BindOnce(&MockHandledEventCallback::HandleCallback,
-                          base::Unretained(this));
+    return WTF::BindOnce(&MockHandledEventCallback::HandleCallback,
+                         WTF::Unretained(this));
   }
 
  private:
@@ -512,15 +513,15 @@ class NotifySwapTimesWebFrameWidgetTest : public SimTest {
     base::TimeTicks swap_time;
     static_cast<WebFrameWidgetImpl*>(MainFrame().FrameWidget())
         ->NotifySwapAndPresentationTimeForTesting(
-            {base::BindOnce(
+            {WTF::BindOnce(
                  [](base::OnceClosure swap_quit_closure,
                     base::TimeTicks* swap_time, base::TimeTicks timestamp) {
                    DCHECK(!timestamp.is_null());
                    *swap_time = timestamp;
                    std::move(swap_quit_closure).Run();
                  },
-                 swap_run_loop.QuitClosure(), &swap_time),
-             base::BindOnce(
+                 swap_run_loop.QuitClosure(), WTF::Unretained(&swap_time)),
+             WTF::BindOnce(
                  [](base::OnceClosure presentation_quit_closure,
                     base::TimeTicks timestamp) {
                    DCHECK(!timestamp.is_null());
@@ -984,15 +985,15 @@ class EventHandlingWebFrameWidgetSimTest : public SimTest {
       // Register callbacks for swap and presentation times.
       base::TimeTicks swap_time;
       NotifySwapAndPresentationTimeForTesting(
-          {base::BindOnce(
+          {WTF::BindOnce(
                [](base::OnceClosure swap_quit_closure,
                   base::TimeTicks* swap_time, base::TimeTicks timestamp) {
                  DCHECK(!timestamp.is_null());
                  *swap_time = timestamp;
                  std::move(swap_quit_closure).Run();
                },
-               swap_run_loop.QuitClosure(), &swap_time),
-           base::BindOnce(
+               swap_run_loop.QuitClosure(), WTF::Unretained(&swap_time)),
+           WTF::BindOnce(
                [](base::OnceClosure presentation_quit_closure,
                   base::TimeTicks timestamp) {
                  DCHECK(!timestamp.is_null());

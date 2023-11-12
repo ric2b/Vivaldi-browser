@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_store_backend_error.h"
@@ -17,23 +17,25 @@ class GURL;
 
 namespace password_manager {
 
-struct PasswordForm;
-
 // A service that can be used to query the list of facets that are affiliated
 // with a given facet, i.e., facets that belong to the same logical application.
 // See affiliation_utils.h for details of what this means.
 class AffiliationService : public KeyedService {
  public:
   // Controls whether to send a network request or fail on a cache miss.
-  enum class StrategyOnCacheMiss { FETCH_OVER_NETWORK, FAIL };
+  enum class StrategyOnCacheMiss {
+    // Affiliation service will keep trying to send request with exponential
+    // backlog.
+    FETCH_OVER_NETWORK,
+    // Request will fail immediately.
+    FAIL,
+    // After first request failure affiliation service will stop trying.
+    TRY_ONCE_OVER_NETWORK
+  };
 
   using ResultCallback =
       base::OnceCallback<void(const AffiliatedFacets& /* results */,
                               bool /* success */)>;
-
-  using PasswordFormsOrErrorCallback = base::OnceCallback<void(
-      absl::variant<std::vector<std::unique_ptr<PasswordForm>>,
-                    PasswordStoreBackendError>)>;
 
   using GroupsCallback =
       base::OnceCallback<void(const std::vector<GroupedFacets>&)>;
@@ -105,17 +107,17 @@ class AffiliationService : public KeyedService {
   // used to group passwords together.
   virtual void GetAllGroups(GroupsCallback callback) const = 0;
 
-  // Retrieves affiliation and branding information about the Android
-  // credentials in |forms|, sets |affiliated_web_realm|, |app_display_name| and
-  // |app_icon_url| of forms, and invokes |result_callback|.
-  // NOTE: When |strategy_on_cache_miss| is set to |FAIL|, this will not issue
-  // an on-demand network request. And if a request to cache fails, no
-  // affiliation and branding information will be injected into corresponding
-  // form.
-  virtual void InjectAffiliationAndBrandingInformation(
-      std::vector<std::unique_ptr<PasswordForm>> forms,
-      AffiliationService::StrategyOnCacheMiss strategy_on_cache_miss,
-      PasswordFormsOrErrorCallback result_callback) = 0;
+  // Retrieves psl extension list. This list includes domain which shouldn't be
+  // considered as PSL match.
+  virtual void GetPSLExtensions(
+      base::OnceCallback<void(std::vector<std::string>)> callback) const = 0;
+
+  // This method will fetch the latest affiliation and branding information for
+  // |facets| even if local cache is still fresh. |callback| is invoked on
+  // completion.
+  virtual void UpdateAffiliationsAndBranding(
+      const std::vector<FacetURI>& facets,
+      base::OnceClosure callback) = 0;
 };
 
 }  // namespace password_manager

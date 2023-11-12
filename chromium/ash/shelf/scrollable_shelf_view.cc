@@ -19,8 +19,8 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/bind.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -1824,6 +1824,17 @@ ScrollableShelfView::CalculateTappableIconIndices(
   DCHECK_LT(first_visible_view_index, visible_views_indices.size());
   DCHECK_LT(last_visible_view_index, visible_views_indices.size());
 
+  // Ensure that each visible view index is within the bounds of
+  // `visible_views_indices`.
+  // TODO(b/268401797): Rewrite CalculateTappableIconIndices() as a more
+  // thorough fix for out of bound indices.
+  first_visible_view_index =
+      base::clamp(first_visible_view_index, static_cast<size_t>(0),
+                  visible_views_indices.size() - 1);
+  last_visible_view_index =
+      base::clamp(last_visible_view_index, first_visible_view_index,
+                  visible_views_indices.size() - 1);
+
   return {visible_views_indices[first_visible_view_index],
           visible_views_indices[last_visible_view_index]};
 }
@@ -2120,7 +2131,7 @@ void ScrollableShelfView::UpdateScrollOffset(float target_offset) {
   const bool strategy_needs_update = (layout_strategy_ != new_strategy);
   if (strategy_needs_update) {
     layout_strategy_ = new_strategy;
-    const bool has_gradient_zone = !layer()->gradient_mask().IsEmpty();
+    const bool has_gradient_zone = layer()->HasGradientMask();
     const bool should_have_gradient_zone = ShouldApplyMaskLayerGradientZone();
     if (has_gradient_zone && !should_have_gradient_zone) {
       layer()->SetGradientMask(gfx::LinearGradient::GetEmpty());

@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
@@ -223,8 +224,12 @@ class MidiManagerFactoryForTesting : public midi::MidiService::ManagerFactory {
   }
 
  private:
-  TestUsbMidiDeviceFactory* device_factory_ = nullptr;
-  MidiManagerUsbForTesting* manager_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #constexpr-ctor-field-initializer
+  RAW_PTR_EXCLUSION TestUsbMidiDeviceFactory* device_factory_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #constexpr-ctor-field-initializer
+  RAW_PTR_EXCLUSION MidiManagerUsbForTesting* manager_ = nullptr;
 };
 
 class MidiManagerUsbTest : public ::testing::Test {
@@ -282,12 +287,12 @@ class MidiManagerUsbTest : public ::testing::Test {
 
   MidiManagerUsb* manager() { return factory_->manager(); }
 
-  raw_ptr<MidiManagerFactoryForTesting> factory_;
   std::unique_ptr<FakeMidiManagerClient> client_;
   Logger logger_;
 
  private:
-  std::unique_ptr<MidiService> service_;
+  std::unique_ptr<MidiService> service_;  // Must outlive `factory_`.
+  raw_ptr<MidiManagerFactoryForTesting> factory_;
   base::test::SingleThreadTaskEnvironment task_environment_;
 };
 

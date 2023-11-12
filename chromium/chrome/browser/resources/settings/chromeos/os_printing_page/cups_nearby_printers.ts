@@ -11,11 +11,9 @@ import '../../settings_shared.css.js';
 import './cups_printer_types.js';
 import './cups_printers_browser_proxy.js';
 import './cups_printers_entry.js';
-import './cups_printers_entry_list_behavior.js';
 
-import {ListPropertyUpdateMixin, ListPropertyUpdateMixinInterface} from 'chrome://resources/cr_elements/list_property_update_mixin.js';
-import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {recordSettingChange} from '../metrics_recorder.js';
 
@@ -23,17 +21,10 @@ import {getTemplate} from './cups_nearby_printers.html.js';
 import {matchesSearchTerm, sortPrinters} from './cups_printer_dialog_util.js';
 import {PrinterListEntry} from './cups_printer_types.js';
 import {CupsPrinterInfo, CupsPrintersBrowserProxyImpl, PrinterSetupResult} from './cups_printers_browser_proxy.js';
-import {CupsPrintersEntryListBehavior, CupsPrintersEntryListBehaviorInterface} from './cups_printers_entry_list_behavior.js';
+import {CupsPrintersEntryListMixin} from './cups_printers_entry_list_mixin.js';
 
 const SettingsCupsNearbyPrintersElementBase =
-    mixinBehaviors(
-        [
-          CupsPrintersEntryListBehavior,
-        ],
-        WebUiListenerMixin(ListPropertyUpdateMixin(PolymerElement))) as {
-      new (): PolymerElement & CupsPrintersEntryListBehaviorInterface &
-          ListPropertyUpdateMixinInterface & WebUiListenerMixinInterface,
-    };
+    CupsPrintersEntryListMixin(WebUiListenerMixin(PolymerElement));
 
 export class SettingsCupsNearbyPrintersElement extends
     SettingsCupsNearbyPrintersElementBase {
@@ -202,17 +193,12 @@ export class SettingsCupsNearbyPrintersElement extends
     this.setActivePrinter_(item);
     this.savingPrinter_ = true;
 
-    // This is a workaround to ensure type safety on the params of the casted
-    // function. We do this because the closure compiler does not work well with
-    // rejected js promises.
-    const queryDiscoveredPrinterFailed: (printer: CupsPrinterInfo) => void =
-        this.onQueryDiscoveredPrinterFailed_.bind(this);
     CupsPrintersBrowserProxyImpl.getInstance()
         .addDiscoveredPrinter(item.printerInfo.printerId)
         .then(
             this.onQueryDiscoveredPrinterSucceeded_.bind(
                 this, item.printerInfo.printerName),
-            queryDiscoveredPrinterFailed);
+            this.onQueryDiscoveredPrinterFailed_.bind(this));
     recordSettingChange();
   }
 
@@ -268,6 +254,9 @@ export class SettingsCupsNearbyPrintersElement extends
       printerName: string, result: PrinterSetupResult): void {
     this.savingPrinter_ = false;
     this.showCupsPrinterToast_(result, printerName);
+    chrome.metricsPrivate.recordEnumerationValue(
+        'Printing.CUPS.PrinterSetupResult.SettingsDiscoveredPrinters', result,
+        Object.keys(PrinterSetupResult).length);
   }
 
   /**
@@ -282,6 +271,10 @@ export class SettingsCupsNearbyPrintersElement extends
           detail: {item: printer},
         });
     this.dispatchEvent(openManufacturerDialogEvent);
+    chrome.metricsPrivate.recordEnumerationValue(
+        'Printing.CUPS.PrinterSetupResult.SettingsDiscoveredPrinters',
+        PrinterSetupResult.MANUAL_SETUP_REQUIRED,
+        Object.keys(PrinterSetupResult).length);
   }
 
   /**

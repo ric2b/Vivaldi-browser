@@ -4,6 +4,7 @@
 
 #include "build/build_config.h"
 #include "chrome/browser/chrome_browser_main.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/translate/content/common/translate.mojom.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/browser_thread.h"

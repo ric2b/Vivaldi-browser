@@ -8,6 +8,7 @@
 #include "chrome/browser/ui/browser_content_setting_bubble_model_delegate.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -18,7 +19,6 @@
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_constants.h"
-#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -26,7 +26,11 @@
 #include "ui/compositor/layer.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_observer.h"
+#include "ui/gfx/animation/animation_container.h"
+#include "ui/views/animation/compositor_animation_runner.h"
 #include "ui/views/event_monitor.h"
+#include "ui/views/layout/animating_layout_manager.h"
+#include "ui/views/layout/flex_layout_view.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/frame_background.h"
 #include "ui/views/window/window_shape.h"
@@ -65,8 +69,24 @@ constexpr int kFrameBorderThickness = 4;
 constexpr int kResizeBorder = 10;
 constexpr int kResizeAreaCornerSize = 16;
 
-// The window has a smaller minimum size than normal Chrome windows.
-constexpr gfx::Size kMinWindowSize(300, 300);
+// The time duration that the top bar animation will take in total.
+constexpr base::TimeDelta kAnimationDuration = base::Milliseconds(250);
+
+// The animation durations for the top right buttons, which are separated into
+// multiple parts because some changes need to be delayed.
+constexpr std::array<base::TimeDelta, 2>
+    kMoveCameraButtonToRightAnimationDurations = {kAnimationDuration * 0.4,
+                                                  kAnimationDuration * 0.6};
+constexpr std::array<base::TimeDelta, 3>
+    kShowBackToTabButtonAnimationDurations = {kAnimationDuration * 0.4,
+                                              kAnimationDuration * 0.4,
+                                              kAnimationDuration * 0.2};
+constexpr std::array<base::TimeDelta, 2>
+    kHideBackToTabButtonAnimationDurations = {kAnimationDuration * 0.4,
+                                              kAnimationDuration * 0.6};
+constexpr std::array<base::TimeDelta, 3> kCloseButtonAnimationDurations = {
+    kAnimationDuration * 0.2, kAnimationDuration * 0.4,
+    kAnimationDuration * 0.4};
 
 class BackToTabButton : public OverlayWindowImageButton {
  public:
@@ -162,53 +182,121 @@ class WindowEventObserver : public ui::EventObserver {
 PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
     BrowserFrame* frame,
     BrowserView* browser_view)
-    : BrowserNonClientFrameView(frame, browser_view) {
+    : BrowserNonClientFrameView(frame, browser_view),
+      top_bar_color_animation_(this),
+      move_camera_button_to_left_animation_(this),
+      move_camera_button_to_right_animation_(
+          std::vector<gfx::MultiAnimation::Part>{
+              gfx::MultiAnimation::Part(
+                  kMoveCameraButtonToRightAnimationDurations[0],
+                  gfx::Tween::Type::ZERO,
+                  1.0,
+                  1.0),
+              gfx::MultiAnimation::Part(
+                  kMoveCameraButtonToRightAnimationDurations[1],
+                  gfx::Tween::Type::EASE_OUT,
+                  1.0,
+                  0.0)}),
+      show_back_to_tab_button_animation_(std::vector<gfx::MultiAnimation::Part>{
+          gfx::MultiAnimation::Part(kShowBackToTabButtonAnimationDurations[0],
+                                    gfx::Tween::Type::ZERO,
+                                    0.0,
+                                    0.0),
+          gfx::MultiAnimation::Part(kShowBackToTabButtonAnimationDurations[1],
+                                    gfx::Tween::Type::LINEAR,
+                                    0.0,
+                                    1.0),
+          gfx::MultiAnimation::Part(kShowBackToTabButtonAnimationDurations[2],
+                                    gfx::Tween::Type::ZERO,
+                                    1.0,
+                                    1.0)}),
+      hide_back_to_tab_button_animation_(std::vector<gfx::MultiAnimation::Part>{
+          gfx::MultiAnimation::Part(kHideBackToTabButtonAnimationDurations[0],
+                                    gfx::Tween::Type::LINEAR,
+                                    1.0,
+                                    0.0),
+          gfx::MultiAnimation::Part(kHideBackToTabButtonAnimationDurations[1],
+                                    gfx::Tween::Type::ZERO,
+                                    0.0,
+                                    0.0)}),
+      show_close_button_animation_(std::vector<gfx::MultiAnimation::Part>{
+          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[0],
+                                    gfx::Tween::Type::ZERO,
+                                    0.0,
+                                    0.0),
+          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[1],
+                                    gfx::Tween::Type::LINEAR,
+                                    0.0,
+                                    1.0),
+          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[2],
+                                    gfx::Tween::Type::ZERO,
+                                    1.0,
+                                    1.0)}),
+      hide_close_button_animation_(std::vector<gfx::MultiAnimation::Part>{
+          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[0],
+                                    gfx::Tween::Type::ZERO,
+                                    1.0,
+                                    1.0),
+          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[1],
+                                    gfx::Tween::Type::LINEAR,
+                                    1.0,
+                                    0.0),
+          gfx::MultiAnimation::Part(kCloseButtonAnimationDurations[2],
+                                    gfx::Tween::Type::ZERO,
+                                    0.0,
+                                    0.0)}) {
   location_bar_model_ = std::make_unique<LocationBarModelImpl>(
       this, content::kMaxURLDisplayChars);
 
-  // Creates a view that will hold all the control views.
-  AddChildView(
-      views::Builder<views::BoxLayoutView>()
-          .CopyAddressTo(&controls_container_view_)
-          .SetOrientation(views::BoxLayout::Orientation::kHorizontal)
-          .SetCrossAxisAlignment(views::BoxLayout::CrossAxisAlignment::kCenter)
-          .Build());
+  // Creates a view for the top bar area.
+  AddChildView(views::Builder<views::FlexLayoutView>()
+                   .CopyAddressTo(&top_bar_container_view_)
+                   .SetOrientation(views::LayoutOrientation::kHorizontal)
+                   .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
+                   .Build());
 
   // Creates the window icon.
   const gfx::FontList& font_list = views::style::GetFont(
       CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
-  location_icon_view_ = controls_container_view_->AddChildView(
+  location_icon_view_ = top_bar_container_view_->AddChildView(
       std::make_unique<LocationIconView>(font_list, this, this));
 
   // Creates the window title.
-  controls_container_view_->AddChildView(
+  top_bar_container_view_->AddChildView(
       views::Builder<views::Label>()
           .CopyAddressTo(&window_title_)
           .SetText(location_bar_model_->GetURLForDisplay())
           .SetHorizontalAlignment(gfx::ALIGN_LEFT)
           .SetElideBehavior(gfx::ELIDE_HEAD)
+          .SetProperty(
+              views::kFlexBehaviorKey,
+              views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                                       views::MaximumFlexSizeRule::kUnbounded))
           .Build());
-  controls_container_view_->SetFlexForView(window_title_, 1);
 
-  // Creates the content setting models. Currently we only support geo location
-  // and camera and microphone settings.
+  // Creates a container view for the top right buttons to handle the button
+  // animations.
+  button_container_view_ = top_bar_container_view_->AddChildView(
+      std::make_unique<views::FlexLayoutView>());
+
+  // Creates the content setting models. Currently we only support camera and
+  // microphone settings.
   constexpr ContentSettingImageModel::ImageType kContentSettingImageOrder[] = {
-      ContentSettingImageModel::ImageType::GEOLOCATION,
       ContentSettingImageModel::ImageType::MEDIASTREAM};
   std::vector<std::unique_ptr<ContentSettingImageModel>> models;
   for (auto type : kContentSettingImageOrder)
     models.push_back(ContentSettingImageModel::CreateForContentType(type));
 
-  // Creates the content setting views.
+  // Creates the content setting views based on the models.
   for (auto& model : models) {
     auto image_view = std::make_unique<ContentSettingImageView>(
         std::move(model), this, this, font_list);
     content_setting_views_.push_back(
-        controls_container_view_->AddChildView(std::move(image_view)));
+        button_container_view_->AddChildView(std::move(image_view)));
   }
 
   // Creates the back to tab button.
-  back_to_tab_button_ = controls_container_view_->AddChildView(
+  back_to_tab_button_ = button_container_view_->AddChildView(
       std::make_unique<BackToTabButton>(base::BindRepeating(
           [](PictureInPictureBrowserFrameView* frame_view) {
             PictureInPictureWindowManager::GetInstance()->FocusInitiator();
@@ -218,13 +306,40 @@ PictureInPictureBrowserFrameView::PictureInPictureBrowserFrameView(
           base::Unretained(this))));
 
   // Creates the close button.
-  close_image_button_ = controls_container_view_->AddChildView(
+  close_image_button_ = button_container_view_->AddChildView(
       std::make_unique<CloseImageButton>(base::BindRepeating(
           [](PictureInPictureBrowserFrameView* frame_view) {
             PictureInPictureWindowManager::GetInstance()
                 ->ExitPictureInPicture();
           },
           base::Unretained(this))));
+
+  // Enable button layer rendering to set opacity for animation.
+  back_to_tab_button_->SetPaintToLayer();
+  back_to_tab_button_->layer()->SetFillsBoundsOpaquely(false);
+  close_image_button_->SetPaintToLayer();
+  close_image_button_->layer()->SetFillsBoundsOpaquely(false);
+
+  // Creates the top bar title color and camera icon color animation. Set the
+  // initial state to 1.0 because the window is active when first shown.
+  top_bar_color_animation_.SetSlideDuration(kAnimationDuration);
+  top_bar_color_animation_.SetTweenType(gfx::Tween::LINEAR);
+  top_bar_color_animation_.Reset(1.0);
+
+  // Creates the camera icon movement animations with the default EASE_OUT type.
+  move_camera_button_to_left_animation_.SetSlideDuration(kAnimationDuration);
+  move_camera_button_to_right_animation_.set_continuous(false);
+  move_camera_button_to_right_animation_.set_delegate(this);
+
+  // Creates the button animations.
+  show_back_to_tab_button_animation_.set_continuous(false);
+  show_back_to_tab_button_animation_.set_delegate(this);
+  hide_back_to_tab_button_animation_.set_continuous(false);
+  hide_back_to_tab_button_animation_.set_delegate(this);
+  show_close_button_animation_.set_continuous(false);
+  show_close_button_animation_.set_delegate(this);
+  hide_close_button_animation_.set_continuous(false);
+  hide_close_button_animation_.set_delegate(this);
 
 #if BUILDFLAG(IS_LINUX)
   frame_background_ = std::make_unique<views::FrameBackground>();
@@ -250,6 +365,15 @@ gfx::Rect PictureInPictureBrowserFrameView::GetBoundsForTabStripRegion(
     const gfx::Size& tabstrip_minimum_size) const {
   return gfx::Rect();
 }
+
+gfx::Rect PictureInPictureBrowserFrameView::GetBoundsForWebAppFrameToolbar(
+    const gfx::Size& toolbar_preferred_size) const {
+  return gfx::Rect();
+}
+
+void PictureInPictureBrowserFrameView::LayoutWebAppWindowTitle(
+    const gfx::Rect& available_space,
+    views::Label& window_title_label) const {}
 
 int PictureInPictureBrowserFrameView::GetTopInset(bool restored) const {
   return GetTopAreaHeight();
@@ -324,7 +448,7 @@ void PictureInPictureBrowserFrameView::UpdateWindowIcon() {
 }
 
 gfx::Size PictureInPictureBrowserFrameView::GetMinimumSize() const {
-  return kMinWindowSize;
+  return PictureInPictureWindowManager::GetMinimumWindowSize();
 }
 
 gfx::Size PictureInPictureBrowserFrameView::GetMaximumSize() const {
@@ -333,21 +457,22 @@ gfx::Size PictureInPictureBrowserFrameView::GetMaximumSize() const {
 
   auto display = display::Screen::GetScreen()->GetDisplayNearestWindow(
       GetWidget()->GetNativeWindow());
-  return gfx::ScaleToRoundedSize(display.size(), 0.8);
+  return PictureInPictureWindowManager::GetMaximumWindowSize(display);
 }
 
 void PictureInPictureBrowserFrameView::OnThemeChanged() {
   const auto* color_provider = GetColorProvider();
+  window_title_->SetBackgroundColor(
+      color_provider->GetColor(kColorPipWindowTopBarBackground));
   window_title_->SetEnabledColor(
       color_provider->GetColor(kColorPipWindowForeground));
   for (ContentSettingImageView* view : content_setting_views_)
-    view->SetIconColor(color_provider->GetColor(kColorOmniboxResultsIcon));
+    view->SetIconColor(color_provider->GetColor(kColorPipWindowForeground));
 
 #if !BUILDFLAG(IS_LINUX)
   // On Linux the top bar background will be drawn in OnPaint().
-  controls_container_view_->SetBackground(views::CreateSolidBackground(
-      SkColorSetA(color_provider->GetColor(kColorPipWindowControlsBackground),
-                  SK_AlphaOPAQUE)));
+  top_bar_container_view_->SetBackground(views::CreateSolidBackground(
+      color_provider->GetColor(kColorPipWindowTopBarBackground)));
 #endif
 
   BrowserNonClientFrameView::OnThemeChanged();
@@ -355,7 +480,7 @@ void PictureInPictureBrowserFrameView::OnThemeChanged() {
 
 void PictureInPictureBrowserFrameView::Layout() {
   auto border_thickness = FrameBorderInsets();
-  controls_container_view_->SetBoundsRect(
+  top_bar_container_view_->SetBoundsRect(
       gfx::Rect(border_thickness.left(), border_thickness.top(),
                 width() - border_thickness.width(), kTopControlsHeight));
 
@@ -365,6 +490,19 @@ void PictureInPictureBrowserFrameView::Layout() {
 void PictureInPictureBrowserFrameView::AddedToWidget() {
   widget_observation_.Observe(GetWidget());
   window_event_observer_ = std::make_unique<WindowEventObserver>(this);
+
+  // Creates an animation container to ensure all the animations update at the
+  // same time.
+  gfx::AnimationContainer* animation_container = new gfx::AnimationContainer();
+  animation_container->SetAnimationRunner(
+      std::make_unique<views::CompositorAnimationRunner>(GetWidget()));
+  top_bar_color_animation_.SetContainer(animation_container);
+  move_camera_button_to_left_animation_.SetContainer(animation_container);
+  move_camera_button_to_right_animation_.SetContainer(animation_container);
+  show_back_to_tab_button_animation_.SetContainer(animation_container);
+  hide_back_to_tab_button_animation_.SetContainer(animation_container);
+  show_close_button_animation_.SetContainer(animation_container);
+  hide_close_button_animation_.SetContainer(animation_container);
 
   BrowserNonClientFrameView::AddedToWidget();
 }
@@ -487,12 +625,12 @@ ui::ImageModel PictureInPictureBrowserFrameView::GetLocationIcon(
 SkColor
 PictureInPictureBrowserFrameView::GetIconLabelBubbleSurroundingForegroundColor()
     const {
-  return GetColorProvider()->GetColor(kColorOmniboxText);
+  return GetColorProvider()->GetColor(kColorPipWindowForeground);
 }
 
 SkColor PictureInPictureBrowserFrameView::GetIconLabelBubbleBackgroundColor()
     const {
-  return GetColorProvider()->GetColor(kColorLocationBarBackground);
+  return GetColorProvider()->GetColor(kColorPipWindowTopBarBackground);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -516,18 +654,9 @@ PictureInPictureBrowserFrameView::GetContentSettingBubbleModelDelegate() {
   return browser->content_setting_bubble_model_delegate();
 }
 
-#if BUILDFLAG(IS_MAC)
-///////////////////////////////////////////////////////////////////////////////
-// GeolocationManager::PermissionObserver implementations:
-void PictureInPictureBrowserFrameView::OnSystemPermissionUpdated(
-    device::LocationSystemPermissionStatus new_status) {
-  // Update icons if the macOS location permission is updated.
-  UpdateContentSettingsIcons();
-}
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////
 // views::WidgetObserver implementations:
+
 void PictureInPictureBrowserFrameView::OnWidgetActivationChanged(
     views::Widget* widget,
     bool active) {
@@ -545,7 +674,50 @@ void PictureInPictureBrowserFrameView::OnWidgetDestroying(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// gfx::AnimationDelegate implementations:
+
+void PictureInPictureBrowserFrameView::AnimationProgressed(
+    const gfx::Animation* animation) {
+  if (animation == &top_bar_color_animation_) {
+    SkColor color = gfx::Tween::ColorValueBetween(
+        animation->GetCurrentValue(),
+        GetColorProvider()->GetColor(kColorPipWindowForegroundInactive),
+        GetColorProvider()->GetColor(kColorPipWindowForeground));
+    window_title_->SetEnabledColor(color);
+    for (ContentSettingImageView* view : content_setting_views_) {
+      view->SetIconColor(color);
+    }
+    return;
+  }
+
+  if (animation == &move_camera_button_to_left_animation_ ||
+      animation == &move_camera_button_to_right_animation_) {
+    for (ContentSettingImageView* view : content_setting_views_) {
+      // Set the position of camera icon relative to |button_container_view_|.
+      view->SetX(animation->CurrentValueBetween(
+          back_to_tab_button_->width() + close_image_button_->width(), 0));
+    }
+    return;
+  }
+
+  if (animation == &show_back_to_tab_button_animation_ ||
+      animation == &hide_back_to_tab_button_animation_) {
+    back_to_tab_button_->layer()->SetOpacity(animation->GetCurrentValue());
+    return;
+  }
+
+  if (animation == &show_close_button_animation_ ||
+      animation == &hide_close_button_animation_) {
+    close_image_button_->layer()->SetOpacity(animation->GetCurrentValue());
+    return;
+  }
+
+  NOTREACHED();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // views::View implementations:
+
 void PictureInPictureBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
 #if BUILDFLAG(IS_LINUX)
   // Draw the PiP window frame borders and shadows, including the top bar
@@ -557,7 +729,7 @@ void PictureInPictureBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
   } else {
     DCHECK(frame_background_);
     frame_background_->set_frame_color(
-        GetFrameColor(BrowserFrameActiveState::kUseCurrent));
+        GetColorProvider()->GetColor(kColorPipWindowTopBarBackground));
     frame_background_->set_use_custom_frame(frame()->UseCustomFrame());
     frame_background_->set_is_active(ShouldPaintAsActive());
     frame_background_->set_theme_image(GetFrameImage());
@@ -576,32 +748,38 @@ void PictureInPictureBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // PictureInPictureBrowserFrameView implementations:
-gfx::Rect PictureInPictureBrowserFrameView::ConvertControlViewBounds(
-    views::View* control_view) const {
+
+gfx::Rect PictureInPictureBrowserFrameView::ConvertTopBarControlViewBounds(
+    views::View* control_view,
+    views::View* source_view) const {
   gfx::RectF bounds(control_view->GetMirroredBounds());
-  views::View::ConvertRectToTarget(controls_container_view_, this, &bounds);
+  views::View::ConvertRectToTarget(source_view, this, &bounds);
   return gfx::ToEnclosingRect(bounds);
 }
 
 gfx::Rect PictureInPictureBrowserFrameView::GetLocationIconViewBounds() const {
   DCHECK(location_icon_view_);
-  return ConvertControlViewBounds(location_icon_view_);
+  return ConvertTopBarControlViewBounds(location_icon_view_,
+                                        top_bar_container_view_);
 }
 
 gfx::Rect PictureInPictureBrowserFrameView::GetContentSettingViewBounds(
     size_t index) const {
   DCHECK(index < content_setting_views_.size());
-  return ConvertControlViewBounds(content_setting_views_[index]);
+  return ConvertTopBarControlViewBounds(content_setting_views_[index],
+                                        button_container_view_);
 }
 
 gfx::Rect PictureInPictureBrowserFrameView::GetBackToTabControlsBounds() const {
   DCHECK(back_to_tab_button_);
-  return ConvertControlViewBounds(back_to_tab_button_);
+  return ConvertTopBarControlViewBounds(back_to_tab_button_,
+                                        button_container_view_);
 }
 
 gfx::Rect PictureInPictureBrowserFrameView::GetCloseControlsBounds() const {
   DCHECK(close_image_button_);
-  return ConvertControlViewBounds(close_image_button_);
+  return ConvertTopBarControlViewBounds(close_image_button_,
+                                        button_container_view_);
 }
 
 LocationIconView* PictureInPictureBrowserFrameView::GetLocationIconView() {
@@ -609,24 +787,58 @@ LocationIconView* PictureInPictureBrowserFrameView::GetLocationIconView() {
 }
 
 void PictureInPictureBrowserFrameView::UpdateContentSettingsIcons() {
+  const auto kButtonContainerViewWithCameraButtonInsets =
+      gfx::Insets::TLBR(0, 0, 0, GetLayoutConstant(TAB_AFTER_TITLE_PADDING));
+  const auto kButtonContainerViewInsets =
+      gfx::Insets::VH(0, GetLayoutConstant(TAB_AFTER_TITLE_PADDING));
+
   for (auto* view : content_setting_views_) {
     view->Update();
+
+    // Currently the only content setting view we have is for camera and
+    // microphone settings, and we add margin insets based on its visibility to
+    // the button container view to be consistent with the normal browser
+    // window.
+    button_container_view_->SetProperty(
+        views::kMarginsKey,
+        (view->GetVisible() ? kButtonContainerViewWithCameraButtonInsets
+                            : kButtonContainerViewInsets));
   }
 }
 
 void PictureInPictureBrowserFrameView::UpdateTopBarView(bool render_active) {
-  back_to_tab_button_->SetVisible(render_active);
-  close_image_button_->SetVisible(render_active);
-
-  SkColor color;
-  if (render_active) {
-    color = GetColorProvider()->GetColor(kColorPipWindowForeground);
-  } else {
-    color = GetColorProvider()->GetColor(kColorOmniboxResultsIcon);
+  // Check if the update is needed to avoid redundant animations.
+  if (render_active_ == render_active) {
+    return;
   }
-  window_title_->SetEnabledColor(color);
-  for (ContentSettingImageView* view : content_setting_views_)
-    view->SetIconColor(color);
+
+  render_active_ = render_active;
+
+  // Stop the previous animations since if this function is called too soon,
+  // previous animations may override the new animations.
+  if (render_active_) {
+    move_camera_button_to_right_animation_.Stop();
+    hide_back_to_tab_button_animation_.Stop();
+    hide_close_button_animation_.Stop();
+
+    top_bar_color_animation_.Show();
+
+    // SlideAnimation needs to be reset if only Show() is called.
+    move_camera_button_to_left_animation_.Reset(0.0);
+    move_camera_button_to_left_animation_.Show();
+
+    show_back_to_tab_button_animation_.Start();
+    show_close_button_animation_.Start();
+  } else {
+    move_camera_button_to_left_animation_.Stop();
+    show_back_to_tab_button_animation_.Stop();
+    show_close_button_animation_.Stop();
+
+    top_bar_color_animation_.Hide();
+    move_camera_button_to_right_animation_.Start();
+    hide_back_to_tab_button_animation_.Start();
+    hide_close_button_animation_.Start();
+  }
 }
 
 gfx::Insets PictureInPictureBrowserFrameView::FrameBorderInsets() const {
@@ -686,15 +898,31 @@ gfx::ShadowValues PictureInPictureBrowserFrameView::GetShadowValues() {
 }
 #endif
 
+// Helper functions for testing.
+std::vector<gfx::Animation*>
+PictureInPictureBrowserFrameView::GetRenderActiveAnimationsForTesting() {
+  return std::vector<gfx::Animation*>(
+      {&top_bar_color_animation_, &move_camera_button_to_left_animation_,
+       &show_back_to_tab_button_animation_, &show_close_button_animation_});
+}
+
+std::vector<gfx::Animation*>
+PictureInPictureBrowserFrameView::GetRenderInactiveAnimationsForTesting() {
+  return std::vector<gfx::Animation*>(
+      {&top_bar_color_animation_, &move_camera_button_to_right_animation_,
+       &hide_back_to_tab_button_animation_, &hide_close_button_animation_});
+}
+
 views::View* PictureInPictureBrowserFrameView::GetBackToTabButtonForTesting() {
   return back_to_tab_button_;
 }
 
+views::View* PictureInPictureBrowserFrameView::GetCloseButtonForTesting() {
+  return close_image_button_;
+}
+
 void PictureInPictureBrowserFrameView::OnMouseEnteredOrExitedWindow(
     bool entered) {
-  if (mouse_inside_window_ == entered)
-    return;
-
   mouse_inside_window_ = entered;
   UpdateTopBarView(mouse_inside_window_);
 }

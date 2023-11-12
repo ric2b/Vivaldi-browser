@@ -4,9 +4,10 @@
 
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
@@ -38,6 +39,11 @@ const base::TimeDelta kMinimumRefreshDelay = base::Minutes(1);
 const char kForceTreatUserAsAdvancedProtection[] =
     "safe-browsing-treat-user-as-advanced-protection";
 
+void RecordUMA(AdvancedProtectionStatusManager::UmaEvent event) {
+  base::UmaHistogramEnumeration("SafeBrowsing.AdvancedProtection.Enabled",
+                                event);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -54,14 +60,34 @@ void AdvancedProtectionStatusManager::Initialize() {
   SubscribeToSigninEvents();
 }
 
+void AdvancedProtectionStatusManager::AddObserver(
+    StatusChangedObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void AdvancedProtectionStatusManager::RemoveObserver(
+    StatusChangedObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+void AdvancedProtectionStatusManager::NotifyStatusChanged() {
+  for (StatusChangedObserver& observer : observers_) {
+    observer.OnAdvancedProtectionStatusChanged(is_under_advanced_protection_);
+  }
+}
+
 void AdvancedProtectionStatusManager::MaybeRefreshOnStartUp() {
   // Retrieves advanced protection service status from primary account's info.
   CoreAccountInfo core_info =
       identity_manager_->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
-  if (core_info.account_id.empty())
+  if (core_info.account_id.empty()) {
     return;
+  }
 
   is_under_advanced_protection_ = core_info.is_under_advanced_protection;
+  RecordUMA(is_under_advanced_protection_ ? UmaEvent::kEnabled
+                                          : UmaEvent::kDisabled);
+  NotifyStatusChanged();
 
   if (pref_service_->HasPrefPath(prefs::kAdvancedProtectionLastRefreshInUs)) {
     last_refreshed_ = base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(
@@ -118,7 +144,6 @@ void AdvancedProtectionStatusManager::OnExtendedAccountInfoRemoved(
       GetUnconsentedPrimaryAccountId();
   if (!unconsented_primary_account_id.empty() &&
       unconsented_primary_account_id == info.account_id) {
-    is_under_advanced_protection_ = false;
     OnAdvancedProtectionDisabled();
   }
 }
@@ -144,15 +169,23 @@ void AdvancedProtectionStatusManager::OnPrimaryAccountChanged(
 }
 
 void AdvancedProtectionStatusManager::OnAdvancedProtectionEnabled() {
+  if (!is_under_advanced_protection_) {
+    RecordUMA(UmaEvent::kEnabledAfterDisabled);
+  }
   is_under_advanced_protection_ = true;
   UpdateLastRefreshTime();
   ScheduleNextRefresh();
+  NotifyStatusChanged();
 }
 
 void AdvancedProtectionStatusManager::OnAdvancedProtectionDisabled() {
+  if (is_under_advanced_protection_) {
+    RecordUMA(UmaEvent::kDisabledAfterEnabled);
+  }
   is_under_advanced_protection_ = false;
   UpdateLastRefreshTime();
   CancelFutureRefresh();
+  NotifyStatusChanged();
 }
 
 void AdvancedProtectionStatusManager::OnAccessTokenFetchComplete(
@@ -297,6 +330,7 @@ CoreAccountId AdvancedProtectionStatusManager::GetUnconsentedPrimaryAccountId()
 void AdvancedProtectionStatusManager::SetAdvancedProtectionStatusForTesting(
     bool enrolled) {
   is_under_advanced_protection_ = enrolled;
+  NotifyStatusChanged();
 }
 
 }  // namespace safe_browsing

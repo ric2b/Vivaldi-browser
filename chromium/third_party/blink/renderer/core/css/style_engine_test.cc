@@ -161,11 +161,7 @@ class StyleEngineTest : public PageTestBase {
   }
 };
 
-class StyleEngineContainerQueryTest : public StyleEngineTest,
-                                      private ScopedLayoutNGForTest {
- public:
-  StyleEngineContainerQueryTest() : ScopedLayoutNGForTest(true) {}
-};
+class StyleEngineContainerQueryTest : public StyleEngineTest {};
 
 StyleEngineTest::RuleSetInvalidation
 StyleEngineTest::ScheduleInvalidationsForRules(TreeScope& tree_scope,
@@ -179,8 +175,9 @@ StyleEngineTest::ScheduleInvalidationsForRules(TreeScope& tree_scope,
       sheet->EnsureRuleSet(MediaQueryEvaluator(GetDocument().GetFrame()),
                            kRuleHasDocumentSecurityOrigin);
   rule_set.CompactRulesIfNeeded();
-  if (rule_set.NeedsFullRecalcForRuleSetInvalidation())
+  if (rule_set.NeedsFullRecalcForRuleSetInvalidation()) {
     return kRuleSetInvalidationFullRecalc;
+  }
   rule_sets.insert(&rule_set);
   GetStyleEngine().ScheduleInvalidationsForRuleSets(tree_scope, rule_sets);
   return kRuleSetInvalidationsScheduled;
@@ -448,8 +445,10 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   ASSERT_TRUE(t5);
 
   // There's no @keyframes rule named dummy-animation
-  ASSERT_FALSE(GetStyleEngine().GetStyleResolver().FindKeyframesRule(
-      t5, t5, AtomicString("dummy-animation")));
+  ASSERT_FALSE(GetStyleEngine()
+                   .GetStyleResolver()
+                   .FindKeyframesRule(t5, t5, AtomicString("dummy-animation"))
+                   .rule);
 
   auto* keyframes_parsed_sheet = MakeGarbageCollected<StyleSheetContents>(
       MakeGarbageCollected<CSSParserContext>(GetDocument()));
@@ -462,8 +461,10 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   // After injecting the style sheet, a @keyframes rule named dummy-animation
   // is found with one keyframe.
   StyleRuleKeyframes* keyframes =
-      GetStyleEngine().GetStyleResolver().FindKeyframesRule(
-          t5, t5, AtomicString("dummy-animation"));
+      GetStyleEngine()
+          .GetStyleResolver()
+          .FindKeyframesRule(t5, t5, AtomicString("dummy-animation"))
+          .rule;
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(1u, keyframes->Keyframes().size());
 
@@ -475,16 +476,20 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
 
   // Author @keyframes rules take precedence; now there are two keyframes (from
   // and to).
-  keyframes = GetStyleEngine().GetStyleResolver().FindKeyframesRule(
-      t5, t5, AtomicString("dummy-animation"));
+  keyframes = GetStyleEngine()
+                  .GetStyleResolver()
+                  .FindKeyframesRule(t5, t5, AtomicString("dummy-animation"))
+                  .rule;
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(2u, keyframes->Keyframes().size());
 
   GetDocument().body()->RemoveChild(style_element);
   UpdateAllLifecyclePhases();
 
-  keyframes = GetStyleEngine().GetStyleResolver().FindKeyframesRule(
-      t5, t5, AtomicString("dummy-animation"));
+  keyframes = GetStyleEngine()
+                  .GetStyleResolver()
+                  .FindKeyframesRule(t5, t5, AtomicString("dummy-animation"))
+                  .rule;
   ASSERT_TRUE(keyframes);
   EXPECT_EQ(1u, keyframes->Keyframes().size());
 
@@ -492,8 +497,10 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
   UpdateAllLifecyclePhases();
 
   // Injected @keyframes rules are no longer available once removed.
-  ASSERT_FALSE(GetStyleEngine().GetStyleResolver().FindKeyframesRule(
-      t5, t5, AtomicString("dummy-animation")));
+  ASSERT_FALSE(GetStyleEngine()
+                   .GetStyleResolver()
+                   .FindKeyframesRule(t5, t5, AtomicString("dummy-animation"))
+                   .rule);
 
   // Custom properties
 
@@ -5620,139 +5627,6 @@ TEST_F(StyleEngineSimTest, ResizeWithBlockingSheetTransition) {
       Color::FromRGB(0, 128, 0));
 }
 
-namespace {
-
-const String CQLegacyWarningText() {
-  return String(
-      "Using container queries or units with printing, or in combination with "
-      "tables inside multicol will not work correctly.");
-}
-
-}  // namespace
-
-TEST_F(StyleEngineSimTest, ContainerQueryLegacyNoWarning) {
-  ScopedLayoutNGTableFragmentationForTest disabled_scope(false);
-
-  SimRequest main_resource("https://example.com/", "text/html");
-
-  LoadURL("https://example.com/");
-
-  main_resource.Complete(R"HTML(
-    <div style="container-type:size">
-      <div style="columns:1">
-        <table></table>
-      </div>
-    </div>
-    <div style="columns:1">
-      <table></table>
-    </div>
-  )HTML");
-
-  Compositor().BeginFrame();
-  test::RunPendingTasks();
-
-  EXPECT_FALSE(ConsoleMessages().Contains(CQLegacyWarningText()));
-}
-
-TEST_F(StyleEngineSimTest, ContainerQueryLegacyConsoleWarning_AddContainer) {
-  // For the ng-disabled bots:
-  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
-  ScopedLayoutNGTableFragmentationForTest disabled_scope(false);
-
-  SimRequest main_resource("https://example.com/", "text/html");
-
-  LoadURL("https://example.com/");
-
-  main_resource.Complete(R"HTML(
-    <div style="columns:1">
-      <table>
-        <div id="container"></div>
-      </table>
-    </div>
-  )HTML");
-
-  Compositor().BeginFrame();
-  test::RunPendingTasks();
-
-  EXPECT_FALSE(ConsoleMessages().Contains(CQLegacyWarningText()));
-
-  Element* container = GetDocument().getElementById("container");
-  container->SetInlineStyleProperty(CSSPropertyID::kContainerType, "size");
-
-  test::RunPendingTasks();
-  Compositor().BeginFrame();
-
-  EXPECT_TRUE(ConsoleMessages().Contains(CQLegacyWarningText()));
-}
-
-TEST_F(StyleEngineSimTest, ContainerQueryLegacyConsoleWarning_AddTable) {
-  // For the ng-disabled bots:
-  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
-  ScopedLayoutNGTableFragmentationForTest disabled_scope(false);
-
-  SimRequest main_resource("https://example.com/", "text/html");
-
-  LoadURL("https://example.com/");
-
-  main_resource.Complete(R"HTML(
-    <div style="columns:1">
-      <div style="container-type:size">
-        <div id="table"></div>
-      </div>
-    </div>
-  )HTML");
-
-  Compositor().BeginFrame();
-  test::RunPendingTasks();
-
-  EXPECT_FALSE(ConsoleMessages().Contains(CQLegacyWarningText()));
-
-  Element* table = GetDocument().getElementById("table");
-  table->SetInlineStyleProperty(CSSPropertyID::kDisplay, "table");
-
-  Compositor().BeginFrame();
-  test::RunPendingTasks();
-
-  EXPECT_TRUE(ConsoleMessages().Contains(CQLegacyWarningText()));
-}
-
-TEST_F(StyleEngineSimTest, ContainerQueryLegacyConsoleWarning_AddColumns) {
-  // For the ng-disabled bots:
-  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
-  ScopedLayoutNGTableFragmentationForTest disabled_scope(false);
-
-  SimRequest main_resource("https://example.com/", "text/html");
-
-  LoadURL("https://example.com/");
-
-  main_resource.Complete(R"HTML(
-    <div id="columns">
-      <div style="container-type:size">
-        <table></table>
-      </div>
-    </div>
-  )HTML");
-
-  Compositor().BeginFrame();
-  test::RunPendingTasks();
-
-  EXPECT_FALSE(ConsoleMessages().Contains(CQLegacyWarningText()));
-
-  Element* columns = GetDocument().getElementById("columns");
-  columns->SetInlineStyleProperty(CSSPropertyID::kColumns, "1");
-
-  Compositor().BeginFrame();
-  test::RunPendingTasks();
-
-  EXPECT_TRUE(ConsoleMessages().Contains(CQLegacyWarningText()));
-}
-
 TEST_F(StyleEngineSimTest,
        ShouldInvalidateSubjectPseudoHasAfterChildrenParsingFinished) {
   SimRequest main_resource("https://example.com/", "text/html");
@@ -5838,21 +5712,6 @@ TEST_F(StyleEngineSimTest,
   EXPECT_EQ(
       Color::FromRGB(0, 0, 0),
       fourth->GetComputedStyle()->VisitedDependentColor(GetCSSPropertyColor()));
-}
-
-TEST_F(StyleEngineTest, UsesCachedTokenizer) {
-  // Make sure the parser exists.
-  GetDocument().write("<body></body>");
-
-  GetDocument().GetScriptableDocumentParser()->AddCSSTokenizer(
-      ".foo{}", CSSTokenizer::CreateCachedTokenizer(".foo{} .bar{}"));
-  GetDocument().body()->setInnerHTML("<style id=style>.foo{}</style>");
-
-  // If the cached tokenizer is used, the resulting sheet should have 2 rules
-  // (.foo and .bar).
-  auto& style_element =
-      To<HTMLStyleElement>(*GetDocument().getElementById("style"));
-  EXPECT_EQ(style_element.sheet()->length(), 2u);
 }
 
 TEST_F(StyleEngineTest, StyleElementTypeAttrChange) {
@@ -6055,6 +5914,119 @@ TEST_F(StyleEngineTest, SubsequentSiblingRecalcFlatTree) {
 
   // Only the slotted elements should get style recalc.
   EXPECT_EQ(3u, after_count - before_count);
+}
+
+TEST_F(StyleEngineTest, InitialStyle_Recalc) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #target { background-color: green; }
+      #target:initial { background-color: red; }
+    </style>
+    <div id="target"></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  constexpr Color green = Color::FromRGB(0, 128, 0);
+  constexpr Color lime = Color::FromRGB(0, 255, 0);
+
+  Element* target = GetDocument().getElementById("target");
+  unsigned before_count = GetStyleEngine().StyleForElementCount();
+
+  target->SetInlineStyleProperty(CSSPropertyID::kColor, "lime");
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 1u)
+      << "The style recalc should not do a separate :initial pass since the "
+         "element already has a style";
+  EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
+                GetCSSPropertyBackgroundColor()),
+            green)
+      << "Make sure :initial does not match for the second pass";
+  EXPECT_EQ(
+      target->ComputedStyleRef().VisitedDependentColor(GetCSSPropertyColor()),
+      lime)
+      << "Check that the color changed to lime";
+}
+
+TEST_F(StyleEngineTest, InitialStyle_FromDisplayNone) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #target { background-color: green; }
+      #target:initial { background-color: red; }
+    </style>
+    <div id="target" style="display:none"></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  constexpr Color green = Color::FromRGB(0, 128, 0);
+
+  Element* target = GetDocument().getElementById("target");
+  unsigned before_count = GetStyleEngine().StyleForElementCount();
+
+  target->SetInlineStyleProperty(CSSPropertyID::kDisplay, "block");
+  UpdateAllLifecyclePhasesForTest();
+
+  EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 2u)
+      << "The style recalc needs to do two passes because the element was "
+         "display:none and :initial styles are matching";
+  EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
+                GetCSSPropertyBackgroundColor()),
+            green)
+      << "Make sure :initial does not match for the second pass";
+}
+
+TEST_F(StyleEngineTest, InitialStyleCount_EnsureComputedStyle) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #target {
+        background-color: green;
+        transition: background-color 100s step-end;
+      }
+      #target:initial { background-color: red; }
+    </style>
+    <div id="target" style="display:none"></div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  constexpr Color green = Color::FromRGB(0, 128, 0);
+
+  Element* target = GetDocument().getElementById("target");
+  unsigned before_count = GetStyleEngine().StyleForElementCount();
+
+  ASSERT_FALSE(target->GetComputedStyle())
+      << "Initially no ComputedStyle on display:none element";
+
+  const ComputedStyle* none_style = target->EnsureComputedStyle();
+  ASSERT_TRUE(none_style);
+
+  EXPECT_EQ(GetStyleEngine().StyleForElementCount() - before_count, 1u)
+      << "No :initial pass for EnsureComputedStyle";
+
+  EXPECT_EQ(target->ComputedStyleRef().VisitedDependentColor(
+                GetCSSPropertyBackgroundColor()),
+            green)
+      << "Transitions are not started and :initial does not apply in "
+         "display:none";
+}
+
+TEST_F(StyleEngineTest, UseCountCSSAnchorPositioning) {
+  ScopedCSSAnchorPositioningForTest enabled(true);
+
+  EXPECT_FALSE(IsUseCounted(WebFeature::kCSSAnchorPositioning));
+
+  SetBodyInnerHTML("<style>#foo { top: anchor(top); }");
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSAnchorPositioning));
+
+  ClearUseCounter(WebFeature::kCSSAnchorPositioning);
+  SetBodyInnerHTML("<style>#foo { width: anchor-size(width); }");
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSAnchorPositioning));
+
+  ClearUseCounter(WebFeature::kCSSAnchorPositioning);
+  SetBodyInnerHTML("<style>@position-fallback --pf {}</style>");
+  EXPECT_TRUE(IsUseCounted(WebFeature::kCSSAnchorPositioning));
 }
 
 }  // namespace blink

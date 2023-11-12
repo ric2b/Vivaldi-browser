@@ -9,11 +9,14 @@ andzaytsev@google.com
 ckitagawa@chromium.org
 sinansahin@google.com
 mvanouwerkerk@chromium.org
+jinsukkim@chromium.org
 # apps
 nancylingwang@chromium.org
 tby@chromium.org
+yulunwu@chromium.org
 # arc
 mhasank@chromium.org
+batoon@google.com
 # ash_clipboard
 ckincaid@chromium.org
 dmblack@google.com
@@ -21,9 +24,9 @@ dmblack@google.com
 tby@chromium.org
 jimmyxgong@chromium.org
 zentaro@chromium.org
+yulunwu@chromium.org
 # assistant
 xiaohuic@chromium.org
-updowndota@chromium.org
 # autofill
 jsaul@google.com
 vidhanj@google.com
@@ -105,6 +108,7 @@ davidmunro@google.com
 hollingum@google.com
 danielng@google.com
 # cryptohome
+emaxx@chromium.org
 jorgelo@chromium.org
 # custom_tabs
 eirage@chromium.org
@@ -282,8 +286,12 @@ olivierli@chromium.org
 tby@chromium.org
 # prefetch
 curranmax@chromium.org
+spelchat@chromium.org
 tbansal@chromium.org
 toyoshim@chromium.org
+# preloading
+curranmax@chromium.org
+spelchat@chromium.org
 # printing
 awscreen@chromium.org
 jimmyxgong@chromium.org
@@ -304,7 +312,6 @@ johnidel@chromium.org
 alexilin@chromium.org
 # quick_answers
 xiaohuic@chromium.org
-updowndota@chromium.org
 # quota
 ayui@chromium.org
 # renderer4
@@ -386,7 +393,6 @@ rayankans@chromium.org
 alancutter@chromium.org
 dmurph@chromium.org
 eirage@chromium.org
-ericwilligers@chromium.org
 glenrob@chromium.org
 hartmanng@chromium.org
 # web_audio

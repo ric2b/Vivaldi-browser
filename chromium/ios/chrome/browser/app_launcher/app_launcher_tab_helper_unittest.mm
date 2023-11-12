@@ -6,9 +6,10 @@
 
 #import <memory>
 
-#import "base/bind.h"
 #import "base/command_line.h"
 #import "base/files/scoped_temp_dir.h"
+#import "base/functional/bind.h"
+#import "base/memory/scoped_refptr.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "base/time/default_clock.h"
@@ -90,9 +91,14 @@ class FakeNavigationManager : public web::FakeNavigationManager {
 // Test fixture for AppLauncherTabHelper class.
 class AppLauncherTabHelperTest : public PlatformTest {
  protected:
-  AppLauncherTabHelperTest()
-      : browser_state_(TestChromeBrowserState::Builder().Build()),
-        abuse_detector_([[FakeAppLauncherAbuseDetector alloc] init]) {
+  AppLauncherTabHelperTest() {
+    TestChromeBrowserState::Builder builder;
+    builder.AddTestingFactory(
+        ReadingListModelFactory::GetInstance(),
+        base::BindRepeating(&BuildReadingListModelWithFakeStorage,
+                            std::vector<scoped_refptr<ReadingListEntry>>()));
+    browser_state_ = builder.Build();
+    abuse_detector_ = [[FakeAppLauncherAbuseDetector alloc] init];
     AppLauncherTabHelper::CreateForWebState(&web_state_, abuse_detector_);
     // Allow is the default policy for this test.
     abuse_detector_.policy = ExternalAppLaunchPolicyAllow;
@@ -131,27 +137,11 @@ class AppLauncherTabHelperTest : public PlatformTest {
     return policy_decision.ShouldAllowNavigation();
   }
 
-  // Initialize reading list model and its required tab helpers.
-  void InitializeReadingListModel() {
-    TestChromeBrowserState::Builder test_cbs_builder;
-    chrome_browser_state_ = test_cbs_builder.Build();
-    web_state_.SetBrowserState(chrome_browser_state_.get());
-    ReadingListModelFactory::GetInstance()->SetTestingFactoryAndUse(
-        chrome_browser_state_.get(),
-        base::BindRepeating(&BuildReadingListModelWithFakeStorage,
-                            std::vector<ReadingListEntry>()));
-    is_reading_list_initialized_ = true;
-  }
-
   // Returns true if the `expected_read_status` matches the read status for any
   // non empty source URL based on the transition type and the app policy.
   bool TestReadingListUpdate(bool is_app_blocked,
                              bool is_link_transition,
                              bool expected_read_status) {
-    // Make sure reading list model is initialized.
-    if (!is_reading_list_initialized_)
-      InitializeReadingListModel();
-
     web_state_.SetCurrentURL(GURL("https://chromium.org"));
     GURL pending_url("http://google.com");
     navigation_manager_->AddItem(pending_url, ui::PAGE_TRANSITION_LINK);
@@ -159,8 +149,8 @@ class AppLauncherTabHelperTest : public PlatformTest {
     navigation_manager_->SetPendingItem(item);
     item->SetOriginalRequestURL(pending_url);
 
-    ReadingListModel* model = ReadingListModelFactory::GetForBrowserState(
-        chrome_browser_state_.get());
+    ReadingListModel* model =
+        ReadingListModelFactory::GetForBrowserState(browser_state_.get());
     EXPECT_TRUE(model->DeleteAllEntries());
     model->AddOrReplaceEntry(pending_url, "unread",
                              reading_list::ADDED_VIA_CURRENT_APP,
@@ -191,7 +181,8 @@ class AppLauncherTabHelperTest : public PlatformTest {
     EXPECT_TRUE(callback_called);
     EXPECT_TRUE(policy_decision.ShouldCancelNavigation());
 
-    const ReadingListEntry* entry = model->GetEntryByURL(pending_url);
+    scoped_refptr<const ReadingListEntry> entry =
+        model->GetEntryByURL(pending_url);
     return entry->IsRead() == expected_read_status;
   }
 
@@ -199,11 +190,8 @@ class AppLauncherTabHelperTest : public PlatformTest {
   std::unique_ptr<TestChromeBrowserState> browser_state_;
   web::FakeWebState web_state_;
   FakeNavigationManager* navigation_manager_ = nullptr;
-
-  std::unique_ptr<TestChromeBrowserState> chrome_browser_state_ = nil;
   FakeAppLauncherAbuseDetector* abuse_detector_ = nil;
   FakeAppLauncherTabHelperDelegate delegate_;
-  bool is_reading_list_initialized_ = false;
   AppLauncherTabHelper* tab_helper_ = nullptr;
 };
 
@@ -515,11 +503,11 @@ class BlockedUrlPolicyAppLauncherTabHelperTest
     web_state_.SetBrowserState(enterprise_policy_helper_->GetBrowserState());
 
     policy::PolicyMap policy_map;
-    base::Value value(base::Value::Type::LIST);
+    base::Value::List value;
     value.Append("itms-apps://*");
     policy_map.Set(policy::key::kURLBlocklist, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   std::move(value), nullptr);
+                   base::Value(std::move(value)), nullptr);
     enterprise_policy_helper_->GetPolicyProvider()->UpdateChromePolicy(
         policy_map);
 

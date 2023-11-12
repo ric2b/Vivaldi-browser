@@ -4,10 +4,10 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
@@ -325,7 +325,7 @@ std::string PrintToString(const quic::ParsedQuicVersion& v) {
 
 INSTANTIATE_TEST_SUITE_P(Version,
                          URLRequestQuicTest,
-                         ::testing::ValuesIn(quic::AllSupportedVersions()),
+                         ::testing::ValuesIn(AllSupportedQuicVersions()),
                          ::testing::PrintToStringParamName());
 
 TEST_P(URLRequestQuicTest, TestGetRequest) {
@@ -433,6 +433,8 @@ TEST_P(URLRequestQuicTest, DelayedResponseStart) {
   EXPECT_EQ(OK, delegate.request_status());
   EXPECT_GE((timing_info.receive_headers_start - timing_info.request_start),
             delay);
+  EXPECT_GE(timing_info.receive_non_informational_headers_start,
+            timing_info.receive_headers_start);
 }
 
 }  // namespace net

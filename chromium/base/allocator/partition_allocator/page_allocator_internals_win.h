@@ -5,29 +5,16 @@
 #ifndef BASE_ALLOCATOR_PARTITION_ALLOCATOR_PAGE_ALLOCATOR_INTERNALS_WIN_H_
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_PAGE_ALLOCATOR_INTERNALS_WIN_H_
 
-#include <versionhelpers.h>
-
 #include <cstdint>
 
 #include "base/allocator/partition_allocator/oom.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/page_allocator_internal.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
-#include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_notreached.h"
 
 namespace partition_alloc::internal {
-
-namespace {
-
-// On Windows, discarded pages are not returned to the system immediately and
-// not guaranteed to be zeroed when returned to the application.
-using DiscardVirtualMemoryFunction = DWORD(WINAPI*)(PVOID virtualAddress,
-                                                    SIZE_T size);
-DiscardVirtualMemoryFunction s_discard_virtual_memory =
-    reinterpret_cast<DiscardVirtualMemoryFunction>(-1);
-
-}  // namespace
 
 // |VirtualAlloc| will fail if allocation at the hint address is blocked.
 constexpr bool kHintIsAdvisory = false;
@@ -41,7 +28,7 @@ bool IsOutOfMemory(DWORD error) {
     case ERROR_COMMITMENT_MINIMUM:
       // Page file is too small.
     case ERROR_COMMITMENT_LIMIT:
-#if defined(PA_HAS_64_BITS_POINTERS)
+#if BUILDFLAG(HAS_64_BIT_POINTERS)
     // Not enough memory resources are available to process this command.
     //
     // It is not entirely clear whether this error pertains to out of address
@@ -237,27 +224,10 @@ bool TryRecommitSystemPagesInternal(
 }
 
 void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
-  if (s_discard_virtual_memory ==
-      reinterpret_cast<DiscardVirtualMemoryFunction>(-1)) {
-    // DiscardVirtualMemory's minimum supported client is Windows 8.1 Update.
-    // So skip GetProcAddress("DiscardVirtualMemory") if windows version is
-    // smaller than Windows 8.1.
-    if (IsWindows8Point1OrGreater()) {
-      s_discard_virtual_memory =
-          reinterpret_cast<DiscardVirtualMemoryFunction>(GetProcAddress(
-              GetModuleHandle(L"Kernel32.dll"), "DiscardVirtualMemory"));
-    } else {
-      s_discard_virtual_memory = nullptr;
-    }
-  }
-
   void* ptr = reinterpret_cast<void*>(address);
   // Use DiscardVirtualMemory when available because it releases faster than
   // MEM_RESET.
-  DWORD ret = 1;
-  if (s_discard_virtual_memory) {
-    ret = s_discard_virtual_memory(ptr, length);
-  }
+  DWORD ret = DiscardVirtualMemory(ptr, length);
   // DiscardVirtualMemory is buggy in Win10 SP0, so fall back to MEM_RESET on
   // failure.
   if (ret) {

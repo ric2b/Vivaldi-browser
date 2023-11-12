@@ -10,6 +10,7 @@
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "components/omnibox/browser/location_bar_model_impl.h"
 #import "components/omnibox/browser/omnibox_edit_model.h"
 #import "components/omnibox/browser/omnibox_view.h"
@@ -22,6 +23,7 @@
 #import "ios/chrome/browser/browser_state_metrics/browser_state_metrics.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/url_drag_drop_handler.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
@@ -37,6 +39,7 @@
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/search_image_with_lens_command.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
+#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
@@ -51,13 +54,13 @@
 #import "ios/chrome/browser/ui/main/default_browser_scene_agent.h"
 #import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#import "ios/chrome/browser/ui/ntp/ntp_util.h"
-#import "ios/chrome/browser/ui/omnibox/location_bar_delegate.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_util.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_controller_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_coordinator.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_focus_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_coordinator.h"
-#import "ios/chrome/browser/ui/omnibox/web_omnibox_edit_controller_impl.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_delegate.h"
+#import "ios/chrome/browser/ui/omnibox/web_omnibox_edit_model_delegate_impl.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #import "ios/chrome/browser/url_loading/image_search_param_generator.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
@@ -76,7 +79,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "ios/chrome/browser/ui/activity_services/canonical_url_retriever.h"
+#import "ios/chrome/browser/ui/sharing/activity_services/canonical_url_retriever.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_summery_view_controller.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -91,13 +94,13 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 }  // namespace
 
 @interface LocationBarCoordinator () <LoadQueryCommands,
-                                      LocationBarDelegate,
                                       LocationBarViewControllerDelegate,
                                       LocationBarConsumer,
                                       LocationBarSteadyViewConsumer,
+                                      OmniboxControllerDelegate,
                                       URLDragDataSource> {
   // API endpoint for omnibox.
-  std::unique_ptr<WebOmniboxEditControllerImpl> _editController;
+  std::unique_ptr<WebOmniboxEditModelDelegateImpl> _editModelDelegate;
   // Observer that updates `viewController` for fullscreen events.
   std::unique_ptr<FullscreenUIUpdater> _omniboxFullscreenUIUpdater;
   // Observer that updates BadgeViewController for fullscreen events.
@@ -179,13 +182,18 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   self.viewController.layoutGuideCenter =
       LayoutGuideCenterForBrowser(self.browser);
 
-  _editController = std::make_unique<WebOmniboxEditControllerImpl>(self);
-  _editController->SetURLLoader(self);
+  _editModelDelegate =
+      std::make_unique<WebOmniboxEditModelDelegateImpl>(self, self.delegate);
+  _editModelDelegate->SetURLLoader(self);
+  _locationBarModelDelegate.reset(new LocationBarModelDelegateIOS(
+      self.browser->GetWebStateList(), self.browserState));
+  _locationBarModel = std::make_unique<LocationBarModelImpl>(
+      _locationBarModelDelegate.get(), kMaxURLDisplayChars);
 
   self.omniboxCoordinator =
       [[OmniboxCoordinator alloc] initWithBaseViewController:nil
                                                      browser:self.browser];
-  self.omniboxCoordinator.editController = _editController.get();
+  self.omniboxCoordinator.editModelDelegate = _editModelDelegate.get();
   self.omniboxCoordinator.presenterDelegate = self.popupPresenterDelegate;
   [self.omniboxCoordinator start];
 
@@ -228,11 +236,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   self.mediator.consumer = self;
   self.mediator.webStateList = self.webStateList;
 
-  _locationBarModelDelegate.reset(
-      new LocationBarModelDelegateIOS(self.browser->GetWebStateList()));
-  _locationBarModel = std::make_unique<LocationBarModelImpl>(
-      _locationBarModelDelegate.get(), kMaxURLDisplayChars);
-
   self.steadyViewMediator = [[LocationBarSteadyViewMediator alloc]
       initWithLocationBarModel:[self locationBarModel]];
   self.steadyViewMediator.webStateList = self.browser->GetWebStateList();
@@ -257,7 +260,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   [self.omniboxCoordinator stop];
   [self.badgeMediator disconnect];
   self.badgeMediator = nil;
-  _editController.reset();
+  _editModelDelegate.reset();
 
   self.viewController = nil;
   [self.mediator disconnect];
@@ -385,15 +388,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   self.isCancellingOmniboxEdit = NO;
 }
 
-#pragma mark - LocationBarDelegate
-
-- (void)locationBarHasBecomeFirstResponder {
-  [self.delegate locationBarDidBecomeFirstResponder];
-}
-
-- (void)locationBarHasResignedFirstResponder {
-  [self.delegate locationBarDidResignFirstResponder];
-}
+#pragma mark - OmniboxControllerDelegate
 
 - (web::WebState*)webState {
   return self.webStateList->GetActiveWebState();
@@ -401,10 +396,6 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (LocationBarModel*)locationBarModel {
   return _locationBarModel.get();
-}
-
-- (void)locationBarRequestScribbleTargetFocus {
-  [self.omniboxCoordinator focusOmniboxForScribble];
 }
 
 #pragma mark - LocationBarViewControllerDelegate
@@ -415,6 +406,10 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
 
 - (void)locationBarCopyTapped {
   StoreURLInPasteboard(self.webState->GetVisibleURL());
+}
+
+- (void)locationBarRequestScribbleTargetFocus {
+  [self.omniboxCoordinator focusOmniboxForScribble];
 }
 
 - (void)recordShareButtonPressed {
@@ -438,6 +433,9 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   DefaultBrowserSceneAgent* agent =
       [DefaultBrowserSceneAgent agentFromScene:sceneState];
   [agent.nonModalScheduler logUserPastedInOmnibox];
+  LogToFETUserPastedURLIntoOmnibox(
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          self.browser->GetBrowserState()));
 }
 
 - (void)searchCopiedImage {
@@ -634,7 +632,7 @@ const size_t kMaxURLDisplayChars = 32 * 1024;
   }
 }
 
-- (id<ActivityServicePositioner>)activityServicePositioner {
+- (id<SharingPositioner>)vivaldiPositioner {
   return [self.viewController steadyView];
 }
 // End Vivaldi

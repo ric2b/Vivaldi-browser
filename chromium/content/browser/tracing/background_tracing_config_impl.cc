@@ -55,7 +55,7 @@ BackgroundTracingConfigImpl::BackgroundTracingConfigImpl(
     : BackgroundTracingConfig(tracing_mode),
       category_preset_(BackgroundTracingConfigImpl::BENCHMARK_STARTUP) {}
 
-BackgroundTracingConfigImpl::~BackgroundTracingConfigImpl() {}
+BackgroundTracingConfigImpl::~BackgroundTracingConfigImpl() = default;
 
 // static
 std::string BackgroundTracingConfigImpl::CategoryPresetToString(
@@ -138,12 +138,8 @@ void BackgroundTracingConfigImpl::AddPreemptiveRule(
 }
 
 void BackgroundTracingConfigImpl::AddReactiveRule(
-    const base::Value::Dict& dict,
-    BackgroundTracingConfigImpl::CategoryPreset category_preset) {
-  BackgroundTracingRule* rule = AddRule(dict);
-  if (rule) {
-    rule->set_category_preset(category_preset);
-  }
+    const base::Value::Dict& dict) {
+  AddRule(dict);
 }
 
 void BackgroundTracingConfigImpl::AddSystemRule(const base::Value::Dict& dict) {
@@ -232,7 +228,7 @@ BackgroundTracingConfigImpl::PreemptiveFromDict(const base::Value::Dict& dict) {
 
   if (const base::Value::Dict* trace_config =
           dict.FindDict(kConfigTraceConfigKey)) {
-    config->trace_config_ = TraceConfig(base::Value(trace_config->Clone()));
+    config->trace_config_ = TraceConfig(trace_config->Clone());
     config->category_preset_ = CUSTOM_TRACE_CONFIG;
   } else if (const std::string* categories =
                  dict.FindString(kConfigCustomCategoriesKey)) {
@@ -280,7 +276,7 @@ BackgroundTracingConfigImpl::ReactiveFromDict(const base::Value::Dict& dict) {
   bool has_global_categories = false;
   if (const base::Value::Dict* trace_config =
           dict.FindDict(kConfigTraceConfigKey)) {
-    config->trace_config_ = TraceConfig(base::Value(trace_config->Clone()));
+    config->trace_config_ = TraceConfig(trace_config->Clone());
     config->category_preset_ = CUSTOM_TRACE_CONFIG;
     has_global_categories = true;
   } else if (const std::string* categories =
@@ -322,7 +318,7 @@ BackgroundTracingConfigImpl::ReactiveFromDict(const base::Value::Dict& dict) {
       }
     }
 
-    config->AddReactiveRule(config_dict.GetDict(), config->category_preset_);
+    config->AddReactiveRule(config_dict.GetDict());
   }
 
   if (config->rules().empty())

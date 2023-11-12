@@ -7,9 +7,9 @@
 #include <cmath>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -1223,10 +1223,7 @@ void TabImpl::InitializeAutofillDriver() {
   autofill::ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
       web_contents, AutofillClientImpl::FromWebContents(web_contents),
       base::BindRepeating(&autofill::AndroidDriverInitHook,
-                          AutofillClientImpl::FromWebContents(web_contents),
-                          autofill::AutofillManager::EnableDownloadManager(
-                              !autofill::AutofillProvider::
-                                  is_download_manager_disabled_for_testing())));
+                          AutofillClientImpl::FromWebContents(web_contents)));
 }
 
 #endif  // BUILDFLAG(IS_ANDROID)

@@ -10,7 +10,6 @@
 
 #include "base/feature_list.h"
 #include "base/run_loop.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
@@ -73,15 +72,16 @@ void AdverseAdFilterTestHarness::SetUp() {
   // for |ContentRulesetService| and |RulesetService| would be a good idea, but
   // external unit tests code implicitly uses knowledge that blocking and
   // background task runners are initiazlied from
-  // |base::ThreadTaskRunnerHandle::Get()|:
+  // |base::SingleThreadTaskRunner::GetCurrentDefault()|:
   // 1. |TestRulesetPublisher| uses this knowledge in |SetRuleset| method. It
   //    is waiting for the ruleset published callback.
   // 2. Navigation simulator uses this knowledge. It knows that
   //    |AsyncDocumentSubresourceFilter| posts core initialization tasks on
   //    blocking task runner and this it is the current thread task runner.
   auto ruleset_service = std::make_unique<subresource_filter::RulesetService>(
-      &pref_service_, base::ThreadTaskRunnerHandle::Get(),
-      ruleset_service_dir_.GetPath(), base::ThreadTaskRunnerHandle::Get());
+    &pref_service_, base::SingleThreadTaskRunner::GetCurrentDefault(),
+    ruleset_service_dir_.GetPath(),
+    base::SingleThreadTaskRunner::GetCurrentDefault());
   TestingBrowserProcess::GetGlobal()->SetRulesetService(
       std::move(ruleset_service));
 

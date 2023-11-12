@@ -34,6 +34,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.Log;
@@ -44,6 +45,7 @@ import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
 import org.chromium.ui.modelutil.SimpleRecyclerViewAdapter;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
+import org.chromium.ui.resources.dynamics.DynamicResourceReadyOnceCallback;
 import org.chromium.ui.resources.dynamics.ViewResourceAdapter;
 import org.chromium.ui.widget.ViewLookupCachingFrameLayout;
 
@@ -161,6 +163,14 @@ class TabListRecyclerView
     // It is null when gts-tab animation is disabled or switching from Start surface to GTS.
     @Nullable
     private RecyclerView.ItemAnimator mOriginalAnimator;
+    // Null if there is no runnable to execute on the next layout.
+    @Nullable
+    private Runnable mOnNextLayoutRunnable;
+    /**
+     * Capture is suppressed when animations are not running. Animations are initiated after the
+     * completion of {@link DynamicResource#triggerBitmapCapture()}.
+     */
+    private boolean mSuppressCapture = true;
 
     // Vivaldi
     private int mCurrentTabViewInstance;
@@ -176,6 +186,49 @@ class TabListRecyclerView
 
         // Vivaldi
         mCurrentTabViewInstance = TabSwitcherView.CurrentTabViewInstance;
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        if (mOnNextLayoutRunnable != null) {
+            Runnable runnable = mOnNextLayoutRunnable;
+            mOnNextLayoutRunnable = null;
+            runnable.run();
+        }
+    }
+
+    /**
+     * Sets a runnable to start an animation that executes on next layout. This ensures any
+     * positioning changes will be accounted for. If the view is not attached or will not be laid
+     * out the runnable is executed immediately to avoid blocking indefinitely. This method is
+     * intended to be used to defer transition animations until after a {@link DynamicView} is
+     * captured.
+     * @param runnable the runnable that executes on next layout.
+     */
+    void runAnimationOnNextLayout(Runnable runnable) {
+        assert mOnNextLayoutRunnable
+                == null
+            : "TabListRecyclerView animation on next layout set multiple times without running.";
+        mOnNextLayoutRunnable = () -> {
+            if (mDynamicView == null) {
+                runnable.run();
+                return;
+            }
+            DynamicResourceReadyOnceCallback.onNext(mDynamicView, resource -> {
+                mSuppressCapture = false;
+                runnable.run();
+            });
+            mDynamicView.triggerBitmapCapture();
+        };
+
+        // If the view is detached or won't conduct a new layout then trigger the runnable
+        // immediately rather than waiting for it to be attached.
+        if (!isAttachedToWindow() || !isLayoutRequested()) {
+            Runnable runNow = mOnNextLayoutRunnable;
+            mOnNextLayoutRunnable = null;
+            runNow.run();
+        }
     }
 
     /**
@@ -238,6 +291,7 @@ class TabListRecyclerView
             @Override
             public void onAnimationEnd(Animator animation) {
                 mFadeInAnimator = null;
+                mSuppressCapture = true;
                 mListener.finishedShowing();
                 // Restore the original value.
                 // TODO(crbug.com/1315676): Remove the null check after decoupling Start surface
@@ -248,8 +302,8 @@ class TabListRecyclerView
                 }
                 setShadowVisibility(computeVerticalScrollOffset() > 0);
                 if (mDynamicView != null) {
-                    mDynamicView.dropCachedBitmap();
                     unregisterDynamicView();
+                    mDynamicView.dropCachedBitmap();
                 }
                 // TODO(crbug.com/972157): remove this band-aid after we know why GTS is invisible.
                 if (TabUiFeatureUtilities.isTabToGtsAnimationEnabled()) {
@@ -350,6 +404,11 @@ class TabListRecyclerView
      * The view resource can be obtained by {@link #getResourceId} in compositor layer.
      */
     void createDynamicView(DynamicResourceLoader loader) {
+        // TODO(crbug/1409886): Consider reducing capture frequency or only capturing once. There
+        // was some discussion about this in crbug/1386265. However, it was punted on due to mid-end
+        // devices having difficulty producing thumbnails before the first capture to avoid the
+        // transition being jarring. This is exacerbated by multi-thumbnails which need to be
+        // assembled from multiple assets.
         mDynamicView = new ViewResourceAdapter(this) {
             private long mSuppressedUntil;
 
@@ -359,7 +418,7 @@ class TabListRecyclerView
                 if (dirty) {
                     mLastDirtyTime = SystemClock.elapsedRealtime();
                 }
-                if (SystemClock.elapsedRealtime() < mSuppressedUntil) {
+                if (SystemClock.elapsedRealtime() < mSuppressedUntil || mSuppressCapture) {
                     if (dirty) {
                         Log.d(TAG, "Dynamic View is dirty but suppressed");
                     }
@@ -474,7 +533,18 @@ class TabListRecyclerView
         endAllAnimations();
 
         registerDynamicView();
+        if (mDynamicView == null) {
+            hideAnimation(animate);
+            return;
+        }
+        DynamicResourceReadyOnceCallback.onNext(mDynamicView, resource -> {
+            mSuppressCapture = false;
+            hideAnimation(animate);
+        });
+        mDynamicView.triggerBitmapCapture();
+    }
 
+    private void hideAnimation(boolean animate) {
         mListener.startedHiding(animate);
         mFadeOutAnimator = ObjectAnimator.ofFloat(this, View.ALPHA, 0);
         mFadeOutAnimator.setInterpolator(BakedBezierInterpolator.FADE_OUT_CURVE);
@@ -484,6 +554,7 @@ class TabListRecyclerView
             public void onAnimationEnd(Animator animation) {
                 mFadeOutAnimator = null;
                 setVisibility(View.INVISIBLE);
+                mSuppressCapture = true;
                 mListener.finishedHiding();
             }
         });
@@ -494,8 +565,8 @@ class TabListRecyclerView
 
     void postHiding() {
         if (mDynamicView != null) {
-            mDynamicView.dropCachedBitmap();
             unregisterDynamicView();
+            mDynamicView.dropCachedBitmap();
         }
     }
 
@@ -572,7 +643,7 @@ class TabListRecyclerView
      */
     @NonNull
     RecyclerViewPosition getRecyclerViewPosition() {
-        GridLayoutManager layoutManager = (GridLayoutManager) getLayoutManager();
+        LinearLayoutManager layoutManager = (LinearLayoutManager) getLayoutManager();
         int position = layoutManager.findFirstVisibleItemPosition();
         int offset = 0;
         if (position != RecyclerView.NO_POSITION) {
@@ -588,7 +659,7 @@ class TabListRecyclerView
      * @param recyclerViewPosition the position and offset to scroll the recycler view to.
      */
     void setRecyclerViewPosition(@NonNull RecyclerViewPosition recyclerViewPosition) {
-        ((GridLayoutManager) getLayoutManager())
+        ((LinearLayoutManager) getLayoutManager())
                 .scrollToPositionWithOffset(
                         recyclerViewPosition.getPosition(), recyclerViewPosition.getOffset());
     }

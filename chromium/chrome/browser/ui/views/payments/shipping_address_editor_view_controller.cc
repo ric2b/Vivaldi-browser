@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/views/payments/shipping_address_editor_view_controller.h"
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
@@ -212,6 +212,11 @@ std::u16string ShippingAddressEditorViewController::GetSheetTitle() {
   // in the case that one or more fields are missing.
   return profile_to_edit_ ? l10n_util::GetStringUTF16(IDS_PAYMENTS_EDIT_ADDRESS)
                           : l10n_util::GetStringUTF16(IDS_PAYMENTS_ADD_ADDRESS);
+}
+
+base::WeakPtr<PaymentRequestSheetController>
+ShippingAddressEditorViewController::GetWeakPtr() {
+  return weak_ptr_factory_.GetWeakPtr();
 }
 
 int ShippingAddressEditorViewController::GetPrimaryButtonId() {
@@ -432,7 +437,7 @@ void ShippingAddressEditorViewController::UpdateEditorFields() {
   if (chosen_country_index_ < countries_.size())
     chosen_country_code = countries_[chosen_country_index_].first;
 
-  std::vector<std::vector<::i18n::addressinput::AddressUiComponent>> components;
+  std::vector<std::vector<autofill::ExtendedAddressUiComponent>> components;
   autofill::GetAddressComponents(
       chosen_country_code, state()->GetApplicationLocale(),
       /*include_literals=*/false, &components, &language_code_);
@@ -444,9 +449,9 @@ void ShippingAddressEditorViewController::UpdateEditorFields() {
       EditorField::LengthHint::HINT_SHORT, /*required=*/true,
       EditorField::ControlType::COMBOBOX);
 
-  for (const std::vector<::i18n::addressinput::AddressUiComponent>& line :
+  for (const std::vector<autofill::ExtendedAddressUiComponent>& line :
        components) {
-    for (const ::i18n::addressinput::AddressUiComponent& component : line) {
+    for (const autofill::ExtendedAddressUiComponent& component : line) {
       EditorField::LengthHint length_hint =
           component.length_hint ==
                   i18n::addressinput::AddressUiComponent::HINT_LONG

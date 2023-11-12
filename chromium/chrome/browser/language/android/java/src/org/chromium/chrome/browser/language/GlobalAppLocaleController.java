@@ -20,6 +20,9 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Locale;
 
+// Vivaldi
+import android.preference.PreferenceManager;
+
 /**
  * The global application language controller that uses the locale from
  * {@link AppLocaleUtils#getAppLanguagePref} to override the locales in
@@ -97,7 +100,9 @@ public class GlobalAppLocaleController {
         // that applyOverrideConfiguration() does not interpret it as an overridden value.
         // https://crbug.com/834191
         config.fontScale = 0;
-
+        // Note(david@vivaldi.com): Always apply the correct ui scale value (VAB-7172).
+        config.densityDpi =
+                PreferenceManager.getDefaultSharedPreferences(base).getInt("ui_scale_value", 0);
         LocaleUtils.updateConfig(base, config, mOverrideLanguage);
         return config;
     }

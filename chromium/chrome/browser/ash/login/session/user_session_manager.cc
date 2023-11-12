@@ -17,12 +17,12 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/base_paths.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -30,6 +30,7 @@
 #include "base/path_service.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/syslog_logging.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -57,7 +58,6 @@
 #include "chrome/browser/ash/login/auth/chrome_safe_mode_delegate.h"
 #include "chrome/browser/ash/login/chrome_restart_request.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
-#include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_manager.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_notification_controller.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/ash/login/existing_user_controller.h"
@@ -362,10 +362,6 @@ bool CanPerformEarlyRestart() {
   if (controller->auth_mode() != LoginPerformer::AuthorizationMode::kInternal)
     return false;
 
-  // No early restart if Easy unlock key needs to be updated.
-  if (UserSessionManager::GetInstance()->NeedsToUpdateEasyUnlockKeys())
-    return false;
-
   return true;
 }
 
@@ -563,7 +559,6 @@ UserSessionManager::UserSessionManager()
       has_auth_cookies_(false),
       user_sessions_restored_(false),
       user_sessions_restore_in_progress_(false),
-      running_easy_unlock_key_ops_(false),
       should_obtain_handles_(true),
       should_launch_browser_(true),
       waiting_for_child_account_status_(false),
@@ -718,8 +713,6 @@ void UserSessionManager::StartSession(
     base::WeakPtr<UserSessionManagerDelegate> delegate) {
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(kEventCategoryChromeOS, kEventStartSession,
                                     TRACE_ID_LOCAL(this));
-
-  easy_unlock_key_ops_finished_ = false;
 
   delegate_ = std::move(delegate);
   start_session_type_ = start_session_type;
@@ -1007,12 +1000,6 @@ bool UserSessionManager::RestartToApplyPerSessionFlagsIfNeed(
   return true;
 }
 
-bool UserSessionManager::NeedsToUpdateEasyUnlockKeys() const {
-  return user_context_.GetAccountId().is_valid() &&
-         user_manager::User::TypeHasGaiaAccount(user_context_.GetUserType()) &&
-         user_context_.GetKey() && !user_context_.GetKey()->GetSecret().empty();
-}
-
 void UserSessionManager::AddSessionStateObserver(
     ash::UserSessionStateObserver* observer) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -1090,7 +1077,7 @@ void UserSessionManager::OnSessionRestoreStateChanged(
   // subject to an exploit. See http://crbug.com/677312.
   if (IsOnlineSignin(user_context_) &&
       state == OAuth2LoginManager::SESSION_RESTORE_FAILED) {
-    LOG(ERROR)
+    SYSLOG(ERROR)
         << "Session restore failed for online sign-in, terminating session.";
     chrome::AttemptUserExit();
     return;
@@ -1160,7 +1147,8 @@ void UserSessionManager::OnUsersSignInConstraintsChanged() {
       continue;
     }
     if (!user_manager->IsUserAllowed(*user)) {
-      LOG(ERROR) << "The current user is not allowed, terminating the session.";
+      SYSLOG(ERROR)
+          << "The current user is not allowed, terminating the session.";
       chrome::AttemptUserExit();
     }
   }
@@ -1327,8 +1315,9 @@ void UserSessionManager::PrepareProfile(const base::FilePath& profile_path) {
           [](base::WeakPtr<UserSessionManager> self,
              const UserContext& user_context, Profile* profile) {
             // `profile` might be null, meaning that the creation failed.
-            if (!profile)
+            if (!profile || !self) {
               return;
+            }
             // Profile is created, extensions and promo resources
             // are initialized. At this point all other Chrome OS
             // services will be notified that it is safe to use
@@ -1341,8 +1330,9 @@ void UserSessionManager::PrepareProfile(const base::FilePath& profile_path) {
           [](base::WeakPtr<UserSessionManager> self,
              const UserContext& user_context, Profile* profile) {
             // `profile` might be null, meaning that the creation failed.
-            if (!profile)
+            if (!profile || !self) {
               return;
+            }
             // Profile created but before initializing extensions and
             // promo resources.
             self->InitProfilePreferences(profile, user_context);
@@ -1627,35 +1617,44 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
   user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile);
   user_manager::KnownUser known_user(g_browser_process->local_state());
   if (user_manager->IsLoggedInAsUserWithGaiaAccount()) {
-    if (user_context_.GetAuthFlow() == UserContext::AUTH_FLOW_GAIA_WITH_SAML) {
-      known_user.UpdateUsingSAML(user_context_.GetAccountId(), true);
+    const UserContext::AuthFlow auth_flow = user_context_.GetAuthFlow();
+    if (auth_flow == UserContext::AUTH_FLOW_GAIA_WITH_SAML ||
+        auth_flow == UserContext::AUTH_FLOW_GAIA_WITHOUT_SAML) {
+      const bool using_saml =
+          auth_flow == UserContext::AUTH_FLOW_GAIA_WITH_SAML;
+      const AccountId& account_id = user_context_.GetAccountId();
+      known_user.UpdateUsingSAML(account_id, using_saml);
       known_user.UpdateIsUsingSAMLPrincipalsAPI(
-          user_context_.GetAccountId(),
-          user_context_.IsUsingSamlPrincipalsApi());
-      user->set_using_saml(true);
+          account_id,
+          using_saml ? user_context_.IsUsingSamlPrincipalsApi() : false);
+      user->set_using_saml(using_saml);
+      if (!using_saml) {
+        known_user.ClearPasswordSyncToken(account_id);
+      }
     }
-    PasswordSyncTokenVerifier* password_sync_token_verifier =
-        PasswordSyncTokenVerifierFactory::GetForProfile(profile);
-    if (password_sync_token_verifier) {
-      if (user_context_.GetAuthFlow() ==
-          UserContext::AUTH_FLOW_GAIA_WITH_SAML) {
-        // Update local sync token after online SAML login.
-        password_sync_token_verifier->FetchSyncTokenOnReauth();
-      } else if (user_context_.GetAuthFlow() ==
-                 UserContext::AUTH_FLOW_OFFLINE) {
-        // Verify local sync token to check whether the local password is out
-        // of sync.
-        password_sync_token_verifier->RecordTokenPollingStart();
-        password_sync_token_verifier->CheckForPasswordNotInSync();
-      } else {
-        NOTREACHED();
+    if (user->using_saml()) {
+      PasswordSyncTokenVerifier* password_sync_token_verifier =
+          PasswordSyncTokenVerifierFactory::GetForProfile(profile);
+      if (password_sync_token_verifier) {
+        if (auth_flow == UserContext::AUTH_FLOW_GAIA_WITH_SAML) {
+          // Update local sync token after online SAML login.
+          password_sync_token_verifier->FetchSyncTokenOnReauth();
+        } else if (auth_flow == UserContext::AUTH_FLOW_OFFLINE) {
+          // Verify local sync token to check whether the local password is out
+          // of sync.
+          password_sync_token_verifier->RecordTokenPollingStart();
+          password_sync_token_verifier->CheckForPasswordNotInSync();
+        } else {
+          // SAML user is not expected to go through other authentication flows.
+          NOTREACHED();
+        }
       }
     }
 
     OfflineSigninLimiter* offline_signin_limiter =
         OfflineSigninLimiterFactory::GetForProfile(profile);
     if (offline_signin_limiter)
-      offline_signin_limiter->SignedIn(user_context_.GetAuthFlow());
+      offline_signin_limiter->SignedIn(auth_flow);
   }
 
   profile->OnLogin();
@@ -1675,19 +1674,8 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
       always_on_vpn_manager_ =
           std::make_unique<arc::AlwaysOnVpnManager>(profile->GetPrefs());
 
-      // SecureDnsManager is only needed if DNS-over-HTTPS is enabled for the
-      // dns-proxy service.
-      if (base::FeatureList::IsEnabled(::features::kDnsProxyEnableDOH)) {
-        secure_dns_manager_ = std::make_unique<SecureDnsManager>(
-            g_browser_process->local_state());
-      }
-    }
-
-    UpdateEasyUnlockKeys(user_context_);
-    if (!features::IsUseAuthFactorsEnabled()) {
-      // Migration to cryptohome uses legacy AddKey-based cryptohome methods.
-      quick_unlock::PinBackend::GetInstance()->MigrateToCryptohome(
-          profile, std::make_unique<UserContext>(user_context_));
+      secure_dns_manager_ =
+          std::make_unique<SecureDnsManager>(g_browser_process->local_state());
     }
 
     // Save sync password hash and salt to profile prefs if they are available.
@@ -1839,8 +1827,7 @@ bool MaybeStartManagementTransition(Profile* profile) {
 
 bool MaybeShowManagedTermsOfService(Profile* profile) {
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-  if (features::IsManagedTermsOfServiceEnabled() &&
-      !user_manager->IsCurrentUserNew() &&
+  if (!user_manager->IsCurrentUserNew() &&
       profile->GetPrefs()->IsManagedPreference(::prefs::kTermsOfServiceURL)) {
     LoginDisplayHost::default_host()->GetSigninUI()->ShowTosForExistingUser();
     return true;
@@ -2121,75 +2108,6 @@ void UserSessionManager::NotifyPendingUserSessionsRestoreFinished() {
     observer.PendingUserSessionsRestoreFinished();
 }
 
-void UserSessionManager::UpdateEasyUnlockKeys(const UserContext& user_context) {
-  easy_unlock_key_ops_finished_ = false;
-
-  // Skip key update because FakeUserDataAuthClient always return success
-  // and RefreshKeys op expects a failure to stop. As a result, some tests would
-  // timeout.
-  // TODO(xiyuan): Revisit this when adding tests.
-  if (!base::SysInfo::IsRunningOnChromeOS()) {
-    NotifyEasyUnlockKeyOpsFinished();
-    return;
-  }
-
-  // Only update Easy unlock keys for regular user.
-  // TODO(xiyuan): Fix inconsistency user type of `user_context` introduced in
-  // authenticator.
-  const user_manager::User* user =
-      user_manager::UserManager::Get()->FindUser(user_context.GetAccountId());
-  if (!user || !user->HasGaiaAccount()) {
-    NotifyEasyUnlockKeyOpsFinished();
-    return;
-  }
-
-  // Bail if `user_context` does not have secret.
-  if (user_context.GetKey()->GetSecret().empty()) {
-    NotifyEasyUnlockKeyOpsFinished();
-    return;
-  }
-
-  // Skip key update when using PIN. The keys should wrap password instead of
-  // PIN.
-  if (user_context.IsUsingPin()) {
-    NotifyEasyUnlockKeyOpsFinished();
-    return;
-  }
-
-  const base::Value::List* device_list = nullptr;
-  EasyUnlockService* easy_unlock_service = EasyUnlockService::GetForUser(*user);
-  if (easy_unlock_service) {
-    device_list = easy_unlock_service->IsChromeOSLoginEnabled()
-                      ? easy_unlock_service->GetRemoteDevices()
-                      : nullptr;
-    easy_unlock_service->SetHardlockState(SmartLockStateHandler::NO_HARDLOCK);
-  }
-
-  base::Value::List empty_list;
-  if (!device_list)
-    device_list = &empty_list;
-
-  EasyUnlockKeyManager* key_manager = GetEasyUnlockKeyManager();
-  running_easy_unlock_key_ops_ = true;
-  key_manager->RefreshKeys(
-      user_context, *device_list,
-      base::BindOnce(&UserSessionManager::OnEasyUnlockKeyOpsFinished,
-                     GetUserSessionManagerAsWeakPtr(),
-                     user_context.GetAccountId()));
-}
-
-void UserSessionManager::OnEasyUnlockKeyOpsFinished(const AccountId& account_id,
-                                                    bool success) {
-  const user_manager::User* user =
-      user_manager::UserManager::Get()->FindUser(account_id);
-  CHECK(user);
-  EasyUnlockService* easy_unlock_service = EasyUnlockService::GetForUser(*user);
-  if (easy_unlock_service)
-    easy_unlock_service->CheckCryptohomeKeysAndMaybeHardlock();
-
-  NotifyEasyUnlockKeyOpsFinished();
-}
-
 void UserSessionManager::OnChildPolicyReady(
     Profile* profile,
     ChildPolicyObserver::InitialPolicyRefreshResult result) {
@@ -2247,13 +2165,6 @@ void UserSessionManager::CheckEolInfo(Profile* profile) {
                .first;
   }
   iter->second->CheckEolInfo();
-}
-
-EasyUnlockKeyManager* UserSessionManager::GetEasyUnlockKeyManager() {
-  if (!easy_unlock_key_manager_)
-    easy_unlock_key_manager_ = std::make_unique<EasyUnlockKeyManager>();
-
-  return easy_unlock_key_manager_.get();
 }
 
 void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
@@ -2547,25 +2458,6 @@ void UserSessionManager::UpdateTokenHandle(Profile* const profile,
       profile, base::BindOnce(&UserSessionManager::OnTokenHandleObtained,
                               GetUserSessionManagerAsWeakPtr()));
   token_handle_backfill_tried_for_testing_ = true;
-}
-
-void UserSessionManager::NotifyEasyUnlockKeyOpsFinished() {
-  DCHECK(!easy_unlock_key_ops_finished_);
-  running_easy_unlock_key_ops_ = false;
-  easy_unlock_key_ops_finished_ = true;
-  for (auto& callback : easy_unlock_key_ops_finished_callbacks_) {
-    std::move(callback).Run();
-  }
-  easy_unlock_key_ops_finished_callbacks_.clear();
-}
-
-void UserSessionManager::WaitForEasyUnlockKeyOpsFinished(
-    base::OnceClosure callback) {
-  if (easy_unlock_key_ops_finished_) {
-    std::move(callback).Run();
-    return;
-  }
-  easy_unlock_key_ops_finished_callbacks_.push_back(std::move(callback));
 }
 
 bool UserSessionManager::IsFullRestoreEnabled(Profile* profile) {

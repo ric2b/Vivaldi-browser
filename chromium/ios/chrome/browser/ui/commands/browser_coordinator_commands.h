@@ -6,6 +6,7 @@
 #define IOS_CHROME_BROWSER_UI_COMMANDS_BROWSER_COORDINATOR_COMMANDS_H_
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 @protocol BadgeItem;
 class GURL;
@@ -31,10 +32,6 @@ class GURL;
 // Shows the Reading List UI.
 - (void)showReadingList;
 
-// Shows an IPH pointing to where the Reading List entry point is, if
-// applicable.
-- (void)showReadingListIPH;
-
 // Shows an IPH pointing to where the Follow entry point is, if
 // applicable.
 - (void)showFollowWhileBrowsingIPH;
@@ -51,6 +48,8 @@ class GURL;
 - (void)showNotesManager;
 
 - (void)showPanel;
+
+- (void)dismissPanel;
 // End Vivaldi
 
 // Shows recent tabs.
@@ -107,6 +106,9 @@ class GURL;
 
 // Shows what's new IPH.
 - (void)showWhatsNewIPH;
+
+// Shows the spotlight debugger.
+- (void)showSpotlightDebugger;
 
 @end
 

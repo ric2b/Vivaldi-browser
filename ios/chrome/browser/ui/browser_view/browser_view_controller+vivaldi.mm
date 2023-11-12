@@ -3,9 +3,10 @@
 
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+vivaldi.h"
 
-#import <objc/runtime.h>
 #import <MaterialComponents/MaterialSnackbar.h>
-#include <memory>
+
+#import <memory>
+#import <objc/runtime.h>
 
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
@@ -23,7 +24,7 @@
 #import "notes/notes_model.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 namespace {
 const void* const key = &key;

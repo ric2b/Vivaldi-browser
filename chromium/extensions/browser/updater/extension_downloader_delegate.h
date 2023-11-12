@@ -8,7 +8,7 @@
 #include <set>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "extensions/browser/crx_file_info.h"
 #include "extensions/browser/updater/extension_downloader_types.h"
@@ -218,6 +218,12 @@ class ExtensionDownloaderDelegate {
   // of downloading.
   virtual void OnExtensionDownloadStageChanged(const ExtensionId& id,
                                                Stage stage);
+
+  // Invoked when an update is found for an extension, but before any attempt
+  // to download it is made.
+  virtual void OnExtensionUpdateFound(const ExtensionId& id,
+                                      const std::set<int>& request_ids,
+                                      const base::Version& version);
 
   // Invoked once during downloading, after fetching and parsing update
   // manifest, |cache_status| contains information about what have we found in

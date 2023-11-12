@@ -2,13 +2,13 @@
 
 #import "ios/notes/note_path_cache.h"
 
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
-#include "ios/chrome/browser/prefs/pref_names.h"
+#import "components/pref_registry/pref_registry_syncable.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/notes/note_utils_ios.h"
-#include "notes/notes_model.h"
-#include "notes/note_node.h"
-#include "prefs/vivaldi_pref_names.h"
+#import "notes/note_node.h"
+#import "notes/notes_model.h"
+#import "prefs/vivaldi_pref_names.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

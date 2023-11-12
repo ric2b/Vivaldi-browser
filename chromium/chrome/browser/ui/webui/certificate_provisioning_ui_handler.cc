@@ -7,9 +7,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/webui/certificate_provisioning_ui_handler.h"
 
-#include "base/bind.h"
 #include "base/containers/span.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/functional/bind.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
@@ -96,6 +95,18 @@ std::u16string StateToText(CertProvisioningProcessState state) {
     case CertProvisioningProcessState::kCanceled:
       return l10n_util::GetStringUTF16(
           IDS_SETTINGS_CERTIFICATE_MANAGER_PROVISIONING_STATUS_CANCELED);
+    case CertProvisioningProcessState::kReadyForNextOperation:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_CERTIFICATE_MANAGER_PROVISIONING_STATUS_READY_FOR_NEXT_OPERATION);
+    case CertProvisioningProcessState::kAuthorizeInstructionReceived:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_CERTIFICATE_MANAGER_PROVISIONING_STATUS_AUTHORIZE_INSTRUCTION_RECEIVED);
+    case CertProvisioningProcessState::kProofOfPossessionInstructionReceived:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_CERTIFICATE_MANAGER_PROVISIONING_STATUS_PROOF_OF_POSSESSION_INSTRUCTION_RECEIVED);
+    case CertProvisioningProcessState::kImportCertificateInstructionReceived:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_CERTIFICATE_MANAGER_PROVISIONING_STATUS_IMPORT_CERTIFICATE_INSTRUCTION_RECEIVED);
   }
   NOTREACHED();
 }

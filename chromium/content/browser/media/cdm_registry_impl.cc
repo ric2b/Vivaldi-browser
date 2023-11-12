@@ -13,19 +13,23 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_split.h"
+#include "base/task/bind_post_task.h"
 #include "base/types/optional_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/common/cdm_info.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/key_system_names.h"
 #include "media/base/key_systems.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
 #include "media/media_buildflags.h"
 #include "media/mojo/buildflags.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "content/browser/media/key_system_support_android.h"
+#endif
 
 #if BUILDFLAG(IS_WIN)
 #include "content/browser/gpu/gpu_data_manager_impl.h"
@@ -475,19 +479,19 @@ void CdmRegistryImpl::AttemptToFinalizeKeySystemCapability(
   pending_lazy_initializations_.insert({key_system, robustness});
   LazyInitializeCapability(
       key_system, robustness,
-      media::BindToCurrentLoop(base::BindOnce(
+      base::BindPostTaskToCurrentDefault(base::BindOnce(
           &CdmRegistryImpl::OnCapabilityInitialized,
           weak_ptr_factory_.GetWeakPtr(), key_system, robustness)));
 }
 
 // TODO(xhwang): Find a way to register this as callbacks so we don't have to
 // hardcode platform-specific logic here.
-// TODO(crbug.com/853336): Support Android query.
 void CdmRegistryImpl::LazyInitializeCapability(
     const std::string& key_system,
     CdmInfo::Robustness robustness,
-    CdmCapabilityCB cdm_capability_cb) {
-  DVLOG(2) << __func__;
+    media::CdmCapabilityCB cdm_capability_cb) {
+  DVLOG(2) << __func__ << ": key_system=" << key_system
+           << ", robustness=" << robustness;
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (capability_cb_for_testing_) {
@@ -503,11 +507,15 @@ void CdmRegistryImpl::LazyInitializeCapability(
     DCHECK(cdm_info && !cdm_info->capability);
     GetMediaFoundationServiceHardwareSecureCdmCapability(
         key_system, cdm_info->path, std::move(cdm_capability_cb));
-    return;
+  } else {
+    // kSoftwareSecure should have been determined from the manifest.
+    std::move(cdm_capability_cb).Run(absl::nullopt);
   }
-#endif  // BUILDFLAG(IS_WIN)
-
+#elif BUILDFLAG(IS_ANDROID)
+  GetAndroidCdmCapability(key_system, robustness, std::move(cdm_capability_cb));
+#else
   std::move(cdm_capability_cb).Run(absl::nullopt);
+#endif
 }
 
 void CdmRegistryImpl::OnCapabilityInitialized(

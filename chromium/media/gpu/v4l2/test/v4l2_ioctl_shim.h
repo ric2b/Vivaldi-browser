@@ -61,12 +61,9 @@ class MmapedBuffer : public base::RefCounted<MmapedBuffer> {
 
   MmapedPlanes mmaped_planes_;
   const uint32_t num_planes_;
-  // TODO(stevecho): might be better to use constructor for default value
-  uint32_t buffer_id_ = 0;
+  uint32_t buffer_id_;
   // Indicates which frame in input bitstream corresponds to this MmapedBuffer
   // in OUTPUT queue.
-  // TODO(stevecho): might need to consider |show_frame| flag in the frame
-  // header.
   uint32_t frame_number_;
 };
 
@@ -233,6 +230,12 @@ class V4L2IoctlShim {
   // Re-initializes the previously allocated request for reuse.
   [[nodiscard]] bool MediaRequestIocReinit(
       const std::unique_ptr<V4L2Queue>& queue) const;
+
+  // Finds available media device for video decoder. This function also checks
+  // to make sure either |bus_info| or |driver| field from |media_device_info|
+  // struct (obtained from MEDIA_IOC_DEVICE_INFO call) is matched from the same
+  // field in |v4l2_capability| struct (obtained from VIDIOC_QUERYCAP call).
+  [[nodiscard]] bool FindMediaDevice();
 
   // Verifies |v4l_fd| supports |compressed_format| for OUTPUT queues
   // and |uncompressed_format| for CAPTURE queues, respectively.

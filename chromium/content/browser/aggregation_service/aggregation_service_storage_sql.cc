@@ -11,12 +11,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/sequence_checker.h"
@@ -128,10 +128,9 @@ bool UpgradeAggregationServiceStorageSqlSchema(sql::Database& db,
   if (!db.Execute(kReportingOriginIndexSql))
     return false;
 
-  meta_table.SetVersionNumber(
-      AggregationServiceStorageSql::kCurrentVersionNumber);
-
-  return transaction.Commit();
+  return meta_table.SetVersionNumber(
+             AggregationServiceStorageSql::kCurrentVersionNumber) &&
+         transaction.Commit();
 }
 
 void RecordInitializationStatus(
@@ -711,15 +710,8 @@ AggregationServiceStorageSql::AdjustOfflineReportTimes(
 void AggregationServiceStorageSql::ClearDataBetween(
     base::Time delete_begin,
     base::Time delete_end,
-    StoragePartition::StorageKeyMatcherFunction filter,
-    base::ElapsedTimer elapsed_timer) {
+    StoragePartition::StorageKeyMatcherFunction filter) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  // Temporary histogram for investigating bug.
-  // TODO(crbug.com/1373392): Remove when resolved.
-  base::UmaHistogramLongTimes100(
-      "PrivacySandbox.AggregationService.Storage.Sql.ClearDataTaskDelay",
-      elapsed_timer.Elapsed());
 
   if (!EnsureDatabaseOpen(DbCreationPolicy::kFailIfAbsent))
     return;
@@ -769,7 +761,8 @@ void AggregationServiceStorageSql::ClearRequestsStoredBetween(
   while (select_requests_to_delete_statement.Step()) {
     url::Origin reporting_origin = url::Origin::Create(
         GURL(select_requests_to_delete_statement.ColumnString(1)));
-    if (filter.is_null() || filter.Run(blink::StorageKey(reporting_origin))) {
+    if (filter.is_null() ||
+        filter.Run(blink::StorageKey::CreateFirstParty(reporting_origin))) {
       if (!DeleteRequestImpl(
               RequestId(select_requests_to_delete_statement.ColumnInt64(0)))) {
         return;

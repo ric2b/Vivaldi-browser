@@ -13,12 +13,12 @@
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -77,8 +77,7 @@ PasswordUIViewAndroid::SerializationResult SerializePasswords(
   // Write the serialized data in CSV.
   std::string data =
       password_manager::PasswordCSVWriter::SerializePasswords(credentials);
-  int bytes_written = base::WriteFile(export_file, data.data(), data.size());
-  if (bytes_written != base::checked_cast<int>(data.size())) {
+  if (!base::WriteFile(export_file, data)) {
     return {
         0, std::string(),
         logging::SystemErrorCodeToString(logging::GetLastSystemErrorCode())};

@@ -9,11 +9,12 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/task_environment.h"
 #include "components/services/storage/public/cpp/buckets/bucket_id.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
@@ -42,16 +43,15 @@ class MockQuotaEvictionHandler : public QuotaEvictionHandler {
   }
 
   void EvictBucketData(const BucketLocator& bucket,
-                       StatusCallback callback) override {
+                       base::OnceCallback<void(QuotaError)> callback) override {
     if (error_on_evict_buckets_data_) {
-      std::move(callback).Run(
-          blink::mojom::QuotaStatusCode::kErrorInvalidModification);
+      std::move(callback).Run(QuotaError::kUnknownError);
       return;
     }
     int64_t bucket_usage = EnsureBucketRemoved(bucket);
     if (bucket_usage >= 0)
       available_space_ += bucket_usage;
-    std::move(callback).Run(blink::mojom::QuotaStatusCode::kOk);
+    std::move(callback).Run(QuotaError::kNone);
   }
 
   void GetEvictionRoundInfo(EvictionRoundInfoCallback callback) override {

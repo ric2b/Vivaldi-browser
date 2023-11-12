@@ -10,11 +10,13 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "content/browser/fenced_frame/fenced_frame_config.h"
+#include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
@@ -29,18 +31,22 @@ using SharedStorageReportingMap = base::flat_map<std::string, ::GURL>;
 // Keeps a mapping of fenced frames URN:UUID and URL. Also keeps a set of
 // pending mapped URN:UUIDs to support asynchronous mapping. See
 // https://github.com/WICG/fenced-frame/blob/master/explainer/opaque_src.md
+// TODO(crbug.com/1405477): Add methods for:
+// 1. generating the pending config.
+// 2. finalizing the pending config.
 class CONTENT_EXPORT FencedFrameURLMapping {
  public:
   // The runURLSelectionOperation's url mapping result. It contains the mapped
-  // url and the `SharedStorageBudgetMetadata`.
+  // url, the `SharedStorageBudgetMetadata`, and a FencedFrameReporter.
   struct CONTENT_EXPORT SharedStorageURNMappingResult {
     GURL mapped_url;
     SharedStorageBudgetMetadata budget_metadata;
-    SharedStorageReportingMap reporting_map;
+    scoped_refptr<FencedFrameReporter> fenced_frame_reporter;
     SharedStorageURNMappingResult();
-    SharedStorageURNMappingResult(GURL mapped_url,
-                                  SharedStorageBudgetMetadata budget_metadata,
-                                  SharedStorageReportingMap reporting_map);
+    SharedStorageURNMappingResult(
+        GURL mapped_url,
+        SharedStorageBudgetMetadata budget_metadata,
+        scoped_refptr<FencedFrameReporter> fenced_frame_reporter);
     ~SharedStorageURNMappingResult();
   };
 
@@ -64,8 +70,7 @@ class CONTENT_EXPORT FencedFrameURLMapping {
   // Imports URN to URL mappings from passed in mapping. Generally only called
   // once per PendingAdComponentsMap, on the mapping associated with a frame
   // being navigated to a URN. Calling this twice with the same
-  // PendingAdComponentsMap on the same FencedFrameURLMapping will assert,
-  // since it will result in adding the same URNs twice to the same mapping.
+  // PendingAdComponentsMap on the same FencedFrameURLMapping will do nothing.
   void ImportPendingAdComponents(
       const std::vector<std::pair<GURL, FencedFrameConfig>>& components);
 
@@ -89,7 +94,7 @@ class CONTENT_EXPORT FencedFrameURLMapping {
       AdAuctionData auction_data,
       base::RepeatingClosure on_navigate_callback,
       std::vector<GURL> ad_component_urls,
-      const ReportingMetadata& reporting_metadata = ReportingMetadata());
+      scoped_refptr<FencedFrameReporter> fenced_frame_reporter = nullptr);
 
   // Generate a URN that is not yet mapped to a URL.
   // * For Shared Storage, it will be returned by
@@ -123,7 +128,12 @@ class CONTENT_EXPORT FencedFrameURLMapping {
   // will trigger the observers' OnFencedFrameURLMappingComplete() method
   // associated with the `urn_uuid`, unregister those observers, and move the
   // `urn_uuid` from `pending_urn_uuid_to_url_map_` to `urn_uuid_to_url_map_`.
-  void OnSharedStorageURNMappingResultDetermined(
+  // If the resolved URL is fenced-frame-compatible, the return value is the
+  // populated fenced frame config. It is used to notify the observers in shared
+  // storage worklet host manager. Tests can then obtain the populated fenced
+  // frame configs from the observers.
+  // Otherwise this method returns an absl::nullopt.
+  absl::optional<FencedFrameConfig> OnSharedStorageURNMappingResultDetermined(
       const GURL& urn_uuid,
       const SharedStorageURNMappingResult& mapping_result);
 
@@ -133,12 +143,11 @@ class CONTENT_EXPORT FencedFrameURLMapping {
   // Mapping will not be added and return absl::nullopt if number of mappings
   // has reached limit. Enforcing a limit on number of mappings prevents
   // excessive memory consumption.
-  // `reporting_metadata` will contain a `ReportingMetadata` that populates
-  // any metadata invoked by the worklet using `RegisterAdBeacon`. See
-  // https://github.com/WICG/turtledove/blob/main/Fenced_Frames_Ads_Reporting.md#registeradbeacon
+  // `fenced_frame_reporter` will contain a `FencedFrameReporter` to associate
+  // with the created URN. It may be nullptr.
   absl::optional<GURL> AddFencedFrameURLForTesting(
       const GURL& url,
-      const ReportingMetadata& reporting_metadata = ReportingMetadata());
+      scoped_refptr<FencedFrameReporter> fenced_frame_reporter = nullptr);
 
   // Return the `SharedStorageBudgetMetadata` associated with `urn_uuid`, or
   // nullptr if there's no metadata associated (i.e. `urn_uuid` was not

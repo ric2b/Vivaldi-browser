@@ -12,10 +12,10 @@
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
 import '../../css/wallpaper.css.js';
 
-import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 
-import {CurrentWallpaper, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperType} from '../personalization_app.mojom-webui.js';
+import {CurrentWallpaper, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperType} from '../../personalization_app.mojom-webui.js';
+import {isDarkLightModeEnabled} from '../load_time_booleans.js';
 import {PersonalizationRouter} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {isNonEmptyArray} from '../utils.js';
@@ -247,7 +247,7 @@ export class WallpaperImages extends WithPersonalizationStore {
 
     const imageArr = images[collectionId]!;
 
-    if (loadTimeData.getBoolean('isDarkLightModeEnabled')) {
+    if (isDarkLightModeEnabled()) {
       return getDarkLightImageTiles(isDarkModeActive, imageArr);
     } else {
       return getRegularImageTiles(imageArr);
@@ -292,20 +292,6 @@ export class WallpaperImages extends WithPersonalizationStore {
             tile.assetId === selectedAssetId && !pendingSelectedAssetId ||
         typeof pendingSelectedAssetId === 'bigint' && !!tile &&
             tile.assetId === pendingSelectedAssetId);
-  }
-
-  private getClassForImg_(index: number, tile: ImageTile): string {
-    if (tile.preview.length < 2) {
-      return '';
-    }
-    switch (index) {
-      case 0:
-        return 'left';
-      case 1:
-        return 'right';
-      default:
-        return '';
-    }
   }
 
   private onImageSelected_(e: WallpaperGridItemSelectedEvent&

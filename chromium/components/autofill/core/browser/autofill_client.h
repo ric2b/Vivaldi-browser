@@ -10,24 +10,26 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/span.h"
+#include "base/functional/callback_forward.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/fast_checkout_delegate.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/payments/risk_data_loader.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/browser/ui/touch_to_fill_delegate.h"
 #include "components/autofill/core/common/aliases.h"
+#include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/form_interactions_flow.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "components/profile_metrics/browser_profile_type.h"
 #include "components/security_state/core/security_state.h"
 #include "components/translate/core/browser/language_state.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/image/image.h"
@@ -62,7 +64,9 @@ class AddressNormalizer;
 class AutocompleteHistoryManager;
 class AutofillAblationStudy;
 class AutofillDriver;
+class AutofillDownloadManager;
 struct AutofillErrorDialogContext;
+class AutofillManager;
 class AutofillOfferData;
 class AutofillOfferManager;
 class AutofillPopupDelegate;
@@ -72,7 +76,7 @@ struct CardUnmaskChallengeOption;
 class CardUnmaskDelegate;
 struct CardUnmaskPromptOptions;
 class CreditCard;
-class CreditCardCVCAuthenticator;
+class CreditCardCvcAuthenticator;
 enum class CreditCardFetchResult;
 class CreditCardOtpAuthenticator;
 class FormDataImporter;
@@ -271,8 +275,7 @@ class AutofillClient : public RiskDataLoader {
     PopupOpenArgs(const gfx::RectF& element_bounds,
                   base::i18n::TextDirection text_direction,
                   std::vector<Suggestion> suggestions,
-                  AutoselectFirstSuggestion autoselect_first_suggestion,
-                  PopupType popup_type);
+                  AutoselectFirstSuggestion autoselect_first_suggestion);
     PopupOpenArgs(const PopupOpenArgs&);
     PopupOpenArgs(PopupOpenArgs&&);
     ~PopupOpenArgs();
@@ -284,7 +287,6 @@ class AutofillClient : public RiskDataLoader {
         base::i18n::TextDirection::UNKNOWN_DIRECTION;
     std::vector<Suggestion> suggestions;
     AutoselectFirstSuggestion autoselect_first_suggestion{false};
-    PopupType popup_type = PopupType::kUnspecified;
   };
 
   // Callback to run after local credit card save is offered. Sends whether the
@@ -340,6 +342,17 @@ class AutofillClient : public RiskDataLoader {
   // version_info::Channel::UNKNOWN.
   virtual version_info::Channel GetChannel() const;
 
+  // Returns whether the user is currently operating in an incognito context.
+  virtual bool IsOffTheRecord() = 0;
+
+  // Returns the URL loader factory associated with this driver.
+  virtual scoped_refptr<network::SharedURLLoaderFactory>
+  GetURLLoaderFactory() = 0;
+
+  // Returns the AutofillDownloadManager for communication with the Autofill
+  // crowdsourcing server.
+  virtual AutofillDownloadManager* GetDownloadManager();
+
   // Gets the PersonalDataManager instance associated with the client.
   virtual PersonalDataManager* GetPersonalDataManager() = 0;
 
@@ -354,7 +367,7 @@ class AutofillClient : public RiskDataLoader {
   virtual MerchantPromoCodeManager* GetMerchantPromoCodeManager();
 
   // Can be null on unsupported platforms.
-  virtual CreditCardCVCAuthenticator* GetCVCAuthenticator();
+  virtual CreditCardCvcAuthenticator* GetCvcAuthenticator();
   virtual CreditCardOtpAuthenticator* GetOtpAuthenticator();
 
   // Creates and returns a SingleFieldFormFillRouter using the
@@ -426,9 +439,8 @@ class AutofillClient : public RiskDataLoader {
   CreateCreditCardInternalAuthenticator(AutofillDriver* driver);
 #endif
 
-  // Causes the Autofill settings UI to be shown. If |show_credit_card_settings|
-  // is true, will show the credit card specific subpage.
-  virtual void ShowAutofillSettings(bool show_credit_card_settings) = 0;
+  // Causes the Autofill settings UI to be shown.
+  virtual void ShowAutofillSettings(PopupType popup_type) = 0;
 
   // Show the OTP unmask dialog to accept user-input OTP value.
   virtual void ShowCardUnmaskOtpInputDialog(
@@ -626,25 +638,30 @@ class AutofillClient : public RiskDataLoader {
   // HasCreditCardScanFeature() returns true.
   virtual void ScanCreditCard(CreditCardScanCallback callback) = 0;
 
-  // Returns true if the Fast Checkout feature is both supported by platform and
-  // enabled. Should be called before `ShowFastCheckout` or `HideFastCheckout`.
-  virtual bool IsFastCheckoutSupported() = 0;
-
-  // Returns true if the form is one of the trigger forms for Fast Checkout on
-  // the domain. Should be called before `ShowFastCheckout`.
-  virtual bool IsFastCheckoutTriggerForm(const FormData& form,
-                                         const FormFieldData& field) = 0;
-
-  // Shows the FastCheckout surface (for autofilling information during the
-  // checkout flow) and returns `true` on success. `delegate` will be notified
-  // of events. Should be called only if `IsFastCheckoutSupported` returns true.
-  virtual bool ShowFastCheckout(
-      base::WeakPtr<FastCheckoutDelegate> delegate) = 0;
+  // Checks whether Fast Checkout is supported in the current situation. The
+  // checks are performed by `FastCheckoutTriggerValidator` and are more
+  // extensive than `IsFastCheckoutSupported()`.
+  // If it is, shows the FastCheckout surface (for autofilling information
+  // during the checkout flow) and returns `true` on success.
+  virtual bool TryToShowFastCheckout(
+      const FormData& form,
+      const FormFieldData& field,
+      base::WeakPtr<AutofillManager> autofill_manager) = 0;
 
   // Hides the Fast Checkout surface (for autofilling information during the
-  // checkout flow) if one is currently shown. Should be called only if
-  // `IsFastCheckoutSupported` returns true.
-  virtual void HideFastCheckout() = 0;
+  // checkout flow) if one is currently shown.
+  // The internal UI state has to be reset by setting parameter
+  // `allow_further_runs = true` before a second Fast Checkout run can be
+  // started successfully.
+  virtual void HideFastCheckout(bool allow_further_runs) = 0;
+
+  // Returns true if the Fast Checkout feature is both supported by platform and
+  // enabled.
+  // TODO(crbug.com/1379149): Remove once bug is resolved.
+  virtual bool IsFastCheckoutSupported() = 0;
+
+  // Returns whether the FC surface is currently being shown.
+  virtual bool IsShowingFastCheckoutUI() = 0;
 
   // Returns true if the Touch To Fill feature is both supported by platform and
   // enabled. Should be called before |ShowTouchToFillCreditCard| or
@@ -657,7 +674,7 @@ class AutofillClient : public RiskDataLoader {
   // returns true.
   virtual bool ShowTouchToFillCreditCard(
       base::WeakPtr<TouchToFillDelegate> delegate,
-      base::span<const autofill::CreditCard* const> cards_to_suggest) = 0;
+      base::span<const autofill::CreditCard> cards_to_suggest) = 0;
 
   // Hides the Touch To Fill surface for filling credit card information
   // if one is currently shown. Should be called only if
@@ -687,7 +704,7 @@ class AutofillClient : public RiskDataLoader {
   virtual PopupOpenArgs GetReopenPopupArgs() const = 0;
 
   // Returns (not elided) suggestions currently held by the UI.
-  virtual base::span<const Suggestion> GetPopupSuggestions() const = 0;
+  virtual std::vector<Suggestion> GetPopupSuggestions() const = 0;
 
   // Updates the popup contents with the newly given suggestions.
   virtual void UpdatePopup(const std::vector<Suggestion>& suggestions,
@@ -749,13 +766,6 @@ class AutofillClient : public RiskDataLoader {
 
   // If the context is secure.
   virtual bool IsContextSecure() const = 0;
-
-  // Whether it is appropriate to show a signin promo for this user.
-  virtual bool ShouldShowSigninPromo() = 0;
-
-  // Whether server side cards are supported by the client. If false, only
-  // local cards will be shown.
-  virtual bool AreServerCardsSupported() const = 0;
 
   // Handles simple actions for the autofill popups.
   virtual void ExecuteCommand(int id) = 0;

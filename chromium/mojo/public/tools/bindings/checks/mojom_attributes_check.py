@@ -34,6 +34,7 @@ _ENUMVAL_ATTRIBUTES = _COMMON_ATTRIBUTES | {
 }
 
 _INTERFACE_ATTRIBUTES = _COMMON_ATTRIBUTES | {
+    'WebUIJsBridge',
     'RenamedFrom',
     'RequireContext',
     'ServiceSandbox',

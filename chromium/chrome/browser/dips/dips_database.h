@@ -135,12 +135,23 @@ class DIPSDatabase {
   // Checks that the internal SQLite database is initialized.
   bool CheckDBInit();
 
+  // Marks meta_table_'s `prepopulated` field as true.
+  //
+  // Called once this database has finished prepopulating with information from
+  // the SiteEngagement service. Returns whether this operation was successful.
+  bool MarkAsPrepopulated();
+
+  // Whether the database was prepopulated using the SiteEngagement service.
+  bool IsPrepopulated();
+
   size_t GetMaxEntries() const { return max_entries_; }
   size_t GetPurgeEntries() const { return purge_entries_; }
 
+  // Testing functions --------------------------------------------------
   void SetMaxEntriesForTesting(size_t entries) { max_entries_ = entries; }
   void SetPurgeEntriesForTesting(size_t entries) { purge_entries_ = entries; }
   void SetClockForTesting(base::Clock* clock) { clock_ = clock; }
+  bool ExecuteSqlForTesting(const char* sql);
 
  protected:
   // Initialization functions --------------------------------------------------
@@ -153,13 +164,6 @@ class DIPSDatabase {
   bool ClearTimestamps(const base::Time& delete_begin,
                        const base::Time& delete_end,
                        const DIPSEventRemovalType type);
-  bool AdjustFirstTimestamps(const base::Time& delete_begin,
-                             const base::Time& delete_end,
-                             const DIPSEventRemovalType type);
-  bool AdjustLastTimestamps(const base::Time& delete_begin,
-                            const base::Time& delete_end,
-                            const DIPSEventRemovalType type);
-
   bool ClearTimestampsBySite(bool preserve,
                              const std::vector<std::string>& sites,
                              const DIPSEventRemovalType type);
@@ -170,6 +174,15 @@ class DIPSDatabase {
  private:
   // Callback for database errors.
   void DatabaseErrorCallback(int extended_error, sql::Statement* stmt);
+
+  // Only ClearTimestamps() should call this method.
+  bool AdjustFirstTimestamps(const base::Time& delete_begin,
+                             const base::Time& delete_end,
+                             const DIPSEventRemovalType type);
+  // Only ClearTimestamps() should call this method.
+  bool AdjustLastTimestamps(const base::Time& delete_begin,
+                            const base::Time& delete_end,
+                            const DIPSEventRemovalType type);
 
   // When the number of entries in the database exceeds |max_entries_|, purge
   // down to |max_entries_| - |purge_entries_|.

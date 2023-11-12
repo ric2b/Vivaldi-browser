@@ -146,6 +146,9 @@ class ExistingUserController : public LoginDisplay::Delegate,
   static user_manager::UserList ExtractLoginUsers(
       const user_manager::UserList& users);
 
+  // Calls login() on previously-used `login_performer_`.
+  void LoginAuthenticated(std::unique_ptr<UserContext> user_context);
+
  private:
   friend class ExistingUserControllerTest;
   friend class ExistingUserControllerAutoLoginTest;
@@ -171,11 +174,14 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void OnAuthFailure(const AuthFailure& error) override;
   void OnAuthSuccess(const UserContext& user_context) override;
   void OnOffTheRecordAuthSuccess() override;
-  void OnPasswordChangeDetected(const UserContext& user_context) override;
+  void OnPasswordChangeDetectedLegacy(const UserContext& user_context) override;
+  void OnPasswordChangeDetected(std::unique_ptr<UserContext>) override;
   void OnOldEncryptionDetected(std::unique_ptr<UserContext>,
                                bool has_incomplete_migration) override;
   void AllowlistCheckFailed(const std::string& email) override;
   void PolicyLoadFailed() override;
+
+  void OnPasswordChangeDetectedImpl(std::unique_ptr<UserContext>);
 
   // Handles the continuation of successful login after an attempt has been made
   // to divert to a hibernate resume flow. The execution of this method means
@@ -215,7 +221,7 @@ class ExistingUserController : public LoginDisplay::Delegate,
   void ShowTPMError();
 
   // Shows "password changed" dialog.
-  void ShowPasswordChangedDialog(const UserContext& user_context);
+  void ShowPasswordChangedDialogLegacy(const UserContext& user_context);
 
   // Creates `login_performer_` if necessary and calls login() on it.
   void PerformLogin(const UserContext& user_context,

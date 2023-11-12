@@ -7,11 +7,13 @@
 #include <stdint.h>
 
 #include "base/test/values_test_util.h"
+#include "base/time/time.h"
 #include "content/browser/attribution_reporting/attribution_observer_types.h"
 #include "content/browser/attribution_reporting/attribution_storage.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
 #include "content/browser/attribution_reporting/storable_source.h"
+#include "net/base/schemeful_site.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
@@ -22,9 +24,11 @@ namespace {
 using EventLevelResult = ::content::AttributionTrigger::EventLevelResult;
 using AggregatableResult = ::content::AttributionTrigger::AggregatableResult;
 
-AttributionReport DefaultEventLevelReport() {
+AttributionReport DefaultEventLevelReport(
+    base::Time source_time = base::Time::Now()) {
   return ReportBuilder(
-             AttributionInfoBuilder(SourceBuilder().BuildStored()).Build())
+             AttributionInfoBuilder(SourceBuilder(source_time).BuildStored())
+                 .Build())
       .Build();
 }
 
@@ -76,8 +80,8 @@ TEST(AttributionDebugReportTest,
   }])";
   EXPECT_EQ(report->ReportBody(), base::test::ParseJson(kExpectedJsonString));
 
-  EXPECT_EQ(report->ReportURL(), GURL("https://report.test/.well-known/"
-                                      "attribution-reporting/debug/verbose"));
+  EXPECT_EQ(report->report_url(), GURL("https://report.test/.well-known/"
+                                       "attribution-reporting/debug/verbose"));
 }
 
 TEST(AttributionDebugReportTest, WithinFencedFrame_NoDebugReport) {
@@ -120,7 +124,14 @@ TEST(AttributionDebugReportTest, SourceDebugging) {
        /*max_sources_per_origin=*/absl::nullopt,
        /*debug_key=*/absl::nullopt,
        /*expected_report_body_without_cookie=*/nullptr,
-       /*expected_report_body_with_cookie=*/nullptr},
+       R"json([{
+         "body": {
+           "attribution_destination": "https://conversion.test",
+           "source_event_id": "123",
+           "source_site": "https://impression.test"
+         },
+         "type": "source-success"
+       }])json"},
       {StorableSource::Result::kInternalError,
        /*max_destinations_per_source_site_reporting_origin=*/absl::nullopt,
        /*max_sources_per_origin=*/absl::nullopt,
@@ -195,6 +206,21 @@ TEST(AttributionDebugReportTest, SourceDebugging) {
          },
          "type": "source-noised"
        }])json"},
+      {StorableSource::Result::kExcessiveReportingOrigins,
+       /*max_destinations_per_source_site_reporting_origin=*/absl::nullopt,
+       /*max_sources_per_origin=*/absl::nullopt,
+       /*debug_key=*/789,
+       /*expected_report_body_without_cookie=*/nullptr,
+       /*expected_report_body_with_cookie=*/
+       R"json([{
+         "body": {
+           "attribution_destination": "https://conversion.test",
+           "source_debug_key": "789",
+           "source_event_id": "123",
+           "source_site": "https://impression.test"
+         },
+         "type": "source-success"
+       }])json"},
   };
 
   for (bool is_debug_cookie_set : {false, true}) {
@@ -222,6 +248,38 @@ TEST(AttributionDebugReportTest, SourceDebugging) {
             << test_case.result << ", " << is_debug_cookie_set;
       }
     }
+  }
+
+  // Multiple destinations
+  {
+    absl::optional<AttributionDebugReport> report =
+        AttributionDebugReport::Create(
+            SourceBuilder()
+                .SetDebugReporting(true)
+                .SetDestinationSites({
+                    net::SchemefulSite::Deserialize("https://c.test"),
+                    net::SchemefulSite::Deserialize("https://d.test"),
+                })
+                .Build(),
+            /*is_debug_cookie_set=*/true,
+            AttributionStorage::StoreSourceResult(
+                StorableSource::Result::kSuccessNoised,
+                /*min_fake_report_time=*/absl::nullopt,
+                /*max_destinations_per_source_site_reporting_origin=*/
+                absl::nullopt,
+                /*max_sources_per_origin=*/absl::nullopt));
+
+    EXPECT_EQ(report->ReportBody(), base::test::ParseJson(R"json([{
+         "body": {
+           "attribution_destination": [
+             "https://c.test",
+             "https://d.test"
+           ],
+           "source_event_id": "123",
+           "source_site": "https://impression.test"
+         },
+         "type": "source-noised"
+      }])json"));
   }
 }
 
@@ -430,14 +488,17 @@ TEST(AttributionDebugReportTest, EventLevelAttributionDebugging) {
       {EventLevelResult::kPriorityTooLow,
        /*replaced_event_level_report=*/absl::nullopt,
        /*new_event_level_report=*/absl::nullopt,
-       /*source=*/SourceBuilder().BuildStored(), CreateReportResult::Limits(),
-       /*dropped_event_level_report=*/DefaultEventLevelReport(),
+       /*source=*/SourceBuilder(base::Time::UnixEpoch()).BuildStored(),
+       CreateReportResult::Limits(),
+       /*dropped_event_level_report=*/
+       DefaultEventLevelReport(base::Time::UnixEpoch()),
        /*trigger_debug_key=*/absl::nullopt,
        R"json([{
          "body": {
            "attribution_destination": "https://conversion.test",
            "randomized_trigger_rate": 0.0,
            "report_id": "21abd97f-73e8-4b88-9389-a9fee6abda5e",
+           "scheduled_report_time": "3600",
            "source_event_id": "123",
            "source_type": "navigation",
            "trigger_data": "0"
@@ -513,14 +574,17 @@ TEST(AttributionDebugReportTest, EventLevelAttributionDebugging) {
       {EventLevelResult::kExcessiveReports,
        /*replaced_event_level_report=*/absl::nullopt,
        /*new_event_level_report=*/absl::nullopt,
-       /*source=*/SourceBuilder().BuildStored(), CreateReportResult::Limits(),
-       /*dropped_event_level_report=*/DefaultEventLevelReport(),
+       /*source=*/SourceBuilder(base::Time::UnixEpoch()).BuildStored(),
+       CreateReportResult::Limits(),
+       /*dropped_event_level_report=*/
+       DefaultEventLevelReport(base::Time::UnixEpoch()),
        /*trigger_debug_key=*/absl::nullopt,
        R"json([{
          "body": {
            "attribution_destination": "https://conversion.test",
            "randomized_trigger_rate": 0.0,
            "report_id": "21abd97f-73e8-4b88-9389-a9fee6abda5e",
+           "scheduled_report_time": "3600",
            "source_event_id": "123",
            "source_type": "navigation",
            "trigger_data": "0"
@@ -555,6 +619,13 @@ TEST(AttributionDebugReportTest, EventLevelAttributionDebugging) {
          },
          "type": "trigger-event-report-window-passed"
        }])json"},
+      {EventLevelResult::kNotRegistered,
+       /*replaced_event_level_report=*/absl::nullopt,
+       /*new_event_level_report=*/absl::nullopt,
+       /*source=*/absl::nullopt, CreateReportResult::Limits(),
+       /*dropped_event_level_report=*/absl::nullopt,
+       /*trigger_debug_key=*/absl::nullopt,
+       /*expected_report_body=*/nullptr},
   };
 
   for (bool is_debug_cookie_set : {false, true}) {

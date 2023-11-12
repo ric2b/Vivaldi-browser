@@ -23,6 +23,7 @@ if (!is_ios) {
   import("//vivaldi/notes/deps_updates.gni")
   import("//vivaldi/prefs/deps_updates.gni")
   import("//vivaldi/renderer/deps_updates.gni")
+  import("//vivaldi/sessions/deps_updates.gni")
   import("//vivaldi/sync/deps_updates.gni")
   import("//vivaldi/thirdparty/deps_updates.gni")
   import("//vivaldi/translate_history/deps_updates.gni")
@@ -102,6 +103,7 @@ if (!is_ios) {
         "//vivaldi/notes",
         "//vivaldi/notes:browser",
         "//vivaldi/importer",
+        "//vivaldi/sessions",
         "//vivaldi/sync:browser",
         "//vivaldi/translate_history",
       ]

@@ -6,8 +6,9 @@
 
 #include <vector>
 
-#include "base/bind.h"
+#include "base/check_is_test.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,6 +31,7 @@
 #include "components/commerce/core/shopping_power_bookmark_data_provider.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/commerce/core/subscriptions/subscriptions_manager.h"
+#include "components/commerce/core/subscriptions/subscriptions_observer.h"
 #include "components/commerce/core/web_wrapper.h"
 #include "components/grit/components_resources.h"
 #include "components/optimization_guide/core/new_optimization_guide_decider.h"
@@ -40,6 +42,7 @@
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
 #include "components/power_bookmarks/core/proto/shopping_specifics.pb.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "components/search/ntp_features.h"
 #include "components/session_proto_db/session_proto_storage.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -60,6 +63,8 @@ ProductInfo::ProductInfo(const ProductInfo&) = default;
 ProductInfo& ProductInfo::operator=(const ProductInfo&) = default;
 ProductInfo::~ProductInfo() = default;
 MerchantInfo::MerchantInfo() = default;
+MerchantInfo::MerchantInfo(const MerchantInfo&) = default;
+MerchantInfo& MerchantInfo::operator=(const MerchantInfo&) = default;
 MerchantInfo::MerchantInfo(MerchantInfo&&) = default;
 MerchantInfo::~MerchantInfo() = default;
 
@@ -92,7 +97,7 @@ ShoppingService::ShoppingService(
       types.push_back(
           optimization_guide::proto::OptimizationType::PRICE_TRACKING);
     }
-    if (IsMerchantInfoApiEnabled()) {
+    if (IsMerchantViewerEnabled()) {
       types.push_back(optimization_guide::proto::OptimizationType::
                           MERCHANT_TRUST_SIGNALS_V2);
     }
@@ -207,6 +212,11 @@ void ShoppingService::HandleDidFinishLoadForProductInfo(WebWrapper* web) {
 
 void ShoppingService::OnProductInfoJavascriptResult(const GURL url,
                                                     base::Value result) {
+  // We should only ever get a string result from the script execution.
+  if (!result.is_string()) {
+    return;
+  }
+
   data_decoder::DataDecoder::ParseJsonIsolated(
       result.GetString(),
       base::BindOnce(&ShoppingService::OnProductInfoJsonSanitizationCompleted,
@@ -272,9 +282,6 @@ const ProductInfo* ShoppingService::GetFromProductInfoCache(const GURL& url) {
 }
 
 void ShoppingService::UpdateProductInfoCacheForRemoval(const GURL& url) {
-  if (!IsProductInfoApiEnabled())
-    return;
-
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Check if the previously navigated URL cache needs to be cleared. If more
@@ -373,7 +380,7 @@ void ShoppingService::GetMerchantInfoForUrl(const GURL& url,
     return;
 
   // Crash if this API is used without a valid experiment.
-  CHECK(IsMerchantInfoApiEnabled());
+  CHECK(IsMerchantViewerEnabled());
 
   opt_guide_->CanApplyOptimization(
       url,
@@ -383,15 +390,25 @@ void ShoppingService::GetMerchantInfoForUrl(const GURL& url,
 }
 
 bool ShoppingService::IsProductInfoApiEnabled() {
-  return base::FeatureList::IsEnabled(kShoppingList);
+  return IsRegionLockedFeatureEnabled(
+             kShoppingList, kShoppingListRegionLaunched, country_on_startup_,
+             locale_on_startup_) ||
+         (base::FeatureList::IsEnabled(ntp_features::kNtpChromeCartModule) &&
+          IsEnabledForCountryAndLocale(ntp_features::kNtpChromeCartModule,
+                                       country_on_startup_,
+                                       locale_on_startup_));
 }
 
 bool ShoppingService::IsPDPMetricsRecordingEnabled() {
-  return base::FeatureList::IsEnabled(commerce::kShoppingPDPMetrics);
+  return IsRegionLockedFeatureEnabled(kShoppingPDPMetrics,
+                                      kShoppingPDPMetricsRegionLaunched,
+                                      country_on_startup_, locale_on_startup_);
 }
 
-bool ShoppingService::IsMerchantInfoApiEnabled() {
-  return base::FeatureList::IsEnabled(kCommerceMerchantViewer);
+bool ShoppingService::IsMerchantViewerEnabled() {
+  return IsRegionLockedFeatureEnabled(kCommerceMerchantViewer,
+                                      kCommerceMerchantViewerRegionLaunched,
+                                      country_on_startup_, locale_on_startup_);
 }
 
 void ShoppingService::HandleOptGuideProductInfoResponse(
@@ -399,9 +416,6 @@ void ShoppingService::HandleOptGuideProductInfoResponse(
     ProductInfoCallback callback,
     optimization_guide::OptimizationGuideDecision decision,
     const optimization_guide::OptimizationMetadata& metadata) {
-  if (!IsProductInfoApiEnabled())
-    return;
-
   // If optimization guide returns negative, return a negative signal with an
   // empty data object.
   if (decision != optimization_guide::OptimizationGuideDecision::kTrue) {
@@ -693,6 +707,50 @@ void ShoppingService::Unsubscribe(
   }
 }
 
+void ShoppingService::AddSubscriptionsObserver(
+    SubscriptionsObserver* observer) {
+  if (subscriptions_manager_) {
+    subscriptions_manager_->AddObserver(observer);
+  }
+}
+
+void ShoppingService::RemoveSubscriptionsObserver(
+    SubscriptionsObserver* observer) {
+  if (subscriptions_manager_) {
+    subscriptions_manager_->RemoveObserver(observer);
+  }
+}
+
+void ShoppingService::GetAllSubscriptions(
+    SubscriptionType type,
+    base::OnceCallback<void(std::vector<CommerceSubscription>)> callback) {
+  if (subscriptions_manager_) {
+    subscriptions_manager_->GetAllSubscriptions(type, std::move(callback));
+  } else {
+    CHECK_IS_TEST();
+  }
+}
+
+void ShoppingService::IsSubscribed(CommerceSubscription subscription,
+                                   base::OnceCallback<void(bool)> callback) {
+  if (subscriptions_manager_) {
+    subscriptions_manager_->IsSubscribed(std::move(subscription),
+                                         std::move(callback));
+  } else {
+    CHECK_IS_TEST();
+  }
+}
+
+bool ShoppingService::IsSubscribedFromCache(
+    const CommerceSubscription& subscription) {
+  if (subscriptions_manager_) {
+    return subscriptions_manager_->IsSubscribedFromCache(subscription);
+  } else {
+    CHECK_IS_TEST();
+  }
+  return false;
+}
+
 void ShoppingService::FetchPriceEmailPref() {
   if (account_checker_) {
     account_checker_->FetchPriceEmailPref();
@@ -704,13 +762,18 @@ void ShoppingService::ScheduleSavedProductUpdate() {
 }
 
 bool ShoppingService::IsShoppingListEligible() {
-  return IsShoppingListEligible(account_checker_.get(), pref_service_);
+  return IsShoppingListEligible(account_checker_.get(), pref_service_,
+                                country_on_startup_, locale_on_startup_);
 }
 
 bool ShoppingService::IsShoppingListEligible(AccountChecker* account_checker,
-                                             PrefService* prefs) {
-  if (!base::FeatureList::IsEnabled(kShoppingList))
+                                             PrefService* prefs,
+                                             const std::string& country_code,
+                                             const std::string& locale) {
+  if (!IsRegionLockedFeatureEnabled(kShoppingList, kShoppingListRegionLaunched,
+                                    country_code, locale)) {
     return false;
+  }
 
   if (!prefs || !IsShoppingListAllowedForEnterprise(prefs))
     return false;
@@ -719,7 +782,8 @@ bool ShoppingService::IsShoppingListEligible(AccountChecker* account_checker,
   // store data.
   if (!account_checker || !account_checker->IsSignedIn() ||
       !account_checker->IsAnonymizedUrlDataCollectionEnabled() ||
-      !account_checker->IsWebAndAppActivityEnabled()) {
+      !account_checker->IsWebAndAppActivityEnabled() ||
+      account_checker->IsSubjectToParentalControls()) {
     return false;
   }
 

@@ -30,6 +30,7 @@ import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.components.browser_ui.settings.ChromeImageViewPreference;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
@@ -47,7 +48,8 @@ import java.util.Map;
  * Shows the permissions and other settings for a particular website.
  */
 public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
-        implements Preference.OnPreferenceChangeListener, Preference.OnPreferenceClickListener {
+        implements Preference.OnPreferenceChangeListener, Preference.OnPreferenceClickListener,
+                   CustomDividerFragment {
     /**
      * Interface for a class that wants to receive updates from SingleWebsiteSettings.
      */
@@ -191,8 +193,6 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
     // The callback to be run after this site is reset.
     private Observer mWebsiteSettingsObserver;
 
-    private final SiteDataCleaner mSiteDataCleaner = new SiteDataCleaner();
-
     // The website this page is displaying details about.
     private Website mSite;
 
@@ -328,10 +328,13 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             assert false : "Exactly one of EXTRA_SITE or EXTRA_SITE_ADDRESS must be provided.";
         }
 
-        setDivider(null);
-
         // Disable animations of preference changes.
         getListView().setItemAnimator(null);
+    }
+
+    @Override
+    public boolean hasDivider() {
+        return false;
     }
 
     @Override
@@ -343,12 +346,14 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
             }
             Callback<Boolean> onDialogClosed = (Boolean confirmed) -> {
                 if (confirmed) {
-                    mSite.clearAllStoredData(getSiteSettingsDelegate().getBrowserContextHandle(),
-                            mDataClearedCallback::run);
+                    SiteDataCleaner.clearData(getSiteSettingsDelegate().getBrowserContextHandle(),
+                            mSite, mDataClearedCallback);
                 }
             };
             ClearWebsiteStorageDialog dialogFragment =
-                    ClearWebsiteStorageDialog.newInstance(preference, onDialogClosed);
+                    ClearWebsiteStorageDialog.newInstance(preference, onDialogClosed,
+                            getSiteSettingsDelegate().isPrivacySandboxSettings4Enabled(),
+                            /*isGroup=*/false);
             dialogFragment.setTargetFragment(this, 0);
             dialogFragment.show(getFragmentManager(), ClearWebsiteStorageDialog.TAG);
         } else {
@@ -542,7 +547,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                         context.getString(R.string.origin_settings_storage_usage_brief),
                         Formatter.formatShortFileSize(context, usage)));
             }
-            preference.setDataForDisplay(mSite.getTitle(), appFound);
+            preference.setDataForDisplay(mSite.getTitle(), appFound, /*isGroup=*/false);
             if (mSite.isCookieDeletionDisabled(
                         getSiteSettingsDelegate().getBrowserContextHandle())) {
                 preference.setEnabled(false);
@@ -1174,7 +1179,7 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
                         .setPositiveButton(buttonResId,
                                 (dialog, which) -> {
                                     if (mHideNonPermissionPreferences) {
-                                        mSiteDataCleaner.resetPermissions(
+                                        SiteDataCleaner.resetPermissions(
                                                 getSiteSettingsDelegate().getBrowserContextHandle(),
                                                 mSite);
                                     } else {
@@ -1214,9 +1219,9 @@ public class SingleWebsiteSettings extends SiteSettingsPreferenceFragment
         boolean finishActivityImmediately =
                 mSite.getTotalUsage() == 0 && mObjectPolicyPermissionCount == 0;
 
-        mSiteDataCleaner.resetPermissions(
+        SiteDataCleaner.resetPermissions(
                 getSiteSettingsDelegate().getBrowserContextHandle(), mSite);
-        mSiteDataCleaner.clearData(
+        SiteDataCleaner.clearData(
                 getSiteSettingsDelegate().getBrowserContextHandle(), mSite, mDataClearedCallback);
 
         int navigationSource = getArguments().getInt(

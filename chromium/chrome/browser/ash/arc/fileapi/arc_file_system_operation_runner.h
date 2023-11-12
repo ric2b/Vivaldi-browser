@@ -14,7 +14,7 @@
 
 #include "ash/components/arc/mojom/file_system.mojom-forward.h"
 #include "ash/components/arc/session/connection_observer.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "chrome/browser/ash/arc/fileapi/arc_file_system_bridge.h"
@@ -202,6 +202,8 @@ class ArcFileSystemOperationRunner
 
   // Returns true if operations will be deferred.
   bool WillDefer() const { return should_defer_; }
+
+  static void EnsureFactoryBuilt();
 
  private:
   friend class ArcFileSystemOperationRunnerTest;

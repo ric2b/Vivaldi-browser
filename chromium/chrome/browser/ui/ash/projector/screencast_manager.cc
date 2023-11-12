@@ -9,15 +9,16 @@
 
 #include "ash/webui/projector_app/projector_screencast.h"
 #include "ash/webui/projector_app/public/cpp/projector_app_constants.h"
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/extensions/file_manager/scoped_suppress_drive_notifications_for_path.h"
@@ -85,13 +86,17 @@ void GetVideoMetadata(const base::FilePath& video_path,
   int64_t size_in_byte;
   if (!base::PathExists(video_path) ||
       !base::GetFileSize(video_path, &size_in_byte)) {
-    std::move(callback).Run(
-        /*video=*/nullptr,
-        base::StringPrintf("Path does not exist or cannot read video size with "
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback),
+                       /*video=*/nullptr,
+                       base::StringPrintf(
+                           "Path does not exist or cannot read video size with "
                            "video file id=%s",
-                           video->file_id.c_str()));
+                           video->file_id.c_str())));
     return;
   }
+
   auto parser = std::make_unique<SafeMediaMetadataParser>(
       size_in_byte, kProjectorMediaMimeType,
       /*get_attached_images=*/false,

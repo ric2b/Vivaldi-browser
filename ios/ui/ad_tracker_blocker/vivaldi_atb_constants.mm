@@ -26,6 +26,12 @@ const CGFloat vStackSpacing = 4.f;
 #pragma mark - ICONS
 // Image name for tracker blocker shield
 NSString* vATBShield = @"vivaldi_atb_shield";
+// Image name for no blocking shield
+NSString* vATBShieldNone = @"vivaldi_atb_shield_notrack";
+// Image name for trackers blocking shield
+NSString* vATBShieldTrackers = @"vivaldi_atb_shield_trackers";
+// Image name for trackers and ads blocking shield
+NSString* vATBShieldTrackesAndAds = @"vivaldi_atb_shield_trackers_and_ads";
 // Image name for tracker blocker selection check
 NSString* vATBSettingsSelectionCheck =
   @"vivaldi_atb_settings_selection_check";

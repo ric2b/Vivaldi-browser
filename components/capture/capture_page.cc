@@ -6,8 +6,8 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -130,7 +130,7 @@ class PaintPreviewCaptureState {
         paint_preview::PaintPreviewClient::FromWebContents(web_contents);
     if (!client) {
       VLOG(1) << "Failed to create PaintPreviewClient";
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(std::move(callback), SkBitmap()));
       return;
     }
@@ -383,7 +383,7 @@ void CapturePage::CaptureImpl(content::WebContents* web_contents,
                          weak_ptr_factory_.GetWeakPtr()),
           gfx::Size(), base::ReadOnlySharedMemoryRegion()));
 
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindRepeating(&CapturePage::OnCaptureTimeout,
                           weak_ptr_factory_.GetWeakPtr()),

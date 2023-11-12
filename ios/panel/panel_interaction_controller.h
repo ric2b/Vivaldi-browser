@@ -10,8 +10,9 @@ class Browser;
 
 enum PanelPage {
   BookmarksPage = 0,
-  NotesPage = 1,
+  ReadinglistPage = 1,
   HistoryPage = 2,
+  NotesPage = 3,
 };
 
 // Handles setting up and showing the panels

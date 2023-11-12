@@ -11,7 +11,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/prefetch/pref_names.h"
 #include "chrome/browser/preloading/prefetch/prefetch_proxy/prefetch_proxy_params.h"
-#include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
@@ -105,13 +104,14 @@ void PrefetchProxyOriginDecider::LoadFromPrefs() {
 }
 
 void PrefetchProxyOriginDecider::SaveToPrefs() const {
-  base::DictionaryValue dictionary;
+  base::Value::Dict dictionary;
   for (const auto& element : origin_retry_afters_) {
     std::string key = element.first.GetURL().spec();
     base::Value value = base::TimeToValue(element.second);
-    dictionary.SetKey(std::move(key), std::move(value));
+    dictionary.Set(std::move(key), std::move(value));
   }
-  pref_service_->Set(prefetch::prefs::kRetryAfterPrefPath, dictionary);
+  pref_service_->SetDict(prefetch::prefs::kRetryAfterPrefPath,
+                         std::move(dictionary));
 }
 
 bool PrefetchProxyOriginDecider::ClearPastEntries() {

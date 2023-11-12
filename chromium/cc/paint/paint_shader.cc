@@ -4,10 +4,12 @@
 
 #include "cc/paint/paint_shader.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
 #include "base/notreached.h"
+#include "base/numerics/checked_math.h"
 #include "base/types/optional_util.h"
 #include "cc/paint/image_provider.h"
 #include "cc/paint/paint_image_builder.h"
@@ -21,7 +23,7 @@ namespace cc {
 namespace {
 base::AtomicSequenceNumber g_next_shader_id;
 
-sk_sp<SkPicture> ToSkPicture(sk_sp<PaintRecord> record,
+sk_sp<SkPicture> ToSkPicture(const PaintRecord& record,
                              const SkRect& bounds,
                              const gfx::SizeF* raster_scale,
                              ImageProvider* image_provider) {
@@ -31,27 +33,29 @@ sk_sp<SkPicture> ToSkPicture(sk_sp<PaintRecord> record,
   canvas->translate(-bounds.fLeft, -bounds.fTop);
   if (raster_scale)
     canvas->scale(raster_scale->width(), raster_scale->height());
-  record->Playback(canvas, PlaybackParams(image_provider));
+  record.Playback(canvas, PlaybackParams(image_provider));
   return recorder.finishRecordingAsPicture();
 }
 
-bool CompareMatrices(const SkMatrix& a,
-                     const SkMatrix& b,
-                     bool ignore_scaling_differences) {
-  if (!ignore_scaling_differences)
-    return PaintOp::AreSkMatricesEqual(a, b);
+bool CompareMatricesForTesting(const SkMatrix& a,  // IN-TEST
+                               const SkMatrix& b,
+                               bool ignore_scaling_differences) {
+  if (!ignore_scaling_differences) {
+    return a == b;
+  }
 
   SkSize scale;
   SkMatrix a_without_scale;
   SkMatrix b_without_scale;
 
   const bool decomposes = a.decomposeScale(&scale, &a_without_scale);
-  if (decomposes != b.decomposeScale(&scale, &b_without_scale))
+  if (decomposes != b.decomposeScale(&scale, &b_without_scale)) {
     return false;
-
-  if (!decomposes)
+  }
+  if (!decomposes) {
     return true;
-  return PaintOp::AreSkMatricesEqual(a_without_scale, b_without_scale);
+  }
+  return a_without_scale == b_without_scale;
 }
 
 }  // namespace
@@ -197,7 +201,7 @@ sk_sp<PaintShader> PaintShader::MakeImage(const PaintImage& image,
 }
 
 sk_sp<PaintShader> PaintShader::MakePaintRecord(
-    sk_sp<PaintRecord> record,
+    PaintRecord record,
     const SkRect& tile,
     SkTileMode tx,
     SkTileMode ty,
@@ -217,26 +221,35 @@ sk_sp<PaintShader> PaintShader::MakePaintRecord(
 
 // static
 size_t PaintShader::GetSerializedSize(const PaintShader* shader) {
-  size_t bool_size = sizeof(bool);
-  if (!shader)
-    return bool_size;
+  if (!shader) {
+    return PaintOpWriter::SerializedSize<bool>();
+  }
 
-  return bool_size + sizeof(shader->shader_type_) + sizeof(shader->flags_) +
-         sizeof(shader->end_radius_) + sizeof(shader->start_radius_) +
-         sizeof(shader->tx_) + sizeof(shader->ty_) +
-         sizeof(shader->fallback_color_) + sizeof(shader->scaling_behavior_) +
-         bool_size + sizeof(*shader->local_matrix_) + sizeof(shader->center_) +
-         sizeof(shader->tile_) + sizeof(shader->start_point_) +
-         sizeof(shader->end_point_) + sizeof(shader->start_degrees_) +
-         sizeof(shader->end_degrees_) +
-         PaintOpWriter::GetImageSize(shader->image_) +
-         PaintOpWriter::GetImageSize(shader->image_) + bool_size +
-         sizeof(shader->id_) +
-         PaintOpWriter::GetRecordSize(shader->record_.get()) +
-         sizeof(shader->colors_.size()) +
-         shader->colors_.size() * sizeof(SkColor4f) +
-         sizeof(shader->positions_.size()) +
-         shader->positions_.size() * sizeof(SkScalar);
+  return (base::CheckedNumeric<size_t>(PaintOpWriter::SerializedSize<bool>()) +
+          PaintOpWriter::SerializedSize(shader->shader_type_) +
+          PaintOpWriter::SerializedSize(shader->flags_) +
+          PaintOpWriter::SerializedSize(shader->end_radius_) +
+          PaintOpWriter::SerializedSize(shader->start_radius_) +
+          PaintOpWriter::SerializedSize(shader->tx_) +
+          PaintOpWriter::SerializedSize(shader->ty_) +
+          PaintOpWriter::SerializedSize(shader->fallback_color_) +
+          PaintOpWriter::SerializedSize(shader->scaling_behavior_) +
+          PaintOpWriter::SerializedSize(shader->local_matrix_) +
+          PaintOpWriter::SerializedSize(shader->center_) +
+          PaintOpWriter::SerializedSize(shader->tile_) +
+          PaintOpWriter::SerializedSize(shader->start_point_) +
+          PaintOpWriter::SerializedSize(shader->end_point_) +
+          PaintOpWriter::SerializedSize(shader->start_degrees_) +
+          PaintOpWriter::SerializedSize(shader->end_degrees_) +
+          PaintOpWriter::SerializedSize(shader->gradient_interpolation_) +
+          PaintOpWriter::SerializedSize(shader->image_) +
+          PaintOpWriter::SerializedSize(shader->id_) +
+          PaintOpWriter::SerializedSize(shader->record_) +
+          PaintOpWriter::SerializedSizeOfElements(shader->colors_.data(),
+                                                  shader->colors_.size()) +
+          PaintOpWriter::SerializedSizeOfElements(shader->positions_.data(),
+                                                  shader->positions_.size()))
+      .ValueOrDie();
 }
 
 PaintShader::PaintShader(Type type) : shader_type_(type) {}
@@ -298,6 +311,13 @@ sk_sp<PaintShader> PaintShader::CreateScaledPaintRecord(
   if (!GetClampedRasterizationTileRect(ctm, max_texture_size, &tile_rect))
     return nullptr;
 
+  *raster_scale =
+      gfx::SizeF(SkIntToScalar(tile_rect.width()) / tile_.width(),
+                 SkIntToScalar(tile_rect.height()) / tile_.height());
+  SkMatrix local_matrix_with_inv_raster_scale = GetLocalMatrix();
+  local_matrix_with_inv_raster_scale.preScale(1 / raster_scale->width(),
+                                              1 / raster_scale->height());
+
   sk_sp<PaintShader> shader(new PaintShader(Type::kPaintRecord));
   shader->record_ = record_;
   shader->id_ = id_;
@@ -305,16 +325,7 @@ sk_sp<PaintShader> PaintShader::CreateScaledPaintRecord(
   // Use a fixed scale since we have already scaled the tile rect and fixed the
   // raster scale.
   shader->scaling_behavior_ = ScalingBehavior::kFixedScale;
-  shader->tx_ = tx_;
-  shader->ty_ = ty_;
-
-  *raster_scale =
-      gfx::SizeF(SkIntToScalar(tile_rect.width()) / tile_.width(),
-                 SkIntToScalar(tile_rect.height()) / tile_.height());
-  shader->local_matrix_ = GetLocalMatrix();
-  shader->local_matrix_->preScale(1 / raster_scale->width(),
-                                  1 / raster_scale->height());
-
+  shader->SetMatrixAndTiling(&local_matrix_with_inv_raster_scale, tx_, ty_);
   return shader;
 }
 
@@ -325,12 +336,12 @@ sk_sp<PaintShader> PaintShader::CreatePaintWorkletRecord(
 
   ImageProvider::ScopedResult result =
       image_provider->GetRasterContent(DrawImage(image_));
-  if (!result || !result.paint_record())
+  if (!result || !result.has_paint_record()) {
     return nullptr;
+  }
   SkMatrix local_matrix = GetLocalMatrix();
-  return PaintShader::MakePaintRecord(
-      sk_ref_sp<PaintRecord>(result.paint_record()), tile_, tx_, ty_,
-      &local_matrix);
+  return PaintShader::MakePaintRecord(result.ReleaseAsRecord(), tile_, tx_, ty_,
+                                      &local_matrix);
 }
 
 sk_sp<PaintShader> PaintShader::CreateDecodedImage(
@@ -482,7 +493,7 @@ void PaintShader::ResolveSkObjects(const gfx::SizeF* raster_scale,
       // Create a recording at the desired scale if this record has images
       // which have been decoded before raster.
       sk_cached_picture_ =
-          ToSkPicture(record_, tile_, raster_scale, image_provider);
+          ToSkPicture(*record_, tile_, raster_scale, image_provider);
       break;
     }
     default:
@@ -506,8 +517,13 @@ void PaintShader::SetColorsAndPositions(const SkColor4f* colors,
 void PaintShader::SetMatrixAndTiling(const SkMatrix* matrix,
                                      SkTileMode tx,
                                      SkTileMode ty) {
-  if (matrix)
+  if (matrix) {
     local_matrix_ = *matrix;
+    // The matrix type is mutable and set lazily. Force it to be computed here
+    // to avoid a data race from the lazy computation happening on a worker
+    // thread.
+    local_matrix_->getType();
+  }
   tx_ = tx;
   ty_ = ty;
 }
@@ -584,7 +600,7 @@ bool PaintShader::IsValid() const {
   return false;
 }
 
-bool PaintShader::operator==(const PaintShader& other) const {
+bool PaintShader::EqualsForTesting(const PaintShader& other) const {
   if (shader_type_ != other.shader_type_)
     return false;
 
@@ -597,23 +613,19 @@ bool PaintShader::operator==(const PaintShader& other) const {
   const SkMatrix& local_matrix = local_matrix_ ? *local_matrix_ : SkMatrix::I();
   const SkMatrix& other_local_matrix =
       other.local_matrix_ ? *other.local_matrix_ : SkMatrix::I();
-  if (!CompareMatrices(local_matrix, other_local_matrix,
-                       ignore_scaling_differences)) {
+  if (!CompareMatricesForTesting(local_matrix, other_local_matrix,  // IN-TEST
+                                 ignore_scaling_differences)) {
     return false;
   }
 
-  if (fallback_color_ != other.fallback_color_)
+  if (fallback_color_ != other.fallback_color_ || flags_ != other.flags_ ||
+      tx_ != other.tx_ || ty_ != other.ty_) {
     return false;
-  if (flags_ != other.flags_)
-    return false;
-  if (tx_ != other.tx_)
-    return false;
-  if (ty_ != other.ty_)
-    return false;
-
+  }
   if (!ignore_scaling_differences &&
-      scaling_behavior_ != other.scaling_behavior_)
+      scaling_behavior_ != other.scaling_behavior_) {
     return false;
+  }
 
   // Variables that only some shaders use.
   switch (shader_type_) {
@@ -621,31 +633,20 @@ bool PaintShader::operator==(const PaintShader& other) const {
     case Type::kColor:
       break;
     case Type::kSweepGradient:
-      if (!PaintOp::AreEqualEvenIfNaN(start_degrees_, other.start_degrees_))
+      if (start_degrees_ != other.start_degrees_ ||
+          end_degrees_ != other.end_degrees_) {
         return false;
-      if (!PaintOp::AreEqualEvenIfNaN(end_degrees_, other.end_degrees_))
-        return false;
+      }
       [[fallthrough]];
     case Type::kLinearGradient:
     case Type::kRadialGradient:
     case Type::kTwoPointConicalGradient:
-      if (!PaintOp::AreEqualEvenIfNaN(start_radius_, other.start_radius_))
+      if (start_radius_ != other.start_radius_ ||
+          end_radius_ != other.end_radius_ || center_ != other.center_ ||
+          start_point_ != other.start_point_ ||
+          end_point_ != other.end_point_ || colors_ != other.colors_ ||
+          positions_ != other.positions_) {
         return false;
-      if (!PaintOp::AreEqualEvenIfNaN(end_radius_, other.end_radius_))
-        return false;
-      if (!PaintOp::AreSkPointsEqual(center_, other.center_))
-        return false;
-      if (!PaintOp::AreSkPointsEqual(start_point_, other.start_point_))
-        return false;
-      if (!PaintOp::AreSkPointsEqual(end_point_, other.end_point_))
-        return false;
-      if (colors_ != other.colors_)
-        return false;
-      if (positions_.size() != other.positions_.size())
-        return false;
-      for (size_t i = 0; i < positions_.size(); ++i) {
-        if (!PaintOp::AreEqualEvenIfNaN(positions_[i], other.positions_[i]))
-          return false;
       }
       break;
     case Type::kImage:

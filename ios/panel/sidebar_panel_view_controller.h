@@ -17,6 +17,7 @@ class Browser;
 - (instancetype)initWithCoder:(NSCoder*)coder NS_UNAVAILABLE;
 - (void)setupControllers:(UINavigationController*)nvc
         withBookmarkController:(UINavigationController*)bvc
+        andReadinglistController:(UINavigationController*)rvc
     andHistoryController:(UINavigationController*)hc;
 - (void)panelDismissed;
 - (void)setIndexForControl:(int)index;

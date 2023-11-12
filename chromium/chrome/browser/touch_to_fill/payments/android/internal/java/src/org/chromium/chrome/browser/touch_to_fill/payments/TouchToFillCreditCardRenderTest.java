@@ -6,12 +6,13 @@ package org.chromium.chrome.browser.touch_to_fill.payments;
 
 import static org.chromium.base.test.util.ApplicationTestUtils.finishActivity;
 import static org.chromium.chrome.browser.autofill.AutofillTestHelper.createCreditCard;
+import static org.chromium.chrome.browser.autofill.AutofillTestHelper.createVirtualCreditCard;
 import static org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils.tearDownNightModeAfterChromeActivityDestroyed;
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 import static org.chromium.ui.base.LocalizationUtils.setRtlForTesting;
 
-import android.os.Build.VERSION_CODES;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.test.filters.MediumTest;
 
@@ -21,6 +22,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.mockito.quality.Strictness;
@@ -30,12 +32,12 @@ import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
+import org.chromium.chrome.browser.touch_to_fill.common.BottomSheetFocusHelper;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -47,13 +49,12 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * These tests render screenshots of touch to fill for credit cards sheet and compare them
- * to a gold standard.
+ * These tests render screenshots of touch to fill for credit cards sheet and compare them to a gold
+ * standard.
  */
 @RunWith(ParameterizedRunner.class)
 @Batch(Batch.PER_CLASS)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
-@DisableIf.Build(sdk_is_less_than = VERSION_CODES.O_MR1, message = "https://crbug.com/1404413")
 public class TouchToFillCreditCardRenderTest {
     @ParameterAnnotations.ClassParameter
     private static List<ParameterSet> sClassParams =
@@ -69,12 +70,14 @@ public class TouchToFillCreditCardRenderTest {
     @Rule
     public final ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
-                    .setRevision(1)
+                    .setRevision(10)
                     .setBugComponent(Component.UI_BROWSER_AUTOFILL)
                     .build();
 
     @Mock
     private TouchToFillCreditCardComponent.Delegate mDelegateMock;
+    @Mock
+    private BottomSheetFocusHelper mBottomSheetFocusHelper;
 
     private static final CreditCard VISA = createCreditCard("Visa", "4111111111111111", "5",
             AutofillTestHelper.nextYear(), true, "Visa", "• • • • 1111", R.drawable.visa_card);
@@ -84,6 +87,17 @@ public class TouchToFillCreditCardRenderTest {
     private static final CreditCard SERVER_MASTER_CARD = createCreditCard("MasterCard-GPay",
             "5454545454545454", "11", AutofillTestHelper.nextYear(), false, "MasterCard-GPay",
             "• • • • 5454", R.drawable.mc_card);
+    private static final CreditCard DISCOVER =
+            createCreditCard("Discover", "6011111111111117", "9", AutofillTestHelper.nextYear(),
+                    true, "Discover", "• • • • 1117", R.drawable.discover_card);
+    private static final CreditCard AMERICAN_EXPRESS = createCreditCard("American Express",
+            "378282246310005", "10", AutofillTestHelper.nextYear(), true, "American Express",
+            "• • • • 0005", R.drawable.amex_card);
+    private static final CreditCard MASTERCARD_VIRTUAL_CARD = createVirtualCreditCard(
+            /* name= */ "MasterCard-GPay", /* number= */ "5454545454545454", /* month= */ "11",
+            /* year= */ AutofillTestHelper.nextYear(), /* network= */ "Mastercard",
+            /* iconId= */ R.drawable.mc_card, /* cardNameForAutofillDisplay= */ "MasterCard-GPay",
+            /* obfuscatedLastFourDigits= */ "• • • • 5454");
 
     private BottomSheetController mBottomSheetController;
     private TouchToFillCreditCardCoordinator mCoordinator;
@@ -97,14 +111,16 @@ public class TouchToFillCreditCardRenderTest {
 
     @Before
     public void setUp() throws InterruptedException {
+        MockitoAnnotations.initMocks(this);
         mActivityTestRule.startMainActivityOnBlankPage();
+        mActivityTestRule.waitForActivityCompletelyLoaded();
         mBottomSheetController = mActivityTestRule.getActivity()
                                          .getRootUiCoordinatorForTesting()
                                          .getBottomSheetController();
         runOnUiThreadBlocking(() -> {
             mCoordinator = new TouchToFillCreditCardCoordinator();
-            mCoordinator.initialize(
-                    mActivityTestRule.getActivity(), mBottomSheetController, mDelegateMock);
+            mCoordinator.initialize(mActivityTestRule.getActivity(), mBottomSheetController,
+                    mDelegateMock, mBottomSheetFocusHelper);
         });
     }
 
@@ -122,26 +138,129 @@ public class TouchToFillCreditCardRenderTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    public void testShowsVisaAndMastercard() throws IOException {
+    public void testShowsOneCard() throws IOException {
+        runOnUiThreadBlocking(() -> { mCoordinator.showSheet(new CreditCard[] {VISA}, true); });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        View bottomSheetView = mActivityTestRule.getActivity().findViewById(R.id.bottom_sheet);
+        mRenderTestRule.render(bottomSheetView, "touch_to_fill_credit_card_sheet_one_card");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowsOneCardHalfState() throws IOException {
+        runOnUiThreadBlocking(() -> { mCoordinator.showSheet(new CreditCard[] {VISA}, true); });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        ViewGroup bottomSheetParentView = (ViewGroup) mActivityTestRule.getActivity()
+                                                  .findViewById(R.id.bottom_sheet)
+                                                  .getParent();
+        mRenderTestRule.render(
+                bottomSheetParentView, "touch_to_fill_credit_card_sheet_one_card_half_state");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowsTwoCards() throws IOException {
         runOnUiThreadBlocking(() -> {
             mCoordinator.showSheet(new CreditCard[] {VISA, MASTER_CARD}, true);
         });
         BottomSheetTestSupport.waitForOpen(mBottomSheetController);
 
         View bottomSheetView = mActivityTestRule.getActivity().findViewById(R.id.bottom_sheet);
-        mRenderTestRule.render(bottomSheetView, "touch_to_fill_credit_card_sheet");
+        mRenderTestRule.render(bottomSheetView, "touch_to_fill_credit_card_sheet_two_cards");
     }
 
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    public void testShowsLocalAndServerCards() throws IOException {
+    public void testShowsTwoCardsHalfState() throws IOException {
         runOnUiThreadBlocking(() -> {
-            mCoordinator.showSheet(new CreditCard[] {VISA, SERVER_MASTER_CARD}, true);
+            mCoordinator.showSheet(new CreditCard[] {VISA, MASTER_CARD}, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        ViewGroup bottomSheetParentView = (ViewGroup) mActivityTestRule.getActivity()
+                                                  .findViewById(R.id.bottom_sheet)
+                                                  .getParent();
+        mRenderTestRule.render(
+                bottomSheetParentView, "touch_to_fill_credit_card_sheet_two_cards_half_state");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowsThreeCards() throws IOException {
+        runOnUiThreadBlocking(() -> {
+            mCoordinator.showSheet(new CreditCard[] {VISA, MASTER_CARD, DISCOVER}, true);
         });
         BottomSheetTestSupport.waitForOpen(mBottomSheetController);
 
         View bottomSheetView = mActivityTestRule.getActivity().findViewById(R.id.bottom_sheet);
-        mRenderTestRule.render(bottomSheetView, "touch_to_fill_credit_card_sheet");
+        mRenderTestRule.render(bottomSheetView, "touch_to_fill_credit_card_sheet_three_cards");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowsThreeCardsHalfState() throws IOException {
+        runOnUiThreadBlocking(() -> {
+            mCoordinator.showSheet(new CreditCard[] {VISA, MASTER_CARD, DISCOVER}, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        ViewGroup bottomSheetParentView = (ViewGroup) mActivityTestRule.getActivity()
+                                                  .findViewById(R.id.bottom_sheet)
+                                                  .getParent();
+        mRenderTestRule.render(
+                bottomSheetParentView, "touch_to_fill_credit_card_sheet_three_cards_half_state");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowsFourCards() throws IOException {
+        runOnUiThreadBlocking(() -> {
+            mCoordinator.showSheet(
+                    new CreditCard[] {VISA, MASTER_CARD, DISCOVER, AMERICAN_EXPRESS}, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        View bottomSheetView = mActivityTestRule.getActivity().findViewById(R.id.bottom_sheet);
+        mRenderTestRule.render(bottomSheetView, "touch_to_fill_credit_card_sheet_four_cards");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowsFourCardsHalfState() throws IOException {
+        runOnUiThreadBlocking(() -> {
+            mCoordinator.showSheet(
+                    new CreditCard[] {VISA, MASTER_CARD, DISCOVER, AMERICAN_EXPRESS}, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        ViewGroup bottomSheetParentView = (ViewGroup) mActivityTestRule.getActivity()
+                                                  .findViewById(R.id.bottom_sheet)
+                                                  .getParent();
+        mRenderTestRule.render(
+                bottomSheetParentView, "touch_to_fill_credit_card_sheet_four_cards_half_state");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testShowsLocalAndServerAndVirtualCards() throws IOException {
+        runOnUiThreadBlocking(() -> {
+            mCoordinator.showSheet(
+                    new CreditCard[] {VISA, MASTERCARD_VIRTUAL_CARD, SERVER_MASTER_CARD}, true);
+        });
+        BottomSheetTestSupport.waitForOpen(mBottomSheetController);
+
+        View bottomSheetView = mActivityTestRule.getActivity().findViewById(R.id.bottom_sheet);
+        mRenderTestRule.render(bottomSheetView,
+                "touch_to_fill_credit_card_sheet_shows_local_and_server_and_virtual_cards");
     }
 }

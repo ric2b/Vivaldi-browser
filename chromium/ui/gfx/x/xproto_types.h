@@ -8,9 +8,9 @@
 #include <cstdint>
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/free_deleter.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
@@ -50,7 +50,7 @@ struct COMPONENT_EXPORT(X11) ReadBuffer {
 
   scoped_refptr<base::RefCountedMemory> data;
   size_t offset = 0;
-  raw_ptr<const int> fds = nullptr;
+  raw_ptr<const int, AllowPtrArithmetic> fds = nullptr;
 };
 
 // Wraps data to write to the connection.

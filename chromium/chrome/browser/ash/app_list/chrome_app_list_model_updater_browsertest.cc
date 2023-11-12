@@ -26,7 +26,6 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -38,7 +37,6 @@
 #include "components/session_manager/core/session_manager.h"
 #include "components/sync/model/string_ordinal.h"
 #include "components/sync/test/fake_sync_change_processor.h"
-#include "components/sync/test/sync_error_factory_mock.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/extension_system.h"
@@ -440,8 +438,7 @@ IN_PROC_BROWSER_TEST_F(ChromeAppListModelUpdaterTest,
 
   app_list_syncable_service->MergeDataAndStartSyncing(
       syncer::APP_LIST, syncer::SyncDataList(),
-      std::make_unique<syncer::FakeSyncChangeProcessor>(),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>());
 
   // Simluate installation of an app pinned to shelf by default after initial
   // sync data is merged: app with web_app::kMessagesAppId ID.

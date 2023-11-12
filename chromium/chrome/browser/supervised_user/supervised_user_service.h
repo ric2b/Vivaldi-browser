@@ -11,7 +11,7 @@
 #include <set>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
@@ -19,17 +19,16 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/net/file_downloader.h"
-#include "chrome/browser/supervised_user/supervised_user_denylist.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
-#include "chrome/browser/supervised_user/supervised_users.h"
 #include "chrome/browser/supervised_user/web_approvals_manager.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
+#include "components/supervised_user/core/common/supervised_user_denylist.h"
+#include "components/supervised_user/core/common/supervised_users.h"
 #include "components/sync/driver/sync_type_preference_provider.h"
 #include "extensions/buildflags/buildflags.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/ui/supervised_user/parent_permission_dialog.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/management_policy.h"
@@ -39,10 +38,13 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+#if !BUILDFLAG(IS_ANDROID)
+class Browser;
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 class PrefService;
 class Profile;
 class SupervisedUserServiceObserver;
-class SupervisedUserSettingsService;
 class SupervisedUserURLFilter;
 
 namespace base {
@@ -54,15 +56,19 @@ class Version;
 namespace extensions {
 class Extension;
 }
-#endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+
+namespace signin {
+class IdentityManager;
+}  // namespace signin
+
+namespace supervised_user {
+class SupervisedUserSettingsService;
+}  // namespace supervised_user
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
-
-#if !BUILDFLAG(IS_ANDROID)
-class Browser;
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 // This class handles all the information related to a given supervised profile
 // (e.g. the default URL filtering behavior, or manual allowlist/denylist
@@ -173,7 +179,7 @@ class SupervisedUserService : public KeyedService,
   // includes Unicorn, Geller, and Griffin accounts.
   bool IsChild() const;
 
-  bool IsSupervisedUserExtensionInstallEnabled() const;
+  bool IsURLFilteringEnabled() const;
 
   // Returns true if there is a custodian for the child.  A child can have
   // up to 2 custodians, and this returns true if they have at least 1.
@@ -247,7 +253,10 @@ class SupervisedUserService : public KeyedService,
 
   // Use |SupervisedUserServiceFactory::GetForProfile(..)| to get
   // an instance of this service.
-  explicit SupervisedUserService(Profile* profile);
+  explicit SupervisedUserService(
+      Profile* profile,
+      signin::IdentityManager* identity_manager,
+      ValidateURLSupportCallback check_webstore_url_callback);
 
   void SetActive(bool active);
 
@@ -318,7 +327,7 @@ class SupervisedUserService : public KeyedService,
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   // Returns the SupervisedUserSettingsService associated with |profile_|.
-  SupervisedUserSettingsService* GetSettingsService();
+  supervised_user::SupervisedUserSettingsService* GetSettingsService();
 
   // Returns the PrefService associated with |profile_|.
   PrefService* GetPrefService();
@@ -368,6 +377,8 @@ class SupervisedUserService : public KeyedService,
   // Owns us via the KeyedService mechanism.
   raw_ptr<Profile> profile_;
 
+  raw_ptr<signin::IdentityManager> identity_manager_;
+
   bool active_;
 
   raw_ptr<Delegate> delegate_;
@@ -394,7 +405,7 @@ class SupervisedUserService : public KeyedService,
     LOADED
   } denylist_state_;
 
-  SupervisedUserDenylist denylist_;
+  supervised_user::SupervisedUserDenylist denylist_;
   std::unique_ptr<FileDownloader> denylist_downloader_;
 
   // Manages local and remote web approvals.

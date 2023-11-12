@@ -23,7 +23,6 @@ class ChromeProcessSingleton;
 class HttpsFirstModeService;
 class NavigationMetricsRecorder;
 class PrefService;
-class Profile;
 
 namespace {
 class CrashesDOMHandler;
@@ -34,7 +33,7 @@ class ChromeCameraAppUIDelegate;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace domain_reliability {
-class DomainReliabilityServiceFactory;
+bool ShouldCreateService();
 }
 
 namespace extensions {
@@ -50,10 +49,6 @@ namespace metrics {
 class ChromeOSPerUserMetricsBrowserTestBase;
 class UkmConsentParamBrowserTest;
 }  // namespace metrics
-
-namespace welcome {
-void JoinOnboardingGroup(Profile* profile);
-}
 
 namespace safe_browsing {
 class ChromeCleanerControllerDelegate;
@@ -115,7 +110,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeBrowserMainParts;
   friend class ChromeContentBrowserClient;
   friend class ChromeMetricsServicesManagerClient;
-  friend class domain_reliability::DomainReliabilityServiceFactory;
+  friend bool domain_reliability::ShouldCreateService();
   friend class extensions::ChromeGuestViewManagerDelegate;
   friend class extensions::ChromeMetricsPrivateDelegate;
   friend void ChangeMetricsReportingStateWithReply(
@@ -134,7 +129,6 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeMetricsServiceClient;
   friend class ChromePasswordManagerClient;
   friend class ChromeProcessSingleton;
-  friend void welcome::JoinOnboardingGroup(Profile* profile);
   friend class NavigationMetricsRecorder;
   friend class ChromeBrowserMainExtraPartsGpu;
   friend class Browser;
@@ -142,10 +136,10 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class OptimizationGuideKeyedService;
   friend class WebUITabStripFieldTrial;
   friend class feed::FeedServiceDelegateImpl;
+  friend class FirstRunService;
   friend class browser_sync::DeviceInfoSyncClientImpl;
   friend class feed::WebFeedSubscriptionCoordinator;
   friend class HttpsFirstModeService;
-  friend class webauthn::authenticator::IsMetricsAndCrashReportingEnabled;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   friend class ChromeCameraAppUIDelegate;
@@ -178,9 +172,6 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   // For Ash Chrome, if a user is logged in and the device has an owner or is
   // managed, the current user's consent (if applicable) will be used if metrics
   // reporting for the device has been enabled.
-  //
-  // TODO(gayane): Consolidate metric prefs on all platforms.
-  // http://crbug.com/362192,  http://crbug.com/532084
   static bool IsMetricsAndCrashReportingEnabled();
 
   // This is identical to the function without the |local_state| param but can

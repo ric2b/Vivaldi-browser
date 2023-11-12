@@ -6,7 +6,7 @@
 #include "base/android/jni_string.h"
 #include "chrome/browser/touch_to_fill/payments/android/jni_headers/TouchToFillCreditCardControllerBridge_jni.h"
 #include "chrome/browser/touch_to_fill/payments/android/touch_to_fill_credit_card_view.h"
-#include "components/autofill/content/browser/content_autofill_driver.h"
+#include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/ui/touch_to_fill_delegate.h"
 
 namespace autofill {
@@ -22,7 +22,7 @@ TouchToFillCreditCardController::~TouchToFillCreditCardController() {
 bool TouchToFillCreditCardController::Show(
     std::unique_ptr<TouchToFillCreditCardView> view,
     base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard* const> cards_to_suggest) {
+    base::span<const autofill::CreditCard> cards_to_suggest) {
   // Abort if TTF surface is already shown.
   if (view_)
     return false;
@@ -35,7 +35,6 @@ bool TouchToFillCreditCardController::Show(
 
   view_ = std::move(view);
   delegate_ = std::move(delegate);
-  SetShouldSuppressKeyboard(/*suppress=*/true);
   return true;
 }
 
@@ -44,15 +43,11 @@ void TouchToFillCreditCardController::Hide() {
     view_->Hide();
 }
 
-void TouchToFillCreditCardController::SetShouldSuppressKeyboard(bool suppress) {
+void TouchToFillCreditCardController::OnDismissed(JNIEnv* env,
+                                                  bool dismissed_by_user) {
   if (delegate_) {
-    static_cast<ContentAutofillDriver*>(delegate_->GetDriver())
-        ->SetShouldSuppressKeyboard(suppress);
+    delegate_->OnDismissed(dismissed_by_user);
   }
-}
-
-void TouchToFillCreditCardController::OnDismissed(JNIEnv* env) {
-  SetShouldSuppressKeyboard(/*suppress=*/false);
   view_.reset();
   delegate_.reset();
   java_object_.Reset();
@@ -68,8 +63,10 @@ void TouchToFillCreditCardController::ShowCreditCardSettings(JNIEnv* env) {
 
 void TouchToFillCreditCardController::SuggestionSelected(
     JNIEnv* env,
-    base::android::JavaParamRef<jstring> unique_id) {
-  delegate_->SuggestionSelected(ConvertJavaStringToUTF8(env, unique_id));
+    base::android::JavaParamRef<jstring> unique_id,
+    bool is_virtual) {
+  delegate_->SuggestionSelected(ConvertJavaStringToUTF8(env, unique_id),
+                                is_virtual);
 }
 
 base::android::ScopedJavaLocalRef<jobject>

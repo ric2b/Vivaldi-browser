@@ -39,31 +39,48 @@ try_.defaults.os.set(os.LINUX_DEFAULT)
 try_.defaults.pool.set("luci.chromium.try")
 try_.defaults.service_account.set("chromium-try-builder@chops-service-accounts.iam.gserviceaccount.com")
 
-try_.defaults.caches.set([
-    swarming.cache(
-        name = "win_toolchain",
-        path = "win_toolchain",
-    ),
-])
-
 consoles.list_view(
     name = "tryserver.chromium.codesearch",
 )
 
 try_.builder(
     name = "gen-android-try",
+    properties = {
+        "recipe_properties": {
+            "build_config": "android",
+            "platform": "android",
+        },
+    },
 )
 
 try_.builder(
     name = "gen-chromiumos-try",
+    properties = {
+        "recipe_properties": {
+            "build_config": "chromeos",
+            "platform": "chromeos",
+        },
+    },
 )
 
 try_.builder(
     name = "gen-fuchsia-try",
+    properties = {
+        "recipe_properties": {
+            "build_config": "fuchsia",
+            "platform": "fuchsia",
+        },
+    },
 )
 
 try_.builder(
     name = "gen-lacros-try",
+    properties = {
+        "recipe_properties": {
+            "build_config": "lacros",
+            "platform": "lacros",
+        },
+    },
 )
 
 try_.builder(
@@ -73,10 +90,22 @@ try_.builder(
 try_.builder(
     name = "gen-mac-try",
     os = os.MAC_10_15,
+    properties = {
+        "recipe_properties": {
+            "build_config": "mac",
+            "platform": "mac",
+        },
+    },
 )
 
 try_.builder(
     name = "gen-webview-try",
+    properties = {
+        "recipe_properties": {
+            "build_config": "webview",
+            "platform": "webview",
+        },
+    },
 )
 
 try_.builder(

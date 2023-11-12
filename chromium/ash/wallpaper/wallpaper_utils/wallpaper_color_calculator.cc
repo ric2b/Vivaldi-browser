@@ -7,14 +7,20 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
+#include "ash/wallpaper/wallpaper_utils/scored_sample.h"
 #include "ash/wallpaper/wallpaper_utils/wallpaper_calculated_colors.h"
-#include "ash/wallpaper/wallpaper_utils/wallpaper_color_calculator_observer.h"
 #include "ash/wallpaper/wallpaper_utils/wallpaper_color_extraction_result.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/task/task_runner.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
+#include "base/time/time.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_analysis.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -81,8 +87,14 @@ WallpaperCalculatedColors CalculateWallpaperColor(
       *resized_image.bitmap(), resized_image.height(), kNoBounds, kNoBounds,
       /*find_closest=*/true);
 
-  UMA_HISTOGRAM_TIMES("Ash.Wallpaper.ColorExtraction.Durations",
-                      base::TimeTicks::Now() - start_time);
+  // Compute result with with the improved clustering algorithm.
+  SkColor celebi_color = ash::features::IsJellyEnabled()
+                             ? ComputeWallpaperSeedColor(resized_image)
+                             : SK_ColorTRANSPARENT;
+
+  DVLOG(2) << __func__ << " image_size=" << image.size().ToString()
+           << " time=" << base::TimeTicks::Now() - start_time;
+
   WallpaperColorExtractionResult result = NUM_COLOR_EXTRACTION_RESULTS;
   for (size_t i = 0; i < color_profiles.size(); ++i) {
     bool is_result_transparent = prominent_colors[i] == SK_ColorTRANSPARENT;
@@ -127,9 +139,8 @@ WallpaperCalculatedColors CalculateWallpaperColor(
     }
   }
   DCHECK_NE(NUM_COLOR_EXTRACTION_RESULTS, result);
-  UMA_HISTOGRAM_ENUMERATION("Ash.Wallpaper.ColorExtractionResult2", result,
-                            NUM_COLOR_EXTRACTION_RESULTS);
-  return WallpaperCalculatedColors(prominent_colors, k_mean_color);
+  return WallpaperCalculatedColors(prominent_colors, k_mean_color,
+                                   celebi_color);
 }
 
 bool ShouldCalculateSync(const gfx::ImageSkia& image) {
@@ -140,32 +151,23 @@ bool ShouldCalculateSync(const gfx::ImageSkia& image) {
 
 WallpaperColorCalculator::WallpaperColorCalculator(
     const gfx::ImageSkia& image,
-    const std::vector<color_utils::ColorProfile>& color_profiles,
-    scoped_refptr<base::TaskRunner> task_runner)
-    : image_(image),
-      color_profiles_(color_profiles),
-      task_runner_(std::move(task_runner)) {
-  std::vector<SkColor> prominent_colors =
-      std::vector<SkColor>(color_profiles.size(), SK_ColorTRANSPARENT);
-  calculated_colors_ =
-      WallpaperCalculatedColors(prominent_colors, SK_ColorTRANSPARENT);
+    const std::vector<color_utils::ColorProfile>& color_profiles)
+    : image_(image), color_profiles_(color_profiles) {
+  // The task runner is used to compute the wallpaper colors on a thread
+  // that doesn't block the UI. The user may or may not be waiting for it.
+  // If we need to shutdown, we can just re-compute the value next time.
+  task_runner_ = base::ThreadPool::CreateTaskRunner(
+      {base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
 WallpaperColorCalculator::~WallpaperColorCalculator() = default;
 
-void WallpaperColorCalculator::AddObserver(
-    WallpaperColorCalculatorObserver* observer) {
-  observers_.AddObserver(observer);
-}
-
-void WallpaperColorCalculator::RemoveObserver(
-    WallpaperColorCalculatorObserver* observer) {
-  observers_.RemoveObserver(observer);
-}
-
-bool WallpaperColorCalculator::StartCalculation() {
+bool WallpaperColorCalculator::StartCalculation(
+    WallpaperColorCallback callback) {
   if (ShouldCalculateSync(image_)) {
-    NotifyCalculationComplete(CalculateWallpaperColor(image_, color_profiles_));
+    calculated_colors_ = CalculateWallpaperColor(image_, color_profiles_);
+    std::move(callback).Run(*calculated_colors_);
     return true;
   }
 
@@ -174,17 +176,14 @@ bool WallpaperColorCalculator::StartCalculation() {
           FROM_HERE,
           base::BindOnce(&CalculateWallpaperColor, image_, color_profiles_),
           base::BindOnce(&WallpaperColorCalculator::OnAsyncCalculationComplete,
-                         weak_ptr_factory_.GetWeakPtr(),
-                         base::TimeTicks::Now()))) {
+                         weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now(),
+                         std::move(callback)))) {
     return true;
   }
 
   LOG(WARNING) << "PostSequencedWorkerTask failed. "
                << "Wallpaper prominent colors may not be calculated.";
 
-  calculated_colors_.prominent_colors =
-      std::vector<SkColor>(color_profiles_.size(), SK_ColorTRANSPARENT);
-  calculated_colors_.k_mean_color = SK_ColorTRANSPARENT;
   return false;
 }
 
@@ -195,19 +194,11 @@ void WallpaperColorCalculator::SetTaskRunnerForTest(
 
 void WallpaperColorCalculator::OnAsyncCalculationComplete(
     base::TimeTicks async_start_time,
+    WallpaperColorCallback callback,
     const WallpaperCalculatedColors& calculated_colors) {
-  UMA_HISTOGRAM_TIMES("Ash.Wallpaper.ColorExtraction.UserDelay",
-                      base::TimeTicks::Now() - async_start_time);
-  NotifyCalculationComplete(calculated_colors);
-}
-
-void WallpaperColorCalculator::NotifyCalculationComplete(
-    const WallpaperCalculatedColors& calculated_colors) {
+  DVLOG(2) << __func__ << " time=" << base::TimeTicks::Now() - async_start_time;
   calculated_colors_ = calculated_colors;
-  for (auto& observer : observers_)
-    observer.OnColorCalculationComplete();
-
-  // This could be deleted!
+  std::move(callback).Run(calculated_colors);
 }
 
 }  // namespace ash

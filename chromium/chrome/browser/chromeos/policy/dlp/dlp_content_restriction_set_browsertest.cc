@@ -72,53 +72,30 @@ class DlpContentRestrictionSetBrowserTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(DlpContentRestrictionSetBrowserTest,
                        GetRestrictionSetForURL) {
-  {
+  {  // Do not remove the brackets, policy update is triggered on
+     // ScopedListPrefUpdate destructor.
     ScopedListPrefUpdate update(g_browser_process->local_state(),
                                 policy_prefs::kDlpRulesList);
 
-    base::Value src_urls1(base::Value::Type::LIST);
-    src_urls1.Append(kUrl1);
-    base::Value restrictions1(base::Value::Type::LIST);
-    restrictions1.Append(dlp_test_util::CreateRestrictionWithLevel(
-        dlp::kScreenshotRestriction, dlp::kBlockLevel));
-    update->Append(dlp_test_util::CreateRule(
-        "rule #1", "Block", std::move(src_urls1),
-        /*dst_urls=*/base::Value(base::Value::Type::LIST),
-        /*dst_components=*/base::Value(base::Value::Type::LIST),
-        std::move(restrictions1)));
+    dlp_test_util::DlpRule rule1("rule #1", "Block", "testid1");
+    rule1.AddSrcUrl(kUrl1).AddRestriction(dlp::kScreenshotRestriction,
+                                          dlp::kBlockLevel);
+    update->Append(rule1.Create());
 
-    base::Value src_urls2(base::Value::Type::LIST);
-    src_urls2.Append(kUrl2);
-    base::Value restrictions2(base::Value::Type::LIST);
-    restrictions2.Append(dlp_test_util::CreateRestrictionWithLevel(
-        dlp::kPrivacyScreenRestriction, dlp::kBlockLevel));
-    update->Append(dlp_test_util::CreateRule(
-        "rule #2", "Block", std::move(src_urls2),
-        /*dst_urls=*/base::Value(base::Value::Type::LIST),
-        /*dst_components=*/base::Value(base::Value::Type::LIST),
-        std::move(restrictions2)));
+    dlp_test_util::DlpRule rule2("rule #2", "Block", "testid2");
+    rule2.AddSrcUrl(kUrl2).AddRestriction(dlp::kPrivacyScreenRestriction,
+                                          dlp::kBlockLevel);
+    update->Append(rule2.Create());
 
-    base::Value src_urls3(base::Value::Type::LIST);
-    src_urls3.Append(kUrl3);
-    base::Value restrictions3(base::Value::Type::LIST);
-    restrictions3.Append(dlp_test_util::CreateRestrictionWithLevel(
-        dlp::kPrintingRestriction, dlp::kBlockLevel));
-    update->Append(dlp_test_util::CreateRule(
-        "rule #3", "Block", std::move(src_urls3),
-        /*dst_urls=*/base::Value(base::Value::Type::LIST),
-        /*dst_components=*/base::Value(base::Value::Type::LIST),
-        std::move(restrictions3)));
+    dlp_test_util::DlpRule rule3("rule #3", "Block", "testid3");
+    rule3.AddSrcUrl(kUrl3).AddRestriction(dlp::kPrintingRestriction,
+                                          dlp::kBlockLevel);
+    update->Append(rule3.Create());
 
-    base::Value src_urls4(base::Value::Type::LIST);
-    src_urls4.Append(kUrl4);
-    base::Value restrictions4(base::Value::Type::LIST);
-    restrictions4.Append(dlp_test_util::CreateRestrictionWithLevel(
-        dlp::kScreenShareRestriction, dlp::kBlockLevel));
-    update->Append(dlp_test_util::CreateRule(
-        "rule #4", "Block", std::move(src_urls4),
-        /*dst_urls=*/base::Value(base::Value::Type::LIST),
-        /*dst_components=*/base::Value(base::Value::Type::LIST),
-        std::move(restrictions4)));
+    dlp_test_util::DlpRule rule4("rule #4", "Block", "testid4");
+    rule4.AddSrcUrl(kUrl4).AddRestriction(dlp::kScreenShareRestriction,
+                                          dlp::kBlockLevel);
+    update->Append(rule4.Create());
   }
 
   EXPECT_EQ(kScreenshotRestricted,

@@ -66,7 +66,7 @@ void TextPainter::PaintDecorationsExceptLineThrough(
     const TextDecorationOffsetBase& decoration_offset,
     TextDecorationInfo& decoration_info,
     const PaintInfo& paint_info,
-    const Vector<AppliedTextDecoration>& decorations,
+    const Vector<AppliedTextDecoration, 1>& decorations,
     const TextPaintStyle& text_style) {
   // Updating the graphics context and looping through applied decorations is
   // expensive, so avoid doing it if the only decoration was a ‘line-through’.
@@ -116,7 +116,7 @@ void TextPainter::PaintDecorationsExceptLineThrough(
 void TextPainter::PaintDecorationsOnlyLineThrough(
     TextDecorationInfo& decoration_info,
     const PaintInfo& paint_info,
-    const Vector<AppliedTextDecoration>& decorations,
+    const Vector<AppliedTextDecoration, 1>& decorations,
     const TextPaintStyle& text_style) {
   // Updating the graphics context and looping through applied decorations is
   // expensive, so avoid doing it if there are no ‘line-through’ decorations.
@@ -209,10 +209,9 @@ void TextPainter::ClipDecorationsStripe(float upper,
     return;
 
   Vector<Font::TextIntercept> text_intercepts;
-  font_.GetTextIntercepts(
-      text_run_paint_info, graphics_context_.DeviceScaleFactor(),
-      graphics_context_.FillFlags(),
-      std::make_tuple(upper, upper + stripe_width), text_intercepts);
+  font_.GetTextIntercepts(text_run_paint_info, graphics_context_.FillFlags(),
+                          std::make_tuple(upper, upper + stripe_width),
+                          text_intercepts);
 
   DecorationsStripeIntercepts(upper, stripe_width, dilation, text_intercepts);
 }

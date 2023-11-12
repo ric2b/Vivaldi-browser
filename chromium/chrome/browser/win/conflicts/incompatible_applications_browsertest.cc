@@ -3,10 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/base_paths.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/scoped_native_library.h"
@@ -17,7 +17,6 @@
 #include "base/test/test_reg_util_win.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/win_util.h"
-#include "base/win/windows_version.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/win/conflicts/incompatible_applications_updater.h"
 #include "chrome/browser/win/conflicts/module_database.h"
@@ -134,9 +133,7 @@ class IncompatibleApplicationsBrowserTest : public InProcessBrowserTest {
 
     std::string contents;
     ASSERT_TRUE(module_list.SerializeToString(&contents));
-    ASSERT_EQ(base::WriteFile(GetModuleListPath(), contents.data(),
-                              static_cast<int>(contents.size())),
-              static_cast<int>(contents.size()));
+    ASSERT_TRUE(base::WriteFile(GetModuleListPath(), contents));
   }
 
   // Registers an uninstallation entry for the third-party application, and
@@ -204,9 +201,6 @@ constexpr wchar_t IncompatibleApplicationsBrowserTest::kApplicationName[];
 // page is shown after a browser crash.
 IN_PROC_BROWSER_TEST_F(IncompatibleApplicationsBrowserTest,
                        InjectIncompatibleDLL) {
-  if (base::win::GetVersion() < base::win::Version::WIN10)
-    return;
-
   // Create the observer early so the change is guaranteed to be observed.
   auto incompatible_applications_observer =
       std::make_unique<IncompatibleApplicationsObserver>();

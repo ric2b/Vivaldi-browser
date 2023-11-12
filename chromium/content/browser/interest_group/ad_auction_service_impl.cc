@@ -16,7 +16,9 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
+#include "content/browser/attribution_reporting/attribution_data_host_manager.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
+#include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "content/browser/fenced_frame/fenced_frame_url_mapping.h"
 #include "content/browser/interest_group/ad_auction_document_data.h"
 #include "content/browser/interest_group/ad_auction_result_metrics.h"
@@ -78,102 +80,6 @@ bool IsAdRequestValid(const blink::mojom::AdRequestConfig& config) {
   }
 
   return true;
-}
-
-// Sends requests for the Private Aggregation API to its manager. Does nothing
-// if the manager is unavailable. The map should be keyed by reporting origin
-// of the corresponding requests.
-void SendPrivateAggregationRequests(
-    PrivateAggregationManager* private_aggregation_manager,
-    const url::Origin& main_frame_origin,
-    std::map<url::Origin,
-             std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>>
-        private_aggregation_requests) {
-  // Empty vectors should've been filtered out.
-  DCHECK(base::ranges::none_of(private_aggregation_requests,
-                               [](auto& it) { return it.second.empty(); }));
-
-  if (!private_aggregation_manager) {
-    return;
-  }
-
-  for (auto& [origin, requests] : private_aggregation_requests) {
-    mojo::Remote<mojom::PrivateAggregationHost> remote;
-    if (!private_aggregation_manager->BindNewReceiver(
-            origin, main_frame_origin,
-            PrivateAggregationBudgetKey::Api::kFledge,
-            remote.BindNewPipeAndPassReceiver())) {
-      continue;
-    }
-
-    for (auction_worklet::mojom::PrivateAggregationRequestPtr& request :
-         requests) {
-      DCHECK(request);
-      std::vector<mojom::AggregatableReportHistogramContributionPtr>
-          contributions;
-      contributions.push_back(std::move(request->contribution));
-      remote->SendHistogramReport(std::move(contributions),
-                                  request->aggregation_mode,
-                                  std::move(request->debug_mode_details));
-    }
-  }
-}
-
-// Sends reports for a successful auction, both aggregated and event-level, and
-// performs interest group updates needed when an auction has a winner. Called
-// when a frame navigation maps a winning bid's URN to a URL. Only sends reports
-// the first time it's invoked for a given auction, to avoid generating multiple
-// reports if the winner of a single auction is used in multiple frames.
-//
-// `has_sent_reports` True if reports have already been sent for this auction.
-// Expected to be false on first invocation, and set to true for future calls.
-// Referenced object is expected to be owned by a RepeatingCallback, so it's
-// never nullptr.
-//
-// `private_aggregation_manager` and `interest_group_manager` must be valid and
-// non-null. This is ensured by having the URN to URL mapping object, which is
-// scoped to a page, own the callback. These two objects are scoped to the
-// BrowserContext, which outlives all pages that use it.
-//
-// `client_security_state` and  `trusted_url_loader_factory` are used for
-// event-level reports only.
-void SendSuccessfulAuctionReportsAndUpdateInterestGroups(
-    bool* has_sent_reports,
-    PrivateAggregationManager* private_aggregation_manager,
-    InterestGroupManagerImpl* interest_group_manager,
-    const url::Origin& main_frame_origin,
-    const url::Origin& frame_origin,
-    const blink::InterestGroupKey& winning_group_key,
-    const std::string& winning_group_ad_metadata,
-    std::map<url::Origin,
-             std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>>*
-        private_aggregation_requests,
-    const std::vector<GURL>& report_urls,
-    const std::vector<GURL>& debug_loss_report_urls,
-    const std::vector<GURL>& debug_win_report_urls,
-    const blink::InterestGroupSet& interest_groups_that_bid,
-    base::flat_set<std::string> k_anon_keys_to_join,
-    const network::mojom::ClientSecurityStatePtr& client_security_state,
-    scoped_refptr<network::WrapperSharedURLLoaderFactory>
-        trusted_url_loader_factory) {
-  DCHECK(has_sent_reports);
-  DCHECK(interest_group_manager);
-  DCHECK(client_security_state);
-  if (*has_sent_reports)
-    return;
-  *has_sent_reports = true;
-
-  interest_group_manager->RecordInterestGroupBids(interest_groups_that_bid);
-  interest_group_manager->RecordInterestGroupWin(winning_group_key,
-                                                 winning_group_ad_metadata);
-  interest_group_manager->RegisterAdKeysAsJoined(
-      std::move(k_anon_keys_to_join));
-
-  SendPrivateAggregationRequests(private_aggregation_manager, main_frame_origin,
-                                 std::move(*private_aggregation_requests));
-  interest_group_manager->EnqueueReports(
-      report_urls, debug_win_report_urls, debug_loss_report_urls, frame_origin,
-      client_security_state.Clone(), std::move(trusted_url_loader_factory));
 }
 
 }  // namespace
@@ -336,8 +242,17 @@ void AdAuctionServiceImpl::RunAdAuction(
   }
 
   std::unique_ptr<AuctionRunner> auction = AuctionRunner::CreateAndStart(
-      &auction_worklet_manager_, &GetInterestGroupManager(), config,
-      GetClientSecurityState(),
+      &auction_worklet_manager_, &GetInterestGroupManager(),
+      AttributionDataHostManager::FromBrowserContext(
+          render_frame_host().GetBrowserContext()),
+      private_aggregation_manager_,
+      // Unlike other callbacks, this needs to be safe to call after destruction
+      // of the AdAuctionServiceImpl, so that the reporter can outlive it.
+      base::BindRepeating(
+          &AdAuctionServiceImpl::MaybeLogPrivateAggregationFeature,
+          weak_ptr_factory_.GetWeakPtr()),
+      config, main_frame_origin_, origin(), GetClientSecurityState(),
+      GetRefCountedTrustedURLLoaderFactory(),
       base::BindRepeating(&AdAuctionServiceImpl::IsInterestGroupAPIAllowed,
                           base::Unretained(this)),
       std::move(abort_receiver),
@@ -414,7 +329,7 @@ void AdAuctionServiceImpl::DeprecatedGetURLFromURN(
 
 void AdAuctionServiceImpl::DeprecatedReplaceInURN(
     const GURL& urn_url,
-    std::vector<blink::mojom::ReplacementPtr> replacements,
+    std::vector<blink::mojom::AdKeywordReplacementPtr> replacements,
     DeprecatedReplaceInURNCallback callback) {
   if (!blink::IsValidUrnUuidURL(urn_url)) {
     ReportBadMessageAndDeleteThis("Unexpected request: invalid URN");
@@ -611,17 +526,9 @@ void AdAuctionServiceImpl::OnAuctionComplete(
     absl::optional<blink::InterestGroupKey> winning_group_key,
     absl::optional<GURL> render_url,
     std::vector<GURL> ad_component_urls,
-    std::string winning_group_ad_metadata,
-    std::vector<GURL> debug_loss_report_urls,
-    std::vector<GURL> debug_win_report_urls,
-    std::map<url::Origin,
-             std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>>
-        private_aggregation_requests,
-    blink::InterestGroupSet interest_groups_that_bid,
-    base::flat_set<std::string> k_anon_keys_to_join,
     std::vector<std::string> errors,
     std::unique_ptr<InterestGroupAuctionReporter> reporter) {
-  // Remove `auction` from `auctions_` but tmeporarily keep it alive - on
+  // Remove `auction` from `auctions_` but temporarily keep it alive - on
   // success, it owns a AuctionWorkletManager::WorkletHandle for the top-level
   // auction, which `reporter` can reuse once started. Fine to delete after
   // starting the reporter.
@@ -642,20 +549,7 @@ void AdAuctionServiceImpl::OnAuctionComplete(
 
   if (!render_url) {
     DCHECK(!reporter);
-    MaybeLogPrivateAggregationFeature(private_aggregation_requests);
-    if (!manually_aborted) {
-      SendPrivateAggregationRequests(private_aggregation_manager_,
-                                     main_frame_origin_,
-                                     std::move(private_aggregation_requests));
-      GetInterestGroupManager().RegisterAdKeysAsJoined(
-          std::move(k_anon_keys_to_join));
-      if (!interest_groups_that_bid.empty()) {
-        GetInterestGroupManager().RecordInterestGroupBids(
-            interest_groups_that_bid);
-      }
-    }
 
-    DCHECK(winning_group_ad_metadata.empty());
     std::move(callback).Run(manually_aborted, /*config=*/absl::nullopt);
     if (auction_result_metrics) {
       // `auction_result_metrics` can be null since PageUserData like
@@ -667,30 +561,44 @@ void AdAuctionServiceImpl::OnAuctionComplete(
       auction_result_metrics->ReportAuctionResult(
           AdAuctionResultMetrics::AuctionResult::kFailed);
     }
-    GetInterestGroupManager().EnqueueReports(
-        std::vector<GURL>(), std::vector<GURL>(), debug_loss_report_urls,
-        origin(), GetClientSecurityState(),
-        GetRefCountedTrustedURLLoaderFactory());
     return;
   }
 
   DCHECK(reporter);
-  // `reporter` has any aggregation requests generated in this case.
-  DCHECK(private_aggregation_requests.empty());
-  DCHECK(winning_group_key);  // Should always be present with a render_url
-  DCHECK(!winning_group_ad_metadata.empty());
+  // Should always be present with a render_url.
+  DCHECK(winning_group_key);
   DCHECK(blink::IsValidFencedFrameURL(*render_url));
   DCHECK(urn_uuid.is_valid());
-  DCHECK(!interest_groups_that_bid.empty());
 
+  content::AdAuctionData ad_auction_data{winning_group_key->owner,
+                                         winning_group_key->name};
+  FencedFrameURLMapping& fenced_frame_urls_map =
+      GetFrame()->GetPage().fenced_frame_urls_map();
+
+  // Set up reporting for any fenced frame that's navigated to the winning bid's
+  // URL. Use a URLLoaderFactory that will automatically reconnect on network
+  // process crashes, and can outlive the frame.
+  scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory =
+      render_frame_host()
+          .GetStoragePartition()
+          ->GetURLLoaderFactoryForBrowserProcess();
+
+  blink::FencedFrame::RedactedFencedFrameConfig config =
+      fenced_frame_urls_map.AssignFencedFrameURLAndInterestGroupInfo(
+          urn_uuid, *render_url, std::move(ad_auction_data),
+          reporter->OnNavigateToWinningAdCallback(), ad_component_urls,
+          reporter->fenced_frame_reporter());
+  std::move(callback).Run(/*manually_aborted=*/false, std::move(config));
+
+  // Start the InterestGroupAuctionReporter. It will run reporting scripts, but
+  // nothing will be reported (nor the reporter deleted) until a fenced frame
+  // navigates to the winning ad, which will be signalled by invoking the
+  // callback returned by the InterestGroupAuctionReporter's
+  // OnNavitationToWinningAdCallback() method (invoked just above).
   reporters_.emplace_front(std::move(reporter));
-  reporters_.front()->Start(base::BindOnce(
-      &AdAuctionServiceImpl::OnReporterComplete, base::Unretained(this),
-      reporters_.begin(), std::move(callback), std::move(urn_uuid),
-      std::move(*winning_group_key), std::move(*render_url),
-      std::move(ad_component_urls), std::move(winning_group_ad_metadata),
-      std::move(debug_loss_report_urls), std::move(debug_win_report_urls),
-      std::move(interest_groups_that_bid), std::move(k_anon_keys_to_join)));
+  reporters_.front()->Start(
+      base::BindOnce(&AdAuctionServiceImpl::OnReporterComplete,
+                     base::Unretained(this), reporters_.begin()));
   if (auction_result_metrics) {
     auction_result_metrics->ReportAuctionResult(
         AdAuctionResultMetrics::AuctionResult::kSucceeded);
@@ -698,17 +606,7 @@ void AdAuctionServiceImpl::OnAuctionComplete(
 }
 
 void AdAuctionServiceImpl::OnReporterComplete(
-    ReporterList::iterator reporter_it,
-    RunAdAuctionCallback callback,
-    GURL urn_uuid,
-    blink::InterestGroupKey winning_group_key,
-    GURL render_url,
-    std::vector<GURL> ad_component_urls,
-    std::string winning_group_ad_metadata,
-    std::vector<GURL> debug_loss_report_urls,
-    std::vector<GURL> debug_win_report_urls,
-    blink::InterestGroupSet interest_groups_that_bid,
-    base::flat_set<std::string> k_anon_keys_to_join) {
+    ReporterList::iterator reporter_it) {
   // Forward debug information to devtools.
   //
   // TODO(https://crbug.com/1394777): Ideally this will share code with the
@@ -720,53 +618,7 @@ void AdAuctionServiceImpl::OnReporterComplete(
         base::StrCat({"Worklet error: ", error}));
   }
 
-  auto ad_beacon_map = reporter->TakeAdBeaconMap();
-  auto report_urls = reporter->TakeReportUrls();
-  auto private_aggregation_requests =
-      reporter->TakePrivateAggregationRequests();
-  MaybeLogPrivateAggregationFeature(private_aggregation_requests);
-
   reporters_.erase(reporter_it);
-
-  FencedFrameURLMapping& fenced_frame_urls_map =
-      GetFrame()->GetPage().fenced_frame_urls_map();
-
-  // Need to send reports when the navigation code replaces a winning ad's URN
-  // with its URL, but should only do so once for the results from a given
-  // auction. FencedFrameURLMapping takes a RepeatingCallback, as it can map the
-  // same URN to a URL multiple times. To avoid multiple invocations, pass in a
-  // base::Owned bool, which is set to true by first invocation.
-  //
-  // The callback can also potentially be invoked after the AdAuctionServiceImpl
-  // is destroyed, in a number of cases, such as running an auction in an
-  // iframe, closing the iframe, and then navigating another frame to the URN.
-  // To handle this, the must not dereference `this`, so have to pass everything
-  // the callback needs directly.
-  content::AdAuctionData ad_auction_data{winning_group_key.owner,
-                                         winning_group_key.name};
-  blink::FencedFrame::RedactedFencedFrameConfig config =
-      fenced_frame_urls_map.AssignFencedFrameURLAndInterestGroupInfo(
-          urn_uuid, render_url, std::move(ad_auction_data),
-          base::BindRepeating(
-              &SendSuccessfulAuctionReportsAndUpdateInterestGroups,
-              /*has_sent_reports=*/base::Owned(std::make_unique<bool>(false)),
-              private_aggregation_manager_, &GetInterestGroupManager(),
-              main_frame_origin_, origin(), std::move(winning_group_key),
-              std::move(winning_group_ad_metadata),
-              base::Owned(
-                  std::make_unique<
-                      std::map<url::Origin,
-                               std::vector<auction_worklet::mojom::
-                                               PrivateAggregationRequestPtr>>>(
-                      std::move(private_aggregation_requests))),
-              std::move(report_urls), std::move(debug_win_report_urls),
-              std::move(debug_loss_report_urls),
-              std::move(interest_groups_that_bid),
-              std::move(k_anon_keys_to_join), GetClientSecurityState(),
-              GetRefCountedTrustedURLLoaderFactory()),
-          ad_component_urls, ad_beacon_map);
-
-  std::move(callback).Run(/*manually_aborted=*/false, std::move(config));
 }
 
 void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeature(
@@ -776,6 +628,8 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeature(
         private_aggregation_requests) {
   // TODO(crbug.com/1356654): Improve coverage of these use counters, i.e.
   // for API usage that does not result in a successful request.
+  // TODO(crbug.com/1410322): Use separate use counters for SendHistogram() and
+  // reportContributionForEvent().
   if (!private_aggregation_requests.empty()) {
     GetContentClient()->browser()->LogWebFeatureForCurrentPage(
         &render_frame_host(),

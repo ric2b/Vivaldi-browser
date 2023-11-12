@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 mis}zero{# mis}two{# fis}few{# mis}many{# mis}other{# mis}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/e</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 awr a }zero{# awr a }two{# awr a }few{# awr a }many{# awr a }other{# awr a }}</translation>
+<translation id="185013357618350178">Dewis</translation>
 <translation id="1859234291848436338">Cyfeiriad Ysgrifennu</translation>
 <translation id="1860796786778352021">Cau hysbysiad</translation>
 <translation id="186476001994626254">Cynnwys Gludo Web Smart</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{mewn 1a}zero{mewn #a}two{mewn #a}few{mewn #a}many{mewn #a}other{mewn #a}}</translation>
 <translation id="2583543531130364912">Calibradu'ch sgrîn gyffwrdd</translation>
 <translation id="2586657967955657006">Clipfwrdd</translation>
+<translation id="2653844658857826081">NEWYDD</translation>
 <translation id="2666092431469916601">Brig</translation>
 <translation id="2701330563083355633">Rhannwyd o <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Newydd</translation>

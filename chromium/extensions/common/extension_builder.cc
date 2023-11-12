@@ -23,6 +23,7 @@ struct ExtensionBuilder::ManifestData {
   Type type;
   std::string name;
   std::vector<std::string> permissions;
+  std::vector<std::string> optional_permissions;
   absl::optional<ActionInfo::Type> action;
   absl::optional<BackgroundContext> background_context;
   absl::optional<std::string> version;
@@ -62,9 +63,18 @@ struct ExtensionBuilder::ManifestData {
       manifest.Set(manifest_keys::kPermissions, permissions_builder.Build());
     }
 
+    if (!optional_permissions.empty()) {
+      ListBuilder permissions_builder;
+      for (const std::string& permission : optional_permissions) {
+        permissions_builder.Append(permission);
+      }
+      manifest.Set(manifest_keys::kOptionalPermissions,
+                   permissions_builder.Build());
+    }
+
     if (action) {
       const char* action_key = ActionInfo::GetManifestKeyForActionType(*action);
-      manifest.Set(action_key, std::make_unique<base::DictionaryValue>());
+      manifest.Set(action_key, base::Value(base::Value::Dict()));
     }
 
     if (background_context) {
@@ -106,7 +116,7 @@ struct ExtensionBuilder::ManifestData {
                    scripts_value.Build());
     }
 
-    base::Value::Dict result = manifest.BuildDict();
+    base::Value::Dict result = manifest.Build();
     if (extra)
       result.Merge(extra->Clone());
 
@@ -183,6 +193,22 @@ ExtensionBuilder& ExtensionBuilder::AddPermissions(
   return *this;
 }
 
+ExtensionBuilder& ExtensionBuilder::AddOptionalPermission(
+    const std::string& permission) {
+  CHECK(manifest_data_);
+  manifest_data_->optional_permissions.push_back(permission);
+  return *this;
+}
+
+ExtensionBuilder& ExtensionBuilder::AddOptionalPermissions(
+    const std::vector<std::string>& permissions) {
+  CHECK(manifest_data_);
+  manifest_data_->optional_permissions.insert(
+      manifest_data_->optional_permissions.end(), permissions.begin(),
+      permissions.end());
+  return *this;
+}
+
 ExtensionBuilder& ExtensionBuilder::SetAction(ActionInfo::Type type) {
   CHECK(manifest_data_);
   manifest_data_->action = type;
@@ -237,16 +263,10 @@ ExtensionBuilder& ExtensionBuilder::SetLocation(
   return *this;
 }
 
-ExtensionBuilder& ExtensionBuilder::SetManifest(
-    std::unique_ptr<base::DictionaryValue> manifest) {
-  CHECK(!manifest_data_);
-  manifest_value_ = std::move(*manifest).TakeDict();
-  return *this;
-}
-
 ExtensionBuilder& ExtensionBuilder::SetManifest(base::Value::Dict manifest) {
-  return SetManifest(base::DictionaryValue::From(
-      std::make_unique<base::Value>(std::move(manifest))));
+  CHECK(!manifest_data_);
+  manifest_value_ = std::move(manifest);
+  return *this;
 }
 
 ExtensionBuilder& ExtensionBuilder::MergeManifest(base::Value::Dict to_merge) {
@@ -256,11 +276,6 @@ ExtensionBuilder& ExtensionBuilder::MergeManifest(base::Value::Dict to_merge) {
     manifest_value_->Merge(std::move(to_merge));
   }
   return *this;
-}
-
-ExtensionBuilder& ExtensionBuilder::MergeManifest(
-    std::unique_ptr<base::DictionaryValue> manifest) {
-  return MergeManifest(std::move(*manifest).TakeDict());
 }
 
 ExtensionBuilder& ExtensionBuilder::AddFlags(int init_from_value_flags) {

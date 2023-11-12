@@ -4,19 +4,22 @@
 
 // Include test fixture.
 GEN_INCLUDE([
-  '../testing/chromevox_next_e2e_test_base.js',
+  '../testing/chromevox_e2e_test_base.js',
 ]);
 
 /**
  * Test fixture for ChromeVox Learn Mode page.
  */
-ChromeVoxLearnModeTest = class extends ChromeVoxNextE2ETest {
+ChromeVoxLearnModeTest = class extends ChromeVoxE2ETest {
   constructor() {
     super();
-    window.doKeyDown = this.doKeyDown.bind(this);
-    window.doKeyUp = this.doKeyUp.bind(this);
-    window.doLearnModeGesture = this.doLearnModeGesture.bind(this);
-    window.doBrailleKeyEvent = this.doBrailleKeyEvent.bind(this);
+    globalThis.EventType = chrome.automation.EventType;
+    globalThis.Gesture = chrome.accessibilityPrivate.Gesture;
+
+    globalThis.doKeyDown = this.doKeyDown.bind(this);
+    globalThis.doKeyUp = this.doKeyUp.bind(this);
+    globalThis.doLearnModeGesture = this.doLearnModeGesture.bind(this);
+    globalThis.doBrailleKeyEvent = this.doBrailleKeyEvent.bind(this);
   }
 
   /** @override */
@@ -30,14 +33,17 @@ ChromeVoxLearnModeTest = class extends ChromeVoxNextE2ETest {
     await importModule(
         ['BrailleKeyEvent', 'BrailleKeyCommand'],
         '/chromevox/common/braille/braille_key_types.js');
+    await importModule(
+        'LearnModeBridge', '/chromevox/common/learn_mode_bridge.js');
     await importModule('QueueMode', '/chromevox/common/tts_types.js');
+    await importModule('AsyncUtil', '/common/async_util.js');
     await importModule('KeyCode', '/common/key_code.js');
   }
 
   async runOnLearnModePage() {
     return new Promise(async resolve => {
       const mockFeedback = this.createMockFeedback();
-      const desktop = await new Promise(r => chrome.automation.getDesktop(r));
+      const desktop = await AsyncUtil.getDesktop();
       function listener(evt) {
         if (evt.target.docUrl.indexOf('learn_mode/learn_mode.html') === -1 ||
             !evt.target.docLoaded) {
@@ -68,40 +74,21 @@ ChromeVoxLearnModeTest = class extends ChromeVoxNextE2ETest {
   }
 
   doKeyDown(evt) {
-    return () => {
-      chrome.runtime.sendMessage({
-        target: 'LearnMode',
-        action: 'onKeyDown',
-        args: [this.makeMockKeyEvent(evt)],
-      });
-    };
+    return async () =>
+               await LearnModeBridge.onKeyDown(this.makeMockKeyEvent(evt));
   }
 
   doKeyUp(evt) {
-    return () => {
-      chrome.runtime.sendMessage({
-        target: 'LearnMode',
-        action: 'onKeyUp',
-        args: [this.makeMockKeyEvent(evt)],
-      });
-    };
+    return async () =>
+               await LearnModeBridge.onKeyUp(this.makeMockKeyEvent(evt));
   }
 
   doLearnModeGesture(gesture) {
-    return () => {
-      chrome.runtime.sendMessage({
-        target: 'LearnMode',
-        action: 'onAccessibilityGesture',
-        args: [gesture],
-      });
-    };
+    return async () => await LearnModeBridge.onAccessibilityGesture(gesture);
   }
 
   doBrailleKeyEvent(evt) {
-    return () => {
-      chrome.runtime.sendMessage(
-          {target: 'LearnMode', action: 'onBrailleKeyEvent', args: [evt]});
-    };
+    return async () => await LearnModeBridge.onBrailleKeyEvent(evt);
   }
 };
 
@@ -148,8 +135,7 @@ AX_TEST_F('ChromeVoxLearnModeTest', 'KeyboardInputRepeat', async function() {
 
 AX_TEST_F('ChromeVoxLearnModeTest', 'Gesture', async function() {
   const [mockFeedback, evt] = await this.runOnLearnModePage();
-  chrome.runtime.sendMessage(
-      {target: 'LearnMode', action: 'clearTouchExploreOutputTime'});
+  await LearnModeBridge.clearTouchExploreOutputTime();
   mockFeedback.call(doLearnModeGesture(Gesture.SWIPE_RIGHT1))
       .expectSpeechWithQueueMode(
           'Swipe one finger right', QueueMode.CATEGORY_FLUSH)

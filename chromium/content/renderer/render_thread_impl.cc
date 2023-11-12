@@ -13,12 +13,13 @@
 #include <vector>
 
 #include "base/allocator/allocator_extension.h"
+#include "base/allocator/partition_alloc_support.h"
 #include "base/at_exit.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/discardable_memory_allocator.h"
@@ -72,9 +73,9 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/main_frame_counter.h"
-#include "content/common/partition_alloc_support.h"
 #include "content/common/process_visibility_tracker.h"
 #include "content/common/pseudonymization_salt.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
@@ -87,6 +88,7 @@
 #include "content/renderer/agent_scheduling_group.h"
 #include "content/renderer/browser_exposed_renderer_interfaces.h"
 #include "content/renderer/effective_connection_type_helper.h"
+#include "content/renderer/media/codec_factory.h"
 #include "content/renderer/media/gpu/gpu_video_accelerator_factories_impl.h"
 #include "content/renderer/media/media_factory.h"
 #include "content/renderer/media/render_media_client.h"
@@ -120,6 +122,7 @@
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "net/base/net_errors.h"
@@ -135,6 +138,7 @@
 #include "services/viz/public/cpp/gpu/gpu.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/page/launching_process_state.h"
 #include "third_party/blink/public/common/privacy_budget/active_sampling.h"
 #include "third_party/blink/public/common/privacy_budget/identifiability_study_settings.h"
 #include "third_party/blink/public/common/switches.h"
@@ -195,10 +199,20 @@
 #include "mojo/public/cpp/bindings/message_dumper.h"
 #endif
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 #include <malloc/malloc.h>
 #else
 #include <malloc.h>
+#endif
+
+#if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
+#include "content/renderer/media/codec_factory_mojo.h"
+#include "media/mojo/mojom/interface_factory.mojom.h"
+#endif
+
+#if BUILDFLAG(IS_FUCHSIA)
+#include "content/renderer/media/codec_factory_fuchsia.h"
+#include "media/mojo/mojom/fuchsia_media.mojom.h"
 #endif
 
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
@@ -292,6 +306,13 @@ void AddCrashKey(v8::CrashKeyId id, const std::string& value) {
       // to introduce new CrashKeyId's without triggering a build break.
       break;
   }
+}
+
+// Updates the crash key for whether this renderer is foregrounded.
+void UpdateForegroundCrashKey(bool foreground) {
+  static auto* const crash_key = base::debug::AllocateCrashKeyString(
+      "renderer_foreground", base::debug::CrashKeySize::Size32);
+  base::debug::SetCrashKeyString(crash_key, foreground ? "true" : "false");
 }
 
 scoped_refptr<viz::ContextProviderCommandBuffer> CreateOffscreenContext(
@@ -718,6 +739,8 @@ void RenderThreadImpl::Init() {
             },
             std::move(recorder)));
   }
+  UpdateForegroundCrashKey(
+      /*foreground=*/!blink::kLaunchingProcessIsBackgrounded);
 }
 
 RenderThreadImpl::~RenderThreadImpl() {
@@ -922,6 +945,14 @@ void RenderThreadImpl::InitializeRenderer(
   user_agent_metadata_ = user_agent_metadata;
   cors_exempt_header_list_ = cors_exempt_header_list;
   attribution_os_support_ = attribution_os_support;
+
+  blink::WebVector<blink::WebString> web_cors_exempt_header_list(
+      cors_exempt_header_list.size());
+  std::transform(cors_exempt_header_list.begin(), cors_exempt_header_list.end(),
+                 web_cors_exempt_header_list.begin(), [](const std::string& h) {
+                   return blink::WebString::FromLatin1(h);
+                 });
+  blink::SetCorsExemptHeaderList(web_cors_exempt_header_list);
 }
 
 void RenderThreadImpl::RegisterSchemes() {
@@ -1047,7 +1078,6 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
        gpu::kGpuFeatureStatusEnabled);
 
   const bool enable_video_encode_accelerator =
-
 #if BUILDFLAG(IS_LINUX)
       base::FeatureList::IsEnabled(media::kVaapiVideoEncodeLinux) &&
 #else
@@ -1076,31 +1106,17 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
        gpu_channel_host->gpu_info().overlay_info.supports_overlays);
 #endif  // BUILDFLAG(IS_WIN)
 
-  mojo::PendingRemote<media::mojom::InterfaceFactory> interface_factory;
-  BindHostReceiver(interface_factory.InitWithNewPipeAndPassReceiver());
-
-  mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
-      vea_provider;
-
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-  if (base::FeatureList::IsEnabled(media::kUseOutOfProcessVideoEncoding)) {
-    BindHostReceiver(vea_provider.InitWithNewPipeAndPassReceiver());
-  } else {
-    gpu_->CreateVideoEncodeAcceleratorProvider(
-        vea_provider.InitWithNewPipeAndPassReceiver());
-  }
-#else
-  gpu_->CreateVideoEncodeAcceleratorProvider(
-      vea_provider.InitWithNewPipeAndPassReceiver());
-#endif
-
+  auto codec_factory = CreateMediaCodecFactory(media_context_provider,
+                                               enable_video_decode_accelerator,
+                                               enable_video_encode_accelerator);
   gpu_factories_.push_back(GpuVideoAcceleratorFactoriesImpl::Create(
       std::move(gpu_channel_host),
       base::SingleThreadTaskRunner::GetCurrentDefault(),
       GetMediaSequencedTaskRunner(), std::move(media_context_provider),
-      enable_video_gpu_memory_buffers, enable_media_stream_gpu_memory_buffers,
-      enable_video_decode_accelerator, enable_video_encode_accelerator,
-      std::move(interface_factory), std::move(vea_provider)));
+      std::move(codec_factory), enable_video_gpu_memory_buffers,
+      enable_media_stream_gpu_memory_buffers, enable_video_decode_accelerator,
+      enable_video_encode_accelerator));
+
   gpu_factories_.back()->SetRenderingColorSpace(rendering_color_space_);
   return gpu_factories_.back().get();
 }
@@ -1757,15 +1773,17 @@ bool RenderThreadImpl::RendererIsBackgrounded() const {
 }
 
 void RenderThreadImpl::OnRendererBackgrounded() {
+  UpdateForegroundCrashKey(/*foreground=*/false);
   main_thread_scheduler_->SetRendererBackgrounded(true);
   discardable_memory_allocator_->OnBackgrounded();
-  internal::PartitionAllocSupport::Get()->OnBackgrounded();
+  base::allocator::PartitionAllocSupport::Get()->OnBackgrounded();
 }
 
 void RenderThreadImpl::OnRendererForegrounded() {
+  UpdateForegroundCrashKey(/*foreground=*/true);
   main_thread_scheduler_->SetRendererBackgrounded(false);
   discardable_memory_allocator_->OnForegrounded();
-  internal::PartitionAllocSupport::Get()->OnForegrounded(
+  base::allocator::PartitionAllocSupport::Get()->OnForegrounded(
       MainFrameCounter::has_main_frame());
   process_foregrounded_count_++;
 }
@@ -1838,5 +1856,53 @@ void RenderThreadImpl::SetOsSupportForAttributionReporting(
     attribution_reporting::mojom::OsSupport attribution_os_support) {
   attribution_os_support_ = attribution_os_support;
 }
+
+std::unique_ptr<CodecFactory> RenderThreadImpl::CreateMediaCodecFactory(
+    scoped_refptr<viz::ContextProviderCommandBuffer> context_provider,
+    bool enable_video_decode_accelerator,
+    bool enable_video_encode_accelerator) {
+  mojo::PendingRemote<media::mojom::VideoEncodeAcceleratorProvider>
+      vea_provider;
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  if (base::FeatureList::IsEnabled(media::kUseOutOfProcessVideoEncoding)) {
+    BindHostReceiver(vea_provider.InitWithNewPipeAndPassReceiver());
+  } else {
+    gpu_->CreateVideoEncodeAcceleratorProvider(
+        vea_provider.InitWithNewPipeAndPassReceiver());
+  }
+#else
+  gpu_->CreateVideoEncodeAcceleratorProvider(
+      vea_provider.InitWithNewPipeAndPassReceiver());
+#endif
+
+#if BUILDFLAG(ENABLE_MOJO_VIDEO_DECODER)
+  mojo::PendingRemote<media::mojom::InterfaceFactory> interface_factory;
+  BindHostReceiver(interface_factory.InitWithNewPipeAndPassReceiver());
+  return std::make_unique<CodecFactoryMojo>(
+      GetMediaSequencedTaskRunner(), context_provider,
+      enable_video_decode_accelerator, enable_video_encode_accelerator,
+      std::move(vea_provider), std::move(interface_factory));
+#elif BUILDFLAG(IS_FUCHSIA)
+  mojo::PendingRemote<media::mojom::FuchsiaMediaCodecProvider>
+      media_codec_provider;
+  BindHostReceiver(media_codec_provider.InitWithNewPipeAndPassReceiver());
+  return std::make_unique<CodecFactoryFuchsia>(
+      GetMediaSequencedTaskRunner(), context_provider,
+      enable_video_decode_accelerator, enable_video_encode_accelerator,
+      std::move(vea_provider), std::move(media_codec_provider));
+#else
+  return std::make_unique<CodecFactoryDefault>(
+      GetMediaSequencedTaskRunner(), context_provider,
+      enable_video_decode_accelerator, enable_video_encode_accelerator,
+      std::move(vea_provider));
+#endif
+}
+
+#if BUILDFLAG(IS_ANDROID)
+void RenderThreadImpl::SetPrivateMemoryFootprint(
+    uint64_t private_memory_footprint_bytes) {
+  GetRendererHost()->SetPrivateMemoryFootprint(private_memory_footprint_bytes);
+}
+#endif
 
 }  // namespace content

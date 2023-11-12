@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
@@ -194,14 +194,14 @@ class StorageHandler::IndexedDBObserver
 
   ~IndexedDBObserver() override { DCHECK_CURRENTLY_ON(BrowserThread::UI); }
 
-  void TrackOrigin(const blink::StorageKey& storage_key) {
+  void TrackStorageKey(const blink::StorageKey& storage_key) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (storage_keys_.find(storage_key) != storage_keys_.end())
       return;
     storage_keys_.insert(storage_key);
   }
 
-  void UntrackOrigin(const blink::StorageKey& storage_key) {
+  void UntrackStorageKey(const blink::StorageKey& storage_key) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     storage_keys_.erase(storage_key);
   }
@@ -293,6 +293,11 @@ class StorageHandler::SharedStorageObserver
     owner_->NotifySharedStorageAccessed(access_time, type, main_frame_id,
                                         owner_origin, params);
   }
+
+  void OnUrnUuidGenerated(const GURL& urn_uuid) override {}
+
+  void OnConfigPopulated(
+      const absl::optional<FencedFrameConfig>& config) override {}
 
  private:
   raw_ptr<StorageHandler> const owner_;
@@ -463,8 +468,8 @@ void StorageHandler::ClearDataForOrigin(
 
   storage_partition_->ClearData(
       remove_mask, StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
-      blink::StorageKey(url::Origin::Create(GURL(origin))), base::Time(),
-      base::Time::Max(),
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(GURL(origin))),
+      base::Time(), base::Time::Max(),
       base::BindOnce(&ClearDataForOriginCallback::sendSuccess,
                      std::move(callback)));
 }
@@ -485,6 +490,10 @@ void StorageHandler::ClearDataForStorageKey(
 
   absl::optional<blink::StorageKey> key =
       blink::StorageKey::Deserialize(storage_key);
+  if (!key) {
+    return callback->sendFailure(
+        Response::InvalidParams("Unable to deserialize storage key"));
+  }
   storage_partition_->ClearData(
       remove_mask, StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL, *key,
       base::Time(), base::Time::Max(),
@@ -509,7 +518,8 @@ void StorageHandler::GetUsageAndQuota(
   GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&GetUsageAndQuotaOnIOThread, base::RetainedRef(manager),
-                     blink::StorageKey(origin), std::move(callback)));
+                     blink::StorageKey::CreateFirstParty(origin),
+                     std::move(callback)));
 }
 
 void StorageHandler::OverrideQuotaForOrigin(
@@ -536,15 +546,13 @@ void StorageHandler::OverrideQuotaForOrigin(
   }
 
   quota_override_handle_->OverrideQuotaForStorageKey(
-      blink::StorageKey(origin),
+      blink::StorageKey::CreateFirstParty(origin),
       quota_size.isJust() ? absl::make_optional(quota_size.fromJust())
                           : absl::nullopt,
       base::BindOnce(&OverrideQuotaForOriginCallback::sendSuccess,
                      std::move(callback)));
 }
 
-// TODO(https://crbug.com/1199077): We should think about how this function
-// should be exposed when migrating to storage keys.
 Response StorageHandler::TrackCacheStorageForOrigin(
     const std::string& origin_string) {
   if (!storage_partition_)
@@ -555,7 +563,8 @@ Response StorageHandler::TrackCacheStorageForOrigin(
   if (!origin_url.is_valid() || origin.opaque())
     return Response::InvalidParams(origin_string + " is not a valid URL");
 
-  GetCacheStorageObserver()->TrackStorageKey(blink::StorageKey(origin));
+  GetCacheStorageObserver()->TrackStorageKey(
+      blink::StorageKey::CreateFirstParty(origin));
   return Response::Success();
 }
 
@@ -573,8 +582,6 @@ Response StorageHandler::TrackCacheStorageForStorageKey(
   return Response::Success();
 }
 
-// TODO(https://crbug.com/1199077): We should think about how this function
-// should be exposed when migrating to storage keys.
 Response StorageHandler::UntrackCacheStorageForOrigin(
     const std::string& origin_string) {
   if (!storage_partition_)
@@ -585,7 +592,8 @@ Response StorageHandler::UntrackCacheStorageForOrigin(
   if (!origin_url.is_valid() || origin.opaque())
     return Response::InvalidParams(origin_string + " is not a valid URL");
 
-  GetCacheStorageObserver()->UntrackStorageKey(blink::StorageKey(origin));
+  GetCacheStorageObserver()->UntrackStorageKey(
+      blink::StorageKey::CreateFirstParty(origin));
   return Response::Success();
 }
 
@@ -613,9 +621,8 @@ Response StorageHandler::TrackIndexedDBForOrigin(
   if (!origin_url.is_valid() || origin.opaque())
     return Response::InvalidParams(origin_string + " is not a valid URL");
 
-  // TODO(https://crbug.com/1199077): Pass the real StorageKey into this
-  // function once the Chrome DevTools Protocol (CDP) supports StorageKey.
-  GetIndexedDBObserver()->TrackOrigin(blink::StorageKey(origin));
+  GetIndexedDBObserver()->TrackStorageKey(
+      blink::StorageKey::CreateFirstParty(origin));
   return Response::Success();
 }
 
@@ -629,7 +636,7 @@ Response StorageHandler::TrackIndexedDBForStorageKey(
   if (!key)
     return Response::InvalidParams("Unable to deserialize storage key");
 
-  GetIndexedDBObserver()->TrackOrigin(*key);
+  GetIndexedDBObserver()->TrackStorageKey(*key);
   return Response::Success();
 }
 
@@ -643,9 +650,8 @@ Response StorageHandler::UntrackIndexedDBForOrigin(
   if (!origin_url.is_valid() || origin.opaque())
     return Response::InvalidParams(origin_string + " is not a valid URL");
 
-  // TODO(https://crbug.com/1199077): Pass the real StorageKey into this
-  // function once the Chrome DevTools Protocol (CDP) supports StorageKey.
-  GetIndexedDBObserver()->UntrackOrigin(blink::StorageKey(origin));
+  GetIndexedDBObserver()->UntrackStorageKey(
+      blink::StorageKey::CreateFirstParty(origin));
   return Response::Success();
 }
 
@@ -659,7 +665,7 @@ Response StorageHandler::UntrackIndexedDBForStorageKey(
   if (!key)
     return Response::InvalidParams("Unable to deserialize storage key");
 
-  GetIndexedDBObserver()->UntrackOrigin(*key);
+  GetIndexedDBObserver()->UntrackStorageKey(*key);
   return Response::Success();
 }
 
@@ -824,12 +830,12 @@ void StorageHandler::ClearTrustTokens(
 
 void StorageHandler::OnInterestGroupAccessed(
     const base::Time& access_time,
-    InterestGroupManagerImpl::InterestGroupObserverInterface::AccessType type,
-    const std::string& owner_origin,
+    InterestGroupManagerImpl::InterestGroupObserver::AccessType type,
+    const url::Origin& owner_origin,
     const std::string& name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   using AccessType =
-      InterestGroupManagerImpl::InterestGroupObserverInterface::AccessType;
+      InterestGroupManagerImpl::InterestGroupObserver::AccessType;
   std::string type_enum;
   switch (type) {
     case AccessType::kJoin:
@@ -852,7 +858,7 @@ void StorageHandler::OnInterestGroupAccessed(
       break;
   };
   frontend_->InterestGroupAccessed(access_time.ToDoubleT(), type_enum,
-                                   owner_origin, name);
+                                   owner_origin.Serialize(), name);
 }
 
 namespace {
@@ -1231,6 +1237,34 @@ Response StorageHandler::SetSharedStorageTracking(bool enable) {
     shared_storage_observer_.reset();
   }
   return Response::Success();
+}
+
+void StorageHandler::ResetSharedStorageBudget(
+    const std::string& owner_origin_string,
+    std::unique_ptr<ResetSharedStorageBudgetCallback> callback) {
+  auto manager_or_response = GetSharedStorageManager();
+  if (absl::holds_alternative<protocol::Response>(manager_or_response)) {
+    callback->sendFailure(absl::get<protocol::Response>(manager_or_response));
+    return;
+  }
+
+  storage::SharedStorageManager* manager =
+      absl::get<storage::SharedStorageManager*>(manager_or_response);
+  DCHECK(manager);
+
+  GURL owner_origin_url(owner_origin_string);
+  if (!owner_origin_url.is_valid()) {
+    callback->sendFailure(Response::InvalidParams("Invalid owner origin"));
+    return;
+  }
+  url::Origin owner_origin = url::Origin::Create(owner_origin_url);
+  DCHECK(!owner_origin.opaque());
+
+  manager->ResetBudgetForDevTools(
+      owner_origin,
+      base::BindOnce(
+          &DispatchSharedStorageCallback<ResetSharedStorageBudgetCallback>,
+          std::move(callback)));
 }
 
 void StorageHandler::NotifySharedStorageAccessed(

@@ -3,16 +3,23 @@
 // found in the LICENSE file.
 
 #include <map>
+#include <sstream>
 #include <string>
 
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/guid.h"
+#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_base.h"
+#include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -22,6 +29,7 @@
 #include "chrome/browser/autofill/captured_sites_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
+#include "chrome/browser/ui/autofill/payments/test_card_unmask_prompt_waiter.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/translate/translate_bubble_test_utils.h"
 #include "chrome/common/chrome_features.h"
@@ -37,8 +45,11 @@
 #include "components/autofill/core/browser/geo/state_names.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/autofill_util.h"
+#include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/user_prefs/user_prefs.h"
 #include "components/variations/variations_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_renderer_host.h"
@@ -52,9 +63,13 @@ using captured_sites_test_utils::GetCapturedSites;
 using captured_sites_test_utils::TestRecipeReplayer;
 using captured_sites_test_utils::WebPageReplayServerWrapper;
 
+namespace autofill {
+
 namespace {
 
-const base::TimeDelta autofill_wait_for_action_interval = base::Seconds(5);
+constexpr base::TimeDelta kAutofillWaitForActionInterval = base::Seconds(5);
+constexpr base::TimeDelta kAutofillWaitForFormToFillWithCvcInterval =
+    base::Seconds(30);
 
 base::FilePath GetReplayFilesRootDirectory() {
   base::FilePath src_dir;
@@ -63,16 +78,75 @@ base::FilePath GetReplayFilesRootDirectory() {
         .AppendASCII("test")
         .AppendASCII("data")
         .AppendASCII("autofill")
-        .AppendASCII("captured_sites");
+        .AppendASCII("captured_sites")
+        .AppendASCII("artifacts");
   } else {
     src_dir.clear();
     return src_dir;
   }
 }
 
-}  // namespace
+// Implements the `kAutofillCapturedSiteTestsMetricsScraper` testing feature.
+class MetricsScraper {
+ public:
+  // Creates a MetricsScraper if the Finch flag is enabled.
+  static std::unique_ptr<MetricsScraper> MaybeCreate(const std::string& test) {
+    if (!base::FeatureList::IsEnabled(
+            features::test::kAutofillCapturedSiteTestsMetricsScraper)) {
+      return nullptr;
+    }
+    const std::string& output_dir =
+        features::test::kAutofillCapturedSiteTestsMetricsScraperOutputDir.Get();
+    const std::string& histogram_regex =
+        features::test::kAutofillCapturedSiteTestsMetricsScraperHistogramRegex
+            .Get();
+    return base::WrapUnique(new MetricsScraper(
+        base::FilePath::FromASCII(output_dir).AppendASCII(test + ".txt"),
+        base::UTF8ToUTF16(histogram_regex)));
+  }
 
-namespace autofill {
+  // Writes all samples of all histograms matching `histogram_regex_` into
+  // `output_file_`.
+  void ScrapeMetrics() const {
+    // Combine metrics from different processes.
+    ::metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+
+    // Get all relevant histogram names. Since `GetHistograms()` doesn't
+    // guarantee order, the results are sorted for easier comparisons across
+    // runs.
+    std::vector<std::string> histogram_names;
+    for (base::HistogramBase* histogram :
+         base::StatisticsRecorder::GetHistograms()) {
+      const std::string& name = histogram->histogram_name();
+      if (MatchesRegex(base::UTF8ToUTF16(name), *histogram_regex_)) {
+        histogram_names.push_back(name);
+      }
+    }
+    base::ranges::sort(histogram_names);
+
+    // Output the samples of all `histogram_names` to `output_file`.
+    std::stringstream output;
+    for (const std::string& name : histogram_names) {
+      output << name << std::endl;
+      for (const base::Bucket& bucket : histogram_tester_.GetAllSamples(name)) {
+        output << bucket.min << " " << bucket.count << std::endl;
+      }
+    }
+    base::WriteFile(output_file_, output.str());
+  }
+
+ private:
+  MetricsScraper(const base::FilePath& output_file,
+                 base::StringPiece16 histogram_regex)
+      : output_file_(output_file),
+        histogram_regex_(CompileRegex(histogram_regex)) {}
+
+  const base::FilePath output_file_;
+  const std::unique_ptr<const icu::RegexPattern> histogram_regex_;
+  const base::HistogramTester histogram_tester_;
+};
+
+}  // namespace
 
 class AutofillCapturedSitesInteractiveTest
     : public AutofillUiTest,
@@ -81,10 +155,12 @@ class AutofillCapturedSitesInteractiveTest
       public ::testing::WithParamInterface<CapturedSiteParams> {
  public:
   // TestRecipeReplayChromeFeatureActionExecutor
-  bool AutofillForm(const std::string& focus_element_css_selector,
-                    const std::vector<std::string>& iframe_path,
-                    const int attempts,
-                    content::RenderFrameHost* frame) override {
+  bool AutofillForm(
+      const std::string& focus_element_css_selector,
+      const std::vector<std::string>& iframe_path,
+      const int attempts,
+      content::RenderFrameHost* frame,
+      absl::optional<ServerFieldType> triggered_field_type) override {
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(frame);
     auto* autofill_manager = static_cast<BrowserAutofillManager*>(
@@ -115,7 +191,7 @@ class AutofillCapturedSitesInteractiveTest
       // Press the down key to highlight the first choice in the autofill
       // suggestion drop down.
       test_delegate()->SetExpectations({ObservedUiEvents::kPreviewFormData},
-                                       autofill_wait_for_action_interval);
+                                       kAutofillWaitForActionInterval);
       SendKeyToPopup(frame, ui::DomKey::ARROW_DOWN);
       if (!test_delegate()->Wait()) {
         LOG(WARNING) << "Failed to select an option from the "
@@ -123,10 +199,36 @@ class AutofillCapturedSitesInteractiveTest
         continue;
       }
 
+      absl::optional<std::u16string> cvc = profile_controller_->cvc();
+      // If CVC is available in the Action Recorder receipts and this is a
+      // payment form, this means it's running the test with a server card. So
+      // the "Enter CVC" dialog will pop up for card autofill.
+      bool is_credit_card_field =
+          triggered_field_type.has_value() &&
+          AutofillType(triggered_field_type.value()).group() ==
+              FieldTypeGroup::kCreditCard;
+      bool should_cvc_dialog_pop_up = is_credit_card_field && cvc;
+
       // Press the enter key to invoke autofill using the first suggestion.
-      test_delegate()->SetExpectations({ObservedUiEvents::kFormDataFilled},
-                                       autofill_wait_for_action_interval);
+      test_delegate()->SetExpectations(
+          {ObservedUiEvents::kFormDataFilled},
+          should_cvc_dialog_pop_up ? kAutofillWaitForFormToFillWithCvcInterval
+                                   : kAutofillWaitForActionInterval);
+      TestCardUnmaskPromptWaiter test_card_unmask_prompt_waiter(
+          web_contents,
+          user_prefs::UserPrefs::Get(web_contents->GetBrowserContext()));
       SendKeyToPopup(frame, ui::DomKey::ENTER);
+
+      if (should_cvc_dialog_pop_up) {
+        if (!test_card_unmask_prompt_waiter.Wait()) {
+          LOG(WARNING) << "\"Enter CVC\" dialog did not pop up.";
+        } else {
+          VLOG(1) << "CVC to be filled is: " << *cvc;
+          if (test_card_unmask_prompt_waiter.EnterAndAcceptCvcDialog(*cvc)) {
+            VLOG(1) << "\"Enter CVC\" dialog popped up and closed.";
+          }
+        }
+      }
       if (!test_delegate()->Wait()) {
         LOG(WARNING) << "Failed to fill the form.";
         continue;
@@ -181,9 +283,14 @@ class AutofillCapturedSitesInteractiveTest
             GetParam().capture_file_path,
             test::ServerCacheReplayer::kOptionFailOnInvalidJsonRecord |
                 test::ServerCacheReplayer::kOptionSplitRequestsByForm)));
+
+    metrics_scraper_ = MetricsScraper::MaybeCreate(GetParam().site_name);
   }
 
   void TearDownOnMainThread() override {
+    if (metrics_scraper_) {
+      metrics_scraper_->ScrapeMetrics();
+    }
     recipe_replayer()->Cleanup();
     // Need to delete the URL loader and its underlying interceptor on the main
     // thread. Will result in a fatal crash otherwise. The pointer has its
@@ -214,7 +321,10 @@ class AutofillCapturedSitesInteractiveTest
     // elements in a form to determine if the form is ready for interaction.
     feature_list_.InitWithFeaturesAndParameters(
         /*enabled_features=*/{{features::kAutofillAcrossIframes, {}},
-                              {features::kAutofillShowTypePredictions, {}},
+                              {features::test::kAutofillServerCommunication,
+                               {}},
+                              {features::test::kAutofillShowTypePredictions,
+                               {}},
                               {features::kAutofillParsingPatternProvider,
                                {{"prediction_source", "nextgen"}}}},
         /*disabled_features=*/{});
@@ -243,7 +353,7 @@ class AutofillCapturedSitesInteractiveTest
     // Doing so ensures that Chrome scrolls the element into view if the
     // element is off the page.
     test_delegate()->SetExpectations({ObservedUiEvents::kSuggestionShown},
-                                     autofill_wait_for_action_interval);
+                                     kAutofillWaitForActionInterval);
     if (!captured_sites_test_utils::TestRecipeReplayer::PlaceFocusOnElement(
             target_element_xpath, iframe_path, frame)) {
       return false;
@@ -257,7 +367,7 @@ class AutofillCapturedSitesInteractiveTest
     }
 
     test_delegate()->SetExpectations({ObservedUiEvents::kSuggestionShown},
-                                     autofill_wait_for_action_interval);
+                                     kAutofillWaitForActionInterval);
     if (!captured_sites_test_utils::TestRecipeReplayer::
             SimulateLeftMouseClickAt(rect.CenterPoint(), frame))
       return false;
@@ -272,8 +382,8 @@ class AutofillCapturedSitesInteractiveTest
           std::make_unique<captured_sites_test_utils::ProfileDataController>();
 
   base::test::ScopedFeatureList feature_list_;
-
   std::unique_ptr<test::ServerUrlLoader> server_url_loader_;
+  std::unique_ptr<MetricsScraper> metrics_scraper_;
 };
 
 IN_PROC_BROWSER_TEST_P(AutofillCapturedSitesInteractiveTest, Recipe) {

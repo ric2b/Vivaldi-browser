@@ -630,6 +630,9 @@ bool HTMLPlugInElement::RequestObject(const PluginParameters& plugin_params) {
       SetEmbeddedContentView(ContentFrame()->View());
       DCHECK(OwnedEmbeddedContentView());
     }
+
+    WillPerformContainerInitiatedNavigation(completed_url);
+
     // If the plugin element already contains a subframe,
     // loadOrRedirectSubframe will re-use it. Otherwise, it will create a
     // new frame and set it as the LayoutEmbeddedContent's EmbeddedContentView,
@@ -819,9 +822,10 @@ void HTMLPlugInElement::UpdateServiceTypeIfEmpty() {
   }
 }
 
-scoped_refptr<ComputedStyle> HTMLPlugInElement::CustomStyleForLayoutObject(
+scoped_refptr<const ComputedStyle>
+HTMLPlugInElement::CustomStyleForLayoutObject(
     const StyleRecalcContext& style_recalc_context) {
-  scoped_refptr<ComputedStyle> style =
+  scoped_refptr<const ComputedStyle> style =
       OriginalStyleForLayoutObject(style_recalc_context);
   if (IsImageType() && !GetLayoutObject() && style &&
       LayoutObjectIsNeeded(*style)) {

@@ -122,6 +122,12 @@ class CertBuilder {
       base::StringPiece common_name,
       unsigned common_name_tag);
 
+  // Set the version of the certificate. Note that only V3 certificates may
+  // contain extensions, so if |version| is |V1| or |V2| you may want to also
+  // call |ClearExtensions()| unless you intentionally want to generate an
+  // invalid certificate.
+  void SetCertificateVersion(CertificateVersion version);
+
   // Sets a value for the indicated X.509 (v3) extension.
   void SetExtension(const der::Input& oid,
                     std::string value,
@@ -129,6 +135,9 @@ class CertBuilder {
 
   // Removes an extension (if present).
   void EraseExtension(const der::Input& oid);
+
+  // Removes all extensions.
+  void ClearExtensions();
 
   // Sets the basicConstraints extension. |path_len| may be negative to
   // indicate the pathLenConstraint should be omitted.
@@ -189,6 +198,13 @@ class CertBuilder {
   // OIDs, which must be specified in dotted string notation (e.g. "1.2.3.4").
   // If |policy_oids| is empty, the extension will be removed.
   void SetCertificatePolicies(const std::vector<std::string>& policy_oids);
+
+  // Sets the policyMappings extension with the specified mappings, which are
+  // pairs of issuerDomainPolicy -> subjectDomainPolicy mappings in dotted
+  // string notation.
+  // If |policy_mappings| is empty, the extension will be removed.
+  void SetPolicyMappings(
+      const std::vector<std::pair<std::string, std::string>>& policy_mappings);
 
   // Sets the PolicyConstraints extension. If both |require_explicit_policy|
   // and |inhibit_policy_mapping| are nullopt, the PolicyConstraints extension
@@ -313,6 +329,11 @@ class CertBuilder {
   // created.
   std::string GetPEMFullChain();
 
+  // Returns the private key as PEM.
+  // Convenience method for debugging, to more easily log what certs are being
+  // created.
+  std::string GetPrivateKeyPEM();
+
  private:
   // Initializes the CertBuilder, if |orig_cert| is non-null it will be used as
   // a template. If |issuer| is null then the generated certificate will be
@@ -362,6 +383,7 @@ class CertBuilder {
     std::string value;
   };
 
+  CertificateVersion version_ = CertificateVersion::V3;
   std::string validity_tlv_;
   absl::optional<std::string> issuer_tlv_;
   std::string subject_tlv_;

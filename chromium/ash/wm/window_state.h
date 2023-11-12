@@ -6,12 +6,13 @@
 #define ASH_WM_WINDOW_STATE_H_
 
 #include <memory>
+#include <ostream>
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/display/persistent_window_info.h"
 #include "ash/public/cpp/presentation_time_recorder.h"
 #include "ash/wm/drag_details.h"
+#include "ash/wm/multi_display/persistent_window_info.h"
 #include "ash/wm/wm_metrics.h"
 #include "base/gtest_prod_util.h"
 #include "base/observer_list.h"
@@ -99,11 +100,36 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
     // Cross fade animation. Copies old layer, and fades it out while fading the
     // new layer in.
     kCrossFade,
+    // Custom cross fade animations when floating/unfloating a window.
+    kCrossFadeFloat,
+    kCrossFadeUnfloat,
     // Bounds animation.
     kAnimate,
     // Bounds animation with zero tween. Updates the bounds once at the end of
     // the animation.
     kAnimateZero,
+  };
+
+  // Represents the state of a window relevant for restore.
+  struct RestoreState {
+    // The WindowStateType for which this RestoreState is applicable.
+    chromeos::WindowStateType window_state_type =
+        chromeos::WindowStateType::kDefault;
+
+    // The actual window bounds, in screen coordinates, during this
+    // window_state_type. If there was no explicit restore bounds property
+    // during this state, then the actual bounds here is used for restoring.
+    gfx::Rect actual_bounds_in_screen;
+
+    // The value of the restore bounds property, if any, in screen coordinates,
+    // during this window_state_type. This is separate from the actual bounds
+    // above, because some special cases, such as horizontal/vertical maximize,
+    // have different actual bounds and restore bounds.
+    absl::optional<gfx::Rect> restore_bounds_in_screen;
+
+    // TODO(aluh): Simplify to defaulted comparison operator once C++20 is
+    // supported.
+    bool operator==(const RestoreState&) const;
   };
 
   // The default duration for an animation between two sets of bounds.
@@ -145,6 +171,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool IsTrustedPinned() const;
   bool IsPip() const;
   bool IsFloated() const;
+
+  // Gets the id of the display to show fullscreen on.
+  // Returns kInvalidDisplay if not set.
+  int64_t GetFullscreenTargetDisplayId() const;
 
   // True if the window's state type is chromeos::WindowStateType::kMaximized,
   // chromeos::WindowStateType::kFullscreen or
@@ -196,6 +226,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Set the window state to its previous applicable window state.
   void Restore();
 
+  // Determines whether transitioning from the `previous_state` to the current
+  // state counts as restoring.
+  bool IsRestoring(chromeos::WindowStateType previous_state) const;
+
   // Caches, then disables z-ordering state and then stacks |window_| below
   // |window_on_top| if |window_| currently has a special z-order.
   void DisableZOrdering(aura::Window* window_on_top);
@@ -210,6 +244,9 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // TODO(oshima): Try hiding these methods and making them accessible only to
   // state impl. State changes should happen through events (as much
   // as possible).
+
+  // Gets the current bounds in screen DIP coordinates.
+  gfx::Rect GetCurrentBoundsInScreen() const;
 
   // Saves the current bounds to be used as a restore bounds.
   void SaveCurrentBoundsForRestore();
@@ -246,6 +283,11 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // display work area changes, or if system ui regions like the virtual
   // keyboard position changes.
   void UpdatePipBounds();
+
+  // Updates the window bounds. This may get called when a window is resized in
+  // splitview (i.e. a snapped window and overview). Side-by-side snapped
+  // windows will get resized by WorkspaceWindowResizer normally.
+  void UpdateSnappedBounds();
 
   // Replace the State object of a window with a state handler which can
   // implement a new window manager type. The passed object will be owned
@@ -391,7 +433,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Returns the Display that this WindowState is on.
   display::Display GetDisplay() const;
 
-  // Returns the window state to restore to from the current window state.
+  // Returns the WindowStateType to restore to from the current window state.
+  // TODO(aluh): Rename to GetWindowStateTypeForRestore() for clarity.
   chromeos::WindowStateType GetRestoreWindowState() const;
 
   // Called when `window_` is dragged to maximized to track if it's a
@@ -406,8 +449,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
     snap_action_source_ = type;
   }
 
-  const std::vector<chromeos::WindowStateType>&
-  window_state_restore_history_for_testing() const {
+  const std::vector<RestoreState>& window_state_restore_history_for_testing()
+      const {
     return window_state_restore_history_;
   }
 
@@ -496,9 +539,12 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
       base::TimeDelta duration = kBoundsChangeSlideDuration,
       gfx::Tween::Type animation_type = gfx::Tween::LINEAR);
 
-  // Sets the window's |bounds| and transition to the new bounds with
-  // a cross fade animation.
-  void SetBoundsDirectCrossFade(const gfx::Rect& bounds);
+  // Sets the window's `bounds` and transition to the new bounds with
+  // a cross fade animation. If `float_state` has a value, sets a custom
+  // float/unfloat cross fade animation.
+  void SetBoundsDirectCrossFade(
+      const gfx::Rect& bounds,
+      absl::optional<bool> float_state = absl::nullopt);
 
   // Called before the state change and update PIP related state, such as next
   // window animation type, upon state change.
@@ -511,10 +557,21 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Collects PIP enter and exit metrics:
   void CollectPipEnterExitMetrics(bool enter);
 
-  // Called after the window state change to update the window state restore
-  // history stack.
-  void UpdateWindowStateRestoreHistoryStack(
-      chromeos::WindowStateType previous_state_type);
+  // Records the time since partial split was started. Does nothing if the
+  // window was not partial.
+  void MaybeRecordPartialDuration();
+
+  // Called before the window state change to push/pop the applicable window
+  // state to/from the restore history.
+  void UpdateRestoreHistory(chromeos::WindowStateType previous_state_type);
+
+  // Called after the window state change to update the various window restore
+  // properties from the restore history.
+  void UpdateRestorePropertiesFromRestoreHistory();
+
+  // Looks at the next RestoreState from the restore history without modifying
+  // the history. Returns nullptr if history is empty.
+  const RestoreState* PeekNextRestoreState() const;
 
   // Depending on the capabilities of the window we either return
   // |WindowStateType::kMaximized| or |WindowStateType::kNormal|.
@@ -532,6 +589,9 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds,
                              ui::PropertyChangeReason reason) override;
+  void OnWindowParentChanged(aura::Window* window,
+                             aura::Window* parent) override;
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
 
   bool CanUnresizableSnapOnDisplay(display::Display display) const;
 
@@ -576,13 +636,14 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool allow_set_bounds_direct_ = false;
   bool is_moving_to_another_display_ = false;
 
+  bool is_handling_float_event_ = false;
+
   // Contains the window's target snap ratio if it's going to be snapped by a
-  // WindowSnapWMEvent, and the updated window snap ratio if the snapped
-  // window's bounds are changed while it remains snapped. It will be used to
-  // calculate the desired snapped window bounds for a WindowSnapWMEvent, or
-  // adjust the window's bounds when display or workarea changes, or decide what
-  // the window bounds should be if restoring the window back to a snapped
-  // window state, etc.
+  // WMEvent, and the updated window snap ratio if the snapped window's bounds
+  // are changed while it remains snapped. It will be used to calculate the
+  // desired snapped window bounds for a WMEvent, or adjust the window's bounds
+  // when display or workarea changes, or decide what the window bounds should
+  // be if restoring the window back to a snapped window state, etc.
   absl::optional<float> snap_ratio_;
 
   // A property to remember the window position which was set before the
@@ -624,15 +685,26 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // When the current (or last) PIP session started.
   base::TimeTicks pip_start_time_;
 
+  // When the window was partial split. Not null during partial split.
+  base::TimeTicks partial_start_time_;
+
   // Maintains the window state restore history that the current window state
-  // can restore back to. See kWindowStateRestoreHistoryLayerMap in the cc file
-  // for what window state types that can be put in the restore history stack.
-  std::vector<chromeos::WindowStateType> window_state_restore_history_;
+  // can restore back to, with relevant restore states.
+  // See `kWindowStateRestoreHistoryLayerMap` in the cc file for what window
+  // state types can be put in the restore history stack.
+  std::vector<RestoreState> window_state_restore_history_;
+
+  // Holds the current working restore state.
+  absl::optional<RestoreState> current_restore_state_;
 
   // This is used to record where the current snap window state change request
   // comes from.
   WindowSnapActionSource snap_action_source_ = WindowSnapActionSource::kOthers;
 };
+
+ASH_EXPORT
+std::ostream& operator<<(std::ostream& os,
+                         const WindowState::RestoreState& state);
 
 }  // namespace ash
 

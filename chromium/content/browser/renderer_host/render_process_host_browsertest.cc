@@ -4,15 +4,18 @@
 
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_split.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/hang_watcher.h"
 #include "build/build_config.h"
@@ -34,11 +37,13 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/pseudonymization_util.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
+#include "content/public/test/content_browser_test_content_browser_client.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/test_frame_navigation_observer.h"
@@ -47,11 +52,8 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_browser_main_parts.h"
-#include "content/shell/browser/shell_content_browser_client.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/storage_partition_test_helpers.h"
-#include "content/test/test_content_browser_client.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
 #include "media/mojo/buildflags.h"
@@ -66,7 +68,13 @@
 #include "third_party/blink/public/common/chrome_debug_urls.h"
 
 #if BUILDFLAG(IS_WIN)
+#include "base/features.h"
+#include "base/files/file.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/no_destructor.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "sandbox/policy/switches.h"
 #endif
 
@@ -232,7 +240,8 @@ class RenderProcessHostTest : public ContentBrowserTest,
 
 // A mock ContentBrowserClient that only considers a spare renderer to be a
 // suitable host.
-class SpareRendererContentBrowserClient : public TestContentBrowserClient {
+class SpareRendererContentBrowserClient
+    : public ContentBrowserTestContentBrowserClient {
  public:
   bool IsSuitableHost(RenderProcessHost* process_host,
                       const GURL& site_url) override {
@@ -246,7 +255,8 @@ class SpareRendererContentBrowserClient : public TestContentBrowserClient {
 
 // A mock ContentBrowserClient that only considers a non-spare renderer to be a
 // suitable host, but otherwise tries to reuse processes.
-class NonSpareRendererContentBrowserClient : public TestContentBrowserClient {
+class NonSpareRendererContentBrowserClient
+    : public ContentBrowserTestContentBrowserClient {
  public:
   NonSpareRendererContentBrowserClient() = default;
 
@@ -386,8 +396,6 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   SpareRendererContentBrowserClient browser_client;
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&browser_client);
 
   RenderProcessHost::SetMaxRendererProcessCount(1);
 
@@ -423,7 +431,6 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
 
   // Revert to the default process limit and original ContentBrowserClient.
   RenderProcessHost::SetMaxRendererProcessCount(0);
-  SetBrowserClientForTesting(old_client);
 }
 
 // Check that the spare renderer is dropped if an existing process is reused.
@@ -431,8 +438,6 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareRendererOnProcessReuse) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   NonSpareRendererContentBrowserClient browser_client;
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&browser_client);
 
   RenderProcessHost::WarmupSpareRenderProcessHost(
       ShellContentBrowserClient::Get()->browser_context());
@@ -464,8 +469,6 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, SpareRendererOnProcessReuse) {
       base::BindOnce([](base::WaitableEvent* done) { done->Signal(); },
                      base::Unretained(&launcher_thread_done)));
   ASSERT_TRUE(launcher_thread_done.TimedWait(TestTimeouts::action_timeout()));
-
-  SetBrowserClientForTesting(old_client);
 }
 
 // Verifies that the spare renderer maintained by SpareRenderProcessHostManager
@@ -499,9 +502,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
 
   // Provide custom storage partition for test sites.
   GURL test_url = embedded_test_server()->GetURL("a.com", "/simple_page.html");
-  CustomStoragePartitionForSomeSites modified_client(GURL("http://a.com/"));
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&modified_client);
+  CustomStoragePartitionBrowserClient modified_client(GURL("http://a.com/"));
 
   BrowserContext* browser_context =
       ShellContentBrowserClient::Get()->browser_context();
@@ -538,9 +539,6 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   EXPECT_EQ(custom_storage, new_process->GetStoragePartition());
   // And consequently, the spare shouldn't have been used.
   EXPECT_NE(spare_renderer, new_process);
-
-  // Restore the original ContentBrowserClient.
-  SetBrowserClientForTesting(old_client);
 }
 
 class RenderProcessHostObserverCounter : public RenderProcessHostObserver {
@@ -875,7 +873,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, KillProcessZerosAudioStreams) {
     // to audio stream owners and they get a chance to notify of stream closure.
     base::RunLoop run_loop;
     GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE, media::BindToCurrentLoop(run_loop.QuitClosure()));
+        FROM_HERE, base::BindPostTaskToCurrentDefault(run_loop.QuitClosure()));
     run_loop.Run();
   }
 
@@ -973,7 +971,7 @@ IN_PROC_BROWSER_TEST_F(CaptureStreamRenderProcessHostTest,
     // to audio stream owners and they get a chance to notify of stream closure.
     base::RunLoop run_loop;
     GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE, media::BindToCurrentLoop(run_loop.QuitClosure()));
+        FROM_HERE, base::BindPostTaskToCurrentDefault(run_loop.QuitClosure()));
     run_loop.Run();
   }
 
@@ -1038,7 +1036,7 @@ IN_PROC_BROWSER_TEST_F(CaptureStreamRenderProcessHostTest,
     // to audio stream owners and they get a chance to notify of stream closure.
     base::RunLoop run_loop;
     GetIOThreadTaskRunner({})->PostTask(
-        FROM_HERE, media::BindToCurrentLoop(run_loop.QuitClosure()));
+        FROM_HERE, base::BindPostTaskToCurrentDefault(run_loop.QuitClosure()));
     run_loop.Run();
   }
 
@@ -1102,8 +1100,8 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   RenderProcessHostImpl* rph = static_cast<RenderProcessHostImpl*>(
       shell()->web_contents()->GetPrimaryMainFrame()->GetProcess());
   // 1 for the service worker.
-  EXPECT_EQ(rph->worker_ref_count(), 1u);
-  EXPECT_EQ(rph->keep_alive_ref_count(), 0u);
+  EXPECT_EQ(rph->worker_ref_count(), 1);
+  EXPECT_EQ(rph->keep_alive_ref_count(), 0);
 
   // We use /workers/send-beacon.html, not send-beacon.html, due to the
   // service worker scope rule.
@@ -1114,8 +1112,8 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
   // We are still using the same process.
   ASSERT_EQ(shell()->web_contents()->GetPrimaryMainFrame()->GetProcess(), rph);
   // 1 for the service worker, 1 for the keepalive fetch.
-  EXPECT_EQ(rph->keep_alive_ref_count(), 1u);
-  EXPECT_EQ(rph->worker_ref_count(), 1u);
+  EXPECT_EQ(rph->keep_alive_ref_count(), 1);
+  EXPECT_EQ(rph->worker_ref_count(), 1);
 }
 
 // Test is flaky on Android builders: https://crbug.com/875179
@@ -1467,7 +1465,7 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, ForEachRenderFrameHost) {
   EXPECT_EQ(same_process_rfhs.size(), 0u);
 
   // 7. Resume the blocked navigation.
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
 
   // 8. Check that `RenderProcessHost::ForEachRenderFrameHost` does not filter
   // `rfh_b` out, because its lifecycle has changed to kActive.
@@ -1938,6 +1936,147 @@ IN_PROC_BROWSER_TEST_F(RenderProcessHostTest, ZeroExecutionTimes) {
       1);
   process->Cleanup();
 }
+
+class RenderProcessHostWriteableFileDeathTest
+    : public RenderProcessHostTest,
+      public ::testing::WithParamInterface<
+          std::tuple</*enforcement_enabled=*/bool,
+                     /*add_no_execute_flags=*/bool>> {
+ public:
+  void SetUp() override {
+    enforcement_feature_.InitWithFeatureState(
+        base::features::kEnforceNoExecutableFileHandles,
+        IsEnforcementEnabled());
+    RenderProcessHostTest::SetUp();
+  }
+
+ protected:
+  bool IsEnforcementEnabled() { return std::get<0>(GetParam()); }
+  bool ShouldMarkNoExecute() { return std::get<1>(GetParam()); }
+
+ private:
+  base::test::ScopedFeatureList enforcement_feature_;
+};
+
+IN_PROC_BROWSER_TEST_P(RenderProcessHostWriteableFileDeathTest,
+                       PassUnsafeWriteableExecutableFile) {
+  // This test only works if DCHECKs are enabled.
+#if !DCHECK_IS_ON()
+  GTEST_SKIP();
+#else
+  // This test only works if the renderer process is sandboxed.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          sandbox::policy::switches::kNoSandbox)) {
+    GTEST_SKIP();
+  }
+
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL test_url = embedded_test_server()->GetURL("/simple_page.html");
+  EXPECT_TRUE(NavigateToURL(shell(), test_url));
+  RenderProcessHost* rph =
+      shell()->web_contents()->GetPrimaryMainFrame()->GetProcess();
+
+  mojo::Remote<mojom::TestService> test_service;
+  rph->BindReceiver(test_service.BindNewPipeAndPassReceiver());
+
+  uint32_t flags = base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_READ |
+                   base::File::FLAG_WRITE;
+  if (ShouldMarkNoExecute()) {
+    flags = base::File::AddFlagsForPassingToUntrustedProcess(flags);
+  }
+
+  base::FilePath file_path;
+  base::CreateTemporaryFile(&file_path);
+  base::File temp_file_writeable(file_path, flags);
+  ASSERT_TRUE(temp_file_writeable.IsValid());
+
+  static base::NoDestructor<std::string> fatal_log_string;
+  // Note: logging::ScopedLogAssertHandler can't be used here as it does not
+  // capture CHECK.
+  auto old_handler = logging::GetLogMessageHandler();
+  logging::SetLogMessageHandler([](int severity, const char* file, int line,
+                                   size_t message_start,
+                                   const std::string& str) -> bool {
+    if (severity != logging::LOGGING_FATAL) {
+      return false;
+    }
+    *fatal_log_string = str;
+    return true;
+  });
+
+  base::RunLoop run_loop;
+  test_service->PassWriteableFile(std::move(temp_file_writeable),
+                                  run_loop.QuitClosure());
+  run_loop.Run();
+  logging::SetLogMessageHandler(old_handler);
+
+  // This test should only CHECK if enforcement is enabled and the file has not
+  // been marked no-execute correctly.
+  if (IsEnforcementEnabled() && !ShouldMarkNoExecute()) {
+    EXPECT_TRUE(fatal_log_string->find(
+                    "Transfer of writable handle to executable file to an "
+                    "untrusted process") != fatal_log_string->npos);
+  } else {
+    EXPECT_TRUE(fatal_log_string->empty());
+  }
+#endif  // DCHECK_IS_ON()
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    RenderProcessHostWriteableFileDeathTest,
+    testing::Combine(/*enforcement_enabled=*/testing::Bool(),
+                     /*add_no_execute_flags=*/testing::Bool()));
+
 #endif  // BUILDFLAG(IS_WIN)
+
+// This test verifies that the Pseudonymization salt that is generated in the
+// browser process is correctly synchronized with a child process, in this case,
+// two separate renderer processes.
+IN_PROC_BROWSER_TEST_F(RenderProcessHostTest,
+                       SetPseudonymizationSaltSynchronized) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Ensure all sites get dedicated processes during the test.
+  IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
+
+  // Create two renderer processes.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/simple_page.html")));
+  RenderProcessHost* rph1 =
+      shell()->web_contents()->GetPrimaryMainFrame()->GetProcess();
+  Shell* second_shell = CreateBrowser();
+  EXPECT_TRUE(NavigateToURL(second_shell, embedded_test_server()->GetURL(
+                                              "b.com", "/simple_page.html")));
+  RenderProcessHost* rph2 =
+      second_shell->web_contents()->GetPrimaryMainFrame()->GetProcess();
+
+  // This test needs two processes.
+  EXPECT_NE(rph1->GetProcess().Pid(), rph2->GetProcess().Pid());
+
+  const std::string test_string = "testing123";
+  uint32_t browser_result =
+      PseudonymizationUtil::PseudonymizeStringForTesting(test_string);
+
+  for (RenderProcessHost* rph : {rph1, rph2}) {
+    mojo::Remote<mojom::TestService> service;
+    rph->BindReceiver(service.BindNewPipeAndPassReceiver());
+
+    base::RunLoop run_loop;
+
+    absl::optional<uint32_t> renderer_result = absl::nullopt;
+    service->PseudonymizeString(
+        test_string, base::BindLambdaForTesting([&](uint32_t result) {
+          renderer_result = result;
+          run_loop.Quit();
+        }));
+    run_loop.Run();
+
+    ASSERT_TRUE(renderer_result.has_value());
+    EXPECT_EQ(*renderer_result, browser_result);
+  }
+}
 
 }  // namespace content

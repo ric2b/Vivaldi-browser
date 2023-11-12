@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/unguessable_token.h"
@@ -21,6 +21,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/tts_controller.h"
 #include "content/public/browser/tts_utterance.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -231,6 +232,18 @@ void TtsAsh::SpeakOrEnqueue(
       std::move(lacros_utterance));
 }
 
+void TtsAsh::Stop(const GURL& source_url) {
+  content::TtsController::GetInstance()->Stop(source_url);
+}
+
+void TtsAsh::Pause() {
+  content::TtsController::GetInstance()->Pause();
+}
+
+void TtsAsh::Resume() {
+  content::TtsController::GetInstance()->Resume();
+}
+
 void TtsAsh::SpeakWithLacrosVoice(content::TtsUtterance* utterance,
                                   const content::VoiceData& voice) {
   if (!HasTtsClient())
@@ -288,6 +301,18 @@ void TtsAsh::StopRemoteEngine(content::TtsUtterance* utterance) {
   auto item = tts_clients_.find(GetPrimaryProfileBrowserContextId());
   DCHECK(item != tts_clients_.end());
   item->second->Stop(utterance->GetEngineId());
+}
+
+void TtsAsh::PauseRemoteEngine(content::TtsUtterance* utterance) {
+  auto item = tts_clients_.find(GetPrimaryProfileBrowserContextId());
+  DCHECK(item != tts_clients_.end());
+  item->second->Pause(utterance->GetEngineId());
+}
+
+void TtsAsh::ResumeRemoteEngine(content::TtsUtterance* utterance) {
+  auto item = tts_clients_.find(GetPrimaryProfileBrowserContextId());
+  DCHECK(item != tts_clients_.end());
+  item->second->Resume(utterance->GetEngineId());
 }
 
 void TtsAsh::GetCrosapiVoices(base::UnguessableToken browser_context_id,

@@ -25,6 +25,7 @@
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/crostini/termina_installer.h"
 #include "chrome/browser/ash/guest_os/guest_id.h"
+#include "chrome/browser/ash/guest_os/guest_os_remover.h"
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_mount_provider_registry.h"
 #include "chrome/browser/ash/guest_os/public/guest_os_terminal_provider_registry.h"
@@ -171,16 +172,10 @@ class CrostiniManager : public KeyedService,
    public:
     virtual ~RestartObserver() = default;
     virtual void OnStageStarted(mojom::InstallerState stage) {}
-    virtual void OnComponentLoaded(CrostiniResult result) {}
     virtual void OnDiskImageCreated(bool success,
                                     CrostiniResult result,
                                     int64_t disk_size_bytes) {}
-    virtual void OnVmStarted(bool success) {}
-    virtual void OnLxdStarted(CrostiniResult result) {}
     virtual void OnContainerDownloading(int32_t download_percent) {}
-    virtual void OnContainerCreated(CrostiniResult result) {}
-    virtual void OnContainerSetup(bool success) {}
-    virtual void OnContainerStarted(CrostiniResult result) {}
   };
 
   struct RestartOptions {
@@ -252,19 +247,6 @@ class CrostiniManager : public KeyedService,
       int64_t disk_size_bytes,
       CreateDiskImageCallback callback);
 
-  // Checks the arguments for destroying a named Termina VM disk image.
-  // Removes the named Termina VM via ConciergeClient::DestroyDiskImage.
-  // |callback| is called if the arguments are bad, or after the method call
-  // finishes.
-  void DestroyDiskImage(
-      // The path to the disk image, including the name of the image itself.
-      const std::string& vm_name,
-      BoolCallback callback);
-
-  using ListVmDisksCallback =
-      base::OnceCallback<void(CrostiniResult result, int64_t total_size)>;
-  void ListVmDisks(ListVmDisksCallback callback);
-
   // Checks the arguments for starting a Termina VM. Starts a Termina VM via
   // ConciergeClient::StartTerminaVm. |callback| is called if the arguments
   // are bad, or after the method call finishes.
@@ -284,6 +266,10 @@ class CrostiniManager : public KeyedService,
   // ConciergeClient::StopVm. |callback| is called if the arguments are bad,
   // or after the method call finishes.
   void StopVm(std::string name, CrostiniResultCallback callback);
+
+  // Calls |StopVm| for each member of |running_vms_| not already in state
+  // |STOPPING|.
+  void StopRunningVms(CrostiniResultCallback callback);
 
   // Asynchronously retrieve the Termina VM kernel version using concierge's
   // GetVmEnterpriseReportingInfo method and store it in prefs.
@@ -468,6 +454,12 @@ class CrostiniManager : public KeyedService,
   // complete.
   bool IsRestartPending(RestartId restart_id);
 
+  // Returns whether there is an active restarter for a given GuestId. Even
+  // after cancelling all requests or aborting a restarter, this will continue
+  // to return true until the current operation is finished and the restarter
+  // is destroyed.
+  bool HasRestarterForTesting(const guest_os::GuestId& guest_id);
+
   // Adds a callback to receive notification of container shutdown.
   void AddShutdownContainerCallback(guest_os::GuestId container_id,
                                     base::OnceClosure shutdown_callback);
@@ -519,6 +511,8 @@ class CrostiniManager : public KeyedService,
   // ConciergeClient::VmObserver:
   void OnVmStarted(const vm_tools::concierge::VmStartedSignal& signal) override;
   void OnVmStopped(const vm_tools::concierge::VmStoppedSignal& signal) override;
+  void OnVmStopping(
+      const vm_tools::concierge::VmStoppingSignal& signal) override;
 
   // CiceroneClient::Observer:
   void OnContainerStarted(
@@ -631,7 +625,7 @@ class CrostiniManager : public KeyedService,
       CrostiniManager::RestartId id,
       CrostiniResult result);
   void SetInstallTerminaNeverCompletesForTesting(bool never_completes) {
-    install_termina_never_completes_ = never_completes;
+    install_termina_never_completes_for_testing_ = never_completes;
   }
 
   // Mounts the user's Crostini home directory so it's accessible from the host.
@@ -655,18 +649,6 @@ class CrostiniManager : public KeyedService,
   void OnCreateDiskImage(
       CreateDiskImageCallback callback,
       absl::optional<vm_tools::concierge::CreateDiskImageResponse> response);
-
-  // Callback for ConciergeClient::DestroyDiskImage. Called after the Concierge
-  // service method finishes.
-  void OnDestroyDiskImage(
-      BoolCallback callback,
-      absl::optional<vm_tools::concierge::DestroyDiskImageResponse> response);
-
-  // Callback for ConciergeClient::ListVmDisks. Called after the Concierge
-  // service method finishes.
-  void OnListVmDisks(
-      ListVmDisksCallback callback,
-      absl::optional<vm_tools::concierge::ListVmDisksResponse> response);
 
   // Callback for ConciergeClient::StartVm. Called after the Concierge
   // service method finishes.  Updates running containers list then calls the
@@ -830,7 +812,11 @@ class CrostiniManager : public KeyedService,
                         base::OnceClosure closure);
 
   // Callback for CrostiniManager::RemoveCrostini.
-  void OnRemoveCrostini(CrostiniResult result);
+  void OnRemoveCrostini(guest_os::GuestOsRemover::Result result);
+
+  void OnRemoveTermina(bool success);
+
+  void FinishUninstall(CrostiniResult result);
 
   void OnVmStoppedCleanup(const std::string& vm_name);
 
@@ -894,7 +880,7 @@ class CrostiniManager : public KeyedService,
 
   // Callbacks to run after LXD is started, keyed by vm_name. Used if StartLxd
   // completes but we need to wait for LXD to start.
-  std::map<std::string, CrostiniResultCallback> start_lxd_callbacks_;
+  std::multimap<std::string, CrostiniResultCallback> start_lxd_callbacks_;
 
   std::map<std::string, VmInfo> running_vms_;
 
@@ -956,7 +942,7 @@ class CrostiniManager : public KeyedService,
 
   TerminaInstaller termina_installer_{};
 
-  bool install_termina_never_completes_ = false;
+  bool install_termina_never_completes_for_testing_ = false;
 
   std::unique_ptr<CrostiniSshfs> crostini_sshfs_;
 

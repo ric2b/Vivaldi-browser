@@ -10,10 +10,10 @@
 #include <map>
 #include <set>
 
-#include "base/bind.h"
-#include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -499,6 +499,17 @@ const absl::optional<media::VideoCaptureFormat>
 VideoCaptureController::GetVideoCaptureFormat() const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return video_capture_format_;
+}
+
+void VideoCaptureController::OnCaptureConfigurationChanged() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  EmitLogMessage(__func__, 3);
+  for (const auto& client : controller_clients_) {
+    if (client->session_closed) {
+      continue;
+    }
+    client->event_handler->OnCaptureConfigurationChanged(client->controller_id);
+  }
 }
 
 void VideoCaptureController::OnNewBuffer(

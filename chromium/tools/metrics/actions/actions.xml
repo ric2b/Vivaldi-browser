@@ -905,7 +905,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Accel_NewTabInGroup">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User added a new tab to the existing group by keyboard shortcut Ctrl-T.
@@ -2560,6 +2560,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="AmbientMode.ScreenSaverPreview.Started">
+  <owner>safarli@google.com</owner>
+  <owner>assistive-eng@google.com</owner>
+  <description>
+    User clicked the button to start screen saver preview. Records the button
+    click event. Recorded on ChromeOS only.
+  </description>
+</action>
+
 <action name="Android.AddToHomescreenIPH.Message.Clicked">
   <owner>shaktisahu@chromium.org</owner>
   <owner>dtrainor@chromium.org</owner>
@@ -3433,6 +3442,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Android.Survey.ShowSurveyInfoBar">
+  <obsolete>
+    Deprecated 12/2022 as part of survey message launch cleanup.
+  </obsolete>
   <owner>danielpark@chromium.org</owner>
   <description>The survey infobar was displayed.</description>
 </action>
@@ -3476,6 +3488,120 @@ should be able to be added at any place in this file.
   <obsolete>Unused as of 08/2017</obsolete>
   <owner>jamescook@chromium.org</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="AppHome_CreateShortcut">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User clicks on the menu option to create shortcuts for an app from the right
+    click context menu of an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_CustomContextMenuTriggered">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User opens the custom context menu for an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_InstallAppLocally">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User clicks on the menu option to install an app locally from the right
+    click context menu of an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_LaunchAtStartupChecked">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User checks the launch at startup option from the right click context menu
+    of an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_LaunchAtStartupUnchecked">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User unchecks the launch at startup option from the right click context menu
+    of an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_LaunchDeprecatedApp">
+  <owner>dmurph@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User launches a deprecated app (chrome app, built on extensions system) by
+    clicking on the app icon from the new chrome://apps page. This will result
+    in the launch being interrupted with a dialog that post-m112 will block the
+    actual launch of the app. After m114, the admin policy allowing the bypass
+    of this dialog will expire as well. If the user ends up launching the app
+    itself, the web app's start_url opening up in a dedicated window or in a
+    browser tab, depending on the user's preference.
+  </description>
+</action>
+
+<action name="AppHome_LaunchWebApp">
+  <owner>dmurph@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User launches a web app by clicking on the app icon from the new
+    chrome://apps page. This results in the web app's start_url opening up in a
+    dedicated window or in a browser tab, depending on the user's preference.
+  </description>
+</action>
+
+<action name="AppHome_NavigationComplete">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    Triggered whenever an the new chrome://apps page page is initialized on
+    navigation. This is not recorded on OSes where the new chrome://apps page
+    page does not exist, like ChromeOS and Android.
+  </description>
+</action>
+
+<action name="AppHome_OpenAppSettings">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User clicks on the menu option to open app settings from the right click
+    context menu of an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_OpenInWindowChecked">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User checks the open in window option from the right click context menu of
+    an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_OpenInWindowUnchecked">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User checks the open in window option from the right click context menu of
+    an app from new chrome://apps page.
+  </description>
+</action>
+
+<action name="AppHome_UninstallTriggered">
+  <owner>dibyapal@chromium.org</owner>
+  <owner>desktop-pwas-team@chromium.org</owner>
+  <description>
+    User clicks on the menu option to uninstall an app from the right click
+    context menu of an app from new chrome://apps page.
+  </description>
 </action>
 
 <action name="ApplicationShortcut.LensPressedFromHomeScreenWidget">
@@ -4211,6 +4337,48 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="AutofillIbanAdded">
+  <owner>qihuizhao@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when user adds IBAN via chrome://settings/payments page.
+  </description>
+</action>
+
+<action name="AutofillIbanAddedWithNickname">
+  <owner>qihuizhao@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when user adds IBAN with a nickname via chrome://settings/payments
+    page.
+  </description>
+</action>
+
+<action name="AutofillIbanDeleted">
+  <owner>qihuizhao@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when user deletes IBAN via chrome://settings/payments page.
+  </description>
+</action>
+
+<action name="AutofillIbanEdited">
+  <owner>qihuizhao@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when user edits IBAN via chrome://settings/payments page.
+  </description>
+</action>
+
+<action name="AutofillIbanEditedWithNickname">
+  <owner>qihuizhao@google.com</owner>
+  <owner>jsaul@google.com</owner>
+  <description>
+    Recorded when user edits IBAN with a new nickname via
+    chrome://settings/payments page.
+  </description>
+</action>
+
 <action name="AutomaticReset_WebUIBanner_BannerShown">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -4932,6 +5100,14 @@ should be able to be added at any place in this file.
 <action name="BookmarkBar_ContextMenu_Add">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="BookmarkBar_ContextMenu_AddToBookmarkBar">
+  <owner>emshack@chromium.org</owner>
+  <description>
+    The user added one or more bookmarks to the Bookmarks Bar using the context
+    menu.
+  </description>
 </action>
 
 <action name="BookmarkBar_ContextMenu_Edit">
@@ -5689,6 +5865,16 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="ChromeOS.Settings.InputMethod.Autocorrect.Open">
+  <owner>zacpartridge@chromium.org</owner>
+  <owner>essential-inputs-team@google.com</owner>
+  <description>
+    Recorded when a user clicks the link to open the Auto-correction section in
+    Chrome OS Inputs methods setting page. This can happen when a user clicks on
+    the Learn More button from the Autocorrection undo window.
+  </description>
+</action>
+
 <action name="ChromeOS.Settings.Languages">
   <owner>myy@chromium.org</owner>
   <owner>essential-inputs-team@google.com</owner>
@@ -5806,8 +5992,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ClearBrowsingData_Everything" not_user_triggered="true">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Browsing data has been cleared for all time.</description>
 </action>
 
 <action name="ClearBrowsingData_History" not_user_triggered="true">
@@ -5815,27 +6002,42 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="ClearBrowsingData_Last15Minutes" not_user_triggered="true">
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>
+    Browsing data has been cleared for the last 15 minutes.
+  </description>
+</action>
+
 <action name="ClearBrowsingData_LastDay" not_user_triggered="true">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Browsing data has been cleared for the last day.</description>
 </action>
 
 <action name="ClearBrowsingData_LastHour" not_user_triggered="true">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Browsing data has been cleared for the last hour.</description>
 </action>
 
 <action name="ClearBrowsingData_LastMonth" not_user_triggered="true">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Browsing data has been cleared for the last month.</description>
 </action>
 
 <action name="ClearBrowsingData_LastWeek" not_user_triggered="true">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Browsing data has been cleared for the last week.</description>
 </action>
 
 <action name="ClearBrowsingData_LSOData">
+  <obsolete>
+    LSO data relates to Flash, and Flash is no longer supported.
+  </obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -5944,6 +6146,12 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ClearBrowsingData_TimePeriodChanged_Everything">
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>Time period in CBD was changed.</description>
+</action>
+
+<action name="ClearBrowsingData_TimePeriodChanged_Last15Minutes">
   <owner>dullweber@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
   <description>Time period in CBD was changed.</description>
@@ -6063,7 +6271,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="CloseGroupedTab">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>User closed a tab that belongs to a group.</description>
 </action>
@@ -8964,6 +9172,30 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="FileBrowser.GoogleOneOffer.Dismiss">
+  <owner>yawano@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <description>
+    Google One offer files banner gets dismissed by the user.
+  </description>
+</action>
+
+<action name="FileBrowser.GoogleOneOffer.GetPerk">
+  <owner>yawano@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <description>
+    Get perk button of Google One offer files banner gets activated.
+  </description>
+</action>
+
+<action name="FileBrowser.GoogleOneOffer.Shown">
+  <owner>yawano@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <description>
+    Google One offer files banner gets shown on Files app.
+  </description>
+</action>
+
 <action name="FileBrowser.PhotoEditor.Edit">
   <obsolete>Removed in M92.</obsolete>
   <owner>simmonsjosh@google.com</owner>
@@ -9023,17 +9255,17 @@ should be able to be added at any place in this file.
 
 <action name="Find">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <description>For iOS: see IOS.FindInPage.SearchStarted</description>
 </action>
 
 <action name="FindNext">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <description>For iOS: see IOS.FindInPage.FindNext</description>
 </action>
 
 <action name="FindPrevious">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <description>For iOS: see IOS.FindInPage.FindPrevious</description>
 </action>
 
 <action name="FindString">
@@ -9059,6 +9291,22 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated 02/2017.</obsolete>
   <owner>thestig@chromium.org</owner>
   <description>Count of Flash plugin instances.</description>
+</action>
+
+<action name="FloatWindowTucked">
+  <owner>sophiewen@chromium.org</owner>
+  <owner>shidi@chromium.org</owner>
+  <description>
+    Recorded when a floated window is tucked in tablet mode.
+  </description>
+</action>
+
+<action name="FloatWindowUntucked">
+  <owner>sophiewen@chromium.org</owner>
+  <owner>shidi@chromium.org</owner>
+  <description>
+    Recorded when a floated window is untucked in tablet mode.
+  </description>
 </action>
 
 <action name="FocusAppMenu">
@@ -11360,6 +11608,41 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="IOS.EmailExperience.LongPress.Copy">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    User tapped on the copy button after long-pressing on an email address.
+  </description>
+</action>
+
+<action name="IOS.EmailExperience.LongPress.CreateEmail">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    User tapped on the &quot;Create Email&quot; button after long-pressing on an
+    email address.
+  </description>
+</action>
+
+<action name="IOS.EmailExperience.LongPress.Display">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the email experience context menu was displayed after a
+    user long press on an email address.
+  </description>
+</action>
+
+<action name="IOS.EmailExperience.OneTap.CreateEmail">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the user tapped on an underlined email address and
+    triggered the &quot;Create mail with&quot; view controller.
+  </description>
+</action>
+
 <action name="IOS.ExperienceKit.Calendar.Copy">
   <owner>erahmaoui@google.com</owner>
   <owner>djean@chromium.org</owner>
@@ -11395,12 +11678,56 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="IOS.ExperienceKit.Maps.MenuDisplayed">
+  <owner>erahmaoui@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the user triggered the maps context menu after a long
+    press on an address, this includes all the menu contexts,
+    &quot;get-directions&quot;,&quot;view-location&quot;, and copy.
+  </description>
+</action>
+
 <action name="IOS.ExperienceKit.Maps.View">
   <owner>erahmaoui@google.com</owner>
   <owner>djean@chromium.org</owner>
   <description>
     The number of times the user triggered the &quot;view-location&quot; context
     after a long press on an address.
+  </description>
+</action>
+
+<action name="IOS.FindInPage.FindNext">
+  <owner>qpubert@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the user navigated to the next match in Find in Page on
+    iOS. For instance, the user pressed the Next button in the system Find panel
+    or Chrome Find bar, or used the associated keybinding. From M112 onwards,
+    this is not recorded if the total number of matches is 2 or less.
+  </description>
+</action>
+
+<action name="IOS.FindInPage.FindPrevious">
+  <owner>qpubert@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the user navigated to the previous match in Find in Page
+    on iOS. For instance, the user pressed the Previous button in the system
+    Find panel or Chrome Find bar, or used the associated keybinding. From M112
+    onwards, this is not recorded if the total number of matches is 2 or less.
+  </description>
+</action>
+
+<action name="IOS.FindInPage.SearchStarted">
+  <owner>qpubert@google.com</owner>
+  <owner>djean@chromium.org</owner>
+  <description>
+    The number of times the user started a new Find in Page search on iOS. This
+    is recorded every time the Chrome Find bar is presented and every time the
+    user edits the query. This is not recorded if the Find in Page variant uses
+    the system Find panel (bottom of the screen, right above the keyboard) as
+    opposed to the Chrome Find bar (top of the screen).
   </description>
 </action>
 
@@ -11535,6 +11862,32 @@ should be able to be added at any place in this file.
   <owner>sczs@chromium.org</owner>
   <description>
     Recorded when a user closes bookmark manager by swiping down. iOS-only.
+  </description>
+</action>
+
+<action name="IOSBookmarksEditorClosedWithSwipeDown">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    Recorded when the user closes bookmark editor by swiping down. iOS-only.
+  </description>
+</action>
+
+<action name="IOSBookmarksFolderChooserClosedWithSwipeDown">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    Recorded when the user closes bookmark folder chooser by swiping down.
+    iOS-only.
+  </description>
+</action>
+
+<action name="IOSBookmarksFolderEditorClosedWithSwipeDown">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    Recorded when the user closes bookmark folder editor by swiping down.
+    iOS-only.
   </description>
 </action>
 
@@ -17675,6 +18028,12 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileBookmarkManagerAddedBookmarkUndone">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>The user undid added bookmark on iOS only.</description>
+</action>
+
 <action name="MobileBookmarkManagerClose">
   <owner>twellington@google.com</owner>
   <owner>sczs@chromium.org</owner>
@@ -17693,6 +18052,12 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileBookmarkManagerDeletedEntryUndone">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>The user undid bookmark deletion on iOS only.</description>
+</action>
+
 <action name="MobileBookmarkManagerDragReorder">
   <owner>jhimawan@google.com</owner>
   <owner>twellington@google.com</owner>
@@ -17706,7 +18071,8 @@ should be able to be added at any place in this file.
   <owner>twellington@google.com</owner>
   <owner>clank-app-team@google.com</owner>
   <description>
-    Recorded when a user edits a bookmark in the Android bookmark manager.
+    Recorded when a user edits a bookmark in bookmark manager, on iOS or
+    Android.
   </description>
 </action>
 
@@ -17714,7 +18080,7 @@ should be able to be added at any place in this file.
   <owner>twellington@google.com</owner>
   <owner>clank-app-team@google.com</owner>
   <description>
-    Recorded when a user edits a folder in the Android bookmark manager.
+    Recorded when a user edits a folder in bookmark manager, on iOS or Android.
   </description>
 </action>
 
@@ -17788,8 +18154,14 @@ should be able to be added at any place in this file.
   <owner>clank-app-team@google.com</owner>
   <description>
     Recorded when a user moves all selected bookmark items to a new folder in
-    the Android bookmark manager.
+    bookmark manager, on iOS or Android.
   </description>
+</action>
+
+<action name="MobileBookmarkManagerMoveToFolderUndone">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>The user undid bookmark move on iOS only.</description>
 </action>
 
 <action name="MobileBookmarkManagerMoveUp">
@@ -17801,6 +18173,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileBookmarkManagerMultipleEntriesOpened">
+  <owner>wylieb@chromium.org</owner>
+  <owner>chrome-collections@google.com</owner>
+  <description>
+    Recorded when multi-selection is opened from the bookmark manager. Possible
+    that the selection is only 1 bookmark.
+  </description>
+</action>
+
 <action name="MobileBookmarkManagerOpen">
   <owner>ianwen@chromium.org</owner>
   <description>
@@ -17809,11 +18190,19 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileBookmarkManagerOpenedBookmarkEditorFromSnackbar">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user opened the bookmark editor using the snackbar.
+  </description>
+</action>
+
 <action name="MobileBookmarkManagerOpenFolder">
   <owner>twellington@google.com</owner>
   <owner>clank-app-team@google.com</owner>
   <description>
-    Recorded when a user opens a folder in the Android bookmark manager.
+    Recorded when a user opens a folder on iOS and Android.
   </description>
 </action>
 
@@ -17858,6 +18247,92 @@ should be able to be added at any place in this file.
   <description>
     Recorded when a user taps on an item in order to select it from the Android
     bookmark manager (this can only occur while in selection mode).
+  </description>
+</action>
+
+<action name="MobileBookmarkManagerUpdatedBookmarkUndone">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>The user undid bookmark update on iOS only.</description>
+</action>
+
+<action name="MobileBookmarksEditorCanceled">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user canceled the bookmark editor view. iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksEditorDeletedBookmark">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user deleted the bookmark in the bookmark editor view. iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksEditorOpenedFolderChooser">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user opened the folder chooser in the bookmark editor view. iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksEditorSaved">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>The user saved the bookmark editor view. iOS-only.</description>
+</action>
+
+<action name="MobileBookmarksFolderChooserCanceled">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user canceled the bookmark folder chooser view. iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksFolderChooserDone">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user confirmed the bookmark folder chooser view. iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksFolderEditorCanceled">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user canceled the bookmark folder editor view. iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksFolderEditorDeletedFolder">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user deleted the folder while in the bookmark folder editor view.
+    iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksFolderEditorOpenedFolderChooser">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user opened the folder chooser in the bookmark folder editor view.
+    iOS-only.
+  </description>
+</action>
+
+<action name="MobileBookmarksFolderEditorSaved">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    The user confirmed the bookmark folder editor view. iOS-only.
   </description>
 </action>
 
@@ -18431,7 +18906,7 @@ should be able to be added at any place in this file.
 
 <action name="MobileFreUMALinkTapped">
   <owner>arthurmilchior@chromium.org</owner>
-  <owner>jlebel@google.com</owner>
+  <owner>jlebel@chromium.org</owner>
   <owner>chrome-signin-team@google.com</owner>
   <description>
     User tapped on the UMA link on the first run welcome view. This metric is
@@ -19835,6 +20310,21 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobilePasswordCheckupSettingsBack">
+  <owner>noemies@google.com</owner>
+  <description>
+    Reported when user goes back from Password Checkup Settings UI to root
+    Settings screen. iOS only.
+  </description>
+</action>
+
+<action name="MobilePasswordCheckupSettingsClose">
+  <owner>noemies@google.com</owner>
+  <description>
+    Reported when Password Checkup Settings UI was dismissed. iOS only.
+  </description>
+</action>
+
 <action name="MobilePasswordsSettingsBack">
   <owner>kazinova@google.com</owner>
   <owner>sczs@chromium.org</owner>
@@ -20336,6 +20826,11 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileShareMenuAddToHome">
+  <owner>gambard@chromium.org</owner>
+  <description>User added current page to device home screen.</description>
+</action>
+
 <action name="MobileShareMenuBookmark">
   <owner>gambard@chromium.org</owner>
   <description>User shared to the device's bookmarks.</description>
@@ -20594,6 +21089,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileTabGridAddedMultipleNewBookmarks">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    User added multiple new bookmarks base on the selected tabs, in the iOS tab
+    grid. It is possible to have one tab selected.
+  </description>
+</action>
+
 <action name="MobileTabGridBeganReordering">
   <owner>edchin@chromium.org</owner>
   <owner>marq@chromium.org</owner>
@@ -20761,6 +21265,20 @@ should be able to be added at any place in this file.
   <owner>ewannpv@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <description>User moves from a Tab to an existing other Tab.</description>
+</action>
+
+<action name="MobileTabGridOpenedBookmarkEditorForExistingBookmark">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>
+    User edited an existing bookmark, in the iOS tab grid.
+  </description>
+</action>
+
+<action name="MobileTabGridOpenedBookmarkEditorForNewBookmark">
+  <owner>jlebel@chromium.org</owner>
+  <owner>chrome-signin-team@google.com</owner>
+  <description>User adds one new bookmark, in the iOS tab grid.</description>
 </action>
 
 <action name="MobileTabGridOpenIncognitoTab">
@@ -20956,6 +21474,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="MobileTabGridShowInactiveTabs">
+  <owner>lpromero@google.com</owner>
+  <owner>alionadangla@google.com</owner>
+  <description>
+    User tapped on the Inactive Tabs button of the iOS Regular Tab Grid.
+  </description>
+</action>
+
 <action name="MobileTabGridTabContextMenuSelectTabs">
   <owner>mrefaat@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
@@ -21025,6 +21551,12 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of 5/2015</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileTabStripScrollDidEnd">
+  <owner>ewannpv@chromium.org</owner>
+  <owner>gambard@chromium.org</owner>
+  <description>User scrolled the tabStrip view.</description>
 </action>
 
 <action name="MobileTabStripShowTabGridMenu">
@@ -25209,7 +25741,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Overscroll_Cancelled.Reload">
-  <owner>mohsen@chromium.org</owner>
+  <owner>jonross@chromium.org</owner>
   <description>
     When vertical overscroll corresponding to the RELOAD navigation is cancelled
     - either because the user performed an interfering action such as pressing a
@@ -25233,7 +25765,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Overscroll_Navigated.Reload">
-  <owner>mohsen@chromium.org</owner>
+  <owner>jonross@chromium.org</owner>
   <description>
     When vertical overscroll initiates a RELOAD navigation in the browser.
   </description>
@@ -26714,6 +27246,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="QS_Subpage_Network_JoinNetwork">
+  <owner>jiamingc@google.com</owner>
+  <owner>cros-status-area-eng@google.com</owner>
+  <description>
+    User clicked on the Join Wi-Fi network entry in the quick settings network
+    subpage on ChromeOS.
+  </description>
+</action>
+
 <action name="QuickActionSearchWidget.LensQuery">
   <owner>ender@google.com</owner>
   <owner>fgorski@chromium.org</owner>
@@ -28144,6 +28685,24 @@ should be able to be added at any place in this file.
   <description>User starts the Privacy guide via the promo.</description>
 </action>
 
+<action name="Settings.PrivacySandbox.AdMeasurement.Disabled">
+  <owner>rubindl@chromium.org</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User disables the privacy sandbox Ad Measurement API in the Ad Measurement
+    setting page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.AdMeasurement.Enabled">
+  <owner>rubindl@chromium.org</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User enables the privacy sandbox Ad Measurement API in the Ad Measurement
+    setting page.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.AdMeasurement.Opened">
   <owner>dullweber@google.com</owner>
   <owner>sauski@google.com</owner>
@@ -28171,6 +28730,8 @@ should be able to be added at any place in this file.
   <owner>sauski@google.com</owner>
   <description>
     User removed a site that was previously in their allowed sites list.
+    TODO(crbug.com/1378703): Deprecate this action in favor of
+    Settings.PrivacySandbox.Fledge.SiteRemoved after the feature is launched.
   </description>
 </action>
 
@@ -28179,6 +28740,8 @@ should be able to be added at any place in this file.
   <owner>sauski@google.com</owner>
   <description>
     User removed a topic that was previously in their allowed topics list.
+    TODO(crbug.com/1378703): Deprecate this action in favor of
+    Settings.PrivacySandbox.Topics.TopicRemoved after the feature is launched.
   </description>
 </action>
 
@@ -28236,6 +28799,15 @@ should be able to be added at any place in this file.
   <description>User declined the privacy sandbox consent.</description>
 </action>
 
+<action name="Settings.PrivacySandbox.Consent.LearnMoreClosed">
+  <owner>harrisonsean@chromium.org</owner>
+  <owner>sauski@google.com</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>
+    User closed the Learn More in the Privacy Sandbox Consent.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.Consent.LearnMoreExpanded">
   <owner>harrisonsean@chromium.org</owner>
   <owner>sauski@google.com</owner>
@@ -28245,11 +28817,87 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Settings.PrivacySandbox.Consent.MoreButtonClicked">
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <owner>kartoffel-core-eng@google.com</owner>
+  <description>
+    User clicked on the More button in the Privacy Sandbox Consent.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.Consent.Shown">
   <owner>harrisonsean@chromium.org</owner>
   <owner>sauski@google.com</owner>
   <owner>msramek@chromium.org</owner>
   <description>User is shown the Privacy Sandbox consent.</description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.AllSitesOpened">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opened the all sites subpage, by clicking on the pref in the Fledge
+    settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.BlockedSitesOpened">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opened the blocked sites section, by clicking on the button in the
+    Topics settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.Disabled">
+  <owner>rubindl@chromium.org</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User disables the privacy sandbox Fledge API in the Fledge settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.Enabled">
+  <owner>rubindl@chromium.org</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User enables the privacy sandbox Fledge API in the Fledge settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.LearnMoreClicked">
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opened the learn more about fledge section, by clicking on the button
+    in the Fledge settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.Opened">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opened Fledge subpage from main sandbox settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.SiteAdded">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User added back a site that was previously in their removed sites list.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Fledge.SiteRemoved">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User removed a site that was previously in their allowed sites list.
+  </description>
 </action>
 
 <action name="Settings.PrivacySandbox.FlocSubpageOpened">
@@ -28295,12 +28943,30 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Settings.PrivacySandbox.Notice.LearnMoreClosed">
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <owner>tommasin@chromium.org</owner>
+  <description>
+    User closed the Learn More in the Privacy Sandbox Notice.
+  </description>
+</action>
+
 <action name="Settings.PrivacySandbox.Notice.LearnMoreExpanded">
   <owner>olesiamarukhno@google.com</owner>
   <owner>sauski@google.com</owner>
   <owner>tommasin@chromium.org</owner>
   <description>
     User expanded the Learn More in the Privacy Sandbox Notice.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Notice.MoreButtonClicked">
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <owner>kartoffel-core-eng@google.com</owner>
+  <description>
+    User clicked on the More button in the Privacy Sandbox Notice.
   </description>
 </action>
 
@@ -28364,6 +29030,8 @@ should be able to be added at any place in this file.
   <owner>sauski@google.com</owner>
   <description>
     User added back a site that was previously in their removed sites list.
+    TODO(crbug.com/1378703): Deprecate this action in favor of
+    Settings.PrivacySandbox.Fledge.SiteAdded after the feature is launched.
   </description>
 </action>
 
@@ -28372,6 +29040,8 @@ should be able to be added at any place in this file.
   <owner>sauski@google.com</owner>
   <description>
     User added back a topic that was previously in their removed topics list.
+    TODO(crbug.com/1378703): Deprecate this action in favor of
+    Settings.PrivacySandbox.Topics.TopicAdded after the feature is launched.
   </description>
 </action>
 
@@ -28379,6 +29049,64 @@ should be able to be added at any place in this file.
   <owner>dullweber@google.com</owner>
   <owner>sauski@google.com</owner>
   <description>User opened Fraud prevention subpage.</description>
+</action>
+
+<action name="Settings.PrivacySandbox.Topics.BlockedTopicsOpened">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opened the blocked Topics section, by clicking on the button in the
+    Topics settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Topics.Disabled">
+  <owner>rubindl@chromium.org</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User disables the privacy sandbox Topics API in the Topics setting page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Topics.Enabled">
+  <owner>rubindl@chromium.org</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User enables the privacy sandbox Topics API in the Topics settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Topics.LearnMoreClicked">
+  <owner>olesiamarukhno@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opened the learn more about topics section, by clicking on the button
+    in the Topics settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Topics.Opened">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User opened Topics subpage from main sandbox settings page.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Topics.TopicAdded">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User added back a topic that was previously in their removed topics list.
+  </description>
+</action>
+
+<action name="Settings.PrivacySandbox.Topics.TopicRemoved">
+  <owner>rubindl@google.com</owner>
+  <owner>sauski@google.com</owner>
+  <description>
+    User removed a topic that was previously in their allowed topics list.
+  </description>
 </action>
 
 <action name="Settings.SafetyCheck.ChromeCleanerCaretNavigation">
@@ -28471,6 +29199,14 @@ should be able to be added at any place in this file.
   <owner>andzaytsev@google.com</owner>
   <owner>msramek@chromium.org</owner>
   <description>User clicks the extensions row in safety check.</description>
+</action>
+
+<action name="Settings.SafetyCheck.ReviewUnusedSitePermissions">
+  <owner>sideyilmaz@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>
+    User clicks the button in the unused site permissions row in safety check.
+  </description>
 </action>
 
 <action name="Settings.SafetyCheck.Start">
@@ -29223,7 +29959,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Shelf_ShutDown">
-  <owner>sherrilin@google.com</owner>
+  <owner>antrim@google.com</owner>
   <owner>cros-lurs@google.com</owner>
   <description>User shut down from the shelf shutdown button.</description>
 </action>
@@ -29269,6 +30005,11 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="ShowAsTab">
+  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="ShowAudioSettingsPage">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -30357,6 +31098,15 @@ should be able to be added at any place in this file.
   <description>
     Recorded when a user signs in again from the force sign in auth error
     warning modal dialog.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromForYouFre">
+  <owner>dgn@chromium.org</owner>
+  <owner>chrome-signin-team@chromium.org</owner>
+  <description>
+    Recorded when a user taps in the sign-in promo in the Desktop First Run
+    Experience
   </description>
 </action>
 
@@ -33016,12 +33766,27 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
-<action name="Suggestions.Tile.Tapped.StartSurface">
+<action name="Suggestions.Tile.Tapped.NewTabPage">
   <owner>hanxi@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
   <owner>clank-start@google.com</owner>
   <description>
-    User tapped on a suggestions tile while viewing the start surface.
-    Android-only.
+    User tapped on a suggestions tile while viewing the new tab page. This is
+    recorded when 1) user clicks on most visited tiles; 2) long press on most
+    visited tiles to open in a new incognito tab. This is consistent with
+    Suggestions.Tile.Tapped.StartSurface on Start Surface. Android-only.
+  </description>
+</action>
+
+<action name="Suggestions.Tile.Tapped.StartSurface">
+  <owner>hanxi@chromium.org</owner>
+  <owner>xinyiji@chromium.org</owner>
+  <owner>clank-start@google.com</owner>
+  <description>
+    User tapped on a suggestions tile while viewing the start surface. This is
+    recorded when 1) user clicks on most visited tiles; 2) long press on most
+    visited tiles to open in a new incognito tab. This is consistent with
+    Suggestions.Tile.Tapped.NewTabPage on NTP. Android-only.
   </description>
 </action>
 
@@ -33292,14 +34057,26 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SystemBack">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>lazzzis@google.com</owner>
+  <description>
+    The user triggered system back **after** Native is initialized. This action
+    is mutually exclusive with SystemBackBeforeNativeInitialized. Android only.
+  </description>
+</action>
+
+<action name="SystemBackBeforeNativeInitialized">
+  <owner>lazzzis@google.com</owner>
+  <description>
+    The user triggered system back **before** Native is initialized. This action
+    is mutually exclusive with SystemBack. Android only.
+  </description>
 </action>
 
 <action name="SystemBackBeforeUINativeInitialized">
   <owner>lazzzis@google.com</owner>
   <description>
-    The user triggered system back before UI with Native is initialized.
+    The user triggered system back **before UI** with Native is initialized.
+    Recorded on Android only.
   </description>
 </action>
 
@@ -33312,6 +34089,14 @@ should be able to be added at any place in this file.
   <description>
     The user navigated backward in the tab's history using the system back
     button.
+  </description>
+</action>
+
+<action name="SystemBackOnActivityFinishingOrDestroyed">
+  <owner>lazzzis@google.com</owner>
+  <description>
+    The user triggered system back when activity is finishing or has been
+    destroyed. Android only.
   </description>
 </action>
 
@@ -33463,7 +34248,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabContextMenu_NewTabInGroup">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User added a tab to an existing group by choosing 'Add to existing group'
@@ -33661,7 +34446,7 @@ should be able to be added at any place in this file.
   <obsolete>
     This action no longer occurs as of 11/2022. Tab groups can always collapse.
   </obsolete>
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User clicked on the tab group header of the last expanded tab group. This
@@ -33670,13 +34455,13 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_SwitchGroupedTab">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>User switched to a tab that belongs in a group.</description>
 </action>
 
 <action name="TabGroups_TabGroupBubble_CloseGroup">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User closed a group by choosing 'Close group' from the tab group editor
@@ -33685,7 +34470,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupBubble_ColorChanged">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User changed the color of a group through the color picker in the tab group
@@ -33694,7 +34479,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupBubble_GroupSaved">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User saved an existing tab group by switching the toggle to the right next
@@ -33703,7 +34488,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupBubble_GroupUnsaved">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User unsaved an existing tab group by switching the toggle to the left next
@@ -33712,7 +34497,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupBubble_NameChanged">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User changed the name of a group through the editor bubble.
@@ -33720,7 +34505,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupBubble_NewTabInGroup">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User added a new tab to an existing group by choosing 'New tab in group'
@@ -33729,7 +34514,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupBubble_SendFeedback">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User opened the feedback app by choosing 'Send feedback' from the tab group
@@ -33738,7 +34523,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupBubble_Ungroup">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User removed all tabs in a group from that group by choosing 'Ungroup' from
@@ -33747,7 +34532,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupHeader_Collapsed">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User clicked on the tab group header of an expanded tab group to collapse
@@ -33756,7 +34541,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabGroups_TabGroupHeader_Expanded">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <owner>chrome-desktop-ui-sea@google.com</owner>
   <description>
     User clicked on the tab group header of a collapsed tab group to expand the
@@ -34006,12 +34791,14 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="TabStrip">
+  <obsolete>The feature was deprecated and code deleted.</obsolete>
   <owner>yusufo@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <description>User actions about conditional tab strip.</description>
 </action>
 
 <action name="TabStrip.SessionVisibility">
+  <obsolete>The feature was deprecated and code deleted.</obsolete>
   <owner>yusufo@chromium.org</owner>
   <owner>wychen@chromium.org</owner>
   <description>
@@ -35646,7 +36433,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="WrenchMenu_OpenRecentGroup">
-  <owner>connily@chromium.org</owner>
+  <owner>dpenning@chromium.org</owner>
   <description>App Menu: Recently Closed: Open a recent group.</description>
 </action>
 
@@ -35852,6 +36639,8 @@ should be able to be added at any place in this file.
   <suffix name="GMCCastStartStop" label="For GMCCastStartStop feature."/>
   <suffix name="GMCCastStartStopFeature"
       label="For Global Media Controls Cast start and stop feature."/>
+  <suffix name="GoogleOneOfferNotification"
+      label="For google one offer notification feature."/>
   <suffix name="HighEfficiencyInfoMode"
       label="For HighEfficiencyInfoMode feature."/>
   <suffix name="HighEfficiencyModeFeature"
@@ -35864,6 +36653,12 @@ should be able to be added at any place in this file.
   <suffix name="IntentChip"
       label="In product help for opening a webpage in an app using the intent
              chip."/>
+  <suffix name="iOSDefaultBrowserBadgeEligibility"
+      label="For iOSDefaultBrowserBadgeEligibility feature"/>
+  <suffix name="iOSDefaultBrowserOverflowMenuBadge"
+      label="For iOSDefaultBrowserOverflowMenuBadge feature"/>
+  <suffix name="iOSDefaultBrowserSettingsBadge"
+      label="For iOSDefaultBrowserSettingsBadge feature"/>
   <suffix name="KeyboardAccessoryAddressFilling"
       label="For KeyboardAccessoryAddressFilling feature."/>
   <suffix name="KeyboardAccessoryBarSwiping"
@@ -35890,6 +36685,7 @@ should be able to be added at any place in this file.
       label="For the overflow menu help tip on iOS."/>
   <suffix name="PageInfo" label="In product help for opening PageInfo."/>
   <suffix name="PageInfoStoreInfo" label="For PageInfoStoreInfo feature."/>
+  <suffix name="PageZoom" label="For Page Zoom feature."/>
   <suffix name="PasswordsAccountStorage"
       label="For PasswordsAccountStorage feature."/>
   <suffix name="PasswordSuggestions" label="For PasswordSuggestions feature."/>
@@ -35928,6 +36724,10 @@ should be able to be added at any place in this file.
       label="For the RequestDesktopSiteAppMenu feature."/>
   <suffix name="RequestDesktopSiteDefaultOn"
       label="For the RequestDesktopSiteDefaultOn feature."/>
+  <suffix name="RequestDesktopSiteExceptionsGeneric"
+      label="For the RequestDesktopSiteExceptionsGeneric feature."/>
+  <suffix name="RequestDesktopSiteExceptionsSpecific"
+      label="For the RequestDesktopSiteExceptionsSpecific feature."/>
   <suffix name="RequestDesktopSiteOptIn"
       label="For the RequestDesktopSiteOptIn feature."/>
   <suffix name="SharedHighlightingBuilder"
@@ -36260,6 +37060,12 @@ should be able to be added at any place in this file.
       label="Users opened TabSelectionEditorV2 from the Tab Dialog."/>
   <suffix name="OpenFromGrid"
       label="Users opened TabSelectionEditorV2 from the Tab Switcher."/>
+  <suffix name="OpenLongPressInDialog"
+      label="Users enacted a longpress action from the Tab Dialog to enter
+             TabSelectionEditorV2."/>
+  <suffix name="OpenLongPressInGrid"
+      label="Users enacted a longpress action from the Tab Switcher to enter
+             TabSelectionEditorV2."/>
   <suffix name="SelectAll"
       label="Users tapped on the select all button in TabSelectionEditorV2."/>
   <suffix name="SharedTabAsTextList"

@@ -1865,9 +1865,8 @@ CommandHandler.COMMANDS_['default-task'] = new (class extends FilesCommand {
 
   /** @override */
   canExecute(event, fileManager) {
-    const canExecute = fileManager.taskController.canExecuteDefaultTask();
-    event.canExecute = canExecute;
-    event.command.setHidden(!canExecute);
+    event.canExecute = fileManager.taskController.canExecuteDefaultTask();
+    event.command.setHidden(fileManager.taskController.shouldHideDefaultTask());
   }
 })();
 
@@ -1897,8 +1896,11 @@ CommandHandler.COMMANDS_['invoke-sharesheet'] =
       execute(event, fileManager) {
         const entries = fileManager.selectionHandler.selection.entries;
         const launchSource = CommandUtil.getSharesheetLaunchSource(event);
+        const dlpSourceUrls =
+            fileManager.metadataModel.getCache(entries, ['sourceUrl'])
+                .map(m => m.sourceUrl || '');
         chrome.fileManagerPrivate.invokeSharesheet(
-            entries, launchSource, () => {
+            entries, launchSource, dlpSourceUrls, () => {
               if (chrome.runtime.lastError) {
                 console.warn(chrome.runtime.lastError.message);
                 return;
@@ -1927,15 +1929,16 @@ CommandHandler.COMMANDS_['invoke-sharesheet'] =
         event.command.disabled = !fileManager.ui.actionbar.contains(
             /** @type {Node} */ (event.target));
 
-        chrome.fileManagerPrivate.sharesheetHasTargets(entries, hasTargets => {
-          if (chrome.runtime.lastError) {
-            console.warn(chrome.runtime.lastError.message);
-            return;
-          }
-          event.command.setHidden(!hasTargets);
-          event.canExecute = hasTargets;
-          event.command.disabled = !hasTargets;
-        });
+        chrome.fileManagerPrivate.sharesheetHasTargets(
+            entries.map(e => util.unwrapEntry(e)), hasTargets => {
+              if (chrome.runtime.lastError) {
+                console.warn(chrome.runtime.lastError.message);
+                return;
+              }
+              event.command.setHidden(!hasTargets);
+              event.canExecute = hasTargets;
+              event.command.disabled = !hasTargets;
+            });
       }
     })();
 

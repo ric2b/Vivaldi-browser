@@ -4,11 +4,12 @@
 
 #include "content/browser/child_process_launcher_helper.h"
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
+#include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/lazy_thread_pool_task_runner.h"
 #include "base/task/sequenced_task_runner.h"
@@ -22,6 +23,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "content/browser/android/launcher_thread.h"
@@ -53,7 +55,7 @@ ChildProcessLauncherHelper::Process::~Process() = default;
 
 ChildProcessLauncherHelper::Process::Process(Process&& other)
     : process(std::move(other.process))
-#if BUILDFLAG(USE_ZYGOTE_HANDLE)
+#if BUILDFLAG(USE_ZYGOTE)
       ,
       zygote(other.zygote)
 #endif
@@ -103,14 +105,6 @@ void ChildProcessLauncherHelper::StartLaunchOnClientThread() {
 
   BeforeLaunchOnClientThread();
 
-#if BUILDFLAG(IS_FUCHSIA)
-  mojo_channel_.emplace();
-#else   // BUILDFLAG(IS_FUCHSIA)
-  mojo_named_channel_ = CreateNamedPlatformChannelOnClientThread();
-  if (!mojo_named_channel_)
-    mojo_channel_.emplace();
-#endif  //  BUILDFLAG(IS_FUCHSIA)
-
   GetProcessLauncherTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&ChildProcessLauncherHelper::LaunchOnLauncherThread,
@@ -120,11 +114,20 @@ void ChildProcessLauncherHelper::StartLaunchOnClientThread() {
 void ChildProcessLauncherHelper::LaunchOnLauncherThread() {
   DCHECK(CurrentlyOnProcessLauncherTaskRunner());
 
+#if BUILDFLAG(IS_FUCHSIA)
+  mojo_channel_.emplace();
+#else   // BUILDFLAG(IS_FUCHSIA)
+  mojo_named_channel_ = CreateNamedPlatformChannelOnLauncherThread();
+  if (!mojo_named_channel_) {
+    mojo_channel_.emplace();
+  }
+#endif  //  BUILDFLAG(IS_FUCHSIA)
+
   begin_launch_time_ = base::TimeTicks::Now();
   if (GetProcessType() == switches::kRendererProcess &&
       base::TimeTicks::IsConsistentAcrossProcesses()) {
     const base::TimeDelta ticks_as_delta = begin_launch_time_.since_origin();
-    command_line_->AppendSwitchASCII(
+    command_line()->AppendSwitchASCII(
         switches::kRendererProcessLaunchTimeTicks,
         base::NumberToString(ticks_as_delta.InMicroseconds()));
   }
@@ -133,19 +136,27 @@ void ChildProcessLauncherHelper::LaunchOnLauncherThread() {
 
   bool is_synchronous_launch = true;
   int launch_result = LAUNCH_RESULT_FAILURE;
-  base::LaunchOptions options;
+  absl::optional<base::LaunchOptions> options;
+  base::LaunchOptions* options_ptr = nullptr;
+  if (IsUsingLaunchOptions()) {
+    options.emplace();
+    options_ptr = &*options;
+  }
 
   Process process;
-  if (BeforeLaunchOnLauncherThread(*files_to_register, &options)) {
+  if (BeforeLaunchOnLauncherThread(*files_to_register, options_ptr)) {
+// TODO(crbug.com/1412835): iOS is single process mode for now.
+#if !BUILDFLAG(IS_IOS)
     base::FieldTrialList::PopulateLaunchOptionsWithFieldTrialState(
-        command_line(), &options);
+        command_line(), options_ptr);
+#endif
     process =
-        LaunchProcessOnLauncherThread(options, std::move(files_to_register),
+        LaunchProcessOnLauncherThread(options_ptr, std::move(files_to_register),
 #if BUILDFLAG(IS_ANDROID)
                                       can_use_warm_up_connection_,
 #endif
                                       &is_synchronous_launch, &launch_result);
-    AfterLaunchOnLauncherThread(process, options);
+    AfterLaunchOnLauncherThread(process, options_ptr);
   }
 
   if (is_synchronous_launch) {

@@ -73,8 +73,9 @@ class WebKioskAppDataTest : public InProcessBrowserTest,
                             public KioskAppDataDelegate {
  public:
   void WaitForAppDataChange(int count) {
-    if (change_count_ >= count)
+    if (change_count_ >= count) {
       return;
+    }
     waited_count_ = count;
     waiter_ = std::make_unique<base::RunLoop>();
     waiter_->Run();
@@ -82,17 +83,18 @@ class WebKioskAppDataTest : public InProcessBrowserTest,
 
   void SetCached(bool installed, bool icon_valid = true) {
     const std::string app_key = std::string(kAppKey) + '.' + kAppId;
-    auto app_dict = std::make_unique<base::DictionaryValue>();
+    base::Value::Dict app_dict;
 
-    app_dict->SetStringPath(app_key + '.' + std::string(kTitleKey), kAppTitle);
-    app_dict->SetStringPath(app_key + '.' + std::string(kIconKey),
-                            GetFullPathToImage(icon_valid).value());
+    app_dict.SetByDottedPath(app_key + '.' + std::string(kTitleKey), kAppTitle);
+    app_dict.SetByDottedPath(app_key + '.' + std::string(kIconKey),
+                             GetFullPathToImage(icon_valid).value());
     if (installed) {
-      app_dict->SetStringPath(app_key + '.' + std::string(kLaunchUrlKey),
-                              kLaunchUrl);
+      app_dict.SetByDottedPath(app_key + '.' + std::string(kLaunchUrlKey),
+                               kLaunchUrl);
     }
     g_browser_process->local_state()->Set(
-        WebKioskAppManager::kWebKioskDictionaryName, *app_dict);
+        WebKioskAppManager::kWebKioskDictionaryName,
+        base::Value(std::move(app_dict)));
   }
 
  private:
@@ -107,8 +109,9 @@ class WebKioskAppDataTest : public InProcessBrowserTest,
 
   void OnKioskAppDataChanged(const std::string& app_id) override {
     change_count_++;
-    if (change_count_ >= waited_count_ && waiter_)
+    if (change_count_ >= waited_count_ && waiter_) {
       waiter_->Quit();
+    }
   }
 
   void OnKioskAppDataLoadFailure(const std::string& app_id) override {}

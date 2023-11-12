@@ -10,19 +10,23 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/timer/elapsed_timer.h"
+#include "chrome/browser/ash/crosapi/browser_data_migrator_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/common/chrome_constants.h"
@@ -41,10 +45,27 @@ namespace {
 const char kBrowserDataBackwardMigrationForceSkip[] = "force-skip";
 const char kBrowserDataBackwardMigrationForceMigration[] = "force-migration";
 
+base::RepeatingClosure* g_back_migrator_attempt_restart_for_testing = nullptr;
+
 // We set a generous recursion depth, that should never be reached, but this
 // way we protect against file system loops.
 const unsigned int kMaxRecursionDepth = 2000;
 }  // namespace
+
+ScopedBackMigratorRestartAttemptForTesting::
+    ScopedBackMigratorRestartAttemptForTesting(
+        base::RepeatingClosure callback) {
+  DCHECK(!g_back_migrator_attempt_restart_for_testing);
+  g_back_migrator_attempt_restart_for_testing =
+      new base::RepeatingClosure(std::move(callback));
+}
+
+ScopedBackMigratorRestartAttemptForTesting::
+    ~ScopedBackMigratorRestartAttemptForTesting() {
+  DCHECK(g_back_migrator_attempt_restart_for_testing);
+  delete g_back_migrator_attempt_restart_for_testing;
+  g_back_migrator_attempt_restart_for_testing = nullptr;
+}
 
 BrowserDataBackMigrator::BrowserDataBackMigrator(
     const base::FilePath& ash_profile_dir,
@@ -56,6 +77,16 @@ BrowserDataBackMigrator::BrowserDataBackMigrator(
 
 BrowserDataBackMigrator::~BrowserDataBackMigrator() = default;
 
+// static
+void BrowserDataBackMigrator::AttemptRestart() {
+  if (g_back_migrator_attempt_restart_for_testing) {
+    g_back_migrator_attempt_restart_for_testing->Run();
+    return;
+  }
+
+  chrome::AttemptRestart();
+}
+
 void BrowserDataBackMigrator::Migrate(
     BackMigrationProgressCallback progress_callback,
     BackMigrationFinishedCallback finished_callback) {
@@ -66,6 +97,7 @@ void BrowserDataBackMigrator::Migrate(
       crosapi::browser_util::PolicyInitState::kBeforeInit));
 
   running_ = true;
+  migration_start_time_ = base::TimeTicks::Now();
 
   const base::FilePath lacros_profile_dir =
       ash_profile_dir_.Append(browser_data_migrator_util::kLacrosDir);
@@ -98,6 +130,7 @@ BrowserDataBackMigrator::PreMigrationCleanUp(
     const base::FilePath& ash_profile_dir,
     const base::FilePath& lacros_profile_dir) {
   LOG(WARNING) << "Running PreMigrationCleanUp()";
+  base::ElapsedTimer timer;
 
   const base::FilePath tmp_profile_dir =
       ash_profile_dir.Append(browser_data_back_migrator::kTmpDir);
@@ -138,6 +171,8 @@ BrowserDataBackMigrator::PreMigrationCleanUp(
     }
   }
 
+  base::UmaHistogramMediumTimes(kPreMigrationCleanUpTimeUMA, timer.Elapsed());
+
   return {TaskStatus::kSucceeded};
 }
 
@@ -145,7 +180,7 @@ void BrowserDataBackMigrator::OnPreMigrationCleanUp(
     BrowserDataBackMigrator::TaskResult result) {
   if (result.status != TaskStatus::kSucceeded) {
     LOG(ERROR) << "PreMigrationCleanup() failed.";
-    std::move(finished_callback_).Run(ToResult(result));
+    InvokeCallback(result);
     return;
   }
 
@@ -164,6 +199,7 @@ void BrowserDataBackMigrator::OnPreMigrationCleanUp(
 BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::MergeSplitItems(
     const base::FilePath& ash_profile_dir) {
   LOG(WARNING) << "Running MergeSplitItems()";
+  base::ElapsedTimer timer;
 
   const base::FilePath tmp_profile_dir =
       ash_profile_dir.Append(browser_data_back_migrator::kTmpDir);
@@ -278,6 +314,8 @@ BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::MergeSplitItems(
     return {TaskStatus::kMergeSplitItemsMergeSyncDataFailed};
   }
 
+  base::UmaHistogramMediumTimes(kMergeSplitItemsTimeUMA, timer.Elapsed());
+
   return {TaskStatus::kSucceeded};
 }
 
@@ -285,7 +323,7 @@ void BrowserDataBackMigrator::OnMergeSplitItems(
     BrowserDataBackMigrator::TaskResult result) {
   if (result.status != TaskStatus::kSucceeded) {
     LOG(ERROR) << "MergeSplitItems() failed.";
-    std::move(finished_callback_).Run(ToResult(result));
+    InvokeCallback(result);
     return;
   }
 
@@ -304,6 +342,7 @@ void BrowserDataBackMigrator::OnMergeSplitItems(
 BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::DeleteAshItems(
     const base::FilePath& ash_profile_dir) {
   LOG(WARNING) << "Running DeleteAshItems()";
+  base::ElapsedTimer timer;
 
   // For extensions that exist in both Ash and Lacros, take the Lacros version
   // and delete the Ash version.
@@ -325,7 +364,7 @@ BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::DeleteAshItems(
     // persmissions of the directories created in `MoveMergedItemsBackToAsh`.
     int permissions;
     if (base::GetPosixFilePermissions(item.path, &permissions)) {
-      VLOG(1) << "Deleting " << item.path.value() << " with permissions "
+      VLOG(5) << "Deleting " << item.path.value() << " with permissions "
               << permissions;
     }
 
@@ -335,62 +374,73 @@ BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::DeleteAshItems(
     }
   }
 
+  base::UmaHistogramMediumTimes(kDeleteAshItemsTimeUMA, timer.Elapsed());
+
   return {TaskStatus::kSucceeded};
 }
 
 void BrowserDataBackMigrator::OnDeleteAshItems(TaskResult result) {
   if (result.status != TaskStatus::kSucceeded) {
     LOG(ERROR) << "DeleteAshItems() failed.";
-    std::move(finished_callback_).Run(ToResult(result));
+    InvokeCallback(result);
     return;
   }
 
-  SetProgress(MigrationStep::kMoveLacrosItemsToTmpDir);
+  SetProgress(MigrationStep::kMoveLacrosItemsToAshDir);
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::BLOCK_SHUTDOWN},
-      base::BindOnce(&BrowserDataBackMigrator::MoveLacrosItemsToTmpDir,
+      base::BindOnce(&BrowserDataBackMigrator::MoveLacrosItemsToAshDir,
                      ash_profile_dir_),
-      base::BindOnce(&BrowserDataBackMigrator::OnMoveLacrosItemsToTmpDir,
+      base::BindOnce(&BrowserDataBackMigrator::OnMoveLacrosItemsToAshDir,
                      weak_factory_.GetWeakPtr()));
 }
 
 // static
 BrowserDataBackMigrator::TaskResult
-BrowserDataBackMigrator::MoveLacrosItemsToTmpDir(
+BrowserDataBackMigrator::MoveLacrosItemsToAshDir(
     const base::FilePath& ash_profile_dir) {
-  LOG(WARNING) << "Running MoveLacrosItemsToTmpDir()";
+  LOG(WARNING) << "Running MoveLacrosItemsToAshDir()";
+  base::ElapsedTimer timer;
 
   const base::FilePath lacros_profile_dir =
       ash_profile_dir.Append(browser_data_migrator_util::kLacrosDir)
           .Append(browser_data_migrator_util::kLacrosProfilePath);
-
-  const base::FilePath tmp_profile_dir =
-      ash_profile_dir.Append(browser_data_back_migrator::kTmpDir);
 
   browser_data_migrator_util::TargetItems lacros_items =
       browser_data_migrator_util::GetTargetItems(
           lacros_profile_dir, browser_data_migrator_util::ItemType::kLacros);
 
   for (const auto& item : lacros_items.items) {
-    // The corresponding items in Ash will be deleted in `DeleteAshItems` before
-    // they are overwritten by the Lacros items from the tmp directory.
-    if (!base::Move(item.path, tmp_profile_dir.Append(item.path.BaseName()))) {
+    // The corresponding items in Ash are deleted in `DeleteAshItems` before
+    // they are overwritten by the Lacros items here.
+    const base::FilePath destination_path =
+        ash_profile_dir.Append(item.path.BaseName());
+
+    if (base::PathExists(destination_path)) {
+      PLOG(ERROR) << "Path " << destination_path << " already exists.";
+      return {TaskStatus::kMoveLacrosItemsToAshDirFailed, errno};
+    }
+
+    if (!base::Move(item.path, destination_path)) {
       PLOG(ERROR) << "Failed to move item " << item.path.value() << " to "
-                  << tmp_profile_dir.Append(item.path.BaseName()) << ": ";
-      return {TaskStatus::kMoveLacrosItemsToTmpDirMoveFailed, errno};
+                  << destination_path << ": ";
+      return {TaskStatus::kMoveLacrosItemsToAshDirFailed, errno};
     }
   }
+
+  base::UmaHistogramMediumTimes(kMoveLacrosItemsToAshDirTimeUMA,
+                                timer.Elapsed());
 
   return {TaskStatus::kSucceeded};
 }
 
-void BrowserDataBackMigrator::OnMoveLacrosItemsToTmpDir(
+void BrowserDataBackMigrator::OnMoveLacrosItemsToAshDir(
     BrowserDataBackMigrator::TaskResult result) {
   if (result.status != TaskStatus::kSucceeded) {
-    LOG(ERROR) << "MoveLacrosItemsToTmpDir() failed.";
-    std::move(finished_callback_).Run(ToResult(result));
+    LOG(ERROR) << "MoveLacrosItemsToAshDir() failed.";
+    InvokeCallback(result);
     return;
   }
 
@@ -410,6 +460,7 @@ BrowserDataBackMigrator::TaskResult
 BrowserDataBackMigrator::MoveMergedItemsBackToAsh(
     const base::FilePath& ash_profile_dir) {
   LOG(WARNING) << "Running MoveMergedItemsBackToAsh()";
+  base::ElapsedTimer timer;
 
   const base::FilePath tmp_profile_dir =
       ash_profile_dir.Append(browser_data_back_migrator::kTmpDir);
@@ -420,6 +471,9 @@ BrowserDataBackMigrator::MoveMergedItemsBackToAsh(
     return {TaskStatus::kMoveMergedItemsBackToAshMoveFileFailed, errno};
   }
 
+  base::UmaHistogramMediumTimes(kMoveMergedItemsBackToAshTimeUMA,
+                                timer.Elapsed());
+
   return {TaskStatus::kSucceeded};
 }
 
@@ -428,9 +482,9 @@ bool BrowserDataBackMigrator::MoveFilesToAshDirectory(
     const base::FilePath& source_dir,
     const base::FilePath& dest_dir,
     unsigned int recursion_depth) {
-  LOG(WARNING) << "Calling MoveFilesToAshDirectory from " << source_dir.value()
-               << " to " << dest_dir.value() << " at recursion depth "
-               << recursion_depth;
+  VLOG(5) << "Calling MoveFilesToAshDirectory from " << source_dir.value()
+          << " to " << dest_dir.value() << " at recursion depth "
+          << recursion_depth;
 
   if (recursion_depth >= kMaxRecursionDepth) {
     LOG(WARNING) << "We have reached maximum recursion depth "
@@ -466,7 +520,7 @@ bool BrowserDataBackMigrator::MoveFilesToAshDirectory(
         // the persmissions of the directories deleted in `DeleteAshItems`.
         int permissions;
         if (base::GetPosixFilePermissions(new_dest_dir, &permissions)) {
-          VLOG(1) << "Created " << new_dest_dir << " with permissions "
+          VLOG(5) << "Created " << new_dest_dir << " with permissions "
                   << permissions;
         }
       }
@@ -489,7 +543,7 @@ void BrowserDataBackMigrator::OnMoveMergedItemsBackToAsh(
     BrowserDataBackMigrator::TaskResult result) {
   if (result.status != TaskStatus::kSucceeded) {
     LOG(ERROR) << "MoveMergedItemsBackToAsh() failed.";
-    std::move(finished_callback_).Run(ToResult(result));
+    InvokeCallback(result);
     return;
   }
 
@@ -508,6 +562,7 @@ void BrowserDataBackMigrator::OnMoveMergedItemsBackToAsh(
 BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::DeleteLacrosDir(
     const base::FilePath& ash_profile_dir) {
   LOG(WARNING) << "Running DeleteLacrosDir()";
+  base::ElapsedTimer timer;
 
   const base::FilePath lacros_profile_dir =
       ash_profile_dir.Append(browser_data_migrator_util::kLacrosDir);
@@ -519,6 +574,8 @@ BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::DeleteLacrosDir(
     }
   }
 
+  base::UmaHistogramMediumTimes(kDeleteLacrosDirTimeUMA, timer.Elapsed());
+
   return {TaskStatus::kSucceeded};
 }
 
@@ -526,7 +583,7 @@ void BrowserDataBackMigrator::OnDeleteLacrosDir(
     BrowserDataBackMigrator::TaskResult result) {
   if (result.status != TaskStatus::kSucceeded) {
     LOG(ERROR) << "DeleteLacrosDir() failed.";
-    std::move(finished_callback_).Run(ToResult(result));
+    InvokeCallback(result);
     return;
   }
 
@@ -544,6 +601,7 @@ void BrowserDataBackMigrator::OnDeleteLacrosDir(
 BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::DeleteTmpDir(
     const base::FilePath& ash_profile_dir) {
   LOG(WARNING) << "Running DeleteTmpDir()";
+  base::ElapsedTimer timer;
 
   const base::FilePath tmp_user_dir =
       ash_profile_dir.Append(browser_data_back_migrator::kTmpDir);
@@ -554,6 +612,8 @@ BrowserDataBackMigrator::TaskResult BrowserDataBackMigrator::DeleteTmpDir(
     }
   }
 
+  base::UmaHistogramMediumTimes(kDeleteTmpDirTimeUMA, timer.Elapsed());
+
   return {TaskStatus::kSucceeded};
 }
 
@@ -561,7 +621,7 @@ void BrowserDataBackMigrator::OnDeleteTmpDir(
     BrowserDataBackMigrator::TaskResult result) {
   if (result.status != TaskStatus::kSucceeded) {
     LOG(ERROR) << "DeleteTmpDir() failed.";
-    std::move(finished_callback_).Run(ToResult(result));
+    InvokeCallback(result);
     return;
   }
 
@@ -588,7 +648,7 @@ BrowserDataBackMigrator::MarkMigrationComplete() {
 void BrowserDataBackMigrator::OnMarkMigrationComplete() {
   LOG(WARNING) << "Backward migration completed successfully.";
   SetProgress(MigrationStep::kDone);
-  std::move(finished_callback_).Run(ToResult({TaskStatus::kSucceeded}));
+  InvokeCallback({TaskStatus::kSucceeded});
 }
 
 // static
@@ -754,14 +814,8 @@ bool BrowserDataBackMigrator::MergePreferences(
     return false;
   }
 
-  // For preferences that were moved to Lacros, and deleted in Ash, copy them
-  // back to Ash.
-  for (const char* key :
-       browser_data_migrator_util::kLacrosOnlyPreferencesKeys) {
-    base::Value* lacros_value = lacros_root_dict->FindByDottedPath(key);
-    if (lacros_value)
-      ash_root_dict->SetByDottedPath(key, lacros_value->Clone());
-  }
+  std::string current_path;
+  MergeLacrosPreferences(*ash_root_dict, current_path, lacros_root.value(), 0u);
 
   // Preferences that were split between Ash and Lacros relate to extensions.
   // Here we need to take the preferences from Lacros that were removed from
@@ -817,6 +871,56 @@ bool BrowserDataBackMigrator::MergePreferences(
     PLOG(ERROR) << "Failure while writing Preferences JSON to "
                 << tmp_pref_path.value();
     return false;
+  }
+
+  return true;
+}
+
+// static
+bool BrowserDataBackMigrator::MergeLacrosPreferences(
+    base::Value::Dict& ash_root_dict,
+    std::string& current_dotted_path,
+    const base::Value& current_value,
+    unsigned int recursion_depth) {
+  if (recursion_depth >= kMaxRecursionDepth) {
+    LOG(WARNING) << "We have reached maximum recursion depth "
+                 << kMaxRecursionDepth
+                 << " and we are stopping MergeLacrosPreferences()";
+    return false;
+  }
+
+  // If the |current_dotted_path| was split or ash-only, then ignore it.
+  if (base::Contains(browser_data_migrator_util::kSplitPreferencesKeys,
+                     current_dotted_path) ||
+      base::Contains(browser_data_migrator_util::kAshOnlyPreferencesKeys,
+                     current_dotted_path)) {
+    return true;
+  }
+
+  // If current value is not a dictionary, then it is a final pref.
+  // Merge it into the |ash_root_dict|.
+  if (!current_value.is_dict()) {
+    ash_root_dict.SetByDottedPath(current_dotted_path, current_value.Clone());
+
+    return true;
+  }
+  // Otherwise, traverse all child elements of the current dictionary.
+  for (const auto child_entry : current_value.GetDict()) {
+    const std::string& child_entry_key = child_entry.first;
+    const base::Value* child_entry_value = &child_entry.second;
+
+    std::string child_dotted_path;
+    // Can be empty if it is a root dictionary.
+    if (current_dotted_path.empty()) {
+      child_dotted_path = child_entry_key;
+    } else {
+      child_dotted_path = current_dotted_path + "." + child_entry_key;
+    }
+
+    if (!MergeLacrosPreferences(ash_root_dict, child_dotted_path,
+                                *child_entry_value, recursion_depth + 1u)) {
+      return false;
+    }
   }
 
   return true;
@@ -993,16 +1097,14 @@ bool BrowserDataBackMigrator::MergeSyncDataLevelDB(
         ash_db->NewIterator(leveldb::ReadOptions()));
     for (it->SeekToFirst(); it->Valid(); it->Next()) {
       const std::string key = it->key().ToString();
-      std::string value;
-      status = ash_db->Get(leveldb::ReadOptions(), key, &value);
-      if (!status.ok()) {
-        PLOG(ERROR) << "Failure while reading from Ash Sync Data LevelDB: "
-                    << ash_db_path;
-        return false;
-      }
-
+      const std::string value = it->value().ToString();
       if (browser_data_migrator_util::IsAshOnlySyncDataType(key))
         ash_write_batch.Put(key, value);
+    }
+    if (!it->status().ok()) {
+      PLOG(ERROR) << "Failure while reading from Ash Sync Data LevelDB: "
+                  << ash_db_path;
+      return false;
     }
   }
 
@@ -1013,17 +1115,14 @@ bool BrowserDataBackMigrator::MergeSyncDataLevelDB(
         lacros_db->NewIterator(leveldb::ReadOptions()));
     for (it->SeekToFirst(); it->Valid(); it->Next()) {
       const std::string key = it->key().ToString();
-      std::string value;
-
-      status = lacros_db->Get(leveldb::ReadOptions(), key, &value);
-      if (!status.ok()) {
-        PLOG(ERROR) << "Failure while reading from Lacros Sync Data LevelDB: "
-                    << lacros_db_path;
-        return false;
-      }
-
+      const std::string value = it->value().ToString();
       if (!browser_data_migrator_util::IsAshOnlySyncDataType(key))
         lacros_write_batch.Put(key, value);
+    }
+    if (!it->status().ok()) {
+      PLOG(ERROR) << "Failure while reading from Lacros Sync Data LevelDB: "
+                  << lacros_db_path;
+      return false;
     }
   }
 
@@ -1050,33 +1149,6 @@ bool BrowserDataBackMigrator::MergeSyncDataLevelDB(
 }
 
 // static
-BrowserDataBackMigrator::Result BrowserDataBackMigrator::ToResult(
-    TaskResult result) {
-  switch (result.status) {
-    case TaskStatus::kSucceeded:
-      return Result::kSucceeded;
-    case TaskStatus::kPreMigrationCleanUpDeleteTmpDirFailed:
-    case TaskStatus::kMergeSplitItemsCreateTmpDirFailed:
-    case TaskStatus::kMergeSplitItemsCopyExtensionsFailed:
-    case TaskStatus::kMergeSplitItemsCopyExtensionStorageFailed:
-    case TaskStatus::kMergeSplitItemsCreateDirFailed:
-    case TaskStatus::kMergeSplitItemsMergeIndexedDBFailed:
-    case TaskStatus::kMergeSplitItemsMergePrefsFailed:
-    case TaskStatus::kMergeSplitItemsMergeLocalStorageLevelDBFailed:
-    case TaskStatus::kMergeSplitItemsMergeStateStoreLevelDBFailed:
-    case TaskStatus::kMergeSplitItemsMergeSyncDataFailed:
-    case TaskStatus::kDeleteAshItemsDeleteExtensionsFailed:
-    case TaskStatus::kDeleteAshItemsDeleteLacrosItemFailed:
-    case TaskStatus::kDeleteLacrosDirDeleteFailed:
-    case TaskStatus::kDeleteTmpDirDeleteFailed:
-    case TaskStatus::kMoveLacrosItemsToTmpDirMoveFailed:
-    case TaskStatus::kMoveMergedItemsBackToAshCopyDirectoryFailed:
-    case TaskStatus::kMoveMergedItemsBackToAshMoveFileFailed:
-      return Result::kFailed;
-  }
-}
-
-// static
 bool BrowserDataBackMigrator::IsBackMigrationForceEnabled() {
   const std::string force_migration_switch =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -1089,6 +1161,7 @@ bool BrowserDataBackMigrator::IsBackMigrationForceEnabled() {
 bool BrowserDataBackMigrator::IsBackMigrationEnabled(
     crosapi::browser_util::PolicyInitState policy_init_state) {
   if (IsBackMigrationForceEnabled()) {
+    VLOG(1) << "Lacros backward migration is force enabled";
     return true;
   }
 
@@ -1098,6 +1171,7 @@ bool BrowserDataBackMigrator::IsBackMigrationEnabled(
           switches::kForceBrowserDataBackwardMigration);
 
   if (force_migration_switch == kBrowserDataBackwardMigrationForceSkip) {
+    VLOG(1) << "Lacros backward migration is force skipped";
     return false;
   }
 
@@ -1105,10 +1179,17 @@ bool BrowserDataBackMigrator::IsBackMigrationEnabled(
       crosapi::browser_util::LacrosDataBackwardMigrationMode::kNone;
   if (policy_init_state ==
       crosapi::browser_util::PolicyInitState::kBeforeInit) {
-    auto parsed = crosapi::browser_util::ParseLacrosDataBackwardMigrationMode(
-        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+    absl::optional<crosapi::browser_util::LacrosDataBackwardMigrationMode>
+        parsed = absl::nullopt;
+
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             crosapi::browser_util::
-                kLacrosDataBackwardMigrationModePolicySwitch));
+                kLacrosDataBackwardMigrationModePolicySwitch)) {
+      parsed = crosapi::browser_util::ParseLacrosDataBackwardMigrationMode(
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              crosapi::browser_util::
+                  kLacrosDataBackwardMigrationModePolicySwitch));
+    }
 
     migration_mode =
         parsed.has_value()
@@ -1124,17 +1205,23 @@ bool BrowserDataBackMigrator::IsBackMigrationEnabled(
   // Backward migration can be explicitly enabled by using the
   // LacrosDataBackwardMigrationMode policy.
   if (migration_mode ==
-      crosapi::browser_util::LacrosDataBackwardMigrationMode::kKeepAll)
+      crosapi::browser_util::LacrosDataBackwardMigrationMode::kKeepAll) {
+    VLOG(1) << "Lacros backward migration mode is keep_all";
     return true;
+  }
 
   // Modes beside none do not go through backward migration.
   // None is the default, fall back to the feature instead.
   if (migration_mode !=
-      crosapi::browser_util::LacrosDataBackwardMigrationMode::kNone)
+      crosapi::browser_util::LacrosDataBackwardMigrationMode::kNone) {
+    VLOG(1) << "Lacros backward migration mode is not none";
     return false;
+  }
 
-  return base::FeatureList::IsEnabled(
+  bool isFeatureEnabled = base::FeatureList::IsEnabled(
       ash::features::kLacrosProfileBackwardMigration);
+  VLOG(1) << "Lacros backward migration feature flag is " << isFeatureEnabled;
+  return isFeatureEnabled;
 }
 
 // static
@@ -1212,8 +1299,7 @@ bool BrowserDataBackMigrator::RestartToMigrateBack(
     return false;
   }
 
-  // TODO(b/253621578): Add g_attempt_restart helper for testing
-  chrome::AttemptRestart();
+  AttemptRestart();
   return true;
 }
 
@@ -1227,6 +1313,102 @@ bool BrowserDataBackMigrator::MaybeRestartToMigrateBack(
   }
 
   return RestartToMigrateBack(account_id);
+}
+
+// static
+BrowserDataBackMigrator::Result BrowserDataBackMigrator::ToResult(
+    TaskResult result) {
+  switch (result.status) {
+    case TaskStatus::kSucceeded:
+      return Result::kSucceeded;
+    case TaskStatus::kPreMigrationCleanUpDeleteTmpDirFailed:
+    case TaskStatus::kMergeSplitItemsCreateTmpDirFailed:
+    case TaskStatus::kMergeSplitItemsCopyExtensionsFailed:
+    case TaskStatus::kMergeSplitItemsCopyExtensionStorageFailed:
+    case TaskStatus::kMergeSplitItemsCreateDirFailed:
+    case TaskStatus::kMergeSplitItemsMergeIndexedDBFailed:
+    case TaskStatus::kMergeSplitItemsMergePrefsFailed:
+    case TaskStatus::kMergeSplitItemsMergeLocalStorageLevelDBFailed:
+    case TaskStatus::kMergeSplitItemsMergeStateStoreLevelDBFailed:
+    case TaskStatus::kMergeSplitItemsMergeSyncDataFailed:
+    case TaskStatus::kDeleteAshItemsDeleteExtensionsFailed:
+    case TaskStatus::kDeleteAshItemsDeleteLacrosItemFailed:
+    case TaskStatus::kDeleteLacrosDirDeleteFailed:
+    case TaskStatus::kDeleteTmpDirDeleteFailed:
+    case TaskStatus::kMoveLacrosItemsToAshDirFailed:
+    case TaskStatus::kMoveMergedItemsBackToAshCopyDirectoryFailed:
+    case TaskStatus::kMoveMergedItemsBackToAshMoveFileFailed:
+      return Result::kFailed;
+  }
+}
+
+void BrowserDataBackMigrator::InvokeCallback(TaskResult result) {
+  RecordFinalStatus(result);
+  RecordPosixErrnoIfAvailable(result);
+  RecordMigrationTimeIfSuccessful(result, migration_start_time_);
+  std::move(finished_callback_).Run(ToResult(result));
+}
+
+// static
+void BrowserDataBackMigrator::RecordFinalStatus(TaskResult result) {
+  base::UmaHistogramEnumeration(kFinalStatusUMA, result.status);
+}
+
+// static
+void BrowserDataBackMigrator::RecordPosixErrnoIfAvailable(TaskResult result) {
+  if (result.status == TaskStatus::kSucceeded ||
+      !result.posix_errno.has_value()) {
+    return;
+  }
+
+  const int posix_errno = result.posix_errno.value();
+  if (posix_errno == 0) {
+    return;
+  }
+
+  std::string uma_name = kPosixErrnoUMA + TaskStatusToString(result.status);
+  base::UmaHistogramSparse(uma_name, posix_errno);
+}
+
+// static
+void BrowserDataBackMigrator::RecordMigrationTimeIfSuccessful(
+    TaskResult result,
+    base::TimeTicks migration_start_time) {
+  if (result.status != TaskStatus::kSucceeded) {
+    return;
+  }
+
+  base::UmaHistogramMediumTimes(kSuccessfulMigrationTimeUMA,
+                                base::TimeTicks::Now() - migration_start_time);
+}
+
+// static
+std::string BrowserDataBackMigrator::TaskStatusToString(
+    TaskStatus task_status) {
+  switch (task_status) {
+#define MAPPING(name)       \
+  case TaskStatus::k##name: \
+    return #name
+    MAPPING(Succeeded);
+    MAPPING(PreMigrationCleanUpDeleteTmpDirFailed);
+    MAPPING(MergeSplitItemsCreateTmpDirFailed);
+    MAPPING(MergeSplitItemsCopyExtensionsFailed);
+    MAPPING(MergeSplitItemsCopyExtensionStorageFailed);
+    MAPPING(MergeSplitItemsCreateDirFailed);
+    MAPPING(MergeSplitItemsMergeIndexedDBFailed);
+    MAPPING(MergeSplitItemsMergePrefsFailed);
+    MAPPING(MergeSplitItemsMergeLocalStorageLevelDBFailed);
+    MAPPING(MergeSplitItemsMergeStateStoreLevelDBFailed);
+    MAPPING(MergeSplitItemsMergeSyncDataFailed);
+    MAPPING(DeleteAshItemsDeleteExtensionsFailed);
+    MAPPING(DeleteAshItemsDeleteLacrosItemFailed);
+    MAPPING(DeleteLacrosDirDeleteFailed);
+    MAPPING(DeleteTmpDirDeleteFailed);
+    MAPPING(MoveLacrosItemsToAshDirFailed);
+    MAPPING(MoveMergedItemsBackToAshCopyDirectoryFailed);
+    MAPPING(MoveMergedItemsBackToAshMoveFileFailed);
+#undef MAPPING
+  }
 }
 
 }  // namespace ash

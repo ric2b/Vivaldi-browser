@@ -14,6 +14,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "chrome/browser/media/clear_key_cdm_test_helper.h"
 #include "chrome/browser/media/media_browsertest.h"
 #include "chrome/browser/media/test_license_server.h"
 #include "chrome/browser/media/wv_test_license_server_config.h"
@@ -32,6 +33,7 @@
 #include "media/base/key_system_names.h"
 #include "media/base/media_switches.h"
 #include "media/base/test_data_util.h"
+#include "media/cdm/clear_key_cdm_common.h"
 #include "media/cdm/supported_cdm_versions.h"
 #include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest-spi.h"
@@ -40,39 +42,11 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "base/win/windows_version.h"
-#endif
+#endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-#include "chrome/browser/media/library_cdm_test_helper.h"
-#include "media/cdm/cdm_paths.h"
-#endif
-
-// Available key systems.
-const char kClearKeyKeySystem[] = "org.w3.clearkey";
-const char kExternalClearKeyKeySystem[] = "org.chromium.externalclearkey";
-
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-// Variants of External Clear Key key system to test different scenarios.
-// To add a new variant, make sure you also update:
-// - media/test/data/eme_player_js/globals.js
-// - media/test/data/eme_player_js/player_utils.js
-// - CreateCdmInstance() in clear_key_cdm.cc
-const char kExternalClearKeyMessageTypeTestKeySystem[] =
-    "org.chromium.externalclearkey.messagetypetest";
-const char kExternalClearKeyFileIOTestKeySystem[] =
-    "org.chromium.externalclearkey.fileiotest";
 const char kExternalClearKeyInitializeFailKeySystem[] =
     "org.chromium.externalclearkey.initializefail";
-const char kExternalClearKeyPlatformVerificationTestKeySystem[] =
-    "org.chromium.externalclearkey.platformverificationtest";
-const char kExternalClearKeyCrashKeySystem[] =
-    "org.chromium.externalclearkey.crash";
-#if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
-const char kExternalClearKeyVerifyCdmHostTestKeySystem[] =
-    "org.chromium.externalclearkey.verifycdmhosttest";
-#endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
-const char kExternalClearKeyStorageIdTestKeySystem[] =
-    "org.chromium.externalclearkey.storageidtest";
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 // Sessions to load.
@@ -123,12 +97,24 @@ enum class PlayCount { ONCE, TWICE };
 // Base class for encrypted media tests.
 class EncryptedMediaTestBase : public MediaBrowserTest {
  public:
-  bool IsExternalClearKey(const std::string& key_system) {
-    if (key_system == kExternalClearKeyKeySystem)
+  bool RequiresClearKeyCdm(const std::string& key_system) {
+    if (key_system == media::kExternalClearKeyKeySystem) {
       return true;
-    std::string prefix = std::string(kExternalClearKeyKeySystem) + '.';
+    }
+    // Treat `media::kMediaFoundationClearKeyKeySystem` as a separate key system
+    // only for Windows
+    if (key_system == media::kMediaFoundationClearKeyKeySystem) {
+      return false;
+    }
+    std::string prefix = std::string(media::kExternalClearKeyKeySystem) + '.';
     return key_system.substr(0, prefix.size()) == prefix;
   }
+
+#if BUILDFLAG(IS_WIN)
+  bool IsMediaFoundationClearKey(const std::string& key_system) {
+    return (key_system == media::kMediaFoundationClearKeyKeySystem);
+  }
+#endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(ENABLE_WIDEVINE)
   bool IsWidevine(const std::string& key_system) {
@@ -313,18 +299,29 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
     }
 
     // TODO(crbug.com/1243903): WhatsNewUI might be causing timeouts.
-    std::vector<base::test::FeatureRef> enabled_features;
+    std::vector<base::test::FeatureRefAndParams> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features = {
         features::kChromeWhatsNewUI};
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-    if (IsExternalClearKey(key_system)) {
+    if (RequiresClearKeyCdm(key_system)) {
       RegisterClearKeyCdm(command_line);
-      enabled_features.push_back(media::kExternalClearKeyForTesting);
+      enabled_features.push_back({media::kExternalClearKeyForTesting, {}});
     }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
-    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+#if BUILDFLAG(IS_WIN)
+    if (IsMediaFoundationClearKey(key_system)) {
+      RegisterMediaFoundationClearKeyCdm(enabled_features);
+      // TODO(crbug.com/1412485): Remove this line so that real hardware
+      // capabilities can be checked.
+      command_line->AppendSwitchASCII(
+          switches::kOverrideHardwareSecureCodecsForTesting, "avc1");
+    }
+#endif  // BUILDFLAG(IS_WIN)
+
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                       disabled_features);
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -340,7 +337,7 @@ class ECKEncryptedMediaTest : public EncryptedMediaTestBase,
   int GetCdmInterfaceVersion() { return GetParam(); }
 
   // We use special |key_system| names to do non-playback related tests,
-  // e.g. kExternalClearKeyFileIOTestKeySystem is used to test file IO.
+  // e.g. media::kExternalClearKeyFileIOTestKeySystem is used to test file IO.
   void TestNonPlaybackCases(const std::string& key_system,
                             const std::string& expected_title) {
     // Since we do not test playback, arbitrarily choose a test file and source
@@ -361,7 +358,8 @@ class ECKEncryptedMediaTest : public EncryptedMediaTestBase,
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaTestBase::SetUpCommandLine(command_line);
-    SetUpCommandLineForKeySystem(kExternalClearKeyKeySystem, command_line);
+    SetUpCommandLineForKeySystem(media::kExternalClearKeyKeySystem,
+                                 command_line);
     // Override enabled CDM interface version for testing.
     command_line->AppendSwitchASCII(
         switches::kOverrideEnabledCdmInterfaceVersion,
@@ -388,13 +386,15 @@ class ECKEncryptedMediaOutputProtectionTest
     if (create_recorder_before_media_keys)
       query_params.emplace_back("createMediaRecorderBeforeMediaKeys", "1");
     RunMediaTestPage("eme_and_get_display_media.html", query_params,
-                     expected_title, true);
+                     expected_title, /*http=*/true,
+                     /*with_transient_activation=*/true);
   }
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaTestBase::SetUpCommandLine(command_line);
-    SetUpCommandLineForKeySystem(kExternalClearKeyKeySystem, command_line);
+    SetUpCommandLineForKeySystem(media::kExternalClearKeyKeySystem,
+                                 command_line);
     // The output protection tests create a MediaRecorder on a MediaStream,
     // so this allows for a fake stream to be created.
     command_line->AppendSwitch(switches::kUseFakeUIForMediaStream);
@@ -407,7 +407,7 @@ class ECKEncryptedMediaOutputProtectionTest
 class ECKIncognitoEncryptedMediaTest : public EncryptedMediaTestBase {
  public:
   // We use special |key_system| names to do non-playback related tests,
-  // e.g. kExternalClearKeyFileIOTestKeySystem is used to test file IO.
+  // e.g. media::kExternalClearKeyFileIOTestKeySystem is used to test file IO.
   void TestNonPlaybackCases(const std::string& key_system,
                             const std::string& expected_title) {
     // Since we do not test playback, arbitrarily choose a test file and source
@@ -420,7 +420,8 @@ class ECKIncognitoEncryptedMediaTest : public EncryptedMediaTestBase {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaTestBase::SetUpCommandLine(command_line);
-    SetUpCommandLineForKeySystem(kExternalClearKeyKeySystem, command_line);
+    SetUpCommandLineForKeySystem(media::kExternalClearKeyKeySystem,
+                                 command_line);
     command_line->AppendSwitch(switches::kIncognito);
   }
 };
@@ -542,34 +543,34 @@ using ::testing::Values;
 
 INSTANTIATE_TEST_SUITE_P(MSE_ClearKey,
                          EncryptedMediaTest,
-                         Combine(Values(kClearKeyKeySystem),
+                         Combine(Values(media::kClearKeyKeySystem),
                                  Values(SrcType::MSE)));
 
 INSTANTIATE_TEST_SUITE_P(MSE_ClearKey,
                          MseEncryptedMediaTest,
-                         Values(kClearKeyKeySystem));
+                         Values(media::kClearKeyKeySystem));
 
 // External Clear Key is currently only used on platforms that use library CDMs.
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 INSTANTIATE_TEST_SUITE_P(SRC_ExternalClearKey,
                          EncryptedMediaTest,
-                         Combine(Values(kExternalClearKeyKeySystem),
+                         Combine(Values(media::kExternalClearKeyKeySystem),
                                  Values(SrcType::SRC)));
 
 INSTANTIATE_TEST_SUITE_P(MSE_ExternalClearKey,
                          EncryptedMediaTest,
-                         Combine(Values(kExternalClearKeyKeySystem),
+                         Combine(Values(media::kExternalClearKeyKeySystem),
                                  Values(SrcType::MSE)));
 
 INSTANTIATE_TEST_SUITE_P(MSE_ExternalClearKey,
                          MseEncryptedMediaTest,
-                         Values(kExternalClearKeyKeySystem));
+                         Values(media::kExternalClearKeyKeySystem));
 #else   // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 // To reduce test time, only run ClearKey SRC tests when we are not running
 // ExternalClearKey SRC tests.
 INSTANTIATE_TEST_SUITE_P(SRC_ClearKey,
                          EncryptedMediaTest,
-                         Combine(Values(kClearKeyKeySystem),
+                         Combine(Values(media::kClearKeyKeySystem),
                                  Values(SrcType::SRC)));
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
@@ -582,7 +583,7 @@ INSTANTIATE_TEST_SUITE_P(MSE_Widevine,
 INSTANTIATE_TEST_SUITE_P(MSE_Widevine,
                          MseEncryptedMediaTest,
                          Values(kWidevineKeySystem));
-#endif  // #if BUILDFLAG(BUNDLE_WIDEVINE_CDM)
+#endif  // BUILDFLAG(BUNDLE_WIDEVINE_CDM)
 
 IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, Playback_AudioClearVideo_WebM) {
   TestSimplePlayback("bear-320x240-av_enc-a.webm");
@@ -815,7 +816,7 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, InitializeCDMFail) {
                        kEmeNotSupportedError);
 }
 
-// TODO(1019187): Failing on win7.
+// TODO(https://crbug.com/1019187): Failing on Windows.
 #if BUILDFLAG(IS_WIN)
 #define MAYBE_CDMCrashDuringDecode DISABLED_CDMCrashDuringDecode
 #else
@@ -824,17 +825,19 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, InitializeCDMFail) {
 // When CDM crashes, we should still get a decode error and all sessions should
 // be closed.
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, MAYBE_CDMCrashDuringDecode) {
-  TestNonPlaybackCases(kExternalClearKeyCrashKeySystem,
+  TestNonPlaybackCases(media::kExternalClearKeyCrashKeySystem,
                        kEmeSessionClosedAndError);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, FileIOTest) {
-  TestNonPlaybackCases(kExternalClearKeyFileIOTestKeySystem, kUnitTestSuccess);
+  TestNonPlaybackCases(media::kExternalClearKeyFileIOTestKeySystem,
+                       kUnitTestSuccess);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, PlatformVerificationTest) {
-  TestNonPlaybackCases(kExternalClearKeyPlatformVerificationTestKeySystem,
-                       kUnitTestSuccess);
+  TestNonPlaybackCases(
+      media::kExternalClearKeyPlatformVerificationTestKeySystem,
+      kUnitTestSuccess);
 }
 
 // Intermittent leaks on ASan/LSan runs: crbug.com/889923
@@ -844,8 +847,8 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, PlatformVerificationTest) {
 #define MAYBE_MessageTypeTest MessageTypeTest
 #endif
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, MAYBE_MessageTypeTest) {
-  TestPlaybackCase(kExternalClearKeyMessageTypeTestKeySystem, kNoSessionToLoad,
-                   media::kEndedTitle);
+  TestPlaybackCase(media::kExternalClearKeyMessageTypeTestKeySystem,
+                   kNoSessionToLoad, media::kEndedTitle);
 
   int num_received_message_types = 0;
   EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
@@ -860,34 +863,32 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, MAYBE_MessageTypeTest) {
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadPersistentLicense) {
-  TestPlaybackCase(kExternalClearKeyKeySystem, kPersistentLicense,
+  TestPlaybackCase(media::kExternalClearKeyKeySystem, kPersistentLicense,
                    media::kEndedTitle);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadUnknownSession) {
-  TestPlaybackCase(kExternalClearKeyKeySystem, kUnknownSession,
+  TestPlaybackCase(media::kExternalClearKeyKeySystem, kUnknownSession,
                    kEmeSessionNotFound);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, LoadSessionAfterClose) {
-  base::StringPairs query_params{{"keySystem", kExternalClearKeyKeySystem}};
+  base::StringPairs query_params{
+      {"keySystem", media::kExternalClearKeyKeySystem}};
   RunEncryptedMediaTestPage("eme_load_session_after_close_test.html",
-                            kExternalClearKeyKeySystem, query_params,
+                            media::kExternalClearKeyKeySystem, query_params,
                             media::kEndedTitle);
 }
 
-const char kExternalClearKeyDecryptOnlyKeySystem[] =
-    "org.chromium.externalclearkey.decryptonly";
-
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DecryptOnly_VideoAudio_WebM) {
   RunSimpleEncryptedMediaTest("bear-320x240-av_enc-av.webm",
-                              kExternalClearKeyDecryptOnlyKeySystem,
+                              media::kExternalClearKeyDecryptOnlyKeySystem,
                               SrcType::MSE);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DecryptOnly_VideoOnly_MP4_VP9) {
   RunSimpleEncryptedMediaTest("bear-320x240-v_frag-vp9-cenc.mp4",
-                              kExternalClearKeyDecryptOnlyKeySystem,
+                              media::kExternalClearKeyDecryptOnlyKeySystem,
                               SrcType::MSE);
 }
 
@@ -899,8 +900,8 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DecryptOnly_VideoOnly_MP4_CBCS) {
   std::string expected_result =
       GetCdmInterfaceVersion() >= 10 ? media::kEndedTitle : media::kErrorTitle;
   RunEncryptedMediaTest(kDefaultEmePlayer, "bear-640x360-v_frag-cbcs.mp4",
-                        kExternalClearKeyDecryptOnlyKeySystem, SrcType::MSE,
-                        kNoSessionToLoad, false, PlayCount::ONCE,
+                        media::kExternalClearKeyDecryptOnlyKeySystem,
+                        SrcType::MSE, kNoSessionToLoad, false, PlayCount::ONCE,
                         expected_result);
 }
 
@@ -908,18 +909,18 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, DecryptOnly_VideoOnly_MP4_CBCS) {
 // content/browser/media/encrypted_media_browsertest.cc.
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, Playback_Encryption_CENC) {
   RunEncryptedMediaMultipleFileTest(
-      kExternalClearKeyKeySystem, "bear-640x360-v_frag-cenc.mp4",
+      media::kExternalClearKeyKeySystem, "bear-640x360-v_frag-cenc.mp4",
       "bear-640x360-a_frag-cenc.mp4", media::kEndedTitle);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, Playback_Encryption_CBC1) {
-  RunEncryptedMediaMultipleFileTest(kExternalClearKeyKeySystem,
+  RunEncryptedMediaMultipleFileTest(media::kExternalClearKeyKeySystem,
                                     "bear-640x360-v_frag-cbc1.mp4",
                                     std::string(), media::kErrorTitle);
 }
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, Playback_Encryption_CENS) {
-  RunEncryptedMediaMultipleFileTest(kExternalClearKeyKeySystem,
+  RunEncryptedMediaMultipleFileTest(media::kExternalClearKeyKeySystem,
                                     "bear-640x360-v_frag-cens.mp4",
                                     std::string(), media::kErrorTitle);
 }
@@ -930,7 +931,7 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, Playback_Encryption_CBCS) {
   std::string expected_result =
       GetCdmInterfaceVersion() >= 10 ? media::kEndedTitle : media::kErrorTitle;
   RunEncryptedMediaMultipleFileTest(
-      kExternalClearKeyKeySystem, "bear-640x360-v_frag-cbcs.mp4",
+      media::kExternalClearKeyKeySystem, "bear-640x360-v_frag-cbcs.mp4",
       "bear-640x360-a_frag-cbcs.mp4", expected_result);
 }
 
@@ -938,13 +939,13 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, Playback_Encryption_CBCS) {
 
 #if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, VerifyCdmHostTest) {
-  TestNonPlaybackCases(kExternalClearKeyVerifyCdmHostTestKeySystem,
+  TestNonPlaybackCases(media::kExternalClearKeyVerifyCdmHostTestKeySystem,
                        kUnitTestSuccess);
 }
 #endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 
 IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaTest, StorageIdTest) {
-  TestNonPlaybackCases(kExternalClearKeyStorageIdTestKeySystem,
+  TestNonPlaybackCases(media::kExternalClearKeyStorageIdTestKeySystem,
                        kUnitTestSuccess);
 }
 
@@ -991,14 +992,16 @@ IN_PROC_BROWSER_TEST_P(ECKEncryptedMediaOutputProtectionTest, AfterMediaKeys) {
 
 IN_PROC_BROWSER_TEST_F(ECKIncognitoEncryptedMediaTest, FileIO) {
   // Try the FileIO test using the default CDM API while running in incognito.
-  TestNonPlaybackCases(kExternalClearKeyFileIOTestKeySystem, kUnitTestSuccess);
+  TestNonPlaybackCases(media::kExternalClearKeyFileIOTestKeySystem,
+                       kUnitTestSuccess);
 }
 
 IN_PROC_BROWSER_TEST_F(ECKIncognitoEncryptedMediaTest, LoadSessionAfterClose) {
   // Loading a session should work in incognito mode.
-  base::StringPairs query_params{{"keySystem", kExternalClearKeyKeySystem}};
+  base::StringPairs query_params{
+      {"keySystem", media::kExternalClearKeyKeySystem}};
   RunEncryptedMediaTestPage("eme_load_session_after_close_test.html",
-                            kExternalClearKeyKeySystem, query_params,
+                            media::kExternalClearKeyKeySystem, query_params,
                             media::kEndedTitle);
 }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)

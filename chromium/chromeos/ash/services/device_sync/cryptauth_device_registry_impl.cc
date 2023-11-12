@@ -16,9 +16,7 @@
 #include "components/prefs/pref_service.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace ash {
-
-namespace device_sync {
+namespace ash::device_sync {
 
 // static
 CryptAuthDeviceRegistryImpl::Factory*
@@ -57,7 +55,7 @@ CryptAuthDeviceRegistryImpl::CryptAuthDeviceRegistryImpl(
     absl::optional<std::string> instance_id =
         util::DecodeFromString(id_device_pair.first);
     absl::optional<CryptAuthDevice> device =
-        CryptAuthDevice::FromDictionary(id_device_pair.second);
+        CryptAuthDevice::FromDictionary(id_device_pair.second.GetDict());
     if (!instance_id || !device || *instance_id != device->instance_id()) {
       PA_LOG(ERROR) << "Error retrieving device with Instance ID "
                     << id_device_pair.first << " from preferences.";
@@ -73,20 +71,18 @@ CryptAuthDeviceRegistryImpl::CryptAuthDeviceRegistryImpl(
 CryptAuthDeviceRegistryImpl::~CryptAuthDeviceRegistryImpl() = default;
 
 void CryptAuthDeviceRegistryImpl::OnDeviceRegistryUpdated() {
-  pref_service_->Set(prefs::kCryptAuthDeviceRegistry, AsDictionary());
+  pref_service_->SetDict(prefs::kCryptAuthDeviceRegistry, AsDictionary());
 }
 
-base::Value CryptAuthDeviceRegistryImpl::AsDictionary() const {
-  base::Value dict(base::Value::Type::DICTIONARY);
+base::Value::Dict CryptAuthDeviceRegistryImpl::AsDictionary() const {
+  base::Value::Dict dict;
   for (const std::pair<std::string, CryptAuthDevice>& id_device_pair :
        instance_id_to_device_map()) {
-    dict.SetKey(util::EncodeAsString(id_device_pair.first),
-                id_device_pair.second.AsDictionary());
+    dict.Set(util::EncodeAsString(id_device_pair.first),
+             id_device_pair.second.AsDictionary());
   }
 
   return dict;
 }
 
-}  // namespace device_sync
-
-}  // namespace ash
+}  // namespace ash::device_sync

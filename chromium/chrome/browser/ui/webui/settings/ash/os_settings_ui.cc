@@ -15,6 +15,7 @@
 #include "ash/webui/personalization_app/search/search.mojom.h"
 #include "ash/webui/personalization_app/search/search_handler.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/ash/login/quick_unlock/pin_backend.h"
 #include "chrome/browser/ash/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_manager.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_manager_factory.h"
@@ -46,6 +47,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/webui/color_change_listener/color_change_handler.h"
 
 namespace {
 
@@ -77,7 +79,8 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
                         "ChromeOS.Settings.LoadCompletedTime") {
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource* html_source =
-      content::WebUIDataSource::Create(chrome::kChromeUIOSSettingsHost);
+      content::WebUIDataSource::CreateAndAdd(profile,
+                                             chrome::kChromeUIOSSettingsHost);
 
   OsSettingsManager* manager = OsSettingsManagerFactory::GetForProfile(profile);
   manager->AddHandlers(web_ui);
@@ -95,9 +98,6 @@ OSSettingsUI::OSSettingsUI(content::WebUI* web_ui)
   html_source->DisableTrustedTypesCSP();
 
   ManagedUIHandler::Initialize(web_ui, html_source);
-
-  content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
-                                html_source);
 }
 
 OSSettingsUI::~OSSettingsUI() {
@@ -229,6 +229,14 @@ void OSSettingsUI::BindInterface(
 }
 
 void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<mojom::InputDeviceSettingsProvider> receiver) {
+  DCHECK(features::IsInputDeviceSettingsSplitEnabled());
+  OsSettingsManagerFactory::GetForProfile(Profile::FromWebUI(web_ui()))
+      ->input_device_settings_provider()
+      ->BindInterface(std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<auth::mojom::AuthFactorConfig> receiver) {
   auth::BindToAuthFactorConfig(std::move(receiver),
                                quick_unlock::QuickUnlockFactory::GetDelegate());
@@ -238,6 +246,26 @@ void OSSettingsUI::BindInterface(
     mojo::PendingReceiver<auth::mojom::RecoveryFactorEditor> receiver) {
   auth::BindToRecoveryFactorEditor(
       std::move(receiver), quick_unlock::QuickUnlockFactory::GetDelegate());
+}
+
+void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<color_change_listener::mojom::PageHandler> receiver) {
+  if (!features::IsJellyEnabled()) {
+    mojo::ReportBadMessage(
+        "Jelly not enabled: OSSettingsUI should not listen to color changes.");
+    return;
+  }
+  color_provider_handler_ = std::make_unique<ui::ColorChangeHandler>(
+      web_ui()->GetWebContents(), std::move(receiver));
+}
+
+void OSSettingsUI::BindInterface(
+    mojo::PendingReceiver<auth::mojom::PinFactorEditor> receiver) {
+  auto* pin_backend = quick_unlock::PinBackend::GetInstance();
+  CHECK(pin_backend);
+  auth::BindToPinFactorEditor(std::move(receiver),
+                              quick_unlock::QuickUnlockFactory::GetDelegate(),
+                              *pin_backend);
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(OSSettingsUI)

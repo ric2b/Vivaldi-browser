@@ -4,18 +4,15 @@
 
 #include "extensions/browser/extension_registrar.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
-#include "content/public/browser/storage_partition.h"
-#include "extensions/browser/app_sorting.h"
 #include "extensions/browser/blocklist_extension_prefs.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
@@ -69,10 +66,6 @@ void ExtensionRegistrar::AddExtension(
     // Other than for unpacked extensions, we should not be downgrading.
     if (!Manifest::IsUnpackedLocation(extension->location()) &&
         version_compare_result < 0) {
-      UMA_HISTOGRAM_ENUMERATION(
-          "Extensions.AttemptedToDowngradeVersionLocation",
-          extension->location());
-
       // TODO(https://crbug.com/810799): It would be awfully nice to CHECK this,
       // but that's caused problems. There are apparently times when this
       // happens that we aren't accounting for. We should track those down and
@@ -107,6 +100,7 @@ void ExtensionRegistrar::AddExtension(
       // the new one. ReloadExtension disables the extension, which is
       // sufficient.
       RemoveExtension(extension->id(), UnloadedExtensionReason::UPDATE);
+      UnregisterServiceWorkerWithRootScope(extension.get());
     }
     AddNewExtension(extension);
   }
@@ -129,15 +123,6 @@ void ExtensionRegistrar::AddNewExtension(
   } else if (extension_prefs_->IsExtensionDisabled(extension->id())) {
     registry_->AddDisabled(extension);
   } else {  // Extension should be enabled.
-    // All apps that are displayed in the launcher are ordered by their ordinals
-    // so we must ensure they have valid ordinals.
-    if (extension->RequiresSortOrdinal()) {
-      AppSorting* app_sorting = extension_system_->app_sorting();
-      app_sorting->SetExtensionVisible(extension->id(),
-                                       extension->ShouldDisplayInNewTabPage());
-      app_sorting->EnsureValidOrdinals(extension->id(),
-                                       syncer::StringOrdinal());
-    }
     registry_->AddEnabled(extension);
     ActivateExtension(extension.get(), true);
   }
@@ -298,9 +283,8 @@ std::vector<scoped_refptr<DevToolsAgentHost>> GetDevToolsAgentHostsFor(
     }
   } else {
     content::ServiceWorkerContext* context =
-        util::GetStoragePartitionForExtensionId(
-            extension->id(), process_manager->browser_context())
-            ->GetServiceWorkerContext();
+        util::GetServiceWorkerContextForExtensionId(
+            extension->id(), process_manager->browser_context());
     std::vector<WorkerId> service_worker_ids =
         process_manager->GetServiceWorkersForExtension(extension->id());
     for (const auto& worker_id : service_worker_ids) {
@@ -515,6 +499,40 @@ void ExtensionRegistrar::DeactivateExtension(const Extension* extension,
   DeactivateTaskQueueForExtension(browser_context_, extension);
 
   delegate_->PostDeactivateExtension(extension);
+}
+
+void ExtensionRegistrar::UnregisterServiceWorkerWithRootScope(
+    const Extension* new_extension) {
+  // Only cleanup the old service worker if the new extension is
+  // service-worker-based.
+  if (!BackgroundInfo::IsServiceWorkerBased(new_extension)) {
+    return;
+  }
+
+  // Non service-worker based extensions could register root-scope service
+  // workers using regular web APIs. These service workers are not tracked by
+  // extension ServiceWorkerTaskQueue and would prevent newer service worker
+  // version from installing (crbug/1340341).
+  content::ServiceWorkerContext* context =
+      util::GetServiceWorkerContextForExtensionId(new_extension->id(),
+                                                  browser_context_);
+  // Even though the unregistration process for a service worker is
+  // asynchronous, we begin the process before the new extension is added, so
+  // the old worker will be unregistered before the new one is registered.
+  context->UnregisterServiceWorker(
+      new_extension->url(),
+      blink::StorageKey::CreateFirstParty(new_extension->origin()),
+      base::BindOnce(&ExtensionRegistrar::NotifyServiceWorkerUnregistered,
+                     weak_factory_.GetWeakPtr(), new_extension->id()));
+}
+
+void ExtensionRegistrar::NotifyServiceWorkerUnregistered(
+    const ExtensionId& extension_id,
+    bool success) {
+  if (!success) {
+    LOG(ERROR) << "Failed to unregister service worker for extension "
+               << extension_id;
+  }
 }
 
 bool ExtensionRegistrar::ReplaceReloadedExtension(

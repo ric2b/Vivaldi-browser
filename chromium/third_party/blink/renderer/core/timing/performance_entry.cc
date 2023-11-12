@@ -48,22 +48,32 @@ static base::AtomicSequenceNumber index_seq;
 PerformanceEntry::PerformanceEntry(const AtomicString& name,
                                    double start_time,
                                    double finish_time,
-                                   uint32_t navigation_id)
+                                   DOMWindow* source,
+                                   bool is_triggered_by_soft_navigation)
     : duration_(finish_time - start_time),
       name_(name),
       start_time_(start_time),
       index_(index_seq.GetNext()),
-      navigation_id_(navigation_id) {}
+      navigation_id_(DynamicTo<LocalDOMWindow>(source)
+                         ? DynamicTo<LocalDOMWindow>(source)->GetNavigationId()
+                         : kNavigationIdDefaultValue),
+      source_(source),
+      is_triggered_by_soft_navigation_(is_triggered_by_soft_navigation) {}
 
 PerformanceEntry::PerformanceEntry(double duration,
                                    const AtomicString& name,
                                    double start_time,
-                                   uint32_t navigation_id)
+                                   DOMWindow* source,
+                                   bool is_triggered_by_soft_navigation)
     : duration_(duration),
       name_(name),
       start_time_(start_time),
       index_(index_seq.GetNext()),
-      navigation_id_(navigation_id) {
+      navigation_id_(DynamicTo<LocalDOMWindow>(source)
+                         ? DynamicTo<LocalDOMWindow>(source)->GetNavigationId()
+                         : kNavigationIdDefaultValue),
+      source_(source),
+      is_triggered_by_soft_navigation_(is_triggered_by_soft_navigation) {
   DCHECK_GE(duration_, 0.0);
 }
 
@@ -79,6 +89,10 @@ DOMHighResTimeStamp PerformanceEntry::duration() const {
 
 uint32_t PerformanceEntry::navigationId() const {
   return navigation_id_;
+}
+
+DOMWindow* PerformanceEntry::source() const {
+  return source_;
 }
 
 mojom::blink::PerformanceMarkOrMeasurePtr
@@ -144,13 +158,9 @@ uint32_t PerformanceEntry::GetNavigationId(ScriptState* script_state) {
   return local_dom_window->GetNavigationId();
 }
 
-// static
-uint32_t PerformanceEntry::GetNavigationId(ExecutionContext* context) {
-  const auto* local_dom_window = DynamicTo<LocalDOMWindow>(context);
-  if (!local_dom_window)
-    return kNavigationIdDefaultValue;
-
-  return local_dom_window->GetNavigationId();
+void PerformanceEntry::Trace(Visitor* visitor) const {
+  visitor->Trace(source_);
+  ScriptWrappable::Trace(visitor);
 }
 
 ScriptValue PerformanceEntry::toJSONForBinding(

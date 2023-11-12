@@ -24,6 +24,12 @@ struct LargestContentfulPaintTiming {
   // Time when the page's largest image is painted.
   mojo_base.mojom.TimeDelta? largest_image_paint;
 
+  // Time when the page's largest image starts loading.
+  mojo_base.mojom.TimeDelta? largest_image_load_start;
+
+  // Time when the page's largest image finishes loading.
+  mojo_base.mojom.TimeDelta? largest_image_load_end;
+
   // Size of the largest image of the largest image paint, by
   // Size = Height * Width. Removed images are excluded.
   uint64 largest_image_paint_size;
@@ -212,6 +218,12 @@ struct FrameMetadata {
   // computed, and for any subsequent changes, and is null otherwise (i.e.
   // hasn't changed).
   gfx.mojom.Rect? main_frame_viewport_rect;
+
+  // The image ad rectangles within the main frame. Empty rectangles are used to
+  // signal the removal of the rectangle. The map keys are the element ids. This
+  // is only populated for the main frame, for the first time
+  // each rectangle is initially computed and for any subsequent changes.
+  map<int32, gfx.mojom.Rect> main_frame_image_ad_rects;
 };
 
 struct SubresourceLoadMetrics {
@@ -222,6 +234,16 @@ struct SubresourceLoadMetrics {
   // Number of subresources loads that is responded by the service worker.
   // i.e. `respondWith` was called.
   uint32 number_of_subresource_loads_handled_by_service_worker;
+
+  // Whether a pervasive payload (aka subresource) was requested.
+  bool pervasive_payload_requested;
+
+  // Number of bytes fetched by the network for pervasive payloads on a page.
+  int64 pervasive_bytes_fetched;
+
+  // Total number of bytes fetched by the network. This value can be -1
+  // when the value is unknown or there is no data.
+  int64 total_bytes_fetched;
 };
 
 // Enumeration of distinct cache types.

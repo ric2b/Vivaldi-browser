@@ -9,14 +9,15 @@
 #include <set>
 #include <string>
 
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/google/core/common/google_util.h"
@@ -39,6 +40,9 @@
 #include "components/search_engines/template_url_service.h"
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "url/gurl.h"
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
 
 using metrics::OmniboxInputType;
 
@@ -68,6 +72,9 @@ bool AllowLocalHistoryZeroSuggestSuggestions(AutocompleteProviderClient* client,
   if (client->IsOffTheRecord())
     return false;
 
+  // Note(david@vivaldi.com): We always show the local history regardless of the
+  // default search engine.
+  if (!vivaldi::IsVivaldiRunning()){
   // Allow local history zero-suggest only when the user has set up Google as
   // their default search engine.
   TemplateURLService* template_url_service = client->GetTemplateURLService();
@@ -76,6 +83,7 @@ bool AllowLocalHistoryZeroSuggestSuggestions(AutocompleteProviderClient* client,
       template_url_service->GetDefaultSearchProvider()->GetEngineType(
           template_url_service->search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
     return false;
+  }
   }
 
   if (base::FeatureList::IsEnabled(
@@ -90,15 +98,6 @@ bool AllowLocalHistoryZeroSuggestSuggestions(AutocompleteProviderClient* client,
   return input.focus_type() == metrics::OmniboxFocusType::INTERACTION_FOCUS &&
          input.type() == OmniboxInputType::EMPTY &&
          BaseSearchProvider::IsNTPPage(input.current_page_classification());
-}
-
-void RecordDBMetrics(const base::TimeTicks db_query_time,
-                     const size_t result_size) {
-  base::UmaHistogramTimes(
-      "Omnibox.LocalHistoryZeroSuggest.SearchTermsExtractionTime",
-      base::TimeTicks::Now() - db_query_time);
-  base::UmaHistogramCounts10000(
-      "Omnibox.LocalHistoryZeroSuggest.SearchTermsExtractedCount", result_size);
 }
 
 }  // namespace
@@ -159,7 +158,7 @@ void LocalHistoryZeroSuggestProvider::DeleteMatch(
   // number of suggestions shown and the async nature of this lookup.
   history::QueryOptions opts;
   opts.duplicate_policy = history::QueryOptions::KEEP_ALL_DUPLICATES;
-  opts.begin_time = OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold();
+  opts.begin_time = base::Time::Now() - base::Days(90);  // Full history length.
   history_service->QueryHistory(
       base::ASCIIToUTF16(google_search_url), opts,
       base::BindOnce(&LocalHistoryZeroSuggestProvider::OnHistoryQueryResults,
@@ -207,31 +206,18 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
   }
 
   std::vector<std::unique_ptr<history::KeywordSearchTermVisit>> results;
-  const base::TimeTicks db_query_time = base::TimeTicks::Now();
-  if (base::FeatureList::IsEnabled(omnibox::kLocalHistorySuggestRevamp)) {
-    auto enumerator = url_db->CreateKeywordSearchTermVisitEnumerator(
-        template_url_service->GetDefaultSearchProvider()->id(),
-        OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold());
-    if (enumerator) {
-      history::GetAutocompleteSearchTermsFromEnumerator(
-          *enumerator,
-          OmniboxFieldTrial::kZeroSuggestIgnoreDuplicateVisits.Get(),
-          history::SearchTermRankingPolicy::kFrecency, &results);
-    }
-  } else {
-    url_db->GetMostRecentKeywordSearchTerms(
-        template_url_service->GetDefaultSearchProvider()->id(),
-        OmniboxFieldTrial::GetLocalHistoryZeroSuggestAgeThreshold(), &results);
-    const base::Time now = base::Time::Now();
-    std::sort(results.begin(), results.end(),
-              [&](const auto& a, const auto& b) {
-                return history::GetFrecencyScore(a->visit_count,
-                                                 a->last_visit_time, now) >
-                       history::GetFrecencyScore(b->visit_count,
-                                                 b->last_visit_time, now);
-              });
+  const base::ElapsedTimer db_query_timer;
+  auto enumerator = url_db->CreateKeywordSearchTermVisitEnumerator(
+      template_url_service->GetDefaultSearchProvider()->id());
+  if (enumerator) {
+    history::GetAutocompleteSearchTermsFromEnumerator(
+        *enumerator, max_matches_, /*ignore_duplicate_visits=*/true,
+        history::SearchTermRankingPolicy::kFrecency, &results);
   }
-  RecordDBMetrics(db_query_time, results.size());
+  DCHECK_LE(results.size(), max_matches_);
+  base::UmaHistogramTimes(
+      "Omnibox.LocalHistoryZeroSuggest.SearchTermsExtractionTimeV2",
+      db_query_timer.Elapsed());
 
   int relevance =
       OmniboxFieldTrial::kLocalHistoryZeroSuggestRelevanceScore.Get();
@@ -256,10 +242,7 @@ void LocalHistoryZeroSuggestProvider::QueryURLDatabase(
         TemplateURLRef::NO_SUGGESTIONS_AVAILABLE,
         /*append_extra_query_params_from_command_line*/ true);
     match.deletable = client_->AllowDeletingBrowserHistory();
-
     matches_.push_back(match);
-    if (matches_.size() >= max_matches_)
-      break;
   }
 }
 

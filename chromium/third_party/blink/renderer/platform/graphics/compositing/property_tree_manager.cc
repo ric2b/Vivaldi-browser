@@ -222,11 +222,6 @@ void PropertyTreeManager::EnsureCompositorScrollNodes(
     EnsureCompositorScrollNode(*node);
 }
 
-void PropertyTreeManager::SetCcScrollNodeIsComposited(int cc_node_id) {
-  DCHECK(base::FeatureList::IsEnabled(features::kScrollUnification));
-  scroll_tree_.Node(cc_node_id)->is_composited = true;
-}
-
 void PropertyTreeManager::SetupRootTransformNode() {
   // cc is hardcoded to use transform node index 1 for device scale and
   // transform.
@@ -455,12 +450,7 @@ int PropertyTreeManager::EnsureCompositorTransformNode(
           transform_node.GetAnchorScrollContainersData()) {
     cc::AnchorScrollContainersData& compositor_data =
         transform_tree_.EnsureAnchorScrollContainersData(id);
-    compositor_data.inner_most_scroll_container_id = EnsureCompositorScrollNode(
-        *anchor_scroll_data->inner_most_scroll_container);
-    compositor_data.outer_most_scroll_container_id = EnsureCompositorScrollNode(
-        *anchor_scroll_data->outer_most_scroll_container);
-    compositor_data.accumulated_scroll_origin =
-        anchor_scroll_data->accumulated_scroll_origin;
+    compositor_data = *anchor_scroll_data;
   }
 
   auto compositor_element_id = transform_node.GetCompositorElementId();

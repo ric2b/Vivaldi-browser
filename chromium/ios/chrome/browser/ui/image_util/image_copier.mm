@@ -4,9 +4,9 @@
 
 #import "image_copier.h"
 
-#import <MobileCoreServices/MobileCoreServices.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-#import "base/bind.h"
+#import "base/functional/bind.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/strings/grit/components_strings.h"
@@ -116,7 +116,8 @@ const int kNoActiveCopy = 0;
         [weakSelf recordCopyImageUMA:ContextMenuCopyImage::kImageCopied];
       } else {
         [item setValue:[NSURL URLWithString:urlStr]
-                forKey:(__bridge NSString*)kUTTypeURL];
+                forKey:UTTypeURL.identifier];
+
         [weakSelf recordCopyImageUMA:ContextMenuCopyImage::kURLCopied];
       }
       UIPasteboard.generalPasteboard.items =

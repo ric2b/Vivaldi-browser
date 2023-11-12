@@ -69,9 +69,11 @@
 #ifndef CONTENT_BROWSER_FENCED_FRAME_FENCED_FRAME_CONFIG_H_
 #define CONTENT_BROWSER_FENCED_FRAME_FENCED_FRAME_CONFIG_H_
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/ref_counted.h"
+#include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "content/common/content_export.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/fenced_frame/redacted_fenced_frame_config.h"
@@ -88,7 +90,7 @@ extern const char kUrnUuidPrefix[];
 GURL CONTENT_EXPORT GenerateUrnUuid();
 
 using AdAuctionData = blink::FencedFrame::AdAuctionData;
-using ReportingMetadata = blink::FencedFrame::FencedFrameReporting;
+using DeprecatedFencedFrameMode = blink::FencedFrame::DeprecatedFencedFrameMode;
 using SharedStorageBudgetMetadata =
     blink::FencedFrame::SharedStorageBudgetMetadata;
 
@@ -190,15 +192,17 @@ class CONTENT_EXPORT FencedFrameProperty {
 //
 // Config-generating APIs like FLEDGE's runAdAuction and sharedStorage's
 // selectURL return urns as handles to `FencedFrameConfig`s.
+// TODO(crbug.com/1417871): Turn this into a class, make its fields private,
+// and have a single constructor that requires all fields to be specified.
 struct CONTENT_EXPORT FencedFrameConfig {
   FencedFrameConfig();
   explicit FencedFrameConfig(const GURL& mapped_url);
-  FencedFrameConfig(GURL urn, const GURL& url);
+  FencedFrameConfig(const GURL& urn_uuid, const GURL& url);
   FencedFrameConfig(
-      GURL urn,
+      const GURL& urn_uuid,
       const GURL& url,
       const SharedStorageBudgetMetadata& shared_storage_budget_metadata,
-      const ReportingMetadata& reporting_metadata = ReportingMetadata());
+      scoped_refptr<FencedFrameReporter> fenced_frame_reporter);
   FencedFrameConfig(const FencedFrameConfig&);
   FencedFrameConfig(FencedFrameConfig&&);
   ~FencedFrameConfig();
@@ -209,7 +213,7 @@ struct CONTENT_EXPORT FencedFrameConfig {
   blink::FencedFrame::RedactedFencedFrameConfig RedactFor(
       FencedFrameEntity entity) const;
 
-  absl::optional<GURL> urn_;
+  absl::optional<GURL> urn_uuid_;
 
   absl::optional<FencedFrameProperty<GURL>> mapped_url_;
 
@@ -254,8 +258,16 @@ struct CONTENT_EXPORT FencedFrameConfig {
       shared_storage_budget_metadata_;
 
   // If reporting events from fenced frames are registered, then this
-  // information gets filled here.
-  absl::optional<FencedFrameProperty<ReportingMetadata>> reporting_metadata_;
+  // is populated. May be nullptr, otherwise.
+  scoped_refptr<FencedFrameReporter> fenced_frame_reporter_;
+
+  // The mode for the resulting fenced frame: `kDefault` or `kOpaqueAds`.
+  // TODO(crbug.com/1347953): This field is currently unused. Replace the
+  // `mode` attribute of HTMLFencedFrameElement with this field in the config.
+  // TODO(crbug.com/1347953): Decompose this field into flags that directly
+  // control the behavior of the frame, e.g. sandbox flags. We do not want
+  // mode to exist as a concept going forward.
+  DeprecatedFencedFrameMode mode_ = DeprecatedFencedFrameMode::kDefault;
 };
 
 // Contains a set of fenced frame properties. These are generated at
@@ -271,6 +283,7 @@ struct CONTENT_EXPORT FencedFrameConfig {
 // These `FencedFrameProperties` are stored in the fenced frame root
 // `FrameTreeNode`, and live between embedder-initiated fenced frame
 // navigations.
+// TODO(crbug.com/1417871): Turn this into a class and make its fields private.
 struct CONTENT_EXPORT FencedFrameProperties {
   // The empty constructor is used for:
   // * pre-navigation fenced frames
@@ -291,9 +304,14 @@ struct CONTENT_EXPORT FencedFrameProperties {
   blink::FencedFrame::RedactedFencedFrameProperties RedactFor(
       FencedFrameEntity entity) const;
 
-  absl::optional<GURL> urn_;
-
   absl::optional<FencedFrameProperty<GURL>> mapped_url_;
+
+  // Update the stored mapped URL to a new one given by `url`.
+  // `this` must have a value for `mapped_url_` when the function is called.
+  // We use this method when an embedder-initiated fenced frame root navigation
+  // commits, to update the mapped URL to reflect the final destination after
+  // any server-side redirects.
+  void UpdateMappedURL(GURL url);
 
   absl::optional<FencedFrameProperty<gfx::Size>> container_size_;
 
@@ -326,9 +344,11 @@ struct CONTENT_EXPORT FencedFrameProperties {
       FencedFrameProperty<raw_ptr<const SharedStorageBudgetMetadata>>>
       shared_storage_budget_metadata_;
 
-  absl::optional<FencedFrameProperty<ReportingMetadata>> reporting_metadata_;
+  scoped_refptr<FencedFrameReporter> fenced_frame_reporter_;
 
   absl::optional<FencedFrameProperty<base::UnguessableToken>> partition_nonce_;
+
+  DeprecatedFencedFrameMode mode_ = DeprecatedFencedFrameMode::kDefault;
 };
 
 }  // namespace content

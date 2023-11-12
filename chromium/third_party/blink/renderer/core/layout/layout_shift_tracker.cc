@@ -343,8 +343,9 @@ void LayoutShiftTracker::ObjectShifted(
   // determine how much the element moved.
   float move_distance =
       GetMoveDistance(old_starting_point_in_root, new_starting_point_in_root);
-  if (std::isnan(move_distance) || std::isinf(move_distance))
+  if (!std::isfinite(move_distance)) {
     return;
+  }
   DCHECK_GT(move_distance, 0.f);
   frame_max_distance_ = std::max(frame_max_distance_, move_distance);
 
@@ -592,12 +593,11 @@ void LayoutShiftTracker::SubmitPerformanceEntry(double score_delta,
   DCHECK(performance);
 
   double input_timestamp = LastInputTimestamp();
-  LayoutShift* entry = LayoutShift::Create(
-      performance->now(), score_delta, had_recent_input, input_timestamp,
-      CreateAttributionList(),
-      PerformanceEntry::GetNavigationId(window));  // Add WPT for
-                                                   //  LayoutShift. See
-                                                   //  crbug.com/1320878.
+  LayoutShift* entry =
+      LayoutShift::Create(performance->now(), score_delta, had_recent_input,
+                          input_timestamp, CreateAttributionList(), window);
+
+  // Add WPT for LayoutShift. See crbug.com/1320878.
 
   performance->AddLayoutShiftEntry(entry);
 }

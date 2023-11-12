@@ -28,6 +28,7 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
@@ -55,6 +56,7 @@ const CGFloat kTabStripLineHeight = 0.5;
 const CGFloat kCloseButtonHorizontalShift = 22;
 const CGFloat kTitleLeftMargin = 8.0;
 const CGFloat kTitleRightMargin = 0.0;
+const CGFloat kPinnedFaviconHorizontalMargin = 31.0;
 
 const CGFloat kCloseButtonSize = 24.0;
 const CGFloat kFaviconSize = 16.0;
@@ -80,7 +82,11 @@ UIImage* DefaultFaviconImage() {
 
   // Background image for this tab.
   UIImageView* _backgroundImageView;
+
   BOOL _incognitoStyle;
+
+  // Whether the Tab is pinned or not.
+  BOOL _pinned;
 
   // Set to YES when the layout constraints have been initialized.
   BOOL _layoutConstraintsInitialized;
@@ -94,13 +100,21 @@ UIImage* DefaultFaviconImage() {
   MDCActivityIndicator* _activityIndicator;
 
   // Adds hover interaction to background tabs.
-  API_AVAILABLE(ios(13.4)) UIPointerInteraction* _pointerInteraction;
+  UIPointerInteraction* _pointerInteraction;
 
   // Vivaldi
   // Background view for tab view
   UIView *tabViewBackground;
   // End Vivaldi
 }
+
+// Default constraints, used when the tab view is unpinned.
+@property(nonatomic, strong) NSArray<NSLayoutConstraint*>* defaultConstraints;
+
+// Constraints when the tab view is pinned.
+@property(nonatomic, strong)
+    NSArray<NSLayoutConstraint*>* faviconPinnedConstraints;
+
 @end
 
 @interface TabView (Private)
@@ -123,6 +137,8 @@ UIImage* DefaultFaviconImage() {
 
 - (id)initWithEmptyView:(BOOL)emptyView selected:(BOOL)selected {
   if ((self = [super initWithFrame:CGRectZero])) {
+    _pinned = NO;
+    self.isAccessibilityElement = NO;
     [self setOpaque:NO];
     [self createCommonViews];
 
@@ -157,8 +173,10 @@ UIImage* DefaultFaviconImage() {
 }
 
 - (void)setCollapsed:(BOOL)collapsed {
-  if (_collapsed != collapsed)
+  // If the item is pinned the `_closeButton` should remain hidden.
+  if (_collapsed != collapsed && !_pinned) {
     [_closeButton setHidden:collapsed];
+  }
 
   _collapsed = collapsed;
 }
@@ -181,8 +199,14 @@ UIImage* DefaultFaviconImage() {
 }
 
 - (void)setFavicon:(UIImage*)favicon {
+
+  if (IsVivaldiRunning() && !favicon) {
+    favicon = [UIImage imageNamed:vNTPSDFallbackFavicon];
+  } else {
   if (!favicon)
     favicon = DefaultFaviconImage();
+  } // End Vivaldi
+
   [_faviconView setImage:favicon];
 }
 
@@ -198,11 +222,27 @@ UIImage* DefaultFaviconImage() {
   return;
 }
 
+- (void)setPinned:(BOOL)pinned {
+  if (_pinned == pinned) {
+    return;
+  }
+
+  _pinned = pinned;
+  _titleLabel.hidden = pinned;
+  _closeButton.hidden = pinned;
+}
+
 - (void)startProgressSpinner {
   [_activityIndicator startAnimating];
   [_activityIndicator setHidden:NO];
   [_faviconView setHidden:YES];
+
+  if (IsVivaldiRunning()) {
+    [_faviconView setImage:[UIImage imageNamed:vNTPSDFallbackFavicon]];
+  } else {
   [_faviconView setImage:DefaultFaviconImage()];
+  } // End Vivaldi
+
 }
 
 - (void)stopProgressSpinner {
@@ -224,6 +264,8 @@ UIImage* DefaultFaviconImage() {
   if (CGRectEqualToRect(CGRectZero, previousFrame) &&
       !_layoutConstraintsInitialized) {
     [self setNeedsUpdateConstraints];
+  } else {
+    [self updatePinnedConstraints];
   }
 }
 
@@ -234,8 +276,9 @@ UIImage* DefaultFaviconImage() {
     _layoutConstraintsInitialized = YES;
     [self addCommonConstraints];
     // Add buttons and labels constraints if needed.
-    if (_closeButton)
+    if (_closeButton) {
       [self addButtonsAndLabelConstraints];
+    }
   }
 }
 
@@ -288,10 +331,21 @@ UIImage* DefaultFaviconImage() {
 - (void)createButtonsAndLabel {
   _closeButton = [HighlightButton buttonWithType:UIButtonTypeCustom];
   [_closeButton setTranslatesAutoresizingMaskIntoConstraints:NO];
+
+  // TODO(crbug.com/1418068): Remove after minimum version required is >=
+  // iOS 15.
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+  NSDirectionalEdgeInsets contentInsets =
+      NSDirectionalEdgeInsetsMake(kTabCloseTopInset, kTabCloseLeftInset,
+                                  kTabCloseBottomInset, kTabCloseRightInset);
+  [_closeButton.configuration setContentInsets:contentInsets];
+#else
   [_closeButton setContentEdgeInsets:UIEdgeInsetsMake(kTabCloseTopInset,
                                                       kTabCloseLeftInset,
                                                       kTabCloseBottomInset,
                                                       kTabCloseRightInset)];
+#endif  // __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+
   UIImage* closeButton =
       UseSymbols()
           ? DefaultSymbolTemplateWithPointSize(kXMarkSymbol,
@@ -319,7 +373,13 @@ UIImage* DefaultFaviconImage() {
   _faviconView = [[UIImageView alloc] initWithFrame:faviconFrame];
   [_faviconView setTranslatesAutoresizingMaskIntoConstraints:NO];
   [_faviconView setContentMode:UIViewContentModeScaleAspectFit];
+
+  if (IsVivaldiRunning()) {
+    [_faviconView setImage:[UIImage imageNamed:@"toolbar_menu"]];
+  } else {
   [_faviconView setImage:DefaultFaviconImage()];
+  } // End Vivaldi
+
   [_faviconView setAccessibilityIdentifier:@"Favicon"];
   [self addSubview:_faviconView];
 
@@ -338,31 +398,31 @@ UIImage* DefaultFaviconImage() {
     @"title" : _titleLabel,
     @"favicon" : _faviconView,
   };
+
   NSArray* constraints = @[
-    @"H:|-faviconLeftInset-[favicon(faviconSize)]",
+    @"H:[favicon(faviconSize)]",
     @"V:|-faviconVerticalOffset-[favicon]-0-|",
     @"H:[close(==closeButtonSize)]-closeButtonHorizontalShift-|",
     @"V:|-0-[close]-0-|",
-    @"H:[favicon]-titleLeftMargin-[title]-titleRightMargin-[close]",
+    @"H:[title]-titleRightMargin-[close]",
     @"V:[title(==titleHeight)]",
   ];
 
   NSDictionary* metrics = @{
     @"closeButtonSize" : @(kCloseButtonSize),
     @"closeButtonHorizontalShift" : @(kCloseButtonHorizontalShift),
-    @"titleLeftMargin" : @(kTitleLeftMargin),
     @"titleRightMargin" : @(kTitleRightMargin),
     @"titleHeight" : @(kFaviconSize),
-    @"faviconLeftInset" : @(kFaviconLeftInset),
     @"faviconVerticalOffset" : @(kFaviconVerticalOffset),
     @"faviconSize" : @(kFaviconSize),
   };
+
   ApplyVisualConstraintsWithMetrics(constraints, viewsDictionary, metrics);
   AddSameCenterXConstraint(self, _faviconView, _activityIndicator);
   AddSameCenterYConstraint(self, _faviconView, _activityIndicator);
   AddSameCenterYConstraint(self, _faviconView, _titleLabel);
+  [self updatePinnedConstraints];
 }
-
 // Updates this tab's style based on the value of `selected` and the current
 // incognito style.
 - (void)updateStyleForSelected:(BOOL)selected {
@@ -476,18 +536,56 @@ UIImage* DefaultFaviconImage() {
   return path;
 }
 
+// Updates constraints that depend on the pinned state.
+- (void)updatePinnedConstraints {
+  if (_pinned) {
+    [NSLayoutConstraint deactivateConstraints:self.defaultConstraints];
+    [NSLayoutConstraint activateConstraints:self.faviconPinnedConstraints];
+  } else {
+    [NSLayoutConstraint deactivateConstraints:self.faviconPinnedConstraints];
+    [NSLayoutConstraint activateConstraints:self.defaultConstraints];
+  }
+}
+
+#pragma mark - Getters
+
+- (NSArray<NSLayoutConstraint*>*)faviconPinnedConstraints {
+  if (!_faviconPinnedConstraints) {
+    _faviconPinnedConstraints = @[
+      [_faviconView.leadingAnchor
+          constraintGreaterThanOrEqualToAnchor:self.leadingAnchor
+                                      constant:kPinnedFaviconHorizontalMargin],
+      [_faviconView.trailingAnchor
+          constraintLessThanOrEqualToAnchor:self.trailingAnchor
+                                   constant:-kPinnedFaviconHorizontalMargin],
+    ];
+  }
+  return _faviconPinnedConstraints;
+}
+
+- (NSArray<NSLayoutConstraint*>*)defaultConstraints {
+  if (!_defaultConstraints) {
+    _defaultConstraints = @[
+      [_faviconView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor
+                                                 constant:kFaviconLeftInset],
+      [_faviconView.trailingAnchor
+          constraintEqualToAnchor:_titleLabel.leadingAnchor
+                         constant:-kTitleLeftMargin],
+    ];
+  }
+  return _defaultConstraints;
+}
+
 #pragma mark UIPointerInteractionDelegate
 
 - (UIPointerRegion*)pointerInteraction:(UIPointerInteraction*)interaction
                       regionForRequest:(UIPointerRegionRequest*)request
-                         defaultRegion:(UIPointerRegion*)defaultRegion
-    API_AVAILABLE(ios(13.4)) {
+                         defaultRegion:(UIPointerRegion*)defaultRegion {
   return defaultRegion;
 }
 
 - (UIPointerStyle*)pointerInteraction:(UIPointerInteraction*)interaction
-                       styleForRegion:(UIPointerRegion*)region
-    API_AVAILABLE(ios(13.4)) {
+                       styleForRegion:(UIPointerRegion*)region {
   // Hovering over this tab view and closing the tab simultaneously could result
   // in this tab view having been removed from the window at the beginning of
   // this method. If this tab view has already been removed from the view

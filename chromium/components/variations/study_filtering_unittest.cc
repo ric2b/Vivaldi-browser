@@ -10,8 +10,8 @@
 
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -669,6 +669,53 @@ TEST(VariationsStudyFilteringTest, CheckStudyCountry) {
     EXPECT_EQ(test.expected_result,
               internal::CheckStudyCountry(filter, test.actual_country));
   }
+}
+
+TEST(VariationsStudyFilteringTest, CheckStudyGoogleGroupFilterNotSet) {
+  Study::Filter filter;
+
+  // Check that if the filter is not set, the study always applies.
+  EXPECT_TRUE(internal::CheckStudyGoogleGroup(filter, {}));
+  EXPECT_TRUE(internal::CheckStudyGoogleGroup(filter, {1}));
+}
+
+TEST(VariationsStudyFilteringTest, CheckStudyGoogleGroupFilterSet) {
+  Study::Filter filter;
+
+  // Check that if a google_group filter is set, then only members of that group
+  // match.
+  filter.add_google_group(1);
+  filter.add_google_group(2);
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {}));
+  EXPECT_TRUE(internal::CheckStudyGoogleGroup(filter, {1}));
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {3}));
+  EXPECT_TRUE(internal::CheckStudyGoogleGroup(filter, {1, 3}));
+}
+
+TEST(VariationsStudyFilteringTest, CheckStudyExcludeGoogleGroupFilterSet) {
+  Study::Filter filter;
+
+  // Check that if an exclude_google_group filter is set, then only non-members
+  // of that group match.
+  filter.add_exclude_google_group(1);
+  filter.add_exclude_google_group(2);
+  EXPECT_TRUE(internal::CheckStudyGoogleGroup(filter, {}));
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {1}));
+  EXPECT_TRUE(internal::CheckStudyGoogleGroup(filter, {3}));
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {1, 3}));
+}
+
+TEST(VariationsStudyFilteringTest, CheckStudyBothGoogleGroupFiltersSet) {
+  Study::Filter filter;
+
+  // Check that both google_group and exclude_google_group filter is set, the
+  // study is filtered out.
+  filter.add_google_group(1);
+  filter.add_exclude_google_group(2);
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {}));
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {1}));
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {2}));
+  EXPECT_FALSE(internal::CheckStudyGoogleGroup(filter, {1, 2}));
 }
 
 TEST(VariationsStudyFilteringTest, FilterAndValidateStudies) {

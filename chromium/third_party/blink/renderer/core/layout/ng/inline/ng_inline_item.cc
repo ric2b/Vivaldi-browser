@@ -86,7 +86,8 @@ NGInlineItem::NGInlineItem(NGInlineItemType type,
       is_empty_item_(false),
       is_block_level_(false),
       is_end_collapsible_newline_(false),
-      is_generated_for_line_break_(false) {
+      is_generated_for_line_break_(false),
+      is_unsafe_to_reuse_shape_result_(false) {
   DCHECK_GE(end, start);
   ComputeBoxProperties();
 }
@@ -110,7 +111,8 @@ NGInlineItem::NGInlineItem(const NGInlineItem& other,
       is_empty_item_(other.is_empty_item_),
       is_block_level_(other.is_block_level_),
       is_end_collapsible_newline_(other.is_end_collapsible_newline_),
-      is_generated_for_line_break_(other.is_generated_for_line_break_) {
+      is_generated_for_line_break_(other.is_generated_for_line_break_),
+      is_unsafe_to_reuse_shape_result_(other.is_unsafe_to_reuse_shape_result_) {
   DCHECK_GE(end, start);
 }
 
@@ -200,7 +202,6 @@ unsigned NGInlineItem::SetBidiLevel(HeapVector<NGInlineItem>& items,
 const Font& NGInlineItem::FontWithSvgScaling() const {
   if (const auto* svg_text =
           DynamicTo<LayoutSVGInlineText>(layout_object_.Get())) {
-    DCHECK(RuntimeEnabledFeatures::SVGTextNGEnabled());
     // We don't need to care about StyleVariant(). SVG 1.1 doesn't support
     // ::first-line.
     return svg_text->ScaledFont();

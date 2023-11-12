@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 
-#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/path_service.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
@@ -250,8 +250,9 @@ class LocationBarViewGeolocationBackForwardCacheBrowserTest
   LocationBarViewGeolocationBackForwardCacheBrowserTest()
       : geo_override_(0.0, 0.0) {
     feature_list_.InitWithFeaturesAndParameters(
-        {{features::kBackForwardCache,
-          {{"TimeToLiveInBackForwardCacheInSeconds", "3600"}}},
+        {{features::kBackForwardCache, {{}}},
+         {features::kBackForwardCacheTimeToLiveControl,
+          {{"time_to_live_seconds", "3600"}}},
          {blink::features::kLoadingTasksUnfreezable, {}},
          {features::kBackForwardCacheMemoryControls, {}}},
         {});

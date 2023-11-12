@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/overlays/infobar_modal/save_card/save_card_infobar_modal_overlay_mediator.h"
 
-#import "base/bind.h"
 #import "base/feature_list.h"
+#import "base/functional/bind.h"
 #import "base/guid.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/autofill/core/browser/autofill_client.h"
@@ -82,19 +82,11 @@ class SaveCardInfobarModalOverlayMediatorTest : public PlatformTest {
         autofill::LegalMessageLines(
             {autofill::TestLegalMessageLine("Test message")});
     std::unique_ptr<autofill::AutofillSaveCardInfoBarDelegateMobile> delegate =
-        std::make_unique<autofill::AutofillSaveCardInfoBarDelegateMobile>(
-            /*upload=*/true, autofill::AutofillClient::SaveCreditCardOptions(),
+        autofill::AutofillSaveCardInfoBarDelegateMobile::CreateForUploadSave(
+            autofill::AutofillClient::SaveCreditCardOptions(),
             autofill::CreditCard(base::GenerateGUID(),
                                  "https://www.example.com/"),
-            legal_message_lines,
-            base::BindOnce(
-                ^(autofill::AutofillClient::SaveCardOfferUserDecision
-                      user_decision,
-                  const autofill::AutofillClient::UserProvidedCardDetails&
-                      user_provided_card_details){
-                }),
-            autofill::AutofillClient::LocalSaveCardPromptCallback(),
-            AccountInfo());
+            base::DoNothing(), legal_message_lines, AccountInfo());
     delegate_ = delegate.get();
     infobar_ = std::make_unique<InfoBarIOS>(InfobarType::kInfobarTypeSaveCard,
                                             std::move(delegate));

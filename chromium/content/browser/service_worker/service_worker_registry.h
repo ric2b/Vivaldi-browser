@@ -9,6 +9,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/containers/unique_ptr_adapters.h"
+#include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -39,6 +40,9 @@ class ServiceWorkerVersion;
 
 class ServiceWorkerRegistryTest;
 FORWARD_DECLARE_TEST(ServiceWorkerRegistryTest, StoragePolicyChange);
+
+CONTENT_EXPORT BASE_DECLARE_FEATURE(
+    kServiceWorkerMergeFindRegistrationForClientUrl);
 
 // Manages in-memory representation of service worker registrations
 // (i.e., ServiceWorkerRegistration) including installing and uninstalling
@@ -89,6 +93,8 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   using StatusCallback =
       base::OnceCallback<void(blink::ServiceWorkerStatusCode status)>;
 
+  enum class Purpose { kNotForNavigation, kNavigation };
+
   ServiceWorkerRegistry(ServiceWorkerContextCore* context,
                         storage::QuotaManagerProxy* quota_manager_proxy,
                         storage::SpecialStoragePolicy* special_storage_policy);
@@ -131,7 +137,8 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   // for `client_url` or `registration_id` may complete immediately
   // (the callback may be called prior to the method returning) or
   // asynchronously.
-  void FindRegistrationForClientUrl(const GURL& client_url,
+  void FindRegistrationForClientUrl(Purpose purpose,
+                                    const GURL& client_url,
                                     const blink::StorageKey& key,
                                     FindRegistrationCallback callback);
   void FindRegistrationForScope(const GURL& scope,
@@ -189,7 +196,6 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
   //   ServiceWorkerStorage::PurgeResources() to delete their script resources.
   // If these aren't called, on the next profile session the cleanup occurs.
   void DeleteRegistration(scoped_refptr<ServiceWorkerRegistration> registration,
-                          const blink::StorageKey& key,
                           StatusCallback callback);
 
   // Intended for use only by ServiceWorkerRegisterJob and
@@ -223,6 +229,11 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
       int64_t registration_id,
       const blink::StorageKey& key,
       blink::mojom::ServiceWorkerFetchHandlerType fetch_handler_type,
+      StatusCallback callback);
+  void UpdateResourceSha256Checksums(
+      int64_t registration_id,
+      const blink::StorageKey& key,
+      const base::flat_map<int64_t, std::string>& updated_sha256_checksums,
       StatusCallback callback);
   void StoreUncommittedResourceId(int64_t resource_id,
                                   const blink::StorageKey& key);
@@ -326,7 +337,13 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
       int64_t trace_event_id,
       FindRegistrationCallback callback,
       storage::mojom::ServiceWorkerDatabaseStatus database_status,
-      storage::mojom::ServiceWorkerFindRegistrationResultPtr result);
+      storage::mojom::ServiceWorkerFindRegistrationResultPtr result,
+      const absl::optional<std::vector<GURL>>& scopes);
+  void RunFindRegistrationCallbacks(
+      const GURL& client_url,
+      const blink::StorageKey& key,
+      scoped_refptr<ServiceWorkerRegistration> registration,
+      blink::ServiceWorkerStatusCode status);
   void DidFindRegistrationForScope(
       FindRegistrationCallback callback,
       storage::mojom::ServiceWorkerDatabaseStatus database_status,
@@ -360,6 +377,7 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
       uint64_t deleted_resources_size);
   void DidDeleteRegistration(
       int64_t registration_id,
+      const GURL& stored_scope,
       const blink::StorageKey& key,
       StatusCallback callback,
       storage::mojom::ServiceWorkerDatabaseStatus database_status,
@@ -497,6 +515,16 @@ class CONTENT_EXPORT ServiceWorkerRegistry {
 
   // Indicates whether recovery process should be scheduled.
   bool should_schedule_delete_and_start_over_ = true;
+
+  // Stores in-flight FindRegistrationForClientUrl callbacks to merge duplicate
+  // requests.
+  base::flat_map<std::pair<GURL, blink::StorageKey>,
+                 std::vector<FindRegistrationCallback>>
+      find_registration_callbacks_;
+
+  // ServiceWorker registration scope cache to skip calling
+  // FindRegistrationForClientUrl mojo function (https://crbug.com/1411197).
+  std::map<blink::StorageKey, std::set<GURL>> registration_scope_cache_;
 
   enum class ConnectionState {
     kNormal,

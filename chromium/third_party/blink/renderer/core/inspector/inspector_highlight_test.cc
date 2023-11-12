@@ -36,11 +36,7 @@ void AssertValueEqualsJSON(const std::unique_ptr<protocol::Value>& actual_value,
 
 }  // namespace
 
-class InspectorHighlightTest : public testing::Test,
-                               private ScopedLayoutNGForTest {
- public:
-  InspectorHighlightTest() : ScopedLayoutNGForTest(true) {}
-
+class InspectorHighlightTest : public testing::Test {
  protected:
   void SetUp() override;
 
@@ -292,7 +288,7 @@ static std::string GetBackgroundColorFromElementInfo(Element* element) {
   EXPECT_TRUE(status_to_json.ok());
   base::Value parsed_json_actual = ParseJson(json_actual);
   auto* style =
-      parsed_json_actual.FindKeyOfType("style", base::Value::Type::DICTIONARY);
+      parsed_json_actual.FindKeyOfType("style", base::Value::Type::DICT);
   EXPECT_TRUE(style);
   auto* backgroundColor = style->FindKeyOfType("background-color-css-text",
                                                base::Value::Type::STRING);

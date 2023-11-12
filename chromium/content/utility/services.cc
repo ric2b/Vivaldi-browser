@@ -20,6 +20,7 @@
 #include "content/services/auction_worklet/auction_worklet_service_impl.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
 #include "device/vr/buildflags/buildflags.h"
+#include "media/base/media_switches.h"
 #include "media/gpu/buildflags.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -88,7 +89,7 @@ extern sandbox::TargetServices* g_utility_target_services;
 
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)) && \
     (BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC))
-#include "media/mojo/services/stable_video_decoder_factory_service.h"  // nogncheck
+#include "media/mojo/services/stable_video_decoder_factory_process_service.h"  // nogncheck
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)) &&
         // (BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC))
 
@@ -233,7 +234,9 @@ auto RunAudio(mojo::PendingReceiver<audio::mojom::AudioService> receiver) {
   }
 #endif  // BUILDFLAG(IS_WIN)
 
-  return audio::CreateStandaloneService(std::move(receiver));
+  return audio::CreateStandaloneService(
+      std::move(receiver),
+      /*run_audio_processing=*/media::IsChromeWideEchoCancellationEnabled());
 }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING) && BUILDFLAG(IS_CHROMEOS)
@@ -318,12 +321,11 @@ auto RunOOPArcVideoAcceleratorFactoryService(
 
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)) && \
     (BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC))
-auto RunStableVideoDecoderFactoryService(
-    mojo::PendingReceiver<media::stable::mojom::StableVideoDecoderFactory>
-        receiver) {
-  auto factory = std::make_unique<media::StableVideoDecoderFactoryService>();
-  factory->BindReceiver(std::move(receiver));
-  return factory;
+auto RunStableVideoDecoderFactoryProcessService(
+    mojo::PendingReceiver<
+        media::stable::mojom::StableVideoDecoderFactoryProcess> receiver) {
+  return std::make_unique<media::StableVideoDecoderFactoryProcessService>(
+      std::move(receiver));
 }
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)) &&
         // (BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC))
@@ -388,7 +390,7 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
 
 #if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)) && \
     (BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC))
-  services.Add(RunStableVideoDecoderFactoryService);
+  services.Add(RunStableVideoDecoderFactoryProcessService);
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_ASH)) &&
         // (BUILDFLAG(USE_VAAPI) || BUILDFLAG(USE_V4L2_CODEC))
 

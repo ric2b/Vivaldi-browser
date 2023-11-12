@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/hash/hash.h"
 #include "base/json/json_writer.h"
 #include "base/memory/memory_pressure_listener.h"
@@ -160,14 +160,10 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
     use_virtualized_gl_context_ = false;
 #endif
 
-  gpu::GpuMemoryBufferFactory* gmb_factory =
-      manager->gpu_memory_buffer_factory();
-
   command_buffer_ = std::make_unique<CommandBufferService>(
       this, context_group_->memory_tracker());
   gles2_decoder_ = gles2::GLES2Decoder::Create(
-      this, command_buffer_.get(), manager->outputter(), context_group_.get(),
-      gmb_factory ? gmb_factory->AsImageFactory() : nullptr);
+      this, command_buffer_.get(), manager->outputter(), context_group_.get());
   set_decoder_context(std::unique_ptr<DecoderContext>(gles2_decoder_));
 
   sync_point_client_state_ =
@@ -190,16 +186,32 @@ gpu::ContextResult GLES2CommandBufferStub::Initialize(
       gpu_preference == gl::GpuPreference::kNone || force_default_display) {
     gpu_preference = gl::GpuPreference::kDefault;
   }
-  gl::GLDisplay* display = gl::GetDisplay(gpu_preference);
-  DCHECK(display);
 
-  if (!display->IsInitialized()) {
-    gl::GLDisplay* initialized_display =
-        gl::init::InitializeGLOneOffPlatformImplementation(
-            /*fallback_to_software_gl=*/false, /*disable_gl_drawing=*/false,
-            /*init_extensions=*/true,
-            /*system_device_id=*/display->system_device_id());
-    DCHECK_EQ(initialized_display, display);
+  // Query and initialize the default display for this GPU preference,
+  // ignoring any queried display key for now. For simplicity we need
+  // to initialize the default display per-GPU first.
+  // We may be requesting a new GPU/display, so get or initialize the display.
+  gl::GLDisplay* display =
+      gl::init::GetOrInitializeGLOneOffPlatformImplementation(
+          /*fallback_to_software_gl=*/false, /*disable_gl_drawing=*/false,
+          /*init_extensions=*/true,
+          /*gpu_preference=*/gpu_preference);
+
+  // If the user queries a key to create a distinct display on this GPU,
+  // check if this display already exists, and if not, initialize it from
+  // the default display on this GPU.
+  gl::DisplayKey display_key = gl::DisplayKey::kDefault;
+  if (manager->gpu_preferences().force_separate_egl_display_for_webgl_testing &&
+      features::SupportsEGLDualGPURendering()) {
+    display_key = gl::DisplayKey::kSeparateEGLDisplayForWebGLTesting;
+  }
+
+  if (display_key != gl::DisplayKey::kDefault) {
+    gl::GLDisplay* keyed_display = gl::GetDisplay(gpu_preference, display_key);
+    if (!keyed_display->IsInitialized()) {
+      keyed_display->InitializeFromDisplay(display);
+    }
+    display = keyed_display;
   }
 
   if (offscreen) {

@@ -5,21 +5,25 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/barrier_callback.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_test_util.h"
+#include "chrome/browser/apps/icon_standardizer.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
@@ -35,11 +39,19 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/arc/mojom/intent_helper.mojom.h"
 #include "ash/constants/ash_features.h"
-#include "chrome/browser/apps/icon_standardizer.h"
+#include "chrome/browser/apps/app_service/app_icon/app_icon_decoder.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ash/app_list/md_icon_normalizer.h"
-#include "chrome/browser/chromeos/arc/icon_decode_request.h"
+#include "chrome/browser/ash/arc/icon_decode_request.h"
+#include "chrome/browser/ash/crostini/crostini_test_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/chrome_unscaled_resources.h"
+#include "chrome/grit/component_extension_resources.h"
+#include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
+#include "components/services/app_service/public/cpp/features.h"
 #endif
 
 namespace apps {
@@ -52,33 +64,21 @@ class AppIconFactoryTest : public testing::Test {
 
   void SetUp() override { ASSERT_TRUE(tmp_dir_.CreateUniqueTempDir()); }
 
-  void RunLoadIconFromFileWithFallback(apps::IconValuePtr fallback_response,
-                                       bool* callback_called,
-                                       bool* fallback_called,
+  bool RunLoadIconFromFileWithFallback(apps::IconValuePtr fallback_response,
                                        apps::IconValuePtr* result) {
-    *callback_called = false;
-    *fallback_called = false;
+    bool fallback_called = false;
 
+    base::test::TestFuture<apps::IconValuePtr> success_future;
     apps::LoadIconFromFileWithFallback(
         apps::IconType::kUncompressed, 200, GetPath(), apps::IconEffects::kNone,
-        base::BindOnce(
-            [](bool* called, apps::IconValuePtr* result, base::OnceClosure quit,
-               apps::IconValuePtr icon) {
-              *called = true;
-              *result = std::move(icon);
-              std::move(quit).Run();
-            },
-            base::Unretained(callback_called), base::Unretained(result),
-            run_loop_.QuitClosure()),
-        base::BindOnce(
-            [](bool* called, apps::IconValuePtr response,
-               apps::LoadIconCallback callback) {
-              *called = true;
-              std::move(callback).Run(std::move(response));
-            },
-            base::Unretained(fallback_called), std::move(fallback_response)));
+        success_future.GetCallback(),
+        base::BindLambdaForTesting([&](apps::LoadIconCallback callback) {
+          fallback_called = true;
+          std::move(callback).Run(std::move(fallback_response));
+        }));
 
-    run_loop_.Run();
+    *result = success_future.Take();
+    return fallback_called;
   }
 
   std::string GetPngData(const std::string file_name) {
@@ -101,18 +101,10 @@ class AppIconFactoryTest : public testing::Test {
                                      apps::IconType icon_type,
                                      apps::IconEffects icon_effects,
                                      apps::IconValuePtr& output_icon) {
-    apps::LoadIconFromCompressedData(
-        icon_type, kSizeInDip, icon_effects, png_data_as_string,
-        base::BindOnce(
-            [](apps::IconValuePtr* result,
-               base::OnceClosure load_app_icon_callback,
-               apps::IconValuePtr icon) {
-              *result = std::move(icon);
-              std::move(load_app_icon_callback).Run();
-            },
-            &output_icon, run_loop_.QuitClosure()));
-    run_loop_.Run();
-
+    base::test::TestFuture<apps::IconValuePtr> future;
+    apps::LoadIconFromCompressedData(icon_type, kSizeInDip, icon_effects,
+                                     png_data_as_string, future.GetCallback());
+    output_icon = future.Take();
     ASSERT_TRUE(output_icon);
     ASSERT_EQ(icon_type, output_icon->icon_type);
     ASSERT_FALSE(output_icon->is_placeholder_icon);
@@ -132,25 +124,19 @@ class AppIconFactoryTest : public testing::Test {
 
     output_image_skia = gfx::ImageSkia::CreateFromBitmap(decoded, scale);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
     output_image_skia = apps::CreateStandardIconImage(output_image_skia);
-#endif
     EnsureRepresentationsLoaded(output_image_skia);
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   apps::IconValuePtr RunLoadIconFromResource(apps::IconType icon_type,
                                              apps::IconEffects icon_effects) {
-    bool is_placeholder_icon = false;
-    apps::IconValuePtr icon_value;
-    apps::LoadIconFromResource(
-        icon_type, kSizeInDip, IDR_LOGO_CROSTINI_DEFAULT, is_placeholder_icon,
-        icon_effects, base::BindLambdaForTesting([&](apps::IconValuePtr icon) {
-          icon_value = std::move(icon);
-          run_loop_.Quit();
-        }));
-    run_loop_.Run();
-    return icon_value;
+    base::test::TestFuture<apps::IconValuePtr> future;
+    apps::LoadIconFromResource(icon_type, kSizeInDip, IDR_LOGO_CROSTINI_DEFAULT,
+                               /*is_placeholder_icon=*/false, icon_effects,
+                               future.GetCallback());
+    auto icon = future.Take();
+    return icon;
   }
 
   void GenerateCrostiniPenguinIcon(gfx::ImageSkia& output_image_skia) {
@@ -170,12 +156,21 @@ class AppIconFactoryTest : public testing::Test {
             IDR_LOGO_CROSTINI_DEFAULT);
     output = std::vector<uint8_t>(data.begin(), data.end());
   }
+
+  void GeneratePlayStoreIcon(gfx::ImageSkia& output_image_skia) {
+    output_image_skia =
+        *(ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_ARC_SUPPORT_ICON_192_PNG));
+    output_image_skia = gfx::ImageSkiaOperations::CreateResizedImage(
+        output_image_skia, skia::ImageOperations::RESIZE_BEST,
+        gfx::Size(kSizeInDip, kSizeInDip));
+    EnsureRepresentationsLoaded(output_image_skia);
+  }
 #endif
 
  protected:
   content::BrowserTaskEnvironment task_env_{};
   base::ScopedTempDir tmp_dir_{};
-  base::RunLoop run_loop_{};
 };
 
 TEST_F(AppIconFactoryTest, LoadFromFileSuccess) {
@@ -186,16 +181,13 @@ TEST_F(AppIconFactoryTest, LoadFromFileSuccess) {
 
   auto fallback_response = std::make_unique<apps::IconValue>();
   auto result = std::make_unique<apps::IconValue>();
-  bool callback_called, fallback_called;
-  RunLoadIconFromFileWithFallback(std::move(fallback_response),
-                                  &callback_called, &fallback_called, &result);
-  EXPECT_TRUE(callback_called);
+  bool fallback_called =
+      RunLoadIconFromFileWithFallback(std::move(fallback_response), &result);
   EXPECT_FALSE(fallback_called);
   ASSERT_TRUE(result);
 
-  EXPECT_TRUE(
-      cc::MatchesBitmap(*bitmap, *result->uncompressed.bitmap(),
-                        cc::ExactPixelComparator(/*discard_alpha=*/false)));
+  EXPECT_TRUE(cc::MatchesBitmap(*bitmap, *result->uncompressed.bitmap(),
+                                cc::ExactPixelComparator()));
 }
 
 TEST_F(AppIconFactoryTest, LoadFromFileFallback) {
@@ -208,10 +200,8 @@ TEST_F(AppIconFactoryTest, LoadFromFileFallback) {
   fallback_response->uncompressed = expect_image;
 
   auto result = std::make_unique<apps::IconValue>();
-  bool callback_called, fallback_called;
-  RunLoadIconFromFileWithFallback(std::move(fallback_response),
-                                  &callback_called, &fallback_called, &result);
-  EXPECT_TRUE(callback_called);
+  bool fallback_called =
+      RunLoadIconFromFileWithFallback(std::move(fallback_response), &result);
   EXPECT_TRUE(fallback_called);
   ASSERT_TRUE(result);
   EXPECT_TRUE(result->uncompressed.BackedBySameObjectAs(expect_image));
@@ -220,34 +210,27 @@ TEST_F(AppIconFactoryTest, LoadFromFileFallback) {
 TEST_F(AppIconFactoryTest, LoadFromFileFallbackFailure) {
   auto fallback_response = std::make_unique<apps::IconValue>();
   auto result = std::make_unique<apps::IconValue>();
-  bool callback_called, fallback_called;
-  RunLoadIconFromFileWithFallback(std::move(fallback_response),
-                                  &callback_called, &fallback_called, &result);
-  EXPECT_TRUE(callback_called);
+  bool fallback_called =
+      RunLoadIconFromFileWithFallback(std::move(fallback_response), &result);
   EXPECT_TRUE(fallback_called);
   ASSERT_TRUE(result);
 }
 
 TEST_F(AppIconFactoryTest, LoadFromFileFallbackDoesNotReturn) {
-  auto result = std::make_unique<apps::IconValue>();
-  bool callback_called = false, fallback_called = false;
+  base::test::TestFuture<apps::IconValuePtr> success_future;
 
+  bool fallback_called = false;
   apps::LoadIconFromFileWithFallback(
-      apps::IconType::kUncompressed, 200, GetPath(), apps::IconEffects::kNone,
-      base::BindLambdaForTesting([&](apps::IconValuePtr icon) {
-        callback_called = true;
-        result = std::move(icon);
-        run_loop_.Quit();
-      }),
-      base::BindLambdaForTesting([&](apps::LoadIconCallback callback) {
-        fallback_called = true;
+      apps::IconType::kUncompressed, /*size_hint_in_dip=*/200, GetPath(),
+      apps::IconEffects::kNone, success_future.GetCallback(),
+      base::BindLambdaForTesting([&](apps::LoadIconCallback) {
         // Drop the callback here, like a buggy fallback might.
+        fallback_called = true;
       }));
 
-  run_loop_.Run();
-
-  EXPECT_TRUE(callback_called);
+  EXPECT_TRUE(success_future.Wait());
   EXPECT_TRUE(fallback_called);
+  auto result = success_future.Take();
   ASSERT_TRUE(result);
 }
 
@@ -315,21 +298,11 @@ TEST_F(AppIconFactoryTest, ArcNonAdaptiveIconToImageSkia) {
                            png_data_as_string.end()),
       std::vector<uint8_t>(), std::vector<uint8_t>());
 
-  bool callback_called = false;
-  apps::ArcRawIconPngDataToImageSkia(
-      std::move(icon), 100,
-      base::BindOnce(
-          [](bool* called, base::OnceClosure quit,
-             const gfx::ImageSkia& image) {
-            if (!image.isNull()) {
-              *called = true;
-            }
-            std::move(quit).Run();
-          },
-          base::Unretained(&callback_called), run_loop_.QuitClosure()));
-
-  run_loop_.Run();
-  EXPECT_TRUE(callback_called);
+  base::test::TestFuture<const gfx::ImageSkia&> future;
+  apps::ArcRawIconPngDataToImageSkia(std::move(icon), 100,
+                                     future.GetCallback());
+  auto image = future.Take();
+  EXPECT_TRUE(!image.isNull());
 }
 
 TEST_F(AppIconFactoryTest, ArcAdaptiveIconToImageSkia) {
@@ -343,21 +316,11 @@ TEST_F(AppIconFactoryTest, ArcAdaptiveIconToImageSkia) {
       std::vector<uint8_t>(png_data_as_string.begin(),
                            png_data_as_string.end()));
 
-  bool callback_called = false;
-  apps::ArcRawIconPngDataToImageSkia(
-      std::move(icon), 100,
-      base::BindOnce(
-          [](bool* called, base::OnceClosure quit,
-             const gfx::ImageSkia& image) {
-            if (!image.isNull()) {
-              *called = true;
-            }
-            std::move(quit).Run();
-          },
-          base::Unretained(&callback_called), run_loop_.QuitClosure()));
-
-  run_loop_.Run();
-  EXPECT_TRUE(callback_called);
+  base::test::TestFuture<const gfx::ImageSkia&> future;
+  apps::ArcRawIconPngDataToImageSkia(std::move(icon), 100,
+                                     future.GetCallback());
+  auto image = future.Take();
+  EXPECT_TRUE(!image.isNull());
 }
 
 TEST_F(AppIconFactoryTest, ArcActivityIconsToImageSkias) {
@@ -394,24 +357,10 @@ TEST_F(AppIconFactoryTest, ArcActivityIconsToImageSkias) {
           std::vector<uint8_t>(png_data_as_string.begin(),
                                png_data_as_string.end()))));
 
-  std::vector<gfx::ImageSkia> result;
-  bool callback_called = false;
-  apps::ArcActivityIconsToImageSkias(
-      icons, base::BindOnce(
-                 [](bool* called, std::vector<gfx::ImageSkia>* result,
-                    base::OnceClosure quit,
-                    const std::vector<gfx::ImageSkia>& images) {
-                   *called = true;
-                   for (auto image : images) {
-                     result->emplace_back(image);
-                   }
-                   std::move(quit).Run();
-                 },
-                 base::Unretained(&callback_called), base::Unretained(&result),
-                 run_loop_.QuitClosure()));
-  run_loop_.Run();
+  base::test::TestFuture<const std::vector<gfx::ImageSkia>&> future;
+  apps::ArcActivityIconsToImageSkias(icons, future.GetCallback());
 
-  EXPECT_TRUE(callback_called);
+  auto result = future.Take();
   EXPECT_EQ(4U, result.size());
   EXPECT_TRUE(result[0].isNull());
   EXPECT_FALSE(result[1].isNull());
@@ -422,6 +371,134 @@ TEST_F(AppIconFactoryTest, ArcActivityIconsToImageSkias) {
     EXPECT_TRUE(icon.IsThreadSafe());
   }
 }
+
+class AppServiceAppIconTest : public AppIconFactoryTest {
+ public:
+  void SetUp() override {
+    AppIconFactoryTest::SetUp();
+
+    scoped_feature_list_.InitAndEnableFeature(
+        apps::kUnifiedAppServiceIconLoading);
+
+    ash::CiceroneClient::InitializeFake();
+    profile_ = std::make_unique<TestingProfile>();
+    proxy_ = AppServiceProxyFactory::GetForProfile(profile_.get());
+    scoped_decode_request_for_testing_ =
+        std::make_unique<ScopedDecodeRequestForTesting>();
+
+    crostini_test_helper_ =
+        std::make_unique<crostini::CrostiniTestHelper>(profile_.get());
+    crostini_test_helper_->ReInitializeAppServiceIntegration();
+
+    fake_publisher_ =
+        std::make_unique<apps::FakePublisherForIconTest>(proxy_, AppType::kArc);
+  }
+
+  void TearDown() override {
+    crostini_test_helper_.reset();
+    profile_.reset();
+    ash::CiceroneClient::Shutdown();
+  }
+
+  void OverrideAppServiceProxyInnerIconLoader(apps::IconLoader* icon_loader) {
+    app_service_proxy().OverrideInnerIconLoaderForTesting(icon_loader);
+  }
+
+  void AddApp(const std::string& app_id, AppType app_type) {
+    std::vector<AppPtr> deltas;
+    deltas.push_back(std::make_unique<App>(app_type, app_id));
+    proxy_->OnApps(std::move(deltas), app_type,
+                   /*should_notify_initialized=*/false);
+  }
+
+  // Set up the test Crostini app.
+  std::string AddCrostiniApp(std::string app_id, std::string app_name) {
+    vm_tools::apps::App app;
+    app.set_desktop_file_id(app_id);
+    vm_tools::apps::App::LocaleString::Entry* entry =
+        app.mutable_name()->add_values();
+    entry->set_locale(std::string());
+    entry->set_value(app_name);
+    crostini_test_helper_->AddApp(app);
+
+    return crostini::CrostiniTestHelper::GenerateAppId(
+        app.desktop_file_id(), crostini::kCrostiniDefaultVmName,
+        crostini::kCrostiniDefaultContainerName);
+  }
+
+  apps::IconValuePtr LoadIconFromIconKey(const std::string& app_id,
+                                         const IconKey& icon_key,
+                                         IconType icon_type) {
+    base::test::TestFuture<apps::IconValuePtr> result;
+    app_service_proxy().LoadIconFromIconKey(
+        AppType::kCrostini, app_id, icon_key, icon_type, kSizeInDip,
+        /*allow_placeholder_icon=*/false, result.GetCallback());
+    return result.Take();
+  }
+
+  AppServiceProxy& app_service_proxy() { return *proxy_; }
+
+ private:
+  std::unique_ptr<TestingProfile> profile_;
+  raw_ptr<AppServiceProxy> proxy_;
+  std::unique_ptr<apps::FakePublisherForIconTest> fake_publisher_;
+  std::unique_ptr<ScopedDecodeRequestForTesting>
+      scoped_decode_request_for_testing_;
+
+  std::unique_ptr<crostini::CrostiniTestHelper> crostini_test_helper_;
+
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  base::WeakPtrFactory<AppServiceAppIconTest> weak_ptr_factory_{this};
+};
+
+TEST_F(AppServiceAppIconTest, GetCrostiniPenguinIcon) {
+  gfx::ImageSkia src_image_skia;
+  GenerateCrostiniPenguinIcon(src_image_skia);
+
+  std::string app_id = AddCrostiniApp("app_id", "app_name");
+
+  // Verify the icon reading function in AppService for the default Crostini
+  // penguin icon by calling LoadIconFromResource.
+  IconKey icon_key;
+  icon_key.resource_id = IDR_LOGO_CROSTINI_DEFAULT;
+  icon_key.icon_effects = apps::IconEffects::kCrOsStandardIcon;
+  auto iv = LoadIconFromIconKey(app_id, icon_key, IconType::kStandard);
+  ASSERT_EQ(apps::IconType::kStandard, iv->icon_type);
+  EnsureRepresentationsLoaded(iv->uncompressed);
+  VerifyIcon(src_image_skia, iv->uncompressed);
+}
+
+TEST_F(AppServiceAppIconTest, GetCrostiniPenguinCompressedIcon) {
+  std::vector<uint8_t> src_data;
+  GenerateCrostiniPenguinCompressedIcon(src_data);
+
+  std::string app_id = AddCrostiniApp("app_id", "app_name");
+
+  // Verify the icon reading function in AppService for the default Crostini
+  // penguin icon by calling LoadIconFromResource.
+  IconKey icon_key;
+  icon_key.resource_id = IDR_LOGO_CROSTINI_DEFAULT;
+  icon_key.icon_effects = apps::IconEffects::kCrOsStandardIcon;
+  auto iv = LoadIconFromIconKey(app_id, icon_key, IconType::kCompressed);
+  VerifyCompressedIcon(src_data, *iv);
+}
+
+TEST_F(AppServiceAppIconTest, GetPlayStoreIcon) {
+  gfx::ImageSkia src_image_skia;
+  GeneratePlayStoreIcon(src_image_skia);
+
+  AddApp(arc::kPlayStoreAppId, AppType::kArc);
+
+  // Verify the icon reading function in AppService for the Play Store icon by
+  // calling LoadIconFromResource.
+  auto iv =
+      LoadIconFromIconKey(arc::kPlayStoreAppId, IconKey(), IconType::kStandard);
+  ASSERT_EQ(apps::IconType::kStandard, iv->icon_type);
+  EnsureRepresentationsLoaded(iv->uncompressed);
+  VerifyIcon(src_image_skia, iv->uncompressed);
+}
+
 #endif
 
 }  // namespace apps

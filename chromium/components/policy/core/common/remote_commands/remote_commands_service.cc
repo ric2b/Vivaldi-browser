@@ -9,9 +9,9 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "base/syslog_logging.h"
@@ -21,6 +21,7 @@
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
 #include "components/policy/core/common/cloud/enterprise_metrics.h"
 #include "components/policy/core/common/remote_commands/remote_commands_factory.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 
 namespace policy {
 
@@ -67,6 +68,8 @@ RemoteCommandsService::MetricReceivedRemoteCommand RemoteCommandMetricFromType(
       return Metric::kBrowserRotateAttestationCredential;
     case em::RemoteCommand_Type_FETCH_CRD_AVAILABILITY_INFO:
       return Metric::kFetchCrdAvailabilityInfo;
+    case em::RemoteCommand_Type_FETCH_SUPPORT_PACKET:
+      return Metric::kFetchSupportPacket;
   }
 
   // None of possible types matched. May indicate that there is new unhandled
@@ -111,32 +114,12 @@ const char* RemoteCommandTypeToString(em::RemoteCommand_Type type) {
       return "BrowserRotateAttestationCredential";
     case em::RemoteCommand_Type_FETCH_CRD_AVAILABILITY_INFO:
       return "FetchCrdAvailabilityInfo";
+    case em::RemoteCommand_Type_FETCH_SUPPORT_PACKET:
+      return "FetchSupportPacket";
   }
 
   NOTREACHED() << "Unknown command type: " << type;
   return "";
-}
-
-em::RemoteCommandResult::ResultType CommandStatusToResultType(
-    RemoteCommandJob::Status status) {
-  switch (status) {
-    case RemoteCommandJob::SUCCEEDED:
-      return em::RemoteCommandResult_ResultType_RESULT_SUCCESS;
-    case RemoteCommandJob::FAILED:
-      return em::RemoteCommandResult_ResultType_RESULT_FAILURE;
-    case RemoteCommandJob::EXPIRED:
-    case RemoteCommandJob::INVALID:
-      return em::RemoteCommandResult_ResultType_RESULT_IGNORED;
-    case RemoteCommandJob::NOT_INITIALIZED:
-    case RemoteCommandJob::NOT_STARTED:
-    case RemoteCommandJob::RUNNING:
-    case RemoteCommandJob::TERMINATED:
-    case RemoteCommandJob::STATUS_TYPE_SIZE:
-      NOTREACHED();
-      return em::RemoteCommandResult_ResultType_RESULT_IGNORED;
-  }
-  NOTREACHED();
-  return em::RemoteCommandResult_ResultType_RESULT_IGNORED;
 }
 
 std::string ToString(
@@ -250,7 +233,7 @@ bool RemoteCommandsService::FetchRemoteCommands() {
   }
 
   client_->FetchRemoteCommands(
-      std::move(id_to_acknowledge), previous_results,
+      std::move(id_to_acknowledge), previous_results, GetSignatureType(),
       base::BindOnce(&RemoteCommandsService::OnRemoteCommandsFetched,
                      weak_factory_.GetWeakPtr()));
 
@@ -272,8 +255,7 @@ void RemoteCommandsService::VerifyAndEnqueueSignedCommand(
     const em::SignedData& signed_command) {
   const bool valid_signature = CloudPolicyValidatorBase::VerifySignature(
       signed_command.data(), store_->policy_signature_public_key(),
-      signed_command.signature(),
-      CloudPolicyValidatorBase::SignatureType::SHA1);
+      signed_command.signature(), GetSignatureType());
 
   auto ignore_result = base::BindOnce(
       [](RemoteCommandsService* self, const char* error_msg,
@@ -381,20 +363,23 @@ void RemoteCommandsService::OnJobFinished(RemoteCommandJob* command) {
   // the server to keep our last acknowledged command ID.
   // See http://crbug.com/466572.
 
-  em::RemoteCommandResult result;
-  result.set_command_id(command->unique_id());
-  result.set_timestamp(command->execution_started_time().ToJavaTime());
-  result.set_result(CommandStatusToResultType(command->status()));
+  if (command->GetResult()) {
+    em::RemoteCommandResult result;
+    result.set_command_id(command->unique_id());
+    result.set_timestamp(command->execution_started_time().ToJavaTime());
+    result.set_result(command->GetResult().value());
 
-  std::unique_ptr<std::string> result_payload = command->GetResultPayload();
-  if (result_payload)
-    result.set_payload(std::move(*result_payload));
+    std::unique_ptr<std::string> result_payload = command->GetResultPayload();
+    if (result_payload) {
+      result.set_payload(std::move(*result_payload));
+    }
 
-  SYSLOG(INFO) << "Remote command " << command->unique_id()
-               << " finished with result " << ToString(result.result()) << " ("
-               << result.result() << ")";
+    SYSLOG(INFO) << "Remote command " << command->unique_id()
+                 << " finished with result " << ToString(result.result())
+                 << " (" << result.result() << ")";
 
-  unsent_results_.push_back(result);
+    unsent_results_.push_back(result);
+  }
 
   RecordExecutedRemoteCommand(*command);
 
@@ -407,19 +392,22 @@ void RemoteCommandsService::OnRemoteCommandsFetched(
   DCHECK(command_fetch_in_progress_);
   command_fetch_in_progress_ = false;
 
-  if (!on_command_acked_callback_.is_null())
+  if (!on_command_acked_callback_.is_null()) {
     std::move(on_command_acked_callback_).Run();
+  }
 
   // TODO(binjin): Add retrying on errors. See http://crbug.com/466572.
   if (status == DM_STATUS_SUCCESS) {
-    for (const auto& command : commands)
+    for (const auto& command : commands) {
       VerifyAndEnqueueSignedCommand(command);
+    }
   }
 
   // Start another fetch request job immediately if there are unsent command
   // results or enqueued fetch requests.
-  if (!unsent_results_.empty() || has_enqueued_fetch_request_)
+  if (!unsent_results_.empty() || has_enqueued_fetch_request_) {
     FetchRemoteCommands();
+  }
 }
 
 void RemoteCommandsService::RecordReceivedRemoteCommand(

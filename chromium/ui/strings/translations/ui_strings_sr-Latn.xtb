@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 mesec}one{# mesec}few{# meseca}other{# meseci}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 sat i }one{# sat i }few{# sata i }other{# sati i }}</translation>
+<translation id="185013357618350178">&amp;Izaberi</translation>
 <translation id="1859234291848436338">Smer pisanja</translation>
 <translation id="1860796786778352021">Zatvori obaveštenje</translation>
 <translation id="186476001994626254">Veb-sadržaj za pametno nalepljivanje</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{za 1 č}one{za # č}few{za # č}other{za # č}}</translation>
 <translation id="2583543531130364912">Kalibracija dodirnog ekrana</translation>
 <translation id="2586657967955657006">Memorija</translation>
+<translation id="2653844658857826081">NOVO</translation>
 <translation id="2666092431469916601">Vrh</translation>
 <translation id="2701330563083355633">Deljeno sa: <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Novo</translation>

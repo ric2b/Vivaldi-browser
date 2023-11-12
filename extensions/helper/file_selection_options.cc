@@ -3,7 +3,6 @@
 #include "extensions/helper/file_selection_options.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -78,7 +77,7 @@ void FileSelectionOptions::RunDialog(RunDialogResult callback) && {
   if (!browser) {
     // Run the callback later so the caller does not need to deal with
     // synchronous callback calls.
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), base::FilePath(),
                                   /*cancelled=*/false));
     return;

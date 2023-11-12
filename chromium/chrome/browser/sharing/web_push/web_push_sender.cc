@@ -7,7 +7,7 @@
 #include <limits.h>
 
 #include "base/base64url.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/sharing/web_push/json_web_token_util.h"
@@ -47,7 +47,7 @@ const char kContentCodingAes128Gcm[] = "aes128gcm";
 const char kContentEncodingOctetStream[] = "application/octet-stream";
 
 absl::optional<std::string> GetAuthHeader(crypto::ECPrivateKey* vapid_key) {
-  base::Value claims(base::Value::Type::DICTIONARY);
+  base::Value claims(base::Value::Type::DICT);
   claims.SetKey(kClaimsKeyAudience, base::Value(kFCMServerAudience));
 
   int64_t exp =

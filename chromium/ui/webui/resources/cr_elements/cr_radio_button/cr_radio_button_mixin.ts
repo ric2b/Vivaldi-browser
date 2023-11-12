@@ -8,8 +8,7 @@
 
 // clang-format off
 import {dedupingMixin, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-
-import {assert, assertNotReached} from '../../js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 
 interface PaperRippleElement {
   clear(): void;
@@ -49,6 +48,12 @@ export const CrRadioButtonMixin = dedupingMixin(
               observer: 'onFocusableChanged_',
             },
 
+            hideLabelText: {
+              type: Boolean,
+              value: false,
+              reflectToAttribute: true,
+            },
+
             label: {
               type: String,
               value: '',  // Allows hidden$= binding to run without being set.
@@ -73,6 +78,7 @@ export const CrRadioButtonMixin = dedupingMixin(
         checked: boolean;
         disabled: boolean;
         focusable: boolean;
+        hideLabelText: boolean;
         label: string;
         name: string;
         private buttonTabIndex_: number;
@@ -147,6 +153,7 @@ export interface CrRadioButtonMixinInterface {
   checked: boolean;
   disabled: boolean;
   focusable: boolean;
+  hideLabelText: boolean;
   label: string;
   name: string;
 

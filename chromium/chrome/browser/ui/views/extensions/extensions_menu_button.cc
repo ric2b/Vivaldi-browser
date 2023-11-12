@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/views/extensions/extensions_menu_button.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
@@ -74,10 +74,9 @@ void ExtensionsMenuButton::UpdateState() {
   ChromeLayoutProvider* const provider = ChromeLayoutProvider::Get();
   const int icon_size =
       provider->GetDistanceMetric(DISTANCE_EXTENSIONS_MENU_EXTENSION_ICON_SIZE);
-  SetImage(Button::STATE_NORMAL, controller_
-                                     ->GetIcon(GetCurrentWebContents(),
-                                               gfx::Size(icon_size, icon_size))
-                                     .AsImageSkia());
+  SetImageModel(Button::STATE_NORMAL,
+                controller_->GetIcon(GetCurrentWebContents(),
+                                     gfx::Size(icon_size, icon_size)));
 
   SetText(controller_->GetActionName());
   SetTooltipText(controller_->GetTooltip(GetCurrentWebContents()));

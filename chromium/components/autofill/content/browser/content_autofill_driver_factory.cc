@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/browser_autofill_manager.h"
@@ -18,9 +18,7 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
-
-#include "app/vivaldi_apptools.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "third_party/blink/public/common/features.h"
 
 namespace autofill {
 
@@ -45,16 +43,8 @@ bool ShouldEnableHeavyFormDataScraping(const version_info::Channel channel) {
 void BrowserDriverInitHook(AutofillClient* client,
                            const std::string& app_locale,
                            ContentAutofillDriver* driver) {
-  bool enable_autofill_dl_manager = true;
-  if (vivaldi::IsVivaldiRunning()) {
-    enable_autofill_dl_manager = client->GetPrefs()->GetBoolean(
-        vivaldiprefs::kPrivacyAutofillServerAssist);
-  }
-
-  driver->set_autofill_manager(std::make_unique<BrowserAutofillManager>(
-      driver, client, app_locale,
-      AutofillManager::EnableDownloadManager(enable_autofill_dl_manager)));
-
+  driver->set_autofill_manager(
+      std::make_unique<BrowserAutofillManager>(driver, client, app_locale));
   if (client && ShouldEnableHeavyFormDataScraping(client->GetChannel()))
     driver->GetAutofillAgent()->EnableHeavyFormDataScraping();
 }
@@ -130,8 +120,10 @@ ContentAutofillDriver* ContentAutofillDriverFactory::DriverForFrame(
   // Within fenced frames and their descendants, Password Manager should for now
   // be disabled (crbug.com/1294378).
   if (render_frame_host->IsNestedWithinFencedFrame() &&
-      !base::FeatureList::IsEnabled(
-          features::kAutofillEnableWithinFencedFrame)) {
+      !(base::FeatureList::IsEnabled(
+            features::kAutofillEnableWithinFencedFrame) &&
+        base::FeatureList::IsEnabled(
+            blink::features::kFencedFramesAPIChanges))) {
     return nullptr;
   }
 
@@ -236,8 +228,6 @@ void ContentAutofillDriverFactory::OnVisibilityChanged(
     content::Visibility visibility) {
   if (visibility == content::Visibility::HIDDEN) {
     client_->HideAutofillPopup(PopupHidingReason::kTabGone);
-    if (client_->IsTouchToFillCreditCardSupported())
-      client_->HideTouchToFillCreditCard();
   }
 }
 

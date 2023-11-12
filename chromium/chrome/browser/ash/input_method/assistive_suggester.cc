@@ -17,7 +17,6 @@
 #include "chrome/browser/ash/input_method/assistive_suggester_prefs.h"
 #include "chrome/browser/ash/input_method/assistive_suggester_switch.h"
 #include "chrome/browser/ash/input_method/suggestion_handler_interface.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/pref_names.h"
@@ -55,14 +54,13 @@ constexpr auto kDefaultLongpressEnabledKeys = base::MakeFixedFlatSet<char>(
 void RecordAssistiveMatch(AssistiveType type) {
   base::UmaHistogramEnumeration("InputMethod.Assistive.Match", type);
 
-  ui::TextInputTarget* input_context =
-      ui::IMEBridge::Get()->GetInputContextHandler();
+  TextInputTarget* input_context = IMEBridge::Get()->GetInputContextHandler();
   if (!input_context)
     return;
 
   auto sourceId = input_context->GetClientSourceForMetrics();
   if (sourceId != ukm::kInvalidSourceId) {
-    ui::RecordUkmAssistiveMatch(sourceId, static_cast<int>(type));
+    RecordUkmAssistiveMatch(sourceId, static_cast<int>(type));
   }
 }
 
@@ -113,6 +111,12 @@ void RecordAssistiveCoverage(AssistiveType type) {
 
 void RecordAssistiveSuccess(AssistiveType type) {
   base::UmaHistogramEnumeration("InputMethod.Assistive.Success", type);
+}
+
+void RecordLongPressDiacriticAutoRepeatSuppressedMetric() {
+  base::UmaHistogramEnumeration(
+      "InputMethod.PhysicalKeyboard.LongpressDiacritics.Action",
+      IMEPKLongpressDiacriticAction::kAutoRepeatSuppressed);
 }
 
 bool IsTopResultMultiWord(const std::vector<AssistiveSuggestion>& suggestions) {
@@ -383,6 +387,12 @@ bool AssistiveSuggester::OnKeyEvent(const ui::KeyEvent& event) {
   if (!focused_context_id_.has_value())
     return false;
 
+  // Auto repeat resets whenever a key is pressed/released as long as its not a
+  // repeat event.
+  if (!event.is_repeat()) {
+    auto_repeat_suppress_metric_emitted_ = false;
+  }
+
   // We only track keydown event because the suggesting action is triggered by
   // surrounding text change, which is triggered by a keydown event. As a
   // result, the next key event after suggesting would be a keyup event of the
@@ -429,6 +439,14 @@ bool AssistiveSuggester::HandleLongpressEnabledKeyEvent(
   // behaviour for alphabetical keys.
   if (event.is_repeat() &&
       kDefaultLongpressEnabledKeys.contains(event.GetCharacter())) {
+    // Only emit the metric if `auto_repeat_suppress_metric_emitted_` is false
+    // as the metric should only be emitted once per Press->Release cycle.
+    if (!auto_repeat_suppress_metric_emitted_ &&
+        !longpress_diacritics_suggester_.HasDiacriticSuggestions(
+            event.GetCharacter())) {
+      auto_repeat_suppress_metric_emitted_ = true;
+      RecordLongPressDiacriticAutoRepeatSuppressedMetric();
+    }
     return true;  // Do not propagate this event.
   }
 
@@ -528,11 +546,11 @@ void AssistiveSuggester::RecordAssistiveMatchMetricsForAssistiveType(
 
 void AssistiveSuggester::RecordAssistiveMatchMetrics(
     const std::u16string& text,
-    int cursor_pos,
-    int anchor_pos,
+    const gfx::Range selection_range,
     const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions) {
   int len = static_cast<int>(text.length());
-  if (cursor_pos > 0 && cursor_pos <= len && cursor_pos == anchor_pos &&
+  const int cursor_pos = selection_range.end();
+  if (cursor_pos > 0 && cursor_pos <= len && selection_range.is_empty() &&
       (cursor_pos == len || base::IsAsciiWhitespace(text[cursor_pos]))) {
     int start_pos = std::max(0, cursor_pos - kMaxTextBeforeCursorLength);
     std::u16string text_before_cursor =
@@ -555,9 +573,8 @@ void AssistiveSuggester::RecordAssistiveMatchMetrics(
   }
 }
 
-bool AssistiveSuggester::WithinGrammarFragment(int cursor_pos, int anchor_pos) {
-  ui::TextInputTarget* input_context =
-      ui::IMEBridge::Get()->GetInputContextHandler();
+bool AssistiveSuggester::WithinGrammarFragment() {
+  TextInputTarget* input_context = IMEBridge::Get()->GetInputContextHandler();
   if (!input_context)
     return false;
 
@@ -567,23 +584,21 @@ bool AssistiveSuggester::WithinGrammarFragment(int cursor_pos, int anchor_pos) {
   return grammar_fragment_opt != absl::nullopt;
 }
 
-void AssistiveSuggester::OnSurroundingTextChanged(const std::u16string& text,
-                                                  int cursor_pos,
-                                                  int anchor_pos) {
+void AssistiveSuggester::OnSurroundingTextChanged(
+    const std::u16string& text,
+    const gfx::Range selection_range) {
   last_surrounding_text_ = text;
-  last_cursor_pos_ = cursor_pos;
-  suggester_switch_->FetchEnabledSuggestionsThen(base::BindOnce(
-      &AssistiveSuggester::ProcessOnSurroundingTextChanged,
-      weak_ptr_factory_.GetWeakPtr(), text, cursor_pos, anchor_pos));
+  last_cursor_pos_ = selection_range.end();
+  suggester_switch_->FetchEnabledSuggestionsThen(
+      base::BindOnce(&AssistiveSuggester::ProcessOnSurroundingTextChanged,
+                     weak_ptr_factory_.GetWeakPtr(), text, selection_range));
 }
 
 void AssistiveSuggester::ProcessOnSurroundingTextChanged(
     const std::u16string& text,
-    int cursor_pos,
-    int anchor_pos,
+    const gfx::Range selection_range,
     const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions) {
-  RecordAssistiveMatchMetrics(text, cursor_pos, anchor_pos,
-                              enabled_suggestions);
+  RecordAssistiveMatchMetrics(text, selection_range, enabled_suggestions);
   if (!IsAssistiveFeatureEnabled() || !focused_context_id_.has_value())
     return;
 
@@ -591,12 +606,11 @@ void AssistiveSuggester::ProcessOnSurroundingTextChanged(
       enabled_suggestions.multi_word_suggestions) {
     // Only multi word cares about tracking the current state of the text
     // field
-    multi_word_suggester_.OnSurroundingTextChanged(text, cursor_pos,
-                                                   anchor_pos);
+    multi_word_suggester_.OnSurroundingTextChanged(text, selection_range);
   }
 
-  if (WithinGrammarFragment(cursor_pos, anchor_pos) ||
-      !TrySuggestWithSurroundingText(text, cursor_pos, anchor_pos,
+  if (WithinGrammarFragment() ||
+      !TrySuggestWithSurroundingText(text, selection_range,
                                      enabled_suggestions)) {
     DismissSuggestion();
   }
@@ -604,17 +618,16 @@ void AssistiveSuggester::ProcessOnSurroundingTextChanged(
 
 bool AssistiveSuggester::TrySuggestWithSurroundingText(
     const std::u16string& text,
-    int cursor_pos,
-    int anchor_pos,
+    const gfx::Range selection_range,
     const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions) {
   if (IsSuggestionShown()) {
-    return current_suggester_->TrySuggestWithSurroundingText(text, cursor_pos,
-                                                             anchor_pos);
+    return current_suggester_->TrySuggestWithSurroundingText(text,
+                                                             selection_range);
   }
   if (IsAssistPersonalInfoEnabled() &&
       enabled_suggestions.personal_info_suggestions &&
-      personal_info_suggester_.TrySuggestWithSurroundingText(text, cursor_pos,
-                                                             anchor_pos)) {
+      personal_info_suggester_.TrySuggestWithSurroundingText(text,
+                                                             selection_range)) {
     current_suggester_ = &personal_info_suggester_;
     if (personal_info_suggester_.IsFirstShown()) {
       RecordAssistiveCoverage(current_suggester_->GetProposeActionType());
@@ -623,8 +636,7 @@ bool AssistiveSuggester::TrySuggestWithSurroundingText(
   }
   if (IsEmojiSuggestAdditionEnabled() && !IsEnhancedEmojiSuggestEnabled() &&
       enabled_suggestions.emoji_suggestions &&
-      emoji_suggester_.TrySuggestWithSurroundingText(text, cursor_pos,
-                                                     anchor_pos)) {
+      emoji_suggester_.TrySuggestWithSurroundingText(text, selection_range)) {
     current_suggester_ = &emoji_suggester_;
     RecordAssistiveCoverage(current_suggester_->GetProposeActionType());
     return true;

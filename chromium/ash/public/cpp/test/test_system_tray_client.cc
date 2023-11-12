@@ -122,7 +122,9 @@ void TestSystemTrayClient::SetLocaleAndExit(
     const std::string& locale_iso_code) {}
 
 void TestSystemTrayClient::ShowAccessCodeCastingDialog(
-    AccessCodeCastDialogOpenLocation open_location) {}
+    AccessCodeCastDialogOpenLocation open_location) {
+  ++show_access_code_casting_dialog_count_;
+}
 
 void TestSystemTrayClient::ShowCalendarEvent(
     const absl::optional<GURL>& event_url,
@@ -132,12 +134,20 @@ void TestSystemTrayClient::ShowCalendarEvent(
   show_calendar_event_count_++;
 }
 
+void TestSystemTrayClient::ShowGoogleMeet(const std::string& hangout_link) {
+  show_google_meet_count_++;
+}
+
 void TestSystemTrayClient::ShowChannelInfoAdditionalDetails() {
   ++show_channel_info_additional_details_count_;
 }
 
 void TestSystemTrayClient::ShowChannelInfoGiveFeedback() {
   ++show_channel_info_give_feedback_count_;
+}
+
+void TestSystemTrayClient::ShowAudioSettings() {
+  ++show_audio_settings_count_;
 }
 
 bool TestSystemTrayClient::IsUserFeedbackEnabled() {

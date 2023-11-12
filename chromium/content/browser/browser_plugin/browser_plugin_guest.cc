@@ -41,9 +41,9 @@ void BrowserPluginGuest::Init() {
 }
 
 std::unique_ptr<WebContentsImpl> BrowserPluginGuest::CreateNewGuestWindow(
-    const WebContents::CreateParams& params) {
+    const WebContents::CreateParams& params, int disposition) {
   std::unique_ptr<WebContents> new_contents =
-      delegate_->CreateNewGuestWindow(params);
+      delegate_->CreateNewGuestWindow(params, disposition);
   DCHECK(new_contents);
   return base::WrapUnique(
       static_cast<WebContentsImpl*>(new_contents.release()));
@@ -96,6 +96,11 @@ void BrowserPluginGuest::CreateInWebContents(
 
 WebContentsImpl* BrowserPluginGuest::GetWebContents() const {
   return static_cast<WebContentsImpl*>(web_contents());
+}
+
+RenderFrameHostImpl* BrowserPluginGuest::GetProspectiveOuterDocument() {
+  return static_cast<RenderFrameHostImpl*>(
+      delegate_->GetProspectiveOuterDocument());
 }
 
 void BrowserPluginGuest::DidStartNavigation(

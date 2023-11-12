@@ -761,8 +761,6 @@ suite('AboutPageTest', function() {
   });
 
   test('FirmwareUpdatesBadge No Updates', async function() {
-    loadTimeData.overrideValues({isFirmwareUpdaterAppEnabled: true});
-
     aboutBrowserProxy.setFirmwareUpdatesCount(0);
     await initNewPage();
     flush();
@@ -776,8 +774,6 @@ suite('AboutPageTest', function() {
   });
 
   test('FirmwareUpdatesBadge N Updates', async function() {
-    loadTimeData.overrideValues({isFirmwareUpdaterAppEnabled: true});
-
     for (let i = 1; i < 10; i++) {
       aboutBrowserProxy.setFirmwareUpdatesCount(i);
       await initNewPage();
@@ -795,8 +791,6 @@ suite('AboutPageTest', function() {
   });
 
   test('FirmwareUpdatesBadge 10 Updates', async function() {
-    loadTimeData.overrideValues({isFirmwareUpdaterAppEnabled: true});
-
     aboutBrowserProxy.setFirmwareUpdatesCount(10);
     await initNewPage();
     flush();
@@ -814,7 +808,6 @@ suite('AboutPageTest', function() {
   test('LaunchFirmwareUpdates', async function() {
     loadTimeData.overrideValues({
       isDeepLinkingEnabled: true,
-      isFirmwareUpdaterAppEnabled: true,
     });
 
     await initNewPage();
@@ -828,7 +821,6 @@ suite('AboutPageTest', function() {
   test('Deep link to firmware updates', async () => {
     loadTimeData.overrideValues({
       isDeepLinkingEnabled: true,
-      isFirmwareUpdaterAppEnabled: true,
     });
 
     await initNewPage();
@@ -1382,7 +1374,7 @@ suite('ChannelSwitcherDialogTest', function() {
   let browserProxy = null;
   let currentChannel;
 
-  setup(function() {
+  setup(async function() {
     currentChannel = BrowserChannel.BETA;
     browserProxy = new TestAboutPageBrowserProxyChromeOS();
     browserProxy.setChannels(currentChannel, currentChannel);
@@ -1393,7 +1385,7 @@ suite('ChannelSwitcherDialogTest', function() {
 
     radioButtons = dialog.shadowRoot.querySelectorAll('cr-radio-button');
     assertEquals(3, radioButtons.length);
-    return browserProxy.whenCalled('getChannelInfo');
+    await browserProxy.whenCalled('getChannelInfo');
   });
 
   teardown(function() {
@@ -1533,10 +1525,10 @@ suite('AboutPageTest_OfficialBuild', function() {
     Router.getInstance().resetRouteForTesting();
   });
 
-  test('ReportAnIssue', function() {
+  test('ReportAnIssue', async function() {
     assertTrue(!!page.$.reportIssue);
     page.$.reportIssue.click();
-    return browserProxy.whenCalled('openFeedbackDialog');
+    await browserProxy.whenCalled('openFeedbackDialog');
   });
 
   test('Deep link to report an issue', async () => {

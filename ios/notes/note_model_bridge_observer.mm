@@ -1,12 +1,12 @@
 // Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
-#include "ios/notes/note_model_bridge_observer.h"
+#import "ios/notes/note_model_bridge_observer.h"
 
 #import <Foundation/Foundation.h>
 
-#include "base/check.h"
-#include "base/notreached.h"
-#include "notes/notes_model.h"
+#import "base/check.h"
+#import "base/notreached.h"
+#import "notes/notes_model.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

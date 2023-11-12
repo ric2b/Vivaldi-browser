@@ -11,7 +11,7 @@
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/drag_drop/drag_drop_capture_delegate.h"
 #include "ash/drag_drop/tab_drag_drop_delegate.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -56,6 +56,13 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   void set_toplevel_window_drag_delegate(ToplevelWindowDragDelegate* delegate) {
     toplevel_window_drag_delegate_ = delegate;
   }
+
+  // Returns if the drag drop operation has been fully completed.  This is
+  // similar to IsDragDropInProgress, but returns true even after the drop_data
+  // is passed to the target, and keep returning true until the drag drop states
+  // are callbacks are called), so that the callback receive the proper
+  // state.
+  bool IsDragDropCompleted();
 
   // Overridden from aura::client::DragDropClient:
   ui::mojom::DragOperation StartDragAndDrop(
@@ -165,6 +172,7 @@ class ASH_EXPORT DragDropController : public aura::client::DragDropClient,
   void CancelIfInProgress();
 
   bool enabled_ = false;
+  bool drag_drop_completed_ = true;
   views::UniqueWidgetPtr drag_image_widget_;
   gfx::Vector2d drag_image_offset_;
   std::unique_ptr<ui::OSExchangeData> drag_data_;

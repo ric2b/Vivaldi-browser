@@ -12,6 +12,7 @@
 
 #include "base/files/file_path.h"
 #include "base/format_macros.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "base/test/trace_test_utils.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -369,7 +370,7 @@ TEST_F(TracingObserverProtoTest, AsProtoInto) {
   };
 
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-  perfetto::TrackEvent::Trace([&](perfetto::TrackEvent::TraceContext ctx) {
+  base::TrackEvent::Trace([&](base::TrackEvent::TraceContext ctx) {
     write_dump(ctx.NewTracePacket());
   });
 #else   // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)

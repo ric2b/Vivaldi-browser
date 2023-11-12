@@ -19,10 +19,6 @@
 // explicitly use `ProfileSelections::Builder::WithSystem()`.
 BASE_DECLARE_FEATURE(kSystemProfileSelectionDefaultNone);
 
-// Similar experiment to `kSystemProfileSelectionDefaultNone` described above
-// affecting Guest Profile.
-BASE_DECLARE_FEATURE(kGuestProfileSelectionDefaultNone);
-
 class Profile;
 
 // A helper function that checks whether Keyed Services should be created for
@@ -222,7 +218,7 @@ class ProfileSelections {
   // Parameters: (used during the experiment)
   // - force_guest: true, force Guest with `ProfileSelection::kOriginalOnly`.
   // - force_system: true, force System with `ProfileSelection::kOriginalOnly`.
-  static ProfileSelections BuildDefault(bool force_guest = false,
+  static ProfileSelections BuildDefault(bool force_guest = true,
                                         bool force_system = false);
 
   // Without the experiment:
@@ -261,7 +257,7 @@ class ProfileSelections {
   // - force_system: true, force System with
   // `ProfileSelecion::kRedirectedToOriginal`.
   static ProfileSelections BuildRedirectedInIncognito(
-      bool force_guest = false,
+      bool force_guest = true,
       bool force_system = false);
 
   // Without the experiment:
@@ -288,7 +284,7 @@ class ProfileSelections {
   // - force_guest: true, force Guest with `ProfileSelecion::kOwnInstance`.
   // - force_system: true, force System with `ProfileSelecion::kOwnInstance`.
   static ProfileSelections BuildForRegularAndIncognito(
-      bool force_guest = false,
+      bool force_guest = true,
       bool force_system = false);
 
   // Given a Profile and a ProfileSelection enum, returns the right profile

@@ -9,9 +9,9 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
@@ -27,6 +27,7 @@
 #include "components/omnibox/browser/base_search_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/browser/omnibox_triggered_feature_service.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
 #include "components/omnibox/browser/zero_suggest_cache_service.h"
@@ -251,8 +252,8 @@ bool StoreRemoteResponse(const std::string& response_json,
   if (base::FeatureList::IsEnabled(omnibox::kZeroSuggestInMemoryCaching)) {
     auto* zero_suggest_cache_service = client->GetZeroSuggestCacheService();
     if (zero_suggest_cache_service != nullptr) {
-      ZeroSuggestCacheService::CacheEntry entry(response_json);
-      zero_suggest_cache_service->StoreZeroSuggestResponse(page_url, entry);
+      zero_suggest_cache_service->StoreZeroSuggestResponse(page_url,
+                                                           response_json);
       LogEvent(Event::kRemoteResponseCached, result_type, is_prefetch);
     }
   } else {
@@ -446,18 +447,26 @@ void ZeroSuggestProvider::StartPrefetch(const AutocompleteInput& input) {
     LogEvent(Event::kRequestInvalidated, result_type, /*is_prefetch=*/true);
   }
 
-  // Create a loader for the request and take ownership of it.
   TemplateURLRef::SearchTermsArgs search_terms_args;
   search_terms_args.page_classification = input.current_page_classification();
   search_terms_args.focus_type = input.focus_type();
   search_terms_args.current_page_url = result_type == ResultType::kRemoteSendURL
                                            ? input.current_url().spec()
                                            : std::string();
+
+  // AllowZeroPrefixSuggestions() ensures these are not nullptr.
+  const TemplateURLService* template_url_service =
+      client()->GetTemplateURLService();
+  const TemplateURL* template_url =
+      template_url_service->GetDefaultSearchProvider();
+
+  // Create a loader for the request and take ownership of it.
   prefetch_loader_ =
       client()
           ->GetRemoteSuggestionsService(/*create_if_necessary=*/true)
-          ->StartSuggestionsRequest(
-              search_terms_args, client()->GetTemplateURLService(),
+          ->StartZeroPrefixSuggestionsRequest(
+              template_url, search_terms_args,
+              template_url_service->search_terms_data(),
               base::BindOnce(&ZeroSuggestProvider::OnPrefetchURLLoadComplete,
                              weak_ptr_factory_.GetWeakPtr(),
                              GetZeroSuggestInput(input, client()),
@@ -480,9 +489,6 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
     return;
   }
 
-  set_field_trial_triggered(false);
-  set_field_trial_triggered_in_session(false);
-
   // Convert the stored response to |matches_|, if applicable.
   SearchSuggestionParser::Results results;
   if (ReadStoredResponse(client(), GetZeroSuggestInput(input, client()),
@@ -499,7 +505,12 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
 
   done_ = false;
 
-  // Create a loader for the request and take ownership of it.
+  // AllowZeroPrefixSuggestions() ensures these are not nullptr.
+  const TemplateURLService* template_url_service =
+      client()->GetTemplateURLService();
+  const TemplateURL* template_url =
+      template_url_service->GetDefaultSearchProvider();
+
   TemplateURLRef::SearchTermsArgs search_terms_args;
   search_terms_args.page_classification = input.current_page_classification();
   search_terms_args.focus_type = input.focus_type();
@@ -507,10 +518,13 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
       result_type_running_ == ResultType::kRemoteSendURL
           ? input.current_url().spec()
           : std::string();
+
+  // Create a loader for the request and take ownership of it.
   loader_ = client()
                 ->GetRemoteSuggestionsService(/*create_if_necessary=*/true)
-                ->StartSuggestionsRequest(
-                    search_terms_args, client()->GetTemplateURLService(),
+                ->StartZeroPrefixSuggestionsRequest(
+                    template_url, search_terms_args,
+                    template_url_service->search_terms_data(),
                     base::BindOnce(&ZeroSuggestProvider::OnURLLoadComplete,
                                    weak_ptr_factory_.GetWeakPtr(),
                                    GetZeroSuggestInput(input, client()),
@@ -560,13 +574,6 @@ void ZeroSuggestProvider::AddProviderInfo(ProvidersInfo* provider_info) const {
     provider_info->back().set_times_returned_results_in_session(1);
 }
 
-void ZeroSuggestProvider::ResetSession() {
-  // The user has started editing in the omnibox, so leave
-  // |field_trial_triggered_in_session| unchanged and set
-  // |field_trial_triggered| to false since zero suggest is inactive now.
-  set_field_trial_triggered(false);
-}
-
 ZeroSuggestProvider::ZeroSuggestProvider(AutocompleteProviderClient* client,
                                          AutocompleteProviderListener* listener)
     : BaseSearchProvider(AutocompleteProvider::TYPE_ZERO_SUGGEST, client) {
@@ -595,16 +602,13 @@ void ZeroSuggestProvider::OnURLLoadComplete(
     const AutocompleteInput& input,
     const ResultType result_type,
     const network::SimpleURLLoader* source,
+    const bool response_received,
     std::unique_ptr<std::string> response_body) {
   TRACE_EVENT0("omnibox", "ZeroSuggestProvider::OnURLLoadComplete");
 
   DCHECK(!done_);
   DCHECK_EQ(loader_.get(), source);
 
-  const bool response_received =
-      response_body && source->NetError() == net::OK &&
-      (source->ResponseInfo() && source->ResponseInfo()->headers &&
-       source->ResponseInfo()->headers->response_code() == 200);
   if (!response_received) {
     loader_.reset();
     done_ = true;
@@ -649,15 +653,12 @@ void ZeroSuggestProvider::OnPrefetchURLLoadComplete(
     const AutocompleteInput& input,
     const ResultType result_type,
     const network::SimpleURLLoader* source,
+    const bool response_received,
     std::unique_ptr<std::string> response_body) {
   TRACE_EVENT0("omnibox", "ZeroSuggestProvider::OnPrefetchURLLoadComplete");
 
   DCHECK_EQ(prefetch_loader_.get(), source);
 
-  const bool response_received =
-      response_body && source->NetError() == net::OK &&
-      (source->ResponseInfo() && source->ResponseInfo()->headers &&
-       source->ResponseInfo()->headers->response_code() == 200);
   if (response_received) {
     LogEvent(Event::kRemoteResponseReceived, result_type, /*is_prefetch=*/true);
 
@@ -707,11 +708,9 @@ void ZeroSuggestProvider::ConvertSuggestResultsToAutocompleteMatches(
   suggestion_groups_map_.clear();
   experiment_stats_v2s_.clear();
 
-  if (!field_trial_triggered()) {
-    set_field_trial_triggered(results.field_trial_triggered);
-  }
-  if (!field_trial_triggered_in_session()) {
-    set_field_trial_triggered_in_session(results.field_trial_triggered);
+  if (results.field_trial_triggered) {
+    client()->GetOmniboxTriggeredFeatureService()->FeatureTriggered(
+        OmniboxTriggeredFeatureService::Feature::kRemoteZeroSuggestFeature);
   }
 
   // Add all the SuggestResults to the map. We display all ZeroSuggest search

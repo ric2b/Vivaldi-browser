@@ -218,6 +218,29 @@
       ]
     },
   },
+  '13-x64-emulator': {
+    '$mixin_append': {
+      'args': [
+        '--avd-config=../../tools/android/avd/proto/generic_android33.textpb',
+      ],
+    },
+    'swarming': {
+      # soft affinity so that bots with caches will be picked first
+      'optional_dimensions': {
+        '60': [
+          {
+            'caches': 'generic_android33',
+          }
+        ],
+      },
+      'named_caches': [
+        {
+          'name': 'generic_android33',
+          'path': '.android_emulator/generic_android33',
+        },
+      ]
+    },
+  },
   'android_r': {
     'swarming': {
       'dimensions': {
@@ -341,6 +364,39 @@
       ],
     },
   },
+  'chromeos-betty-finch': {
+    'swarming': {
+      'dimension_sets': [
+        {
+          'cpu': 'x86',
+          'kvm': '1',
+          'gce': '1',
+          'os': 'Ubuntu-18.04',
+          'pool': 'chrome.tests.finch',
+        }
+      ],
+      'optional_dimensions': {
+        '60': [
+          {
+            'caches': 'cros_vm',
+          }
+        ],
+      },
+      # See the 'chromeos-amd64-generic' mixin above for the purpose of this
+      # cache.
+      'named_caches': [
+        {
+          'name': 'cros_vm',
+          'path': 'magic_cros_vm_cache',
+        },
+      ],
+    },
+    '$mixin_append': {
+      'args': [
+        '--magic-vm-cache=magic_cros_vm_cache',
+      ],
+    },
+  },
   'chromeos-jacuzzi': {
     'swarming': {
       'dimensions': {
@@ -405,14 +461,6 @@
       ],
     },
   },
-  'chromeos-zork': {
-    'swarming': {
-      'dimensions': {
-        'os': 'ChromeOS',
-        'device_type': 'zork',
-      },
-    },
-  },
   'chromium-tester-dev-service-account': {
     'swarming': {
       'service_account': 'chromium-tester-dev@chops-service-accounts.iam.gserviceaccount.com',
@@ -475,13 +523,6 @@
       },
     },
   },
-  'femu-additional-ram': {
-    '$mixin_append': {
-      'args': [
-        '--ram-size-mb=16384',
-      ],
-    },
-  },
   'finch-chromium-swarming-pool': {
     'swarming': {
       'dimensions': {
@@ -501,30 +542,15 @@
   'fuchsia-code-coverage': {
     '$mixin_append': {
       'args': [
-        '--code-coverage',
         '--code-coverage-dir=${ISOLATED_OUTDIR}'
       ],
     },
-  },
-  'fuchsia-test-workstation': {
-    '$mixin_append': {
-      'args': [
-        '--custom-image=workstation_eng.qemu-x64',
-      ],
-    }
   },
   'fuchsia_logs': {
     '$mixin_append': {
       'args': [
         '--logs-dir=${ISOLATED_OUTDIR}/logs',
       ],
-    },
-  },
-  'gpu-exp-swarming-pool': {
-    'swarming': {
-      'dimensions': {
-        'pool': 'chromium.tests.gpu.experimental',
-      },
     },
   },
   'gpu-swarming-pool': {
@@ -542,6 +568,13 @@
       # TODO(crbug.com/1163797): Remove the 'enable' field in favor of
       # 'has_native_resultdb_integration'.
       'has_native_resultdb_integration': True,
+    },
+  },
+  'integrity_high': {
+    'swarming': {
+      'dimensions': {
+        'integrity': 'high',
+      },
     },
   },
   'ios_custom_webkit': {
@@ -614,13 +647,13 @@
       },
     },
   },
-  'ios_runtime_cache_16_1': {
+  'ios_runtime_cache_16_2': {
     '$mixin_append': {
       'swarming': {
         'named_caches': [
           {
-            'name': 'runtime_ios_16_1',
-            'path': 'Runtime-ios-16.1',
+            'name': 'runtime_ios_16_2',
+            'path': 'Runtime-ios-16.2',
           },
         ],
       },
@@ -658,15 +691,6 @@
           'path': '.android_emulator/generic_android19',
         },
       ]
-    },
-  },
-  # TODO(crbug.com/901197): Remove this mixin and all uses once LIFO rolls
-  # out more widely.
-  'lifo-test-pool': {
-    'swarming': {
-      'dimensions': {
-        'pool': 'chromium.tests.lifo',
-      },
     },
   },
   'limited_capacity_bot': {
@@ -742,6 +766,10 @@
     },
   },
   'linux_nvidia_gtx_1660_stable': {
+    # TODO(crbug.com/1408314): The swarming dimensions for
+    # webgpu_blink_web_tests and webgpu_cts_tests on linux-code-coverage
+    # must be kept manually in sync with the appropriate mixin; currently,
+    # this one, which is used by Dawn Linux x64 Release (NVIDIA).
     'swarming': {
       'dimensions': {
         'gpu': '10de:2184-440.100',
@@ -844,6 +872,22 @@
       },
     },
   },
+  'mac_13_arm64': {
+    'swarming': {
+      'dimensions': {
+        'cpu': 'arm64',
+        'os': 'Mac-13',
+      },
+    },
+  },
+  'mac_13_x64': {
+    'swarming': {
+      'dimensions': {
+        'cpu': 'x86-64',
+        'os': 'Mac-13',
+      },
+    },
+  },
   'mac_arm64_apple_m1_gpu_experimental': {
     'swarming': {
       'dimensions': {
@@ -893,6 +937,10 @@
     },
   },
   'mac_mini_intel_gpu_stable': {
+    # TODO(crbug.com/1408314): The swarming dimensions for
+    # webgpu_blink_web_tests and webgpu_cts_tests on mac-code-coverage
+    # must be kept manually in sync with the appropriate mixin; currently,
+    # this one, which is used by Dawn Mac x64 Release (Intel).
     'swarming': {
       'dimensions': {
         'cpu': 'x86-64',
@@ -1204,6 +1252,28 @@
       'io_timeout': 900,
     },
   },
+  'updater-default-pool': {
+    'swarming': {
+      'dimensions': {
+        'pool': 'chromium.tests',
+      },
+    },
+  },
+  'updater-mac-pool': {
+    'swarming': {
+      'dimensions': {
+        # Bots in this pool support passwordless sudo.
+        'pool': 'chromium.updater.mac',
+      },
+    },
+  },
+  'updater-win-uac-pool': {
+    'swarming': {
+      'dimensions': {
+        'pool': 'chromium.win.uac',
+      },
+    },
+  },
   'vr_instrumentation_test': {
      '$mixin_append': {
        'args': [
@@ -1260,14 +1330,7 @@
   'win10': {
     'swarming': {
       'dimensions': {
-        'os': 'Windows-10-19042|Windows-10-19045',
-      },
-    },
-  },
-  'win10-20h2': {
-    'swarming': {
-      'dimensions': {
-        'os': 'Windows-10-19042',
+        'os': 'Windows-10-19045',
       },
     },
   },
@@ -1297,7 +1360,7 @@
       },
     },
   },
-  'win10_intel_hd_630_stable': {
+  'win10_intel_uhd_630_experimental': {
     'swarming': {
       'dimensions': {
         'gpu': '8086:9bc5-31.0.101.2111',
@@ -1306,7 +1369,16 @@
       },
     },
   },
-  'win10_intel_hd_630_stable_dimension_set': {
+  'win10_intel_uhd_630_stable': {
+    'swarming': {
+      'dimensions': {
+        'gpu': '8086:9bc5-31.0.101.2111',
+        'os': 'Windows-10',
+        'pool': 'chromium.tests.gpu',
+      },
+    },
+  },
+  'win10_intel_uhd_630_stable_dimension_set': {
     'swarming': {
       # We use explicit 'dimension_sets' instead of 'dimensions' since this is
       # used in conjunction with 'win10_nvidia_gtx_1660_stable_dimension_set'
@@ -1320,15 +1392,6 @@
       ],
     },
   },
-  'win10_intel_uhd_630_experimental': {
-    'swarming': {
-      'dimensions': {
-        'gpu': '8086:9bc5-31.0.101.2111',
-        'os': 'Windows-10',
-        'pool': 'chromium.tests.gpu',
-      },
-    },
-  },
   'win10_nvidia_gtx_1660_experimental': {
     'swarming': {
       'dimensions': {
@@ -1339,6 +1402,10 @@
     },
   },
   'win10_nvidia_gtx_1660_stable': {
+    # TODO(crbug.com/1408314): The swarming dimensions for
+    # webgpu_blink_web_tests and webgpu_cts_tests on win10-code-coverage
+    # must be kept manually in sync with the appropriate mixin; currently,
+    # this one, which is used by Dawn Win10 x64 Release (NVIDIA).
     'swarming': {
       'dimensions': {
         'gpu': '10de:2184-27.21.14.5638',
@@ -1368,20 +1435,6 @@
       },
     },
   },
-  'win7': {
-    'swarming': {
-      'dimensions': {
-        'os': 'Windows-7-SP1',
-      },
-    },
-  },
-  'x86-32': {
-    'swarming': {
-      'dimensions': {
-        'cpu': 'x86-32',
-      },
-    },
-  },
   'x86-64': {
     'swarming': {
       'dimensions': {
@@ -1394,13 +1447,13 @@
     '$mixin_append': {
       'args': [
         '--xcode-build-version',
-        '14b47b'
+        '14c18'
       ],
     },
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_14b47b',
+          'name': 'xcode_ios_14c18',
           'path': 'Xcode.app',
         },
       ],
@@ -1411,13 +1464,13 @@
     '$mixin_append': {
       'args': [
         '--xcode-build-version',
-        '14b47b'
+        '14c18'
       ],
     },
     'swarming': {
       'named_caches': [
         {
-          'name': 'xcode_ios_14b47b',
+          'name': 'xcode_ios_14c18',
           'path': 'Xcode.app',
         },
       ],

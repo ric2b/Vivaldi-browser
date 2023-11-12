@@ -4,6 +4,11 @@
 
 package org.chromium.chrome.browser.multiwindow;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
+
 import static org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper.createSecondChromeTabbedActivity;
 
 import android.app.Activity;
@@ -19,6 +24,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.Mockito;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
@@ -27,12 +34,14 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
+import org.chromium.chrome.test.AutomotiveContextWrapperTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -47,10 +56,17 @@ import java.util.concurrent.TimeoutException;
 public class MultiWindowUtilsTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    @Rule
+    public AutomotiveContextWrapperTestRule mAutomotiveContextWrapperTestRule =
+            new AutomotiveContextWrapperTestRule();
+
+    @Mock
+    private MultiWindowUtils mMultiWindowUtils;
 
     @Before
     public void setUp() throws InterruptedException {
         mActivityTestRule.startMainActivityOnBlankPage();
+        mMultiWindowUtils = Mockito.spy(MultiWindowUtils.getInstance());
     }
 
     @After
@@ -115,6 +131,7 @@ public class MultiWindowUtilsTest {
     @Test
     @SmallTest
     @Feature("MultiWindow")
+    @DisabledTest(message = "https://crbug.com/1417018")
     public void testTabbedActivityForIntentOnlyActivity1IsRunning() {
         ChromeTabbedActivity activity1 = mActivityTestRule.getActivity();
         ChromeTabbedActivity2 activity2 = createSecondChromeTabbedActivity(activity1);
@@ -171,6 +188,7 @@ public class MultiWindowUtilsTest {
     @Test
     @SmallTest
     @Feature("MultiWindow")
+    @DisabledTest(message = "https://crbug.com/1417018")
     public void testTabbedActivity2TaskRunning() {
         ChromeTabbedActivity activity2 =
                 createSecondChromeTabbedActivity(mActivityTestRule.getActivity());
@@ -336,5 +354,125 @@ public class MultiWindowUtilsTest {
         activity2DestroyedCallback.waitForFirst();
         Assert.assertFalse("No instances should be running as all instances are killed.",
                 MultiWindowUtils.getInstance().areMultipleChromeInstancesRunning(activity2));
+    }
+
+    /**
+     * These tests check that MultiWindowUtils properly checks whether opening tabs in other windows
+     * is supported.
+     */
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testIsOpenInOtherWindowSupported_isNotInMultiWindowDisplayMode_returnsFalse() {
+        assertFalse(doTestIsOpenInOtherWindowSupported(
+                /* isAutomotive */ false,
+                /* isInMultiWindowMode */ false,
+                /* isInMultiDisplayMode */ false,
+                /* openInOtherWindowActivity */ ChromeTabbedActivity.class));
+    }
+
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testIsOpenInOtherWindowSupported_isAutomotive_returnsFalse() {
+        assertFalse(doTestIsOpenInOtherWindowSupported(
+                /* isAutomotive */ true,
+                /* isInMultiWindowMode */ true,
+                /* isInMultiDisplayMode */ true,
+                /* openInOtherWindowActivity */ ChromeTabbedActivity.class));
+    }
+
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testIsOpenInOtherWindowSupported_otherWindowActivityIsNull_returnsFalse() {
+        assertFalse(doTestIsOpenInOtherWindowSupported(
+                /* isAutomotive */ false,
+                /* isInMultiWindowMode */ true,
+                /* isInMultiDisplayMode */ true,
+                /* openInOtherWindowActivity */ null));
+    }
+
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testIsOpenInOtherWindowSupported_otherWindowActivityIsNotNull_returnsTrue() {
+        assertTrue(doTestIsOpenInOtherWindowSupported(
+                /* isAutomotive */ false,
+                /* isInMultiWindowMode */ true,
+                /* isInMultiDisplayMode */ true,
+                /* openInOtherWindowActivity */ ChromeTabbedActivity.class));
+    }
+
+    public boolean doTestIsOpenInOtherWindowSupported(boolean isAutomotive,
+            boolean isInMultiWindowMode, boolean isInMultiDisplayMode,
+            Class<? extends Activity> openInOtherWindowActivity) {
+        mAutomotiveContextWrapperTestRule.setIsAutomotive(isAutomotive);
+
+        doReturn(isInMultiWindowMode).when(mMultiWindowUtils).isInMultiWindowMode(any());
+        doReturn(isInMultiDisplayMode).when(mMultiWindowUtils).isInMultiDisplayMode(any());
+        doReturn(openInOtherWindowActivity)
+                .when(mMultiWindowUtils)
+                .getOpenInOtherWindowActivity(any());
+
+        return mMultiWindowUtils.isOpenInOtherWindowSupported(mActivityTestRule.getActivity());
+    }
+
+    /**
+     * These tests check that MultiWindowUtils properly checks whether Chrome can enter
+     * multi-window mode.
+     */
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testCanEnterMultiWindowMode_isAutomotive_returnsFalse() {
+        assertFalse(doTestCanEnterMultiWindowMode(
+                /* isAutomotive */ true,
+                /* aospMultiWindowModeSupported */ false,
+                /* customMultiWindowModeSupported */ false));
+    }
+
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testCanEnterMultiWindowMode_noSupport_returnsFalse() {
+        assertFalse(doTestCanEnterMultiWindowMode(
+                /* isAutomotive */ false,
+                /* aospMultiWindowModeSupported */ false,
+                /* customMultiWindowModeSupported */ false));
+    }
+
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testCanEnterMultiWindowMode_aospMultiWindowModeSupported_returnsFalse() {
+        assertTrue(doTestCanEnterMultiWindowMode(
+                /* isAutomotive */ false,
+                /* aospMultiWindowModeSupported */ true,
+                /* customMultiWindowModeSupported */ false));
+    }
+
+    @Test
+    @SmallTest
+    @Feature("MultiWindow")
+    public void testCanEnterMultiWindowMode_customMultiWindowModeSupported_returnsFalse() {
+        assertTrue(doTestCanEnterMultiWindowMode(
+                /* isAutomotive */ false,
+                /* aospMultiWindowModeSupported */ false,
+                /* customMultiWindowModeSupported */ true));
+    }
+
+    public boolean doTestCanEnterMultiWindowMode(boolean isAutomotive,
+            boolean aospMultiWindowModeSupported, boolean customMultiWindowModeSupported) {
+        mAutomotiveContextWrapperTestRule.setIsAutomotive(isAutomotive);
+
+        doReturn(aospMultiWindowModeSupported)
+                .when(mMultiWindowUtils)
+                .aospMultiWindowModeSupported();
+        doReturn(customMultiWindowModeSupported)
+                .when(mMultiWindowUtils)
+                .customMultiWindowModeSupported();
+
+        return mMultiWindowUtils.canEnterMultiWindowMode(mActivityTestRule.getActivity());
     }
 }

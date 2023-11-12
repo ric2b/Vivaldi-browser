@@ -62,7 +62,7 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         type='int',
         help='Patchset number to fetch results from.')
 
-    def __init__(self):
+    def __init__(self, tool):
         super(RebaselineCL, self).__init__(options=[
             self.only_changed_tests_option,
             self.no_trigger_jobs_option,
@@ -76,19 +76,13 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             optparse.make_option('--no-fill-missing',
                                  dest='fill_missing',
                                  action='store_false'),
-            optparse.make_option(
-                '--use-blink-try-bots-only',
-                dest='use_blink_try_bots_only',
-                action='store_true',
-                default=False,
-                help='Use only the try jobs results for rebaselining. '
-                'Default behavior is to use results from both CQ builders '
-                'and try bots.'),
             self.test_name_file_option,
             optparse.make_option(
                 '--builders',
-                default=None,
-                action='append',
+                default=set(),
+                type='string',
+                callback=self._check_builders,
+                action='callback',
                 help=('Comma-separated-list of builders to pull new baselines '
                       'from (can also be provided multiple times).')),
             self.patchset_option,
@@ -101,10 +95,33 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             self.dry_run_option,
             self.results_directory_option,
         ])
+        self._tool = tool
         self.git_cl = None
-        self._use_blink_try_bots_only = False
         self._builders = []
         self._resultdb_fetcher = False
+
+    def _check_builders(self, option, _opt_str, value, parser):
+        selected_builders = getattr(parser.values, option.dest, set())
+        # This set includes CQ builders, whereas `builder_for_rebaselining()`
+        # does not.
+        allowed_builders = {
+            builder
+            for builder in self._tool.builders.all_try_builder_names()
+            if not self._tool.builders.uses_wptrunner(builder)
+        }
+        for builder in value.split(','):
+            if builder in allowed_builders:
+                selected_builders.add(builder)
+            else:
+                lines = [
+                    "'%s' is not a try builder." % builder,
+                    '',
+                    "The try builders that 'rebaseline-cl' recognizes are:",
+                ]
+                lines.extend('  * %s' % builder
+                             for builder in sorted(allowed_builders))
+                raise optparse.OptionValueError('\n'.join(lines))
+        setattr(parser.values, option.dest, selected_builders)
 
     def execute(self, options, args, tool):
         self._tool = tool
@@ -121,15 +138,16 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         if not self.check_ok_to_run():
             return 1
 
-        self._use_blink_try_bots_only = options.use_blink_try_bots_only
         self._builders = options.builders
 
         build_resolver = BuildResolver(
+            self._tool.web,
             self.git_cl,
             can_trigger_jobs=(options.trigger_jobs and not self._dry_run))
         builds = [Build(builder) for builder in self.selected_try_bots]
         try:
-            jobs = build_resolver.resolve_builds(builds, options.patchset)
+            build_statuses = build_resolver.resolve_builds(
+                builds, options.patchset)
         except RPCError as error:
             _log.error('%s', error)
             _log.error('Request payload: %s',
@@ -139,30 +157,22 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
             _log.error('%s', error)
             return 1
 
-        jobs_to_results = self._fetch_results(jobs)
+        builders_with_infra_failures = {
+            build.builder_name
+            for build in GitCL.filter_infra_failed(build_statuses)
+        }
+        jobs_to_results = self._fetch_results(build_statuses)
         builders_with_results = {b.builder_name for b in jobs_to_results}
-        builders_without_results = (
-            set(self.selected_try_bots) - builders_with_results)
-        interrupted_builders = self._remove_interrupted_builders(
-            jobs_to_results)
+        builders_without_results = (set(self.selected_try_bots) -
+                                    builders_with_results -
+                                    builders_with_infra_failures)
         if builders_without_results:
-            _log.warning('There are some builders with no results:')
+            _log.warning('Some builders have no results:')
             for builder in sorted(builders_without_results):
                 _log.warning('  %s', builder)
-        if interrupted_builders:
-            _log.warning('There are some builders that were interrupted.')
-            _log.warning('Some shards may have timed out or exited early '
-                         'due to excessive unexpected failures:')
-            for builder in sorted(interrupted_builders):
-                _log.warning('  %s', builder)
-            _log.warning('Please consider retry the failed builders or '
-                         'give the builders more shards. See '
-                         'https://chromium.googlesource.com/chromium/src/+/'
-                         'HEAD/docs/testing/web_test_expectations.md'
-                         '#rebaselining-using-try-jobs')
 
-        incomplete_builders = builders_without_results | interrupted_builders
-        if options.fill_missing is None and incomplete_builders:
+        builders_without_results.update(builders_with_infra_failures)
+        if options.fill_missing is None and builders_without_results:
             should_continue = self._tool.user.confirm(
                 'Would you like to continue?',
                 default=self._tool.user.DEFAULT_NO)
@@ -195,16 +205,6 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
         self.rebaseline(options, test_baseline_set)
         return 0
 
-    def _remove_interrupted_builders(self, jobs_to_results):
-        interrupted_builders = set()
-        # Iterate over a shallow copy of `items()`, which is a view of a
-        # dictionary being mutated.
-        for build, step_results in list(jobs_to_results.items()):
-            if any(step_result.interrupted for step_result in step_results):
-                interrupted_builders.add(build.builder_name)
-                del jobs_to_results[build]
-        return interrupted_builders
-
     def check_ok_to_run(self):
         unstaged_baselines = self.unstaged_baselines()
         if unstaged_baselines:
@@ -216,42 +216,9 @@ class RebaselineCL(AbstractParallelRebaselineCommand):
 
     @property
     def selected_try_bots(self):
-        try_builders = set()
         if self._builders:
-            for builder_names in self._builders:
-                try_builders.update(builder_names.split(','))
-        else:
-            try_builders = frozenset(
-                self._tool.builders.filter_builders(
-                    is_try=True, exclude_specifiers={'android'}))
-
-        if self._use_blink_try_bots_only:
-            try_builders = try_builders - self.cq_try_bots
-        elif not self._builders:
-            # User did not specify builders and --use-blink-try-bots-only in
-            # command line. Trigger default set of builders in this case, that
-            # is CQ builders plus blink-rel builders that covers additional platforms.
-            # Running duplicated builders for the same platform wastes resource, and
-            # causes problem to rebaseline as we will randomly choose a builder later.
-            to_remove = set()
-            for try_builder, cq_builder in self.try_bots_with_cq_mirror:
-                if (try_builder in try_builders
-                        and cq_builder in try_builders):
-                    to_remove.add(try_builder)
-            try_builders = try_builders - to_remove
-
-        return set([
-            builder for builder in try_builders
-            if not self._tool.builders.is_wpt_builder(builder)
-        ])
-
-    @property
-    def cq_try_bots(self):
-        return frozenset(self._tool.builders.all_cq_try_builder_names())
-
-    @property
-    def try_bots_with_cq_mirror(self):
-        return self._tool.builders.try_bots_with_cq_mirror()
+            return set(self._builders)
+        return self._tool.builders.builders_for_rebaselining()
 
     def _fetch_results(self, jobs):
         """Fetches results for all of the given builds.

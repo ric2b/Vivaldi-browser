@@ -365,9 +365,9 @@ void FakeServer::OverrideResponseType(
   loopback_server_->OverrideResponseType(std::move(response_type_override));
 }
 
-std::unique_ptr<base::Value::Dict> FakeServer::GetEntitiesAsDict() {
+base::Value::Dict FakeServer::GetEntitiesAsDictForTesting() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  return loopback_server_->GetEntitiesAsDict();
+  return loopback_server_->GetEntitiesAsDictForTesting();
 }
 
 std::vector<sync_pb::SyncEntity> FakeServer::GetSyncEntitiesByModelType(
@@ -567,7 +567,7 @@ void FakeServer::TriggerError(const sync_pb::SyncEnums_ErrorType& error_type) {
   error_type_ = error_type;
 }
 
-void FakeServer::TriggerActionableError(
+void FakeServer::TriggerActionableProtocolError(
     const sync_pb::SyncEnums_ErrorType& error_type,
     const std::string& description,
     const std::string& url,
@@ -583,7 +583,7 @@ void FakeServer::TriggerActionableError(
   triggered_actionable_error_.reset(error);
 }
 
-void FakeServer::ClearActionableError() {
+void FakeServer::ClearActionableProtocolError() {
   triggered_actionable_error_.reset();
 }
 

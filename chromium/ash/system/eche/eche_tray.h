@@ -98,7 +98,15 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
     // from EcheTray.
     kConnectionFailInTabletMode = 5,
 
-    kMaxValue = kConnectionFailInTabletMode,
+    // Connection fail because the devices are on different networks. Report
+    // this from EcheTray.
+    kConnectionFailSsidDifferent = 6,
+
+    // Connection fail because the remote device is on cellular network. Report
+    // this from EcheTray.
+    kConnectionFailRemoteDeviceOnCellular = 7,
+
+    kMaxValue = kConnectionFailRemoteDeviceOnCellular,
   };
 
   using GracefulCloseCallback = base::OnceCallback<void()>;
@@ -126,6 +134,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   void OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
                                     bool visible) override;
   bool CacheBubbleViewForHide() const override;
+  void OnThemeChanged() override;
 
   // TrayBubbleView::Delegate:
   std::u16string GetAccessibleNameForBubble() override;
@@ -197,6 +206,10 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // started. 2. Purges and closes the bubble when the streaming is stopped.
   void OnStreamStatusChanged(eche_app::mojom::StreamStatus status);
 
+  // Receives the `orientation` change when the stream switches between
+  // landscape and portrait.
+  void OnStreamOrientationChanged(bool is_landscape);
+
   // Set up the params and init the bubble.
   // Note: This function makes the bubble active and makes the
   // TrayBackgroundView's background inkdrop activate.
@@ -207,6 +220,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   void StartGracefulClose();
 
   // Test helpers
+  bool get_is_landscape_for_test() { return is_landscape_; }
   TrayBubbleWrapper* get_bubble_wrapper_for_test() { return bubble_.get(); }
   AshWebView* get_web_view_for_test() { return web_view_; }
   views::ImageButton* GetIcon();
@@ -216,6 +230,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   FRIEND_TEST_ALL_PREFIXES(EcheTrayTest, EcheTrayOnDisplayConfigurationChanged);
   FRIEND_TEST_ALL_PREFIXES(EcheTrayTest,
                            EcheTrayKeyboardShowHideUpdateBubbleBounds);
+  FRIEND_TEST_ALL_PREFIXES(EcheTrayTest, EcheTrayOnStreamOrientationChanged);
 
   // Intercepts all the events targeted to the internal webview in order to
   // process the accelerator keys.
@@ -253,6 +268,9 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
 
   PhoneHubTray* GetPhoneHubTray();
   EcheIconLoadingIndicatorView* GetLoadingIndicator();
+
+  // Refreshes the header buttons, particularly when the theme changes.
+  void RefreshHeaderView();
 
   // Resize Eche size and update the bubble's position.
   void UpdateEcheSizeAndBubbleBounds();
@@ -303,6 +321,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // The unload timer to force close EcheTray in case unload error.
   std::unique_ptr<base::DelayTimer> unload_timer_;
 
+  views::View* header_view_ = nullptr;
   views::Button* close_button_ = nullptr;
   views::Button* minimize_button_ = nullptr;
   views::Button* arrow_back_button_ = nullptr;
@@ -312,7 +331,12 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // when the stream is initializing to when the stream is closed by user.
   absl::optional<base::TimeTicks> init_stream_timestamp_;
 
+  // The orientation of the stream (portrait vs landscape). The default
+  // orientation is portrait.
+  bool is_landscape_ = false;
+
   bool is_stream_started_ = false;
+  std::u16string phone_name_;
 
   // Observers
   base::ScopedObservation<SessionControllerImpl, SessionObserver>

@@ -9,16 +9,17 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/test_simple_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromeos/ash/components/network/certificate_helper.h"
 #include "chromeos/components/onc/onc_parsed_certificates.h"
 #include "chromeos/components/onc/onc_test_utils.h"
 #include "components/onc/onc_constants.h"
+#include "crypto/scoped_nss_types.h"
 #include "crypto/scoped_test_nss_db.h"
 #include "net/base/hash_value.h"
 #include "net/cert/cert_type.h"
@@ -74,10 +75,10 @@ class ONCCertificateImporterImplTest : public testing::Test {
                                ImportType import_type,
                                bool expected_parse_success,
                                bool expected_import_success) {
-    base::Value onc =
-        chromeos::onc::test_utils::ReadTestDictionaryValue(filename);
+    base::Value::Dict onc =
+        chromeos::onc::test_utils::ReadTestDictionary(filename);
     absl::optional<base::Value> certificates_value =
-        onc.ExtractKey(::onc::toplevel_config::kCertificates);
+        onc.Extract(::onc::toplevel_config::kCertificates);
     onc_certificates_ = std::move(*certificates_value).TakeList();
 
     CertificateImporterImpl importer(task_runner_, test_nssdb_.get());
@@ -134,7 +135,7 @@ class ONCCertificateImporterImplTest : public testing::Test {
 
     const base::Value& certificate = onc_certificates_[0];
     const std::string* guid_value =
-        certificate.FindStringKey(::onc::certificate::kGUID);
+        certificate.GetDict().FindString(::onc::certificate::kGUID);
     *guid = *guid_value;
   }
 
@@ -164,7 +165,7 @@ class ONCCertificateImporterImplTest : public testing::Test {
 
   net::ScopedCERTCertificateList ListCertsInSlot(PK11SlotInfo* slot) {
     net::ScopedCERTCertificateList result;
-    CERTCertList* cert_list = PK11_ListCertsInSlot(slot);
+    crypto::ScopedCERTCertList cert_list(PK11_ListCertsInSlot(slot));
     if (!cert_list)
       return result;
     for (CERTCertListNode* node = CERT_LIST_HEAD(cert_list);
@@ -172,7 +173,6 @@ class ONCCertificateImporterImplTest : public testing::Test {
          node = CERT_LIST_NEXT(node)) {
       result.push_back(net::x509_util::DupCERTCertificate(node->cert));
     }
-    CERT_DestroyCertList(cert_list);
 
     std::sort(result.begin(), result.end(),
               [](const net::ScopedCERTCertificate& lhs,

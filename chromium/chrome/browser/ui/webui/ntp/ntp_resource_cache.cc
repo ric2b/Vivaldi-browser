@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
@@ -269,9 +269,7 @@ void NTPResourceCache::CreateNewTabIncognitoHTML(
       CookieControlsServiceFactory::GetForProfile(incognito_profile);
 
   replacements["incognitoTabDescription"] =
-      l10n_util::GetStringUTF8(reading_list::switches::IsReadingListEnabled()
-                                   ? IDS_NEW_TAB_OTR_SUBTITLE_WITH_READING_LIST
-                                   : IDS_NEW_TAB_OTR_SUBTITLE);
+      l10n_util::GetStringUTF8(IDS_NEW_TAB_OTR_SUBTITLE_WITH_READING_LIST);
 
   bool use_revamped_ui =
       base::FeatureList::IsEnabled(features::kIncognitoNtpRevamp);
@@ -310,11 +308,7 @@ void NTPResourceCache::CreateNewTabIncognitoHTML(
   replacements["learnMoreLink"] = kLearnMoreIncognitoUrl;
   replacements["learnMoreA11yLabel"] = l10n_util::GetStringUTF8(
       IDS_INCOGNITO_TAB_LEARN_MORE_ACCESSIBILITY_LABEL);
-  replacements["title"] = l10n_util::GetStringUTF8(
-      base::FeatureList::IsEnabled(
-          features::kUpdateHistoryEntryPointsInIncognito)
-          ? IDS_NEW_INCOGNITO_TAB_TITLE
-          : IDS_NEW_TAB_TITLE);
+  replacements["title"] = l10n_util::GetStringUTF8(IDS_NEW_INCOGNITO_TAB_TITLE);
   replacements["cookieControlsToggleChecked"] =
       cookie_controls_service->GetToggleCheckedValue() ? "checked" : "";
   replacements["hideTooltipIcon"] =

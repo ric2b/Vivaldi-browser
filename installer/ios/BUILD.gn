@@ -115,6 +115,14 @@ sign_bundle("sign_MaterialComponents") {
   app = "${vivaldi_app}/Frameworks/MaterialComponents.framework"
 }
 
+sign_bundle("sign_Lottie") {
+  bindir = "$root_out_dir/obj/ios/third_party/lottie"
+
+  binary = "$bindir/Lottie"
+  extra_args = ["--disable-embedded-mobileprovision"]
+  app = "${vivaldi_app}/Frameworks/Lottie.framework"
+}
+
 sign_bundle("sign_ios") {
   bindir = "$root_out_dir/obj/ios/chrome/app"
   gendir = "$root_out_dir/gen/ios/chrome/app"
@@ -127,6 +135,7 @@ sign_bundle("sign_ios") {
     "$gendir/chrome_partial_info.plist",
   ]
   deps = [
+    ":sign_Lottie",
     ":sign_MaterialComponents",
     ":sign_credential_provider_extension",
     ":sign_search_widget_extension",

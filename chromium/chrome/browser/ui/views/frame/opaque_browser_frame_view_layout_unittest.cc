@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -74,6 +75,7 @@ class TestLayoutDelegate : public OpaqueBrowserFrameViewLayoutDelegate {
   bool IsMinimized() const override { return false; }
   bool IsFullscreen() const override { return false; }
   bool IsTabStripVisible() const override { return window_title_.empty(); }
+  bool GetBorderlessModeEnabled() const override { return false; }
   int GetTabStripHeight() const override {
     return IsTabStripVisible() ? GetLayoutConstant(TAB_HEIGHT) : 0;
   }
@@ -94,6 +96,7 @@ class TestLayoutDelegate : public OpaqueBrowserFrameViewLayoutDelegate {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   ui::WindowTiledEdges GetTiledEdges() const override { return {}; }
 #endif
+  int WebAppButtonHeight() const override { return 0; }
 
  private:
   std::u16string window_title_;
@@ -371,7 +374,9 @@ class OpaqueBrowserFrameViewLayoutTest
   raw_ptr<views::ImageButton> restore_button_ = nullptr;
   raw_ptr<views::ImageButton> close_button_ = nullptr;
 
-  TabIconView* tab_icon_view_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #addr-of
+  RAW_PTR_EXCLUSION TabIconView* tab_icon_view_ = nullptr;
   raw_ptr<views::Label> window_title_ = nullptr;
 };
 

@@ -15,7 +15,6 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_search/default_search_icon_source.h"
-#include "chrome/browser/ui/views/side_search/side_search_browser_controller.h"
 #include "chrome/browser/ui/views/side_search/side_search_views_utils.h"
 #include "chrome/browser/ui/views/side_search/unified_side_search_controller.h"
 #include "chrome/grit/generated_resources.h"
@@ -134,13 +133,9 @@ void SideSearchIconView::OnExecuting(PageActionIconView::ExecuteSource source) {
   if (!browser_view)
     return;
 
-  if (base::FeatureList::IsEnabled(features::kUnifiedSidePanel)) {
-    browser_view->side_panel_coordinator()->Show(
-        SidePanelEntry::Id::kSideSearch,
-        SidePanelUtil::SidePanelOpenTrigger::kSideSearchPageAction);
-  } else {
-    browser_view->side_search_controller()->ToggleSidePanel();
-  }
+  browser_view->side_panel_coordinator()->Show(
+      SidePanelEntry::Id::kSideSearch,
+      SidePanelUtil::SidePanelOpenTrigger::kSideSearchPageAction);
   auto* tracker = feature_engagement::TrackerFactory::GetForBrowserContext(
       browser_->profile());
   if (tracker)

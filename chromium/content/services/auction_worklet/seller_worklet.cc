@@ -13,9 +13,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
@@ -32,6 +32,7 @@
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom.h"
 #include "content/services/auction_worklet/register_ad_beacon_bindings.h"
 #include "content/services/auction_worklet/report_bindings.h"
+#include "content/services/auction_worklet/shared_storage_bindings.h"
 #include "content/services/auction_worklet/trusted_signals.h"
 #include "content/services/auction_worklet/worklet_loader.h"
 #include "gin/converter.h"
@@ -40,6 +41,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/interest_group/auction_config.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "url/gurl.h"
@@ -68,6 +70,46 @@ bool InsertPrioritySignals(
     }
   }
   return v8_helper->InsertValue(key, v8_priority_signals, object);
+}
+
+// Attempts to create an v8 Object from `maybe_promise_buyer_timeouts`. On fatal
+// error, returns false. Otherwise, writes the result to
+// `out_per_buyer_timeouts`, which will be left unchanged if there are no times
+// to write to it.
+bool CreatePerBuyerTimeoutsObject(
+    v8::Isolate* isolate,
+    const blink::AuctionConfig::MaybePromiseBuyerTimeouts&
+        maybe_promise_buyer_timeouts,
+    v8::Local<v8::Object>& out_per_buyer_timeouts) {
+  DCHECK(!maybe_promise_buyer_timeouts.is_promise());
+
+  const blink::AuctionConfig::BuyerTimeouts& buyer_timeouts =
+      maybe_promise_buyer_timeouts.value();
+  // If there are no times, leave `out_per_buyer_timeouts` empty, and indicate
+  // success.
+  if (!buyer_timeouts.per_buyer_timeouts.has_value() &&
+      !buyer_timeouts.all_buyers_timeout.has_value()) {
+    return true;
+  }
+
+  out_per_buyer_timeouts = v8::Object::New(isolate);
+  gin::Dictionary per_buyer_timeouts_dict(isolate, out_per_buyer_timeouts);
+
+  if (buyer_timeouts.per_buyer_timeouts.has_value()) {
+    for (const auto& kv : buyer_timeouts.per_buyer_timeouts.value()) {
+      if (!per_buyer_timeouts_dict.Set(kv.first.Serialize(),
+                                       kv.second.InMilliseconds())) {
+        return false;
+      }
+    }
+  }
+  if (buyer_timeouts.all_buyers_timeout.has_value()) {
+    if (!per_buyer_timeouts_dict.Set(
+            "*", buyer_timeouts.all_buyers_timeout.value().InMilliseconds())) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Converts `auction_config` back to JSON format, and appends to args.
@@ -126,18 +168,20 @@ bool AppendAuctionConfig(AuctionV8Helper* v8_helper,
     auction_config_dict.Set("interestGroupBuyers", interest_group_buyers);
   }
 
-  if (auction_ad_config_non_shared_params.auction_signals.is_json() &&
+  DCHECK(!auction_ad_config_non_shared_params.auction_signals.is_promise());
+  if (auction_ad_config_non_shared_params.auction_signals.value() &&
       !v8_helper->InsertJsonValue(
           context, "auctionSignals",
-          auction_ad_config_non_shared_params.auction_signals.json_payload(),
+          *auction_ad_config_non_shared_params.auction_signals.value(),
           auction_config_value)) {
     return false;
   }
 
-  if (auction_ad_config_non_shared_params.seller_signals.is_json() &&
+  DCHECK(!auction_ad_config_non_shared_params.seller_signals.is_promise());
+  if (auction_ad_config_non_shared_params.seller_signals.value() &&
       !v8_helper->InsertJsonValue(
           context, "sellerSignals",
-          auction_ad_config_non_shared_params.seller_signals.json_payload(),
+          *auction_ad_config_non_shared_params.seller_signals.value(),
           auction_config_value)) {
     return false;
   }
@@ -152,10 +196,13 @@ bool AppendAuctionConfig(AuctionV8Helper* v8_helper,
     return false;
   }
 
-  if (auction_ad_config_non_shared_params.per_buyer_signals.has_value()) {
+  DCHECK(!auction_ad_config_non_shared_params.per_buyer_signals.is_promise());
+  if (auction_ad_config_non_shared_params.per_buyer_signals.value()
+          .has_value()) {
     v8::Local<v8::Object> per_buyer_value = v8::Object::New(isolate);
     for (const auto& kv :
-         auction_ad_config_non_shared_params.per_buyer_signals.value()) {
+         auction_ad_config_non_shared_params.per_buyer_signals.value()
+             .value()) {
       if (!v8_helper->InsertJsonValue(context, kv.first.Serialize(), kv.second,
                                       per_buyer_value)) {
         return false;
@@ -165,32 +212,26 @@ bool AppendAuctionConfig(AuctionV8Helper* v8_helper,
   }
 
   v8::Local<v8::Object> per_buyer_timeouts;
-  if (auction_ad_config_non_shared_params.per_buyer_timeouts.has_value()) {
-    per_buyer_timeouts = v8::Object::New(isolate);
-    for (const auto& kv :
-         auction_ad_config_non_shared_params.per_buyer_timeouts.value()) {
-      if (!v8_helper->InsertJsonValue(
-              context, kv.first.Serialize(),
-              base::NumberToString(kv.second.InMilliseconds()),
-              per_buyer_timeouts)) {
-        return false;
-      }
-    }
+  if (!CreatePerBuyerTimeoutsObject(
+          isolate, auction_ad_config_non_shared_params.buyer_timeouts,
+          per_buyer_timeouts)) {
+    return false;
   }
-  if (auction_ad_config_non_shared_params.all_buyers_timeout.has_value()) {
-    if (per_buyer_timeouts.IsEmpty())
-      per_buyer_timeouts = v8::Object::New(isolate);
-    if (!v8_helper->InsertJsonValue(
-            context, "*",
-            base::NumberToString(
-                auction_ad_config_non_shared_params.all_buyers_timeout.value()
-                    .InMilliseconds()),
-            per_buyer_timeouts)) {
-      return false;
-    }
-  }
-  if (!per_buyer_timeouts.IsEmpty())
+  if (!per_buyer_timeouts.IsEmpty()) {
     auction_config_dict.Set("perBuyerTimeouts", per_buyer_timeouts);
+  }
+
+  v8::Local<v8::Object> per_buyer_cumulative_timeouts;
+  if (!CreatePerBuyerTimeoutsObject(
+          isolate,
+          auction_ad_config_non_shared_params.buyer_cumulative_timeouts,
+          per_buyer_cumulative_timeouts)) {
+    return false;
+  }
+  if (!per_buyer_cumulative_timeouts.IsEmpty()) {
+    auction_config_dict.Set("perBuyerCumulativeTimeouts",
+                            per_buyer_cumulative_timeouts);
+  }
 
   if (auction_ad_config_non_shared_params.per_buyer_priority_signals ||
       auction_ad_config_non_shared_params.all_buyers_priority_signals) {
@@ -293,12 +334,15 @@ absl::optional<mojom::RejectReason> RejectReasonStringToEnum(
 
 SellerWorklet::SellerWorklet(
     scoped_refptr<AuctionV8Helper> v8_helper,
+    mojo::PendingRemote<mojom::AuctionSharedStorageHost>
+        shared_storage_host_remote,
     bool pause_for_debugger_on_start,
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         pending_url_loader_factory,
     const GURL& decision_logic_url,
     const absl::optional<GURL>& trusted_scoring_signals_url,
     const url::Origin& top_window_origin,
+    mojom::AuctionWorkletPermissionsPolicyStatePtr permissions_policy_state,
     absl::optional<uint16_t> experiment_group_id)
     : v8_runner_(v8_helper->v8_runner()),
       v8_helper_(std::move(v8_helper)),
@@ -321,8 +365,9 @@ SellerWorklet::SellerWorklet(
   DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
 
   v8_state_ = std::unique_ptr<V8State, base::OnTaskRunnerDeleter>(
-      new V8State(v8_helper_, debug_id_, decision_logic_url,
-                  trusted_scoring_signals_url, top_window_origin,
+      new V8State(v8_helper_, debug_id_, std::move(shared_storage_host_remote),
+                  decision_logic_url, trusted_scoring_signals_url,
+                  top_window_origin, std::move(permissions_policy_state),
                   experiment_group_id, weak_ptr_factory_.GetWeakPtr()),
       base::OnTaskRunnerDeleter(v8_runner_));
 
@@ -416,11 +461,12 @@ void SellerWorklet::ScoreAd(
         DirectFromSellerSignalsRequester::Result();
   }
 
+  score_ad_task->trace_wait_deps_start = base::TimeTicks::Now();
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "wait_score_ad_deps", trace_id);
+
   // If `trusted_signals_request_manager_` exists, there's a trusted scoring
   // signals URL which needs to be fetched before the auction can be run.
   if (trusted_signals_request_manager_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "request_scoring_signals",
-                                      trace_id);
     score_ad_task->trusted_scoring_signals_request =
         trusted_signals_request_manager_->RequestScoringSignals(
             browser_signal_render_url,
@@ -430,8 +476,6 @@ void SellerWorklet::ScoreAd(
     return;
   }
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "waiting_for_seller_script",
-                                    trace_id);
   ScoreAdIfReady(score_ad_task);
 }
 
@@ -523,7 +567,8 @@ void SellerWorklet::ReportResult(
         DirectFromSellerSignalsRequester::Result();
   }
 
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "waiting_for_seller_script",
+  report_result_task->trace_wait_deps_start = base::TimeTicks::Now();
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "wait_report_result_deps",
                                     trace_id);
   RunReportResultIfReady(report_result_task);
 }
@@ -546,9 +591,12 @@ SellerWorklet::ReportResultTask::~ReportResultTask() = default;
 SellerWorklet::V8State::V8State(
     scoped_refptr<AuctionV8Helper> v8_helper,
     scoped_refptr<AuctionV8Helper::DebugId> debug_id,
+    mojo::PendingRemote<mojom::AuctionSharedStorageHost>
+        shared_storage_host_remote,
     const GURL& decision_logic_url,
     const absl::optional<GURL>& trusted_scoring_signals_url,
     const url::Origin& top_window_origin,
+    mojom::AuctionWorkletPermissionsPolicyStatePtr permissions_policy_state,
     absl::optional<uint16_t> experiment_group_id,
     base::WeakPtr<SellerWorklet> parent)
     : v8_helper_(std::move(v8_helper)),
@@ -558,10 +606,12 @@ SellerWorklet::V8State::V8State(
       decision_logic_url_(decision_logic_url),
       trusted_scoring_signals_url_(trusted_scoring_signals_url),
       top_window_origin_(top_window_origin),
+      permissions_policy_state_(std::move(permissions_policy_state)),
       experiment_group_id_(experiment_group_id) {
   DETACH_FROM_SEQUENCE(v8_sequence_checker_);
   v8_helper_->v8_runner()->PostTask(
-      FROM_HERE, base::BindOnce(&V8State::FinishInit, base::Unretained(this)));
+      FROM_HERE, base::BindOnce(&V8State::FinishInit, base::Unretained(this),
+                                std::move(shared_storage_host_remote)));
 }
 
 void SellerWorklet::V8State::SetWorkletScript(
@@ -605,7 +655,17 @@ void SellerWorklet::V8State::ScoreAd(
   // repeated calls to this worklet, or to calls to any other worklet.
   ContextRecycler context_recycler(v8_helper_.get());
   context_recycler.AddForDebuggingOnlyBindings();
-  context_recycler.AddPrivateAggregationBindings();
+  context_recycler.AddPrivateAggregationBindings(
+      permissions_policy_state_->private_aggregation_allowed);
+
+  if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
+    context_recycler.AddSharedStorageBindings(
+        shared_storage_host_remote_.is_bound()
+            ? shared_storage_host_remote_.get()
+            : nullptr,
+        permissions_policy_state_->shared_storage_allowed);
+  }
+
   ContextRecyclerScope context_recycler_scope(context_recycler);
   v8::Local<v8::Context> context = context_recycler_scope.GetContext();
 
@@ -906,7 +966,17 @@ void SellerWorklet::V8State::ReportResult(
   ContextRecycler context_recycler(v8_helper_.get());
   context_recycler.AddReportBindings();
   context_recycler.AddRegisterAdBeaconBindings();
-  context_recycler.AddPrivateAggregationBindings();
+  context_recycler.AddPrivateAggregationBindings(
+      permissions_policy_state_->private_aggregation_allowed);
+
+  if (base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI)) {
+    context_recycler.AddSharedStorageBindings(
+        shared_storage_host_remote_.is_bound()
+            ? shared_storage_host_remote_.get()
+            : nullptr,
+        permissions_policy_state_->shared_storage_allowed);
+  }
+
   ContextRecyclerScope context_recycler_scope(context_recycler);
   v8::Local<v8::Context> context = context_recycler_scope.GetContext();
 
@@ -1048,8 +1118,15 @@ SellerWorklet::V8State::~V8State() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
 }
 
-void SellerWorklet::V8State::FinishInit() {
+void SellerWorklet::V8State::FinishInit(
+    mojo::PendingRemote<mojom::AuctionSharedStorageHost>
+        shared_storage_host_remote) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(v8_sequence_checker_);
+
+  if (shared_storage_host_remote) {
+    shared_storage_host_remote_.Bind(std::move(shared_storage_host_remote));
+  }
+
   debug_id_->SetResumeCallback(base::BindOnce(
       &SellerWorklet::V8State::PostResumeToUserThread, parent_, user_thread_));
 }
@@ -1165,6 +1242,7 @@ void SellerWorklet::OnDownloadComplete(WorkletLoader::Result worklet_script,
                        base::BindOnce(&SellerWorklet::V8State::SetWorkletScript,
                                       base::Unretained(v8_state_.get()),
                                       std::move(worklet_script)));
+  MaybeRecordCodeWait();
 
   for (auto score_ad_task = score_ad_tasks_.begin();
        score_ad_task != score_ad_tasks_.end(); ++score_ad_task) {
@@ -1177,22 +1255,34 @@ void SellerWorklet::OnDownloadComplete(WorkletLoader::Result worklet_script,
   }
 }
 
+void SellerWorklet::MaybeRecordCodeWait() {
+  if (!IsCodeReady()) {
+    return;
+  }
+
+  base::TimeTicks now = base::TimeTicks::Now();
+  for (auto& task : score_ad_tasks_) {
+    task.wait_code = now - task.trace_wait_deps_start;
+  }
+
+  for (auto& task : report_result_tasks_) {
+    task.wait_code = now - task.trace_wait_deps_start;
+  }
+}
+
 void SellerWorklet::OnTrustedScoringSignalsDownloaded(
     ScoreAdTaskList::iterator task,
     scoped_refptr<TrustedSignals::Result> result,
     absl::optional<std::string> error_msg) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(user_sequence_checker_);
 
-  TRACE_EVENT_NESTABLE_ASYNC_END0("fledge", "request_scoring_signals",
-                                  task->trace_id);
-  TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "waiting_for_seller_script",
-                                    task->trace_id);
-
   task->trusted_scoring_signals_error_msg = std::move(error_msg);
   task->trusted_scoring_signals_result = std::move(result);
   // Clean up single-use object, now that it has done its job.
   task->trusted_scoring_signals_request.reset();
 
+  task->wait_trusted_signals =
+      base::TimeTicks::Now() - task->trace_wait_deps_start;
   ScoreAdIfReady(task);
 }
 
@@ -1218,6 +1308,11 @@ void SellerWorklet::OnDirectFromSellerSellerSignalsDownloadedScoreAd(
 
   task->direct_from_seller_result_seller_signals = std::move(result);
   task->direct_from_seller_request_seller_signals.reset();
+  // The two direct from seller signals metrics for tracing are combined since
+  // they should be roughly the same.
+  task->wait_direct_from_seller_signals =
+      std::max(task->wait_direct_from_seller_signals,
+               base::TimeTicks::Now() - task->trace_wait_deps_start);
 
   ScoreAdIfReady(task);
 }
@@ -1229,6 +1324,11 @@ void SellerWorklet::OnDirectFromSellerAuctionSignalsDownloadedScoreAd(
 
   task->direct_from_seller_result_auction_signals = std::move(result);
   task->direct_from_seller_request_auction_signals.reset();
+  // The two direct from seller signals metrics for tracing are combined since
+  // they should be roughly the same.
+  task->wait_direct_from_seller_signals =
+      std::max(task->wait_direct_from_seller_signals,
+               base::TimeTicks::Now() - task->trace_wait_deps_start);
 
   ScoreAdIfReady(task);
 }
@@ -1245,8 +1345,22 @@ void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
   if (!IsReadyToScoreAd(*task))
     return;
 
-  TRACE_EVENT_NESTABLE_ASYNC_END0("fledge", "waiting_for_seller_script",
-                                  task->trace_id);
+  TRACE_EVENT_NESTABLE_ASYNC_END1(
+      "fledge", "wait_score_ad_deps", task->trace_id, "data",
+      [&](perfetto::TracedValue trace_context) {
+        auto dict = std::move(trace_context).WriteDictionary();
+        if (!task->wait_code.is_zero()) {
+          dict.Add("wait_code_ms", task->wait_code.InMillisecondsF());
+        }
+        if (!task->wait_trusted_signals.is_zero()) {
+          dict.Add("wait_trusted_signals_ms",
+                   task->wait_trusted_signals.InMillisecondsF());
+        }
+        if (!task->wait_direct_from_seller_signals.is_zero()) {
+          dict.Add("wait_direct_from_seller_signals_ms",
+                   task->wait_direct_from_seller_signals.InMillisecondsF());
+        }
+      });
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "post_v8_task", task->trace_id);
 
   // Normally the PostTask below will eventually get `task` cleaned up once it
@@ -1254,8 +1368,7 @@ void SellerWorklet::ScoreAdIfReady(ScoreAdTaskList::iterator task) {
   // won't happen if it gets cancelled. To deal with that, a ScopedClosureRunner
   // is passed to ask for `task` to get cleaned up in case the V8State::ScoreAd
   // closure gets destroyed without running.
-  base::OnceClosure cleanup_score_ad_task = base::BindPostTask(
-      base::SequencedTaskRunner::GetCurrentDefault(),
+  base::OnceClosure cleanup_score_ad_task = base::BindPostTaskToCurrentDefault(
       base::BindOnce(&SellerWorklet::CleanUpScoreAdTaskOnUserThread,
                      weak_ptr_factory_.GetWeakPtr(), task));
 
@@ -1323,6 +1436,11 @@ void SellerWorklet::OnDirectFromSellerSellerSignalsDownloadedReportResult(
 
   task->direct_from_seller_result_seller_signals = std::move(result);
   task->direct_from_seller_request_seller_signals.reset();
+  // The two direct from seller signals metrics for tracing are combined since
+  // they should be roughly the same.
+  task->wait_direct_from_seller_signals =
+      std::max(task->wait_direct_from_seller_signals,
+               base::TimeTicks::Now() - task->trace_wait_deps_start);
 
   RunReportResultIfReady(task);
 }
@@ -1334,6 +1452,11 @@ void SellerWorklet::OnDirectFromSellerAuctionSignalsDownloadedReportResult(
 
   task->direct_from_seller_result_auction_signals = std::move(result);
   task->direct_from_seller_request_auction_signals.reset();
+  // The two direct from seller signals metrics for tracing are combined since
+  // they should be roughly the same.
+  task->wait_direct_from_seller_signals =
+      std::max(task->wait_direct_from_seller_signals,
+               base::TimeTicks::Now() - task->trace_wait_deps_start);
 
   RunReportResultIfReady(task);
 }
@@ -1348,8 +1471,18 @@ void SellerWorklet::RunReportResultIfReady(
   if (!IsReadyToReportResult(*task))
     return;
 
-  TRACE_EVENT_NESTABLE_ASYNC_END0("fledge", "waiting_for_seller_script",
-                                  task->trace_id);
+  TRACE_EVENT_NESTABLE_ASYNC_END1(
+      "fledge", "wait_report_result_deps", task->trace_id, "data",
+      [&](perfetto::TracedValue trace_context) {
+        auto dict = std::move(trace_context).WriteDictionary();
+        if (!task->wait_code.is_zero()) {
+          dict.Add("wait_code_ms", task->wait_code.InMillisecondsF());
+        }
+        if (!task->wait_direct_from_seller_signals.is_zero()) {
+          dict.Add("wait_direct_from_seller_signals_ms",
+                   task->wait_direct_from_seller_signals.InMillisecondsF());
+        }
+      });
   TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("fledge", "post_v8_task", task->trace_id);
 
   cancelable_task_tracker_.PostTask(

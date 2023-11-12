@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -235,8 +235,8 @@ class CertsSourcePlatformNSS : public CertificateManagerModel::CertsSource,
   void RemoveFromDatabase(net::ScopedCERTCertificate cert,
                           base::OnceCallback<void(bool)> callback) override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    auto callback_and_runner = base::BindPostTask(
-        base::SequencedTaskRunner::GetCurrentDefault(), std::move(callback));
+    auto callback_and_runner =
+        base::BindPostTaskToCurrentDefault(std::move(callback));
 
     // Passing Unretained(cert_db_) is safe because the corresponding profile
     // should be alive during this call and therefore the deletion task for the

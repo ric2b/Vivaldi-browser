@@ -106,7 +106,7 @@ void ContentAutofillRouter::UnregisterDriver(ContentAutofillDriver* driver) {
 
 void ContentAutofillRouter::SetLastQueriedSource(
     ContentAutofillDriver* source) {
-  if (last_queried_source_ && last_queried_target_ != source) {
+  if (last_queried_source_ && last_queried_source_ != source) {
     last_queried_source_->UnsetKeyPressHandlerCallback();
     last_queried_source_->SetShouldSuppressKeyboardCallback(false);
   }
@@ -623,35 +623,6 @@ void ContentAutofillRouter::JavaScriptChangedAutofilledValue(
   auto* target = DriverOfFrame(browser_form.host_frame);
   AFCHECK(target, return);
   callback(target, browser_form, field, old_value);
-}
-
-void ContentAutofillRouter::FillFormForAssistant(
-    ContentAutofillDriver* source,
-    const AutofillableData& fill_data,
-    const FormData& form,
-    const FormFieldData& field,
-    void (*callback)(ContentAutofillDriver* target,
-                     const AutofillableData& fill_data,
-                     const FormData& form,
-                     const FormFieldData& fiel)) {
-  if (!base::FeatureList::IsEnabled(features::kAutofillAcrossIframes)) {
-    callback(source, fill_data, form, field);
-    return;
-  }
-
-  some_rfh_for_debugging_ = source->render_frame_host()->GetGlobalId();
-
-  form_forest_.UpdateTreeOfRendererForm(form, source);
-
-  TriggerReparseExcept(source);
-
-  const FormData& browser_form =
-      form_forest_.GetBrowserFormOfRendererForm(form);
-  auto* target = DriverOfFrame(browser_form.host_frame);
-  AFCHECK(target, return );
-  SetLastQueriedSource(source);
-  SetLastQueriedTarget(target);
-  callback(target, fill_data, form, field);
 }
 
 void ContentAutofillRouter::OnContextMenuShownInField(

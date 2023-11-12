@@ -80,7 +80,7 @@ class ASH_EXPORT UnifiedSystemTrayController
 
   // Create the view in the bubble.
   std::unique_ptr<UnifiedSystemTrayView> CreateUnifiedQuickSettingsView();
-  std::unique_ptr<QuickSettingsView> CreateQuickSettingsView();
+  std::unique_ptr<QuickSettingsView> CreateQuickSettingsView(int max_height);
 
   // Sign out from the current user. Called from the view.
   void HandleSignOutAction();
@@ -127,6 +127,8 @@ class ASH_EXPORT UnifiedSystemTrayController
   void ShowLocaleDetailedView();
   // Show the detailed view of audio. Called from the view.
   void ShowAudioDetailedView();
+  // Show the detailed view of display. Called from the view.
+  void ShowDisplayDetailedView();
   // Show the detailed view of notifier settings. Called from the view.
   void ShowNotifierSettingsView();
   // Show the detailed view of media controls. Called from the view.
@@ -184,6 +186,9 @@ class ASH_EXPORT UnifiedSystemTrayController
   // Return true if UnifiedSystemTray is expanded.
   bool IsExpanded() const;
 
+  // Update the bubble view layout.
+  void UpdateBubble();
+
   scoped_refptr<UnifiedSystemTrayModel> model() { return model_; }
 
   PaginationController* pagination_controller() {
@@ -196,6 +201,10 @@ class ASH_EXPORT UnifiedSystemTrayController
 
   bool showing_audio_detailed_view() const {
     return showing_audio_detailed_view_;
+  }
+
+  bool showing_display_detailed_view() const {
+    return showing_display_detailed_view_;
   }
 
   bool showing_calendar_view() const { return showing_calendar_view_; }
@@ -316,6 +325,8 @@ class ASH_EXPORT UnifiedSystemTrayController
   absl::optional<ui::ThroughputTracker> animation_tracker_;
 
   bool showing_audio_detailed_view_ = false;
+
+  bool showing_display_detailed_view_ = false;
 
   bool showing_calendar_view_ = false;
 

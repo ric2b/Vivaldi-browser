@@ -9,7 +9,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "extensions/browser/api/api_resource_manager.h"
@@ -104,9 +104,9 @@ void SerialGetDevicesFunction::OnGotDevices(
   Respond(ArgumentList(serial::GetDevices::Results::Create(results)));
 }
 
-SerialConnectFunction::SerialConnectFunction() {}
+SerialConnectFunction::SerialConnectFunction() = default;
 
-SerialConnectFunction::~SerialConnectFunction() {}
+SerialConnectFunction::~SerialConnectFunction() = default;
 
 ExtensionFunction::ResponseAction SerialConnectFunction::Run() {
   auto params = serial::Connect::Params::Create(args());

@@ -12,7 +12,6 @@
 #include "chrome/browser/apps/app_service/mock_crosapi_app_service_proxy.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
@@ -42,14 +41,15 @@ TEST(AppServiceProxyLacrosTest, Launch) {
   proxy.SetCrosapiAppServiceProxyForTesting(&mock_proxy);
 
   base::RunLoop waiter;
-  LaunchResult result;
   proxy.LaunchAppWithUrl(
       kAppId, event_flag, GURL(kUrl), launch_source,
       std::make_unique<WindowInfo>(display::kDefaultDisplayId),
-      base::BindLambdaForTesting([&](LaunchResult&& result_arg) {
-        EXPECT_EQ(result_arg.state, LaunchResult::State::SUCCESS);
-        waiter.Quit();
-      }));
+      base::BindOnce(
+          [](base::OnceClosure callback, LaunchResult&& result_arg) {
+            EXPECT_EQ(LaunchResult::State::SUCCESS, result_arg.state);
+            std::move(callback).Run();
+          },
+          waiter.QuitClosure()));
   mock_proxy.Wait();
   waiter.Run();
 

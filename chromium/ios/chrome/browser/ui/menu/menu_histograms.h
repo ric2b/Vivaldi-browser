@@ -26,8 +26,12 @@ enum class MenuScenarioHistogram {
   kTabGridSearchResult = 14,
   kThumbStrip = 15,
   kOmniboxMostVisitedEntry = 16,
-  kNoteEntry = 17, // Vivaldi
-  kNoteFolder = 18, // Vivaldi
+  kPinnedTabsEntry = 17,
+  kTabStripEntry = 18,
+
+
+  kNoteEntry, // Vivaldi
+  kNoteFolder, // Vivaldi
   kMaxValue = kNoteFolder, // Vivaldi
 };
 

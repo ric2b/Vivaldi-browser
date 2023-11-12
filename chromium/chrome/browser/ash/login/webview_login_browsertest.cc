@@ -9,10 +9,10 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/json/json_writer.h"
 #include "base/memory/scoped_refptr.h"
@@ -27,6 +27,7 @@
 #include "base/synchronization/lock.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/repeating_test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -35,9 +36,9 @@
 #include "chrome/browser/ash/login/saml/lockscreen_reauth_dialog_test_helper.h"
 #include "chrome/browser/ash/login/signin/token_handle_util.h"
 #include "chrome/browser/ash/login/signin_partition_manager.h"
+#include "chrome/browser/ash/login/test/cryptohome_mixin.h"
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/embedded_policy_test_server_mixin.h"
-#include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/ash/login/test/fake_recovery_service_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
@@ -65,13 +66,13 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/eula_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/marketing_opt_in_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/user_creation_screen_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/test/base/fake_gaia_mixin.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
@@ -218,45 +219,6 @@ void PolicyChangedCallback(base::RepeatingClosure callback,
                            const base::Value* old_value,
                            const base::Value* new_value) {
   callback.Run();
-}
-
-// Spins the loop until a notification is received from `prefs` that the value
-// of `pref_name` has changed. If the notification is received before Wait()
-// has been called, Wait() returns immediately and no loop is spun.
-class PrefChangeWatcher {
- public:
-  PrefChangeWatcher(const std::string& pref_name, PrefService* prefs);
-
-  PrefChangeWatcher(const PrefChangeWatcher&) = delete;
-  PrefChangeWatcher& operator=(const PrefChangeWatcher&) = delete;
-
-  void Wait();
-
- private:
-  void OnPrefChange();
-
-  bool pref_changed_ = false;
-
-  base::RunLoop run_loop_;
-  PrefChangeRegistrar registrar_;
-};
-
-PrefChangeWatcher::PrefChangeWatcher(const std::string& pref_name,
-                                     PrefService* prefs) {
-  registrar_.Init(prefs);
-  registrar_.Add(pref_name,
-                 base::BindRepeating(&PrefChangeWatcher::OnPrefChange,
-                                     base::Unretained(this)));
-}
-
-void PrefChangeWatcher::Wait() {
-  if (!pref_changed_)
-    run_loop_.Run();
-}
-
-void PrefChangeWatcher::OnPrefChange() {
-  pref_changed_ = true;
-  run_loop_.Quit();
 }
 
 // Observes OOBE screens and can be queried to see if the error screen has been
@@ -668,8 +630,6 @@ class WebviewLoginTestWithSyncTrustedVaultEnabled : public WebviewLoginTest {
  public:
   WebviewLoginTestWithSyncTrustedVaultEnabled() {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitAndEnableFeature(
-        ::syncer::kSyncTrustedVaultPassphraseRecovery);
   }
 };
 
@@ -817,8 +777,8 @@ IN_PROC_BROWSER_TEST_F(WebviewDeviceOwnedLoginTest, AllowNewUser) {
   test::OobeJS().ExpectTrue(frame_url + ".search('flow=nosignup') == -1");
 
   // Disallow new users - we also need to set an allowlist due to weird logic.
-  scoped_testing_cros_settings_.device_settings()->Set(kAccountsPrefUsers,
-                                                       base::ListValue());
+  scoped_testing_cros_settings_.device_settings()->Set(
+      kAccountsPrefUsers, base::Value(base::Value::List()));
   scoped_testing_cros_settings_.device_settings()->Set(
       kAccountsPrefAllowNewUser, base::Value(false));
   WaitForGaiaPageReload();
@@ -853,10 +813,30 @@ class ReauthTokenWebviewLoginTest : public ReauthWebviewLoginTest {
  public:
   ReauthTokenWebviewLoginTest() {
     scoped_feature_list_.Reset();
-    scoped_feature_list_.InitAndEnableFeature(
-        features::kCryptohomeRecoveryFlow);
+    scoped_feature_list_.InitAndEnableFeature(features::kCryptohomeRecovery);
     login_manager_mixin_.AppendRegularUsers(1);
     user_with_invalid_token_ = login_manager_mixin_.users().back().account_id;
+    cryptohome_mixin_.MarkUserAsExisting(user_with_invalid_token_);
+  }
+
+  void ShowReauthDialog() {
+    TokenHandleUtil::StoreTokenHandle(user_with_invalid_token_,
+                                      kTestTokenHandle);
+    // Force to remain in OOBE after login instead of start session, so we could
+    // verify the value in UserContext.
+    user_manager::KnownUser(g_browser_process->local_state())
+        .SetPendingOnboardingScreen(user_with_invalid_token_,
+                                    MarketingOptInScreenView::kScreenId.name);
+    // Focus triggers token check and updates the user pod to online sign-in
+    // state.
+    EXPECT_TRUE(LoginScreenTestApi::FocusUser(user_with_invalid_token_));
+    EXPECT_FALSE(LoginScreenTestApi::IsOobeDialogVisible());
+    EXPECT_TRUE(
+        LoginScreenTestApi::IsForcedOnlineSignin(user_with_invalid_token_));
+    // Focus triggers online signin.
+    EXPECT_TRUE(LoginScreenTestApi::FocusUser(user_with_invalid_token_));
+    WaitForGaiaPageLoadAndPropertyUpdate();
+    EXPECT_TRUE(LoginScreenTestApi::IsOobeDialogVisible());
   }
 
  protected:
@@ -871,28 +851,14 @@ class ReauthTokenWebviewLoginTest : public ReauthWebviewLoginTest {
   }
 
   AccountId user_with_invalid_token_;
+  CryptohomeMixin cryptohome_mixin_{&mixin_host_};
   FakeRecoveryServiceMixin fake_recovery_service_{&mixin_host_,
                                                   embedded_test_server()};
 };
 
 IN_PROC_BROWSER_TEST_F(ReauthTokenWebviewLoginTest, FetchSuccess) {
-  TokenHandleUtil::StoreTokenHandle(user_with_invalid_token_, kTestTokenHandle);
-  // Force to remain in OOBE after login instead of start session, so we could
-  // verify the value in UserContext.
-  user_manager::KnownUser(g_browser_process->local_state())
-      .SetPendingOnboardingScreen(user_with_invalid_token_,
-                                  MarketingOptInScreenView::kScreenId.name);
-  // Focus triggers token check and updates the user pod to online sign-in
-  // state.
-  EXPECT_TRUE(LoginScreenTestApi::FocusUser(user_with_invalid_token_));
-
-  EXPECT_FALSE(LoginScreenTestApi::IsOobeDialogVisible());
-  EXPECT_TRUE(
-      LoginScreenTestApi::IsForcedOnlineSignin(user_with_invalid_token_));
-  // Focus triggers online signin.
-  EXPECT_TRUE(LoginScreenTestApi::FocusUser(user_with_invalid_token_));
-  WaitForGaiaPageLoadAndPropertyUpdate();
-  EXPECT_TRUE(LoginScreenTestApi::IsOobeDialogVisible());
+  cryptohome_mixin_.AddRecoveryFactor(user_with_invalid_token_);
+  ShowReauthDialog();
 
   EXPECT_EQ(fake_gaia_.fake_gaia()->prefilled_email(),
             user_with_invalid_token_.GetUserEmail());
@@ -914,23 +880,8 @@ IN_PROC_BROWSER_TEST_F(ReauthTokenWebviewLoginTest, FetchSuccess) {
 IN_PROC_BROWSER_TEST_F(ReauthTokenWebviewLoginTest, FetchFailure) {
   fake_recovery_service_.SetErrorResponse("/v1/rart",
                                           net::HTTP_SERVICE_UNAVAILABLE);
-  TokenHandleUtil::StoreTokenHandle(user_with_invalid_token_, kTestTokenHandle);
-  // Force to remain in OOBE after login instead of start session, so we could
-  // verify the value in UserContext.
-  user_manager::KnownUser(g_browser_process->local_state())
-      .SetPendingOnboardingScreen(user_with_invalid_token_,
-                                  MarketingOptInScreenView::kScreenId.name);
-  // Focus triggers token check and updates the user pod to online sign-in
-  // state.
-  EXPECT_TRUE(LoginScreenTestApi::FocusUser(user_with_invalid_token_));
-
-  EXPECT_FALSE(LoginScreenTestApi::IsOobeDialogVisible());
-  EXPECT_TRUE(
-      LoginScreenTestApi::IsForcedOnlineSignin(user_with_invalid_token_));
-  // Focus triggers online signin.
-  EXPECT_TRUE(LoginScreenTestApi::FocusUser(user_with_invalid_token_));
-  WaitForGaiaPageLoadAndPropertyUpdate();
-  EXPECT_TRUE(LoginScreenTestApi::IsOobeDialogVisible());
+  cryptohome_mixin_.AddRecoveryFactor(user_with_invalid_token_);
+  ShowReauthDialog();
 
   EXPECT_EQ(fake_gaia_.fake_gaia()->prefilled_email(),
             user_with_invalid_token_.GetUserEmail());
@@ -945,6 +896,15 @@ IN_PROC_BROWSER_TEST_F(ReauthTokenWebviewLoginTest, FetchFailure) {
                                   ->GetWizardContext()
                                   ->extra_factors_auth_session.get();
   EXPECT_TRUE(user_context->GetReauthProofToken().empty());
+}
+
+IN_PROC_BROWSER_TEST_F(ReauthTokenWebviewLoginTest,
+                       SkipFetchTokenWhenRecoveryNotSetUp) {
+  TokenHandleUtil::StoreTokenHandle(user_with_invalid_token_, kTestTokenHandle);
+  ShowReauthDialog();
+  EXPECT_EQ(fake_gaia_.fake_gaia()->prefilled_email(),
+            user_with_invalid_token_.GetUserEmail());
+  EXPECT_TRUE(fake_gaia_.fake_gaia()->reauth_request_token().empty());
 }
 
 class ReauthEndpointWebviewLoginTest : public WebviewLoginTest {
@@ -1200,11 +1160,16 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
 
     FakeSessionManagerClient::Get()->set_device_policy(
         device_policy_builder_.GetBlob());
-    PrefChangeWatcher watcher(prefs::kManagedAutoSelectCertificateForUrls,
-                              ProfileHelper::GetSigninProfile()->GetPrefs());
+    PrefChangeRegistrar registrar;
+    base::test::RepeatingTestFuture<const char*> pref_changed_future;
+    registrar.Init(ProfileHelper::GetSigninProfile()->GetPrefs());
+    registrar.Add(
+        prefs::kManagedAutoSelectCertificateForUrls,
+        base::BindRepeating(pref_changed_future.GetCallback(),
+                            prefs::kManagedAutoSelectCertificateForUrls));
     FakeSessionManagerClient::Get()->OnPropertyChangeComplete(true);
-
-    watcher.Wait();
+    EXPECT_EQ(prefs::kManagedAutoSelectCertificateForUrls,
+              pref_changed_future.Take());
   }
 
   // Adds the certificate from `authority_file_path` (PEM) as untrusted
@@ -1228,10 +1193,16 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
 
     FakeSessionManagerClient::Get()->set_device_policy(
         device_policy_builder_.GetBlob());
-    PrefChangeWatcher watcher(onc::prefs::kDeviceOpenNetworkConfiguration,
-                              g_browser_process->local_state());
+    PrefChangeRegistrar registrar;
+    base::test::RepeatingTestFuture<const char*> pref_changed_future;
+    registrar.Init(g_browser_process->local_state());
+    registrar.Add(
+        onc::prefs::kDeviceOpenNetworkConfiguration,
+        base::BindRepeating(pref_changed_future.GetCallback(),
+                            onc::prefs::kDeviceOpenNetworkConfiguration));
     FakeSessionManagerClient::Get()->OnPropertyChangeComplete(true);
-    watcher.Wait();
+    EXPECT_EQ(onc::prefs::kDeviceOpenNetworkConfiguration,
+              pref_changed_future.Take());
   }
 
   // Sets the DeviceLoginScreenPromptOnMultipleMatchingCertificates device
@@ -1245,10 +1216,16 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
 
     FakeSessionManagerClient::Get()->set_device_policy(
         device_policy_builder_.GetBlob());
-    PrefChangeWatcher watcher(prefs::kPromptOnMultipleMatchingCertificates,
-                              ProfileHelper::GetSigninProfile()->GetPrefs());
+    PrefChangeRegistrar registrar;
+    base::test::RepeatingTestFuture<const char*> pref_changed_future;
+    registrar.Init(ProfileHelper::GetSigninProfile()->GetPrefs());
+    registrar.Add(
+        prefs::kPromptOnMultipleMatchingCertificates,
+        base::BindRepeating(pref_changed_future.GetCallback(),
+                            prefs::kPromptOnMultipleMatchingCertificates));
     FakeSessionManagerClient::Get()->OnPropertyChangeComplete(true);
-    watcher.Wait();
+    EXPECT_EQ(prefs::kPromptOnMultipleMatchingCertificates,
+              pref_changed_future.Take());
   }
 
   // Starts the Test HTTPS server with `ssl_options`.
@@ -1293,11 +1270,6 @@ class WebviewClientCertsLoginTestBase : public WebviewLoginTest {
     absl::optional<net::SSLInfo> server_ssl_info = std::move(server_ssl_info_);
     server_ssl_info_ = absl::nullopt;
     return server_ssl_info;
-  }
-
-  void ShowEulaScreen() {
-    LoginDisplayHost::default_host()->StartWizard(EulaView::kScreenId);
-    OobeScreenWaiter(EulaView::kScreenId).Wait();
   }
 
  protected:
@@ -1409,8 +1381,6 @@ IN_PROC_BROWSER_TEST_F(WebviewClientCertsLoginTest,
   const std::vector<std::string> autoselect_patterns = {
       R"({"pattern": "*", "filter": {"ISSUER": {"CN": "B CA"}}})"};
   SetAutoSelectCertificatePatterns(autoselect_patterns);
-
-  ShowEulaScreen();
 
   // Use `watch_new_webcontents` because the EULA webview has not navigated yet.
   absl::optional<net::SSLInfo> ssl_info =
@@ -2120,13 +2090,8 @@ class WebviewProxyAuthLoginTest : public WebviewLoginTest {
       &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
 };
 
-// TODO(crbug.com/1377241): The test times out on ASAN.
-#if defined(ADDRESS_SANITIZER)
-#define MAYBE_ProxyAuthTransfer DISABLED_ProxyAuthTransfer
-#else
-#define MAYBE_ProxyAuthTransfer ProxyAuthTransfer
-#endif
-IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, MAYBE_ProxyAuthTransfer) {
+// TODO(crbug.com/1377241): Test is flaky.
+IN_PROC_BROWSER_TEST_F(WebviewProxyAuthLoginTest, DISABLED_ProxyAuthTransfer) {
   WaitForSigninScreen();
 
   LoginHandler* login_handler = WaitForAuthRequested();

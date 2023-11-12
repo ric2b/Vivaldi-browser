@@ -26,6 +26,17 @@
 
 namespace printing {
 
+namespace {
+
+#if BUILDFLAG(IS_WIN)
+void CaptureResult(mojom::ResultCode& capture_result,
+                   mojom::ResultCode result) {
+  capture_result = result;
+}
+#endif
+
+}  // namespace
+
 TestPrintingContextDelegate::TestPrintingContextDelegate() = default;
 
 TestPrintingContextDelegate::~TestPrintingContextDelegate() = default;
@@ -55,6 +66,10 @@ void TestPrintingContext::SetDeviceSettings(
   device_settings_.emplace(device_name, std::move(settings));
 }
 
+void TestPrintingContext::SetUserSettings(const PrintSettings& settings) {
+  user_settings_ = settings;
+}
+
 void TestPrintingContext::AskUserForSettings(int max_pages,
                                              bool has_selection,
                                              bool is_scripted,
@@ -67,22 +82,31 @@ void TestPrintingContext::AskUserForSettings(int max_pages,
     return;
   }
 
-  // Pretend the user selected the default printer and used the default
-  // settings for it.
-  scoped_refptr<PrintBackend> print_backend =
-      PrintBackend::CreateInstance(/*locale=*/std::string());
-  std::string printer_name;
-  if (print_backend->GetDefaultPrinterName(printer_name) !=
-      mojom::ResultCode::kSuccess) {
-    std::move(callback).Run(mojom::ResultCode::kFailed);
-    return;
+  // Allow for test-specific user modifications.
+  if (user_settings_.has_value()) {
+    *settings_ = *user_settings_;
+  } else {
+    // Pretend the user selected the default printer and used the default
+    // settings for it.
+    scoped_refptr<PrintBackend> print_backend =
+        PrintBackend::CreateInstance(/*locale=*/std::string());
+    std::string printer_name;
+    if (print_backend->GetDefaultPrinterName(printer_name) !=
+        mojom::ResultCode::kSuccess) {
+      std::move(callback).Run(mojom::ResultCode::kFailed);
+      return;
+    }
+    auto found = device_settings_.find(printer_name);
+    if (found == device_settings_.end()) {
+      std::move(callback).Run(mojom::ResultCode::kFailed);
+      return;
+    }
+    settings_ = std::make_unique<PrintSettings>(*found->second);
   }
-  auto found = device_settings_.find(printer_name);
-  if (found == device_settings_.end()) {
-    std::move(callback).Run(mojom::ResultCode::kFailed);
-    return;
-  }
-  settings_ = std::make_unique<PrintSettings>(*found->second);
+
+  // Capture a snapshot, simluating changes made to platform device context.
+  applied_settings_ = *settings_;
+
   std::move(callback).Run(mojom::ResultCode::kSuccess);
 }
 
@@ -100,6 +124,10 @@ mojom::ResultCode TestPrintingContext::UseDefaultSettings() {
   if (found == device_settings_.end())
     return mojom::ResultCode::kFailed;
   settings_ = std::make_unique<PrintSettings>(*found->second);
+
+  // Capture a snapshot, simluating changes made to platform device context.
+  applied_settings_ = *settings_;
+
   return mojom::ResultCode::kSuccess;
 }
 
@@ -117,7 +145,11 @@ mojom::ResultCode TestPrintingContext::UpdatePrinterSettings(
 #if BUILDFLAG(IS_MAC)
   DCHECK(!printer_settings.external_preview) << "Not implemented";
 #endif
+
+  // Windows is special case where system dialog can be shown from here.
+#if !BUILDFLAG(IS_WIN)
   DCHECK(!printer_settings.show_system_dialog) << "Not implemented";
+#endif
 
   // The printer name is to be embedded in the printing context's existing
   // settings.
@@ -140,6 +172,19 @@ mojom::ResultCode TestPrintingContext::UpdatePrinterSettings(
     settings_->advanced_settings().emplace(item.first, item.second.Clone());
 #endif
 
+#if BUILDFLAG(IS_WIN)
+  if (printer_settings.show_system_dialog) {
+    mojom::ResultCode result = mojom::ResultCode::kFailed;
+    AskUserForSettings(printer_settings.page_count, /*has_selection=*/false,
+                       /*is_scripted=*/false,
+                       base::BindOnce(&CaptureResult, std::ref(result)));
+    return result;
+  }
+#endif
+
+  // Capture a snapshot, simluating changes made to platform device context.
+  applied_settings_ = *settings_;
+
   return mojom::ResultCode::kSuccess;
 }
 
@@ -147,13 +192,17 @@ mojom::ResultCode TestPrintingContext::NewDocument(
     const std::u16string& document_name) {
   DCHECK(!in_print_job_);
 
-  if (!new_document_called_.is_null())
-    new_document_called_.Run();
+  if (on_new_document_callback_) {
+    on_new_document_callback_.Run(applied_settings_);
+  }
 
   abort_printing_ = false;
   in_print_job_ = true;
 
   if (!skip_system_calls()) {
+    if (new_document_cancels_) {
+      return mojom::ResultCode::kCanceled;
+    }
     if (new_document_fails_)
       return mojom::ResultCode::kFailed;
     if (new_document_blocked_by_permissions_)

@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/media_device_id.h"
@@ -625,9 +625,9 @@ void WebcamPrivateResetFunction::OnResetWebcam(bool success) {
   Respond(OneArgument(base::Value(result.ToValue())));
 }
 
-WebcamPrivateSetHomeFunction::WebcamPrivateSetHomeFunction() {}
+WebcamPrivateSetHomeFunction::WebcamPrivateSetHomeFunction() = default;
 
-WebcamPrivateSetHomeFunction::~WebcamPrivateSetHomeFunction() {}
+WebcamPrivateSetHomeFunction::~WebcamPrivateSetHomeFunction() = default;
 
 ExtensionFunction::ResponseAction WebcamPrivateSetHomeFunction::Run() {
   std::unique_ptr<webcam_private::SetHome::Params> params(
@@ -710,9 +710,11 @@ void WebcamPrivateRestoreCameraPresetFunction::OnRestoreCameraPresetWebcam(
   Respond(OneArgument(base::Value(result.ToValue())));
 }
 
-WebcamPrivateSetCameraPresetFunction::WebcamPrivateSetCameraPresetFunction() {}
+WebcamPrivateSetCameraPresetFunction::WebcamPrivateSetCameraPresetFunction() =
+    default;
 
-WebcamPrivateSetCameraPresetFunction::~WebcamPrivateSetCameraPresetFunction() {}
+WebcamPrivateSetCameraPresetFunction::~WebcamPrivateSetCameraPresetFunction() =
+    default;
 
 ExtensionFunction::ResponseAction WebcamPrivateSetCameraPresetFunction::Run() {
   std::unique_ptr<webcam_private::SetCameraPreset::Params> params(

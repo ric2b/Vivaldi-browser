@@ -8,10 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
+#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -200,6 +201,10 @@ namespace content {
 scoped_refptr<BluetoothAdapter>
 WebTestBluetoothAdapterProvider::GetBluetoothAdapter(
     const std::string& fake_adapter_name) {
+  // When modifying the set of supported test adapters this information must be
+  // kept in sync with
+  // third_party/blink/renderer/modules/bluetooth/testing/clusterfuzz/wbt_fakes.py
+  // so that invalid test cases are not generated.
   if (fake_adapter_name == "BaseAdapter")
     return GetBaseAdapter();
   if (fake_adapter_name == "ScanFilterCheckingAdapter")
@@ -277,12 +282,8 @@ WebTestBluetoothAdapterProvider::GetBluetoothAdapter(
     return GetDelayedServicesDiscoveryAdapter();
   if (fake_adapter_name.empty())
     return nullptr;
-  // New adapters that can be used when fuzzing the Web Bluetooth API
-  // should also be added to
-  // src/third_party/WebKit/Source/modules/
-  //   bluetooth/testing/clusterfuzz/constraints.py.
 
-  NOTREACHED() << fake_adapter_name;
+  LOG(ERROR) << "Test requested unrecognized adapter: " << fake_adapter_name;
   return nullptr;
 }
 

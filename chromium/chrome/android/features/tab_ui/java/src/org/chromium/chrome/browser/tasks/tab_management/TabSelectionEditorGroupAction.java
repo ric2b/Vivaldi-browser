@@ -9,11 +9,11 @@ import android.graphics.drawable.Drawable;
 
 import androidx.appcompat.content.res.AppCompatResources;
 
-import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiMetricsHelper.TabSelectionEditorActionMetricGroups;
 import org.chromium.chrome.tab_ui.R;
 
 import java.util.ArrayList;
@@ -72,8 +72,6 @@ public class TabSelectionEditorGroupAction extends TabSelectionEditorAction {
 
         // Sort tabs by index prevent visual bugs when undoing.
         List<Tab> sortedTabs = new ArrayList<>(selectedTabs.size());
-        // Ensure tab count is as expected and the group doesn't get shuffled.
-        sortedTabs.addAll(relatedTabs);
         TabModel model = getTabModelSelector().getCurrentModel();
         for (int i = 0; i < model.getCount(); i++) {
             Tab tab = model.getTabAt(i);
@@ -86,8 +84,8 @@ public class TabSelectionEditorGroupAction extends TabSelectionEditorAction {
         tabGroupModelFilter.mergeListOfTabsToGroup(
                 sortedTabs, destinationTab, /*isSameGroup=*/true, /*notify=*/true);
 
-        RecordUserAction.record("TabMultiSelectV2.GroupTabs");
-        RecordUserAction.record("TabGroup.Created.TabMultiSelect");
+        TabUiMetricsHelper.recordSelectionEditorActionMetrics(
+                TabSelectionEditorActionMetricGroups.GROUP);
         return true;
     }
 

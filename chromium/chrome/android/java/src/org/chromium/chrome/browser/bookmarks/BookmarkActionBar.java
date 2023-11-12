@@ -26,13 +26,15 @@ import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableList
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 
-import java.util.HashSet;
 import java.util.List;
 
 // Vivaldi
 import android.text.SpannableString;
 import android.text.style.AbsoluteSizeSpan;
 import android.text.style.ForegroundColorSpan;
+import android.view.View;
+import android.widget.PopupMenu;
+import java.util.HashSet;
 
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
@@ -40,6 +42,7 @@ import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import org.vivaldi.browser.bookmarks.BookmarkDialogDelegate;
+import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.panels.PanelUtils;
 
 /**
@@ -166,17 +169,15 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             RecordUserAction.record("MobileBookmarkManagerEntryOpenedInNewTab");
             RecordHistogram.recordCount1000Histogram(
                     "Bookmarks.Count.OpenInNewTab", mSelectionDelegate.getSelectedItems().size());
-            mDelegate.openBookmarks(selectionDelegate.getSelectedItemsAsList(),
-                    /*openInNewTab=*/true, /*incognito=*/false);
-            selectionDelegate.clearSelection();
+            mDelegate.openBookmarksInNewTabs(
+                    selectionDelegate.getSelectedItemsAsList(), /*incognito=*/false);
             return true;
         } else if (menuItem.getItemId() == R.id.selection_open_in_incognito_tab_id) {
             RecordUserAction.record("MobileBookmarkManagerEntryOpenedInIncognito");
             RecordHistogram.recordCount1000Histogram("Bookmarks.Count.OpenInIncognito",
                     mSelectionDelegate.getSelectedItems().size());
-            mDelegate.openBookmarks(selectionDelegate.getSelectedItemsAsList(),
-                    /*openInNewTab=*/true, /*incognito=*/true);
-            selectionDelegate.clearSelection();
+            mDelegate.openBookmarksInNewTabs(
+                    selectionDelegate.getSelectedItemsAsList(), /*incognito=*/true);
             return true;
         } else if (menuItem.getItemId() == R.id.reading_list_mark_as_read_id
                 || menuItem.getItemId() == R.id.reading_list_mark_as_unread_id) {
@@ -342,8 +343,10 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
         boolean isReadingListFolder =
                 mCurrentFolder.getId().equals(mDelegate.getModel().getReadingListFolder());
         if (isReadingListFolder && mTabbedActivity != null) {
-            setNavigationButton(NAVIGATION_BUTTON_NONE);
-            getMenu().findItem(R.id.close_menu_id).setVisible(false);
+            if (!PanelUtils.isPanelOpen(mTabbedActivity)) {
+                setNavigationButton(NAVIGATION_BUTTON_NONE);
+                getMenu().findItem(R.id.close_menu_id).setVisible(false);
+            }
             getMenu().findItem(R.id.search_menu_id).setVisible(false);
             addPageMenuItem.setVisible(true);
             addPageMenuItem.setEnabled(shouldEnableAddCurrentPageMenu(mTabbedActivity));
@@ -402,10 +405,6 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                 }
             }
 
-            // Unless type-swapping is enabled disable edit/move buttons. For multi-selections,
-            // check that the read state matches for all items before showing "mark as" buttons.
-            // Disable move/edit buttons regardless if there's also a partner bookmark selected.
-            boolean typeSwappingEnabled = ReadingListFeatures.shouldAllowBookmarkTypeSwapping();
             // Compute whether all selected bookmarks are reading list items and add up the number
             // of read items.
             int numReadingListItems = 0;
@@ -425,20 +424,13 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
             if (numReadingListItems > 0) {
                 getMenu()
                         .findItem(R.id.selection_mode_move_menu_id)
-                        .setVisible(typeSwappingEnabled && !hasPartnerBoomarkSelected);
+                        .setVisible(!hasPartnerBoomarkSelected);
                 getMenu()
                         .findItem(R.id.selection_mode_edit_menu_id)
-                        .setVisible(selectedBookmarks.size() == 1 && typeSwappingEnabled
-                                && !hasPartnerBoomarkSelected);
+                        .setVisible(selectedBookmarks.size() == 1 && !hasPartnerBoomarkSelected);
 
-                // Check the reading list flag before "open in" items.
-                boolean shouldUseRegularTab = !ReadingListFeatures.shouldUseCustomTab();
-                getMenu()
-                        .findItem(R.id.selection_open_in_new_tab_id)
-                        .setVisible(shouldUseRegularTab);
-                getMenu()
-                        .findItem(R.id.selection_open_in_incognito_tab_id)
-                        .setVisible(shouldUseRegularTab);
+                getMenu().findItem(R.id.selection_open_in_new_tab_id).setVisible(true);
+                getMenu().findItem(R.id.selection_open_in_incognito_tab_id).setVisible(true);
             }
 
             // Only show the "mark as" options when all selections are reading list items and

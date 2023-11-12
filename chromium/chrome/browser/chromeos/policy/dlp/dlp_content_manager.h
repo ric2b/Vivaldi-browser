@@ -9,10 +9,11 @@
 #include <string>
 #include <utility>
 
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_confidential_contents.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager_observer.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_observer.h"
@@ -124,6 +125,9 @@ class DlpContentManager : public DlpContentObserver,
       std::unique_ptr<DlpWarnNotifier> warn_notifier);
   void ResetWarnNotifierForTesting();
 
+  // Sets the delay before resuming a screen share.
+  static void SetScreenShareResumeDelayForTesting(base::TimeDelta delay);
+
   // Structure that relates a list of confidential contents to the
   // corresponding restriction level.
   struct ConfidentialContentsInfo {
@@ -200,6 +204,8 @@ class DlpContentManager : public DlpContentObserver,
     void ChangeStateBeforeSourceChange();
     // Stops the screen share. Can only be called once.
     void Stop();
+    // Start the screen share after source change if pending.
+    void StartIfPending();
 
     // If necessary, hides or shows the paused/resumed notification for this
     // screen share. The notification should be updated after changing the state
@@ -249,6 +255,8 @@ class DlpContentManager : public DlpContentObserver,
     // Pointer to the associated DlpWarnDialog widget.
     // Not null only while the dialog is opened.
     base::WeakPtr<views::Widget> dialog_widget_ = nullptr;
+    // Remembers that it should be restarted after source update.
+    bool pending_start_on_source_change_ = false;
 
     // Set only for tab shares.
     base::WeakPtr<content::WebContents> web_contents_;
@@ -347,6 +355,9 @@ class DlpContentManager : public DlpContentObserver,
   // Checks and stops the running screen shares if restricted content appeared
   // in the corresponding areas.
   void CheckRunningScreenShares();
+
+  // Resumes the |screen_share| after a delay if it's still necessary.
+  void MaybeResumeScreenShare(base::WeakPtr<ScreenShareInfo> screen_share);
 
   // Called back from Screen Share warning dialogs that are shown during the
   // screen share. Passes along the user's response, reflected in the value of

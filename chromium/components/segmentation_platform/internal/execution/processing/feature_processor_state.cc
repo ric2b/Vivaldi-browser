@@ -19,19 +19,19 @@ FeatureProcessorState::FeatureProcessorState()
 
 FeatureProcessorState::FeatureProcessorState(
     base::Time prediction_time,
+    base::Time observation_time,
     base::TimeDelta bucket_duration,
     SegmentId segment_id,
     scoped_refptr<InputContext> input_context,
     FeatureListQueryProcessor::FeatureProcessorCallback callback)
     : prediction_time_(prediction_time),
+      observation_time_(observation_time),
       bucket_duration_(bucket_duration),
       segment_id_(segment_id),
       input_context_(std::move(input_context)),
       callback_(std::move(callback)) {}
 
-FeatureProcessorState::~FeatureProcessorState() {
-  DCHECK(callback_.is_null());
-}
+FeatureProcessorState::~FeatureProcessorState() = default;
 
 void FeatureProcessorState::SetError(stats::FeatureProcessingError error,
                                      const std::string& message) {

@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 hónap}other{# hónap}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 óra és }other{# óra és }}</translation>
+<translation id="185013357618350178">&amp;Kiválasztás</translation>
 <translation id="1859234291848436338">Írás iránya</translation>
 <translation id="1860796786778352021">Értesítés bezárása</translation>
 <translation id="186476001994626254">Web Smart Paste-tartalom</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{1 óra múlva}other{# óra múlva}}</translation>
 <translation id="2583543531130364912">Az érintőképernyő kalibrálása</translation>
 <translation id="2586657967955657006">Vágólap</translation>
+<translation id="2653844658857826081">ÚJ</translation>
 <translation id="2666092431469916601">Felülre</translation>
 <translation id="2701330563083355633">Megosztva a következő eszközről: <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Új</translation>

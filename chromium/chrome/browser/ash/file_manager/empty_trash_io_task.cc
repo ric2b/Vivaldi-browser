@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ash/file_manager/io_task_util.h"
@@ -90,12 +90,10 @@ void EmptyTrashIOTask::RemoveTrashSubDirectory(
 
   progress_.outputs.emplace_back(trash_url, absl::nullopt);
 
-  auto complete_callback = base::BindPostTask(
-      base::SequencedTaskRunner::GetCurrentDefault(),
-      base::BindOnce(&EmptyTrashIOTask::OnRemoveTrashSubDirectory,
-                     weak_ptr_factory_.GetWeakPtr(),
-                     base::OwnedRef(trash_location),
-                     std::move(folder_name_to_remove)));
+  auto complete_callback = base::BindPostTaskToCurrentDefault(base::BindOnce(
+      &EmptyTrashIOTask::OnRemoveTrashSubDirectory,
+      weak_ptr_factory_.GetWeakPtr(), base::OwnedRef(trash_location),
+      std::move(folder_name_to_remove)));
 
   content::GetIOThreadTaskRunner({})->PostTaskAndReplyWithResult(
       FROM_HERE,

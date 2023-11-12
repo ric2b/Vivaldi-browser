@@ -10,8 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
@@ -993,7 +993,7 @@ TEST_F(MutableProfileOAuth2TokenServiceDelegateTest, GaiaIdMigration) {
 
     ScopedListPrefUpdate update(&pref_service_, prefs::kAccountInfo);
     update->clear();
-    base::Value dict(base::Value::Type::DICTIONARY);
+    base::Value dict(base::Value::Type::DICT);
     dict.SetStringKey("account_id", email);
     dict.SetStringKey("email", email);
     dict.SetStringKey("gaia", gaia_id);

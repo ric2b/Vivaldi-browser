@@ -6,16 +6,17 @@
 
 #include "base/feature_list.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/power_bookmarks/common/power.h"
+#include "components/power_bookmarks/common/power_overview.h"
+#include "components/power_bookmarks/common/search_params.h"
 #include "components/power_bookmarks/core/power_bookmark_data_provider.h"
 #include "components/power_bookmarks/core/power_bookmark_features.h"
 #include "components/power_bookmarks/core/power_bookmark_utils.h"
-#include "components/power_bookmarks/core/powers/power.h"
-#include "components/power_bookmarks/core/powers/power_overview.h"
-#include "components/power_bookmarks/core/powers/search_params.h"
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
-#include "components/power_bookmarks/metrics/power_bookmark_metrics.h"
 #include "components/power_bookmarks/storage/power_bookmark_backend.h"
+#include "components/sync/model/proxy_model_type_controller_delegate.h"
 #include "components/sync/protocol/power_bookmark_specifics.pb.h"
 
 using bookmarks::BookmarkModel;
@@ -26,51 +27,83 @@ namespace power_bookmarks {
 PowerBookmarkService::PowerBookmarkService(
     BookmarkModel* model,
     const base::FilePath& database_dir,
+    scoped_refptr<base::SequencedTaskRunner> frontend_task_runner,
     scoped_refptr<base::SequencedTaskRunner> backend_task_runner)
     : model_(model), backend_task_runner_(backend_task_runner) {
   if (model_)
     model_->AddObserver(this);
 
-  backend_ = base::SequenceBound<PowerBookmarkBackend>(backend_task_runner_,
-                                                       database_dir);
-  backend_.AsyncCall(&PowerBookmarkBackend::Init)
-      .WithArgs(base::FeatureList::IsEnabled(kPowerBookmarkBackend));
+  backend_ = std::make_unique<PowerBookmarkBackend>(
+      database_dir, frontend_task_runner, weak_ptr_factory_.GetWeakPtr());
+  backend_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::Init,
+                     base::Unretained(backend_.get()),
+                     base::FeatureList::IsEnabled(kPowerBookmarkBackend)));
 }
 
 PowerBookmarkService::~PowerBookmarkService() {
   if (model_)
     model_->RemoveObserver(this);
 
-  backend_.AsyncCall(&PowerBookmarkBackend::Shutdown);
-  backend_task_runner_ = nullptr;
+  backend_task_runner_->DeleteSoon(FROM_HERE, std::move(backend_));
+}
+
+std::unique_ptr<syncer::ModelTypeControllerDelegate>
+PowerBookmarkService::CreateSyncControllerDelegate() {
+  return std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+      backend_task_runner_,
+      base::BindRepeating(&PowerBookmarkBackend::GetSyncControllerDelegate,
+                          base::Unretained(backend_.get())));
 }
 
 void PowerBookmarkService::GetPowersForURL(
     const GURL& url,
     const sync_pb::PowerBookmarkSpecifics::PowerType& power_type,
     PowersCallback callback) {
-  backend_.AsyncCall(&PowerBookmarkBackend::GetPowersForURL)
-      .WithArgs(url, power_type)
-      .Then(std::move(callback));
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::GetPowersForURL,
+                     base::Unretained(backend_.get()), url, power_type),
+      std::move(callback));
 }
 
 void PowerBookmarkService::GetPowerOverviewsForType(
     const sync_pb::PowerBookmarkSpecifics::PowerType& power_type,
     PowerOverviewsCallback callback) {
-  backend_.AsyncCall(&PowerBookmarkBackend::GetPowerOverviewsForType)
-      .WithArgs(power_type)
-      .Then(std::move(callback));
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::GetPowerOverviewsForType,
+                     base::Unretained(backend_.get()), power_type),
+      std::move(callback));
 }
 
-void PowerBookmarkService::Search(const SearchParams& search_params,
-                                  PowersCallback callback) {
-  backend_.AsyncCall(&PowerBookmarkBackend::Search)
-      .WithArgs(search_params)
-      .Then(std::move(callback));
+void PowerBookmarkService::SearchPowers(const SearchParams& search_params,
+                                        PowersCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::SearchPowers,
+                     base::Unretained(backend_.get()), search_params),
+      std::move(callback));
+}
+
+void PowerBookmarkService::SearchPowerOverviews(
+    const SearchParams& search_params,
+    PowerOverviewsCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::SearchPowerOverviews,
+                     base::Unretained(backend_.get()), search_params),
+      std::move(callback));
 }
 
 void PowerBookmarkService::CreatePower(std::unique_ptr<Power> power,
                                        SuccessCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Accept existing guids if they're explicitly set.
   if (!power->guid().is_valid())
     power->set_guid(base::GUID::GenerateRandomV4());
@@ -79,104 +112,65 @@ void PowerBookmarkService::CreatePower(std::unique_ptr<Power> power,
     power->set_time_added(now);
   if (power->time_modified().is_null())
     power->set_time_modified(now);
-  sync_pb::PowerBookmarkSpecifics::PowerType power_type = power->power_type();
-  backend_.AsyncCall(&PowerBookmarkBackend::CreatePower)
-      .WithArgs(std::move(power))
-      .Then(base::BindOnce(&PowerBookmarkService::NotifyAndRecordPowerCreated,
-                           weak_ptr_factory_.GetWeakPtr(), power_type,
-                           std::move(callback)));
-}
-
-void PowerBookmarkService::NotifyAndRecordPowerCreated(
-    sync_pb::PowerBookmarkSpecifics::PowerType power_type,
-    SuccessCallback callback,
-    bool success) {
-  std::move(callback).Run(success);
-  NotifyPowersChanged(success);
-  metrics::RecordPowerCreated(power_type, success);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::CreatePower,
+                     base::Unretained(backend_.get()), std::move(power)),
+      std::move(callback));
 }
 
 void PowerBookmarkService::UpdatePower(std::unique_ptr<Power> power,
                                        SuccessCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   power->set_time_modified(base::Time::Now());
-  sync_pb::PowerBookmarkSpecifics::PowerType power_type = power->power_type();
-  backend_.AsyncCall(&PowerBookmarkBackend::UpdatePower)
-      .WithArgs(std::move(power))
-      .Then(base::BindOnce(&PowerBookmarkService::NotifyAndRecordPowerUpdated,
-                           weak_ptr_factory_.GetWeakPtr(), power_type,
-                           std::move(callback)));
-}
-
-void PowerBookmarkService::NotifyAndRecordPowerUpdated(
-    sync_pb::PowerBookmarkSpecifics::PowerType power_type,
-    SuccessCallback callback,
-    bool success) {
-  std::move(callback).Run(success);
-  NotifyPowersChanged(success);
-  metrics::RecordPowerUpdated(power_type, success);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::UpdatePower,
+                     base::Unretained(backend_.get()), std::move(power)),
+      std::move(callback));
 }
 
 void PowerBookmarkService::DeletePower(const base::GUID& guid,
                                        SuccessCallback callback) {
-  backend_.AsyncCall(&PowerBookmarkBackend::DeletePower)
-      .WithArgs(guid)
-      .Then(base::BindOnce(&PowerBookmarkService::NotifyAndRecordPowerDeleted,
-                           weak_ptr_factory_.GetWeakPtr(),
-                           std::move(callback)));
-}
-
-void PowerBookmarkService::NotifyAndRecordPowerDeleted(SuccessCallback callback,
-                                                       bool success) {
-  std::move(callback).Run(success);
-  NotifyPowersChanged(success);
-  metrics::RecordPowerDeleted(success);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::DeletePower,
+                     base::Unretained(backend_.get()), guid),
+      std::move(callback));
 }
 
 void PowerBookmarkService::DeletePowersForURL(
     const GURL& url,
     const sync_pb::PowerBookmarkSpecifics::PowerType& power_type,
     SuccessCallback callback) {
-  backend_.AsyncCall(&PowerBookmarkBackend::DeletePowersForURL)
-      .WithArgs(url, power_type)
-      .Then(base::BindOnce(
-          &PowerBookmarkService::NotifyAndRecordPowersDeletedForURL,
-          weak_ptr_factory_.GetWeakPtr(), power_type, std::move(callback)));
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  backend_task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&PowerBookmarkBackend::DeletePowersForURL,
+                     base::Unretained(backend_.get()), url, power_type),
+      std::move(callback));
 }
 
-void PowerBookmarkService::NotifyAndRecordPowersDeletedForURL(
-    sync_pb::PowerBookmarkSpecifics::PowerType power_type,
-    SuccessCallback callback,
-    bool success) {
-  std::move(callback).Run(success);
-  NotifyPowersChanged(success);
-  metrics::RecordPowersDeletedForURL(power_type, success);
-}
-
-void PowerBookmarkService::NotifyPowersChanged(bool success) {
-  // If the create/update/delete call wasn't successful, then there was no
-  // functional change to the backend. In this case, skip notifying observers.
-  if (!success)
-    return;
-
-  for (auto& observer : observers_)
-    observer.OnPowersChanged();
-}
-
-void PowerBookmarkService::AddObserver(Observer* observer) {
+void PowerBookmarkService::AddObserver(PowerBookmarkObserver* observer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.AddObserver(observer);
 }
 
-void PowerBookmarkService::RemoveObserver(Observer* observer) {
+void PowerBookmarkService::RemoveObserver(PowerBookmarkObserver* observer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   observers_.RemoveObserver(observer);
 }
 
 void PowerBookmarkService::AddDataProvider(
     PowerBookmarkDataProvider* data_provider) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   data_providers_.emplace_back(data_provider);
 }
 
 void PowerBookmarkService::RemoveDataProvider(
     PowerBookmarkDataProvider* data_provider) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto it = base::ranges::find(data_providers_, data_provider);
   if (it != data_providers_.end())
     data_providers_.erase(it);
@@ -186,6 +180,8 @@ void PowerBookmarkService::BookmarkNodeAdded(BookmarkModel* model,
                                              const BookmarkNode* parent,
                                              size_t index,
                                              bool newly_added) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (!newly_added)
     return;
 
@@ -198,6 +194,14 @@ void PowerBookmarkService::BookmarkNodeAdded(BookmarkModel* model,
   }
 
   SetNodePowerBookmarkMeta(model, node, std::move(meta));
+}
+
+void PowerBookmarkService::OnPowersChanged() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  for (auto& observer : observers_) {
+    observer.OnPowersChanged();
+  }
 }
 
 }  // namespace power_bookmarks

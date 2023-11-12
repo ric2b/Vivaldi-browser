@@ -75,7 +75,7 @@ struct MapTraits<base::Value> {
 
   static size_t GetSize(const base::Value& input) {
     DCHECK(input.is_dict());
-    return static_cast<const base::DictionaryValue&>(input).DictSize();
+    return input.GetDict().size();
   }
 
   static Iterator GetBegin(const base::Value& input) {
@@ -90,19 +90,6 @@ struct MapTraits<base::Value> {
   static const Value& GetValue(const Iterator& iterator) {
     return iterator->second;
   }
-};
-
-template <>
-struct COMPONENT_EXPORT(MOJO_BASE_SHARED_TRAITS)
-    StructTraits<mojo_base::mojom::DeprecatedDictionaryValueDataView,
-                 base::Value> {
-  static const base::Value& storage(const base::Value& value) {
-    DCHECK(value.is_dict());
-    return value;
-  }
-
-  static bool Read(mojo_base::mojom::DeprecatedDictionaryValueDataView data,
-                   base::Value* value);
 };
 
 template <>
@@ -122,7 +109,7 @@ struct COMPONENT_EXPORT(MOJO_BASE_SHARED_TRAITS)
         return mojo_base::mojom::ValueDataView::Tag::kStringValue;
       case base::Value::Type::BINARY:
         return mojo_base::mojom::ValueDataView::Tag::kBinaryValue;
-      case base::Value::Type::DICTIONARY:
+      case base::Value::Type::DICT:
         return mojo_base::mojom::ValueDataView::Tag::kDictionaryValue;
       case base::Value::Type::LIST:
         return mojo_base::mojom::ValueDataView::Tag::kListValue;

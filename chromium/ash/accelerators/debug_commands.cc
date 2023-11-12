@@ -16,11 +16,16 @@
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/debug_utils.h"
 #include "ash/public/cpp/system/toast_data.h"
+#include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/style/style_viewer/system_ui_components_style_viewer_view.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/toast/toast_manager_impl.h"
+#include "ash/system/video_conference/video_conference_media_state.h"
+#include "ash/system/video_conference/video_conference_tray.h"
+#include "ash/system/video_conference/video_conference_tray_controller.h"
 #include "ash/touch/touch_devices_controller.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/float/float_controller.h"
@@ -31,8 +36,6 @@
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chromeos/ui/wm/features.h"
-#include "chromeos/ui/wm/window_util.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/display/manager/display_manager.h"
@@ -193,7 +196,23 @@ void HandleToggleTabletMode() {
 }
 
 void HandleToggleVideoConferenceCameraTrayIcon() {
-  // TODO(b/259733853): Add call to toggle visibility for the icon itself.
+  if (!ash::features::IsVideoConferenceEnabled()) {
+    return;
+  }
+
+  // Update media state to toggle video conference tray visibility.
+  const bool vc_tray_visible = Shell::Get()
+                                   ->GetPrimaryRootWindowController()
+                                   ->GetStatusAreaWidget()
+                                   ->video_conference_tray()
+                                   ->GetVisible();
+
+  VideoConferenceMediaState state;
+  state.has_media_app = !vc_tray_visible;
+  state.has_camera_permission = !vc_tray_visible;
+  state.has_microphone_permission = !vc_tray_visible;
+  state.is_capturing_screen = !vc_tray_visible;
+  VideoConferenceTrayController::Get()->UpdateWithMediaState(state);
 }
 
 void HandleTriggerCrash() {
@@ -205,16 +224,14 @@ void HandleTriggerHUDDisplay() {
 }
 
 void HandleTuckFloatedWindow(AcceleratorAction action) {
-  // Find the active floated window.
-  auto* float_controller = Shell::Get()->float_controller();
-  auto* floated_window = float_controller->FindFloatedWindowOfDesk(
-      DesksController::Get()->GetTargetActiveDesk());
-
+  auto* floated_window = window_util::GetFloatedWindowForActiveDesk();
   DCHECK(floated_window);
 
-  float_controller->OnFlingOrSwipeForTablet(
-      floated_window,
-      /*left=*/action == DEBUG_TUCK_FLOATED_WINDOW_LEFT, /*up=*/true);
+  const float velocity_x =
+      action == DEBUG_TUCK_FLOATED_WINDOW_LEFT ? -500.f : 500.f;
+  Shell::Get()->float_controller()->OnFlingOrSwipeForTablet(floated_window,
+                                                            velocity_x,
+                                                            /*velocity_y=*/0.f);
 }
 
 }  // namespace
@@ -228,20 +245,8 @@ void PrintUIHierarchies() {
   HandlePrintViewHierarchy();
 }
 
-bool CanToggleFloatingWindow() {
-  if (!chromeos::wm::features::IsFloatWindowEnabled())
-    return false;
-
-  aura::Window* window = window_util::GetActiveWindow();
-  return window && chromeos::wm::CanFloatWindow(window);
-}
-
 bool CanTuckFloatedWindow() {
-  if (!chromeos::wm::features::IsFloatWindowEnabled())
-    return false;
-
-  return Shell::Get()->float_controller()->FindFloatedWindowOfDesk(
-      DesksController::Get()->GetTargetActiveDesk());
+  return !!window_util::GetFloatedWindowForActiveDesk();
 }
 
 bool DebugAcceleratorsEnabled() {

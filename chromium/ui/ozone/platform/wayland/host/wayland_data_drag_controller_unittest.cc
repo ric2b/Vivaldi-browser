@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -479,7 +479,7 @@ TEST_P(WaylandDataDragControllerTest, ReceiveDragPixelSurface) {
     });
   }
 
-  EXPECT_EQ(window_->window_scale(), kTripleScale);
+  EXPECT_EQ(window_->applied_state().window_scale, kTripleScale);
 
   gfx::Point center_point{400, 300};
   {
@@ -1146,6 +1146,40 @@ TEST_P(WaylandDataDragControllerTest, DropWhileFetchingData) {
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
     server->data_device_manager()->data_device()->OnLeave();
   });
+}
+
+// Regression test for https://crbug.com/1405176.
+TEST_P(WaylandDataDragControllerTest, DndActionsToDragOperations) {
+  const uint32_t surface_id = window_->root_surface()->get_surface_id();
+
+  // Consume the move event from pointer enter.
+  EXPECT_CALL(*drop_handler_, MockDragMotion(_, _, _));
+
+  PostToServerAndWait([surface_id](wl::TestWaylandServerThread* server) {
+    // Place the window onto the output.
+    wl::MockSurface* surface = server->GetObject<wl::MockSurface>(surface_id);
+    wl_surface_send_enter(surface->resource(), server->output()->resource());
+
+    auto* data_device = server->data_device_manager()->data_device();
+    auto* data_offer = data_device->CreateAndSendDataOffer();
+    data_offer->OnSourceActions(WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE |
+                                WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY |
+                                WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK);
+
+    gfx::Point entered_point(10, 10);
+    // The server sends an enter event.
+    data_device->OnEnter(server->GetNextSerial(), surface->resource(),
+                         wl_fixed_from_int(entered_point.x()),
+                         wl_fixed_from_int(entered_point.y()), data_offer);
+  });
+
+  EXPECT_CALL(*drop_handler_, MockDragMotion(_,
+                                             DragDropTypes::DRAG_COPY |
+                                                 DragDropTypes::DRAG_MOVE |
+                                                 DragDropTypes::DRAG_LINK,
+                                             _));
+
+  SendMotionEvent(gfx::Point(10, 10));
 }
 
 INSTANTIATE_TEST_SUITE_P(XdgVersionStableTest,

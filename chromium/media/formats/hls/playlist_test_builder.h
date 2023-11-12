@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "media/formats/hls/playlist.h"
 #include "media/formats/hls/source_string.h"
@@ -60,6 +60,16 @@ class PlaylistTestBuilder {
         [](Fn fn, Arg arg, const base::Location& from,
            const PlaylistT& playlist) { fn(arg, from, playlist); },
         std::move(fn), std::move(arg), std::move(location)));
+  }
+
+  scoped_refptr<PlaylistT> Parse(
+      const base::Location& from = base::Location::Current()) {
+    auto result = PlaylistT::Parse(source_, uri_, version_);
+    EXPECT_TRUE(result.has_value()) << "Error: " << from.ToString();
+    auto playlist = std::move(result).value();
+    // Ensure that playlist has expected version
+    EXPECT_EQ(playlist->GetVersion(), version_) << from.ToString();
+    return std::move(playlist);
   }
 
  protected:

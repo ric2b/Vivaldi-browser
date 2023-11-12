@@ -13,12 +13,12 @@
 #include <string>
 
 #include "base/at_exit.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/message_loop/message_pump_type.h"
@@ -26,6 +26,7 @@
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "chrome/updater/app/app.h"
+#include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/mac_util.h"
 #include "chrome/updater/util/util.h"
@@ -58,7 +59,9 @@ void KSInstallApp::Uninstall(base::OnceCallback<void(int)> callback) {
         const absl::optional<base::FilePath>& keystone_path =
             GetKeystoneFolderPath(scope);
 
-        if (!keystone_path || !base::DeletePathRecursively(*keystone_path)) {
+        if (!keystone_path ||
+            !base::DeletePathRecursively(
+                keystone_path->AppendASCII(KEYSTONE_NAME ".bundle"))) {
           PLOG(ERROR) << "Couldn't find/delete Keystone path.";
           return false;
         }

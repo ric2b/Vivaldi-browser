@@ -139,7 +139,8 @@ public class MessagesMetrics {
         return SystemClock.uptimeMillis();
     }
 
-    static String stackingAnimationActionToHistogramSuffix(@StackingAnimationAction int action) {
+    private static String stackingAnimationActionToHistogramSuffix(
+            @StackingAnimationAction int action) {
         if (action == StackingAnimationAction.INSERT_AT_FRONT) {
             return "InsertAtFront";
         } else if (action == StackingAnimationAction.INSERT_AT_BACK) {
@@ -235,6 +236,8 @@ public class MessagesMetrics {
                 return "DownloadIncognitoWarning";
             case MessageIdentifier.RESTORE_CUSTOM_TAB:
                 return "RestoreCustomTab";
+            case MessageIdentifier.UNDO_CUSTOM_TAB_RESTORATION:
+                return "UndoCustomTabRestoration";
             default:
                 return "Unknown";
         }

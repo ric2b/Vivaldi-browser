@@ -31,8 +31,8 @@ source_set("browser_sources") {
     "allow_service_worker_result.cc",
     "allow_service_worker_result.h",
     "anchor_element_preconnect_delegate.h",
-    "attribution_config.h",
-    "attribution_reporting.h",
+    "attribution_data_model.cc",
+    "attribution_data_model.h",
     "audio_service.h",
     "audio_service_info.cc",
     "audio_service_info.h",
@@ -101,6 +101,8 @@ source_set("browser_sources") {
     "certificate_request_result_type.h",
     "child_process_data.cc",
     "child_process_data.h",
+    "child_process_host.h",
+    "child_process_host_delegate.h",
     "child_process_launcher_utils.h",
     "child_process_security_policy.h",
     "child_process_termination_info.cc",
@@ -172,6 +174,7 @@ source_set("browser_sources") {
     "feature_observer_client.h",
     "federated_identity_api_permission_context_delegate.cc",
     "federated_identity_api_permission_context_delegate.h",
+    "federated_identity_auto_reauthn_permission_context_delegate.h",
     "federated_identity_permission_context_delegate.h",
     "file_select_listener.h",
     "file_system_access_entry_factory.h",
@@ -187,8 +190,8 @@ source_set("browser_sources") {
     "frame_accept_header.cc",
     "frame_accept_header.h",
     "frame_rate_throttling.h",
-    "frame_type.cc",
     "frame_type.h",
+    "fullscreen_types.h",
     "generated_code_cache_settings.h",
     "global_request_id.cc",
     "global_request_id.h",
@@ -215,6 +218,8 @@ source_set("browser_sources") {
     "installed_payment_apps_finder.h",
     "interest_group_manager.h",
     "invalidate_type.h",
+    "isolated_web_apps_policy.cc",
+    "isolated_web_apps_policy.h",
     "jank_monitor.h",
     "javascript_dialog_manager.cc",
     "javascript_dialog_manager.h",
@@ -243,8 +248,6 @@ source_set("browser_sources") {
     "mhtml_generation_result.cc",
     "mhtml_generation_result.h",
     "mojo_binder_policy_map.h",
-    "native_io_context.cc",
-    "native_io_context.h",
     "native_web_keyboard_event.h",
     "navigation_controller.cc",
     "navigation_controller.h",
@@ -319,8 +322,6 @@ source_set("browser_sources") {
     "reduce_accept_language_controller_delegate.h",
     "reload_type.h",
     "render_frame_host.h",
-    "render_frame_host_observer.cc",
-    "render_frame_host_observer.h",
     "render_frame_host_receiver_set.h",
     "render_frame_metadata_provider.h",
     "render_process_host.h",
@@ -342,7 +343,6 @@ source_set("browser_sources") {
     "resource_context.h",
     "resource_coordinator_service.h",
     "restore_type.h",
-    "same_site_data_remover.h",
     "save_page_type.h",
     "screen_orientation_delegate.h",
     "screenlock_observer.h",
@@ -409,6 +409,7 @@ source_set("browser_sources") {
     "tts_utterance.h",
     "url_data_source.cc",
     "url_data_source.h",
+    "url_loader_request_interceptor.cc",
     "url_loader_request_interceptor.h",
     "url_loader_throttles.h",
     "usb_chooser.cc",
@@ -444,6 +445,8 @@ source_set("browser_sources") {
     "web_ui_data_source.h",
     "web_ui_message_handler.h",
     "web_ui_url_loader_factory.h",
+    "webauthn_security_utils.cc",
+    "webauthn_security_utils.h",
     "webrtc_event_logger.cc",
     "webrtc_event_logger.h",
     "webrtc_log.cc",
@@ -561,7 +564,10 @@ source_set("browser_sources") {
   }
 
   if (is_android) {
-    deps += [ "//ui/android" ]
+    deps += [
+      "//cc/slim",
+      "//ui/android",
+    ]
     sources += [
       "android/android_overlay_provider.h",
       "android/browser_context_handle.h",
@@ -601,7 +607,6 @@ source_set("browser_sources") {
 
   if (is_fuchsia) {
     sources += [ "ax_inspect_factory_fuchsia.cc" ]
-    deps += [ "//media/fuchsia/mojom:fuchsia_media" ]
   }
 
   if (is_win) {
@@ -638,6 +643,12 @@ source_set("browser_sources") {
       # Android provides its own native implementation of that API.
       "web_authentication_request_proxy.h",
     ]
+    if (!is_fuchsia) {
+      sources += [
+        "smart_card_delegate.cc",
+        "smart_card_delegate.h",
+      ]
+    }
   }
 
   if (is_chromeos_ash) {

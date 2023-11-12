@@ -5,10 +5,10 @@
 #include "chrome/browser/password_manager/android/save_update_password_message_delegate.h"
 #include <utility>
 
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/android/resource_mapper.h"
@@ -146,10 +146,10 @@ void SaveUpdatePasswordMessageDelegate::DisplaySaveUpdatePasswordPromptInternal(
   }
 
   if (account_info.has_value()) {
-    if (base::FeatureList::IsEnabled(
-            chrome::android::kHideNonDisplayableAccountEmail) &&
-        account_info->capabilities.can_have_email_address_displayed() ==
-            signin::Tribool::kFalse) {
+    if (account_info->capabilities.can_have_email_address_displayed() ==
+            signin::Tribool::kFalse &&
+        base::FeatureList::IsEnabled(
+            chrome::android::kHideNonDisplayableAccountEmail)) {
       account_email_ = account_info.value().full_name;
     } else {
       account_email_ = account_info.value().email;
@@ -162,7 +162,7 @@ void SaveUpdatePasswordMessageDelegate::DisplaySaveUpdatePasswordPromptInternal(
   RecordMessageShownMetrics();
   messages::MessageDispatcherBridge::Get()->EnqueueMessage(
       message_.get(), web_contents_, messages::MessageScopeType::WEB_CONTENTS,
-      messages::MessagePriority::kNormal);
+      messages::MessagePriority::kUrgent);
 }
 
 void SaveUpdatePasswordMessageDelegate::CreateMessage(bool update_password) {

@@ -9,9 +9,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -95,21 +95,14 @@ void LocalFileStreamReader::Open(net::CompletionOnceCallback callback) {
   DCHECK(!stream_impl_.get());
   has_pending_open_ = true;
 
-  if (!file_access::ScopedFileAccessDelegate::Get()) {
-    OnScopedFileAccessRequested(std::move(callback),
-                                file_access::ScopedFileAccess::Allowed());
-    return;
-  }
-
   base::OnceCallback<void(file_access::ScopedFileAccess)> open_cb =
       base::BindOnce(&LocalFileStreamReader::OnScopedFileAccessRequested,
                      weak_factory_.GetWeakPtr(), std::move(callback));
-  auto current_task_runner = base::SequencedTaskRunner::GetCurrentDefault();
-  auto task = base::BindPostTask(current_task_runner, std::move(open_cb));
 
-  // TODO(crbug.com/1354502): Replace this with actual destination URLs.
-  file_access::ScopedFileAccessDelegate::Get()->RequestFilesAccessForSystem(
-      {file_path_}, std::move(task));
+  // TODO(b/262199707 b/265908846): Replace with getting access through a
+  // callback.
+  file_access::ScopedFileAccessDelegate::RequestFilesAccessForSystemIO(
+      {file_path_}, std::move(open_cb));
 }
 
 void LocalFileStreamReader::OnScopedFileAccessRequested(

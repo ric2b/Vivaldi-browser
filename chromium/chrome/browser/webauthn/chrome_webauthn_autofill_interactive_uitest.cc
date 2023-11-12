@@ -8,7 +8,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/ssl/cert_verifier_browser_test.h"
@@ -24,7 +24,6 @@
 #include "components/password_manager/core/browser/password_ui_utils.h"
 #include "content/public/browser/authenticator_environment.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -177,7 +176,8 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
     EXPECT_EQ(webauthn_entry.icon, "globeIcon");
 
     // Click the credential.
-    popup_controller->AcceptSuggestion(suggestion_index);
+    popup_controller->AcceptSuggestion(suggestion_index,
+                                       /*show_threshold=*/base::TimeDelta());
     std::string result;
     ASSERT_TRUE(message_queue.WaitForMessage(&result));
     EXPECT_EQ(result, "\"webauthn: OK\"");
@@ -250,8 +250,6 @@ class WebAuthnAutofillIntegrationTest : public CertVerifierBrowserTest {
     }
   }
 
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kWebAuthConditionalUI};
   raw_ptr<device::test::VirtualFidoDeviceFactory> virtual_device_factory_;
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
 };

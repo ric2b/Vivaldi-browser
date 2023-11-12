@@ -72,10 +72,9 @@
 #include "base/allocator/partition_allocator/thread_cache.h"
 #include "build/build_config.h"
 
-#if BUILDFLAG(STARSCAN)
+#if BUILDFLAG(USE_STARSCAN)
 #include "base/allocator/partition_allocator/starscan/pcscan.h"
-#include "base/allocator/partition_allocator/starscan/state_bitmap.h"
-#endif  // BUILDFLAG(STARSCAN)
+#endif
 
 // We use this to make MEMORY_TOOL_REPLACES_ALLOCATOR behave the same for max
 // size as other alloc code.
@@ -88,14 +87,6 @@
   }
 
 namespace partition_alloc::internal {
-
-// This type trait verifies a type can be used as a pointer offset.
-//
-// We support pointer offsets in signed (ptrdiff_t) or unsigned (size_t) values.
-// Smaller types are also allowed.
-template <typename Z>
-static constexpr bool offset_type =
-    std::is_integral_v<Z> && sizeof(Z) <= sizeof(ptrdiff_t);
 
 // We want this size to be big enough that we have time to start up other
 // scripts _before_ we wrap around.
@@ -129,7 +120,7 @@ PA_ALWAYS_INLINE void DCheckIfManagedByPartitionAllocBRPPool(
     uintptr_t address) {}
 #endif
 
-#if defined(PA_USE_PARTITION_ROOT_ENUMERATOR)
+#if PA_CONFIG(USE_PARTITION_ROOT_ENUMERATOR)
 class PartitionRootEnumerator;
 #endif
 
@@ -255,9 +246,9 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   using SuperPageExtentEntry =
       internal::PartitionSuperPageExtentEntry<thread_safe>;
   using DirectMapExtent = internal::PartitionDirectMapExtent<thread_safe>;
-#if BUILDFLAG(STARSCAN)
+#if BUILDFLAG(USE_STARSCAN)
   using PCScan = internal::PCScan;
-#endif  // BUILDFLAG(STARSCAN)
+#endif
 
   enum class QuarantineMode : uint8_t {
     kAlwaysDisabled,
@@ -297,9 +288,9 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
 #if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
     bool brp_enabled_;
     bool brp_zapping_enabled_;
-#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#if PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
     bool mac11_malloc_size_hack_enabled_ = false;
-#endif  // defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#endif  // PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
 #endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
     bool use_configurable_pool;
 
@@ -307,7 +298,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     int pkey;
 #endif
 
-#if defined(PA_EXTRAS_REQUIRED)
+#if PA_CONFIG(EXTRAS_REQUIRED)
     uint32_t extras_size;
     uint32_t extras_offset;
 #else
@@ -315,7 +306,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     // extras.
     static inline constexpr uint32_t extras_size = 0;
     static inline constexpr uint32_t extras_offset = 0;
-#endif  // defined(PA_EXTRAS_REQUIRED)
+#endif  // PA_CONFIG(EXTRAS_REQUIRED)
   };
 
   // Read-mostly flags.
@@ -405,15 +396,17 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
 
   bool quarantine_always_for_testing = false;
 
-#if defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
   partition_alloc::PartitionTag current_partition_tag = 0;
   // Points to the end of the committed tag bitmap region.
   uintptr_t next_tag_bitmap_page = 0;
-#endif  // defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 
   PartitionRoot()
       : flags{QuarantineMode::kAlwaysDisabled, ScanMode::kDisabled} {}
   explicit PartitionRoot(PartitionOptions opts) : flags() { Init(opts); }
+  // TODO(tasak): remove ~PartitionRoot() after confirming all tests
+  // don't need ~PartitionRoot().
   ~PartitionRoot();
 
   // This will unreserve any space in the pool that the PartitionRoot is
@@ -422,9 +415,9 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   // pool and cause tests to fail.
   void DestructForTesting();
 
-#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#if PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
   void EnableMac11MallocSizeHackForTesting();
-#endif  // defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#endif  // PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
 
   // Public API
   //
@@ -593,6 +586,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
                  PartitionStatsDumper* partition_stats_dumper);
 
   static void DeleteForTesting(PartitionRoot* partition_root);
+  void ResetForTesting(bool allow_leaks);
   void ResetBookkeepingForTesting();
 
   PA_ALWAYS_INLINE BucketDistribution GetBucketDistribution() const {
@@ -661,10 +655,12 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   }
 
   internal::pool_handle ChoosePool() const {
+#if BUILDFLAG(HAS_64_BIT_POINTERS)
     if (flags.use_configurable_pool) {
       PA_DCHECK(IsConfigurablePoolAvailable());
       return internal::kConfigurablePoolHandle;
     }
+#endif
 #if BUILDFLAG(ENABLE_PKEYS)
     if (flags.pkey != internal::kDefaultPkey) {
       return internal::kPkeyPoolHandle;
@@ -687,16 +683,19 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   }
 
   PA_ALWAYS_INLINE bool ShouldQuarantine(void* object) const {
-    if (PA_UNLIKELY(flags.quarantine_mode != QuarantineMode::kEnabled))
+    if (PA_UNLIKELY(flags.quarantine_mode != QuarantineMode::kEnabled)) {
       return false;
-#if defined(PA_HAS_MEMORY_TAGGING)
-    if (PA_UNLIKELY(quarantine_always_for_testing))
+    }
+#if PA_CONFIG(HAS_MEMORY_TAGGING)
+    if (PA_UNLIKELY(quarantine_always_for_testing)) {
       return true;
+    }
     // If quarantine is enabled and the tag overflows, move the containing slot
     // to quarantine, to prevent the attacker from exploiting a pointer that has
     // an old tag.
-    if (PA_LIKELY(IsMemoryTaggingEnabled()))
+    if (PA_LIKELY(IsMemoryTaggingEnabled())) {
       return internal::HasOverflowTag(object);
+    }
     // Default behaviour if MTE is not enabled for this PartitionRoot.
     return true;
 #else
@@ -771,8 +770,9 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     // be rather complex. Then there is also the fear of the unknown. The
     // existing cases were discovered through obscure, painful-to-debug crashes.
     // Better save ourselves trouble with not-yet-discovered cases.
-    if (PA_UNLIKELY(size == 0))
+    if (PA_UNLIKELY(size == 0)) {
       return 1;
+    }
     return size;
   }
 
@@ -835,7 +835,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     max_empty_slot_spans_dirty_bytes_shift = 0;
   }
 
-#if defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
   PA_ALWAYS_INLINE partition_alloc::PartitionTag GetNewPartitionTag() {
     // TODO(crbug.com/1298696): performance is not an issue. We can use
     // random tags in lieu of sequential ones.
@@ -844,7 +844,7 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
     current_partition_tag = tag;
     return tag;
   }
-#endif  // defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 
   // Enables the sorting of active slot spans in PurgeMemory().
   static void EnableSortActiveSlotSpans();
@@ -923,14 +923,14 @@ struct PA_ALIGNAS(64) PA_COMPONENT_EXPORT(PARTITION_ALLOC) PartitionRoot {
   // May return an invalid thread cache.
   PA_ALWAYS_INLINE ThreadCache* GetOrCreateThreadCache();
 
-#if defined(PA_USE_PARTITION_ROOT_ENUMERATOR)
+#if PA_CONFIG(USE_PARTITION_ROOT_ENUMERATOR)
   static internal::Lock& GetEnumeratorLock();
 
   PartitionRoot* PA_GUARDED_BY(GetEnumeratorLock()) next_root = nullptr;
   PartitionRoot* PA_GUARDED_BY(GetEnumeratorLock()) prev_root = nullptr;
 
   friend class internal::PartitionRootEnumerator;
-#endif  // defined(PA_USE_PARTITION_ROOT_ENUMERATOR)
+#endif  // PA_CONFIG(USE_PARTITION_ROOT_ENUMERATOR)
 
   friend class ThreadCache;
 };
@@ -939,7 +939,7 @@ namespace internal {
 
 class ScopedSyscallTimer {
  public:
-#if defined(PA_COUNT_SYSCALL_TIME)
+#if PA_CONFIG(COUNT_SYSCALL_TIME)
   explicit ScopedSyscallTimer(PartitionRoot<>* root)
       : root_(root), tick_(base::TimeTicks::Now()) {}
 
@@ -966,17 +966,18 @@ class ScopedSyscallTimer {
 PA_ALWAYS_INLINE uintptr_t
 PartitionAllocGetDirectMapSlotStartInBRPPool(uintptr_t address) {
   PA_DCHECK(IsManagedByPartitionAllocBRPPool(address));
-#if defined(PA_HAS_64_BITS_POINTERS)
+#if BUILDFLAG(HAS_64_BIT_POINTERS)
   // Use this variant of GetDirectMapReservationStart as it has better
   // performance.
   uintptr_t offset = OffsetInBRPPool(address);
   uintptr_t reservation_start =
       GetDirectMapReservationStart(address, kBRPPoolHandle, offset);
-#else
+#else  // BUILDFLAG(HAS_64_BIT_POINTERS)
   uintptr_t reservation_start = GetDirectMapReservationStart(address);
 #endif
-  if (!reservation_start)
+  if (!reservation_start) {
     return 0;
+  }
 
   // The direct map allocation may not start exactly from the first page, as
   // there may be padding for alignment. The first page metadata holds an offset
@@ -1025,8 +1026,9 @@ PartitionAllocGetSlotStartInBRPPool(uintptr_t address) {
 
   uintptr_t directmap_slot_start =
       PartitionAllocGetDirectMapSlotStartInBRPPool(address);
-  if (PA_UNLIKELY(directmap_slot_start))
+  if (PA_UNLIKELY(directmap_slot_start)) {
     return directmap_slot_start;
+  }
   auto* slot_span = SlotSpanMetadata<ThreadSafe>::FromAddr(address);
   auto* root = PartitionRoot<ThreadSafe>::FromSlotSpan(slot_span);
   // Double check that ref-count is indeed present.
@@ -1047,9 +1049,9 @@ PartitionAllocGetSlotStartInBRPPool(uintptr_t address) {
 //
 // This isn't a general purpose function. The caller is responsible for ensuring
 // that the ref-count is in place for this allocation.
-template <typename Z, typename = std::enable_if_t<offset_type<Z>, void>>
+template <typename Z>
 PA_ALWAYS_INLINE PtrPosWithinAlloc
-PartitionAllocIsValidPtrDelta(uintptr_t address, Z delta_in_bytes) {
+PartitionAllocIsValidPtrDelta(uintptr_t address, PtrDelta<Z> delta) {
   // Required for pointers right past an allocation. See
   // |PartitionAllocGetSlotStartInBRPPool()|.
   uintptr_t adjusted_address = address - kPartitionPastAllocationAdjustment;
@@ -1068,21 +1070,19 @@ PartitionAllocIsValidPtrDelta(uintptr_t address, Z delta_in_bytes) {
   PA_DCHECK(root->brp_enabled());
 
   uintptr_t object_addr = root->SlotStartToObjectAddr(slot_start);
-  uintptr_t new_address = address + static_cast<uintptr_t>(delta_in_bytes);
+  uintptr_t new_address =
+      address + static_cast<uintptr_t>(delta.delta_in_bytes);
   uintptr_t object_end = object_addr + slot_span->GetUsableSize(root);
-#if defined(PA_USE_OOB_POISON)
-  bool below_object_end = new_address < object_end;
-#else
-  bool below_object_end = new_address <= object_end;
-#endif
-  if (object_addr <= new_address && below_object_end) {
-    return PtrPosWithinAlloc::kInBounds;
-#if defined(PA_USE_OOB_POISON)
-  } else if (new_address == object_end) {
+  if (new_address < object_addr || object_end < new_address) {
+    return PtrPosWithinAlloc::kFarOOB;
+#if PA_CONFIG(USE_OOB_POISON)
+  } else if (object_end - delta.type_size < new_address) {
+    // Not even a single element of the type referenced by the pointer can fit
+    // between the pointer and the end of the object.
     return PtrPosWithinAlloc::kAllocEnd;
 #endif
   } else {
-    return PtrPosWithinAlloc::kFarOOB;
+    return PtrPosWithinAlloc::kInBounds;
   }
 }
 
@@ -1162,8 +1162,9 @@ PartitionRoot<thread_safe>::AllocFromBucket(Bucket* bucket,
   } else {
     slot_start = bucket->SlowPathAlloc(this, flags, raw_size,
                                        slot_span_alignment, is_already_zeroed);
-    if (PA_UNLIKELY(!slot_start))
+    if (PA_UNLIKELY(!slot_start)) {
       return 0;
+    }
 
     slot_span = SlotSpan::FromSlotStart(slot_start);
     // TODO(crbug.com/1257655): See if we can afford to make this a CHECK.
@@ -1206,13 +1207,15 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeWithFlags(
     return;
   }
 #endif  // defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
-  if (PA_UNLIKELY(!object))
+  if (PA_UNLIKELY(!object)) {
     return;
+  }
 
   if (PartitionAllocHooks::AreHooksEnabled()) {
     PartitionAllocHooks::FreeObserverHookIfEnabled(object);
-    if (PartitionAllocHooks::FreeOverrideHookIfEnabled(object))
+    if (PartitionAllocHooks::FreeOverrideHookIfEnabled(object)) {
       return;
+    }
   }
 
   FreeNoHooks(object);
@@ -1226,7 +1229,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeWithFlags(
 template <bool thread_safe>
 PA_ALWAYS_INLINE bool PartitionRoot<thread_safe>::IsMemoryTaggingEnabled()
     const {
-#if defined(PA_HAS_MEMORY_TAGGING)
+#if PA_CONFIG(HAS_MEMORY_TAGGING)
   return !flags.use_configurable_pool;
 #else
   return false;
@@ -1236,8 +1239,9 @@ PA_ALWAYS_INLINE bool PartitionRoot<thread_safe>::IsMemoryTaggingEnabled()
 // static
 template <bool thread_safe>
 PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* object) {
-  if (PA_UNLIKELY(!object))
+  if (PA_UNLIKELY(!object)) {
     return;
+  }
   // Almost all calls to FreeNoNooks() will end up writing to |*object|, the
   // only cases where we don't would be delayed free() in PCScan, but |*object|
   // can be cold in cache.
@@ -1254,7 +1258,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* object) {
   //
   // On Android Chromecast devices, this is already checked in PartitionFree()
   // in the shim.
-#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && \
     (BUILDFLAG(IS_ANDROID) && !BUILDFLAG(PA_IS_CAST_ANDROID))
   PA_CHECK(IsManagedByPartitionAlloc(object_addr));
 #endif
@@ -1275,11 +1279,14 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* object) {
   uintptr_t slot_start = root->ObjectToSlotStart(object);
   PA_DCHECK(slot_span == SlotSpan::FromSlotStart(slot_start));
 
-#if defined(PA_HAS_MEMORY_TAGGING)
+#if PA_CONFIG(HAS_MEMORY_TAGGING)
   if (PA_LIKELY(root->IsMemoryTaggingEnabled())) {
     const size_t slot_size = slot_span->bucket->slot_size;
     if (PA_LIKELY(slot_size <= internal::kMaxMemoryTaggingSize)) {
-      internal::TagMemoryRangeIncrement(slot_start, slot_size);
+      // slot_span is untagged at this point, so we have to recover its tag
+      // again to increment and provide use-after-free mitigations.
+      internal::TagMemoryRangeIncrement(internal::TagAddr(slot_start),
+                                        slot_size);
       // Incrementing the MTE-tag in the memory range invalidates the |object|'s
       // tag, so it must be retagged.
       object = internal::TagPtr(object);
@@ -1298,16 +1305,16 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* object) {
   // Don't do it when memory tagging is enabled, as |*slot_span| has already
   // been touched above.
   PA_PREFETCH(slot_span);
-#endif  // defined(PA_HAS_MEMORY_TAGGING)
+#endif  // PA_CONFIG(HAS_MEMORY_TAGGING)
 
-#if defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+#if PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
   if (!root->IsDirectMappedBucket(slot_span->bucket)) {
     partition_alloc::internal::PartitionTagIncrementValue(
         slot_start, slot_span->bucket->slot_size);
   }
-#endif  // defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
+#endif  // PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS)
 
-#if BUILDFLAG(STARSCAN)
+#if BUILDFLAG(USE_STARSCAN)
   // TODO(bikineev): Change the condition to PA_LIKELY once PCScan is enabled by
   // default.
   if (PA_UNLIKELY(root->ShouldQuarantine(object))) {
@@ -1319,7 +1326,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooks(void* object) {
       return;
     }
   }
-#endif  // BUILDFLAG(STARSCAN)
+#endif  // BUILDFLAG(USE_STARSCAN)
 
   root->FreeNoHooksImmediate(object, slot_span, slot_start);
 }
@@ -1372,7 +1379,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
   }
 #endif
 
-#if BUILDFLAG(STARSCAN)
+#if BUILDFLAG(USE_STARSCAN)
   // TODO(bikineev): Change the condition to PA_LIKELY once PCScan is enabled by
   // default.
   if (PA_UNLIKELY(IsQuarantineEnabled())) {
@@ -1381,7 +1388,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
       internal::StateBitmapFromAddr(slot_start)->Free(slot_start);
     }
   }
-#endif  // BUILDFLAG(STARSCAN)
+#endif  // BUILDFLAG(USE_STARSCAN)
 
 #if BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
   // TODO(keishi): Add PA_LIKELY when brp is fully enabled as |brp_enabled| will
@@ -1392,9 +1399,15 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
     // immediately. Otherwise, defer the operation and zap the memory to turn
     // potential use-after-free issues into unexploitable crashes.
     if (PA_UNLIKELY(!ref_count->IsAliveWithNoKnownRefs() &&
-                    brp_zapping_enabled()))
-      internal::SecureMemset(object, internal::kQuarantinedByte,
-                             slot_span->GetUsableSize(this));
+                    brp_zapping_enabled())) {
+      auto usable_size = slot_span->GetUsableSize(this);
+      auto hook = PartitionAllocHooks::GetQuarantineOverrideHook();
+      if (PA_UNLIKELY(hook)) {
+        hook(object, usable_size);
+      } else {
+        internal::SecureMemset(object, internal::kQuarantinedByte, usable_size);
+      }
+    }
 
     if (PA_UNLIKELY(!(ref_count->ReleaseFromAllocator()))) {
       total_size_of_brp_quarantined_bytes.fetch_add(
@@ -1419,7 +1432,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
                             - sizeof(internal::PartitionRefCount)
 #endif
   );
-#elif defined(PA_ZERO_RANDOMLY_ON_FREE)
+#elif PA_CONFIG(ZERO_RANDOMLY_ON_FREE)
   // `memset` only once in a while: we're trading off safety for time
   // efficiency.
   if (PA_UNLIKELY(internal::RandomPeriod()) &&
@@ -1431,7 +1444,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::FreeNoHooksImmediate(
 #endif
     );
   }
-#endif  // defined(PA_ZERO_RANDOMLY_ON_FREE)
+#endif  // PA_CONFIG(ZERO_RANDOMLY_ON_FREE)
 
   RawFreeWithThreadCache(slot_start, slot_span);
 }
@@ -1456,7 +1469,7 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::RawFree(
   RawFree(slot_start, slot_span);
 }
 
-#if defined(COMPILER_MSVC) && !defined(__clang__)
+#if PA_CONFIG(IS_NONCLANG_MSVC)
 // MSVC only supports inline assembly on x86. This preprocessor directive
 // is intended to be a replacement for the same.
 //
@@ -1498,14 +1511,14 @@ PA_ALWAYS_INLINE void PartitionRoot<thread_safe>::RawFree(uintptr_t slot_start,
   // OS page. No need to write to the second one as well.
   //
   // Do not move the store above inside the locked section.
-#if !(defined(COMPILER_MSVC) && !defined(__clang__))
+#if !(PA_CONFIG(IS_NONCLANG_MSVC))
   __asm__ __volatile__("" : : "r"(slot_start) : "memory");
 #endif
 
   ::partition_alloc::internal::ScopedGuard guard{lock_};
   FreeInSlotSpan(slot_start, slot_span);
 }
-#if defined(COMPILER_MSVC) && !defined(__clang__)
+#if PA_CONFIG(IS_NONCLANG_MSVC)
 #pragma optimize("", on)
 #endif
 
@@ -1726,8 +1739,9 @@ PA_ALWAYS_INLINE bool PartitionRoot<thread_safe>::TryRecommitSystemPagesForData(
                                 accessibility_disposition);
   }
 
-  if (ok)
+  if (ok) {
     IncreaseCommittedPages(length);
+  }
 
   return ok;
 }
@@ -1746,8 +1760,9 @@ PA_ALWAYS_INLINE bool PartitionRoot<thread_safe>::TryRecommitSystemPagesForData(
 template <bool thread_safe>
 PA_ALWAYS_INLINE size_t PartitionRoot<thread_safe>::GetUsableSize(void* ptr) {
   // malloc_usable_size() is expected to handle NULL gracefully and return 0.
-  if (!ptr)
+  if (!ptr) {
     return 0;
+  }
   auto* slot_span = SlotSpan::FromObjectInnerPtr(ptr);
   auto* root = FromSlotSpan(slot_span);
   return slot_span->GetUsableSize(root);
@@ -1757,12 +1772,13 @@ template <bool thread_safe>
 PA_ALWAYS_INLINE size_t
 PartitionRoot<thread_safe>::GetUsableSizeWithMac11MallocSizeHack(void* ptr) {
   // malloc_usable_size() is expected to handle NULL gracefully and return 0.
-  if (!ptr)
+  if (!ptr) {
     return 0;
+  }
   auto* slot_span = SlotSpan::FromObjectInnerPtr(ptr);
   auto* root = FromSlotSpan(slot_span);
   size_t usable_size = slot_span->GetUsableSize(root);
-#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#if PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
   // Check |mac11_malloc_size_hack_enabled_| flag first as this doesn't
   // concern OS versions other than macOS 11.
   if (PA_UNLIKELY(root->flags.mac11_malloc_size_hack_enabled_ &&
@@ -1774,7 +1790,7 @@ PartitionRoot<thread_safe>::GetUsableSizeWithMac11MallocSizeHack(void* ptr) {
       return internal::kMac11MallocSizeHackRequestedSize;
     }
   }
-#endif  // defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#endif  // PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
 
   return usable_size;
 }
@@ -1787,9 +1803,10 @@ PA_ALWAYS_INLINE PageAccessibilityConfiguration
 PartitionRoot<thread_safe>::GetPageAccessibility() const {
   PageAccessibilityConfiguration::Permissions permissions =
       PageAccessibilityConfiguration::kReadWrite;
-#if defined(PA_HAS_MEMORY_TAGGING)
-  if (IsMemoryTaggingEnabled())
+#if PA_CONFIG(HAS_MEMORY_TAGGING)
+  if (IsMemoryTaggingEnabled()) {
     permissions = PageAccessibilityConfiguration::kReadWriteTagged;
+  }
 #endif
 #if BUILDFLAG(ENABLE_PKEYS)
   return PageAccessibilityConfiguration(permissions, flags.pkey);
@@ -1923,7 +1940,7 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocWithFlagsNoHooks(
   uintptr_t slot_start = 0;
   size_t slot_size;
 
-#if BUILDFLAG(STARSCAN)
+#if BUILDFLAG(USE_STARSCAN)
   const bool is_quarantine_enabled = IsQuarantineEnabled();
   // PCScan safepoint. Call before trying to allocate from cache.
   // TODO(bikineev): Change the condition to PA_LIKELY once PCScan is enabled by
@@ -1931,7 +1948,7 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocWithFlagsNoHooks(
   if (PA_UNLIKELY(is_quarantine_enabled)) {
     PCScan::JoinScanIfNeeded();
   }
-#endif  // BUILDFLAG(STARSCAN)
+#endif  // BUILDFLAG(USE_STARSCAN)
 
   auto* thread_cache = GetOrCreateThreadCache();
 
@@ -1977,11 +1994,13 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocWithFlagsNoHooks(
                  &usable_size, &is_already_zeroed);
   }
 
-  if (PA_UNLIKELY(!slot_start))
+  if (PA_UNLIKELY(!slot_start)) {
     return nullptr;
+  }
 
-  if (PA_LIKELY(ThreadCache::IsValid(thread_cache)))
+  if (PA_LIKELY(ThreadCache::IsValid(thread_cache))) {
     thread_cache->RecordAllocation(usable_size);
+  }
 
   // Layout inside the slot:
   //   |[refcnt]|...object...|[empty]|[cookie]|[unused]|
@@ -2056,7 +2075,7 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocWithFlagsNoHooks(
   // be false only for the aligned partition.
   if (brp_enabled()) {
     bool needs_mac11_malloc_size_hack = false;
-#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#if PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
     // Only apply hack to size 32 allocations on macOS 11. There is a buggy
     // assertion that malloc_size() equals sizeof(class_rw_t) which is 32.
     if (PA_UNLIKELY(this->flags.mac11_malloc_size_hack_enabled_ &&
@@ -2064,10 +2083,10 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocWithFlagsNoHooks(
                         internal::kMac11MallocSizeHackRequestedSize)) {
       needs_mac11_malloc_size_hack = true;
     }
-#endif  // defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#endif  // PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
     auto* ref_count = new (internal::PartitionRefCountPointer(slot_start))
         internal::PartitionRefCount(needs_mac11_malloc_size_hack);
-#if defined(PA_REF_COUNT_STORE_REQUESTED_SIZE)
+#if PA_CONFIG(REF_COUNT_STORE_REQUESTED_SIZE)
     ref_count->SetRequestedSize(requested_size);
 #else
     (void)ref_count;
@@ -2075,7 +2094,7 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocWithFlagsNoHooks(
   }
 #endif  // BUILDFLAG(ENABLE_BACKUP_REF_PTR_SUPPORT)
 
-#if BUILDFLAG(STARSCAN)
+#if BUILDFLAG(USE_STARSCAN)
   // TODO(bikineev): Change the condition to PA_LIKELY once PCScan is enabled by
   // default.
   if (PA_UNLIKELY(is_quarantine_enabled)) {
@@ -2084,7 +2103,7 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AllocWithFlagsNoHooks(
       internal::StateBitmapFromAddr(slot_start)->Allocate(slot_start);
     }
   }
-#endif  // BUILDFLAG(STARSCAN)
+#endif  // BUILDFLAG(USE_STARSCAN)
 
   return object;
 }
@@ -2161,8 +2180,9 @@ PA_ALWAYS_INLINE void* PartitionRoot<thread_safe>::AlignedAllocWithFlags(
 
     // Overflow check. adjusted_size must be larger or equal to requested_size.
     if (PA_UNLIKELY(adjusted_size < requested_size)) {
-      if (flags & AllocFlags::kReturnNull)
+      if (flags & AllocFlags::kReturnNull) {
         return nullptr;
+      }
       // OutOfMemoryDeathTest.AlignedAlloc requires
       // base::TerminateBecauseOutOfMemory (invoked by
       // PartitionExcessiveAllocationSize).

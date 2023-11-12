@@ -5,7 +5,7 @@
 #ifndef UI_BASE_TEST_UI_CONTROLS_H_
 #define UI_BASE_TEST_UI_CONTROLS_H_
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -44,7 +44,11 @@ void EnableUIControls();
 bool IsUIControlsEnabled();
 #endif
 
-// Send a key press with/without modifier keys.
+// Generates keyboard accelerator state in bitmap from each key boolean.
+int GenerateAcceleratorState(bool control, bool shift, bool alt, bool command);
+
+// Send a key press with/without modifier keys. This will trigger a key release
+// event after the key press.
 //
 // If you're writing a test chances are you want the variant in ui_test_utils.
 // See it for details.
@@ -61,6 +65,34 @@ bool SendKeyPressNotifyWhenDone(gfx::NativeWindow window,
                                 bool alt,
                                 bool command,
                                 base::OnceClosure task);
+
+enum KeyEventType { kKeyPress = 1 << 0, kKeyRelease = 1 << 1 };
+
+// The keys that may be held down while generating a keyboard/mouse event.
+enum AcceleratorState {
+  kNoAccelerator = 0,
+  kShift = 1 << 0,
+  kControl = 1 << 1,
+  kAlt = 1 << 2,
+  kCommand = 1 << 3,
+};
+
+// Not supported on win.
+// TODO(crbug.com/1414800): Support this on win.
+#if !BUILDFLAG(IS_WIN)
+// Sends a key press and/or release message with/without modifier keys.
+// `key_event_types` is a bitmask of KeyEventType constants that indicates what
+// events are generated.
+bool SendKeyEvents(gfx::NativeWindow window,
+                   ui::KeyboardCode key,
+                   int key_event_types,
+                   int accelerator_state = kNoAccelerator);
+bool SendKeyEventsNotifyWhenDone(gfx::NativeWindow window,
+                                 ui::KeyboardCode key,
+                                 int key_event_types,
+                                 base::OnceClosure task,
+                                 int accelerator_state = kNoAccelerator);
+#endif  // !BUILDFLAG(IS_WIN)
 
 // This value specifies that no window hint is given and an appropriate target
 // window should be deduced from the target or current mouse position.
@@ -94,16 +126,11 @@ enum MouseButtonState {
   DOWN = 2
 };
 
-// The keys that may be held down while generating a mouse event.
-enum AcceleratorState {
-  kNoAccelerator = 0,
-  kShift = 1 << 0,
-  kControl = 1 << 1,
-  kAlt = 1 << 2,
-  kCommand = 1 << 3,
+enum TouchType {
+  kTouchPress = 1 << 0,
+  kTouchRelease = 1 << 1,
+  kTouchMove = 1 << 2,
 };
-
-enum TouchType { PRESS = 1 << 0, RELEASE = 1 << 1, MOVE = 1 << 2 };
 
 // Sends a mouse down and/or up message with optional one or multiple
 // accelerator keys. The click will be sent to wherever the cursor

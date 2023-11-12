@@ -4,6 +4,8 @@
 
 package org.chromium.content.browser;
 
+import static org.chromium.cc.mojom.RootScrollOffsetUpdateFrequency.NONE;
+
 import android.graphics.Point;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
@@ -19,17 +21,20 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.blink.mojom.EventType;
+import org.chromium.cc.mojom.RootScrollOffsetUpdateFrequency;
 import org.chromium.content.browser.input.ImeAdapterImpl;
 import org.chromium.content.browser.selection.SelectionPopupControllerImpl;
 import org.chromium.content.browser.webcontents.WebContentsImpl;
 import org.chromium.content.browser.webcontents.WebContentsImpl.UserDataFactory;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
-import org.chromium.content_public.browser.GestureStateListenerWithScroll;
 import org.chromium.content_public.browser.ViewEventSink.InternalAccessDelegate;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.GestureEventType;
 import org.chromium.ui.base.ViewAndroidDelegate;
+
+import java.util.Collections;
+import java.util.HashMap;
 
 /**
  * Implementation of the interface {@link GestureListenerManager}. Manages
@@ -51,8 +56,11 @@ public class GestureListenerManagerImpl
     private final WebContentsImpl mWebContents;
     private final ObserverList<GestureStateListener> mListeners;
     private final RewindableIterator<GestureStateListener> mIterator;
+    private final HashMap<GestureStateListener, Integer> mListenerFrequency;
+    private SelectionPopupControllerImpl mSelectionPopupController;
     private ViewAndroidDelegate mViewDelegate;
     private InternalAccessDelegate mScrollDelegate;
+    private final Point mRootScrollOffsetStruct = new Point();
 
     private long mNativeGestureListenerManager;
 
@@ -93,6 +101,7 @@ public class GestureListenerManagerImpl
         mWebContents = (WebContentsImpl) webContents;
         mListeners = new ObserverList<GestureStateListener>();
         mIterator = mListeners.rewindableIterator();
+        mListenerFrequency = new HashMap<>();
         mViewDelegate = mWebContents.getViewAndroidDelegate();
         mViewDelegate.addVerticalScrollDirectionChangeListener(this);
         WindowEventObserverManager.from(mWebContents).addObserver(this);
@@ -113,22 +122,26 @@ public class GestureListenerManagerImpl
 
     @Override
     public void addListener(GestureStateListener listener) {
+        addListener(listener, NONE);
+    }
+
+    @Override
+    public void addListener(GestureStateListener listener,
+            @RootScrollOffsetUpdateFrequency.EnumType int frequency) {
         final boolean didAdd = mListeners.addObserver(listener);
-        if (mNativeGestureListenerManager != 0 && didAdd
-                && listener instanceof GestureStateListenerWithScroll) {
-            GestureListenerManagerImplJni.get().setHasListenersAttached(
-                    mNativeGestureListenerManager, true);
+        if (mNativeGestureListenerManager != 0 && didAdd) {
+            mListenerFrequency.put(listener, frequency);
+            updateRootScrollOffsetUpdateFrequency();
         }
     }
 
     @Override
     public void removeListener(GestureStateListener listener) {
         final boolean didRemove = mListeners.removeObserver(listener);
-        if (mNativeGestureListenerManager != 0 && didRemove
-                && (listener instanceof GestureStateListenerWithScroll)
-                && !hasGestureStateListenerWithScroll()) {
-            GestureListenerManagerImplJni.get().setHasListenersAttached(
-                    mNativeGestureListenerManager, false);
+        if (mNativeGestureListenerManager != 0 && didRemove) {
+            assert mListenerFrequency.containsKey(listener);
+            mListenerFrequency.remove(listener);
+            updateRootScrollOffsetUpdateFrequency();
         }
     }
 
@@ -137,11 +150,17 @@ public class GestureListenerManagerImpl
         return mListeners.hasObserver(listener);
     }
 
-    private boolean hasGestureStateListenerWithScroll() {
-        for (GestureStateListener listener : mListeners) {
-            if (listener instanceof GestureStateListenerWithScroll) return true;
-        }
-        return false;
+    private void updateRootScrollOffsetUpdateFrequency() {
+        @RootScrollOffsetUpdateFrequency.EnumType
+        int maxFrequency = calculateMaxRootScrollOffsetUpdateFrequency();
+        GestureListenerManagerImplJni.get().setRootScrollOffsetUpdateFrequency(
+                mNativeGestureListenerManager, maxFrequency);
+    }
+
+    private @RootScrollOffsetUpdateFrequency.EnumType
+    int calculateMaxRootScrollOffsetUpdateFrequency() {
+        if (mListenerFrequency.isEmpty()) return NONE;
+        return Collections.max(mListenerFrequency.values());
     }
 
     @Override
@@ -171,8 +190,8 @@ public class GestureListenerManagerImpl
     }
 
     @VisibleForTesting
-    public boolean shouldReportAllRootScrolls() {
-        return hasGestureStateListenerWithScroll();
+    public @RootScrollOffsetUpdateFrequency.EnumType int getRootScrollOffsetUpdateFrequency() {
+        return calculateMaxRootScrollOffsetUpdateFrequency();
     }
 
     // WindowEventObserver
@@ -193,10 +212,7 @@ public class GestureListenerManagerImpl
     public void updateOnScrollChanged(int offset, int extent) {
         for (mIterator.rewind(); mIterator.hasNext();) {
             GestureStateListener listener = mIterator.next();
-            if (listener instanceof GestureStateListenerWithScroll) {
-                ((GestureStateListenerWithScroll) listener)
-                        .onScrollOffsetOrExtentChanged(offset, extent);
-            }
+            listener.onScrollOffsetOrExtentChanged(offset, extent);
         }
     }
 
@@ -300,11 +316,11 @@ public class GestureListenerManagerImpl
      * @param scrollOffsetX Horizontal scroll offset in pixels.
      * @param scrollOffsetY Vertical scroll offset in pixels.
      */
-    private static @Nullable Point getRootScrollOffsetStruct(
-            float scrollOffsetX, float scrollOffsetY) {
+    private @Nullable Point getRootScrollOffsetStruct(float scrollOffsetX, float scrollOffsetY) {
         if (scrollOffsetX < 0 || scrollOffsetY < 0) return null;
 
-        return new Point((int) scrollOffsetX, (int) scrollOffsetY);
+        mRootScrollOffsetStruct.set((int) scrollOffsetX, (int) scrollOffsetY);
+        return mRootScrollOffsetStruct;
     }
 
     /**
@@ -335,8 +351,13 @@ public class GestureListenerManagerImpl
     }
 
     private void destroyPastePopup() {
-        SelectionPopupControllerImpl controller = getSelectionPopupController();
-        if (controller != null) controller.destroyPastePopup();
+        if (mSelectionPopupController == null) {
+            mSelectionPopupController =
+                    SelectionPopupControllerImpl.fromWebContentsNoCreate(mWebContents);
+        }
+        if (mSelectionPopupController != null) {
+            mSelectionPopupController.destroyPastePopup();
+        }
     }
 
     @CalledByNative
@@ -354,6 +375,7 @@ public class GestureListenerManagerImpl
     private void onNativeDestroyed() {
         for (mIterator.rewind(); mIterator.hasNext();) mIterator.next().onDestroyed();
         mListeners.clear();
+        mListenerFrequency.clear();
         mViewDelegate.removeVerticalScrollDirectionChangeListener(this);
         mNativeGestureListenerManager = 0;
     }
@@ -454,10 +476,13 @@ public class GestureListenerManagerImpl
     private void setGestureScrollInProgress(boolean gestureScrollInProgress) {
         mIsGestureScrollInProgress = gestureScrollInProgress;
 
+        if (mSelectionPopupController == null) {
+            mSelectionPopupController = SelectionPopupControllerImpl.fromWebContents(mWebContents);
+        }
         // Use the active scroll signal for hiding. The animation movement by
         // fling will naturally hide the ActionMode by invalidating its content
         // rect.
-        getSelectionPopupController().setScrollInProgress(isScrollInProgress());
+        mSelectionPopupController.setScrollInProgress(isScrollInProgress());
     }
 
     /**
@@ -473,10 +498,6 @@ public class GestureListenerManagerImpl
             updateOnScrollEnd();
         }
         resetFlingGesture();
-    }
-
-    private SelectionPopupControllerImpl getSelectionPopupController() {
-        return SelectionPopupControllerImpl.fromWebContents(mWebContents);
     }
 
     /**
@@ -505,6 +526,7 @@ public class GestureListenerManagerImpl
                 GestureListenerManagerImpl caller, boolean enabled);
         void setMultiTouchZoomSupportEnabled(long nativeGestureListenerManager,
                 GestureListenerManagerImpl caller, boolean enabled);
-        void setHasListenersAttached(long nativeGestureListenerManager, boolean hasListeners);
+        void setRootScrollOffsetUpdateFrequency(long nativeGestureListenerManager,
+                @RootScrollOffsetUpdateFrequency.EnumType int frequency);
     }
 }

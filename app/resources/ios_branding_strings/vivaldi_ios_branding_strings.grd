@@ -8,6 +8,7 @@ locale.  The strings in this file are specific to iOS.
 <grit base_dir="." latest_public_release="0" current_release="1"
       output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
   <outputs>
+    <output filename="ios_google_chrome_strings_ca-valencia.pak" type="data_package" lang="ca@valencia" />
     <output filename="ios_google_chrome_strings_de-CH.pak" type="data_package" lang="de-CH" />
     <output filename="ios_google_chrome_strings_eo.pak" type="data_package" lang="eo" />
     <output filename="ios_google_chrome_strings_es-PE.pak" type="data_package" lang="es-PE" />
@@ -32,13 +33,17 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_branding_strings_bn.xtb" lang="bn" />
     <file path="strings/vivaldi_ios_branding_strings_bs.xtb" lang="bs" />
     <file path="strings/vivaldi_ios_branding_strings_ca.xtb" lang="ca" />
+    <file path="strings/vivaldi_ios_branding_strings_ca-valencia.xtb" lang="ca@valencia" />
     <file path="strings/vivaldi_ios_branding_strings_cs.xtb" lang="cs" />
     <file path="strings/vivaldi_ios_branding_strings_da.xtb" lang="da" />
     <file path="strings/vivaldi_ios_branding_strings_de.xtb" lang="de" />
+    <file path="strings/vivaldi_ios_branding_strings_de-CH.xtb" lang="de-CH" />
     <file path="strings/vivaldi_ios_branding_strings_el.xtb" lang="el" />
     <file path="strings/vivaldi_ios_branding_strings_en-GB.xtb" lang="en-GB" />
+    <file path="strings/vivaldi_ios_branding_strings_eo.xtb" lang="eo" />
     <file path="strings/vivaldi_ios_branding_strings_es.xtb" lang="es" />
     <file path="strings/vivaldi_ios_branding_strings_es-419.xtb" lang="es-419" />
+    <file path="strings/vivaldi_ios_branding_strings_es-PE.xtb" lang="es-PE" />
     <file path="strings/vivaldi_ios_branding_strings_et.xtb" lang="et" />
     <file path="strings/vivaldi_ios_branding_strings_eu.xtb" lang="eu" />
     <file path="strings/vivaldi_ios_branding_strings_fa.xtb" lang="fa" />
@@ -46,6 +51,8 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_branding_strings_fil.xtb" lang="fil" />
     <file path="strings/vivaldi_ios_branding_strings_fr.xtb" lang="fr" />
     <file path="strings/vivaldi_ios_branding_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_ios_branding_strings_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_ios_branding_strings_gd.xtb" lang="gd" />
     <file path="strings/vivaldi_ios_branding_strings_gl.xtb" lang="gl" />
     <file path="strings/vivaldi_ios_branding_strings_gu.xtb" lang="gu" />
     <file path="strings/vivaldi_ios_branding_strings_he.xtb" lang="he" />
@@ -54,14 +61,19 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_branding_strings_hu.xtb" lang="hu" />
     <file path="strings/vivaldi_ios_branding_strings_hy.xtb" lang="hy" />
     <file path="strings/vivaldi_ios_branding_strings_id.xtb" lang="id" />
+    <file path="strings/vivaldi_ios_branding_strings_io.xtb" lang="io" />
     <file path="strings/vivaldi_ios_branding_strings_is.xtb" lang="is" />
     <file path="strings/vivaldi_ios_branding_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_ios_branding_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_ios_branding_strings_ja-KS.xtb" lang="ja-KS" />
+    <file path="strings/vivaldi_ios_branding_strings_jbo.xtb" lang="jbo" />
     <file path="strings/vivaldi_ios_branding_strings_ka.xtb" lang="ka" />
+    <file path="strings/vivaldi_ios_branding_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_ios_branding_strings_kk.xtb" lang="kk" />
     <file path="strings/vivaldi_ios_branding_strings_km.xtb" lang="km" />
     <file path="strings/vivaldi_ios_branding_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_ios_branding_strings_ko.xtb" lang="ko" />
+    <file path="strings/vivaldi_ios_branding_strings_ku.xtb" lang="ku" />
     <file path="strings/vivaldi_ios_branding_strings_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_ios_branding_strings_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_ios_branding_strings_lt.xtb" lang="lt" />
@@ -75,6 +87,7 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_branding_strings_nb.xtb" lang="no" />
     <file path="strings/vivaldi_ios_branding_strings_ne.xtb" lang="ne" />
     <file path="strings/vivaldi_ios_branding_strings_nl.xtb" lang="nl" />
+    <file path="strings/vivaldi_ios_branding_strings_nn.xtb" lang="nn" />
     <file path="strings/vivaldi_ios_branding_strings_or.xtb" lang="or" />
     <file path="strings/vivaldi_ios_branding_strings_pa.xtb" lang="pa" />
     <file path="strings/vivaldi_ios_branding_strings_pl.xtb" lang="pl" />
@@ -82,6 +95,7 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_branding_strings_pt-PT.xtb" lang="pt-PT" />
     <file path="strings/vivaldi_ios_branding_strings_ro.xtb" lang="ro" />
     <file path="strings/vivaldi_ios_branding_strings_ru.xtb" lang="ru" />
+    <file path="strings/vivaldi_ios_branding_strings_sc.xtb" lang="sc" />
     <file path="strings/vivaldi_ios_branding_strings_si.xtb" lang="si" />
     <file path="strings/vivaldi_ios_branding_strings_sk.xtb" lang="sk" />
     <file path="strings/vivaldi_ios_branding_strings_sl.xtb" lang="sl" />
@@ -102,18 +116,6 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_branding_strings_zh-HK.xtb" lang="zh-HK" />
     <file path="strings/vivaldi_ios_branding_strings_zh-TW.xtb" lang="zh-TW" />
     <file path="strings/vivaldi_ios_branding_strings_zu.xtb" lang="zu" />
-    <file path="strings/vivaldi_ios_branding_strings_de-CH.xtb" lang="de-CH" />
-    <file path="strings/vivaldi_ios_branding_strings_eo.xtb" lang="eo" />
-    <file path="strings/vivaldi_ios_branding_strings_es-PE.xtb" lang="es-PE" />
-    <file path="strings/vivaldi_ios_branding_strings_fy.xtb" lang="fy" />
-    <file path="strings/vivaldi_ios_branding_strings_gd.xtb" lang="gd" />
-    <file path="strings/vivaldi_ios_branding_strings_io.xtb" lang="io" />
-    <file path="strings/vivaldi_ios_branding_strings_ja-KS.xtb" lang="ja-KS" />
-    <file path="strings/vivaldi_ios_branding_strings_jbo.xtb" lang="jbo" />
-    <file path="strings/vivaldi_ios_branding_strings_kab.xtb" lang="kab" />
-    <file path="strings/vivaldi_ios_branding_strings_ku.xtb" lang="ku" />
-    <file path="strings/vivaldi_ios_branding_strings_sc.xtb" lang="sc" />
-    <file path="strings/vivaldi_ios_branding_strings_nn.xtb" lang="nn" />
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">

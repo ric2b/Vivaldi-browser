@@ -11,8 +11,9 @@
 #include <utility>
 
 #include "base/android/jni_android.h"
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/task/single_thread_task_runner.h"
 #include "device/vr/android/arcore/arcore_gl.h"
 #include "device/vr/public/cpp/xr_frame_sink_client.h"
 #include "device/vr/vr_device.h"
@@ -74,22 +75,6 @@ class COMPONENT_EXPORT(VR_ARCORE) ArCoreDevice : public VRDeviceBase {
                              const gfx::PointF& location);
   void OnDrawingSurfaceDestroyed();
   void OnSessionEnded();
-
-  template <typename... Args>
-  static void RunCallbackOnTaskRunner(
-      const scoped_refptr<base::TaskRunner>& task_runner,
-      base::OnceCallback<void(Args...)> callback,
-      Args... args) {
-    task_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), std::forward<Args>(args)...));
-  }
-  template <typename... Args>
-  base::OnceCallback<void(Args...)> CreateMainThreadCallback(
-      base::OnceCallback<void(Args...)> callback) {
-    return base::BindOnce(&ArCoreDevice::RunCallbackOnTaskRunner<Args...>,
-                          main_thread_task_runner_, std::move(callback));
-  }
 
   void PostTaskToGlThread(base::OnceClosure task);
 

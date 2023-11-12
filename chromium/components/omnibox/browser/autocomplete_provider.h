@@ -273,11 +273,6 @@ class AutocompleteProvider
   // information it wants to |provider_info|.
   virtual void AddProviderInfo(ProvidersInfo* provider_info) const;
 
-  // Called when a new omnibox session starts or the current session ends.
-  // This gives the opportunity to reset the internal state, if any, associated
-  // with the previous session.
-  virtual void ResetSession();
-
   // Estimates dynamic memory usage.
   // See base/trace_event/memory_usage_estimator.h for more info.
   //
@@ -396,6 +391,12 @@ class AutocompleteProvider
   typedef std::pair<bool, std::u16string> FixupReturn;
 
   virtual ~AutocompleteProvider();
+
+  // Limits the size of `matches_` to `max_matches`. When ML scoring is enabled,
+  // the provider should pass all suggestions to the controller. In that case,
+  // this does not resize the list of matches, but instead marks all matches
+  // beyond `max_matches` as zero relevance and `culled_by_provider`.
+  void ResizeMatches(size_t max_matches, bool ml_scoring_enabled);
 
   // Fixes up user URL input to make it more possible to match against.  Among
   // many other things, this takes care of the following:

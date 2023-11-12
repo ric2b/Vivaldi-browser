@@ -134,6 +134,10 @@ NSString* const kToolsMenuTextBadgeAccessibilityIdentifier =
     _imageView = [[UIImageView alloc] init];
     _imageView.translatesAutoresizingMaskIntoConstraints = NO;
 
+    // Vivaldi
+    _imageView.contentMode = UIViewContentModeScaleAspectFit;
+    // End Vivaldi
+
     _numberBadgeView = [[NumberBadgeView alloc] init];
     _numberBadgeView.translatesAutoresizingMaskIntoConstraints = NO;
 

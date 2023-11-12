@@ -12,11 +12,11 @@
 #include "base/memory/ref_counted.h"
 #include "base/no_destructor.h"
 #include "base/types/optional_util.h"
+#include "content/public/browser/child_process_host.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/child_process_host.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/isolation_info.h"
 #include "net/http/http_request_headers.h"
@@ -55,7 +55,7 @@ class MockNavigationHandle : public NavigationHandle {
   bool IsInMainFrame() const override {
     return render_frame_host_ ? !render_frame_host_->GetParent() : true;
   }
-  MOCK_METHOD0(IsInPrerenderedMainFrame, bool());
+  MOCK_CONST_METHOD0(IsInPrerenderedMainFrame, bool());
   bool IsPrerenderedPageActivation() const override {
     return is_prerendered_page_activation_;
   }
@@ -180,6 +180,9 @@ class MockNavigationHandle : public NavigationHandle {
   const absl::optional<url::Origin>& GetInitiatorOrigin() override {
     return initiator_origin_;
   }
+  const absl::optional<GURL>& GetInitiatorBaseUrl() override {
+    return initiator_base_url_;
+  }
   const std::vector<std::string>& GetDnsAliases() override {
     static const base::NoDestructor<std::vector<std::string>>
         emptyvector_result;
@@ -201,6 +204,7 @@ class MockNavigationHandle : public NavigationHandle {
               (const std::vector<std::string>& trials));
   MOCK_METHOD(void, SetIsOverridingUserAgent, (bool));
   MOCK_METHOD(void, SetSilentlyIgnoreErrors, ());
+  MOCK_METHOD(network::mojom::WebSandboxFlags, SandboxFlagsInherited, ());
   MOCK_METHOD(network::mojom::WebSandboxFlags, SandboxFlagsToCommit, ());
   MOCK_METHOD(bool, IsWaitingToCommit, ());
   MOCK_METHOD(bool, WasResourceHintsReceived, ());
@@ -337,6 +341,7 @@ class MockNavigationHandle : public NavigationHandle {
   bool was_response_cached_ = false;
   net::ProxyServer proxy_server_;
   absl::optional<url::Origin> initiator_origin_;
+  absl::optional<GURL> initiator_base_url_;
   ReloadType reload_type_ = content::ReloadType::NONE;
   std::string href_translate_;
   absl::optional<blink::Impression> impression_;

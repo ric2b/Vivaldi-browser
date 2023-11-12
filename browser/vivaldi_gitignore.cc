@@ -1,8 +1,8 @@
 // Copyright (c) 2021 Vivaldi Technologies AS. All rights reserved
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/task/task_traits.h"

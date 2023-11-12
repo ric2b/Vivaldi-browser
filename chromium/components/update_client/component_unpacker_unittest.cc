@@ -6,15 +6,15 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
-#include "base/task/single_thread_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/task_environment.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/update_client/component_unpacker.h"
@@ -77,8 +77,8 @@ class ComponentUnpackerTest : public testing::Test {
   void RunThreads();
 
   base::test::TaskEnvironment task_environment_;
-  const scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_ =
-      base::SingleThreadTaskRunner::GetCurrentDefault();
+  const scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner_ =
+      base::SequencedTaskRunner::GetCurrentDefault();
   base::RunLoop runloop_;
   base::OnceClosure quit_closure_ = runloop_.QuitClosure();
 

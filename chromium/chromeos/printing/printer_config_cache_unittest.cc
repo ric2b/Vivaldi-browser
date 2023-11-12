@@ -6,8 +6,8 @@
 
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -83,7 +83,8 @@ class PrinterConfigCacheTest : public ::testing::Test {
             base::BindLambdaForTesting([&]() {
               return reinterpret_cast<network::mojom::URLLoaderFactory*>(
                   &loader_factory_);
-            }))) {}
+            }),
+            /*use_localhost_as_root=*/false)) {}
 
   // Sets up the default responses to dispense.
   void SetUp() override {

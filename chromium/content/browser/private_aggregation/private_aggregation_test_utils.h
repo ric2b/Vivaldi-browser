@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
 #include "content/browser/private_aggregation/private_aggregation_budgeter.h"
@@ -100,12 +100,9 @@ class MockPrivateAggregationManager : public PrivateAggregationManager {
               (override));
 };
 
-class MockPrivateAggregationContentBrowserClient
-    : public TestContentBrowserClient {
+template <typename SuperClass>
+class MockPrivateAggregationContentBrowserClientBase : public SuperClass {
  public:
-  MockPrivateAggregationContentBrowserClient();
-  ~MockPrivateAggregationContentBrowserClient() override;
-
   // ContentBrowserClient:
   MOCK_METHOD(bool,
               IsPrivateAggregationAllowed,
@@ -117,7 +114,17 @@ class MockPrivateAggregationContentBrowserClient
               LogWebFeatureForCurrentPage,
               (content::RenderFrameHost*, blink::mojom::WebFeature),
               (override));
+  MOCK_METHOD(bool,
+              IsSharedStorageAllowed,
+              (content::BrowserContext * browser_context,
+               content::RenderFrameHost* rfh,
+               const url::Origin& top_frame_origin,
+               const url::Origin& accessing_origin),
+              (override));
 };
+
+using MockPrivateAggregationContentBrowserClient =
+    MockPrivateAggregationContentBrowserClientBase<TestContentBrowserClient>;
 
 bool operator==(const PrivateAggregationBudgetKey::TimeWindow&,
                 const PrivateAggregationBudgetKey::TimeWindow&);

@@ -81,8 +81,13 @@ public class ViewAndroidDelegate {
 
     private StylusWritingCursorHandler mStylusWritingCursorHandler;
 
-    // Whether the current hovered element's action is stylus writable or not.
-    private boolean mHoverActionStylusWritable;
+    // Cache the last Pointer Icon calculated for cursor type received from blink. Pointer is reset
+    // to this icon when once cursor stops being overridden.
+    private PointerIcon mPointerIconForLastCursor;
+
+    // Whether the cursor received from blink has been overridden to set specific cursor.
+    // Ex: Stylus writing cursor.
+    private boolean mCursorOverridden;
 
     /**
      * Sets a handler to handle the stylus writing cursor updates.
@@ -245,33 +250,36 @@ public class ViewAndroidDelegate {
      * Start {@link View#startDragAndDrop(ClipData, DragShadowBuilder, Object, int)} with
      * {@link DropDataAndroid} from the web content.
      *
-     * @param shadowImage The shadow image for the dragged text.
+     * @param shadowImage The shadow image for the dragged object.
      * @param dropData The drop data presenting the drag target.
+     * @param cursorOffsetX The x offset of the cursor w.r.t. to top-left corner of the drag-image.
+     * @param cursorOffsetY The y offset of the cursor w.r.t. to top-left corner of the drag-image.
+     * @param dragObjRectWidth The width of the drag object.
+     * @param dragObjRectHeight The height of the drag object.
      */
     @CalledByNative
-    private boolean startDragAndDrop(Bitmap shadowImage, DropDataAndroid dropData) {
+    private boolean startDragAndDrop(Bitmap shadowImage, DropDataAndroid dropData,
+            int cursorOffsetX, int cursorOffsetY, int dragObjRectWidth, int dragObjRectHeight) {
         ViewGroup containerView = getContainerViewGroup();
         if (containerView == null) return false;
 
-        return getDragAndDropDelegate().startDragAndDrop(containerView, shadowImage, dropData);
+        return getDragAndDropDelegate().startDragAndDrop(containerView, shadowImage, dropData,
+                cursorOffsetX, cursorOffsetY, dragObjRectWidth, dragObjRectHeight);
     }
 
     @VisibleForTesting
     @CalledByNative
     public void onCursorChangedToCustom(Bitmap customCursorBitmap, int hotspotX, int hotspotY) {
         PointerIcon icon = PointerIcon.create(customCursorBitmap, hotspotX, hotspotY);
+        mPointerIconForLastCursor = icon;
+        if (mCursorOverridden) return;
+
         getContainerViewGroup().setPointerIcon(icon);
     }
 
     @VisibleForTesting
     @CalledByNative
     public void onCursorChanged(int cursorType) {
-        // Allow stylus writing handler to override the cursor.
-        if (mHoverActionStylusWritable && mStylusWritingCursorHandler != null
-                && mStylusWritingCursorHandler.didHandleCursorUpdate(getContainerViewGroup())) {
-            return;
-        }
-
         int pointerIconType = PointerIcon.TYPE_ARROW;
         switch (cursorType) {
             case CursorType.NONE:
@@ -395,12 +403,31 @@ public class ViewAndroidDelegate {
         }
         ViewGroup containerView = getContainerViewGroup();
         PointerIcon icon = PointerIcon.getSystemIcon(containerView.getContext(), pointerIconType);
+        mPointerIconForLastCursor = icon;
+        if (mCursorOverridden) return;
+
         containerView.setPointerIcon(icon);
     }
 
     @CalledByNative
-    private void setHoverActionStylusWritable(boolean stylusWritable) {
-        mHoverActionStylusWritable = stylusWritable;
+    private void notifyHoverActionStylusWritable(boolean stylusWritable) {
+        // Set stylus writing icon when hover action under pointer is writable.
+        if (stylusWritable && didHandleStylusWritingCursorUpdate()) {
+            mCursorOverridden = true;
+            return;
+        }
+
+        // If the hover action becomes not writable, then blink may not send another cursor update
+        // as the element under pointer is still same. Then reset to last cached icon from blink.
+        if (mCursorOverridden && !stylusWritable) {
+            getContainerViewGroup().setPointerIcon(mPointerIconForLastCursor);
+        }
+        mCursorOverridden = false;
+    }
+
+    private boolean didHandleStylusWritingCursorUpdate() {
+        return mStylusWritingCursorHandler != null
+                && mStylusWritingCursorHandler.didHandleCursorUpdate(getContainerViewGroup());
     }
 
     /**

@@ -8,10 +8,10 @@
 #include <utility>
 
 #include "ash/public/cpp/image_downloader.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
@@ -21,6 +21,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/ash/image_downloader_impl.h"
 #include "components/user_manager/user_image/user_image.h"
+#include "google_apis/credentials_mode.h"
 #include "ipc/ipc_channel.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
@@ -393,9 +394,11 @@ void StartWithDataAnimated(base::StringPiece data, LoadedCallback loaded_cb) {
   DecodeAnimation(std::move(loaded_cb), data);
 }
 
-void StartWithFilePathAnimated(const base::FilePath& file_path,
-                               LoadedCallback loaded_cb) {
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTaskAndReplyWithResult(
+void StartWithFilePathAnimated(
+    scoped_refptr<base::SequencedTaskRunner> background_task_runner,
+    const base::FilePath& file_path,
+    LoadedCallback loaded_cb) {
+  background_task_runner->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(
           [](const base::FilePath& file_path) {
@@ -436,7 +439,8 @@ void StartWithGURLAnimated(const GURL& default_image_url,
 
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = default_image_url;
-  request->credentials_mode = network::mojom::CredentialsMode::kOmit;
+  request->credentials_mode =
+      google_apis::GetOmitCredentialsModeForGaiaRequests();
 
   auto loader = network::SimpleURLLoader::Create(std::move(request),
                                                  kNetworkTrafficAnnotationTag);

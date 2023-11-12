@@ -3,10 +3,10 @@
 #include "components/adverse_adblocking/adverse_ad_filter_list.h"
 
 #include "app/vivaldi_apptools.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/memory/singleton.h"
 #include "base/path_service.h"
@@ -16,8 +16,9 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/time/time_to_iso8601.h"
 #include "base/values.h"
-#include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"  // nogncheck
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/pref_service.h"
@@ -45,38 +46,23 @@ AdverseAdFilterListService::AdverseAdFilterListService(Profile* profile)
   if (!vivaldi::IsVivaldiRunning())
     return;
   if (profile_) {  // Profile will be null in components.
-
     PrefService* prefs = profile_->GetPrefs();
-
-    notification_registrar_.Add(this, chrome::NOTIFICATION_PROFILE_ADDED,
-                                content::Source<Profile>(profile_));
 
     pref_change_registrar_.Init(prefs);
     pref_change_registrar_.Add(
         vivaldiprefs::kPrivacyAdverseAdBlockEnabled,
         base::BindRepeating(&AdverseAdFilterListService::SettingsUpdated,
                             weak_ptr_factory_.GetWeakPtr()));
+
+    OnProfileAdded(profile_);
   }
 }
 
-AdverseAdFilterListService::~AdverseAdFilterListService() {}
-
-void AdverseAdFilterListService::Observe(
-    int type,
-    const content::NotificationSource& source,
-    const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_PROFILE_ADDED: {
-      // Profile and services are up and running
-      OnProfileAndServicesInitialized();
-      break;
-    }
-    default:
-      NOTREACHED();
-  }
+AdverseAdFilterListService::~AdverseAdFilterListService() {
 }
 
-void AdverseAdFilterListService::OnProfileAndServicesInitialized() {
+void AdverseAdFilterListService::OnProfileAdded(Profile *profile) {
+  // Profile and services are up and running
   // PathExists() triggers IO restriction.
   base::VivaldiScopedAllowBlocking allow_blocking;
 
@@ -193,7 +179,7 @@ void AdverseAdFilterListService::OnBlocklistDownloadDone(
     int interval =
         prefs->GetInteger(vivaldiprefs::kPrivacyAdverseAdBlockUpdateInterval);
 
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&AdverseAdFilterListService::OnDoBlockListLifecycleCheck,
                        weak_ptr_factory_.GetWeakPtr()),
@@ -236,7 +222,7 @@ void AdverseAdFilterListService::OnDoBlockListLifecycleCheck() {
     DoChecksumBeforeDownload();
   } else {
     // Schedule a new lifecyclecheck
-    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&AdverseAdFilterListService::OnDoBlockListLifecycleCheck,
                        weak_ptr_factory_.GetWeakPtr()),

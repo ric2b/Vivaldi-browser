@@ -48,14 +48,14 @@ class VIZ_SERVICE_EXPORT OutputPresenterGL : public OutputPresenter {
                                              gfx::Size image_size) final;
   void SwapBuffers(SwapCompletionCallback completion_callback,
                    BufferPresentedCallback presentation_callback,
-                   gl::FrameData data) final;
+                   gfx::FrameData data) final;
   void PostSubBuffer(const gfx::Rect& rect,
                      SwapCompletionCallback completion_callback,
                      BufferPresentedCallback presentation_callback,
-                     gl::FrameData data) final;
+                     gfx::FrameData data) final;
   void CommitOverlayPlanes(SwapCompletionCallback completion_callback,
                            BufferPresentedCallback presentation_callback,
-                           gl::FrameData data) final;
+                           gfx::FrameData data) final;
   void SchedulePrimaryPlane(
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane,
       Image* image,
@@ -64,8 +64,10 @@ class VIZ_SERVICE_EXPORT OutputPresenterGL : public OutputPresenter {
       const OutputPresenter::OverlayPlaneCandidate& overlay_plane_candidate,
       ScopedOverlayAccess* access,
       std::unique_ptr<gfx::GpuFence> acquire_fence) final;
-
-#if BUILDFLAG(IS_MAC)
+  bool SupportsGpuVSync() const final;
+  void SetGpuVSyncEnabled(bool enabled) final;
+  void SetVSyncDisplayID(int64_t display_id) final;
+#if BUILDFLAG(IS_APPLE)
   void SetCALayerErrorCode(gfx::CALayerResult ca_layer_error_code) final;
 #endif
 
@@ -82,7 +84,7 @@ class VIZ_SERVICE_EXPORT OutputPresenterGL : public OutputPresenter {
       shared_image_representation_factory_;
   uint32_t shared_image_usage_;
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   gfx::CALayerResult ca_layer_error_code_ = gfx::kCALayerSuccess;
 #endif
 };

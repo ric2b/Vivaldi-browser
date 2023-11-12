@@ -5,7 +5,7 @@
 #include "ash/wm/window_restore/window_restore_util.h"
 
 #include "ash/public/cpp/app_types_util.h"
-#include "ash/public/cpp/desks_templates_delegate.h"
+#include "ash/public/cpp/saved_desk_delegate.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -69,10 +69,10 @@ std::unique_ptr<app_restore::WindowInfo> BuildWindowInfo(
   WindowState* window_state = WindowState::Get(window);
   if (override_bounds) {
     window_info->current_bounds = *override_bounds;
-    // Snapped state can be restored from tablet onto clamshell, so we do not
-    // use the restore override state here.
+    // Snapped and floated states can be restored from tablet onto clamshell, so
+    // we do not use the restore override state here.
     window_info->window_state_type =
-        window_state->IsSnapped()
+        window_state->IsSnapped() || window_state->IsFloated()
             ? window_state->GetStateType()
             : window->GetProperty(kRestoreWindowStateTypeOverrideKey);
   } else {
@@ -124,10 +124,10 @@ std::unique_ptr<app_restore::WindowInfo> BuildWindowInfo(
   if (for_saved_desks) {
     std::string* app_id = window->GetProperty(kAppIDKey);
     window_info->app_title =
-        app_id ? base::UTF8ToUTF16(
-                     Shell::Get()->desks_templates_delegate()->GetAppShortName(
-                         *app_id))
-               : window->GetTitle();
+        app_id
+            ? base::UTF8ToUTF16(
+                  Shell::Get()->saved_desk_delegate()->GetAppShortName(*app_id))
+            : window->GetTitle();
   }
 
   // Save window size restriction of ARC app window.

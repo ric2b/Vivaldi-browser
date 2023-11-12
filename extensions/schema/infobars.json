@@ -28,10 +28,6 @@
           "prominent": {
             "type": "boolean",
             "description": "This is the prominent button and should receive styling accordingly."
-          },
-          "triggersUACPrompt": {
-            "type": "boolean",
-            "description": "Will this trigger a UAC prompt on Windows."
           }
         }
       },

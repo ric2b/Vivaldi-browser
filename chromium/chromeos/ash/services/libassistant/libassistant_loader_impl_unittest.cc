@@ -4,8 +4,8 @@
 
 #include "chromeos/ash/services/libassistant/libassistant_loader_impl.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -36,8 +36,12 @@ TEST_F(LibassistantLoaderImplTest, ShouldCreateInstance) {
 }
 
 TEST_F(LibassistantLoaderImplTest, ShouldRunCallbackWithoutDlcFeature) {
-  feature_list_.InitAndDisableFeature(
-      assistant::features::kEnableLibAssistantDlc);
+  // Enable LibAssistantV2 will also enable LibAssistantDlc. Therefore, in this
+  // test, we disable both.
+  feature_list_.InitWithFeatures(
+      /*enabled_features=*/{},
+      /*disabled_features=*/{assistant::features::kEnableLibAssistantDlc,
+                             assistant::features::kEnableLibAssistantV2});
 
   auto* loader = LibassistantLoaderImpl::GetInstance();
   EXPECT_TRUE(loader);

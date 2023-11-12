@@ -11,13 +11,14 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/json/json_writer.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/supervised_user/kids_chrome_management/kids_external_fetcher.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
@@ -105,6 +106,18 @@ std::string BuildGetFamilyMembersResponse(
   return result;
 }
 
+std::string BuildEmptyGetFamilyMembersResponse() {
+  base::Value::Dict dict;
+  dict.Set("members", base::Value::Dict());
+  std::string result;
+  base::JSONWriter::Write(dict, &result);
+  return result;
+}
+
+std::string BuildGarbageResponse() {
+  return "garbage";
+}
+
 } // namespace
 
 class FamilyInfoFetcherTest
@@ -142,9 +155,10 @@ class FamilyInfoFetcherTest
 #if BUILDFLAG(IS_CHROMEOS)
     return identity_test_env_.SetPrimaryAccount(kAccountId,
                                                 signin::ConsentLevel::kSync);
-#elif BUILDFLAG(IS_ANDROID)
-    // Android supports Unicorn accounts in signed in state with sync disabled.
-    // Using that setup in these tests checks that we aren't overly
+#elif BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_LINUX)
+    // Android and desktop support Unicorn accounts in signed in state with sync
+    // disabled. Using that setup in these tests checks that we aren't overly
     // restrictive.
     return identity_test_env_.SetPrimaryAccount(kAccountId,
                                                 signin::ConsentLevel::kSignin);
@@ -154,20 +168,17 @@ class FamilyInfoFetcherTest
   }
 
   void ClearPrimaryAccount() {
-#if (BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID))
     return identity_test_env_.ClearPrimaryAccount();
-#else
-#error Unsupported platform.
-#endif
   }
 
   void IssueRefreshToken() {
 #if BUILDFLAG(IS_CHROMEOS)
     identity_test_env_.MakePrimaryAccountAvailable(kAccountId,
                                                    signin::ConsentLevel::kSync);
-#elif BUILDFLAG(IS_ANDROID)
-    // Android supports Unicorn accounts in signed in state with sync disabled.
-    // Using that setup in these tests checks that we aren't overly
+#elif BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_LINUX)
+    // Android and desktop support Unicorn accounts in signed in state with sync
+    // disabled. Using that setup in these tests checks that we aren't overly
     // restrictive.
     identity_test_env_.MakePrimaryAccountAvailable(
         kAccountId, signin::ConsentLevel::kSignin);
@@ -208,6 +219,14 @@ class FamilyInfoFetcherTest
     SendResponse(net::OK, net::HTTP_OK, BuildEmptyGetFamilyProfileResponse());
   }
 
+  void SendInvalidGetFamilyMembersResponse() {
+    SendResponse(net::OK, net::HTTP_OK, BuildEmptyGetFamilyMembersResponse());
+  }
+
+  void SendGarbageResponse() {
+    SendResponse(net::OK, net::HTTP_OK, BuildGarbageResponse());
+  }
+
   void SendFailedResponse() {
     SendResponse(net::ERR_ABORTED, -1, std::string());
   }
@@ -220,6 +239,7 @@ class FamilyInfoFetcherTest
   signin::IdentityTestEnvironment identity_test_env_;
   network::TestURLLoaderFactory test_url_loader_factory_;
   std::unique_ptr<FamilyInfoFetcher> fetcher_;
+  base::HistogramTester histogram_tester_;
 };
 
 TEST_F(FamilyInfoFetcherTest, GetFamilyProfileSuccess) {
@@ -280,6 +300,11 @@ TEST_F(FamilyInfoFetcherTest, GetFamilyMembersSuccess) {
 
   EXPECT_CALL(*this, OnGetFamilyMembersSuccess(members));
   SendValidGetFamilyMembersResponse(members);
+
+  EXPECT_EQ(histogram_tester_.GetBucketCount(
+                "Signin.ListFamilyMembersRequest.Status",
+                KidsExternalFetcherStatus::State::NO_ERROR),
+            1);
 }
 
 
@@ -330,7 +355,7 @@ TEST_F(FamilyInfoFetcherTest, NoRefreshToken) {
       access_token_requested.Get());
 }
 
-TEST_F(FamilyInfoFetcherTest, GetTokenFailure) {
+TEST_F(FamilyInfoFetcherTest, GetTokenFailureForStartGetFamilyProfile) {
   IssueRefreshToken();
 
   StartGetFamilyProfile();
@@ -343,7 +368,25 @@ TEST_F(FamilyInfoFetcherTest, GetTokenFailure) {
       GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
 }
 
-TEST_F(FamilyInfoFetcherTest, InvalidResponse) {
+TEST_F(FamilyInfoFetcherTest, GetTokenFailureForStartGetFamilyMembers) {
+  IssueRefreshToken();
+
+  StartGetFamilyMembers();
+
+  // On failure to get an access token we expect a token error.
+  EXPECT_CALL(*this, OnFailure(FamilyInfoFetcher::ErrorCode::kTokenError));
+  identity_test_env_.WaitForAccessTokenRequestIfNecessaryAndRespondWithError(
+      identity_test_env_.identity_manager()->GetPrimaryAccountId(
+          signin::ConsentLevel::kSignin),
+      GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
+
+  EXPECT_EQ(histogram_tester_.GetBucketCount(
+                "Signin.ListFamilyMembersRequest.Status",
+                KidsExternalFetcherStatus::State::GOOGLE_SERVICE_AUTH_ERROR),
+            1);
+}
+
+TEST_F(FamilyInfoFetcherTest, InvalidFamilyProfileResponse) {
   IssueRefreshToken();
 
   StartGetFamilyProfile();
@@ -353,6 +396,40 @@ TEST_F(FamilyInfoFetcherTest, InvalidResponse) {
   // Invalid response data should result in a service error.
   EXPECT_CALL(*this, OnFailure(FamilyInfoFetcher::ErrorCode::kServiceError));
   SendInvalidGetFamilyProfileResponse();
+}
+
+TEST_F(FamilyInfoFetcherTest, InvalidFamilyMembersResponse) {
+  IssueRefreshToken();
+
+  StartGetFamilyMembers();
+
+  WaitForAccessTokenRequestAndIssueToken();
+
+  // Invalid response data should result in a service error.
+  EXPECT_CALL(*this, OnFailure(FamilyInfoFetcher::ErrorCode::kServiceError));
+  SendInvalidGetFamilyMembersResponse();
+
+  EXPECT_EQ(histogram_tester_.GetBucketCount(
+                "Signin.ListFamilyMembersRequest.Status",
+                KidsExternalFetcherStatus::State::DATA_ERROR),
+            1);
+}
+
+TEST_F(FamilyInfoFetcherTest, GarbageFamilyMembersResponse) {
+  IssueRefreshToken();
+
+  StartGetFamilyMembers();
+
+  WaitForAccessTokenRequestAndIssueToken();
+
+  // Invalid response data should result in a service error.
+  EXPECT_CALL(*this, OnFailure(FamilyInfoFetcher::ErrorCode::kServiceError));
+  SendGarbageResponse();
+
+  EXPECT_EQ(histogram_tester_.GetBucketCount(
+                "Signin.ListFamilyMembersRequest.Status",
+                KidsExternalFetcherStatus::State::INVALID_RESPONSE),
+            1);
 }
 
 TEST_F(FamilyInfoFetcherTest, FailedResponse) {

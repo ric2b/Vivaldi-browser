@@ -9,8 +9,8 @@
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/wm/window_util.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "components/exo/input_trace.h"
@@ -50,13 +50,8 @@
 #include "ui/wm/core/cursor_util.h"
 
 namespace exo {
-namespace {
 
-// TODO(oshima): Some accessibility features, including large cursors, disable
-// hardware cursors. Ash does not support compositing for custom cursors, so it
-// replaces them with the default cursor. As a result, this scale has no effect
-// for now. See crbug.com/708378.
-const float kLargeCursorScale = 2.8f;
+namespace {
 
 const double kLocatedEventEpsilonSquared = 1.0 / (2000.0 * 2000.0);
 
@@ -103,7 +98,6 @@ Pointer::Pointer(PointerDelegate* delegate, Seat* seat)
       capture_scale_(GetCaptureDisplayInfo().device_scale_factor()),
       cursor_capture_source_id_(base::UnguessableToken::Create()) {
   WMHelper* helper = WMHelper::GetInstance();
-  helper->AddPreTargetHandler(this);
   // TODO(sky): CursorClient does not exist in mash
   // yet. https://crbug.com/631103.
   aura::client::CursorClient* cursor_client = helper->GetCursorClient();
@@ -114,15 +108,24 @@ Pointer::Pointer(PointerDelegate* delegate, Seat* seat)
   auto* drag_drop_client = helper->GetDragDropClient();
   if (drag_drop_client)
     drag_drop_client->AddObserver(this);
+
+  ash::Shell::Get()->AddShellObserver(this);
+  for (aura::Window* root : ash::Shell::GetAllRootWindows()) {
+    root->AddPreTargetHandler(this);
+  }
 }
 
 Pointer::~Pointer() {
+  ash::Shell::Get()->RemoveShellObserver(this);
+  for (aura::Window* root : ash::Shell::GetAllRootWindows()) {
+    root->RemovePreTargetHandler(this);
+  }
+
   WMHelper* helper = WMHelper::GetInstance();
   // Remove the pretarget handler in case the pointer is deleted
   // w/o disabling pointer capture.
   aura::Env::GetInstance()->RemovePreTargetHandler(this);
 
-  helper->RemovePreTargetHandler(this);
   delegate_->OnPointerDestroying(this);
   if (focus_surface_)
     focus_surface_->RemoveSurfaceObserver(this);
@@ -462,6 +465,13 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
   if (seat_->was_shutdown() || event->handled())
     return;
 
+  WMHelper* helper = WMHelper::GetInstance();
+  auto* drag_drop_client = helper->GetDragDropClient();
+  if (!static_cast<ash::DragDropController*>(drag_drop_client)
+           ->IsDragDropCompleted()) {
+    return;
+  }
+
   // Nothing to report to a client nor have to update the pointer when capture
   // changes.
   if (event->type() == ui::ET_MOUSE_CAPTURE_CHANGED)
@@ -506,18 +516,6 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
   }
 
   if (event->IsMouseEvent()) {
-    // Generate motion event if location changed. We need to check location
-    // here as mouse movement can generate both "moved" and "entered" events
-    // but OnPointerMotion should only be called if location changed since
-    // OnPointerEnter was called.
-    // For synthesized events, they typically lack floating point precision
-    // so to avoid generating mouse event jitter we consider the location of
-    // these events to be the same as |location| if floored values match.
-    bool same_location = !event->IsSynthesized()
-                             ? SameLocation(location_in_root, location_in_root_)
-                             : gfx::ToFlooredPoint(location_in_root) ==
-                                   gfx::ToFlooredPoint(location_in_root_);
-
     // Ordinal motion is sent only on platforms that support it, which is
     // indicated by the presence of a flag.
     absl::optional<gfx::Vector2dF> ordinal_motion = absl::nullopt;
@@ -526,7 +524,12 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
       ordinal_motion = event->movement();
     }
 
-    if (!same_location) {
+    // Generate motion event if location changed or the location hasn't been
+    // sent yet. We need to check location here as mouse movement can generate
+    // both "moved" and "entered" events but OnPointerMotion should only be
+    // called if location changed since OnPointerEnter was called.
+    if (!CheckIfSameLocation(event->IsSynthesized(), location_in_root,
+                             location_in_target)) {
       bool ignore_motion = false;
       if (expected_next_mouse_location_) {
         const gfx::Point& expected = *expected_next_mouse_location_;
@@ -547,11 +550,14 @@ void Pointer::OnMouseEvent(ui::MouseEvent* event) {
       if (capture_window_) {
         if (ShouldMoveToCenter())
           MoveCursorToCenterOfActiveDisplay();
+        location_in_root_ = location_in_root;
+        location_in_surface_ = location_in_target;
       } else if (event->type() != ui::ET_MOUSE_EXITED && !ignore_motion) {
         delegate_->OnPointerMotion(event->time_stamp(), location_in_target);
         needs_frame |= true;
+        location_in_root_ = location_in_root;
+        location_in_surface_ = location_in_target;
       }
-      location_in_root_ = location_in_root;
     }
   }
   switch (event->type()) {
@@ -720,34 +726,12 @@ void Pointer::OnDragStarted() {
 }
 
 void Pointer::OnDragCompleted(const ui::DropTargetEvent& event) {
-  // Drag 'n drop operations driven by sources different than pointer/mouse
-  // should have not effect here.
-  WMHelper* helper = WMHelper::GetInstance();
-  if (auto* drag_drop_client = helper->GetDragDropClient()) {
-    if (static_cast<ash::DragDropController*>(drag_drop_client)
-            ->event_source() != ui::mojom::DragEventSource::kMouse)
-      return;
-  }
-
-  // DragDropController::PerformDrop() can result in the DropTargetEvent::target
-  // being destroyed. Verify whether this is the case, and adapt the event.
-  // This must be tested before `GetEffectiveTargetForEvent` which may pick the
-  // capture window.
-  //
-  // TODO(https://crbug.com/1160925): Avoid nested RunLoop in exo
-  // DataDevice::GetDropCallback() - remove the block below when it is fixed.
-  auto* event_target = static_cast<aura::Window*>(event.target());
-  if (!event_target) {
-    LOG(WARNING) << "EventTarget has been destroyed during the drop operation.";
-    return;
-  }
-
-  gfx::PointF location_in_target;
-  auto* target = GetEffectiveTargetForEvent(&event, &location_in_target);
-  if (target) {
-    SetFocus(target, event.root_location_f(), location_in_target,
-             /*button_flags=*/0);
-  }
+  // Don't update the focus here as the DragDropOperation is still processing
+  // the DnD and hasn't sent drop/leave events.
+  // The focus has been reset upon DnD start above, and will be updated on
+  // next Mouse Event.
+  // This is not ideal, but the better fix should be done as a part of
+  // DnD nested loop removal. (crbug.com/1160925)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -796,6 +780,16 @@ void Pointer::OnWindowFocused(aura::Window* gained_focus,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// ash::ShellObserver:
+void Pointer::OnRootWindowAdded(aura::Window* root_window) {
+  root_window->AddPreTargetHandler(this);
+}
+
+void Pointer::OnRootWindowWillShutdown(aura::Window* root_window) {
+  root_window->RemovePreTargetHandler(this);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // Pointer, private:
 
 Surface* Pointer::GetEffectiveTargetForEvent(
@@ -839,9 +833,16 @@ void Pointer::SetFocus(Surface* surface,
   }
   // Second generate an enter event if focus moved to a new surface.
   if (surface) {
+    // Pointer enter should not be generated during dnd session.
+#if DCHECK_IS_ON()
+    auto* drag_drop_controller = static_cast<ash::DragDropController*>(
+        aura::client::GetDragDropClient(surface->window()->GetRootWindow()));
+    DCHECK(!drag_drop_controller->IsDragDropInProgress());
+#endif
     delegate_->OnPointerEnter(surface, surface_location, button_flags);
     delegate_->OnPointerFrame();
     location_in_root_ = root_location;
+    location_in_surface_ = surface_location;
     focus_surface_ = surface;
     if (!focus_surface_->HasSurfaceObserver(this))
       focus_surface_->AddSurfaceObserver(this);
@@ -936,12 +937,9 @@ void Pointer::UpdateCursor() {
 
     // Scaling bitmap to match the corresponding supported scale factor of ash.
     const display::Display& display = cursor_client->GetDisplay();
-    float scale =
-        ui::GetScaleForResourceScaleFactor(ui::GetSupportedResourceScaleFactor(
-            display.device_scale_factor())) /
-        capture_scale_;
-    if (cursor_client->GetCursorSize() == ui::CursorSize::kLarge)
-      scale *= kLargeCursorScale;
+    const float resource_scale_factor = ui::GetScaleForResourceScaleFactor(
+        ui::GetSupportedResourceScaleFactor(display.device_scale_factor()));
+    const float scale = resource_scale_factor / capture_scale_;
 
     // Use panel_rotation() rather than "natural" rotation, as it actually
     // relates to the hardware you're about to draw the cursor bitmap on.
@@ -951,11 +949,11 @@ void Pointer::UpdateCursor() {
     // TODO(reveman): Add interface for creating cursors from GpuMemoryBuffers
     // and use that here instead of the current bitmap API.
     // https://crbug.com/686600
+    cursor_ = ui::Cursor::NewCustom(std::move(bitmap), std::move(hotspot),
+                                    resource_scale_factor);
     cursor_.SetPlatformCursor(
-        ui::CursorFactory::GetInstance()->CreateImageCursor(cursor_.type(),
-                                                            bitmap, hotspot));
-    cursor_.set_custom_bitmap(bitmap);
-    cursor_.set_custom_hotspot(hotspot);
+        ui::CursorFactory::GetInstance()->CreateImageCursor(
+            cursor_.type(), cursor_.custom_bitmap(), cursor_.custom_hotspot()));
   }
 
   // When pointer capture is broken, use the standard system cursor instead of
@@ -1029,6 +1027,29 @@ void Pointer::MaybeRemoveSurfaceObserver(Surface* surface) {
   if (!ShouldObserveSurface(surface)) {
     surface->RemoveSurfaceObserver(this);
   }
+}
+
+bool Pointer::CheckIfSameLocation(bool is_synthesized,
+                                  const gfx::PointF& location_in_root,
+                                  const gfx::PointF& location_in_target) {
+  // There is a specific case that location_in_root is the same
+  // but location_in_target is updated with SynthesizeMouseMove
+  // without the actual mouse movement when the window bounds changes.
+  // To handle this case, PointerMotion event should be delievered to
+  // delegate to update the current pointer location properly.
+  // Hence, check either target or root has changed.
+  if (!is_synthesized) {
+    return SameLocation(location_in_root, location_in_root_) &&
+           SameLocation(location_in_target, location_in_surface_);
+  }
+
+  // For synthesized events, they typically lack floating point precision
+  // so to avoid generating mouse event jitter we consider the location of
+  // these events to be the same as |location| if floored values match.
+  return (gfx::ToFlooredPoint(location_in_root) ==
+          gfx::ToFlooredPoint(location_in_root_)) &&
+         (gfx::ToFlooredPoint(location_in_target) ==
+          gfx::ToFlooredPoint(location_in_surface_));
 }
 
 }  // namespace exo

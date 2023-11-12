@@ -9,11 +9,12 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_deletion_info.h"
 #include "services/network/cookie_manager.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -21,11 +22,14 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
-using CookieDeletionInfo = net::CookieDeletionInfo;
-
 namespace content {
 
 namespace {
+
+using CookieDeletionInfo = net::CookieDeletionInfo;
+
+using testing::IsEmpty;
+using testing::UnorderedElementsAre;
 
 const char kGoogleDomain[] = "google.com";
 // sp.nom.br is an eTLD, so this is a regular valid registrable domain, just
@@ -143,8 +147,8 @@ void RunTestCase(
   auto origin = url::Origin::Create(GURL(test_case.origin));
   auto top_level_site =
       net::SchemefulSite(url::Origin::Create(GURL(test_case.top_level_site)));
-  auto key = blink::StorageKey::CreateWithOptionalNonce(
-      origin, top_level_site, nullptr, test_case.ancestor_chain_bit);
+  auto key = blink::StorageKey::Create(origin, top_level_site,
+                                       test_case.ancestor_chain_bit);
   EXPECT_EQ(test_case.should_match, filter.Run(key))
       << key.GetDebugString() << " should "
       << (test_case.should_match ? "" : "NOT ") << "be matched by the filter.";
@@ -487,18 +491,26 @@ TEST(BrowsingDataFilterBuilderImplTest, StorageKey) {
       // Top-level (Foo).
       blink::StorageKey::CreateFromStringForTesting("https://foo.com"),
       // Foo -> Bar.
-      blink::StorageKey::CreateWithOptionalNonce(
-          origin1, net::SchemefulSite(origin2), nullptr,
-          blink::mojom::AncestorChainBit::kCrossSite),
+      blink::StorageKey::Create(origin1, net::SchemefulSite(origin2),
+                                blink::mojom::AncestorChainBit::kCrossSite),
       // Foo -> Bar -> Foo.
-      blink::StorageKey::CreateWithOptionalNonce(
-          origin1, net::SchemefulSite(origin1), nullptr,
-          blink::mojom::AncestorChainBit::kCrossSite),
+      blink::StorageKey::Create(origin1, net::SchemefulSite(origin1),
+                                blink::mojom::AncestorChainBit::kCrossSite),
+      // Bar
+      blink::StorageKey::Create(origin2, net::SchemefulSite(origin2),
+                                blink::mojom::AncestorChainBit::kSameSite),
+      // Bar -> Foo
+      blink::StorageKey::Create(origin2, net::SchemefulSite(origin1),
+                                blink::mojom::AncestorChainBit::kCrossSite),
   };
+
+  // Test for OriginMatchingMode::kThirdPartiesIncluded.
   for (size_t i = 0; i < std::size(keys); ++i) {
     const auto& storage_key = keys[i];
     BrowsingDataFilterBuilderImpl builder(
-        BrowsingDataFilterBuilderImpl::Mode::kDelete);
+        BrowsingDataFilterBuilderImpl::Mode::kDelete,
+        BrowsingDataFilterBuilderImpl::OriginMatchingMode::
+            kThirdPartiesIncluded);
     builder.AddOrigin((storage_key.has_value()) ? storage_key.value().origin()
                                                 : origin1);
     builder.SetStorageKey(storage_key);
@@ -515,6 +527,33 @@ TEST(BrowsingDataFilterBuilderImplTest, StorageKey) {
            key_to_compare.value().MatchesOriginForTrustedStorageDeletion(
                origin1));
       bool expected = same_key || origin_match;
+      EXPECT_EQ(expected,
+                std::move(matcher_function).Run(key_to_compare.value()));
+    }
+  }
+
+  // Test for OriginMatchingMode::kOriginInAllContexts
+  for (size_t i = 0; i < std::size(keys); ++i) {
+    const auto& storage_key = keys[i];
+    BrowsingDataFilterBuilderImpl builder(
+        BrowsingDataFilterBuilderImpl::Mode::kDelete,
+        BrowsingDataFilterBuilderImpl::OriginMatchingMode::
+            kOriginInAllContexts);
+    builder.AddOrigin((storage_key.has_value()) ? storage_key.value().origin()
+                                                : origin1);
+    builder.SetStorageKey(storage_key);
+    EXPECT_EQ(storage_key.has_value(), builder.HasStorageKey());
+    // Start from 1 to ignore the nullopt key.
+    for (size_t j = 1; j < std::size(keys); ++j) {
+      const auto& key_to_compare = keys[j];
+      auto matcher_function = builder.BuildStorageKeyFilter();
+      // Only matches either when the keys are exactly the same, or when there
+      // is no stored key and the origin is the same.
+      bool same_key = (i == j);
+      bool same_origin =
+          (!storage_key.has_value() && key_to_compare.has_value() &&
+           key_to_compare.value().origin() == origin1);
+      bool expected = same_key || same_origin;
       EXPECT_EQ(expected,
                 std::move(matcher_function).Run(key_to_compare.value()));
     }
@@ -801,6 +840,33 @@ TEST(BrowsingDataFilterBuilderImplTest, PartitionedPreserveList) {
 
   for (auto test_case : test_cases)
     RunTestCase(test_case, filter);
+}
+
+TEST(BrowsingDataFilterBuilderImplTest, GetOrigins) {
+  BrowsingDataFilterBuilderImpl builder(
+      BrowsingDataFilterBuilderImpl::Mode::kDelete);
+
+  url::Origin a = url::Origin::Create(GURL("https://www.google.com"));
+  url::Origin b = url::Origin::Create(GURL("http://www.example.com"));
+  EXPECT_THAT(builder.GetOrigins(), IsEmpty());
+  builder.AddOrigin(a);
+  EXPECT_THAT(builder.GetOrigins(), UnorderedElementsAre(a));
+  builder.AddOrigin(b);
+  EXPECT_THAT(builder.GetOrigins(), UnorderedElementsAre(a, b));
+}
+
+TEST(BrowsingDataFilterBuilderImplTest, GetRegisterableDomains) {
+  BrowsingDataFilterBuilderImpl builder(
+      BrowsingDataFilterBuilderImpl::Mode::kDelete);
+
+  EXPECT_THAT(builder.GetRegisterableDomains(), IsEmpty());
+  builder.AddRegisterableDomain(std::string(kGoogleDomain));
+  EXPECT_THAT(builder.GetRegisterableDomains(),
+              UnorderedElementsAre(kGoogleDomain));
+
+  builder.AddRegisterableDomain(std::string(kLongETLDDomain));
+  EXPECT_THAT(builder.GetRegisterableDomains(),
+              UnorderedElementsAre(kGoogleDomain, kLongETLDDomain));
 }
 
 }  // namespace content

@@ -222,8 +222,8 @@ void VideoOverlayWindowViews::UpdateStoredBounds() {
       chrome::FindBrowserWithWebContents(GetController()->GetWebContents());
   if (browser) {
     PrefService* prefs = browser->profile()->GetPrefs();
-    DictionaryPrefUpdate update(prefs, vivaldiprefs::kVivaldiPIPPlacement);
-    base::Value::Dict& dict = update.Get()->GetDict();
+    ScopedDictPrefUpdate update(prefs, vivaldiprefs::kVivaldiPIPPlacement);
+    base::Value::Dict& dict = update.Get();
 
     dict.Set(kPipLeft, bounds.x());
     dict.Set(kPipTop, bounds.y());

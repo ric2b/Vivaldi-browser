@@ -20,8 +20,8 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -185,7 +185,7 @@ class KeyboardControllerImplTest : public AshTestBase {
   }
 
   void SetKeyboardConfigToPref(const base::Value& value) {
-    base::Value features(base::Value::Type::DICTIONARY);
+    base::Value features(base::Value::Type::DICT);
     features.SetKey("auto_complete_enabled", value.Clone());
     features.SetKey("auto_correct_enabled", value.Clone());
     features.SetKey("handwriting_enabled", value.Clone());
@@ -270,7 +270,7 @@ TEST_F(KeyboardControllerImplTest,
   keyboard_controller()->SetEnableFlag(KeyboardEnableFlag::kExtensionEnabled);
 
   // Set the policy for virtual keyboard features.
-  base::Value features(base::Value::Type::DICTIONARY);
+  base::Value features(base::Value::Type::DICT);
   PrefService* prefs =
       Shell::Get()->session_controller()->GetLastActiveUserPrefService();
   prefs->Set(prefs::kAccessibilityVirtualKeyboardFeatures, features);

@@ -11,10 +11,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/power_monitor/power_monitor.h"
@@ -22,6 +22,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -328,9 +329,8 @@ void Compositor::AddChildFrameSink(const viz::FrameSinkId& frame_sink_id) {
 
 void Compositor::RemoveChildFrameSink(const viz::FrameSinkId& frame_sink_id) {
   auto it = child_frame_sinks_.find(frame_sink_id);
-  DCHECK(it != child_frame_sinks_.end());
+  CHECK(it != child_frame_sinks_.end());
   DCHECK(it->is_valid());
-
   context_factory_->GetHostFrameSinkManager()->UnregisterFrameSinkHierarchy(
       frame_sink_id_, *it);
   child_frame_sinks_.erase(it);
@@ -499,6 +499,24 @@ void Compositor::SetDisplayColorSpaces(
   if (display_private_)
     display_private_->SetDisplayColorSpaces(display_color_spaces_);
 }
+
+#if BUILDFLAG(IS_MAC)
+void Compositor::SetVSyncDisplayID(const int64_t display_id) {
+  if (display_id_ == display_id) {
+    return;
+  }
+
+  display_id_ = display_id;
+
+  if (display_private_) {
+    display_private_->SetVSyncDisplayID(display_id);
+  }
+}
+
+int64_t Compositor::display_id() const {
+  return display_id_;
+}
+#endif
 
 void Compositor::SetDisplayTransformHint(gfx::OverlayTransform hint) {
   host_->set_display_transform_hint(hint);

@@ -4,35 +4,32 @@
 
 #import "UIKit/UIKit.h"
 
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_blocked_count_view.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
+using l10n_util::GetNSString;
+
 namespace {
-// Spacing between two view on stack view
-const CGFloat stackSpacing = 12.f;
+const UIEdgeInsets statusContainerPadding = UIEdgeInsetsMake(12, 0, 12, 0);
 } // End Namespace
 
 
-@interface VivaldiATBSummeryHeaderView ()<VivaldiATBBlockCountViewDelegate>
-// View to show the blocked trackers count.
-@property (weak, nonatomic) VivaldiATBBlockCountView* trackerView;
-// View to show the blocked ads count.
-@property (weak, nonatomic) VivaldiATBBlockCountView* adsView;
+@interface VivaldiATBSummeryHeaderView ()
+@property (weak, nonatomic) UIView* statusContainer;
+@property (weak, nonatomic) UILabel* statusLabel;
 @end
 
 @implementation VivaldiATBSummeryHeaderView
 
-@synthesize trackerView = _trackerView;
-@synthesize adsView = _adsView;
+@synthesize statusContainer = _statusContainer;
+@synthesize statusLabel = _statusLabel;
 
 #pragma mark - INITIALIZER
 - (instancetype)init {
@@ -54,64 +51,46 @@ const CGFloat stackSpacing = 12.f;
   [self addSubview:containerView];
   [containerView fillSuperview];
 
-  UIView* separator = [UIView new];
-  separator.backgroundColor = UIColor.quaternaryLabelColor;
-  [containerView addSubview:separator];
-  [separator anchorTop:containerView.topAnchor
-               leading:containerView.leadingAnchor
-                bottom:nil
-              trailing:containerView.trailingAnchor
-                  size:CGSizeMake(0, 1.f)];
+  // Container for the status label.
+  UIView* statusContainer = [UIView new];
+  _statusContainer = statusContainer;
+  statusContainer.layer.cornerRadius = vBlockedCountBgCornerRadius;
+  statusContainer.clipsToBounds = YES;
 
-  VivaldiATBBlockCountView* trackerView = [VivaldiATBBlockCountView new];
-  _trackerView = trackerView;
-  trackerView.delegate = self;
+  [containerView addSubview:statusContainer];
+  [statusContainer fillSuperviewWithPadding:statusContainerPadding];
 
-  VivaldiATBBlockCountView* adsView = [VivaldiATBBlockCountView new];
-  _adsView = adsView;
-  adsView.delegate = self;
+  // Status label
+  UILabel* statusLabel = [UILabel new];
+  _statusLabel = statusLabel;
+  statusLabel.adjustsFontForContentSizeCategory = YES;
+  statusLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+  statusLabel.numberOfLines = 0;
+  statusLabel.textAlignment = NSTextAlignmentCenter;
+  statusLabel.textColor = UIColor.whiteColor;
 
-  UIStackView* stack = [[UIStackView alloc] initWithArrangedSubviews:@[
-    trackerView, adsView
-  ]];
-  stack.distribution = UIStackViewDistributionFillEqually;
-  stack.spacing = stackSpacing;
-  stack.axis = UILayoutConstraintAxisHorizontal;
-
-  [containerView addSubview:stack];
-  [stack fillSuperview];
+  [statusContainer addSubview:statusLabel];
+  [statusLabel fillSuperview];
 }
 
 #pragma mark - SETTERS
-- (void)setValueWithBlockedTrackers:(NSInteger)trackers
-                                ads:(NSInteger)ads {
-  // Tracker
-  NSString* trackerTitleString = trackers > 0 ?
-    l10n_util::GetNSString(IDS_IOS_TRACKERS_BLOCKED_TEXT) :
-    l10n_util::GetNSString(IDS_IOS_TRACKER_BLOCKED_TEXT);
-
-  [self.trackerView setTitle:trackerTitleString
-                       value:trackers];
-
-  // Ad
-  NSString* adsTitleString = trackers > 0 ?
-    l10n_util::GetNSString(IDS_IOS_ADS_BLOCKED_TEXT) :
-    l10n_util::GetNSString(IDS_IOS_AD_BLOCKED_TEXT);
-
-  [self.adsView setTitle:adsTitleString
-                   value:ads];
-}
-
-#pragma mark VIVALDI ATB BLOCKED COUNT VIEW DELEGATE
-- (void)didTapItem:(UIView*)sender {
-  if (!self.delegate)
-    return;
-
-  if (sender == self.adsView)
-      [self.delegate didTapAds];
-
-  if (sender == self.trackerView)
-      [self.delegate didTapTrackers];
+- (void)setStatusFromSetting:(ATBSettingType)settingType {
+  switch (settingType) {
+    case ATBSettingNoBlocking:
+      _statusContainer.backgroundColor = UIColor.vSystemOrange;
+      _statusLabel.text = GetNSString(IDS_VIVALDI_IOS_BLOCKING_NONE);
+      break;
+    case ATBSettingBlockTrackers:
+      _statusContainer.backgroundColor = UIColor.vSystemGreen;
+      _statusLabel.text = GetNSString(IDS_VIVALDI_IOS_BLOCKING_TRACKERS);
+      break;
+    case ATBSettingBlockTrackersAndAds:
+      _statusContainer.backgroundColor = UIColor.vSystemGreen;
+      _statusLabel.text = GetNSString(IDS_VIVALDI_IOS_BLOCKING_TRACKERS_ADS);
+      break;
+    default: break;
+  }
 }
 
 @end

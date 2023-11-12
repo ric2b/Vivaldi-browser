@@ -25,12 +25,6 @@
 #import "components/metrics/demographics/user_demographics.h"
 #import "components/metrics/metrics_pref_names.h"
 #import "components/network_time/network_time_tracker.h"
-#import "components/ntp_snippets/category_rankers/click_based_category_ranker.h"
-#import "components/ntp_snippets/content_suggestions_service.h"
-#import "components/ntp_snippets/remote/remote_suggestions_provider_impl.h"
-#import "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
-#import "components/ntp_snippets/remote/request_throttler.h"
-#import "components/ntp_snippets/user_classifier.h"
 #import "components/ntp_tiles/most_visited_sites.h"
 #import "components/ntp_tiles/popular_sites_impl.h"
 #import "components/omnibox/browser/zero_suggest_provider.h"
@@ -47,6 +41,7 @@
 #import "components/reading_list/core/reading_list_pref_names.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/search_engines/template_url_prepopulate_data.h"
+#import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
 #import "components/segmentation_platform/public/segmentation_platform_service.h"
 #import "components/sessions/core/session_id_generator.h"
 #import "components/signin/public/base/signin_pref_names.h"
@@ -77,10 +72,9 @@
 #import "ios/chrome/browser/ui/bookmarks/bookmark_path_cache.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_mediator.h"
-#import "ios/chrome/browser/ui/first_run/fre_field_trial.h"
 #import "ios/chrome/browser/ui/first_run/trending_queries_field_trial.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
-#import "ios/chrome/browser/ui/ntp/ios_popular_sites_field_trial.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_retention_field_trial.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/voice/voice_search_prefs_registration.h"
 #import "ios/chrome/browser/web/font_size/font_size_tab_helper.h"
@@ -88,6 +82,7 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
+#import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_prefs.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 #import "ios/notes/note_mediator.h"
@@ -135,6 +130,58 @@ const char kPrefPromoObject[] = "ios.ntppromo";
 // Deprecated 11/2022.
 const char kLocalConsentsDictionary[] = "local_consents";
 
+// Deprecated 01/2023.
+const char kClickBasedCategoryRankerOrderWithClicks[] =
+    "ntp_suggestions.click_based_category_ranker.category_order_with_clicks";
+const char kClickBasedCategoryRankerLastDecayTime[] =
+    "ntp_suggestions.click_based_category_ranker.last_decay_time";
+const char kDismissedCategories[] = "ntp_suggestions.dismissed_categories";
+const char kRemoteSuggestionCategories[] = "ntp_snippets.remote_categories";
+const char kLastSuccessfulBackgroundFetchTime[] =
+    "ntp_suggestions.remote.last_successful_background_fetch_time";
+const char kSnippetPersistentFetchingIntervalWifi[] =
+    "ntp_snippets.fetching_interval_wifi";
+const char kSnippetPersistentFetchingIntervalFallback[] =
+    "ntp_snippets.fetching_interval_fallback";
+const char kSnippetStartupFetchingIntervalWifi[] =
+    "ntp_snippets.startup_fetching_interval_wifi";
+const char kSnippetStartupFetchingIntervalFallback[] =
+    "ntp_snippets.startup_fetching_interval_fallback";
+const char kSnippetShownFetchingIntervalWifi[] =
+    "ntp_snippets.soft_fetching_interval_wifi";
+const char kSnippetShownFetchingIntervalFallback[] =
+    "ntp_snippets.soft_fetching_interval_fallback";
+const char kSnippetLastFetchAttemptTime[] = "ntp_snippets.last_fetch_attempt";
+const char kSnippetLastSuccessfulFetchTime[] =
+    "ntp_snippets.last_successful_fetch_time";
+const char kSnippetFetcherRequestCount[] =
+    "ntp.request_throttler.suggestion_fetcher.count";
+const char kSnippetFetcherInteractiveRequestCount[] =
+    "ntp.request_throttler.suggestion_fetcher.interactive_count";
+const char kSnippetFetcherRequestsDay[] =
+    "ntp.request_throttler.suggestion_fetcher.day";
+const char kSnippetThumbnailsRequestCount[] =
+    "ntp.request_throttler.suggestion_thumbnails.count";
+const char kSnippetThumbnailsInteractiveRequestCount[] =
+    "ntp.request_throttler.suggestion_thumbnails.interactive_count";
+const char kSnippetThumbnailsRequestsDay[] =
+    "ntp.request_throttler.suggestion_thumbnails.day";
+const char kUserClassifierAverageNTPOpenedPerHour[] =
+    "ntp_suggestions.user_classifier.average_ntp_opened_per_hour";
+const char kUserClassifierAverageSuggestionsShownPerHour[] =
+    "ntp_suggestions.user_classifier.average_suggestions_shown_per_hour";
+const char kUserClassifierAverageSuggestionsUsedPerHour[] =
+    "ntp_suggestions.user_classifier.average_suggestions_used_per_hour";
+const char kUserClassifierLastTimeToOpenNTP[] =
+    "ntp_suggestions.user_classifier.last_time_to_open_ntp";
+const char kUserClassifierLastTimeToShowSuggestions[] =
+    "ntp_suggestions.user_classifier.last_time_to_show_suggestions";
+const char kUserClassifierLastTimeToUseSuggestions[] =
+    "ntp_suggestions.user_classifier.last_time_to_use_suggestions";
+
+// Deprecated 01/2023.
+const char* kTrialGroupMICeAndDefaultBrowserVersionPrefName =
+    "fre_refactoring_mice_and_default_browser.trial_version";
 }  // namespace
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
@@ -150,9 +197,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   sessions::SessionIdGenerator::RegisterPrefs(registry);
   update_client::RegisterPrefs(registry);
   variations::VariationsService::RegisterPrefs(registry);
-  fre_field_trial::RegisterLocalStatePrefs(registry);
   trending_queries_field_trial::RegisterLocalStatePrefs(registry);
-  ios_popular_sites_field_trial::RegisterLocalStatePrefs(registry);
+  new_tab_page_retention_field_trial::RegisterLocalStatePrefs(registry);
   component_updater::RegisterComponentUpdateServicePrefs(registry);
   component_updater::AutofillStatesComponentInstallerPolicy::RegisterPrefs(
       registry);
@@ -175,14 +221,24 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(language::prefs::kApplicationLocale,
                                std::string());
   registry->RegisterBooleanPref(prefs::kEulaAccepted, false);
+
+  // Vivaldi: Make sure metrics logging stays disabled always by default.
+  // Even if chrome changes its settings.
+  if (vivaldi::IsVivaldiRunning()) {
+    registry->RegisterBooleanPref(metrics::prefs::kMetricsReportingEnabled,
+                                  false);
+  } else {
   registry->RegisterBooleanPref(metrics::prefs::kMetricsReportingEnabled,
                                 false);
+  } // End Vivaldi
 
   registry->RegisterDictionaryPref(prefs::kIosPreRestoreAccountInfo);
 
   registry->RegisterListPref(prefs::kIosPromosManagerActivePromos);
   registry->RegisterListPref(prefs::kIosPromosManagerImpressions);
   registry->RegisterListPref(prefs::kIosPromosManagerSingleDisplayActivePromos);
+  registry->RegisterDictionaryPref(
+      prefs::kIosPromosManagerSingleDisplayPendingPromos);
 
   registry->RegisterBooleanPref(enterprise_reporting::kCloudReportingEnabled,
                                 false);
@@ -195,6 +251,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
   registry->RegisterDictionaryPref(prefs::kOverflowMenuDestinationUsageHistory,
                                    PrefRegistry::LOSSY_PREF);
+  registry->RegisterListPref(prefs::kOverflowMenuNewDestinations,
+                             PrefRegistry::LOSSY_PREF);
 
   // Preferences related to Enterprise policies.
   registry->RegisterListPref(prefs::kRestrictAccountsToPatterns);
@@ -219,6 +277,20 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
       prefs::kAutofillBrandingIconAnimationRemainingCountPrefName, 2);
 
   registry->RegisterDictionaryPref(kLocalConsentsDictionary);
+
+  registry->RegisterIntegerPref(kTrialGroupMICeAndDefaultBrowserVersionPrefName,
+                                -1);
+
+  registry->RegisterBooleanPref(prefs::kIosCredentialProviderPromoStopPromo,
+                                false);
+
+  registry->RegisterIntegerPref(prefs::kIosCredentialProviderPromoSource, 0);
+
+  registry->RegisterBooleanPref(
+      prefs::kIosCredentialProviderPromoHasRegisteredWithPromoManager, false);
+
+  registry->RegisterBooleanPref(prefs::kIosCredentialProviderPromoPolicyEnabled,
+                                true);
 }
 
 void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
@@ -233,12 +305,6 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   invalidation::PerUserTopicSubscriptionManager::RegisterProfilePrefs(registry);
   language::LanguagePrefs::RegisterProfilePrefs(registry);
   metrics::RegisterDemographicsProfilePrefs(registry);
-  ntp_snippets::ClickBasedCategoryRanker::RegisterProfilePrefs(registry);
-  ntp_snippets::ContentSuggestionsService::RegisterProfilePrefs(registry);
-  ntp_snippets::RemoteSuggestionsProviderImpl::RegisterProfilePrefs(registry);
-  ntp_snippets::RemoteSuggestionsSchedulerImpl::RegisterProfilePrefs(registry);
-  ntp_snippets::RequestThrottler::RegisterProfilePrefs(registry);
-  ntp_snippets::UserClassifier::RegisterProfilePrefs(registry);
   ntp_tiles::MostVisitedSites::RegisterProfilePrefs(registry);
   ntp_tiles::PopularSitesImpl::RegisterProfilePrefs(registry);
   optimization_guide::prefs::RegisterProfilePrefs(registry);
@@ -250,6 +316,8 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   RegisterVoiceSearchBrowserStatePrefs(registry);
   safe_browsing::RegisterProfilePrefs(registry);
   segmentation_platform::SegmentationPlatformService::RegisterProfilePrefs(
+      registry);
+  segmentation_platform::DeviceSwitcherResultDispatcher::RegisterProfilePrefs(
       registry);
   sync_sessions::SessionSyncPrefs::RegisterProfilePrefs(registry);
   syncer::DeviceInfoPrefs::RegisterProfilePrefs(registry);
@@ -279,6 +347,20 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // End Vivaldi
 
   registry->RegisterBooleanPref(kDataSaverEnabled, false);
+
+  // Vivaldi: Make sure these logging stays disabled always by default.
+  // Even if chrome changes its settings.
+  if (vivaldi::IsVivaldiRunning()) {
+    registry->RegisterBooleanPref(
+        prefs::kEnableDoNotTrack, true,
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+    registry->RegisterBooleanPref(
+        translate::prefs::kOfferTranslateEnabled, false,
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+    registry->RegisterBooleanPref(
+        prefs::kTrackPricesOnTabsEnabled, false,
+        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  } else {
   registry->RegisterBooleanPref(
       prefs::kEnableDoNotTrack, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
@@ -287,6 +369,17 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
       prefs::kTrackPricesOnTabsEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  } // End Vivaldi
+
+  registry->RegisterBooleanPref(
+      prefs::kNTPContentSuggestionsEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kArticlesForYouEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kNTPContentSuggestionsForSupervisedUserEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   registry->RegisterStringPref(prefs::kDefaultCharset,
@@ -332,7 +425,9 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   registry->RegisterBooleanPref(kOptimizationGuideRemoteFetchingEnabled, true);
 
+  // Register HTTPS related settings.
   registry->RegisterBooleanPref(prefs::kHttpsOnlyModeEnabled, false);
+  registry->RegisterBooleanPref(prefs::kMixedContentAutoupgradeEnabled, true);
 
   // Register pref storing whether the Incognito interstitial for third-party
   // intents is enabled.
@@ -359,6 +454,9 @@ void RegisterBrowserStatePrefs(user_prefs::PrefRegistrySyncable* registry) {
       base::to_underlying(
           prerender_prefs::NetworkPredictionSetting::kEnabledWifiOnly),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  // Register pref used to determine if the Price Tracking UI has been shown.
+  registry->RegisterBooleanPref(prefs::kPriceNotificationsHasBeenShown, false);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -380,6 +478,9 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
 
   // Added 11/2022.
   prefs->ClearPref(kLocalConsentsDictionary);
+
+  // Added 01/2023
+  prefs->ClearPref(kTrialGroupMICeAndDefaultBrowserVersionPrefName);
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -424,4 +525,81 @@ void MigrateObsoleteBrowserStatePrefs(PrefService* prefs) {
 
   // Added 12/2022.
   prefs->ClearPref(reading_list::prefs::kDeprecatedReadingListHasUnseenEntries);
+
+  // Added 01/2023.
+  if (prefs->FindPreference(kClickBasedCategoryRankerOrderWithClicks)) {
+    prefs->ClearPref(kClickBasedCategoryRankerOrderWithClicks);
+  }
+  if (prefs->FindPreference(kClickBasedCategoryRankerLastDecayTime)) {
+    prefs->ClearPref(kClickBasedCategoryRankerLastDecayTime);
+  }
+  if (prefs->FindPreference(kDismissedCategories)) {
+    prefs->ClearPref(kDismissedCategories);
+  }
+  if (prefs->FindPreference(kRemoteSuggestionCategories)) {
+    prefs->ClearPref(kRemoteSuggestionCategories);
+  }
+  if (prefs->FindPreference(kLastSuccessfulBackgroundFetchTime)) {
+    prefs->ClearPref(kLastSuccessfulBackgroundFetchTime);
+  }
+  if (prefs->FindPreference(kSnippetPersistentFetchingIntervalWifi)) {
+    prefs->ClearPref(kSnippetPersistentFetchingIntervalWifi);
+  }
+  if (prefs->FindPreference(kSnippetPersistentFetchingIntervalFallback)) {
+    prefs->ClearPref(kSnippetPersistentFetchingIntervalFallback);
+  }
+  if (prefs->FindPreference(kSnippetStartupFetchingIntervalWifi)) {
+    prefs->ClearPref(kSnippetStartupFetchingIntervalWifi);
+  }
+  if (prefs->FindPreference(kSnippetStartupFetchingIntervalFallback)) {
+    prefs->ClearPref(kSnippetStartupFetchingIntervalFallback);
+  }
+  if (prefs->FindPreference(kSnippetShownFetchingIntervalWifi)) {
+    prefs->ClearPref(kSnippetShownFetchingIntervalWifi);
+  }
+  if (prefs->FindPreference(kSnippetShownFetchingIntervalFallback)) {
+    prefs->ClearPref(kSnippetShownFetchingIntervalFallback);
+  }
+  if (prefs->FindPreference(kSnippetLastFetchAttemptTime)) {
+    prefs->ClearPref(kSnippetLastFetchAttemptTime);
+  }
+  if (prefs->FindPreference(kSnippetLastSuccessfulFetchTime)) {
+    prefs->ClearPref(kSnippetLastSuccessfulFetchTime);
+  }
+  if (prefs->FindPreference(kSnippetFetcherRequestCount)) {
+    prefs->ClearPref(kSnippetFetcherRequestCount);
+  }
+  if (prefs->FindPreference(kSnippetFetcherInteractiveRequestCount)) {
+    prefs->ClearPref(kSnippetFetcherInteractiveRequestCount);
+  }
+  if (prefs->FindPreference(kSnippetFetcherRequestsDay)) {
+    prefs->ClearPref(kSnippetFetcherRequestsDay);
+  }
+  if (prefs->FindPreference(kSnippetThumbnailsRequestCount)) {
+    prefs->ClearPref(kSnippetThumbnailsRequestCount);
+  }
+  if (prefs->FindPreference(kSnippetThumbnailsInteractiveRequestCount)) {
+    prefs->ClearPref(kSnippetThumbnailsInteractiveRequestCount);
+  }
+  if (prefs->FindPreference(kSnippetThumbnailsRequestsDay)) {
+    prefs->ClearPref(kSnippetThumbnailsRequestsDay);
+  }
+  if (prefs->FindPreference(kUserClassifierAverageNTPOpenedPerHour)) {
+    prefs->ClearPref(kUserClassifierAverageNTPOpenedPerHour);
+  }
+  if (prefs->FindPreference(kUserClassifierAverageSuggestionsShownPerHour)) {
+    prefs->ClearPref(kUserClassifierAverageSuggestionsShownPerHour);
+  }
+  if (prefs->FindPreference(kUserClassifierAverageSuggestionsUsedPerHour)) {
+    prefs->ClearPref(kUserClassifierAverageSuggestionsUsedPerHour);
+  }
+  if (prefs->FindPreference(kUserClassifierLastTimeToOpenNTP)) {
+    prefs->ClearPref(kUserClassifierLastTimeToOpenNTP);
+  }
+  if (prefs->FindPreference(kUserClassifierLastTimeToShowSuggestions)) {
+    prefs->ClearPref(kUserClassifierLastTimeToShowSuggestions);
+  }
+  if (prefs->FindPreference(kUserClassifierLastTimeToUseSuggestions)) {
+    prefs->ClearPref(kUserClassifierLastTimeToUseSuggestions);
+  }
 }

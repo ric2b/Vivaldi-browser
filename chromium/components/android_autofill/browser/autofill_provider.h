@@ -7,6 +7,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
+#include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/signatures.h"
@@ -75,9 +76,6 @@ class AutofillProvider : public content::WebContentsUserData<AutofillProvider> {
                                          const FormData& form,
                                          base::TimeTicks timestamp) = 0;
 
-  virtual void OnFormsSeen(AndroidAutofillManager* manager,
-                           const std::vector<FormData>& forms) = 0;
-
   virtual void OnHidePopup(AndroidAutofillManager* manager) = 0;
 
   virtual void OnServerPredictionsAvailable(
@@ -88,8 +86,12 @@ class AutofillProvider : public content::WebContentsUserData<AutofillProvider> {
 
   virtual void Reset(AndroidAutofillManager* manager) = 0;
 
+  // Returns autofilled state from AutofillProvider's cache.
+  virtual bool GetCachedIsAutofilled(const FormFieldData& field) const = 0;
+
   void FillOrPreviewForm(AndroidAutofillManager* manager,
-                         const FormData& formData,
+                         const FormData& form_data,
+                         FieldTypeGroup field_type_group,
                          const url::Origin& triggered_origin);
 
   // Notifies the renderer should accept the datalist suggestion given by

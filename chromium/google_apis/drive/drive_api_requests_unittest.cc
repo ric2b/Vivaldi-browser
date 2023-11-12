@@ -11,16 +11,16 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/json/json_reader.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/task_environment.h"
+#include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "google_apis/common/dummy_auth_service.h"
@@ -226,7 +226,6 @@ class DriveApiRequestsTest : public testing::Test {
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::IO};
   net::EmbeddedTestServer test_server_;
-  std::unique_ptr<RequestSender> request_sender_;
   std::unique_ptr<DriveApiUrlGenerator> url_generator_;
   std::unique_ptr<network::mojom::NetworkService> network_service_;
   std::unique_ptr<network::mojom::NetworkContextClient> network_context_client_;
@@ -234,6 +233,7 @@ class DriveApiRequestsTest : public testing::Test {
   mojo::Remote<network::mojom::URLLoaderFactory> url_loader_factory_;
   scoped_refptr<network::WeakWrapperSharedURLLoaderFactory>
       test_shared_loader_factory_;
+  std::unique_ptr<RequestSender> request_sender_;
   base::ScopedTempDir temp_dir_;
 
   // This is a path to the file which contains expected response from
@@ -2034,15 +2034,13 @@ TEST_F(DriveApiRequestsTest, PermissionsInsertRequest) {
             http_request_.relative_url);
   EXPECT_EQ("application/json", http_request_.headers["Content-Type"]);
 
-  std::unique_ptr<base::Value> expected = base::JSONReader::ReadDeprecated(
+  base::Value::Dict expected = base::test::ParseJsonDict(
       "{\"additionalRoles\":[\"commenter\"], \"role\":\"reader\", "
       "\"type\":\"user\",\"value\":\"user@example.com\"}");
-  ASSERT_TRUE(expected);
 
-  std::unique_ptr<base::Value> result =
-      base::JSONReader::ReadDeprecated(http_request_.content);
+  base::Value::Dict result = base::test::ParseJsonDict(http_request_.content);
   EXPECT_TRUE(http_request_.has_content);
-  EXPECT_EQ(*expected, *result);
+  EXPECT_EQ(expected, result);
 
   // Add "can edit" permission to users in "example.com".
   error = OTHER_ERROR;
@@ -2067,13 +2065,12 @@ TEST_F(DriveApiRequestsTest, PermissionsInsertRequest) {
             http_request_.relative_url);
   EXPECT_EQ("application/json", http_request_.headers["Content-Type"]);
 
-  expected = base::JSONReader::ReadDeprecated(
+  expected = base::test::ParseJsonDict(
       "{\"role\":\"writer\", \"type\":\"domain\",\"value\":\"example.com\"}");
-  ASSERT_TRUE(expected);
 
-  result = base::JSONReader::ReadDeprecated(http_request_.content);
+  result = base::test::ParseJsonDict(http_request_.content);
   EXPECT_TRUE(http_request_.has_content);
-  EXPECT_EQ(*expected, *result);
+  EXPECT_EQ(expected, result);
 }
 
 TEST_F(DriveApiRequestsTest, BatchUploadRequest) {

@@ -4,8 +4,8 @@
 
 #include "remoting/test/it2me_cli_host.h"
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
@@ -159,8 +159,9 @@ void It2MeCliHost::SendMessageToHost(const std::string& type,
 }
 
 void It2MeCliHost::DoSendMessage(const std::string& json) {
-  if (!host_)
+  if (!host_) {
     return;
+  }
   host_->OnMessage(json);
 }
 
@@ -177,7 +178,7 @@ void It2MeCliHost::StartCRDHostAndGetCode(OAuthTokenGetter::Status status,
   DCHECK(!host_);
 
   // Store all parameters for future connect call.
-  base::Value connect_params(base::Value::Type::DICTIONARY);
+  base::Value connect_params(base::Value::Type::DICT);
 
   connect_params.SetKey(kUserName, base::Value(user_email));
   connect_params.SetKey(kAuthServiceWithToken,
@@ -192,13 +193,14 @@ void It2MeCliHost::StartCRDHostAndGetCode(OAuthTokenGetter::Status status,
   host_ = CreateNativeMessagingHost(ui_task_runner_);
   host_->Start(this);
 
-  base::Value params(base::Value::Type::DICTIONARY);
+  base::Value params(base::Value::Type::DICT);
   SendMessageToHost(kHelloMessage, std::move(params));
 }
 
 void It2MeCliHost::ShutdownHost() {
-  if (!host_)
+  if (!host_) {
     return;
+  }
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&It2MeCliHost::DoShutdownHost,
                                 weak_factory_.GetWeakPtr()));
@@ -231,10 +233,11 @@ void It2MeCliHost::OnStateError(const std::string& error_state,
   } else {
     auto* error_code_value =
         message.FindKeyOfType(kErrorMessageCode, base::Value::Type::STRING);
-    if (error_code_value)
+    if (error_code_value) {
       error_message = error_code_value->GetString();
-    else
+    } else {
       error_message = "Unknown CRD Error";
+    }
   }
   // Notify callback if command is still running.
   if (command_awaiting_crd_access_code_) {
@@ -257,12 +260,13 @@ void It2MeCliHost::OnStateRemoteConnected(const base::Value& message) {
 void It2MeCliHost::OnStateRemoteDisconnected() {
   // There could be a connection attempt that was not successful, we will
   // receive "disconnected" message without actually receiving "connected".
-  if (!remote_connected_)
+  if (!remote_connected_) {
     return;
+  }
   remote_connected_ = false;
   // Remote has disconnected, time to send "disconnect" that would result
   // in shutting down the host.
-  base::Value params(base::Value::Type::DICTIONARY);
+  base::Value params(base::Value::Type::DICT);
   SendMessageToHost(kDisconnectMessage, std::move(params));
 }
 
@@ -273,7 +277,7 @@ void It2MeCliHost::OnStateReceivedAccessCode(const base::Value& message) {
       // this CRD session through a remote command, and we can not send a new
       // access code. Assuming that the old access code is no longer valid, we
       // can only terminate the current CRD session.
-      base::Value params(base::Value::Type::DICTIONARY);
+      base::Value params(base::Value::Type::DICT);
       SendMessageToHost(kDisconnectMessage, std::move(params));
     }
     return;

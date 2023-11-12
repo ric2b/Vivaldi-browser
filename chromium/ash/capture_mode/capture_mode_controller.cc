@@ -5,12 +5,14 @@
 #include "ash/capture_mode/capture_mode_controller.h"
 
 #include <utility>
+#include <vector>
 
 #include "ash/capture_mode/capture_mode_ash_notification_view.h"
 #include "ash/capture_mode/capture_mode_camera_controller.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
 #include "ash/capture_mode/capture_mode_notification_view.h"
 #include "ash/capture_mode/capture_mode_session.h"
+#include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
@@ -27,18 +29,19 @@
 #include "ash/system/message_center/message_view_factory.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/current_thread.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -59,6 +62,7 @@
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/snapshot/snapshot.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 
@@ -105,6 +109,13 @@ constexpr char kUsesDefaultCapturePathPrefName[] =
 // in such a way that the nudge no longer needs to be displayed again.
 constexpr char kCanShowCameraNudge[] = "ash.capture_mode.can_show_camera_nudge";
 
+// The name of a boolean pref that determines whether we can show the demo tools
+// user nudge. When this pref is false, it means that we showed the nudge at
+// some point and the user interacted with the capture mode session UI in such a
+// way that the nudge no longer needs to be displayed again.
+constexpr char kCanShowDemoToolsNudge[] =
+    "ash.capture_mode.can_show_demo_tools_nudge";
+
 // The screenshot notification button index.
 enum ScreenshotNotificationButtonIndex {
   BUTTON_EDIT = 0,
@@ -115,6 +126,30 @@ enum ScreenshotNotificationButtonIndex {
 enum VideoNotificationButtonIndex {
   BUTTON_DELETE_VIDEO = 0,
 };
+
+// Returns the file extension for the given `recording_type`.
+std::string GetVideoExtension(RecordingType recording_type) {
+  switch (recording_type) {
+    case RecordingType::kGif:
+      return "gif";
+    case RecordingType::kWebM:
+      return "webm";
+  }
+}
+
+// Returns true if the given `recording_type` supports audio recording.
+bool SupportsAudioRecording(RecordingType recording_type) {
+  return recording_type == RecordingType::kWebM;
+}
+
+bool IsVideoFileExtensionSupported(const base::FilePath& video_file_path) {
+  for (const auto* const extension : {".webm", ".gif"}) {
+    if (video_file_path.MatchesExtension(extension)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 // Returns the date extracted from |timestamp| as a string to be part of
 // captured file names. Note that naturally formatted dates includes slashes
@@ -369,9 +404,8 @@ CaptureModeController::CaptureModeController(
           std::make_unique<CaptureModeCameraController>(delegate_.get())),
       blocking_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           // A task priority of BEST_EFFORT is good enough for this runner,
-          // since it's used for blocking file IO such as saving the screenshots
-          // or the successive webm video chunks received from the recording
-          // service.
+          // since it's used for blocking file IO such as saving the
+          // screenshots.
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       num_consecutive_screenshots_scheduler_(
@@ -453,7 +487,10 @@ void CaptureModeController::RegisterProfilePrefs(PrefRegistrySimple* registry) {
                                  /*default_value=*/base::FilePath());
   registry->RegisterBooleanPref(kUsesDefaultCapturePathPrefName,
                                 /*default_value=*/false);
-  registry->RegisterBooleanPref(kCanShowCameraNudge, /*default_value=*/true);
+  registry->RegisterBooleanPref(features::AreCaptureModeDemoToolsEnabled()
+                                    ? kCanShowDemoToolsNudge
+                                    : kCanShowCameraNudge,
+                                /*default_value=*/true);
 }
 
 bool CaptureModeController::IsActive() const {
@@ -561,11 +598,16 @@ bool CaptureModeController::CanShowUserNudge() const {
 
   auto* pref_service = session_controller->GetActivePrefService();
   DCHECK(pref_service);
-  return pref_service->GetBoolean(kCanShowCameraNudge);
+  return pref_service->GetBoolean(features::AreCaptureModeDemoToolsEnabled()
+                                      ? kCanShowDemoToolsNudge
+                                      : kCanShowCameraNudge);
 }
 
 void CaptureModeController::DisableUserNudgeForever() {
-  GetActiveUserPrefService()->SetBoolean(kCanShowCameraNudge, false);
+  GetActiveUserPrefService()->SetBoolean(
+      features::AreCaptureModeDemoToolsEnabled() ? kCanShowDemoToolsNudge
+                                                 : kCanShowCameraNudge,
+      false);
 }
 
 void CaptureModeController::SetUsesDefaultCaptureFolder(bool value) {
@@ -658,6 +700,12 @@ void CaptureModeController::PerformCapture() {
 }
 
 void CaptureModeController::EndVideoRecording(EndRecordingReason reason) {
+  if (!is_recording_in_progress()) {
+    // A user may click on the stop recording button multiple times while still
+    // in the process of hiding. See http://b/270625738.
+    return;
+  }
+
   RecordEndRecordingReason(reason);
   recording_service_remote_->StopRecording();
   TerminateRecordingUiElements();
@@ -757,6 +805,33 @@ gfx::Rect CaptureModeController::GetCaptureSurfaceConfineBounds() const {
   return gfx::Rect();
 }
 
+std::vector<aura::Window*>
+CaptureModeController::GetWindowsForCollisionAvoidance() const {
+  std::vector<aura::Window*> windows_to_be_avoided;
+  if (IsActive()) {
+    aura::Window* capture_bar_window =
+        capture_mode_session_->capture_mode_bar_widget()->GetNativeWindow();
+    windows_to_be_avoided.push_back(capture_bar_window);
+  }
+
+  auto* camera_preview_widget = camera_controller_->camera_preview_widget();
+  if (camera_preview_widget && camera_preview_widget->IsVisible()) {
+    windows_to_be_avoided.push_back(camera_preview_widget->GetNativeView());
+  }
+
+  if (video_recording_watcher_ &&
+      !video_recording_watcher_->is_shutting_down() &&
+      video_recording_watcher_->recording_source() !=
+          CaptureModeSource::kWindow) {
+    if (auto* key_combo_widget =
+            video_recording_watcher_->GetKeyComboWidgetIfVisible()) {
+      windows_to_be_avoided.push_back(key_combo_widget->GetNativeWindow());
+    }
+  }
+
+  return windows_to_be_avoided;
+}
+
 void CaptureModeController::OnRecordingEnded(
     recording::mojom::RecordingStatus status,
     const gfx::ImageSkia& thumbnail) {
@@ -817,7 +892,9 @@ void CaptureModeController::MaybeRestoreCachedCaptureConfigurations() {
 
   type_ = cached_normal_session_configs_->type;
   source_ = cached_normal_session_configs_->source;
+  recording_type_ = cached_normal_session_configs_->recording_type;
   enable_audio_recording_ = cached_normal_session_configs_->audio_on;
+  enable_demo_tools_ = cached_normal_session_configs_->demo_tools_enabled;
   cached_normal_session_configs_.reset();
 }
 
@@ -990,7 +1067,7 @@ void CaptureModeController::LaunchRecordingServiceAndStartRecording(
   // is ok since the |audio_stream_factory| parameter in the recording service
   // APIs is optional, and can be not bound.
   mojo::PendingRemote<media::mojom::AudioStreamFactory> audio_stream_factory;
-  if (GetAudioRecordingEnabled()) {
+  if (SupportsAudioRecording(recording_type_) && GetAudioRecordingEnabled()) {
     delegate_->BindAudioStreamFactory(
         audio_stream_factory.InitWithNewPipeAndPassReceiver());
     capture_mode_util::MaybeUpdateMicrophonePrivacyIndicator(/*mic_on=*/true);
@@ -1206,9 +1283,11 @@ void CaptureModeController::OnImageFileSaved(
   ShowPreviewNotification(file_saved_path, image, CaptureModeType::kImage);
   if (Shell::Get()->session_controller()->IsActiveUserSessionStarted())
     RecordSaveToLocation(GetSaveToOption(file_saved_path));
-  HoldingSpaceClient* client = HoldingSpaceController::Get()->client();
-  if (client)  // May be `nullptr` in tests.
-    client->AddScreenshot(file_saved_path);
+  // NOTE: Holding space `client` may be `nullptr` in tests.
+  if (auto* client = HoldingSpaceController::Get()->client()) {
+    client->AddScreenCapture(HoldingSpaceItem::Type::kScreenshot,
+                             file_saved_path);
+  }
 }
 
 void CaptureModeController::OnVideoFileSaved(
@@ -1225,9 +1304,14 @@ void CaptureModeController::OnVideoFileSaved(
       ShowPreviewNotification(saved_video_file_path,
                               gfx::Image(video_thumbnail),
                               CaptureModeType::kVideo);
-      HoldingSpaceClient* client = HoldingSpaceController::Get()->client();
-      if (client)  // May be `nullptr` in tests.
-        client->AddScreenRecording(saved_video_file_path);
+      // NOTE: Holding space `client` may be `nullptr` in tests.
+      if (auto* client = HoldingSpaceController::Get()->client()) {
+        client->AddScreenCapture(
+            recording_type_ == RecordingType::kGif
+                ? HoldingSpaceItem::Type::kScreenRecordingGif
+                : HoldingSpaceItem::Type::kScreenRecording,
+            saved_video_file_path);
+      }
     }
     DCHECK(!recording_start_time_.is_null());
     RecordCaptureModeRecordTime(
@@ -1262,6 +1346,7 @@ void CaptureModeController::ShowPreviewNotification(
   optional_fields.buttons.push_back(delete_button);
 
   optional_fields.image = preview_image;
+  optional_fields.image_path = screen_capture_path;
 
   ShowNotification(
       capture_mode_util::GetScreenCaptureNotificationIdForPath(
@@ -1327,7 +1412,7 @@ base::FilePath CaptureModeController::BuildImagePath() const {
 
 base::FilePath CaptureModeController::BuildVideoPath() const {
   return BuildPathNoExtension(kVideoFileNameFmtStr, base::Time::Now())
-      .AddExtension("webm");
+      .AddExtension(GetVideoExtension(recording_type_));
 }
 
 base::FilePath CaptureModeController::BuildImagePathForDisplay(
@@ -1421,6 +1506,8 @@ void CaptureModeController::OnProjectorContainerFolderCreated(
     return;
   }
 
+  // Note that the extension `webm` is used here directly, since projector
+  // doesn't work with any other format.
   BeginVideoRecording(capture_params, /*for_projector=*/true,
                       file_path_no_extension.AddExtension("webm"));
 }
@@ -1431,7 +1518,7 @@ void CaptureModeController::BeginVideoRecording(
     const base::FilePath& video_file_path) {
   DCHECK_EQ(capture_mode_session_->is_in_projector_mode(), for_projector);
   DCHECK(!video_file_path.empty());
-  DCHECK(video_file_path.MatchesExtension(".webm"));
+  DCHECK(IsVideoFileExtensionSupported(video_file_path));
 
   if (!IsActive()) {
     // This function gets called asynchronously, and until it gets called, the
@@ -1479,6 +1566,11 @@ void CaptureModeController::BeginVideoRecording(
 
   LaunchRecordingServiceAndStartRecording(capture_params,
                                           std::move(cursor_overlay_receiver));
+
+  // Intentionally record the metrics before
+  // `MaybeRestoreCachedCaptureConfigurations` as `enable_demo_tools_` may be
+  // overwritten otherwise.
+  RecordRecordingStartsWithDemoTools(enable_demo_tools_, for_projector);
 
   // Restore the capture mode configurations that include the `type_`, `source_`
   // and `enable_audio_recording_` after projector-inititated recording starts
@@ -1668,11 +1760,14 @@ void CaptureModeController::OnDlpRestrictionCheckedAtSessionInit(
     // Cache the normal capture mode configurations that will be used for
     // restoration when switching to the normal capture mode session if needed.
     cached_normal_session_configs_ =
-        CaptureSessionConfigs{type_, source_, enable_audio_recording_};
+        CaptureSessionConfigs{type_, source_, recording_type_,
+                              enable_audio_recording_, enable_demo_tools_};
 
     enable_audio_recording_ = true;
+    enable_demo_tools_ = true;
     SetType(CaptureModeType::kVideo);
     SetSource(CaptureModeSource::kFullscreen);
+    SetRecordingType(RecordingType::kWebM);
   }
 
   RecordCaptureModeEntryType(entry_type);

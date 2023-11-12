@@ -11,11 +11,11 @@ source_set("declarative_net_request") {
   sources = [
     "declarative_net_request_api.cc",
     "declarative_net_request_api.h",
-    "declarative_net_request_prefs_helper.cc",
-    "declarative_net_request_prefs_helper.h",
     "web_contents_helper.cc",
     "web_contents_helper.h",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   deps = [
     "//base",

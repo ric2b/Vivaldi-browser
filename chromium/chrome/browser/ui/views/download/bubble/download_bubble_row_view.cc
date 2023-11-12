@@ -4,9 +4,10 @@
 
 #include "chrome/browser/ui/views/download/bubble/download_bubble_row_view.h"
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
@@ -90,6 +91,7 @@ class TransparentButton : public views::Button {
                              DownloadBubbleRowView* row_view)
       : Button(callback), row_view_(row_view) {
     views::InkDrop::Get(this)->SetMode(views::InkDropHost::InkDropMode::OFF);
+    SetInstallFocusRingOnFocus(false);
   }
   ~TransparentButton() override = default;
 
@@ -171,6 +173,10 @@ void DownloadBubbleRowView::UpdateRow(bool initial_setup) {
   RecordDownloadDisplayed();
   UpdateLabels();
   UpdateProgressBar();
+  if ((initial_setup || ui_info_changed) &&
+      !update_status_text_timer_.IsRunning()) {
+    update_status_text_timer_.Reset();
+  }
 }
 
 void DownloadBubbleRowView::AddedToWidget() {
@@ -207,7 +213,8 @@ void DownloadBubbleRowView::OnDeviceScaleFactorChanged(
 }
 
 void DownloadBubbleRowView::SetIconFromImageModel(bool use_over_last_override,
-                                                  ui::ImageModel icon) {
+                                                  base::Time load_start_time,
+                                                  const ui::ImageModel& icon) {
   if (last_overriden_icon_ && !use_over_last_override)
     return;
   if (icon.IsEmpty()) {
@@ -215,11 +222,14 @@ void DownloadBubbleRowView::SetIconFromImageModel(bool use_over_last_override,
   } else {
     icon_->SetImage(icon);
   }
+  base::UmaHistogramTimes("Download.Bubble.LoadAndSetIconLatency",
+                          base::Time::Now() - load_start_time);
 }
 
 void DownloadBubbleRowView::SetIconFromImage(bool use_over_last_override,
+                                             base::Time load_start_time,
                                              gfx::Image icon) {
-  SetIconFromImageModel(use_over_last_override,
+  SetIconFromImageModel(use_over_last_override, load_start_time,
                         ui::ImageModel::FromImage(icon));
 }
 
@@ -228,12 +238,14 @@ void DownloadBubbleRowView::LoadIcon() {
   if (!GetWidget())
     return;
 
+  base::Time load_start_time = base::Time::Now();
+
   if (ui_info_.icon_model_override) {
     if (last_overriden_icon_ == ui_info_.icon_model_override)
       return;
     last_overriden_icon_ = ui_info_.icon_model_override;
     SetIconFromImageModel(
-        /*use_over_last_override=*/true,
+        /*use_over_last_override=*/true, load_start_time,
         ui::ImageModel::FromVectorIcon(*ui_info_.icon_model_override,
                                        ui_info_.secondary_color,
                                        GetLayoutConstant(DOWNLOAD_ICON_SIZE)));
@@ -245,7 +257,7 @@ void DownloadBubbleRowView::LoadIcon() {
       return;
     last_overriden_icon_ = &kIncognitoIcon;
     SetIconFromImageModel(
-        /*use_over_last_override=*/true,
+        /*use_over_last_override=*/true, load_start_time,
         ui::ImageModel::FromVectorIcon(kIncognitoIcon, ui::kColorIcon,
                                        GetLayoutConstant(DOWNLOAD_ICON_SIZE)));
     return;
@@ -261,7 +273,8 @@ void DownloadBubbleRowView::LoadIcon() {
     if (already_set_default_icon_)
       return;
     already_set_default_icon_ = true;
-    SetIconFromImageModel(/*use_over_last_override=*/true, GetDefaultIcon());
+    SetIconFromImageModel(/*use_over_last_override=*/true, load_start_time,
+                          GetDefaultIcon());
     return;
   }
 
@@ -270,19 +283,21 @@ void DownloadBubbleRowView::LoadIcon() {
       im->LookupIconFromFilepath(file_path, IconLoader::SMALL, current_scale_);
 
   if (file_icon_image) {
-    SetIconFromImage(/*use_over_last_override=*/true, *file_icon_image);
+    SetIconFromImage(/*use_over_last_override=*/true, load_start_time,
+                     *file_icon_image);
   } else {
-    im->LoadIcon(file_path, IconLoader::SMALL, current_scale_,
-                 base::BindOnce(&DownloadBubbleRowView::SetIconFromImage,
-                                weak_factory_.GetWeakPtr(),
-                                /*use_over_last_override=*/false),
-                 &cancelable_task_tracker_);
+    im->LoadIcon(
+        file_path, IconLoader::SMALL, current_scale_,
+        base::BindOnce(&DownloadBubbleRowView::SetIconFromImage,
+                       weak_factory_.GetWeakPtr(),
+                       /*use_over_last_override=*/false, load_start_time),
+        &cancelable_task_tracker_);
   }
 }
 
 DownloadBubbleRowView::~DownloadBubbleRowView() {
   // Explicit removal of InkDrop for classes that override
-  // Add/RemoveLayerBeneathView(). This is done so that the InkDrop doesn't
+  // Add/RemoveLayerFromRegions(). This is done so that the InkDrop doesn't
   // access the non-override versions in ~View.
   views::InkDrop::Remove(this);
 }
@@ -307,6 +322,11 @@ DownloadBubbleRowView::DownloadBubbleRowView(
           FROM_HERE,
           base::Minutes(3),
           base::BindRepeating(&DownloadBubbleRowView::AnnounceInProgressAlert,
+                              base::Unretained(this))),
+      update_status_text_timer_(
+          FROM_HERE,
+          base::Minutes(1),
+          base::BindRepeating(&DownloadBubbleRowView::UpdateStatusText,
                               base::Unretained(this))) {
   model_->SetDelegate(this);
   SetBorder(views::CreateEmptyBorder(GetLayoutInsets(DOWNLOAD_ROW)));
@@ -431,9 +451,9 @@ DownloadBubbleRowView::DownloadBubbleRowView(
   // Empty cell under icon_
   AddChildView(std::make_unique<views::FlexLayoutView>());
 
+  // The content of the label will be populated in the `UpdateRow` function.
   secondary_label_ = AddChildView(std::make_unique<views::Label>(
-      model_->GetStatusText(), views::style::CONTEXT_LABEL,
-      views::style::STYLE_SECONDARY));
+      u"", views::style::CONTEXT_LABEL, views::style::STYLE_SECONDARY));
   secondary_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   // The 2 columns being removed are icon, and padding.
   secondary_label_->SetProperty(views::kTableColAndRowSpanKey,
@@ -537,17 +557,17 @@ gfx::Size DownloadBubbleRowView::CalculatePreferredSize() const {
   // the view. This is assuming that the row view is loaded inside a bubble. It
   // will break if the row view is loaded inside a different parent view.
   int fixed_width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        views::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    GetLayoutInsets(DOWNLOAD_ROW).width();
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH);
   return {fixed_width, GetHeightForWidth(fixed_width)};
 }
 
-void DownloadBubbleRowView::AddLayerBeneathView(ui::Layer* layer) {
-  inkdrop_container_->AddLayerBeneathView(layer);
+void DownloadBubbleRowView::AddLayerToRegion(ui::Layer* layer,
+                                             views::LayerRegion region) {
+  inkdrop_container_->AddLayerToRegion(layer, region);
 }
 
-void DownloadBubbleRowView::RemoveLayerBeneathView(ui::Layer* layer) {
-  inkdrop_container_->RemoveLayerBeneathView(layer);
+void DownloadBubbleRowView::RemoveLayerFromRegions(ui::Layer* layer) {
+  inkdrop_container_->RemoveLayerFromRegions(layer);
 }
 
 void DownloadBubbleRowView::OnWillChangeFocus(views::View* before,
@@ -566,6 +586,7 @@ void DownloadBubbleRowView::UpdateRowForFocus(
     bool visible,
     bool request_focus_on_last_quick_action) {
   quick_action_holder_->SetVisible(visible);
+  views::InkDrop::Get(this)->GetInkDrop()->SetFocused(visible);
   // Update focus only if focus received from a different row.
   bool should_set_focus = request_focus_on_last_quick_action &&
                           GetFocusManager() &&
@@ -586,9 +607,11 @@ void DownloadBubbleRowView::Layout() {
                                quick_actions_size.width() - insets.right(),
                            insets.top()),
                 quick_actions_size));
+  inkdrop_container_->SetBoundsRect(GetLocalBounds());
 }
 
 void DownloadBubbleRowView::OnMainButtonPressed() {
+  bubble_controller_->RecordDownloadBubbleInteraction();
   if (ui_info_.has_subpage) {
     DownloadItemWarningData::AddWarningActionEvent(
         model_->GetDownloadItem(),
@@ -609,6 +632,7 @@ void DownloadBubbleRowView::UpdateButtons() {
   cancel_action_->SetVisible(false);
   show_in_folder_action_->SetVisible(false);
   open_when_complete_action_->SetVisible(false);
+
   for (const auto& action : ui_info_.quick_actions) {
     views::ImageButton* action_button =
         GetActionButtonForCommand(action.command);
@@ -622,22 +646,21 @@ void DownloadBubbleRowView::UpdateButtons() {
     action_button->SetVisible(true);
   }
 
-  cancel_button_->SetVisible(ui_info_.primary_button_command ==
-                             DownloadCommands::CANCEL);
-  discard_button_->SetVisible(ui_info_.primary_button_command ==
-                              DownloadCommands::DISCARD);
-  keep_button_->SetVisible(ui_info_.primary_button_command ==
-                           DownloadCommands::KEEP);
-  scan_button_->SetVisible(ui_info_.primary_button_command ==
-                           DownloadCommands::DEEP_SCAN);
-  open_now_button_->SetVisible(ui_info_.primary_button_command ==
-                               DownloadCommands::BYPASS_DEEP_SCANNING);
-  resume_button_->SetVisible(ui_info_.primary_button_command ==
-                             DownloadCommands::RESUME);
-  review_button_->SetVisible(ui_info_.primary_button_command ==
-                             DownloadCommands::REVIEW);
-  retry_button_->SetVisible(ui_info_.primary_button_command ==
-                            DownloadCommands::RETRY);
+  cancel_button_->SetVisible(false);
+  discard_button_->SetVisible(false);
+  keep_button_->SetVisible(false);
+  scan_button_->SetVisible(false);
+  open_now_button_->SetVisible(false);
+  resume_button_->SetVisible(false);
+  review_button_->SetVisible(false);
+  retry_button_->SetVisible(false);
+  if (ui_info_.primary_button_command) {
+    views::MdTextButton* main_button =
+        GetMainPageButton(ui_info_.primary_button_command.value());
+    main_button->SetAccessibleName(GetAccessibleNameForMainPageButton(
+        ui_info_.primary_button_command.value()));
+    main_button->SetVisible(true);
+  }
 
   subpage_icon_->SetVisible(ui_info_.has_subpage);
 }
@@ -664,7 +687,7 @@ void DownloadBubbleRowView::UpdateProgressBar() {
 
 void DownloadBubbleRowView::UpdateLabels() {
   primary_label_->SetText(model_->GetFileNameToReportUser().LossyDisplayName());
-  secondary_label_->SetText(model_->GetStatusText());
+  UpdateStatusText();
 
   if (ui_info_.has_subpage) {
     transparent_button_->SetAccessibleName(l10n_util::GetStringFUTF16(
@@ -825,6 +848,71 @@ std::u16string DownloadBubbleRowView::GetAccessibleNameForQuickAction(
   }
 }
 
+views::MdTextButton* DownloadBubbleRowView::GetMainPageButton(
+    DownloadCommands::Command command) {
+  switch (command) {
+    case DownloadCommands::CANCEL:
+      return cancel_button_;
+    case DownloadCommands::RESUME:
+      return resume_button_;
+    case DownloadCommands::DISCARD:
+      return discard_button_;
+    case DownloadCommands::KEEP:
+      return keep_button_;
+    case DownloadCommands::DEEP_SCAN:
+      return scan_button_;
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
+      return open_now_button_;
+    case DownloadCommands::REVIEW:
+      return review_button_;
+    case DownloadCommands::RETRY:
+      return retry_button_;
+    default:
+      return nullptr;
+  }
+}
+
+std::u16string DownloadBubbleRowView::GetAccessibleNameForMainPageButton(
+    DownloadCommands::Command command) {
+  switch (command) {
+    case DownloadCommands::CANCEL:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_CANCEL_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::RESUME:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_RESUME_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::DISCARD:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_DELETE_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::KEEP:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_KEEP_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::DEEP_SCAN:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_SCAN_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::BYPASS_DEEP_SCANNING:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_OPEN_NOW_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::REVIEW:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_REVIEW_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    case DownloadCommands::RETRY:
+      return l10n_util::GetStringFUTF16(
+          IDS_DOWNLOAD_BUBBLE_RETRY_MAIN_BUTTON_ACCESSIBILITY,
+          model_->GetFileNameToReportUser().LossyDisplayName());
+    default:
+      NOTREACHED();
+      return u"";
+  }
+}
+
 void DownloadBubbleRowView::ShowContextMenuForViewImpl(
     View* source,
     const gfx::Point& point,
@@ -848,6 +936,11 @@ void DownloadBubbleRowView::ShowContextMenuForViewImpl(
 void DownloadBubbleRowView::AnnounceInProgressAlert() {
   GetViewAccessibility().AnnounceText(
       model_->GetInProgressAccessibleAlertText());
+}
+
+void DownloadBubbleRowView::UpdateStatusText() {
+  secondary_label_->SetText(model_->GetStatusTextForLabel(
+      secondary_label_->font_list(), secondary_label_->width()));
 }
 
 bool DownloadBubbleRowView::AcceleratorPressed(
@@ -877,6 +970,10 @@ bool DownloadBubbleRowView::AcceleratorPressed(
 bool DownloadBubbleRowView::CanHandleAccelerators() const {
   bool focused = Contains(GetFocusManager()->GetFocusedView());
   return focused;
+}
+
+const std::u16string& DownloadBubbleRowView::GetSecondaryLabelTextForTesting() {
+  return secondary_label_->GetText();
 }
 
 void DownloadBubbleRowView::RegisterAccelerators(

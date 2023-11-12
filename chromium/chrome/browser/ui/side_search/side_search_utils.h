@@ -21,11 +21,6 @@ class WebContents;
 
 namespace side_search {
 
-// Adds side search state data to a tab's state restore data if applicable.
-void MaybeAddSideSearchTabRestoreData(
-    content::WebContents* web_contents,
-    std::map<std::string, std::string>& extra_data);
-
 // Returns side search tab restore state data if applicable or empty.
 absl::optional<std::pair<std::string, std::string>>
 MaybeGetSideSearchTabRestoreData(content::WebContents* web_contents);
@@ -42,19 +37,12 @@ void SetSideSearchTabStateFromRestoreData(
 // side search feature.
 bool IsSidePanelWebContents(content::WebContents* web_contents);
 
-// Returns true if side search with DSE support for participating search engines
-// is enabled.
-bool IsDSESupportEnabled(const Profile* profile);
-
 // Returns true if side search is enabled and is supported for `browser`.
 bool IsEnabledForBrowser(const Browser* browser);
 
 // Returns true if necessary flags are enabled, browser is valid and default
 // search engine (e.g. Google) supports search in side panel.
 bool IsSearchWebInSidePanelSupported(const Browser* browser);
-
-// Returns true if side search should use the unified side panel implementation.
-bool ShouldUseUnifiedSidePanel();
 
 }  // namespace side_search
 

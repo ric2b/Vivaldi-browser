@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/pagination/pagination_model_observer.h"
 #include "ash/system/brightness/unified_brightness_view.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
@@ -29,7 +30,8 @@ class UnifiedSystemTrayController;
 // View class of the bubble in status area tray.
 //
 // The `QuickSettingsView` contains the quick settings controls
-class ASH_EXPORT QuickSettingsView : public views::View {
+class ASH_EXPORT QuickSettingsView : public views::View,
+                                     public PaginationModelObserver {
  public:
   METADATA_HEADER(QuickSettingsView);
 
@@ -82,6 +84,9 @@ class ASH_EXPORT QuickSettingsView : public views::View {
   // Shows media controls view.
   void ShowMediaControls();
 
+  // PaginationModelObserver:
+  void TotalPagesChanged(int previous_page_count, int new_page_count) override;
+
   // views::View:
   void OnGestureEvent(ui::GestureEvent* event) override;
 
@@ -103,15 +108,10 @@ class ASH_EXPORT QuickSettingsView : public views::View {
   friend class UnifiedBrightnessViewTest;
   friend class UnifiedVolumeViewTest;
 
-  // Adds buttons that load some of the tray detailed pages.
-  // TODO(b/255993869): Delete this when feature tiles are working.
-  void AddTemporaryDetailedViewButtons();
-
   // Owned by UnifiedSystemTrayBubble.
   UnifiedSystemTrayController* const controller_;
 
   // Owned by views hierarchy.
-  views::View* temporary_buttons_container_ = nullptr;
   views::FlexLayoutView* system_tray_container_ = nullptr;
   QuickSettingsHeader* header_ = nullptr;
   FeatureTilesContainerView* feature_tiles_container_ = nullptr;

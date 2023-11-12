@@ -120,7 +120,7 @@ bool NotesCodec::Decode(NoteNode* notes_node,
 base::Value NotesCodec::EncodeNode(
     const NoteNode* node,
     const std::vector<const NoteNode*>* extra_nodes) {
-  base::Value value(base::Value::Type::DICTIONARY);
+  base::Value value(base::Value::Type::DICT);
   std::string node_id = base::NumberToString(node->id());
   value.SetStringKey(kIdKey, node_id);
   UpdateChecksum(node_id);
@@ -182,11 +182,11 @@ base::Value NotesCodec::EncodeNode(
     base::Value child_list(base::Value::Type::LIST);
 
     for (const auto& child : node->children()) {
-      child_list.Append(EncodeNode(child.get(), nullptr));
+      child_list.GetList().Append(EncodeNode(child.get(), nullptr));
     }
     if (extra_nodes) {
       for (const auto* child : *extra_nodes) {
-        child_list.Append(EncodeNode(child, nullptr));
+        child_list.GetList().Append(EncodeNode(child, nullptr));
       }
     }
     value.SetKey(kChildrenKey, std::move(child_list));

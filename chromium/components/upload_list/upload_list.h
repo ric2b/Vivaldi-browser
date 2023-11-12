@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/time/time.h"
@@ -33,6 +33,7 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
       Uploaded,
     };
 
+    UploadInfo(const UploadInfo& upload_info);
     UploadInfo(const std::string& upload_id,
                const base::Time& upload_time,
                const std::string& local_id,
@@ -44,7 +45,6 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
                State state,
                const std::u16string& file_size);
     UploadInfo(const std::string& upload_id, const base::Time& upload_time);
-    UploadInfo(const UploadInfo& upload_info);
     ~UploadInfo();
 
     // These fields are only valid when |state| == UploadInfo::State::Uploaded.
@@ -62,6 +62,9 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
 
     // Identifies where the crash comes from.
     std::string source;
+
+    // The MD5sum of the path of the crash meta file.
+    std::string path_hash;
 
     // Formatted file size for locally stored data.
     std::u16string file_size;
@@ -105,7 +108,7 @@ class UploadList : public base::RefCountedThreadSafe<UploadList> {
                                const base::Time& end) = 0;
 
   // Requests a user triggered upload for a crash report with a given id.
-  virtual void RequestSingleUpload(const std::string& local_id);
+  virtual void RequestSingleUpload(const std::string& local_id) = 0;
 
  private:
   friend class base::RefCountedThreadSafe<UploadList>;

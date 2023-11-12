@@ -49,10 +49,6 @@ void SetIsIncognitoEnabled(const std::string& extension_id,
                            content::BrowserContext* context,
                            bool enabled);
 
-// Returns true if |extension| can be loaded in incognito.
-bool CanLoadInIncognito(const extensions::Extension* extension,
-                        content::BrowserContext* context);
-
 // Returns true if this extension can inject scripts into pages with file URLs.
 bool AllowFileAccess(const std::string& extension_id,
                      content::BrowserContext* context);
@@ -63,15 +59,6 @@ bool AllowFileAccess(const std::string& extension_id,
 void SetAllowFileAccess(const std::string& extension_id,
                         content::BrowserContext* context,
                         bool allow);
-
-// Returns true if |extension_id| can be launched (possibly only after being
-// enabled).
-bool IsAppLaunchable(const std::string& extension_id,
-                     content::BrowserContext* context);
-
-// Returns true if |extension_id| can be launched without being enabled first.
-bool IsAppLaunchableWithoutEnabling(const std::string& extension_id,
-                                    content::BrowserContext* context);
 
 // Returns true if |extension| should be synced.
 bool ShouldSync(const Extension* extension, content::BrowserContext* context);

@@ -10,7 +10,6 @@
 #include "base/auto_reset.h"
 #include "base/base_switches.h"
 #include "base/command_line.h"
-#include "base/debug/activity_tracker.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/histogram_macros.h"
@@ -202,7 +201,13 @@ bool DeserializeGUIDFromStringPieces(StringPiece first,
   if (!StringToUint64(first, &high) || !StringToUint64(second, &low))
     return false;
 
-  *guid = UnguessableToken::Deserialize(high, low);
+  absl::optional<UnguessableToken> token =
+      UnguessableToken::Deserialize(high, low);
+  if (!token.has_value()) {
+    return false;
+  }
+
+  *guid = token.value();
   return true;
 }
 #endif  // !BUILDFLAG(IS_NACL) && !BUILDFLAG(IS_IOS)
@@ -435,14 +440,10 @@ void FieldTrial::GetStateWhileLocked(PickleState* field_trial_state) {
 // static
 FieldTrialList* FieldTrialList::global_ = nullptr;
 
-// static
-bool FieldTrialList::used_without_global_ = false;
-
 FieldTrialList::Observer::~Observer() = default;
 
 FieldTrialList::FieldTrialList() {
   DCHECK(!global_);
-  DCHECK(!used_without_global_);
   global_ = this;
 }
 
@@ -509,22 +510,6 @@ bool FieldTrialList::IsTrialActive(StringPiece trial_name) {
   FieldTrial* field_trial = Find(trial_name);
   FieldTrial::ActiveGroup active_group;
   return field_trial && field_trial->GetActiveGroup(&active_group);
-}
-
-// static
-void FieldTrialList::StatesToString(std::string* output) {
-  FieldTrial::ActiveGroups active_groups;
-  GetActiveFieldTrialGroups(&active_groups);
-  for (const auto& active_group : active_groups) {
-    DCHECK_EQ(std::string::npos,
-              active_group.trial_name.find(kPersistentStringSeparator));
-    DCHECK_EQ(std::string::npos,
-              active_group.group_name.find(kPersistentStringSeparator));
-    output->append(active_group.trial_name);
-    output->append(1, kPersistentStringSeparator);
-    output->append(active_group.group_name);
-    output->append(1, kPersistentStringSeparator);
-  }
 }
 
 // static
@@ -746,7 +731,6 @@ void FieldTrialList::PopulateLaunchOptionsWithFieldTrialState(
     CommandLine* command_line,
     LaunchOptions* launch_options) {
   DCHECK(command_line);
-  DCHECK(launch_options);
 
   // Use shared memory to communicate field trial state to child processes.
   // The browser is the only process that has write access to the shared memory.
@@ -1055,8 +1039,6 @@ void FieldTrialList::RestoreInstanceForTesting(FieldTrialList* instance) {
 std::string FieldTrialList::SerializeSharedMemoryRegionMetadata(
     const ReadOnlySharedMemoryRegion& shm,
     LaunchOptions* launch_options) {
-  DCHECK(launch_options);
-
   std::stringstream ss;
 #if BUILDFLAG(IS_WIN)
   // Elevated process might not need this, although it is harmless.
@@ -1363,10 +1345,8 @@ FieldTrial* FieldTrialList::PreLockedFind(StringPiece name) {
 
 // static
 void FieldTrialList::Register(FieldTrial* trial, bool is_randomized_trial) {
-  if (!global_) {
-    used_without_global_ = true;
-    return;
-  }
+  DCHECK(global_);
+
   AutoLock auto_lock(global_->lock_);
   CHECK(!global_->PreLockedFind(trial->trial_name())) << trial->trial_name();
   trial->AddRef();
@@ -1391,8 +1371,6 @@ FieldTrialList::RegistrationMap FieldTrialList::GetRegisteredTrials() {
 bool FieldTrialList::CreateTrialsFromFieldTrialStatesInternal(
     const std::vector<FieldTrial::State>& entries) {
   DCHECK(global_);
-  if (entries.empty() || !global_)
-    return true;
 
   for (const auto& entry : entries) {
     FieldTrial* trial = CreateFieldTrial(entry.trial_name, entry.group_name);

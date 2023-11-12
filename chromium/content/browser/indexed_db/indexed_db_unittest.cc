@@ -9,8 +9,10 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -20,14 +22,18 @@
 #include "components/services/storage/privileged/mojom/indexed_db_control.mojom-test-utils.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "content/browser/indexed_db/indexed_db_bucket_state.h"
+#include "content/browser/indexed_db/indexed_db_client_state_checker_wrapper.h"
 #include "content/browser/indexed_db/indexed_db_connection.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
-#include "content/browser/indexed_db/indexed_db_factory_impl.h"
+#include "content/browser/indexed_db/indexed_db_factory.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_env.h"
 #include "content/browser/indexed_db/mock_indexed_db_callbacks.h"
 #include "content/browser/indexed_db/mock_indexed_db_database_callbacks.h"
+#include "mojo/public/cpp/bindings/pending_associated_remote.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/features.h"
+#include "net/base/schemeful_site.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "storage/browser/test/mock_quota_manager_proxy.h"
@@ -130,28 +136,31 @@ class IndexedDBTest : public testing::Test,
     bucket_info = InitBucket(kSessionOnlyFirstPartyStorageKey);
     kSessionOnlyFirstPartyBucketLocator = bucket_info.ToBucketLocator();
 
-    kNormalThirdPartyStorageKey = blink::StorageKey::CreateForTesting(
-        url::Origin::Create(GURL("http://normal/")),
-        url::Origin::Create(GURL("http://rando/")));
+    kNormalThirdPartyStorageKey =
+        blink::StorageKey::Create(url::Origin::Create(GURL("http://normal/")),
+                                  net::SchemefulSite(GURL("http://rando/")),
+                                  blink::mojom::AncestorChainBit::kCrossSite);
     bucket_info = InitBucket(kNormalThirdPartyStorageKey);
     kNormalThirdPartyBucketLocator = bucket_info.ToBucketLocator();
 
-    kSessionOnlyThirdPartyStorageKey = blink::StorageKey::CreateForTesting(
+    kSessionOnlyThirdPartyStorageKey = blink::StorageKey::Create(
         url::Origin::Create(GURL("http://session-only/")),
-        url::Origin::Create(GURL("http://rando/")));
+        net::SchemefulSite(GURL("http://rando/")),
+        blink::mojom::AncestorChainBit::kCrossSite);
     bucket_info = InitBucket(kSessionOnlyThirdPartyStorageKey);
     kSessionOnlyThirdPartyBucketLocator = bucket_info.ToBucketLocator();
 
-    kInvertedNormalThirdPartyStorageKey = blink::StorageKey::CreateForTesting(
-        url::Origin::Create(GURL("http://rando/")),
-        url::Origin::Create(GURL("http://normal/")));
+    kInvertedNormalThirdPartyStorageKey =
+        blink::StorageKey::Create(url::Origin::Create(GURL("http://rando/")),
+                                  net::SchemefulSite(GURL("http://normal/")),
+                                  blink::mojom::AncestorChainBit::kCrossSite);
     bucket_info = InitBucket(kInvertedNormalThirdPartyStorageKey);
     kInvertedNormalThirdPartyBucketLocator = bucket_info.ToBucketLocator();
 
-    kInvertedSessionOnlyThirdPartyStorageKey =
-        blink::StorageKey::CreateForTesting(
-            url::Origin::Create(GURL("http://rando/")),
-            url::Origin::Create(GURL("http://session-only/")));
+    kInvertedSessionOnlyThirdPartyStorageKey = blink::StorageKey::Create(
+        url::Origin::Create(GURL("http://rando/")),
+        net::SchemefulSite(GURL("http://session-only/")),
+        blink::mojom::AncestorChainBit::kCrossSite);
     bucket_info = InitBucket(kInvertedSessionOnlyThirdPartyStorageKey);
     kInvertedSessionOnlyThirdPartyBucketLocator = bucket_info.ToBucketLocator();
 
@@ -188,7 +197,7 @@ class IndexedDBTest : public testing::Test,
 
   void TearDown() override {
     if (context_ && !context_->IsInMemoryContext()) {
-      IndexedDBFactoryImpl* factory = context_->GetIDBFactory();
+      IndexedDBFactory* factory = context_->GetIDBFactory();
 
       // Loop through all open buckets, and force close them, and request
       // the deletion of the leveldb state. Once the states are no longer
@@ -227,6 +236,14 @@ class IndexedDBTest : public testing::Test,
   }
 
   bool IsThirdPartyStoragePartitioningEnabled() { return GetParam(); }
+
+  scoped_refptr<IndexedDBClientStateCheckerWrapper>
+  CreateTestClientStateWrapper() {
+    mojo::PendingAssociatedRemote<storage::mojom::IndexedDBClientStateChecker>
+        remote;
+    return base::MakeRefCounted<IndexedDBClientStateCheckerWrapper>(
+        std::move(remote));
+  }
 
  protected:
   IndexedDBContextImpl* context() const { return context_.get(); }
@@ -406,7 +423,8 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteFirstParty) {
                 std::make_unique<IndexedDBPendingConnection>(
                     open_callbacks, open_db_callbacks, host_transaction_id,
                     version, std::move(create_transaction_callback1)),
-                bucket_locator, context()->GetDataPath(bucket_locator));
+                bucket_locator, context()->GetDataPath(bucket_locator),
+                CreateTestClientStateWrapper());
   EXPECT_TRUE(base::DirectoryExists(test_path));
 
   auto create_transaction_callback2 =
@@ -415,7 +433,8 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteFirstParty) {
                 std::make_unique<IndexedDBPendingConnection>(
                     closed_callbacks, closed_db_callbacks, host_transaction_id,
                     version, std::move(create_transaction_callback2)),
-                bucket_locator, context()->GetDataPath(bucket_locator));
+                bucket_locator, context()->GetDataPath(bucket_locator),
+                CreateTestClientStateWrapper());
   RunPostedTasks();
   ASSERT_TRUE(closed_callbacks->connection());
   closed_callbacks->connection()->AbortTransactionsAndClose(
@@ -440,9 +459,10 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteFirstParty) {
 }
 
 TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteThirdParty) {
-  const blink::StorageKey kTestStorageKey = blink::StorageKey::CreateForTesting(
-      url::Origin::Create(GURL("http://test/")),
-      url::Origin::Create(GURL("http://rando/")));
+  const blink::StorageKey kTestStorageKey =
+      blink::StorageKey::Create(url::Origin::Create(GURL("http://test/")),
+                                net::SchemefulSite(GURL("http://rando/")),
+                                blink::mojom::AncestorChainBit::kCrossSite);
   storage::BucketInfo bucket_info = InitBucket(kTestStorageKey);
   storage::BucketLocator bucket_locator = bucket_info.ToBucketLocator();
 
@@ -467,7 +487,8 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteThirdParty) {
                 std::make_unique<IndexedDBPendingConnection>(
                     open_callbacks, open_db_callbacks, host_transaction_id,
                     version, std::move(create_transaction_callback1)),
-                bucket_locator, context()->GetDataPath(bucket_locator));
+                bucket_locator, context()->GetDataPath(bucket_locator),
+                CreateTestClientStateWrapper());
   EXPECT_TRUE(base::DirectoryExists(test_path));
 
   auto create_transaction_callback2 =
@@ -476,7 +497,8 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnDeleteThirdParty) {
                 std::make_unique<IndexedDBPendingConnection>(
                     closed_callbacks, closed_db_callbacks, host_transaction_id,
                     version, std::move(create_transaction_callback2)),
-                bucket_locator, context()->GetDataPath(bucket_locator));
+                bucket_locator, context()->GetDataPath(bucket_locator),
+                CreateTestClientStateWrapper());
   RunPostedTasks();
   ASSERT_TRUE(closed_callbacks->connection());
   closed_callbacks->connection()->AbortTransactionsAndClose(
@@ -527,9 +549,10 @@ TEST_P(IndexedDBTest, DeleteFailsIfDirectoryLockedFirstParty) {
 }
 
 TEST_P(IndexedDBTest, DeleteFailsIfDirectoryLockedThirdParty) {
-  const blink::StorageKey kTestStorageKey = blink::StorageKey::CreateForTesting(
-      url::Origin::Create(GURL("http://test/")),
-      url::Origin::Create(GURL("http://rando/")));
+  const blink::StorageKey kTestStorageKey =
+      blink::StorageKey::Create(url::Origin::Create(GURL("http://test/")),
+                                net::SchemefulSite(GURL("http://rando/")),
+                                blink::mojom::AncestorChainBit::kCrossSite);
   storage::BucketInfo bucket_info = InitBucket(kTestStorageKey);
   storage::BucketLocator bucket_locator = bucket_info.ToBucketLocator();
 
@@ -560,8 +583,7 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureFirstParty) {
   bucket_locator.id = storage::BucketId::FromUnsafeValue(5);
   bucket_locator.storage_key = kTestStorageKey;
 
-  auto* factory =
-      static_cast<IndexedDBFactoryImpl*>(context()->GetIDBFactory());
+  auto* factory = static_cast<IndexedDBFactory*>(context()->GetIDBFactory());
 
   const int64_t transaction_id = 1;
 
@@ -574,7 +596,8 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureFirstParty) {
       IndexedDBDatabaseMetadata::DEFAULT_VERSION,
       std::move(create_transaction_callback1));
   factory->Open(u"db", std::move(connection), bucket_locator,
-                context()->GetDataPath(bucket_locator));
+                context()->GetDataPath(bucket_locator),
+                CreateTestClientStateWrapper());
   RunPostedTasks();
 
   ASSERT_TRUE(callbacks->connection());
@@ -593,15 +616,15 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureFirstParty) {
 }
 
 TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureThirdParty) {
-  const blink::StorageKey kTestStorageKey = blink::StorageKey::CreateForTesting(
-      url::Origin::Create(GURL("http://test/")),
-      url::Origin::Create(GURL("http://rando/")));
+  const blink::StorageKey kTestStorageKey =
+      blink::StorageKey::Create(url::Origin::Create(GURL("http://test/")),
+                                net::SchemefulSite(GURL("http://rando/")),
+                                blink::mojom::AncestorChainBit::kCrossSite);
   auto bucket_locator = storage::BucketLocator();
   bucket_locator.id = storage::BucketId::FromUnsafeValue(5);
   bucket_locator.storage_key = kTestStorageKey;
 
-  auto* factory =
-      static_cast<IndexedDBFactoryImpl*>(context()->GetIDBFactory());
+  auto* factory = static_cast<IndexedDBFactory*>(context()->GetIDBFactory());
 
   const int64_t transaction_id = 1;
 
@@ -614,7 +637,8 @@ TEST_P(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailureThirdParty) {
       IndexedDBDatabaseMetadata::DEFAULT_VERSION,
       std::move(create_transaction_callback1));
   factory->Open(u"db", std::move(connection), bucket_locator,
-                context()->GetDataPath(bucket_locator));
+                context()->GetDataPath(bucket_locator),
+                CreateTestClientStateWrapper());
   RunPostedTasks();
 
   ASSERT_TRUE(callbacks->connection());

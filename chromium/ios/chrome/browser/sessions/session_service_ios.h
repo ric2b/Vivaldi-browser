@@ -7,8 +7,8 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/ios/block_types.h"
 #include "base/task/sequenced_task_runner.h"
 
@@ -87,7 +87,6 @@
 // is not a situation we normally expect to be in because we never
 // want the session being saved on the main thread in the production app.
 - (void)performSaveSessionData:(NSData*)sessionData
-                   tabContents:(NSDictionary*)tabContents
                    sessionPath:(NSString*)sessionPath;
 
 @end

@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/settings/cells/version_item.h"
 
-#import "ios/chrome/browser/ui/collection_view/cells/collection_view_cell_constants.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/table_view/table_view_cells_constants.h"
@@ -61,7 +60,7 @@ const CGFloat kVerticalSpacing = 16;
     _textLabel = [[UILabel alloc] init];
     _textLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _textLabel.font =
-        [UIFont preferredFontForTextStyle:kTableViewSublabelFontStyle];
+        [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
     _textLabel.numberOfLines = 0;
     _textLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
     _textLabel.textAlignment = NSTextAlignmentCenter;

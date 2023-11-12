@@ -265,6 +265,20 @@ class PasswordsPrivateGetInsecureCredentialsFunction
   ResponseAction Run() override;
 };
 
+class PasswordsPrivateGetCredentialsWithReusedPasswordFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION(
+      "passwordsPrivate.getCredentialsWithReusedPassword",
+      PASSWORDSPRIVATE_GETCREDENTIALSWITHREUSEDPASSWORD)
+
+ protected:
+  ~PasswordsPrivateGetCredentialsWithReusedPasswordFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+};
+
 class PasswordsPrivateMuteInsecureCredentialFunction
     : public ExtensionFunction {
  public:
@@ -414,6 +428,19 @@ class PasswordsPrivateShowAddShortcutDialogFunction : public ExtensionFunction {
 
  protected:
   ~PasswordsPrivateShowAddShortcutDialogFunction() override = default;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+};
+
+class PasswordsPrivateShowExportedFileInShellFunction
+    : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("passwordsPrivate.showExportedFileInShell",
+                             PASSWORDSPRIVATE_SHOWEXPORTEDFILEINSHELL)
+
+ protected:
+  ~PasswordsPrivateShowExportedFileInShellFunction() override = default;
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;

@@ -9,7 +9,7 @@
 
 #include "ash/components/arc/mojom/volume_mounter.mojom.h"
 #include "ash/components/arc/session/connection_observer.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "chromeos/ash/components/disks/disk_mount_manager.h"
@@ -93,6 +93,8 @@ class ArcVolumeMounterBridge
 
   // Send all existing mount events. Usually is called around service startup.
   void SendAllMountEvents();
+
+  static void EnsureFactoryBuilt();
 
  private:
   void SendMountEventForMyFiles();

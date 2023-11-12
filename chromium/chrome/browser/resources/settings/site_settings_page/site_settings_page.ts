@@ -53,6 +53,15 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
           loadTimeData.getBoolean('enableSafeBrowsingSubresourceFilter'),
     },
     {
+      route: routes.SITE_SETTINGS_ANTI_ABUSE,
+      id: Id.ANTI_ABUSE,
+      label: 'siteSettingsAntiAbuse',
+      icon: 'settings20:account-attention',
+      enabledLabel: 'siteSettingsAntiAbuseEnabledSubLabel',
+      disabledLabel: 'siteSettingsAntiAbuseDisabledSubLabel',
+      shouldShow: () => loadTimeData.getBoolean('privateStateTokensEnabled'),
+    },
+    {
       route: routes.SITE_SETTINGS_AR,
       id: Id.AR,
       label: 'siteSettingsAr',
@@ -116,7 +125,9 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
     {
       route: routes.COOKIES,
       id: Id.COOKIES,
-      label: 'siteSettingsCookies',
+      label: loadTimeData.getBoolean('isPrivacySandboxSettings4') ?
+          'thirdPartyCookiesLinkRowLabel' :
+          'siteSettingsCookies',
       icon: 'settings:cookie',
       enabledLabel: 'siteSettingsCookiesAllowed',
       disabledLabel: 'siteSettingsBlocked',
@@ -281,8 +292,7 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
     {
       route: routes.SITE_SETTINGS_SITE_DATA,
       id: Id.SITE_DATA,
-      // TODO(crbug/1378703): Replace label.
-      label: 'privacyPageTitle',
+      label: 'siteDataPageTitle',
       icon: 'settings:database',
       shouldShow: () => loadTimeData.getBoolean('isPrivacySandboxSettings4'),
     },
@@ -352,6 +362,12 @@ function buildItemListFromIds(orderedIdList: ContentSettingsTypes[]):
   return orderedList;
 }
 
+export interface SettingsSiteSettingsPageElement {
+  $: {
+    advancedContentList: HTMLElement,
+  };
+}
+
 const SettingsSiteSettingsPageElementBase = WebUiListenerMixin(PolymerElement);
 
 export class SettingsSiteSettingsPageElement extends
@@ -413,6 +429,7 @@ export class SettingsSiteSettingsPageElement extends
             ]),
             contentAdvanced: buildItemListFromIds([
               Id.SOUND,
+              Id.ANTI_ABUSE,
               Id.ADS,
               Id.ZOOM_LEVELS,
               Id.PDF_DOCUMENTS,

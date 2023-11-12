@@ -7,9 +7,9 @@
 #include <vector>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -84,7 +84,9 @@ void VersionInfoUpdater::StartUpdate(bool is_chrome_branded) {
   policy::DeviceCloudPolicyManagerAsh* policy_manager =
       connector->GetDeviceCloudPolicyManager();
   if (policy_manager) {
-    policy_manager->core()->store()->AddObserver(this);
+    if (!policy_manager->core()->store()->HasObserver(this)) {
+      policy_manager->core()->store()->AddObserver(this);
+    }
 
     // Ensure that we have up-to-date enterprise info in case enterprise policy
     // is already fetched and has finished initialization.
@@ -163,7 +165,7 @@ std::string VersionInfoUpdater::GetDeviceIdsLabel() {
   // Get the attested device ID and add the ZTE indication and the ID if needed.
   const absl::optional<base::StringPiece> attested_device_id =
       system::StatisticsProvider::GetInstance()->GetMachineStatistic(
-          chromeos::system::kAttestedDeviceIdKey);
+          system::kAttestedDeviceIdKey);
   // Start with the ZTE indication and the attested device ID if it exists.
   if (attested_device_id && !attested_device_id->empty()) {
     device_ids_text.append(kZteReady);

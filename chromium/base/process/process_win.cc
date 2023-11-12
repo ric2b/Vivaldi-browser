@@ -5,13 +5,12 @@
 #include "base/process/process.h"
 
 #include "base/clang_profiling_buildflags.h"
-#include "base/debug/activity_tracker.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/base_tracing.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
+#include "base/win/windows_version.h"
 
 #include <windows.h>
 
@@ -27,6 +26,15 @@ DWORD kBasicProcessAccess =
 } // namespace
 
 namespace base {
+
+// Sets Eco QoS (Quality of Service) level for background process which would
+// select efficient CPU frequency and schedule the process to efficient cores
+// (available on hybrid CPUs).
+// QoS is a scheduling Win API which indicates the desired performance and power
+// efficiency of a process/thread. EcoQoS is introduced since Windows 11.
+BASE_FEATURE(kUseEcoQoSForBackgroundProcess,
+             "UseEcoQoSForBackgroundProcess",
+             FEATURE_DISABLED_BY_DEFAULT);
 
 Process::Process(ProcessHandle handle)
     : process_(handle), is_current_process_(false) {
@@ -183,9 +191,6 @@ bool Process::Terminate(int exit_code, bool wait) const {
 Process::WaitExitStatus Process::WaitForExitOrEvent(
     const base::win::ScopedHandle& stop_event_handle,
     int* exit_code) const {
-  // Record the event that this thread is blocking upon (for hang diagnosis).
-  base::debug::ScopedProcessWaitActivity process_activity(this);
-
   HANDLE events[] = {Handle(), stop_event_handle.get()};
   DWORD wait_result =
       ::WaitForMultipleObjects(std::size(events), events, FALSE, INFINITE);
@@ -216,10 +221,7 @@ bool Process::WaitForExit(int* exit_code) const {
 bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
   TRACE_EVENT0("base", "Process::WaitForExitWithTimeout");
 
-  // Record the event that this thread is blocking upon (for hang diagnosis).
-  absl::optional<debug::ScopedProcessWaitActivity> process_activity;
   if (!timeout.is_zero()) {
-    process_activity.emplace(this);
     // Assert that this thread is allowed to wait below. This intentionally
     // doesn't use ScopedBlockingCallWithBaseSyncPrimitives because the process
     // being waited upon tends to itself be using the CPU and considering this
@@ -243,10 +245,7 @@ bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
   return true;
 }
 
-void Process::Exited(int exit_code) const {
-  base::debug::GlobalActivityTracker::RecordProcessExitIfEnabled(Pid(),
-                                                                 exit_code);
-}
+void Process::Exited(int exit_code) const {}
 
 bool Process::IsProcessBackgrounded() const {
   DCHECK(IsValid());
@@ -265,6 +264,30 @@ bool Process::SetProcessBackgrounded(bool value) {
   // https://crbug.com/1396155 for details.
   DCHECK(!is_current());
   const DWORD priority = value ? IDLE_PRIORITY_CLASS : NORMAL_PRIORITY_CLASS;
+
+  if (base::win::OSInfo::GetInstance()->version() >=
+          base::win::Version::WIN11 &&
+      FeatureList::IsEnabled(kUseEcoQoSForBackgroundProcess)) {
+    PROCESS_POWER_THROTTLING_STATE power_throttling;
+    RtlZeroMemory(&power_throttling, sizeof(power_throttling));
+    power_throttling.Version = PROCESS_POWER_THROTTLING_CURRENT_VERSION;
+
+    if (value) {
+      // Sets Eco QoS level.
+      power_throttling.ControlMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+      power_throttling.StateMask = PROCESS_POWER_THROTTLING_EXECUTION_SPEED;
+    } else {
+      // Uses system default.
+      power_throttling.ControlMask = 0;
+      power_throttling.StateMask = 0;
+    }
+    bool ret =
+        ::SetProcessInformation(Handle(), ProcessPowerThrottling,
+                                &power_throttling, sizeof(power_throttling));
+    if (ret == 0) {
+      DPLOG(ERROR) << "Setting process QoS policy fails";
+    }
+  }
 
   return (::SetPriorityClass(Handle(), priority) != 0);
 }

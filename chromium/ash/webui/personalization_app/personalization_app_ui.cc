@@ -29,7 +29,7 @@
 #include "content/public/common/url_constants.h"
 #include "services/network/public/mojom/content_security_policy.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/resources/grit/webui_generated_resources.h"
+#include "ui/resources/grit/webui_resources.h"
 #include "ui/webui/color_change_listener/color_change_handler.h"
 #include "ui/webui/mojo_web_ui_controller.h"
 
@@ -52,7 +52,7 @@ void AddResources(content::WebUIDataSource* source) {
   source->AddResourcePath("", IDR_ASH_PERSONALIZATION_APP_INDEX_HTML);
   source->AddResourcePaths(base::make_span(
       kAshPersonalizationAppResources, kAshPersonalizationAppResourcesSize));
-  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
+  source->AddResourcePath("test_loader.html", IDR_WEBUI_TEST_LOADER_HTML);
   source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
   source->AddResourcePath("test_loader_util.js",
                           IDR_WEBUI_JS_TEST_LOADER_UTIL_JS);
@@ -71,6 +71,10 @@ void AddStrings(content::WebUIDataSource* source) {
       {"defaultWallpaper", IDS_PERSONALIZATION_APP_DEFAULT_WALLPAPER},
       {"back", IDS_PERSONALIZATION_APP_BACK_BUTTON},
       {"currentlySet", IDS_PERSONALIZATION_APP_CURRENTLY_SET},
+      {"descriptionDialogOpen",
+       IDS_PERSONALIZATION_APP_WALLPAPER_DESCRIPTION_DIALOG_OPEN},
+      {"descriptionDialogClose",
+       IDS_PERSONALIZATION_APP_WALLPAPER_DESCRIPTION_DIALOG_CLOSE},
       {"myImagesLabel", IDS_PERSONALIZATION_APP_MY_IMAGES},
       {"wallpaperCollections", IDS_PERSONALIZATION_APP_WALLPAPER_COLLECTIONS},
       {"center", IDS_PERSONALIZATION_APP_CENTER},
@@ -147,6 +151,10 @@ void AddStrings(content::WebUIDataSource* source) {
 
       // Ambient mode related string.
       {"screensaverLabel", IDS_PERSONALIZATION_APP_SCREENSAVER_LABEL},
+      {"screenSaverPreviewButton",
+       IDS_PERSONALIZATION_APP_SCREENSAVER_PREVIEW_BUTTON},
+      {"screenSaverPreviewDownloading",
+       IDS_PERSONALIZATION_APP_SCREENSAVER_PREVIEW_DOWNLOADING},
       {"ambientModePageDescription",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_PAGE_DESCRIPTION},
       {"ambientModeOn", IDS_PERSONALIZATION_APP_AMBIENT_MODE_ON},
@@ -240,12 +248,24 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_RAINBOW_COLOR_LABEL},
       {"wallpaperColorNudgeText",
        IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_WALLPAPER_COLOR_NUDGE_TEXT},
+      {"zoneCustomize",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_ZONE_CUSTOMIZATION_BUTTON},
 
       // Google Photos strings
       // TODO(b/229149314): Finalize error and retry strings.
       {"googlePhotosLabel", IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS},
       {"googlePhotosError", IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_ERROR},
       {"googlePhotosTryAgain", IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_TRY_AGAIN},
+      {"googlePhotosAlbumShared",
+       IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_ALBUM_SHARED},
+      {"googlePhotosSharedAlbumDialogTitle",
+       IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_SHARED_ALBUM_DIALOG_TITLE},
+      {"googlePhotosSharedAlbumDialogContent",
+       IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_SHARED_ALBUM_DIALOG_CONTENT},
+      {"googlePhotosSharedAlbumDialogCloseButton",
+       IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_SHARED_ALBUM_DIALOG_CLOSE_BUTTON},
+      {"googlePhotosSharedAlbumDialogAcceptButton",
+       IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_SHARED_ALBUM_DIALOG_ACCEPT_BUTTON},
       {"googlePhotosAlbumsTabLabel",
        IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_ALBUMS_TAB},
       {"googlePhotosPhotosTabLabel",
@@ -353,11 +373,11 @@ void PersonalizationAppUI::BindInterface(
 }
 
 void PersonalizationAppUI::AddBooleans(content::WebUIDataSource* source) {
-  source->AddBoolean("fullScreenPreviewEnabled",
-                     features::IsWallpaperFullScreenPreviewEnabled());
-
   source->AddBoolean("isGooglePhotosIntegrationEnabled",
                      wallpaper_provider_->IsEligibleForGooglePhotos());
+
+  source->AddBoolean("isGooglePhotosSharedAlbumsEnabled",
+                     features::IsWallpaperGooglePhotosSharedAlbumsEnabled());
 
   source->AddBoolean("isDarkLightModeEnabled",
                      features::IsDarkLightModeEnabled());
@@ -369,19 +389,16 @@ void PersonalizationAppUI::AddBooleans(content::WebUIDataSource* source) {
       features::IsRgbKeyboardEnabled() &&
           Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported());
 
-  source->AddBoolean("isAvatarsCloudMigrationEnabled",
-                     features::IsAvatarsCloudMigrationEnabled());
-
-  source->AddBoolean("isJellyEnabled", features::IsJellyEnabled());
-
   source->AddBoolean("isScreenSaverPreviewEnabled",
                      features::IsScreenSaverPreviewEnabled());
 
-  source->AddBoolean("isAmbientSubpageUIChangeEnabled",
-                     features::IsAmbientSubpageUIChangeEnabled());
+  source->AddBoolean("isPersonalizationJellyEnabled",
+                     features::IsPersonalizationJellyEnabled());
 
-  // TODO(b/258838122): update when the screen saver policy code is ready.
-  source->AddBoolean("isAmbientModeManaged", false);
+  source->AddBoolean(
+      "isMultiZoneRgbKeyboardSupported",
+      features::IsMultiZoneRgbKeyboardEnabled() &&
+          Shell::Get()->rgb_keyboard_manager()->GetZoneCount() > 1);
 }
 
 void PersonalizationAppUI::HandleWebUIRequest(

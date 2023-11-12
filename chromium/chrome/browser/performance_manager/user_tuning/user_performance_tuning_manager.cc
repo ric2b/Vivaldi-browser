@@ -7,9 +7,12 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/power_monitor/power_monitor.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/performance_manager/metrics/page_timeline_monitor.h"
 #include "chrome/browser/performance_manager/policies/high_efficiency_mode_policy.h"
+#include "chrome/browser/performance_manager/policies/page_discarding_helper.h"
+#include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
 #include "components/performance_manager/public/features.h"
 #include "components/performance_manager/public/performance_manager.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
@@ -22,6 +25,8 @@ namespace performance_manager::user_tuning {
 namespace {
 
 UserPerformanceTuningManager* g_user_performance_tuning_manager = nullptr;
+
+constexpr base::TimeDelta kBatteryUsageWriteFrequency = base::Days(1);
 
 class FrameThrottlingDelegateImpl
     : public performance_manager::user_tuning::UserPerformanceTuningManager::
@@ -86,9 +91,11 @@ WEB_CONTENTS_USER_DATA_KEY_IMPL(
 
 UserPerformanceTuningManager::PreDiscardResourceUsage::PreDiscardResourceUsage(
     content::WebContents* contents,
-    uint64_t resident_set_size_estimate)
+    uint64_t memory_footprint_estimate,
+    ::mojom::LifecycleUnitDiscardReason discard_reason)
     : content::WebContentsUserData<PreDiscardResourceUsage>(*contents),
-      resident_set_size_estimate_(resident_set_size_estimate) {}
+      memory_footprint_estimate_(memory_footprint_estimate),
+      discard_reason_(discard_reason) {}
 
 UserPerformanceTuningManager::PreDiscardResourceUsage::
     ~PreDiscardResourceUsage() = default;
@@ -146,6 +153,11 @@ bool UserPerformanceTuningManager::IsUsingBatteryPower() const {
   return on_battery_power_;
 }
 
+base::Time UserPerformanceTuningManager::GetLastBatteryUsageTimestamp() const {
+  return pref_change_registrar_.prefs()->GetTime(
+      performance_manager::user_tuning::prefs::kLastBatteryUseTimestamp);
+}
+
 int UserPerformanceTuningManager::SampledBatteryPercentage() const {
   return battery_percentage_;
 }
@@ -172,6 +184,17 @@ void UserPerformanceTuningManager::UserPerformanceTuningReceiverImpl::
         // PostMainMessageLoopRun, which shouldn't happen.
         CHECK(g_user_performance_tuning_manager);
         GetInstance()->NotifyMemoryThresholdReached();
+      }));
+}
+
+void UserPerformanceTuningManager::UserPerformanceTuningReceiverImpl::
+    NotifyMemoryMetricsRefreshed() {
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce([]() {
+        // Hitting this CHECK would mean this task is running after
+        // PostMainMessageLoopRun, which shouldn't happen.
+        CHECK(g_user_performance_tuning_manager);
+        GetInstance()->NotifyMemoryMetricsRefreshed();
       }));
 }
 
@@ -329,12 +352,19 @@ void UserPerformanceTuningManager::NotifyMemoryThresholdReached() {
   }
 }
 
+void UserPerformanceTuningManager::NotifyMemoryMetricsRefreshed() {
+  for (auto& obs : observers_) {
+    obs.OnMemoryMetricsRefreshed();
+  }
+}
+
 void UserPerformanceTuningManager::OnPowerStateChange(bool on_battery_power) {
   on_battery_power_ = on_battery_power;
 
   // Plugging in the device unsets the temporary disable BSM flag
-  if (!on_battery_power)
+  if (!on_battery_power) {
     battery_saver_mode_disabled_for_session_ = false;
+  }
 
   for (auto& obs : observers_) {
     obs.OnExternalPowerConnectedChanged(on_battery_power);
@@ -357,6 +387,16 @@ void UserPerformanceTuningManager::OnBatteryStateSampled(
     for (auto& obs : observers_) {
       obs.OnDeviceHasBatteryChanged(has_battery_);
     }
+  }
+
+  // Log the unplugged battery usage to local pref if the previous value is more
+  // than a day old.
+  if (has_battery_ && !battery_state->is_external_power_connected &&
+      (base::Time::Now() - GetLastBatteryUsageTimestamp() >
+       kBatteryUsageWriteFrequency)) {
+    pref_change_registrar_.prefs()->SetTime(
+        performance_manager::user_tuning::prefs::kLastBatteryUseTimestamp,
+        base::Time::Now());
   }
 
   if (!battery_state->current_capacity ||
@@ -396,6 +436,28 @@ void UserPerformanceTuningManager::OnBatteryStateSampled(
   }
 
   UpdateBatterySaverModeState();
+}
+
+void UserPerformanceTuningManager::DiscardPageForTesting(
+    content::WebContents* web_contents) {
+  base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+  performance_manager::PerformanceManager::CallOnGraph(
+      FROM_HERE,
+      base::BindOnce(
+          [](base::RepeatingClosure quit_closure,
+             base::WeakPtr<performance_manager::PageNode> page_node,
+             performance_manager::Graph* graph) {
+            if (page_node) {
+              performance_manager::policies::PageDiscardingHelper::GetFromGraph(
+                  graph)
+                  ->ImmediatelyDiscardSpecificPage(page_node.get());
+              quit_closure.Run();
+            }
+          },
+          run_loop.QuitClosure(),
+          performance_manager::PerformanceManager::
+              GetPrimaryPageNodeForWebContents(web_contents)));
+  run_loop.Run();
 }
 
 }  // namespace performance_manager::user_tuning

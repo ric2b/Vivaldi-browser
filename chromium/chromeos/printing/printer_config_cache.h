@@ -13,8 +13,8 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/time/clock.h"
@@ -40,9 +40,14 @@ class COMPONENT_EXPORT(CHROMEOS_PRINTING) PrinterConfigCache {
   //
   // Caller must guarantee that |loader_factory_dispenser| is always
   // safe to Run() for the lifetime of |this|.
+  //
+  // Setting `use_localhost_as_root` to true sets the Chrome OS Printing
+  // serving root to localhost. It allows to run integration tests without
+  // connecting to actual Chrome OS Printing serving root.
   static std::unique_ptr<PrinterConfigCache> Create(
       const base::Clock* clock,
-      base::RepeatingCallback<network::mojom::URLLoaderFactory*()>);
+      base::RepeatingCallback<network::mojom::URLLoaderFactory*()>,
+      bool use_localhost_as_root);
   virtual ~PrinterConfigCache() = default;
 
   // Result of calling Fetch(). The |key| identifies how Fetch() was
@@ -50,11 +55,9 @@ class COMPONENT_EXPORT(CHROMEOS_PRINTING) PrinterConfigCache {
   // defined iff |succeeded| is true.
   struct FetchResult {
     static FetchResult Failure(const std::string& key);
-
     static FetchResult Success(const std::string& key,
                                const std::string& contents,
                                base::Time time_of_fetch);
-
     bool succeeded;
     std::string key;
     std::string contents;

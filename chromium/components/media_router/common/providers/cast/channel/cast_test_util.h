@@ -9,9 +9,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/task/single_thread_task_runner.h"
+#include "components/media_router/common/providers/cast/channel/cast_channel_enum.h"
 #include "components/media_router/common/providers/cast/channel/cast_message_handler.h"
 #include "components/media_router/common/providers/cast/channel/cast_message_util.h"
 #include "components/media_router/common/providers/cast/channel/cast_socket.h"
@@ -147,6 +148,9 @@ class MockCastSocket : public CastSocket {
     error_state_ = error_state;
   }
 
+  CastChannelFlags flags() const override { return flags_; }
+  void SetFlags(CastChannelFlags flags) { flags_ = flags; }
+
   bool keep_alive() const override { return keep_alive_; }
   void SetKeepAlive(bool keep_alive) { keep_alive_ = keep_alive; }
 
@@ -160,6 +164,8 @@ class MockCastSocket : public CastSocket {
   net::IPEndPoint ip_endpoint_;
   int channel_id_;
   ChannelError error_state_;
+  CastChannelFlags flags_{
+      static_cast<CastChannelFlags>(CastChannelFlag::kFlagsNone)};
   bool keep_alive_;
   bool audio_only_;
 

@@ -112,7 +112,15 @@ const char kArcDisableTtsCache[] = "arc-disable-tts-cache";
 // Flag that disables ureadahead completely, including host and guest parts.
 // To enable only guest ureadahead, please use --arcvm-ureadahead-mode=readahead
 // in combination with this switch (see |kArcVmUreadaheadMode|).
+// TODO(b/264585671): Refactore this and |kArcHostUreadaheadGeneration| to
+// mode enum.
 const char kArcDisableUreadahead[] = "arc-disable-ureadahead";
+
+// Flag that indicates host ureadahead generation session. Note, it is still
+// valid even in case of kArcDisableUreadahead is set.
+// TODO(b/264585671): Refactore this and |kArcDisableUreadahead| to
+// mode enum.
+const char kArcHostUreadaheadGeneration[] = "arc-host-ureadahead-generation";
 
 // Flag that forces the OptIn ui to be shown. Used in tests.
 const char kArcForceShowOptInUi[] = "arc-force-show-optin-ui";
@@ -151,6 +159,9 @@ const char kArcStartMode[] = "arc-start-mode";
 
 // Sets ARC Terms Of Service hostname url for testing.
 const char kArcTosHostForTests[] = "arc-tos-host-for-tests";
+
+// Sets Privacy Policy hostname url for testing.
+const char kPrivacyPolicyHostForTests[] = "privacy-policy-host-for-tests";
 
 // Sets the mode of operation for ureadahead during ARCVM boot. If this switch
 // is not set, ARCVM ureadahead will check for the presence and age of pack
@@ -291,6 +302,11 @@ const char kCrosRegion[] = "cros-region";
 // Overrides the url for fetching a reauth request token for Cryptohome recovery
 // flow.
 const char kCryptohomeRecoveryReauthUrl[] = "cryptohome-recovery-reauth-url";
+
+// Forces cryptohome recovery process to use test environment (test keys /
+// URLs).
+const char kCryptohomeRecoveryUseTestEnvironment[] =
+    "cryptohome-recovery-use-test-env";
 
 // Controls if AuthSession API should be used when interacting with cryptohomed.
 const char kCryptohomeUseAuthSession[] = "cryptohome-use-authsession";
@@ -578,9 +594,6 @@ const char kForceShowCursor[] = "force-show-cursor";
 // being on a non-stable release channel with feedback enabled.
 const char kForceShowReleaseTrack[] = "force-show-release-track";
 
-// Force system compositor mode when set.
-const char kForceSystemCompositorMode[] = "force-system-compositor-mode";
-
 // If set, tablet-like power button behavior (i.e. tapping the button turns the
 // screen off) is used even if the device is in laptop mode.
 const char kForceTabletPowerButton[] = "force-tablet-power-button";
@@ -650,6 +663,10 @@ const char kInstallLogFastUploadForTests[] =
 // directory. For now, only one extension can be specified.
 const char kInstallSystemExtension[] = "install-system-extension";
 
+// Minimum time the kiosk splash screen will be shown in seconds.
+const char kKioskSplashScreenMinTimeSeconds[] =
+    "kiosk-splash-screen-min-time-seconds";
+
 // When this flag is set, the lacros-availability policy is ignored.
 const char kLacrosAvailabilityIgnore[] = "lacros-availability-ignore";
 
@@ -688,6 +705,9 @@ const char kLacrosChromePath[] = "lacros-chrome-path";
 // 1. Test launcher to run browser tests in testing environment.
 // 2. A terminal to start lacros-chrome with a debugger.
 const char kLacrosMojoSocketForTesting[] = "lacros-mojo-socket-for-testing";
+
+// When this flag is set, the lacros-selection policy is ignored.
+const char kLacrosSelectionPolicyIgnore[] = "lacros-selection-policy-ignore";
 
 // Start Chrome in RMA mode. Launches RMA app automatically.
 // kRmaNotAllowed switch takes priority over this one.
@@ -778,12 +798,16 @@ const char kOobeTimezoneOverrideForTests[] = "oobe-timezone-override-for-tests";
 const char kOobeTriggerSyncTimeoutForTests[] =
     "oobe-trigger-sync-timeout-for-tests";
 
-// Removes the condition that a network has had to existed for at least two
-// weeks and allows the user to provide the frequency at which the
-// HiddenNetworkHandler class checks for and removes wrongly hidden networks.
-// The frequency should be provided in seconds, should follow the format
-// "--force-hidden-network-migration=#", and should be >= 1.
-const char kForceHiddenNetworkMigration[] = "force-hidden-network-migration";
+// Controls how often the HiddenNetworkHandler class checks for wrongly hidden
+// networks. The interval should be provided in seconds, should follow the
+// format "--hidden-network-migration-interval=#", and should be >= 1.
+const char kHiddenNetworkMigrationInterval[] =
+    "hidden-network-migration-interval";
+
+// Sets how long a wrongly hidden network must have existed in order to be
+// considered for removal. The interval should be provided in days, should
+// follow the format "--hidden-network-migration-age=#", and should be >= 0.
+const char kHiddenNetworkMigrationAge[] = "hidden-network-migration-age";
 
 // If set to "true", the profile requires policy during restart (policy load
 // must succeed, otherwise session restart should fail).
@@ -828,6 +852,11 @@ const char kSamlPasswordChangeUrl[] = "saml-password-change-url";
 // smaller shelf in clamshell mode.
 const char kShelfHotseat[] = "shelf-hotseat";
 
+// Testing grace period for DeviceScheduledReboot policy. Useful for tast tests.
+// See `ShouldSkipRebootDueToGracePeriod` in scheduled_task_util.h.
+const char kScheduledRebootGracePeriodInSecondsForTesting[] =
+    "scheduled-reboot-grace-period-in-seconds-for-testing";
+
 // App window previews when hovering over the shelf.
 const char kShelfHoverPreviews[] = "shelf-hover-previews";
 
@@ -851,6 +880,11 @@ const char kSkipForceOnlineSignInForTesting[] =
 // the nudge is considered as shown.
 const char kSkipReorderNudgeShowThresholdDurationForTest[] =
     "skip-reorder-nudge-show-threshold-duration";
+
+// Used to force software cursors on specific devices that do not have enough
+// planes to display a hardware cursor when connected to displays with higher
+// widths in pixels.
+const char kSwCursorOnWideDisplays[] = "sw-cursor-on-wide-displays";
 
 // If set, the device will be forced to stay in clamshell UI mode but screen
 // auto rotation will be supported. E.g, chromebase device Dooly.
@@ -927,10 +961,6 @@ const char kWaitForInitialPolicyFetchForTest[] =
 // attempt to load from /tmp/resource_overrides/help_app/untrusted/js/main.js.
 const char kWebUiDataSourcePathForTesting[] =
     "web-ui-data-source-path-for-testing";
-
-// Used to determine if and how on-device handwriting recognition is supported
-// (e.g. via rootfs or downloadable content).
-const char kOndeviceHandwritingSwitch[] = "ondevice_handwriting";
 
 // Enable the getAccessToken autotest API which creates access tokens using
 // the internal OAuth client ID.

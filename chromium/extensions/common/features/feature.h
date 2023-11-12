@@ -115,6 +115,10 @@ class Feature {
   // Tests whether this is an internal API or not.
   virtual bool IsInternal() const = 0;
 
+  // Returns if this feature's availability requires a delegated availability
+  // check.
+  virtual bool RequiresDelegatedAvailabilityCheck() const = 0;
+
   // Is this an vivaldi api or not
   virtual bool IsVivaldiFeature() const = 0;
   virtual void set_vivaldi(bool flag) = 0;

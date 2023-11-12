@@ -5,10 +5,6 @@
 #ifndef IOS_CHROME_BROWSER_UI_SETTINGS_PASSWORD_PASSWORD_DETAILS_PASSWORD_DETAILS_COORDINATOR_DELEGATE_H_
 #define IOS_CHROME_BROWSER_UI_SETTINGS_PASSWORD_PASSWORD_DETAILS_PASSWORD_DETAILS_COORDINATOR_DELEGATE_H_
 
-namespace password_manager {
-struct CredentialUIEntry;
-}  // namespace password_manager
-
 @class PasswordDetailsCoordinator;
 
 // Delegate for PasswordIssuesCoordinator.
@@ -17,12 +13,6 @@ struct CredentialUIEntry;
 // Called when the view controller was removed from navigation controller.
 - (void)passwordDetailsCoordinatorDidRemove:
     (PasswordDetailsCoordinator*)coordinator;
-
-// Called when user deleted password. This action should be handled
-// outside to update the list of passwords immediately.
-- (void)passwordDetailsCoordinator:(PasswordDetailsCoordinator*)coordinator
-                  deleteCredential:
-                      (const password_manager::CredentialUIEntry&)credential;
 
 @end
 

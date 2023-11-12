@@ -12,7 +12,6 @@
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/ui/webui_login_view.h"
-#include "chrome/browser/ui/webui/ash/login/signin_screen_handler.h"
 #include "components/user_manager/user_type.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -68,6 +67,7 @@ class MockLoginDisplayHost : public LoginDisplayHost {
   MOCK_METHOD(void, StartKiosk, (const KioskAppId&, bool), (override));
   MOCK_METHOD(void, AttemptShowEnableConsumerKioskScreen, (), (override));
   MOCK_METHOD(void, ShowGaiaDialog, (const AccountId&), (override));
+  MOCK_METHOD(bool, IsGaiaDialogVisibleForTesting, (), (override));
   MOCK_METHOD(void, ShowOsInstallScreen, (), (override));
   MOCK_METHOD(void, ShowGuestTosScreen, (), (override));
   MOCK_METHOD(void, ShowAllowlistCheckFailedError, (), (override));

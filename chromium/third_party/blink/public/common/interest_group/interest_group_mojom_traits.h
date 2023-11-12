@@ -37,23 +37,46 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::InterestGroupAdDataView,
 };
 
 template <>
+struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::InterestGroupSizeDataView,
+                                        blink::InterestGroup::Size> {
+  static double width(const blink::InterestGroup::Size& size) {
+    return size.width;
+  }
+
+  static blink::InterestGroup::Size::LengthUnit width_units(
+      const blink::InterestGroup::Size& size) {
+    return size.width_units;
+  }
+
+  static double height(const blink::InterestGroup::Size& size) {
+    return size.height;
+  }
+
+  static blink::InterestGroup::Size::LengthUnit height_units(
+      const blink::InterestGroup::Size& size) {
+    return size.height_units;
+  }
+
+  static bool Read(blink::mojom::InterestGroupSizeDataView data,
+                   blink::InterestGroup::Size* out);
+};
+
+template <>
 struct BLINK_COMMON_EXPORT
     StructTraits<blink::mojom::SellerCapabilitiesDataView,
-                 blink::InterestGroup::SellerCapabilitiesType> {
+                 blink::SellerCapabilitiesType> {
   static bool allows_interest_group_counts(
-      const blink::InterestGroup::SellerCapabilitiesType& capabilities) {
-    return capabilities.Has(
-        blink::InterestGroup::SellerCapabilities::kInterestGroupCounts);
+      const blink::SellerCapabilitiesType& capabilities) {
+    return capabilities.Has(blink::SellerCapabilities::kInterestGroupCounts);
   }
 
   static bool allows_latency_stats(
-      const blink::InterestGroup::SellerCapabilitiesType& capabilities) {
-    return capabilities.Has(
-        blink::InterestGroup::SellerCapabilities::kLatencyStats);
+      const blink::SellerCapabilitiesType& capabilities) {
+    return capabilities.Has(blink::SellerCapabilities::kLatencyStats);
   }
 
   static bool Read(blink::mojom::SellerCapabilitiesDataView data,
-                   blink::InterestGroup::SellerCapabilitiesType* out);
+                   blink::SellerCapabilitiesType* out);
 };
 
 template <>
@@ -91,13 +114,12 @@ struct BLINK_COMMON_EXPORT
   }
 
   static const absl::optional<
-      base::flat_map<url::Origin,
-                     blink::InterestGroup::SellerCapabilitiesType>>&
+      base::flat_map<url::Origin, blink::SellerCapabilitiesType>>&
   seller_capabilities(const blink::InterestGroup& interest_group) {
     return interest_group.seller_capabilities;
   }
 
-  static blink::InterestGroup::SellerCapabilitiesType all_sellers_capabilities(
+  static blink::SellerCapabilitiesType all_sellers_capabilities(
       const blink::InterestGroup& interest_group) {
     return interest_group.all_sellers_capabilities;
   }
@@ -145,6 +167,18 @@ struct BLINK_COMMON_EXPORT
   static const absl::optional<std::vector<blink::InterestGroup::Ad>>&
   ad_components(const blink::InterestGroup& interest_group) {
     return interest_group.ad_components;
+  }
+
+  static const absl::optional<
+      base::flat_map<std::string, blink::InterestGroup::Size>>&
+  ad_sizes(const blink::InterestGroup& interest_group) {
+    return interest_group.ad_sizes;
+  }
+
+  static const absl::optional<
+      base::flat_map<std::string, std::vector<std::string>>>&
+  size_groups(const blink::InterestGroup& interest_group) {
+    return interest_group.size_groups;
   }
 
   static bool Read(blink::mojom::InterestGroupDataView data,

@@ -10,15 +10,16 @@
 #include <numeric>
 #include <utility>
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/token.h"
 #include "build/build_config.h"
@@ -131,6 +132,8 @@ void MediaStreamVideoSource::AddTrack(
       break;
     }
   }
+
+  UpdateCanDiscardAlpha();
 }
 
 void MediaStreamVideoSource::RemoveTrack(MediaStreamVideoTrack* video_track,
@@ -199,6 +202,8 @@ void MediaStreamVideoSource::RemoveTrack(MediaStreamVideoTrack* video_track,
   } else if (callback) {
     std::move(callback).Run();
   }
+
+  UpdateCanDiscardAlpha();
 }
 
 void MediaStreamVideoSource::DidStopSource(RestartResult result) {
@@ -579,6 +584,18 @@ scoped_refptr<VideoTrackAdapter> MediaStreamVideoSource::GetTrackAdapter() {
         video_task_runner(), GetWeakPtr());
   }
   return track_adapter_;
+}
+
+void MediaStreamVideoSource::UpdateCanDiscardAlpha() {
+  DCHECK(GetTaskRunner()->BelongsToCurrentThread());
+  bool using_alpha = false;
+  for (auto* track : tracks_) {
+    if (track->UsingAlpha()) {
+      using_alpha = true;
+      break;
+    }
+  }
+  OnSourceCanDiscardAlpha(!using_alpha);
 }
 
 }  // namespace blink

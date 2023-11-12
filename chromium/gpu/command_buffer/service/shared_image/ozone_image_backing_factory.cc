@@ -35,25 +35,6 @@
 namespace gpu {
 namespace {
 
-// Returns BufferFormat for given `format`.
-gfx::BufferFormat GetBufferFormat(viz::SharedImageFormat format) {
-  if (format.is_single_plane())
-    viz::BufferFormat(format.resource_format());
-
-  switch (format.plane_config()) {
-    case viz::SharedImageFormat::PlaneConfig::kY_V_U:
-      return gfx::BufferFormat::YVU_420;
-    case viz::SharedImageFormat::PlaneConfig::kY_UV:
-      return format.channel_format() ==
-                     viz::SharedImageFormat::ChannelFormat::k10
-                 ? gfx::BufferFormat::P010
-                 : gfx::BufferFormat::YUV_420_BIPLANAR;
-    case viz::SharedImageFormat::PlaneConfig::kY_UV_A:
-      return gfx::BufferFormat::YUVA_420_TRIPLANAR;
-  }
-  NOTREACHED();
-}
-
 gfx::BufferUsage GetBufferUsage(uint32_t usage) {
   if (usage & SHARED_IMAGE_USAGE_WEBGPU) {
     // Just use SCANOUT for WebGPU since the memory doesn't need to be linear.
@@ -65,13 +46,25 @@ gfx::BufferUsage GetBufferUsage(uint32_t usage) {
   }
 }
 
+constexpr uint32_t kSupportedUsage =
+    SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+    SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
+    SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
+    SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_WEBGPU |
+    SHARED_IMAGE_USAGE_CONCURRENT_READ_WRITE | SHARED_IMAGE_USAGE_VIDEO_DECODE |
+    SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
+    SHARED_IMAGE_USAGE_RASTER_DELEGATED_COMPOSITING |
+    SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU | SHARED_IMAGE_USAGE_CPU_UPLOAD |
+    SHARED_IMAGE_USAGE_CPU_WRITE;
+
 }  // namespace
 
 OzoneImageBackingFactory::OzoneImageBackingFactory(
     SharedContextState* shared_context_state,
     const GpuDriverBugWorkarounds& workarounds,
     const GpuPreferences& gpu_preferences)
-    : shared_context_state_(shared_context_state),
+    : SharedImageBackingFactory(kSupportedUsage),
+      shared_context_state_(shared_context_state),
       workarounds_(workarounds),
       use_passthrough_(gpu_preferences.use_passthrough_cmd_decoder &&
                        gles2::PassthroughCommandDecoderSupported()) {
@@ -159,8 +152,9 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
     SkImageInfo info = backing->AsSkImageInfo();
     SkPixmap pixmap(info, pixel_data.data(), info.minRowBytes());
 
-    if (!backing->UploadFromMemory(pixmap))
+    if (!backing->UploadFromMemory({pixmap})) {
       return nullptr;
+    }
   }
 
   return backing;
@@ -168,7 +162,6 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
 
 std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
-    int client_id,
     gfx::GpuMemoryBufferHandle handle,
     gfx::BufferFormat buffer_format,
     gfx::BufferPlane plane,
@@ -217,7 +210,7 @@ std::unique_ptr<SharedImageBacking> OzoneImageBackingFactory::CreateSharedImage(
       ui::OzonePlatform::GetInstance()->GetSurfaceFactoryOzone();
   scoped_refptr<gfx::NativePixmap> pixmap =
       surface_factory->CreateNativePixmapFromHandle(
-          kNullSurfaceHandle, size, GetBufferFormat(format),
+          kNullSurfaceHandle, size, ToBufferFormat(format),
           std::move(handle.native_pixmap_handle));
   if (!pixmap) {
     return nullptr;
@@ -240,10 +233,6 @@ bool OzoneImageBackingFactory::IsSupported(
     gfx::GpuMemoryBufferType gmb_type,
     GrContextType gr_context_type,
     base::span<const uint8_t> pixel_data) {
-  if (format.is_multi_plane() && gmb_type != gfx::NATIVE_PIXMAP) {
-    return false;
-  }
-
   if (gmb_type != gfx::EMPTY_BUFFER && gmb_type != gfx::NATIVE_PIXMAP) {
     return false;
   }

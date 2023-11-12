@@ -16,6 +16,7 @@
 #include "services/network/public/cpp/optional_trust_token_params.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/mojom/chunked_data_pipe_getter.mojom-blink.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom-blink.h"
 #include "services/network/public/mojom/data_pipe_getter.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
@@ -138,7 +139,7 @@ mojom::ResourceType RequestContextToResourceType(
     case mojom::blink::RequestContextType::XML_HTTP_REQUEST:
       return mojom::ResourceType::kXhr;
 
-    // Navigation requests should not go through WebURLLoader.
+    // Navigation requests should not go through URLLoader.
     case mojom::blink::RequestContextType::FORM:
     case mojom::blink::RequestContextType::HYPERLINK:
     case mojom::blink::RequestContextType::LOCATION:
@@ -313,6 +314,7 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
                          .GetLoadFlagsForWebUrlRequest();
   dest->recursive_prefetch_token = src.RecursivePrefetchToken();
   dest->priority = WebURLRequest::ConvertToNetPriority(src.Priority());
+  dest->priority_incremental = src.PriorityIncremental();
   dest->cors_preflight_policy = src.CorsPreflightPolicy();
   dest->skip_service_worker = src.GetSkipServiceWorker();
   dest->mode = src.GetMode();
@@ -398,6 +400,8 @@ void PopulateResourceRequest(const ResourceRequestHead& src,
     dest->do_not_prompt_for_login = true;
     dest->load_flags |= net::LOAD_DO_NOT_USE_EMBEDDED_IDENTITY;
   }
+
+  dest->has_storage_access = src.GetHasStorageAccess();
 }
 
 }  // namespace blink

@@ -86,17 +86,6 @@ enum class MediaRouterDialogActivationLocation {
   TOTAL_COUNT = 7
 };
 
-// The possible outcomes from a route creation response.
-enum class MediaRouterRouteCreationOutcome {
-  SUCCESS = 0,
-  FAILURE_NO_ROUTE = 1,
-  FAILURE_INVALID_SINK = 2,
-
-  // Note: Add entries only immediately above this line. Remember to also update
-  // tools/metrics/histograms/enums.xml.
-  TOTAL_COUNT = 3,
-};
-
 // The possible actions a user can take while interacting with the Media Router
 // dialog.
 enum class MediaRouterUserAction {
@@ -167,7 +156,6 @@ class MediaRouterMetrics {
   static const char kHistogramMediaRouterFileSize[];
   static const char kHistogramMediaSinkType[];
   static const char kHistogramPresentationUrlType[];
-  static const char kHistogramRouteCreationOutcome[];
   static const char kHistogramStartLocalLatency[];
   static const char kHistogramStartLocalPosition[];
   static const char kHistogramStartLocalSessionSuccessful[];
@@ -209,10 +197,6 @@ class MediaRouterMetrics {
   // opened.
   static void RecordMediaRouterInitialUserAction(MediaRouterUserAction action);
 
-  // Records the outcome in a create route response.
-  static void RecordRouteCreationOutcome(
-      MediaRouterRouteCreationOutcome outcome);
-
   // Records the format of a cast file.
   static void RecordMediaRouterFileFormat(
       media::container_names::MediaContainerName format);
@@ -232,20 +216,6 @@ class MediaRouterMetrics {
   // Records the number of devices shown in the Cast dialog. The device count
   // may be 0.
   static void RecordDeviceCount(int device_count);
-
-  // Records the number of sinks in |is_available| state, provided by |provider|
-  // that was opened via |activation_location|. Recorded for the global media
-  // controls and the Cast dialog, respectively.
-  static void RecordGmcDeviceCount(
-      MediaRouterDialogActivationLocation activation_location,
-      mojom::MediaRouteProviderId provider,
-      bool is_available,
-      int count);
-  static void RecordCastDialogDeviceCount(
-      MediaRouterDialogActivationLocation activation_location,
-      mojom::MediaRouteProviderId provider,
-      bool is_available,
-      int count);
 
   // Records the index of the device the user has started casting to on the
   // devices list. The index starts at 0.

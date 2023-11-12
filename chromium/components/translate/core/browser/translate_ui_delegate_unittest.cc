@@ -4,8 +4,8 @@
 
 #include "components/translate/core/browser/translate_ui_delegate.h"
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -261,6 +261,40 @@ TEST_F(TranslateUIDelegateTest, LanguageCodes) {
   EXPECT_EQ("ar", delegate_->GetSourceLanguageCode());
   delegate_->UpdateTargetLanguageIndex(fr_index);
   EXPECT_EQ("fr", delegate_->GetTargetLanguageCode());
+}
+
+TEST_F(TranslateUIDelegateTest, UpdateSourceLanguageTranslateEvent) {
+  // Test source language and corresponding TranslateEvent field.
+  EXPECT_EQ("ar", delegate_->GetSourceLanguageCode());
+  EXPECT_FALSE(
+      manager_->mutable_translate_event()->has_modified_source_language());
+
+  // Test that updating with current language does not update TranslateEvent.
+  delegate_->UpdateSourceLanguage("ar");
+  EXPECT_FALSE(
+      manager_->mutable_translate_event()->has_modified_source_language());
+
+  // Test that updating with different language does update TranslateEvent.
+  delegate_->UpdateSourceLanguage("es");
+  EXPECT_TRUE(
+      manager_->mutable_translate_event()->has_modified_source_language());
+}
+
+TEST_F(TranslateUIDelegateTest, UpdateTargetLanguageTranslateEvent) {
+  // Test target language and corresponding TranslateEvent field.
+  EXPECT_EQ("fr", delegate_->GetTargetLanguageCode());
+  EXPECT_FALSE(
+      manager_->mutable_translate_event()->has_modified_target_language());
+
+  // Test that updating with current language does not update TranslateEvent.
+  delegate_->UpdateTargetLanguage("fr");
+  EXPECT_FALSE(
+      manager_->mutable_translate_event()->has_modified_target_language());
+
+  // Test that updating with different language does update TranslateEvent.
+  delegate_->UpdateTargetLanguage("es");
+  EXPECT_TRUE(
+      manager_->mutable_translate_event()->has_modified_target_language());
 }
 
 TEST_F(TranslateUIDelegateTest, ContentLanguagesWhenPrefChangeObserverEnabled) {

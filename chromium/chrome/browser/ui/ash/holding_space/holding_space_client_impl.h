@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "ash/public/cpp/holding_space/holding_space_client.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 
 class Profile;
@@ -26,8 +26,8 @@ class HoldingSpaceClientImpl : public HoldingSpaceClient {
 
   // HoldingSpaceClient:
   void AddDiagnosticsLog(const base::FilePath& file_path) override;
-  void AddScreenRecording(const base::FilePath& file_path) override;
-  void AddScreenshot(const base::FilePath& file_path) override;
+  void AddScreenCapture(HoldingSpaceItem::Type type,
+                        const base::FilePath& file_path) override;
   void CopyImageToClipboard(const HoldingSpaceItem&, SuccessCallback) override;
   base::FilePath CrackFileSystemUrl(const GURL& file_system_url) const override;
   bool IsDriveDisabled() const override;

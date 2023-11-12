@@ -5,12 +5,12 @@
 #include <stddef.h>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path_watcher.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -64,10 +64,10 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/lacros/lacros_test_helper.h"
 #include "chromeos/startup/browser_init_params.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "content/public/test/test_launcher.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
@@ -991,7 +991,7 @@ IN_PROC_BROWSER_TEST_P(ChildProfileTransitionBrowserTest, PRE_Transition) {
   ASSERT_TRUE(profile);
   EXPECT_EQ(is_child_profile_expected, profile->IsChild());
   EXPECT_EQ(profile->GetPrefs()->GetString(prefs::kSupervisedUserId),
-            is_child_profile_expected ? supervised_users::kChildAccountSUID
+            is_child_profile_expected ? supervised_user::kChildAccountSUID
                                       : std::string());
 
   // Check stored profile attributes.
@@ -1008,7 +1008,7 @@ IN_PROC_BROWSER_TEST_P(ChildProfileTransitionBrowserTest, Transition) {
   ASSERT_TRUE(profile);
   EXPECT_EQ(is_child_profile_expected, profile->IsChild());
   EXPECT_EQ(profile->GetPrefs()->GetString(prefs::kSupervisedUserId),
-            is_child_profile_expected ? supervised_users::kChildAccountSUID
+            is_child_profile_expected ? supervised_user::kChildAccountSUID
                                       : std::string());
 
   // Check stored profile attributes.

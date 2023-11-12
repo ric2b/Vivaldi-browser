@@ -8,10 +8,10 @@
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/test/mock_callback.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_cast_feature.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -180,7 +180,7 @@ class CastMirroringServiceHostBrowserTest
     session_params->source_id = "SourceID";
     host_->Start(std::move(session_params), std::move(observer),
                  std::move(outbound_channel),
-                 inbound_channel_.BindNewPipeAndPassReceiver());
+                 inbound_channel_.BindNewPipeAndPassReceiver(), "Sink Name");
   }
 
   void EnableAccessCodeCast() {
@@ -201,26 +201,11 @@ class CastMirroringServiceHostBrowserTest
     int web_contents_source_tab_id =
         web_contents->GetPrimaryMainFrame()->GetFrameTreeNodeId();
 
-    base::MockCallback<CastMirroringServiceHost::GetTabSourceIdCallback>
-        before_update_callback;
-    base::MockCallback<CastMirroringServiceHost::GetTabSourceIdCallback>
-        after_update_callback;
-
-    EXPECT_CALL(before_update_callback, Run(_))
-        .WillOnce([&web_contents_source_tab_id](int32_t source_tab_id) {
-          ASSERT_NE(web_contents_source_tab_id, source_tab_id);
-        });
-
-    EXPECT_CALL(after_update_callback, Run(_))
-        .WillOnce([&web_contents_source_tab_id](int32_t source_tab_id) {
-          ASSERT_EQ(web_contents_source_tab_id, source_tab_id);
-        });
-
-    host_->GetTabSourceId(before_update_callback.Get());
+    ASSERT_NE(host_->GetTabSourceId(), web_contents_source_tab_id);
     ASSERT_NE(host_->web_contents(), web_contents);
     host_->SwitchMirroringSourceTab(BuildMediaIdForTabMirroring(web_contents));
     ASSERT_EQ(host_->web_contents(), web_contents);
-    host_->GetTabSourceId(after_update_callback.Get());
+    ASSERT_EQ(host_->GetTabSourceId(), web_contents_source_tab_id);
   }
 
   void GetVideoCaptureHost() {
@@ -389,8 +374,8 @@ class CastMirroringServiceHostBrowserTestTabSwitcher
                                       media::kOpenscreenCastStreamingSession},
                                      {});
     } else {
-      feature_list_.InitAndEnableFeature(
-          features::kAccessCodeCastTabSwitchingUI);
+      feature_list_.InitWithFeatures({features::kAccessCodeCastTabSwitchingUI},
+                                     {media::kOpenscreenCastStreamingSession});
     }
   }
 

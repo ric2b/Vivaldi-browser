@@ -6,7 +6,6 @@
 
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chrome_for_testing/buildflags.h"
 #include "chrome/common/chrome_version.h"
 
@@ -15,7 +14,7 @@
 #if BUILDFLAG(IS_MAC)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #define PRODUCT_STRING "Google Chrome"
-#elif BUILDFLAG(USE_INTERNAL_CHROME_FOR_TESTING_ICONS)
+#elif BUILDFLAG(GOOGLE_CHROME_FOR_TESTING_BRANDING)
 #define PRODUCT_STRING "Google Chrome for Testing"
 #elif BUILDFLAG(CHROMIUM_BRANDING) || defined(VIVALDI_BUILD)
 #define PRODUCT_STRING "Vivaldi"
@@ -154,8 +153,6 @@ const base::FilePath::CharType kSingletonCookieFilename[] =
 const base::FilePath::CharType kSingletonLockFilename[] = FPL("SingletonLock");
 const base::FilePath::CharType kSingletonSocketFilename[] =
     FPL("SingletonSocket");
-const base::FilePath::CharType kSupervisedUserSettingsFilename[] =
-    FPL("Managed Mode Settings");
 const base::FilePath::CharType kThemePackFilename[] = FPL("Cached Theme.pak");
 const base::FilePath::CharType kTransportSecurityPersisterFilename[] =
     FPL("TransportSecurity");
@@ -177,11 +174,6 @@ const wchar_t kUserDataDirname[] = L"User Data";
 #endif
 
 const float kMaxShareOfExtensionProcesses = 0.30f;
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-const char kLockScreenAppProfile[] = "LockScreenAppsProfile";
-const char kLockScreenProfile[] = "LockScreenProfile";
-#endif
 
 // This GUID is associated with any 'don't ask me again' settings that the
 // user can select for different file types.

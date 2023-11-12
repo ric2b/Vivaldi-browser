@@ -8,8 +8,8 @@
 #import <string>
 #import <utility>
 
-#import "base/bind.h"
-#import "base/callback_helpers.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback_helpers.h"
 #import "base/memory/ptr_util.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/values.h"
@@ -137,8 +137,7 @@ void FlagsDOMHandler::HandleRequestExperimentalFeatures(
   results.Set(flags_ui::kSupportedFeatures, std::move(supported_features));
   results.Set(flags_ui::kUnsupportedFeatures, std::move(unsupported_features));
 
-  // Cannot restart the browser on iOS.
-  results.Set(flags_ui::kNeedsRestart, false);
+  results.Set(flags_ui::kNeedsRestart, IsRestartNeededToCommitChanges());
   results.Set(flags_ui::kShowOwnerWarning,
               access_ == flags_ui::kGeneralAccessFlagsOnly);
 

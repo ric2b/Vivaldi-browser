@@ -16,6 +16,10 @@ constexpr base::TimeDelta kDefaultAudioTelemetryCollectionRate =
 // Default metric collection rate used for testing purposes.
 constexpr base::TimeDelta kDefaultCollectionRateForTesting = base::Minutes(2);
 
+// Default device activity heartbeat collection rate.
+constexpr base::TimeDelta kDefaultDeviceActivityHeartbeatCollectionRate =
+    base::Minutes(15);
+
 // Default event checking rate for testing purposes.
 constexpr base::TimeDelta kDefaultEventCheckingRateForTesting =
     base::Minutes(1);
@@ -37,6 +41,9 @@ constexpr base::TimeDelta kDefaultReportUploadFrequencyForTesting =
 
 // Initial metric reporting upload delay.
 constexpr base::TimeDelta kInitialUploadDelay = base::Minutes(3);
+
+// Default value for reporting device activity heartbeats.
+constexpr bool kDeviceActivityHeartbeatEnabledDefaultValue = false;
 
 // Default value for reporting device audio status.
 constexpr bool kReportDeviceAudioStatusDefaultValue = true;
@@ -69,6 +76,11 @@ namespace ash::reporting {
 class CrosHealthdInfoMetricsHelper;
 }  // namespace ash::reporting
 
+// Forward declaration for the friend class below.
+namespace reporting {
+class UsbBrowserTestHelper;
+}  // namespace reporting
+
 namespace reporting::metrics {
 // Metric reporting manager initialization delay. This is for rate limiting
 // in case a device frequently reboots.
@@ -83,6 +95,18 @@ class InitDelayParam {
   static void SetForTesting(const base::TimeDelta& delay);
 };
 
+// Peripheral collection delay to mitigate the race
+// condition where CrosHealthD may query fwupd before it has a chance to read
+// all of the USB devices that are plugged into the machine.
+class PeripheralCollectionDelayParam {
+ public:
+  static const base::TimeDelta Get();
+
+ private:
+  friend class ::reporting::UsbBrowserTestHelper;
+  static void SetForTesting(const base::TimeDelta& delay);
+  static base::TimeDelta collection_delay_;
+};
 }  // namespace reporting::metrics
 
 #endif  // CHROME_BROWSER_CHROMEOS_REPORTING_METRIC_DEFAULT_UTILS_H_

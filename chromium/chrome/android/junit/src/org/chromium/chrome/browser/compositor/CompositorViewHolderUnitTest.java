@@ -4,10 +4,11 @@
 
 package org.chromium.chrome.browser.compositor;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
@@ -19,10 +20,12 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.IBinder;
 import android.view.ContextThemeWrapper;
+import android.view.MotionEvent;
 import android.view.View;
 
 import androidx.test.core.app.ApplicationProvider;
 
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -44,22 +47,39 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.test.util.browser.Features;
+import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.browser_ui.widget.TouchEventObserver;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.mojom.VirtualKeyboardMode;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Unit tests for {@link CompositorViewHolder}.
  */
 @RunWith(BaseRobolectricTestRunner.class)
 public class CompositorViewHolderUnitTest {
-    @Rule
-    public TestRule mProcessor = new Features.JUnitProcessor();
-
     // Since these tests don't depend on the heights being pixels, we can use these as dpi directly.
     private static final int TOOLBAR_HEIGHT = 56;
+
+    private static final long TOUCH_TIME = 0;
+    private static final MotionEvent MOTION_EVENT_DOWN =
+            MotionEvent.obtain(TOUCH_TIME, TOUCH_TIME, MotionEvent.ACTION_DOWN, 1, 1, 0);
+    private static final MotionEvent MOTION_EVENT_UP =
+            MotionEvent.obtain(TOUCH_TIME, TOUCH_TIME, MotionEvent.ACTION_UP, 1, 1, 0);
+
+    enum EventSource {
+        IN_MOTION,
+        TOUCH_EVENT_OBSERVER;
+    }
+
+    @Rule
+    public TestRule mProcessor = new Features.JUnitProcessor();
 
     @Mock
     private Activity mActivity;
@@ -114,6 +134,7 @@ public class CompositorViewHolderUnitTest {
 
         mContext = new ContextThemeWrapper(
                 ApplicationProvider.getApplicationContext(), R.style.Theme_BrowserUI_DayNight);
+
         mCompositorViewHolder = spy(new CompositorViewHolder(mContext));
         mCompositorViewHolder.setCompositorViewForTesting(mCompositorView);
         mCompositorViewHolder.setBrowserControlsManager(mBrowserControlsManager);
@@ -123,6 +144,25 @@ public class CompositorViewHolderUnitTest {
 
         IBinder windowToken = mock(IBinder.class);
         when(mContainerView.getWindowToken()).thenReturn(windowToken);
+    }
+
+    private List<EventSource> observeTouchAndMotionEvents() {
+        List<EventSource> eventSequence = new ArrayList<>();
+        mCompositorViewHolder.getInMotionSupplier().addObserver(
+                (inMotion) -> eventSequence.add(EventSource.IN_MOTION));
+        // This touch observer is used as a proxy for when ViewGroup#dispatchTouchEvent is called,
+        // which is when the touch is propagated to children.
+        mCompositorViewHolder.addTouchEventObserver(new TouchEventObserver() {
+            @Override
+            public boolean shouldInterceptTouchEvent(MotionEvent e) {
+                return false;
+            }
+            @Override
+            public void handleTouchEvent(MotionEvent e) {
+                eventSequence.add(EventSource.TOUCH_EVENT_OBSERVER);
+            }
+        });
+        return eventSequence;
     }
 
     // controlsResizeView tests ---
@@ -386,5 +426,49 @@ public class CompositorViewHolderUnitTest {
                 mWebContents, mContainerView, totalAdjustedWidth, totalAdjustedHeight);
         verify(mCompositorViewHolder, times(0))
                 .notifyVirtualKeyboardOverlayRect(mWebContents, 0, 0, 0, 0);
+    }
+
+    @Test
+    public void testInMotionSupplier() {
+        mCompositorViewHolder.dispatchTouchEvent(MOTION_EVENT_DOWN);
+        mCompositorViewHolder.onInterceptTouchEvent(MOTION_EVENT_DOWN);
+        Assert.assertTrue(mCompositorViewHolder.getInMotionSupplier().get());
+
+        mCompositorViewHolder.dispatchTouchEvent(MOTION_EVENT_UP);
+        mCompositorViewHolder.onInterceptTouchEvent(MOTION_EVENT_UP);
+        Assert.assertFalse(mCompositorViewHolder.getInMotionSupplier().get());
+
+        mCompositorViewHolder.dispatchTouchEvent(MOTION_EVENT_DOWN);
+        mCompositorViewHolder.onInterceptTouchEvent(MOTION_EVENT_DOWN);
+        Assert.assertTrue(mCompositorViewHolder.getInMotionSupplier().get());
+
+        // Simulate a child handling a scroll, where they call requestDisallowInterceptTouchEvent
+        // and then we no longer get onInterceptTouchEvent. The dispatchTouchEvent alone should
+        // still cause our motion status to correctly update.
+        mCompositorViewHolder.requestDisallowInterceptTouchEvent(true);
+        mCompositorViewHolder.dispatchTouchEvent(MOTION_EVENT_UP);
+        Assert.assertFalse(mCompositorViewHolder.getInMotionSupplier().get());
+    }
+
+    @Test
+    @DisableFeatures(ChromeFeatureList.DEFER_NOTIFY_IN_MOTION)
+    public void testInMotionOrdering_NoDefer() {
+        // With the 'defer in motion' experiment disabled, touch events are routed to android UI
+        // before being sent to native/web content.
+        List<EventSource> eventSequence = observeTouchAndMotionEvents();
+        mCompositorViewHolder.dispatchTouchEvent(MOTION_EVENT_DOWN);
+        assertEquals(Arrays.asList(EventSource.IN_MOTION, EventSource.TOUCH_EVENT_OBSERVER),
+                eventSequence);
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.DEFER_NOTIFY_IN_MOTION)
+    public void testInMotionOrdering_WithDefer() {
+        // With the 'defer in motion' experiment enabled, touch events are routed to android UI
+        // after being sent to native/web content.
+        List<EventSource> eventSequence = observeTouchAndMotionEvents();
+        mCompositorViewHolder.dispatchTouchEvent(MOTION_EVENT_DOWN);
+        assertEquals(Arrays.asList(EventSource.TOUCH_EVENT_OBSERVER, EventSource.IN_MOTION),
+                eventSequence);
     }
 }

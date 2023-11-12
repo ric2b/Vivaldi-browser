@@ -7,14 +7,13 @@
 #include <algorithm>
 #include <memory>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/branding_buildflags.h"
-#include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/net/system_network_context_manager.h"
@@ -52,6 +51,40 @@ constexpr int kMaxOfflineResultsBeforeReport = 3;
 const NetworkState* DefaultNetwork() {
   return NetworkHandler::Get()->network_state_handler()->DefaultNetwork();
 }
+
+  // traffic annotation tag.
+constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+  net::DefineNetworkTrafficAnnotation("network_portal_detector", R"(
+    semantics {
+      sender: "Network Portal Detector"
+      description:
+        "Checks if the system is behind a captive portal. To do so, makes "
+        "an unlogged, dataless connection to a Google server and checks "
+        "the response."
+      trigger:
+        "Portal detection by the OS is initiated when a new WiFi service "
+        "is connected to in order to determine whether the network has "
+        "internet access or is behind a captive portal."
+      data: "None."
+      destination: GOOGLE_OWNED_SERVICE
+      internal {
+        contacts {
+          email: "cros-network-health-team@google.com"
+        }
+      }
+      user_data {
+        type: NONE
+      }
+      last_reviewed: "2023-01-13"
+    }
+    policy {
+      cookies_allowed: NO
+      setting:
+        "This feature cannot be disabled by settings."
+      policy_exception_justification:
+        "This feature is required to deliver core user experiences and "
+        "cannot be disabled by policy."
+    })");
 
 void SetNetworkPortalState(const NetworkState* network,
                            NetworkState::PortalState portal_state) {
@@ -109,18 +142,13 @@ void NetworkPortalDetectorImpl::Enable() {
   if (enabled_)
     return;
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  if (!StartupUtils::IsEulaAccepted()) {
-    NET_LOG(EVENT) << "NetworkPortalDetector: Eula not accepted.";
-    return;
-  }
-#endif
-
   NET_LOG(EVENT) << "NetworkPortalDetector Enabled.";
   DCHECK(is_idle());
   enabled_ = true;
 
   // Ensure that Shill portal detection is enabled.
+  // TODO(b/265806000): Remove calls to SetCheckPortalList entirely once
+  // shill/init/shill.sh is updated.
   NetworkHandler::Get()->network_state_handler()->SetCheckPortalList(
       NetworkStateHandler::kDefaultCheckPortalList);
 
@@ -261,7 +289,7 @@ void NetworkPortalDetectorImpl::StartAttempt() {
       url,
       base::BindOnce(&NetworkPortalDetectorImpl::OnAttemptCompleted,
                      weak_factory_.GetWeakPtr()),
-      NO_TRAFFIC_ANNOTATION_YET);
+      kTrafficAnnotation);
   attempt_timeout_task_.Reset(
       base::BindOnce(&NetworkPortalDetectorImpl::OnAttemptTimeout,
                      weak_factory_.GetWeakPtr()));

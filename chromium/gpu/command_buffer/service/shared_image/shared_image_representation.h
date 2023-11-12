@@ -9,7 +9,7 @@
 #include <dawn/webgpu.h>
 #include <memory>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/types/pass_key.h"
@@ -25,15 +25,10 @@
 #include "ui/gfx/gpu_fence.h"
 
 #if BUILDFLAG(IS_WIN)
-#include <wrl/client.h>
-#include "ui/gl/dcomp_surface_proxy.h"
-
-class IDCompositionSurface;
-class IDXGISwapChain1;
-class IUnknown;
+#include "ui/gl/dc_layer_overlay_image.h"
 #endif
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 #include "ui/gfx/mac/io_surface.h"
 #endif
 
@@ -54,11 +49,7 @@ class SkPromiseImageTexture;
 
 namespace cc {
 class PaintOpBuffer;
-}
-
-namespace gl {
-class GLImage;
-}
+}  // namespace cc
 
 namespace gfx {
 class NativePixmap;
@@ -117,6 +108,9 @@ class GPU_GLES2_EXPORT SharedImageRepresentation {
     has_context_ = false;
     backing_->OnContextLost();
   }
+
+  // Returns the number of image planes expected based on the backing format.
+  size_t NumPlanesExpected() const;
 
  protected:
   SharedImageManager* manager() const { return manager_; }
@@ -223,10 +217,8 @@ class GPU_GLES2_EXPORT GLTextureImageRepresentationBase
   virtual void UpdateClearedStateOnBeginAccess() {}
   virtual void UpdateClearedStateOnEndAccess() {}
 
-  // TODO(ericrk): Make these pure virtual and ensure real implementations
-  // exist.
-  virtual bool BeginAccess(GLenum mode);
-  virtual void EndAccess() {}
+  virtual bool BeginAccess(GLenum mode) = 0;
+  virtual void EndAccess() = 0;
 
   virtual bool SupportsMultipleConcurrentReadAccess();
 };
@@ -239,7 +231,6 @@ class GPU_GLES2_EXPORT GLTextureImageRepresentation
                                MemoryTypeTracker* tracker)
       : GLTextureImageRepresentationBase(manager, backing, tracker) {}
 
-  // TODO(ericrk): Move this to the ScopedAccess object. crbug.com/1003686
   // Gets the texture associated with the `plane_index` for SharedImageFormat.
   virtual gles2::Texture* GetTexture(int plane_index) = 0;
   // Calls GetTexture with `plane_index` = 0 for single planar formats eg. RGB.
@@ -262,7 +253,6 @@ class GPU_GLES2_EXPORT GLTexturePassthroughImageRepresentation
                                           MemoryTypeTracker* tracker)
       : GLTextureImageRepresentationBase(manager, backing, tracker) {}
 
-  // TODO(ericrk): Move this to the ScopedAccess object. crbug.com/1003686
   // Gets the passthrough texture associated with the `plane_index` for
   // SharedImageFormat.
   virtual const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough(
@@ -272,6 +262,10 @@ class GPU_GLES2_EXPORT GLTexturePassthroughImageRepresentation
   const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough();
 
   gpu::TextureBase* GetTextureBase(int plane_index) override;
+
+  // Returns true if access must be suspended in between GL decoder tasks due to
+  // DXGI keyed mutex. Only implemented for D3D GL representation.
+  virtual bool NeedsSuspendAccessForDXGIKeyedMutex() const;
 
  private:
   friend class WrappedGLTexturePassthroughCompoundImageRepresentation;
@@ -339,10 +333,17 @@ class GPU_GLES2_EXPORT SkiaImageRepresentation
     SkPromiseImageTexture* promise_image_texture(int plane_index) const {
       return promise_image_textures_[plane_index].get();
     }
+    // Creates an SkImage from GrBackendTexture for single planar formats or if
+    // format prefers external sampler. Creates an SkImage from
+    // GrYUVABackendTexture for multiplanar formats.
     sk_sp<SkImage> CreateSkImage(
         GrDirectContext* context,
         SkImage::TextureReleaseProc texture_release_proc = nullptr,
         SkImage::ReleaseContext release_context = nullptr) const;
+    // Creates an SkImage for the given `plane_index` from GrBackendTexture for
+    // multiplanar formats.
+    sk_sp<SkImage> CreateSkImageForPlane(int plane_index,
+                                         GrDirectContext* context) const;
     [[nodiscard]] std::unique_ptr<GrBackendSurfaceMutableState> TakeEndState();
 
    private:
@@ -492,32 +493,6 @@ class GPU_GLES2_EXPORT OverlayImageRepresentation
                              MemoryTypeTracker* tracker)
       : SharedImageRepresentation(manager, backing, tracker) {}
 
-#if BUILDFLAG(IS_WIN)
-  // Holds DComp content needed to update the DComp layer tree
-  class GPU_GLES2_EXPORT DCompLayerContent {
-   public:
-    explicit DCompLayerContent(
-        Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain);
-    DCompLayerContent(
-        Microsoft::WRL::ComPtr<IDCompositionSurface> dcomp_surface,
-        uint64_t surface_serial);
-    DCompLayerContent(const DCompLayerContent&);
-    DCompLayerContent& operator=(const DCompLayerContent&);
-    ~DCompLayerContent();
-
-    IUnknown* content() const { return content_.Get(); }
-    uint64_t surface_serial() const { return surface_serial_; }
-
-   private:
-    // Either an IDCompositionSurface or an IDXGISwapChain1
-    Microsoft::WRL::ComPtr<IUnknown> content_;
-    // This is a number that increments once for every EndDraw on a surface, and
-    // is used to determine when the contents have changed so Commit() needs to
-    // be called on the device.
-    uint64_t surface_serial_ = 0;
-  };
-#endif
-
   class GPU_GLES2_EXPORT ScopedReadAccess
       : public ScopedAccessBase<OverlayImageRepresentation> {
    public:
@@ -542,15 +517,10 @@ class GPU_GLES2_EXPORT OverlayImageRepresentation
       return representation()->GetNativePixmap();
     }
 #elif BUILDFLAG(IS_WIN)
-    gl::GLImage* gl_image() { return representation()->GetGLImage(); }
-
-    scoped_refptr<gl::DCOMPSurfaceProxy> GetDCOMPSurfaceProxy() {
-      return representation()->GetDCOMPSurfaceProxy();
+    absl::optional<gl::DCLayerOverlayImage> GetDCLayerOverlayImage() {
+      return representation()->GetDCLayerOverlayImage();
     }
-    DCompLayerContent GetDCompLayerContent() const {
-      return representation()->GetDCompLayerContent();
-    }
-#elif BUILDFLAG(IS_MAC)
+#elif BUILDFLAG(IS_APPLE)
     gfx::ScopedIOSurface GetIOSurface() const {
       return representation()->GetIOSurface();
     }
@@ -598,10 +568,8 @@ class GPU_GLES2_EXPORT OverlayImageRepresentation
 #elif BUILDFLAG(IS_OZONE)
   scoped_refptr<gfx::NativePixmap> GetNativePixmap();
 #elif BUILDFLAG(IS_WIN)
-  virtual scoped_refptr<gl::DCOMPSurfaceProxy> GetDCOMPSurfaceProxy();
-  virtual gl::GLImage* GetGLImage() = 0;
-  virtual DCompLayerContent GetDCompLayerContent() const;
-#elif BUILDFLAG(IS_MAC)
+  virtual absl::optional<gl::DCLayerOverlayImage> GetDCLayerOverlayImage();
+#elif BUILDFLAG(IS_APPLE)
   virtual gfx::ScopedIOSurface GetIOSurface() const;
   // Return true if the macOS WindowServer is currently using the underlying
   // storage for the image.

@@ -58,6 +58,8 @@ std::string GetDecoderName(VideoDecoderType type) {
       return "PassThroughVideoDecoder";
     case VideoDecoderType::kTesting:
       return "Testing or Mock Video decoder";
+    case VideoDecoderType::kOutOfProcess:
+      return "OOPVideoDecoder";
   }
 }
 

@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "media/base/media_switches.h"
@@ -69,6 +70,8 @@ CreatePlatformSpecificVideoCaptureDeviceFactory(
   return std::make_unique<VideoCaptureDeviceFactoryAndroid>();
 #elif BUILDFLAG(IS_FUCHSIA)
   return std::make_unique<VideoCaptureDeviceFactoryFuchsia>();
+#elif BUILDFLAG(IS_IOS)
+  return CreateFakeVideoCaptureDeviceFactory();
 #else
   NOTIMPLEMENTED();
   return nullptr;

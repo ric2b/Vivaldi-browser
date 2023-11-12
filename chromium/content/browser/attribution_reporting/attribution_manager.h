@@ -8,10 +8,12 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "components/attribution_reporting/os_support.mojom-forward.h"
 #include "components/attribution_reporting/source_registration_error.mojom-forward.h"
+#include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
+#include "content/public/browser/attribution_data_model.h"
 #include "content/public/browser/storage_partition.h"
 
 namespace attribution_reporting {
@@ -27,20 +29,25 @@ namespace content {
 class AttributionDataHostManager;
 class AttributionObserver;
 class AttributionTrigger;
+class BrowserContext;
 class BrowsingDataFilterBuilder;
 class StorableSource;
 class StoredSource;
 class WebContents;
 
+struct GlobalRenderFrameHostId;
+
 // Interface that mediates data flow between the network, storage layer, and
 // blink.
-class AttributionManager {
+class AttributionManager : public AttributionDataModel {
  public:
   static AttributionManager* FromWebContents(WebContents* web_contents);
 
+  static AttributionManager* FromBrowserContext(BrowserContext*);
+
   static attribution_reporting::mojom::OsSupport GetOsSupport();
 
-  virtual ~AttributionManager() = default;
+  ~AttributionManager() override = default;
 
   virtual void AddObserver(AttributionObserver* observer) = 0;
 
@@ -51,11 +58,13 @@ class AttributionManager {
 
   // Persists the given |source| to storage. Called when a navigation
   // originating from a source tag finishes.
-  virtual void HandleSource(StorableSource source) = 0;
+  virtual void HandleSource(StorableSource source,
+                            GlobalRenderFrameHostId render_frame_id) = 0;
 
   // Process a newly registered trigger. Will create and log any new
   // reports to storage.
-  virtual void HandleTrigger(AttributionTrigger trigger) = 0;
+  virtual void HandleTrigger(AttributionTrigger trigger,
+                             GlobalRenderFrameHostId render_frame_id) = 0;
 
   // Get all sources that are currently stored in this partition. Used for
   // populating WebUI.
@@ -79,7 +88,9 @@ class AttributionManager {
   // Called by `AttributionDataHostManagerImpl`.
   virtual void NotifyFailedSourceRegistration(
       const std::string& header_value,
+      const attribution_reporting::SuitableOrigin& source_origin,
       const attribution_reporting::SuitableOrigin& reporting_origin,
+      attribution_reporting::mojom::SourceType,
       attribution_reporting::mojom::SourceRegistrationError) = 0;
 
   // Deletes all data in storage for storage keys matching `filter`, between

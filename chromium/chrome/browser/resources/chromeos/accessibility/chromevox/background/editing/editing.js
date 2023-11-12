@@ -15,13 +15,15 @@ import {LocalStorage} from '../../../common/local_storage.js';
 import {NavBraille} from '../../common/braille/nav_braille.js';
 import {ChromeVoxEvent} from '../../common/custom_automation_event.js';
 import {Msgs} from '../../common/msgs.js';
+import {SettingsManager} from '../../common/settings_manager.js';
 import {MultiSpannable, Spannable} from '../../common/spannable.js';
 import {Personality, QueueMode} from '../../common/tts_types.js';
-import {BrailleBackground} from '../braille/braille_background.js';
+import {BrailleTranslatorManager} from '../braille/braille_translator_manager.js';
 import {LibLouis} from '../braille/liblouis.js';
 import {BrailleTextStyleSpan, ValueSelectionSpan, ValueSpan} from '../braille/spans.js';
 import {ChromeVox} from '../chromevox.js';
-import {ChromeVoxState, ChromeVoxStateObserver} from '../chromevox_state.js';
+import {ChromeVoxRange, ChromeVoxRangeObserver} from '../chromevox_range.js';
+import {ChromeVoxState} from '../chromevox_state.js';
 import {Color} from '../color.js';
 import {Output} from '../output/output.js';
 import {OutputCustomEvent, OutputNodeSpan} from '../output/output_types.js';
@@ -64,7 +66,7 @@ export class TextEditHandler {
     /** @private {!Array<AutomationIntent>} */
     this.inferredIntents_ = [];
 
-    chrome.automation.getDesktop(function(desktop) {
+    chrome.automation.getDesktop(desktop => {
       const isTextArea = node.htmlTag === 'textarea';
 
       // ChromeVox handles two general groups of text fields:
@@ -104,7 +106,7 @@ export class TextEditHandler {
 
       this.editableText_ = useRichText ? new AutomationRichEditableText(node) :
                                          new AutomationEditableText(node);
-    }.bind(this));
+    });
   }
 
   /** @return {!AutomationNode} */
@@ -419,9 +421,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       return true;
     }
     const exited = AutomationUtil.getUniqueAncestors(next, deep);
-    return Boolean(exited.find(function(item) {
-      return item === this.node_;
-    }.bind(this)));
+    return exited.includes(this.node_);
   }
 
   /** @override */
@@ -437,9 +437,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
       return true;
     }
     const exited = AutomationUtil.getUniqueAncestors(next, deep);
-    return Boolean(exited.find(function(item) {
-      return item === this.node_;
-    }.bind(this)));
+    return exited.includes(this.node_);
   }
 
   /** @override */
@@ -989,7 +987,7 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 
     this.speakTextMarker_(container, cur.localStartOffset, cur.localEndOffset);
 
-    if (LocalStorage.get('announceRichTextAttributes')) {
+    if (SettingsManager.get('announceRichTextAttributes')) {
       this.speakTextStyle_(container);
     }
   }
@@ -999,11 +997,11 @@ const AutomationRichEditableText = class extends AutomationEditableText {
 /**
  * An observer that reacts to ChromeVox range changes that modifies braille
  * table output when over email or url text fields.
- * @implements {ChromeVoxStateObserver}
+ * @implements {ChromeVoxRangeObserver}
  */
-class EditingChromeVoxStateObserver {
+class EditingRangeObserver {
   constructor() {
-    ChromeVoxState.addObserver(this);
+    ChromeVoxRange.addObserver(this);
   }
 
   /**
@@ -1014,17 +1012,15 @@ class EditingChromeVoxStateObserver {
   onCurrentRangeChanged(range, opt_fromEditing) {
     const inputType = range && range.start.node.inputType;
     if (inputType === 'email' || inputType === 'url') {
-      BrailleBackground.instance.getTranslatorManager().refresh(
-          LocalStorage.get('brailleTable8'));
+      BrailleTranslatorManager.instance.refresh(
+          SettingsManager.getString('brailleTable8'));
       return;
     }
-    BrailleBackground.instance.getTranslatorManager().refresh(
-        LocalStorage.get('brailleTable'));
+    BrailleTranslatorManager.instance.refresh(
+        SettingsManager.getString('brailleTable'));
   }
 }
 
 
-/**
- * @private {ChromeVoxStateObserver}
- */
-EditingChromeVoxStateObserver.instance_ = new EditingChromeVoxStateObserver();
+/** @type {ChromeVoxRangeObserver} */
+EditingRangeObserver.instance = new EditingRangeObserver();

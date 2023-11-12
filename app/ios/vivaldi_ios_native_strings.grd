@@ -14,11 +14,13 @@ locale.  The strings in this file are specific to iOS.
     <output filename="vivaldi_ios_native_strings_af.pak" type="data_package" lang="af" />
     <output filename="vivaldi_ios_native_strings_am.pak" type="data_package" lang="am" />
     <output filename="vivaldi_ios_native_strings_ar.pak" type="data_package" lang="ar" />
+    <output filename="vivaldi_ios_native_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
     <output filename="vivaldi_ios_native_strings_az.pak" type="data_package" lang="az" />
     <output filename="vivaldi_ios_native_strings_be.pak" type="data_package" lang="be" />
     <output filename="vivaldi_ios_native_strings_bg.pak" type="data_package" lang="bg" />
     <output filename="vivaldi_ios_native_strings_bn.pak" type="data_package" lang="bn" />
     <output filename="vivaldi_ios_native_strings_ca.pak" type="data_package" lang="ca" />
+    <output filename="vivaldi_ios_native_strings_ca-valencia.pak" type="data_package" lang="ca@valencia" />
     <output filename="vivaldi_ios_native_strings_cs.pak" type="data_package" lang="cs" />
     <output filename="vivaldi_ios_native_strings_da.pak" type="data_package" lang="da" />
     <output filename="vivaldi_ios_native_strings_de.pak" type="data_package" lang="de" />
@@ -26,6 +28,7 @@ locale.  The strings in this file are specific to iOS.
     <output filename="vivaldi_ios_native_strings_el.pak" type="data_package" lang="el" />
     <output filename="vivaldi_ios_native_strings_en-GB.pak" type="data_package" lang="en-GB" />
     <output filename="vivaldi_ios_native_strings_en-US.pak" type="data_package" lang="en-GB" />
+    <output filename="vivaldi_ios_native_strings_en-XA.pak" type="data_package" lang="en-XA" />
     <output filename="vivaldi_ios_native_strings_eo.pak" type="data_package" lang="eo" />
     <output filename="vivaldi_ios_native_strings_es.pak" type="data_package" lang="es" />
     <output filename="vivaldi_ios_native_strings_es-MX.pak" type="data_package" lang="es-419" />
@@ -89,8 +92,6 @@ locale.  The strings in this file are specific to iOS.
     <output filename="vivaldi_ios_native_strings_vi.pak" type="data_package" lang="vi" />
     <output filename="vivaldi_ios_native_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
     <output filename="vivaldi_ios_native_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
-    <output filename="vivaldi_ios_native_strings_en-XA.pak" type="data_package" lang="en-XA" />
-    <output filename="vivaldi_ios_native_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
   </outputs>
   <translations>
     <file path="strings/vivaldi_ios_native_strings_af.xtb" lang="af" />
@@ -103,13 +104,17 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_native_strings_bn.xtb" lang="bn" />
     <file path="strings/vivaldi_ios_native_strings_bs.xtb" lang="bs" />
     <file path="strings/vivaldi_ios_native_strings_ca.xtb" lang="ca" />
+    <file path="strings/vivaldi_ios_native_strings_ca-valencia.xtb" lang="ca@valencia" />
     <file path="strings/vivaldi_ios_native_strings_cs.xtb" lang="cs" />
     <file path="strings/vivaldi_ios_native_strings_da.xtb" lang="da" />
     <file path="strings/vivaldi_ios_native_strings_de.xtb" lang="de" />
+    <file path="strings/vivaldi_ios_native_strings_de-CH.xtb" lang="de-CH" />
     <file path="strings/vivaldi_ios_native_strings_el.xtb" lang="el" />
     <file path="strings/vivaldi_ios_native_strings_en-GB.xtb" lang="en-GB" />
+    <file path="strings/vivaldi_ios_native_strings_eo.xtb" lang="eo" />
     <file path="strings/vivaldi_ios_native_strings_es.xtb" lang="es" />
     <file path="strings/vivaldi_ios_native_strings_es-419.xtb" lang="es-419" />
+    <file path="strings/vivaldi_ios_native_strings_es-PE.xtb" lang="es-PE" />
     <file path="strings/vivaldi_ios_native_strings_et.xtb" lang="et" />
     <file path="strings/vivaldi_ios_native_strings_eu.xtb" lang="eu" />
     <file path="strings/vivaldi_ios_native_strings_fa.xtb" lang="fa" />
@@ -117,6 +122,8 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_native_strings_fil.xtb" lang="fil" />
     <file path="strings/vivaldi_ios_native_strings_fr.xtb" lang="fr" />
     <file path="strings/vivaldi_ios_native_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_ios_native_strings_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_ios_native_strings_gd.xtb" lang="gd" />
     <file path="strings/vivaldi_ios_native_strings_gl.xtb" lang="gl" />
     <file path="strings/vivaldi_ios_native_strings_gu.xtb" lang="gu" />
     <file path="strings/vivaldi_ios_native_strings_he.xtb" lang="he" />
@@ -125,14 +132,19 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_native_strings_hu.xtb" lang="hu" />
     <file path="strings/vivaldi_ios_native_strings_hy.xtb" lang="hy" />
     <file path="strings/vivaldi_ios_native_strings_id.xtb" lang="id" />
+    <file path="strings/vivaldi_ios_native_strings_io.xtb" lang="io" />
     <file path="strings/vivaldi_ios_native_strings_is.xtb" lang="is" />
     <file path="strings/vivaldi_ios_native_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_ios_native_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_ios_native_strings_ja-KS.xtb" lang="ja-KS" />
+    <file path="strings/vivaldi_ios_native_strings_jbo.xtb" lang="jbo" />
     <file path="strings/vivaldi_ios_native_strings_ka.xtb" lang="ka" />
+    <file path="strings/vivaldi_ios_native_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_ios_native_strings_kk.xtb" lang="kk" />
     <file path="strings/vivaldi_ios_native_strings_km.xtb" lang="km" />
     <file path="strings/vivaldi_ios_native_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_ios_native_strings_ko.xtb" lang="ko" />
+    <file path="strings/vivaldi_ios_native_strings_ku.xtb" lang="ku" />
     <file path="strings/vivaldi_ios_native_strings_ky.xtb" lang="ky" />
     <file path="strings/vivaldi_ios_native_strings_lo.xtb" lang="lo" />
     <file path="strings/vivaldi_ios_native_strings_lt.xtb" lang="lt" />
@@ -146,6 +158,7 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_native_strings_nb.xtb" lang="no" />
     <file path="strings/vivaldi_ios_native_strings_ne.xtb" lang="ne" />
     <file path="strings/vivaldi_ios_native_strings_nl.xtb" lang="nl" />
+    <file path="strings/vivaldi_ios_native_strings_nn.xtb" lang="nn" />
     <file path="strings/vivaldi_ios_native_strings_or.xtb" lang="or" />
     <file path="strings/vivaldi_ios_native_strings_pa.xtb" lang="pa" />
     <file path="strings/vivaldi_ios_native_strings_pl.xtb" lang="pl" />
@@ -153,6 +166,7 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_native_strings_pt-PT.xtb" lang="pt-PT" />
     <file path="strings/vivaldi_ios_native_strings_ro.xtb" lang="ro" />
     <file path="strings/vivaldi_ios_native_strings_ru.xtb" lang="ru" />
+    <file path="strings/vivaldi_ios_native_strings_sc.xtb" lang="sc" />
     <file path="strings/vivaldi_ios_native_strings_si.xtb" lang="si" />
     <file path="strings/vivaldi_ios_native_strings_sk.xtb" lang="sk" />
     <file path="strings/vivaldi_ios_native_strings_sl.xtb" lang="sl" />
@@ -173,18 +187,6 @@ locale.  The strings in this file are specific to iOS.
     <file path="strings/vivaldi_ios_native_strings_zh-HK.xtb" lang="zh-HK" />
     <file path="strings/vivaldi_ios_native_strings_zh-TW.xtb" lang="zh-TW" />
     <file path="strings/vivaldi_ios_native_strings_zu.xtb" lang="zu" />
-    <file path="strings/vivaldi_ios_native_strings_de-CH.xtb" lang="de-CH" />
-    <file path="strings/vivaldi_ios_native_strings_eo.xtb" lang="eo" />
-    <file path="strings/vivaldi_ios_native_strings_es-PE.xtb" lang="es-PE" />
-    <file path="strings/vivaldi_ios_native_strings_fy.xtb" lang="fy" />
-    <file path="strings/vivaldi_ios_native_strings_gd.xtb" lang="gd" />
-    <file path="strings/vivaldi_ios_native_strings_io.xtb" lang="io" />
-    <file path="strings/vivaldi_ios_native_strings_ja-KS.xtb" lang="ja-KS" />
-    <file path="strings/vivaldi_ios_native_strings_jbo.xtb" lang="jbo" />
-    <file path="strings/vivaldi_ios_native_strings_kab.xtb" lang="kab" />
-    <file path="strings/vivaldi_ios_native_strings_ku.xtb" lang="ku" />
-    <file path="strings/vivaldi_ios_native_strings_sc.xtb" lang="sc" />
-    <file path="strings/vivaldi_ios_native_strings_nn.xtb" lang="nn" />
   </translations>
   <release seq="1">
     <messages fallback_to_english="true">
@@ -207,7 +209,216 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_TAB_SWITCHER_RECENTLY_CLOSED_TABS_UNAVAILABLE_TITLE" desc="Title shown above a message in the Recently Closed Tabs page of the tab grid when the IncognitoModeAvailability enterprise policy is set to forced.">
         Recently Closed Tabs are Unavailable
       </message>
+      <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_MESSAGE" desc="Message shown in the Incognito Tabs page when the grid is empty, explaining that the user can open a new tab.">
+        Tap the plus icon below to create a new private tab.
+      </message>
+      <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_EMPTY_TITLE" desc="Title shown above a message on the Incognito tab switcher when there are no Incognito tabs. [iOS only]">
+        Private Tabs
+      </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_TITLE" desc="Title shown above a message on the synced tab switcher when there are no items. [iOS only]">
+        Synced Tabs
+      </message>
+      <message name="IDS_VIVALDI_TAB_SWITCHER_SYNC_TABS_EMPTY_MESSAGE" desc="Message shown underneath a title on the synced tab switcher when there are no item.">
+        Synchronized tabs from other devices will appear here. Sign in to Sync to use this service.
+      </message>
+      <message name="IDS_VIVALDI_TAB_GRID_REGULAR_TABS_TITLE" desc="The accessibility label of the Regular Tabs page (as opposed to the Private Tabs page) in the tab grid UI">
+        Tabs
+      </message>
+      <message name="IDS_VIVALDI_TAB_GRID_INCOGNITO_TABS_TITLE" desc="The accessibility label of the Incognito Tabs page in the tab grid UI.">
+        Private Tabs
+      </message>
+      <message name="IDS_VIVALDI_TAB_GRID_REMOTE_TABS_TITLE" desc="The accessibility label of the Remote Tabs page in the tab grid UI">
+        Tabs from other devices
+      </message>
+      <message name="IDS_VIVALDI_TAB_GRID_RECENTLY_CLOSED_TABS_TITLE" desc="The accessibility label of the Recently Closed Tabs page in the tab grid UI.">
+        Recently Closed Tabs
+      </message>
+      <message name="IDS_VIVALDI_CONTENT_CONTEXT_NEWNOTE" desc="The iOS context menu item for adding a new note. ">
+        New Note
+      </message>
+      <message name="IDS_VIVALDI_CONTENT_CONTEXT_NEWFOLDER" desc="The iOS context menu item for adding a new folder. ">
+        New Folder
+      </message>
+      <message name="IDS_VIVALDI_HISTORY_OPEN_CLEAR_BROWSING_DATA_DIALOG" desc="The iOS context menu item for adding a new folder. ">
+        Clear Browsing Data ...
+      </message>
+      <message name="IDS_IOS_NOTE_CONTEXT_BAR_EDIT" desc="The iOS context bar item for edit note. ">
+        Edit
+      </message>
+      <message name="IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="The iOS context bar item for adding new note folder. ">
+        New Folder
+      </message>
+      <!-- Notes-->
+      <message name="IDS_VIVALDI_TOOLS_MENU_ADD_TO_NOTES" desc="The iOS menu item for adding the current page to the notes. This is a verb  [iOS only]" meaning="Add current page to notes. [Verb]">
+        Create note
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_NOTES" desc="The iOS menu item for opening the notes manager [Length: 15em] [iOS only]">
+        Notes
+      </message>
+      <message name="IDS_VIVALDI_COPY_TO_NOTE" desc="Menu item for copy to note functionality. [Length: 35em]" meaning="Menu item text for copy to note functionality. [Length: 35em]">
+        Copy to note
+      </message>
+      <message name="IDS_VIVALDI_NOTE_SNACKBAR_MESSAGE" desc="Message briefly displayed at the bottom of the screen to the user to inform that text has been copied to a note. [Length: 35em]" meaning="The selected text has been added to a note. [Length: 35em]">
+        Copied to note
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DATATYPE_NOTES" desc="Notes">
+        Notes
+      </message>
+      <message name="IDS_VIVALDI_NOTE_PAGE_SAVED" desc="Presented in an infobar when a note is created. [Length: 30em.]">
+        Note saved
+      </message>
+      <message name="IDS_VIVALDI_NOTE_PAGE_SAVED_FOLDER" desc="Presented in an infobar when a note is created. Specifies in which folder the note was added. [Length: 30em.]">
+        Note saved to <ph name="FOLDER_TITLE">$1<ex>My Folder</ex></ph>
+      </message>
+      <message name="IDS_VIVALDI_NOTE_FOLDERS_LABEL" desc="Title on top of the note folder list [Length: 30em] [iOS only]">
+        Folders
+      </message>
+      <message name="IDS_VIVALDI_NOTE_GROUP_BUTTON" desc="Button to change the folder of a note. [iOS only]">
+        Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_GROUP_DELETE" desc="Button to delete a folder. [Length: 30em.] [iOS only]">
+        Delete Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_ITEM_COUNT" desc="Displayed when there are more than one item in a note folder [Length: 30em.]">
+        <ph name="COUNT">$1<ex>42</ex></ph> items
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NAME_FIELD_HEADER" desc="Title shown above note name field on Edit Note screen. [Length: 20em]" meaning="Name of an inanimate object">
+        Name
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_NOTES_BAR_TITLE" desc="Text that describes the notes present in the notes bar for chrome on desktop. [Length: 30em.] [iOS only]">
+        Notes Bar
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_NOTE_CREATED" desc="A description presented to the user that they just created a note. [Length: 30em.] [iOS only]">
+        Item created
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_NOTE_UPDATED" desc="A description presented to the user that they just updated a note. [Length: 30em.] [iOS only]">
+        Item updated
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_CANCEL_BUTTON_LABEL" desc="Accessibility label for a button that cancels the current action. [Length: 30em.]">
+        Cancel
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_DELETE_BUTTON_LABEL" desc="Accessibility label for a button that allows the user to delete one or many notes. [Length: 30em.]">
+        Delete
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_EDITOR_NAME_LABEL" desc="Label shown before the title/name of the URL [Length: 30em.]">
+        Title
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_EDIT_BUTTON_LABEL" desc="Accessibility label for a button that allows the user to edit a note. [Length: 30em.]">
+        Edit
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_GROUP_DEFAULT_NAME" desc="Default name for new folders. [iOS only]">
+        New Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_GROUP_EDITOR_CREATE_TITLE" desc="Title of the view controller to create a new folder. [Length: 30em.] [iOS only]">
+        New Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_GROUP_EDITOR_EDIT_TITLE" desc="Title of the view controller to edit an existing folder. [Length: 30em.] [iOS only]">
+        Edit Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_MANY_ITEM_LABEL" desc="Text that indicates that a user has selected many notes for editing. It will be prefaced with a single number greater than 1. e.g. '5 selected' [Length: 30em.]">
+        <ph name="NUMBER_OF_SELECTED_NOTES">$1<ex>2</ex></ph> selected
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_MENU_LABEL" desc="Accessibility label for a button that shows the user a menu of possible options. [Length: 30em.]">
+        Menu
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_MORE_BUTTON_ACCESSIBILITY_LABEL" desc="The accessibility label of the button that shows the options menu on a given note, ie the menu for 'More' options. [iOS only]">
+        More menu
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_MOVE_BUTTON_LABEL" desc="Accessibility label for a button that allows the user to move the position of one or many notes. [Length: 30em.]">
+        Move
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_MULTIPLE_NOTE_DELETE" desc="A description presented to the user that they just deleted multiple notes. [Length: 30em.] [iOS only]">
+        <ph name="NUMBER_OF_SELECTED_NOTES">$1<ex>2</ex></ph> items deleted
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_MULTIPLE_NOTE_MOVE" desc="A description presented to the user that they just moved multiple notes. [Length: 30em.] [iOS only]">
+        <ph name="NUMBER_OF_SELECTED_NOTES">$1<ex>2</ex></ph> items moved
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_ONE_ITEM_LABEL" desc="Text that indicates that a user has selected one note for editing. [Length: 30em.]">
+        1 selected
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_SINGLE_NOTE_DELETE" desc="A description presented to the user that they just deleted 1 note. [Length: 30em.] [iOS only]">
+        1 item deleted
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_SINGLE_NOTE_MOVE" desc="A description presented to the user that they just moved 1 note. [Length: 30em.] [iOS only]">
+        1 item moved
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_UNDO_BUTTON_TITLE" desc="Text shown for the undo button. [Length: 30em.] [iOS only]">
+        Undo
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_ZERO_ITEM_LABEL" desc="Text that indicates that a user has selected zero notes for editing. [Length: 30em.]">
+        0 selected
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NO_ITEM_COUNT" desc="Displayed when there are no items in a note folder [Length: 30em.]">
+        No notes
+      </message>
+      <message name="IDS_VIVALDI_NOTE_ONE_ITEM_COUNT" desc="Displayed when there is only one item in a note folder [Length: 30em.]">
+        1 item
+      </message>
+      <message name="IDS_VIVALDI_NOTE_FOLDER_TRASH" desc="Trash [Length: 30em.] [iOS only]">
+        Trash folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_BAR_OTHER_FOLDER_NAME" desc="Trash [Length: 30em.] [iOS only]">
+        Other folder
+      </message>
+      <message name="IDS_VIVALDI_CONTENT_CONTEXT_ADDNOTE" desc="The iOS context menu item for adding the url of a tab to the notes. [iOS only]">
+        Add note
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_FOLDER" desc="Text on the notes context bar to create new folder">
+        New Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_NEW_NOTE" desc="Text on the notes context bar to create new note">
+        New Note
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_DELETE" desc="Text on the notes context bar for delete action">
+        Delete
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_SELECT" desc="Text on the notes context bar for select action">
+        Select
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_EDIT" desc="Text on the notes context bar for edit action">
+        Edit
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_BAR_MORE" desc="Text on the notes context bar to show more context menu">
+        More...
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_OPEN" desc="Text on the notes context menu to open all selected notes">
+        Open All Note Addresses
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_OPEN_INCOGNITO" desc="Text on the notes context menu to open selected note in Incognito">
+        Open Note Addresses in Incognito
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_MOVE" desc="Text on the notes context menu to move selected note">
+        Move
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT" desc="Text on the notes context menu to edit selected note">
+        Edit Note
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CONTEXT_MENU_EDIT_FOLDER" desc="Text on the notes context menu to edit selected note folder">
+        Edit Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_NEW_NOTE" desc="Text on the new note action">
+        New note
+      </message>
+      <message name="IDS_VIVALDI_NOTE_EDIT_SCREEN_TITLE" desc="Title of Edit Note screen [Length: 13em]">
+        Edit Note
+      </message>
+      <message name="IDS_VIVALDI_NOTE_DELETE" desc="Title of button that deletes currently edited note. [Length: 20em.]">
+        Delete
+      </message>
+      <message name="IDS_VIVALDI_NOTE_EDIT_PARENT_FOLDER_BUTTON_HINT" desc="The accessibility hint spoken when hovering over the parent folder of a note in the editor. [iOS only]">
+        Double tap to change the parent folder.
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CHOOSE_GROUP_BUTTON" desc="Button to assign a folder to an uncategorized note. [iOS only]">
+        Choose Folder
+      </message>
+      <message name="IDS_VIVALDI_NOTE_CREATE_GROUP" desc="Button to create a new note folder [Length: 30em.]">
+        New Folder…
+      </message>
+      <!-- End Notes -->
       <!-- START PAGE AND SPEED DIAL -->
+      <message name="IDS_IOS_TABS_SPEED_DIAL" desc="The title for the new tab on desktop tabs tab view">
+        Speed Dial
+      </message>
       <message name="IDS_IOS_NEW_SPEED_DIAL" desc="The string title describing the new speed dial adding option on the start page.">
         New Speed Dial
       </message>
@@ -310,10 +521,196 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NEW_TAB_PRIVATE_TITLE" desc="Header shown when a user opens an private tab explaining private mode">
         Private Tab
       </message>
+      <message name="IDS_IOS_NEW_TAB_PRIVATE_SEARCH" desc="The iOS menu item for opening a new Private tab and doing a new search in that tab." meaning="Do a new search in a new Private tab">
+        Private Search
+      </message>
       <message name="IDS_IOS_NEW_TAB_PRIVATE_MESSAGE" desc="Message shown when a user opens an private tab explaining incognito mode">
         Browsing in a Private Tab means that searches, sites visited, cookies and temporary files won't be stored by Vivaldi. It does not encrypt or otherwise modify your connection.
       </message>
       <!-- Sync -->
+      <message name="IDS_PREFS_VIVALDI_SYNC" desc="(Vivaldi) Sync settings access point name">
+        Sync
+      </message>
+      <message name="IDS_VIVALDI_SYNC_AUTOMATIC_TITLE" desc="(Vivaldi) Title of sync all data.">
+        Sync All
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DATA_CHOOSE_TITLE" desc="(Vivaldi) Title of data to sync.">
+        Sync Selected
+      </message>
+      <message name="IDS_VIVALDI_SYNC_EVERYTHING" desc="(Vivaldi) Choose to sync all datatypes.">
+        Synchronize all data, and automatically enable synchronization of new data types
+      </message>
+      <message name="IDS_SYNC_ALL_SET_TEXT" desc="(Vivaldi) Text to indicate user about starting sync.">
+        All set! Time to decide what data to sync between devices.
+      </message>
+      <message name="IDS_VIVALDI_START_SYNCING" desc="(Vivaldi) Text on start sync button.">
+        Start Syncing All Data
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_LOG_OUT" desc="(Vivaldi) Label of the button used to log out of Sync.">
+        Log Out
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_LOG_IN" desc="(Vivaldi) Confirming sync account credentials.">
+        Log In
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_LOG_IN_TITLE" desc="(Vivaldi) Sync account log in title.">
+        Log in to your Account
+      </message>
+      <message name="IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_TITLE" desc="(Vivaldi) Title of sync encryption password">
+        Encryption password
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DECRYPT" desc="(Vivaldi) Label of the button used to confirm encryption password.">
+        Decrypt
+      </message>
+      <message name="IDS_VIVALDI_DECRYPTION_TEXT" desc="(Vivaldi) Text used to tell the user what to do on the encryption password screen.">
+        Your sync data is encrypted. Provide your encryption password in order to decrypt the data.
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_USERNAME" desc="(Vivaldi) Username field in sync account set up.">
+        Username
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_PASSWORD" desc="(Vivaldi) Login password field in sync account set up.">
+        Password
+      </message>
+      <message name="IDS_VIVALDI_BACKUP_ENCRYPTION_KEY" desc="(Vivaldi) Title of encryption backup key">
+        Backup encryption key
+      </message>
+      <message name="IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_SECTION" desc="(Vivaldi) Sync encryption password.">
+        Data secured by encryption password
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CLEAR_SERVER_DATA" desc="(Vivaldi) Label of the button used to remove Sync server-side data.">
+        Delete Data
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_TITLE" desc="(Vivaldi) Title of the dialog showing up to ask the user to confirm the clearing of server-side data.">
+        Delete Remote Sync Data
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_MESSAGE" desc="(Vivaldi) Text of the dialog showing up to ask the user to confirm the clearing of server-side data.">
+        This will remove all sync data stored on our server, reset your encryption password, and log you out.
+      </message>
+      <message name="IDS_VIVALDI_SAVE" desc="(Vivaldi) Label of the button to confirm save">
+        Save
+      </message>
+      <message name="IDS_VIVALDI_SYNC_SUCCESS" desc="(Vivaldi) Sync succeeded text.">
+        Sync is active
+      </message>
+      <message name="IDS_VIVALDI_SYNC_APPLYING_CHANGES" desc="(Vivaldi) Text to inform that the changes are being applied">
+        Applying changes...
+      </message>
+      <message name="IDS_VIVALDI_SYNC_NOT_SYNCED_CYCLE" desc="(Vivaldi) Not Synced text.">
+        Not Synced
+      </message>
+      <message name="IDS_VIVALDI_SYNC_INITIALIZING" desc="(Vivaldi) Messages shown while the sync engine is starting up.">
+        Initializing sync...
+      </message>
+      <message name="IDS_VIVALDI_SYNC_WAITING_SERVER_ERROR" desc="(Vivaldi) Messages shown while the sync engine is starting up.">
+        The sync server is experiencing issues. Retrying sync initialization soon...
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CLIENT_NEEDS_UPDATE" desc="(Vivaldi) Error message displayed when sync cannot start.">
+        You must upgrade Vivaldi in order to use sync.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_FAILED" desc="(Vivaldi) Error message displayed when sync cannot start.">
+        Sync Failed to start.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_AUTH_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Server refused your credentials.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_SERVER_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Server error.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_NETWORK_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Network error.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CONFLICT" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Conflict with another client's data.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_THROTTLED" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Connection throttled by server.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_OTHER_ERROR" desc="(Vivaldi) Text used to indicate a temporary sync failure.">
+        Unexpected error.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_DEVICE_NAME" desc="(Vivaldi) Device name field in sync account set up.">
+        Device name
+      </message>
+      <message name="IDS_VIVALDI_USER_AGE" desc="(Vivaldi) Age field in sync account set up.">
+        Age
+      </message>
+      <message name="IDS_VIVALDI_RECOVERY_EMAIL" desc="(Vivaldi) Recovery email field in sync account set up.">
+        Recovery email
+      </message>
+      <message name="IDS_VIVALDI_CONFIRM_RECOVERY_EMAIL" desc="(Vivaldi) Confirm Recovery email field in sync account set up.">
+        Confirm recovery email
+      </message>
+      <message name="IDS_VIVALDI_CONFIRM_PASSWORD" desc="(Vivaldi) Confirm password field in sync account set up.">
+        Confirm password
+      </message>
+      <message name="IDS_VIVALDI_VERIFICATION_CODE_HINT" desc="(Vivaldi) Hint indicating the required code">
+        Enter the 6-digit code
+      </message>
+      <message name="IDS_VIVALDI_SET_UP_ENCRYPTION_DESC" desc="(Vivaldi) Text used to tell the user what to do on the encryption password screen.">
+        To encrypt and protect your sync data (passwords, bookmarks, notes, and more), please create an encryption password. This password will never be sent to us.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_RESEND_CODE_SUCCESS" desc="(Vivaldi) Toast to confirm that verification code email is resent.">
+        Email sent successfully
+      </message>
+      <message name="IDS_VIVALDI_SYNC_RESEND_CODE_FAILED" desc="(Vivaldi) Toast to inform resending verification code email failed.">
+        Sending Email failed. Please try again.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CODE_EXPIRED" desc="(Vivaldi) Error message indicating entered activation code has expired.">
+        The code has expired. Please request a new activation code.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_ACCOUNT_LOCKED" desc="(Vivaldi) Error message indicating the account has been locked. ">
+        Account has been locked
+      </message>
+      <message name="IDS_SYNC_USER_UNDER_AGE" desc="(Vivaldi) Error indicating the user is under age.">
+        Sorry, it looks like you need to wait a little before joining our community. We require our members to be at least 16 years old to join.
+      </message>
+      <message name="IDS_SYNC_USER_INVALID_AGE" desc="(Vivaldi) Error indicating user age is not realistic.">
+        Please enter a realistic lifespan number.
+      </message>
+      <message name="IDS_SYNC_USER_AGE_EMPTY_ERROR" desc="(Vivaldi) Error indicating user age is not entered.">
+        Please provide your age.
+      </message>
+      <message name="IDS_SYNC_PASSWORD_LENGTH_ERROR" desc="(Vivaldi) Error indicating entered password is not long enough.">
+        Please choose a password at least 12 characters long.
+      </message>
+      <message name="IDS_SYNC_PASSWORD_MATCH_ERROR" desc="(Vivaldi) Error indicating entered passwords do not match.">
+        Passwords need to match.
+      </message>
+      <message name="IDS_SYNC_NOT_VALID_EMAIL_ERROR" desc="(Vivaldi) Error indicating entered email address is not valid.">
+        Please enter a valid email address.
+      </message>
+      <message name="IDS_SYNC_EMAIL_MATCH_ERROR" desc="(Vivaldi) Error indicating entered email address do not match.">
+        Email addresses need to match.
+      </message>
+      <message name="IDS_SYNC_USER_EXISTS" desc="(Vivaldi) Error indicating entered username is not available.">
+        This username is not available.
+      </message>
+      <message name="IDS_SYNC_EMAIL_ALREADY_REGISTERED" desc="(Vivaldi) Error indicating the user is already registered.">
+        This email is already linked with another account.
+      </message>
+      <message name="IDS_EMAIL_NOT_ACCEPTED" desc="(Vivaldi) Error indicating entered the email domain is not accepted.">
+        Email not accepted. Please use different domain.
+      </message>
+      <message name="IDS_PASSWORD_INVALID_ERROR" desc="(Vivaldi) Error indicating entered the password is not accepted.">
+        Password is not valid.
+      </message>
+      <message name="IDS_SYNC_TC_NOT_ACCEPTED_ERROR" desc="(Vivaldi) Error indicating sync terms and condition is not accepted.">
+        You need to agree to Terms and Conditions.
+      </message>
+      <message name="IDS_SYNC_IP_BLOCKED" desc="(Vivaldi) Error that casued sync registration failure.">
+        Registration has been temporarily blocked from this IP. Please try again later.
+      </message>
+      <message name="IDS_SYNC_REGISTRATION_OTHER_ERROR" desc="(Vivaldi) Error that casued sync registration failure.">
+        Registration failed due to an error. Please try again later.
+      </message>
+      <message name="IDS_SYNC_SERVER_OTHER_ERROR" desc="(Vivaldi) Error that casued the request failure.">
+        Request failed due to an error. Please try again later.
+      </message>
+      <message name="IDS_SYNC_ACTIVATION_CODE_LENGTH_ERROR" desc="(Vivaldi) Error indicating entered code is not long enough.">
+        Activation code must be 6 digits.
+      </message>
+      <message name="IDS_SYNC_DEFAULT_RECOVERY_EMAIL_ADDRESS" desc="(Vivaldi) Text used as backup string when user recovery email address is not available.">
+        your recovery email address.
+      </message>
       <message name="IDS_VIVALDI_IOS_SYNC_LAST_SYNC" desc="(Vivaldi iOS) Message prefix of last sync information.">
         Last sync:
       </message>
@@ -336,7 +733,13 @@ locale.  The strings in this file are specific to iOS.
         Encryption password required
       </message>
       <message name="IDS_VIVALDI_CREATE_ACCOUNT_TEXT" desc="(Vivaldi) Request the creation of a new vivaldi account.">
-        New to Vivaldi? <ph name="BEGIN_LINK">BEGIN_LINK</ph>Create an Account<ph name="END_LINK">END_LINK</ph>
+        New to Vivaldi? <ph name="BEGIN_LINK">BEGIN_LINK</ph>Create an Account ➔<ph name="END_LINK">END_LINK</ph>
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CREATE_ACCOUNT_TITLE" desc="(Vivaldi) Title of view to create an account.">
+        Create an Account
+      </message>
+      <message name="IDS_VIVALDI_LOG_IN_TEXT" desc="(Vivaldi) Go back to the login screen from the create account screen.">
+        Already have an account? <ph name="BEGIN_LINK">BEGIN_LINK</ph>Log in ➔<ph name="END_LINK">END_LINK</ph>
       </message>
       <!-- TODO(tomas@vivaldi.com): we need an ios URL. See HP-199 in JIRA-->
       <message name="IDS_VIVALDI_IOS_ENCRYPTION_INFO_URL" translateable="false">
@@ -375,6 +778,78 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SYNC_CANCEL_CLEAR_SERVER_DATA_MESSAGE" desc="(Vivaldi) Cancel button of the dialog showing up to ask the user to confirm the clearing of server-side data.">
         Cancel
       </message>
+      <message name="IDS_VIVALDI_CREATE_ACCOUNT_NEXT" desc="(Vivaldi) Button to continue creating a vivaldi.net account in the ios sync UI.">
+        Next
+      </message>
+      <message name="IDS_VIVALDI_CREATE_ACCOUNT_CREATE" desc="(Vivaldi) Button to create a vivaldi.net account in the ios sync UI.">
+        Create
+      </message>
+      <message name="IDS_VIVALDI_SYNC_TC" desc="(Vivaldi) Checkbox to agree to Vivaldi's terms and condition">
+        I have read and agree to the Terms of Use and Privacy Policy
+      </message>
+      <message name="IDS_VIVALDI_SUBSCRIBE_NEWSLETTER" desc="(Vivaldi) Checkbox to subscribe to Vivaldi's newsletter.">
+        I want to receive Vivaldi's newsletter
+      </message>
+      <message name="IDS_VIVALDI_TOS_AND_PP_EXTERNAL_LINKS" desc="(Vivaldi) A label showing links to the terms of service and privacy policy webpages.">
+        <ph name="BEGIN_LINK">BEGIN_LINK</ph>Terms of Use ➔<ph name="END_LINK">END_LINK</ph>     <ph name="BEGIN_LINK2">BEGIN_LINK</ph>Privacy Policy ➔<ph name="END_LINK2">END_LINK</ph>
+      </message>
+      <message name="IDS_VIVALDI_TOS_TITLE" desc="(Vivaldi) Title of the view that displays the Terms of Use webpage.">
+        Terms of Use
+      </message>
+      <message name="IDS_VIVALDI_PRIVACY_TITLE" desc="(Vivaldi) Title of the view that displays the Privacy Policy webpage.">
+        Privacy Policy
+      </message>
+      <message name="IDS_VIVALDI_VERIFICATION_CODE_TEXT" desc="(Vivaldi) Text indicating the verification code sent to user account">
+        A verification code has been sent to <ph name="EMAIL_ID">
+          $1<ex>"username@email.domain</ex>
+        </ph>
+      </message>
+      <message name="IDS_VIVALDI_ACTIVATE_ACCOUNT_TITLE" desc="(Vivaldi) Title of activate your account view">
+        Activate your account
+      </message>
+      <message name="IDS_VIVALDI_ACTIVATE_ACCOUNT_BUTTON" desc="(Vivaldi) Text of the button to activate your account">
+        Activate
+      </message>
+      <message name="IDS_VIVALDI_ACTIVATION_CODE_REQUIRED" desc="(Vivaldi) Warning message shown if the user has not entered the code">
+        Verification code is required
+      </message>
+      <message name="IDS_VIVALDI_RESEND_CODE" desc="(Vivaldi) A link that will trigger the activation code to be sent again">
+        <ph name="BEGIN_LINK">BEGIN_LINK</ph>Resend Code<ph name="END_LINK">END_LINK</ph>
+      </message>
+      <message name="IDS_SYNC_USER_NAME_LENGTH_ERROR" desc="(Vivaldi) Error indicating entered username is not long enough.">
+        Please choose a username between 3 and 30 letters (a-z or A-Z) and digits (0-9) only.
+      </message>
+      <message name="IDS_VIVALDI_SYNC_CODE_DOESNT_MATCH" desc="(Vivaldi) Error message indicating entered activation code doesn't match. ">
+        This code doesn't match the one we sent you.
+        You have <ph name="ATTEMPTS">
+          $1<ex>2</ex>
+        </ph> remaining attempts.
+      </message>
+      <message name="IDS_SYNC_ACTIVATION_CODE_MAX_LIMIT_REACHED" desc="(Vivaldi) Error indicating maximum wrong attempts reached for activation code.">
+        This code doesn't match the one we sent you.
+        You have reached the maximum wrong attempts limit. Please request a new code using Resend option below.
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_1" desc="(Vivaldi) Text indicating what prevented login to a vivaldi account">
+        Vivaldi.net rejected your credentials: <ph name="SERVER_ERROR">
+          $1<ex>login error message</ex>
+        </ph> (<ph name="ERROR_CODE">
+          $2<ex>400</ex>
+        </ph>)
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_REJECTED_2" desc="(Vivaldi) Text indicating what prevented login to a vivaldi account">
+        Vivaldi.net rejected your credentials: Error code <ph name="ERROR_CODE">
+          $1<ex>502</ex>
+        </ph>
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ERROR_WRONG_DOMAIN" desc="(Vivaldi) Text indicating what prevented login to a vivaldi account">
+        You must use a Vivaldi account to log in.
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_ENCRYPTED" desc="(Vivaldi) Text indicating what prevented login to a vivaldi account">
+        Failed to decrypt your credentials. Please log in again.
+      </message>
+      <message name="IDS_VIVALDI_ACCOUNT_ERROR_CREDENTIALS_MISSING" desc="(Vivaldi) Text indicating what prevented login to a vivaldi account">
+        Failed to retrieve your credentials. Please log in again.
+      </message>
       <!-- End Sync -->
       <!-- AD AND TRACKER BLOCKER -->
       <message name="IDS_IOS_PREFS_VIVALDI_AD_AND_TRACKER_BLOCKER" desc="Title for the ad and tracker blocker settings">
@@ -395,6 +870,228 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_ADS_BLOCKED_TEXT" desc="Label for blocked ads counter in the blocker popup window">
         Ads blocked
       </message>
+      <message name="IDS_LEVEL_NO_BLOCKING" desc="Title for the No Blocking option in the blocker popup window">
+        No Blocking
+      </message>
+      <message name="IDS_LEVEL_NO_BLOCKING_DESCRIPTION" desc="Description for the No Blocking in the blocker popup window">
+        We don’t block any ads or trackers.
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS" desc="Title for the Block Trackers option in the blocker popup window">
+        Block Trackers
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS_DESCRIPTION" desc="Description for the Block Trackers in the blocker popup window">
+        Trackers are blocked, but not ads. Some sites may break.
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS_AND_ADS" desc="Title for the Block Trackers and Ads option in the blocker popup window">
+        Block Trackers and Ads
+      </message>
+      <message name="IDS_LEVEL_BLOCK_TRACKERS_AND_ADS_DESCRIPTION" desc="Description for the Block Trackers and Ads option in the blocker popup window">
+        Trackers and ads are blocked. Some sites may break.
+      </message>
+      <message name="IDS_DEFAULT_LEVEL_LABEL" desc="Default level marker text for option">
+        (Default)
+      </message>
+      <message name="IDS_TRACKER_BLOCKED_TEXT" desc="Label for blocked tracker (singular) counter in the blocker popup window [2 LINES]">
+        Tracker\nblocked
+      </message>
+      <message name="IDS_TRACKERS_BLOCKED_TEXT" desc="Label for blocked trackers counter in the blocker popup window [2 LINES]">
+        Trackers\nblocked
+      </message>
+      <message name="IDS_TRACKER_DETAILS" desc="Label for blocked tracker details spinner">
+        Tracker details
+      </message>
+      <message name="IDS_AD_BLOCKED_TEXT" desc="Label for blocked ad (singular) counter in the blocker popup window [2 LINES]">
+        Ad\nblocked
+      </message>
+      <message name="IDS_ADS_BLOCKED_TEXT" desc="Label for blocked ads counter in the blocker popup window [2 LINES]">
+        Ads\nblocked
+      </message>
+      <message name="IDS_AD_DETAILS" desc="Label for blocked ad details spinner">
+        Ad details
+      </message>
+      <message name="IDS_MANAGE_DEFAULT_SETTINGS" desc="Push button in the blocker popup window">
+        Manage Privacy Settings
+      </message>
+      <message name="IDS_PREFS_ADS_TRACKING" desc="General Ads and Tracking Blocker preference">
+        Tracker and Ad Blocking
+      </message>
+      <message name="IDS_BLOCK_PREF_CATEGORY_TRACKING_PROTECTION_LEVEL" desc="Blocker preference category: DEFAULT TRACKING PROTECTION LEVEL">
+        DEFAULT BLOCKING LEVEL
+      </message>
+      <message name="IDS_BLOCK_PREF_CATEGORY_EXCEPTIONS" desc="Blocker preference category: EXCEPTIONS">
+        EXCEPTIONS
+      </message>
+      <message name="IDS_BLOCK_PREF_MANAGE_BLOCKING_LEVEL_PER_SITE" desc="Blocker preference">
+        Manage blocking level per site
+      </message>
+      <message name="IDS_BLOCK_PREF_CATEGORY_SOURCES" desc="Blocker preference category: SOURCES">
+        SOURCES
+      </message>
+      <message name="IDS_BLOCK_PREF_MANAGE_TRACKER_BLOCKING_SOURCES" desc="Blocker preference">
+        Manage Tracker Blocking Sources
+      </message>
+      <message name="IDS_BLOCK_PREF_MANAGE_AD_BLOCKING_SOURCES" desc="Blocker preference">
+        Manage Ad Blocking Sources
+      </message>
+      <message name="IDS_ADD_NEW_SOURCE" desc="Add new source label">
+        Add New Source
+      </message>
+      <message name="IDS_AUTOFILL_IMPORT_URL_HINT" desc="Hint for the import blocker list url">
+        Enter URL to import blocker rules
+      </message>
+      <message name="IDS_ADD_NEW_DOMAIN" desc="Add new domain label">
+        Add New Domain
+      </message>
+      <message name="IDS_EDIT_DOMAIN" desc="Edit domain label">
+        Edit Domain
+      </message>
+      <message name="IDS_AUTOFILL_DOMAIN_HINT" desc="Hint for the website url">
+        Domain
+      </message>
+      <message name="IDS_AUTOFILL_IMPORT_URL" desc="Button text in import blocker list dialog">
+        Import
+      </message>
+      <message name="IDS_VIVALDI_IOS_MANAGE_BLOCKER_SETTINGS" desc="Push button in the blocker popup window">
+        Manage Blocker Settings
+      </message>
+      <message name="IDS_VIVALDI_IOS_BLOCKING_TRACKERS" desc="Message to show in blocker summary when trackers blocking is active.">
+        Blocking Trackers
+      </message>
+      <message name="IDS_VIVALDI_IOS_BLOCKING_TRACKERS_ADS" desc="Message to show in blocker summary when trackers and ads blocking is active.">
+        Blocking Trackers and Ads
+      </message>
+      <message name="IDS_VIVALDI_IOS_BLOCKING_NONE" desc="Message to show in blocker summary when trackers and ads blocking is inactive.">
+        Enable trackers and ads blocking for faster and safer browsing
+      </message>
+      <message name="IDS_VIVALDI_IOS_UPDATE_DOMAIN" desc="Update domain label">
+        Update
+      </message>
+      <message name="IDS_VIVALDI_IOS_REMOVE_DOMAIN" desc="Remove domain label">
+        Remove
+      </message>
+      <message name="IDS_VIVALDI_IOS_BLOCKER_LIST_DATE_UPDATED" desc="Blocker list date updated label in the summary of the preference entry">
+        Updated: <ph name="DATE">$1</ph>
+      </message>
+      <message name="IDS_VIVALDI_IOS_BLOCKER_LIST_DISABLED" desc="Blocker list is disabled status">
+        Disabled
+      </message>
+      <message name="IDS_VIVALDI_IOS_BLOCKER_LIST_FETCHING" desc="Blocker list is fetching status">
+        Fetching
+      </message>
+      <message name="IDS_VIVALDI_IOS_BLOCKER_LIST_NOT_FETCHED" desc="Blocker list not-fetched status">
+        Not fetched
+      </message>
+      <message name="IDS_VIVALDI_IOS_RULE_SOURCE_ENABLE" desc="Blocker lists context menu item to enable source">
+        Enable
+      </message>
+      <message name="IDS_VIVALDI_IOS_RULE_SOURCE_DISABLE" desc="Blocker lists context menu item to disable source">
+        Disable
+      </message>
+      <message name="IDS_VIVALDI_IOS_RULE_SOURCE_REMOVE" desc="Blocker lists context menu item to remove source">
+        Remove
+      </message>
+      <message name="IDS_VIVALDI_IOS_RULE_SOURCE_RESTORE_LISTS" desc="Blocker lists context menu item to restore default sources">
+        Restore Built-in Lists
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ALLOW_VIVALDI_PARTNERS" desc="The origin of the blocking list source file">
+        Allow ads from our partners (support Vivaldi)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_TYPE_COOKIE_WARNING" desc="The type of the blocking list source file">
+        Remove cookie warnings (<ph name="TYPE">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ARABIC" desc="The origin of the blocking list source file">
+        Arabic (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_BULGARIAN" desc="The origin of the blocking list source file">
+        Bulgarian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_CHINESE" desc="The origin of the blocking list source file">
+        Chinese (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_COLOMBIAN" desc="The origin of the blocking list source file">
+        Colombian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_CZECH_AND_SLOVAK" desc="The origin of the blocking list source file">
+        Czech and Slovak (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_DUTCH" desc="The origin of the blocking list source file">
+        Dutch (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ENGLISH" desc="The origin of the blocking list source file">
+        English (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ESTONIAN" desc="The origin of the blocking list source file">
+        Estonian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_FARSI" desc="The origin of the blocking list source file">
+        Farsi (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_FINNISH" desc="The origin of the blocking list source file">
+        Finnish (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_FRENCH" desc="The origin of the blocking list source file">
+        French (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_GERMAN" desc="The origin of the blocking list source file">
+        German (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_GREEK" desc="The origin of the blocking list source file">
+        Greek (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_HEBREW" desc="The origin of the blocking list source file">
+        Hebrew (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_HUNGARIAN" desc="The origin of the blocking list source file">
+        Hungarian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ICELANDIC" desc="The origin of the blocking list source file">
+        Icelandic (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_INDIAN" desc="The origin of the blocking list source file">
+        Indian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_INDONESIAN" desc="The origin of the blocking list source file">
+        Indonesian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ITALIAN" desc="The origin of the blocking list source file">
+        Italian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_JAPANESE" desc="The origin of the blocking list source file">
+        Japanese (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_KOREAN" desc="The origin of the blocking list source file">
+        Korean (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_LATVIAN" desc="The origin of the blocking list source file">
+        Latvian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_LITHUANIAN" desc="The origin of the blocking list source file">
+        Lithuanian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_NORDIC" desc="The origin of the blocking list source file">
+        Nordic (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_POLISH" desc="The origin of the blocking list source file">
+        Polish (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_PORTUGUESE" desc="The origin of the blocking list source file">
+        Portuguese (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_ROMANIAN" desc="The origin of the blocking list source file">
+        Romanian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_RUSSIAN" desc="The origin of the blocking list source file">
+        Russian (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_SPANISH" desc="The origin of the blocking list source file">
+        Spanish (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_TURKISH" desc="The origin of the blocking list source file">
+        Turkish (<ph name="ORIGIN">$1</ph>)
+      </message>
+      <message name="IDS_VIVALDI_IOS_SOURCE_MAP_ORIGIN_VIETNAMESE" desc="The origin of the blocking list source file">
+        Vietnamese (<ph name="ORIGIN">$1</ph>)
+      </message>
       <!-- END AD AND TRACKER BLOCKER -->
       <message name="IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE" desc="Message shown on the Note screen when there are no Notes, explaining the purpose of the Note screen.">
         Add your first bookmark by tapping the plus icon below
@@ -413,6 +1110,12 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_VIVALDI_NOTE_EMPTY_TITLE" desc="Title shown on the Note screen when there are no Notes.">
          You'll find your notes here
+      </message>
+      <message name="IDS_VIVALDI_FOLDER_NOTE" desc="Displayed when there is one item in a note folder [Length: 30em.]">
+        note
+      </message>
+      <message name="IDS_VIVALDI_FOLDER_NO_ITEMS" desc="Displayed when there are is one item in a note or bookmark folder">
+        This folder is empty
       </message>
       <!-- START PAGE LAYOUT SETTINGS -->
       <message name="IDS_IOS_PREFS_VIVALDI_START_PAGE_LAYOUT" desc="Title for the start page layout settings">
@@ -465,6 +1168,99 @@ locale.  The strings in this file are specific to iOS.
         Search
       </message>
       <!-- END TOOLBAR -->
+      <!-- OVERFLOW MENU/MAIN MENU -->
+      <message name="IDS_VIVALDI_TOOLS_MENU_PAGE_INFO" desc="The title for the page info item on the overflow menu">
+        Page Info
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_NEW_PRIVATE_TAB" desc="The title for the new private tab item on the overflow menu">
+        New private Tab
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_DELETE_HISTORY" desc="The title for the delete browsing history item on the overflow menu">
+        Delete Browsing History
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_DESKTOP_SITE" desc="The title for the view desktop version of the site item on the overflow menu">
+        View Desktop Version of Site
+      </message>
+      <message name="IDS_VIVALDI_TOOLS_MENU_MOBILE_SITE" desc="The title for the view mobile version of the site item on the overflow menu">
+        View Mobile Version of Site
+      </message>
+      <!-- END OVERFLOW MENU/MAIN MENU -->
+      <!-- PASSWORD MANAGER -->
+      <message name="IDS_VIVALDI_SAVE_PASSWORDS" desc="Title for the save button on password manager page">
+        Save Passwords
+      </message>
+      <message name="IDS_VIVALDI_SAVE_PASSWORDS_HEADER_MESSAGE" desc="Message for the password manager page.">
+        Saved passwords will appear here.
+      </message>
+      <message name="IDS_VIVALDI_SAVE_PASSWORD_FOOTER_DISPLAYING_USER_EMAIL" desc="The footer text of the infobar that offers user to save/update a password to Vivaldi; also display's current user's email.">
+        You can use saved passwords on any device. They're saved to Vivaldi Password Manager for <ph name="EMAIL">$1<ex>johndoe@gmail.com</ex></ph>
+      </message>
+      <message name="IDS_VIVALDI_SAVE_PASSWORD_FOOTER_NOT_SYNCING" desc="Helper text above the save credentials modal's primary action button. [Length: unlimited] [iOS only]">
+        Passwords are saved to Password Manager on this device.
+      </message>
+      <message name="IDS_VIVALDI_SUGGESTED_STRONG_PASSWORD_HINT" desc="Text shown alongside a suggested password to tell user that generated passwords are stored in password manager. [Length: unlimited] [iOS only]">
+        You won't need to remember this password. It will be saved to Vivaldi Password Manager.
+      </message>
+      <message name="IDS_VIVALDI_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPAD" desc="The subtitle of the view that teaches users to turn on iOS auto-fill from Vivaldi password manager for iPad [iPadOS only]">
+        You can use the passwords you saved to Vivaldi Password Manager in other apps on your iPad.
+      </message>
+      <message name="IDS_VIVALDI_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPHONE" desc="The subtitle of the view that teaches users to turn on iOS auto-fill from Vivaldi password manager for iPhone [iOS only]">
+        You can use the passwords you saved to Vivaldi Password Manager in other apps on your iPhone.
+      </message>
+      <!-- END PASSWORD MANAGER -->
+      <!-- COMMON URLS -->
+      <message name="IDS_VIVALDI_IOS_HELP_URL" desc="URL for help and support" translateable="false">
+        https://help.vivaldi.com
+      </message>
+      <message name="IDS_VIVALDI_IOS_TOS_URL" desc="URL for terms of service" translateable="false">
+        https://vivaldi.com/privacy/vivaldi-end-user-license-agreement/
+      </message>
+      <message name="IDS_VIVALDI_IOS_PRIVACY_URL" desc="URL for privacy policy" translateable="false">
+        https://vivaldi.com/privacy/browser/
+      </message>
+      <!-- END COMMON URLS -->
+      <message name="IDS_VIVALDI_IOS_SETTINGS_ABOUT" desc="The title for the about item on the settings">
+        About
+      </message>
+      <!-- END OVERFLOW MENU/MAIN MENU -->
+      <!-- CUSTOM VIEWS -->
+      <message name="IDS_VIVALDI_SEARCHBAR_PLACEHOLDER" desc="Placeholder text for the search bar">
+        Search
+      </message>
+      <!-- END CUSTOM VIEWS -->
+
+      <!-- DEFAULT BROWSER PROMO -->
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_ALL_TABS_TITLE" desc="Text of title for 'All your tabs' tailored default browser promo [iOS only]">
+        Happy with Vivaldi? Make it your default.
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_ALL_TABS_DESCRIPTION" desc="Description for the 'All your tabs' default browser promotion modal. [iOS only]">
+        With Vivaldi, keep all your tabs in one browser and sync them across all devices.
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_STAY_SAFE_TITLE" desc="Title for the 'Stay safe' default browser promotion modal. [iOS only]">
+        Make Vivaldi your default browser?
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_STAY_SAFE_DESCRIPTION" desc="Description for the 'Stay safe' default browser promotion modal. [iOS only]">
+        Vivaldi’s built-in Tracker and Ad Blocker protects you from malware and ads.
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_BUILT_FOR_IPADOS_TITLE" desc="Text of title for 'Built for iPadOS' tailored default browser promo [iPadOS only]">
+        Switch your default to Vivaldi on iPad?
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_BUILT_FOR_IPADOS_DESCRIPTION" desc="Description for 'Built for iPadOS' tailored default browser promo [iPadOS only]">
+        With Panels you can keep go-to tools within easy reach in the browser’s sidebar.
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_BUILT_FOR_IOS_TITLE" desc="Text of title for 'Built for iOS' tailored default browser promo [iPadOS only]">
+        Ready to set Vivaldi as your default browser?
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_BUILT_FOR_IOS_DESCRIPTION" desc="Description for 'Built for iOS' tailored default browser promo [iPadOS only]">
+        With Vivaldi, you can seamlessly open links, search from widgets, and autofill passwords in other apps.
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_NON_MODAL_TITLE" desc="Title for the non-modal default browser promotion banner">
+        Time to switch up your default browser? Choose Vivaldi.
+      </message>
+      <message name="IDS_VIVALDI_IOS_DEFAULT_BROWSER_NON_MODAL_DESCRIPTION" desc="Description for the non-modal default browser promotion banner">
+        Keep browsing the web smarter, smoother and faster with Vivaldi.
+      </message>
+      <!-- END DEFAULT BROWSER PROMO -->
     </messages>
   </release>
 </grit>

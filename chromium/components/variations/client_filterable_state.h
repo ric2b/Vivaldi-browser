@@ -7,8 +7,8 @@
 
 #include <string>
 
-#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "components/variations/proto/study.pb.h"
@@ -90,6 +90,12 @@ struct COMPONENT_EXPORT(VARIATIONS) ClientFilterableState {
 
   // The restriction applied to Chrome through the "ChromeVariations" policy.
   RestrictionPolicy policy_restriction = RestrictionPolicy::NO_RESTRICTIONS;
+
+  // The list of Google groups that one of more signed-in syncing users are a
+  // a member of.
+  // Each value is the Gaia ID of the google group.
+  // TODO(b/264838828): populate this field.
+  std::set<uint64_t> google_groups;
 
  private:
   // Evaluating enterprise status negatively affects performance, so we only

@@ -48,8 +48,11 @@ source_set("ad_blocker") {
     "utils.h",
   ]
 
-  deps = [
+  public_deps = [
     ":adblock_parser",
+  ]
+
+  deps = [
     "//base:base",
     "//base:i18n",
     "//services/network/public/cpp",

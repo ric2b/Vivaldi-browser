@@ -13,10 +13,10 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/hash/md5.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -127,6 +127,9 @@ void ChromeOSMetricsProvider::Init() {
 void ChromeOSMetricsProvider::OnDidCreateMetricsLog() {
   cros_system_profile_provider_->OnDidCreateMetricsLog();
   if (base::FeatureList::IsEnabled(metrics::features::kEmitHistogramsEarlier)) {
+    if (!arc::StabilityMetricsManager::Get()) {
+      return;
+    }
     // Not guaranteed to result in emitting hisotograms when called early on
     // browser startup.
     arc::StabilityMetricsManager::Get()->RecordMetricsToUMA();

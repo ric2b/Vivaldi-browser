@@ -29,8 +29,6 @@
 #include "content/public/browser/speculation_host_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/isolation_info.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
@@ -392,6 +390,7 @@ class PrefetchProxyTabHelper
   // Called when |loader| encounters a redirect.
   void OnPrefetchRedirect(network::SimpleURLLoader* loader,
                           const GURL& original_url,
+                          const GURL& url_before_redirect,
                           const net::RedirectInfo& redirect_info,
                           const network::mojom::URLResponseHead& response_head,
                           std::vector<std::string>* removed_headers);

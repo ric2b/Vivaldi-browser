@@ -15,10 +15,6 @@ vivaldi_app_name = vivaldi_name
 input_app_folder_for_dmg = "$root_build_dir/$vivaldi_name.app"
 
 universal_suffix = ""
-pgo_suffix = ""
-if (chrome_pgo_phase > 0) {
-  pgo_suffix = ".pgo"
-}
 
 perform_signing = vivaldi_signing_key != "" && vivaldi_signing_id != ""
 
@@ -55,7 +51,7 @@ if (perform_signing) {
 }
 
 # NOTE(tomas@vivaldi.com): Don't change the names of these files based on channel
-dmg_name = "$vivaldi_name.${vivaldi_version_full}${pgo_suffix}${universal_suffix}.dmg"
+dmg_name = "$vivaldi_name.${vivaldi_version_full}${universal_suffix}.dmg"
 
 
 group("mac") {
@@ -112,7 +108,7 @@ command_bash("build_dmg") {
 }
 
 if (perform_signing) {
-  tar_name = "$vivaldi_name.$vivaldi_version_full${pgo_suffix}${universal_suffix}.tar.xz"
+  tar_name = "$vivaldi_name.$vivaldi_version_full${universal_suffix}.tar.xz"
   group("sign_mac") {
     deps = [
       ":sign_package",

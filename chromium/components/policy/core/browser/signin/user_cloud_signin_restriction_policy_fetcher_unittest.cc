@@ -6,13 +6,12 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/features.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -65,7 +64,7 @@ TEST_F(UserCloudSigninRestrictionPolicyFetcherTest, NoUseAfterFreeCrash) {
   feature_list_->InitAndDisableFeature(
       policy::features::kEnableUserCloudSigninRestrictionPolicyFetcher);
   network::TestURLLoaderFactory url_loader_factory;
-  base::Value expected_response(base::Value::Type::DICTIONARY);
+  base::Value expected_response(base::Value::Type::DICT);
   expected_response.SetStringKey("policyValue", "primary_account");
   std::string response;
   JSONStringValueSerializer serializer(&response);
@@ -88,7 +87,7 @@ TEST_F(UserCloudSigninRestrictionPolicyFetcherTest, NoUseAfterFreeCrash) {
 
 TEST_F(UserCloudSigninRestrictionPolicyFetcherTest, ReturnsValueFromBody) {
   network::TestURLLoaderFactory url_loader_factory;
-  base::Value expected_response(base::Value::Type::DICTIONARY);
+  base::Value expected_response(base::Value::Type::DICT);
   expected_response.SetStringKey("policyValue", "primary_account");
   std::string response;
   JSONStringValueSerializer serializer(&response);

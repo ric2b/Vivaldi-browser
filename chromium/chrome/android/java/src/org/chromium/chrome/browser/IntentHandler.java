@@ -45,7 +45,7 @@ import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteControllerProvider;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.renderer_host.ChromeNavigationUIData;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
@@ -287,6 +287,8 @@ public class IntentHandler {
     private static final String YOUTUBE_LINK_PREFIX_HTTP = "http://www.youtube.com/redirect?";
     private static final String BRING_TAB_TO_FRONT_EXTRA = "BRING_TAB_TO_FRONT";
     public static final String BRING_TAB_TO_FRONT_SOURCE_EXTRA = "BRING_TAB_TO_FRONT_SOURCE";
+    public static final String DAYDREAM_CATEGORY = "com.google.intent.category.DAYDREAM";
+    public static final String SHARE_INTENT_HISTOGRAM = "Android.Intent.ShareIntentUrlCount";
 
     /**
      * Represents popular external applications that can load a page in Chrome via intent.
@@ -745,8 +747,13 @@ public class IntentHandler {
             return null;
         }
         String query = results.get(0);
-        AutocompleteMatch match =
-                AutocompleteCoordinator.classify(Profile.getLastUsedRegularProfile(), query);
+
+        AutocompleteMatch match;
+        try (var controller = AutocompleteControllerProvider.createCloseableController(
+                     Profile.getLastUsedRegularProfile())) {
+            match = controller.get().classify(query, false);
+        }
+
         if (!match.isSearchSuggestion()) return match.getUrl().getSpec();
 
         List<String> urls = IntentUtils.safeGetStringArrayListExtra(
@@ -969,15 +976,26 @@ public class IntentHandler {
                 return true;
             }
 
+            boolean isFromChrome = wasIntentSenderChrome(intent);
+
             // Determine if this intent came from a trustworthy source (either Chrome or Google
             // first party applications).
-            boolean isInternal = notSecureIsIntentChromeOrFirstParty(intent);
-            boolean isFromChrome = wasIntentSenderChrome(intent);
+            boolean isInternal = false;
+            if (ChromeFeatureList.sShouldIgnoreIntentSkipInternalCheck.isEnabled()) {
+                // When removing the flag replace the isInternal usage with isFromChrome.
+                isInternal = isFromChrome;
+            } else {
+                isInternal = notSecureIsIntentChromeOrFirstParty(intent);
+            }
 
             if (IntentUtils.safeGetBooleanExtra(intent, EXTRA_OPEN_NEW_INCOGNITO_TAB, false)
                     && !isAllowedIncognitoIntent(isFromChrome, isCustomTab, intent)) {
                 return true;
             }
+
+            // Ignore Daydream intents as these would cause us to re-navigate after the Device ON
+            // flow. This can be removed once we migrate to the cardboard library.
+            if (intent.hasCategory(DAYDREAM_CATEGORY)) return true;
 
             // Now if we have an empty URL and the intent was ACTION_MAIN,
             // we are pretty sure it is the launcher calling us to show up.
@@ -1254,6 +1272,56 @@ public class IntentHandler {
         if (url == null) return null;
         url = url.trim();
         return TextUtils.isEmpty(url) ? null : url;
+    }
+
+    /**
+     * Extracts all Strings terminated by whitespace with the specified prefix.
+     *
+     * @param text Text to examine.
+     * @param prefix The prefix on which to extract Strings.
+     * @param results The list to insert results into.
+     * @return A possibly empty list of URL Strings.
+     */
+    private static void extractStringsWithPrefix(String text, String prefix, List<String> results) {
+        int i = 0;
+        while (i < text.length()) {
+            int startIndex = text.indexOf(prefix, i);
+            if (startIndex == -1) return;
+            for (i = startIndex + prefix.length(); i < text.length(); i++) {
+                if (Character.isWhitespace(text.charAt(i))) {
+                    results.add(text.substring(startIndex, i));
+                    break;
+                }
+            }
+            if (i >= text.length()) results.add(text.substring(startIndex));
+        }
+    }
+
+    /**
+     * Extract a raw URL from the Share intent text, without further processing. In the case of
+     * multiple URLs being present, picks the last one. Only considers http/https URLs.
+     * @param intent Intent to examine.
+     * @return Raw URL from the intent, or null if no URL could be found.
+     */
+    public static @Nullable String getUrlFromShareIntent(Intent intent) {
+        assert Intent.ACTION_SEND.equals(intent.getAction());
+        if (!"text/plain".equals(intent.getType())) return null;
+
+        String text = IntentUtils.safeGetStringExtra(intent, Intent.EXTRA_TEXT);
+        List<String> urls = new ArrayList<>();
+        if (!TextUtils.isEmpty(text)) {
+            extractStringsWithPrefix(text, UrlConstants.HTTP_URL_PREFIX, urls);
+            extractStringsWithPrefix(text, UrlConstants.HTTPS_URL_PREFIX, urls);
+        }
+
+        // Record a small exact linear histogram as we mostly care about 0/1/2, but the presence of
+        // larger counts would be interesting.
+        RecordHistogram.recordExactLinearHistogram(SHARE_INTENT_HISTOGRAM, urls.size(), 5);
+
+        if (urls.isEmpty()) return null;
+        // If multiple URLs are present, somewhat arbitrarily pick the last one (preferring https) -
+        // share actions seem to usually put the URL at the end.
+        return urls.get(urls.size() - 1);
     }
 
     private static String getUrlForCustomTab(Intent intent) {

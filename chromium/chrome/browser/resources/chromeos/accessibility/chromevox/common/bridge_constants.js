@@ -35,11 +35,13 @@ let BridgeEntry;
 export const BridgeConstants = {};
 
 /** @public {!BridgeEntry} */
-BridgeConstants.BrailleBackground = {
-  TARGET: 'BrailleBackground',
+BridgeConstants.Braille = {
+  TARGET: 'Braille',
   Action: {
     BACK_TRANSLATE: 'backTranslate',
-    REFRESH_BRAILLE_TABLE: 'refreshBrailleTable',
+    PAN_LEFT: 'panLeft',
+    PAN_RIGHT: 'panRight',
+    WRITE: 'write',
   },
 };
 
@@ -63,8 +65,8 @@ BridgeConstants.ChromeVoxPrefs = {
 };
 
 /** @public {!BridgeEntry} */
-BridgeConstants.ChromeVoxState = {
-  TARGET: 'ChromeVoxState',
+BridgeConstants.ChromeVoxRange = {
+  TARGET: 'ChromeVoxRange',
   Action: {
     CLEAR_CURRENT_RANGE: 'clearCurrentRange',
   },
@@ -79,8 +81,8 @@ BridgeConstants.CommandHandler = {
 };
 
 /** @public {!BridgeEntry} */
-BridgeConstants.EventSourceState = {
-  TARGET: 'EventSourceState',
+BridgeConstants.EventSource = {
+  TARGET: 'EventSource',
   Action: {
     GET: 'get',
   },
@@ -99,6 +101,18 @@ BridgeConstants.GestureCommandHandler = {
   TARGET: 'GestureCommandHandler',
   Action: {
     SET_ENABLED: 'setEnabled',
+  },
+};
+
+/** @public {!BridgeEntry} */
+BridgeConstants.LearnMode = {
+  TARGET: 'LearnMode',
+  Action: {
+    CLEAR_TOUCH_EXPLORE_OUTPUT_TIME: 'clearTouchExploreOutputTime',
+    ON_ACCESSIBILITY_GESTURE: 'onAccessibilityGesture',
+    ON_BRAILLE_KEY_EVENT: 'onBrailleKeyEvent',
+    ON_KEY_DOWN: 'onKeyDown',
+    ON_KEY_UP: 'onKeyUp',
   },
 };
 

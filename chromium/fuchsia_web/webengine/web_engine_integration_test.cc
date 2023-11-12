@@ -20,6 +20,7 @@
 #include "fuchsia_web/common/test/fit_adapter.h"
 #include "fuchsia_web/common/test/frame_test_util.h"
 #include "fuchsia_web/common/test/test_devtools_list_fetcher.h"
+#include "fuchsia_web/webengine/test/context_provider_for_test.h"
 #include "fuchsia_web/webengine/web_engine_integration_test_base.h"
 #include "media/base/media_switches.h"
 #include "media/fuchsia/audio/fake_audio_consumer.h"
@@ -28,12 +29,6 @@
 #include "net/http/http_request_headers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-#if defined(USE_CFV1_LAUNCHER)
-#include "fuchsia_web/webengine/test/context_provider_for_test_v1.h"  // nogncheck
-#else
-#include "fuchsia_web/webengine/test/context_provider_for_test_v2.h"  // nogncheck
-#endif
 
 namespace {
 
@@ -58,11 +53,16 @@ class WebEngineIntegrationTest : public WebEngineIntegrationTestBase {
  protected:
   WebEngineIntegrationTest() = default;
 
+  ~WebEngineIntegrationTest() override {
+    // We're about to shut down the realm; unbind to unhook the error handler.
+    frame_.Unbind();
+    context_.Unbind();
+  }
+
   void StartWebEngine(base::CommandLine command_line) override {
-    context_provider_.emplace(
-        ContextProviderForTest::Create(std::move(command_line)));
+    context_provider_.emplace(command_line);
     context_provider_->ptr().set_error_handler(
-        [](zx_status_t status) { ADD_FAILURE(); });
+        [](zx_status_t status) { FAIL() << zx_status_get_string(status); });
   }
 
   fuchsia::web::ContextProvider* GetContextProvider() override {
@@ -284,7 +284,8 @@ TEST_F(WebEngineIntegrationTest, RemoteDebuggingPort) {
   // Create a second frame, without remote debugging enabled. The remote
   // debugging service should still report a single Frame is present.
   fuchsia::web::FramePtr web_frame2;
-  web_frame2.set_error_handler([](zx_status_t) { ADD_FAILURE(); });
+  web_frame2.set_error_handler(
+      [](zx_status_t status) { FAIL() << zx_status_get_string(status); });
   context()->CreateFrame(web_frame2.NewRequest());
 
   devtools_list = GetDevToolsListFromPort(remote_debugging_port);

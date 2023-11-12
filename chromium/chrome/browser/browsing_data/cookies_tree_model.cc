@@ -13,8 +13,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
@@ -43,7 +43,6 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/permissions/permissions_client.h"
 #include "components/vector_icons/vector_icons.h"
-#include "content/public/browser/native_io_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/storage_usage_info.h"
 #include "content/public/common/url_constants.h"
@@ -759,7 +758,7 @@ class CookieTreeCacheStorageNode : public CookieTreeNode {
           AccessContextAuditDatabase::StorageAPIType::kCacheStorage);
 
       container->cache_storage_helper_->DeleteCacheStorage(
-          usage_info_->storage_key.origin());
+          usage_info_->storage_key);
       container->cache_storage_info_list_.erase(usage_info_);
     }
   }
@@ -1238,6 +1237,18 @@ void CookiesTreeModel::ScopedBatchUpdateNotifier::StartBatchUpdate() {
 
 ///////////////////////////////////////////////////////////////////////////////
 // CookiesTreeModel, public:
+
+// static
+std::unique_ptr<CookiesTreeModel> CookiesTreeModel::CreateForProfileDeprecated(
+    Profile* profile) {
+  return base::WrapUnique(new CookiesTreeModel(
+      LocalDataContainer::CreateFromStoragePartition(
+          profile->GetDefaultStoragePartition(),
+          CookiesTreeModel::GetCookieDeletionDisabledCallback(profile)),
+      profile->GetExtensionSpecialStoragePolicy(),
+      AccessContextAuditServiceFactory::GetForProfile(profile)));
+}
+
 CookiesTreeModel::CookiesTreeModel(
     std::unique_ptr<LocalDataContainer> data_container,
     ExtensionSpecialStoragePolicy* special_storage_policy)
@@ -1743,62 +1754,4 @@ CookiesTreeModel::GetCookieDeletionDisabledCallback(Profile* profile) {
   }
 #endif
   return base::NullCallback();
-}
-
-// static
-std::unique_ptr<CookiesTreeModel> CookiesTreeModel::CreateForProfileDeprecated(
-    Profile* profile) {
-  auto* storage_partition = profile->GetDefaultStoragePartition();
-  auto* file_system_context = storage_partition->GetFileSystemContext();
-  auto* native_io_context = storage_partition->GetNativeIOContext();
-
-  // If partitioned storage is enabled, the quota node is used to represent all
-  // types of quota managed storage. If not, the quota node type is excluded as
-  // it is represented by other types.
-  bool use_quota_only =
-      blink::StorageKey::IsThirdPartyStoragePartitioningEnabled();
-
-  // Types managed by Quota:
-  auto database_helper =
-      use_quota_only
-          ? nullptr
-          : base::MakeRefCounted<browsing_data::DatabaseHelper>(profile);
-  auto cache_helper =
-      use_quota_only ? nullptr
-                     : base::MakeRefCounted<browsing_data::CacheStorageHelper>(
-                           storage_partition);
-  auto indexed_db_helper =
-      use_quota_only ? nullptr
-                     : base::MakeRefCounted<browsing_data::IndexedDBHelper>(
-                           storage_partition);
-  auto file_system_helper =
-      use_quota_only
-          ? nullptr
-          : base::MakeRefCounted<browsing_data::FileSystemHelper>(
-                file_system_context,
-                browsing_data_file_system_util::GetAdditionalFileSystemTypes(),
-                native_io_context);
-  auto service_worker_helper =
-      use_quota_only ? nullptr
-                     : base::MakeRefCounted<browsing_data::ServiceWorkerHelper>(
-                           storage_partition->GetServiceWorkerContext());
-
-  // Quota type itself:
-  auto quota_helper =
-      use_quota_only ? BrowsingDataQuotaHelper::Create(profile) : nullptr;
-
-  auto container = std::make_unique<LocalDataContainer>(
-      base::MakeRefCounted<browsing_data::CookieHelper>(
-          storage_partition, GetCookieDeletionDisabledCallback(profile)),
-      database_helper,
-      base::MakeRefCounted<browsing_data::LocalStorageHelper>(profile),
-      /*session_storage_helper=*/nullptr, indexed_db_helper, file_system_helper,
-      quota_helper, service_worker_helper,
-      base::MakeRefCounted<browsing_data::SharedWorkerHelper>(
-          storage_partition),
-      cache_helper);
-
-  return std::make_unique<CookiesTreeModel>(
-      std::move(container), profile->GetExtensionSpecialStoragePolicy(),
-      AccessContextAuditServiceFactory::GetForProfile(profile));
 }

@@ -79,15 +79,9 @@ enum class HidePopoverFocusBehavior {
   kFocusPreviousElement,
 };
 
-enum class HidePopoverForcingLevel {
-  kHideAfterAnimations,
-  kHideImmediately,
-};
-
-enum class PopoverAncestorType {
-  kDefault,
-  kNewPopover,
-  kInclusive,
+enum class HidePopoverTransitionBehavior {
+  kFireEventsAndWaitForTransitions,
+  kNoEventsNoWaiting,
 };
 
 class CORE_EXPORT HTMLElement : public Element {
@@ -219,22 +213,27 @@ class CORE_EXPORT HTMLElement : public Element {
   bool HasPopoverAttribute() const;
   PopoverValueType PopoverType() const;
   bool popoverOpen() const;
-  const char* IsPopoverNotReady(PopoverTriggerAction action,
-                                DOMExceptionCode& exception_code) const;
-  bool IsPopoverReady(PopoverTriggerAction action) const;
+  bool IsPopoverReady(PopoverTriggerAction action,
+                      ExceptionState* exception_state,
+                      bool include_event_handler_text = false) const;
   void togglePopover(ExceptionState& exception_state);
   void togglePopover(bool force, ExceptionState& exception_state);
   void showPopover(ExceptionState& exception_state);
   void hidePopover(ExceptionState& exception_state);
+  // |exception_state| can be nullptr when exceptions can't be thrown, such as
+  // when the browser hides a popover during light dismiss or shows a popover in
+  // response to clicking a button with popovershowtarget.
+  void ShowPopoverInternal(ExceptionState* exception_state);
   void HidePopoverInternal(HidePopoverFocusBehavior focus_behavior,
-                           HidePopoverForcingLevel forcing_level);
-  void PopoverHideFinishIfNeeded();
-  static const HTMLElement* NearestOpenAncestralPopover(const Node&,
-                                                        PopoverAncestorType);
+                           HidePopoverTransitionBehavior event_firing,
+                           ExceptionState* exception_state);
+  void PopoverHideFinishIfNeeded(bool immediate);
+  static const HTMLElement* FindTopmostPopoverAncestor(HTMLElement&);
 
   // Retrieves the element pointed to by this element's 'anchor' content
-  // attribute, if that element exists, and if this element is a popover.
-  Element* anchorElement() const;
+  // attribute, if that element exists.
+  Element* anchorElement();
+  void setAnchorElement(Element*);
   void ResetPopoverAnchorObserver();
   void PopoverAnchorElementChanged();
   static void HandlePopoverLightDismiss(const Event& event, const Node& node);
@@ -245,7 +244,13 @@ class CORE_EXPORT HTMLElement : public Element {
   static void HideAllPopoversUntil(const HTMLElement*,
                                    Document&,
                                    HidePopoverFocusBehavior,
-                                   HidePopoverForcingLevel);
+                                   HidePopoverTransitionBehavior);
+  // This function checks that the ancestor relationships are still valid for
+  // the entire popover stack. These can change in various ways, such as a
+  // triggering element changing its `disabled` attribute. If any relationships
+  // are invalid, the entire popover stack is closed, and a console warning is
+  // emitted.
+  void CheckAndPossiblyClosePopoverStack();
 
   void SetOwnerSelectMenuElement(HTMLSelectMenuElement* element);
   HTMLSelectMenuElement* ownerSelectMenuElement() const;

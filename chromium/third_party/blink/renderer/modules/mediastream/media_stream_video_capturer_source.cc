@@ -6,7 +6,8 @@
 
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/token.h"
 #include "build/build_config.h"
 #include "media/capture/mojom/video_capture_types.mojom-blink.h"
@@ -65,7 +66,7 @@ void MediaStreamVideoCapturerSource::SetDeviceCapturerFactoryCallbackForTesting(
   device_capturer_factory_callback_ = std::move(testing_factory_callback);
 }
 
-void MediaStreamVideoCapturerSource::SetCanDiscardAlpha(
+void MediaStreamVideoCapturerSource::OnSourceCanDiscardAlpha(
     bool can_discard_alpha) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   source_->SetCanDiscardAlpha(can_discard_alpha);
@@ -117,7 +118,7 @@ void MediaStreamVideoCapturerSource::StartSourceImpl(
   source_->StartCapture(
       capture_params_, frame_callback_, crop_version_callback_,
       WTF::BindRepeating(&MediaStreamVideoCapturerSource::OnRunStateChanged,
-                         WTF::Unretained(this), capture_params_));
+                         weak_factory_.GetWeakPtr(), capture_params_));
 }
 
 media::VideoCaptureFeedbackCB
@@ -154,7 +155,7 @@ void MediaStreamVideoCapturerSource::RestartSourceImpl(
   source_->StartCapture(
       new_capture_params, frame_callback_, crop_version_callback_,
       WTF::BindRepeating(&MediaStreamVideoCapturerSource::OnRunStateChanged,
-                         WTF::Unretained(this), new_capture_params));
+                         weak_factory_.GetWeakPtr(), new_capture_params));
 }
 
 absl::optional<media::VideoCaptureFormat>
@@ -190,7 +191,7 @@ void MediaStreamVideoCapturerSource::ChangeSourceImpl(
   source_->StartCapture(
       capture_params_, frame_callback_, crop_version_callback_,
       WTF::BindRepeating(&MediaStreamVideoCapturerSource::OnRunStateChanged,
-                         WTF::Unretained(this), capture_params_));
+                         weak_factory_.GetWeakPtr(), capture_params_));
 }
 
 #if !BUILDFLAG(IS_ANDROID)

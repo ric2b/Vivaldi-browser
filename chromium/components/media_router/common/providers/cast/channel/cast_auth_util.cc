@@ -9,12 +9,12 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "components/media_router/common/providers/cast/certificate/cast_cert_validator.h"
 #include "components/media_router/common/providers/cast/certificate/cast_crl.h"
 #include "components/media_router/common/providers/cast/channel/cast_channel_enum.h"
+#include "components/media_router/common/providers/cast/channel/cast_channel_metrics.h"
 #include "components/media_router/common/providers/cast/channel/cast_message_util.h"
 #include "crypto/random.h"
 #include "net/cert/pki/signature_algorithm.h"
@@ -138,80 +138,29 @@ class CastNonce {
   base::Time nonce_generation_time_;
 };
 
-// Must match with histogram enum CastCertificateStatus.
-// This should never be reordered.
-enum CertVerificationStatus {
-  CERT_STATUS_OK,
-  CERT_STATUS_INVALID_CRL,
-  CERT_STATUS_VERIFICATION_FAILED,
-  CERT_STATUS_REVOKED,
-  CERT_STATUS_MISSING_CRL,
-  CERT_STATUS_PARSE_FAILED,
-  CERT_STATUS_DATE_INVALID,
-  CERT_STATUS_RESTRICTIONS_FAILED,
-  CERT_STATUS_MISSING_CERTS,
-  CERT_STATUS_UNEXPECTED_FAILED,
-  CERT_STATUS_COUNT,
-};
-
-// Must match with histogram enum CastNonce.
-// This should never be reordered.
-enum NonceVerificationStatus {
-  NONCE_MATCH,
-  NONCE_MISMATCH,
-  NONCE_MISSING,
-  NONCE_COUNT,
-};
-
-// Must match with the histogram enum CastSignature.
-// This should never be reordered.
-enum SignatureStatus {
-  SIGNATURE_OK,
-  SIGNATURE_EMPTY,
-  SIGNATURE_VERIFY_FAILED,
-  SIGNATURE_ALGORITHM_UNSUPPORTED,
-  SIGNATURE_COUNT,
-};
-
-// Record certificate verification histogram events.
-void RecordCertificateEvent(CertVerificationStatus event) {
-  UMA_HISTOGRAM_ENUMERATION("Cast.Channel.Certificate", event,
-                            CERT_STATUS_COUNT);
-}
-
-// Record nonce verification histogram events.
-void RecordNonceEvent(NonceVerificationStatus event) {
-  UMA_HISTOGRAM_ENUMERATION("Cast.Channel.Nonce", event, NONCE_COUNT);
-}
-
-// Record signature verification histogram events.
-void RecordSignatureEvent(SignatureStatus event) {
-  UMA_HISTOGRAM_ENUMERATION("Cast.Channel.Signature", event, SIGNATURE_COUNT);
-}
-
 // Maps CastCertError to AuthResult.
 // If crl_required is set to false, all revocation related errors are ignored.
 AuthResult MapToAuthResult(cast_certificate::CastCertError error,
                            bool crl_required) {
   switch (error) {
     case cast_certificate::CastCertError::ERR_CERTS_MISSING:
-      RecordCertificateEvent(CERT_STATUS_MISSING_CERTS);
+      RecordCertificateStatus(CastCertificateStatus::kMissingCerts);
       return AuthResult("Failed to locate certificates.",
                         AuthResult::ERROR_PEER_CERT_EMPTY);
     case cast_certificate::CastCertError::ERR_CERTS_PARSE:
-      RecordCertificateEvent(CERT_STATUS_PARSE_FAILED);
+      RecordCertificateStatus(CastCertificateStatus::kParseFailed);
       return AuthResult("Failed to parse certificates.",
                         AuthResult::ERROR_CERT_PARSING_FAILED);
     case cast_certificate::CastCertError::ERR_CERTS_DATE_INVALID:
-      RecordCertificateEvent(CERT_STATUS_DATE_INVALID);
+      RecordCertificateStatus(CastCertificateStatus::kDateInvalid);
       return AuthResult("Failed date validity check.",
                         AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
     case cast_certificate::CastCertError::ERR_CERTS_VERIFY_GENERIC:
-      RecordCertificateEvent(CERT_STATUS_VERIFICATION_FAILED);
+      RecordCertificateStatus(CastCertificateStatus::kVerificationFailed);
       return AuthResult("Failed with a generic certificate verification error.",
                         AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
     case cast_certificate::CastCertError::ERR_CERTS_RESTRICTIONS:
-      RecordCertificateEvent(CERT_STATUS_RESTRICTIONS_FAILED);
+      RecordCertificateStatus(CastCertificateStatus::kRestrictionsFailed);
       return AuthResult("Failed certificate restrictions.",
                         AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
     case cast_certificate::CastCertError::ERR_CRL_INVALID:
@@ -219,18 +168,23 @@ AuthResult MapToAuthResult(cast_certificate::CastCertError error,
       // This error is only encountered if |crl_required| is true.
       DCHECK(crl_required);
       return AuthResult("Failed to provide a valid CRL.",
-                        AuthResult::ERROR_CRL_INVALID);
+                        AuthResult::ERROR_CRL_INVALID,
+                        CastChannelFlag::kCRLInvalid);
     case cast_certificate::CastCertError::ERR_CERTS_REVOKED:
-      RecordCertificateEvent(CERT_STATUS_REVOKED);
+      RecordCertificateStatus(CastCertificateStatus::kRevoked);
       // Revocation check is the last step of Cast certificate verification.
       // If this error is encountered, the rest of certificate verification has
       // succeeded.
-      if (!crl_required)
-        return AuthResult();
+      if (!crl_required) {
+        AuthResult success;
+        success.set_flag(CastChannelFlag::kCertificateRevoked);
+        return success;
+      }
       return AuthResult("Failed certificate revocation check.",
-                        AuthResult::ERROR_CERT_REVOKED);
+                        AuthResult::ERROR_CERT_REVOKED,
+                        CastChannelFlag::kCertificateRevoked);
     case cast_certificate::CastCertError::ERR_UNEXPECTED:
-      RecordCertificateEvent(CERT_STATUS_UNEXPECTED_FAILED);
+      RecordCertificateStatus(CastCertificateStatus::kUnexpectedFailed);
       return AuthResult("Failed verifying cast device certificate.",
                         AuthResult::ERROR_CERT_NOT_SIGNED_BY_TRUSTED_CA);
     case cast_certificate::CastCertError::OK:
@@ -241,13 +195,16 @@ AuthResult MapToAuthResult(cast_certificate::CastCertError error,
 
 }  // namespace
 
-AuthResult::AuthResult()
-    : error_type(ERROR_NONE), channel_policies(POLICY_NONE) {}
+AuthResult::AuthResult() = default;
 
-AuthResult::AuthResult(const std::string& error_message, ErrorType error_type)
-    : error_message(error_message), error_type(error_type) {}
+AuthResult::AuthResult(const std::string& error_message,
+                       ErrorType error_type,
+                       CastChannelFlag flag)
+    : error_message(error_message),
+      error_type(error_type),
+      flags(static_cast<CastChannelFlags>(flag)) {}
 
-AuthResult::~AuthResult() {}
+AuthResult::~AuthResult() = default;
 
 // static
 AuthResult AuthResult::CreateWithParseError(const std::string& error_message,
@@ -283,39 +240,47 @@ AuthContext::~AuthContext() = default;
 
 AuthResult AuthContext::VerifySenderNonce(
     const std::string& nonce_response) const {
+  AuthResult success;
   if (nonce_ != nonce_response) {
     if (nonce_response.empty()) {
-      RecordNonceEvent(NONCE_MISSING);
+      RecordNonceStatus(CastNonceStatus::kMissing);
+      success.set_flag(CastChannelFlag::kSenderNonceMissing);
     } else {
-      RecordNonceEvent(NONCE_MISMATCH);
+      RecordNonceStatus(CastNonceStatus::kMismatch);
+      success.set_flag(CastChannelFlag::kSenderNonceMismatch);
     }
     if (base::FeatureList::IsEnabled(kEnforceNonceChecking)) {
       return AuthResult("Sender nonce mismatched.",
-                        AuthResult::ERROR_SENDER_NONCE_MISMATCH);
+                        AuthResult::ERROR_SENDER_NONCE_MISMATCH,
+                        CastChannelFlag::kSenderNonceMismatch);
     }
   } else {
-    RecordNonceEvent(NONCE_MATCH);
+    RecordNonceStatus(CastNonceStatus::kMatch);
   }
-  return AuthResult();
+  return success;
 }
 
 AuthResult VerifyAndMapDigestAlgorithm(
     cast::channel::HashAlgorithm response_digest_algorithm,
     cast_certificate::CastDigestAlgorithm* digest_algorithm) {
+  AuthResult success;
   switch (response_digest_algorithm) {
     case cast::channel::SHA1:
-      RecordSignatureEvent(SIGNATURE_ALGORITHM_UNSUPPORTED);
+      RecordSignatureStatus(CastSignatureStatus::kAlgorithmUnsupported);
       *digest_algorithm = cast_certificate::CastDigestAlgorithm::SHA1;
       if (base::FeatureList::IsEnabled(kEnforceSHA256Checking)) {
         return AuthResult("Unsupported digest algorithm.",
-                          AuthResult::ERROR_DIGEST_UNSUPPORTED);
+                          AuthResult::ERROR_DIGEST_UNSUPPORTED,
+                          CastChannelFlag::kSha1DigestAlgorithm);
+      } else {
+        success.set_flag(CastChannelFlag::kSha1DigestAlgorithm);
       }
       break;
     case cast::channel::SHA256:
       *digest_algorithm = cast_certificate::CastDigestAlgorithm::SHA256;
       break;
   }
-  return AuthResult();
+  return success;
 }
 
 // Verifies the peer certificate and populates |peer_cert_der| with the DER
@@ -416,12 +381,12 @@ AuthResult VerifyCredentialsImpl(const AuthResponse& response,
   // Parse the CRL.
   std::unique_ptr<cast_crypto::CastCRL> crl;
   if (response.crl().empty()) {
-    RecordCertificateEvent(CERT_STATUS_MISSING_CRL);
+    RecordCertificateStatus(CastCertificateStatus::kMissingCRL);
   } else {
     crl = cast_crypto::ParseAndVerifyCRLUsingCustomTrustStore(
         response.crl(), verification_time, crl_trust_store);
     if (!crl) {
-      RecordCertificateEvent(CERT_STATUS_INVALID_CRL);
+      RecordCertificateStatus(CastCertificateStatus::kInvalidCRL);
     }
   }
 
@@ -439,10 +404,10 @@ AuthResult VerifyCredentialsImpl(const AuthResponse& response,
     return result;
 
   // The certificate is verified at this point.
-  RecordCertificateEvent(CERT_STATUS_OK);
+  RecordCertificateStatus(CastCertificateStatus::kOk);
 
   if (response.signature().empty() && !signature_input.empty()) {
-    RecordSignatureEvent(SIGNATURE_EMPTY);
+    RecordSignatureStatus(CastSignatureStatus::kEmpty);
     return AuthResult("Signature is empty.", AuthResult::ERROR_SIGNATURE_EMPTY);
   }
   cast_certificate::CastDigestAlgorithm digest_algorithm;
@@ -456,12 +421,12 @@ AuthResult VerifyCredentialsImpl(const AuthResponse& response,
     // For fuzz testing we just pretend the signature was OK.  The signature is
     // normally verified using boringssl, which has its own fuzz tests.
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    RecordSignatureEvent(SIGNATURE_VERIFY_FAILED);
+    RecordSignatureStatus(CastSignatureStatus::kVerifyFailed);
     return AuthResult("Failed verifying signature over data.",
                       AuthResult::ERROR_SIGNED_BLOBS_MISMATCH);
 #endif
   }
-  RecordSignatureEvent(SIGNATURE_OK);
+  RecordSignatureStatus(CastSignatureStatus::kOk);
 
   AuthResult success;
 

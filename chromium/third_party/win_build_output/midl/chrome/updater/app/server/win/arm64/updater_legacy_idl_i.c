@@ -9,7 +9,7 @@
 /* at a redacted point in time
  */
 /* Compiler settings for gen/chrome/updater/app/server/win/updater_legacy_idl.idl:
-    Oicf, W1, Zp8, env=Win64 (32b run), target_arch=ARM64 8.01.0626 
+    Oicf, W1, Zp8, env=Win64 (32b run), target_arch=ARM64 8.01.0628 
     protocol : dce , ms_ext, c_ext, robust
     error checks: allocation ref bounds_check enum stub_data 
     VC __declspec() decoration level: 
@@ -67,6 +67,9 @@ typedef IID CLSID;
 
 #endif // !_MIDL_USE_GUIDDEF_
 
+MIDL_DEFINE_GUID(IID, IID_IAppVersionWeb,0xAA10D17D,0x7A09,0x48AC,0xB1,0xE4,0xF1,0x24,0x93,0x7E,0x3D,0x26);
+
+
 MIDL_DEFINE_GUID(IID, IID_ICurrentState,0xA643508B,0xB1E3,0x4457,0x97,0x69,0x32,0xC9,0x53,0xBD,0x1D,0x57);
 
 
@@ -107,6 +110,9 @@ MIDL_DEFINE_GUID(CLSID, CLSID_GoogleUpdate3WebUserClass,0xA0FEB7CB,0xE0D8,0x4035
 
 
 MIDL_DEFINE_GUID(CLSID, CLSID_GoogleUpdate3WebSystemClass,0xFAC5C548,0x84EC,0x474C,0xA4,0xB3,0xCD,0x41,0x4E,0x09,0xB1,0x4C);
+
+
+MIDL_DEFINE_GUID(CLSID, CLSID_GoogleUpdate3WebServiceClass,0x687DCE9A,0x57BE,0x4026,0xBE,0xC4,0xC0,0xA9,0xAC,0xBB,0xCA,0xF2);
 
 
 MIDL_DEFINE_GUID(CLSID, CLSID_PolicyStatusUserClass,0xE432DCFE,0x6A32,0x4C07,0xB0,0x38,0x9D,0x74,0xAC,0x80,0xD6,0xAB);

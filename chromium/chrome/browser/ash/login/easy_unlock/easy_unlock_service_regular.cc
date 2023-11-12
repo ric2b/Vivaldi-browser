@@ -11,20 +11,18 @@
 
 #include "apps/app_lifetime_monitor_factory.h"
 #include "base/base64url.h"
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/linux_util.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/easy_unlock/chrome_proximity_auth_client.h"
-#include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_manager.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_names.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_notification_controller.h"
 #include "chrome/browser/ash/login/easy_unlock/smartlock_feature_usage_metrics.h"
@@ -280,17 +278,11 @@ void EasyUnlockServiceRegular::SetStoredRemoteDevices(
     pairing_update->Remove(kKeyDevices);
   else
     pairing_update->Set(kKeyDevices, devices.Clone());
-
-  CheckCryptohomeKeysAndMaybeHardlock();
 }
 
 proximity_auth::ProximityAuthPrefManager*
 EasyUnlockServiceRegular::GetProximityAuthPrefManager() {
   return pref_manager_.get();
-}
-
-EasyUnlockService::Type EasyUnlockServiceRegular::GetType() const {
-  return EasyUnlockService::TYPE_REGULAR;
 }
 
 AccountId EasyUnlockServiceRegular::GetAccountId() const {
@@ -307,40 +299,12 @@ const base::Value::List* EasyUnlockServiceRegular::GetRemoteDevices() const {
   return pairing_dict.FindList(kKeyDevices);
 }
 
-std::string EasyUnlockServiceRegular::GetChallenge() const {
-  NOTREACHED();
-  return std::string();
-}
-
-std::string EasyUnlockServiceRegular::GetWrappedSecret() const {
-  NOTREACHED();
-  return std::string();
-}
-
-void EasyUnlockServiceRegular::RecordEasySignInOutcome(
-    const AccountId& account_id,
-    bool success) const {
-  NOTREACHED();
-}
-
-void EasyUnlockServiceRegular::RecordPasswordLoginEvent(
-    const AccountId& account_id) const {
-  NOTREACHED();
-}
-
 void EasyUnlockServiceRegular::InitializeInternal() {
   pref_manager_ =
       std::make_unique<proximity_auth::ProximityAuthProfilePrefManager>(
           profile()->GetPrefs(), multidevice_setup_client_);
   pref_manager_->StartSyncingToLocalState(g_browser_process->local_state(),
                                           GetAccountId());
-
-  registrar_.Init(profile()->GetPrefs());
-  registrar_.Add(
-      proximity_auth::prefs::kProximityAuthIsChromeOSLoginEnabled,
-      base::BindRepeating(
-          &EasyUnlockServiceRegular::CheckCryptohomeKeysAndMaybeHardlock,
-          weak_ptr_factory_.GetWeakPtr()));
 
   // If `device_sync_client_` is not ready yet, wait for it to call back on
   // OnReady().
@@ -358,8 +322,6 @@ void EasyUnlockServiceRegular::InitializeInternal() {
 void EasyUnlockServiceRegular::ShutdownInternal() {
   pref_manager_.reset();
   notification_controller_.reset();
-
-  registrar_.RemoveAll();
 
   device_sync_client_->RemoveObserver(this);
 

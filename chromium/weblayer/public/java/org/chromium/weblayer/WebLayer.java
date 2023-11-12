@@ -25,8 +25,7 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
-import org.chromium.weblayer_private.interfaces.IBrowserFragment;
-import org.chromium.weblayer_private.interfaces.IMediaRouteDialogFragment;
+import org.chromium.weblayer_private.interfaces.IBrowser;
 import org.chromium.weblayer_private.interfaces.IProfile;
 import org.chromium.weblayer_private.interfaces.IWebLayer;
 import org.chromium.weblayer_private.interfaces.IWebLayerClient;
@@ -43,7 +42,8 @@ import java.util.List;
 /**
  * WebLayer is responsible for initializing state necessary to use any of the classes in web layer.
  */
-class WebLayer {
+@VisibleForTesting
+public class WebLayer {
     private static final String TAG = "WebLayer";
     // This metadata key, if defined, overrides the default behaviour of loading WebLayer from the
     // current WebView implementation. This is only intended for testing, and does not enforce any
@@ -218,6 +218,12 @@ class WebLayer {
         return WebLayerClientVersionConstants.PRODUCT_VERSION;
     }
 
+    @NonNull
+    static String getProviderPackageName(@NonNull Context context) {
+        ThreadCheck.ensureOnUiThread();
+        return getWebLayerLoader(context).getProviderPackageName();
+    }
+
     /**
      * Encapsulates the state of WebLayer loading and initialization.
      */
@@ -282,6 +288,14 @@ class WebLayer {
             mAvailable = available;
             mMajorVersion = majorVersion;
             mVersion = version;
+        }
+
+        public String getProviderPackageName() {
+            try {
+                return getOrCreateRemoteContext(mContext).getPackageName();
+            } catch (Exception e) {
+                throw new APICallException(e);
+            }
         }
 
         public boolean isAvailable() {
@@ -507,23 +521,10 @@ class WebLayer {
         }
     }
 
-    /**
-     * Returns remote counterpart for the BrowserFragment: an {@link IBrowserFragment}.
-     */
-    /* package */ IBrowserFragment connectFragment(Bundle fragmentArgs) {
+    IBrowser createBrowser(Context serviceContext, Bundle fragmentArgs) {
         try {
-            return mImpl.createBrowserFragmentImpl(ObjectWrapper.wrap(fragmentArgs));
-        } catch (RemoteException e) {
-            throw new APICallException(e);
-        }
-    }
-
-    /**
-     * Returns the remote counterpart of MediaRouteDialogFragment.
-     */
-    /* package */ IMediaRouteDialogFragment connectMediaRouteDialogFragment() {
-        try {
-            return mImpl.createMediaRouteDialogFragmentImpl();
+            return mImpl.createBrowser(
+                    ObjectWrapper.wrap(serviceContext), ObjectWrapper.wrap(fragmentArgs));
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -596,15 +597,11 @@ class WebLayer {
         sAppContext = appContext;
         if (implPackageName != null) {
             sRemoteContext = createRemoteContextFromPackageName(appContext, implPackageName);
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        } else {
             Method getContext =
                     webViewFactoryClass.getDeclaredMethod("getWebViewContextAndSetProvider");
             getContext.setAccessible(true);
             sRemoteContext = (Context) getContext.invoke(null);
-        } else {
-            implPackageName =
-                    (String) webViewFactoryClass.getMethod("getWebViewPackageName").invoke(null);
-            sRemoteContext = createRemoteContextFromPackageName(appContext, implPackageName);
         }
         sContextCreationTime = SystemClock.elapsedRealtime() - start;
         return sRemoteContext;

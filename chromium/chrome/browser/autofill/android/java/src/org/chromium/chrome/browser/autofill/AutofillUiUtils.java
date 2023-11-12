@@ -8,9 +8,11 @@ import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
 import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
+import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.text.Spannable;
@@ -29,12 +31,14 @@ import android.widget.TextView;
 import androidx.annotation.IntDef;
 import androidx.annotation.Px;
 import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.content.res.ResourcesCompat;
-import androidx.core.widget.TextViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ContextUtils;
+import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.url.GURL;
@@ -90,8 +94,7 @@ public class AutofillUiUtils {
             OffsetProvider offsetProvider, View anchorView, final Runnable dismissAction) {
         TextView textView = new TextView(context);
         textView.setText(text);
-        TextViewCompat.setTextAppearance(
-                textView, R.style.TextAppearance_TextMedium_Primary_Baseline_Light);
+        textView.setTextAppearance(R.style.TextAppearance_TextMedium_Primary_Baseline_Light);
         Resources resources = context.getResources();
         int hPadding = resources.getDimensionPixelSize(R.dimen.autofill_tooltip_horizontal_padding);
         int vPadding = resources.getDimensionPixelSize(R.dimen.autofill_tooltip_vertical_padding);
@@ -447,5 +450,76 @@ public class AutofillUiUtils {
         StringBuilder url = new StringBuilder(customIconURL.getSpec());
         url.append("=w").append(width).append("-h").append(height).append("-n");
         return new GURL(url.toString());
+    }
+
+    /**
+     * If the card has a valid card art URL, it tries to fetch the bitmap of the required size from
+     * PersonalDataManager. If it is not available in cache, then the bitmap of the required size is
+     * fetched and stored in cache for the next time.
+     * @param context Context required to get resources.
+     * @param card The credit card for which the icon is to be retrieved.
+     * @param widthId Resource Id for the width spec.
+     * @param heightId Resource Id for the height spec.
+     * @return {@link Drawable} that can be set as the card icon.
+     */
+    public static Drawable getCardIcon(
+            Context context, CreditCard card, int widthId, int heightId) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)) {
+            if (card.getCardArtUrl() != null && card.getCardArtUrl().isValid()) {
+                Resources resources = context.getResources();
+                Bitmap customIconBitmap =
+                        PersonalDataManager.getInstance()
+                                .getCustomImageForAutofillSuggestionIfAvailable(
+                                        getCCIconURLWithParams(card.getCardArtUrl(),
+                                                resources.getDimensionPixelSize(widthId),
+                                                resources.getDimensionPixelSize(heightId)));
+                if (customIconBitmap != null) {
+                    // TODO(crbug.com/1313616): We have one gstatic card art image that is available
+                    // in a single size. All other card art images can be fetched in the desired
+                    // size. Scale the bitmap to match the desired size. This might not be required
+                    // when this gstatic card art image is deprecated.
+                    Bitmap scaledBitmap = Bitmap.createScaledBitmap(customIconBitmap,
+                            resources.getDimensionPixelSize(widthId),
+                            resources.getDimensionPixelSize(heightId), true);
+                    return new BitmapDrawable(resources, scaledBitmap);
+                }
+            }
+        }
+        return AppCompatResources.getDrawable(context, card.getIssuerIconDrawableId());
+    }
+
+    /**
+     * If the {@code cardArtUrl} is valid, it tries to fetch the bitmap of the required size from
+     * PersonalDataManager. If it is not available in cache, then the bitmap of the required size is
+     * fetched and stored in cache for the next time.
+     * @param context Context required to get resources.
+     * @param cardArtUrl The URL to fetch the icon.
+     * @param defaultIconId Resource Id for the default (network) icon if the card art could not be
+     *        retrieved.
+     * @param widthId Resource Id for the width spec.
+     * @param heightId Resource Id for the height spec.
+     * @return {@link Drawable} that can be set as the card icon.
+     */
+    public static Drawable getCardIcon(
+            Context context, GURL cardArtUrl, int defaultIconId, int widthId, int heightId) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ENABLE_CARD_ART_IMAGE)) {
+            if (cardArtUrl.isValid()) {
+                Resources resources = context.getResources();
+                Bitmap customIconBitmap =
+                        PersonalDataManager.getInstance()
+                                .getCustomImageForAutofillSuggestionIfAvailable(
+                                        getCCIconURLWithParams(cardArtUrl,
+                                                resources.getDimensionPixelSize(widthId),
+                                                resources.getDimensionPixelSize(heightId)));
+                if (customIconBitmap != null) {
+                    // Scale the icon to the desired dimension.
+                    Bitmap scaledBitmap = Bitmap.createScaledBitmap(customIconBitmap,
+                            resources.getDimensionPixelSize(widthId),
+                            resources.getDimensionPixelSize(heightId), true);
+                    return new BitmapDrawable(resources, scaledBitmap);
+                }
+            }
+        }
+        return AppCompatResources.getDrawable(context, defaultIconId);
     }
 }

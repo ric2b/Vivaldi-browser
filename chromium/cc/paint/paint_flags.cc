@@ -2,21 +2,37 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <utility>
-
 #include "cc/paint/paint_flags.h"
 
+#include <utility>
+
+#include "base/memory/values_equivalent.h"
 #include "base/notreached.h"
 #include "cc/paint/paint_filter.h"
+#include "cc/paint/paint_op.h"
 #include "cc/paint/paint_op_buffer.h"
-#include "cc/paint/paint_op_writer.h"
 #include "cc/paint/paint_shader.h"
 #include "third_party/skia/include/core/SkPathUtils.h"
 
 namespace {
 
-static bool affects_alpha(const SkColorFilter* cf) {
+bool affects_alpha(const SkColorFilter* cf) {
   return cf && !cf->isAlphaUnchanged();
+}
+
+template <typename T>
+bool AreValuesEqualForTesting(const sk_sp<T>& a, const sk_sp<T>& b) {
+  return base::ValuesEquivalent(a, b, [](const T& x, const T& y) {
+    return x.EqualsForTesting(y);  // IN-TEST
+  });
+}
+
+bool AreSkFlattenablesEqualForTesting(const sk_sp<SkFlattenable> a,  // IN-TEST
+                                      const sk_sp<SkFlattenable> b) {
+  return base::ValuesEquivalent(
+      a, b, [](const SkFlattenable& x, const SkFlattenable& y) {
+        return x.serialize()->equals(y.serialize().get());
+      });
 }
 
 }  // namespace
@@ -103,27 +119,6 @@ bool PaintFlags::getFillPath(const SkPath& src,
   return skpathutils::FillPathWithPaint(src, paint, dst, cull_rect, res_scale);
 }
 
-bool PaintFlags::IsSimpleOpacity() const {
-  uint32_t color = getColor();
-  if (SK_ColorTRANSPARENT != SkColorSetA(color, SK_AlphaTRANSPARENT))
-    return false;
-  if (getBlendMode() != SkBlendMode::kSrcOver)
-    return false;
-  if (getLooper())
-    return false;
-  if (getPathEffect())
-    return false;
-  if (HasShader())
-    return false;
-  if (getMaskFilter())
-    return false;
-  if (getColorFilter())
-    return false;
-  if (getImageFilter())
-    return false;
-  return true;
-}
-
 bool PaintFlags::SupportsFoldingAlpha() const {
   if (getBlendMode() != SkBlendMode::kSrcOver)
     return false;
@@ -177,73 +172,34 @@ bool PaintFlags::IsValid() const {
   return PaintOp::IsValidPaintFlagsSkBlendMode(getBlendMode());
 }
 
-bool PaintFlags::operator==(const PaintFlags& other) const {
+bool PaintFlags::EqualsForTesting(const PaintFlags& other) const {
   // Can't just ToSkPaint and operator== here as SkPaint does pointer
   // comparisons on all the ref'd skia objects on the SkPaint, which
   // is not true after serialization.
-  if (getColor() != other.getColor())
-    return false;
-  if (!PaintOp::AreEqualEvenIfNaN(getStrokeWidth(), other.getStrokeWidth()))
-    return false;
-  if (!PaintOp::AreEqualEvenIfNaN(getStrokeMiter(), other.getStrokeMiter()))
-    return false;
-  if (getBlendMode() != other.getBlendMode())
-    return false;
-  if (getStrokeCap() != other.getStrokeCap())
-    return false;
-  if (getStrokeJoin() != other.getStrokeJoin())
-    return false;
-  if (getStyle() != other.getStyle())
-    return false;
-  if (getFilterQuality() != other.getFilterQuality())
-    return false;
-
-  if (!PaintOp::AreSkFlattenablesEqual(getPathEffect().get(),
-                                       other.getPathEffect().get())) {
-    return false;
-  }
-  if (!PaintOp::AreSkFlattenablesEqual(getMaskFilter().get(),
-                                       other.getMaskFilter().get())) {
-    return false;
-  }
-  if (!PaintOp::AreSkFlattenablesEqual(getColorFilter().get(),
-                                       other.getColorFilter().get())) {
-    return false;
-  }
-  if (!PaintOp::AreSkFlattenablesEqual(getLooper().get(),
-                                       other.getLooper().get())) {
-    return false;
-  }
-
-  if (!getImageFilter() != !other.getImageFilter())
-    return false;
-  if (getImageFilter() && *getImageFilter() != *other.getImageFilter())
-    return false;
-
-  if (!getShader() != !other.getShader())
-    return false;
-  if (getShader() && *getShader() != *other.getShader())
-    return false;
-  return true;
+  return getColor() == other.getColor() &&
+         getStrokeWidth() == getStrokeWidth() &&
+         getStrokeMiter() == other.getStrokeMiter() &&
+         getBlendMode() == other.getBlendMode() &&
+         getStrokeCap() == other.getStrokeCap() &&
+         getStrokeJoin() == other.getStrokeJoin() &&
+         getStyle() == other.getStyle() &&
+         getFilterQuality() == other.getFilterQuality() &&
+         AreSkFlattenablesEqualForTesting(path_effect_,  // IN-TEST
+                                          other.path_effect_) &&
+         AreSkFlattenablesEqualForTesting(mask_filter_,  // IN-TEST
+                                          other.mask_filter_) &&
+         AreSkFlattenablesEqualForTesting(color_filter_,  // IN-TEST
+                                          other.color_filter_) &&
+         AreSkFlattenablesEqualForTesting(draw_looper_,  // IN-TEST
+                                          other.draw_looper_) &&
+         AreValuesEqualForTesting(image_filter_,  // IN-TEST
+                                  other.image_filter_) &&
+         AreValuesEqualForTesting(shader_, other.shader_);  // IN-TEST
 }
 
 bool PaintFlags::HasDiscardableImages() const {
   return (shader_ && shader_->has_discardable_images()) ||
          (image_filter_ && image_filter_->has_discardable_images());
-}
-
-size_t PaintFlags::GetSerializedSize() const {
-  return sizeof(color_) + sizeof(width_) + sizeof(miter_limit_) +
-         sizeof(blend_mode_) + sizeof(bitfields_uint_) +
-         PaintOpWriter::GetFlattenableSize(path_effect_.get()) +
-         PaintOpWriter::Alignment() +
-         PaintOpWriter::GetFlattenableSize(mask_filter_.get()) +
-         PaintOpWriter::Alignment() +
-         PaintOpWriter::GetFlattenableSize(color_filter_.get()) +
-         PaintOpWriter::Alignment() +
-         PaintOpWriter::GetFlattenableSize(draw_looper_.get()) +
-         PaintFilter::GetFilterSize(image_filter_.get()) +
-         PaintShader::GetSerializedSize(shader_.get());
 }
 
 }  // namespace cc

@@ -47,19 +47,15 @@
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
-          layoutStyle:(VivaldiStartPageLayoutStyle)style
-    deviceOrientation:(BOOL)isLandscape {
+          layoutStyle:(VivaldiStartPageLayoutStyle)style {
   [self.speedDialView configureWith:speedDials
                              parent:parent
                       faviconLoader:faviconLoader
-                        layoutStyle:style
-                  deviceOrientation:isLandscape];
+                        layoutStyle:style];
 }
 
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
-                  isLandscape:(BOOL)isLandscape {
-  [self.speedDialView reloadLayoutWithStyle:style
-                                isLandscape:isLandscape];
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style {
+  [self.speedDialView reloadLayoutWithStyle:style];
 }
 
 - (void)setCurrentPage:(NSInteger)page {

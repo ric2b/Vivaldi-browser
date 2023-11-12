@@ -5,15 +5,15 @@
 package org.chromium.chrome.browser.background_sync;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.content.Context;
-import android.os.Bundle;
+import android.os.PersistableBundle;
 
 import org.junit.After;
 import org.junit.Before;
@@ -59,7 +59,7 @@ public class BackgroundSyncBackgroundTaskTest {
     @Rule
     public JniMocker mocker = new JniMocker();
 
-    private Bundle mTaskExtras;
+    private PersistableBundle mTaskExtras;
     private long mTaskTime;
 
     @Mock
@@ -78,7 +78,7 @@ public class BackgroundSyncBackgroundTaskTest {
         MockitoAnnotations.initMocks(this);
         BackgroundTaskSchedulerFactory.setSchedulerForTesting(mTaskScheduler);
 
-        mTaskExtras = new Bundle();
+        mTaskExtras = new PersistableBundle();
 
         doReturn(true)
                 .when(mTaskScheduler)

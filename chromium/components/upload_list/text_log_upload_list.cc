@@ -27,6 +27,7 @@ constexpr char kJsonLogKeyLocalId[] = "local_id";
 constexpr char kJsonLogKeyCaptureTime[] = "capture_time";
 constexpr char kJsonLogKeyState[] = "state";
 constexpr char kJsonLogKeySource[] = "source";
+constexpr char kJsonLogKeyPathHash[] = "path_hash";
 
 std::vector<std::string> SplitIntoLines(const std::string& file_contents) {
   return base::SplitString(file_contents, base::kWhitespaceASCII,
@@ -139,7 +140,7 @@ std::unique_ptr<TextLogUploadList::UploadInfo> TryParseCsvLogEntry(
 std::unique_ptr<TextLogUploadList::UploadInfo> TryParseJsonLogEntry(
     const base::Value& dict) {
   // Parse upload_id.
-  const base::Value* upload_id_value = dict.FindKey(kJsonLogKeyUploadId);
+  const base::Value* upload_id_value = dict.GetDict().Find(kJsonLogKeyUploadId);
   if (upload_id_value && !upload_id_value->is_string())
     return nullptr;
 
@@ -175,9 +176,16 @@ std::unique_ptr<TextLogUploadList::UploadInfo> TryParseJsonLogEntry(
         static_cast<TextLogUploadList::UploadInfo::State>(state.value());
 
   // Parse source.
-  const std::string* source = dict.FindStringKey(kJsonLogKeySource);
-  if (source)
+  if (const std::string* source = dict.FindStringKey(kJsonLogKeySource);
+      source) {
     info->source = *source;
+  }
+
+  // Parse path hash.
+  if (const std::string* path_hash = dict.FindStringKey(kJsonLogKeyPathHash);
+      path_hash) {
+    info->path_hash = *path_hash;
+  }
 
   return info;
 }
@@ -250,4 +258,8 @@ void TextLogUploadList::ParseLogEntries(
     if (info)
       uploads->push_back(*info);
   }
+}
+
+void TextLogUploadList::RequestSingleUpload(const std::string& local_id) {
+  // Do nothing.
 }

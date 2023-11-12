@@ -6,10 +6,10 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_forward.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/token.h"
 #include "base/unguessable_token.h"
 #include "content/browser/browser_main_loop.h"
@@ -122,6 +122,18 @@ void VideoCaptureHost::OnError(const VideoCaptureControllerID& controller_id,
       FROM_HERE,
       base::BindOnce(&VideoCaptureHost::DoError, weak_factory_.GetWeakPtr(),
                      controller_id, error));
+}
+
+void VideoCaptureHost::OnCaptureConfigurationChanged(
+    const VideoCaptureControllerID& controller_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  if (!base::Contains(controllers_, controller_id) ||
+      !base::Contains(device_id_to_observer_map_, controller_id)) {
+    return;
+  }
+
+  media_stream_manager_->OnCaptureConfigurationChanged(controller_id);
 }
 
 void VideoCaptureHost::OnNewBuffer(

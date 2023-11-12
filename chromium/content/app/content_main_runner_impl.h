@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "content/browser/startup_data_impl.h"
 #include "content/public/app/content_main.h"
@@ -66,6 +66,10 @@ class ContentMainRunnerImpl : public ContentMainRunner {
 
   // True if the runner has been shut down.
   bool is_shutdown_ = false;
+
+  // Set to true if this content process's main function should enable startup
+  // tracing after initializing Mojo.
+  bool needs_startup_tracing_after_mojo_init_ = false;
 
   // The delegate will outlive this object.
   raw_ptr<ContentMainDelegate> delegate_ = nullptr;

@@ -5,13 +5,13 @@
 #include <string>
 
 #include "base/base_paths.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
-#include "base/process/launch.h"
 #include "base/process/process_iterator.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
@@ -19,12 +19,16 @@
 #include "chrome/updater/activity_impl_util_posix.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants_builder.h"
+#include "chrome/updater/linux/systemd_util.h"
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/service_proxy_factory.h"
 #include "chrome/updater/test/integration_tests_impl.h"
 #include "chrome/updater/update_service.h"
+#include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/linux_util.h"
+#include "chrome/updater/util/posix_util.h"
+#include "chrome/updater/util/unittest_util.h"
 #include "chrome/updater/util/util.h"
 #include "components/crx_file/crx_verifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -61,18 +65,19 @@ absl::optional<base::FilePath> GetInstalledExecutablePath(UpdaterScope scope) {
   return path->Append(GetExecutableRelativePath());
 }
 
-bool WaitForUpdaterExit(UpdaterScope /*scope*/) {
-  return WaitFor(base::BindRepeating([]() {
-                   return !base::NamedProcessIterator(kExecutableName, nullptr)
-                               .NextProcessEntry();
-                 }),
-                 base::BindLambdaForTesting([]() {
-                   VLOG(0) << "Still waiting for updater to exit...";
-                 }));
-}
-
-absl::optional<base::FilePath> GetDataDirPath(UpdaterScope scope) {
-  return GetBaseDataDirectory(scope);
+bool WaitForUpdaterExit(UpdaterScope scope) {
+  return WaitFor(
+      base::BindRepeating(
+          [](UpdaterScope scope) {
+            return !base::NamedProcessIterator(
+                        GetExecutableRelativePath().MaybeAsASCII(), nullptr)
+                        .NextProcessEntry() &&
+                   !base::NamedProcessIterator(kLauncherName, nullptr)
+                        .NextProcessEntry();
+          },
+          scope),
+      base::BindLambdaForTesting(
+          []() { VLOG(0) << "Still waiting for updater to exit..."; }));
 }
 
 void Uninstall(UpdaterScope scope) {
@@ -81,16 +86,8 @@ void Uninstall(UpdaterScope scope) {
   base::CommandLine command_line(*path);
   command_line.AppendSwitch(kUninstallSwitch);
   int exit_code = -1;
-  ASSERT_TRUE(Run(scope, command_line, &exit_code));
+  Run(scope, command_line, &exit_code);
   EXPECT_EQ(exit_code, 0);
-}
-
-void ExpectActiveUpdater(UpdaterScope scope) {
-  absl::optional<base::FilePath> path = GetInstalledExecutablePath(scope);
-  EXPECT_TRUE(path);
-  if (path) {
-    EXPECT_TRUE(base::PathExists(*path));
-  }
 }
 
 void ExpectCandidateUninstalled(UpdaterScope scope) {
@@ -110,17 +107,19 @@ void ExpectInstalled(UpdaterScope scope) {
 }
 
 void Clean(UpdaterScope scope) {
-  absl::optional<base::FilePath> path = GetBaseDataDirectory(scope);
+  absl::optional<base::FilePath> path = GetInstallDirectory(scope);
   EXPECT_TRUE(path);
   if (path) {
     EXPECT_TRUE(base::DeletePathRecursively(*path));
   }
+
+  EXPECT_TRUE(UninstallSystemdUnits(scope));
 }
 
 void ExpectClean(UpdaterScope scope) {
   ExpectCleanProcesses();
 
-  absl::optional<base::FilePath> path = GetBaseDataDirectory(scope);
+  absl::optional<base::FilePath> path = GetInstallDirectory(scope);
   EXPECT_TRUE(path);
   if (path && base::PathExists(*path)) {
     // If the path exists, then expect only the log file to be present.
@@ -130,6 +129,8 @@ void ExpectClean(UpdaterScope scope) {
       EXPECT_TRUE(base::PathExists(path->AppendASCII("updater.log")));
     }
   }
+
+  EXPECT_FALSE(SystemdUnitsInstalled(scope));
 }
 
 void EnterTestMode(const GURL& url) {

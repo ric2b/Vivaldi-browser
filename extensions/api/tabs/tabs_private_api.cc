@@ -118,15 +118,22 @@ bool IsTabMuted(const WebContents* web_contents) {
 }
 
 bool IsTabInAWorkspace(const WebContents* web_contents) {
-  std::string viv_extdata = web_contents->GetVivExtData();
+  return IsTabInAWorkspace(web_contents->GetVivExtData());
+}
+
+bool IsTabInAWorkspace(const std::string& viv_extdata) {
+  return GetTabWorkspaceId(viv_extdata).has_value();
+}
+
+absl::optional<double> GetTabWorkspaceId(const std::string& viv_extdata) {
   base::JSONParserOptions options = base::JSON_PARSE_RFC;
   absl::optional<base::Value> json =
-      base::JSONReader::Read(viv_extdata, options);
+     base::JSONReader::Read(viv_extdata, options);
+  absl::optional<double>value;
   if (json && json->is_dict()) {
-    auto workspace_id = json->FindDoubleKey(kVivaldiWorkspace);
-    return workspace_id.has_value();
+    value = json->FindDoubleKey(kVivaldiWorkspace);
   }
-  return false;
+  return value;
 }
 
 namespace {
@@ -634,6 +641,12 @@ void VivaldiPrivateTabObserver::CommitSettings() {
   web_contents()->OnWebPreferencesChanged();
 }
 
+void VivaldiPrivateTabObserver::OnZoomControllerDestroyed(
+    zoom::ZoomController* zoom_controller) {
+  DCHECK(zoom_controller);
+  zoom_controller->RemoveObserver(this);
+}
+
 void VivaldiPrivateTabObserver::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
   content::WebContents* web_contents = data.web_contents;
@@ -802,9 +815,7 @@ void VivaldiPrivateTabObserver::WebContentsDidAttach() {
       web_contents()->GetBrowserContext());
 }
 
-void VivaldiPrivateTabObserver::BeforeUnloadFired(
-    bool proceed,
-    const base::TimeTicks& proceed_time) {
+void VivaldiPrivateTabObserver::BeforeUnloadFired(bool proceed) {
   int tab_id = extensions::ExtensionTabUtil::GetTabId(web_contents());
   Browser* browser = ::vivaldi::FindBrowserWithWebContents(web_contents());
   int window_id = browser->session_id().id();

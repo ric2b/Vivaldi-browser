@@ -6,9 +6,10 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_clock.h"
@@ -22,7 +23,9 @@
 #include "components/autofill/core/browser/webdata/autofill_wallet_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_usage_data_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
+#include "components/autofill/core/browser/webdata/contact_info_model_type_controller.h"
 #include "components/autofill/core/browser/webdata/contact_info_sync_bridge.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/browser_sync/active_devices_provider_impl.h"
 #include "components/browser_sync/browser_sync_client.h"
 #include "components/history/core/browser/sync/history_delete_directives_model_type_controller.h"
@@ -30,7 +33,10 @@
 #include "components/history/core/common/pref_names.h"
 #include "components/password_manager/core/browser/password_store_interface.h"
 #include "components/password_manager/core/browser/sync/password_model_type_controller.h"
+#include "components/power_bookmarks/core/power_bookmark_features.h"
+#include "components/power_bookmarks/core/power_bookmark_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/reading_list/core/reading_list_model.h"
 #include "components/reading_list/features/reading_list_switches.h"
 #include "components/send_tab_to_self/features.h"
 #include "components/send_tab_to_self/send_tab_to_self_model_type_controller.h"
@@ -157,6 +163,7 @@ SyncApiComponentFactoryImpl::SyncApiComponentFactoryImpl(
     const scoped_refptr<password_manager::PasswordStoreInterface>&
         account_password_store,
     sync_bookmarks::BookmarkSyncService* bookmark_sync_service,
+    power_bookmarks::PowerBookmarkService* power_bookmark_service,
     sync_notes::NoteSyncService* note_sync_service)
     : sync_client_(sync_client),
       channel_(channel),
@@ -171,6 +178,7 @@ SyncApiComponentFactoryImpl::SyncApiComponentFactoryImpl(
       profile_password_store_(profile_password_store),
       account_password_store_(account_password_store),
       bookmark_sync_service_(bookmark_sync_service),
+      power_bookmark_service_(power_bookmark_service),
       note_sync_service_(note_sync_service) {
   DCHECK(sync_client_);
 }
@@ -229,21 +237,43 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
     // disabled.
     if (base::FeatureList::IsEnabled(syncer::kSyncEnableContactInfoDataType) &&
         !disabled_types.Has(syncer::CONTACT_INFO)) {
-      controllers.push_back(std::make_unique<syncer::ModelTypeController>(
-          syncer::CONTACT_INFO,
-          std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
-              db_thread_, base::BindRepeating(
-                              &ContactInfoDelegateFromDataService,
-                              base::RetainedRef(web_data_service_on_disk_)))));
+      // The same delegate is used for full sync and transport mode.
+      controllers.push_back(
+          std::make_unique<autofill::ContactInfoModelTypeController>(
+              /*delegate_for_full_sync_mode=*/
+              std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+                  db_thread_,
+                  base::BindRepeating(
+                      &ContactInfoDelegateFromDataService,
+                      base::RetainedRef(web_data_service_on_disk_))),
+              /*delegate_for_transport_mode=*/
+              std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+                  db_thread_,
+                  base::BindRepeating(
+                      &ContactInfoDelegateFromDataService,
+                      base::RetainedRef(web_data_service_on_disk_))),
+              sync_service));
     }
 
     // Wallet data sync is enabled by default. Register unless explicitly
     // disabled.
     if (!disabled_types.Has(syncer::AUTOFILL_WALLET_DATA)) {
-      controllers.push_back(CreateWalletModelTypeControllerWithInMemorySupport(
-          syncer::AUTOFILL_WALLET_DATA,
-          base::BindRepeating(&AutofillWalletDelegateFromDataService),
-          sync_service));
+      if (base::FeatureList::IsEnabled(
+              autofill::features::kAutofillEnableAccountWalletStorage)) {
+        controllers.push_back(
+            CreateWalletModelTypeControllerWithInMemorySupport(
+                syncer::AUTOFILL_WALLET_DATA,
+                base::BindRepeating(&AutofillWalletDelegateFromDataService),
+                sync_service));
+      } else {
+        // Create without a transport-mode delegate otherwise.
+        // Since the feature is already enabled by default, this path is only
+        // executed in integration tests.
+        controllers.push_back(CreateWalletModelTypeController(
+            syncer::AUTOFILL_WALLET_DATA,
+            base::BindRepeating(&AutofillWalletDelegateFromDataService),
+            sync_service));
+      }
     }
 
     // Wallet metadata sync depends on Wallet data sync. Register if neither
@@ -291,6 +321,14 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
               bookmark_sync_service_
                   ->GetBookmarkSyncControllerDelegate(favicon_service)
                   .get())));
+    }
+
+    if (!disabled_types.Has(syncer::POWER_BOOKMARK) &&
+        power_bookmark_service_ &&
+        base::FeatureList::IsEnabled(power_bookmarks::kPowerBookmarkBackend)) {
+      controllers.push_back(std::make_unique<ModelTypeController>(
+          syncer::POWER_BOOKMARK,
+          power_bookmark_service_->CreateSyncControllerDelegate()));
     }
   }
 
@@ -385,12 +423,27 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
             dump_stack));
   }
 
-  // Reading list sync is enabled by default only on iOS. Register unless
-  // Reading List or Reading List Sync is explicitly disabled.
-  if (!disabled_types.Has(syncer::READING_LIST) &&
-      reading_list::switches::IsReadingListEnabled()) {
-    controllers.push_back(CreateModelTypeControllerForModelRunningOnUIThread(
-        syncer::READING_LIST));
+  // Register reading list unless explicitly disabled.
+  if (!disabled_types.Has(syncer::READING_LIST)) {
+    // The transport-mode delegate may or may not be null depending on
+    // platform and feature toggle state.
+    syncer::ModelTypeControllerDelegate* delegate_for_transport_mode =
+        sync_client_->GetReadingListModel()
+            ->GetSyncControllerDelegateForTransportMode()
+            .get();
+
+    controllers.push_back(std::make_unique<ModelTypeController>(
+        syncer::READING_LIST,
+        /*delegate_for_full_sync_mode=*/
+        std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+            sync_client_->GetReadingListModel()
+                ->GetSyncControllerDelegate()
+                .get()),
+        /*delegate_for_transport_mode=*/
+        delegate_for_transport_mode
+            ? std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+                  delegate_for_transport_mode)
+            : nullptr));
   }
 
   if (!disabled_types.Has(syncer::USER_EVENTS)) {
@@ -484,13 +537,6 @@ SyncApiComponentFactoryImpl::CreateForwardingControllerDelegate(
     syncer::ModelType type) {
   return std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
       sync_client_->GetControllerDelegateForModelType(type).get());
-}
-
-std::unique_ptr<ModelTypeController>
-SyncApiComponentFactoryImpl::CreateModelTypeControllerForModelRunningOnUIThread(
-    syncer::ModelType type) {
-  return std::make_unique<ModelTypeController>(
-      type, CreateForwardingControllerDelegate(type));
 }
 
 std::unique_ptr<ModelTypeController>

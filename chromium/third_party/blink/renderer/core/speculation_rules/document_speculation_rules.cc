@@ -8,6 +8,9 @@
 #include "base/ranges/algorithm.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
+#include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/css/style_rule.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/dom/shadow_including_tree_order_traversal.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -16,6 +19,7 @@
 #include "third_party/blink/renderer/core/html/html_area_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/speculation_rule_loader.h"
+#include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/speculation_rules/document_rule_predicate.h"
 #include "third_party/blink/renderer/core/speculation_rules/speculation_rules_metrics.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
@@ -113,9 +117,9 @@ absl::optional<Referrer> GetReferrer(SpeculationRule* rule,
 
   // TODO(mcnee): Speculation rules initially shipped with a bug where a policy
   // of "no-referrer" would be assumed and the referrer policy restriction was
-  // not enforced. We emulate that behaviour here as sites don't currently have
-  // a means of specifying a suitable policy. Once
-  // SpeculationRulesReferrerPolicyKey ships, this workaround should be removed.
+  // not enforced. We emulate that behaviour here as sites did not have a means
+  // of specifying a suitable policy. SpeculationRulesReferrerPolicyKey shipped
+  // in M111. This workaround should be removed when the flag is removed.
   // See https://crbug.com/1398772.
   if (!RuntimeEnabledFeatures::SpeculationRulesReferrerPolicyKeyEnabled(
           execution_context) &&
@@ -175,17 +179,28 @@ void DocumentSpeculationRules::AddRuleSet(SpeculationRuleSet* rule_set) {
                       WebFeature::kSpeculationRulesDocumentRules);
     InitializeIfNecessary();
     InvalidateAllLinks();
+    if (!rule_set->selectors().empty()) {
+      UpdateSelectors();
+    }
   }
   QueueUpdateSpeculationCandidates();
+
+  probe::DidAddSpeculationRuleSet(*GetSupplementable(), *rule_set);
 }
 
 void DocumentSpeculationRules::RemoveRuleSet(SpeculationRuleSet* rule_set) {
   auto* it = base::ranges::remove(rule_sets_, rule_set);
   DCHECK(it != rule_sets_.end()) << "rule set was removed without existing";
   rule_sets_.erase(it, rule_sets_.end());
-  if (rule_set->has_document_rule())
+  if (rule_set->has_document_rule()) {
     InvalidateAllLinks();
+    if (!rule_set->selectors().empty()) {
+      UpdateSelectors();
+    }
+  }
   QueueUpdateSpeculationCandidates();
+
+  probe::DidRemoveSpeculationRuleSet(*GetSupplementable(), *rule_set);
 }
 
 void DocumentSpeculationRules::AddSpeculationRuleLoader(
@@ -271,17 +286,43 @@ void DocumentSpeculationRules::DocumentBaseURLChanged() {
   // updated document base URL.
   for (Member<SpeculationRuleSet>& rule_set : rule_sets_) {
     SpeculationRuleSet::Source* source = rule_set->source();
-    String parse_error;
     rule_set = SpeculationRuleSet::Parse(
-        source, GetSupplementable()->GetExecutionContext(), &parse_error);
+        source, GetSupplementable()->GetExecutionContext(),
+        /*out_error=*/nullptr);
     // There should not be any parsing errors as these rule sets have already
     // been parsed once without errors, and an updated base URL should not cause
-    // new errors.
-    DCHECK(parse_error.empty());
+    // new errors. There may however still be warnings.
+    DCHECK(rule_set);
   }
   if (initialized_)
     InvalidateAllLinks();
   QueueUpdateSpeculationCandidates();
+}
+
+void DocumentSpeculationRules::LinkMatchedSelectorsUpdated(
+    HTMLAnchorElement* link) {
+  DCHECK(initialized_);
+  DCHECK(SelectorMatchesEnabled());
+
+  InvalidateLink(link);
+  QueueUpdateSpeculationCandidates();
+}
+
+void DocumentSpeculationRules::LinkGainedOrLostComputedStyle(
+    HTMLAnchorElement* link) {
+  if (!SelectorMatchesEnabled() || !initialized_) {
+    return;
+  }
+
+  InvalidateLink(link);
+  QueueUpdateSpeculationCandidates();
+}
+
+void DocumentSpeculationRules::DocumentStyleUpdated() {
+  if (pending_update_state_ ==
+      PendingUpdateState::kUpdateWithCleanStylePending) {
+    UpdateSpeculationCandidates();
+  }
 }
 
 void DocumentSpeculationRules::Trace(Visitor* visitor) const {
@@ -292,6 +333,7 @@ void DocumentSpeculationRules::Trace(Visitor* visitor) const {
   visitor->Trace(matched_links_);
   visitor->Trace(unmatched_links_);
   visitor->Trace(pending_links_);
+  visitor->Trace(selectors_);
 }
 
 mojom::blink::SpeculationHost* DocumentSpeculationRules::GetHost() {
@@ -307,21 +349,42 @@ mojom::blink::SpeculationHost* DocumentSpeculationRules::GetHost() {
 }
 
 void DocumentSpeculationRules::QueueUpdateSpeculationCandidates() {
-  if (has_pending_update_)
+  if (pending_update_state_ != PendingUpdateState::kNoUpdatePending) {
     return;
+  }
+
+  // If "selector_matches" is enabled and style isn't clean, we don't need to
+  // enqueue a microtask to run UpdateSpeculationCandidates, and instead wait
+  // for DocumentStyleUpdated to be called.
+  if (SelectorMatchesEnabled() &&
+      GetSupplementable()->NeedsLayoutTreeUpdate()) {
+    SetPendingUpdateState(PendingUpdateState::kUpdateWithCleanStylePending);
+    return;
+  }
 
   auto* execution_context = GetSupplementable()->GetExecutionContext();
   if (!execution_context)
     return;
 
-  has_pending_update_ = true;
+  SetPendingUpdateState(PendingUpdateState::kUpdatePending);
   execution_context->GetAgent()->event_loop()->EnqueueMicrotask(
       WTF::BindOnce(&DocumentSpeculationRules::UpdateSpeculationCandidates,
                     WrapWeakPersistent(this)));
 }
 
 void DocumentSpeculationRules::UpdateSpeculationCandidates() {
-  has_pending_update_ = false;
+  DCHECK_NE(pending_update_state_, PendingUpdateState::kNoUpdatePending);
+
+  // Style may be invalidated after we enqueue a microtask, in which case we
+  // wait for style to be clean before proceeding.
+  if (SelectorMatchesEnabled() &&
+      GetSupplementable()->NeedsLayoutTreeUpdate()) {
+    SetPendingUpdateState(PendingUpdateState::kUpdateWithCleanStylePending);
+    return;
+  }
+
+  // We are actually performing the update below, so mark as no update pending.
+  SetPendingUpdateState(PendingUpdateState::kNoUpdatePending);
 
   mojom::blink::SpeculationHost* host = GetHost();
   auto* execution_context = GetSupplementable()->GetExecutionContext();
@@ -346,10 +409,11 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
             rule->requires_anonymous_client_ip_when_cross_origin(),
             rule->target_browsing_context_name_hint().value_or(
                 mojom::blink::SpeculationTargetHint::kNoHint),
-            mojom::blink::SpeculationEagerness::
-                kEager));  // The default Eagerness value for |"source": "list"|
-                           // rules is |kEager|. More info can be found here:
-                           // https://docs.google.com/document/d/1nKOUX6R9seR5e7nyR16mj0lp3C1z7Qox-_KUt4C9E2U
+            // The default Eagerness value for |"source": "list"| rules is
+            // |kEager|. More info can be found here:
+            // https://github.com/WICG/nav-speculation/blob/main/triggers.md#eagerness
+            rule->eagerness().value_or(
+                mojom::blink::SpeculationEagerness::kEager)));
       }
     }
   };
@@ -395,6 +459,7 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
     sent_is_part_of_no_vary_search_trial_ = true;
     host->EnableNoVarySearchSupport();
   }
+
   host->UpdateSpeculationCandidates(std::move(candidates));
 }
 
@@ -408,11 +473,26 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
     ExecutionContext* execution_context =
         GetSupplementable()->GetExecutionContext();
     DCHECK(execution_context);
+    const bool selector_matches_enabled = SelectorMatchesEnabled();
 
     const auto push_link_candidates =
-        [&link, &link_candidates, &execution_context](
+        [&link, &link_candidates, &execution_context,
+         &selector_matches_enabled](
             mojom::blink::SpeculationAction action,
             const HeapVector<Member<SpeculationRule>>& speculation_rules) {
+          if (!link->HrefURL().ProtocolIsInHTTPFamily()) {
+            return;
+          }
+
+          // We exclude links that don't have a ComputedStyle stored (or have a
+          // ComputedStyle only because EnsureComputedStyle was called, and
+          // otherwise wouldn't). This corresponds to links that are not in the
+          // flat tree or links with a "display: none" inclusive-ancestor.
+          if (selector_matches_enabled &&
+              ComputedStyle::IsNullOrEnsured(link->GetComputedStyle())) {
+            return;
+          }
+
           for (SpeculationRule* rule : speculation_rules) {
             if (!rule->predicate())
               continue;
@@ -436,11 +516,11 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
                     rule->requires_anonymous_client_ip_when_cross_origin(),
                     rule->target_browsing_context_name_hint().value_or(
                         mojom::blink::SpeculationTargetHint::kNoHint),
-                    mojom::blink::SpeculationEagerness::
-                        kDefault);  // The default Eagerness value for
-                                    // |"source": "document"| rules is
-                                    // |kDefault|. More info can be found here:
-                                    // https://docs.google.com/document/d/1nKOUX6R9seR5e7nyR16mj0lp3C1z7Qox-_KUt4C9E2U
+                    // The default Eagerness value for |"source": "document"|
+                    // rules is |kConservative|. More info can be found here:
+                    // https://github.com/WICG/nav-speculation/blob/main/triggers.md#eagerness
+                    rule->eagerness().value_or(
+                        mojom::blink::SpeculationEagerness::kConservative));
             link_candidates.push_back(std::move(candidate));
           }
         };
@@ -551,6 +631,39 @@ void DocumentSpeculationRules::InvalidateAllLinks() {
   for (HTMLAnchorElement* link : unmatched_links_)
     pending_links_.insert(link);
   unmatched_links_.clear();
+}
+
+void DocumentSpeculationRules::UpdateSelectors() {
+  if (!SelectorMatchesEnabled()) {
+    return;
+  }
+
+  HeapVector<Member<StyleRule>> selectors;
+  for (SpeculationRuleSet* rule_set : rule_sets_) {
+    selectors.AppendVector(rule_set->selectors());
+  }
+
+  selectors_ = std::move(selectors);
+  GetSupplementable()->GetStyleEngine().DocumentRulesSelectorsChanged();
+}
+
+void DocumentSpeculationRules::SetPendingUpdateState(
+    PendingUpdateState new_state) {
+  PendingUpdateState old_state = pending_update_state_;
+  // This is the only invalid state transition.
+  DCHECK(!(old_state == PendingUpdateState::kUpdateWithCleanStylePending &&
+           new_state == PendingUpdateState::kUpdatePending));
+  pending_update_state_ = new_state;
+}
+
+bool DocumentSpeculationRules::SelectorMatchesEnabled() {
+  if (was_selector_matches_enabled_) {
+    return true;
+  }
+  was_selector_matches_enabled_ = RuntimeEnabledFeatures::
+      SpeculationRulesDocumentRulesSelectorMatchesEnabled(
+          GetSupplementable()->GetExecutionContext());
+  return was_selector_matches_enabled_;
 }
 
 }  // namespace blink

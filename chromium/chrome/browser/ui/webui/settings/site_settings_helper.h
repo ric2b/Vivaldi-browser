@@ -45,13 +45,9 @@ typedef std::map<std::pair<ContentSettingsPattern, std::string>,
                  OnePatternSettings>
     AllPatternsSettings;
 
-// TODO(https://crbug.com/854329): Once the Site Settings WebUI is capable of
-// displaying the new chooser exception object format, remove the typedefs that
-// are currently used for organizing the chooser exceptions.
-// Maps from a primary URL pattern/source pair to a set of secondary URL
-// patterns/incognito status pair.
-using ChooserExceptionDetails =
-    std::map<std::pair<GURL, std::string>, std::set<std::pair<GURL, bool>>>;
+// A set of <origin, source, incognito> tuple for organizing granted permission
+// objects that belong to the same device.
+using ChooserExceptionDetails = std::set<std::tuple<GURL, std::string, bool>>;
 
 constexpr char kChooserType[] = "chooserType";
 constexpr char kDisplayName[] = "displayName";
@@ -71,7 +67,15 @@ constexpr char kType[] = "type";
 constexpr char kIsDirectory[] = "isDirectory";
 constexpr char kIsEmbargoed[] = "isEmbargoed";
 constexpr char kIsWritable[] = "isWritable";
+constexpr char kDirectoryReadGrants[] = "directoryReadGrants";
+constexpr char kDirectoryWriteGrants[] = "directoryWriteGrants";
+constexpr char kFilePath[] = "filePath";
+constexpr char kFileReadGrants[] = "fileReadGrants";
+constexpr char kFileWriteGrants[] = "fileWriteGrants";
 constexpr char kNotificationInfoString[] = "notificationInfoString";
+constexpr char kPermissions[] = "permissions";
+constexpr char kExtensionName[] = "extensionName";
+constexpr char kExtensionNameWithId[] = "extensionNameWithId";
 
 enum class SiteSettingSource {
   kAllowlist,
@@ -150,14 +154,12 @@ void GetContentCategorySetting(const HostContentSettingsMap* map,
 // of that setting, and its display name, which will be different if it's an
 // extension. Note this is similar to GetContentCategorySetting() above but this
 // goes through the PermissionManager (preferred, see https://crbug.com/739241).
-ContentSetting GetContentSettingForOrigin(
-    Profile* profile,
-    const HostContentSettingsMap* map,
-    const GURL& origin,
-    ContentSettingsType content_type,
-    std::string* source_string,
-    const extensions::ExtensionRegistry* extension_registry,
-    std::string* display_name);
+ContentSetting GetContentSettingForOrigin(Profile* profile,
+                                          const HostContentSettingsMap* map,
+                                          const GURL& origin,
+                                          ContentSettingsType content_type,
+                                          std::string* source_string,
+                                          std::string* display_name);
 
 // Returns URLs with granted entries from the File System Access API.
 void GetFileSystemGrantedEntries(std::vector<base::Value::Dict>* exceptions,
@@ -191,7 +193,7 @@ struct ContentSettingsTypeNameEntry {
   const char* name;
 };
 
-const ChooserTypeNameEntry* ChooserTypeFromGroupName(const std::string& name);
+const ChooserTypeNameEntry* ChooserTypeFromGroupName(base::StringPiece name);
 
 // Creates a chooser exception object for the object with |display_name|. The
 // object contains the following properties
@@ -205,7 +207,8 @@ base::Value::Dict CreateChooserExceptionObject(
     const std::u16string& display_name,
     const base::Value& object,
     const std::string& chooser_type,
-    const ChooserExceptionDetails& chooser_exception_details);
+    const ChooserExceptionDetails& chooser_exception_details,
+    Profile* profile);
 
 // Returns an array of chooser exception objects.
 base::Value::List GetChooserExceptionListFromProfile(
@@ -215,6 +218,11 @@ base::Value::List GetChooserExceptionListFromProfile(
 // Returns the short name of a web app in case of an Isolated Web App.
 absl::optional<std::string> GetIsolatedWebAppName(Profile* profile,
                                                   GURL origin);
+
+// Returns the short name of a browser extension, or nullopt if `origin` is not
+// an extension URL.
+absl::optional<std::string> GetExtensionDisplayName(Profile* profile,
+                                                    GURL origin);
 
 }  // namespace site_settings
 

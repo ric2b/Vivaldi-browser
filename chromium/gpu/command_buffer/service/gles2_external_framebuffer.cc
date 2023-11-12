@@ -246,6 +246,9 @@ class GLES2ExternalFramebuffer::Attachment {
 
   void OnContextLost() { context_lost_ = true; }
 
+  GLenum format() const { return format_; }
+  int samples_count() const { return samples_count_; }
+
  private:
   void AttachImpl(GLenum attachment, bool is_texture, GLuint object) {
     if (is_texture) {
@@ -357,10 +360,10 @@ bool GLES2ExternalFramebuffer::AttachSharedImage(const Mailbox& mailbox,
   }
 
   if (!shared_image_representation_->format().is_single_plane() ||
-      (shared_image_representation_->format().resource_format() !=
-           viz::ResourceFormat::RGBA_8888 &&
-       shared_image_representation_->format().resource_format() !=
-           viz::ResourceFormat::RGBX_8888)) {
+      (shared_image_representation_->format() !=
+           viz::SinglePlaneFormat::kRGBA_8888 &&
+       shared_image_representation_->format() !=
+           viz::SinglePlaneFormat::kRGBX_8888)) {
     LOG(ERROR) << "Unsupported format";
     return false;
   }
@@ -393,7 +396,7 @@ bool GLES2ExternalFramebuffer::AttachSharedImage(const Mailbox& mailbox,
       clear_flags |= GL_COLOR_BUFFER_BIT;
   } else {
     const bool has_alpha = shared_image_representation_->format() ==
-                           viz::SharedImageFormat::kRGBA_8888;
+                           viz::SinglePlaneFormat::kRGBA_8888;
     if (UpdateAttachment(GL_COLOR_ATTACHMENT0, size, samples,
                          has_alpha ? GL_RGBA8 : GL_RGB8)) {
       clear_flags |= GL_COLOR_BUFFER_BIT;
@@ -552,12 +555,77 @@ void GLES2ExternalFramebuffer::ResolveAndDetach() {
   shared_image_representation_.reset();
 }
 
-GLuint GLES2ExternalFramebuffer::GetFramebufferId() {
+GLuint GLES2ExternalFramebuffer::GetFramebufferId() const {
   return fbo_;
 }
 
-bool GLES2ExternalFramebuffer::IsSharedImageAttached() {
+bool GLES2ExternalFramebuffer::IsSharedImageAttached() const {
   return !!scoped_access_;
+}
+
+gfx::Size GLES2ExternalFramebuffer::GetSize() const {
+  DCHECK(IsSharedImageAttached());
+  return shared_image_representation_->size();
+}
+
+GLenum GLES2ExternalFramebuffer::GetColorFormat() const {
+  DCHECK(IsSharedImageAttached());
+  auto it = attachments_.find(GL_COLOR_ATTACHMENT0);
+  DCHECK(it != attachments_.end());
+  return it->second->format();
+}
+
+GLenum GLES2ExternalFramebuffer::GetDepthFormat() const {
+  DCHECK(IsSharedImageAttached());
+  if (auto it = attachments_.find(GL_DEPTH_STENCIL_ATTACHMENT);
+      it != attachments_.end()) {
+    return it->second->format();
+  }
+
+  if (auto it = attachments_.find(GL_DEPTH_ATTACHMENT);
+      it != attachments_.end()) {
+    return it->second->format();
+  }
+
+  return GL_NONE;
+}
+
+GLenum GLES2ExternalFramebuffer::GetStencilFormat() const {
+  DCHECK(IsSharedImageAttached());
+  DCHECK(IsSharedImageAttached());
+  if (auto it = attachments_.find(GL_DEPTH_STENCIL_ATTACHMENT);
+      it != attachments_.end()) {
+    return it->second->format();
+  }
+
+  if (auto it = attachments_.find(GL_STENCIL_ATTACHMENT);
+      it != attachments_.end()) {
+    return it->second->format();
+  }
+
+  return GL_NONE;
+}
+
+int GLES2ExternalFramebuffer::GetSamplesCount() const {
+  DCHECK(IsSharedImageAttached());
+  auto it = attachments_.find(GL_COLOR_ATTACHMENT0);
+  DCHECK(it != attachments_.end());
+  return it->second->samples_count();
+}
+
+bool GLES2ExternalFramebuffer::HasAlpha() const {
+  DCHECK(IsSharedImageAttached());
+  auto it = attachments_.find(GL_COLOR_ATTACHMENT0);
+  DCHECK(it != attachments_.end());
+  return it->second->format() == GL_RGBA8;
+}
+
+bool GLES2ExternalFramebuffer::HasDepth() const {
+  return GetDepthFormat() != GL_NONE;
+}
+
+bool GLES2ExternalFramebuffer::HasStencil() const {
+  return GetStencilFormat() != GL_NONE;
 }
 
 }  // namespace gpu::gles2

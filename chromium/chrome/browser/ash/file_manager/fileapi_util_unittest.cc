@@ -7,8 +7,8 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
 #include "base/files/file_error_or.h"
+#include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -89,7 +89,8 @@ class TempFileSystem {
   // Creates an external file system URL for the given path.
   storage::FileSystemURL CreateFileSystemURL(const std::string& path) {
     return file_system_context_->CreateCrackedFileSystemURL(
-        blink::StorageKey(origin_), storage::kFileSystemTypeExternal,
+        blink::StorageKey::CreateFirstParty(origin_),
+        storage::kFileSystemTypeExternal,
         base::FilePath().Append(name_).Append(
             base::FilePath::FromUTF8Unsafe(path)));
   }
@@ -150,7 +151,7 @@ class FileManagerFileAPIUtilTest : public ::testing::Test {
         errors.push_back(base::File::FILE_OK);
       } else {
         fs_url = storage::FileSystemURL::CreateForTest(
-            blink::StorageKey(url::Origin::Create(appURL)),
+            blink::StorageKey::CreateFirstParty(url::Origin::Create(appURL)),
             storage::kFileSystemTypeExternal, base::FilePath(order.file_name));
         errors.push_back(base::File::FILE_ERROR_NOT_FOUND);
       }

@@ -16,12 +16,12 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/hash/sha1.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -43,7 +43,6 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -384,7 +383,8 @@ class TestSBClient : public base::RefCountedThreadSafe<TestSBClient>,
     // safe signal, handle it right away.
     bool synchronous_safe_signal =
         safe_browsing_service_->database_manager()->CheckBrowseUrl(
-            url, threat_types, this);
+            url, threat_types, this,
+            MechanismExperimentHashDatabaseCache::kNoExperiment);
     if (synchronous_safe_signal) {
       threat_type_ = SB_THREAT_TYPE_SAFE;
       content::GetUIThreadTaskRunner({})->PostTask(
@@ -707,16 +707,9 @@ IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest, MainFrameHitWithReferrer) {
   EXPECT_FALSE(hit_report().is_subresource);
 }
 
-// TODO(https://crbug.com/1345215): Flaky on Mac.
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_SubResourceHitWithMainFrameReferrer \
-  DISABLED_SubResourceHitWithMainFrameReferrer
-#else
-#define MAYBE_SubResourceHitWithMainFrameReferrer \
-  SubResourceHitWithMainFrameReferrer
-#endif
+// TODO(https://crbug.com/1399454): Test is flaky.
 IN_PROC_BROWSER_TEST_F(V4SafeBrowsingServiceTest,
-                       MAYBE_SubResourceHitWithMainFrameReferrer) {
+                       DISABLED_SubResourceHitWithMainFrameReferrer) {
   GURL first_url = embedded_test_server()->GetURL(kEmptyPage);
   GURL second_url = embedded_test_server()->GetURL(kMalwarePage);
   GURL bad_url = embedded_test_server()->GetURL(kMalwareImg);

@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/syslog_logging.h"
 #include "base/task/single_thread_task_runner.h"
@@ -18,15 +18,11 @@
 
 namespace policy {
 
-namespace {
+constexpr char DeviceCommandSetVolumeJob::kVolumeFieldName[] = "volume";
 
-const char kVolumeFieldName[] = "volume";
+DeviceCommandSetVolumeJob::DeviceCommandSetVolumeJob() = default;
 
-}  // namespace
-
-DeviceCommandSetVolumeJob::DeviceCommandSetVolumeJob() {}
-
-DeviceCommandSetVolumeJob::~DeviceCommandSetVolumeJob() {}
+DeviceCommandSetVolumeJob::~DeviceCommandSetVolumeJob() = default;
 
 enterprise_management::RemoteCommand_Type DeviceCommandSetVolumeJob::GetType()
     const {
@@ -36,20 +32,22 @@ enterprise_management::RemoteCommand_Type DeviceCommandSetVolumeJob::GetType()
 bool DeviceCommandSetVolumeJob::ParseCommandPayload(
     const std::string& command_payload) {
   absl::optional<base::Value> root(base::JSONReader::Read(command_payload));
-  if (!root || !root->is_dict())
+  if (!root || !root->is_dict()) {
     return false;
+  }
   absl::optional<int> maybe_volume;
   maybe_volume = root->GetDict().FindInt(kVolumeFieldName);
-  if (!maybe_volume)
+  if (!maybe_volume) {
     return false;
+  }
   volume_ = *maybe_volume;
-  if (volume_ < 0 || volume_ > 100)
+  if (volume_ < 0 || volume_ > 100) {
     return false;
+  }
   return true;
 }
 
-void DeviceCommandSetVolumeJob::RunImpl(CallbackWithResult succeeded_callback,
-                                        CallbackWithResult failed_callback) {
+void DeviceCommandSetVolumeJob::RunImpl(CallbackWithResult result_callback) {
   SYSLOG(INFO) << "Running set volume command, volume = " << volume_;
   auto* audio_handler = ash::CrasAudioHandler::Get();
   audio_handler->SetOutputVolumePercent(volume_);
@@ -57,7 +55,8 @@ void DeviceCommandSetVolumeJob::RunImpl(CallbackWithResult succeeded_callback,
   audio_handler->SetOutputMute(mute);
 
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(succeeded_callback), absl::nullopt));
+      FROM_HERE, base::BindOnce(std::move(result_callback),
+                                ResultType::kSuccess, absl::nullopt));
 }
 
 }  // namespace policy

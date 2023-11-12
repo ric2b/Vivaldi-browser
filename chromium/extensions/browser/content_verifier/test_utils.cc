@@ -5,9 +5,9 @@
 #include "extensions/browser/content_verifier/test_utils.h"
 
 #include "base/base64url.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
@@ -354,9 +354,12 @@ namespace content_verifier_test_utils {
 
 // TestExtensionBuilder -------------------------------------------------------
 TestExtensionBuilder::TestExtensionBuilder()
+    // We have to provide explicit extension id in verified_contents.json.
+    : TestExtensionBuilder(ExtensionId(32, 'a')) {}
+
+TestExtensionBuilder::TestExtensionBuilder(const ExtensionId& extension_id)
     : test_content_verifier_key_(crypto::RSAPrivateKey::Create(2048)),
-      // We have to provide explicit extension id in verified_contents.json.
-      extension_id_(32, 'a') {
+      extension_id_(extension_id) {
   base::CreateDirectory(extension_dir_.UnpackedPath().Append(kMetadataFolder));
 }
 
@@ -422,7 +425,7 @@ std::string TestExtensionBuilder::CreateVerifiedContents() const {
       std::string(signature_value.begin(), signature_value.end()),
       base::Base64UrlEncodePolicy::OMIT_PADDING, &signature_b64);
 
-  std::unique_ptr<base::Value> signatures =
+  base::Value::List signatures =
       ListBuilder()
           .Append(DictionaryBuilder()
                       .Set("header",
@@ -431,7 +434,7 @@ std::string TestExtensionBuilder::CreateVerifiedContents() const {
                       .Set("signature", signature_b64)
                       .Build())
           .Build();
-  std::unique_ptr<base::Value> verified_contents =
+  base::Value::List verified_contents =
       ListBuilder()
           .Append(DictionaryBuilder()
                       .Set("description", "treehash per file")
@@ -444,8 +447,9 @@ std::string TestExtensionBuilder::CreateVerifiedContents() const {
           .Build();
 
   std::string json;
-  if (!base::JSONWriter::Write(*verified_contents, &json))
+  if (!base::JSONWriter::Write(verified_contents, &json)) {
     return "";
+  }
 
   return json;
 }
@@ -461,7 +465,8 @@ void TestExtensionBuilder::WriteVerifiedContents() {
                             verified_contents.size()));
 }
 
-std::vector<uint8_t> TestExtensionBuilder::GetTestContentVerifierPublicKey() {
+std::vector<uint8_t> TestExtensionBuilder::GetTestContentVerifierPublicKey()
+    const {
   std::vector<uint8_t> public_key;
   test_content_verifier_key_->ExportPublicKey(&public_key);
   return public_key;
@@ -487,18 +492,22 @@ TestExtensionBuilder::CreateVerifiedContentsPayload() const {
                      .Build());
   }
 
-  return DictionaryBuilder()
-      .Set("item_id", extension_id_)
-      .Set("item_version", "1.0")
-      .Set("content_hashes", ListBuilder()
-                                 .Append(DictionaryBuilder()
-                                             .Set("format", "treehash")
-                                             .Set("block_size", block_size)
-                                             .Set("hash_block_size", block_size)
-                                             .Set("files", files.Build())
-                                             .Build())
-                                 .Build())
-      .Build();
+  base::Value::Dict result =
+      DictionaryBuilder()
+          .Set("item_id", extension_id_)
+          .Set("item_version", "1.0")
+          .Set("content_hashes",
+               ListBuilder()
+                   .Append(DictionaryBuilder()
+                               .Set("format", "treehash")
+                               .Set("block_size", block_size)
+                               .Set("hash_block_size", block_size)
+                               .Set("files", files.Build())
+                               .Build())
+                   .Build())
+          .Build();
+
+  return std::make_unique<base::Value>(std::move(result));
 }
 
 // Other stuff ----------------------------------------------------------------

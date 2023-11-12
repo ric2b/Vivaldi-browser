@@ -52,9 +52,9 @@
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_fence_android_native_fence_sync.h"
 #include "ui/gl/gl_gl_api_implementation.h"
-#include "ui/gl/gl_image_ahardwarebuffer.h"
 #include "ui/gl/gl_utils.h"
 #include "ui/gl/gl_version_info.h"
+#include "ui/gl/scoped_binders.h"
 
 namespace gpu {
 namespace {
@@ -118,6 +118,31 @@ class OverlayImage final : public base::RefCounted<OverlayImage> {
   // presented.
   base::ScopedFD previous_end_read_fence_;
 };
+
+GLuint CreateAndBindTexture(EGLImage image, GLenum target) {
+  gl::GLApi* api = gl::g_current_gl_context;
+  GLuint service_id = 0;
+  api->glGenTexturesFn(1, &service_id);
+  gl::ScopedTextureBinder texture_binder(target, service_id);
+
+  api->glTexParameteriFn(target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  api->glTexParameteriFn(target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  api->glTexParameteriFn(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  api->glTexParameteriFn(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  glEGLImageTargetTexture2DOES(target, image);
+
+  return service_id;
+}
+
+constexpr uint32_t kSupportedUsage =
+    SHARED_IMAGE_USAGE_GLES2 | SHARED_IMAGE_USAGE_GLES2_FRAMEBUFFER_HINT |
+    SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_DISPLAY_READ |
+    SHARED_IMAGE_USAGE_RASTER | SHARED_IMAGE_USAGE_OOP_RASTERIZATION |
+    SHARED_IMAGE_USAGE_SCANOUT | SHARED_IMAGE_USAGE_WEBGPU |
+    SHARED_IMAGE_USAGE_VIDEO_DECODE |
+    SHARED_IMAGE_USAGE_WEBGPU_SWAP_CHAIN_TEXTURE |
+    SHARED_IMAGE_USAGE_HIGH_PERFORMANCE_GPU;
 
 }  // namespace
 
@@ -322,19 +347,30 @@ AHardwareBufferImageBacking::ProduceGLTexture(SharedImageManager* manager,
   // backing.
   DCHECK(hardware_buffer_handle_.is_valid());
 
-  // Note that we are not using GL_TEXTURE_EXTERNAL_OES target(here and all
-  // other places in this file) since sksurface
-  // doesn't supports it. As per the egl documentation -
-  // https://www.khronos.org/registry/OpenGL/extensions/OES/OES_EGL_image_external.txt
-  // if GL_OES_EGL_image is supported then <target> may also be TEXTURE_2D.
-  auto* texture =
-      GenGLTexture(hardware_buffer_handle_.get(), GL_TEXTURE_2D, color_space(),
-                   size(), GetEstimatedSize(), ClearedRect());
-  if (!texture)
+  auto egl_image =
+      CreateEGLImageFromAHardwareBuffer(hardware_buffer_handle_.get());
+
+  if (!egl_image.is_valid()) {
     return nullptr;
+  }
+
+  // Android documentation states that right GL format for RGBX AHardwareBuffer
+  // is GL_RGB8, so we don't use angle rgbx.
+  auto gl_format_desc = ToGLFormatDesc(format(), /*plane_index=*/0,
+                                       /*use_angle_rgbx_format=*/false);
+  GLuint service_id =
+      CreateAndBindTexture(egl_image.get(), gl_format_desc.target);
+
+  auto* texture =
+      gles2::CreateGLES2TextureWithLightRef(service_id, gl_format_desc.target);
+  texture->SetLevelInfo(gl_format_desc.target, 0,
+                        gl_format_desc.image_internal_format, size().width(),
+                        size().height(), 1, 0, gl_format_desc.data_format,
+                        gl_format_desc.data_type, ClearedRect());
+  texture->SetImmutable(true, false);
 
   return std::make_unique<GLTextureAndroidImageRepresentation>(
-      manager, this, tracker, std::move(texture));
+      manager, this, tracker, std::move(egl_image), std::move(texture));
 }
 
 std::unique_ptr<GLTexturePassthroughImageRepresentation>
@@ -345,19 +381,25 @@ AHardwareBufferImageBacking::ProduceGLTexturePassthrough(
   // backing.
   DCHECK(hardware_buffer_handle_.is_valid());
 
-  // Note that we are not using GL_TEXTURE_EXTERNAL_OES target(here and all
-  // other places in this file) since sksurface
-  // doesn't supports it. As per the egl documentation -
-  // https://www.khronos.org/registry/OpenGL/extensions/OES/OES_EGL_image_external.txt
-  // if GL_OES_EGL_image is supported then <target> may also be TEXTURE_2D.
-  auto texture = GenGLTexturePassthrough(hardware_buffer_handle_.get(),
-                                         GL_TEXTURE_2D, color_space(), size(),
-                                         GetEstimatedSize(), ClearedRect());
-  if (!texture)
+  auto egl_image =
+      CreateEGLImageFromAHardwareBuffer(hardware_buffer_handle_.get());
+  if (!egl_image.is_valid()) {
     return nullptr;
+  }
+
+  // Android documentation states that right GL format for RGBX AHardwareBuffer
+  // is GL_RGB8, so we don't use angle rgbx.
+  auto gl_format_desc = ToGLFormatDesc(format(), /*plane_index=*/0,
+                                       /*use_angle_rgbx_format=*/false);
+  GLuint service_id =
+      CreateAndBindTexture(egl_image.get(), gl_format_desc.target);
+
+  auto texture = base::MakeRefCounted<gles2::TexturePassthrough>(
+      service_id, gl_format_desc.target);
+  texture->SetEstimatedSize(GetEstimatedSize());
 
   return std::make_unique<GLTexturePassthroughAndroidImageRepresentation>(
-      manager, this, tracker, std::move(texture));
+      manager, this, tracker, std::move(egl_image), std::move(texture));
 }
 
 std::unique_ptr<SkiaImageRepresentation>
@@ -390,10 +432,16 @@ AHardwareBufferImageBacking::ProduceSkia(
   DCHECK(hardware_buffer_handle_.is_valid());
 
   std::unique_ptr<GLTextureImageRepresentationBase> gl_representation;
-  if (use_passthrough_)
+  if (use_passthrough_) {
     gl_representation = ProduceGLTexturePassthrough(manager, tracker);
-  else
+  } else {
     gl_representation = ProduceGLTexture(manager, tracker);
+  }
+
+  if (!gl_representation) {
+    LOG(ERROR) << "Unable produce gl texture!";
+    return nullptr;
+  }
 
   return SkiaGLImageRepresentation::Create(std::move(gl_representation),
                                            std::move(context_state), manager,
@@ -476,7 +524,8 @@ void AHardwareBufferImageBacking::EndOverlayAccess() {
 AHardwareBufferImageBackingFactory::AHardwareBufferImageBackingFactory(
     const gles2::FeatureInfo* feature_info,
     const GpuPreferences& gpu_preferences)
-    : use_passthrough_(gpu_preferences.use_passthrough_cmd_decoder &&
+    : SharedImageBackingFactory(kSupportedUsage),
+      use_passthrough_(gpu_preferences.use_passthrough_cmd_decoder &&
                        gl::PassthroughCommandDecoderSupported()) {
   DCHECK(base::AndroidHardwareBufferCompat::IsSupportAvailable());
   const gles2::Validators* validators = feature_info->validators();
@@ -620,8 +669,8 @@ AHardwareBufferImageBackingFactory::MakeBacking(
   }
 
   // Calculate SharedImage size in bytes.
-  size_t estimated_size;
-  if (!viz::ResourceSizes::MaybeSizeInBytes(size, format, &estimated_size)) {
+  auto estimated_size = format.MaybeEstimatedSizeInBytes(size);
+  if (!estimated_size) {
     LOG(ERROR) << "Failed to calculate SharedImage size";
     return nullptr;
   }
@@ -698,7 +747,7 @@ AHardwareBufferImageBackingFactory::MakeBacking(
 
   auto backing = std::make_unique<AHardwareBufferImageBacking>(
       mailbox, format, size, color_space, surface_origin, alpha_type, usage,
-      std::move(handle), estimated_size, is_thread_safe,
+      std::move(handle), estimated_size.value(), is_thread_safe,
       std::move(initial_upload_fd), dawn_procs_, use_passthrough_);
 
   // If we uploaded initial data, set the backing as cleared.
@@ -783,7 +832,6 @@ AHardwareBufferImageBackingFactory::FormatInfo::~FormatInfo() = default;
 std::unique_ptr<SharedImageBacking>
 AHardwareBufferImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
-    int client_id,
     gfx::GpuMemoryBufferHandle handle,
     gfx::BufferFormat buffer_format,
     gfx::BufferPlane plane,
@@ -808,15 +856,15 @@ AHardwareBufferImageBackingFactory::CreateSharedImage(
     return nullptr;
   }
 
-  size_t estimated_size;
-  if (!viz::ResourceSizes::MaybeSizeInBytes(size, si_format, &estimated_size)) {
+  auto estimated_size = si_format.MaybeEstimatedSizeInBytes(size);
+  if (!estimated_size) {
     LOG(ERROR) << "Failed to calculate SharedImage size";
     return nullptr;
   }
 
   auto backing = std::make_unique<AHardwareBufferImageBacking>(
       mailbox, si_format, size, color_space, surface_origin, alpha_type, usage,
-      std::move(handle.android_hardware_buffer), estimated_size, false,
+      std::move(handle.android_hardware_buffer), estimated_size.value(), false,
       base::ScopedFD(), dawn_procs_, use_passthrough_);
 
   backing->SetCleared();

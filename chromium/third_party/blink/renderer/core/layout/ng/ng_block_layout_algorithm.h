@@ -23,7 +23,6 @@
 namespace blink {
 
 enum class NGBreakStatus;
-class DeferredShapingMinimumTopScope;
 class NGConstraintSpace;
 class NGFragment;
 
@@ -67,6 +66,9 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   const NGLayoutResult* Layout() override;
 
  private:
+  NOINLINE const NGLayoutResult* HandleNonsuccessfulLayoutResult(
+      const NGLayoutResult*);
+
   NOINLINE const NGLayoutResult* LayoutWithInlineChildLayoutContext(
       const NGLayoutInputNode& first_child);
 
@@ -110,10 +112,6 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
       const absl::optional<LayoutUnit> bfc_block_offset = absl::nullopt,
       bool has_clearance_past_adjoining_floats = false,
       LayoutUnit block_start_annotation_space = LayoutUnit());
-
-  [[nodiscard]] DeferredShapingMinimumTopScope CreateMinimumTopScopeForChild(
-      const NGLayoutInputNode child,
-      const NGInflowChildData& child_data) const;
 
   // @return Estimated BFC block offset for the "to be layout" child.
   NGInflowChildData ComputeChildData(const NGPreviousInflowPosition&,

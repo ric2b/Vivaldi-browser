@@ -17,7 +17,8 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/tcp_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
-#include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/restricted_udp_socket.mojom.h"
 #include "services/network/public/mojom/tcp_socket.mojom.h"
 #include "services/network/public/mojom/udp_socket.mojom.h"
 #include "services/network/tcp_bound_socket.h"
@@ -32,14 +33,15 @@ class NetLog;
 
 namespace network {
 
+class SimpleHostResolver;
+
 // Helper class that handles socket requests. It takes care of destroying
 // socket implementation instances when mojo  pipes are broken.
 class COMPONENT_EXPORT(NETWORK_SERVICE) SocketFactory
     : public TCPServerSocket::Delegate {
  public:
   // Constructs a SocketFactory. If |net_log| is non-null, it is used to
-  // log NetLog events when logging is enabled. |net_log| used to must outlive
-  // |this|.
+  // log NetLog events when logging is enabled. |net_log| must outlive |this|.
   SocketFactory(net::NetLog* net_log,
                 net::URLRequestContext* url_request_context);
 
@@ -51,6 +53,15 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) SocketFactory
   // These all correspond to the NetworkContext methods of the same name.
   void CreateUDPSocket(mojo::PendingReceiver<mojom::UDPSocket> receiver,
                        mojo::PendingRemote<mojom::UDPSocketListener> listener);
+  void CreateRestrictedUDPSocket(
+      const net::IPEndPoint& addr,
+      mojom::RestrictedUDPSocketMode mode,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+      mojom::UDPSocketOptionsPtr options,
+      mojo::PendingReceiver<mojom::RestrictedUDPSocket> receiver,
+      mojo::PendingRemote<mojom::UDPSocketListener> listener,
+      std::unique_ptr<SimpleHostResolver> resolver,
+      mojom::NetworkContext::CreateRestrictedUDPSocketCallback callback);
   void CreateTCPServerSocket(
       const net::IPEndPoint& local_addr,
       int backlog,
@@ -104,6 +115,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) SocketFactory
   raw_ptr<net::ClientSocketFactory> client_socket_factory_;
   TLSSocketFactory tls_socket_factory_;
   mojo::UniqueReceiverSet<mojom::UDPSocket> udp_socket_receivers_;
+  mojo::UniqueReceiverSet<mojom::RestrictedUDPSocket>
+      restricted_udp_socket_receivers_;
   mojo::UniqueReceiverSet<mojom::TCPServerSocket> tcp_server_socket_receivers_;
   mojo::UniqueReceiverSet<mojom::TCPConnectedSocket>
       tcp_connected_socket_receiver_;

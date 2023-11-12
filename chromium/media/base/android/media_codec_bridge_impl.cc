@@ -129,6 +129,16 @@ bool GetCodecSpecificDataForAudio(const AudioDecoderConfig& config,
       output_csd0->emplace_back('L');
       output_csd0->emplace_back('a');
       output_csd0->emplace_back('C');
+      // The STREAMINFO block should contain the METADATA_BLOCK_HEADER.
+      // <1> last-metadata-block flag: 1
+      // <7> block type: STREAMINFO (0)
+      output_csd0->emplace_back(0x80);
+      // <24> length of metadata to follow.
+      DCHECK_LE(extra_data_size, static_cast<size_t>(0xffffff));
+      output_csd0->emplace_back((extra_data_size & 0xff0000) >> 16);
+      output_csd0->emplace_back((extra_data_size & 0x00ff00) >> 8);
+      output_csd0->emplace_back(extra_data_size & 0x0000ff);
+      // STREAMINFO bytes.
       output_csd0->insert(output_csd0->end(), extra_data,
                           extra_data + extra_data_size);
       break;
@@ -440,22 +450,19 @@ MediaCodecStatus MediaCodecBridgeImpl::GetOutputColorSpace(
   return MEDIA_CODEC_OK;
 }
 
-MediaCodecStatus MediaCodecBridgeImpl::GetInputFormatStride(int* stride) {
+MediaCodecStatus MediaCodecBridgeImpl::GetInputFormat(int* stride,
+                                                      int* slice_height,
+                                                      gfx::Size* encoded_size) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> result =
       Java_MediaCodecBridge_getInputFormat(env, j_bridge_);
   MediaCodecStatus status = result ? MEDIA_CODEC_OK : MEDIA_CODEC_ERROR;
-  if (status == MEDIA_CODEC_OK)
+  if (status == MEDIA_CODEC_OK) {
     *stride = Java_MediaFormatWrapper_stride(env, result);
-  return status;
-}
-MediaCodecStatus MediaCodecBridgeImpl::GetInputFormatYPlaneHeight(int* height) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> result =
-      Java_MediaCodecBridge_getInputFormat(env, j_bridge_);
-  MediaCodecStatus status = result ? MEDIA_CODEC_OK : MEDIA_CODEC_ERROR;
-  if (status == MEDIA_CODEC_OK)
-    *height = Java_MediaFormatWrapper_yPlaneHeight(env, result);
+    *slice_height = Java_MediaFormatWrapper_yPlaneHeight(env, result);
+    *encoded_size = gfx::Size(Java_MediaFormatWrapper_width(env, result),
+                              Java_MediaFormatWrapper_height(env, result));
+  }
   return status;
 }
 

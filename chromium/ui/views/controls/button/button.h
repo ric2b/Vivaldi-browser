@@ -8,14 +8,14 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/gtest_prod_util.h"
 #include "build/build_config.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/animation_delegate_views.h"
-#include "ui/views/animation/ink_drop_host_view.h"
+#include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/animation/ink_drop_state.h"
 #include "ui/views/controls/button/button_controller_delegate.h"
 #include "ui/views/controls/focus_ring.h"
@@ -132,8 +132,7 @@ class VIEWS_EXPORT Button : public View, public AnimationDelegateViews {
 
   virtual void SetCallback(PressedCallback callback);
 
-  void SetAccessibleName(const std::u16string& name);
-  const std::u16string& GetAccessibleName() const;
+  const std::u16string& GetAccessibleName() const override;
 
   // Get/sets the current display state of the button.
   ButtonState GetState() const;
@@ -142,13 +141,6 @@ class VIEWS_EXPORT Button : public View, public AnimationDelegateViews {
   // like event dispatching, focus traversals, etc. Calling SetEnabled(false)
   // will also set the state of |this| to STATE_DISABLED.
   void SetState(ButtonState state);
-
-  // Starts throbbing. See HoverAnimation for a description of cycles_til_stop.
-  // This method does nothing if |animate_on_state_change_| is false.
-  void StartThrobbing(int cycles_til_stop);
-
-  // Stops throbbing immediately.
-  void StopThrobbing();
 
   // Set how long the hover animation will last for.
   void SetAnimationDuration(base::TimeDelta duration);
@@ -305,9 +297,6 @@ class VIEWS_EXPORT Button : public View, public AnimationDelegateViews {
   // The text shown in a tooltip.
   std::u16string tooltip_text_;
 
-  // Accessibility data.
-  std::u16string accessible_name_;
-
   // The button's listener. Notified when clicked.
   PressedCallback callback_;
 
@@ -321,9 +310,6 @@ class VIEWS_EXPORT Button : public View, public AnimationDelegateViews {
 
   // Should we animate when the state changes?
   bool animate_on_state_change_ = false;
-
-  // Is the hover animation running because StartThrob was invoked?
-  bool is_throbbing_ = false;
 
   // Mouse event flags which can trigger button actions.
   int triggerable_event_flags_ = ui::EF_LEFT_MOUSE_BUTTON;

@@ -12,9 +12,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/process/launch.h"
 #include "base/process/process.h"
@@ -83,8 +83,7 @@ class ChromePromptChannelTest : public ::testing::Test {
 
     base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
     base::HandlesToInheritVector handles_to_inherit;
-    ASSERT_TRUE(
-        channel_->PrepareForCleaner(&command_line, &handles_to_inherit));
+    ASSERT_TRUE(channel_->PrepareForCleaner(command_line, &handles_to_inherit));
 
     // Instead of spawning a cleaner process, extract the prompt handles from
     // the command-line. Duplicate them so that we retain ownership if

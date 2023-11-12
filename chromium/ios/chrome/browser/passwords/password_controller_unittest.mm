@@ -9,6 +9,7 @@
 #import <memory>
 #import <utility>
 
+#import "base/ios/ios_util.h"
 #import "base/json/json_reader.h"
 #import "base/memory/ref_counted.h"
 #import "base/strings/sys_string_conversions.h"
@@ -294,7 +295,8 @@ class PasswordControllerTest : public PlatformTest {
     __block web::WebFrame* main_frame = nullptr;
     bool success =
         WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
-          main_frame = web_state()->GetWebFramesManager()->GetMainWebFrame();
+          main_frame =
+              web_state()->GetPageWorldWebFramesManager()->GetMainWebFrame();
           return main_frame != nullptr;
         });
     if (!success) {
@@ -468,7 +470,7 @@ class PasswordControllerTest : public PlatformTest {
   // This method only works if there are no more than 1 iframes per page.
   web::WebFrame* GetWebFrame(bool is_main_frame) {
     std::set<WebFrame*> all_frames =
-        web_state()->GetWebFramesManager()->GetAllWebFrames();
+        web_state()->GetPageWorldWebFramesManager()->GetAllWebFrames();
     for (auto* frame : all_frames) {
       if (is_main_frame == frame->IsMainFrame()) {
         return frame;
@@ -970,8 +972,7 @@ TEST_F(PasswordControllerTest, FillPasswordForm) {
 
 // Check that password form is not filled if 'readonly' attribute is set
 // on either username or password fields.
-// TODO(crbug.com/503050): Test is flaky.
-TEST_F(PasswordControllerTest, FLAKY_DontFillReadOnly) {
+TEST_F(PasswordControllerTest, DontFillReadOnly) {
   TestPasswordFormData test_data = {/*form_name=*/"f0",
                                     /*form_renderer_id=*/1,
                                     /*username_element=*/"un0",
@@ -1105,7 +1106,7 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
       "Should show all suggestions when focusing empty username field",
       @[(@"var evt = document.createEvent('Events');"
          "username_.focus();"),
-        @""],
+        @";"],
       @[@"user0 ••••••••", @"abc ••••••••"],
       @"[]=, onkeyup=false, onchange=false"
     },
@@ -1113,7 +1114,7 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
       "Should show password suggestions when focusing password field",
       @[(@"var evt = document.createEvent('Events');"
          "password_.focus();"),
-        @""],
+        @";"],
       @[@"user0 ••••••••", @"abc ••••••••"],
       @"[]=, onkeyup=false, onchange=false"
     },
@@ -1121,7 +1122,7 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
       "Should not filter suggestions when focusing username field with input",
       @[(@"username_.value='ab';"
          "username_.focus();"),
-        @""],
+        @";"],
       @[@"user0 ••••••••", @"abc ••••••••"],
       @"ab[]=, onkeyup=false, onchange=false"
     },
@@ -1132,7 +1133,7 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
          // Keyup event is dispatched to simulate typing
          "var ev = new KeyboardEvent('keyup', {bubbles:true});"
          "username_.dispatchEvent(ev);"),
-        @""],
+        @";"],
       @[@"abc ••••••••"],
       @"ab[]=, onkeyup=true, onchange=false"
     },
@@ -1144,7 +1145,7 @@ TEST_F(PasswordControllerTest, SuggestionUpdateTests) {
          // Keyup event is dispatched to simulate typing.
          "var ev = new KeyboardEvent('keyup', {bubbles:true});"
          "password_.dispatchEvent(ev);"),
-        @""],
+        @";"],
       @[],
       @"abc[]=••, onkeyup=true, onchange=false"
     },
@@ -1600,7 +1601,7 @@ TEST_F(PasswordControllerTest, CheckPasswordGenerationSuggestion) {
       "Should not show suggest password when focusing username field",
       @[(@"var evt = document.createEvent('Events');"
          "username_.focus();"),
-        @""],
+        @";"],
       @[@"user0 ••••••••", @"abc ••••••••"],
       @"[]=, onkeyup=false, onchange=false"
     },
@@ -1608,7 +1609,7 @@ TEST_F(PasswordControllerTest, CheckPasswordGenerationSuggestion) {
       "Should show suggest password when focusing password field",
       @[(@"var evt = document.createEvent('Events');"
          "password_.focus();"),
-        @""],
+        @";"],
       @[@"user0 ••••••••", @"abc ••••••••", @"Suggest Password\u2026"],
       @"[]=, onkeyup=false, onchange=false"
     },
@@ -1646,11 +1647,15 @@ TEST_F(PasswordControllerTest, CheckPasswordGenerationSuggestion) {
   }
 }
 
-
-
 // Tests that the user is prompted to save or update password on a succesful
 // form submission.
 TEST_F(PasswordControllerTest, ShowingSavingPromptOnSuccessfulSubmission) {
+  // TODO(crbug.com/1404697): Re-enable on iOS 14. This test is flaky on iOS 14,
+  // sometimes failing to finish loading the HTML.
+  if (!base::ios::IsRunningOnIOS15OrLater()) {
+    return;
+  }
+
   const char* kHtml = {"<html><body>"
                        "<form name='login_form' id='login_form'>"
                        "  <input type='text' name='username'>"
@@ -1719,6 +1724,12 @@ TEST_F(PasswordControllerTest, NotShowingSavingPromptWithoutSubmission) {
 // Tests that the user is not prompted to save or update password on a
 // succesful form submission while saving is disabled.
 TEST_F(PasswordControllerTest, NotShowingSavingPromptWhileSavingIsDisabled) {
+  // TODO(crbug.com/1404697): Re-enable on iOS 14. This test is flaky on iOS 14,
+  // sometimes failing to finish loading the HTML.
+  if (!base::ios::IsRunningOnIOS15OrLater()) {
+    return;
+  }
+
   const char* kHtml = {"<html><body>"
                        "<form name='login_form' id='login_form'>"
                        "  <input type='text' name='username'>"
@@ -1748,6 +1759,12 @@ TEST_F(PasswordControllerTest, NotShowingSavingPromptWhileSavingIsDisabled) {
 // form submission when there's already a credential with the same
 // username in the store.
 TEST_F(PasswordControllerTest, ShowingUpdatePromptOnSuccessfulSubmission) {
+  // TODO(crbug.com/1404697): Re-enable on iOS 14. This test is flaky on iOS 14,
+  // sometimes failing to finish loading the HTML.
+  if (!base::ios::IsRunningOnIOS15OrLater()) {
+    return;
+  }
+
   PasswordForm form(MakeSimpleForm());
   ON_CALL(*store_, GetLogins)
       .WillByDefault(WithArg<1>(InvokeConsumer(store_.get(), form)));
@@ -2035,7 +2052,7 @@ TEST_F(PasswordControllerTest, DetectSubmissionOnIFrameDetach) {
 
   std::string mainFrameID = web::GetMainWebFrameId(web_state());
   std::set<WebFrame*> all_frames =
-      web_state()->GetWebFramesManager()->GetAllWebFrames();
+      web_state()->GetPageWorldWebFramesManager()->GetAllWebFrames();
   std::string iFrameID;
   for (auto* frame : all_frames) {
     if (!frame->IsMainFrame()) {
@@ -2113,12 +2130,19 @@ TEST_F(PasswordControllerTest,
        "frame1.parentNode.removeChild(frame1);",
       web_state());
   ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
-    auto frames = web_state()->GetWebFramesManager()->GetAllWebFrames();
+    auto frames =
+        web_state()->GetPageWorldWebFramesManager()->GetAllWebFrames();
     return frames.size() == 1;
   }));
 }
 
 TEST_F(PasswordControllerTest, PasswordMetricsNoSavedCredentials) {
+  // TODO(crbug.com/1404697): Re-enable on iOS 14. This test is flaky on iOS 14,
+  // sometimes failing to finish loading the HTML.
+  if (!base::ios::IsRunningOnIOS15OrLater()) {
+    return;
+  }
+
   base::HistogramTester histogram_tester;
   {
     ON_CALL(*store_, GetLogins)
@@ -2328,145 +2352,6 @@ TEST_F(PasswordControllerTest, SavingPasswordsOutsideTheFormTag) {
   }));
   EXPECT_EQ(u"user1", form_manager->GetPendingCredentials().username_value);
   EXPECT_EQ(u"password1", form_manager->GetPendingCredentials().password_value);
-}
-
-// Tests that submission is detected on change password form clearing.
-TEST_F(PasswordControllerTest, DetectSubmissionOnFormReset) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kDetectFormSubmissionOnFormClear);
-
-  PasswordForm form(
-      CreatePasswordForm("https://chromium.test/", "user", "oldpw"));
-  EXPECT_CALL(*store_, GetLogins)
-      .WillRepeatedly(WithArg<1>(InvokeConsumer(store_.get(), form)));
-
-  LoadHtml(@"<html><body>"
-            "<form name='change_form' id='change_form'>"
-            "  <input type='password' id='opw'>"
-            "  <input type='password' id='npw' autocomplete='new-password'>"
-            "  <input type='password' id='cpw' autocomplete='new-password'>"
-            "  <button id='submit_button' value='Submit'>"
-            "</form>"
-            "</body></html>");
-  WaitForFormManagersCreation();
-
-  std::string main_frame_id = web::GetMainWebFrameId(web_state());
-
-  SimulateUserTyping("change_form", FormRendererId(1), "opw",
-                     FieldRendererId(2), "oldpw", main_frame_id);
-  SimulateUserTyping("change_form", FormRendererId(1), "npw",
-                     FieldRendererId(3), "newpw", main_frame_id);
-  SimulateUserTyping("change_form", FormRendererId(1), "cpw",
-                     FieldRendererId(4), "newpw", main_frame_id);
-
-  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
-  EXPECT_CALL(*weak_client_, PromptUserToSaveOrUpdatePasswordPtr)
-      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
-
-  __block NSString* form_details = nil;
-  __block bool form_details_retreived = false;
-  password_manager::PasswordManagerJavaScriptFeature::GetInstance()
-      ->ExtractForm(GetMainFrame(web_state()), FormRendererId(1),
-                    base::BindOnce(^(NSString* response) {
-                      form_details = response;
-                      form_details_retreived = true;
-                    }));
-
-  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
-    return form_details_retreived;
-  }));
-
-  std::string form_data = base::SysNSStringToUTF8(form_details);
-
-  // Imitiate the signal from the page resetting the form.
-  SimulateFormActivityObserverSignal("password_form_cleared", FormRendererId(1),
-                                     FieldRendererId(), form_data);
-
-  auto& form_manager_check = form_manager_to_save;
-  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
-    return form_manager_check != nullptr;
-  }));
-  EXPECT_EQ("https://chromium.test/",
-            form_manager_to_save->GetPendingCredentials().signon_realm);
-  EXPECT_EQ(u"user",
-            form_manager_to_save->GetPendingCredentials().username_value);
-  EXPECT_EQ(u"newpw",
-            form_manager_to_save->GetPendingCredentials().password_value);
-
-  auto* form_manager =
-      static_cast<PasswordFormManager*>(form_manager_to_save.get());
-  EXPECT_TRUE(form_manager->is_submitted());
-  EXPECT_TRUE(form_manager->IsPasswordUpdate());
-}
-
-// Tests that submission is detected on change password form clearing,
-// when the formless fields are cleared individually.
-TEST_F(PasswordControllerTest, DetectSubmissionOnFormlessFieldsClearing) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kDetectFormSubmissionOnFormClear);
-
-  PasswordForm form(
-      CreatePasswordForm("https://chromium.test/", "user", "oldpw"));
-  EXPECT_CALL(*store_, GetLogins)
-      .WillRepeatedly(WithArg<1>(InvokeConsumer(store_.get(), form)));
-
-  LoadHtml(@"<html><body>"
-            "  <input type='password' id='opw'>"
-            "  <input type='password' id='npw' autocomplete='new-password'>"
-            "  <input type='password' id='cpw' autocomplete='new-password'>"
-            "  <button id='submit_button' value='Submit'>"
-            "</body></html>");
-  WaitForFormManagersCreation();
-
-  std::string main_frame_id = web::GetMainWebFrameId(web_state());
-
-  SimulateUserTyping("change_form", FormRendererId(), "opw", FieldRendererId(1),
-                     "oldpw", main_frame_id);
-  SimulateUserTyping("change_form", FormRendererId(), "npw", FieldRendererId(2),
-                     "newpw", main_frame_id);
-  SimulateUserTyping("change_form", FormRendererId(), "cpw", FieldRendererId(3),
-                     "newpw", main_frame_id);
-
-  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
-  EXPECT_CALL(*weak_client_, PromptUserToSaveOrUpdatePasswordPtr)
-      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
-
-  __block NSString* form_details = nil;
-  __block bool form_details_retreived = false;
-  password_manager::PasswordManagerJavaScriptFeature::GetInstance()
-      ->ExtractForm(GetMainFrame(web_state()), autofill::FormRendererId(0),
-                    base::BindOnce(^(NSString* response) {
-                      form_details = response;
-                      form_details_retreived = true;
-                    }));
-
-  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool() {
-    return form_details_retreived;
-  }));
-
-  std::string form_data = base::SysNSStringToUTF8(form_details);
-
-  // Imitiate the signal from the page resetting the form.
-  SimulateFormActivityObserverSignal("password_form_cleared", FormRendererId(),
-                                     FieldRendererId(), form_data);
-
-  auto& form_manager_check = form_manager_to_save;
-  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
-    return form_manager_check != nullptr;
-  }));
-  EXPECT_EQ("https://chromium.test/",
-            form_manager_to_save->GetPendingCredentials().signon_realm);
-  EXPECT_EQ(u"user",
-            form_manager_to_save->GetPendingCredentials().username_value);
-  EXPECT_EQ(u"newpw",
-            form_manager_to_save->GetPendingCredentials().password_value);
-
-  auto* form_manager =
-      static_cast<PasswordFormManager*>(form_manager_to_save.get());
-  EXPECT_TRUE(form_manager->is_submitted());
-  EXPECT_TRUE(form_manager->IsPasswordUpdate());
 }
 
 // Tests submission and saving of a password form located in a same origin

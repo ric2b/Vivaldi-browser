@@ -125,6 +125,7 @@
 #include "chromeos/crosapi/mojom/wallpaper.mojom.h"
 #include "chromeos/crosapi/mojom/web_app_service.mojom.h"
 #include "chromeos/crosapi/mojom/web_page_info.mojom.h"
+#include "chromeos/services/machine_learning/public/cpp/ml_switches.h"
 #include "chromeos/services/machine_learning/public/mojom/machine_learning_service.mojom.h"
 #include "chromeos/startup/startup.h"
 #include "chromeos/ui/wm/features.h"
@@ -232,10 +233,9 @@ mojom::DevicePropertiesPtr GetDeviceProperties() {
   policy::BrowserPolicyConnectorAsh* policy_connector =
       g_browser_process->platform_part()->browser_policy_connector_ash();
   result->directory_device_id = policy_connector->GetDirectoryApiID();
-  result->serial_number =
-      std::string(chromeos::system::StatisticsProvider::GetInstance()
-                      ->GetMachineID()
-                      .value_or(""));
+  result->serial_number = std::string(
+      ash::system::StatisticsProvider::GetInstance()->GetMachineID().value_or(
+          ""));
   result->annotated_asset_id = policy_connector->GetDeviceAssetID();
   result->annotated_location = policy_connector->GetDeviceAnnotatedLocation();
   auto* device_name_policy_handler =
@@ -498,10 +498,10 @@ void InjectBrowserInitParams(
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          ash::switches::kOndeviceHandwritingSwitch)) {
+          ::switches::kOndeviceHandwritingSwitch)) {
     const auto handwriting_switch =
         base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            ash::switches::kOndeviceHandwritingSwitch);
+            ::switches::kOndeviceHandwritingSwitch);
 
     // TODO(https://crbug.com/1168978): Query mlservice instead of using
     // hard-coded values.
@@ -571,10 +571,10 @@ void InjectBrowserInitParams(
   params->use_cups_for_printing = GetUseCupsForPrinting();
   params->use_floss_bluetooth = floss::features::IsFlossEnabled();
 
-  params->enable_float_window =
-      base::FeatureList::IsEnabled(chromeos::wm::features::kFloatWindow);
-  params->enable_partial_split =
-      base::FeatureList::IsEnabled(chromeos::wm::features::kPartialSplit);
+  params->enable_window_layout_menu =
+      base::FeatureList::IsEnabled(chromeos::wm::features::kWindowLayoutMenu);
+  // TODO(b/267528378): Remove this after M114.
+  params->enable_partial_split_deprecated = true;
 
   params->is_cloud_gaming_device =
       chromeos::features::IsCloudGamingDeviceEnabled();
@@ -587,7 +587,10 @@ void InjectBrowserInitParams(
 
   params->extension_keep_list = extensions::BuildExtensionKeeplistInitParam();
 
-  params->vc_controls_ui_enabled = ash::features::IsVcControlsUiEnabled();
+  params->vc_controls_ui_enabled = ash::features::IsVideoConferenceEnabled();
+
+  params->standalone_browser_app_service_blocklist =
+      extensions::BuildStandaloneBrowserAppServiceBlockListInitParam();
 }
 
 template <typename BrowserParams>
@@ -800,6 +803,13 @@ mojom::DeviceSettingsPtr GetDeviceSettings() {
         result->report_device_network_telemetry_collection_rate_ms =
             crosapi::mojom::NullableInt64::New(
                 report_device_network_telemetry_collection_rate_ms);
+      }
+
+      std::string device_variations_restrict_parameter;
+      if (cros_settings->GetString(ash::kVariationsRestrictParameter,
+                                   &device_variations_restrict_parameter)) {
+        result->device_variations_restrict_parameter =
+            device_variations_restrict_parameter;
       }
     } else {
       LOG(WARNING) << "Unexpected crossettings trusted values status: "

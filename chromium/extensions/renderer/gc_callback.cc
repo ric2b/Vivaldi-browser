@@ -4,7 +4,7 @@
 
 #include "extensions/renderer/gc_callback.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
 #include "extensions/renderer/script_context.h"
@@ -62,7 +62,7 @@ GCCallback::GCCallback(ScriptContext* context,
   }
 }
 
-GCCallback::~GCCallback() {}
+GCCallback::~GCCallback() = default;
 
 // static
 void GCCallback::OnObjectGC(const v8::WeakCallbackInfo<GCCallback>& data) {

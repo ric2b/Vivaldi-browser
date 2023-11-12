@@ -9,8 +9,8 @@
 #include <string>
 #include <unordered_map>
 
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/callback.h"
 #include "components/commerce/core/proto/commerce_subscription_db_content.pb.h"
 #include "components/commerce/core/subscriptions/subscriptions_manager.h"
 #include "components/session_proto_db/session_proto_storage.h"
@@ -74,17 +74,20 @@ class SubscriptionsStorage {
   virtual void IsSubscribed(CommerceSubscription subscription,
                             base::OnceCallback<void(bool)> callback);
 
- private:
-  std::string GetSubscriptionKey(const CommerceSubscription& subscription);
+  // Get all subscriptions that match the provided |type|.
+  virtual void LoadAllSubscriptionsForType(
+      SubscriptionType type,
+      GetLocalSubscriptionsCallback callback);
 
+  // Load all subscriptions regardless of type.
+  virtual void LoadAllSubscriptions(GetLocalSubscriptionsCallback callback);
+
+ private:
   void SaveSubscription(CommerceSubscription subscription,
                         base::OnceCallback<void(bool)> callback);
 
   void DeleteSubscription(CommerceSubscription subscription,
                           base::OnceCallback<void(bool)> callback);
-
-  void LoadAllSubscriptionsForType(SubscriptionType type,
-                                   GetLocalSubscriptionsCallback callback);
 
   CommerceSubscription GetSubscriptionFromProto(
       const SessionProtoStorage<CommerceSubscriptionProto>::KeyAndValue& kv);
@@ -108,6 +111,10 @@ class SubscriptionsStorage {
       StorageOperationCallback callback,
       std::unique_ptr<std::vector<CommerceSubscription>> remote_subscriptions,
       std::unique_ptr<std::vector<CommerceSubscription>> local_subscriptions);
+
+  void HandleLoadCompleted(GetLocalSubscriptionsCallback callback,
+                           bool succeeded,
+                           CommerceSubscriptions data);
 
   raw_ptr<SessionProtoStorage<CommerceSubscriptionProto>> proto_db_;
 

@@ -6,13 +6,9 @@
 
 namespace apps {
 
-BASE_FEATURE(kStopMojomAppService,
-             "StopMojomAppService",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kUnifiedAppServiceIconLoading,
              "UnifiedAppServiceIconLoading",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kAppServiceStorage,
              "AppServiceStorage",

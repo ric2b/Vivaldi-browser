@@ -4,6 +4,7 @@
       source_lang_id="en" enc_check="möl">
   <outputs>
     <if expr="not vivaldi_chromium_file">
+      <output filename="google_chrome_strings_ca-valencia.pak" type="data_package" lang="ca@valencia" />
       <output filename="google_chrome_strings_de-CH.pak" type="data_package" lang="de-CH" />
       <output filename="google_chrome_strings_eo.pak" type="data_package" lang="eo" />
       <output filename="google_chrome_strings_es-PE.pak" type="data_package" lang="es-PE" />
@@ -21,44 +22,62 @@
     </if>
   </outputs>
   <translations>
+    <file path="strings/vivaldi_strings_af.xtb" lang="af" />
     <file path="strings/vivaldi_strings_am.xtb" lang="am" />
     <file path="strings/vivaldi_strings_ar.xtb" lang="ar" />
     <file path="strings/vivaldi_strings_as.xtb" lang="as" />
     <file path="strings/vivaldi_strings_az.xtb" lang="az" />
+    <file path="strings/vivaldi_strings_be.xtb" lang="be" />
     <file path="strings/vivaldi_strings_bg.xtb" lang="bg" />
     <file path="strings/vivaldi_strings_bn.xtb" lang="bn" />
     <file path="strings/vivaldi_strings_bs.xtb" lang="bs" />
     <file path="strings/vivaldi_strings_ca.xtb" lang="ca" />
+    <file path="strings/vivaldi_strings_ca-valencia.xtb" lang="ca@valencia" />
     <file path="strings/vivaldi_strings_cs.xtb" lang="cs" />
     <file path="strings/vivaldi_strings_da.xtb" lang="da" />
     <file path="strings/vivaldi_strings_de.xtb" lang="de" />
+    <file path="strings/vivaldi_strings_de-CH.xtb" lang="de-CH" />
     <file path="strings/vivaldi_strings_el.xtb" lang="el" />
     <file path="strings/vivaldi_strings_en-GB.xtb" lang="en-GB" />
+    <file path="strings/vivaldi_strings_eo.xtb" lang="eo" />
     <file path="strings/vivaldi_strings_es.xtb" lang="es" />
+    <file path="strings/vivaldi_strings_es-419.xtb" lang="es-419" />
+    <file path="strings/vivaldi_strings_es-PE.xtb" lang="es-PE" />
     <file path="strings/vivaldi_strings_et.xtb" lang="et" />
+    <file path="strings/vivaldi_strings_eu.xtb" lang="eu" />
     <file path="strings/vivaldi_strings_fa.xtb" lang="fa" />
     <file path="strings/vivaldi_strings_fi.xtb" lang="fi" />
     <file path="strings/vivaldi_strings_fil.xtb" lang="fil" />
     <file path="strings/vivaldi_strings_fr.xtb" lang="fr" />
     <file path="strings/vivaldi_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_strings_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_strings_gd.xtb" lang="gd" />
+    <file path="strings/vivaldi_strings_gl.xtb" lang="gl" />
     <file path="strings/vivaldi_strings_gu.xtb" lang="gu" />
     <file path="strings/vivaldi_strings_he.xtb" lang="he" />
     <file path="strings/vivaldi_strings_hi.xtb" lang="hi" />
     <file path="strings/vivaldi_strings_hr.xtb" lang="hr" />
     <file path="strings/vivaldi_strings_hu.xtb" lang="hu" />
+    <file path="strings/vivaldi_strings_hy.xtb" lang="hy" />
     <file path="strings/vivaldi_strings_id.xtb" lang="id" />
+    <file path="strings/vivaldi_strings_io.xtb" lang="io" />
+    <file path="strings/vivaldi_strings_is.xtb" lang="is" />
     <file path="strings/vivaldi_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_strings_ja.xtb" lang="ja" />
     <file path="strings/vivaldi_strings_ja-KS.xtb" lang="ja-KS" />
+    <file path="strings/vivaldi_strings_jbo.xtb" lang="jbo" />
+    <file path="strings/vivaldi_strings_ka.xtb" lang="ka" />
     <file path="strings/vivaldi_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_strings_kk.xtb" lang="kk" />
     <file path="strings/vivaldi_strings_km.xtb" lang="km" />
     <file path="strings/vivaldi_strings_kn.xtb" lang="kn" />
     <file path="strings/vivaldi_strings_ko.xtb" lang="ko" />
+    <file path="strings/vivaldi_strings_ku.xtb" lang="ku" />
     <file path="strings/vivaldi_strings_ky.xtb" lang="ky" />
-    <file path="strings/vivaldi_strings_lt.xtb" lang="lt" />
     <file path="strings/vivaldi_strings_lo.xtb" lang="lo" />
+    <file path="strings/vivaldi_strings_lt.xtb" lang="lt" />
     <file path="strings/vivaldi_strings_lv.xtb" lang="lv" />
+    <file path="strings/vivaldi_strings_mk.xtb" lang="mk" />
     <file path="strings/vivaldi_strings_ml.xtb" lang="ml" />
     <file path="strings/vivaldi_strings_mn.xtb" lang="mn" />
     <file path="strings/vivaldi_strings_mr.xtb" lang="mr" />
@@ -67,16 +86,21 @@
     <file path="strings/vivaldi_strings_nb.xtb" lang="no" />
     <file path="strings/vivaldi_strings_ne.xtb" lang="ne" />
     <file path="strings/vivaldi_strings_nl.xtb" lang="nl" />
+    <file path="strings/vivaldi_strings_nn.xtb" lang="nn" />
     <file path="strings/vivaldi_strings_or.xtb" lang="or" />
     <file path="strings/vivaldi_strings_pa.xtb" lang="pa" />
     <file path="strings/vivaldi_strings_pl.xtb" lang="pl" />
+    <file path="strings/vivaldi_strings_pt-BR.xtb" lang="pt-BR" />
     <file path="strings/vivaldi_strings_pt-PT.xtb" lang="pt-PT" />
     <file path="strings/vivaldi_strings_ro.xtb" lang="ro" />
     <file path="strings/vivaldi_strings_ru.xtb" lang="ru" />
+    <file path="strings/vivaldi_strings_sc.xtb" lang="sc" />
     <file path="strings/vivaldi_strings_si.xtb" lang="si" />
     <file path="strings/vivaldi_strings_sk.xtb" lang="sk" />
     <file path="strings/vivaldi_strings_sl.xtb" lang="sl" />
+    <file path="strings/vivaldi_strings_sq.xtb" lang="sq" />
     <file path="strings/vivaldi_strings_sr.xtb" lang="sr" />
+    <file path="strings/vivaldi_strings_sr-Latn.xtb" lang="sr-Latn" />
     <file path="strings/vivaldi_strings_sv.xtb" lang="sv" />
     <file path="strings/vivaldi_strings_sw.xtb" lang="sw" />
     <file path="strings/vivaldi_strings_ta.xtb" lang="ta" />
@@ -91,28 +115,6 @@
     <file path="strings/vivaldi_strings_zh-HK.xtb" lang="zh-HK" />
     <file path="strings/vivaldi_strings_zh-TW.xtb" lang="zh-TW" />
     <file path="strings/vivaldi_strings_zu.xtb" lang="zu" />
-    <file path="strings/vivaldi_strings_es-419.xtb" lang="es-419" />
-    <file path="strings/vivaldi_strings_pt-BR.xtb" lang="pt-BR" />
-    <file path="strings/vivaldi_strings_af.xtb" lang="af" />
-    <file path="strings/vivaldi_strings_be.xtb" lang="be" />
-    <file path="strings/vivaldi_strings_de-CH.xtb" lang="de-CH" />
-    <file path="strings/vivaldi_strings_eo.xtb" lang="eo" />
-    <file path="strings/vivaldi_strings_es-PE.xtb" lang="es-PE" />
-    <file path="strings/vivaldi_strings_eu.xtb" lang="eu" />
-    <file path="strings/vivaldi_strings_fy.xtb" lang="fy" />
-    <file path="strings/vivaldi_strings_gd.xtb" lang="gd" />
-    <file path="strings/vivaldi_strings_gl.xtb" lang="gl" />
-    <file path="strings/vivaldi_strings_hy.xtb" lang="hy" />
-    <file path="strings/vivaldi_strings_io.xtb" lang="io" />
-    <file path="strings/vivaldi_strings_is.xtb" lang="is" />
-    <file path="strings/vivaldi_strings_jbo.xtb" lang="jbo" />
-    <file path="strings/vivaldi_strings_ka.xtb" lang="ka" />
-    <file path="strings/vivaldi_strings_ku.xtb" lang="ku" />
-    <file path="strings/vivaldi_strings_mk.xtb" lang="mk" />
-    <file path="strings/vivaldi_strings_sc.xtb" lang="sc" />
-    <file path="strings/vivaldi_strings_sq.xtb" lang="sq" />
-    <file path="strings/vivaldi_strings_nn.xtb" lang="nn" />
-    <file path="strings/vivaldi_strings_sr-Latn.xtb" lang="sr-Latn" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">

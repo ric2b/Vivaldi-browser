@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
@@ -499,6 +499,7 @@ void DownloadTargetDeterminer::ReserveVirtualPathDone(
             download::DOWNLOAD_INTERRUPT_REASON_USER_CANCELED);
         return;
       case download::PathValidationResult::SUCCESS:
+      case download::PathValidationResult::SUCCESS_RESOLVED_CONFLICT:
       case download::PathValidationResult::SAME_AS_SOURCE:
         DCHECK_EQ(virtual_path_, path) << "Transient download path should not"
                                           "be changed.";
@@ -512,6 +513,11 @@ void DownloadTargetDeterminer::ReserveVirtualPathDone(
     switch (result) {
       case download::PathValidationResult::SUCCESS:
       case download::PathValidationResult::SAME_AS_SOURCE:
+        break;
+
+      // TODO(crbug.com/1361503): This should trigger a duplicate download
+      // prompt.
+      case download::PathValidationResult::SUCCESS_RESOLVED_CONFLICT:
         break;
 
       case download::PathValidationResult::PATH_NOT_WRITABLE:

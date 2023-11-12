@@ -16,8 +16,6 @@
 
 // Partners with branding for Vivaldi
 "duckduckgo.com",
-"ecosia.com",
-"ecosia.org",
 "neeva.com",
 "qwant.com",
 "startpage.com",

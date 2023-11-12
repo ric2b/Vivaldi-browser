@@ -18,7 +18,6 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/features.h"
 #include "net/base/filename_util.h"
 #include "net/base/load_flags.h"
@@ -514,10 +513,9 @@ TEST_F(PacFileFetcherImplTest, IgnoresLimits) {
   test_server_.SetConnectionListener(&connection_listener);
   ASSERT_TRUE(test_server_.Start());
 
-  std::vector<std::unique_ptr<PacFileFetcherImpl>> pac_fetchers;
-
-  TestCompletionCallback callback;
   std::u16string text;
+  TestCompletionCallback callback;
+  std::vector<std::unique_ptr<PacFileFetcherImpl>> pac_fetchers;
   for (int i = 0; i < num_requests; i++) {
     auto pac_fetcher = PacFileFetcherImpl::Create(context_.get());
     GURL url(test_server_.GetURL("/hung"));

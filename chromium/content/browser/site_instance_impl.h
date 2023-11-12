@@ -45,6 +45,9 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // with the same name.
   static scoped_refptr<SiteInstanceImpl> Create(
       BrowserContext* browser_context);
+  static scoped_refptr<SiteInstanceImpl> CreateForURL(
+      BrowserContext* browser_context,
+      const GURL& url);
   static scoped_refptr<SiteInstanceImpl> CreateForGuest(
       BrowserContext* browser_context,
       const StoragePartitionConfig& partition_config);
@@ -258,23 +261,33 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // the information provided in `url_info`. This function is slightly different
   // than SiteInfo::Create() because it takes into account information
   // specific to this SiteInstance, like whether it is a guest or not, and
-  // changes its behavior accordingly. `is_related` - Controls the SiteInfo
-  // returned for non-guest SiteInstances.
-  //  Set to true if the caller wants the SiteInfo for an existing related
-  //  SiteInstance associated with `url_info`. This is identical to what you
-  //  would get from GetRelatedSiteInstanceImpl(url_info)->GetSiteInfo(). This
-  //  may return the SiteInfo for the default SiteInstance so callers must be
-  //  prepared to deal with that. If set to false, a SiteInfo created with
-  //  SiteInfo::Create() is returned.
+  // changes its behavior accordingly.
   //
-  // For guest SiteInstances, `site_info_` is returned because guests are not
-  // allowed to derive new guest SiteInfos. All guest navigations must stay in
-  // the same SiteInstance with the same SiteInfo.
+  // `is_related` - Controls the SiteInfo returned for non-guest SiteInstances.
+  // Set to true if the caller wants the SiteInfo for an existing related
+  // SiteInstance associated with `url_info`. This is identical to what you
+  // would get from GetRelatedSiteInstanceImpl(url_info)->GetSiteInfo(). This
+  // may return the SiteInfo for the default SiteInstance so callers must be
+  // prepared to deal with that. If set to false, a SiteInfo created with
+  // SiteInfo::Create() is returned.
   //
-  // Note: Since we're deriving the state of the SiteInfo based on both UrlInfo
-  // and SiteInstance, we verify internally that their WebExposedIsolationInfos
-  // are compatible.
-  SiteInfo DeriveSiteInfo(const UrlInfo& url_info, bool is_related = false);
+  // `disregard_web_exposed_isolation_info` - Controls whether we should
+  // disregard `url_info`'s WebExposedIsolationInfo. This can be used when we're
+  // using DeriveSiteInfo to compute a specific SiteInfo member, like the
+  // StoragePartition, even though the WebExposedIsolationInfo would normally
+  // make this function unable to produce a complete SiteInfo unambiguously (we
+  // would not be sure which one of conflicting WebExposedIsolationInfos we
+  // should use).
+  //
+  // Note: For guest SiteInstances, `site_info_` is returned because guests are
+  // not allowed to derive new guest SiteInfos. All guest navigations must stay
+  // in the same SiteInstance with the same SiteInfo.
+  //
+  // TODO(ahemery): DeriveSiteInfo is a function used for too many things and
+  // should probably be split up into multiple never ambiguous subfunctions.
+  SiteInfo DeriveSiteInfo(const UrlInfo& url_info,
+                          bool is_related = false,
+                          bool disregard_web_exposed_isolation_info = false);
 
   // Helper function that returns the storage partition domain for this
   // object.
@@ -316,6 +329,12 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   void ConvertToDefaultOrSetSite(const UrlInfo& url_info);
 
   // Returns whether SetSite() has been called.
+  //
+  // In some cases, the "site" is not set at SiteInstance creation time, and
+  // instead it's set lazily when a navigation response is received and
+  // SiteInstance selection is finalized. This is to support better process
+  // sharing in case the site redirects to some other site: we want to use the
+  // destination site in the SiteInstance.
   bool HasSite() const;
 
   // Returns whether there is currently a related SiteInstance (registered with

@@ -46,6 +46,10 @@ const char kToolbarMenuActionsHistogram[] =
     "Mobile.ContextMenu.Toolbar.Actions";
 const char kOmniboxMostVisitedEntryActionsHistogram[] =
     "Mobile.ContextMenu.OmniboxMostVisitedEntry.Actions";
+const char kPinnedTabsEntryActionsHistogram[] =
+    "Mobile.ContextMenu.PinnedTabsEntry.Actions";
+const char kTabStripEntryActionsHistogram[] =
+    "Mobile.ContextMenu.TabStrip.Actions";
 
 // Vivaldi
 const char kNoteEntryActionsHistogram[] =
@@ -95,6 +99,10 @@ const char* GetActionsHistogramName(MenuScenarioHistogram scenario) {
       return kToolbarMenuActionsHistogram;
     case MenuScenarioHistogram::kOmniboxMostVisitedEntry:
       return kOmniboxMostVisitedEntryActionsHistogram;
+    case MenuScenarioHistogram::kPinnedTabsEntry:
+      return kPinnedTabsEntryActionsHistogram;
+    case MenuScenarioHistogram::kTabStripEntry:
+      return kTabStripEntryActionsHistogram;
 
     // Vivaldi
     case MenuScenarioHistogram::kNoteEntry:

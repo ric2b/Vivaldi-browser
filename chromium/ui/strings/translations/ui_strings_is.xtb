@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{Einn mánuður}one{# mánuður}other{# mánuðir}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/sek.</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 klukkustund og }one{# klukkustund og }other{# klukkustundir og }}</translation>
+<translation id="185013357618350178">&amp;Velja</translation>
 <translation id="1859234291848436338">Ritunarstefna</translation>
 <translation id="1860796786778352021">Loka tilkynningu</translation>
 <translation id="186476001994626254">Snjalllíming efnis fyrir vefinn</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{eftir 1 klst.}one{eftir # klst.}other{eftir # klst.}}</translation>
 <translation id="2583543531130364912">Kvarðaðu snertiskjáinn</translation>
 <translation id="2586657967955657006">Klippiborð</translation>
+<translation id="2653844658857826081">NÝTT</translation>
 <translation id="2666092431469916601">Efst</translation>
 <translation id="2701330563083355633">Deilt úr <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Nýtt</translation>

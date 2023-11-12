@@ -7,9 +7,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_util.h"
 #include "base/threading/platform_thread.h"
@@ -160,9 +160,10 @@ Status ParseType(const std::string& type_as_string, WebViewInfo::Type* type) {
 namespace internal {
 
 Status ParseWebViewsInfo(const std::string& data, WebViewsInfo* views_info) {
-  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(data);
-  if (!value.get())
+  absl::optional<base::Value> value = base::JSONReader::Read(data);
+  if (!value) {
     return Status(kUnknownError, "DevTools returned invalid JSON");
+  }
   if (!value->is_list())
     return Status(kUnknownError, "DevTools did not return list");
 

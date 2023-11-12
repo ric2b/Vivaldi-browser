@@ -9,12 +9,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/observer_list.h"
 #include "base/strings/string_util.h"
 #include "build/chromeos_buildflags.h"
@@ -22,9 +22,10 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/web_applications/app_registrar_observer.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
@@ -34,6 +35,7 @@
 #include "chrome/browser/web_applications/web_app_translation_manager.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
 #include "chrome/common/chrome_features.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/common/features.h"
 
@@ -146,13 +148,6 @@ void WebAppRegistrar::NotifyWebAppsWillBeUpdatedFromSync(
     observer.OnWebAppsWillBeUpdatedFromSync(new_apps_state);
 }
 
-void WebAppRegistrar::NotifyWebAppLocallyInstalledStateChanged(
-    const AppId& app_id,
-    bool is_locally_installed) {
-  for (AppRegistrarObserver& observer : observers_)
-    observer.OnWebAppLocallyInstalledStateChanged(app_id, is_locally_installed);
-}
-
 void WebAppRegistrar::NotifyWebAppDisabledStateChanged(const AppId& app_id,
                                                        bool is_disabled) {
   for (AppRegistrarObserver& observer : observers_)
@@ -191,7 +186,7 @@ void WebAppRegistrar::NotifyWebAppProfileWillBeDeleted(const AppId& app_id) {
 
 void WebAppRegistrar::NotifyWebAppUserDisplayModeChanged(
     const AppId& app_id,
-    UserDisplayMode user_display_mode) {
+    mojom::UserDisplayMode user_display_mode) {
   for (AppRegistrarObserver& observer : observers_)
     observer.OnWebAppUserDisplayModeChanged(app_id, user_display_mode);
 }
@@ -462,7 +457,7 @@ DisplayMode WebAppRegistrar::GetAppEffectiveDisplayMode(
     return DisplayMode::kBrowser;
 
   auto app_display_mode = GetAppDisplayMode(app_id);
-  absl::optional<UserDisplayMode> user_display_mode =
+  absl::optional<mojom::UserDisplayMode> user_display_mode =
       GetAppUserDisplayMode(app_id);
   if (app_display_mode == DisplayMode::kUndefined ||
       !user_display_mode.has_value()) {
@@ -697,8 +692,7 @@ bool WebAppRegistrar::IsActivelyInstalled(const AppId& app_id) const {
 
 bool WebAppRegistrar::IsIsolated(const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
-  return web_app && (web_app->IsStorageIsolated() ||
-                     web_app->isolation_data().has_value());
+  return web_app && web_app->isolation_data().has_value();
 }
 
 bool WebAppRegistrar::IsInstalledByDefaultManagement(
@@ -786,6 +780,31 @@ int WebAppRegistrar::CountUserInstalledApps() const {
       ++num_user_installed;
   }
   return num_user_installed;
+}
+
+std::vector<content::StoragePartitionConfig>
+WebAppRegistrar::GetIsolatedWebAppStoragePartitionConfigs(
+    const AppId& isolated_web_app_id) const {
+  if (!base::FeatureList::IsEnabled(features::kIsolatedWebApps)) {
+    return {};
+  }
+
+  const WebApp* isolated_web_app = GetAppById(isolated_web_app_id);
+  if (!isolated_web_app || !isolated_web_app->is_locally_installed() ||
+      !isolated_web_app->isolation_data()) {
+    return {};
+  }
+
+  base::expected<IsolatedWebAppUrlInfo, std::string> url_info =
+      IsolatedWebAppUrlInfo::Create(isolated_web_app->scope());
+  if (!url_info.has_value()) {
+    LOG(ERROR) << "Invalid Isolated Web App: " << isolated_web_app->app_id()
+               << ", " << url_info.error();
+    return {};
+  }
+
+  // TODO(crbug.com/1311065): Include Controlled Frame StoragePartitions.
+  return {url_info->storage_partition_config(profile_)};
 }
 
 std::string WebAppRegistrar::GetAppShortName(const AppId& app_id) const {
@@ -896,8 +915,14 @@ ApiApprovalState WebAppRegistrar::GetAppFileHandlerApprovalState(
 bool WebAppRegistrar::ExpectThatFileHandlersAreRegisteredWithOs(
     const AppId& app_id) const {
   const WebApp* web_app = GetAppById(app_id);
-  return web_app && web_app->file_handler_os_integration_state() ==
-                        OsIntegrationState::kEnabled;
+  if (!web_app) {
+    return false;
+  }
+
+  // TODO(dibyapal): Add support for the new `current_os_integration_state()`
+  // when file handlers are added there. https://crbug.com/1404165.
+  return web_app->file_handler_os_integration_state() ==
+         OsIntegrationState::kEnabled;
 }
 
 absl::optional<GURL> WebAppRegistrar::GetAppScopeInternal(
@@ -921,7 +946,7 @@ DisplayMode WebAppRegistrar::GetAppDisplayMode(const AppId& app_id) const {
   return web_app ? web_app->display_mode() : DisplayMode::kUndefined;
 }
 
-absl::optional<UserDisplayMode> WebAppRegistrar::GetAppUserDisplayMode(
+absl::optional<mojom::UserDisplayMode> WebAppRegistrar::GetAppUserDisplayMode(
     const AppId& app_id) const {
   auto* web_app = GetAppById(app_id);
   if (web_app == nullptr) {

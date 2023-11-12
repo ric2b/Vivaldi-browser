@@ -32,7 +32,7 @@
 namespace views::corewm {
 namespace {
 
-constexpr auto kDefaultShowTooltipDelay = base::Milliseconds(50);
+constexpr auto kDefaultShowTooltipDelay = base::Milliseconds(500);
 constexpr auto kDefaultHideTooltipDelay = base::Seconds(10);
 
 // Returns true if |target| is a valid window to get the tooltip from.
@@ -51,10 +51,20 @@ bool IsValidTarget(aura::Window* event_target, aura::Window* target) {
 
   void* event_target_grouping_id = event_target->GetNativeWindowProperty(
       TooltipManager::kGroupingPropertyKey);
-  void* target_grouping_id =
-      target->GetNativeWindowProperty(TooltipManager::kGroupingPropertyKey);
+
+  auto* toplevel_of_target = target->GetToplevelWindow();
+
+  // Return true if grouping id is same for `target` and `event_target`.
+  // Also, check grouping id of target's toplevel window to allow the child
+  // window under `target`, because the menu window may have a child window.
   return event_target_grouping_id &&
-         event_target_grouping_id == target_grouping_id;
+         (event_target_grouping_id ==
+              target->GetNativeWindowProperty(
+                  TooltipManager::kGroupingPropertyKey) ||
+          (toplevel_of_target &&
+           event_target_grouping_id ==
+               toplevel_of_target->GetNativeWindowProperty(
+                   TooltipManager::kGroupingPropertyKey)));
 }
 
 // Returns the target (the Window tooltip text comes from) based on the event.
@@ -114,10 +124,8 @@ aura::Window* GetTooltipTarget(const ui::MouseEvent& event,
       return screen_target;
     }
     default:
-      NOTREACHED();
-      break;
+      NOTREACHED_NORETURN();
   }
-  return nullptr;
 }
 
 }  // namespace
@@ -175,7 +183,13 @@ void TooltipController::UpdateTooltip(aura::Window* target) {
 
 void TooltipController::UpdateTooltipFromKeyboard(const gfx::Rect& bounds,
                                                   aura::Window* target) {
-  anchor_point_ = bounds.bottom_center();
+  UpdateTooltipFromKeyboardWithAnchorPoint(bounds.bottom_center(), target);
+}
+
+void TooltipController::UpdateTooltipFromKeyboardWithAnchorPoint(
+    const gfx::Point& anchor_point,
+    aura::Window* target) {
+  anchor_point_ = anchor_point;
   SetObservedWindow(target);
 
   // Update the position of the active but not yet visible keyboard triggered
@@ -327,7 +341,7 @@ void TooltipController::OnWindowVisibilityChanged(aura::Window* window,
 
 void TooltipController::OnWindowDestroyed(aura::Window* window) {
   if (observed_window_ == window) {
-    RemoveHideTooltipTimeoutFromMap(observed_window_);
+    RemoveTooltipDelayFromMap(observed_window_);
     observed_window_ = nullptr;
   }
 
@@ -353,16 +367,22 @@ void TooltipController::OnWindowActivated(ActivationReason reason,
     HideAndReset();
 }
 
+void TooltipController::SetShowTooltipDelay(aura::Window* target,
+                                            base::TimeDelta delay) {
+  show_tooltip_delay_map_[target] = delay;
+}
+
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-void TooltipController::OnTooltipShownOnServer(const std::u16string& text,
+void TooltipController::OnTooltipShownOnServer(aura::Window* window,
+                                               const std::u16string& text,
                                                const gfx::Rect& bounds) {
-  state_manager_->OnTooltipShownOnServer(text, bounds);
+  state_manager_->OnTooltipShownOnServer(window, text, bounds);
 }
 
 void TooltipController::OnTooltipHiddenOnServer() {
   state_manager_->OnTooltipHiddenOnServer();
 }
-#endif  // BUILDFLA(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 ////////////////////////////////////////////////////////////////////////////////
 // TooltipController private:
@@ -423,8 +443,13 @@ bool TooltipController::IsCursorVisible() const {
 }
 
 base::TimeDelta TooltipController::GetShowTooltipDelay() {
-  return skip_show_delay_for_testing_ ? base::TimeDelta()
-                                      : kDefaultShowTooltipDelay;
+  std::map<aura::Window*, base::TimeDelta>::const_iterator it =
+      show_tooltip_delay_map_.find(observed_window_);
+  if (it == show_tooltip_delay_map_.end()) {
+    return skip_show_delay_for_testing_ ? base::TimeDelta()
+                                        : kDefaultShowTooltipDelay;
+  }
+  return it->second;
 }
 
 base::TimeDelta TooltipController::GetHideTooltipDelay() {
@@ -465,7 +490,8 @@ bool TooltipController::IsTooltipTextUpdateNeeded() const {
   return state_manager_->tooltip_text() != wm::GetTooltipText(observed_window_);
 }
 
-void TooltipController::RemoveHideTooltipTimeoutFromMap(aura::Window* window) {
+void TooltipController::RemoveTooltipDelayFromMap(aura::Window* window) {
+  show_tooltip_delay_map_.erase(window);
   hide_tooltip_timeout_map_.erase(window);
 }
 

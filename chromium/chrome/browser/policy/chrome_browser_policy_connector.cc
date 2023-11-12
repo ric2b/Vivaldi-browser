@@ -8,10 +8,10 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check_is_test.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/path_service.h"
 #include "base/task/thread_pool.h"
 #include "build/branding_buildflags.h"
@@ -161,8 +161,10 @@ void ChromeBrowserPolicyConnector::Shutdown() {
   // Reset the controller before calling base class so that
   // shutdown occurs in correct sequence.
   chrome_browser_cloud_management_controller_.reset();
-  if (machine_level_user_cloud_policy_manager_)
+  if (machine_level_user_cloud_policy_manager_) {
     machine_level_user_cloud_policy_manager_->Shutdown();
+    machine_level_user_cloud_policy_manager_ = nullptr;
+  }
 #endif
 
   BrowserPolicyConnector::Shutdown();
@@ -330,11 +332,11 @@ void ChromeBrowserPolicyConnector::OnMachineLevelCloudPolicyManagerCreated(
     std::unique_ptr<MachineLevelUserCloudPolicyManager>
         machine_level_user_cloud_policy_manager) {
   machine_level_user_cloud_policy_manager_ =
-      std::move(machine_level_user_cloud_policy_manager);
+      machine_level_user_cloud_policy_manager.get();
   if (machine_level_user_cloud_policy_manager_) {
     machine_level_user_cloud_policy_manager_->Init(GetSchemaRegistry());
-    proxy_policy_provider_->SetDelegate(
-        machine_level_user_cloud_policy_manager_.get());
+    proxy_policy_provider_->SetOwnedDelegate(
+        std::move(machine_level_user_cloud_policy_manager));
   }
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)

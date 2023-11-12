@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_BOREALIS_BOREALIS_INSTALLER_VIEW_H_
 
 #include "ash/public/cpp/style/color_mode_observer.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ash/borealis/borealis_installer.h"
@@ -23,6 +23,12 @@ class ProgressBar;
 }  // namespace views
 
 class Profile;
+
+namespace borealis {
+
+void ShowBorealisInstallerView(Profile* profile);
+
+}  // namespace borealis
 
 // The front end for the Borealis installation process, works closely with
 // "chrome/browser/ash/borealis/borealis_installer.h".

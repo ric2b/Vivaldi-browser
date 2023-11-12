@@ -48,6 +48,18 @@ TEST_F('ParentAccessAppTest', 'TestShowWebApprovalsAfterFlow', function() {
       parent_access_app_tests.TestNames.TestShowWebApprovalsAfterFlow);
 });
 
+TEST_F('ParentAccessAppTest', 'TestShowExtensionApprovalsFlow', function() {
+  this.runMochaTest(
+      parent_access_app_tests.TestNames.TestShowExtensionApprovalsFlow);
+});
+
+TEST_F(
+    'ParentAccessAppTest', 'TestShowExtensionApprovalsDisabledScreen',
+    function() {
+      this.runMochaTest(parent_access_app_tests.TestNames
+                            .TestShowExtensionApprovalsDisabledScreen);
+    });
+
 TEST_F('ParentAccessAppTest', 'TestShowErrorScreenOnOAuthFailure', function() {
   this.runMochaTest(
       parent_access_app_tests.TestNames.TestShowErrorScreenOnOAuthFailure);

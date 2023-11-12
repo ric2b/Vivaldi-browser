@@ -6,11 +6,14 @@
 
 #import "base/containers/cxx20_erase_vector.h"
 #import "base/memory/raw_ptr.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/sync/base/passphrase_enums.h"
+#import "components/sync/base/user_selectable_type.h"
 #import "components/sync/driver/sync_service_utils.h"
 #import "components/sync/driver/sync_user_settings.h"
 #import "ios/chrome/browser/sync/sync_observer_bridge.h"
@@ -128,6 +131,11 @@ using password_manager::prefs::kCredentialsEnableService;
 
   [self.consumer setSavePasswordsEnabled:_passwordManagerEnabled.value];
 
+  [self.consumer setSignedInAccount:base::SysUTF8ToNSString(
+                                        _syncService->GetAccountInfo().email)];
+
+  [self.consumer setAccountStorageState:[self computeAccountStorageState]];
+
   // TODO(crbug.com/1082827): In addition to setting this value here, we should
   // observe for changes (i.e., if policy changes while the screen is open) and
   // push that to the consumer.
@@ -206,6 +214,18 @@ using password_manager::prefs::kCredentialsEnableService;
   _passwordManagerEnabled.value = enabled;
 }
 
+- (void)accountStorageSwitchDidChange:(BOOL)enabled {
+  syncer::UserSelectableTypeSet types =
+      _syncService->GetUserSettings()->GetSelectedTypes();
+  if (enabled) {
+    types.Put(syncer::UserSelectableType::kPasswords);
+  } else {
+    types.Remove(syncer::UserSelectableType::kPasswords);
+  }
+  _syncService->GetUserSettings()->SetSelectedTypes(/*sync_everything=*/false,
+                                                    types);
+}
+
 #pragma mark - SavedPasswordsPresenterObserver
 
 - (void)savedPasswordsDidChange {
@@ -241,6 +261,9 @@ using password_manager::prefs::kCredentialsEnableService;
 
 - (void)onSyncStateChanged {
   [self.consumer setOnDeviceEncryptionState:[self onDeviceEncryptionState]];
+  [self.consumer setSignedInAccount:base::SysUTF8ToNSString(
+                                        _syncService->GetAccountInfo().email)];
+  [self.consumer setAccountStorageState:[self computeAccountStorageState]];
 }
 
 #pragma mark - Private
@@ -263,6 +286,19 @@ using password_manager::prefs::kCredentialsEnableService;
   [self.consumer
       setCanExportPasswords:self.hasSavedPasswords && self.exporterIsReady];
   [self.consumer updateExportPasswordsButton];
+}
+
+- (PasswordSettingsAccountStorageState)computeAccountStorageState {
+  if (!_syncService->GetAccountInfo().IsEmpty() &&
+      !_syncService->IsSyncFeatureEnabled() &&
+      base::FeatureList::IsEnabled(
+          password_manager::features::kEnablePasswordsAccountStorage)) {
+    return _syncService->GetUserSettings()->GetSelectedTypes().Has(
+               syncer::UserSelectableType::kPasswords)
+               ? PasswordSettingsAccountStorageStateOptedIn
+               : PasswordSettingsAccountStorageStateOptedOut;
+  }
+  return PasswordSettingsAccountStorageStateNotShown;
 }
 
 @end

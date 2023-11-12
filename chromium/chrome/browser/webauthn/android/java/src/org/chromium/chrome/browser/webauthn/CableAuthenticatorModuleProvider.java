@@ -12,7 +12,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -73,8 +72,6 @@ public class CableAuthenticatorModuleProvider extends Fragment implements OnClic
             "org.chromium.chrome.browser.webauth.authenticator.CableAuthenticatorActivity";
     private static final String SECRET_KEY =
             "org.chromium.chrome.modules.cablev2_authenticator.Secret";
-    private static final String METRICS_KEY =
-            "org.chromium.chrome.modules.cablev2_authenticator.MetricsEnabled";
 
     private View mErrorView;
 
@@ -89,17 +86,6 @@ public class CableAuthenticatorModuleProvider extends Fragment implements OnClic
         ((TextView) mErrorView.findViewById(R.id.error_code))
                 .setText(getResources().getString(
                         R.string.cablev2_error_code, INSTALL_FAILURE_ERROR_CODE));
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            // While the device will not be advertised in Sync if the Android
-            // version is too old, this case can occur in the QR flow because
-            // there's no version restriction on Play Services forwarding the
-            // `Intent`.
-            ((TextView) mErrorView.findViewById(R.id.error_description))
-                    .setText(getResources().getString(
-                            R.string.menu_update_unsupported_summary_default));
-            return mErrorView;
-        }
 
         ((TextView) mErrorView.findViewById(R.id.error_description))
                 .setText(getResources().getString(R.string.cablev2_error_generic));
@@ -166,8 +152,6 @@ public class CableAuthenticatorModuleProvider extends Fragment implements OnClic
         arguments.putLong(
                 REGISTRATION_KEY, CableAuthenticatorModuleProviderJni.get().getRegistration());
         arguments.putByteArray(SECRET_KEY, CableAuthenticatorModuleProviderJni.get().getSecret());
-        arguments.putBoolean(METRICS_KEY,
-                CableAuthenticatorModuleProviderJni.get().isMetricsAndCrashReportingEnabled());
         fragment.setArguments(arguments);
         transaction.replace(getId(), fragment);
         // This fragment is deliberately not added to the back-stack here so
@@ -242,8 +226,7 @@ public class CableAuthenticatorModuleProvider extends Fragment implements OnClic
     public static boolean canDeviceSupportCable() {
         // This function will be run on a background thread.
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N
-                || BluetoothAdapter.getDefaultAdapter() == null) {
+        if (BluetoothAdapter.getDefaultAdapter() == null) {
             return false;
         }
 
@@ -278,8 +261,5 @@ public class CableAuthenticatorModuleProvider extends Fragment implements OnClic
         byte[] getSecret();
         // freeEvent releases resources used by the given event.
         void freeEvent(long event);
-        // isMetricsCollectionEnabled returns true if the user has opted into
-        // metrics collection. This enables logging for server-linked sign-ins.
-        boolean isMetricsAndCrashReportingEnabled();
     }
 }

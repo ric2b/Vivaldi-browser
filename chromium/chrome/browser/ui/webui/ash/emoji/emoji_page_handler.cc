@@ -5,17 +5,26 @@
 #include "chrome/browser/ui/webui/ash/emoji/emoji_page_handler.h"
 
 #include "ash/constants/ash_features.h"
+#include "ash/public/cpp/system/toast_data.h"
+#include "ash/public/cpp/system/toast_manager.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/ash/emoji/emoji_ui.h"
+#include "chrome/grit/generated_resources.h"
+#include "content/public/browser/storage_partition.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/ime/ash/ime_bridge.h"
 #include "ui/base/ime/input_method_observer.h"
+#include "ui/base/l10n/l10n_util.h"
 
 namespace ash {
+
+constexpr char kEmojiPickerToastId[] = "emoji_picker_toast";
 
 // Keep in sync with entry in enums.xml.
 enum class EmojiVariantType {
@@ -37,6 +46,11 @@ void LogInsertEmoji(bool is_variant, int16_t search_length) {
 
 void LogInsertEmojiDelay(base::TimeDelta delay) {
   base::UmaHistogramMediumTimes("InputMethod.SystemEmojiPicker.Delay", delay);
+}
+
+void LogLoadTime(base::TimeDelta delay) {
+  base::UmaHistogramMediumTimes("InputMethod.SystemEmojiPicker.LoadTime",
+                                delay);
 }
 
 void CopyEmojiToClipboard(const std::string& emoji_to_copy) {
@@ -76,7 +90,7 @@ class EmojiObserver : public ui::InputMethodObserver {
       // Can't use this->ime_ either as it may not be active, want to ensure
       // that we get the active IME.
       ui::InputMethod* input_method =
-          ui::IMEBridge::Get()->GetInputContextHandler()->GetInputMethod();
+          IMEBridge::Get()->GetInputContextHandler()->GetInputMethod();
 
       if (!input_method) {
         return;
@@ -128,7 +142,11 @@ EmojiPageHandler::EmojiPageHandler(
     : receiver_(this, std::move(receiver)),
       webui_controller_(webui_controller),
       incognito_mode_(incognito_mode),
-      no_text_field_(no_text_field) {}
+      no_text_field_(no_text_field) {
+  Profile* profile = Profile::FromWebUI(web_ui);
+  url_loader_factory_ = profile->GetDefaultStoragePartition()
+                            ->GetURLLoaderFactoryForBrowserProcess();
+}
 
 EmojiPageHandler::~EmojiPageHandler() {}
 
@@ -150,10 +168,6 @@ void EmojiPageHandler::IsIncognitoTextField(
 
 void EmojiPageHandler::GetFeatureList(GetFeatureListCallback callback) {
   std::vector<emoji_picker::mojom::Feature> enabled_features;
-  if (base::FeatureList::IsEnabled(features::kImeSystemEmojiPickerExtension)) {
-    enabled_features.push_back(
-        emoji_picker::mojom::Feature::EMOJI_PICKER_EXTENSION);
-  }
   if (base::FeatureList::IsEnabled(
           features::kImeSystemEmojiPickerSearchExtension)) {
     enabled_features.push_back(
@@ -167,6 +181,30 @@ void EmojiPageHandler::GetFeatureList(GetFeatureListCallback callback) {
   std::move(callback).Run(enabled_features);
 }
 
+void EmojiPageHandler::GetCategories(GetCategoriesCallback callback) {
+  gif_tenor_api_fetcher_.FetchCategories(std::move(callback),
+                                         url_loader_factory_);
+}
+
+void EmojiPageHandler::GetFeaturedGifs(const absl::optional<std::string>& pos,
+                                       GetFeaturedGifsCallback callback) {
+  gif_tenor_api_fetcher_.FetchFeaturedGifs(std::move(callback),
+                                           url_loader_factory_, pos);
+}
+
+void EmojiPageHandler::SearchGifs(const std::string& query,
+                                  const absl::optional<std::string>& pos,
+                                  SearchGifsCallback callback) {
+  gif_tenor_api_fetcher_.FetchGifSearch(std::move(callback),
+                                        url_loader_factory_, query, pos);
+}
+
+void EmojiPageHandler::GetGifsByIds(const std::vector<std::string>& ids,
+                                    GetGifsByIdsCallback callback) {
+  gif_tenor_api_fetcher_.FetchGifsByIds(std::move(callback),
+                                        url_loader_factory_, ids);
+}
+
 void EmojiPageHandler::InsertEmoji(const std::string& emoji_to_insert,
                                    bool is_variant,
                                    int16_t search_length) {
@@ -177,7 +215,7 @@ void EmojiPageHandler::InsertEmoji(const std::string& emoji_to_insert,
   // e.g. JS has mutated the web page while emoji picker was open, so check
   // that a valid input client is available as part of inserting the emoji.
   ui::InputMethod* input_method =
-      ui::IMEBridge::Get()->GetInputContextHandler()->GetInputMethod();
+      IMEBridge::Get()->GetInputContextHandler()->GetInputMethod();
   if (!input_method) {
     DLOG(WARNING) << "no input_method found";
     CopyEmojiToClipboard(emoji_to_insert);
@@ -199,6 +237,37 @@ void EmojiPageHandler::InsertEmoji(const std::string& emoji_to_insert,
   if (embedder) {
     embedder->CloseUI();
   }
+}
+
+void EmojiPageHandler::CopyGifToClipboard(const GURL& gif) {
+  if (!gif.is_valid()) {
+    return;
+  }
+
+  // Overwrite the clipboard data with the gif url.
+  auto clipboard = std::make_unique<ui::ScopedClipboardWriter>(
+      ui::ClipboardBuffer::kCopyPaste, nullptr);
+  // Referrer-Policy is used to prevent Tenor from getting information about
+  // where the GIFs are being used.
+  clipboard->WriteHTML(
+      base::UTF8ToUTF16(base::StrCat(
+          {"<img src=\"", gif.spec(), "\" referrerpolicy=\"no-referrer\">"})),
+      "", ui::ClipboardContentType::kSanitized);
+
+  // By hiding the emoji picker, we restore focus to the original text field.
+  auto embedder = webui_controller_->embedder();
+  if (embedder) {
+    embedder->CloseUI();
+  }
+
+  // Show a toast that says GIF has been copied to your clipboard.
+  ToastManager::Get()->Show(ToastData(
+      kEmojiPickerToastId, ToastCatalogName::kCopyGifToClipboardAction,
+      l10n_util::GetStringUTF16(IDS_ASH_EMOJI_PICKER_COPY_GIF_TO_CLIPBOARD)));
+}
+
+void EmojiPageHandler::OnUiFullyLoaded() {
+  LogLoadTime(base::TimeTicks::Now() - shown_time_);
 }
 
 }  // namespace ash

@@ -16,19 +16,23 @@ CaptureModeDemoToolsTestApi::CaptureModeDemoToolsTestApi(
     CaptureModeDemoToolsController* demo_tools_controller)
     : demo_tools_controller_(demo_tools_controller) {}
 
-views::Widget* CaptureModeDemoToolsTestApi::GetDemoToolsWidget() {
-  return demo_tools_controller_->demo_tools_widget_.get();
+views::Widget* CaptureModeDemoToolsTestApi::GetKeyComboWidget() {
+  DCHECK(demo_tools_controller_);
+  return demo_tools_controller_->key_combo_widget_.get();
 }
 
 KeyComboView* CaptureModeDemoToolsTestApi::GetKeyComboView() {
+  DCHECK(demo_tools_controller_);
   return demo_tools_controller_->key_combo_view_;
 }
 
 int CaptureModeDemoToolsTestApi::GetCurrentModifiersFlags() {
+  DCHECK(demo_tools_controller_);
   return demo_tools_controller_->modifiers_;
 }
 
 ui::KeyboardCode CaptureModeDemoToolsTestApi::GetLastNonModifierKey() {
+  DCHECK(demo_tools_controller_);
   return demo_tools_controller_->last_non_modifier_key_;
 }
 
@@ -37,8 +41,9 @@ CaptureModeDemoToolsTestApi::GetShownModifiersKeyCodes() {
   DCHECK(demo_tools_controller_);
   KeyComboView* key_combo_view = demo_tools_controller_->key_combo_view_;
 
-  if (!key_combo_view || !key_combo_view->modifiers_container_view_)
+  if (!key_combo_view || !key_combo_view->modifiers_container_view_) {
     return std::vector<ui::KeyboardCode>();
+  }
 
   return key_combo_view->GetModifierKeycodeVector();
 }
@@ -53,9 +58,9 @@ ui::KeyboardCode CaptureModeDemoToolsTestApi::GetShownNonModifierKeyCode() {
   return key_combo_view->last_non_modifier_key_;
 }
 
-base::OneShotTimer* CaptureModeDemoToolsTestApi::GetKeyComboHideTimer() {
+base::OneShotTimer* CaptureModeDemoToolsTestApi::GetRefreshKeyComboTimer() {
   DCHECK(demo_tools_controller_);
-  return &(demo_tools_controller_->hide_timer_);
+  return &(demo_tools_controller_->key_up_refresh_timer_);
 }
 
 views::ImageView* CaptureModeDemoToolsTestApi::GetNonModifierKeyItemIcon() {
@@ -74,6 +79,18 @@ void CaptureModeDemoToolsTestApi::SetOnMouseHighlightAnimationEndedCallback(
   demo_tools_controller_
       ->on_mouse_highlight_animation_ended_callback_for_test_ =
       std::move(callback);
+}
+
+const MouseHighlightLayers&
+CaptureModeDemoToolsTestApi::GetMouseHighlightLayers() const {
+  DCHECK(demo_tools_controller_);
+  return demo_tools_controller_->mouse_highlight_layers_;
+}
+
+const TouchHighlightLayersMap&
+CaptureModeDemoToolsTestApi::GetTouchIdToHighlightLayerMap() const {
+  DCHECK(demo_tools_controller_);
+  return demo_tools_controller_->touch_pointer_id_to_highlight_layer_map_;
 }
 
 }  // namespace ash

@@ -15,7 +15,7 @@
 namespace {
 // The insets of the View content and additional margin for some of its items.
 const CGFloat kStackMargin = 32.0;
-const CGFloat kItemMargin = 16.0;
+const CGFloat kItemMargin = 10.0;
 // Spacing within stackView.
 const CGFloat kStackViewSpacing = 13.0;
 // Height of the image.

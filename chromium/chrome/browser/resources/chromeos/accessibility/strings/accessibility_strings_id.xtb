@@ -32,7 +32,6 @@
 <translation id="1195238899008218998">Penutup</translation>
 <translation id="1197088940767939838">Oranye</translation>
 <translation id="1198865190323699001">Gestur Sentuh</translation>
-<translation id="1201402288615127009">Berikutnya</translation>
 <translation id="1202112913213080585">batal</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1207086294218137981">Tidak ada judul level 4 berikutnya</translation>
@@ -71,7 +70,6 @@
 <translation id="1342835525016946179">article</translation>
 <translation id="1346059596910821859">Tips</translation>
 <translation id="1354356357730355833">salin</translation>
-<translation id="135978014023467274">Update ke ChromeVox 63 berhasil.</translation>
 <translation id="1360699455582016846">Klik item di bawah tombol perutean <ph name="ROUTING_KEY_NUMBER" /></translation>
 <translation id="1376703628032300005">pindah ke karakter berikutnya</translation>
 <translation id="1377925789329510816">Ini adalah judul terakhir. Tekan Penelusuran+H untuk meringkas judul pertama, atau Penelusuran+Shift+H untuk membuka judul kedua pada halaman ini.</translation>
@@ -153,7 +151,7 @@
 <translation id="1923956950274750765">Medium Orchid</translation>
 <translation id="1928932365747995741">Tidak ada kolom teks yang dapat diedit sebelumnya</translation>
 <translation id="1964135212174907577">Objek Berikutnya</translation>
-<translation id="1966649499058910679">Soroti setiap kata saat kata tersebut diucapkan</translation>
+<translation id="1966649499058910679">Tandai setiap kata saat kata tersebut diucapkan</translation>
 <translation id="1973886230221301399">ChromeVox</translation>
 <translation id="1988733631391393183">Tampilkan perintah braille di menu ChromeVox</translation>
 <translation id="2007545860310005685">{COUNT,plural, =1{kurung siku buka}other{# kurung siku buka}}</translation>
@@ -291,6 +289,7 @@
 <translation id="2909584066358367921">Tidak ada tombol berikutnya</translation>
 <translation id="2911433807131383493">Membuka tutorial ChromeVox</translation>
 <translation id="2912405967290226587">Geser tiga jari ke kanan</translation>
+<translation id="2919107550468490321">Mode lekat pintar aktif</translation>
 <translation id="2937799153569150791">Tidak ada judul level 3 berikutnya</translation>
 <translation id="2942710183375260152">Dark Slate Blue</translation>
 <translation id="2943596527105977722">Dark Golden Rod</translation>
@@ -305,6 +304,7 @@
 <translation id="2999559350546931576">Menurunkan tinggi nada</translation>
 <translation id="3009352964623081324">Search + O, lalu S. Gunakan untuk menginstal, mengelola, dan menyesuaikan suara.</translation>
 <translation id="3014130421870723208">@ed 8titik</translation>
+<translation id="3018210433491759145">ChromeVox sedang dimuat</translation>
 <translation id="3030432017085518523">Tombol radio item menu</translation>
 <translation id="3037392361165431467">{COUNT,plural, =1{apostrof}other{# apostrof}}</translation>
 <translation id="3040901448410802366">Indikator kemajuan</translation>
@@ -361,7 +361,6 @@
 <translation id="3283583562490372694">tidak dicentang</translation>
 <translation id="3286372614333682499">potret</translation>
 <translation id="3286390186030710347">Penggeser</translation>
-<translation id="3300348286427369683">Dukungan teks kaya. Kini ChromeVox mendukung kolom teks kaya, termasuk perintah lewati, perutean kursor braille, pilihan, dan masih banyak lagi.</translation>
 <translation id="3300733168898541351">urungkan</translation>
 <translation id="3307886118343381874">Berpindah ke akhir tabel</translation>
 <translation id="3312997241656799641">Tautan yang dikunjungi selanjutnya</translation>
@@ -439,6 +438,7 @@
 <translation id="3810838688059735925">Video</translation>
 <translation id="3813387282697781382">Light Coral</translation>
 <translation id="3816633764618089385">Media berikutnya</translation>
+<translation id="3821689185319271077">Tidak ada anchor pointer</translation>
 <translation id="3840823741487267909">Singkatan</translation>
 <translation id="3841319830220785495">Suara alami default</translation>
 <translation id="385383972552776628">Membuka halaman opsi</translation>
@@ -544,11 +544,10 @@
 <translation id="4597532268155981612">formulir</translation>
 <translation id="4601367666219428522">tbl <ph name="TABLENAME" /> <ph name="TABLEROWS" />x<ph name="TABLECOLS" /></translation>
 <translation id="4615592953348396470">Mengabaikan penekanan tombol berikutnya</translation>
+<translation id="4617384941327705512">Mode lekat pintar nonaktif</translation>
 <translation id="4623097797855662355">Kolofon</translation>
 <translation id="4624970070706497034">TalkBack tidak lagi mendukung penyesuaian di Chromebook. Anda tetap dapat menggunakan TalkBack, tetapi gunakan pintasan keyboard default-nya. Tekan Penelusuran+A, lalu K untuk melihat pintasan yang tersedia. Jika Anda masih ingin menggunakan TalkBack, tekan tombol Command lagi.</translation>
-<translation id="463135993322337640">Tekan ChromeVox o, n untuk melihat apa saja yang baru</translation>
 <translation id="4649220074413114917">Mengetuk layar dengan dua jari dapat digunakan untuk menghentikan ucapan saat ini. Ini berguna jika Anda tidak ingin ChromeVox membacakan sesuatu. Untuk melanjutkan, ketuk layar dengan dua jari.</translation>
-<translation id="4660783501463101648">Versi Classic dihapus. Tombol keyboard untuk beralih kembali ke ChromeVox Classic telah dihapus.</translation>
 <translation id="4661075872484491155">tree</translation>
 <translation id="4668929960204016307">,</translation>
 <translation id="4677535310137735442">Buka kolom berikutnya</translation>
@@ -613,7 +612,6 @@
 <translation id="5087864757604726239">kembali</translation>
 <translation id="5102981729317424850">Bilah alat</translation>
 <translation id="5105050547967751155">rq</translation>
-<translation id="5106547198195128110">Kami memiliki beberapa perubahan menarik dalam rilis baru ini; berikut apa saja yang baru:</translation>
 <translation id="5111640677200759579">Judul kolom</translation>
 <translation id="5115892389597951922">Log ChromeVox</translation>
 <translation id="5119330972669454698">Burly Wood</translation>
@@ -764,7 +762,6 @@
 <translation id="6082768461603900813">Navigasi Dasar</translation>
 <translation id="609281021724813947">Tidak ada penggeser sebelumnya</translation>
 <translation id="6100239002225743044">Naikkan satu baris</translation>
-<translation id="6118126368611144850">Aplikasi Android untuk Chrome. Jika memiliki Play Store di perangkat, Anda dapat mengetahui lebih awal tentang ChromeVox dengan aplikasi Android. Coba dukungan eksperimental dengan mendownload Google Chrome Canary dari Play Store.</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119846243427417423">aktifkan</translation>
 <translation id="6122013438240733403">btn</translation>
@@ -812,7 +809,7 @@
 <translation id="6468049171101508116">Tombol berikutnya</translation>
 <translation id="646954774886932461">Indeks</translation>
 <translation id="6475604559827479857">Warna untuk highlight kata:</translation>
-<translation id="6493991254603208962">mengurangi Kecerahan</translation>
+<translation id="6493991254603208962">Turunkan kecerahan</translation>
 <translation id="6501595918865591267">Turquoise</translation>
 <translation id="6508059270146105198">Pindahkan penampil braille ke bagian bawah halaman</translation>
 <translation id="6521550811716689390">Dark Violet</translation>
@@ -838,7 +835,6 @@
 <translation id="6697092096875747123">Kotak kombo sebelumnya</translation>
 <translation id="6702609185760332517">{COUNT,plural, =1{tanda seru}other{# tanda seru}}</translation>
 <translation id="670717715607710284">Menonaktifkan layar</translation>
-<translation id="6710213216561001401">Sebelumnya</translation>
 <translation id="6714813999819678458">Judul tingkat 2 sebelumnya</translation>
 <translation id="6730312624811567147">Gunakan Search Panah Kiri atau Kanan untuk Home atau End, Search Control Panah Kiri atau Kanan untuk Control Home atau End, Search Panah Atas atau Bawah untuk Page Up atau Down</translation>
 <translation id="6736510033526053669">tab dibuat</translation>
@@ -886,7 +882,7 @@
 <translation id="7043850226734279132">Dark Khaki</translation>
 <translation id="7051308646573997571">Coral</translation>
 <translation id="7062635574500127092">Hijau kebiruan</translation>
-<translation id="7086377898680121060">menambah Kecerahan</translation>
+<translation id="7086377898680121060">Naikkan kecerahan</translation>
 <translation id="7088743565397416204">Ketuk dua kali untuk mengaktifkan item yang dipilih</translation>
 <translation id="7088960765736518739">Tombol Akses</translation>
 <translation id="7090715360595433170">Ini juga lebih efisien daripada menggeser ke kiri dan kanan dengan satu jari.</translation>
@@ -1004,7 +1000,7 @@
 <translation id="7882421473871500483">Cokelat</translation>
 <translation id="78826985582142166">sldr</translation>
 <translation id="7913106023953875143">Tidak ada judul level 2 berikutnya</translation>
-<translation id="7914870167134465181">Menyoroti</translation>
+<translation id="7914870167134465181">Penandaan</translation>
 <translation id="7927711904086083099">Tidak dipilih</translation>
 <translation id="7935627501098484003">Kontrol waktu</translation>
 <translation id="7939428177581522200">ditambahkan ke pilihan</translation>
@@ -1185,7 +1181,6 @@
 <translation id="9208241857935108694">Antique White</translation>
 <translation id="9220679313820249046">Orange Red</translation>
 <translation id="9223032053830369045">Dark Red</translation>
-<translation id="923331726185079994">ChromeVox Telah Diperbarui</translation>
 <translation id="93384979447910801">Dark Sea Green</translation>
 <translation id="937605981140327129">TalkBack saat ini belum diinstal. Instal Android Accessibility Suite melalui Play Store, lalu coba lagi.</translation>
 <translation id="948171205378458592">Mengurangi laju ucapan</translation>

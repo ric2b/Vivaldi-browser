@@ -19,6 +19,7 @@
 #include "components/feed/core/proto/v2/wire/info_card.pb.h"
 #include "components/feed/core/proto/v2/wire/reliability_logging_enums.pb.h"
 #include "components/feed/core/v2/enums.h"
+#include "components/feed/core/v2/ios_shared_experiments_translator.h"
 #include "components/feed/core/v2/public/common_enums.h"
 #include "components/feed/core/v2/public/types.h"
 
@@ -62,6 +63,8 @@ struct RequestMetadata {
   TabGroupEnabledState tab_group_enabled_state = TabGroupEnabledState::kNone;
   int followed_from_web_page_menu_count = 0;
   std::vector<feedwire::InfoCardTrackingState> info_card_tracking_states;
+  feedwire::ChromeSignInStatus::SignInStatus sign_in_status =
+      feedwire::ChromeSignInStatus::SIGNED_IN_STATUS_UNSPECIFIED;
 };
 
 // Data internal to MetricsReporter which is persisted to Prefs.

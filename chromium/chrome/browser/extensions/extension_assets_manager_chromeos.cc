@@ -12,9 +12,9 @@
 #include <vector>
 
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/memory/singleton.h"
 #include "base/system/sys_info.h"
 #include "base/task/sequenced_task_runner.h"
@@ -172,7 +172,7 @@ void ExtensionAssetsManagerChromeOS::InstallExtension(
 
 void ExtensionAssetsManagerChromeOS::UninstallExtension(
     const std::string& id,
-    Profile* profile,
+    const std::string& profile_user_name,
     const base::FilePath& local_install_dir,
     const base::FilePath& extension_root) {
   if (local_install_dir.IsParent(extension_root)) {
@@ -187,7 +187,7 @@ void ExtensionAssetsManagerChromeOS::UninstallExtension(
         FROM_HERE,
         base::BindOnce(
             &ExtensionAssetsManagerChromeOS::MarkSharedExtensionUnused, id,
-            profile));
+            profile_user_name));
   }
 }
 
@@ -391,10 +391,10 @@ void ExtensionAssetsManagerChromeOS::InstallSharedExtensionDone(
   base::Value::Dict* extension_info_weak = shared_extensions->EnsureDict(id);
 
   CHECK(!shared_extensions->Find(version));
-  base::Value version_info(base::Value::Type::DICTIONARY);
-  version_info.SetStringKey(kSharedExtensionPath, shared_version_dir.value());
+  base::Value::Dict version_info;
+  version_info.Set(kSharedExtensionPath, shared_version_dir.value());
 
-  base::Value users(base::Value::Type::LIST);
+  base::Value::List users;
   for (size_t i = 0; i < pending_installs.size(); i++) {
     ExtensionAssetsManagerHelper::PendingInstallInfo& info =
         pending_installs[i];
@@ -404,7 +404,7 @@ void ExtensionAssetsManagerChromeOS::InstallSharedExtensionDone(
         FROM_HERE,
         base::BindOnce(std::move(info.callback), shared_version_dir));
   }
-  version_info.SetKey(kSharedExtensionUsers, std::move(users));
+  version_info.Set(kSharedExtensionUsers, std::move(users));
   extension_info_weak->Set(version, std::move(version_info));
 }
 
@@ -422,7 +422,7 @@ void ExtensionAssetsManagerChromeOS::InstallLocalExtension(
 // static
 void ExtensionAssetsManagerChromeOS::MarkSharedExtensionUnused(
     const std::string& id,
-    Profile* profile) {
+    const std::string& profile_user_name) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   PrefService* local_state = g_browser_process->local_state();
@@ -440,7 +440,7 @@ void ExtensionAssetsManagerChromeOS::MarkSharedExtensionUnused(
     versions.push_back(kv.first);
   }
 
-  base::Value user_name(profile->GetProfileUserName());
+  base::Value user_name(profile_user_name);
   for (std::vector<std::string>::const_iterator it = versions.begin();
        it != versions.end(); it++) {
     base::Value::Dict* version_info = extension_info->FindDict(*it);

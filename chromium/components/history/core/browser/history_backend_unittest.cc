@@ -7,16 +7,17 @@
 #include <stddef.h>
 
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/ranges/algorithm.h"
@@ -26,11 +27,13 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/favicon/core/favicon_backend.h"
 #include "components/favicon_base/favicon_usage_data.h"
+#include "components/history/core/browser/features.h"
 #include "components/history/core/browser/history_backend_client.h"
 #include "components/history/core/browser/history_constants.h"
 #include "components/history/core/browser/history_database_params.h"
@@ -40,6 +43,7 @@
 #include "components/history/core/browser/in_memory_database.h"
 #include "components/history/core/browser/in_memory_history_backend.h"
 #include "components/history/core/browser/keyword_search_term.h"
+#include "components/history/core/browser/keyword_search_term_util.h"
 #include "components/history/core/browser/sync/typed_url_sync_bridge.h"
 #include "components/history/core/test/database_test_utils.h"
 #include "components/history/core/test/history_client_fake_bookmarks.h"
@@ -168,6 +172,7 @@ class TestHistoryBackend : public HistoryBackend {
   using HistoryBackend::DeleteAllHistory;
   using HistoryBackend::DeleteFTSIndexDatabases;
   using HistoryBackend::HistoryBackend;
+  using HistoryBackend::MarkVisitAsKnownToSync;
   using HistoryBackend::UpdateVisitDuration;
 
   using HistoryBackend::db_;
@@ -590,9 +595,13 @@ class InMemoryHistoryBackendTest : public HistoryBackendTestBase {
 
   size_t GetNumberOfMatchingSearchTerms(const int keyword_id,
                                         const std::u16string& prefix) {
+    URLDatabase* url_db = mem_backend_->db();
+    auto enumerator =
+        url_db->CreateKeywordSearchTermVisitEnumerator(keyword_id, prefix);
     KeywordSearchTermVisitList matching_terms;
-    mem_backend_->db()->GetMostRecentKeywordSearchTerms(
-        keyword_id, prefix, 1, &matching_terms);
+    GetAutocompleteSearchTermsFromEnumerator(
+        *enumerator, /*count=*/SIZE_MAX, /*ignore_duplicate_visits=*/true,
+        SearchTermRankingPolicy::kRecency, &matching_terms);
     return matching_terms.size();
   }
 
@@ -2058,6 +2067,50 @@ TEST_F(HistoryBackendTest, AddPageMetadata) {
       visit_id, &got_content_annotations));
 }
 
+TEST_F(HistoryBackendTest, SetHasUrlKeyedImage) {
+  ASSERT_TRUE(backend_.get());
+
+  GURL url("http://pagewithvisit.com");
+  ContextID context_id = 1;
+  int nav_entry_id = 1;
+
+  HistoryAddPageArgs request(url, base::Time::Now(), context_id, nav_entry_id,
+                             GURL(), RedirectList(), ui::PAGE_TRANSITION_TYPED,
+                             false, SOURCE_BROWSED, false, true);
+  backend_->AddPage(request);
+
+  VisitVector visits;
+  URLRow row;
+  URLID id = backend_->db()->GetRowForURL(url, &row);
+  ASSERT_TRUE(backend_->db()->GetVisitsForURL(id, &visits));
+  ASSERT_EQ(1U, visits.size());
+  VisitID visit_id = visits[0].visit_id;
+
+  backend_->SetHasUrlKeyedImageForVisit(visit_id, /*has_url_keyed_image=*/true);
+
+  VisitContentAnnotations got_content_annotations;
+  EXPECT_TRUE(backend_->db()->GetContentAnnotationsForVisit(
+      visit_id, &got_content_annotations));
+
+  EXPECT_EQ(VisitContentAnnotationFlag::kNone,
+            got_content_annotations.annotation_flags);
+  EXPECT_EQ(-1.0f, got_content_annotations.model_annotations.visibility_score);
+  EXPECT_TRUE(got_content_annotations.model_annotations.categories.empty());
+  EXPECT_EQ(
+      -1, got_content_annotations.model_annotations.page_topics_model_version);
+  EXPECT_TRUE(got_content_annotations.model_annotations.entities.empty());
+  EXPECT_TRUE(got_content_annotations.related_searches.empty());
+  EXPECT_TRUE(got_content_annotations.search_normalized_url.is_empty());
+  EXPECT_TRUE(got_content_annotations.search_terms.empty());
+  EXPECT_TRUE(got_content_annotations.alternative_title.empty());
+  EXPECT_TRUE(got_content_annotations.has_url_keyed_image);
+
+  // Now, delete the URL. Content Annotations should be deleted.
+  backend_->DeleteURL(url);
+  ASSERT_FALSE(backend_->db()->GetContentAnnotationsForVisit(
+      visit_id, &got_content_annotations));
+}
+
 TEST_F(HistoryBackendTest, MixedContentAnnotationsRequestTypes) {
   ASSERT_TRUE(backend_.get());
 
@@ -2836,6 +2889,31 @@ TEST_F(HistoryBackendTest, UpdateVisitDuration) {
   ASSERT_TRUE(backend_->RemoveVisits(visits1));
 }
 
+TEST_F(HistoryBackendTest, MarkVisitAsKnownToSync) {
+  // This unit test will test adding and deleting visit details information.
+  ASSERT_TRUE(backend_.get());
+
+  GURL url1("http://www.cnn.com");
+  std::vector<VisitInfo> visit_info1;
+  base::Time start_ts = base::Time::Now() - base::Days(5);
+  visit_info1.emplace_back(start_ts, ui::PAGE_TRANSITION_LINK);
+
+  // Add the visit and verify it doesn't start as being known to sync.
+  backend_->AddVisits(url1, visit_info1, SOURCE_BROWSED);
+  VisitVector visits1;
+  URLRow row;
+  URLID url_id1 = backend_->db()->GetRowForURL(url1, &row);
+  ASSERT_TRUE(backend_->db()->GetVisitsForURL(url_id1, &visits1));
+  ASSERT_EQ(1U, visits1.size());
+  EXPECT_FALSE(visits1[0].is_known_to_sync);
+
+  // Mark that visit as being known to sync, and read it back.
+  backend_->MarkVisitAsKnownToSync(visits1[0].visit_id);
+  ASSERT_TRUE(backend_->db()->GetVisitsForURL(url_id1, &visits1));
+  ASSERT_EQ(1U, visits1.size());
+  EXPECT_TRUE(visits1[0].is_known_to_sync);
+}
+
 // Test for migration of adding visit_duration column.
 TEST_F(HistoryBackendTest, MigrationVisitDuration) {
   ASSERT_TRUE(backend_.get());
@@ -3550,7 +3628,8 @@ TEST_F(HistoryBackendTest, QueryMostVisitedURLs) {
 TEST_F(HistoryBackendTest, QueryMostRepeatedQueriesForKeyword) {
   ASSERT_TRUE(backend_.get());
 
-  // Choose the local midnight of today last week as the baseline for the time.
+  // Choose the local midnight of today last week as the baseline for the last
+  // visit time. All searches are less than 7 days old and are done only once.
   base::Time base_time = base::Time::Now().LocalMidnight() - base::Days(7);
   const size_t result_count = 3;
 
@@ -3577,21 +3656,77 @@ TEST_F(HistoryBackendTest, QueryMostRepeatedQueriesForKeyword) {
   }
 
   {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeatureWithParameters(
+        history::kOrganicRepeatableQueries,
+        {{history::kRepeatableQueriesMaxAgeDays.name, "7"},
+         {history::kRepeatableQueriesMinVisitCount.name, "1"}});
+
     base::HistogramTester histogram_tester;
     KeywordSearchTermVisitList queries =
         backend_->QueryMostRepeatedQueriesForKeyword(first_keyword_id,
                                                      result_count);
+
     ASSERT_EQ(result_count, queries.size());
     EXPECT_EQ(u"first6", queries[0]->normalized_term);
     EXPECT_EQ(u"first5", queries[1]->normalized_term);
     EXPECT_EQ(u"first4", queries[2]->normalized_term);
+    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesTimeV2",
+                                      1);
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeatureWithParameters(
+        history::kOrganicRepeatableQueries,
+        {{history::kRepeatableQueriesMaxAgeDays.name, "2"},
+         {history::kRepeatableQueriesMinVisitCount.name, "1"}});
 
-    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesTime",
+    base::HistogramTester histogram_tester;
+    KeywordSearchTermVisitList queries =
+        backend_->QueryMostRepeatedQueriesForKeyword(first_keyword_id,
+                                                     result_count);
+    // Only one search is less than 2 days old.
+    ASSERT_EQ(1U, queries.size());
+    EXPECT_EQ(u"first6", queries[0]->normalized_term);
+    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesTimeV2",
                                       1);
-    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesCount",
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeatureWithParameters(
+        history::kOrganicRepeatableQueries,
+        {{history::kRepeatableQueriesMaxAgeDays.name, "7"},
+         {history::kRepeatableQueriesMinVisitCount.name, "1"}});
+
+    base::HistogramTester histogram_tester;
+    KeywordSearchTermVisitList queries =
+        backend_->QueryMostRepeatedQueriesForKeyword(second_keyword_id,
+                                                     result_count);
+
+    ASSERT_EQ(result_count, queries.size());
+    EXPECT_EQ(u"second6", queries[0]->normalized_term);
+    EXPECT_EQ(u"second5", queries[1]->normalized_term);
+    EXPECT_EQ(u"second4", queries[2]->normalized_term);
+
+    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesTimeV2",
                                       1);
-    histogram_tester.ExpectUniqueSample("History.QueryMostRepeatedQueriesCount",
-                                        result_count * 2, 1);
+  }
+  {
+    base::test::ScopedFeatureList feature_list;
+    feature_list.InitAndEnableFeatureWithParameters(
+        history::kOrganicRepeatableQueries,
+        {{history::kRepeatableQueriesMaxAgeDays.name, "7"},
+         {history::kRepeatableQueriesMinVisitCount.name, "2"}});
+
+    base::HistogramTester histogram_tester;
+    KeywordSearchTermVisitList queries =
+        backend_->QueryMostRepeatedQueriesForKeyword(second_keyword_id,
+                                                     result_count);
+    // No search is done more than once.
+    ASSERT_EQ(0U, queries.size());
+
+    histogram_tester.ExpectTotalCount("History.QueryMostRepeatedQueriesTimeV2",
+                                      1);
   }
 }
 
@@ -3970,8 +4105,8 @@ TEST_F(HistoryBackendTest, GetMostRecentClusters) {
 }
 
 TEST_F(HistoryBackendTest, AddClusters_GetCluster) {
-  AddAnnotatedVisit(0);
-  AddAnnotatedVisit(1);
+  AddAnnotatedVisit(0);  // Visit ID 1.
+  AddAnnotatedVisit(1);  // Visit ID 2.
 
   ClusterVisit visit_1;
   visit_1.annotated_visit.visit_row.visit_id = 1;
@@ -4005,11 +4140,12 @@ TEST_F(HistoryBackendTest, AddClusters_GetCluster) {
         false,
         u"label"}});
 
-  auto cluster = backend_->GetCluster(1, true);
-  VerifyCluster(cluster, {1, {2, 1}});
+  auto cluster =
+      backend_->GetCluster(1, /*include_keywords_and_duplicates=*/true);
+  VerifyCluster(cluster, {1, {1}});
   EXPECT_EQ(cluster.cluster_id, 1);
   EXPECT_EQ(cluster.label, u"label");
-  EXPECT_EQ(cluster.visits[1].url_for_display, u"url_for_display");
+  EXPECT_EQ(cluster.visits[0].url_for_display, u"url_for_display");
   // Verify keywords
   EXPECT_EQ(cluster.keyword_to_data_map.size(), 2u);
   EXPECT_EQ(cluster.keyword_to_data_map[u"keyword1"].type,
@@ -4024,13 +4160,12 @@ TEST_F(HistoryBackendTest, AddClusters_GetCluster) {
   EXPECT_TRUE(
       cluster.keyword_to_data_map[u"keyword2"].entity_collections.empty());
   // Verify duplicate visits.
-  EXPECT_TRUE(cluster.visits[0].duplicate_visits.empty());
-  ASSERT_EQ(cluster.visits[1].duplicate_visits.size(), 1u);
-  EXPECT_EQ(cluster.visits[1].duplicate_visits[0].visit_id, 2);
+  ASSERT_EQ(cluster.visits[0].duplicate_visits.size(), 1u);
+  EXPECT_EQ(cluster.visits[0].duplicate_visits[0].visit_id, 2);
   EXPECT_EQ(
-      cluster.visits[1].duplicate_visits[0].url.spec(),
+      cluster.visits[0].duplicate_visits[0].url.spec(),
       "https://google.com/1");  // The URL generated by `AddAnnotatedVisit()`.
-  EXPECT_EQ(cluster.visits[1].duplicate_visits[0].visit_time,
+  EXPECT_EQ(cluster.visits[0].duplicate_visits[0].visit_time,
             GetRelativeTime(1));
 
   // Verify keywords and duplicates are not returned, but other info is, when
@@ -4060,10 +4195,13 @@ TEST_F(HistoryBackendTest, ReserveNextClusterId_GetCluster) {
   // additional checking around visit count.
   auto cluster = backend_->db_->GetCluster(cluster_id);
   EXPECT_EQ(cluster.cluster_id, cluster_id);
-  EXPECT_TRUE(cluster.should_show_on_prominent_ui_surfaces);
+  EXPECT_FALSE(cluster.should_show_on_prominent_ui_surfaces);
+  EXPECT_FALSE(cluster.triggerability_calculated);
 }
 
-TEST_F(HistoryBackendTest, ReserveNextClusterId_AddVisitsToCluster_GetCluster) {
+TEST_F(
+    HistoryBackendTest,
+    ReserveNextClusterId_AddVisitsToCluster_GetCluster_GetClusterIdContainingVisit) {
   int64_t cluster_id = backend_->ReserveNextClusterId();
 
   AddAnnotatedVisit(1);
@@ -4077,6 +4215,131 @@ TEST_F(HistoryBackendTest, ReserveNextClusterId_AddVisitsToCluster_GetCluster) {
   backend_->AddVisitsToCluster(cluster_id, {visit_1, visit_2});
 
   VerifyCluster(backend_->GetCluster(cluster_id, false), {cluster_id, {2, 1}});
+
+  int64_t received_cluster_id = backend_->GetClusterIdContainingVisit(2);
+  EXPECT_EQ(received_cluster_id, cluster_id);
+}
+
+TEST_F(
+    HistoryBackendTest,
+    ReserveNextClusterId_AddVisitsToCluster_UpdateClusterTriggerability_GetCluster) {
+  int64_t cluster_id = backend_->ReserveNextClusterId();
+
+  AddAnnotatedVisit(1);
+  AddAnnotatedVisit(2);
+  ClusterVisit visit_1;
+  visit_1.annotated_visit.visit_row.visit_id = 1;
+  // Verify the cluster visits are being flushed out.
+  visit_1.url_for_display = u"url_for_display";
+  ClusterVisit visit_2;
+  visit_2.annotated_visit.visit_row.visit_id = 2;
+  backend_->AddVisitsToCluster(cluster_id, {visit_1, visit_2});
+  Cluster cluster;
+  cluster.cluster_id = cluster_id;
+  cluster.should_show_on_prominent_ui_surfaces = true;
+  cluster.triggerability_calculated = true;
+  cluster.keyword_to_data_map[u"keyword1"];
+  backend_->UpdateClusterTriggerability({cluster});
+
+  Cluster out_cluster = backend_->GetCluster(cluster_id, true);
+  VerifyCluster(out_cluster, {cluster_id, {2, 1}});
+  EXPECT_TRUE(out_cluster.should_show_on_prominent_ui_surfaces);
+  EXPECT_TRUE(out_cluster.triggerability_calculated);
+  EXPECT_EQ(out_cluster.keyword_to_data_map.size(), 1u);
+  EXPECT_TRUE(out_cluster.keyword_to_data_map.contains(u"keyword1"));
+}
+
+TEST_F(HistoryBackendTest,
+       AddVisitToSyncedCluster_GetCluster_UpdateClusterVisit) {
+  std::string originator_cache_guid = "originator";
+  int64_t originator_cluster_id = 123;
+
+  const ui::PageTransition kLink = ui::PageTransitionFromInt(
+      ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_CHAIN_START |
+      ui::PAGE_TRANSITION_CHAIN_END);
+
+  // Add 1 synced visit to cluster.
+  VisitRow foreign_visit;
+  foreign_visit.visit_time = base::Time::Now();
+  foreign_visit.transition = kLink;
+  foreign_visit.originator_cache_guid = "originator";
+  foreign_visit.is_known_to_sync = true;
+  VisitID added_id1 = backend_->AddSyncedVisit(
+      GURL("https://some.url"), u"Title", /*hidden=*/false, foreign_visit,
+      absl::nullopt, absl::nullopt);
+  history::ClusterVisit cluster_visit;
+  cluster_visit.annotated_visit.visit_row = foreign_visit;
+  cluster_visit.annotated_visit.visit_row.visit_id = added_id1;
+  backend_->AddVisitToSyncedCluster(cluster_visit, originator_cache_guid,
+                                    originator_cluster_id);
+
+  int64_t local_cluster_id =
+      backend_->db_->GetClusterIdContainingVisit(added_id1);
+  EXPECT_GT(local_cluster_id, 0);
+
+  // Update the cluster visit.
+  history::ClusterVisit updated_cluster_visit = cluster_visit;
+  updated_cluster_visit.url_for_display = u"displayurl";
+  updated_cluster_visit.engagement_score = 10;
+  backend_->UpdateClusterVisit(updated_cluster_visit);
+
+  Cluster updated_out_cluster = backend_->GetCluster(
+      local_cluster_id, /*include_keywords_and_duplicates=*/false);
+  VerifyCluster(updated_out_cluster, {local_cluster_id, {added_id1}});
+  EXPECT_EQ(u"displayurl", updated_out_cluster.visits.front().url_for_display);
+  EXPECT_EQ(10, updated_out_cluster.visits.front().engagement_score);
+
+  // Add another synced visit to same cluster.
+  task_environment_.FastForwardBy(base::Seconds(1));
+
+  VisitRow foreign_visit2;
+  foreign_visit2.visit_time = base::Time::Now();
+  foreign_visit2.transition = kLink;
+  foreign_visit2.originator_cache_guid = "originator";
+  foreign_visit2.is_known_to_sync = true;
+  VisitID added_id2 = backend_->AddSyncedVisit(
+      GURL("https://some.url"), u"Title", /*hidden=*/false, foreign_visit2,
+      absl::nullopt, absl::nullopt);
+  history::ClusterVisit cluster_visit2;
+  cluster_visit2.annotated_visit.visit_row = foreign_visit2;
+  cluster_visit2.annotated_visit.visit_row.visit_id = added_id2;
+  backend_->AddVisitToSyncedCluster(cluster_visit2, originator_cache_guid,
+                                    originator_cluster_id);
+
+  EXPECT_EQ(backend_->db_->GetClusterIdContainingVisit(added_id2),
+            local_cluster_id);
+
+  Cluster out_cluster = backend_->GetCluster(
+      local_cluster_id, /*include_keywords_and_duplicates=*/false);
+  VerifyCluster(out_cluster, {local_cluster_id, {added_id2, added_id1}});
+}
+
+TEST_F(HistoryBackendTest, UpdateClusterVisit_NoClusterAssigned) {
+  const ui::PageTransition kLink = ui::PageTransitionFromInt(
+      ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_CHAIN_START |
+      ui::PAGE_TRANSITION_CHAIN_END);
+
+  VisitRow foreign_visit;
+  foreign_visit.visit_time = base::Time::Now();
+  foreign_visit.transition = kLink;
+  foreign_visit.originator_cache_guid = "originator";
+  foreign_visit.is_known_to_sync = true;
+  VisitID added_id1 = backend_->AddSyncedVisit(
+      GURL("https://some.url"), u"Title", /*hidden=*/false, foreign_visit,
+      absl::nullopt, absl::nullopt);
+
+  // Attempt to update cluster visit.
+  history::ClusterVisit cluster_visit;
+  cluster_visit.annotated_visit.visit_row = foreign_visit;
+  cluster_visit.annotated_visit.visit_row.visit_id = added_id1;
+  cluster_visit.url_for_display = u"displayurl";
+  cluster_visit.engagement_score = 10;
+  backend_->UpdateClusterVisit(cluster_visit);
+
+  // Cluster visit should not belong to any cluster if no cluster contains the
+  // visit to be updated.
+  int64_t local_cluster_id = backend_->db_->GetClusterIdContainingVisit(10);
+  EXPECT_EQ(local_cluster_id, 0);
 }
 
 TEST_F(HistoryBackendTest, GetRedirectChainStart) {
@@ -4251,8 +4514,8 @@ TEST_F(HistoryBackendTest, AddSyncedVisitAddsOnlyValidURLs) {
       ui::PAGE_TRANSITION_CHAIN_END);
 
   // Note: Per AddSyncedVisit() preconditions (DCHECKs), the passed visit MUST
-  // have visit_time and originator_cache_guid, but MUST NOT have visit_id or
-  // url_id.
+  // have visit_time, originator_cache_guid, and is_known_to_sync, but MUST NOT
+  // have visit_id or url_id.
 
   // First, try to add some visits with unwanted URLs. These should *not* get
   // added to the DB.
@@ -4262,6 +4525,7 @@ TEST_F(HistoryBackendTest, AddSyncedVisitAddsOnlyValidURLs) {
   foreign_visit.visit_time = base::Time::Now();
   foreign_visit.transition = kLink;
   foreign_visit.originator_cache_guid = "originator";
+  foreign_visit.is_known_to_sync = true;
   EXPECT_EQ(kInvalidVisitID,
             backend_->AddSyncedVisit(GURL("chrome://settings"), u"Settings",
                                      /*hidden=*/false, foreign_visit,
@@ -4283,6 +4547,22 @@ TEST_F(HistoryBackendTest, AddSyncedVisitAddsOnlyValidURLs) {
       foreign_visit.transition, added_visit.transition));
   EXPECT_EQ(foreign_visit.originator_cache_guid,
             added_visit.originator_cache_guid);
+  EXPECT_TRUE(added_visit.is_known_to_sync);
+}
+
+TEST_F(HistoryBackendTest, AddSyncedVisitWritesIsKnownToSync) {
+  VisitRow foreign_visit;
+  foreign_visit.visit_time = base::Time::Now();
+  foreign_visit.originator_cache_guid = "originator";
+  foreign_visit.is_known_to_sync = true;
+
+  VisitID added_id = backend_->AddSyncedVisit(
+      GURL("https://some.url"), u"Title", /*hidden=*/false, foreign_visit,
+      absl::nullopt, absl::nullopt);
+  ASSERT_NE(added_id, kInvalidVisitID);
+  VisitRow added_visit;
+  ASSERT_TRUE(backend_->GetVisitByID(added_id, &added_visit));
+  EXPECT_TRUE(added_visit.is_known_to_sync);
 }
 
 TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteLocalVisits) {
@@ -4309,6 +4589,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteLocalVisits) {
   foreign_visit1.visit_time = base::Time::Now();
   foreign_visit1.transition = kLink;
   foreign_visit1.originator_cache_guid = "originator";
+  foreign_visit1.is_known_to_sync = true;
   VisitID foreign_visit_id1 = backend_->AddSyncedVisit(
       GURL("https://remote1.url"), u"Title 1", /*hidden=*/false, foreign_visit1,
       absl::nullopt, absl::nullopt);
@@ -4330,6 +4611,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteLocalVisits) {
   foreign_visit2.visit_time = base::Time::Now();
   foreign_visit2.transition = kLink;
   foreign_visit2.originator_cache_guid = "originator";
+  foreign_visit2.is_known_to_sync = true;
   VisitID foreign_visit_id2 = backend_->AddSyncedVisit(
       GURL("https://remote2.url"), u"Title 2", /*hidden=*/true, foreign_visit2,
       absl::nullopt, absl::nullopt);
@@ -4348,7 +4630,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteLocalVisits) {
   }
 
   // Main test body: Instruct backend to delete foreign visits.
-  backend_->DeleteAllForeignVisits();
+  backend_->DeleteAllForeignVisitsAndResetIsKnownToSync();
   // The deletions happens asynchronously, so wait for it to complete.
   task_environment_.RunUntilIdle();
 
@@ -4380,6 +4662,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsWorksInBatches) {
     foreign_visit.visit_time = base::Time::Now();
     foreign_visit.transition = kLink;
     foreign_visit.originator_cache_guid = "originator";
+    foreign_visit.is_known_to_sync = true;
     backend_->AddSyncedVisit(GURL("https://remote.url"), /*title=*/u"",
                              /*hidden=*/false, foreign_visit, absl::nullopt,
                              absl::nullopt);
@@ -4397,7 +4680,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsWorksInBatches) {
   }
 
   // Instruct the backend to delete foreign visits.
-  backend_->DeleteAllForeignVisits();
+  backend_->DeleteAllForeignVisitsAndResetIsKnownToSync();
 
   // Wait for the deletions to happen.
   task_environment_.RunUntilIdle();
@@ -4425,6 +4708,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteFutureVisits) {
     foreign_visit.visit_time = base::Time::Now();
     foreign_visit.transition = kLink;
     foreign_visit.originator_cache_guid = "originator";
+    foreign_visit.is_known_to_sync = true;
     backend_->AddSyncedVisit(GURL("https://remote.url"), /*title=*/u"",
                              /*hidden=*/false, foreign_visit, absl::nullopt,
                              absl::nullopt);
@@ -4441,7 +4725,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteFutureVisits) {
   }
 
   // Instruct the backend to delete foreign visits.
-  backend_->DeleteAllForeignVisits();
+  backend_->DeleteAllForeignVisitsAndResetIsKnownToSync();
 
   // Before the actual (async) deletion happens, add some more foreign visits.
   // These should *not* be affected by the previous DeleteAllForeignVisits()
@@ -4452,6 +4736,7 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteFutureVisits) {
     foreign_visit.visit_time = base::Time::Now();
     foreign_visit.transition = kLink;
     foreign_visit.originator_cache_guid = "originator";
+    foreign_visit.is_known_to_sync = true;
     new_foreign_visit_ids.push_back(backend_->AddSyncedVisit(
         GURL("https://remote.url"), /*title=*/u"",
         /*hidden=*/false, foreign_visit, absl::nullopt, absl::nullopt));
@@ -4474,6 +4759,66 @@ TEST_F(HistoryBackendTest, DeleteAllForeignVisitsDoesNotDeleteFutureVisits) {
     }
     EXPECT_THAT(remaining_visit_ids,
                 UnorderedElementsAreArray(new_foreign_visit_ids));
+  }
+}
+
+TEST_F(HistoryBackendTest, DeleteAllForeignVisitsResetsIsKnownToSyncFlag) {
+  const ui::PageTransition kLink = ui::PageTransitionFromInt(
+      ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_CHAIN_START |
+      ui::PAGE_TRANSITION_CHAIN_END);
+
+  const base::Time initial_time = base::Time::Now();
+
+  // Setup: Add two local visits.
+  VisitID local_visit_id1 =
+      backend_
+          ->AddPageVisit(GURL("https://local1.url"), base::Time::Now(),
+                         /*referring_visit=*/kInvalidVisitID, kLink,
+                         /*hidden=*/false, SOURCE_BROWSED,
+                         /*should_increment_typed_count=*/false,
+                         /*opener_visit=*/kInvalidVisitID)
+          .second;
+
+  task_environment_.FastForwardBy(base::Seconds(1));
+
+  // Modify local visit 2 to have `is_known_to_sync` as true.
+  VisitID local_visit_id2 =
+      backend_
+          ->AddPageVisit(GURL("https://local2.url"), base::Time::Now(),
+                         /*referring_visit=*/kInvalidVisitID, kLink,
+                         /*hidden=*/false, SOURCE_BROWSED,
+                         /*should_increment_typed_count=*/false,
+                         /*opener_visit=*/kInvalidVisitID)
+          .second;
+  backend_->MarkVisitAsKnownToSync(local_visit_id2);
+
+  task_environment_.FastForwardBy(base::Seconds(1));
+
+  // Setup finished - verify that the visits exist, and one is known to sync.
+  {
+    VisitVector visits;
+    backend_->db()->GetAllVisitsInRange(initial_time, base::Time::Now(),
+                                        /*max_results=*/5, &visits);
+    ASSERT_THAT(visits, ElementsAre(HasVisitID(local_visit_id1),
+                                    HasVisitID(local_visit_id2)));
+    ASSERT_FALSE(visits[0].is_known_to_sync);
+    ASSERT_TRUE(visits[1].is_known_to_sync);
+  }
+
+  // Main test body: Instruct backend to reset all `is_known_to_sync` flags.
+  backend_->DeleteAllForeignVisitsAndResetIsKnownToSync();
+  // The deletions happens asynchronously, so wait for it to complete.
+  task_environment_.RunUntilIdle();
+
+  // Make sure the local visits are now no longer known to sync.
+  {
+    VisitVector visits;
+    backend_->db()->GetAllVisitsInRange(initial_time, base::Time::Now(),
+                                        /*max_results=*/5, &visits);
+    ASSERT_THAT(visits, ElementsAre(HasVisitID(local_visit_id1),
+                                    HasVisitID(local_visit_id2)));
+    EXPECT_FALSE(visits[0].is_known_to_sync);
+    EXPECT_FALSE(visits[1].is_known_to_sync);
   }
 }
 

@@ -43,7 +43,6 @@
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/ui_controls_factory_ash.h"
 #include "ash/utility/haptics_tracking_test_input_controller.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wallpaper/wallpaper_controller_test_api.h"
@@ -68,7 +67,6 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/test/ui_controls.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display.h"
@@ -83,7 +81,7 @@
 #include "ui/views/animation/bounds_animator.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_impl.h"
-#include "ui/views/animation/test/ink_drop_host_view_test_api.h"
+#include "ui/views/animation/test/ink_drop_host_test_api.h"
 #include "ui/views/animation/test/ink_drop_impl_test_api.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/view_model.h"
@@ -3610,6 +3608,56 @@ TEST_P(ShelfPartyTest, PartyingItemsHiddenFromShelf) {
   test_api_->RunMessageLoopUntilAnimationsDone();
   EXPECT_EQ(initial_bounds0, test_api_->GetBoundsByIndex(0));
   EXPECT_EQ(initial_bounds2, test_api_->GetBoundsByIndex(2));
+}
+
+// Verifies that the feature that enables dragging unpinned apps to pin works
+// with shelf party.
+TEST_P(ShelfPartyTest, DragUnpinnedAppToPin) {
+  AddAppShortcut();
+  AddAppShortcut();
+  const ShelfID running_unpinned_app = AddApp();
+
+  ShelfItem item = model_->items()[1u];
+  item.status = STATUS_RUNNING;
+  model_->Set(1, item);
+  const ShelfID running_pinned_app = item.id;
+
+  // Start shelf party.
+  model_->ToggleShelfParty();
+  {
+    const std::vector<size_t> not_partying = {1, 3};
+    EXPECT_EQ(not_partying, shelf_view_->visible_views_indices());
+  }
+  task_environment()->FastForwardBy(base::Seconds(1));
+
+  // At this point, there should be only 1 pinned app and 1 unpinned app on the
+  // shelf.
+  const gfx::Point unpinned_app_center = GetButtonCenter(running_unpinned_app);
+  const gfx::Point pinned_app_center = GetButtonCenter(running_pinned_app);
+  auto* generator = GetEventGenerator();
+
+  // Drag the unpinned app to the front.
+  generator->MoveMouseTo(unpinned_app_center);
+  generator->PressLeftButton();
+  generator->MoveMouseTo(pinned_app_center);
+
+  // The first visible item, which is the dragged item, should not be pinned.
+  const size_t first_visible_index =
+      shelf_view_->visible_views_indices().front();
+  EXPECT_TRUE(!IsAppPinned(model_->items()[first_visible_index].id));
+
+  // Drag the unpinned app back to its original position and release it.
+  generator->MoveMouseTo(unpinned_app_center);
+  generator->ReleaseLeftButton();
+
+  // The last visible item, which is the dragged item, should still be an
+  // unpinned one.
+  const size_t last_visible_index = shelf_view_->visible_views_indices().back();
+  EXPECT_TRUE(!IsAppPinned(model_->items()[last_visible_index].id));
+
+  // End shelf party.
+  model_->ToggleShelfParty();
+  test_api_->RunMessageLoopUntilAnimationsDone();
 }
 
 }  // namespace ash

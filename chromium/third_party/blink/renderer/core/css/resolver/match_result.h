@@ -26,6 +26,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/css/cascade_layer_map.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
 #include "third_party/blink/renderer/core/css/resolver/cascade_origin.h"
 #include "third_party/blink/renderer/core/css/resolver/match_flags.h"
@@ -92,7 +93,7 @@ class AddMatchedPropertiesOptions {
  private:
   unsigned link_match_type_ = CSSSelector::kMatchAll;
   ValidPropertyFilter valid_property_filter_ = ValidPropertyFilter::kNoFilter;
-  unsigned layer_order_ = 0;
+  unsigned layer_order_ = CascadeLayerMap::kImplicitOuterLayerOrder;
   bool is_inline_style_ = false;
 
   friend class Builder;
@@ -185,11 +186,11 @@ class CORE_EXPORT MatchResult {
   bool DependsOnDynamicViewportUnits() const {
     return depends_on_dynamic_viewport_units_;
   }
-  void SetDependsOnRemContainerQueries() {
-    depends_on_rem_container_queries_ = true;
+  void SetDependsOnRootFontContainerQueries() {
+    depends_on_root_font_container_queries_ = true;
   }
-  bool DependsOnRemContainerQueries() const {
-    return depends_on_rem_container_queries_;
+  bool DependsOnRootFontContainerQueries() const {
+    return depends_on_root_font_container_queries_;
   }
   void SetConditionallyAffectsAnimations() {
     conditionally_affects_animations_ = true;
@@ -230,6 +231,10 @@ class CORE_EXPORT MatchResult {
   // objects were added.
   void Reset();
 
+  const HeapVector<Member<const TreeScope>, 4>& GetTreeScopes() const {
+    return tree_scopes_;
+  }
+
   const TreeScope& ScopeFromTreeOrder(uint16_t tree_order) const {
     SECURITY_DCHECK(tree_order < tree_scopes_.size());
     return *tree_scopes_[tree_order];
@@ -244,7 +249,7 @@ class CORE_EXPORT MatchResult {
   bool first_line_depends_on_size_container_queries_{false};
   bool depends_on_static_viewport_units_{false};
   bool depends_on_dynamic_viewport_units_{false};
-  bool depends_on_rem_container_queries_{false};
+  bool depends_on_root_font_container_queries_{false};
   bool conditionally_affects_animations_{false};
   bool has_non_universal_highlight_pseudo_styles_{false};
   bool has_non_ua_highlight_pseudo_styles_{false};

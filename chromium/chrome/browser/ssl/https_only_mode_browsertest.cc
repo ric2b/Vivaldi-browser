@@ -10,6 +10,8 @@
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/interstitials/security_interstitial_page_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
+#include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/browser/ssl/https_only_mode_navigation_throttle.h"
 #include "chrome/browser/ssl/https_only_mode_upgrade_interceptor.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -44,13 +46,17 @@
 using security_interstitials::https_only_mode::Event;
 using security_interstitials::https_only_mode::kEventHistogram;
 
+// Tests for the v1 implementation of HTTPS-First Mode. See
+// https_upgrade_browsertest.cc for the tests for v2.
 class HttpsOnlyModeBrowserTest : public InProcessBrowserTest {
  public:
   HttpsOnlyModeBrowserTest() = default;
   ~HttpsOnlyModeBrowserTest() override = default;
 
   void SetUp() override {
-    feature_list_.InitAndEnableFeature(features::kHttpsOnlyMode);
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kHttpsOnlyMode},
+        /*disabled_features=*/{features::kHttpsFirstModeV2});
     InProcessBrowserTest::SetUp();
   }
 
@@ -929,6 +935,110 @@ IN_PROC_BROWSER_TEST_F(HttpsOnlyModeBrowserTest, PreferHstsOverHttpsFirstMode) {
   histograms()->ExpectTotalCount(kEventHistogram, 0);
 }
 
+// Tests that if the HttpAllowlist enterprise policy is set, then HTTPS upgrades
+// are skipped for hosts in the allowlist.
+IN_PROC_BROWSER_TEST_F(HttpsOnlyModeBrowserTest,
+                       EnterpriseAllowlistDisablesUpgrades) {
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Without any policy allowlist, navigate to HTTP URL on foo.test. It *should*
+  // get upgraded to HTTPS.
+  auto http_url = http_server()->GetURL("foo.test", "/simple.html");
+  auto https_url = https_server()->GetURL("foo.test", "/simple.html");
+  EXPECT_FALSE(content::NavigateToURL(contents, http_url));
+  EXPECT_EQ(https_url, contents->GetLastCommittedURL());
+
+  // Artificially add the pref that gets mapped from the enterprise policy.
+  auto* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  auto* prefs = profile->GetPrefs();
+  base::Value::List allowlist;
+  allowlist.Append("foo.test");
+  allowlist.Append("[*.]bar.test");
+  allowlist.Append(http_server()->GetIPLiteralString());
+  // These cases should not work, but the policy->pref mapping won't immediately
+  // reject them.
+  allowlist.Append("[*]");
+  allowlist.Append("*");
+  prefs->SetList(prefs::kHttpAllowlist, std::move(allowlist));
+
+  // Navigate to HTTP URL on foo.test. It should not get upgraded to HTTPS and
+  // no interstitial should be shown.
+  http_url = http_server()->GetURL("foo.test", "/simple.html");
+  https_url = https_server()->GetURL("foo.test", "/simple.html");
+  EXPECT_TRUE(content::NavigateToURL(contents, http_url));
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+  EXPECT_FALSE(
+      chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+          contents));
+
+  // Navigate to HTTP URL on bar.test. Same result.
+  http_url = http_server()->GetURL("bar.test", "/simple.html");
+  https_url = https_server()->GetURL("bar.test", "/simple.html");
+  EXPECT_TRUE(content::NavigateToURL(contents, http_url));
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+  EXPECT_FALSE(
+      chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+          contents));
+
+  // Navigate to HTTP URL on bar.bar.test. Same result as subdomain wildcard
+  // was specified.
+  http_url = http_server()->GetURL("bar.bar.test", "/simple.html");
+  https_url = https_server()->GetURL("bar.bar.test", "/simple.html");
+  EXPECT_TRUE(content::NavigateToURL(contents, http_url));
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+  EXPECT_FALSE(
+      chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+          contents));
+
+  // Navigate to HTTP URL on foo.foo.test. Subdomains of foo.test should not be
+  // considered as being in the allowlist as no wildcard was specified. This
+  // should get upgraded to HTTPS.
+  http_url = http_server()->GetURL("foo.foo.test", "/simple.html");
+  https_url = https_server()->GetURL("foo.foo.test", "/simple.html");
+  EXPECT_FALSE(content::NavigateToURL(contents, http_url));
+  EXPECT_EQ(https_url, contents->GetLastCommittedURL());
+
+  // Navigate to HTTP URL on baz.test, which is not on the allowlist. Should get
+  // upgraded to HTTPS.
+  http_url = http_server()->GetURL("baz.test", "/simple.html");
+  https_url = https_server()->GetURL("baz.test", "/simple.html");
+  EXPECT_FALSE(content::NavigateToURL(contents, http_url));
+  EXPECT_EQ(https_url, contents->GetLastCommittedURL());
+
+  // Navigate to HTTP URL on the HTTP test server's IP address. It should not
+  // get upgraded ot HTTPS and no interstitial should be shown.
+  http_url = http_server()->GetURL("/simple.html");
+  https_url = https_server()->GetURL("/simple.html");
+  EXPECT_TRUE(content::NavigateToURL(contents, http_url));
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+  EXPECT_FALSE(
+      chrome_browser_interstitials::IsShowingHttpsFirstModeInterstitial(
+          contents));
+}
+
+// Tests that if HTTPS-First Mode is disabled, metrics are recorded on
+// upgrade-eligible navigations.
+IN_PROC_BROWSER_TEST_F(HttpsOnlyModeBrowserTest,
+                       MetricsRecordedWhenHFMDisabled) {
+  GURL http_url = http_server()->GetURL("foo.test", "/simple.html");
+
+  // Ensure HTTPS-First Mode is off.
+  SetPref(false);
+
+  // NavigateToURL() returns `true` because the navigation is not redirected.
+  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::NavigateToURL(contents, http_url));
+
+  EXPECT_EQ(http_url, contents->GetLastCommittedURL());
+  EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(contents));
+
+  // Verify that navigation event metrics were correctly recorded.
+  histograms()->ExpectTotalCount(kEventHistogram, 1);
+  histograms()->ExpectBucketCount(kEventHistogram, Event::kUpgradeNotAttempted,
+                                  1);
+}
+
 // A simple test fixture that ensures the kHttpsOnlyMode feature is enabled and
 // constructs a HistogramTester (so that it gets initialized before browser
 // startup). Used for testing pref tracking logic.
@@ -954,6 +1064,8 @@ class HttpsOnlyModePrefsBrowserTest : public InProcessBrowserTest {
   }
 
   base::HistogramTester* histograms() { return &histograms_; }
+
+  base::test::ScopedFeatureList* feature_list() { return &feature_list_; }
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -995,4 +1107,52 @@ IN_PROC_BROWSER_TEST_F(HttpsOnlyModePrefsBrowserTest, PrefStatesRecorded) {
   CreateIncognitoBrowser();
   histograms()->ExpectTotalCount(
       "Security.HttpsFirstMode.SettingEnabledAtStartup", 1);
+}
+
+// Tests for enabling HTTPS-Only Mode for Advanced Protection users.
+class HttpsOnlyModeForAdvancedProtectionBrowserTest
+    : public HttpsOnlyModePrefsBrowserTest,
+      public testing::WithParamInterface<
+          bool /* is_enabled_for_advanced_protection */> {
+  void SetUp() override {
+    if (is_enabled_for_advanced_protection()) {
+      feature_list()->InitWithFeatures(
+          {features::kHttpsOnlyMode,
+           features::kHttpsFirstModeForAdvancedProtectionUsers},
+          {});
+    } else {
+      feature_list()->InitWithFeatures(
+          {features::kHttpsOnlyMode},
+          {features::kHttpsFirstModeForAdvancedProtectionUsers});
+    }
+    InProcessBrowserTest::SetUp();
+  }
+
+ protected:
+  bool is_enabled_for_advanced_protection() const { return GetParam(); }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    HttpsOnlyModeForAdvancedProtectionBrowserTest,
+    testing::Bool() /* is_enabled_for_advanced_protection */);
+
+// Tests that HFM is enabled if the user is under Advanced Protection.
+IN_PROC_BROWSER_TEST_P(HttpsOnlyModeForAdvancedProtectionBrowserTest,
+                       AdvancedProtectionEnabled) {
+  safe_browsing::AdvancedProtectionStatusManager* ap_manager =
+      safe_browsing::AdvancedProtectionStatusManagerFactory::GetForProfile(
+          browser()->profile());
+
+  EXPECT_FALSE(ap_manager->IsUnderAdvancedProtection());
+  EXPECT_FALSE(GetPref());
+
+  ap_manager->SetAdvancedProtectionStatusForTesting(true);
+  if (is_enabled_for_advanced_protection()) {
+    EXPECT_TRUE(GetPref());
+  } else {
+    EXPECT_FALSE(GetPref());
+  }
+
+  // TODO(crbug.com/1414633): Check that the HFM UI setting is locked.
 }

@@ -15,8 +15,8 @@ import android.widget.ImageView;
 import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.widget.ImageViewCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkAddEditFolderActivity;
@@ -70,10 +70,7 @@ public abstract class BookmarkRow
     public BookmarkRow(Context context, AttributeSet attrs) {
         super(context, attrs);
         if (BookmarkFeatures.isBookmarksVisualRefreshEnabled()) {
-            enableVisualRefresh(getResources().getDimensionPixelSize(
-                    BookmarkFeatures.isCompactBookmarksVisualRefreshEnabled()
-                            ? R.dimen.list_item_v2_start_icon_width_compact
-                            : R.dimen.list_item_v2_start_icon_width));
+            enableVisualRefresh();
         }
     }
 
@@ -191,10 +188,9 @@ public abstract class BookmarkRow
             }
             listItems.add(buildMenuListItem(R.string.bookmark_item_select, 0, 0));
             listItems.add(buildMenuListItem(R.string.bookmark_item_delete, 0, 0));
-            if (!ChromeApplicationImpl.isVivaldi())
-            if (ReadingListFeatures.shouldAllowBookmarkTypeSwapping()) {
-                listItems.add(buildMenuListItem(R.string.bookmark_item_edit, 0, 0));
-                listItems.add(buildMenuListItem(R.string.bookmark_item_move, 0, 0));
+            if (!ChromeApplicationImpl.isVivaldi()) {
+            listItems.add(buildMenuListItem(R.string.bookmark_item_edit, 0, 0));
+            listItems.add(buildMenuListItem(R.string.bookmark_item_move, 0, 0));
             }
         } else {
             listItems.add(buildMenuListItem(R.string.bookmark_item_select, 0, 0));
@@ -285,7 +281,7 @@ public abstract class BookmarkRow
 
         mDragHandle = mEndButtonView;
         mDragHandle.setImageResource(R.drawable.ic_drag_handle_grey600_24dp);
-        ApiCompatibilityUtils.setImageTintList(mDragHandle,
+        ImageViewCompat.setImageTintList(mDragHandle,
                 AppCompatResources.getColorStateList(
                         getContext(), R.color.default_icon_color_tint_list));
     }

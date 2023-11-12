@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/values.h"
 #include "chromeos/components/onc/onc_mapper.h"
 #include "chromeos/components/onc/onc_signature.h"
 #include "chromeos/components/onc/onc_validator.h"
@@ -53,8 +54,8 @@ bool GetInt(const base::Value& dict, const char* key, int* result) {
 // |onc_object|.
 void ExpandField(const std::string& fieldname,
                  const VariableExpander& variable_expander,
-                 base::Value* onc_object) {
-  std::string* field_value = onc_object->FindStringKey(fieldname);
+                 base::Value::Dict* onc_object) {
+  std::string* field_value = onc_object->FindString(fieldname);
   if (!field_value)
     return;
   variable_expander.ExpandString(field_value);
@@ -88,8 +89,8 @@ class OncMaskValues : public Mapper {
                           const std::string& mask) {
     OncMaskValues masker(mask);
     bool error = false;
-    base::Value result = masker.MapObject(signature, onc_object, &error);
-    DCHECK(!result.is_none());
+    base::Value result(
+        masker.MapObject(signature, onc_object.GetDict(), &error));
     return result;
   }
 
@@ -229,13 +230,14 @@ bool ResolveSingleCertRef(const CertPEMsByGUIDMap& certs_by_guid,
 bool ResolveCertRefList(const CertPEMsByGUIDMap& certs_by_guid,
                         const std::string& key_guid_ref_list,
                         const std::string& key_pem_list,
-                        base::Value* onc_object) {
-  const base::Value* guid_ref_list = onc_object->FindListKey(key_guid_ref_list);
+                        base::Value::Dict& onc_object) {
+  const base::Value::List* guid_ref_list =
+      onc_object.FindList(key_guid_ref_list);
   if (!guid_ref_list)
     return true;
 
-  base::Value pem_list(base::Value::Type::LIST);
-  for (const auto& entry : guid_ref_list->GetList()) {
+  base::Value::List pem_list;
+  for (const auto& entry : *guid_ref_list) {
     std::string pem_encoded;
     if (!GUIDRefToPEMEncoding(certs_by_guid, entry.GetString(), &pem_encoded))
       return false;
@@ -243,8 +245,8 @@ bool ResolveCertRefList(const CertPEMsByGUIDMap& certs_by_guid,
     pem_list.Append(pem_encoded);
   }
 
-  onc_object->RemoveKey(key_guid_ref_list);
-  onc_object->SetKey(key_pem_list, std::move(pem_list));
+  onc_object.Remove(key_guid_ref_list);
+  onc_object.Set(key_pem_list, std::move(pem_list));
   return true;
 }
 
@@ -253,8 +255,8 @@ bool ResolveCertRefList(const CertPEMsByGUIDMap& certs_by_guid,
 bool ResolveSingleCertRefToList(const CertPEMsByGUIDMap& certs_by_guid,
                                 const std::string& key_guid_ref,
                                 const std::string& key_pem_list,
-                                base::Value* onc_object) {
-  std::string* guid_ref = onc_object->FindStringKey(key_guid_ref);
+                                base::Value::Dict& onc_object) {
+  std::string* guid_ref = onc_object.FindString(key_guid_ref);
   if (!guid_ref)
     return true;
 
@@ -262,10 +264,10 @@ bool ResolveSingleCertRefToList(const CertPEMsByGUIDMap& certs_by_guid,
   if (!GUIDRefToPEMEncoding(certs_by_guid, *guid_ref, &pem_encoded))
     return false;
 
-  base::Value pem_list(base::Value::Type::LIST);
+  base::Value::List pem_list;
   pem_list.Append(pem_encoded);
-  onc_object->RemoveKey(key_guid_ref);
-  onc_object->SetKey(key_pem_list, std::move(pem_list));
+  onc_object.Remove(key_guid_ref);
+  onc_object.Set(key_pem_list, std::move(pem_list));
   return true;
 }
 
@@ -277,19 +279,20 @@ bool ResolveCertRefsOrRefToList(const CertPEMsByGUIDMap& certs_by_guid,
                                 const std::string& key_guid_ref,
                                 const std::string& key_pem_list,
                                 base::Value* onc_object) {
-  if (onc_object->FindKey(key_guid_refs)) {
-    if (onc_object->FindKey(key_guid_ref)) {
+  base::Value::Dict& onc_dict = onc_object->GetDict();
+  if (onc_dict.contains(key_guid_refs)) {
+    if (onc_dict.contains(key_guid_ref)) {
       LOG(ERROR) << "Found both " << key_guid_refs << " and " << key_guid_ref
                  << ". Ignoring and removing the latter.";
-      onc_object->RemoveKey(key_guid_ref);
+      onc_dict.Remove(key_guid_ref);
     }
     return ResolveCertRefList(certs_by_guid, key_guid_refs, key_pem_list,
-                              onc_object);
+                              onc_dict);
   }
 
   // Only resolve |key_guid_ref| if |key_guid_refs| isn't present.
   return ResolveSingleCertRefToList(certs_by_guid, key_guid_ref, key_pem_list,
-                                    onc_object);
+                                    onc_dict);
 }
 
 // Resolve known server and authority certiifcate reference fields in
@@ -300,7 +303,8 @@ bool ResolveServerCertRefsInObject(const CertPEMsByGUIDMap& certs_by_guid,
   DCHECK(onc_object->is_dict());
   if (&signature == &kCertificatePatternSignature) {
     if (!ResolveCertRefList(certs_by_guid, ::onc::client_cert::kIssuerCARef,
-                            ::onc::client_cert::kIssuerCAPEMs, onc_object)) {
+                            ::onc::client_cert::kIssuerCAPEMs,
+                            onc_object->GetDict())) {
       return false;
     }
   } else if (&signature == &kEAPSignature) {
@@ -347,11 +351,12 @@ bool ResolveServerCertRefsInObject(const CertPEMsByGUIDMap& certs_by_guid,
 
 }  // namespace
 
-base::Value ReadDictionaryFromJson(const std::string& json) {
+absl::optional<base::Value::Dict> ReadDictionaryFromJson(
+    const std::string& json) {
   if (json.empty()) {
     // Policy may contain empty values, just log a debug message.
     NET_LOG(DEBUG) << "Empty json string";
-    return base::Value();
+    return absl::nullopt;
   }
   auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(
       json,
@@ -359,12 +364,13 @@ base::Value ReadDictionaryFromJson(const std::string& json) {
   if (!parsed_json.has_value()) {
     NET_LOG(ERROR) << "Invalid JSON Dictionary: "
                    << parsed_json.error().message;
-    return base::Value();
-  } else if (!parsed_json->is_dict()) {
-    NET_LOG(ERROR) << "Invalid JSON Dictionary: Expected a dictionary.";
-    return base::Value();
+    return absl::nullopt;
   }
-  return std::move(*parsed_json);
+  if (!parsed_json->is_dict()) {
+    NET_LOG(ERROR) << "Invalid JSON Dictionary: Expected a dictionary.";
+    return absl::nullopt;
+  }
+  return std::move(*parsed_json).TakeDict();
 }
 
 base::Value Decrypt(const std::string& passphrase, const base::Value& root) {
@@ -456,11 +462,13 @@ base::Value Decrypt(const std::string& passphrase, const base::Value& root) {
     return base::Value();
   }
 
-  base::Value new_root = ReadDictionaryFromJson(plaintext);
-  if (new_root.is_none())
+  absl::optional<base::Value::Dict> new_root =
+      ReadDictionaryFromJson(plaintext);
+  if (!new_root) {
     NET_LOG(ERROR) << "Property dictionary malformed.";
-
-  return new_root;
+    return base::Value();
+  }
+  return base::Value(std::move(*new_root));
 }
 
 std::string GetSourceAsString(::onc::ONCSource source) {
@@ -482,8 +490,7 @@ std::string GetSourceAsString(::onc::ONCSource source) {
 
 void ExpandStringsInOncObject(const OncValueSignature& signature,
                               const VariableExpander& variable_expander,
-                              base::Value* onc_object) {
-  DCHECK(onc_object->is_dict());
+                              base::Value::Dict* onc_object) {
   if (&signature == &kEAPSignature) {
     ExpandField(::onc::eap::kAnonymousIdentity, variable_expander, onc_object);
     ExpandField(::onc::eap::kIdentity, variable_expander, onc_object);
@@ -493,7 +500,7 @@ void ExpandStringsInOncObject(const OncValueSignature& signature,
   }
 
   // Recurse into nested objects.
-  for (auto it : onc_object->DictItems()) {
+  for (auto it : *onc_object) {
     if (!it.second.is_dict())
       continue;
 
@@ -503,16 +510,15 @@ void ExpandStringsInOncObject(const OncValueSignature& signature,
       continue;
 
     ExpandStringsInOncObject(*field_signature->value_signature,
-                             variable_expander, &it.second);
+                             variable_expander, &it.second.GetDict());
   }
 }
 
 void ExpandStringsInNetworks(const VariableExpander& variable_expander,
-                             base::Value* network_configs) {
-  for (auto& network : network_configs->GetList()) {
-    DCHECK(network.is_dict());
+                             base::Value::List& network_configs) {
+  for (auto& network : network_configs) {
     ExpandStringsInOncObject(kNetworkConfigurationSignature, variable_expander,
-                             &network);
+                             &network.GetDict());
   }
 }
 
@@ -624,12 +630,14 @@ bool ParseAndValidateOncForImport(const std::string& onc_blob,
   if (onc_blob.empty())
     return true;
 
-  base::Value toplevel_onc = ReadDictionaryFromJson(onc_blob);
-  if (toplevel_onc.is_none()) {
+  absl::optional<base::Value::Dict> toplevel_onc_dict =
+      ReadDictionaryFromJson(onc_blob);
+  if (!toplevel_onc_dict) {
     NET_LOG(ERROR) << "Not a valid ONC JSON dictionary: "
                    << GetSourceAsString(onc_source);
     return false;
   }
+  base::Value toplevel_onc(std::move(*toplevel_onc_dict));
 
   // Check and see if this is an encrypted ONC file. If so, decrypt it.
   std::string onc_type;

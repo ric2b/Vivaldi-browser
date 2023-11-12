@@ -83,6 +83,11 @@ struct StructTraits<display::mojom::DisplaySnapshotDataView,
     return snapshot->privacy_screen_state();
   }
 
+  static bool has_content_protection_key(
+      const std::unique_ptr<display::DisplaySnapshot>& snapshot) {
+    return snapshot->has_content_protection_key();
+  }
+
   static bool has_color_correction_matrix(
       const std::unique_ptr<display::DisplaySnapshot>& snapshot) {
     return snapshot->has_color_correction_matrix();
@@ -165,6 +170,11 @@ struct StructTraits<display::mojom::DisplaySnapshotDataView,
   static const absl::optional<gfx::Range>& vertical_display_range_limits(
       const std::unique_ptr<display::DisplaySnapshot>& snapshot) {
     return snapshot->vertical_display_range_limits();
+  }
+
+  static const display::DrmFormatsAndModifiers& drm_formats_and_modifiers(
+      const std::unique_ptr<display::DisplaySnapshot>& snapshot) {
+    return snapshot->GetDRMFormatsAndModifiers();
   }
 
   static bool Read(display::mojom::DisplaySnapshotDataView data,

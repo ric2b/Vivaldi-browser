@@ -9,9 +9,9 @@
 #include <set>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -31,6 +31,7 @@
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/crosapi/mojom/desk_template.mojom.h"
+#include "components/component_updater/component_updater_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler_observer.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
@@ -38,6 +39,7 @@
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/values_util.h"
 #include "components/session_manager/core/session_manager_observer.h"
+#include "components/tab_groups/tab_group_info.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/ui_base_types.h"
@@ -206,18 +208,24 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Triggers tab switching in Lacros via horizontal 3-finger swipes.
   //
   // |x_offset| is in DIP coordinates.
-  void HandleTabScrubbing(float x_offset);
+  void HandleTabScrubbing(float x_offset, bool is_fling_scroll_event);
 
-  // Create a browser with the restored data containing |urls|,
-  // |bounds|, |show_state|, |active_tab_index| and |app_name|. Note an
-  // non-empty |app_name| indicates that the browser window is an app type
-  // browser window.
-  void CreateBrowserWithRestoredData(const std::vector<GURL>& urls,
-                                     const gfx::Rect& bounds,
-                                     const ui::WindowShowState show_state,
-                                     int32_t active_tab_index,
-                                     const std::string& app_name,
-                                     int32_t restore_window_id);
+  // Create a browser with the restored data containing `urls`,
+  // `bounds`,`tab_group_infos`, `show_state`, `active_tab_index`,
+  // `first_non_pinned_tab_index`, and `app_name`. Note an non-empty `app_name`
+  // indicates that the browser window is an app type browser window.  Also
+  // note that` first_non_pinned_tab_indexes` with negative values are ignored
+  // type constraints for the `first_non_pinned_tab_index` and are enforced on
+  // the browser side and are dropped if they don't comply with said restraints.
+  void CreateBrowserWithRestoredData(
+      const std::vector<GURL>& urls,
+      const gfx::Rect& bounds,
+      const std::vector<tab_groups::TabGroupInfo>& tab_group_infos,
+      const ui::WindowShowState show_state,
+      int32_t active_tab_index,
+      int32_t first_non_pinned_tab_index,
+      const std::string& app_name,
+      int32_t restore_window_id);
 
   // Initialize resources and start Lacros. This class provides two approaches
   // to fulfill different requirements.
@@ -238,7 +246,7 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Returns true if crosapi interface supports GetFeedbackData API.
   bool GetFeedbackDataSupported() const;
 
-  using GetFeedbackDataCallback = base::OnceCallback<void(base::Value)>;
+  using GetFeedbackDataCallback = base::OnceCallback<void(base::Value::Dict)>;
   // Gathers Lacros feedback data.
   // Virtual for testing.
   virtual void GetFeedbackData(GetFeedbackDataCallback callback);
@@ -262,8 +270,9 @@ class BrowserManager : public session_manager::SessionManagerObserver,
       base::OnceCallback<void(crosapi::mojom::DeskTemplateStatePtr)>;
   // Gets URLs and active indices of the tab strip models from the Lacros
   // browser window.
-  void GetBrowserInformation(const std::string& window_unique_id,
-                             GetBrowserInformationCallback callback);
+  // Virtual for testing.
+  virtual void GetBrowserInformation(const std::string& window_unique_id,
+                                     GetBrowserInformationCallback callback);
 
   void AddObserver(BrowserManagerObserver* observer);
   void RemoveObserver(BrowserManagerObserver* observer);
@@ -313,7 +322,7 @@ class BrowserManager : public session_manager::SessionManagerObserver,
     // Set true if Lacros uses resource file sharing.
     bool enable_resource_file_sharing = false;
 
-    // Any addiniotal  args to start lacros with.
+    // Any additional args to start lacros with.
     std::vector<std::string> lacros_additional_args;
   };
 
@@ -411,7 +420,7 @@ class BrowserManager : public session_manager::SessionManagerObserver,
     // Lacros-chrome is being terminated soon.
     TERMINATING,
   };
-  // Changes |state| value and potentitally notify observers of the change.
+  // Changes |state| value and potentially notify observers of the change.
   void SetState(State state);
 
   // Posts CreateLogFile() and StartWithLogFile() to the thread pool.
@@ -587,7 +596,7 @@ class BrowserManager : public session_manager::SessionManagerObserver,
   // Launch "Go to files" if the migration error page was clicked.
   void HandleGoToFiles();
 
-  // Sets user policy to be propagated to Lacros and subsribes to the user
+  // Sets user policy to be propagated to Lacros and subscribes to the user
   // policy updates in Ash.
   void PrepareLacrosPolicies();
   policy::CloudPolicyCore* GetDeviceAccountPolicyCore();

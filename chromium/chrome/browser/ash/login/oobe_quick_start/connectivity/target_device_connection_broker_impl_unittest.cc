@@ -6,12 +6,17 @@
 
 #include <array>
 
-#include "base/bind.h"
+#include "base/base64.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/fast_pair_advertiser.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/random_session_id.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker_factory.h"
+#include "chrome/browser/ash/nearby/quick_start_connectivity_service.h"
+#include "chrome/browser/ash/nearby/quick_start_connectivity_service_factory.h"
+#include "chrome/browser/nearby_sharing/fake_nearby_connections_manager.h"
+#include "chrome/browser/nearby_sharing/public/cpp/nearby_connections_manager.h"
 #include "chromeos/constants/devicetype.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
@@ -23,11 +28,24 @@ namespace ash::quick_start {
 namespace {
 
 constexpr size_t kMaxEndpointInfoDisplayNameLength = 18;
+constexpr uint8_t kEndpointInfoVerificationStyle = 6u;
+constexpr uint8_t kEndpointInfoDeviceType = 8u;
+
+constexpr size_t kEndpointInfoRandomSessionIdLength = 10;
 
 // 10 random bytes to use as the RandomSessionId. The corresponding display name
 // code is (0x135e % 1000) = 958.
-constexpr std::array<uint8_t, 10> kRandomSessionId = {
-    0x13, 0x5e, 0xfb, 0x0f, 0x3a, 0x20, 0x06, 0xbd, 0xbf, 0x95};
+constexpr std::array<uint8_t, 6> kRandomSessionId = {0x13, 0x5e, 0xfb,
+                                                     0x0f, 0x3a, 0x20};
+
+// Perform base64 decoding with the kForgiving option to allow for missing
+// padding.
+std::vector<uint8_t> Base64DecodeForgiving(base::span<uint8_t> input) {
+  std::string input_str(input.begin(), input.end());
+  std::string output;
+  base::Base64Decode(input_str, &output, base::Base64DecodePolicy::kForgiving);
+  return std::vector<uint8_t>(output.begin(), output.end());
+}
 
 struct EndpointInfoTestCase {
   chromeos::DeviceType device_type;
@@ -78,8 +96,9 @@ class DeferredBluetoothAdapterFactoryWrapper
     : public TargetDeviceConnectionBrokerImpl::BluetoothAdapterFactoryWrapper {
  public:
   void ReturnAdapter() {
-    if (!adapter_callback_)
+    if (!adapter_callback_) {
       return;
+    }
 
     device::BluetoothAdapterFactory::Get()->GetAdapter(
         std::move(adapter_callback_));
@@ -115,10 +134,11 @@ class FakeFastPairAdvertiser : public FastPairAdvertiser {
                         base::OnceCallback<void()> error_callback,
                         const RandomSessionId& random_session_id) override {
     ++start_advertising_call_count_;
-    if (should_succeed_on_start_)
+    if (should_succeed_on_start_) {
       std::move(callback).Run();
-    else
+    } else {
       std::move(error_callback).Run();
+    }
   }
 
   void StopAdvertising(base::OnceCallback<void()> callback) override {
@@ -218,7 +238,8 @@ class TargetDeviceConnectionBrokerImplTest : public testing::Test {
   void CreateConnectionBroker() {
     RandomSessionId session_id(kRandomSessionId);
     connection_broker_ =
-        TargetDeviceConnectionBrokerFactory::Create(session_id);
+        ash::quick_start::TargetDeviceConnectionBrokerFactory::Create(
+            fake_nearby_connections_manager_.GetWeakPtr(), session_id);
   }
 
   void FinishFetchingBluetoothAdapter() {
@@ -268,6 +289,7 @@ class TargetDeviceConnectionBrokerImplTest : public testing::Test {
   bool start_advertising_callback_success_ = false;
   bool stop_advertising_callback_called_ = false;
   scoped_refptr<NiceMock<device::MockBluetoothAdapter>> mock_bluetooth_adapter_;
+  FakeNearbyConnectionsManager fake_nearby_connections_manager_;
   std::unique_ptr<TargetDeviceConnectionBroker> connection_broker_;
   std::unique_ptr<FakeFastPairAdvertiserFactory> fast_pair_advertiser_factory_;
   DeferredBluetoothAdapterFactoryWrapper bluetooth_adapter_factory_wrapper_;
@@ -475,35 +497,82 @@ TEST_P(TargetDeviceConnectionBrokerImplEndpointInfoTest, GenerateEndpointInfo) {
   EXPECT_EQ(GetParam().expected_display_name, display_name);
   i += j;
 
-  ASSERT_GT(endpoint_info.size(), i);
-  uint8_t verification_style = endpoint_info[i];
-  EXPECT_EQ(0u, verification_style);
+  // The remaining advertising info fields are base64-encoded. Decode them
+  // before proceeding.
+  std::vector<uint8_t> advertising_info = Base64DecodeForgiving(
+      base::span<uint8_t>(endpoint_info.begin() + i, endpoint_info.end()));
+  i = 0;
+
+  ASSERT_GT(advertising_info.size(), i);
+  uint8_t verification_style = advertising_info[i];
+  EXPECT_EQ(kEndpointInfoVerificationStyle, verification_style);
   i++;
 
-  ASSERT_GT(endpoint_info.size(), i);
-  uint8_t device_type = endpoint_info[i];
-  EXPECT_EQ(0u, device_type);
+  ASSERT_GT(advertising_info.size(), i);
+  uint8_t device_type = advertising_info[i];
+  EXPECT_EQ(kEndpointInfoDeviceType, device_type);
   i++;
 
-  // Parse the fixed-length RandomSessionId.
-  ASSERT_GE(endpoint_info.size(), i + RandomSessionId::kLength);
-  base::span<const uint8_t, RandomSessionId::kLength> session_id_bytes =
-      GetRandomSessionId().AsBytes();
-  for (size_t k = i; k < i + RandomSessionId::kLength; k++) {
-    EXPECT_EQ(session_id_bytes[k - i], endpoint_info[k]);
+  // Parse the RandomSessionId. The field is fixed-width, but contains a string
+  // that may not occupy the full length, in which case there will be a null
+  // terminator.
+  ASSERT_GE(advertising_info.size(), i + kEndpointInfoRandomSessionIdLength);
+  std::string session_id = GetRandomSessionId().ToString();
+  for (size_t k = i; k < i + kEndpointInfoRandomSessionIdLength; k++) {
+    if (advertising_info[k] == 0) {
+      break;
+    }
+    EXPECT_EQ(session_id[k - i], advertising_info[k]);
   }
-  i += RandomSessionId::kLength;
+  i += kEndpointInfoRandomSessionIdLength;
 
-  ASSERT_GT(endpoint_info.size(), i);
-  uint8_t is_quick_start = endpoint_info[i];
+  ASSERT_GT(advertising_info.size(), i);
+  uint8_t is_quick_start = advertising_info[i];
   EXPECT_EQ(1u, is_quick_start);
 
   // There should be no more endpoint info after the isQuickStart field.
-  EXPECT_EQ(endpoint_info.size(), i + 1);
+  EXPECT_EQ(advertising_info.size(), i + 1);
 }
 
 INSTANTIATE_TEST_SUITE_P(TargetDeviceConnectionBrokerImplTest,
                          TargetDeviceConnectionBrokerImplEndpointInfoTest,
                          testing::ValuesIn(kEndpointInfoTestCases));
+
+TEST_F(TargetDeviceConnectionBrokerImplTest,
+       StartNearbyConnectionsAdvertising) {
+  FinishFetchingBluetoothAdapter();
+  EXPECT_FALSE(fake_nearby_connections_manager_.IsAdvertising());
+
+  connection_broker_->StartAdvertising(
+      nullptr,
+      base::BindOnce(
+          &TargetDeviceConnectionBrokerImplTest::StartAdvertisingResultCallback,
+          weak_ptr_factory_.GetWeakPtr()));
+  EXPECT_TRUE(fake_nearby_connections_manager_.IsAdvertising());
+  EXPECT_EQ(PowerLevel::kHighPower,
+            fake_nearby_connections_manager_.advertising_power_level());
+  EXPECT_TRUE(start_advertising_callback_called_);
+  EXPECT_TRUE(start_advertising_callback_success_);
+}
+
+TEST_F(TargetDeviceConnectionBrokerImplTest,
+       StartNearbyConnectionsAdvertisingError) {
+  FinishFetchingBluetoothAdapter();
+  FakeNearbyConnectionsManager::ConnectionsCallback callback =
+      fake_nearby_connections_manager_.GetStartAdvertisingCallback();
+  EXPECT_FALSE(fake_nearby_connections_manager_.IsAdvertising());
+
+  connection_broker_->StartAdvertising(
+      nullptr,
+      base::BindOnce(
+          &TargetDeviceConnectionBrokerImplTest::StartAdvertisingResultCallback,
+          weak_ptr_factory_.GetWeakPtr()));
+  EXPECT_TRUE(fake_nearby_connections_manager_.IsAdvertising());
+  EXPECT_FALSE(start_advertising_callback_called_);
+
+  std::move(callback).Run(NearbyConnectionsManager::ConnectionsStatus::kError);
+  EXPECT_TRUE(start_advertising_callback_called_);
+  EXPECT_FALSE(start_advertising_callback_success_);
+}
 
 }  // namespace ash::quick_start

@@ -36,6 +36,9 @@ import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.Acces
 import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SET_SELECTION;
 import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SET_TEXT;
 import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_SHOW_ON_SCREEN;
+import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_LENGTH;
+import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX;
+import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY;
 import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.MOVEMENT_GRANULARITY_CHARACTER;
 import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.MOVEMENT_GRANULARITY_PARAGRAPH;
 import static androidx.core.view.accessibility.AccessibilityNodeInfoCompat.MOVEMENT_GRANULARITY_WORD;
@@ -55,15 +58,12 @@ import static org.chromium.content.browser.accessibility.AccessibilityHistogramR
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.PERCENTAGE_DROPPED_HISTOGRAM;
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.PERCENTAGE_DROPPED_HISTOGRAM_AXMODE_BASIC;
 import static org.chromium.content.browser.accessibility.AccessibilityHistogramRecorder.PERCENTAGE_DROPPED_HISTOGRAM_AXMODE_COMPLETE;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRAS_DATA_REQUEST_IMAGE_DATA_KEY;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRAS_KEY_CHROME_ROLE;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRAS_KEY_IMAGE_DATA;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRAS_KEY_OFFSCREEN;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRAS_KEY_UNCLIPPED_BOTTOM;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRAS_KEY_UNCLIPPED_TOP;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_LENGTH;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX;
-import static org.chromium.content.browser.accessibility.WebContentsAccessibilityImpl.EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_DATA_REQUEST_IMAGE_DATA_KEY;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_CHROME_ROLE;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_IMAGE_DATA;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_OFFSCREEN;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_UNCLIPPED_BOTTOM;
+import static org.chromium.content.browser.accessibility.AccessibilityNodeInfoBuilder.EXTRAS_KEY_UNCLIPPED_TOP;
 
 import android.annotation.SuppressLint;
 import android.content.ClipData;
@@ -101,7 +101,6 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -154,12 +153,8 @@ public class WebContentsAccessibilityTest {
 
     // ContentFeatureList maps used for various tests.
     private static final Map<String, Boolean> ON_DEMAND_ON_COMPUTE_ON =
-            new HashMap<String, Boolean>() {
-                {
-                    put(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS, true);
-                    put(ContentFeatureList.COMPUTE_AX_MODE, true);
-                }
-            };
+            Map.of(ContentFeatureList.ON_DEMAND_ACCESSIBILITY_EVENTS, true,
+                    ContentFeatureList.COMPUTE_AX_MODE, true);
 
     // Constant values for unit tests
     private static final int UNSUPPRESSED_EXPECTED_COUNT = 15;
@@ -592,6 +587,51 @@ public class WebContentsAccessibilityTest {
 
         Assert.assertFalse(FOCUSING_ERROR, rootNodeInfo.isAccessibilityFocused());
         Assert.assertFalse(FOCUSING_ERROR, mNodeInfo.isAccessibilityFocused());
+    }
+
+    /**
+     * Test restoring focus of the latest focused element with the {restoreFocus} method.
+     */
+    @Test
+    @SmallTest
+    public void testRestoreFocus() throws Throwable {
+        // Setup test page with example paragraphs.
+        setupTestWithHTML("<input id='id1'><input id='id2'>");
+
+        // Find the root node, and a paragraph node, then focus the paragraph.
+        int rootVvid = waitForNodeMatching(sClassNameMatcher, "android.webkit.WebView");
+        int vvid1 = waitForNodeMatching(sViewIdResourceNameMatcher, "id1");
+        int vvid2 = waitForNodeMatching(sViewIdResourceNameMatcher, "id2");
+
+        Assert.assertNotNull(NODE_TIMEOUT_ERROR, createAccessibilityNodeInfo(rootVvid));
+        Assert.assertNotNull(NODE_TIMEOUT_ERROR, createAccessibilityNodeInfo(vvid1));
+        Assert.assertNotNull(NODE_TIMEOUT_ERROR, createAccessibilityNodeInfo(vvid2));
+
+        Assert.assertFalse(
+                FOCUSING_ERROR, createAccessibilityNodeInfo(vvid1).isAccessibilityFocused());
+        focusNode(vvid1);
+
+        // Reset focus explicitly.
+        TestThreadUtils.runOnUiThreadBlocking(() -> mActivityTestRule.mWcax.resetFocus());
+        CriteriaHelper.pollUiThread(
+                () -> !createAccessibilityNodeInfo(vvid1).isAccessibilityFocused());
+
+        // Restore focus, verify that it gets back.
+        TestThreadUtils.runOnUiThreadBlocking(() -> mActivityTestRule.mWcax.restoreFocus());
+        CriteriaHelper.pollUiThread(
+                () -> createAccessibilityNodeInfo(vvid1).isAccessibilityFocused());
+
+        focusNode(vvid1);
+        focusNode(vvid2);
+
+        // Reset focus by performing an action, it covers one more way of losing focus.
+        Assert.assertTrue(performActionOnUiThread(vvid2, ACTION_CLEAR_ACCESSIBILITY_FOCUS, null,
+                () -> !createAccessibilityNodeInfo(vvid2).isAccessibilityFocused()));
+
+        // Restore focus, verify that the second (latest focused) element gets focus.
+        TestThreadUtils.runOnUiThreadBlocking(() -> mActivityTestRule.mWcax.restoreFocus());
+        CriteriaHelper.pollUiThread(
+                () -> createAccessibilityNodeInfo(vvid2).isAccessibilityFocused());
     }
 
     // ------------------ Tests of AccessibilityNodeInfo caching mechanism ------------------ //
@@ -1192,24 +1232,23 @@ public class WebContentsAccessibilityTest {
     }
 
     /**
-     * Ensure we are honoring min/max/step values for <input type="range"> nodes.
+     * Test <input type="range"> nodes and events for incrementing/decrementing value with actions.
      */
     @Test
     @SmallTest
-    public void testNodeInfo_inputTypeRange_withStepValue() throws Throwable {
+    public void testNodeInfo_inputTypeRangeSmall() throws Throwable {
         // Create a basic input range, and find the associated |AccessibilityNodeInfo| object.
-        setupTestWithHTML("<input type='range' min='0' max='144' step='12'>");
+        setupTestWithHTML("<input type='range' min='0' max='10' value='0'>");
 
         // Find the input range and assert we have the correct node.
         int inputNodeVirtualViewId = waitForNodeMatching(sRangeInfoMatcher, "");
         mNodeInfo = createAccessibilityNodeInfo(inputNodeVirtualViewId);
         Assert.assertNotNull(NODE_TIMEOUT_ERROR, mNodeInfo);
         Assert.assertEquals(NODE_TIMEOUT_ERROR, 0, mNodeInfo.getRangeInfo().getMin(), 0.001);
-        Assert.assertEquals(NODE_TIMEOUT_ERROR, 144, mNodeInfo.getRangeInfo().getMax(), 0.001);
+        Assert.assertEquals(NODE_TIMEOUT_ERROR, 10, mNodeInfo.getRangeInfo().getMax(), 0.001);
 
         // Perform a series of slider increments and check results.
-        int[] expectedVals = new int[] {84, 96, 108, 120, 132, 144};
-        for (int expectedVal : expectedVals) {
+        for (int i = 1; i <= 10; i++) {
             // Increment our slider using action, and poll until we receive the scroll event.
             performActionOnUiThread(inputNodeVirtualViewId, ACTION_SCROLL_FORWARD, new Bundle());
             CriteriaHelper.pollUiThread(
@@ -1219,16 +1258,15 @@ public class WebContentsAccessibilityTest {
             mNodeInfo = createAccessibilityNodeInfo(inputNodeVirtualViewId);
 
             // Confirm slider values.
-            Assert.assertEquals(INPUT_RANGE_VALUE_MISMATCH, expectedVal,
-                    mNodeInfo.getRangeInfo().getCurrent(), 0.001);
+            Assert.assertEquals(
+                    INPUT_RANGE_VALUE_MISMATCH, i, mNodeInfo.getRangeInfo().getCurrent(), 0.001);
 
             // Reset polling value for next test
             mTestData.setReceivedEvent(false);
         }
 
         // Perform a series of slider decrements and check results.
-        expectedVals = new int[] {132, 120, 108, 96, 84, 72, 60, 48, 36, 24, 12, 0};
-        for (int expectedVal : expectedVals) {
+        for (int i = 1; i <= 10; i++) {
             // Decrement our slider using action, and poll until we receive the scroll event.
             performActionOnUiThread(inputNodeVirtualViewId, ACTION_SCROLL_BACKWARD, new Bundle());
             CriteriaHelper.pollUiThread(
@@ -1238,7 +1276,7 @@ public class WebContentsAccessibilityTest {
             mNodeInfo = createAccessibilityNodeInfo(inputNodeVirtualViewId);
 
             // Confirm slider values.
-            Assert.assertEquals(INPUT_RANGE_VALUE_MISMATCH, expectedVal,
+            Assert.assertEquals(INPUT_RANGE_VALUE_MISMATCH, 10 - i,
                     mNodeInfo.getRangeInfo().getCurrent(), 0.001);
 
             // Reset polling value for next test
@@ -1273,7 +1311,7 @@ public class WebContentsAccessibilityTest {
             mNodeInfo = createAccessibilityNodeInfo(inputNodeVirtualViewId);
 
             // Confirm slider values.
-            Assert.assertEquals(INPUT_RANGE_VALUE_MISMATCH, 500 + (10 * i),
+            Assert.assertEquals(INPUT_RANGE_VALUE_MISMATCH, 500 + (50 * i),
                     mNodeInfo.getRangeInfo().getCurrent(), 0.001);
 
             // Reset polling value for next test
@@ -1291,7 +1329,7 @@ public class WebContentsAccessibilityTest {
             mNodeInfo = createAccessibilityNodeInfo(inputNodeVirtualViewId);
 
             // Confirm slider values.
-            Assert.assertEquals(INPUT_RANGE_VALUE_MISMATCH, 600 - (10 * i),
+            Assert.assertEquals(INPUT_RANGE_VALUE_MISMATCH, 1000 - (50 * i),
                     mNodeInfo.getRangeInfo().getCurrent(), 0.001);
 
             // Reset polling value for next test
@@ -1547,15 +1585,16 @@ public class WebContentsAccessibilityTest {
     @SmallTest
     public void testNodeInfo_Actions_OverflowScroll() throws Throwable {
         // Build a simple web page with a div and overflow:scroll
-        setupTestWithHTML("<div title='1234' style='overflow:scroll; width: 200px; height:50px'>\n"
-                + "  <p>Example Paragraph 1</p>\n"
-                + "  <p>Example Paragraph 2</p>\n"
+        setupTestWithHTML(
+                "<div id='div1' title='1234' style='overflow:scroll; width: 200px; height:50px'>\n"
+                + "  <p id='p1'>Example Paragraph 1</p>\n"
+                + "  <p id='p2'>Example Paragraph 2</p>\n"
                 + "</div>");
 
-        // Define our root node and paragraph node IDs by looking for their text.
-        int vvIdDiv = waitForNodeMatching(sTextMatcher, "1234");
-        int vvIdP1 = waitForNodeMatching(sTextMatcher, "Example Paragraph 1");
-        int vvIdP2 = waitForNodeMatching(sTextMatcher, "Example Paragraph 2");
+        // Define our root node and paragraph node IDs by looking for their ids.
+        int vvIdDiv = waitForNodeMatching(sViewIdResourceNameMatcher, "div1");
+        int vvIdP1 = waitForNodeMatching(sViewIdResourceNameMatcher, "p1");
+        int vvIdP2 = waitForNodeMatching(sViewIdResourceNameMatcher, "p2");
 
         // Get the |AccessibilityNodeInfo| objects for our nodes.
         AccessibilityNodeInfoCompat nodeInfoDiv = createAccessibilityNodeInfo(vvIdDiv);

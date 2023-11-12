@@ -8,6 +8,7 @@
 import {LocalStorage} from '../../common/local_storage.js';
 import {BackgroundBridge} from '../common/background_bridge.js';
 import {EventSourceType} from '../common/event_source_type.js';
+import {SettingsManager} from '../common/settings_manager.js';
 
 export class PanelMenuItem {
   /**
@@ -65,8 +66,8 @@ export class PanelMenuItem {
     title.title = this.menuItemTitle;
     this.element.appendChild(title);
 
-    const eventSourceState = await BackgroundBridge.EventSourceState.get();
-    if (eventSourceState === EventSourceType.TOUCH_GESTURE) {
+    const eventSource = await BackgroundBridge.EventSource.get();
+    if (eventSource === EventSourceType.TOUCH_GESTURE) {
       const gestureNode = document.createElement('td');
       gestureNode.className = 'menu-item-shortcut';
       gestureNode.textContent = this.gesture;
@@ -80,7 +81,7 @@ export class PanelMenuItem {
     this.element.appendChild(shortcut);
 
     if (LocalStorage.get('brailleCaptions') ||
-        LocalStorage.get('menuBrailleCommands')) {
+        SettingsManager.get('menuBrailleCommands')) {
       const braille = document.createElement('td');
       braille.className = 'menu-item-shortcut';
       braille.textContent = this.menuItemBraille;

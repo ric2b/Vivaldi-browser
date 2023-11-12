@@ -17,9 +17,9 @@
 #include "ash/system/status_area_widget.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_helper.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/login/users/mock_user_manager.h"
@@ -316,6 +316,12 @@ TEST_F(VmCameraMicManagerPrivacyIndicatorsTest, PrivacyIndicatorsView) {
   SetCameraPrivacyIsOn(false);
   ForwardToStable();
   ExpectPrivacyIndicatorsVisible(/*visible=*/true);
+
+  // Switch back to not accessing, the indicator should not be visible.
+  SetCameraAccessing(kPluginVm, false);
+  SetCameraPrivacyIsOn(false);
+  ForwardToStable();
+  ExpectPrivacyIndicatorsVisible(/*visible=*/false);
 }
 
 // Test `IsDeviceActive()` and `IsNotificationActive()`.

@@ -69,7 +69,7 @@ class RefcountedProfileKeyedServiceFactoryTest
 // `kSystemProfileSelectionDefaultNone` experiment.
 class ProfileKeyedServiceFactoryUnittest
     : public testing::Test,
-      public ::testing::WithParamInterface<std::tuple<bool, bool>> {
+      public ::testing::WithParamInterface<bool> {
  public:
   void SetUp() override {
     testing::Test::SetUp();
@@ -78,16 +78,12 @@ class ProfileKeyedServiceFactoryUnittest
     // TODO(rsult): move the below code to be in the
     // `ProfileSelectionsTestWithParams` constructor, once the System and Guest
     // Profiles can be created with the experiment activated.
-    bool activate_system_experiment = std::get<0>(GetParam());
-    bool activate_guest_experiment = std::get<1>(GetParam());
+    bool activate_system_experiment = GetParam();
     std::vector<base::test::FeatureRef> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
     activate_system_experiment
         ? enabled_features.push_back(kSystemProfileSelectionDefaultNone)
         : disabled_features.push_back(kSystemProfileSelectionDefaultNone);
-    activate_guest_experiment
-        ? enabled_features.push_back(kGuestProfileSelectionDefaultNone)
-        : disabled_features.push_back(kGuestProfileSelectionDefaultNone);
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
@@ -102,10 +98,6 @@ class ProfileKeyedServiceFactoryUnittest
 
   bool IsSystemExperimentActive() const {
     return base::FeatureList::IsEnabled(kSystemProfileSelectionDefaultNone);
-  }
-
-  bool IsGuestExperimentActive() const {
-    return base::FeatureList::IsEnabled(kGuestProfileSelectionDefaultNone);
   }
 
   TestingProfile* regular_profile() {
@@ -147,9 +139,7 @@ TEST_P(ProfileKeyedServiceFactoryUnittest, DefaultFactoryTest) {
   TestProfileToUse(factory, regular_profile(), regular_profile());
   TestProfileToUse(factory, incognito_profile(), nullptr);
 
-  bool guest_experiment = IsGuestExperimentActive();
-  TestProfileToUse(factory, guest_profile(),
-                   guest_experiment ? nullptr : guest_profile());
+  TestProfileToUse(factory, guest_profile(), guest_profile());
   TestProfileToUse(factory, guest_profile_otr(), nullptr);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
@@ -164,10 +154,12 @@ TEST_P(ProfileKeyedServiceFactoryUnittest, DefaultFactoryTest) {
 class PredefinedProfileSelectionsFactoryTest
     : public ProfileKeyedServiceFactoryTest {
  public:
-  PredefinedProfileSelectionsFactoryTest()
+  // Simulates the normal default value for Guest Profile. Guest Profile will
+  // then follow the behavior of the Regular Profile.
+  explicit PredefinedProfileSelectionsFactoryTest(bool force_guest = true)
       : ProfileKeyedServiceFactoryTest(
             "PredefinedProfileSelectionsFactoryTest",
-            ProfileSelections::BuildRedirectedInIncognito()) {}
+            ProfileSelections::BuildRedirectedInIncognito(force_guest)) {}
 };
 
 TEST_P(ProfileKeyedServiceFactoryUnittest,
@@ -176,11 +168,26 @@ TEST_P(ProfileKeyedServiceFactoryUnittest,
   TestProfileToUse(factory, regular_profile(), regular_profile());
   TestProfileToUse(factory, incognito_profile(), regular_profile());
 
-  bool guest_experiment = IsGuestExperimentActive();
-  TestProfileToUse(factory, guest_profile(),
-                   guest_experiment ? nullptr : guest_profile());
-  TestProfileToUse(factory, guest_profile_otr(),
-                   guest_experiment ? nullptr : guest_profile());
+  TestProfileToUse(factory, guest_profile(), guest_profile());
+  TestProfileToUse(factory, guest_profile_otr(), guest_profile());
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
+  bool system_experiment = IsSystemExperimentActive();
+  TestProfileToUse(factory, system_profile(),
+                   system_experiment ? nullptr : system_profile());
+  TestProfileToUse(factory, system_profile_otr(),
+                   system_experiment ? nullptr : system_profile());
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
+}
+
+TEST_P(ProfileKeyedServiceFactoryUnittest,
+       PredefinedProfileSelectionsFactoryTest_WithForceGuestFalse) {
+  PredefinedProfileSelectionsFactoryTest factory(/*force_guest=*/false);
+  TestProfileToUse(factory, regular_profile(), regular_profile());
+  TestProfileToUse(factory, incognito_profile(), regular_profile());
+
+  TestProfileToUse(factory, guest_profile(), nullptr);
+  TestProfileToUse(factory, guest_profile_otr(), nullptr);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
   bool system_experiment = IsSystemExperimentActive();
@@ -235,9 +242,7 @@ TEST_P(ProfileKeyedServiceFactoryUnittest, DefaultRefcountedFactoryTest) {
   TestProfileToUse(factory, regular_profile(), regular_profile());
   TestProfileToUse(factory, incognito_profile(), nullptr);
 
-  bool guest_experiment = IsGuestExperimentActive();
-  TestProfileToUse(factory, guest_profile(),
-                   guest_experiment ? nullptr : guest_profile());
+  TestProfileToUse(factory, guest_profile(), guest_profile());
   TestProfileToUse(factory, guest_profile_otr(), nullptr);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
@@ -264,11 +269,8 @@ TEST_P(ProfileKeyedServiceFactoryUnittest,
   TestProfileToUse(factory, regular_profile(), regular_profile());
   TestProfileToUse(factory, incognito_profile(), incognito_profile());
 
-  bool guest_experiment = IsGuestExperimentActive();
-  TestProfileToUse(factory, guest_profile(),
-                   guest_experiment ? nullptr : guest_profile());
-  TestProfileToUse(factory, guest_profile_otr(),
-                   guest_experiment ? nullptr : guest_profile_otr());
+  TestProfileToUse(factory, guest_profile(), guest_profile());
+  TestProfileToUse(factory, guest_profile_otr(), guest_profile_otr());
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
   bool system_experiment = IsSystemExperimentActive();
@@ -281,5 +283,4 @@ TEST_P(ProfileKeyedServiceFactoryUnittest,
 
 INSTANTIATE_TEST_SUITE_P(ExperimentalProfileKeyedServiceFactory,
                          ProfileKeyedServiceFactoryUnittest,
-                         ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool()));
+                         ::testing::Bool());

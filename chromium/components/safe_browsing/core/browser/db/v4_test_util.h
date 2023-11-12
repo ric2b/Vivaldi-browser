@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/safe_browsing/core/browser/db/v4_database.h"
 #include "components/safe_browsing/core/browser/db/v4_get_hash_protocol_manager.h"
 
@@ -33,15 +34,15 @@ class TestV4Store : public V4Store {
 
   bool HasValidData() override;
 
-  void MarkPrefixAsBad(HashPrefix prefix);
+  void MarkPrefixAsBad(HashPrefixStr prefix);
 
   // |prefixes| does not need to be sorted.
-  void SetPrefixes(std::vector<HashPrefix> prefixes, PrefixSize size);
+  void SetPrefixes(std::vector<HashPrefixStr> prefixes, PrefixSize size);
 
  private:
   // Holds mock prefixes from calls to MarkPrefixAsBad / SetPrefixes. Stored as
   // a vector for simplicity.
-  std::map<PrefixSize, std::vector<HashPrefix>> mock_prefixes_;
+  std::map<PrefixSize, std::vector<HashPrefixStr>> mock_prefixes_;
 };
 
 class TestV4StoreFactory : public V4StoreFactory {
@@ -59,7 +60,7 @@ class TestV4Database : public V4Database {
   TestV4Database(const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
                  std::unique_ptr<StoreMap> store_map);
 
-  void MarkPrefixAsBad(ListIdentifier list_id, HashPrefix prefix);
+  void MarkPrefixAsBad(ListIdentifier list_id, HashPrefixStr prefix);
 
   // V4Database implementation
   int64_t GetStoreSizeInBytes(const ListIdentifier& store) const override;
@@ -74,7 +75,7 @@ class TestV4DatabaseFactory : public V4DatabaseFactory {
       const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
       std::unique_ptr<StoreMap> store_map) override;
 
-  void MarkPrefixAsBad(ListIdentifier list_id, HashPrefix prefix);
+  void MarkPrefixAsBad(ListIdentifier list_id, HashPrefixStr prefix);
 
  private:
   // Owned by V4LocalDatabaseManager. The following usage is expected: each
@@ -111,6 +112,40 @@ class TestV4GetHashProtocolManagerFactory
   // Owned by the SafeBrowsingService.
   raw_ptr<TestV4GetHashProtocolManager, DanglingUntriaged> pm_ = nullptr;
 };
+
+struct TestV4HashResponseInfo {
+  explicit TestV4HashResponseInfo(FullHashStr full_hash,
+                                  ListIdentifier list_id);
+  TestV4HashResponseInfo(const TestV4HashResponseInfo& other);
+  TestV4HashResponseInfo& operator=(const TestV4HashResponseInfo& other) =
+      default;
+  ~TestV4HashResponseInfo();
+
+  struct KeyValue {
+   public:
+    explicit KeyValue(const std::string key, const std::string value);
+    KeyValue(const KeyValue& other);
+    KeyValue& operator=(const KeyValue& other) = default;
+    ~KeyValue();
+
+    std::string key;
+    std::string value;
+
+   private:
+    KeyValue();
+  };
+
+  FullHashStr full_hash;
+  ListIdentifier list_id;
+  std::vector<KeyValue> key_values;
+
+ private:
+  TestV4HashResponseInfo();
+};
+// Converts the |response_infos| into a serialized version of a
+// |FindFullHashesResponse|. It also adds values for the cache durations.
+std::string GetV4HashResponse(
+    std::vector<TestV4HashResponseInfo> response_infos);
 
 // Returns FullHashInfo object for the basic host+path pattern for a given URL
 // after canonicalization.

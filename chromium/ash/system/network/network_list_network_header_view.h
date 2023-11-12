@@ -7,9 +7,9 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/network/network_list_header_view.h"
-#include "ash/system/network/network_row_title_view.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/memory/weak_ptr.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/view.h"
 
@@ -31,7 +31,9 @@ class ASH_EXPORT NetworkListNetworkHeaderView : public NetworkListHeaderView {
     virtual void OnWifiToggleClicked(bool new_state) = 0;
   };
 
-  NetworkListNetworkHeaderView(Delegate* delegate, int label_id);
+  NetworkListNetworkHeaderView(Delegate* delegate,
+                               int label_id,
+                               const gfx::VectorIcon& vector_icon);
   NetworkListNetworkHeaderView(const NetworkListNetworkHeaderView&) = delete;
   NetworkListNetworkHeaderView& operator=(const NetworkListNetworkHeaderView&) =
       delete;
@@ -44,7 +46,7 @@ class ASH_EXPORT NetworkListNetworkHeaderView : public NetworkListHeaderView {
  protected:
   virtual void AddExtraButtons();
 
-  // Called when |toggle_| is clicked and toggled. Subclasses should override to
+  // Called when `toggle_` is clicked and toggled. Subclasses should override to
   // enabled/disable their respective technology.
   virtual void OnToggleToggled(bool is_on);
 
@@ -64,7 +66,11 @@ class ASH_EXPORT NetworkListNetworkHeaderView : public NetworkListHeaderView {
 
   void ToggleButtonPressed();
 
+  // NetworkListHeaderView:
+  void UpdateToggleState(bool has_new_state) override;
+
   TrayNetworkStateModel* model_;
+  int const enabled_label_id_;
 
   // ToggleButton to toggle section on or off.
   views::ToggleButton* toggle_ = nullptr;

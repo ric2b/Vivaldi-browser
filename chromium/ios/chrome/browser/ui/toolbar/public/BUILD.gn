@@ -14,7 +14,6 @@ source_set("public") {
   ]
   deps = [
     "//base",
-    "//ios/chrome/browser/ui/activity_services/requirements",
     "//ios/chrome/browser/ui/bubble",
     "//ios/chrome/browser/ui/fullscreen:ui",
     "//ios/chrome/browser/ui/ntp",

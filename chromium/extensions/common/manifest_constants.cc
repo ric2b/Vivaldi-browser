@@ -274,6 +274,9 @@ const char kDeclarativeNetRequestPermissionNeeded[] =
 const char16_t kDefaultStateShouldNotBeSet[] =
     u"The default_state key cannot be set for browser_action or page_action "
     "keys.";
+const char kExecutionWorldRestrictedToMV3[] =
+    "The 'world' property is restricted to extensions with 'manifest_version' "
+    "set to 3 or higher.";
 const char kExpectString[] = "Expect string value.";
 const char kFileNotFound[] = "File not found: *.";
 const char kHasDifferentialFingerprint[] =
@@ -371,7 +374,7 @@ const char16_t kInvalidFileFiltersList[] = u"Invalid value for 'file_filters'.";
 const char kInvalidFileFilterValue[] =
     "Invalid value for 'file_filters[*]'.";
 const char16_t kInvalidFileHandlers[] = u"Invalid value for 'file_handlers'.";
-const char kInvalidFileHandlersMV3[] =
+const char kInvalidWebFileHandlers[] =
     "Invalid value for 'file_handlers[*]'. *";
 const char16_t kInvalidFileHandlersTooManyTypesAndExtensions[] =
     u"Too many MIME and extension file_handlers have been declared.";

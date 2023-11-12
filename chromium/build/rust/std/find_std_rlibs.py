@@ -35,11 +35,11 @@ def main():
                       required=True)
   parser.add_argument("--stdlibs",
                       help="Expected list of standard library libraries")
-  parser.add_argument("--skip-stdlibs",
-                      help="Standard library files to skip",
-                      default="")
-  parser.add_argument("--expected-rustc-version",
-                      help="The string we expect to be reported by 'rustc -V'")
+  parser.add_argument("--extra-libs",
+                      help="List of extra non-libstd sysroot libraries")
+  parser.add_argument("--rustc-revision",
+                      help="Not used, just passed from GN to add a dependency"
+                      " on the rustc version.")
   args = parser.parse_args()
 
   # Expected rlibs by concise name (the crate name, plus a disambiguating suffix
@@ -57,21 +57,13 @@ def main():
   else:
     rlibs_expected = None
 
-  rlibs_to_skip = set(args.skip_stdlibs.split(','))
-
-  # First, ask rustc to confirm it's the version expected.
-  rustc = os.path.join(args.rust_bin_dir, "rustc")
-  if args.expected_rustc_version:
-    proc = subprocess.run([rustc, "-V"], capture_output=True, text=True)
-    proc.check_returncode()
-    rustc_version = proc.stdout.rstrip()
-    if rustc_version != args.expected_rustc_version:
-      raise Exception("gn arguments state that the rustc_version is %s "
-                      "but it was actually %s. Please adjust your "
-                      "gn arguments to match." %
-                      (args.expected_rustc_version, rustc_version))
+  extra_libs = set()
+  if args.extra_libs:
+    for lib in args.extra_libs.split(','):
+      extra_libs.add(lib)
 
   # Ask rustc where to find the stdlib for this target.
+  rustc = os.path.join(args.rust_bin_dir, "rustc")
   rustc_args = [rustc, "--print", "target-libdir"]
   if args.target:
     rustc_args.extend(["--target", args.target])
@@ -89,6 +81,15 @@ def main():
     # will run this script again and we'll copy them all afresh.
     depfile.write(
         "%s:" % (os.path.join(args.output, "lib%s.rlib" % args.depfile_target)))
+
+    def copy_file(infile, outfile):
+      depfile.write(f" {infile}")
+      if (not os.path.exists(outfile)
+          or os.stat(infile).st_mtime != os.stat(outfile).st_mtime):
+        if os.path.exists(outfile):
+          st = os.stat(outfile)
+          os.chmod(outfile, st.st_mode | stat.S_IWUSR)
+        shutil.copy(infile, outfile)
 
     # Each rlib is named "lib<crate_name>-<metadata>.rlib". The metadata
     # disambiguates multiple crates of the same name. We want to throw away the
@@ -116,8 +117,6 @@ def main():
       # that, and it would prevent us having the predictable filenames
       # which we need for statically computable gn dependency rules.
       (crate_name, metadata) = RLIB_NAME_REGEX.match(f).group(1, 2)
-      if crate_name in rlibs_to_skip:
-        continue
 
       # Use the number of times we've seen this name to disambiguate the output
       # filenames. Since we sort the input filenames including the metadata,
@@ -141,13 +140,12 @@ def main():
 
       infile = os.path.join(rustlib_dir, f)
       outfile = os.path.join(args.output, output_filename)
-      depfile.write(" %s" % infile)
-      if (not os.path.exists(outfile)
-          or os.stat(infile).st_mtime != os.stat(outfile).st_mtime):
-        if os.path.exists(outfile):
-          st = os.stat(outfile)
-          os.chmod(outfile, st.st_mode | stat.S_IWUSR)
-        shutil.copy(infile, outfile)
+      copy_file(infile, outfile)
+
+    for f in extra_libs:
+      infile = os.path.join(rustlib_dir, f)
+      outfile = os.path.join(args.output, f)
+      copy_file(infile, outfile)
 
     depfile.write("\n")
     if rlibs_expected:

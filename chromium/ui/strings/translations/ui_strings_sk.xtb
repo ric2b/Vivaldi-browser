@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 mesiac}few{# mesiace}many{# mesiaca}other{# mesiacov}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{Pred 1 hodinou a }few{Pred # hodinami a }many{Pred # hodinou a }other{Pred # hodinami a }}</translation>
+<translation id="185013357618350178">&amp;Vybrať</translation>
 <translation id="1859234291848436338">Smer písania</translation>
 <translation id="1860796786778352021">Zavrieť upozornenie</translation>
 <translation id="186476001994626254">Obsah pridaný inteligentným prilepením z webov</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{o 1 h}few{o # h}many{o # h}other{o # h}}</translation>
 <translation id="2583543531130364912">Skalibrujte dotykovú obrazovku</translation>
 <translation id="2586657967955657006">Schránka</translation>
+<translation id="2653844658857826081">NOVINKA</translation>
 <translation id="2666092431469916601">Vrch</translation>
 <translation id="2701330563083355633">Zdieľané zo zariadenia <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Nové</translation>

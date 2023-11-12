@@ -14,7 +14,6 @@
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_layout_preview_view.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_layout_style.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -89,14 +88,16 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
   [self reloadModel];
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if ((self.traitCollection.verticalSizeClass !=
-       previousTraitCollection.verticalSizeClass) ||
-      (self.traitCollection.horizontalSizeClass !=
-       previousTraitCollection.horizontalSizeClass)) {
-    [self handleDeviceOrientationChange];
-  }
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
+  [self handleDeviceOrientationChange];
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+  (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  [self handleDeviceOrientationChange];
 }
 
 #pragma mark - PRIVATE
@@ -211,15 +212,7 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
 }
 
 - (void)updateUI {
-  BOOL isLandscape;
-  if (self.hasValidOrientation) {
-    isLandscape = !self.isDevicePortrait;
-  } else {
-    [self.view layoutIfNeeded];
-    isLandscape = self.view.bounds.size.width > self.view.bounds.size.height;
-  }
-  [_previewView reloadLayoutWithStyle:[self currentLayoutStyle]
-                          isLandscape:isLandscape];
+  [_previewView reloadLayoutWithStyle:[self currentLayoutStyle]];
 }
 
 /// Returns current layout style
@@ -240,8 +233,6 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
 
 /// Device orientation change handler
 - (void)handleDeviceOrientationChange {
-  if (!self.hasValidOrientation)
-    return;
   [self updateUI];
 }
 
@@ -312,8 +303,7 @@ const UIEdgeInsets previewViewPadding = UIEdgeInsetsMake(12, 0, 0, 0);
       break;
   }
 
-  [_previewView reloadLayoutWithStyle:selectedLayout
-                         isLandscape:!self.isDevicePortrait];
+  [_previewView reloadLayoutWithStyle:selectedLayout];
   [self setCurrentLayoutStyle:selectedLayout];
 
   [[NSNotificationCenter defaultCenter]

@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/strings/escape.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/file_system/browser_file_system_helper.h"
@@ -139,7 +139,8 @@ storage::FileSystemURL PepperInternalFileRefBackend::GetFileSystemURL() const {
         GetFileSystemContext();
     if (fs_context.get())
       fs_url_ = fs_context->CrackURL(
-          fs_path, blink::StorageKey(url::Origin::Create(fs_path)));
+          fs_path,
+          blink::StorageKey::CreateFirstParty(url::Origin::Create(fs_path)));
   }
   return fs_url_;
 }

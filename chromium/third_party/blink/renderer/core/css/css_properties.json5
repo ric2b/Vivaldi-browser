@@ -71,16 +71,6 @@
       ],
     },
 
-    // Properties which are writable have setters on ComputedStyle.
-    // All other properties must use the ComputedStyleBuilder for setting
-    // the values of properties.
-    //
-    // TODO(crbug.com/1377295): Eventually nothing should be writable.
-    writable: {
-      default: false,
-      valid_type: "bool",
-    },
-
     // Affects how the style building functions are generated.
     //
     // Several property groups (e.g. color properties) deviate from the default
@@ -262,6 +252,15 @@
         // Field is stored as a bool, whose default value is false
         // and can only be set to true. Has a initial/getter/setter.
         "monotonic_flag",
+        // A derived flag is derived from other information on ComputedStyle.
+        // It has no setters, and is instead calculated on first access by
+        // the function specified by 'derived_from'.
+        //
+        // Derived flags must be marked as 'mutable', and can not have a
+        // 'field_group' (i.e. must exist on the top level of ComputedStyle).
+        //
+        // See computed_style_extra_fields.json5 for examples of derived flags.
+        "derived_flag",
         // Field has type specified at type_name and has a getter/setter.
         // Also has a setter taking an rvalue reference. Cannot be packed.
         "external",
@@ -272,6 +271,12 @@
         // entries in CSSFieldAlias.json5.
         "<[a-z]+>"
       ],
+    },
+
+    // Valid for field_template:derived_flag only. This specifies the function
+    // on ComputedStyle used to calculate the flag.
+    derived_from: {
+      valid_type: "str",
     },
 
     // - include_paths: ["path/to/file1.h", "path/to/file2.h"]
@@ -616,14 +621,6 @@
       valid_type: "bool",
     },
 
-    // - tree_scoped_value: true
-    // Whether the property takes a tree-scoped reference as its value.
-    // https://drafts.csswg.org/css-scoping/#css-tree-scoped-reference
-    tree_scoped_value: {
-      default: false,
-      valid_type: "bool",
-    },
-
     // Whether changing this property is so independent that we can apply
     // a change to them incrementally on top of the old style. This happens
     // only when inline style is changed. Conceptually, this could be a blocklist,
@@ -658,6 +655,17 @@
     // we should fix all of these and remove the flag.
     idempotent: {
       default: true,
+      valid_type: "bool",
+    },
+
+    // If true, this property will accept a CSSNumericLiteralValue
+    // (created by a fast-path parser), with no restrictions on range.
+    // (NaN and infinities will be sent through the normal ParseSingleValue
+    // path.) A typical case is the properties that can accept an alpha value;
+    // percent values will take the slow paths, but simple numbers will be sent
+    // directly through.
+    accepts_numeric_literal: {
+      default: false,
       valid_type: "bool",
     },
 
@@ -726,6 +734,22 @@
     // Properties with StyleBuilder handling
 
     // Animation Priority properties
+    {
+      name: "animation-composition",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "InitialValue"],
+      keywords: ["replace", "add", "accumulate"],
+      style_builder_template: "animation",
+      style_builder_template_args: {
+        attribute: "Composition",
+      },
+      typedom_types: ["Keyword"],
+      separator: ",",
+      include_paths: ["third_party/blink/renderer/core/animation/effect_model.h"],
+      default_value: "EffectModel::kCompositeReplace",
+      type_name: "EffectModel::CompositeOperation",
+      valid_for_marker: true,
+      runtime_flag: "CSSAnimationComposition"
+    },
     {
       name: "animation-delay",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "InitialValue"],
@@ -866,6 +890,32 @@
       valid_for_keyframe: false,
     },
     {
+      name: "animation-range-start",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      style_builder_template: "animation",
+      style_builder_template_args: {
+        attribute: "RangeStart",
+      },
+      separator: ",",
+      valid_for_marker: true,
+      is_animation_property: true,
+      valid_for_keyframe: false,
+      runtime_flag: "CSSScrollTimeline",
+    },
+    {
+      name: "animation-range-end",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      style_builder_template: "animation",
+      style_builder_template_args: {
+        attribute: "RangeEnd",
+      },
+      separator: ",",
+      valid_for_marker: true,
+      is_animation_property: true,
+      valid_for_keyframe: false,
+      runtime_flag: "CSSScrollTimeline",
+    },
+    {
       name: "animation-timeline",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "InitialValue"],
       style_builder_template: "animation",
@@ -874,7 +924,6 @@
       },
       keywords: ["none", "auto"],
       typedom_types: ["Keyword"],
-      tree_scoped_value: true,
       separator: ",",
       valid_for_marker: true,
       runtime_flag: "CSSScrollTimeline",
@@ -1035,7 +1084,6 @@
       valid_for_first_line: true,
       valid_for_cue: true,
       valid_for_marker: true,
-      tree_scoped_value: true,
       valid_for_formatted_text: true,
       valid_for_formatted_text_run: true,
     },
@@ -1045,6 +1093,7 @@
       inherited: true,
       font: true,
       name_for_methods: "Kerning",
+      converter: "ConvertFontKerning",
       type_name: "FontDescription::Kerning",
       priority: "High",
       keywords: ["auto", "normal", "none"],
@@ -1061,6 +1110,7 @@
       inherited: true,
       font: true,
       name_for_methods: "FontOpticalSizing",
+      converter: "ConvertFontOpticalSizing",
       type_name: "OpticalSizing",
       priority: "High",
       keywords: ["auto", "none"],
@@ -1144,6 +1194,7 @@
       name: "font-style",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
+      interpolable: true,
       inherited: true,
       font: true,
       name_for_methods: "Style",
@@ -1545,6 +1596,20 @@
       valid_for_position_fallback: true,
     },
     {
+      name: "anchor-default",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal" ],
+      include_paths: ["third_party/blink/renderer/core/style/scoped_css_name.h"],
+      type_name: "ScopedCSSName",
+      wrapper_pointer_name: "Persistent",
+      default_value: "nullptr",
+      field_group: "*",
+      field_template: "external",
+      converter: "ConvertAnchorDefault",
+      keywords: ["none"],
+      typedom_types: ["Keyword"],
+      runtime_flag: "CSSAnchorPositioning",
+    },
+    {
       name: "anchor-name",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal" ],
       include_paths: ["third_party/blink/renderer/core/style/scoped_css_name.h"],
@@ -1557,13 +1622,12 @@
       keywords: ["none"],
       typedom_types: ["Keyword"],
       runtime_flag: "CSSAnchorPositioning",
-      tree_scoped_value: true,
     },
     {
       name: "anchor-scroll",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal" ],
-      include_paths: ["third_party/blink/renderer/core/style/anchor_scroll_value.h"],
-      type_name: "AnchorScrollValue",
+      include_paths: ["third_party/blink/renderer/core/style/anchor_specifier_value.h"],
+      type_name: "AnchorSpecifierValue",
       wrapper_pointer_name: "Persistent",
       default_value: "nullptr",
       field_group: "*",
@@ -1572,7 +1636,6 @@
       keywords: ["none"],
       typedom_types: ["Keyword"],
       runtime_flag: "CSSAnchorPositioning",
-      tree_scoped_value: true,
     },
     {
       name: "aspect-ratio",
@@ -1657,6 +1720,7 @@
       style_builder_template_args: {
         fill_type: "Clip",
       },
+      style_builder_custom_functions: ["value"],
       valid_for_first_letter: true,
       valid_for_first_line: true,
       valid_for_cue: true,
@@ -2242,7 +2306,6 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "box-shadow",
@@ -2494,7 +2557,6 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       type_name: "ScopedCSSNameList",
       wrapper_pointer_name: "Persistent",
-      tree_scoped_value: true,
       default_value: "nullptr",
       field_group: "*",
       field_template: "external",
@@ -2527,7 +2589,6 @@
       computed_style_custom_functions: ["getter"],
       style_builder_custom_functions: ["initial", "inherit", "value"],
       valid_for_marker: true,
-      tree_scoped_value: true,
       supports_incremental_style: true,
     },
     {
@@ -2687,6 +2748,7 @@
       default_value: "1",
       converter: "ConvertAlpha",
       typedom_types: ["Number"],
+      accepts_numeric_literal: true,
     },
     {
       name: "fill-rule",
@@ -2810,6 +2872,7 @@
       converter: "ConvertAlpha",
       typedom_types: ["Number"],
       supports_incremental_style: true,
+      accepts_numeric_literal: true,
     },
     {
       name: "grid-auto-columns",
@@ -2957,7 +3020,6 @@
       supports_incremental_style: true,
       valid_for_formatted_text: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "hyphenate-limit-chars",
@@ -3081,7 +3143,6 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "letter-spacing",
@@ -3170,7 +3231,6 @@
         "decimal", "none"
       ],
       style_builder_custom_functions: ["value"],
-      tree_scoped_value: true,
     },
     {
       name: "margin-bottom",
@@ -3255,6 +3315,7 @@
       field_group: "svg->inherited_resources",
       field_template: "pointer",
       type_name: "StyleSVGResource",
+      include_paths: ["third_party/blink/renderer/core/style/style_svg_resource.h"],
       wrapper_pointer_name: "scoped_refptr",
       default_value: "nullptr",
       name_for_methods: "MarkerEndResource",
@@ -3269,6 +3330,7 @@
       field_group: "svg->inherited_resources",
       field_template: "pointer",
       type_name: "StyleSVGResource",
+      include_paths: ["third_party/blink/renderer/core/style/style_svg_resource.h"],
       wrapper_pointer_name: "scoped_refptr",
       default_value: "nullptr",
       name_for_methods: "MarkerMidResource",
@@ -3283,6 +3345,7 @@
       field_group: "svg->inherited_resources",
       field_template: "pointer",
       type_name: "StyleSVGResource",
+      include_paths: ["third_party/blink/renderer/core/style/style_svg_resource.h"],
       wrapper_pointer_name: "scoped_refptr",
       default_value: "nullptr",
       name_for_methods: "MarkerStartResource",
@@ -3350,7 +3413,6 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "max-width",
@@ -3368,7 +3430,6 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "min-height",
@@ -3385,7 +3446,6 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "min-width",
@@ -3402,7 +3462,6 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "mix-blend-mode",
@@ -3537,6 +3596,7 @@
       valid_for_first_line: true,
       valid_for_cue: true,
       supports_incremental_style: true,
+      accepts_numeric_literal: true,
     },
     {
       name: "order",
@@ -3744,6 +3804,7 @@
       name: "overscroll-behavior-x",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
+      field_group: "*",
       keywords: ["auto", "contain", "none"],
       default_value: "auto",
       type_name: "EOverscrollBehavior",
@@ -3758,6 +3819,7 @@
       name: "overscroll-behavior-y",
       property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
+      field_group: "*",
       keywords: ["auto", "contain", "none"],
       default_value: "auto",
       type_name: "EOverscrollBehavior",
@@ -3945,7 +4007,6 @@
       keywords: ["none"],
       typedom_types: ["Keyword"],
       runtime_flag: "CSSAnchorPositioning",
-      tree_scoped_value: true,
     },
     {
       name: "quotes",
@@ -4003,7 +4064,6 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "r",
@@ -4339,12 +4399,11 @@
       name: "scroll-timeline-axis",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "InitialValue"],
       field_group: "*->timeline",
-      field_template: "primitive",
-      field_size: 2,
-      type_name: "TimelineAxis",
-      default_value: "TimelineAxis::kBlock",
-      keywords: ["block", "inline", "vertical", "horizontal"],
-      typedom_types: ["Keyword"],
+      field_template: "external",
+      default_value: "Vector<TimelineAxis>()",
+      type_name: "Vector<TimelineAxis>",
+      converter: "ConvertViewTimelineAxis",
+      separator: ",",
       runtime_flag: "CSSScrollTimeline",
     },
     {
@@ -4352,11 +4411,11 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "InitialValue"],
       field_group: "*->timeline",
       field_template: "external",
-      type_name: "ScopedCSSName",
-      wrapper_pointer_name: "Persistent",
       default_value: "nullptr",
-      tree_scoped_value: true,
-      converter: "ConvertNoneOrCustomIdent",
+      type_name: "ScopedCSSNameList",
+      wrapper_pointer_name: "Persistent",
+      converter: "ConvertViewTimelineName",
+      separator: ",",
       runtime_flag: "CSSScrollTimeline",
     },
     {
@@ -4369,6 +4428,7 @@
       type_name: "float",
       computed_style_custom_functions: ["setter"],
       typedom_types: ["Number"],
+      accepts_numeric_literal: true,
     },
     {
       name: "shape-margin",
@@ -4452,6 +4512,7 @@
       default_value: "1",
       converter: "ConvertAlpha",
       typedom_types: ["Number"],
+      accepts_numeric_literal: true,
     },
     {
       name: "stroke",
@@ -4550,6 +4611,7 @@
       default_value: "1",
       converter: "ConvertAlpha",
       typedom_types: ["Number"],
+      accepts_numeric_literal: true,
     },
     {
       name: "stroke-width",
@@ -4836,9 +4898,9 @@
       field_group: "*",
       field_size: 4,
       field_template: "primitive",
-      default_value: "kTextUnderlinePositionAuto",
-      name_for_methods: "TextUnderlinePosition",
-      type_name: "unsigned",
+      default_value: "TextUnderlinePosition::kAuto",
+      getter: "GetTextUnderlinePosition",
+      type_name: "TextUnderlinePosition",
       converter: "ConvertTextUnderlinePosition",
       keywords: ["auto", "from-font", "under", "left", "right"],
       typedom_types: ["Keyword"],
@@ -4925,7 +4987,16 @@
       },
       supports_incremental_style: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
+    },
+    {
+      name: "top-layer",
+      runtime_flag: "CSSTopLayerForTransitions",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      field_group: "*",
+      field_template: "keyword",
+      keywords: ["none", "browser"],
+      default_value: "none",
+      typedom_types: ["Keyword"],
     },
     {
       name: "touch-action",
@@ -5104,7 +5175,6 @@
       default_value: "nullptr",
       type_name: "ScopedCSSNameList",
       wrapper_pointer_name: "Persistent",
-      tree_scoped_value: true,
       converter: "ConvertViewTimelineName",
       separator: ",",
       runtime_flag: "CSSViewTimeline",
@@ -5256,6 +5326,7 @@
       field_template: "primitive",
       default_value: "0.0f",
       type_name: "float",
+      accepts_numeric_literal: true,
     },
     {
       name: "-webkit-box-ordinal-group",
@@ -5801,7 +5872,7 @@
       inherited: true,
       field_group: "*",
       field_template: "keyword",
-      keywords: ["auto", "none", "text", "all"],
+      keywords: ["auto", "none", "text", "all", "contain"],
       typedom_types: ["Keyword"],
       default_value: "auto",
     },
@@ -5810,14 +5881,29 @@
       property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: false,  // Actually true, but setting it to false saves a precious bit in ComputedStyleBase.
       inherited: true,
-      field_template: "bitset_keyword",
+      // This property is "keyword" but use "primitive" to use `EWhiteSpace` defined manually.
+      field_template: "primitive",
+      field_size: 4,  // Ensure this is in sync with `kEWhiteSpaceBits`.
+      include_paths: ["third_party/blink/renderer/core/css/white_space.h"],
       keywords: [
-        "normal", "pre", "pre-wrap", "pre-line", "nowrap", "-webkit-nowrap", "break-spaces"
+        "normal", "pre", "pre-wrap", "pre-line", "nowrap", "break-spaces"
       ],
       typedom_types: ["Keyword"],
-      default_value: "normal",
+      default_value: "EWhiteSpace::kNormal",
       valid_for_cue: true,
       valid_for_marker: true,
+    },
+    {
+      name: "text-wrap",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      inherited: true,
+      field_template: "keyword",
+      keywords: ["wrap", "balance"],
+      default_value: "wrap",
+      typedom_types: ["Keyword"],
+      valid_for_cue: true,
+      valid_for_marker: true,
+      runtime_flag: "CSSTextWrap",
     },
     {
       name: "widows",
@@ -5849,7 +5935,6 @@
       supports_incremental_style: true,
       valid_for_formatted_text: true,
       valid_for_position_fallback: true,
-      tree_scoped_value: true,
     },
     {
       name: "will-change",
@@ -6526,6 +6611,15 @@
       runtime_flag: 'CSSScrollTimeline',
     },
     {
+      name: "animation-range",
+      longhands: [
+        "animation-range-start", "animation-range-end",
+      ],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      valid_for_keyframe: false,
+      runtime_flag: 'CSSScrollTimeline',
+    },
+    {
       name: "background",
       longhands: [
         "background-image", "background-position-x", "background-position-y",
@@ -6795,16 +6889,16 @@
         "font-style", "font-variant-ligatures", "font-variant-caps",
         "font-variant-numeric", "font-variant-east-asian", "font-variant-alternates",
         "font-variant-position", "font-weight", "font-stretch", "font-size",
-        "line-height", "font-family"
+        "line-height", "font-family", "font-optical-sizing", "font-size-adjust",
+        "font-kerning", "font-feature-settings", "font-variation-settings"
       ],
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "font-variant",
       longhands: [
-        "font-variant-ligatures", "font-variant-caps",
-        "font-variant-alternates", "font-variant-numeric",
-        "font-variant-east-asian", "font-variant-position"
+        "font-variant-ligatures", "font-variant-caps", "font-variant-alternates",
+        "font-variant-numeric", "font-variant-east-asian", "font-variant-position"
       ],
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
@@ -7021,7 +7115,7 @@
     },
     {
       name: "scroll-timeline",
-      longhands: ["scroll-timeline-axis", "scroll-timeline-name"],
+      longhands: ["scroll-timeline-name", "scroll-timeline-axis"],
       property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollTimeline",
     },

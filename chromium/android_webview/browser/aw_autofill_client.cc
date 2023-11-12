@@ -16,6 +16,8 @@
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/notreached.h"
+#include "components/android_autofill/browser/autofill_provider_android.h"
+#include "components/autofill/core/browser/autofill_download_manager.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/ui/autofill_popup_delegate.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
@@ -26,6 +28,7 @@
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/ssl_status.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -48,6 +51,30 @@ void AwAutofillClient::SetSaveFormData(bool enabled) {
 
 bool AwAutofillClient::GetSaveFormData() const {
   return save_form_data_;
+}
+
+bool AwAutofillClient::IsOffTheRecord() {
+  return GetWebContents().GetBrowserContext()->IsOffTheRecord();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+AwAutofillClient::GetURLLoaderFactory() {
+  return GetWebContents()
+      .GetBrowserContext()
+      ->GetDefaultStoragePartition()
+      ->GetURLLoaderFactoryForBrowserProcess();
+}
+
+autofill::AutofillDownloadManager* AwAutofillClient::GetDownloadManager() {
+  if (autofill::AutofillProvider::is_download_manager_disabled_for_testing()) {
+    return nullptr;
+  }
+  if (!download_manager_) {
+    // Lazy initialization to avoid virtual function calls in the constructor.
+    download_manager_ = std::make_unique<autofill::AutofillDownloadManager>(
+        this, GetChannel(), GetLogManager());
+  }
+  return download_manager_.get();
 }
 
 autofill::PersonalDataManager* AwAutofillClient::GetPersonalDataManager() {
@@ -125,7 +152,7 @@ translate::TranslateDriver* AwAutofillClient::GetTranslateDriver() {
   return nullptr;
 }
 
-void AwAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {
+void AwAutofillClient::ShowAutofillSettings(autofill::PopupType popup_type) {
   NOTIMPLEMENTED();
 }
 
@@ -197,20 +224,17 @@ bool AwAutofillClient::IsFastCheckoutSupported() {
   return false;
 }
 
-bool AwAutofillClient::IsFastCheckoutTriggerForm(
+bool AwAutofillClient::TryToShowFastCheckout(
     const autofill::FormData& form,
-    const autofill::FormFieldData& field) {
+    const autofill::FormFieldData& field,
+    base::WeakPtr<autofill::AutofillManager> autofill_manager) {
   return false;
 }
 
-bool AwAutofillClient::ShowFastCheckout(
-    base::WeakPtr<autofill::FastCheckoutDelegate> delegate) {
-  NOTREACHED();
-  return false;
-}
+void AwAutofillClient::HideFastCheckout(bool allow_further_runs) {}
 
-void AwAutofillClient::HideFastCheckout() {
-  NOTREACHED();
+bool AwAutofillClient::IsShowingFastCheckoutUI() {
+  return false;
 }
 
 bool AwAutofillClient::IsTouchToFillCreditCardSupported() {
@@ -219,7 +243,7 @@ bool AwAutofillClient::IsTouchToFillCreditCardSupported() {
 
 bool AwAutofillClient::ShowTouchToFillCreditCard(
     base::WeakPtr<autofill::TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard* const> cards_to_suggest) {
+    base::span<const autofill::CreditCard> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -252,10 +276,10 @@ void AwAutofillClient::UpdateAutofillPopupDataListValues(
   // See crrev.com/18102002 if need to implement.
 }
 
-base::span<const autofill::Suggestion> AwAutofillClient::GetPopupSuggestions()
+std::vector<autofill::Suggestion> AwAutofillClient::GetPopupSuggestions()
     const {
   NOTIMPLEMENTED();
-  return base::span<const autofill::Suggestion>();
+  return {};
 }
 
 void AwAutofillClient::PinPopupView() {
@@ -326,14 +350,6 @@ bool AwAutofillClient::IsContextSecure() const {
          !net::IsCertStatusError(ssl_status.cert_status) &&
          !(ssl_status.content_status &
            content::SSLStatus::RAN_INSECURE_CONTENT);
-}
-
-bool AwAutofillClient::ShouldShowSigninPromo() {
-  return false;
-}
-
-bool AwAutofillClient::AreServerCardsSupported() const {
-  return true;
 }
 
 void AwAutofillClient::ExecuteCommand(int id) {

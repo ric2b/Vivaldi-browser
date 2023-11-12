@@ -6,14 +6,13 @@
 #include <set>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "chrome/browser/profiles/profile_manager_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 
 namespace base {
 class FilePath;
@@ -29,7 +28,7 @@ class GURL;
 class Profile;
 
 class AdverseAdFilterListService : public KeyedService,
-                                   public content::NotificationObserver {
+                                   public ProfileManagerObserver {
   friend struct base::DefaultSingletonTraits<AdverseAdFilterListService>;
 
  public:
@@ -52,10 +51,8 @@ class AdverseAdFilterListService : public KeyedService,
   void AddBlockItem(const std::string& new_site);
   void ClearSiteList();
 
-  // content::NotificationObserver override.
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  // ProfileManagerObserver
+  void OnProfileAdded(Profile* profile) override;
 
   static base::FilePath GetDefaultFilePath();
 
@@ -71,7 +68,6 @@ class AdverseAdFilterListService : public KeyedService,
   // When the file is done we will load the file contents and initialize
   // this class.
   void DownloadBlockList();
-  void OnProfileAndServicesInitialized();
   // Will download a checksum and compare this with the local file.
   void DoChecksumBeforeDownload();
   void OnSHA256SumDownloadDone(std::unique_ptr<std::string> response_body);
@@ -92,8 +88,6 @@ class AdverseAdFilterListService : public KeyedService,
   PrefChangeRegistrar pref_change_registrar_;
 
   std::string sha256_sum_;
-
-  content::NotificationRegistrar notification_registrar_;
 
   // The task runner where file I/O is done.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;

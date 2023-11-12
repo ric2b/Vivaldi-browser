@@ -1149,8 +1149,10 @@ InspectorCSSAgent::AnimationsForNode(Element* element,
     AtomicString animation_name(animation_data->NameList()[i]);
     if (animation_name == CSSAnimationData::InitialName())
       continue;
-    StyleRuleKeyframes* keyframes_rule = style_resolver.FindKeyframesRule(
-        element, animating_element, animation_name);
+    StyleRuleKeyframes* keyframes_rule =
+        style_resolver
+            .FindKeyframesRule(element, animating_element, animation_name)
+            .rule;
     if (!keyframes_rule)
       continue;
 
@@ -1283,34 +1285,17 @@ void InspectorCSSAgent::CollectPlatformFontsForLayoutObject(
     return;
 
   FontCachePurgePreventer preventer;
-  auto* layout_text = To<LayoutText>(layout_object);
-
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    if (layout_object->IsInLayoutNGInlineFormattingContext()) {
-      NGInlineCursor cursor;
-      cursor.MoveTo(*layout_object);
-      for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
-        const ShapeResultView* shape_result =
-            cursor.Current().TextShapeResult();
-        if (!shape_result)
-          continue;
-        Vector<ShapeResult::RunFontData> run_font_data_list;
-        shape_result->GetRunFontData(&run_font_data_list);
-        CollectPlatformFontsFromRunFontDataList(run_font_data_list, font_stats);
-      }
-      return;
+  DCHECK(layout_object->IsInLayoutNGInlineFormattingContext());
+  NGInlineCursor cursor;
+  cursor.MoveTo(*layout_object);
+  for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
+    const ShapeResultView* shape_result = cursor.Current().TextShapeResult();
+    if (!shape_result) {
+      continue;
     }
-    // If !IsInLayoutNGInlineFormattingContext, the LayoutText is in legacy
-    // inline formatting context. Fallback to InlineTextBox code below.
-  }
-
-  for (InlineTextBox* box : layout_text->TextBoxes()) {
-    const ComputedStyle& style = layout_text->StyleRef(box->IsFirstLineStyle());
-    const Font& font = style.GetFont();
-    TextRun run = box->ConstructTextRunForInspector(style);
-    CachingWordShaper shaper(font);
-    CollectPlatformFontsFromRunFontDataList(shaper.GetRunFontData(run),
-                                            font_stats);
+    Vector<ShapeResult::RunFontData> run_font_data_list;
+    shape_result->GetRunFontData(&run_font_data_list);
+    CollectPlatformFontsFromRunFontDataList(run_font_data_list, font_stats);
   }
 }
 
@@ -2064,7 +2049,7 @@ std::unique_ptr<protocol::CSS::CSSContainerQuery>
 InspectorCSSAgent::BuildContainerQueryObject(CSSContainerRule* rule) {
   std::unique_ptr<protocol::CSS::CSSContainerQuery> container_query_object =
       protocol::CSS::CSSContainerQuery::create()
-          .setText(rule->ConditionTextInternal())
+          .setText(rule->containerQuery())
           .build();
 
   auto it =

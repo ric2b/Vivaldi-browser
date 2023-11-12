@@ -97,6 +97,7 @@ class TabModel {
     // Opened from an app widget.
     FROM_APP_WIDGET,
     // Open from the long press context menu item 'Open in Incognito Tab'.
+    // This is deprecated; use `FROM_LONGPRESS_FOREGROUND` in new code.
     FROM_LONGPRESS_INCOGNITO,
     // Opened in background from Recent Tabs. This is a non-link launch with no
     // parent/child relationship. The tab is added to the end of the TabModel.
@@ -105,6 +106,8 @@ class TabModel {
     // Opened from a Reading list. When going "back" on Android, the Reading
     // list should be reopened.
     FROM_READING_LIST,
+    // Opened from Tab Switcher UI.
+    FROM_TAB_SWITCHER_UI,
     // Must be last.
     SIZE
   };

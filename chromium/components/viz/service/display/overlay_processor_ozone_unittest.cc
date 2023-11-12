@@ -221,12 +221,17 @@ TEST(OverlayProcessorOzoneTest, ColorSpaceMismatch) {
 
   candidates[0] = candidate;
 
-  // We do allow color space mismatches as long as the ContentColorUsage is the
-  // same as the primary plane's (and this applies to all platforms).
+  // In Chrome OS, we don't allow the promotion of the candidate if the
+  // content is HDR. On other platforms, we do allow color space mismatches as
+  // long as the ContentColorUsage is the same as the primary plane's
   primary_plane.color_space = gfx::ColorSpace::CreateHDR10();
   candidates[0].color_space = gfx::ColorSpace::CreateHLG();
   processor.CheckOverlaySupport(&primary_plane, &candidates);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  EXPECT_FALSE(candidates.at(0).overlay_handled);
+#else
   EXPECT_TRUE(candidates.at(0).overlay_handled);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   candidates[0] = candidate;
 
@@ -264,15 +269,9 @@ TEST(OverlayProcessorOzoneTest, ObserveHardwareCapabilites) {
   OverlayCandidateList candidates;
   // Enable 4 overlays
   const std::vector<base::test::FeatureRefAndParams> feature_and_params_list = {
-      {features::kEnableOverlayPrioritization, {}},
       {features::kUseMultipleOverlays, {{features::kMaxOverlaysParam, "4"}}}};
   base::test::ScopedFeatureList scoped_features;
   scoped_features.InitWithFeaturesAndParameters(feature_and_params_list, {});
-  // When overlay prioritization is explicitly disabled (Lacros) we should
-  // skip multiple overlays tests.
-  if (!features::IsOverlayPrioritizationEnabled()) {
-    GTEST_SKIP();
-  }
 
   auto fake_candidates_unique = std::make_unique<FakeOverlayCandidatesOzone>();
   auto* fake_candidates = fake_candidates_unique.get();

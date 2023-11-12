@@ -8,9 +8,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/safe_base_name.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/nearby_sharing/file_attachment.h"
@@ -90,9 +90,9 @@ class NearbyShareActionTest : public testing::Test {
     storage::ExternalMountPoints* mount_points =
         storage::ExternalMountPoints::GetSystemInstance();
     return mount_points
-        ->CreateExternalFileSystemURL(blink::StorageKey(origin),
-                                      mount_point_name,
-                                      base::FilePath(file_name))
+        ->CreateExternalFileSystemURL(
+            blink::StorageKey::CreateFirstParty(origin), mount_point_name,
+            base::FilePath(file_name))
         .ToGURL();
   }
 

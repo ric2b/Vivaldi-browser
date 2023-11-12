@@ -6,6 +6,7 @@
 
 #import "base/files/scoped_temp_dir.h"
 #import "base/ios/ios_util.h"
+#import "base/memory/scoped_refptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/time/default_clock.h"
@@ -15,6 +16,7 @@
 #import "components/bookmarks/test/bookmark_test_helpers.h"
 #import "components/feature_engagement/test/mock_tracker.h"
 #import "components/language/ios/browser/ios_language_detection_tab_helper.h"
+#import "components/language/ios/browser/language_detection_java_script_feature.h"
 #import "components/password_manager/core/browser/mock_password_store_interface.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
 #import "components/policy/core/common/mock_configuration_policy_provider.h"
@@ -55,6 +57,7 @@
 #import "ios/web/public/test/fakes/fake_web_frame.h"
 #import "ios/web/public/test/fakes/fake_web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
+#import "ios/web/public/test/js_test_util.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "ios/web/public/web_state_observer_bridge.h"
 #import "testing/gmock/include/gmock/gmock.h"
@@ -113,8 +116,12 @@ class PopupMenuMediatorTest : public PlatformTest {
     builder.AddTestingFactory(
         ReadingListModelFactory::GetInstance(),
         base::BindRepeating(&BuildReadingListModelWithFakeStorage,
-                            std::vector<ReadingListEntry>()));
+                            std::vector<scoped_refptr<ReadingListEntry>>()));
     browser_state_ = builder.Build();
+
+    web::test::OverrideJavaScriptFeatures(
+        browser_state_.get(),
+        {language::LanguageDetectionJavaScriptFeature::GetInstance()});
 
     reading_list_model_ =
         ReadingListModelFactory::GetForBrowserState(browser_state_.get());
@@ -145,10 +152,11 @@ class PopupMenuMediatorTest : public PlatformTest {
     auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
     auto main_frame = web::FakeWebFrame::CreateMainWebFrame(
         /*security_origin=*/url);
+    main_frame->set_browser_state(browser_state_.get());
     frames_manager->AddWebFrame(std::move(main_frame));
     web_state_->SetWebFramesManager(std::move(frames_manager));
     web_state_->OnWebFrameDidBecomeAvailable(
-        web_state_->GetWebFramesManager()->GetMainWebFrame());
+        web_state_->GetPageWorldWebFramesManager()->GetMainWebFrame());
 
     browser_->GetWebStateList()->InsertWebState(
         0, std::move(test_web_state), WebStateList::INSERT_FORCE_INDEX,
@@ -223,10 +231,11 @@ class PopupMenuMediatorTest : public PlatformTest {
     auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
     auto main_frame = web::FakeWebFrame::CreateMainWebFrame(
         /*security_origin=*/url);
+    main_frame->set_browser_state(browser_state_.get());
     frames_manager->AddWebFrame(std::move(main_frame));
     web_state->SetWebFramesManager(std::move(frames_manager));
     web_state->OnWebFrameDidBecomeAvailable(
-        web_state->GetWebFramesManager()->GetMainWebFrame());
+        web_state->GetPageWorldWebFramesManager()->GetMainWebFrame());
 
     browser_->GetWebStateList()->InsertWebState(
         index, std::move(web_state), WebStateList::INSERT_FORCE_INDEX,

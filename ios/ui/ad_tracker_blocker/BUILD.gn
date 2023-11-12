@@ -13,14 +13,14 @@ source_set("vivaldi_ad_tracker_blocker") {
     "vivaldi_atb_blocked_count_view.h",
     "vivaldi_atb_blocked_count_view.mm",
     "vivaldi_atb_blocked_count_view_delegate.h",
-    "vivaldi_atb_setting_options.h",
+    "vivaldi_atb_setting_type.h",
     "vivaldi_atb_item.h",
     "vivaldi_atb_item.mm",
     "vivaldi_atb_source_type.h",
     "vivaldi_atb_domain_source_mode.h",
-    "vivaldi_atb_mediator.h",
-    "vivaldi_atb_mediator.mm",
     "vivaldi_atb_consumer.h",
+    "vivaldi_atb_source_item.h",
+    "vivaldi_atb_source_item.mm",
   ]
 
   deps = [
@@ -29,11 +29,14 @@ source_set("vivaldi_ad_tracker_blocker") {
     "//base:i18n",
     "//ios/chrome/app/strings",
     "//ios/chrome/common/ui/util",
-    "//ios/public/provider/chrome/browser",
     "//vivaldi/ios/ui/ad_tracker_blocker/cells",
     "//vivaldi/ios/ui/ad_tracker_blocker/settings",
+    "//vivaldi/ios/ui/ad_tracker_blocker/manager",
     "//ios/third_party/material_components_ios",
     "resources:vivaldi_atb_shield",
+    "resources:vivaldi_atb_shield_notrack",
+    "resources:vivaldi_atb_shield_trackers",
+    "resources:vivaldi_atb_shield_trackers_and_ads",
     "resources:vivaldi_atb_settings_selection_check",
   ]
 

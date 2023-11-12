@@ -18,13 +18,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/cxx17_backports.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -45,7 +45,6 @@
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -100,6 +99,7 @@
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/content_browser_test_content_browser_client.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "content/public/test/fenced_frame_test_util.h"
@@ -119,7 +119,6 @@
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/did_commit_navigation_interceptor.h"
 #include "content/test/render_document_feature.h"
-#include "content/test/test_content_browser_client.h"
 #include "ipc/constants.mojom.h"
 #include "ipc/ipc_security_test_util.h"
 #include "media/base/media_switches.h"
@@ -353,8 +352,8 @@ bool ConvertJSONToPoint(const std::string& str, gfx::PointF* point) {
     return false;
   if (!value->is_dict())
     return false;
-  absl::optional<double> x = value->FindDoubleKey("x");
-  absl::optional<double> y = value->FindDoubleKey("y");
+  absl::optional<double> x = value->GetDict().FindDouble("x");
+  absl::optional<double> y = value->GetDict().FindDouble("y");
   if (!x.has_value())
     return false;
   if (!y.has_value())
@@ -3501,7 +3500,7 @@ class SitePerProcessFencedFrameTest : public SitePerProcessBrowserTestBase {
         document.body.appendChild(fenced_frame);
     })";
     EXPECT_TRUE(ExecJs(parent, content::JsReplace(kAddFencedFrameScript, url)));
-    navigation.WaitForNavigationFinished();
+    EXPECT_TRUE(navigation.WaitForNavigationFinished());
 
     return ChildFrameAt(parent, 0);
   }
@@ -5544,8 +5543,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url, Referrer(), absl::nullopt, ui::PAGE_TRANSITION_RELOAD,
-              false, std::string(), controller.GetBrowserContext(),
+              main_url, Referrer(), /* initiator_origin= */ absl::nullopt,
+              /* initiator_base_url= */ absl::nullopt,
+              ui::PAGE_TRANSITION_RELOAD, false, std::string(),
+              controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
   std::unique_ptr<NavigationEntryRestoreContextImpl> context =
@@ -5651,8 +5652,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url, Referrer(), absl::nullopt, ui::PAGE_TRANSITION_RELOAD,
-              false, std::string(), controller.GetBrowserContext(),
+              main_url, Referrer(), /* initiator_origin= */ absl::nullopt,
+              /* initiator_base_url= */ absl::nullopt,
+              ui::PAGE_TRANSITION_RELOAD, false, std::string(),
+              controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
   std::unique_ptr<NavigationEntryRestoreContextImpl> context =
@@ -5751,8 +5754,10 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url, Referrer(), absl::nullopt, ui::PAGE_TRANSITION_RELOAD,
-              false, std::string(), controller.GetBrowserContext(),
+              main_url, Referrer(), /* initiator_origin= */ absl::nullopt,
+              /* initiator_base_url= */ absl::nullopt,
+              ui::PAGE_TRANSITION_RELOAD, false, std::string(),
+              controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   EXPECT_EQ(0U, restored_entry->root_node()->children.size());
   std::unique_ptr<NavigationEntryRestoreContextImpl> context =
@@ -5783,6 +5788,15 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   ASSERT_EQ(1U, new_root->child_count());
   EXPECT_EQ(main_url, new_root->current_url());
   EXPECT_TRUE(new_root->child_at(0)->current_url().IsAboutSrcdoc());
+  if (blink::features::IsNewBaseUrlInheritanceBehaviorEnabled()) {
+    // When NewBaseUrlInheritanceBehavior is enabled, not only should the srcdoc
+    // inherit its base url from its initiator, but it should also be properly
+    // restored from the session history.
+    EXPECT_EQ(
+        main_url,
+        GURL(
+            EvalJs(new_root->child_at(0), "document.baseURI").ExtractString()));
+  }
 
   EXPECT_EQ(new_root->current_frame_host()->GetSiteInstance(),
             new_root->child_at(0)->current_frame_host()->GetSiteInstance());
@@ -6596,11 +6610,11 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Now have the cross-process navigation commit and mark the current RFH as
   // pending deletion.
-  cross_site_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(cross_site_manager.WaitForNavigationFinished());
 
   // Resume the navigation in the previous RFH that has just been marked as
   // pending deletion. We should not crash.
-  transfer_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(transfer_manager.WaitForNavigationFinished());
 }
 
 class NavigationHandleWatcher : public WebContentsObserver {
@@ -8221,7 +8235,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_TRUE(child_proxy->is_render_frame_proxy_live());
 
   // Now let the main frame commit.
-  manager1.WaitForNavigationFinished();
+  ASSERT_TRUE(manager1.WaitForNavigationFinished());
 
   // Make sure the process is live and at the new URL.
   EXPECT_TRUE(b_root_site_instance->GetProcess()->IsInitializedAndNotDead());
@@ -8231,7 +8245,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // The subframe should be gone, so the second navigation should have no
   // effect.
-  manager2.WaitForNavigationFinished();
+  ASSERT_TRUE(manager2.WaitForNavigationFinished());
 
   // The new commit should have detached the old child frame.
   EXPECT_EQ(0U, root->child_count());
@@ -8324,7 +8338,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   }
 
   // Now let the subframe commit.
-  manager2.WaitForNavigationFinished();
+  ASSERT_TRUE(manager2.WaitForNavigationFinished());
 
   // Make sure the process is live and at the new URL.
   EXPECT_TRUE(b_site_instance->GetProcess()->IsInitializedAndNotDead());
@@ -8524,7 +8538,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   NavigationCanceller canceller(
       web_contents(), *first_child->render_manager()->current_frame_host());
 
-  nav_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
   // The navigation should be committed if and only if it committed in a new
   // RFH (i.e. if the navigation used a speculative RFH).
   EXPECT_EQ(using_speculative_rfh, nav_manager.was_committed());
@@ -8583,7 +8597,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   EXPECT_EQ(using_speculative_rfh,
             GetRenderDocumentLevel() == RenderDocumentLevel::kSubframe);
 
-  nav_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
   // There should be no commit...
   EXPECT_FALSE(nav_manager.was_committed());
   // .. and the navigation should have been aborted.
@@ -8629,7 +8643,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // Cross-site navigations always force a speculative RFH to be created.
   EXPECT_TRUE(first_child->render_manager()->speculative_frame_host());
 
-  nav_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
   // There should be no commit...
   EXPECT_FALSE(nav_manager.was_committed());
   // .. and the navigation should have been aborted.
@@ -8710,7 +8724,7 @@ IN_PROC_BROWSER_TEST_P(
   EXPECT_EQ(using_speculative_rfh,
             GetRenderDocumentLevel() == RenderDocumentLevel::kSubframe);
 
-  nav_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
   // There should be no commit...
   EXPECT_FALSE(nav_manager.was_committed());
   // .. and the navigation should have been aborted.
@@ -8792,7 +8806,7 @@ IN_PROC_BROWSER_TEST_P(
   // Cross-site navigations always force a speculative RFH to be created.
   EXPECT_TRUE(first_child->render_manager()->speculative_frame_host());
 
-  nav_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
   // There should be no commit...
   EXPECT_FALSE(nav_manager.was_committed());
   // .. and the navigation should have been aborted.
@@ -8844,7 +8858,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // the URLLoaderInterceptor forces a network error.
   EXPECT_FALSE(nav_manager.WaitForResponse());
 
-  nav_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
   EXPECT_FALSE(nav_manager.was_committed());
 
   // Make sure that the speculative RFH has been cleaned up, if needed.
@@ -8882,7 +8896,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
   // the URLLoaderInterceptor forces a network error.
   EXPECT_FALSE(nav_manager.WaitForResponse());
 
-  nav_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(nav_manager.WaitForNavigationFinished());
   EXPECT_FALSE(nav_manager.was_committed());
 
   // Make sure that the speculative RFH has been cleaned up, if needed.
@@ -10951,10 +10965,11 @@ class ClosePageBeforeCommitHelper : public DidCommitNavigationInterceptor {
       mojom::DidCommitProvisionalLoadParamsPtr* params,
       mojom::DidCommitProvisionalLoadInterfaceParamsPtr* interface_params)
       override {
-    RenderViewHostImpl* rvh = static_cast<RenderViewHostImpl*>(
-        render_frame_host->GetRenderViewHost());
-    EXPECT_TRUE(rvh->is_active());
-    rvh->ClosePage();
+    RenderFrameHostImpl* rfh =
+        static_cast<RenderFrameHostImpl*>(render_frame_host);
+    EXPECT_TRUE(rfh->render_view_host()->is_active());
+    rfh->GetMainFrame()->ClosePage(
+        RenderFrameHostImpl::ClosePageSource::kBrowser);
     if (run_loop_)
       run_loop_->Quit();
     return true;
@@ -11101,7 +11116,8 @@ class SitePerProcessBrowserTouchActionTest : public SitePerProcessBrowserTest {
 
 #if BUILDFLAG(IS_ANDROID)
 // Class to set |force_enable_zoom| to true in WebkitPrefs.
-class EnableForceZoomContentClient : public TestContentBrowserClient {
+class EnableForceZoomContentClient
+    : public ContentBrowserTestContentBrowserClient {
  public:
   EnableForceZoomContentClient() = default;
 
@@ -11111,17 +11127,8 @@ class EnableForceZoomContentClient : public TestContentBrowserClient {
 
   void OverrideWebkitPrefs(WebContents* web_contents,
                            blink::web_pref::WebPreferences* prefs) override {
-    DCHECK(old_client_);
-    old_client_->OverrideWebkitPrefs(web_contents, prefs);
     prefs->force_enable_zoom = true;
   }
-
-  void set_old_client(ContentBrowserClient* old_client) {
-    old_client_ = old_client;
-  }
-
- private:
-  raw_ptr<ContentBrowserClient> old_client_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
@@ -11142,8 +11149,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
   EXPECT_FALSE(GetTouchActionForceEnableZoom(child_rwh));
 
   EnableForceZoomContentClient new_client;
-  ContentBrowserClient* old_client = SetBrowserClientForTesting(&new_client);
-  new_client.set_old_client(old_client);
 
   web_contents()->OnWebPreferencesChanged();
 
@@ -11166,8 +11171,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
             new_child->current_frame_host()->GetRenderWidgetHost());
   EXPECT_TRUE(GetTouchActionForceEnableZoom(
       new_child->current_frame_host()->GetRenderWidgetHost()));
-
-  SetBrowserClientForTesting(old_client);
 }
 
 IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
@@ -11178,8 +11181,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
       web_contents()->GetPrimaryMainFrame()->GetRenderViewHost()->GetWidget()));
 
   EnableForceZoomContentClient new_client;
-  ContentBrowserClient* old_client = SetBrowserClientForTesting(&new_client);
-  new_client.set_old_client(old_client);
 
   web_contents()->OnWebPreferencesChanged();
 
@@ -11191,7 +11192,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTouchActionTest,
 
   EXPECT_TRUE(GetTouchActionForceEnableZoom(
       web_contents()->GetPrimaryMainFrame()->GetRenderViewHost()->GetWidget()));
-  SetBrowserClientForTesting(old_client);
 }
 
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -11669,7 +11669,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Resume and finish the cross-process navigation.
   cross_site_navigation.ResumeNavigation();
-  cross_site_navigation.WaitForNavigationFinished();
+  ASSERT_TRUE(cross_site_navigation.WaitForNavigationFinished());
   EXPECT_TRUE(cross_site_navigation.was_successful());
   EXPECT_EQ(url2, web_contents()->GetLastCommittedURL());
 }
@@ -12093,7 +12093,8 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 #if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_ANDROID)
 // A test ContentBrowserClient implementation which enforces
 // WebPreferences' |double_tap_to_zoom_enabled| to be true.
-class DoubleTapZoomContentBrowserClient : public TestContentBrowserClient {
+class DoubleTapZoomContentBrowserClient
+    : public ContentBrowserTestContentBrowserClient {
  public:
   DoubleTapZoomContentBrowserClient() = default;
 
@@ -12113,8 +12114,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
                        TouchscreenAnimateDoubleTapZoomInOOPIF) {
   // Install a client forcing double-tap zoom to be enabled.
   DoubleTapZoomContentBrowserClient content_browser_client;
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&content_browser_client);
   web_contents()->OnWebPreferencesChanged();
 
   GURL main_url(embedded_test_server()->GetURL(
@@ -12191,8 +12190,6 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     observer_a.WaitForAnyFrameSubmission();
     new_page_scale = observer_a.LastRenderFrameMetadata().page_scale_factor;
   } while (new_page_scale < target_scale);
-
-  SetBrowserClientForTesting(old_client);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_ANDROID)
 
@@ -12438,7 +12435,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
             rfh_b->lifecycle_state());
 
   // The navigation has been canceled.
-  navigation_observer.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_observer.WaitForNavigationFinished());
   EXPECT_FALSE(navigation_observer.was_successful());
 
   // |rfh_b| will complete its deletion at some point:
@@ -12502,7 +12499,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
             rfh_c->GetLifecycleState());
 
   // The navigation has been canceled.
-  navigation_observer.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_observer.WaitForNavigationFinished());
   EXPECT_FALSE(navigation_observer.was_successful());
 
   // |rfh_b| and |rfh_c| will complete their deletion at some point:
@@ -12654,7 +12651,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
 
   // Resume the cross-site navigation and ensure it commits in a new
   // SiteInstance and process.
-  delayer.WaitForNavigationFinished();
+  ASSERT_TRUE(delayer.WaitForNavigationFinished());
   EXPECT_TRUE(web_contents()->GetPrimaryMainFrame()->IsRenderFrameLive());
   EXPECT_NE(web_contents()->GetPrimaryMainFrame()->GetProcess(), first_process);
   EXPECT_NE(web_contents()->GetPrimaryMainFrame()->GetSiteInstance(),
@@ -12836,7 +12833,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     TestNavigationManager navigation_manager(web_contents(),
                                              GURL("about:blank"));
     EXPECT_TRUE(ExecJs(b2_rfh, "location.href = 'about:blank';"));
-    navigation_manager.WaitForNavigationFinished();
+    ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
 
     RenderFrameHostImpl* b3_rfh = a1_rfh->child_at(0)->current_frame_host();
     DCHECK_EQ(b3_rfh->GetSiteInstance(), b2_site_instance);
@@ -12850,7 +12847,7 @@ IN_PROC_BROWSER_TEST_P(SitePerProcessBrowserTest,
     EXPECT_TRUE(ExecJs(a1_rfh, R"(
       document.querySelector("iframe").src = "about:blank";
     )"));
-    navigation_manager.WaitForNavigationFinished();
+    ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
 
     RenderFrameHostImpl* b4_rfh = a1_rfh->child_at(0)->current_frame_host();
     DCHECK_EQ(a1_rfh->GetSiteInstance(), b4_rfh->GetSiteInstance());

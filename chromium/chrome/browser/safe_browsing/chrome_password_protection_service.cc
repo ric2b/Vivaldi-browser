@@ -7,8 +7,8 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -164,12 +164,6 @@ PasswordReuseLookup::ReputationVerdict GetVerdictToLogFromResponse(
   }
   NOTREACHED() << "Unexpected response_verdict: " << response_verdict;
   return PasswordReuseLookup::VERDICT_UNSPECIFIED;
-}
-
-// Records changes in the phished status of saved credential.
-void LogCredentialPhishedStatusChanged(CredentialPhishedStatus status) {
-  base::UmaHistogramEnumeration("SafeBrowsing.CredentialPhishedStatusChange",
-                                status);
 }
 
 // Given a |web_contents|, returns the navigation id of its last committed
@@ -1411,12 +1405,7 @@ bool ChromePasswordProtectionService::IsPingingEnabled(
   }
   bool extended_reporting_enabled = IsExtendedReporting();
   if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT) {
-    if (password_type.account_type() ==
-        ReusedPasswordAccountType::SAVED_PASSWORD) {
-      return true;
-    }
-
-    // Only override policy if password protection is off for Gmail users.
+    // Don't send a ping if the password protection setting is off
     if (GetPasswordProtectionWarningTriggerPref(password_type) ==
         PASSWORD_PROTECTION_OFF) {
       return false;
@@ -1461,8 +1450,6 @@ RequestOutcome ChromePasswordProtectionService::GetPingNotSentReason(
     return RequestOutcome::DISABLED_DUE_TO_INCOGNITO;
   }
   if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT &&
-      password_type.account_type() !=
-          ReusedPasswordAccountType::SAVED_PASSWORD &&
       GetPasswordProtectionWarningTriggerPref(password_type) ==
           PASSWORD_PROTECTION_OFF) {
     return RequestOutcome::TURNED_OFF_BY_ADMIN;
@@ -1671,16 +1658,17 @@ MaybeCreateCommitDeferringCondition(
 PasswordProtectionTrigger
 ChromePasswordProtectionService::GetPasswordProtectionWarningTriggerPref(
     ReusedPasswordAccountType password_type) const {
-  if (password_type.account_type() == ReusedPasswordAccountType::GMAIL ||
-      (password_type.account_type() ==
-       ReusedPasswordAccountType::SAVED_PASSWORD))
-    return PHISHING_REUSE;
-
   bool is_policy_managed = profile_->GetPrefs()->HasPrefPath(
       prefs::kPasswordProtectionWarningTrigger);
   PasswordProtectionTrigger trigger_level =
       static_cast<PasswordProtectionTrigger>(profile_->GetPrefs()->GetInteger(
           prefs::kPasswordProtectionWarningTrigger));
+  if (is_policy_managed && trigger_level == PASSWORD_PROTECTION_OFF) {
+    return PASSWORD_PROTECTION_OFF;
+  }
+  if (password_type.account_type() == ReusedPasswordAccountType::GMAIL) {
+    return PHISHING_REUSE;
+  }
   return is_policy_managed ? trigger_level : PHISHING_REUSE;
 }
 
@@ -1717,8 +1705,6 @@ void ChromePasswordProtectionService::PersistPhishedSavedPasswordCredential(
     if (!password_store) {
       continue;
     }
-    LogCredentialPhishedStatusChanged(
-        CredentialPhishedStatus::kMarkedAsPhished);
     add_phished_credentials_.Run(password_store, credential);
   }
 }
@@ -1736,8 +1722,6 @@ void ChromePasswordProtectionService::RemovePhishedSavedPasswordCredential(
     if (!password_store) {
       continue;
     }
-    LogCredentialPhishedStatusChanged(
-        CredentialPhishedStatus::kSiteMarkedAsLegitimate);
     remove_phished_credentials_.Run(password_store, credential);
   }
 }

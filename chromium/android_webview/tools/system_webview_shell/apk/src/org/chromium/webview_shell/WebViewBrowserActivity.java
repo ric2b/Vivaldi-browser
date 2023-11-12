@@ -5,7 +5,6 @@
 package org.chromium.webview_shell;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.UiModeManager;
@@ -155,7 +154,7 @@ public class WebViewBrowserActivity extends AppCompatActivity {
 
     // Work around our wonky API by wrapping a geo permission prompt inside a regular
     // PermissionRequest.
-    @SuppressLint("NewApi") // GeoPermissionRequest class requires API level 21.
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP) // GeoPermissionRequest class requires API level 21.
     private static class GeoPermissionRequest extends PermissionRequest {
         private String mOrigin;
         private GeolocationPermissions.Callback mCallback;
@@ -190,7 +189,7 @@ public class WebViewBrowserActivity extends AppCompatActivity {
 
     // For simplicity, also treat the read access needed for file:// URLs as a regular
     // PermissionRequest.
-    @SuppressLint("NewApi") // FilePermissionRequest class requires API level 21.
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP) // FilePermissionRequest class requires API level 21.
     private class FilePermissionRequest extends PermissionRequest {
         private String mOrigin;
 
@@ -205,24 +204,14 @@ public class WebViewBrowserActivity extends AppCompatActivity {
 
         @Override
         public String[] getResources() {
-            if (BuildInfo.isAtLeastT()) {
-                return new String[] {WebViewBrowserActivity.RESOURCE_IMAGES_URL,
-                        WebViewBrowserActivity.RESOURCE_VIDEO_URL};
-            } else {
-                return new String[] {WebViewBrowserActivity.RESOURCE_FILE_URL};
-            }
+            return new String[] {WebViewBrowserActivity.RESOURCE_FILE_URL};
         }
 
         @Override
         public void grant(String[] resources) {
-            if (BuildInfo.isAtLeastT()) {
-                assert resources.length == 2;
-                assert WebViewBrowserActivity.RESOURCE_IMAGES_URL.equals(resources[0])
-                        && WebViewBrowserActivity.RESOURCE_VIDEO_URL.equals(resources[1]);
-            } else {
-                assert resources.length == 1;
-                assert WebViewBrowserActivity.RESOURCE_FILE_URL.equals(resources[0]);
-            }
+            assert resources.length == 1;
+            assert WebViewBrowserActivity.RESOURCE_FILE_URL.equals(resources[0]);
+
             // Try again now that we have read access.
             WebViewBrowserActivity.this.mWebView.loadUrl(mOrigin);
         }
@@ -322,6 +311,12 @@ public class WebViewBrowserActivity extends AppCompatActivity {
             threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
         } else if (manufacturer.equals("nokia")) {
             // https://crbug.com/1385924
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+        } else if (manufacturer.equals("xiaomi")) {
+            // https://crbug.com/1401331
+            threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
+        } else if (manufacturer.equals("realme")) {
+            // https://crbug.com/1418348
             threadPolicyBuilder = threadPolicyBuilder.permitDiskReads();
         }
         StrictMode.setThreadPolicy(threadPolicyBuilder.build());
@@ -578,7 +573,7 @@ public class WebViewBrowserActivity extends AppCompatActivity {
         return PackageManager.PERMISSION_GRANTED == checkSelfPermission(androidPermission);
     }
 
-    @SuppressLint("NewApi") // PermissionRequest#deny requires API level 21.
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP) // PermissionRequest#deny requires API level 21.
     private void requestPermissionsForPage(PermissionRequest request) {
         // Deny any unrecognized permissions.
         for (String webkitPermission : request.getResources()) {
@@ -624,9 +619,10 @@ public class WebViewBrowserActivity extends AppCompatActivity {
     }
 
     @Override
-    @SuppressLint("NewApi") // PermissionRequest#deny requires API level 21.
-    public void onRequestPermissionsResult(int requestCode,
-            String permissions[], int[] grantResults) {
+    @RequiresApi(Build.VERSION_CODES.LOLLIPOP) // PermissionRequest#deny requires API level 21.
+    public void onRequestPermissionsResult(
+            int requestCode, String permissions[], int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         // Verify that we can now grant all the requested permissions. Note that although grant()
         // takes a list of permissions, grant() is actually all-or-nothing. If there are any
         // requested permissions not included in the granted permissions, all will be denied.
@@ -901,14 +897,7 @@ public class WebViewBrowserActivity extends AppCompatActivity {
         // Request read access if necessary.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
                 && "file".equals(Uri.parse(url).getScheme())) {
-            if (BuildInfo.isAtLeastT()) {
-                if (PackageManager.PERMISSION_DENIED
-                                == checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES)
-                        && PackageManager.PERMISSION_DENIED
-                                == checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO)) {
-                    requestPermissionsForPage(new FilePermissionRequest(url));
-                }
-            } else if (PackageManager.PERMISSION_DENIED
+            if (PackageManager.PERMISSION_DENIED
                     == checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)) {
                 requestPermissionsForPage(new FilePermissionRequest(url));
             }

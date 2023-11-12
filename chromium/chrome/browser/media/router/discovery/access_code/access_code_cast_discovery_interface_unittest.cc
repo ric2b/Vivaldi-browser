@@ -9,6 +9,7 @@
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "build/build_config.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_cast_constants.h"
 #include "chrome/browser/media/router/discovery/access_code/access_code_test_util.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -317,6 +318,8 @@ TEST_F(AccessCodeCastDiscoveryInterfaceTest, ServerError) {
   base::RunLoop().RunUntilIdle();
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+// Revoking Sync consent is not possible on Ash.
 TEST_F(AccessCodeCastDiscoveryInterfaceTest, SyncError) {
   // Test to validate a fetch request without sync set for the account will
   // return a SYNC_ERROR.
@@ -328,6 +331,7 @@ TEST_F(AccessCodeCastDiscoveryInterfaceTest, SyncError) {
   stub_interface()->ValidateDiscoveryAccessCode(mock_callback.Get());
   base::RunLoop().RunUntilIdle();
 }
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(AccessCodeCastDiscoveryInterfaceTest, HttpErrorMapping) {
   ErrorMappingTestHelper(net::HTTP_UNAUTHORIZED, AddSinkResultCode::AUTH_ERROR);
@@ -469,6 +473,69 @@ TEST_F(AccessCodeCastDiscoveryInterfaceTest, CommandLineSwitch) {
   fetcher = stub_interface()->CreateEndpointFetcher("foobar");
   EXPECT_EQ(std::string(kMockEndpoint) + "/v1/receivers/foobar",
             fetcher->GetUrlForTesting());
+}
+
+TEST_F(AccessCodeCastDiscoveryInterfaceTest,
+       HandleServerErrorProfileSyncError) {
+  // Tests that an endpoint response will return the appropriate profile sync
+  // error when handled.
+  MockDiscoveryDeviceCallback mock_callback;
+  EXPECT_CALL(mock_callback,
+              Run(Eq(absl::nullopt), AddSinkResultCode::PROFILE_SYNC_ERROR));
+  stub_interface()->SetCallbackForTesting(mock_callback.Get());
+
+  auto response = std::make_unique<EndpointResponse>();
+  response->error_type =
+      absl::make_optional<FetchErrorType>(FetchErrorType::kAuthError);
+  response->response = "No primary accounts found";
+  stub_interface()->HandleServerError(std::move(response));
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(AccessCodeCastDiscoveryInterfaceTest, HandleServerErrorAuthError) {
+  // Tests that an endpoint response will return the appropriate auth error when
+  // handled.
+  MockDiscoveryDeviceCallback mock_callback;
+  EXPECT_CALL(mock_callback,
+              Run(Eq(absl::nullopt), AddSinkResultCode::AUTH_ERROR));
+  stub_interface()->SetCallbackForTesting(mock_callback.Get());
+
+  auto response = std::make_unique<EndpointResponse>();
+  response->error_type =
+      absl::make_optional<FetchErrorType>(FetchErrorType::kAuthError);
+  stub_interface()->HandleServerError(std::move(response));
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(AccessCodeCastDiscoveryInterfaceTest, HandleServerErrorServerError) {
+  // Tests that an endpoint response will return the appropriate server error
+  // when handled.
+  MockDiscoveryDeviceCallback mock_callback;
+  EXPECT_CALL(mock_callback,
+              Run(Eq(absl::nullopt), AddSinkResultCode::SERVER_ERROR));
+  stub_interface()->SetCallbackForTesting(mock_callback.Get());
+
+  auto response = std::make_unique<EndpointResponse>();
+  response->error_type =
+      absl::make_optional<FetchErrorType>(FetchErrorType::kNetError);
+  stub_interface()->HandleServerError(std::move(response));
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(AccessCodeCastDiscoveryInterfaceTest,
+       HandleServerErrorResponseMalformedError) {
+  // Tests that an endpoint response will return the appropriate response
+  // malformed error when handled.
+  MockDiscoveryDeviceCallback mock_callback;
+  EXPECT_CALL(mock_callback,
+              Run(Eq(absl::nullopt), AddSinkResultCode::RESPONSE_MALFORMED));
+  stub_interface()->SetCallbackForTesting(mock_callback.Get());
+
+  auto response = std::make_unique<EndpointResponse>();
+  response->error_type =
+      absl::make_optional<FetchErrorType>(FetchErrorType::kResultParseError);
+  stub_interface()->HandleServerError(std::move(response));
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace media_router

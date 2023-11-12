@@ -27,7 +27,6 @@ extern const char kAutofillCreditCardFidoAuthEnabled[];
 #if BUILDFLAG(IS_ANDROID)
 extern const char kAutofillCreditCardFidoAuthOfferCheckboxState[];
 #endif
-extern const char kAutofillCreditCardSigninPromoImpressionCount[];
 // Please use kAutofillCreditCardEnabled, kAutofillIBANEnabled and
 // kAutofillProfileEnabled instead.
 extern const char kAutofillEnabledDeprecated[];
@@ -44,7 +43,6 @@ extern const char kAutofillUploadEncodingSeed[];
 extern const char kAutofillUploadEvents[];
 extern const char kAutofillUploadEventsLastResetTimestamp[];
 extern const char kAutofillWalletImportEnabled[];
-extern const char kAutofillWalletImportStorageCheckboxState[];
 extern const char kAutocompleteLastVersionRetentionPolicy[];
 
 namespace sync_transport_opt_in {

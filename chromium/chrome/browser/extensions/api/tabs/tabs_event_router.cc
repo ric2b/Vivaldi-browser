@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/api/tabs/tabs_windows_api.h"
@@ -270,6 +270,13 @@ void TabsEventRouter::TabGroupedStateChanged(
   std::set<std::string> changed_property_names;
   changed_property_names.insert(tabs_constants::kGroupIdKey);
   DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
+}
+
+void TabsEventRouter::OnZoomControllerDestroyed(
+    zoom::ZoomController* zoom_controller) {
+  if (zoom_scoped_observations_.IsObservingSource(zoom_controller)) {
+    zoom_scoped_observations_.RemoveObservation(zoom_controller);
+  }
 }
 
 void TabsEventRouter::OnZoomChanged(
@@ -605,8 +612,8 @@ void TabsEventRouter::DispatchTabUpdatedEvent(
 void TabsEventRouter::RegisterForTabNotifications(WebContents* contents) {
   favicon_scoped_observations_.AddObservation(
       favicon::ContentFaviconDriver::FromWebContents(contents));
-
-  ZoomController::FromWebContents(contents)->AddObserver(this);
+  zoom_scoped_observations_.AddObservation(
+      ZoomController::FromWebContents(contents));
 
   int tab_id = ExtensionTabUtil::GetTabId(contents);
   DCHECK(tab_entries_.find(tab_id) == tab_entries_.end());
@@ -614,10 +621,12 @@ void TabsEventRouter::RegisterForTabNotifications(WebContents* contents) {
 }
 
 void TabsEventRouter::UnregisterForTabNotifications(WebContents* contents) {
+  if (auto* zoom_controller = ZoomController::FromWebContents(contents);
+      zoom_scoped_observations_.IsObservingSource(zoom_controller)) {
+    zoom_scoped_observations_.RemoveObservation(zoom_controller);
+  }
   favicon_scoped_observations_.RemoveObservation(
       favicon::ContentFaviconDriver::FromWebContents(contents));
-
-  ZoomController::FromWebContents(contents)->RemoveObserver(this);
 
   int tab_id = ExtensionTabUtil::GetTabId(contents);
   int removed_count = tab_entries_.erase(tab_id);

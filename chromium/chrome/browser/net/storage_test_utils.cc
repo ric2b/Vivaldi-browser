@@ -12,13 +12,11 @@ namespace storage::test {
 const std::vector<std::string> kCookiesTypesForFrame{"Cookie", "CookieStore"};
 
 const std::vector<std::string> kStorageTypesForFrame{
-    "LocalStorage",   "FileSystem",    "FileSystemAccess",
-    "SessionStorage", "IndexedDb",     "WebSql",
-    "CacheStorage",   "ServiceWorker", "StorageFoundation"};
+    "LocalStorage", "FileSystem", "FileSystemAccess", "SessionStorage",
+    "IndexedDb",    "WebSql",     "CacheStorage",     "ServiceWorker"};
 
 const std::vector<std::string> kStorageTypesForWorker{
-    "WorkerFileSystemAccess", "WorkerCacheStorage", "WorkerIndexedDb",
-    "WorkerStorageFoundation"};
+    "WorkerFileSystemAccess", "WorkerCacheStorage", "WorkerIndexedDb"};
 
 const std::vector<std::string> kCrossTabCommunicationTypes{
     "SharedWorker",
@@ -170,6 +168,18 @@ bool HasStorageAccessForFrame(content::RenderFrameHost* frame) {
   return content::EvalJs(frame, kHasStorageAccess,
                          content::EXECUTE_SCRIPT_USE_MANUAL_REPLY)
       .ExtractBool();
+}
+
+std::string FetchWithCredentials(content::RenderFrameHost* frame,
+                                 const GURL& url,
+                                 const bool cors_enabled) {
+  constexpr char script[] = R"(
+      fetch($1, {method: 'GET', mode: $2, credentials: 'include'})
+      .then((result) => result.text());
+    )";
+  const std::string mode = cors_enabled ? "cors" : "no-cors";
+  return content::EvalJs(frame, content::JsReplace(script, url, mode))
+      .ExtractString();
 }
 
 }  // namespace storage::test

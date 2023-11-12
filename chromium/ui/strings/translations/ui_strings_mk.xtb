@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 месец}one{# месец}other{# месеци}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 час и }one{# час и }other{# часа и }}</translation>
+<translation id="185013357618350178">&amp;Избери</translation>
 <translation id="1859234291848436338">Насока на пишување</translation>
 <translation id="1860796786778352021">Затворање на известување</translation>
 <translation id="186476001994626254">Содржини од интернет за паметно лепење</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{за 1 ч.}one{за # ч.}other{за # ч.}}</translation>
 <translation id="2583543531130364912">Калибрирање на екранот на допир</translation>
 <translation id="2586657967955657006">Табла со исечоци</translation>
+<translation id="2653844658857826081">НОВО</translation>
 <translation id="2666092431469916601">Горе</translation>
 <translation id="2701330563083355633">Споделено од <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Ново</translation>

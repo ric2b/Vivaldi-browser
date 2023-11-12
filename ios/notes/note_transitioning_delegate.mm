@@ -3,35 +3,31 @@
 #import "ios/notes/note_transitioning_delegate.h"
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/table_view/table_view_animator.h"
-#import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
-#import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 @implementation NoteTransitioningDelegate
-@synthesize presentationControllerModalDelegate =
-    _presentationControllerModalDelegate;
 
 - (UIPresentationController*)
 presentationControllerForPresentedViewController:(UIViewController*)presented
                         presentingViewController:(UIViewController*)presenting
                             sourceViewController:(UIViewController*)source {
-  TableViewPresentationController* controller =
+  /*TableViewPresentationController* controller =
       [[TableViewPresentationController alloc]
           initWithPresentedViewController:presented
                  presentingViewController:presenting];
   controller.modalDelegate = self.presentationControllerModalDelegate;
-  return controller;
+  return controller;*/
+  return nil; // TODO
 }
 
 - (id<UIViewControllerAnimatedTransitioning>)
 animationControllerForPresentedController:(UIViewController*)presented
                      presentingController:(UIViewController*)presenting
                          sourceController:(UIViewController*)source {
-  if (self.presentationControllerModalDelegate) {
+  /*if (self.presentationControllerModalDelegate) {
     TableViewPresentationController* controller =
         base::mac::ObjCCast<TableViewPresentationController>(
             presented.presentationController);
@@ -42,7 +38,7 @@ animationControllerForPresentedController:(UIViewController*)presented
             presentationControllerShouldDismissOnTouchOutside:controller]) {
       return nil;
     }
-  }
+  }*/
 
   UITraitCollection* traitCollection = presenting.traitCollection;
   if (traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact &&
@@ -51,14 +47,12 @@ animationControllerForPresentedController:(UIViewController*)presented
     return nil;
   }
 
-  TableViewAnimator* animator = [[TableViewAnimator alloc] init];
-  animator.presenting = YES;
-  return animator;
+  return nil;
 }
 
 - (id<UIViewControllerAnimatedTransitioning>)
 animationControllerForDismissedController:(UIViewController*)dismissed {
-  if (self.presentationControllerModalDelegate) {
+  /*if (self.presentationControllerModalDelegate) {
     TableViewPresentationController* controller =
         base::mac::ObjCCast<TableViewPresentationController>(
             dismissed.presentationController);
@@ -69,7 +63,7 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
             presentationControllerShouldDismissOnTouchOutside:controller]) {
       return nil;
     }
-  }
+  }*/
 
   UITraitCollection* traitCollection = dismissed.traitCollection;
   if (traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassCompact &&
@@ -78,9 +72,7 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
     return nil;
   }
 
-  TableViewAnimator* animator = [[TableViewAnimator alloc] init];
-  animator.presenting = NO;
-  return animator;
+  return nil;
 }
 
 @end

@@ -37,8 +37,7 @@ bool IsFirstVisiblePosition(Node* node, unsigned pos_offset) {
   auto range_end = PositionInFlatTree(node, pos_offset);
   return node->getNodeType() == Node::kElementNode || pos_offset == 0 ||
          PlainText(EphemeralRangeInFlatTree(range_start, range_end))
-             .StripWhiteSpace()
-             .empty();
+                 .LengthWithStrippedWhiteSpace() == 0;
 }
 
 // Returns true if text from |pos_offset| until end of |node| can be considered
@@ -49,8 +48,7 @@ bool IsLastVisiblePosition(Node* node, unsigned pos_offset) {
   return node->getNodeType() == Node::kElementNode ||
          pos_offset == node->textContent().length() ||
          PlainText(EphemeralRangeInFlatTree(range_start, range_end))
-             .StripWhiteSpace()
-             .empty();
+                 .LengthWithStrippedWhiteSpace() == 0;
 }
 
 struct ForwardDirection {
@@ -84,10 +82,10 @@ Node* NextNonEmptyVisibleTextNode(Node* start_node) {
       return nullptr;
     // Filter out nodes without layout object.
     if (next_node->GetLayoutObject() &&
-        !PlainText(EphemeralRange::RangeOfContents(*next_node))
-             .StripWhiteSpace()
-             .empty())
+        PlainText(EphemeralRange::RangeOfContents(*next_node))
+                .LengthWithStrippedWhiteSpace() > 0) {
       return next_node;
+    }
     node = next_node;
   }
   return nullptr;
@@ -197,8 +195,9 @@ void TextFragmentSelectorGenerator::DidFindMatch(const RangeInFlatTree& match,
     std::move(did_find_match_callback_for_testing_).Run(is_unique);
 
   if (is_unique &&
-      PlainText(match.ToEphemeralRange()).StripWhiteSpace().length() ==
-          PlainText(range_->ToEphemeralRange()).StripWhiteSpace().length()) {
+      PlainText(match.ToEphemeralRange()).LengthWithStrippedWhiteSpace() ==
+          PlainText(range_->ToEphemeralRange())
+              .LengthWithStrippedWhiteSpace()) {
     state_ = kSuccess;
     ResolveSelectorState();
   } else {
@@ -325,8 +324,7 @@ void TextFragmentSelectorGenerator::StartGeneration() {
   }
 
   // Shouldn't continue if selection is empty.
-  String selected_text = PlainText(ephemeral_range).StripWhiteSpace();
-  if (selected_text.empty()) {
+  if (PlainText(ephemeral_range).LengthWithStrippedWhiteSpace() == 0) {
     state_ = kFailure;
     error_ = LinkGenerationError::kEmptySelection;
     ResolveSelectorState();
@@ -482,16 +480,16 @@ void TextFragmentSelectorGenerator::ExtendRangeSelector() {
     PositionInFlatTree range_end_position =
         GetPreviousTextEndPosition(range_->EndPosition());
 
-    if (range_start_position.IsNotNull()) {
-      range_start_iterator_ =
-          MakeGarbageCollected<ForwardSameBlockWordIterator>(
-              range_start_position);
+    if (range_start_position.IsNull() || range_end_position.IsNull()) {
+      state_ = kFailure;
+      error_ = LinkGenerationError::kNoRange;
+      return;
     }
 
-    if (range_end_position.IsNotNull()) {
-      range_end_iterator_ = MakeGarbageCollected<BackwardSameBlockWordIterator>(
-          range_end_position);
-    }
+    range_start_iterator_ = MakeGarbageCollected<ForwardSameBlockWordIterator>(
+        range_start_position);
+    range_end_iterator_ =
+        MakeGarbageCollected<BackwardSameBlockWordIterator>(range_end_position);
 
     // Use at least 3 words from both sides for more robust link to text unless
     // the selected text is shorter than 6 words.
@@ -531,7 +529,7 @@ void TextFragmentSelectorGenerator::ExtendRangeSelector() {
     }
   }
 
-  if (!range_start_iterator_ && !range_end_iterator_) {
+  if (!range_start_iterator_ || !range_end_iterator_) {
     state_ = kFailure;
     error_ = LinkGenerationError::kNoRange;
     return;

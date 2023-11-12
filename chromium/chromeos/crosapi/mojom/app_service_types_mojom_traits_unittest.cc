@@ -15,7 +15,6 @@
 #include "components/services/app_service/public/cpp/intent_filter.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/permission.h"
-#include "components/services/app_service/public/cpp/shortcut.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,6 +33,7 @@ TEST(AppServiceTypesMojomTraitsTest, RoundTrip) {
   input->additional_search_terms = {"1", "2"};
   input->icon_key = apps::IconKey(
       /*timeline=*/1, apps::IconKey::kInvalidResourceId, /*icon_effects=*/2);
+  input->icon_key->raw_icon_updated = true;
   input->last_launch_time = base::Time() + base::Days(1);
   input->install_time = base::Time() + base::Days(2);
   input->install_reason = apps::InstallReason::kUser;
@@ -64,9 +64,6 @@ TEST(AppServiceTypesMojomTraitsTest, RoundTrip) {
   input->allow_uninstall = true;
   input->handles_intents = true;
 
-  input->shortcuts.push_back(
-      std::make_unique<apps::Shortcut>("test_id", "test_name", /*position*/ 1));
-
   input->is_platform_app = true;
 
   apps::AppPtr output;
@@ -85,6 +82,7 @@ TEST(AppServiceTypesMojomTraitsTest, RoundTrip) {
 
   EXPECT_EQ(output->icon_key->timeline, 1U);
   EXPECT_EQ(output->icon_key->icon_effects, 2U);
+  EXPECT_TRUE(output->icon_key->raw_icon_updated);
 
   EXPECT_EQ(output->last_launch_time, base::Time() + base::Days(1));
   EXPECT_EQ(output->install_time, base::Time() + base::Days(2));
@@ -124,12 +122,6 @@ TEST(AppServiceTypesMojomTraitsTest, RoundTrip) {
 
   EXPECT_TRUE(output->allow_uninstall.value());
   EXPECT_TRUE(output->handles_intents.value());
-
-  ASSERT_EQ(output->shortcuts.size(), 1U);
-  auto& shortcut = output->shortcuts[0];
-  EXPECT_EQ(shortcut->shortcut_id, "test_id");
-  EXPECT_EQ(shortcut->name, "test_name");
-  EXPECT_EQ(shortcut->position, 1);
 
   EXPECT_TRUE(output->is_platform_app.value());
 }
@@ -774,6 +766,7 @@ TEST(AppServiceTypesMojomTraitsTest, RoundTripIconValue) {
 
     input->compressed = {1u, 2u};
     input->is_placeholder_icon = true;
+    input->is_maskable_icon = false;
 
     auto output = std::make_unique<apps::IconValue>();
     ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::IconValue>(
@@ -796,6 +789,7 @@ TEST(AppServiceTypesMojomTraitsTest, RoundTripIconValue) {
     gfx::ImageSkia image = gfx::test::CreateImageSkia(3, 4);
     input->uncompressed = image;
     input->is_placeholder_icon = false;
+    input->is_maskable_icon = true;
 
     auto output = std::make_unique<apps::IconValue>();
     ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::IconValue>(
@@ -812,9 +806,9 @@ TEST(AppServiceTypesMojomTraitsTest, RoundTripIconValue) {
 
     input->compressed = {3u, 4u};
     input->is_placeholder_icon = true;
+    input->is_maskable_icon = true;
 
     auto output = std::make_unique<apps::IconValue>();
-    ;
     ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::IconValue>(
         input, output));
 
@@ -1184,46 +1178,6 @@ TEST(AppServiceTypesMojomTraitsTest, PreferredAppChanges) {
   EXPECT_EQ(input->removed_filters.size(), output->removed_filters.size());
   for (const auto& filter : input->removed_filters) {
     EXPECT_TRUE(IsEqual(filter.second, output->removed_filters[filter.first]));
-  }
-}
-
-TEST(AppServiceTypesMojomTraitsTest, RoundTripShortcuts) {
-  {
-    auto shortcut = std::make_unique<apps::Shortcut>("test_id", "test_name",
-                                                     /*position*/ 1);
-    apps::ShortcutPtr output;
-    ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::Shortcut>(
-        shortcut, output));
-    EXPECT_EQ(*shortcut, *output);
-  }
-  {
-    auto shortcut = std::make_unique<apps::Shortcut>("", "", /*position*/ 0);
-    apps::ShortcutPtr output;
-    ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::Shortcut>(
-        shortcut, output));
-    EXPECT_EQ(*shortcut, *output);
-  }
-  {
-    auto shortcut =
-        std::make_unique<apps::Shortcut>("A", "B", /*position*/ 100);
-    apps::ShortcutPtr output;
-    ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::Shortcut>(
-        shortcut, output));
-    EXPECT_EQ(*shortcut, *output);
-  }
-  {
-    auto shortcut = std::make_unique<apps::Shortcut>("", "B", /*position*/ 1);
-    apps::ShortcutPtr output;
-    ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::Shortcut>(
-        shortcut, output));
-    EXPECT_EQ(*shortcut, *output);
-  }
-  {
-    auto shortcut = std::make_unique<apps::Shortcut>("A", "", /*position*/ 1);
-    apps::ShortcutPtr output;
-    ASSERT_TRUE(mojo::test::SerializeAndDeserialize<crosapi::mojom::Shortcut>(
-        shortcut, output));
-    EXPECT_EQ(*shortcut, *output);
   }
 }
 

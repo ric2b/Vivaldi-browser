@@ -12,6 +12,7 @@
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "chrome/browser/ash/app_mode/arc/arc_kiosk_app_manager.h"
+#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/ash/policy/remote_commands/crd_remote_command_utils.h"
 #include "chrome/browser/ash/policy/remote_commands/fake_cros_network_config.h"
@@ -32,6 +33,7 @@ using base::test::ParseJson;
 using base::test::ParseJsonDict;
 using chromeos::network_config::mojom::NetworkType;
 using chromeos::network_config::mojom::OncSource;
+using enterprise_management::CrdSessionAvailability;
 using enterprise_management::RemoteCommand;
 using extensions::DictionaryBuilder;
 using test::SessionTypeToString;
@@ -104,9 +106,11 @@ class DeviceCommandFetchCrdAvailabilityInfoJobTest
     user_activity_detector_ = std::make_unique<ui::UserActivityDetector>();
     arc_kiosk_app_manager_ = std::make_unique<ash::ArcKioskAppManager>();
     web_kiosk_app_manager_ = std::make_unique<ash::WebKioskAppManager>();
+    kiosk_app_manager_ = std::make_unique<ash::KioskAppManager>();
   }
 
   void TearDown() override {
+    kiosk_app_manager_.reset();
     web_kiosk_app_manager_.reset();
     arc_kiosk_app_manager_.reset();
     user_activity_detector_.reset();
@@ -159,6 +163,7 @@ class DeviceCommandFetchCrdAvailabilityInfoJobTest
  private:
   std::unique_ptr<ash::ArcKioskAppManager> arc_kiosk_app_manager_;
   std::unique_ptr<ash::WebKioskAppManager> web_kiosk_app_manager_;
+  std::unique_ptr<ash::KioskAppManager> kiosk_app_manager_;
 
   // Automatically installed as a singleton upon creation.
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;
@@ -184,7 +189,7 @@ TEST_F(DeviceCommandFetchCrdAvailabilityInfoJobTest,
   SetDeviceIdleTime(device_idle_time_in_sec);
   Result result = CreateAndRunJob();
 
-  EXPECT_THAT(ParseJson(result.payload),
+  EXPECT_THAT(ParseJsonDict(result.payload),
               DictionaryHasValue("deviceIdleTimeInSeconds",
                                  base::Value(device_idle_time_in_sec)));
 }
@@ -196,7 +201,7 @@ TEST_F(DeviceCommandFetchCrdAvailabilityInfoJobTest,
 
   Result result = CreateAndRunJob();
 
-  EXPECT_THAT(ParseJson(result.payload),
+  EXPECT_THAT(ParseJsonDict(result.payload),
               DictionaryHasValue("isInManagedEnvironment", base::Value(true)));
 }
 
@@ -207,7 +212,7 @@ TEST_F(DeviceCommandFetchCrdAvailabilityInfoJobTest,
 
   Result result = CreateAndRunJob();
 
-  EXPECT_THAT(ParseJson(result.payload),
+  EXPECT_THAT(ParseJsonDict(result.payload),
               DictionaryHasValue("isInManagedEnvironment", base::Value(false)));
 }
 
@@ -244,7 +249,7 @@ TEST_P(DeviceCommandFetchCrdAvailabilityInfoJobTestParameterizedOverSessionType,
     }
   }();
 
-  EXPECT_THAT(ParseJson(result.payload),
+  EXPECT_THAT(ParseJsonDict(result.payload),
               DictionaryHasValue("userSessionType",
                                  base::Value(static_cast<int>(expected))));
 }
@@ -305,6 +310,78 @@ TEST_P(DeviceCommandFetchCrdAvailabilityInfoJobTestParameterizedOverSessionType,
       ParseJsonDict(result.payload).FindList("supportedCrdSessionTypes"),
       Not(ListContains(
           static_cast<int>(CrdSessionType::REMOTE_ACCESS_SESSION))));
+
+  EXPECT_EQ(ParseJsonDict(result.payload).FindInt("remoteAccessAvailability"),
+            CrdSessionAvailability::UNAVAILABLE_UNMANAGED_ENVIRONMENT);
+}
+
+TEST_P(DeviceCommandFetchCrdAvailabilityInfoJobTestParameterizedOverSessionType,
+       ShouldReturnRemoteSupportAvailability) {
+  TestSessionType session_type = GetParam();
+  SCOPED_TRACE(base::StringPrintf("Testing session type %s",
+                                  SessionTypeToString(session_type)));
+
+  StartSessionOfType(session_type, user_manager());
+
+  Result result = CreateAndRunJob();
+
+  const CrdSessionAvailability expected = [&]() {
+    switch (session_type) {
+      case TestSessionType::kNoSession:
+      case TestSessionType::kGuestSession:
+      case TestSessionType::kUnaffiliatedUserSession:
+        return CrdSessionAvailability::
+            UNAVAILABLE_UNSUPPORTED_USER_SESSION_TYPE;
+
+      case TestSessionType::kManuallyLaunchedArcKioskSession:
+      case TestSessionType::kManuallyLaunchedWebKioskSession:
+      case TestSessionType::kManuallyLaunchedKioskSession:
+      case TestSessionType::kAutoLaunchedArcKioskSession:
+      case TestSessionType::kAutoLaunchedWebKioskSession:
+      case TestSessionType::kAutoLaunchedKioskSession:
+      case TestSessionType::kManagedGuestSession:
+      case TestSessionType::kAffiliatedUserSession:
+        return CrdSessionAvailability::AVAILABLE;
+    }
+  }();
+
+  EXPECT_EQ(ParseJsonDict(result.payload).FindInt("remoteSupportAvailability"),
+            expected);
+}
+
+TEST_P(DeviceCommandFetchCrdAvailabilityInfoJobTestParameterizedOverSessionType,
+       ShouldReturnRemoteAccessAvailability) {
+  TestSessionType session_type = GetParam();
+  SCOPED_TRACE(base::StringPrintf("Testing session type %s",
+                                  SessionTypeToString(session_type)));
+
+  AddActiveManagedNetwork();
+  StartSessionOfType(session_type, user_manager());
+
+  Result result = CreateAndRunJob();
+
+  const CrdSessionAvailability expected = [&]() {
+    switch (session_type) {
+      case TestSessionType::kNoSession:
+        return CrdSessionAvailability::AVAILABLE;
+
+      case TestSessionType::kGuestSession:
+      case TestSessionType::kUnaffiliatedUserSession:
+      case TestSessionType::kManuallyLaunchedArcKioskSession:
+      case TestSessionType::kManuallyLaunchedWebKioskSession:
+      case TestSessionType::kManuallyLaunchedKioskSession:
+      case TestSessionType::kAutoLaunchedArcKioskSession:
+      case TestSessionType::kAutoLaunchedWebKioskSession:
+      case TestSessionType::kAutoLaunchedKioskSession:
+      case TestSessionType::kManagedGuestSession:
+      case TestSessionType::kAffiliatedUserSession:
+        return CrdSessionAvailability::
+            UNAVAILABLE_UNSUPPORTED_USER_SESSION_TYPE;
+    }
+  }();
+
+  EXPECT_EQ(ParseJsonDict(result.payload).FindInt("remoteAccessAvailability"),
+            expected);
 }
 
 INSTANTIATE_TEST_SUITE_P(

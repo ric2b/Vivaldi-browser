@@ -9,15 +9,16 @@
 #include <memory>
 
 #include "ash/webui/camera_app_ui/url_constants.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gtest_util.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -37,6 +38,7 @@
 #include "components/captive_portal/core/buildflags.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/policy/core/common/policy_pref_names.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/services/storage/public/cpp/storage_prefs.h"
 #include "components/variations/variations_associated_data.h"
@@ -59,6 +61,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/switches.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
@@ -90,7 +93,6 @@
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/web_applications/isolation_prefs_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "third_party/blink/public/common/features.h"
@@ -196,15 +198,29 @@ TEST_F(ChromeContentBrowserClientWindowTest, ShouldStayInParentProcessForNTP) {
       content::SiteInstance::CreateForURL(browser()->profile(),
                                           GURL("chrome-search://remote-ntp"));
   EXPECT_TRUE(client.ShouldStayInParentProcessForNTP(
-      GURL("chrome-search://remote-ntp"), site_instance.get()));
+      GURL("chrome-search://most-visited/title.html"),
+      site_instance->GetSiteURL()));
+
+  // Only the most visited tiles host is allowed to stay in the 3P NTP.
+  EXPECT_FALSE(client.ShouldStayInParentProcessForNTP(
+      GURL("chrome-search://foo/"), site_instance->GetSiteURL()));
+  EXPECT_FALSE(client.ShouldStayInParentProcessForNTP(
+      GURL("chrome://new-tab-page"), site_instance->GetSiteURL()));
 
   site_instance = content::SiteInstance::CreateForURL(
       browser()->profile(), GURL("chrome://new-tab-page"));
+
   // chrome://new-tab-page is an NTP replacing local-ntp and supports OOPIFs.
   // ShouldStayInParentProcessForNTP() should only return true for NTPs hosted
   // under the chrome-search: scheme.
   EXPECT_FALSE(client.ShouldStayInParentProcessForNTP(
-      GURL("chrome://new-tab-page"), site_instance.get()));
+      GURL("chrome://new-tab-page"), site_instance->GetSiteURL()));
+
+  // For now, we also allow chrome-search://most-visited to stay in 1P NTP,
+  // chrome://new-tab-page.  We should consider tightening this to only allow
+  // most-visited tiles to stay in 3P NTP.
+  EXPECT_TRUE(client.ShouldStayInParentProcessForNTP(
+      GURL("chrome-search://most-visited"), site_instance->GetSiteURL()));
 }
 
 TEST_F(ChromeContentBrowserClientWindowTest, OverrideNavigationParams) {
@@ -464,6 +480,31 @@ TEST_F(ChromeContentBrowserClientGetLoggingFileTest, GetLoggingFile) {
   EXPECT_FALSE(client.GetLoggingFileName(cmd_line).empty());
 }
 
+#if BUILDFLAG(IS_WIN)
+TEST_F(ChromeContentBrowserClientGetLoggingFileTest,
+       GetLoggingFileFromCommandLine) {
+  base::CommandLine cmd_line(base::CommandLine::NO_PROGRAM);
+  cmd_line.AppendSwitchASCII(switches::kLogFile, "c:\\path\\test_log.txt");
+  ChromeContentBrowserClient client;
+  base::FilePath log_file_name;
+  EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("test_log.txt")).value(),
+            client.GetLoggingFileName(cmd_line).BaseName().value());
+  // Path must be absolute.
+  EXPECT_TRUE(client.GetLoggingFileName(cmd_line).IsAbsolute());
+}
+TEST_F(ChromeContentBrowserClientGetLoggingFileTest,
+       GetLoggingFileFromCommandLineFallback) {
+  base::CommandLine cmd_line(base::CommandLine::NO_PROGRAM);
+  cmd_line.AppendSwitchASCII(switches::kLogFile, "test_log.txt");
+  ChromeContentBrowserClient client;
+  base::FilePath log_file_name;
+  // Windows falls back to the default if an absolute path is not provided.
+  EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("chrome_debug.log")).value(),
+            client.GetLoggingFileName(cmd_line).BaseName().value());
+  // Path must be absolute.
+  EXPECT_TRUE(client.GetLoggingFileName(cmd_line).IsAbsolute());
+}
+#else
 TEST_F(ChromeContentBrowserClientGetLoggingFileTest,
        GetLoggingFileFromCommandLine) {
   base::CommandLine cmd_line(base::CommandLine::NO_PROGRAM);
@@ -473,6 +514,7 @@ TEST_F(ChromeContentBrowserClientGetLoggingFileTest,
   EXPECT_EQ(base::FilePath(FILE_PATH_LITERAL("test_log.txt")).value(),
             client.GetLoggingFileName(cmd_line).value());
 }
+#endif  // BUILDFLAG(IS_WIN)
 
 class TestChromeContentBrowserClient : public ChromeContentBrowserClient {
  public:
@@ -502,6 +544,36 @@ TEST_F(ChromeContentBrowserClientTest, HandleWebUIReverse) {
   EXPECT_TRUE(test_content_browser_client.HandleWebUIReverse(&chrome_settings,
                                                              &profile_));
 }
+
+#if !BUILDFLAG(IS_ANDROID)
+TEST_F(ChromeContentBrowserClientTest, RedirectPrivacySandboxURL) {
+  base::test::ScopedFeatureList feature_list(
+      privacy_sandbox::kPrivacySandboxSettings4);
+
+  TestChromeContentBrowserClient test_content_browser_client;
+  base::HistogramTester histogram_tester;
+  const std::string histogram_name =
+      "Settings.PrivacySandbox.DeprecatedRedirect";
+
+  GURL settings_url = GURL(chrome::kChromeUISettingsURL);
+  settings_url = net::AppendQueryParameter(settings_url, "foo", "bar");
+
+  GURL::Replacements replacements;
+  replacements.SetPathStr(chrome::kPrivacySandboxSubPagePath);
+  GURL old_settings_url = settings_url.ReplaceComponents(replacements);
+
+  replacements.SetPathStr(chrome::kAdPrivacySubPagePath);
+  GURL new_settings_url = settings_url.ReplaceComponents(replacements);
+
+  test_content_browser_client.HandleWebUI(&old_settings_url, &profile_);
+  EXPECT_EQ(new_settings_url, old_settings_url);
+  histogram_tester.ExpectUniqueSample(histogram_name, true, 1);
+
+  test_content_browser_client.HandleWebUI(&new_settings_url, &profile_);
+  histogram_tester.ExpectBucketCount(histogram_name, false, 1);
+  histogram_tester.ExpectTotalCount(histogram_name, 2);
+}
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
 class ChromeContentSettingsRedirectTest
@@ -783,15 +855,6 @@ class ChromeContentBrowserClientStoragePartitionTest
   content::StoragePartitionConfig CreateDefaultStoragePartitionConfig() {
     return content::StoragePartitionConfig::CreateDefault(&profile_);
   }
-
-  void RegisterAppIsolationState(const std::string& app_id,
-                                 const std::string& scope,
-                                 bool isolated) {
-    web_app::WebApp app(app_id);
-    app.SetScope(GURL(scope));
-    app.SetStorageIsolated(isolated);
-    web_app::RecordOrRemoveAppIsolationState(profile_.GetPrefs(), app);
-  }
 };
 // static
 constexpr char ChromeContentBrowserClientStoragePartitionTest::kAppId[];
@@ -810,25 +873,7 @@ TEST_F(ChromeContentBrowserClientStoragePartitionTest,
 }
 
 TEST_F(ChromeContentBrowserClientStoragePartitionTest,
-       DefaultPartitionIsUsedOnHttpsWhenIsolationDisabled) {
-  RegisterAppIsolationState(kAppId, kHttpsScope, /*isolated=*/true);
-
-  TestChromeContentBrowserClient test_content_browser_client;
-  content::StoragePartitionConfig config =
-      test_content_browser_client.GetStoragePartitionConfigForSite(
-          &profile_, GURL(kHttpsScope));
-
-  EXPECT_EQ(CreateDefaultStoragePartitionConfig(), config);
-  EXPECT_FALSE(
-      test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-          &profile_, GURL(kHttpsScope),
-          /*origin_matches_flag=*/false));
-}
-
-TEST_F(ChromeContentBrowserClientStoragePartitionTest,
        DefaultPartitionIsUsedForNonIsolatedPWAs) {
-  RegisterAppIsolationState(kAppId, kHttpsScope, /*isolated=*/false);
-
   TestChromeContentBrowserClient test_content_browser_client;
   content::StoragePartitionConfig config =
       test_content_browser_client.GetStoragePartitionConfigForSite(
@@ -837,8 +882,7 @@ TEST_F(ChromeContentBrowserClientStoragePartitionTest,
   EXPECT_EQ(CreateDefaultStoragePartitionConfig(), config);
   EXPECT_FALSE(
       test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-          &profile_, GURL(kHttpsScope),
-          /*origin_matches_flag=*/false));
+          &profile_, GURL(kHttpsScope)));
 }
 
 TEST_F(ChromeContentBrowserClientStoragePartitionTest,
@@ -847,10 +891,9 @@ TEST_F(ChromeContentBrowserClientStoragePartitionTest,
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kIsolatedWebApps);
 
-  EXPECT_THAT(
-      test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-          &profile_, GURL(kIsolatedAppScope), /*origin_matches_flag=*/false),
-      IsTrue());
+  EXPECT_THAT(test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
+                  &profile_, GURL(kIsolatedAppScope)),
+              IsTrue());
 }
 
 TEST_F(
@@ -862,8 +905,7 @@ TEST_F(
   scoped_feature_list.InitAndDisableFeature(features::kIsolatedWebApps);
 
   EXPECT_THAT(test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-                  &profile_, GURL(kIsolatedAppScope),
-                  /*origin_matches_flag=*/false),
+                  &profile_, GURL(kIsolatedAppScope)),
               IsFalse());
 }
 
@@ -875,33 +917,8 @@ TEST_F(ChromeContentBrowserClientStoragePartitionTest,
   scoped_feature_list.InitAndEnableFeature(features::kIsolatedWebApps);
 
   EXPECT_THAT(test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-                  &profile_, GURL(kHttpsScope),
-                  /*origin_matches_flag=*/false),
+                  &profile_, GURL(kHttpsScope)),
               IsFalse());
-}
-
-TEST_F(ChromeContentBrowserClientStoragePartitionTest,
-       DedicatedPartitionIsUsedForIsolatedHttpsApps) {
-  RegisterAppIsolationState(kAppId, kHttpsScope, /*isolated=*/true);
-
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kIsolatedWebApps);
-
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kIsolatedAppOrigins, kHttpsScope);
-
-  TestChromeContentBrowserClient test_content_browser_client;
-  content::StoragePartitionConfig config =
-      test_content_browser_client.GetStoragePartitionConfigForSite(
-          &profile_, GURL(kHttpsScope));
-
-  auto expected_config = content::StoragePartitionConfig::Create(
-      &profile_, /*partition_domain=*/kAppId, /*partition_name=*/"",
-      /*in_memory=*/false);
-  EXPECT_EQ(expected_config, config);
-  EXPECT_TRUE(test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-      &profile_, GURL(kHttpsScope),
-      /*origin_matches_flag=*/true));
 }
 
 TEST_F(ChromeContentBrowserClientStoragePartitionTest,
@@ -914,17 +931,13 @@ TEST_F(ChromeContentBrowserClientStoragePartitionTest,
   EXPECT_EQ(CreateDefaultStoragePartitionConfig(), config);
   EXPECT_FALSE(
       test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-          &profile_, GURL(kIsolatedAppScope),
-          /*origin_matches_flag=*/false));
+          &profile_, GURL(kIsolatedAppScope)));
 }
 
 TEST_F(ChromeContentBrowserClientStoragePartitionTest,
        DedicatedPartitionIsUsedForIsolatedApps) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kIsolatedWebApps);
-
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kIsolatedAppOrigins, kIsolatedAppScope);
 
   TestChromeContentBrowserClient test_content_browser_client;
   content::StoragePartitionConfig config =
@@ -938,8 +951,7 @@ TEST_F(ChromeContentBrowserClientStoragePartitionTest,
       /*in_memory=*/false);
   EXPECT_EQ(expected_config, config);
   EXPECT_TRUE(test_content_browser_client.ShouldUrlUseApplicationIsolationLevel(
-      &profile_, GURL(kIsolatedAppScope),
-      /*origin_matches_flag=*/false));
+      &profile_, GURL(kIsolatedAppScope)));
 }
 
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -984,56 +996,6 @@ TEST_F(ChromeContentBrowserClientSwitchTest, WebSQLAccessEnabled) {
   profile()->GetPrefs()->SetBoolean(storage::kWebSQLAccess, true);
   base::CommandLine result = FetchCommandLineSwitchesForRendererProcess();
   EXPECT_TRUE(result.HasSwitch(blink::switches::kWebSQLAccess));
-}
-
-TEST_F(ChromeContentBrowserClientSwitchTest,
-       WebSQLNonSecureContextEnabledDefault) {
-  base::CommandLine result = FetchCommandLineSwitchesForRendererProcess();
-  EXPECT_FALSE(
-      result.HasSwitch(blink::switches::kWebSQLNonSecureContextEnabled));
-}
-
-TEST_F(ChromeContentBrowserClientSwitchTest,
-       WebSQLNonSecureContextEnabledDisabled) {
-  profile()->GetPrefs()->SetBoolean(storage::kWebSQLNonSecureContextEnabled,
-                                    false);
-  base::CommandLine result = FetchCommandLineSwitchesForRendererProcess();
-  EXPECT_FALSE(
-      result.HasSwitch(blink::switches::kWebSQLNonSecureContextEnabled));
-}
-
-TEST_F(ChromeContentBrowserClientSwitchTest,
-       WebSQLNonSecureContextEnabledEnabled) {
-  profile()->GetPrefs()->SetBoolean(storage::kWebSQLNonSecureContextEnabled,
-                                    true);
-  base::CommandLine result = FetchCommandLineSwitchesForRendererProcess();
-  EXPECT_TRUE(
-      result.HasSwitch(blink::switches::kWebSQLNonSecureContextEnabled));
-}
-
-TEST_F(ChromeContentBrowserClientSwitchTest,
-       FileSystemSyncAccessHandleAsyncInterfaceEnabledDefault) {
-  base::CommandLine result = FetchCommandLineSwitchesForRendererProcess();
-  EXPECT_FALSE(result.HasSwitch(
-      switches::kFileSystemSyncAccessHandleAsyncInterfaceEnabled));
-}
-
-TEST_F(ChromeContentBrowserClientSwitchTest,
-       FileSystemSyncAccessHandleAsyncInterfaceEnabledDisabled) {
-  profile()->GetPrefs()->SetBoolean(
-      storage::kFileSystemSyncAccessHandleAsyncInterfaceEnabled, false);
-  base::CommandLine result = FetchCommandLineSwitchesForRendererProcess();
-  EXPECT_FALSE(result.HasSwitch(
-      switches::kFileSystemSyncAccessHandleAsyncInterfaceEnabled));
-}
-
-TEST_F(ChromeContentBrowserClientSwitchTest,
-       FileSystemSyncAccessHandleAsyncInterfaceEnabledEnabled) {
-  profile()->GetPrefs()->SetBoolean(
-      storage::kFileSystemSyncAccessHandleAsyncInterfaceEnabled, true);
-  base::CommandLine result = FetchCommandLineSwitchesForRendererProcess();
-  EXPECT_TRUE(result.HasSwitch(
-      switches::kFileSystemSyncAccessHandleAsyncInterfaceEnabled));
 }
 
 #if BUILDFLAG(IS_CHROMEOS)

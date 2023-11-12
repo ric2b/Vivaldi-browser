@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/json/values_util.h"
@@ -56,6 +56,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
 #include "services/network/test/udp_socket_test_util.h"
 #include "sql/database.h"
@@ -377,7 +378,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest,
     return;
 
   mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
-  GetNetworkService()->BindTestInterface(
+  GetNetworkService()->BindTestInterfaceForTesting(
       network_service_test.BindNewPipeAndPassReceiver());
   // TODO(crbug.com/901026): Make sure the network process is started to avoid a
   // deadlock on Android.
@@ -430,7 +431,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, SyncCookieGetOnCrash) {
     return;
 
   mojo::Remote<network::mojom::NetworkServiceTest> network_service_test;
-  GetNetworkService()->BindTestInterface(
+  GetNetworkService()->BindTestInterfaceForTesting(
       network_service_test.BindNewPipeAndPassReceiver());
   network_service_test->CrashOnGetCookieList();
 
@@ -1084,9 +1085,6 @@ void MigrationTestInternal(const base::FilePath& tempdir_one,
       EXPECT_FALSE(base::PathExists(
           tempdir_two.Append(kNetworkSubpath).Append(kCheckpointFileName)));
       histogram_tester.ExpectUniqueSample(
-          "NetworkService.GrantSandboxToCacheResult", /*sample=kSuccess=*/0,
-          /*expected_bucket_count=*/1);
-      histogram_tester.ExpectUniqueSample(
           "NetworkService.GrantSandboxResult",
           /*sample=kFailedToCreateDataDirectory=*/2,
           /*expected_bucket_count=*/1);
@@ -1136,10 +1134,6 @@ void MigrationTestInternal(const base::FilePath& tempdir_one,
       break;
 #endif  // BUILDFLAG(IS_WIN)
     case FailureType::kCacheDirIsAFile:
-      histogram_tester.ExpectUniqueSample(
-          "NetworkService.GrantSandboxToCacheResult",
-          /*sample=kFailedToCreateCacheDirectory=*/1,
-          /*expected_bucket_count=*/1);
       histogram_tester.ExpectUniqueSample("NetworkService.GrantSandboxResult",
                                           /*sample=kSuccess=*/0,
                                           /*expected_bucket_count=*/1);

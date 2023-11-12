@@ -7,7 +7,7 @@
 #include <map>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/shill/fake_shill_device_client.h"
@@ -63,13 +63,11 @@ class ShillDeviceClientImpl : public ShillDeviceClient {
 
   void GetProperties(
       const dbus::ObjectPath& device_path,
-      chromeos::DBusMethodCallback<base::Value> callback) override {
+      chromeos::DBusMethodCallback<base::Value::Dict> callback) override {
     dbus::MethodCall method_call(shill::kFlimflamDeviceInterface,
                                  shill::kGetPropertiesFunction);
     GetHelper(device_path)
-        ->CallValueMethod(&method_call,
-                          base::BindOnce(&ShillClientHelper::OnGetProperties,
-                                         device_path, std::move(callback)));
+        ->CallDictValueMethod(&method_call, std::move(callback));
   }
 
   void SetProperty(const dbus::ObjectPath& device_path,
@@ -81,7 +79,7 @@ class ShillDeviceClientImpl : public ShillDeviceClient {
                                  shill::kSetPropertyFunction);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(name);
-    ShillClientHelper::AppendValueDataAsVariant(&writer, value);
+    ShillClientHelper::AppendValueDataAsVariant(&writer, name, value);
     GetHelper(device_path)
         ->CallVoidMethodWithErrorCallback(&method_call, std::move(callback),
                                           std::move(error_callback));

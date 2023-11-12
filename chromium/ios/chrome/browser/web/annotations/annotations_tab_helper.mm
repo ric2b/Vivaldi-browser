@@ -5,17 +5,20 @@
 #import "ios/chrome/browser/web/annotations/annotations_tab_helper.h"
 
 #import "base/metrics/histogram_functions.h"
+#import "base/metrics/user_metrics.h"
 #import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/task/thread_pool.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/mailto_handler/mailto_handler_service.h"
+#import "ios/chrome/browser/mailto_handler/mailto_handler_service_factory.h"
 #import "ios/chrome/browser/text_selection/text_classifier_model_service.h"
 #import "ios/chrome/browser/text_selection/text_classifier_model_service_factory.h"
 #import "ios/public/provider/chrome/browser/context_menu/context_menu_api.h"
-#import "ios/web/annotations/annotations_text_manager.h"
-#import "ios/web/annotations/annotations_utils.h"
+#import "ios/web/common/annotations_utils.h"
 #import "ios/web/common/url_scheme_util.h"
+#import "ios/web/public/annotations/annotations_text_manager.h"
 #import "ios/web/public/browser_state.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frame_util.h"
@@ -27,10 +30,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-static NSString* kDecorationDate = @"DATE";
-static NSString* kDecorationAddress = @"ADDRESS";
-static NSString* kDecorationPhoneNumber = @"PHONE_NUMBER";
 
 AnnotationsTabHelper::AnnotationsTabHelper(web::WebState* web_state)
     : web_state_(web_state) {
@@ -64,7 +63,8 @@ void AnnotationsTabHelper::WebStateDestroyed(web::WebState* web_state) {
 #pragma mark - AnnotationsTextObserver methods.
 
 void AnnotationsTabHelper::OnTextExtracted(web::WebState* web_state,
-                                           const std::string& text) {
+                                           const std::string& text,
+                                           int seq_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(web_state_, web_state);
 
@@ -79,10 +79,10 @@ void AnnotationsTabHelper::OnTextExtracted(web::WebState* web_state,
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&ios::provider::ExtractDataElementsFromText, text,
-                     ios::provider::GetHandledIntentTypes(web_state),
+                     ios::provider::GetHandledIntentTypesForOneTap(web_state),
                      std::move(model_path)),
       base::BindOnce(&AnnotationsTabHelper::ApplyDeferredProcessing,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr(), seq_id));
 }
 
 void AnnotationsTabHelper::OnDecorated(web::WebState* web_state,
@@ -101,25 +101,46 @@ void AnnotationsTabHelper::OnClick(web::WebState* web_state,
                                    const std::string& data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   NSTextCheckingResult* match =
-      web::annotations::DecodeNSTextCheckingResultData(
-          base::SysUTF8ToNSString(data));
+      web::DecodeNSTextCheckingResultData(base::SysUTF8ToNSString(data));
   if (!match) {
     return;
   }
+  auto* manager = web::AnnotationsTextManager::FromWebState(web_state_);
+  if (manager) {
+    manager->RemoveHighlight();
+  }
 
-  NSArray<CRWContextMenuItem*>* items =
-      ios::provider::GetContextMenuElementsToAdd(web_state, match,
-                                                 base::SysUTF8ToNSString(text),
-                                                 base_view_controller_);
-
-  if (items.count) {
-    [web_state_->GetWebViewProxy() showMenuWithItems:items rect:rect];
+  if (match.resultType == NSTextCheckingTypePhoneNumber) {
+    NSString* phone_number =
+        [match.phoneNumber stringByReplacingOccurrencesOfString:@" "
+                                                     withString:@""];
+    NSString* phone_number_call_format =
+        [NSString stringWithFormat:@"tel:%@", phone_number];
+    [[UIApplication sharedApplication]
+                  openURL:[NSURL URLWithString:phone_number_call_format]
+                  options:@{}
+        completionHandler:nil];
+  } else if (web::IsNSTextCheckingResultEmail(match)) {
+    base::RecordAction(
+        base::UserMetricsAction("IOS.EmailExperience.OneTap.CreateEmail"));
+    MailtoHandlerServiceFactory::GetForBrowserState(
+        ChromeBrowserState::FromBrowserState(web_state->GetBrowserState()))
+        ->HandleMailtoURL(match.URL);
+  } else {
+    NSArray<CRWContextMenuItem*>* items =
+        ios::provider::GetContextMenuElementsToAdd(
+            web_state, match, base::SysUTF8ToNSString(text),
+            base_view_controller_);
+    if (items.count) {
+      [web_state_->GetWebViewProxy() showMenuWithItems:items rect:rect];
+    }
   }
 }
 
 #pragma mark - Private Methods
 
 void AnnotationsTabHelper::ApplyDeferredProcessing(
+    int seq_id,
     absl::optional<base::Value> deferred) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -128,7 +149,7 @@ void AnnotationsTabHelper::ApplyDeferredProcessing(
     DCHECK(manager);
 
     base::Value annotations(std::move(deferred.value()));
-    manager->DecorateAnnotations(web_state_, annotations);
+    manager->DecorateAnnotations(web_state_, annotations, seq_id);
   }
 }
 

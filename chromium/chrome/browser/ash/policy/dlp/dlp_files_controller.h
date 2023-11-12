@@ -8,9 +8,9 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager.h"
 #include "chromeos/dbus/dlp/dlp_service.pb.h"
@@ -18,6 +18,8 @@
 #include "components/services/app_service/public/cpp/app_update.h"
 #include "components/services/app_service/public/cpp/intent.h"
 #include "storage/browser/file_system/file_system_url.h"
+#include "ui/base/clipboard/file_info.h"
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/shell_dialogs/selected_file_info.h"
 #include "url/gurl.h"
 
@@ -129,7 +131,7 @@ class DlpFilesController {
   struct DlpFileDestination {
     DlpFileDestination();
     explicit DlpFileDestination(const std::string& url);
-    explicit DlpFileDestination(const dlp::DlpComponent component);
+    explicit DlpFileDestination(const ::dlp::DlpComponent component);
     explicit DlpFileDestination(const DlpRulesManager::Component component);
 
     DlpFileDestination(const DlpFileDestination&);
@@ -157,8 +159,7 @@ class DlpFilesController {
   using GetFilesRestrictedByAnyRuleCallback = GetDisallowedTransfersCallback;
   using FilterDisallowedUploadsCallback =
       base::OnceCallback<void(std::vector<ui::SelectedFileInfo>)>;
-  using CheckIfDownloadAllowedCallback = base::OnceCallback<void(bool)>;
-  using CheckIfLaunchAllowedCallback = base::OnceCallback<void(bool)>;
+  using CheckIfDlpAllowedCallback = base::OnceCallback<void(bool is_allowed)>;
   using GetDlpMetadataCallback =
       base::OnceCallback<void(std::vector<DlpFileMetadata>)>;
   using IsFilesTransferRestrictedCallback =
@@ -188,7 +189,7 @@ class DlpFilesController {
 
   // Filters files disallowed to be uploaded to `destination`.
   virtual void FilterDisallowedUploads(
-      std::vector<ui::SelectedFileInfo> uploaded_files,
+      std::vector<ui::SelectedFileInfo> selected_files,
       const DlpFileDestination& destination,
       FilterDisallowedUploadsCallback result_callback);
 
@@ -197,7 +198,7 @@ class DlpFilesController {
   virtual void CheckIfDownloadAllowed(
       const DlpFileDestination& download_src,
       const base::FilePath& file_path,
-      CheckIfDownloadAllowedCallback result_callback);
+      CheckIfDlpAllowedCallback result_callback);
 
   // Returns whether downloads from `download_src` to `file_path` might be
   // blocked by DLP, and so a picker should be shown.
@@ -208,7 +209,12 @@ class DlpFilesController {
   // Checks whether launching `app_update` with `intent` is allowed.
   void CheckIfLaunchAllowed(const apps::AppUpdate& app_update,
                             apps::IntentPtr intent,
-                            CheckIfLaunchAllowedCallback result_callback);
+                            CheckIfDlpAllowedCallback result_callback);
+
+  // Returns true if `app_update` is blocked from opening any of the
+  // files in `intent`.
+  virtual bool IsLaunchBlocked(const apps::AppUpdate& app_update,
+                               const apps::IntentPtr& intent);
 
   // Returns a sublist of |transferred_files| which aren't allowed to be
   // transferred to either |destination_url| or |destination_component| in
@@ -239,6 +245,12 @@ class DlpFilesController {
       base::OnceCallback<void(std::unique_ptr<file_access::ScopedFileAccess>)>
           result_callback);
 
+  // Checks whether dropping `dropped_files` to `data_dst` is allowed.
+  virtual void CheckIfDropAllowed(
+      const std::vector<ui::FileInfo>& dropped_files,
+      const ui::DataTransferEndpoint* data_dst,
+      CheckIfDlpAllowedCallback result_callback);
+
   void SetWarnNotifierForTesting(
       std::unique_ptr<DlpWarnNotifier> warn_notifier);
 
@@ -255,6 +267,7 @@ class DlpFilesController {
       std::vector<FileDaemonInfo> restricted_files_sources,
       std::vector<FileDaemonInfo> warned_files_sources,
       std::vector<std::string> warned_src_patterns,
+      std::vector<DlpRulesManager::RuleMetadata> warned_rules_metadata,
       const DlpFileDestination& dst,
       const absl::optional<std::string>& dst_pattern,
       FileAction files_action,
@@ -264,19 +277,22 @@ class DlpFilesController {
   void ReturnDisallowedTransfers(
       base::flat_map<std::string, storage::FileSystemURL> files_map,
       GetDisallowedTransfersCallback result_callback,
-      dlp::CheckFilesTransferResponse response);
+      ::dlp::CheckFilesTransferResponse response);
 
   void ReturnAllowedUploads(std::vector<ui::SelectedFileInfo> uploaded_files,
                             FilterDisallowedUploadsCallback result_callback,
-                            dlp::CheckFilesTransferResponse response);
+                            ::dlp::CheckFilesTransferResponse response);
 
   void ReturnDlpMetadata(std::vector<absl::optional<ino64_t>> inodes,
                          absl::optional<DlpFileDestination> destination,
                          GetDlpMetadataCallback result_callback,
                          const ::dlp::GetFilesSourcesResponse response);
 
-  void LaunchIfAllowed(CheckIfLaunchAllowedCallback result_callback,
+  void LaunchIfAllowed(CheckIfDlpAllowedCallback result_callback,
                        ::dlp::CheckFilesTransferResponse response);
+
+  void ReturnIfDropAllowed(CheckIfDlpAllowedCallback result_callback,
+                           ::dlp::CheckFilesTransferResponse response);
 
   // Reports an event if a `DlpReportingManager` instance exists. When
   // `dst_pattern` is missing, we report `dst.component.value()` instead. When
@@ -286,18 +302,34 @@ class DlpFilesController {
                         const std::string& source_pattern,
                         const DlpFileDestination& dst,
                         const absl::optional<std::string>& dst_pattern,
+                        const DlpRulesManager::RuleMetadata& rule_metadata,
                         absl::optional<DlpRulesManager::Level> level);
 
   // Closes warning dialog if `response` has error.
-  ::dlp::CheckFilesTransferResponse MaybeCloseDialog(
-      ::dlp::CheckFilesTransferResponse response);
+  void MaybeCloseDialog(::dlp::CheckFilesTransferResponse response);
 
   // Called when `transferred_files` is ready. Constructs CheckFilesTransfer
   // request and forwards it to the dlp daemon.
-  void OnGetFilesUrls(storage::FileSystemURL destination,
-                      bool is_move,
-                      GetDisallowedTransfersCallback result_callback,
-                      std::vector<storage::FileSystemURL> transferred_files);
+  void ContinueGetDisallowedTransfers(
+      storage::FileSystemURL destination,
+      bool is_move,
+      GetDisallowedTransfersCallback result_callback,
+      std::vector<storage::FileSystemURL> transferred_files);
+
+  // Called when `uploaded_files` is ready. Constructs CheckFilesTransfer
+  // request and forwards it to the dlp daemon.
+  void ContinueFilterDisallowedUploads(
+      std::vector<ui::SelectedFileInfo> selected_files,
+      const DlpFileDestination& destination,
+      FilterDisallowedUploadsCallback result_callback,
+      std::vector<storage::FileSystemURL> uploaded_files);
+
+  // Called when `dropped_files` is ready. Constructs CheckFilesTransfer
+  // request and forwards it to the dlp daemon.
+  void ContinueCheckIfDropAllowed(
+      const DlpFileDestination& destination,
+      CheckIfDlpAllowedCallback result_callback,
+      std::vector<storage::FileSystemURL> dropped_files);
 
   const DlpRulesManager& rules_manager_;
 

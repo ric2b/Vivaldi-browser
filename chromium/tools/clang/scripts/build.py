@@ -36,6 +36,8 @@ from update import (CDS_URL, CHROMIUM_DIR, CLANG_REVISION, LLVM_BUILD_DIR,
 THIRD_PARTY_DIR = os.path.join(CHROMIUM_DIR, 'third_party')
 LLVM_DIR = os.path.join(THIRD_PARTY_DIR, 'llvm')
 COMPILER_RT_DIR = os.path.join(LLVM_DIR, 'compiler-rt')
+LLVM_GIT_URL = ('https://chromium.googlesource.com/external/' +
+                'github.com/llvm/llvm-project')
 LLVM_BOOTSTRAP_DIR = os.path.join(THIRD_PARTY_DIR, 'llvm-bootstrap')
 LLVM_BOOTSTRAP_INSTALL_DIR = os.path.join(THIRD_PARTY_DIR,
                                           'llvm-bootstrap-install')
@@ -49,9 +51,11 @@ FUCHSIA_SDK_DIR = os.path.join(CHROMIUM_DIR, 'third_party', 'fuchsia-sdk',
                                'sdk')
 PINNED_CLANG_DIR = os.path.join(LLVM_BUILD_TOOLS_DIR, 'pinned-clang')
 
-BUG_REPORT_URL = ('https://crbug.com and run'
-                  ' tools/clang/scripts/process_crashreports.py'
-                  ' (only works inside Google) which will upload a report')
+BUG_REPORT_URL = ('https://crbug.com in the Tools>LLVM component,'
+                  ' run tools/clang/scripts/process_crashreports.py'
+                  ' (only if inside Google) to upload crash related files,')
+
+LIBXML2_VERSION = 'libxml2-v2.9.12'
 
 win_sdk_dir = None
 def GetWinSDKDir():
@@ -128,11 +132,11 @@ def CopyDirectoryContents(src, dst):
     CopyFile(os.path.join(src, f), dst)
 
 
-def CheckoutLLVM(commit, dir):
-  """Checkout the LLVM monorepo at a certain git commit in dir. Any local
+def CheckoutGitRepo(name, git_url, commit, dir):
+  """Checkout the git repo at a certain git commit in dir. Any local
   modifications in dir will be lost."""
 
-  print('Checking out LLVM monorepo %s into %s' % (commit, dir))
+  print(f'Checking out {name} {commit} into {dir}')
 
   # Try updating the current repo if it exists and has no local diff.
   if os.path.isdir(dir):
@@ -150,17 +154,14 @@ def CheckoutLLVM(commit, dir):
     print('Removing %s.' % dir)
     RmTree(dir)
 
-  clone_cmd = [
-      'git', 'clone', 'https://chromium.googlesource.com/external/' +
-      'github.com/llvm/llvm-project', dir
-  ]
+  clone_cmd = ['git', 'clone', git_url, dir]
 
   if RunCommand(clone_cmd, fail_hard=False):
     os.chdir(dir)
     if RunCommand(['git', 'checkout', commit], fail_hard=False):
       return
 
-  print('CheckoutLLVM failed.')
+  print('CheckoutGitRepo failed.')
   sys.exit(1)
 
 
@@ -262,6 +263,30 @@ def AddZlibToPath():
   return zlib_dir
 
 
+class LibXmlDirs:
+  def __init__(self):
+    self.unzip_dir = LLVM_BUILD_TOOLS_DIR
+    # When unpacked in `unzip_dir`, this will be the directory where the
+    # sources are found.
+    self.src_dir = os.path.join(self.unzip_dir, LIBXML2_VERSION)
+    # The lib is built in a directory under its sources.
+    self.build_dir = os.path.join(self.src_dir, 'build')
+    # The lib is installed in a directory under where its built.
+    self.install_dir = os.path.join(self.build_dir, 'install')
+    # The full path to installed include files.
+    self.include_dir = os.path.join(self.install_dir, 'include', 'libxml2')
+    # The full path to installed lib files.
+    self.lib_dir = os.path.join(self.install_dir, 'lib')
+
+
+def GetLibXml2Dirs():
+  """Gets the set of directories where LibXml2 is located.
+
+  Includes the diractories where the source is unpacked, where it is built,
+  and installed."""
+  return LibXmlDirs()
+
+
 def BuildLibXml2():
   """Download and build libxml2"""
   # The .tar.gz on GCS was uploaded as follows.
@@ -273,17 +298,13 @@ def BuildLibXml2():
   # $ gsutil cp -n -a public-read libxml2-$VER.tar.gz \
   #   gs://chromium-browser-clang/tools
 
-  libxml2_version = 'libxml2-v2.9.12'
-  libxml2_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, libxml2_version)
-  if os.path.exists(libxml2_dir):
-    RmTree(libxml2_dir)
-  zip_name = libxml2_version + '.tar.gz'
-  DownloadAndUnpack(CDS_URL + '/tools/' + zip_name, LLVM_BUILD_TOOLS_DIR)
-  os.chdir(libxml2_dir)
-  os.mkdir('build')
-  os.chdir('build')
-
-  libxml2_install_dir = os.path.join(libxml2_dir, 'build', 'install')
+  dirs = GetLibXml2Dirs()
+  if os.path.exists(dirs.src_dir):
+    RmTree(dirs.src_dir)
+  zip_name = LIBXML2_VERSION + '.tar.gz'
+  DownloadAndUnpack(CDS_URL + '/tools/' + zip_name, dirs.unzip_dir)
+  os.mkdir(dirs.build_dir)
+  os.chdir(dirs.build_dir)
 
   # Disable everything except WITH_TREE and WITH_OUTPUT, both needed by LLVM's
   # WindowsManifestMerger.
@@ -341,14 +362,13 @@ def BuildLibXml2():
       msvc_arch='x64')
   RunCommand(['ninja', 'install'], msvc_arch='x64')
 
-  libxml2_include_dir = os.path.join(libxml2_install_dir, 'include', 'libxml2')
   if sys.platform == 'win32':
-    libxml2_lib = os.path.join(libxml2_install_dir, 'lib', 'libxml2s.lib')
+    libxml2_lib = os.path.join(dirs.lib_dir, 'libxml2s.lib')
   else:
-    libxml2_lib = os.path.join(libxml2_install_dir, 'lib', 'libxml2.a')
+    libxml2_lib = os.path.join(dirs.lib_dir, 'libxml2.a')
   extra_cmake_flags = [
       '-DLLVM_ENABLE_LIBXML2=FORCE_ON',
-      '-DLIBXML2_INCLUDE_DIR=' + libxml2_include_dir.replace('\\', '/'),
+      '-DLIBXML2_INCLUDE_DIR=' + dirs.include_dir.replace('\\', '/'),
       '-DLIBXML2_LIBRARIES=' + libxml2_lib.replace('\\', '/'),
       '-DLIBXML2_LIBRARY=' + libxml2_lib.replace('\\', '/'),
 
@@ -613,7 +633,7 @@ def main():
     checkout_revision = CLANG_REVISION
 
   if not args.skip_checkout:
-    CheckoutLLVM(checkout_revision, LLVM_DIR)
+    CheckoutGitRepo('LLVM monorepo', LLVM_GIT_URL, checkout_revision, LLVM_DIR)
 
   if args.llvm_force_head_revision:
     CLANG_REVISION = GetCommitDescription(checkout_revision)
@@ -625,6 +645,11 @@ def main():
 
   if not args.use_system_cmake:
     AddCMakeToPath()
+
+  if sys.platform == 'win32':
+    # CMake on Windows doesn't like depot_tools's ninja.bat wrapper.
+    ninja_dir = os.path.join(THIRD_PARTY_DIR, 'ninja')
+    os.environ['PATH'] = ninja_dir + os.pathsep + os.environ.get('PATH', '')
 
   if args.skip_build:
     return 0

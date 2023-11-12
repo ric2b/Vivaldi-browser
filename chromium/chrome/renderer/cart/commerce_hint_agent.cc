@@ -202,6 +202,10 @@ constexpr base::FeatureParam<std::string> kCouponProductIdPatternMapping{
     // Empty JSON string.
     ""};
 
+constexpr base::FeatureParam<std::string> kDOMBasedAddToCartRequestPattern{
+    &commerce::kChromeCartDomBasedHeuristics, "add-to-cart-request-pattern",
+    "(cart|product)?[\"|_|-]quantity\":[\"]?[\\d]+"};
+
 std::string eTLDPlusOne(const GURL& url) {
   return net::registry_controlled_domains::GetDomainAndRegistry(
       url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
@@ -360,6 +364,14 @@ const re2::RE2& GetAddToCartPattern() {
   return *instance;
 }
 
+const re2::RE2& GetDOMBasedAddToCartPattern() {
+  re2::RE2::Options options;
+  options.set_case_sensitive(false);
+  static base::NoDestructor<re2::RE2> instance(
+      kDOMBasedAddToCartRequestPattern.Get(), options);
+  return *instance;
+}
+
 const std::map<std::string, std::string>& GetPurchaseURLPatternMapping() {
   static base::NoDestructor<std::map<std::string, std::string>> pattern_map([] {
     base::Value json(
@@ -499,7 +511,8 @@ const std::map<std::string, std::string>& GetSkipAddToCartMapping() {
 }
 
 bool DetectAddToCart(content::RenderFrame* render_frame,
-                     const blink::WebURLRequest& request) {
+                     const blink::WebURLRequest& request,
+                     bool should_use_dom_based_heuristics) {
   blink::WebLocalFrame* frame = render_frame->GetWebFrame();
   const GURL& navigation_url(frame->GetDocument().Url());
   const GURL& url = request.Url();
@@ -583,7 +596,14 @@ bool DetectAddToCart(content::RenderFrame* render_frame,
     // Per-site skipping length limit when checking request text.
     bool skip_length_limit = navigation_url.DomainIs("otterbox.com");
 
-    if (CommerceHintAgent::IsAddToCart(str, skip_length_limit)) {
+    bool is_add_to_cart_request =
+        CommerceHintAgent::IsAddToCart(str, skip_length_limit);
+    if (should_use_dom_based_heuristics && !is_add_to_cart_request) {
+      is_add_to_cart_request =
+          CommerceHintAgent::IsAddToCartForDomBasedHeuristics(str);
+    }
+
+    if (is_add_to_cart_request) {
       std::string product_id;
       if (commerce::IsPartnerMerchant(url)) {
         GetProductIdFromRequest(str.substr(0, kLengthLimit), &product_id);
@@ -686,6 +706,12 @@ bool CommerceHintAgent::IsAddToCart(base::StringPiece str,
                                     bool skip_length_limit) {
   return PartialMatch(skip_length_limit ? str : str.substr(0, kLengthLimit),
                       GetAddToCartPattern());
+}
+
+bool CommerceHintAgent::IsAddToCartForDomBasedHeuristics(
+    base::StringPiece str) {
+  return PartialMatch(str.substr(0, kLengthLimit),
+                      GetDOMBasedAddToCartPattern());
 }
 
 // TODO(crbug.com/1310422): Remove below two APIs and move all related unit
@@ -844,7 +870,7 @@ void CommerceHintAgent::ExtractCartWithUpdatedScript(
       GetProductExtractionScript(product_id_json, cart_extraction_script));
 
   main_frame->RequestExecuteScript(
-      ISOLATED_WORLD_ID_CHROME_INTERNAL, base::make_span(&source, 1),
+      ISOLATED_WORLD_ID_CHROME_INTERNAL, base::make_span(&source, 1u),
       blink::mojom::UserActivationOption::kDoNotActivate,
       blink::mojom::EvaluationTiming::kAsynchronous,
       blink::mojom::LoadEventBlockingOption::kDoNotBlock,
@@ -860,10 +886,10 @@ void CommerceHintAgent::OnProductsExtracted(absl::optional<base::Value> results,
   // Only record when the start time is correctly captured.
   if (!results || !results->is_dict())
     return;
+  base::Value::Dict& results_dict = results->GetDict();
   if (!start_time.is_null()) {
-    results->GetDict().Set(
-        "execution_ms",
-        (base::TimeTicks::Now() - start_time).InMillisecondsF());
+    results_dict.Set("execution_ms",
+                     (base::TimeTicks::Now() - start_time).InMillisecondsF());
   }
 
   DVLOG(2) << "OnProductsExtracted: " << *results;
@@ -872,23 +898,23 @@ void CommerceHintAgent::OnProductsExtracted(absl::optional<base::Value> results,
       render_frame()->GetWebFrame()->GetDocument().GetUkmSourceId());
   auto record_time = [&](const std::string& key,
                          const std::string& metric_name) {
-    auto* value = results->FindKey(key);
-    if (!value)
+    absl::optional<double> optional_time = results_dict.FindDouble(key);
+    if (!optional_time) {
       return;
-    if (value->is_int() || value->is_double()) {
-      double time_value = value->GetDouble();
-      base::TimeDelta time = base::Milliseconds(time_value);
-      base::UmaHistogramTimes("Commerce.Carts." + metric_name, time);
+    }
 
-      if (metric_name == "ExtractionLongestTaskTime") {
-        builder.SetExtractionLongestTaskTime(time_value);
-      } else if (metric_name == "ExtractionTotalTasksTime") {
-        builder.SetExtractionTotalTasksTime(time_value);
-      } else if (metric_name == "ExtractionElapsedTime") {
-        builder.SetExtractionElapsedTime(time_value);
-      } else if (metric_name == "ExtractionExecutionTime") {
-        builder.SetExtractionExecutionTime(time_value);
-      }
+    double time_value = optional_time.value();
+    base::TimeDelta time = base::Milliseconds(time_value);
+    base::UmaHistogramTimes("Commerce.Carts." + metric_name, time);
+
+    if (metric_name == "ExtractionLongestTaskTime") {
+      builder.SetExtractionLongestTaskTime(time_value);
+    } else if (metric_name == "ExtractionTotalTasksTime") {
+      builder.SetExtractionTotalTasksTime(time_value);
+    } else if (metric_name == "ExtractionElapsedTime") {
+      builder.SetExtractionElapsedTime(time_value);
+    } else if (metric_name == "ExtractionExecutionTime") {
+      builder.SetExtractionExecutionTime(time_value);
     }
   };
   record_time("longest_task_ms", "ExtractionLongestTaskTime");
@@ -896,32 +922,35 @@ void CommerceHintAgent::OnProductsExtracted(absl::optional<base::Value> results,
   record_time("elapsed_ms", "ExtractionElapsedTime");
   record_time("execution_ms", "ExtractionExecutionTime");
 
-  auto* timedout = results->FindKey("timedout");
-  if (timedout && timedout->is_bool()) {
+  absl::optional<bool> timedout = results_dict.FindBool("timedout");
+  if (timedout) {
     base::UmaHistogramBoolean("Commerce.Carts.ExtractionTimedOut",
-                              timedout->GetBool());
-    builder.SetExtractionTimedOut(timedout->GetBool());
+                              timedout.value());
+    builder.SetExtractionTimedOut(timedout.value());
   }
   builder.Record(ukm_recorder_.get());
 
-  auto* extracted_products = results->FindKey("products");
-  if (!extracted_products)
+  const base::Value::List* extracted_products =
+      results_dict.FindList("products");
+  // Don't update cart when the return value does not exist or is not a list.
+  // This could be due to that the cart is not loaded.
+  if (!extracted_products) {
     return;
-  // Don't update cart when the return value is not a list. This could be due to
-  // that the cart is not loaded.
-  if (!extracted_products->is_list())
-    return;
+  }
   bool is_partner = commerce::IsPartnerMerchant(
       GURL(render_frame()->GetWebFrame()->GetDocument().Url()));
   std::vector<mojom::ProductPtr> products;
-  for (const auto& product : extracted_products->GetList()) {
-    if (!product.is_dict())
+  for (const auto& product_val : *extracted_products) {
+    if (!product_val.is_dict()) {
       continue;
-    const auto* image_url = product.FindKey("imageUrl");
-    const auto* product_name = product.FindKey("title");
+    }
+
+    const base::Value::Dict& product = product_val.GetDict();
+    const std::string* image_url = product.FindString("imageUrl");
+    const std::string* product_name = product.FindString("title");
     mojom::ProductPtr product_ptr(mojom::Product::New());
-    product_ptr->image_url = GURL(image_url->GetString());
-    product_ptr->name = product_name->GetString();
+    product_ptr->image_url = GURL(*image_url);
+    product_ptr->name = *product_name;
     DVLOG(1) << "image_url = " << product_ptr->image_url;
     DVLOG(1) << "name = " << product_ptr->name;
     if (ShouldSkip(product_ptr->name)) {
@@ -930,9 +959,9 @@ void CommerceHintAgent::OnProductsExtracted(absl::optional<base::Value> results,
     }
     if (is_partner) {
       std::string product_id;
-      const auto* extracted_id = product.FindKey("productId");
+      const std::string* extracted_id = product.FindString("productId");
       if (extracted_id) {
-        product_id = extracted_id->GetString();
+        product_id = *extracted_id;
       }
       DVLOG(1) << "product_id = " << product_id;
       DCHECK(!product_id.empty());
@@ -983,8 +1012,9 @@ void CommerceHintAgent::WillSendRequest(const blink::WebURLRequest& request) {
   // DidStartNavigation(). Some sites use GET requests though, so special-case
   // them here.
   GURL request_url = request.Url();
+  bool should_use_dom_based_heuristics = ShouldUseDOMBasedHeuristics();
   bool add_to_cart_active = true;
-  if (ShouldUseDOMBasedHeuristics()) {
+  if (should_use_dom_based_heuristics) {
     add_to_cart_active = base::Time::Now() - add_to_cart_focus_time_ <
                          commerce::kAddToCartButtonActiveTime.Get();
   }
@@ -992,7 +1022,8 @@ void CommerceHintAgent::WillSendRequest(const blink::WebURLRequest& request) {
        request_url.DomainIs(kEbayDomain) ||
        url.DomainIs(kElectronicExpressDomain)) &&
       add_to_cart_active) {
-    bool is_add_to_cart = DetectAddToCart(render_frame(), request);
+    bool is_add_to_cart = DetectAddToCart(render_frame(), request,
+                                          should_use_dom_based_heuristics);
     OnWillSendRequest(render_frame(), is_add_to_cart);
   }
 
@@ -1227,19 +1258,24 @@ void CommerceHintAgent::OnMainFrameIntersectionChanged(
 
 void CommerceHintAgent::FocusedElementChanged(
     const blink::WebElement& focused_element) {
+  base::Time before_check = base::Time::Now();
   if (!should_skip_.has_value() || should_skip_.value()) {
     return;
   }
   if (!ShouldUseDOMBasedHeuristics()) {
     return;
   }
-  base::Time before_check = base::Time::Now();
+  auto builder = ukm::builders::Shopping_AddToCartDetection(
+      render_frame()->GetWebFrame()->GetDocument().GetUkmSourceId());
   blink::WebElement element = focused_element;
   if (IsAddToCartButton(element)) {
     add_to_cart_focus_time_ = base::Time::Now();
   }
+  base::TimeDelta execution_time = base::Time::Now() - before_check;
   base::UmaHistogramMicrosecondsTimes("Commerce.Carts.AddToCartButtonDetection",
-                                      base::Time::Now() - before_check);
+                                      execution_time);
+  builder.SetHeuristicsExecutionTime(execution_time.InMicroseconds())
+      .Record(ukm_recorder_.get());
 }
 
 bool CommerceHintAgent::ShouldSkipAddToCartRequest(const GURL& navigation_url,

@@ -11,14 +11,15 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "components/aggregation_service/aggregation_service.mojom.h"
@@ -30,13 +31,15 @@
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/attribution_reporting/attribution_trigger.h"
 #include "content/browser/attribution_reporting/storable_source.h"
-#include "content/public/browser/attribution_reporting.h"
+#include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/trigger_attestation.h"
 #include "sql/database.h"
 #include "sql/meta_table.h"
 #include "sql/statement.h"
 #include "sql/test/scoped_error_expecter.h"
 #include "sql/test/test_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 
 namespace content {
@@ -62,6 +65,8 @@ struct AggregatableReportMetadataRecord {
   base::Time initial_report_time;
   int aggregation_coordinator = static_cast<int>(
       ::aggregation_service::mojom::AggregationCoordinator::kDefault);
+  absl::optional<std::string> attestation_token;
+  std::string destination_origin = "https://destination.test";
 };
 
 struct AggregatableContributionRecord {
@@ -118,6 +123,7 @@ class AttributionStorageSqlTest : public testing::Test {
     static constexpr const char* kTables[] = {
         "event_level_reports",
         "sources",
+        "source_destinations",
         "rate_limits",
         "dedup_keys",
         "aggregatable_report_metadata",
@@ -167,7 +173,7 @@ class AttributionStorageSqlTest : public testing::Test {
 
     static constexpr char kStoreMetadataSql[] =
         "INSERT INTO aggregatable_report_metadata "
-        "VALUES(?,?,?,?,?,?,?,?,?)";
+        "VALUES(?,?,?,?,?,?,?,?,?,?,?)";
     sql::Statement statement(raw_db.GetUniqueStatement(kStoreMetadataSql));
     statement.BindInt64(0, record.aggregation_id);
     statement.BindInt64(1, record.source_id);
@@ -182,6 +188,12 @@ class AttributionStorageSqlTest : public testing::Test {
     statement.BindInt(6, record.failed_send_attempts);
     statement.BindTime(7, record.initial_report_time);
     statement.BindInt(8, record.aggregation_coordinator);
+    if (record.attestation_token.has_value()) {
+      statement.BindString(9, record.attestation_token.value());
+    } else {
+      statement.BindNull(9);
+    }
+    statement.BindString(10, record.destination_origin);
     ASSERT_TRUE(statement.Run());
   }
 
@@ -249,18 +261,18 @@ TEST_F(AttributionStorageSqlTest,
 
     // [sources], [event_level_reports], [meta], [rate_limits], [dedup_keys],
     // [aggregatable_report_metadata], [aggregatable_contributions],
-    // [sqlite_sequence] (for AUTOINCREMENT support).
-    EXPECT_EQ(8u, sql::test::CountSQLTables(&raw_db));
+    // [source_destinations], [sqlite_sequence] (for AUTOINCREMENT support).
+    EXPECT_EQ(9u, sql::test::CountSQLTables(&raw_db));
 
     // [conversion_domain_idx], [impression_expiry_idx],
-    // [impression_origin_idx], [impression_site_idx],
-    // [conversion_report_time_idx], [conversion_impression_id_idx],
+    // [impression_origin_idx], [conversion_report_time_idx],
+    // [conversion_impression_id_idx],
     // [rate_limit_source_site_reporting_origin_idx],
     // [rate_limit_reporting_origin_idx], [rate_limit_time_idx],
     // [rate_limit_impression_id_idx], [aggregate_source_id_idx],
     // [aggregate_trigger_time_idx], [aggregate_report_time_idx],
-    // [contribution_aggregation_id_idx] and the meta table index.
-    EXPECT_EQ(15u, sql::test::CountSQLIndices(&raw_db));
+    // [sources_by_destination_site], and the meta table index.
+    EXPECT_EQ(14u, sql::test::CountSQLIndices(&raw_db));
   }
 }
 
@@ -288,8 +300,10 @@ TEST_F(AttributionStorageSqlTest, CorruptDatabase_RecoveredOnOpen) {
   // Open that database and ensure that it does not fail.
   EXPECT_NO_FATAL_FAILURE(OpenDatabase());
 
-  // Data should be recovered.
-  EXPECT_THAT(storage()->GetAttributionReports(base::Time::Now()), SizeIs(1));
+  // TODO(crbug.com/1418026): The recovery process does not recover tables
+  // without row IDs, causing no data to be returned here. Data recovery should
+  // be addressed in a separate CL.
+  EXPECT_THAT(storage()->GetAttributionReports(base::Time::Now()), SizeIs(0));
 
   EXPECT_TRUE(expecter.SawExpectedErrors());
 }
@@ -308,13 +322,128 @@ TEST_F(AttributionStorageSqlTest, VersionTooNew_RazesDB) {
     // The values here are irrelevant, as the meta table already exists.
     ASSERT_TRUE(meta.Init(&raw_db, /*version=*/1, /*compatible_version=*/1));
 
-    meta.SetVersionNumber(meta.GetVersionNumber() + 1);
-    meta.SetCompatibleVersionNumber(meta.GetVersionNumber() + 1);
+    ASSERT_TRUE(meta.SetVersionNumber(meta.GetVersionNumber() + 1));
+    ASSERT_TRUE(meta.SetCompatibleVersionNumber(meta.GetVersionNumber() + 1));
   }
 
   // The DB should be razed because the version is too new.
   ASSERT_NO_FATAL_FAILURE(OpenDatabase());
   ASSERT_THAT(storage()->GetAttributionReports(base::Time::Now()), IsEmpty());
+}
+
+TEST_F(AttributionStorageSqlTest,
+       StoreAndRetrieveReportWithAttestation_FeatureEnabled) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      network::features::kAttributionReportingTriggerAttestation);
+  base::HistogramTester histograms;
+
+  OpenDatabase();
+
+  StorableSource source = TestAggregatableSourceProvider()
+                              .GetBuilder()
+                              .SetExpiry(base::Days(30))
+                              .Build();
+  storage()->StoreSource(source);
+
+  auto trigger_attestation = network::TriggerAttestation::Create(
+      /*token=*/"attestation-token", /*aggregatable_report_id=*/
+      "55865da3-fb0e-4b71-965e-64fc4bf0a323");
+  AttributionTrigger trigger = DefaultAggregatableTriggerBuilder()
+                                   .SetAttestation(trigger_attestation)
+                                   .Build();
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::kSuccess),
+                    CreateReportAggregatableStatusIs(
+                        AttributionTrigger::AggregatableResult::kSuccess)));
+  histograms.ExpectUniqueSample(
+      "Conversions.TriggerAttestation.ReportHasAttestation", true,
+      /*expected_bucket_count=*/1);
+
+  AttributionReport aggregatable_report =
+      storage()->GetAttributionReports(base::Time::Max()).at(1);
+  // Should create the report with the id from the trigger attestation.
+  EXPECT_EQ(aggregatable_report.external_report_id(),
+            trigger_attestation->aggregatable_report_id());
+
+  // Should store the attestation token on the report.
+  const auto* data =
+      absl::get_if<AttributionReport::AggregatableAttributionData>(
+          &aggregatable_report.data());
+  EXPECT_EQ(data->attestation_token.value(), trigger_attestation->token());
+
+  CloseDatabase();
+}
+
+TEST_F(AttributionStorageSqlTest,
+       StoreAndRetrieveReportWithoutAttestation_FeatureEnabled) {
+  OpenDatabase();
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      network::features::kAttributionReportingTriggerAttestation);
+  base::HistogramTester histograms;
+
+  StorableSource source = TestAggregatableSourceProvider()
+                              .GetBuilder()
+                              .SetExpiry(base::Days(30))
+                              .Build();
+  storage()->StoreSource(source);
+  AttributionTrigger trigger = DefaultAggregatableTriggerBuilder().Build();
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::kSuccess),
+                    CreateReportAggregatableStatusIs(
+                        AttributionTrigger::AggregatableResult::kSuccess)));
+  histograms.ExpectUniqueSample(
+      "Conversions.TriggerAttestation.ReportHasAttestation", false,
+      /*expected_bucket_count=*/1);
+
+  AttributionReport aggregatable_report =
+      storage()->GetAttributionReports(base::Time::Max()).at(1);
+
+  const auto* data =
+      absl::get_if<AttributionReport::AggregatableAttributionData>(
+          &aggregatable_report.data());
+  EXPECT_FALSE(data->attestation_token.has_value());
+
+  CloseDatabase();
+}
+
+TEST_F(
+    AttributionStorageSqlTest,
+    StoreAndRetrieveReportWithoutAttestation_FeatureDisabled_HasAttestationNotRecorded) {
+  OpenDatabase();
+
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      network::features::kAttributionReportingTriggerAttestation);
+  base::HistogramTester histograms;
+
+  StorableSource source = TestAggregatableSourceProvider()
+                              .GetBuilder()
+                              .SetExpiry(base::Days(30))
+                              .Build();
+  storage()->StoreSource(source);
+  AttributionTrigger trigger = DefaultAggregatableTriggerBuilder().Build();
+  EXPECT_THAT(storage()->MaybeCreateAndStoreReport(trigger),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::kSuccess),
+                    CreateReportAggregatableStatusIs(
+                        AttributionTrigger::AggregatableResult::kSuccess)));
+  histograms.ExpectUniqueSample(
+      "Conversions.TriggerAttestation.ReportHasAttestation", false,
+      /*expected_bucket_count=*/0);
+
+  AttributionReport aggregatable_report =
+      storage()->GetAttributionReports(base::Time::Max()).at(1);
+
+  const auto* data =
+      absl::get_if<AttributionReport::AggregatableAttributionData>(
+          &aggregatable_report.data());
+  EXPECT_FALSE(data->attestation_token.has_value());
+
+  CloseDatabase();
 }
 
 // Create a source with three triggers and craft a query that will target all.
@@ -357,9 +486,9 @@ TEST_F(AttributionStorageSqlTest, ClearDataRangeMultipleReports) {
   // Use a time range that targets all triggers.
   storage()->ClearData(
       base::Time::Min(), base::Time::Max(),
-      base::BindRepeating(
-          std::equal_to<blink::StorageKey>(),
-          blink::StorageKey(source.common_info().source_origin())));
+      base::BindRepeating(std::equal_to<blink::StorageKey>(),
+                          blink::StorageKey::CreateFirstParty(
+                              source.common_info().reporting_origin())));
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), IsEmpty());
 
   CloseDatabase();
@@ -411,9 +540,9 @@ TEST_F(AttributionStorageSqlTest, ClearDataWithVestigialConversion) {
   // Use a time range that only intersects the last trigger.
   storage()->ClearData(
       base::Time::Now(), base::Time::Now(),
-      base::BindRepeating(
-          std::equal_to<blink::StorageKey>(),
-          blink::StorageKey(source.common_info().source_origin())));
+      base::BindRepeating(std::equal_to<blink::StorageKey>(),
+                          blink::StorageKey::CreateFirstParty(
+                              source.common_info().reporting_origin())));
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Max()), IsEmpty());
 
   CloseDatabase();
@@ -562,6 +691,25 @@ TEST_F(AttributionStorageSqlTest, ClearData_KeepRateLimitData) {
   }
 }
 
+TEST_F(AttributionStorageSqlTest, DeleteAttributionDataByDataKey) {
+  OpenDatabase();
+  storage()->StoreSource(SourceBuilder().Build());
+
+  std::vector keys = storage()->GetAllDataKeys();
+  ASSERT_THAT(keys, SizeIs(1));
+
+  storage()->DeleteByDataKey(keys[0]);
+
+  CloseDatabase();
+
+  sql::Database raw_db;
+  ASSERT_TRUE(raw_db.Open(db_path()));
+  {
+    sql::Statement s(raw_db.GetUniqueStatement("SELECT * FROM sources"));
+    ASSERT_FALSE(s.Step());
+  }
+}
+
 TEST_F(AttributionStorageSqlTest, MaxSourcesPerOrigin) {
   OpenDatabase();
   delegate()->set_max_sources_per_origin(2);
@@ -604,108 +752,6 @@ TEST_F(AttributionStorageSqlTest, MaxReportsPerDestination) {
   size_t rate_limit_rows;
   sql::test::CountTableRows(&raw_db, "rate_limits", &rate_limit_rows);
   EXPECT_EQ(3u, rate_limit_rows);
-}
-
-TEST_F(AttributionStorageSqlTest,
-       DeleteRateLimitRowsForSubdomainImpressionOrigin) {
-  OpenDatabase();
-  delegate()->set_max_attributions_per_source(1);
-  delegate()->set_rate_limits({
-      .time_window = base::Days(7),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = std::numeric_limits<int64_t>::max(),
-  });
-  const auto source_origin =
-      *SuitableOrigin::Deserialize("https://sub.impression.example/");
-  const auto reporting_origin =
-      *SuitableOrigin::Deserialize("https://a.example/");
-  const auto destination_origin =
-      *SuitableOrigin::Deserialize("https://b.example/");
-  storage()->StoreSource(SourceBuilder()
-                             .SetExpiry(base::Days(30))
-                             .SetSourceOrigin(source_origin)
-                             .SetReportingOrigin(reporting_origin)
-                             .SetDestinationOrigin(destination_origin)
-                             .Build());
-
-  task_environment_.FastForwardBy(base::Days(1));
-  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
-            MaybeCreateAndStoreEventLevelReport(
-                TriggerBuilder()
-                    .SetDestinationOrigin(destination_origin)
-                    .SetReportingOrigin(reporting_origin)
-                    .Build()));
-  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
-
-  task_environment_.FastForwardBy(base::Days(1));
-  EXPECT_TRUE(
-      storage()->DeleteReport(AttributionReport::EventLevelData::Id(1)));
-  storage()->ClearData(base::Time::Min(), base::Time::Max(),
-                       base::BindRepeating(std::equal_to<blink::StorageKey>(),
-                                           blink::StorageKey(source_origin)));
-
-  CloseDatabase();
-  sql::Database raw_db;
-  EXPECT_TRUE(raw_db.Open(db_path()));
-  size_t conversion_rows;
-  sql::test::CountTableRows(&raw_db, "event_level_reports", &conversion_rows);
-  EXPECT_EQ(0u, conversion_rows);
-  size_t rate_limit_rows;
-  sql::test::CountTableRows(&raw_db, "rate_limits", &rate_limit_rows);
-  EXPECT_EQ(0u, rate_limit_rows);
-}
-
-TEST_F(AttributionStorageSqlTest,
-       DeleteRateLimitRowsForSubdomainConversionOrigin) {
-  OpenDatabase();
-  delegate()->set_max_attributions_per_source(1);
-  delegate()->set_rate_limits({
-      .time_window = base::Days(7),
-      .max_source_registration_reporting_origins =
-          std::numeric_limits<int64_t>::max(),
-      .max_attribution_reporting_origins = std::numeric_limits<int64_t>::max(),
-      .max_attributions = std::numeric_limits<int64_t>::max(),
-  });
-  const auto source_origin = *SuitableOrigin::Deserialize("https://b.example/");
-  const auto reporting_origin =
-      *SuitableOrigin::Deserialize("https://a.example/");
-  const auto destination_origin =
-      *SuitableOrigin::Deserialize("https://sub.impression.example/");
-  storage()->StoreSource(SourceBuilder()
-                             .SetExpiry(base::Days(30))
-                             .SetSourceOrigin(source_origin)
-                             .SetReportingOrigin(reporting_origin)
-                             .SetDestinationOrigin(destination_origin)
-                             .Build());
-
-  task_environment_.FastForwardBy(base::Days(1));
-  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
-            MaybeCreateAndStoreEventLevelReport(
-                TriggerBuilder()
-                    .SetDestinationOrigin(destination_origin)
-                    .SetReportingOrigin(reporting_origin)
-                    .Build()));
-  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(1));
-
-  task_environment_.FastForwardBy(base::Days(1));
-  EXPECT_TRUE(
-      storage()->DeleteReport(AttributionReport::EventLevelData::Id(1)));
-  storage()->ClearData(
-      base::Time::Min(), base::Time::Max(),
-      base::BindRepeating(std::equal_to<blink::StorageKey>(),
-                          blink::StorageKey(destination_origin)));
-
-  CloseDatabase();
-  sql::Database raw_db;
-  EXPECT_TRUE(raw_db.Open(db_path()));
-  size_t conversion_rows;
-  sql::test::CountTableRows(&raw_db, "event_level_reports", &conversion_rows);
-  EXPECT_EQ(0u, conversion_rows);
-  size_t rate_limit_rows;
-  sql::test::CountTableRows(&raw_db, "rate_limits", &rate_limit_rows);
-  EXPECT_EQ(0u, rate_limit_rows);
 }
 
 TEST_F(AttributionStorageSqlTest, CantOpenDb_FailsSilentlyInRelease) {
@@ -765,15 +811,9 @@ TEST_F(AttributionStorageSqlTest, MaxUint64StorageSucceeds) {
   EXPECT_THAT(storage()->GetActiveSources(),
               ElementsAre(SourceEventIdIs(kMaxUint64)));
 
-  EXPECT_EQ(
-      AttributionTrigger::EventLevelResult::kSuccess,
-      MaybeCreateAndStoreEventLevelReport(
-          TriggerBuilder()
-              .SetDebugKey(kMaxUint64)
-              .SetDestinationOrigin(
-                  impression.common_info().destination_origin())
-              .SetReportingOrigin(impression.common_info().reporting_origin())
-              .Build()));
+  EXPECT_EQ(AttributionTrigger::EventLevelResult::kSuccess,
+            MaybeCreateAndStoreEventLevelReport(
+                TriggerBuilder().SetDebugKey(kMaxUint64).Build()));
 
   EXPECT_THAT(storage()->GetAttributionReports(base::Time::Now()),
               ElementsAre(TriggerDebugKeyIs(kMaxUint64)));
@@ -991,34 +1031,46 @@ TEST_F(AttributionStorageSqlTest,
 }
 
 TEST_F(AttributionStorageSqlTest,
-       InsecureImpressionOrigin_FailsDeserialization) {
-  static constexpr const char* kUpdateSqls[] = {
-      "UPDATE sources SET source_origin=?",
-      "UPDATE sources SET destination_origin=?",
-      "UPDATE sources SET reporting_origin=?",
+       InvalidSourceOriginOrSite_FailsDeserialization) {
+  const struct {
+    const char* sql;
+    const char* value;
+  } kTestCases[] = {
+      {
+          .sql = "UPDATE sources SET source_origin=?",
+          .value = "http://insecure.test",
+      },
+      {
+          .sql = "UPDATE sources SET reporting_origin=?",
+          .value = "http://insecure.test",
+      },
+      {
+          .sql = "UPDATE source_destinations SET destination_site=?",
+          .value = "wss://a.test",
+      },
   };
 
-  for (const char* update_sql : kUpdateSqls) {
+  for (const auto& test_case : kTestCases) {
     OpenDatabase();
 
     SourceBuilder source_builder;
     storage()->StoreSource(
         source_builder.SetExpiry(base::Milliseconds(3)).Build());
-    ASSERT_THAT(storage()->GetActiveSources(), SizeIs(1)) << update_sql;
+    ASSERT_THAT(storage()->GetActiveSources(), SizeIs(1)) << test_case.sql;
 
     CloseDatabase();
 
     {
       sql::Database raw_db;
-      ASSERT_TRUE(raw_db.Open(db_path())) << update_sql;
+      ASSERT_TRUE(raw_db.Open(db_path())) << test_case.sql;
 
-      sql::Statement statement(raw_db.GetUniqueStatement(update_sql));
-      statement.BindString(0, "http://insecure.test");
-      ASSERT_TRUE(statement.Run()) << update_sql;
+      sql::Statement statement(raw_db.GetUniqueStatement(test_case.sql));
+      statement.BindString(0, test_case.value);
+      ASSERT_TRUE(statement.Run()) << test_case.sql;
     }
 
     OpenDatabase();
-    ASSERT_THAT(storage()->GetActiveSources(), IsEmpty()) << update_sql;
+    ASSERT_THAT(storage()->GetActiveSources(), IsEmpty()) << test_case.sql;
     storage()->ClearData(base::Time::Min(), base::Time::Max(),
                          base::NullCallback());
     CloseDatabase();
@@ -1170,6 +1222,82 @@ TEST_F(AttributionStorageSqlTest,
     storage()->ClearData(base::Time::Min(), base::Time::Max(),
                          base::NullCallback());
     CloseDatabase();
+  }
+}
+
+TEST_F(AttributionStorageSqlTest, ReportTablesStoreDestinationOrigin) {
+  constexpr char kDestinationOriginA[] = "https://a.d.test";
+  constexpr char kDestinationOriginB[] = "https://b.d.test";
+
+  OpenDatabase();
+
+  StorableSource source =
+      TestAggregatableSourceProvider()
+          .GetBuilder()
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize(kDestinationOriginA))
+          .SetExpiry(base::Days(30))
+          .Build();
+  storage()->StoreSource(source);
+
+  AttributionTrigger trigger =
+      DefaultAggregatableTriggerBuilder()
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize(kDestinationOriginB))
+          .Build();
+  ASSERT_THAT(storage()->MaybeCreateAndStoreReport(trigger),
+              AllOf(CreateReportEventLevelStatusIs(
+                        AttributionTrigger::EventLevelResult::kSuccess),
+                    CreateReportAggregatableStatusIs(
+                        AttributionTrigger::AggregatableResult::kSuccess)));
+
+  CloseDatabase();
+
+  sql::Database raw_db;
+  ASSERT_TRUE(raw_db.Open(db_path()));
+
+  {
+    sql::Statement s(raw_db.GetUniqueStatement(
+        "SELECT context_origin FROM event_level_reports"));
+    ASSERT_TRUE(s.Step());
+    ASSERT_EQ(s.ColumnString(0), kDestinationOriginB);
+  }
+
+  {
+    sql::Statement s(raw_db.GetUniqueStatement(
+        "SELECT destination_origin FROM aggregatable_report_metadata"));
+    ASSERT_TRUE(s.Step());
+    ASSERT_EQ(s.ColumnString(0), kDestinationOriginB);
+  }
+}
+
+TEST_F(AttributionStorageSqlTest, FakeReportUsesSourceOriginAsContext) {
+  OpenDatabase();
+
+  delegate()->set_randomized_response(
+      std::vector<AttributionStorageDelegate::FakeReport>{
+          {.trigger_data = 1,
+           .trigger_time = base::Time::Now() + base::Microseconds(1),
+           .report_time = base::Time::Now() + base::Microseconds(2)}});
+
+  storage()->StoreSource(
+      SourceBuilder()
+          .SetSourceOrigin(*SuitableOrigin::Deserialize("https://a.s.test"))
+          .SetDestinationOrigin(
+              *SuitableOrigin::Deserialize("https://b.d.test"))
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://r.test"))
+          .Build());
+
+  CloseDatabase();
+
+  sql::Database raw_db;
+  ASSERT_TRUE(raw_db.Open(db_path()));
+
+  {
+    sql::Statement s(raw_db.GetUniqueStatement(
+        "SELECT context_origin FROM event_level_reports"));
+    ASSERT_TRUE(s.Step());
+    ASSERT_EQ(s.ColumnString(0), "https://a.s.test");
   }
 }
 

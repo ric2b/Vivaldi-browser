@@ -15,6 +15,7 @@
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -51,8 +52,6 @@ NSString* cellIdList = @"cellIdList";
 @property(assign,nonatomic) VivaldiSpeedDialItem* parent;
 // Array to store the children to populate on the collection view
 @property(strong,nonatomic) NSMutableArray *speedDialItems;
-// A BOOL to keep track the device orientation
-@property(assign,nonatomic) BOOL isDeviceLandscape;
 // Currently selected layout
 @property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
 @end
@@ -63,7 +62,6 @@ NSString* cellIdList = @"cellIdList";
 @synthesize collectionView = _collectionView;
 @synthesize parent = _parent;
 @synthesize speedDialItems = _speedDialItems;
-@synthesize isDeviceLandscape = _isDeviceLandscape;
 
 #pragma mark - INITIALIZER
 - (instancetype)init {
@@ -113,20 +111,16 @@ NSString* cellIdList = @"cellIdList";
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
-          layoutStyle:(VivaldiStartPageLayoutStyle)style
-    deviceOrientation:(BOOL)isLandscape {
+          layoutStyle:(VivaldiStartPageLayoutStyle)style {
   self.parent = parent;
   self.faviconLoader = faviconLoader;
   self.selectedLayout = style;
-  self.isDeviceLandscape = isLandscape;
   self.speedDialItems = [[NSMutableArray alloc] initWithArray:speedDials];
   [self.collectionView reloadData];
 }
 
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
-                  isLandscape:(BOOL)isLandscape {
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style {
   self.selectedLayout = style;
-  self.isDeviceLandscape = isLandscape;
   [self.collectionView.collectionViewLayout invalidateLayout];
   [self.collectionView reloadData];
 }
@@ -215,7 +209,8 @@ NSString* cellIdList = @"cellIdList";
         VivaldiSpeedDialSmallCell *smallCell =
           [collectionView dequeueReusableCellWithReuseIdentifier:cellIdSmall
                                                     forIndexPath:indexPath];
-        [smallCell configureCellWith:item];
+        [smallCell configureCellWith:item
+                            isTablet:self.isCurrentDeviceTablet];
         [self loadFaviconForItem:item
                          forCell:smallCell
           fallbackToGoogleServer:NO];
@@ -270,19 +265,22 @@ NSString* cellIdList = @"cellIdList";
       case VivaldiStartPageLayoutStyleMedium: {
         VivaldiSpeedDialRegularCell *largeCell =
           (VivaldiSpeedDialRegularCell*)cell;
-        [largeCell configureCellWithAttributes:attributes];
+        [largeCell configureCellWithAttributes:attributes
+                                          item:item];
       }
         break;
       case VivaldiStartPageLayoutStyleSmall: {
         VivaldiSpeedDialSmallCell *smallCell =
           (VivaldiSpeedDialSmallCell*)cell;
-        [smallCell configureCellWithAttributes:attributes];
+        [smallCell configureCellWithAttributes:attributes
+                                          item:item];
       }
         break;
       case VivaldiStartPageLayoutStyleList: {
         VivaldiSpeedDialListCell *listCell =
           (VivaldiSpeedDialListCell*)cell;
-        [listCell configureCellWithAttributes:attributes];
+        [listCell configureCellWithAttributes:attributes
+                                         item:item];
       }
     }
   };
@@ -610,7 +608,8 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 
 /// Returns whether current device is iPhone or iPad.
 - (BOOL)isCurrentDeviceTablet {
-  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET;
+  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
+      VivaldiGlobalHelpers.isHorizontalTraitRegular;
 }
 
 // Returns the multiplier to generate the grid item from view width.
@@ -620,7 +619,7 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadLarge;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneLargeLand;
         } else {
           return vSDWidthiPhoneLarge;
@@ -630,7 +629,7 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadMedium;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneMediumLand;
         } else {
           return vSDWidthiPhoneMedium;
@@ -640,7 +639,7 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadSmall;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneSmallLand;
         } else {
           return vSDWidthiPhoneSmall;
@@ -650,7 +649,7 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadList;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneListLand;
         } else {
           return vSDWidthiPhoneList;
@@ -663,19 +662,45 @@ destinationIndexPath:(NSIndexPath*)destinationIndexPath
 /// Return the item padding for iPhone and iPad
 /// Same item padding is used for both portrait and landscape mode.
 - (CGFloat)getItemPadding {
-  return self.isCurrentDeviceTablet ? vSDPaddingiPad : vSDPaddingiPhone;
+  return (self.isCurrentDeviceTablet &&
+          !VivaldiGlobalHelpers.isSplitOrSlideOver) ?
+      vSDPaddingiPad : vSDPaddingiPhone;
 }
 
 /// Returns the section padding for tablet
 - (CGFloat)getSectionPaddingForTablet {
-  return self.isDeviceLandscape ?
-    vSDSectionPaddingiPadLandscape : vSDSectionPaddingiPadPortrait;
+  return self.isTabletPortrait ||
+      VivaldiGlobalHelpers.isSplitOrSlideOver ?
+      vSDSectionPaddingiPadPortrait : vSDSectionPaddingiPadLandscape;
 }
 
 /// Returns the section padding for iPhone
 - (CGFloat)getSectionPaddingForPhone {
-  return self.isDeviceLandscape ?
+  return VivaldiGlobalHelpers.isVerticalTraitCompact ?
     vSDSectionPaddingiPhoneLandscape : vSDSectionPaddingiPhonePortrait;
+}
+
+/// Returns true when app is running on split mode in
+/// iPad with half/half screen state
+- (BOOL)isAppStateHalfScreen {
+  return VivaldiGlobalHelpers.isSplitOrSlideOver &&
+      VivaldiGlobalHelpers.iPadLayoutState == LayoutStateHalfScreen;
+}
+
+/// Returns iPad orientation from global helpers and frame.
+- (BOOL)isTabletPortrait {
+  return VivaldiGlobalHelpers.isValidOrientation ?
+      VivaldiGlobalHelpers.isiPadOrientationPortrait :
+      self.isiPadOrientationPortrait;
+}
+
+/// Returns true for iPhone in landscape and iPad in half/half state.
+/// In iPad half/half state leaves a bigger space which can be utilized
+/// showing the same number of items as iPhone landscape would
+/// show.
+- (BOOL)showiPhoneLandscapeLayout {
+  return VivaldiGlobalHelpers.isVerticalTraitCompact ||
+      self.isAppStateHalfScreen;
 }
 
 @end

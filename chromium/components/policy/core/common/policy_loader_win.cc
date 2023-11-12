@@ -18,13 +18,13 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/cxx17_backports.h"
 #include "base/enterprise_util.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
@@ -173,6 +173,11 @@ bool IsDomainJoined() {
 // Collects stats about the enterprise environment that can be used to decide
 // how to parse the existing policy information.
 void CollectEnterpriseUMAs() {
+  // Collect statistics about the windows suite.
+  UMA_HISTOGRAM_ENUMERATION("EnterpriseCheck.OSType",
+                            base::win::OSInfo::GetInstance()->version_type(),
+                            base::win::SUITE_LAST);
+
   base::UmaHistogramBoolean("EnterpriseCheck.IsManagedOrEnterpriseDevice",
                             base::IsManagedOrEnterpriseDevice());
   base::UmaHistogramBoolean("EnterpriseCheck.IsDomainJoined", IsDomainJoined());
@@ -246,13 +251,6 @@ PolicyLoaderWin::PolicyLoaderWin(
 }
 
 PolicyLoaderWin::~PolicyLoaderWin() {
-  // Mitigate the issues caused by loading DLLs or lazily resolving symbols on a
-  // background thread (http://crbug/973868) which can hold the process wide
-  // LoaderLock and cause contention on Foreground threads. This issue is solved
-  // on Windows version after Win7. This code can be removed when Win7 is no
-  // longer supported.
-  SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
-
   if (!user_policy_watcher_failed_) {
     ::UnregisterGPNotification(user_policy_changed_event_.handle());
     user_policy_watcher_.StopWatching();

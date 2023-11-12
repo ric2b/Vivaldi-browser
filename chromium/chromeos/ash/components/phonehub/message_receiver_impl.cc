@@ -13,8 +13,7 @@
 #include "chromeos/ash/components/phonehub/proto/phonehub_api.pb.h"
 #include "chromeos/ash/components/phonehub/util/histogram_util.h"
 
-namespace ash {
-namespace phonehub {
+namespace ash::phonehub {
 
 namespace {
 
@@ -46,6 +45,10 @@ std::string GetMessageTypeName(proto::MessageType message_type) {
       return "PING_RESPONSE";
     case proto::MessageType::APP_STREAM_UPDATE:
       return "APP_STREAM_UPDATE";
+    case proto::MessageType::APP_LIST_UPDATE:
+      return "APP_LIST_UPDATE";
+    case proto::MessageType::APP_LIST_INCREMENTAL_UPDATE:
+      return "APP_LIST_INCREMENTAL_UPDATE";
     default:
       return "UNKOWN_MESSAGE";
   }
@@ -176,7 +179,18 @@ void MessageReceiverImpl::OnMessageReceived(const std::string& payload) {
     NotifyAppListUpdateReceived(app_list_update);
     return;
   }
+
+  if (features::IsEcheSWAEnabled() &&
+      message_type == proto::MessageType::APP_LIST_INCREMENTAL_UPDATE) {
+    proto::AppListIncrementalUpdate app_list_incrementalUpdate;
+    if (!app_list_incrementalUpdate.ParseFromString(payload.substr(2))) {
+      PA_LOG(ERROR) << "OnMessageReceived() could not deserialize the "
+                    << "AppListIncrementalUpdate proto message.";
+      return;
+    }
+    NotifyAppListIncrementalUpdateReceived(app_list_incrementalUpdate);
+    return;
+  }
 }
 
-}  // namespace phonehub
-}  // namespace ash
+}  // namespace ash::phonehub

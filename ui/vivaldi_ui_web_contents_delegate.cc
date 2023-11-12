@@ -373,7 +373,10 @@ void VivaldiUIWebContentsDelegate::BeforeUnloadFired(
 
 }
 
-void VivaldiUIWebContentsDelegate::BeforeUnloadFired(
-    bool proceed,
-    const base::TimeTicks& proceed_time) {
+void VivaldiUIWebContentsDelegate::BeforeUnloadFired(bool proceed) {}
+
+blink::mojom::DisplayMode VivaldiUIWebContentsDelegate::GetDisplayMode(
+    const content::WebContents* source) {
+  return window_->IsFullscreen() ? blink::mojom::DisplayMode::kFullscreen
+                        : blink::mojom::DisplayMode::kStandalone;
 }

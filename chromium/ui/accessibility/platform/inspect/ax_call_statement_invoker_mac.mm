@@ -4,6 +4,8 @@
 
 #include "ui/accessibility/platform/inspect/ax_call_statement_invoker_mac.h"
 
+#import <Accessibility/Accessibility.h>
+
 #include "base/strings/sys_string_conversions.h"
 #include "ui/accessibility/platform/ax_utils_mac.h"
 #include "ui/accessibility/platform/inspect/ax_element_wrapper_mac.h"
@@ -148,12 +150,20 @@ AXOptionalNSObject AXCallStatementInvoker::Invoke(
   if (!property_node.key.empty())
     (*storage_)[property_node.key] = target;
 
-  return AXOptionalNSObject(target);
+  // When dumping tree, return NULL values as NotApplicable in order to
+  // easily filter them out of the dump.
+  return IsDumpingTree() ? AXOptionalNSObject::NotNullOrNotApplicable(target)
+                         : AXOptionalNSObject(target);
 }
 
 AXOptionalNSObject AXCallStatementInvoker::InvokeFor(
     const id target,
     const AXPropertyNode& property_node) const {
+  if (target == nil) {
+    return AXOptionalNSObject::Error(
+        "Cannot call '" + property_node.ToFlatString() + "' on null value");
+  }
+
   if (AXElementWrapper::IsValidElement(target))
     return InvokeForAXElement({target}, property_node);
 
@@ -167,7 +177,30 @@ AXOptionalNSObject AXCallStatementInvoker::InvokeFor(
   if ([target isKindOfClass:[NSDictionary class]])
     return InvokeForDictionary(target, property_node);
 
+  if (@available(macOS 11.0, *)) {
+    if ([target isKindOfClass:[AXCustomContent class]])
+      return InvokeForAXCustomContent(target, property_node);
+  }
+
   LOG(ERROR) << "Unexpected target type for " << property_node.ToFlatString();
+  return AXOptionalNSObject::Error();
+}
+
+AXOptionalNSObject AXCallStatementInvoker::InvokeForAXCustomContent(
+    const id target,
+    const AXPropertyNode& property_node) const {
+  if (@available(macOS 11.0, *)) {
+    AXCustomContent* content = target;
+
+    if (property_node.name_or_value == "label")
+      return AXOptionalNSObject(content.label);
+    if (property_node.name_or_value == "value")
+      return AXOptionalNSObject(content.value);
+
+    return AXOptionalNSObject::Error(
+        "Unrecognized '" + property_node.name_or_value +
+        "' attribute called on AXCustomContent object.");
+  }
   return AXOptionalNSObject::Error();
 }
 

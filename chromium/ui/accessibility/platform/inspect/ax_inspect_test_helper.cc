@@ -4,6 +4,9 @@
 
 #include "ui/accessibility/platform/inspect/ax_inspect_test_helper.h"
 
+#include <string>
+#include <vector>
+
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -17,13 +20,13 @@
 #include "ui/accessibility/platform/inspect/ax_inspect_scenario.h"
 #include "ui/base/buildflags.h"
 
-#if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
-#endif
 #if BUILDFLAG(USE_ATK)
 extern "C" {
 #include <atk/atk.h>
 }
+#endif
+#if BUILDFLAG(IS_MAC)
+#include "base/mac/mac_util.h"
 #endif
 
 namespace ui {
@@ -352,15 +355,6 @@ FilePath::StringType AXInspectTestHelper::GetExpectedFileSuffix(
 
 FilePath::StringType AXInspectTestHelper::GetVersionSpecificExpectedFileSuffix(
     const base::FilePath::StringType& expectations_qualifier) const {
-#if BUILDFLAG(IS_WIN)
-  if (expectation_type_ == "uia" &&
-      base::win::GetVersion() == base::win::Version::WIN7) {
-    FilePath::StringType suffix;
-    if (!expectations_qualifier.empty())
-      suffix = FILE_PATH_LITERAL("-") + expectations_qualifier;
-    return suffix + FILE_PATH_LITERAL("-expected-uia-win7.txt");
-  }
-#endif
 #if BUILDFLAG(USE_ATK)
   if (expectation_type_ == "linux") {
     FilePath::StringType version_name;
@@ -383,6 +377,18 @@ FilePath::StringType AXInspectTestHelper::GetVersionSpecificExpectedFileSuffix(
     if (!expectations_qualifier.empty())
       suffix = FILE_PATH_LITERAL("-") + expectations_qualifier;
     return suffix + FILE_PATH_LITERAL("-expected-blink-cros.txt");
+  }
+#endif
+#if BUILDFLAG(IS_MAC)
+  // When running tests in a platform specific test directory (such as
+  // content/test/data/accessibility/mac/) the expectation_type_ == content.
+  if ((expectation_type_ == "mac" || expectation_type_ == "content") &&
+      !base::mac::IsAtLeastOS11()) {
+    FilePath::StringType suffix;
+    if (!expectations_qualifier.empty()) {
+      suffix = FILE_PATH_LITERAL("-") + expectations_qualifier;
+    }
+    return suffix + FILE_PATH_LITERAL("-expected-mac-before-11.txt");
   }
 #endif
   return FILE_PATH_LITERAL("");

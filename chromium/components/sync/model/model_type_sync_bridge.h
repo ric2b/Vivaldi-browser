@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/model_type_change_processor.h"
@@ -122,6 +122,8 @@ class ModelTypeSyncBridge {
   //
   // If a model type was never launched pre-USS, then method does not need to be
   // different from GetStorageKey(). Only the hash of this value is kept.
+  //
+  // IsEntityDataValid() is guaranteed to hold for the |entity_data|.
   virtual std::string GetClientTag(const EntityData& entity_data) = 0;
 
   // Must not be called unless SupportsGetStorageKey() returns true.
@@ -135,9 +137,8 @@ class ModelTypeSyncBridge {
   // type should strive to keep these keys as small as possible.
   // Returning an empty string means the remote creation should be ignored (i.e.
   // it contains invalid data).
-  // TODO(crbug.com/1057947): introduce a dedicated method to validate data from
-  // the server to solve the inconsistency with bridges that don't support
-  // GetStorageKey() and with remote updates which are not creations.
+  //
+  // IsEntityDataValid() is guaranteed to hold for the |entity_data|.
   virtual std::string GetStorageKey(const EntityData& entity_data) = 0;
 
   // Whether or not the bridge is capable of producing a client tag from
@@ -174,11 +175,12 @@ class ModelTypeSyncBridge {
       const EntityData& remote_data) const;
 
   // Similar to ApplySyncChanges() but called by the processor when sync
-  // is in the process of being stopped. If |delete_metadata_change_list| is not
-  // null, it indicates that sync metadata must be deleted (i.e. the datatype
-  // was disabled), and |*delete_metadata_change_list| contains a change list to
-  // remove all metadata that the processor knows about (the bridge may decide
-  // to implement deletion by other means).
+  // is in the process of being stopped, or if metadata needs to cleared. If
+  // |delete_metadata_change_list| is not null, it indicates that sync metadata
+  // must be deleted (i.e. the datatype was disabled), and
+  // |*delete_metadata_change_list| contains a change list to remove all
+  // metadata that the processor knows about (the bridge may decide to implement
+  // deletion by other means).
   virtual void ApplyStopSyncChanges(
       std::unique_ptr<MetadataChangeList> delete_metadata_change_list);
 
@@ -198,16 +200,29 @@ class ModelTypeSyncBridge {
   // SyncableService by other means.
   virtual size_t EstimateSyncOverheadMemoryUsage() const;
 
-  // Returns a copy of |entity_specifics| where fields that do not need to be
-  // preserved in EntityMetadata cache are cleared. This allows each data type
-  // to specify which fields are supported in the current version. This usually
-  // means all known proto fields (i.e. all except unknown proto fields synced
-  // from more recent versions of the browser) but not always, since there are
-  // cases where a proto field is defined, but its implementation is not
-  // complete yet or exists behind a feature flag.
+  // Returns a copy of |entity_specifics| with fields that need to be preserved,
+  // resulting in caching them in EntityMetadata and allowing to use them on
+  // commits to the Sync server in order to prevent the data loss.
+  // This means that a data-specific bridge must override this function with the
+  // implementation that clears all supported proto fields (i.e. fields that are
+  // actively used by the implementation and fully launched).
+  // Fields that should not be marked as supported (cleared) include:
+  // * Unknown fields in the current browser version
+  // * Known fields that are just defined in the proto and not actively used
+  // (e.g. a partially-implemented functionality or a functionality guarded by a
+  // feature toggle).
+  // TODO(crbug.com/1408144): Consider changing the default to preserve unknown
+  // fields at least.
   // By default, empty EntitySpecifics is returned.
-  virtual sync_pb::EntitySpecifics TrimRemoteSpecificsForCaching(
+  virtual sync_pb::EntitySpecifics TrimAllSupportedFieldsFromRemoteSpecifics(
       const sync_pb::EntitySpecifics& entity_specifics) const;
+
+  // Returns true if the provided `entity_data` is valid. This method should be
+  // implemented by the bridges and can be used to validate the incoming remote
+  // updates.
+  // TODO(crbug.com/1057947): Mark this method as pure virtual to force all the
+  // bridges to implement this.
+  virtual bool IsEntityDataValid(const EntityData& entity_data) const;
 
   // Needs to be informed about any model change occurring via Delete() and
   // Put(). The changing metadata should be stored to persistent storage

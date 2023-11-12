@@ -57,7 +57,7 @@ import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabModelObserver;
-import org.chromium.chrome.browser.vr.VrModuleProvider;
+import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.components.autofill.AutofillDelegate;
 import org.chromium.components.autofill.AutofillSuggestion;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -68,6 +68,7 @@ import org.chromium.components.browser_ui.widget.InsetObserverView;
 import org.chromium.components.browser_ui.widget.InsetObserverViewSupplier;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.ui.DropdownPopupWindow;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
@@ -301,9 +302,8 @@ class ManualFillingMediator
     }
 
     @Override
-    public void handleBackPress() {
-        boolean ret = onBackPressed();
-        assert ret : "This should only be called when mBackPressChangedSupplier yields true";
+    public @BackPressResult int handleBackPress() {
+        return onBackPressed() ? BackPressResult.SUCCESS : BackPressResult.FAILURE;
     }
 
     @Override
@@ -503,6 +503,7 @@ class ManualFillingMediator
                 ViewUtils.requestLayout(compositorViewHolderSupplier.get(),
                         "ManualFillingMediator.enforceStateProperties");
             }
+            trySetA11yFocusOnWebContents();
         }
         TraceEvent.end("ManualFillingMediator#enforceStateProperties");
     }
@@ -539,9 +540,6 @@ class ManualFillingMediator
      */
     private boolean canExtendKeyboard() {
         if (!mModel.get(SHOW_WHEN_VISIBLE)) return false;
-
-        // When in VR mode, don't extend the keyboard
-        if (VrModuleProvider.getDelegate().isInVr()) return false;
 
         // Don't open the accessory inside the contextual search panel.
         ObservableSupplier<ContextualSearchManager> contextualSearchSupplier =
@@ -650,6 +648,21 @@ class ManualFillingMediator
      */
     private @Nullable Tab getActiveBrowserTab() {
         return mActivity.getActivityTabProvider().get();
+    }
+
+    /**
+     * @return {@link WebContentsAccessibility} instance of the active tab, if available.
+     */
+    private @Nullable WebContentsAccessibility getActiveWebContentsAccessibility() {
+        if (!ChromeAccessibilityUtil.get().isAccessibilityEnabled()) return null;
+
+        Tab tab = getActiveBrowserTab();
+        if (tab == null) return null;
+
+        WebContents webContents = tab.getWebContents();
+        if (webContents == null) return null;
+
+        return WebContentsAccessibility.fromWebContents(webContents);
     }
 
     /**
@@ -822,6 +835,13 @@ class ManualFillingMediator
                 return "FLOATING_SHEET";
         }
         return null;
+    }
+
+    private void trySetA11yFocusOnWebContents() {
+        WebContentsAccessibility accessibility = getActiveWebContentsAccessibility();
+        if (accessibility != null) {
+            accessibility.restoreFocus();
+        }
     }
 
     @VisibleForTesting

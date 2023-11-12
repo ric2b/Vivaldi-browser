@@ -11,12 +11,20 @@
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
+#include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
-#include "base/bind.h"
+#include "base/functional/bind.h"
+#include "media/base/media_switches.h"
 #include "media/mojo/services/media_service_factory.h"  // nogncheck
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
+
+#if BUILDFLAG(IS_WIN)
+#include <d3d11_4.h>
+
+#include "ui/gl/gl_angle_util_win.h"
+#endif
 
 namespace content {
 
@@ -46,18 +54,32 @@ void GpuServiceFactory::RunMediaService(
     mojo::PendingReceiver<media::mojom::MediaService> receiver) {
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_GPU_PROCESS)
   // This service will host audio/video decoders, and if these decoding
-  // operations are blocked, user may hear audio glitch or see video freezing,
-  // hence "user blocking".
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner;
+  // operations are blocked, user may hear audio glitch or see video
+  // freezing, hence "user blocking".
+  scoped_refptr<base::SequencedTaskRunner> task_runner = task_runner_;
+  if (base::FeatureList::IsEnabled(media::kDedicatedMediaServiceThread)) {
+    if (base::FeatureList::IsEnabled(
+            media::kUseSequencedTaskRunnerForMediaService)) {
+      task_runner = base::ThreadPool::CreateSequencedTaskRunner(
+          {base::TaskPriority::USER_BLOCKING});
+    } else {
+      task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
+          {base::TaskPriority::USER_BLOCKING});
+    }
 #if BUILDFLAG(IS_WIN)
-  // Run everything on the gpu main thread, since it's required for decode swap
-  // chains. See SwapChainPresenter::TryPresentToDecodeSwapChain().
-  task_runner = task_runner_;
-#else
-  // TODO(crbug.com/786169): Check whether this needs to be single threaded.
-  task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
-      {base::TaskPriority::USER_BLOCKING});
-#endif  // BUILDFLAG(IS_WIN)
+    // Since the D3D11Device used for decoding is shared with ANGLE, we need
+    // multithread protection turned on to use it from another thread.
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce([] {
+          auto device = gl::QueryD3D11DeviceObjectFromANGLE();
+          CHECK(device);
+          Microsoft::WRL::ComPtr<ID3D11Multithread> multi_threaded;
+          auto hr = device->QueryInterface(IID_PPV_ARGS(&multi_threaded));
+          CHECK(SUCCEEDED(hr));
+          multi_threaded->SetMultithreadProtected(TRUE);
+        }));
+#endif
+  }
 
   using FactoryCallback =
       base::OnceCallback<std::unique_ptr<media::MediaService>()>;

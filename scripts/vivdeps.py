@@ -117,10 +117,10 @@ def get_variables(a_checkout_os=None):
   for an_os in ["telemetry_dependencies"]:
     global_vars.setdefault("checkout_"+an_os, False)
 
-  return global_vars
+  return (global_vars, gnvars)
 
 def get_chromium_variables():
-  global_vars = get_variables()
+  global_vars, _gnvars = get_variables()
   if BASE_URL:
     global_vars.setdefault('chromium_git', BASE_URL)
     global_vars.setdefault('android_git', BASE_URL +'/android')
@@ -239,6 +239,11 @@ class VivaldiBaseDeps(gclient.GitDependency):
       if x.GetScmName() == "git":
         if cipd_only or x.name in exclude_modules:
           x.really_should_process = False
+        else:
+          url, ref = SplitUrlRevision(x.url)
+          if not url.endswith(".git"):
+            x.set_url(url + ".git@"+ref)
+
       elif x.GetScmName() == "cipd":
         if cipd_list and x.name.split(":")[0] not in cipd_list:
           x.really_should_process = False

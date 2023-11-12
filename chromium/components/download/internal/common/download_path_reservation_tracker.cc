@@ -10,11 +10,11 @@
 #include <map>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -240,7 +240,7 @@ PathValidationResult ResolveReservationConflicts(
     case DownloadPathReservationTracker::UNIQUIFY:
       return CreateUniqueFilename(max_path_component_length, info.start_time,
                                   target_path)
-                 ? PathValidationResult::SUCCESS
+                 ? PathValidationResult::SUCCESS_RESOLVED_CONFLICT
                  : PathValidationResult::CONFLICT;
 
     case DownloadPathReservationTracker::OVERWRITE:

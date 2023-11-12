@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/json/values_util.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
@@ -1139,6 +1139,8 @@ TEST_F(DownloadTargetDeterminerTest, ReservationFailed_Confirmation) {
     download::PathValidationResult result;
     DownloadConfirmationReason expected_confirmation_reason;
   } kTestCases[] = {{download::PathValidationResult::SUCCESS,
+                     DownloadConfirmationReason::NONE},
+                    {download::PathValidationResult::SUCCESS_RESOLVED_CONFLICT,
                      DownloadConfirmationReason::NONE},
                     {download::PathValidationResult::CONFLICT,
                      DownloadConfirmationReason::TARGET_CONFLICT},

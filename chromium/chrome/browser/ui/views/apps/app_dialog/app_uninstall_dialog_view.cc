@@ -6,8 +6,8 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -187,7 +187,7 @@ AppUninstallDialogView::AppUninstallDialogView(
   SetAcceptCallback(base::BindOnce(&AppUninstallDialogView::OnDialogAccepted,
                                    base::Unretained(this)));
 
-  InitializeView(profile, app_type, app_id, app_name);
+  InitializeView(profile, app_type, app_id);
 
   g_app_uninstall_dialog_view = this;
 }
@@ -203,8 +203,7 @@ AppUninstallDialogView* AppUninstallDialogView::GetActiveViewForTesting() {
 
 void AppUninstallDialogView::InitializeView(Profile* profile,
                                             apps::AppType app_type,
-                                            const std::string& app_id,
-                                            const std::string& app_name) {
+                                            const std::string& app_id) {
   SetButtonLabel(
       ui::DIALOG_BUTTON_OK,
       l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_UNINSTALL_APP_BUTTON));
@@ -236,8 +235,8 @@ void AppUninstallDialogView::InitializeView(Profile* profile,
       break;
     case apps::AppType::kPluginVm:
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-      InitializeViewWithMessage(l10n_util::GetStringFUTF16(
-          IDS_PLUGIN_VM_UNINSTALL_PROMPT_BODY, base::UTF8ToUTF16(app_name)));
+      InitializeViewWithMessage(
+          l10n_util::GetStringUTF16(IDS_PLUGIN_VM_UNINSTALL_PROMPT_BODY));
 #else
       NOTREACHED();
 #endif
@@ -259,6 +258,13 @@ void AppUninstallDialogView::InitializeView(Profile* profile,
 #if BUILDFLAG(IS_CHROMEOS_ASH)
       InitializeViewWithMessage(l10n_util::GetStringUTF16(
           IDS_CROSTINI_APPLICATION_UNINSTALL_CONFIRM_BODY));
+#else
+      NOTREACHED();
+#endif
+      break;
+    case apps::AppType::kBruschetta:
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      // TODO(b/247636749): Implement Bruschetta uninstall.
 #else
       NOTREACHED();
 #endif

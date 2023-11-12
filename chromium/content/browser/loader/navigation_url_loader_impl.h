@@ -39,7 +39,6 @@ class BrowserContext;
 class NavigationEarlyHintsManager;
 class NavigationLoaderInterceptor;
 class PrefetchedSignedExchangeCache;
-class SignedExchangePrefetchMetricRecorder;
 class SignedExchangeRequestHandler;
 class StoragePartition;
 class StoragePartitionImpl;
@@ -94,6 +93,8 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       StoragePartitionImpl* partition);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(NavigationURLLoaderImplTest,
+                           OnAcceptCHFrameReceivedUKM);
   // Starts the loader by finalizing loader factories initialization and
   // calling Restart().
   // This is called only once (while Restart can be called multiple times).
@@ -101,8 +102,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   void StartImpl(
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
-      scoped_refptr<SignedExchangePrefetchMetricRecorder>
-          signed_exchange_prefetch_metric_recorder,
       mojo::PendingRemote<network::mojom::URLLoaderFactory> factory_for_webui,
       std::string accept_langs);
 
@@ -115,8 +114,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
 
   void CreateInterceptors(scoped_refptr<PrefetchedSignedExchangeCache>
                               prefetched_signed_exchange_cache,
-                          scoped_refptr<SignedExchangePrefetchMetricRecorder>
-                              signed_exchange_prefetch_metric_recorder,
                           const std::string& accept_langs);
 
   // This could be called multiple times to follow a chain of redirects.
@@ -140,7 +137,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   void FallbackToNonInterceptedRequest(bool reset_subresource_loader_params);
 
   scoped_refptr<network::SharedURLLoaderFactory>
-  PrepareForNonInterceptedRequest(uint32_t* out_options);
+  PrepareForNonInterceptedRequest();
 
 #if BUILDFLAG(ENABLE_PLUGINS)
   void CheckPluginAndContinueOnReceiveResponse(
@@ -156,6 +153,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
       bool is_download);
 
   bool MaybeCreateLoaderForResponse(
+      const network::URLLoaderCompletionStatus& status,
       network::mojom::URLResponseHeadPtr* response);
 
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>>
@@ -165,8 +163,6 @@ class CONTENT_EXPORT NavigationURLLoaderImpl
   CreateSignedExchangeRequestHandler(
       const NavigationRequestInfo& request_info,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      scoped_refptr<SignedExchangePrefetchMetricRecorder>
-          signed_exchange_prefetch_metric_recorder,
       std::string accept_langs);
 
   void ParseHeaders(const GURL& url,

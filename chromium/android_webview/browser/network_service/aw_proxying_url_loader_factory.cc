@@ -23,8 +23,8 @@
 #include "android_webview/common/url_constants.h"
 #include "base/android/build_info.h"
 #include "base/barrier_closure.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
@@ -47,7 +47,9 @@
 #include "services/network/public/mojom/early_hints.mojom.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace android_webview {
 
@@ -321,6 +323,8 @@ namespace {
 // Persistent Origin Trials can only be checked on the UI thread.
 // |result_args| is owned by a BarrierClosure that executes after this call.
 void CheckXrwOriginTrialOnUiThread(GURL request_url,
+                                   int frame_tree_node_id,
+                                   blink::mojom::ResourceType resource_type,
                                    InterceptResponseReceivedArgs* result_args) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::OriginTrialsControllerDelegate* delegate =
@@ -328,9 +332,29 @@ void CheckXrwOriginTrialOnUiThread(GURL request_url,
   if (!delegate)
     return;
 
+  // Use the request URL for main frame resources (main frame navigation).
+  // Use last committed origin of outermost main frame for all other requests.
+  // Fall back to an opaque origin if neither is available (not expected to
+  // happen).
+  url::Origin partition_origin;
+  if (resource_type == blink::mojom::ResourceType::kMainFrame) {
+    partition_origin = url::Origin::Create(request_url);
+  } else {
+    content::WebContents* wc =
+        content::WebContents::FromFrameTreeNodeId(frame_tree_node_id);
+    base::UmaHistogramBoolean(
+        "Android.WebView.RequestedWithHeader.HadWebContentsForPartitionOrigin",
+        wc);
+    if (wc) {
+      partition_origin = wc->GetPrimaryMainFrame()
+                             ->GetOutermostMainFrame()
+                             ->GetLastCommittedOrigin();
+    }
+  }
+
   result_args->xrw_origin_trial_enabled = delegate->IsTrialPersistedForOrigin(
-      url::Origin::Create(request_url), "WebViewXRequestedWithDeprecation",
-      base::Time::Now());
+      url::Origin::Create(request_url), partition_origin,
+      "WebViewXRequestedWithDeprecation", base::Time::Now());
   base::UmaHistogramBoolean(
       "Android.WebView.RequestedWithHeader.OriginTrialEnabled",
       result_args->xrw_origin_trial_enabled);
@@ -347,11 +371,14 @@ void CheckXrwOriginTrialOnUiThread(GURL request_url,
 // for |request_url|, saving the result in |result_args|.
 // |result_args| is owned by the |done_callback|.
 void CheckXrwOriginTrialAsync(GURL request_url,
+                              int frame_tree_node_id,
+                              blink::mojom::ResourceType resource_type,
                               InterceptResponseReceivedArgs* result_args,
                               base::OnceClosure done_callback) {
   content::GetUIThreadTaskRunner({})->PostTaskAndReply(
       FROM_HERE,
-      base::BindOnce(&CheckXrwOriginTrialOnUiThread, request_url,
+      base::BindOnce(&CheckXrwOriginTrialOnUiThread, std::move(request_url),
+                     frame_tree_node_id, resource_type,
                      base::Unretained(result_args)),
       std::move(done_callback));
 }
@@ -388,13 +415,17 @@ void InterceptedRequest::Restart() {
 
   request_.load_flags =
       UpdateLoadFlags(request_.load_flags, io_thread_client.get());
+
   if (!io_thread_client || ShouldNotInterceptRequest()) {
     // equivalent to no interception
     std::unique_ptr<InterceptResponseReceivedArgs>
         intercept_response_received_args =
             std::make_unique<InterceptResponseReceivedArgs>();
+
     CheckXrwOriginTrialAsync(
-        request_.url, intercept_response_received_args.get(),
+        request_.url, frame_tree_node_id_,
+        static_cast<blink::mojom::ResourceType>(request_.resource_type),
+        intercept_response_received_args.get(),
         base::BindOnce(&InterceptedRequest::InterceptResponseReceived,
                        weak_factory_.GetWeakPtr(),
                        std::move(intercept_response_received_args)));
@@ -419,8 +450,10 @@ void InterceptedRequest::Restart() {
                             weak_factory_.GetWeakPtr(), std::move(call_args)));
     }
 
-    CheckXrwOriginTrialAsync(request_.url, intercept_response_received_args,
-                             arg_ready_closure);
+    CheckXrwOriginTrialAsync(
+        request_.url, frame_tree_node_id_,
+        static_cast<blink::mojom::ResourceType>(request_.resource_type),
+        intercept_response_received_args, arg_ready_closure);
 
     // TODO: verify the case when WebContents::RenderFrameDeleted is called
     // before network request is intercepted (i.e. if that's possible and
@@ -885,7 +918,7 @@ AwProxyingURLLoaderFactory::AwProxyingURLLoaderFactory(
                           base::Unretained(this)));
 }
 
-AwProxyingURLLoaderFactory::~AwProxyingURLLoaderFactory() {}
+AwProxyingURLLoaderFactory::~AwProxyingURLLoaderFactory() = default;
 
 // static
 void AwProxyingURLLoaderFactory::CreateProxy(

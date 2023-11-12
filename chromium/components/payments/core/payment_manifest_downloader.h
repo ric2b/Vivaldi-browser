@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
@@ -158,6 +158,7 @@ class PaymentManifestDownloader {
 
   // Called by SimpleURLLoader on a redirect.
   void OnURLLoaderRedirect(network::SimpleURLLoader* url_loader,
+                           const GURL& url_before_redirect,
                            const net::RedirectInfo& redirect_info,
                            const network::mojom::URLResponseHead& response_head,
                            std::vector<std::string>* to_be_removed_headers);

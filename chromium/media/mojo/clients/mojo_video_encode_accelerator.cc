@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -173,6 +173,10 @@ void MojoVideoEncodeAccelerator::Encode(scoped_refptr<VideoFrame> frame,
       frame->format() != PIXEL_FORMAT_NV12) {
     DLOG(ERROR) << "Unexpected pixel format: "
                 << VideoPixelFormatToString(frame->format());
+    if (vea_client_) {
+      vea_client_->NotifyError(
+          VideoEncodeAccelerator::Error::kInvalidArgumentError);
+    }
     return;
   }
 

@@ -6,13 +6,11 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
-#include "base/timer/elapsed_timer.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/common/constants.h"
@@ -425,21 +423,22 @@ NativeExtensionBindingsSystem::NativeExtensionBindingsSystem(
                                  base::BindRepeating(&ChromeSetting::Create));
   api_system_.RegisterCustomType("contentSettings.ContentSetting",
                                  base::BindRepeating(&ContentSetting::Create));
-  api_system_.GetHooksForAPI("webRequest")
-      ->SetDelegate(std::make_unique<WebRequestHooks>());
-  api_system_.GetHooksForAPI("declarativeContent")
-      ->SetDelegate(std::make_unique<DeclarativeContentHooksDelegate>());
-  api_system_.GetHooksForAPI("dom")->SetDelegate(
-      std::make_unique<DOMHooksDelegate>());
-  api_system_.GetHooksForAPI("i18n")->SetDelegate(
-      std::make_unique<I18nHooksDelegate>());
-  api_system_.GetHooksForAPI("runtime")->SetDelegate(
-      std::make_unique<RuntimeHooksDelegate>(&messaging_service_));
-  api_system_.GetHooksForAPI("feedbackPrivate")
-      ->SetDelegate(std::make_unique<FeedbackPrivateHooksDelegate>());
+  api_system_.RegisterHooksDelegate("webRequest",
+                                    std::make_unique<WebRequestHooks>());
+  api_system_.RegisterHooksDelegate(
+      "declarativeContent",
+      std::make_unique<DeclarativeContentHooksDelegate>());
+  api_system_.RegisterHooksDelegate("dom",
+                                    std::make_unique<DOMHooksDelegate>());
+  api_system_.RegisterHooksDelegate("i18n",
+                                    std::make_unique<I18nHooksDelegate>());
+  api_system_.RegisterHooksDelegate(
+      "runtime", std::make_unique<RuntimeHooksDelegate>(&messaging_service_));
+  api_system_.RegisterHooksDelegate(
+      "feedbackPrivate", std::make_unique<FeedbackPrivateHooksDelegate>());
 }
 
-NativeExtensionBindingsSystem::~NativeExtensionBindingsSystem() {}
+NativeExtensionBindingsSystem::~NativeExtensionBindingsSystem() = default;
 
 void NativeExtensionBindingsSystem::DidCreateScriptContext(
     ScriptContext* context) {
@@ -757,7 +756,6 @@ v8::Local<v8::Object> NativeExtensionBindingsSystem::GetAPIHelper(
   CHECK(
       gin::Converter<std::string>::FromV8(isolate, api_name, &api_name_string));
 
-  base::ElapsedTimer timer;
   v8::Local<v8::Object> root_binding = CreateFullBinding(
       context, script_context, &data->bindings_system->api_system_,
       FeatureProvider::GetAPIFeatures(), api_name_string);
@@ -769,9 +767,6 @@ v8::Local<v8::Object> NativeExtensionBindingsSystem::GetAPIHelper(
   if (!success.IsJust() || !success.FromJust())
     return v8::Local<v8::Object>();
 
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Extensions.Bindings.NativeBindingCreationTime",
-                              timer.Elapsed().InMicroseconds(), 1, 10000000,
-                              50);
   return root_binding;
 }
 

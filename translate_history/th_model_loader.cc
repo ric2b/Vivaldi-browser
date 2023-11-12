@@ -5,10 +5,10 @@
 
 #include "translate_history/th_model_loader.h"
 
-#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"

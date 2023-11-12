@@ -8,9 +8,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
@@ -28,12 +28,9 @@
 #include "components/signin/public/identity_manager/scope_set.h"
 #include "components/update_client/update_query_params.h"
 #include "content/public/browser/file_url_loader.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/shared_cors_origin_access_list.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extensions_browser_client.h"
-#include "extensions/browser/notification_types.h"
 #include "extensions/browser/updater/extension_cache.h"
 #include "extensions/browser/updater/extension_downloader_test_delegate.h"
 #include "extensions/browser/updater/request_queue_impl.h"
@@ -97,6 +94,7 @@ const char kTokenServiceConsumerId[] = "extension_downloader";
 const char kWebstoreOAuth2Scope[] =
     "https://www.googleapis.com/auth/chromewebstore.readonly";
 
+ExtensionDownloader::TestObserver* g_test_observer = nullptr;
 ExtensionDownloaderTestDelegate* g_test_delegate = nullptr;
 
 #define RETRY_HISTOGRAM(name, retry_count, url)                           \
@@ -181,12 +179,6 @@ DownloadFailure::DownloadFailure(
 DownloadFailure::DownloadFailure(DownloadFailure&&) = default;
 DownloadFailure::~DownloadFailure() = default;
 
-UpdateDetails::UpdateDetails(const std::string& id,
-                             const base::Version& version)
-    : id(id), version(version) {}
-
-UpdateDetails::~UpdateDetails() = default;
-
 ExtensionDownloader::ExtensionFetch::ExtensionFetch(
     ExtensionDownloaderTask task,
     const GURL& url,
@@ -242,11 +234,11 @@ ExtensionDownloader::ExtensionDownloader(
       url_loader_factory_(std::move(url_loader_factory)),
       profile_path_for_url_loader_factory_(profile_path),
       manifests_queue_(
-          &kDefaultBackoffPolicy,
+          kDefaultBackoffPolicy,
           base::BindRepeating(&ExtensionDownloader::CreateManifestLoader,
                               base::Unretained(this))),
       extensions_queue_(
-          &kDefaultBackoffPolicy,
+          kDefaultBackoffPolicy,
           base::BindRepeating(&ExtensionDownloader::CreateExtensionLoader,
                               base::Unretained(this))),
       extension_cache_(nullptr),
@@ -353,15 +345,31 @@ void ExtensionDownloader::SetIdentityManager(
   identity_manager_ = identity_manager;
 }
 
+ExtensionDownloader::TestObserver::TestObserver() = default;
+ExtensionDownloader::TestObserver::~TestObserver() = default;
+
+// static
+void ExtensionDownloader::set_test_observer(TestObserver* observer) {
+  g_test_observer = observer;
+}
+
+// static
+ExtensionDownloader::TestObserver* ExtensionDownloader::test_observer() {
+  return g_test_observer;
+}
+
 // static
 void ExtensionDownloader::set_test_delegate(
     ExtensionDownloaderTestDelegate* delegate) {
   g_test_delegate = delegate;
 }
 
-void ExtensionDownloader::SetBackoffPolicyForTesting(
-    const net::BackoffEntry::Policy* backoff_policy) {
-  manifests_queue_.set_backoff_policy(backoff_policy);
+void ExtensionDownloader::SetBackoffPolicy(
+    absl::optional<net::BackoffEntry::Policy> backoff_policy) {
+  manifests_queue_.set_backoff_policy(
+      backoff_policy.value_or(kDefaultBackoffPolicy));
+  extensions_queue_.set_backoff_policy(
+      backoff_policy.value_or(kDefaultBackoffPolicy));
 }
 
 bool ExtensionDownloader::HasActiveManifestRequestForTesting() {
@@ -780,7 +788,15 @@ void ExtensionDownloader::HandleManifestResults(
     const std::string& extension_id = update.first.id;
 
     GURL crx_url = update.second->crx_url;
-    NotifyUpdateFound(extension_id, update.second->version);
+
+    if (g_test_observer) {
+      g_test_observer->OnExtensionUpdateFound(
+          extension_id, fetch_data->request_ids(),
+          base::Version(update.second->version));
+    }
+    delegate_->OnExtensionUpdateFound(extension_id, fetch_data->request_ids(),
+                                      base::Version(update.second->version));
+
     if (fetch_data->is_all_external_policy_download() && crx_url.is_empty()) {
       DCHECK_EQ(fetch_data->fetch_priority(),
                 DownloadFetchPriority::kForeground);
@@ -1366,15 +1382,6 @@ void ExtensionDownloader::NotifyExtensionsDownloadFailedWithList(
         request_ids, data);
     ping_results_.erase(extension_id);
   }
-}
-
-void ExtensionDownloader::NotifyUpdateFound(const std::string& id,
-                                            const std::string& version) {
-  UpdateDetails updateInfo(id, base::Version(version));
-  content::NotificationService::current()->Notify(
-      extensions::NOTIFICATION_EXTENSION_UPDATE_FOUND,
-      content::NotificationService::AllBrowserContextsAndSources(),
-      content::Details<UpdateDetails>(&updateInfo));
 }
 
 bool ExtensionDownloader::IterateFetchCredentialsAfterFailure(

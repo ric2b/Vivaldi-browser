@@ -15,7 +15,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import static org.chromium.chrome.browser.tasks.ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS;
+import static org.chromium.chrome.features.start_surface.StartSurfaceConfiguration.START_SURFACE_RETURN_TIME_SECONDS;
+import static org.chromium.chrome.features.start_surface.StartSurfaceTestUtils.sClassParamsForStartSurfaceTest;
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
 
 import androidx.test.espresso.action.GeneralClickAction;
@@ -53,7 +54,6 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 
@@ -71,11 +71,7 @@ import java.util.concurrent.TimeoutException;
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group"})
 public class StartSurfaceNoTabsTest {
     @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
-            Arrays.asList(new ParameterSet().value(false, false).name("NoInstant_NoReturn"),
-                    new ParameterSet().value(true, false).name("Instant_NoReturn"),
-                    new ParameterSet().value(false, true).name("NoInstant_Return"),
-                    new ParameterSet().value(true, true).name("Instant_Return"));
+    private static List<ParameterSet> sClassParams = sClassParamsForStartSurfaceTest;
 
     private static final String BASE_PARAMS = "force-fieldtrial-params=Study.Group:";
 
@@ -93,12 +89,13 @@ public class StartSurfaceNoTabsTest {
     @Before
     public void setUp() throws IOException {
         if (mImmediateReturn) {
-            TAB_SWITCHER_ON_RETURN_MS.setForTesting(0);
-            assertEquals(0, ReturnToChromeUtil.TAB_SWITCHER_ON_RETURN_MS.getValue());
+            START_SURFACE_RETURN_TIME_SECONDS.setForTesting(0);
+            assertEquals(0, START_SURFACE_RETURN_TIME_SECONDS.getValue());
             assertTrue(ReturnToChromeUtil.shouldShowTabSwitcher(-1));
         } else {
             assertFalse(ReturnToChromeUtil.shouldShowTabSwitcher(-1));
         }
+        ReturnToChromeUtil.setSkipInitializationCheckForTesting(true);
 
         mActivityTestRule.startMainActivityFromLauncher();
     }
@@ -139,7 +136,6 @@ public class StartSurfaceNoTabsTest {
     @MediumTest
     @Feature({"StartSurface"})
     // clang-format off
-    @DisabledTest(message = "https://crbug.com/1263910")
     public void testShow_SingleAsHomepage_SingleTabSwitcher_NoTabs() {
         // clang-format on
         CriteriaHelper.pollUiThread(

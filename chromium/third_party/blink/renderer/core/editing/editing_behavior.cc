@@ -147,11 +147,12 @@ const KeyboardCodeKeyDownEntry kKeyboardCodeKeyDownEntries[] = {
 #if BUILDFLAG(IS_MAC)
     {'B', kCommandKey, "ToggleBold"},
     {'I', kCommandKey, "ToggleItalic"},
+    {'U', kCommandKey, "ToggleUnderline"},
 #else
     {'B', kCtrlKey, "ToggleBold"},
     {'I', kCtrlKey, "ToggleItalic"},
-#endif
     {'U', kCtrlKey, "ToggleUnderline"},
+#endif
     {VKEY_ESCAPE, 0, "Cancel"},
     {VKEY_OEM_PERIOD, kCtrlKey, "Cancel"},
     {VKEY_TAB, 0, "InsertTab"},
@@ -183,6 +184,9 @@ const KeyboardCodeKeyDownEntry kKeyboardCodeKeyDownEntries[] = {
     {VKEY_BACK, kAltKey | kShiftKey, "Redo"},
 #endif
     {VKEY_INSERT, 0, "OverWrite"},
+#if BUILDFLAG(IS_ANDROID)
+    {VKEY_BACK, kAltKey, "DeleteToBeginningOfLine"},
+#endif
 };
 
 const KeyboardCodeKeyPressEntry kKeyboardCodeKeyPressEntries[] = {

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/memory/read_only_shared_memory_region.h"
+#include "base/task/single_thread_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "components/power_scheduler/power_mode_voter.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
@@ -96,9 +97,10 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
   // viz::mojom::blink::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       WTF::Vector<viz::ReturnedResource> resources) final;
-  void OnBeginFrame(
-      const viz::BeginFrameArgs&,
-      const WTF::HashMap<uint32_t, viz::FrameTimingDetails>&) final;
+  void OnBeginFrame(const viz::BeginFrameArgs&,
+                    const WTF::HashMap<uint32_t, viz::FrameTimingDetails>&,
+                    bool frame_ack,
+                    WTF::Vector<viz::ReturnedResource> resources) final;
   void OnBeginFramePausedChanged(bool paused) final {}
   void ReclaimResources(WTF::Vector<viz::ReturnedResource> resources) final;
   void OnCompositorFrameTransitionDirectiveProcessed(
@@ -116,8 +118,7 @@ class PLATFORM_EXPORT CanvasResourceDispatcher
   friend class CanvasResourceDispatcherTest;
   struct FrameResource;
 
-  using ResourceMap =
-      HashMap<viz::ResourceId, std::unique_ptr<FrameResource>, ResourceIdHash>;
+  using ResourceMap = HashMap<viz::ResourceId, std::unique_ptr<FrameResource>>;
 
   bool PrepareFrame(scoped_refptr<CanvasResource>&&,
                     base::TimeTicks commit_start_time,

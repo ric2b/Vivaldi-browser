@@ -9,6 +9,7 @@
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_future.h"
 #include "build/build_config.h"
 #include "content/browser/direct_sockets/direct_sockets_service_impl.h"
 #include "content/browser/direct_sockets/direct_sockets_test_utils.h"
@@ -19,6 +20,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -33,6 +35,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
 #include "services/network/public/mojom/mdns_responder.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -225,41 +228,25 @@ class DirectSocketsTcpBrowserTest : public ContentBrowserTest {
     GetNetworkContext()->CreateMdnsResponder(
         mdns_responder_.BindNewPipeAndPassReceiver());
 
-    std::string name;
-    base::RunLoop run_loop;
-    mdns_responder_->CreateNameForAddress(
-        net::IPAddress::IPv4Localhost(),
-        base::BindLambdaForTesting(
-            [&name, &run_loop](const std::string& name_out,
-                               bool announcement_scheduled) {
-              name = name_out;
-              run_loop.Quit();
-            }));
-    run_loop.Run();
-    return name;
+    base::test::TestFuture<const std::string&, bool> future;
+    mdns_responder_->CreateNameForAddress(net::IPAddress::IPv4Localhost(),
+                                          future.GetCallback());
+    return future.Get<std::string>();
   }
 
   // Returns the port listening for TCP connections.
   uint16_t StartTcpServer() {
-    net::IPEndPoint local_addr;
-    base::RunLoop run_loop;
+    base::test::TestFuture<int32_t, const absl::optional<net::IPEndPoint>&>
+        future;
     GetNetworkContext()->CreateTCPServerSocket(
         net::IPEndPoint(net::IPAddress::IPv4Localhost(),
                         /*port=*/0),
         /*backlog=*/5,
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
-        tcp_server_socket_.BindNewPipeAndPassReceiver(),
-        base::BindLambdaForTesting(
-            [&local_addr, &run_loop](
-                int32_t result,
-                const absl::optional<net::IPEndPoint>& local_addr_out) {
-              DCHECK_EQ(result, net::OK);
-              DCHECK(local_addr_out.has_value());
-              local_addr = *local_addr_out;
-              run_loop.Quit();
-            }));
-    run_loop.Run();
-    return local_addr.port();
+        tcp_server_socket_.BindNewPipeAndPassReceiver(), future.GetCallback());
+    auto local_addr = future.Get<absl::optional<net::IPEndPoint>>();
+    DCHECK(local_addr);
+    return local_addr->port();
   }
 
   mojo::Remote<network::mojom::TCPServerSocket>& tcp_server_socket() {
@@ -288,12 +275,17 @@ class DirectSocketsTcpBrowserTest : public ContentBrowserTest {
 
     client_ = std::make_unique<test::IsolatedWebAppContentBrowserClient>(
         url::Origin::Create(GetTestPageURL()));
-    scoped_client_ =
-        std::make_unique<ScopedContentBrowserClientSetting>(client_.get());
     runner_ =
         std::make_unique<content::test::AsyncJsRunner>(shell()->web_contents());
 
     ASSERT_TRUE(NavigateToURL(shell(), GetTestPageURL()));
+  }
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // For TCPServerSocket support.
+    // TODO(crbug.com/1408140): remove after TCPServerSocket is fully supported.
+    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
+                                    "DirectSocketsExperimental");
   }
 
   void SetUp() override {
@@ -313,7 +305,6 @@ class DirectSocketsTcpBrowserTest : public ContentBrowserTest {
   mojo::Remote<network::mojom::TCPServerSocket> tcp_server_socket_;
 
   std::unique_ptr<test::IsolatedWebAppContentBrowserClient> client_;
-  std::unique_ptr<ScopedContentBrowserClientSetting> scoped_client_;
   std::unique_ptr<content::test::AsyncJsRunner> runner_;
 };
 
@@ -626,6 +617,12 @@ IN_PROC_BROWSER_TEST_F(DirectSocketsTcpBrowserTest,
 
   EXPECT_THAT(future->Get(),
               ::testing::HasSubstr("waitForClosedPromise succeeded."));
+}
+
+IN_PROC_BROWSER_TEST_F(DirectSocketsTcpBrowserTest, ExchangeTcpServer) {
+  ASSERT_THAT(EvalJs(shell(), "exchangeSingleTcpPacketBetweenClientAndServer()")
+                  .ExtractString(),
+              testing::HasSubstr("succeeded"));
 }
 
 }  // namespace content

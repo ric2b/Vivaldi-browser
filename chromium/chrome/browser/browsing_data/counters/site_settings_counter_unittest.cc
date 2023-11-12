@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/simple_test_clock.h"
 #include "build/build_config.h"
@@ -182,10 +182,9 @@ TEST_F(SiteSettingsCounterTest, OnlyCountContentSettings) {
   map()->SetContentSettingDefaultScope(
       GURL("http://www.google.com"), GURL("http://www.google.com"),
       ContentSettingsType::POPUPS, CONTENT_SETTING_ALLOW);
-  map()->SetWebsiteSettingDefaultScope(
-      GURL("http://maps.google.com"), GURL(),
-      ContentSettingsType::SITE_ENGAGEMENT,
-      base::Value(base::Value::Type::DICTIONARY));
+  map()->SetWebsiteSettingDefaultScope(GURL("http://maps.google.com"), GURL(),
+                                       ContentSettingsType::SITE_ENGAGEMENT,
+                                       base::Value(base::Value::Type::DICT));
 
   counter()->Restart();
   EXPECT_EQ(1, GetResult());
@@ -193,10 +192,10 @@ TEST_F(SiteSettingsCounterTest, OnlyCountContentSettings) {
 
 // Tests that the counter counts WebUSB settings
 TEST_F(SiteSettingsCounterTest, CountWebUsbSettings) {
-  map()->SetWebsiteSettingDefaultScope(
-      GURL("http://www.google.com"), GURL("http://www.google.com"),
-      ContentSettingsType::USB_CHOOSER_DATA,
-      base::Value(base::Value::Type::DICTIONARY));
+  map()->SetWebsiteSettingDefaultScope(GURL("http://www.google.com"),
+                                       GURL("http://www.google.com"),
+                                       ContentSettingsType::USB_CHOOSER_DATA,
+                                       base::Value(base::Value::Type::DICT));
 
   counter()->Restart();
   EXPECT_EQ(1, GetResult());

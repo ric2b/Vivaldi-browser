@@ -35,6 +35,7 @@
 
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -85,7 +86,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_timing.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
-#include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_timing_utils.h"
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
@@ -102,12 +103,6 @@ constexpr size_t kLongTaskUkmSampleInterval = 100;
 
 const char kSwapsPerInsertionHistogram[] =
     "Renderer.Core.Timing.Performance.SwapsPerPerformanceEntryInsertion";
-
-const SecurityOrigin* GetSecurityOrigin(ExecutionContext* context) {
-  if (context)
-    return context->GetSecurityOrigin();
-  return nullptr;
-}
 
 bool IsMeasureOptionsEmpty(const PerformanceMeasureOptions& options) {
   return !options.hasDetail() && !options.hasEnd() && !options.hasStart() &&
@@ -162,19 +157,90 @@ void SwapEntries(PerformanceEntryVector& entries,
   entries[rightIndex] = tmp;
 }
 
+inline bool CheckName(const PerformanceEntry* entry,
+                      const AtomicString& maybe_name) {
+  // If we're not filtering by name, then any entry matches.
+  if (!maybe_name) {
+    return true;
+  }
+  return entry->name() == maybe_name;
+}
+
+// |output_entries| either gets reassigned to or is appended to.
+// Therefore, it must point to a valid PerformanceEntryVector.
+void FilterEntriesTriggeredBySoftNavigationIfNeeded(
+    PerformanceEntryVector& input_entries,
+    PerformanceEntryVector** output_entries,
+    bool include_soft_navigation_observations) {
+  if (include_soft_navigation_observations) {
+    *output_entries = &input_entries;
+  } else {
+    DCHECK(output_entries && *output_entries);
+    std::copy_if(input_entries.begin(), input_entries.end(),
+                 std::back_inserter(**output_entries),
+                 [&](const PerformanceEntry* entry) {
+                   return !entry->IsTriggeredBySoftNavigation();
+                 });
+  }
+}
+
 }  // namespace
 
 PerformanceEntryVector MergePerformanceEntryVectors(
     const PerformanceEntryVector& first_entry_vector,
-    const PerformanceEntryVector& second_entry_vector) {
+    const PerformanceEntryVector& second_entry_vector,
+    const AtomicString& maybe_name) {
   PerformanceEntryVector merged_entries;
   merged_entries.reserve(first_entry_vector.size() +
                          second_entry_vector.size());
 
-  std::merge(first_entry_vector.begin(), first_entry_vector.end(),
-             second_entry_vector.begin(), second_entry_vector.end(),
-             std::back_inserter(merged_entries),
-             PerformanceEntry::StartTimeCompareLessThan);
+  auto* first_it = first_entry_vector.begin();
+  auto* first_end = first_entry_vector.end();
+  auto* second_it = second_entry_vector.begin();
+  auto* second_end = second_entry_vector.end();
+
+  // Advance the second iterator past any entries with disallowed names.
+  while (second_it != second_end && !CheckName(*second_it, maybe_name)) {
+    ++second_it;
+  }
+
+  auto PushBackSecondIteratorAndAdvance = [&]() {
+    DCHECK(CheckName(*second_it, maybe_name));
+    merged_entries.push_back(*second_it);
+    ++second_it;
+    while (second_it != second_end && !CheckName(*second_it, maybe_name)) {
+      ++second_it;
+    }
+  };
+
+  // What follows is based roughly on a reference implementation of std::merge,
+  // except that after copying a value from the second iterator, it must also
+  // advance the second iterator past any entries with disallowed names.
+
+  while (first_it != first_end) {
+    // If the second iterator has ended, just copy the rest of the contents
+    // from the first iterator.
+    if (second_it == second_end) {
+      std::copy(first_it, first_end, std::back_inserter(merged_entries));
+      break;
+    }
+
+    // Add an entry to the result vector from either the first or second
+    // iterator, whichever has an earlier time. The first iterator wins ties.
+    if (PerformanceEntry::StartTimeCompareLessThan(*second_it, *first_it)) {
+      PushBackSecondIteratorAndAdvance();
+    } else {
+      DCHECK(CheckName(*first_it, maybe_name));
+      merged_entries.push_back(*first_it);
+      ++first_it;
+    }
+  }
+
+  // If there are still entries in the second iterator after the first iterator
+  // has ended, copy all remaining entries that have allowed names.
+  while (second_it != second_end) {
+    PushBackSecondIteratorAndAdvance();
+  }
 
   return merged_entries;
 }
@@ -270,47 +336,83 @@ DOMHighResTimeStamp Performance::timeOrigin() const {
       cross_origin_isolated_capability_);
 }
 
-PerformanceEntryVector Performance::getEntries(ScriptState* script_state,
-                                               bool include_frames) {
-  if (include_frames &&
-      RuntimeEnabledFeatures::CrossFramePerformanceTimelineEnabled()) {
-    return GetEntriesWithChildFrames(script_state);
-  } else {
-    return GetEntriesForCurrentFrame();
-  }
+PerformanceEntryVector Performance::getEntries() {
+  return GetEntriesForCurrentFrame();
 }
 
-PerformanceEntryVector Performance::GetEntriesForCurrentFrame() {
+PerformanceEntryVector Performance::getEntries(
+    ScriptState* script_state,
+    PerformanceEntryFilterOptions* options) {
+  if (!RuntimeEnabledFeatures::CrossFramePerformanceTimelineEnabled() ||
+      !options) {
+    return GetEntriesForCurrentFrame();
+  }
+
   PerformanceEntryVector entries;
 
-  entries = MergePerformanceEntryVectors(entries, resource_timing_buffer_);
-  if (first_input_timing_) {
+  AtomicString name =
+      options->hasName() ? AtomicString(options->name()) : g_null_atom;
+
+  AtomicString entry_type = options->hasEntryType()
+                                ? AtomicString(options->entryType())
+                                : g_null_atom;
+
+  // Get sorted entry list based on provided input.
+  if (options->getIncludeChildFramesOr(false)) {
+    entries = GetEntriesWithChildFrames(script_state, entry_type, name);
+  } else {
+    if (!entry_type) {
+      entries = GetEntriesForCurrentFrame(name);
+    } else {
+      entries = GetEntriesByTypeForCurrentFrame(entry_type, name);
+    }
+  }
+
+  return entries;
+}
+
+PerformanceEntryVector Performance::GetEntriesForCurrentFrame(
+    const AtomicString& maybe_name) {
+  PerformanceEntryVector entries;
+
+  entries = MergePerformanceEntryVectors(entries, resource_timing_buffer_,
+                                         maybe_name);
+  if (first_input_timing_ && CheckName(first_input_timing_, maybe_name)) {
     InsertEntryIntoSortedBuffer(entries, *first_input_timing_,
                                 kDoNotRecordSwaps);
   }
-  if (!navigation_timing_) {
-    navigation_timing_ = CreateNavigationTimingInstance();
-  }
   // This extra checking is needed when WorkerPerformance
   // calls this method.
-  if (navigation_timing_) {
+  if (navigation_timing_ && CheckName(navigation_timing_, maybe_name)) {
     InsertEntryIntoSortedBuffer(entries, *navigation_timing_,
                                 kDoNotRecordSwaps);
   }
 
   if (user_timing_) {
-    entries = MergePerformanceEntryVectors(entries, user_timing_->GetMarks());
-    entries =
-        MergePerformanceEntryVectors(entries, user_timing_->GetMeasures());
+    if (maybe_name) {
+      // UserTiming already stores lists of marks and measures by name, so
+      // requesting them directly is much more efficient than getting the full
+      // lists of marks and measures and then filtering during the merge.
+      entries = MergePerformanceEntryVectors(
+          entries, user_timing_->GetMarks(maybe_name), g_null_atom);
+      entries = MergePerformanceEntryVectors(
+          entries, user_timing_->GetMeasures(maybe_name), g_null_atom);
+    } else {
+      entries = MergePerformanceEntryVectors(entries, user_timing_->GetMarks(),
+                                             g_null_atom);
+      entries = MergePerformanceEntryVectors(
+          entries, user_timing_->GetMeasures(), g_null_atom);
+    }
   }
 
   if (paint_entries_timing_.size()) {
-    entries = MergePerformanceEntryVectors(entries, paint_entries_timing_);
+    entries = MergePerformanceEntryVectors(entries, paint_entries_timing_,
+                                           maybe_name);
   }
 
   if (RuntimeEnabledFeatures::NavigationIdEnabled(GetExecutionContext())) {
     entries = MergePerformanceEntryVectors(
-        entries, back_forward_cache_restoration_buffer_);
+        entries, back_forward_cache_restoration_buffer_, maybe_name);
   }
 
   if (RuntimeEnabledFeatures::SoftNavigationHeuristicsEnabled(
@@ -318,33 +420,30 @@ PerformanceEntryVector Performance::GetEntriesForCurrentFrame() {
       soft_navigation_buffer_.size()) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kSoftNavigationHeuristics);
-    entries = MergePerformanceEntryVectors(entries, soft_navigation_buffer_);
+    entries = MergePerformanceEntryVectors(entries, soft_navigation_buffer_,
+                                           maybe_name);
   }
 
   return entries;
 }
 
 PerformanceEntryVector Performance::getBufferedEntriesByType(
-    const AtomicString& entry_type) {
+    const AtomicString& entry_type,
+    bool include_soft_navigation_observations) {
   PerformanceEntry::EntryType type =
       PerformanceEntry::ToEntryTypeEnum(entry_type);
-  return getEntriesByTypeInternal(type);
+  return getEntriesByTypeInternal(type, /*maybe_name=*/g_null_atom,
+                                  include_soft_navigation_observations);
 }
 
 PerformanceEntryVector Performance::getEntriesByType(
-    ScriptState* script_state,
-    const AtomicString& entry_type,
-    bool include_frames) {
-  if (include_frames &&
-      RuntimeEnabledFeatures::CrossFramePerformanceTimelineEnabled()) {
-    return GetEntriesWithChildFrames(script_state, entry_type);
-  } else {
-    return GetEntriesByTypeForCurrentFrame(entry_type);
-  }
+    const AtomicString& entry_type) {
+  return GetEntriesByTypeForCurrentFrame(entry_type);
 }
 
 PerformanceEntryVector Performance::GetEntriesByTypeForCurrentFrame(
-    const AtomicString& entry_type) {
+    const AtomicString& entry_type,
+    const AtomicString& maybe_name) {
   PerformanceEntry::EntryType type =
       PerformanceEntry::ToEntryTypeEnum(entry_type);
   if (!PerformanceEntry::IsValidTimelineEntryType(type)) {
@@ -357,23 +456,34 @@ PerformanceEntryVector Performance::GetEntriesByTypeForCurrentFrame(
     }
     return empty_entries;
   }
-  return getEntriesByTypeInternal(type);
+  return getEntriesByTypeInternal(type, maybe_name);
 }
 
 PerformanceEntryVector Performance::getEntriesByTypeInternal(
-    PerformanceEntry::EntryType type) {
+    PerformanceEntry::EntryType type,
+    const AtomicString& maybe_name,
+    bool include_soft_navigation_observations) {
+  // This vector may be used by any cases below which require local storage.
+  // Cases which refer to pre-existing vectors may simply set `entries` instead.
+  PerformanceEntryVector entries_storage;
+
+  PerformanceEntryVector* entries = &entries_storage;
+  bool already_filtered_by_name = false;
   switch (type) {
     case PerformanceEntry::kResource:
       UseCounter::Count(GetExecutionContext(), WebFeature::kResourceTiming);
-      return resource_timing_buffer_;
+      entries = &resource_timing_buffer_;
+      break;
 
     case PerformanceEntry::kElement:
-      return element_timing_buffer_;
+      entries = &element_timing_buffer_;
+      break;
 
     case PerformanceEntry::kEvent:
       UseCounter::Count(GetExecutionContext(),
                         WebFeature::kEventTimingExplicitlyRequested);
-      return event_timing_buffer_;
+      entries = &event_timing_buffer_;
+      break;
 
     case PerformanceEntry::kFirstInput:
       UseCounter::Count(GetExecutionContext(),
@@ -381,53 +491,72 @@ PerformanceEntryVector Performance::getEntriesByTypeInternal(
       UseCounter::Count(GetExecutionContext(),
                         WebFeature::kEventTimingFirstInputExplicitlyRequested);
       if (first_input_timing_)
-        return {first_input_timing_};
+        entries_storage = {first_input_timing_};
       break;
 
     case PerformanceEntry::kNavigation:
       UseCounter::Count(GetExecutionContext(), WebFeature::kNavigationTimingL2);
-      if (!navigation_timing_)
-        navigation_timing_ = CreateNavigationTimingInstance();
       if (navigation_timing_)
-        return {navigation_timing_};
+        entries_storage = {navigation_timing_};
       break;
 
     case PerformanceEntry::kMark:
-      if (user_timing_)
-        return user_timing_->GetMarks();
+      if (user_timing_) {
+        if (maybe_name) {
+          entries_storage = user_timing_->GetMarks(maybe_name);
+          already_filtered_by_name = true;
+        } else {
+          entries_storage = user_timing_->GetMarks();
+        }
+      }
       break;
 
     case PerformanceEntry::kMeasure:
-      if (user_timing_)
-        return user_timing_->GetMeasures();
+      if (user_timing_) {
+        if (maybe_name) {
+          entries_storage = user_timing_->GetMeasures(maybe_name);
+          already_filtered_by_name = true;
+        } else {
+          entries_storage = user_timing_->GetMeasures();
+        }
+      }
       break;
 
     case PerformanceEntry::kPaint: {
       UseCounter::Count(GetExecutionContext(),
                         WebFeature::kPaintTimingRequested);
 
-      return paint_entries_timing_;
+      FilterEntriesTriggeredBySoftNavigationIfNeeded(
+          paint_entries_timing_, &entries,
+          include_soft_navigation_observations);
+      break;
     }
 
     case PerformanceEntry::kLongTask:
-      return longtask_buffer_;
+      entries = &longtask_buffer_;
+      break;
 
     // TaskAttribution entries are only associated to longtask entries.
     case PerformanceEntry::kTaskAttribution:
       break;
 
     case PerformanceEntry::kLayoutShift:
-      return layout_shift_buffer_;
+      entries = &layout_shift_buffer_;
+      break;
 
     case PerformanceEntry::kLargestContentfulPaint:
-      return largest_contentful_paint_buffer_;
+      FilterEntriesTriggeredBySoftNavigationIfNeeded(
+          largest_contentful_paint_buffer_, &entries,
+          include_soft_navigation_observations);
+      break;
 
     case PerformanceEntry::kVisibilityState:
-      return visibility_state_buffer_;
+      entries = &visibility_state_buffer_;
+      break;
 
     case PerformanceEntry::kBackForwardCacheRestoration:
       if (RuntimeEnabledFeatures::NavigationIdEnabled(GetExecutionContext()))
-        return back_forward_cache_restoration_buffer_;
+        entries = &back_forward_cache_restoration_buffer_;
       break;
 
     case PerformanceEntry::kSoftNavigation:
@@ -435,7 +564,7 @@ PerformanceEntryVector Performance::getEntriesByTypeInternal(
               GetExecutionContext())) {
         UseCounter::Count(GetExecutionContext(),
                           WebFeature::kSoftNavigationHeuristics);
-        return soft_navigation_buffer_;
+        entries = &soft_navigation_buffer_;
       }
       break;
 
@@ -443,33 +572,30 @@ PerformanceEntryVector Performance::getEntriesByTypeInternal(
       break;
   }
 
-  return {};
+  DCHECK_NE(entries, nullptr);
+  if (!maybe_name || already_filtered_by_name) {
+    return *entries;
+  }
+
+  PerformanceEntryVector filtered_entries;
+  std::copy_if(entries->begin(), entries->end(),
+               std::back_inserter(filtered_entries),
+               [&](const PerformanceEntry* entry) {
+                 return entry->name() == maybe_name;
+               });
+  return filtered_entries;
 }
 
 PerformanceEntryVector Performance::getEntriesByName(
-    ScriptState* script_state,
     const AtomicString& name,
-    const AtomicString& entry_type,
-    bool include_frames) {
+    const AtomicString& entry_type) {
   PerformanceEntryVector entries;
-  PerformanceEntryVector all_entries;
 
   // Get sorted entry list based on provided input.
-  if (include_frames &&
-      RuntimeEnabledFeatures::CrossFramePerformanceTimelineEnabled()) {
-    all_entries = GetEntriesWithChildFrames(script_state, entry_type);
+  if (entry_type.IsNull()) {
+    entries = GetEntriesForCurrentFrame(name);
   } else {
-    if (entry_type.IsNull()) {
-      all_entries = GetEntriesForCurrentFrame();
-    } else {
-      all_entries = GetEntriesByTypeForCurrentFrame(entry_type);
-    }
-  }
-
-  // Filter all entries by name.
-  for (const auto& entry : all_entries) {
-    if (entry->name() == name)
-      entries.push_back(entry);
+    entries = GetEntriesByTypeForCurrentFrame(entry_type, name);
   }
 
   return entries;
@@ -477,7 +603,8 @@ PerformanceEntryVector Performance::getEntriesByName(
 
 PerformanceEntryVector Performance::GetEntriesWithChildFrames(
     ScriptState* script_state,
-    const AtomicString& entry_type) {
+    const AtomicString& maybe_type,
+    const AtomicString& maybe_name) {
   PerformanceEntryVector entries;
 
   LocalDOMWindow* window = LocalDOMWindow::From(script_state);
@@ -512,15 +639,16 @@ PerformanceEntryVector Performance::GetEntriesWithChildFrames(
         WindowPerformance* window_performance =
             DOMWindowPerformance::performance(*current_window);
 
-        // Get the performance entries based on entry_type input. Since the root
+        // Get the performance entries based on maybe_type input. Since the root
         // frame can script the current frame, its okay to expose the current
         // frame's performance entries to the root.
         PerformanceEntryVector current_entries;
-        if (entry_type.IsNull()) {
-          current_entries = window_performance->GetEntriesForCurrentFrame();
-        } else {
+        if (!maybe_type) {
           current_entries =
-              window_performance->GetEntriesByTypeForCurrentFrame(entry_type);
+              window_performance->GetEntriesForCurrentFrame(maybe_name);
+        } else {
+          current_entries = window_performance->GetEntriesByTypeForCurrentFrame(
+              maybe_type, maybe_name);
         }
 
         entries.AppendVector(current_entries);
@@ -553,131 +681,12 @@ void Performance::setBackForwardCacheRestorationBufferSizeForTest(
   back_forward_cache_restoration_buffer_size_limit_ = size;
 }
 
-bool Performance::IsResponseSameOriginWithInitiator(
-    const ResourceResponse& response,
-    const SecurityOrigin& initiator_security_origin) {
-  scoped_refptr<const SecurityOrigin> response_origin =
-      SecurityOrigin::Create(response.ResponseUrl());
-  bool is_same_origin =
-      response_origin->IsSameOriginWith(&initiator_security_origin);
-  return is_same_origin;
-}
-
-bool Performance::PassesCORSConditions(
-    const ResourceResponse& final_response,
-    const SecurityOrigin& initiator_security_origin,
-    const network::mojom::RequestMode request_mode,
-    const Vector<ResourceResponse>& redirect_chain) {
-  if (request_mode != network::mojom::RequestMode::kNavigate) {
-    return final_response.IsCorsSameOrigin();
-  }
-
-  for (const ResourceResponse& response : redirect_chain) {
-    if (!IsResponseSameOriginWithInitiator(response,
-                                           initiator_security_origin)) {
-      return false;
-    }
-  }
-  return IsResponseSameOriginWithInitiator(final_response,
-                                           initiator_security_origin);
-}
-
-void Performance::GenerateAndAddResourceTiming(
-    const ResourceTimingInfo& info,
-    const AtomicString& initiator_type) {
-  ExecutionContext* context = GetExecutionContext();
-  const SecurityOrigin* security_origin = GetSecurityOrigin(context);
-  if (!security_origin)
-    return;
-  AddResourceTiming(
-      GenerateResourceTiming(*security_origin, info, *context),
-      !initiator_type.IsNull() ? initiator_type : info.InitiatorType(),
-      context);
-}
-
-// Please keep this function in sync with ObjectNavigationFallbackBodyLoader's
-// GenerateResourceTiming() helper.
-mojom::blink::ResourceTimingInfoPtr Performance::GenerateResourceTiming(
-    const SecurityOrigin& destination_origin,
-    const ResourceTimingInfo& info,
-    ExecutionContext& context_for_use_counter) {
-  // TODO(dcheng): It would be nicer if the performance entries simply held this
-  // data internally, rather than requiring it be marshalled back and forth.
-  const ResourceResponse& final_response = info.FinalResponse();
-  mojom::blink::ResourceTimingInfoPtr result =
-      mojom::blink::ResourceTimingInfo::New();
-  result->name = info.InitialURL().GetString();
-  result->start_time = info.InitialTime();
-  result->alpn_negotiated_protocol =
-      final_response.AlpnNegotiatedProtocol().IsNull()
-          ? g_empty_string
-          : final_response.AlpnNegotiatedProtocol();
-  result->connection_info = final_response.ConnectionInfoString().IsNull()
-                                ? g_empty_string
-                                : final_response.ConnectionInfoString();
-  result->timing = final_response.GetResourceLoadTiming()
-                       ? final_response.GetResourceLoadTiming()->ToMojo()
-                       : nullptr;
-  result->response_end = info.LoadResponseEnd();
-  result->context_type = info.ContextType();
-  result->request_destination = info.RequestDestination();
-
-  result->allow_timing_details = final_response.TimingAllowPassed();
-
-  const Vector<ResourceResponse>& redirect_chain = info.RedirectChain();
-  if (!redirect_chain.empty()) {
-    result->allow_redirect_details = result->allow_timing_details;
-
-    // TODO(https://crbug.com/817691): is |last_chained_timing| being null a bug
-    // or is this if statement reasonable?
-    if (ResourceLoadTiming* last_chained_timing =
-            redirect_chain.back().GetResourceLoadTiming()) {
-      result->last_redirect_end_time = last_chained_timing->ReceiveHeadersEnd();
-    } else {
-      result->allow_redirect_details = false;
-      result->last_redirect_end_time = base::TimeTicks();
-    }
-  } else {
-    result->allow_redirect_details = false;
-    result->last_redirect_end_time = base::TimeTicks();
-  }
-
-  result->cache_state = info.CacheState();
-  result->encoded_body_size = final_response.EncodedBodyLength();
-  result->decoded_body_size = final_response.DecodedBodyLength();
-  result->did_reuse_connection = final_response.ConnectionReused();
-  // Use SecurityOrigin::Create to handle cases like blob:https://.
-  result->is_secure_transport = base::Contains(
-      url::GetSecureSchemes(),
-      SecurityOrigin::Create(final_response.ResponseUrl())->Protocol().Ascii());
-  result->allow_negative_values = info.NegativeAllowed();
-
-  if (result->allow_timing_details) {
-    result->server_timing =
-        PerformanceServerTiming::ParseServerTimingToMojo(info);
-  }
-  if (!result->server_timing.empty()) {
-    UseCounter::Count(&context_for_use_counter,
-                      WebFeature::kPerformanceServerTiming);
-  }
-
-  result->render_blocking_status = info.RenderBlockingStatus();
-  result->content_type = g_empty_string;
-  if (PassesCORSConditions(final_response, destination_origin,
-                           info.RequestMode(), redirect_chain)) {
-    result->response_status = final_response.HttpStatusCode();
-    result->content_type = final_response.HttpContentType();
-  }
-
-  return result;
-}
-
 void Performance::AddResourceTiming(mojom::blink::ResourceTimingInfoPtr info,
-                                    const AtomicString& initiator_type,
-                                    ExecutionContext* context) {
+                                    const AtomicString& initiator_type) {
+  ExecutionContext* context = GetExecutionContext();
   auto* entry = MakeGarbageCollected<PerformanceResourceTiming>(
-      *info, time_origin_, cross_origin_isolated_capability_, initiator_type,
-      context);
+      std::move(info), initiator_type, time_origin_,
+      cross_origin_isolated_capability_, context);
   NotifyObserversOfEntry(*entry);
   // https://w3c.github.io/resource-timing/#dfn-add-a-performanceresourcetiming-entry
   if (CanAddResourceTimingEntry() &&
@@ -685,6 +694,7 @@ void Performance::AddResourceTiming(mojom::blink::ResourceTimingInfoPtr info,
     InsertEntryIntoSortedBuffer(resource_timing_buffer_, *entry, kRecordSwaps);
     return;
   }
+
   // The Resource Timing entries have a special processing model in which there
   // is a secondary buffer but getting those entries requires handling the
   // buffer full event, and the PerformanceObserver with buffered flag only
@@ -702,20 +712,16 @@ void Performance::AddResourceTiming(mojom::blink::ResourceTimingInfoPtr info,
 void Performance::AddResourceTimingWithUnparsedServerTiming(
     mojom::blink::ResourceTimingInfoPtr info,
     const String& server_timing_value,
-    const AtomicString& initiator_type,
-    ExecutionContext* context) {
+    const AtomicString& initiator_type) {
   if (info->allow_timing_details) {
     info->server_timing =
-        PerformanceServerTiming::ParseServerTimingFromHeaderValueToMojo(
-            server_timing_value);
+        ParseServerTimingFromHeaderValueToMojo(server_timing_value);
   }
-  AddResourceTiming(std::move(info), initiator_type, context);
+  AddResourceTiming(std::move(info), initiator_type);
 }
 
 // Called after loadEventEnd happens.
 void Performance::NotifyNavigationTimingToObservers() {
-  if (!navigation_timing_)
-    navigation_timing_ = CreateNavigationTimingInstance();
   if (navigation_timing_)
     NotifyObserversOfEntry(*navigation_timing_);
 }
@@ -806,20 +812,26 @@ void Performance::AddSoftNavigationToPerformanceTimeline(
   }
 }
 
-void Performance::AddFirstPaintTiming(base::TimeTicks start_time) {
-  AddPaintTiming(PerformancePaintTiming::PaintType::kFirstPaint, start_time);
+void Performance::AddFirstPaintTiming(base::TimeTicks start_time,
+                                      bool is_triggered_by_soft_navigation) {
+  AddPaintTiming(PerformancePaintTiming::PaintType::kFirstPaint, start_time,
+                 is_triggered_by_soft_navigation);
 }
 
-void Performance::AddFirstContentfulPaintTiming(base::TimeTicks start_time) {
+void Performance::AddFirstContentfulPaintTiming(
+    base::TimeTicks start_time,
+    bool is_triggered_by_soft_navigation) {
   AddPaintTiming(PerformancePaintTiming::PaintType::kFirstContentfulPaint,
-                 start_time);
+                 start_time, is_triggered_by_soft_navigation);
 }
 
 void Performance::AddPaintTiming(PerformancePaintTiming::PaintType type,
-                                 base::TimeTicks start_time) {
+                                 base::TimeTicks start_time,
+                                 bool is_triggered_by_soft_navigation) {
   PerformanceEntry* entry = MakeGarbageCollected<PerformancePaintTiming>(
       type, MonotonicTimeToDOMHighResTimeStamp(start_time),
-      PerformanceEntry::GetNavigationId(GetExecutionContext()));
+      DynamicTo<LocalDOMWindow>(GetExecutionContext()),
+      is_triggered_by_soft_navigation);
   DCHECK((type == PerformancePaintTiming::PaintType::kFirstPaint) ||
          (type == PerformancePaintTiming::PaintType::kFirstContentfulPaint));
   if (paint_entries_timing_.size() < kDefaultPaintEntriesBufferSize) {
@@ -853,7 +865,7 @@ void Performance::AddLongTaskTiming(base::TimeTicks start_time,
       static_cast<int>(MonotonicTimeToDOMHighResTimeStamp(end_time) -
                        dom_high_res_start_time),
       name, container_type, container_src, container_id, container_name,
-      PerformanceEntry::GetNavigationId(execution_context));
+      DynamicTo<LocalDOMWindow>(execution_context));
   if (longtask_buffer_.size() < kDefaultLongTaskBufferSize) {
     InsertEntryIntoSortedBuffer(longtask_buffer_, *entry, kRecordSwaps);
   } else {
@@ -876,7 +888,7 @@ void Performance::AddBackForwardCacheRestoration(
       MonotonicTimeToDOMHighResTimeStamp(start_time),
       MonotonicTimeToDOMHighResTimeStamp(pageshow_start_time),
       MonotonicTimeToDOMHighResTimeStamp(pageshow_end_time),
-      PerformanceEntry::GetNavigationId(GetExecutionContext()));
+      DynamicTo<LocalDOMWindow>(GetExecutionContext()));
   if (back_forward_cache_restoration_buffer_.size() <
       back_forward_cache_restoration_buffer_size_limit_) {
     InsertEntryIntoSortedBuffer(back_forward_cache_restoration_buffer_, *entry,
@@ -1070,9 +1082,9 @@ PerformanceMeasure* Performance::MeasureWithDetail(
     const V8UnionDoubleOrString* end,
     const ScriptValue& detail,
     ExceptionState& exception_state) {
-  PerformanceMeasure* performance_measure =
-      GetUserTiming().Measure(script_state, measure_name, start, duration, end,
-                              detail, exception_state);
+  PerformanceMeasure* performance_measure = GetUserTiming().Measure(
+      script_state, measure_name, start, duration, end, detail, exception_state,
+      LocalDOMWindow::From(script_state));
   if (performance_measure)
     NotifyObserversOfEntry(*performance_measure);
   return performance_measure;
@@ -1104,6 +1116,8 @@ void Performance::NotifyObserversOfEntry(PerformanceEntry& entry) const {
   bool observer_found = false;
   for (auto& observer : observers_) {
     if (observer->FilterOptions() & entry.EntryTypeEnum() &&
+        (!entry.IsTriggeredBySoftNavigation() ||
+         observer->IncludeSoftNavigationObservations()) &&
         observer->CanObserve(entry)) {
       observer->EnqueuePerformanceEntry(entry);
       observer_found = true;

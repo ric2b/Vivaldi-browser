@@ -24,6 +24,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/threading_features.h"
+#include "build/blink_buildflags.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -92,7 +93,7 @@ BASE_FEATURE(kOptimizedRealtimeThreadingMac,
 #endif
 );
 
-const Feature kUseThreadQoSMac{"UseThreadQoSMac", FEATURE_DISABLED_BY_DEFAULT};
+const Feature kUseThreadQoSMac{"UseThreadQoSMac", FEATURE_ENABLED_BY_DEFAULT};
 
 namespace {
 
@@ -301,7 +302,10 @@ void SetCurrentThreadTypeImpl(ThreadType thread_type,
   const bool use_thread_qos = g_use_thread_qos.load(std::memory_order_relaxed);
   // Changing the priority of the main thread causes performance
   // regressions. https://crbug.com/601270
-  if ([[NSThread currentThread] isMainThread]) {
+  // TODO(1280764): Remove this check. kCompositing is the default on Mac, so
+  // this check is counter intuitive.
+  if ([[NSThread currentThread] isMainThread] &&
+      thread_type >= ThreadType::kCompositing) {
     DCHECK(thread_type == ThreadType::kDefault ||
            thread_type == ThreadType::kCompositing);
     return;
@@ -325,6 +329,7 @@ void SetCurrentThreadTypeImpl(ThreadType thread_type,
       break;
     case ThreadType::kResourceEfficient:
       if (use_thread_qos) {
+        priority = ThreadPriorityForTest::kUtility;
         pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0);
         break;
       }
@@ -390,7 +395,14 @@ ThreadPriorityForTest PlatformThread::GetCurrentThreadPriorityForTest() {
 
 size_t GetDefaultThreadStackSize(const pthread_attr_t& attributes) {
 #if BUILDFLAG(IS_IOS)
+#if BUILDFLAG(USE_BLINK)
+  // For iOS 512kB (the default) isn't sufficient, but using the code
+  // for Mac OS X below will return 8MB. So just be a little more conservative
+  // and return 1MB for now.
+  return 1024 * 1024;
+#else
   return 0;
+#endif
 #else
   // The Mac OS X default for a pthread stack size is 512kB.
   // Libc-594.1.4/pthreads/pthread.c's pthread_attr_init uses

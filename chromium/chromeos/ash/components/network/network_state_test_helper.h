@@ -11,6 +11,7 @@ namespace ash {
 
 class NetworkDeviceHandler;
 class NetworkStateHandler;
+class TechnologyStateController;
 
 // Helper class for tests that use NetworkStateHandler and/or
 // NetworkDeviceHandler. Handles initialization and shutdown of Shill and Hermes
@@ -44,16 +45,16 @@ class NetworkStateTestHelper : public NetworkTestHelperBase {
     return network_device_handler_.get();
   }
 
+  TechnologyStateController* technology_state_controller() {
+    return technology_state_controller_.get();
+  }
+
  private:
   std::unique_ptr<NetworkStateHandler> network_state_handler_;
   std::unique_ptr<NetworkDeviceHandler> network_device_handler_;
+  std::unique_ptr<TechnologyStateController> technology_state_controller_;
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::NetworkStateTestHelper;
-}
 
 #endif  // CHROMEOS_ASH_COMPONENTS_NETWORK_NETWORK_STATE_TEST_HELPER_H_

@@ -6,15 +6,19 @@
 #define CHROME_BROWSER_HEADLESS_HEADLESS_MODE_BROWSERTEST_H_
 
 #include "base/command_line.h"
+#include "base/files/file_path.h"
+#include "base/files/scoped_temp_dir.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace headless {
 
 class HeadlessModeBrowserTest : public InProcessBrowserTest {
  public:
   static constexpr char kHeadlessSwitchValue[] = "new";
 
-  HeadlessModeBrowserTest() = default;
+  HeadlessModeBrowserTest();
 
   HeadlessModeBrowserTest(const HeadlessModeBrowserTest&) = delete;
   HeadlessModeBrowserTest& operator=(const HeadlessModeBrowserTest&) = delete;
@@ -23,6 +27,29 @@ class HeadlessModeBrowserTest : public InProcessBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override;
   void SetUpOnMainThread() override;
+
+ protected:
+  bool headful_mode() const { return headful_mode_; }
+
+  void AppendHeadlessCommandLineSwitches(base::CommandLine* command_line);
+
+ private:
+  bool headful_mode_ = false;
+};
+
+class HeadlessModeBrowserTestWithUserDataDir : public HeadlessModeBrowserTest {
+ public:
+  HeadlessModeBrowserTestWithUserDataDir() = default;
+  ~HeadlessModeBrowserTestWithUserDataDir() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override;
+
+  const base::FilePath& user_data_dir() const {
+    return user_data_dir_.GetPath();
+  }
+
+ private:
+  base::ScopedTempDir user_data_dir_;
 };
 
 enum StartWindowMode {
@@ -36,12 +63,6 @@ class HeadlessModeBrowserTestWithStartWindowMode
       public testing::WithParamInterface<StartWindowMode> {
  public:
   HeadlessModeBrowserTestWithStartWindowMode() = default;
-
-  HeadlessModeBrowserTestWithStartWindowMode(
-      const HeadlessModeBrowserTestWithStartWindowMode&) = delete;
-  HeadlessModeBrowserTestWithStartWindowMode& operator=(
-      const HeadlessModeBrowserTestWithStartWindowMode&) = delete;
-
   ~HeadlessModeBrowserTestWithStartWindowMode() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override;
@@ -51,5 +72,7 @@ class HeadlessModeBrowserTestWithStartWindowMode
 
 // Toggles browser fullscreen mode synchronously.
 void ToggleFullscreenModeSync(Browser* browser);
+
+}  // namespace headless
 
 #endif  // CHROME_BROWSER_HEADLESS_HEADLESS_MODE_BROWSERTEST_H_

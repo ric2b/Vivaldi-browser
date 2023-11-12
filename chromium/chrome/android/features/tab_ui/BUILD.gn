@@ -68,7 +68,6 @@ android_resources("java_resources") {
     "java/res/layout/price_card.xml",
     "java/res/layout/selectable_tab_grid_card_item.xml",
     "java/res/layout/selectable_tab_list_card_item.xml",
-    "java/res/layout/store_hours_card.xml",
     "java/res/layout/tab_grid_card_item.xml",
     "java/res/layout/tab_grid_dialog_layout.xml",
     "java/res/layout/tab_grid_message_card_item.xml",
@@ -114,7 +113,6 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/PriceMessageCardViewModel.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/PriceMessageService.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/SelectableTabGridView.java",
-    "java/src/org/chromium/chrome/browser/tasks/tab_management/StoreHoursCardView.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMediator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabGridDialogMenuCoordinator.java",
@@ -168,6 +166,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabSuggestionMessageService.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabSwitcherCoordinator.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/TabSwitcherMediator.java",
+    "java/src/org/chromium/chrome/browser/tasks/tab_management/TabUiMetricsHelper.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/BaselineTabSuggestionProvider.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/StaleTabSuggestionProvider.java",
     "java/src/org/chromium/chrome/browser/tasks/tab_management/suggestions/TabContextObserver.java",
@@ -265,6 +264,8 @@ android_library("unit_device_javatests") {
     "javatests/src/org/chromium/chrome/browser/tasks/tab_management/TabSelectionEditorLayoutBinderTest.java",
   ]
 
+  # NOTE: the chrome/android:chrome_java dep is necessary to include the
+  # public_tab_management_java_sources.
   deps = [
     ":java",
     ":java_resources",
@@ -272,6 +273,7 @@ android_library("unit_device_javatests") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//base/test:test_support_java",
+    "//chrome/android:chrome_java",
     "//chrome/android/features/tab_ui:java",
     "//chrome/android/features/tab_ui:tab_suggestions_java",
     "//chrome/browser/commerce/price_tracking/android:java",

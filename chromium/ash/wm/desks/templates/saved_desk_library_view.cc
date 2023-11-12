@@ -104,7 +104,7 @@ SavedDesks Group(const std::vector<const DeskTemplate*>& saved_desks) {
       case DeskTemplateType::kSaveAndRecall:
         grouped.save_and_recall.push_back(saved_desk);
         break;
-      // Do nothing in the case of an unknown template or floating workspace.
+      // Do nothing in the case of a floating workspace type or an unknown type.
       case DeskTemplateType::kFloatingWorkspace:
       case DeskTemplateType::kUnknown:
         break;
@@ -379,6 +379,14 @@ void SavedDeskLibraryView::DeleteEntries(const std::vector<base::GUID>& uuids,
 
 void SavedDeskLibraryView::AnimateDeskLaunch(const base::GUID& uuid,
                                              DeskMiniView* mini_view) {
+  SavedDeskItemView* grid_item = GetItemForUUID(uuid);
+  DCHECK(grid_item);
+
+  ui::Layer* mini_view_layer = mini_view->layer();
+  // Stop any ongoing animations for the mini view before we try to get the
+  // target screen bounds of it and start the new animation for it below.
+  mini_view_layer->CompleteAllAnimations();
+
   // If we can't the get bounds, then we just bail. The item will be deleted
   // automatically later through desk model observation.
   absl::optional<gfx::Rect> target_screen_bounds =
@@ -386,12 +394,8 @@ void SavedDeskLibraryView::AnimateDeskLaunch(const base::GUID& uuid,
   if (!target_screen_bounds)
     return;
 
-  SavedDeskItemView* grid_item = GetItemForUUID(uuid);
-  DCHECK(grid_item);
-
   // Immediately hide the desk mini view. It will later be revealed by the
   // animation below.
-  ui::Layer* mini_view_layer = mini_view->layer();
   mini_view_layer->SetOpacity(0.0);
 
   std::unique_ptr<ui::LayerTreeOwner> item_layer_tree =
@@ -581,7 +585,7 @@ void SavedDeskLibraryView::OnKeyEvent(ui::KeyEvent* event) {
       is_scrolling_event = true;
       // Do not process if home/end key are for text editing.
       for (SavedDeskGridView* grid_view : grid_views_) {
-        if (grid_view->IsTemplateNameBeingModified()) {
+        if (grid_view->IsSavedDeskNameBeingModified()) {
           is_scrolling_event = false;
           break;
         }

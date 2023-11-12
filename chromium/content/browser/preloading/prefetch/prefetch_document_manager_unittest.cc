@@ -11,7 +11,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/preloading/prefetch/prefetch_features.h"
 #include "content/browser/preloading/prefetch/prefetch_service.h"
-#include "content/browser/preloading/prefetch/prefetched_mainframe_response_container.h"
+#include "content/browser/preloading/prefetch/prefetch_streaming_url_loader.h"
+#include "content/browser/preloading/prefetch/prefetch_test_utils.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_web_contents.h"
@@ -55,7 +56,7 @@ class PrefetchDocumentManagerTest : public RenderViewHostTestHarness {
  public:
   PrefetchDocumentManagerTest() {
     scoped_feature_list_.InitAndEnableFeatureWithParameters(
-        content::features::kPrefetchUseContentRefactor,
+        features::kPrefetchUseContentRefactor,
         {{"proxy_host", "https://testproxyhost.com"}});
   }
 
@@ -95,8 +96,8 @@ class PrefetchDocumentManagerTest : public RenderViewHostTestHarness {
 
   void NavigateMainframeRendererTo(const GURL& url) {
     std::unique_ptr<NavigationSimulator> simulator =
-        content::NavigationSimulator::CreateRendererInitiated(
-            url, &GetPrimaryMainFrame());
+        NavigationSimulator::CreateRendererInitiated(url,
+                                                     &GetPrimaryMainFrame());
     simulator->SetTransition(ui::PAGE_TRANSITION_LINK);
     simulator->Start();
   }
@@ -149,7 +150,6 @@ TEST_F(PrefetchDocumentManagerTest, ProcessNoVarySearchResponse) {
     const auto& helper = prefetch_document_manager->GetNoVarySearchHelper();
 
     // Now call TakePrefetchedResponse
-    auto body = std::make_unique<std::string>("empty");
     network::mojom::URLResponseHeadPtr head =
         network::mojom::URLResponseHead::New();
     head->parsed_headers = network::mojom::ParsedHeaders::New();
@@ -158,9 +158,8 @@ TEST_F(PrefetchDocumentManagerTest, ProcessNoVarySearchResponse) {
     head->parsed_headers->no_vary_search->search_variance =
         network::mojom::SearchParamsVariance::NewVaryParams({"a"});
 
-    auto response = std::make_unique<PrefetchedMainframeResponseContainer>(
-        info, std::move(head), std::move(body));
-    GetPrefetches()[0]->TakePrefetchedResponse(std::move(response));
+    GetPrefetches()[0]->TakeStreamingURLLoader(
+        MakeServableStreamingURLLoaderForTest(std::move(head), "empty"));
     GetPrefetches()[0]->OnPrefetchedResponseHeadReceived();
 
     const auto* urls_with_no_vary_search =
@@ -194,14 +193,12 @@ TEST_F(PrefetchDocumentManagerTest, ProcessNoVarySearchResponse) {
     prefetch_document_manager->ProcessCandidates(candidates,
                                                  /*devtools_observer=*/nullptr);
 
-    auto body = std::make_unique<std::string>("empty");
     network::mojom::URLResponseHeadPtr head =
         network::mojom::URLResponseHead::New();
     head->parsed_headers = network::mojom::ParsedHeaders::New();
 
-    auto response = std::make_unique<PrefetchedMainframeResponseContainer>(
-        info, std::move(head), std::move(body));
-    GetPrefetches().back()->TakePrefetchedResponse(std::move(response));
+    GetPrefetches().back()->TakeStreamingURLLoader(
+        MakeServableStreamingURLLoaderForTest(std::move(head), "empty"));
     GetPrefetches().back()->OnPrefetchedResponseHeadReceived();
 
     const auto& helper = prefetch_document_manager->GetNoVarySearchHelper();
@@ -310,7 +307,7 @@ TEST_F(PrefetchDocumentManagerTest, ProcessSpeculationCandidates) {
   candidate6->requires_anonymous_client_ip_when_cross_origin = true;
   candidate6->url = GetCrossOriginUrl("/candidate6.html");
   candidate6->referrer = blink::mojom::Referrer::New();
-  candidate6->eagerness = blink::mojom::SpeculationEagerness::kDefault;
+  candidate6->eagerness = blink::mojom::SpeculationEagerness::kConservative;
   candidates.push_back(std::move(candidate6));
 
   // Process the candidates with the |PrefetchDocumentManager| for the current
@@ -344,7 +341,7 @@ TEST_F(PrefetchDocumentManagerTest, ProcessSpeculationCandidates) {
   EXPECT_EQ(prefetch_urls[3]->GetPrefetchType(),
             PrefetchType(/*use_isolated_network_context=*/true,
                          /*use_prefetch_proxy=*/true,
-                         blink::mojom::SpeculationEagerness::kDefault));
+                         blink::mojom::SpeculationEagerness::kConservative));
 
   // Check that the only remaining entries in candidates are those that
   // shouldn't be prefetched by |PrefetchService|.

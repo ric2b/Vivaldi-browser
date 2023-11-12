@@ -8,13 +8,12 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/media/router/providers/test/test_media_route_provider.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/media_router/media_cast_mode.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -41,11 +40,19 @@ inline std::string PrintToString(UiForBrowserTest val) {
   }
 }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+// Global media controls aren't supported in lacros.
+#define INSTANTIATE_MEDIA_ROUTER_INTEGRATION_BROWER_TEST_SUITE(name) \
+  INSTANTIATE_TEST_SUITE_P(/* no prefix */, name,                    \
+                           testing::Values(UiForBrowserTest::kCast), \
+                           testing::PrintToStringParamName())
+#else
 #define INSTANTIATE_MEDIA_ROUTER_INTEGRATION_BROWER_TEST_SUITE(name)    \
   INSTANTIATE_TEST_SUITE_P(                                             \
       /* no prefix */, name,                                            \
       testing::Values(UiForBrowserTest::kCast, UiForBrowserTest::kGmc), \
       testing::PrintToStringParamName())
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // Macro used to skip tests that are only supported with the Cast dialog.
 //
@@ -124,8 +131,6 @@ class MediaRouterIntegrationBrowserTest
   void SetTestData(base::FilePath::StringPieceType test_data_file);
 
   bool IsRouteCreatedOnUI();
-
-  bool IsRouteClosedOnUI();
 
   // Returns true if there is an issue showing in the UI.
   bool IsUIShowingIssue();

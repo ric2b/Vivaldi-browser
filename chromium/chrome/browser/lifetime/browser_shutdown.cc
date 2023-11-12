@@ -10,11 +10,11 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
 #include "base/clang_profiling_buildflags.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -355,13 +355,12 @@ void ShutdownPostThreadsStop(RestartMode restart_mode) {
     base::TimeDelta shutdown_delta = base::Time::Now() - *g_shutdown_started;
     std::string shutdown_ms =
         base::NumberToString(shutdown_delta.InMilliseconds());
-    int len = static_cast<int>(shutdown_ms.length()) + 1;
     base::FilePath shutdown_ms_file = GetShutdownMsPath();
     // Note: ReadLastShutdownFile() is done as a BLOCK_SHUTDOWN task so there's
     // an implicit sequencing between it and this write which happens after
     // threads have been stopped (and thus ThreadPoolInstance::Shutdown() is
     // complete).
-    base::WriteFile(shutdown_ms_file, shutdown_ms.c_str(), len);
+    base::WriteFile(shutdown_ms_file, shutdown_ms);
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

@@ -10,10 +10,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -67,8 +67,6 @@
 #include "components/page_load_metrics/browser/page_load_tracker.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/content_test_helper.h"
-#include "components/sessions/core/serialized_navigation_entry.h"
-#include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_thread.h"
@@ -102,7 +100,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/chrome_debug_urls.h"
 #include "third_party/blink/public/common/features.h"
-#include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/css_property_id.mojom.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
 #include "ui/gfx/geometry/size.h"
@@ -187,8 +184,7 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
   PageLoadMetricsBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
         {ukm::kUkmFeature, blink::features::kPortals,
-         blink::features::kPortalsCrossOrigin,
-         blink::features::kUserAgentOverrideExperiment},
+         blink::features::kPortalsCrossOrigin},
         {});
   }
 
@@ -959,7 +955,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NewPage) {
   histogram_tester_->ExpectTotalCount(internal::kHistogramDomContentLoaded, 1);
   histogram_tester_->ExpectTotalCount(internal::kHistogramLoad, 1);
   histogram_tester_->ExpectTotalCount(internal::kHistogramFirstPaint, 1);
-  histogram_tester_->ExpectTotalCount(internal::kHistogramParseDuration, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramParseBlockedOnScriptLoad, 1);
   histogram_tester_->ExpectTotalCount(
@@ -997,7 +992,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, Redirect) {
   histogram_tester_->ExpectTotalCount(internal::kHistogramDomContentLoaded, 1);
   histogram_tester_->ExpectTotalCount(internal::kHistogramLoad, 1);
   histogram_tester_->ExpectTotalCount(internal::kHistogramFirstPaint, 1);
-  histogram_tester_->ExpectTotalCount(internal::kHistogramParseDuration, 1);
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramParseBlockedOnScriptLoad, 1);
   histogram_tester_->ExpectTotalCount(
@@ -1133,7 +1127,7 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, MainFrameHasNoStore) {
   response.Done();
   EXPECT_TRUE(navigation_manager.WaitForResponse());
   navigation_manager.ResumeNavigation();
-  navigation_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
   NavigateToUntrackedUrl();
 
   auto entries =
@@ -2295,107 +2289,6 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, LoadingMetrics) {
   waiter->Wait();
 }
 
-IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
-                       UseCounterUserAgentOverride) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  std::string original_ua = embedder_support::GetUserAgent();
-  std::string ua_no_substring = "foo";
-  std::string ua_prefix = "foo" + original_ua;
-  std::string ua_suffix = original_ua + "foo";
-
-  {
-    base::HistogramTester histogram;
-    web_contents->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(ua_no_substring), false);
-    web_contents->GetController()
-        .GetLastCommittedEntry()
-        ->SetIsOverridingUserAgent(true);
-    auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-    waiter->AddUseCounterFeatureExpectation({
-        blink::mojom::UseCounterFeatureType::kUserAgentOverride,
-        blink::UserAgentOverride::UserAgentOverriden,
-    });
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL("/empty.html")));
-    content::EvalJsResult result = EvalJs(web_contents, "navigator.userAgent;");
-    waiter->Wait();
-    NavigateToUntrackedUrl();
-    content::FetchHistogramsFromChildProcesses();
-    // Expect 2; one in the navigation stack and one in the renderer
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverriden, 2);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSubstring, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSuffix, 0);
-  }
-
-  {
-    base::HistogramTester histogram;
-    web_contents->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(ua_prefix), false);
-    web_contents->GetController()
-        .GetLastCommittedEntry()
-        ->SetIsOverridingUserAgent(true);
-    auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-    waiter->AddUseCounterFeatureExpectation({
-        blink::mojom::UseCounterFeatureType::kUserAgentOverride,
-        blink::UserAgentOverride::UserAgentOverrideSubstring,
-    });
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL("/empty.html")));
-    content::EvalJsResult result = EvalJs(web_contents, "navigator.userAgent;");
-    waiter->Wait();
-    NavigateToUntrackedUrl();
-    content::FetchHistogramsFromChildProcesses();
-    // Expect 2; one in the navigation stack and one in the renderer
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverriden, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSubstring, 2);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSuffix, 0);
-  }
-  {
-    base::HistogramTester histogram;
-    web_contents->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(ua_suffix), false);
-    web_contents->GetController()
-        .GetLastCommittedEntry()
-        ->SetIsOverridingUserAgent(true);
-    auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
-    waiter->AddUseCounterFeatureExpectation({
-        blink::mojom::UseCounterFeatureType::kUserAgentOverride,
-        blink::UserAgentOverride::UserAgentOverrideSuffix,
-    });
-    ASSERT_TRUE(ui_test_utils::NavigateToURL(
-        browser(), embedded_test_server()->GetURL("/empty.html")));
-    content::EvalJsResult result = EvalJs(web_contents, "navigator.userAgent;");
-    waiter->Wait();
-    NavigateToUntrackedUrl();
-    content::FetchHistogramsFromChildProcesses();
-    // Expect 2; one in the navigation stack and one in the renderer
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverriden, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSubstring, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSuffix, 2);
-  }
-}
-
 class SessionRestorePageLoadMetricsBrowserTest
     : public PageLoadMetricsBrowserTest {
  public:
@@ -2495,18 +2388,9 @@ class SessionRestorePaintWaiter : public SessionRestoreObserver {
 IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
                        InitialVisibilityOfSingleRestoredTab) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetTestURL()));
-  histogram_tester_->ExpectTotalCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, 1);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, true, 1);
 
   Browser* new_browser = QuitBrowserAndRestore(browser());
   ASSERT_NO_FATAL_FAILURE(WaitForTabsToLoad(new_browser));
-
-  histogram_tester_->ExpectTotalCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, 2);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, true, 2);
 }
 
 IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
@@ -2515,10 +2399,6 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GetTestURL(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
-  histogram_tester_->ExpectTotalCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, 2);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, false, 1);
 
   Browser* new_browser = QuitBrowserAndRestore(browser());
   ASSERT_NO_FATAL_FAILURE(WaitForTabsToLoad(new_browser));
@@ -2526,13 +2406,6 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_TRUE(tab_strip);
   ASSERT_EQ(2, tab_strip->count());
-
-  histogram_tester_->ExpectTotalCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, 4);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, true, 2);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, false, 2);
 }
 
 // TODO(crbug.com/882077) Disabled due to flaky timeouts on all platforms.
@@ -2778,7 +2651,8 @@ class SoftNavigationBrowserTest : public PageLoadMetricsBrowserTest {
         await new Promise(
           resolve => {
             (new PerformanceObserver(()=>resolve())).observe(
-              {type: 'largest-contentful-paint'})});
+              {type: 'largest-contentful-paint',
+               includeSoftNavigationObservations: true})});
       })();
     )";
 
@@ -2790,7 +2664,8 @@ class SoftNavigationBrowserTest : public PageLoadMetricsBrowserTest {
               list => {
                 const entries = list.getEntries();
                 resolve(entries[entries.length - 1]);
-              })).observe({type: 'largest-contentful-paint', buffered: true})});
+              })).observe({type: 'largest-contentful-paint', buffered: true,
+                           includeSoftNavigationObservations: true})});
         return last_lcp_entry.startTime;
       })();
     )";
@@ -3959,9 +3834,7 @@ class NavigationPageLoadMetricsBrowserTest
   }
 };
 
-// Flaky. See https://crbug.com/1224780.
-IN_PROC_BROWSER_TEST_P(NavigationPageLoadMetricsBrowserTest,
-                       DISABLED_FirstInputDelay) {
+IN_PROC_BROWSER_TEST_P(NavigationPageLoadMetricsBrowserTest, FirstInputDelay) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url1(embedded_test_server()->GetURL("a.com", "/title1.html"));
@@ -3972,22 +3845,42 @@ IN_PROC_BROWSER_TEST_P(NavigationPageLoadMetricsBrowserTest,
                   internal::kHistogramFirstContentfulPaint),
               testing::IsEmpty());
 
+  auto waiter = CreatePageLoadMetricsTestWaiter("waiter");
+  waiter->AddPageExpectation(TimingField::kFirstInputDelay);
+
   // 1) Navigate to url1.
   EXPECT_TRUE(content::NavigateToURL(web_contents(), url1));
+  histogram_tester_->ExpectTotalCount(internal::kHistogramFirstInputDelay, 0);
   content::RenderFrameHost* rfh_a = RenderFrameHost();
   content::RenderProcessHost* rfh_a_process = rfh_a->GetProcess();
+
+  // We should wait for the main frame's hit-test data to be ready before
+  // sending the click event below to avoid flakiness.
+  content::WaitForHitTestData(web_contents()->GetPrimaryMainFrame());
+  // Ensure the compositor thread is ready for mouse events.
+  content::MainThreadFrameObserver frame_observer(
+      web_contents()->GetRenderWidgetHostView()->GetRenderWidgetHost());
+  frame_observer.Wait();
 
   // Simulate mouse click. FirstInputDelay won't get updated immediately.
   content::SimulateMouseClickAt(web_contents(), 0,
                                 blink::WebMouseEvent::Button::kLeft,
                                 gfx::Point(100, 100));
-  // Run arbitrary script and run tasks in the brwoser to ensure the input is
-  // processed in the renderer.
-  EXPECT_TRUE(content::ExecJs(rfh_a, "var foo = 42;"));
+
+  // Run a Performance Observer to ensure the renderer receives the click
+  EXPECT_TRUE(content::ExecJs(web_contents(), R"(
+          (async () => {
+            await new Promise(resolve => {
+              new PerformanceObserver(e => {
+                e.getEntries().forEach(entry => {
+                  resolve(true);
+                })
+              }).observe({type: 'first-input', buffered: true});
+          })})())"));
   base::RunLoop().RunUntilIdle();
   content::FetchHistogramsFromChildProcesses();
-  histogram_tester_->ExpectTotalCount(internal::kHistogramFirstInputDelay, 0);
 
+  waiter->Wait();
   // 2) Immediately navigate to url2.
   if (GetParam() == "CrossSiteRendererInitiated") {
     EXPECT_TRUE(content::NavigateToURLFromRenderer(web_contents(), url2));
@@ -4060,11 +3953,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderPageLoadMetricsBrowserTest, PrerenderEvent) {
       kPageLoadPrerender2Event,
       PageLoadPrerenderEvent::kPrerenderActivationNavigation, 0);
 
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, true, 1);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, false, 0);
-
   // Start a prerender.
   GURL prerender_url = embedded_test_server()->GetURL("/title2.html");
   prerender_helper_.AddPrerender(prerender_url);
@@ -4076,11 +3964,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderPageLoadMetricsBrowserTest, PrerenderEvent) {
       kPageLoadPrerender2Event,
       PageLoadPrerenderEvent::kPrerenderActivationNavigation, 0);
 
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, true, 1);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, false, 1);
-
   // Activate.
   prerender_helper_.NavigatePrimaryPage(prerender_url);
 
@@ -4090,11 +3973,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderPageLoadMetricsBrowserTest, PrerenderEvent) {
   histogram_tester_->ExpectBucketCount(
       kPageLoadPrerender2Event,
       PageLoadPrerenderEvent::kPrerenderActivationNavigation, 1);
-
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, true, 1);
-  histogram_tester_->ExpectBucketCount(
-      page_load_metrics::internal::kPageLoadStartedInForeground, false, 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PrerenderPageLoadMetricsBrowserTest,

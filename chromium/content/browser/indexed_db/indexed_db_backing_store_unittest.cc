@@ -12,12 +12,12 @@
 #include <utility>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
@@ -41,13 +41,14 @@
 #include "content/browser/indexed_db/indexed_db_bucket_state.h"
 #include "content/browser/indexed_db/indexed_db_class_factory.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
-#include "content/browser/indexed_db/indexed_db_factory_impl.h"
+#include "content/browser/indexed_db/indexed_db_factory.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "content/browser/indexed_db/indexed_db_leveldb_operations.h"
 #include "content/browser/indexed_db/indexed_db_metadata_coding.h"
 #include "content/browser/indexed_db/indexed_db_value.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/base/features.h"
+#include "net/base/schemeful_site.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "storage/browser/test/fake_blob.h"
 #include "storage/browser/test/mock_quota_manager.h"
@@ -123,15 +124,15 @@ class TestableIndexedDBBackingStore : public IndexedDBBackingStore {
 
 // Factory subclass to allow the test to use the
 // TestableIndexedDBBackingStore subclass.
-class TestIDBFactory : public IndexedDBFactoryImpl {
+class TestIDBFactory : public IndexedDBFactory {
  public:
   explicit TestIDBFactory(
       IndexedDBContextImpl* idb_context,
       storage::mojom::BlobStorageContext* blob_storage_context,
       storage::mojom::FileSystemAccessContext* file_system_access_context)
-      : IndexedDBFactoryImpl(idb_context,
-                             IndexedDBClassFactory::Get(),
-                             base::DefaultClock::GetInstance()),
+      : IndexedDBFactory(idb_context,
+                         IndexedDBClassFactory::Get(),
+                         base::DefaultClock::GetInstance()),
         blob_storage_context_(blob_storage_context),
         file_system_access_context_(file_system_access_context) {}
 
@@ -384,7 +385,7 @@ class IndexedDBBackingStoreTest : public testing::Test {
   void TearDown() override {
     DestroyFactoryAndBackingStore();
     if (idb_context_ && !idb_context_->IsInMemoryContext()) {
-      IndexedDBFactoryImpl* factory = idb_context_->GetIDBFactory();
+      IndexedDBFactory* factory = idb_context_->GetIDBFactory();
 
       // Loop through all open buckets, and force close them, and request the
       // deletion of the leveldb state. Once the states are no longer around,
@@ -1661,7 +1662,8 @@ TEST_P(IndexedDBBackingStoreTestForThirdPartyStoragePartitioning,
   auto filesystem_proxy = std::make_unique<storage::FilesystemProxy>(
       storage::FilesystemProxy::UNRESTRICTED, base::FilePath());
   storage::BucketLocator bucket_locator;
-  bucket_locator.storage_key = blink::StorageKey(url::Origin());
+  bucket_locator.storage_key =
+      blink::StorageKey::CreateFirstParty(url::Origin());
   bucket_locator.is_default = true;
 
   // No `path_base`.
@@ -1758,9 +1760,10 @@ TEST_P(IndexedDBBackingStoreTestForThirdPartyStoragePartitioning,
   auto filesystem_proxy = std::make_unique<storage::FilesystemProxy>(
       storage::FilesystemProxy::UNRESTRICTED, base::FilePath());
   storage::BucketLocator bucket_locator;
-  bucket_locator.storage_key = blink::StorageKey::CreateForTesting(
+  bucket_locator.storage_key = blink::StorageKey::Create(
       url::Origin::Create(GURL("http://www.google.com/")),
-      url::Origin::Create(GURL("http://www.youtube.com/")));
+      net::SchemefulSite(GURL("http://www.youtube.com/")),
+      blink::mojom::AncestorChainBit::kCrossSite);
   bucket_locator.id = storage::BucketId::FromUnsafeValue(1);
   bucket_locator.is_default = true;
   const base::FilePath path_base = idb_context_->GetDataPath(bucket_locator);

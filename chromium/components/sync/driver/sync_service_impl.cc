@@ -8,15 +8,14 @@
 #include <utility>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -53,11 +52,7 @@ namespace syncer {
 
 namespace {
 
-BASE_FEATURE(kListenForInvalidationsInLocalSync,
-             "ListenForInvalidationsInLocalSync",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// The initial state of sync, for the Sync.InitialState histogram. Even if
+// The initial state of sync, for the Sync.InitialState2 histogram. Even if
 // this value is CAN_START, sync startup might fail for reasons that we may
 // want to consider logging in the future, such as a passphrase needed for
 // decryption, or the version of Chrome being too old. This enum is used to
@@ -92,7 +87,6 @@ void RecordSyncInitialState(SyncService::DisableReasonSet disable_reasons,
   } else if (!first_setup_complete) {
     sync_state = NEEDS_CONFIRMATION;
   }
-  base::UmaHistogramEnumeration("Sync.InitialState", sync_state);
   if (is_regular_profile_for_uma) {
     base::UmaHistogramEnumeration("Sync.InitialState2", sync_state);
   }
@@ -185,8 +179,8 @@ SyncServiceImpl::SyncServiceImpl(InitParams init_params)
                           base::Unretained(this)),
       base::BindRepeating(&SyncServiceImpl::IsEngineAllowedToRun,
                           base::Unretained(this)),
-      base::BindRepeating(&SyncServiceImpl::StartUpSlowEngineComponents,
-                          base::Unretained(this)));
+      base::BindOnce(&SyncServiceImpl::StartUpSlowEngineComponents,
+                     base::Unretained(this)));
 
   sync_stopped_reporter_ = std::make_unique<SyncStoppedReporter>(
       sync_service_url_, MakeUserAgentForSync(channel_), url_loader_factory_);
@@ -222,16 +216,21 @@ void SyncServiceImpl::Initialize() {
   if (!IsLocalSyncEnabled()) {
     auth_manager_->RegisterForAuthNotifications();
 
-    SyncInvalidationsService* sync_invalidations_service =
-        sync_client_->GetSyncInvalidationsService();
-    if (sync_invalidations_service) {
       // Trigger a refresh when additional data types get enabled for
       // invalidations. This is needed to get the latest data after subscribing
       // for the updates.
-      sync_invalidations_service
-          ->SetCommittedAdditionalInterestedDataTypesCallback(
-              base::BindRepeating(&SyncServiceImpl::TriggerRefresh,
-                                  weak_factory_.GetWeakPtr()));
+    sync_client_->GetSyncInvalidationsService()
+        ->SetCommittedAdditionalInterestedDataTypesCallback(base::BindRepeating(
+            &SyncServiceImpl::TriggerRefresh, weak_factory_.GetWeakPtr()));
+
+    // TODO(crbug.com/1417954): revisit this logic. IsSignedIn() doesn't feel
+    // the right condition to check.
+    if (IsSignedIn()) {
+      // Start receiving invalidations as soon as possible since GCMDriver drops
+      // incoming FCM messages otherwise. The messages will be collected by
+      // SyncInvalidationsService until sync engine is initialized and ready to
+      // handle invalidations.
+      sync_client_->GetSyncInvalidationsService()->StartListening();
     }
   }
 
@@ -456,6 +455,11 @@ void SyncServiceImpl::StartUpSlowEngineComponents() {
 
   if (!IsLocalSyncEnabled()) {
     auth_manager_->ConnectionOpened();
+
+    // Ensures that invalidations are enabled, e.g. when the sync was just
+    // enabled or after the engine was stopped with clearing data. Note that
+    // invalidations are not supported for local sync.
+    sync_client_->GetSyncInvalidationsService()->StartListening();
   }
 
   engine_->Initialize(std::move(params));
@@ -494,30 +498,31 @@ void SyncServiceImpl::ResetEngine(ShutdownReason shutdown_reason,
     if (shutdown_reason == ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA) {
       sync_client_->GetSyncApiComponentFactory()->ClearAllTransportData();
     }
+    // If enabled, call controller's Stop() to inform them to clear the
+    // metadata.
+    if (base::FeatureList::IsEnabled(
+            kSyncAllowClearingMetadataWhenDataTypeIsStopped)) {
+      for (auto& [type, controller] : data_type_controllers_) {
+        controller->Stop(shutdown_reason, base::DoNothing());
+      }
+    }
     return;
   }
 
   base::UmaHistogramEnumeration("Sync.ResetEngineReason", reset_reason);
-  SyncInvalidationsService* sync_invalidations_service =
-      sync_client_->GetSyncInvalidationsService();
   switch (shutdown_reason) {
     case ShutdownReason::STOP_SYNC_AND_KEEP_DATA:
-      if (sync_invalidations_service) {
-        sync_invalidations_service->StopListening();
-      }
+      // Do not stop listening for sync invalidations. Otherwise, GCMDriver
+      // would drop all the incoming messages.
       RemoveClientFromServer();
       break;
     case ShutdownReason::DISABLE_SYNC_AND_CLEAR_DATA: {
-      if (sync_invalidations_service) {
-        sync_invalidations_service->StopListeningPermanently();
-      }
+      sync_client_->GetSyncInvalidationsService()->StopListeningPermanently();
       RemoveClientFromServer();
       break;
     }
     case ShutdownReason::BROWSER_SHUTDOWN_AND_KEEP_DATA:
-      if (sync_invalidations_service) {
-        sync_invalidations_service->StopListening();
-      }
+      sync_client_->GetSyncInvalidationsService()->StopListening();
       break;
   }
 
@@ -553,7 +558,13 @@ void SyncServiceImpl::ResetEngine(ShutdownReason shutdown_reason,
 
   sync_enabled_weak_factory_.InvalidateWeakPtrs();
 
-  startup_controller_->Reset();
+  startup_controller_ = std::make_unique<StartupController>(
+      base::BindRepeating(&SyncServiceImpl::GetPreferredDataTypes,
+                          base::Unretained(this)),
+      base::BindRepeating(&SyncServiceImpl::IsEngineAllowedToRun,
+                          base::Unretained(this)),
+      base::BindOnce(&SyncServiceImpl::StartUpSlowEngineComponents,
+                     base::Unretained(this)));
 
   // Clear various state.
   crypto_.Reset();
@@ -672,6 +683,57 @@ SyncService::TransportState SyncServiceImpl::GetTransportState() const {
   }
 
   return TransportState::ACTIVE;
+}
+
+SyncService::UserActionableError SyncServiceImpl::GetUserActionableError()
+    const {
+  const GoogleServiceAuthError auth_error = GetAuthError();
+  DCHECK(!auth_error.IsTransientError());
+
+  switch (auth_error.state()) {
+    case GoogleServiceAuthError::NONE:
+      break;
+    case GoogleServiceAuthError::SERVICE_UNAVAILABLE:
+    case GoogleServiceAuthError::CONNECTION_FAILED:
+    case GoogleServiceAuthError::REQUEST_CANCELED:
+      // Transient errors aren't reachable.
+      NOTREACHED();
+      break;
+    case GoogleServiceAuthError::SERVICE_ERROR:
+    case GoogleServiceAuthError::SCOPE_LIMITED_UNRECOVERABLE_ERROR:
+    case GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS:
+      return UserActionableError::kSignInNeedsUpdate;
+    case GoogleServiceAuthError::USER_NOT_SIGNED_UP:
+    case GoogleServiceAuthError::UNEXPECTED_SERVICE_RESPONSE:
+      // Not shown to the user.
+      // TODO(crbug.com/1412320): It looks like desktop code in
+      // chrome/browser/sync/sync_ui_util.cc does display this to the user.
+      break;
+    // Conventional value for counting the states, never used.
+    case GoogleServiceAuthError::NUM_STATES:
+      NOTREACHED();
+      break;
+  }
+
+  if (HasUnrecoverableError()) {
+    return UserActionableError::kGenericUnrecoverableError;
+  }
+  if (user_settings_->IsPassphraseRequiredForPreferredDataTypes()) {
+    return UserActionableError::kNeedsPassphrase;
+  }
+  if (user_settings_->IsTrustedVaultKeyRequiredForPreferredDataTypes()) {
+    return user_settings_->IsEncryptEverythingEnabled()
+               ? UserActionableError::kNeedsTrustedVaultKeyForEverything
+               : UserActionableError::kNeedsTrustedVaultKeyForPasswords;
+  }
+  if (user_settings_->IsTrustedVaultRecoverabilityDegraded()) {
+    return user_settings_->IsEncryptEverythingEnabled()
+               ? UserActionableError::
+                     kTrustedVaultRecoverabilityDegradedForEverything
+               : UserActionableError::
+                     kTrustedVaultRecoverabilityDegradedForPasswords;
+  }
+  return UserActionableError::kNone;
 }
 
 void SyncServiceImpl::NotifyObservers() {
@@ -809,7 +871,8 @@ void SyncServiceImpl::OnMigrationNeededForTypes(ModelTypeSet types) {
   migrator_->MigrateTypes(types);
 }
 
-void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
+void SyncServiceImpl::OnActionableProtocolError(
+    const SyncProtocolError& error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   last_actionable_error_ = error;
   DCHECK_NE(last_actionable_error_.action, UNKNOWN_ACTION);
@@ -846,6 +909,9 @@ void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
 
       // Note: StopAndClear sets IsSyncRequested to false, which ensures that
       // Sync-the-feature remains off.
+      // Note: This method might get called again in the following code when
+      // clearing the primary account. But due to rarity of the event, this
+      // should be okay.
       StopAndClear();
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -865,14 +931,14 @@ void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
         // On mobile, fully sign out the user.
         account_mutator->ClearPrimaryAccount(
-            signin_metrics::SERVER_FORCED_DISABLE,
+            signin_metrics::ProfileSignout::kServerForcedDisable,
             signin_metrics::SignoutDelete::kIgnoreMetric);
 #else
         // Note: On some platforms, revoking the sync consent will also clear
         // the primary account as transitioning from ConsentLevel::kSync to
         // ConsentLevel::kSignin is not supported.
         account_mutator->RevokeSyncConsent(
-            signin_metrics::SERVER_FORCED_DISABLE,
+            signin_metrics::ProfileSignout::kServerForcedDisable,
             signin_metrics::SignoutDelete::kIgnoreMetric);
 #endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
       }
@@ -895,6 +961,10 @@ void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
 }
 
 void SyncServiceImpl::OnBackedOffTypesChanged() {
+  NotifyObservers();
+}
+
+void SyncServiceImpl::OnInvalidationStatusChanged() {
   NotifyObservers();
 }
 
@@ -933,20 +1003,9 @@ void SyncServiceImpl::OnConfigureDone(
 
   // Update configured data types and start handling incoming invalidations. The
   // order is important to guarantee that data types are configured to prevent
-  // filtering out invalidations. If there are incoming invalidations, they will
-  // be handled immediately after StartListening() call.
+  // filtering out invalidations.
   UpdateDataTypesForInvalidations();
   engine_->StartHandlingInvalidations();
-  SyncInvalidationsService* invalidations_service =
-      sync_client_->GetSyncInvalidationsService();
-  if (invalidations_service) {
-    // Do not start listening for invalidations since they are not supported for
-    // local sync.
-    if (!IsLocalSyncEnabled() ||
-        base::FeatureList::IsEnabled(kListenForInvalidationsInLocalSync)) {
-      invalidations_service->StartListening();
-    }
-  }
 
   if (migrator_.get() && migrator_->state() != BackendMigrator::IDLE) {
     // Migration in progress.  Let the migrator know we just finished
@@ -1142,12 +1201,9 @@ ModelTypeSet SyncServiceImpl::GetActiveDataTypes() const {
     return ModelTypeSet();
   }
 
-  if (GetAuthError().IsPersistentError()) {
-    // If kSyncPauseUponAnyPersistentAuthError is enabled, a persistent auth
-    // error leads to PAUSED, which implies data_type_manager_==null above.
-    DCHECK(!base::FeatureList::IsEnabled(kSyncPauseUponAnyPersistentAuthError));
-    return ModelTypeSet();
-  }
+  // Persistent auth errors lead to PAUSED, which implies
+  // data_type_manager_==null above.
+  DCHECK(!GetAuthError().IsPersistentError());
 
   return data_type_manager_->GetActiveDataTypes();
 }
@@ -1284,12 +1340,6 @@ ModelTypeSet SyncServiceImpl::GetDataTypesToConfigure() const {
 }
 
 void SyncServiceImpl::UpdateDataTypesForInvalidations() {
-  SyncInvalidationsService* invalidations_service =
-      sync_client_->GetSyncInvalidationsService();
-  if (!invalidations_service) {
-    return;
-  }
-
   // Wait for configuring data types. This is needed to consider proxy types
   // which become known during configuration.
   if (!data_type_manager_ ||
@@ -1317,7 +1367,7 @@ void SyncServiceImpl::UpdateDataTypesForInvalidations() {
 
   types.RemoveAll(data_type_manager_->GetActiveProxyDataTypes());
 
-  invalidations_service->SetInterestedDataTypes(types);
+  sync_client_->GetSyncInvalidationsService()->SetInterestedDataTypes(types);
 }
 
 SyncCycleSnapshot SyncServiceImpl::GetLastCycleSnapshotForDebugging() const {
@@ -1807,12 +1857,22 @@ void SyncServiceImpl::OverrideNetworkForTest(
   // recreate the engine, so that it uses the correct (overridden) callback.
   // This is a horrible hack; the proper fix would be to inject the
   // callback in the ctor instead of adding it retroactively.
+  // TODO(crbug.com/949504): Clean this up and inject required upon
+  // construction.
   bool restart = false;
   if (engine_) {
     // Use BROWSER_SHUTDOWN_AND_KEEP_DATA to prevent the engine from immediately
     // restarting.
     ResetEngine(ShutdownReason::BROWSER_SHUTDOWN_AND_KEEP_DATA,
                 ResetEngineReason::kShutdown);
+    // The startup logic and DCHECKs require that datatypes start stopped.
+    // Since ResetEngine() doesn't do this, it is necessary to stop them here.
+    // STOP_SYNC_AND_KEEP_DATA is used instead of BROWSER_SHUTDOWN_AND_KEEP_DATA
+    // because crbug.com/1400437 is removing shutdown logic from controllers.
+    for (const auto& [type, controller] : data_type_controllers_) {
+      controller->Stop(ShutdownReason::STOP_SYNC_AND_KEEP_DATA,
+                       base::DoNothing());
+    }
     restart = true;
   }
   DCHECK(!engine_);

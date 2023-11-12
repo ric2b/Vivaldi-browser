@@ -11,6 +11,7 @@
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_runner.h"
 #include "build/build_config.h"
 #include "mojo/core/channel.h"
@@ -33,16 +34,16 @@
         // BUILDFLAG(IS_ANDROID)
 #endif  // !BUILDFLAG(IS_NACL)
 
-#if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
-namespace mojo {
-namespace core {
+namespace mojo::core {
 
 namespace {
 
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_FUCHSIA)
 std::atomic<bool> g_mojo_ipcz_enabled{false};
+#else
+// Default to enabled even if InitFeatures() is never called.
+std::atomic<bool> g_mojo_ipcz_enabled{true};
+#endif
 
 }  // namespace
 
@@ -78,22 +79,25 @@ void InitFeatures() {
   Core::set_avoid_random_pipe_id(
       base::FeatureList::IsEnabled(kMojoAvoidRandomPipeId));
 
-#if BUILDFLAG(IS_WIN)
-  // TODO(https://crbug.com/1299283): Sandboxed processes on Windows versions
-  // older than 8.1 require some extra (not yet implemented) setup for ipcz to
-  // work properly. This is omitted for early experimentation.
-  const bool kIsIpczSupported =
-      base::win::GetVersion() >= base::win::Version::WIN8_1;
-#else
-  const bool kIsIpczSupported = true;
-#endif
-  if (base::FeatureList::IsEnabled(kMojoIpcz) && kIsIpczSupported) {
-    g_mojo_ipcz_enabled.store(true, std::memory_order_release);
+  if (base::FeatureList::IsEnabled(kMojoIpcz)) {
+    EnableMojoIpcz();
+  } else {
+    g_mojo_ipcz_enabled.store(false, std::memory_order_release);
   }
+}
+
+void EnableMojoIpcz() {
+  g_mojo_ipcz_enabled.store(true, std::memory_order_release);
 }
 
 void Init(const Configuration& configuration) {
   internal::g_configuration = configuration;
+
+  if (configuration.disable_ipcz) {
+    // Allow the caller to override MojoIpcz even when enabled as a Feature.
+    g_mojo_ipcz_enabled.store(false, std::memory_order_release);
+  }
+
   if (IsMojoIpczEnabled()) {
     CHECK(InitializeIpczNodeForProcess({
         .is_broker = configuration.is_broker_process,
@@ -170,5 +174,4 @@ IpczDriverHandle CreateIpczTransportFromEndpoint(
   return ipcz_driver::ObjectBase::ReleaseAsHandle(std::move(transport));
 }
 
-}  // namespace core
-}  // namespace mojo
+}  // namespace mojo::core

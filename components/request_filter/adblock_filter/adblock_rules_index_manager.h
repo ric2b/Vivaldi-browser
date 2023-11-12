@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "components/ad_blocker/adblock_metadata.h"
 #include "components/ad_blocker/adblock_rule_manager.h"
 

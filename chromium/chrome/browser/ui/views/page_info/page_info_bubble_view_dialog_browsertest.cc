@@ -408,6 +408,8 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
 // set. All permissions will show regardless of its factory default value.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
                        InvokeUi_AllowAllPermissions) {
+  // Last updated in crrev.com/c/4150491.
+  set_baseline("4150491");
   ShowAndVerifyUi();
 }
 
@@ -415,6 +417,8 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
 // set. All permissions will show regardless of its factory default value.
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewDialogBrowserTest,
                        InvokeUi_BlockAllPermissions) {
+  // Last updated in crrev.com/c/4150491.
+  set_baseline("4150491");
   ShowAndVerifyUi();
 }
 
@@ -512,7 +516,7 @@ class PageInfoBubbleViewAboutThisSiteDialogBrowserTest
     std::u16string site_name = u"Example site";
     bubble_view->presenter_for_testing()->SetSiteNameForTesting(site_name);
     ASSERT_EQ(
-        bubble_view->presenter_for_testing()->GetSiteOriginOrAppNameToDisplay(),
+        bubble_view->presenter_for_testing()->GetSiteNameOrAppNameToDisplay(),
         site_name);
 
     if (name == "AboutThisSite") {
@@ -556,14 +560,17 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDialogBrowserTest,
 }
 
 class PageInfoBubbleViewPrivacySandboxDialogBrowserTest
-    : public DialogBrowserTest {
+    : public DialogBrowserTest,
+      public testing::WithParamInterface<bool> {
  public:
   PageInfoBubbleViewPrivacySandboxDialogBrowserTest() {
     // TODO(crbug.com/1344787): Clean up when PageSpecificSiteDataDialog is
     // launched.
-    feature_list_.InitWithFeatures({privacy_sandbox::kPrivacySandboxSettings3},
-                                   {page_info::kPageSpecificSiteDataDialog,
-                                    page_info::kPageInfoCookiesSubpage});
+    feature_list_.InitWithFeatures(
+        {GetParam() ? privacy_sandbox::kPrivacySandboxSettings4
+                    : privacy_sandbox::kPrivacySandboxSettings3},
+        {page_info::kPageSpecificSiteDataDialog,
+         page_info::kPageInfoCookiesSubpage});
   }
 
   void SetUpOnMainThread() override {
@@ -575,10 +582,13 @@ class PageInfoBubbleViewPrivacySandboxDialogBrowserTest
   }
 
   // DialogBrowserTest:
-  void ShowUi(const std::string& name) override {
+  void ShowUi(const std::string& name_with_param_suffix) override {
     // Bubble dialogs' bounds may exceed the display's work area.
     // https://crbug.com/893292.
     set_should_verify_dialog_bounds(false);
+
+    const std::string& name =
+        name_with_param_suffix.substr(0, name_with_param_suffix.find("/"));
 
     ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GetUrl("a.test")));
 
@@ -603,7 +613,7 @@ class PageInfoBubbleViewPrivacySandboxDialogBrowserTest
     std::u16string site_name = u"Example site";
     bubble_view->presenter_for_testing()->SetSiteNameForTesting(site_name);
     ASSERT_EQ(
-        bubble_view->presenter_for_testing()->GetSiteOriginOrAppNameToDisplay(),
+        bubble_view->presenter_for_testing()->GetSiteNameOrAppNameToDisplay(),
         site_name);
 
     if (name == "PrivacySandboxMain") {
@@ -624,15 +634,19 @@ class PageInfoBubbleViewPrivacySandboxDialogBrowserTest
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
 };
 
-IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewPrivacySandboxDialogBrowserTest,
+IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewPrivacySandboxDialogBrowserTest,
                        InvokeUi_PrivacySandboxMain) {
   ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewPrivacySandboxDialogBrowserTest,
+IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewPrivacySandboxDialogBrowserTest,
                        InvokeUi_PrivacySandboxSubpage) {
   ShowAndVerifyUi();
 }
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         PageInfoBubbleViewPrivacySandboxDialogBrowserTest,
+                         testing::Bool());
 
 class PageInfoBubbleViewHistoryDialogBrowserTest : public DialogBrowserTest {
  public:
@@ -672,7 +686,7 @@ class PageInfoBubbleViewHistoryDialogBrowserTest : public DialogBrowserTest {
     std::u16string site_name = u"Example site";
     bubble_view->presenter_for_testing()->SetSiteNameForTesting(site_name);
     ASSERT_EQ(
-        bubble_view->presenter_for_testing()->GetSiteOriginOrAppNameToDisplay(),
+        bubble_view->presenter_for_testing()->GetSiteNameOrAppNameToDisplay(),
         site_name);
   }
 
@@ -875,10 +889,10 @@ class PageInfoBubbleViewIsolatedWebAppBrowserTest : public DialogBrowserTest {
     std::u16string app_name = u"Google IWA";
     bubble_view->presenter_for_testing()->SetIsolatedWebAppNameForTesting(
         app_name);
-    bubble_view->presenter_for_testing()->SetSiteNameForTesting(u"google.com");
+    bubble_view->presenter_for_testing()->UpdateSecurityState();
     // For Isolated Web Apps, normal site name gets overridden by app name.
     ASSERT_EQ(
-        bubble_view->presenter_for_testing()->GetSiteOriginOrAppNameToDisplay(),
+        bubble_view->presenter_for_testing()->GetSiteNameOrAppNameToDisplay(),
         app_name);
   }
 
@@ -891,8 +905,11 @@ class PageInfoBubbleViewIsolatedWebAppBrowserTest : public DialogBrowserTest {
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
 };
 
+// Test renamed, as currently Skia Gold doesn't support resetting test
+// expectation for tests run on windows.
+// crbug.com/1403038
 IN_PROC_BROWSER_TEST_F(
     PageInfoBubbleViewIsolatedWebAppBrowserTest,
-    InvokeUi_AppNameIsDisplayedInsteadOfOriginForIsolatedWebApps) {
+    InvokeUi_AppNameIsDisplayedInsteadOfOriginForIsolatedWebApps_REV1) {
   ShowAndVerifyUi();
 }

@@ -8,7 +8,7 @@
 #import <string>
 #import <vector>
 
-#import "base/bind.h"
+#import "base/functional/bind.h"
 #import "base/memory/scoped_refptr.h"
 #import "base/strings/strcat.h"
 #import "base/strings/string_number_conversions.h"
@@ -18,6 +18,7 @@
 #import "base/test/bind.h"
 #import "base/test/scoped_feature_list.h"
 #import "base/time/time.h"
+#import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/bulk_leak_check_service.h"
 #import "components/password_manager/core/browser/mock_bulk_leak_check_service.h"
 #import "components/password_manager/core/browser/password_form.h"
@@ -48,6 +49,7 @@ constexpr char16_t kUsername116[] = u"alice";
 constexpr char16_t kUsername216[] = u"bob";
 
 constexpr char16_t kPassword116[] = u"s3cre3t";
+constexpr char16_t kWeakPassword[] = u"123456";
 
 using password_manager::BulkLeakCheckServiceInterface;
 using password_manager::CredentialUIEntry;
@@ -64,36 +66,20 @@ using ::testing::Field;
 using ::testing::IsEmpty;
 using ::testing::Pair;
 using ::testing::StrictMock;
+using ::testing::UnorderedElementsAre;
 
 struct MockPasswordCheckManagerObserver
     : IOSChromePasswordCheckManager::Observer {
-  MOCK_METHOD(void, CompromisedCredentialsChanged, (), (override));
+  MOCK_METHOD(void, InsecureCredentialsChanged, (), (override));
   MOCK_METHOD(void,
               PasswordCheckStatusChanged,
               (PasswordCheckState),
               (override));
 };
 
-scoped_refptr<TestPasswordStore> CreateAndUseTestPasswordStore(
-    ChromeBrowserState* _browserState) {
-  return base::WrapRefCounted(static_cast<password_manager::TestPasswordStore*>(
-      IOSChromePasswordStoreFactory::GetInstance()
-          ->SetTestingFactoryAndUse(
-              _browserState,
-              base::BindRepeating(&password_manager::BuildPasswordStore<
-                                  web::BrowserState, TestPasswordStore>))
-          .get()));
-}
-
-MockBulkLeakCheckService* CreateAndUseBulkLeakCheckService(
-    ChromeBrowserState* _browserState) {
-  return static_cast<MockBulkLeakCheckService*>(
-      IOSChromeBulkLeakCheckServiceFactory::GetInstance()
-          ->SetTestingFactoryAndUse(
-              _browserState, base::BindLambdaForTesting([](web::BrowserState*) {
-                return std::unique_ptr<KeyedService>(
-                    std::make_unique<MockBulkLeakCheckService>());
-              })));
+std::unique_ptr<KeyedService> MakeMockPasswordCheckManagerObserver(
+    web::BrowserState*) {
+  return std::make_unique<MockBulkLeakCheckService>();
 }
 
 PasswordForm MakeSavedPassword(
@@ -102,6 +88,7 @@ PasswordForm MakeSavedPassword(
     base::StringPiece16 password = kPassword116,
     base::StringPiece16 username_element = base::StringPiece16()) {
   PasswordForm form;
+  form.url = GURL(signon_realm);
   form.signon_realm = std::string(signon_realm);
   form.username_value = std::u16string(username);
   form.password_value = std::u16string(password);
@@ -127,11 +114,25 @@ void AddIssueToForm(PasswordForm* form,
 
 class IOSChromePasswordCheckManagerTest : public PlatformTest {
  public:
-  IOSChromePasswordCheckManagerTest()
-      : browser_state_(TestChromeBrowserState::Builder().Build()),
-        bulk_leak_check_service_(
-            CreateAndUseBulkLeakCheckService(browser_state_.get())),
-        store_(CreateAndUseTestPasswordStore(browser_state_.get())) {
+  IOSChromePasswordCheckManagerTest() {
+    TestChromeBrowserState::Builder builder;
+    builder.AddTestingFactory(
+        IOSChromeBulkLeakCheckServiceFactory::GetInstance(),
+        base::BindRepeating(&MakeMockPasswordCheckManagerObserver));
+    builder.AddTestingFactory(
+        IOSChromePasswordStoreFactory::GetInstance(),
+        base::BindRepeating(
+            &password_manager::BuildPasswordStore<web::BrowserState,
+                                                  TestPasswordStore>));
+    browser_state_ = builder.Build();
+    bulk_leak_check_service_ = static_cast<MockBulkLeakCheckService*>(
+        IOSChromeBulkLeakCheckServiceFactory::GetForBrowserState(
+            browser_state_.get()));
+    store_ =
+        base::WrapRefCounted(static_cast<password_manager::TestPasswordStore*>(
+            IOSChromePasswordStoreFactory::GetForBrowserState(
+                browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS)
+                .get()));
     manager_ = IOSChromePasswordCheckManagerFactory::GetForBrowserState(
         browser_state_.get());
   }
@@ -158,13 +159,13 @@ class IOSChromePasswordCheckManagerTest : public PlatformTest {
 
 // Sets up the password store with a password and unmuted compromised
 // credential. Verifies that the result is matching expectation.
-TEST_F(IOSChromePasswordCheckManagerTest, GetUnmutedCompromisedCredentials) {
+TEST_F(IOSChromePasswordCheckManagerTest, GetInsecureCredentials) {
   PasswordForm form = MakeSavedPassword(kExampleCom, kUsername116);
   AddIssueToForm(&form, InsecureType::kLeaked, base::Minutes(1));
   store().AddLogin(form);
   RunUntilIdle();
 
-  EXPECT_THAT(manager().GetUnmutedCompromisedCredentials(),
+  EXPECT_THAT(manager().GetInsecureCredentials(),
               ElementsAre(CredentialUIEntry(form)));
 }
 
@@ -179,7 +180,7 @@ TEST_F(IOSChromePasswordCheckManagerTest, NoLeakedFound) {
                          IsLeaked(false));
   RunUntilIdle();
 
-  EXPECT_THAT(manager().GetUnmutedCompromisedCredentials(), IsEmpty());
+  EXPECT_THAT(manager().GetInsecureCredentials(), IsEmpty());
 }
 
 // Test that a found leak creates a compromised credential in the password
@@ -195,7 +196,7 @@ TEST_F(IOSChromePasswordCheckManagerTest, OnLeakFoundCreatesCredential) {
   RunUntilIdle();
 
   AddIssueToForm(&form, InsecureType::kLeaked, base::Minutes(0));
-  EXPECT_THAT(manager().GetUnmutedCompromisedCredentials(),
+  EXPECT_THAT(manager().GetInsecureCredentials(),
               ElementsAre(CredentialUIEntry(form)));
 }
 
@@ -238,7 +239,7 @@ TEST_F(IOSChromePasswordCheckManagerTest, LastTimePasswordCheckCompletedReset) {
 
 // Tests whether adding and removing an observer works as expected.
 TEST_F(IOSChromePasswordCheckManagerTest,
-       NotifyObserversAboutCompromisedCredentialChanges) {
+       NotifyObserversAboutInsecureCredentialChanges) {
   PasswordForm form = MakeSavedPassword(kExampleCom, kUsername116);
   store().AddLogin(form);
   RunUntilIdle();
@@ -248,14 +249,14 @@ TEST_F(IOSChromePasswordCheckManagerTest,
 
   // Adding a compromised credential should notify observers.
   EXPECT_CALL(observer, PasswordCheckStatusChanged);
-  EXPECT_CALL(observer, CompromisedCredentialsChanged);
+  EXPECT_CALL(observer, InsecureCredentialsChanged);
   AddIssueToForm(&form, InsecureType::kLeaked, base::Minutes(1));
   store().UpdateLogin(form);
   RunUntilIdle();
 
   // After an observer is removed it should no longer receive notifications.
   manager().RemoveObserver(&observer);
-  EXPECT_CALL(observer, CompromisedCredentialsChanged).Times(0);
+  EXPECT_CALL(observer, InsecureCredentialsChanged).Times(0);
   AddIssueToForm(&form, InsecureType::kPhished, base::Minutes(1));
   store().UpdateLogin(form);
   RunUntilIdle();
@@ -286,52 +287,76 @@ TEST_F(IOSChromePasswordCheckManagerTest, NotifyObserversAboutStateChanges) {
 
 // Tests expected delay is being added.
 TEST_F(IOSChromePasswordCheckManagerTest, CheckFinishedWithDelay) {
+  // Enable weak and reuse checks.
+  base::test::ScopedFeatureList feature_list(
+      password_manager::features::kIOSPasswordCheckup);
+
   store().AddLogin(MakeSavedPassword(kExampleCom, kUsername116));
 
   RunUntilIdle();
   StrictMock<MockPasswordCheckManagerObserver> observer;
   manager().AddObserver(&observer);
+
+  EXPECT_CALL(observer, InsecureCredentialsChanged).Times(2);
+  EXPECT_CALL(observer, PasswordCheckStatusChanged(PasswordCheckState::kIdle))
+      .Times(2);
   manager().StartPasswordCheck();
   RunUntilIdle();
 
-  EXPECT_CALL(observer, PasswordCheckStatusChanged(PasswordCheckState::kIdle))
-      .Times(0);
   static_cast<BulkLeakCheckServiceInterface::Observer*>(&manager())
       ->OnStateChanged(BulkLeakCheckServiceInterface::State::kIdle);
+
+  // Validate the minimum password check duration of 3 seconds is respected.
+  // The test will fail if any PasswordCheckStatusChanged calls are observed in
+  // the first 2 seconds after the check was started.
+  FastForwardBy(base::Seconds(2));
+  // After the minimum delay passes, the check status update should be received.
+  EXPECT_CALL(observer, PasswordCheckStatusChanged(PasswordCheckState::kIdle));
+  // Advance the clock 1 more second simulating that 3 seconds have passed so
+  // the check status update should have been received.
   FastForwardBy(base::Seconds(1));
 
-  EXPECT_CALL(observer, PasswordCheckStatusChanged(PasswordCheckState::kIdle))
-      .Times(0);
-  FastForwardBy(base::Seconds(1));
-
-  EXPECT_CALL(observer, PasswordCheckStatusChanged(PasswordCheckState::kIdle))
-      .Times(1);
-  FastForwardBy(base::Seconds(1));
   manager().RemoveObserver(&observer);
 }
 
-// Tests that that the correct number of compromised credentials is returned.
-TEST_F(IOSChromePasswordCheckManagerTest, CheckCompromisedCredentialsCount) {
-  // Enable unmuted compromised credential feature.
-  base::test::ScopedFeatureList featureList;
-  featureList.InitAndEnableFeature(
-      password_manager::features::kMuteCompromisedPasswords);
+// Verify that GetInsecureCredentials returns weak credentials.
+TEST_F(IOSChromePasswordCheckManagerTest, WeakCredentialsAreReturned) {
+  // Enable weak and reuse checks.
+  base::test::ScopedFeatureList feature_list(
+      password_manager::features::kIOSPasswordCheckup);
 
-  // Add a muted password.
-  PasswordForm form1 = MakeSavedPassword(kExampleCom, kUsername216);
-  AddIssueToForm(&form1, InsecureType::kLeaked, base::Minutes(1), true);
-  store().AddLogin(form1);
+  PasswordForm weak_form =
+      MakeSavedPassword(kExampleCom, kUsername116, kWeakPassword);
+  store().AddLogin(weak_form);
+
   RunUntilIdle();
-  // Should return an empty list because the compromised credential is muted.
-  EXPECT_THAT(manager().GetUnmutedCompromisedCredentials(), IsEmpty());
-
-  // Add an unmuted password.
-  PasswordForm form2 = MakeSavedPassword(kExampleCom, kUsername116);
-  AddIssueToForm(&form2, InsecureType::kLeaked, base::Minutes(1), false);
-  store().AddLogin(form2);
+  manager().StartPasswordCheck();
   RunUntilIdle();
 
-  // Should return only the unmuted compromised credentials.
-  EXPECT_THAT(manager().GetUnmutedCompromisedCredentials(),
-              ElementsAre(CredentialUIEntry(form2)));
+  EXPECT_THAT(manager().GetInsecureCredentials(),
+              ElementsAre(CredentialUIEntry(weak_form)));
+}
+
+// Verify that GetInsecureCredentials returns reused credentials.
+TEST_F(IOSChromePasswordCheckManagerTest, ReusedCredentialsAreReturned) {
+  // Enable weak and reuse checks.
+  base::test::ScopedFeatureList feature_list(
+      password_manager::features::kIOSPasswordCheckup);
+
+  PasswordForm form_with_same_password_1 =
+      MakeSavedPassword(kExampleCom, kUsername116, kPassword116);
+  store().AddLogin(form_with_same_password_1);
+
+  PasswordForm form_with_same_password_2 =
+      MakeSavedPassword(kExampleCom, kUsername216, kPassword116);
+  store().AddLogin(form_with_same_password_2);
+
+  RunUntilIdle();
+  manager().StartPasswordCheck();
+  RunUntilIdle();
+
+  EXPECT_THAT(
+      manager().GetInsecureCredentials(),
+      UnorderedElementsAre(CredentialUIEntry(form_with_same_password_1),
+                           CredentialUIEntry(form_with_same_password_2)));
 }

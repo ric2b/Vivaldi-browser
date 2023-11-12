@@ -9,6 +9,7 @@
 #include "ash/capture_mode/capture_mode_constants.h"
 #include "ash/capture_mode/capture_mode_controller.h"
 #include "ash/capture_mode/capture_mode_session.h"
+#include "ash/capture_mode/capture_mode_types.h"
 #include "ash/capture_mode/stop_recording_button_tray.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/clipboard_history_controller.h"
@@ -23,9 +24,10 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/check.h"
 #include "base/notreached.h"
+#include "base/task/single_thread_task_runner.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/image_model.h"
-#include "ui/chromeos/events/keyboard_layout_util.h"
+#include "ui/chromeos/events/keyboard_capability.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -277,8 +279,9 @@ std::unique_ptr<views::View> CreateClipboardShortcutView() {
       views::BoxLayout::Orientation::kHorizontal));
 
   const std::u16string shortcut_key = l10n_util::GetStringUTF16(
-      ui::DeviceUsesKeyboardLayout2() ? IDS_ASH_SHORTCUT_MODIFIER_LAUNCHER
-                                      : IDS_ASH_SHORTCUT_MODIFIER_SEARCH);
+      Shell::Get()->keyboard_capability()->HasLauncherButton()
+          ? IDS_ASH_SHORTCUT_MODIFIER_LAUNCHER
+          : IDS_ASH_SHORTCUT_MODIFIER_SEARCH);
 
   const std::u16string label_text = l10n_util::GetStringFUTF16(
       IDS_ASH_MULTIPASTE_SCREENSHOT_NOTIFICATION_NUDGE, shortcut_key);
@@ -463,7 +466,7 @@ bool SetWidgetVisibility(views::Widget* widget,
 
 aura::Window* GetPreferredRootWindow(
     absl::optional<gfx::Point> location_in_screen) {
-  int64_t display_id =
+  const int64_t display_id =
       (location_in_screen
            ? display::Screen::GetScreen()->GetDisplayNearestPoint(
                  *location_in_screen)
@@ -473,7 +476,8 @@ aura::Window* GetPreferredRootWindow(
   // The Display object returned by `CursorManager::GetDisplay()` may be stale,
   // but will have the correct id.
   DCHECK_NE(display::kInvalidDisplayId, display_id);
-  return Shell::GetRootWindowForDisplayId(display_id);
+  auto* root = Shell::GetRootWindowForDisplayId(display_id);
+  return root ? root : Shell::GetPrimaryRootWindow();
 }
 
 void ConfigLabelView(views::Label* label_view) {
@@ -500,15 +504,26 @@ std::string GetScreenCaptureNotificationIdForPath(const base::FilePath& path) {
 
 void MaybeUpdateCameraPrivacyIndicator(bool camera_on) {
   if (features::IsPrivacyIndicatorsEnabled()) {
-    UpdatePrivacyIndicatorsView(kCameraPrivacyIndicatorId, camera_on,
-                                /*is_microphone_used=*/false);
+    UpdatePrivacyIndicators(
+        /*app_id=*/kCameraPrivacyIndicatorId,
+        /*app_name=*/
+        l10n_util::GetStringUTF16(
+            IDS_ASH_STATUS_TRAY_CAPTURE_MODE_BUTTON_LABEL),
+        camera_on,
+        /*is_microphone_used=*/false, /*delegate=*/
+        base::MakeRefCounted<PrivacyIndicatorsNotificationDelegate>());
   }
 }
 
 void MaybeUpdateMicrophonePrivacyIndicator(bool mic_on) {
   if (features::IsPrivacyIndicatorsEnabled()) {
-    UpdatePrivacyIndicatorsView(kMicrophonePrivacyIndicatorId,
-                                /*is_camera_used=*/false, mic_on);
+    UpdatePrivacyIndicators(
+        /*app_id=*/kMicrophonePrivacyIndicatorId,
+        /*app_name=*/
+        l10n_util::GetStringUTF16(
+            IDS_ASH_STATUS_TRAY_CAPTURE_MODE_BUTTON_LABEL),
+        /*is_camera_used=*/false, mic_on, /*delegate=*/
+        base::MakeRefCounted<PrivacyIndicatorsNotificationDelegate>());
   }
 }
 
@@ -522,6 +537,29 @@ bool IsEventTargetedOnWidget(const ui::LocatedEvent& event,
                              views::Widget* widget) {
   auto* target = static_cast<aura::Window*>(event.target());
   return widget && widget->GetNativeWindow()->Contains(target);
+}
+
+gfx::Rect CalculateHighlightLayerBounds(const gfx::PointF& center_point,
+                                        int highlight_layer_radius) {
+  return gfx::Rect(center_point.x() - highlight_layer_radius,
+                   center_point.y() - highlight_layer_radius,
+                   highlight_layer_radius * 2, highlight_layer_radius * 2);
+}
+
+int GetNumberOfSupportedRecordingTypes(bool is_in_projector_mode) {
+  int total = 0;
+  for (const auto& type : {RecordingType::kGif, RecordingType::kWebM}) {
+    switch (type) {
+      case RecordingType::kGif:
+        total +=
+            features::IsGifRecordingEnabled() && !is_in_projector_mode ? 1 : 0;
+        break;
+      case RecordingType::kWebM:
+        total += 1;
+        break;
+    }
+  }
+  return total;
 }
 
 }  // namespace ash::capture_mode_util

@@ -28,7 +28,6 @@ import androidx.preference.PreferenceFragmentCompat;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.night_mode.NightModeMetrics.ThemeSettingsEntry;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
@@ -46,16 +45,14 @@ import org.chromium.chrome.browser.signin.services.SigninManager;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.sync.settings.SignInPreference;
-import org.chromium.chrome.browser.sync.settings.SyncPromoPreference;
-import org.chromium.chrome.browser.sync.settings.SyncPromoPreference.State;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
-import org.chromium.chrome.browser.ui.signin.TangibleSyncCoordinator;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
 import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -87,6 +84,7 @@ import org.vivaldi.browser.preferences.NewTabPositionMainPreference;
 import org.vivaldi.browser.preferences.StartPageModePreference;
 import org.vivaldi.browser.preferences.StatusBarVisibilityPreference;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.vivaldi.browser.preferences.VivaldiPreferencesBridge;
 import org.vivaldi.browser.preferences.VivaldiSyncPreference;
 
 /**
@@ -94,7 +92,7 @@ import org.vivaldi.browser.preferences.VivaldiSyncPreference;
  */
 public class MainSettings extends PreferenceFragmentCompat
         implements TemplateUrlService.LoadListener, SyncService.SyncStateChangedListener,
-                   SigninManager.SignInStateObserver {
+                   SigninManager.SignInStateObserver, ProfileDependentSetting {
     public static final String PREF_SYNC_PROMO = "sync_promo";
     public static final String PREF_ACCOUNT_AND_GOOGLE_SERVICES_SECTION =
             "account_and_google_services_section";
@@ -120,13 +118,15 @@ public class MainSettings extends PreferenceFragmentCompat
     public static final String PREF_VIVALDI_GAME = "vivaldi_game";
     public static final String PREF_STATUS_BAR_VISIBILITY = "status_bar_visibility";
     public static final String PREF_DOUBLE_TAP_BACK_TO_EXIT = "double_tap_back_to_exit";
+    public static final String PREF_ALLOW_BACKGROUND_MEDIA = "allow_background_media";
+    public static final String PREF_ALWAYS_SHOW_DESKTOP_SITE = "always_show_desktop_site";
 
     private final ManagedPreferenceDelegate mManagedPreferenceDelegate;
     protected final Map<String, Preference> mAllPreferences = new HashMap<>();
-    private SyncPromoPreference mSyncPromoPreference;
     private SignInPreference mSignInPreference;
     private ChromeBasePreference mManageSync;
     private @Nullable PasswordCheck mPasswordCheck;
+    private Profile mProfile;
     private ObservableSupplier<ModalDialogManager> mModalDialogManagerSupplier;
 
     private VivaldiSyncPreference mVivaldiSyncPreference;
@@ -169,8 +169,7 @@ public class MainSettings extends PreferenceFragmentCompat
     @Override
     public void onStart() {
         super.onStart();
-        SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
-                Profile.getLastUsedRegularProfile());
+        SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(mProfile);
         if (signinManager.isSigninSupported()) {
             signinManager.addSignInStateObserver(this);
         }
@@ -184,8 +183,7 @@ public class MainSettings extends PreferenceFragmentCompat
     @Override
     public void onStop() {
         super.onStop();
-        SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
-                Profile.getLastUsedRegularProfile());
+        SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(mProfile);
         if (signinManager.isSigninSupported()) {
             signinManager.removeSignInStateObserver(this);
         }
@@ -202,6 +200,11 @@ public class MainSettings extends PreferenceFragmentCompat
         updatePreferences();
     }
 
+    @Override
+    public void setProfile(Profile profile) {
+        mProfile = profile;
+    }
+
     private void createPreferences() {
         if (ChromeApplicationImpl.isVivaldi())
             SettingsUtils.addPreferencesFromResource(this, R.xml.vivaldi_main_preferences);
@@ -209,9 +212,6 @@ public class MainSettings extends PreferenceFragmentCompat
         SettingsUtils.addPreferencesFromResource(this, R.xml.main_preferences);
 
         cachePreferences();
-
-        if (!ChromeApplicationImpl.isVivaldi())
-        mSyncPromoPreference.setOnStateChangedCallback(this::onSyncPromoPreferenceStateChanged);
 
         if (ChromeApplicationImpl.isVivaldi()) {
             if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext())) {
@@ -223,6 +223,12 @@ public class MainSettings extends PreferenceFragmentCompat
                 removePreferenceIfPresent(PREF_DOWNLOADS); // Ref. POLE-20
                 removePreferenceIfPresent(PREF_STATUS_BAR_VISIBILITY); // Ref. POLE-26
                 removePreferenceIfPresent(PREF_DOUBLE_TAP_BACK_TO_EXIT); // Ref. POLE-30
+                // Remove if OEM runs phone UI (Mercedes co driver display).
+                removePreferenceIfPresent(VivaldiPreferences.APP_MENU_BAR_SETTING);
+            }
+            // Remove for Mercedes. Ref. VAB-7254.
+            if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
+                removePreferenceIfPresent(PREF_VIVALDI_GAME);
             }
         }
 
@@ -258,9 +264,10 @@ public class MainSettings extends PreferenceFragmentCompat
             getPreferenceScreen().removePreference(findPreference(PREF_NOTIFICATIONS));
         }
 
-        if (!TemplateUrlServiceFactory.get().isLoaded()) {
-            TemplateUrlServiceFactory.get().registerLoadListener(this);
-            TemplateUrlServiceFactory.get().load();
+        TemplateUrlService templateUrlService = TemplateUrlServiceFactory.getForProfile(mProfile);
+        if (!templateUrlService.isLoaded()) {
+            templateUrlService.registerLoadListener(this);
+            templateUrlService.load();
         }
 
         if (!ChromeApplicationImpl.isVivaldi())
@@ -295,6 +302,29 @@ public class MainSettings extends PreferenceFragmentCompat
                     return true;
                 });
             }
+
+            // Handle background media playback toggle change
+            ChromeSwitchPreference allowBackgroundMediaPref =
+                    findPreference(PREF_ALLOW_BACKGROUND_MEDIA);
+            if (allowBackgroundMediaPref != null) {
+                allowBackgroundMediaPref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
+                    vivaldiPrefs.setBackgroundMediaPlaybackAllowed((boolean) newValue);
+                    VivaldiRelaunchUtils.showRelaunchDialog(getContext(), null);
+                    return true;
+                });
+            }
+
+            ChromeSwitchPreference alwaysShowDesktopSitePref =
+                    findPreference(PREF_ALWAYS_SHOW_DESKTOP_SITE);
+            if (alwaysShowDesktopSitePref != null) {
+                boolean desktopModeEnabled =
+                        VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                                VivaldiPreferences.ALWAYS_SHOW_DESKTOP,
+                                BuildConfig.IS_OEM_MERCEDES_BUILD);
+
+                alwaysShowDesktopSitePref.setChecked(desktopModeEnabled);
+            }
         }
     }
 
@@ -308,7 +338,6 @@ public class MainSettings extends PreferenceFragmentCompat
             Preference preference = getPreferenceScreen().getPreference(index);
             mAllPreferences.put(preference.getKey(), preference);
         }
-        mSyncPromoPreference = (SyncPromoPreference) mAllPreferences.get(PREF_SYNC_PROMO);
         mSignInPreference = (SignInPreference) mAllPreferences.get(PREF_SIGN_IN);
         mManageSync = (ChromeBasePreference) findPreference(PREF_MANAGE_SYNC);
 
@@ -322,9 +351,7 @@ public class MainSettings extends PreferenceFragmentCompat
     }
 
     private void updatePreferences() {
-        if (IdentityServicesProvider.get()
-                        .getSigninManager(Profile.getLastUsedRegularProfile())
-                        .isSigninSupported()) {
+        if (IdentityServicesProvider.get().getSigninManager(mProfile).isSigninSupported()) {
             addPreferenceIfAbsent(PREF_SIGN_IN);
         } else {
             removePreferenceIfPresent(PREF_SIGN_IN);
@@ -374,6 +401,14 @@ public class MainSettings extends PreferenceFragmentCompat
         ((ChromeSwitchPreference)pref).setChecked(
                     VivaldiDefaultBrowserUtils.checkIfVivaldiDefaultBrowser(getActivity()));
 
+        // Vivaldi: Set toggle for background media.
+        pref = findPreference(PREF_ALLOW_BACKGROUND_MEDIA);
+        if (pref != null) {
+            VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
+            ((ChromeSwitchPreference) pref)
+                    .setChecked(vivaldiPrefs.isBackgroundMediaPlaybackAllowed());
+        }
+
         // Handling the home button here.
         boolean isTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(getContext());
         String homeButton = "show_start_page_icon";
@@ -398,17 +433,15 @@ public class MainSettings extends PreferenceFragmentCompat
 
     private void updateManageSyncPreference() {
         String primaryAccountName = CoreAccountInfo.getEmailFrom(
-                IdentityServicesProvider.get()
-                        .getIdentityManager(Profile.getLastUsedRegularProfile())
-                        .getPrimaryAccountInfo(ConsentLevel.SIGNIN));
+                IdentityServicesProvider.get().getIdentityManager(mProfile).getPrimaryAccountInfo(
+                        ConsentLevel.SIGNIN));
         boolean showManageSync = primaryAccountName != null;
         mManageSync.setVisible(showManageSync);
         if (!showManageSync) return;
 
         boolean isSyncConsentAvailable =
-                IdentityServicesProvider.get()
-                        .getIdentityManager(Profile.getLastUsedRegularProfile())
-                        .getPrimaryAccountInfo(ConsentLevel.SYNC)
+                IdentityServicesProvider.get().getIdentityManager(mProfile).getPrimaryAccountInfo(
+                        ConsentLevel.SYNC)
                 != null;
         mManageSync.setIcon(SyncSettingsUtils.getSyncStatusIcon(getActivity()));
         mManageSync.setSummary(SyncSettingsUtils.getSyncStatusSummary(getActivity()));
@@ -419,10 +452,6 @@ public class MainSettings extends PreferenceFragmentCompat
             } else if (isSyncConsentAvailable) {
                 SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
                 settingsLauncher.launchSettingsActivity(context, ManageSyncSettings.class);
-            } else if (ChromeFeatureList.isEnabled(ChromeFeatureList.TANGIBLE_SYNC)) {
-                TangibleSyncCoordinator.start(requireContext(), mModalDialogManagerSupplier.get(),
-                        SyncConsentActivityLauncherImpl.get(),
-                        SigninAccessPoint.SETTINGS_SYNC_OFF_ROW);
             } else {
                 SyncConsentActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
                         context, SigninAccessPoint.SETTINGS_SYNC_OFF_ROW, primaryAccountName);
@@ -432,7 +461,8 @@ public class MainSettings extends PreferenceFragmentCompat
     }
 
     private void updateSearchEnginePreference() {
-        if (!TemplateUrlServiceFactory.get().isLoaded()) {
+        TemplateUrlService templateUrlService = TemplateUrlServiceFactory.getForProfile(mProfile);
+        if (!templateUrlService.isLoaded()) {
             ChromeBasePreference searchEnginePref =
                     (ChromeBasePreference) findPreference(PREF_SEARCH_ENGINE);
             searchEnginePref.setEnabled(false);
@@ -440,8 +470,7 @@ public class MainSettings extends PreferenceFragmentCompat
         }
 
         String defaultSearchEngineName = null;
-        TemplateUrl dseTemplateUrl =
-                TemplateUrlServiceFactory.get().getDefaultSearchEngineTemplateUrl();
+        TemplateUrl dseTemplateUrl = templateUrlService.getDefaultSearchEngineTemplateUrl();
         if (dseTemplateUrl != null) defaultSearchEngineName = dseTemplateUrl.getShortName();
 
         Preference searchEnginePreference = findPreference(PREF_SEARCH_ENGINE);
@@ -457,8 +486,7 @@ public class MainSettings extends PreferenceFragmentCompat
         }
         passwordsPreference.setOnPreferenceClickListener(preference -> {
             if (shouldShowNewLabelForPasswordsPreference()) {
-                UserPrefs.get(Profile.getLastUsedRegularProfile())
-                        .setBoolean(Pref.PASSWORDS_PREF_WITH_NEW_LABEL_USED, true);
+                UserPrefs.get(mProfile).setBoolean(Pref.PASSWORDS_PREF_WITH_NEW_LABEL_USED, true);
             }
             PasswordManagerLauncher.showPasswordSettings(getActivity(),
                     ManagePasswordsReferrer.CHROME_SETTINGS, mModalDialogManagerSupplier);
@@ -468,8 +496,7 @@ public class MainSettings extends PreferenceFragmentCompat
 
     private boolean shouldShowNewLabelForPasswordsPreference() {
         return usesUnifiedPasswordManagerUI() && hasChosenToSyncPasswords(SyncService.get())
-                && !UserPrefs.get(Profile.getLastUsedRegularProfile())
-                            .getBoolean(Pref.PASSWORDS_PREF_WITH_NEW_LABEL_USED);
+                && !UserPrefs.get(mProfile).getBoolean(Pref.PASSWORDS_PREF_WITH_NEW_LABEL_USED);
     }
 
     // TODO(crbug.com/1217070): remove this method once UPM feature is rolled out.
@@ -483,7 +510,7 @@ public class MainSettings extends PreferenceFragmentCompat
                     new SpanInfo("<new>", "</new>", new SuperscriptSpan(),
                             new RelativeSizeSpan(0.75f),
                             new ForegroundColorSpan(
-                                    context.getColor(R.color.default_text_color_blue_baseline))));
+                                    SemanticColorUtils.getDefaultTextColorAccent1(context))));
         } else {
             // Remove the "NEW" text and the trailing whitespace.
             return (CharSequence) (SpanApplier
@@ -513,28 +540,10 @@ public class MainSettings extends PreferenceFragmentCompat
         updatePreferences();
     }
 
-    private void onSyncPromoPreferenceStateChanged() {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SYNC_ANDROID_PROMOS_WITH_ILLUSTRATION)
-                || ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.SYNC_ANDROID_PROMOS_WITH_SINGLE_BUTTON)
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.SYNC_ANDROID_PROMOS_WITH_TITLE)) {
-            // For promo experiments, we want to have mSignInPreference and
-            // PREF_ACCOUNT_AND_GOOGLE_SERVICES_SECTION visible even if the personalized promo is
-            // shown, so skip setting the visibility.
-            return;
-        }
-        // Remove "Account" section header if the personalized sign-in promo is shown.
-        boolean isShowingPersonalizedSigninPromo =
-                mSyncPromoPreference.getState() == State.PERSONALIZED_SIGNIN_PROMO;
-        findPreference(PREF_ACCOUNT_AND_GOOGLE_SERVICES_SECTION)
-                .setVisible(!isShowingPersonalizedSigninPromo);
-        mSignInPreference.setIsShowingPersonalizedSigninPromo(isShowingPersonalizedSigninPromo);
-    }
-
     // TemplateUrlService.LoadListener implementation.
     @Override
     public void onTemplateUrlServiceLoaded() {
-        TemplateUrlServiceFactory.get().unregisterLoadListener(this);
+        TemplateUrlServiceFactory.getForProfile(mProfile).unregisterLoadListener(this);
         updateSearchEnginePreference();
     }
 
@@ -554,11 +563,12 @@ public class MainSettings extends PreferenceFragmentCompat
             @Override
             public boolean isPreferenceControlledByPolicy(Preference preference) {
                 if (PREF_SEARCH_ENGINE.equals(preference.getKey())) {
-                    return TemplateUrlServiceFactory.get().isDefaultSearchManaged();
+                    return TemplateUrlServiceFactory.getForProfile(mProfile)
+                            .isDefaultSearchManaged();
                 }
                 if (usesUnifiedPasswordManagerUI() && PREF_PASSWORDS.equals(preference.getKey())) {
-                    return UserPrefs.get(Profile.getLastUsedRegularProfile())
-                            .isManagedPreference(Pref.CREDENTIALS_ENABLE_SERVICE);
+                    return UserPrefs.get(mProfile).isManagedPreference(
+                            Pref.CREDENTIALS_ENABLE_SERVICE);
                 }
                 return false;
             }
@@ -566,7 +576,8 @@ public class MainSettings extends PreferenceFragmentCompat
             @Override
             public boolean isPreferenceClickDisabledByPolicy(Preference preference) {
                 if (PREF_SEARCH_ENGINE.equals(preference.getKey())) {
-                    return TemplateUrlServiceFactory.get().isDefaultSearchManaged();
+                    return TemplateUrlServiceFactory.getForProfile(mProfile)
+                            .isDefaultSearchManaged();
                 }
                 if (usesUnifiedPasswordManagerUI() && PREF_PASSWORDS.equals(preference.getKey())) {
                     return false;

@@ -4,8 +4,10 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_code_cache.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/renderer/bindings/core/v8/module_record.h"
@@ -43,7 +45,7 @@ uint32_t CacheTag(CacheTagKind kind, const String& encoding) {
   // later load the script from the cache and interpret it with a different
   // encoding, the cached data is not valid for that encoding.
   return (v8_cache_data_version | kind) +
-         (encoding.IsNull() ? 0 : StringHash::GetHash(encoding));
+         (encoding.IsNull() ? 0 : WTF::GetHash(encoding));
 }
 
 // Check previously stored timestamp.
@@ -107,7 +109,8 @@ V8CodeCache::GetCompileOptions(mojom::blink::V8CacheOptions cache_options,
                                const ClassicScript& classic_script) {
   return GetCompileOptions(cache_options, classic_script.CacheHandler(),
                            classic_script.SourceText().length(),
-                           classic_script.SourceLocationType());
+                           classic_script.SourceLocationType(),
+                           classic_script.SourceUrl());
 }
 
 std::tuple<v8::ScriptCompiler::CompileOptions,
@@ -116,9 +119,29 @@ std::tuple<v8::ScriptCompiler::CompileOptions,
 V8CodeCache::GetCompileOptions(mojom::blink::V8CacheOptions cache_options,
                                const CachedMetadataHandler* cache_handler,
                                size_t source_text_length,
-                               ScriptSourceLocationType source_location_type) {
+                               ScriptSourceLocationType source_location_type,
+                               const KURL& url) {
   static const int kMinimalCodeLength = 1024;
   v8::ScriptCompiler::NoCacheReason no_cache_reason;
+
+  auto no_code_cache_compile_options = v8::ScriptCompiler::kNoCompileOptions;
+
+  // Call FeatureList::IsEnabled only once.
+  static bool compile_hints_enabled =
+      base::FeatureList::IsEnabled(features::kProduceCompileHints);
+
+  if (compile_hints_enabled && url.ProtocolIsInHTTPFamily()) {
+    // If we end up compiling the script without forced eager compilation, we'll
+    // also produce compile hints. This is orthogonal to various cache
+    // behaviors: if we don't want to create a code cache for some reason
+    // (e.g., script too small, or not hot enough) we still want to produce
+    // compile hints.
+
+    // When we're forcing eager compilation, we cannot produce compile hints
+    // (we won't gather data about which eagerly compiled functions are
+    // actually used).
+    no_code_cache_compile_options = v8::ScriptCompiler::kProduceCompileHints;
+  }
 
   switch (source_location_type) {
     case ScriptSourceLocationType::kInline:
@@ -139,21 +162,21 @@ V8CodeCache::GetCompileOptions(mojom::blink::V8CacheOptions cache_options,
   }
 
   if (!cache_handler) {
-    return std::make_tuple(v8::ScriptCompiler::kNoCompileOptions,
+    return std::make_tuple(no_code_cache_compile_options,
                            ProduceCacheOptions::kNoProduceCache,
                            no_cache_reason);
   }
 
   if (cache_options == mojom::blink::V8CacheOptions::kNone) {
     no_cache_reason = v8::ScriptCompiler::kNoCacheBecauseCachingDisabled;
-    return std::make_tuple(v8::ScriptCompiler::kNoCompileOptions,
+    return std::make_tuple(no_code_cache_compile_options,
                            ProduceCacheOptions::kNoProduceCache,
                            no_cache_reason);
   }
 
   if (source_text_length < kMinimalCodeLength) {
     no_cache_reason = v8::ScriptCompiler::kNoCacheBecauseScriptTooSmall;
-    return std::make_tuple(v8::ScriptCompiler::kNoCompileOptions,
+    return std::make_tuple(no_code_cache_compile_options,
                            ProduceCacheOptions::kNoProduceCache,
                            no_cache_reason);
   }
@@ -173,18 +196,16 @@ V8CodeCache::GetCompileOptions(mojom::blink::V8CacheOptions cache_options,
     case mojom::blink::V8CacheOptions::kDefault:
     case mojom::blink::V8CacheOptions::kCode:
       if (!IsResourceHotForCaching(cache_handler)) {
-        return std::make_tuple(v8::ScriptCompiler::kNoCompileOptions,
+        return std::make_tuple(no_code_cache_compile_options,
                                ProduceCacheOptions::kSetTimeStamp,
                                v8::ScriptCompiler::kNoCacheBecauseCacheTooCold);
       }
       return std::make_tuple(
-          v8::ScriptCompiler::kNoCompileOptions,
-          ProduceCacheOptions::kProduceCodeCache,
+          no_code_cache_compile_options, ProduceCacheOptions::kProduceCodeCache,
           v8::ScriptCompiler::kNoCacheBecauseDeferredProduceCodeCache);
     case mojom::blink::V8CacheOptions::kCodeWithoutHeatCheck:
       return std::make_tuple(
-          v8::ScriptCompiler::kNoCompileOptions,
-          ProduceCacheOptions::kProduceCodeCache,
+          no_code_cache_compile_options, ProduceCacheOptions::kProduceCodeCache,
           v8::ScriptCompiler::kNoCacheBecauseDeferredProduceCodeCache);
     case mojom::blink::V8CacheOptions::kFullCodeWithoutHeatCheck:
       return std::make_tuple(
@@ -201,7 +222,7 @@ V8CodeCache::GetCompileOptions(mojom::blink::V8CacheOptions cache_options,
   // All switch branches should return and we should never get here.
   // But some compilers aren't sure, hence this default.
   NOTREACHED();
-  return std::make_tuple(v8::ScriptCompiler::kNoCompileOptions,
+  return std::make_tuple(no_code_cache_compile_options,
                          ProduceCacheOptions::kNoProduceCache,
                          v8::ScriptCompiler::kNoCacheNoReason);
 }
@@ -234,6 +255,7 @@ static void ProduceCacheInternal(
       TRACE_EVENT_BEGIN1(kTraceEventCategoryGroup, trace_name, "fileName",
                          source_url.GetString().Utf8());
 
+      base::ElapsedTimer timer;
       std::unique_ptr<v8::ScriptCompiler::CachedData> cached_data(
           v8::ScriptCompiler::CreateCodeCache(unbound_script));
       if (cached_data) {
@@ -253,6 +275,7 @@ static void ProduceCacheInternal(
         cache_handler->SetCachedMetadata(
             code_cache_host, V8CodeCache::TagForCodeCache(cache_handler), data,
             length);
+        base::UmaHistogramTimes("V8.ProduceCodeCache", timer.Elapsed());
       }
 
       TRACE_EVENT_END1(kTraceEventCategoryGroup, trace_name, "data",

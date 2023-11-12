@@ -2,9 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import contextlib
 import json
 import optparse
 import unittest
+from unittest import mock
 
 from blinkpy.common.net.results_fetcher import Build
 from blinkpy.common.net.web_test_results import WebTestResults
@@ -57,15 +59,6 @@ class BaseTestCase(unittest.TestCase):
                 'port_name': 'test-linux-trusty',
                 'specifiers': ['Trusty', 'Release']
             },
-            'MOCK Trusty Disable LayoutNG': {
-                'port_name': 'test-linux-trusty',
-                'specifiers': ['Trusty', 'Release'],
-                'steps': {
-                    'blink_web_tests (with patch)': {
-                        'flag_specific': 'disable-layout-ng',
-                    },
-                },
-            },
             'MOCK Trusty Multiple Steps': {
                 'port_name': 'test-linux-trusty',
                 'specifiers': ['Trusty', 'Release'],
@@ -73,9 +66,6 @@ class BaseTestCase(unittest.TestCase):
                     'blink_web_tests (with patch)': {},
                     'not_site_per_process_blink_web_tests (with patch)': {
                         'flag_specific': 'disable-site-isolation-trials',
-                    },
-                    'layout_ng_disabled_blink_web_tests (with patch)': {
-                        'flag_specific': 'disable-layout-ng',
                     },
                 },
             },
@@ -130,14 +120,6 @@ class BaseTestCase(unittest.TestCase):
             'FlagSpecificConfig',
             json.dumps([
                 {
-                    'name':
-                    'disable-layout-ng',
-                    'args': [
-                        '--disable-blink-features=LayoutNG,'
-                        'LayoutNGBlockFragmentation'
-                    ],
-                },
-                {
                     'name': 'disable-site-isolation-trials',
                     'args': ['--disable-site-isolation-trials'],
                 },
@@ -160,10 +142,28 @@ class BaseTestCase(unittest.TestCase):
                 return test_port
             return self.original_port_factory_get(port_name, options, **kwargs)
 
-        self.tool.port_factory.get = get_test_port
+        self._mocks = contextlib.ExitStack()
+        self._mocks.enter_context(
+            mock.patch('blinkpy.common.message_pool.get',
+                       return_value=self._pool_mock()))
+        self._mocks.enter_context(
+            mock.patch.object(self.tool.port_factory, 'get', get_test_port))
+
+    def _pool_mock(self):
+        message_pool = mock.Mock()
+        message_pool.run = self._pool_run
+        message_pool = contextlib.nullcontext(message_pool)
+        return message_pool
+
+    def _pool_run(self, commands):
+        if commands:
+            self.tool.executive.run_in_parallel([
+                (command, self.tool.git().checkout_root)
+                for _, command in commands
+            ])
 
     def tearDown(self):
-        self.tool.port_factory.get = self.original_port_factory_get
+        self._mocks.close()
 
     def _expand(self, path):
         if self.tool.filesystem.isabs(path):
@@ -252,28 +252,19 @@ class TestAbstractParallelRebaselineCommand(BaseTestCase):
     def test_builders_to_fetch_from_flag_specific(self):
         build_steps_to_fetch = self.command.build_steps_to_fetch_from([
             ('MOCK Trusty', 'blink_web_tests (with patch)'),
-            # On this dedicated flag-specific builder, there's no need to
-            # include the flag-specific option in the step name.
-            ('MOCK Trusty Disable LayoutNG', 'blink_web_tests (with patch)'),
         ])
         # Ports are the same, but the fallback paths differ.
         self.assertEqual(
             build_steps_to_fetch, {
                 ('MOCK Trusty', 'blink_web_tests (with patch)'),
-                ('MOCK Trusty Disable LayoutNG',
-                 'blink_web_tests (with patch)'),
             })
 
         build_steps_to_fetch = self.command.build_steps_to_fetch_from([
-            ('MOCK Trusty Disable LayoutNG', 'blink_web_tests (with patch)'),
             ('MOCK Trusty Multiple Steps', 'blink_web_tests (with patch)'),
             ('MOCK Trusty Multiple Steps',
              'not_site_per_process_blink_web_tests (with patch)'),
-            ('MOCK Trusty Multiple Steps',
-             'layout_ng_disabled_blink_web_tests (with patch)'),
         ])
-        # 'layout_ng_disabled_blink_web_tests' should not be rebaselined twice.
-        self.assertEqual(len(build_steps_to_fetch), 3)
+        self.assertEqual(len(build_steps_to_fetch), 2)
         self.assertIn(
             ('MOCK Trusty Multiple Steps', 'blink_web_tests (with patch)'),
             build_steps_to_fetch)
@@ -418,14 +409,14 @@ class TestRebaseline(BaseTestCase):
                               '--step-name',
                               'blink_web_tests (with patch)',
                           ]],
-                          [
+                          [[
                               'python',
                               'echo',
                               'optimize-baselines',
                               '--no-manifest-update',
                               '--verbose',
                               'userscripts/first-test.html',
-                          ]])
+                          ]]])
 
     def test_rebaseline_debug(self):
         test_baseline_set = TestBaselineSet(self.tool)
@@ -463,14 +454,14 @@ class TestRebaseline(BaseTestCase):
                               '--step-name',
                               'blink_web_tests (with patch)',
                           ]],
-                          [
+                          [[
                               'python',
                               'echo',
                               'optimize-baselines',
                               '--no-manifest-update',
                               '--verbose',
                               'userscripts/first-test.html',
-                          ]])
+                          ]]])
 
     def test_no_optimize(self):
         test_baseline_set = TestBaselineSet(self.tool)
@@ -588,16 +579,19 @@ class TestRebaseline(BaseTestCase):
                               '--step-name',
                               'blink_web_tests (with patch)',
                           ]],
-                          [
+                          [[
                               'python',
                               'echo',
                               'optimize-baselines',
                               '--no-manifest-update',
                               '--verbose',
                               'userscripts/first-test.html',
-                          ]])
+                          ]]])
 
 
+@unittest.skip('Disabled because this does not reflect the behavior of '
+               "'rebaseline-test-internal' now. Reenable after implementing "
+               'crbug.com/1149035.')
 class TestRebaselineUpdatesExpectationsFiles(BaseTestCase):
     """Tests for the logic related to updating the test expectations file."""
 

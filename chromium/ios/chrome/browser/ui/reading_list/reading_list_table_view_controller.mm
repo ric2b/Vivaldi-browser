@@ -40,9 +40,18 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/panel/panel_constants.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+// Vivaldi
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 namespace {
 // Types of ListItems used by the reading list UI.
@@ -206,6 +215,11 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 
   self.title = l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_READING_LIST);
 
+  if (IsVivaldiRunning()) {
+    self.navigationItem.largeTitleDisplayMode =
+      UINavigationItemLargeTitleDisplayModeNever;
+    [self setupHeader];
+  } // End Vivaldi
   self.tableView.accessibilityIdentifier =
       [[self class] accessibilityIdentifier];
   self.tableView.estimatedRowHeight = 56;
@@ -1053,6 +1067,16 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
       self.numberOfBatchOperationInProgress == 0 && !self.editing) {
     [self reloadData];
   }
+}
+
+#pragma mark Vivaldi
+
+- (void)setupHeader {
+  UIView* tableHeaderView =
+      [[UIView alloc] initWithFrame:
+       CGRectMake(0, 0, self.tableView.bounds.size.width,
+                  panel_top_view_height)];
+  self.tableView.tableHeaderView = tableHeaderView;
 }
 
 @end

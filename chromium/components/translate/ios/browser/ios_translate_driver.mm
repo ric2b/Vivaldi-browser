@@ -4,12 +4,11 @@
 
 #include "components/translate/ios/browser/ios_translate_driver.h"
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/translate/core/browser/translate_client.h"
 #include "components/translate/core/browser/translate_manager.h"
@@ -23,6 +22,7 @@
 #include "components/translate/ios/browser/language_detection_model_service.h"
 #import "components/translate/ios/browser/translate_controller.h"
 #include "components/ukm/ios/ukm_url_recorder.h"
+#import "ios/web/public/annotations/annotations_text_manager.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/navigation/navigation_context.h"
 #include "ios/web/public/navigation/navigation_item.h"
@@ -183,6 +183,11 @@ void IOSTranslateDriver::PrepareToTranslatePage(
   timeout_timer_.Start(FROM_HERE, kTimeoutDelay,
                        BindOnce(&IOSTranslateDriver::OnTranslationTimeout,
                                 weak_ptr_factory_.GetWeakPtr(), page_seq_no));
+  // Remove annotations before replacing translated data.
+  auto* manager = web::AnnotationsTextManager::FromWebState(web_state_);
+  if (manager) {
+    manager->RemoveDecorations();
+  }
 }
 
 void IOSTranslateDriver::TranslatePage(int page_seq_no,

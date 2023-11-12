@@ -11,8 +11,6 @@
 #include <vector>
 
 #include "base/base_paths_win.h"
-#include "base/check.h"
-#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
@@ -20,11 +18,11 @@
 #include "base/process/launch.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/string_util_impl_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_localalloc.h"
-#include "chrome/updater/constants.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/win_util.h"
@@ -81,8 +79,9 @@ HRESULT LoadLegacyProcessLauncherFormat(const std::wstring& app_id,
     HRESULT hr = HRESULT_FROM_WIN32(
         app_key.Open(HKEY_LOCAL_MACHINE, GetAppClientsKey(app_id).c_str(),
                      Wow6432(KEY_QUERY_VALUE)));
-    if (FAILED(hr))
+    if (FAILED(hr)) {
       return hr;
+    }
 
     app_key.ReadValue(kRegValuePV, &pv);
     app_key.ReadValue(kRegValueName, &name);
@@ -103,48 +102,6 @@ HRESULT LoadLegacyProcessLauncherFormat(const std::wstring& app_id,
          "AppCommand format: "
       << app_id << ": " << pv << ": " << name << ": " << command_id;
   return E_INVALIDARG;
-}
-
-// Formats a single `parameter` and returns the result. Any placeholder `%N` in
-// `parameter` is replaced with substitutions[N - 1]. Any literal `%` needs to
-// be escaped with a `%`.
-//
-// Returns `absl::nullopt` if:
-// * a placeholder %N is encountered where N > substitutions.size().
-// * a literal `%` is not escaped with a `%`.
-//
-// See examples in the WinUtil*FormatAppCommandLine unit tests.
-absl::optional<std::wstring> FormatParameter(
-    const std::vector<std::wstring>& substitutions,
-    const std::wstring& parameter) {
-  DCHECK_LE(substitutions.size(), 9U);
-
-  std::wstring formatted_parameter;
-  for (auto i = parameter.begin(); i != parameter.end(); ++i) {
-    if (*i != '%') {
-      formatted_parameter.push_back(*i);
-      continue;
-    }
-
-    if (++i == parameter.end())
-      return absl::nullopt;
-
-    if (*i == '%') {
-      formatted_parameter.push_back('%');
-      continue;
-    }
-
-    if (*i < '1' || *i > '9')
-      return absl::nullopt;
-
-    const size_t index = *i - '1';
-    if (index >= substitutions.size())
-      return absl::nullopt;
-
-    formatted_parameter.append(substitutions[index]);
-  }
-
-  return formatted_parameter;
 }
 
 bool IsParentOf(int key, const base::FilePath& child) {
@@ -168,6 +125,7 @@ AppCommandRunner& AppCommandRunner::operator=(const AppCommandRunner&) =
     default;
 AppCommandRunner::~AppCommandRunner() = default;
 
+// static
 HResultOr<AppCommandRunner> AppCommandRunner::LoadAppCommand(
     UpdaterScope scope,
     const std::wstring& app_id,
@@ -178,20 +136,23 @@ HResultOr<AppCommandRunner> AppCommandRunner::LoadAppCommand(
     if (IsSystemInstall(scope)) {
       hr = LoadLegacyProcessLauncherFormat(app_id, command_id, command_format);
     }
-    if (FAILED(hr))
+    if (FAILED(hr)) {
       return base::unexpected(hr);
+    }
   }
 
   AppCommandRunner app_command_runner;
   hr = GetAppCommandFormatComponents(scope, command_format,
                                      app_command_runner.executable_,
                                      app_command_runner.parameters_);
-  if (FAILED(hr))
+  if (FAILED(hr)) {
     return base::unexpected(hr);
+  }
 
   return app_command_runner;
 }
 
+// static
 std::vector<AppCommandRunner>
 AppCommandRunner::LoadAutoRunOnOsUpgradeAppCommands(
     UpdaterScope scope,
@@ -206,8 +167,9 @@ AppCommandRunner::LoadAutoRunOnOsUpgradeAppCommands(
     const base::win::RegKey command_key(
         root, base::StrCat({commands_key_name, it.Name()}).c_str(),
         Wow6432(KEY_QUERY_VALUE));
-    if (!command_key.Valid())
+    if (!command_key.Valid()) {
       continue;
+    }
 
     DWORD auto_run = 0;
     if (command_key.ReadValueDW(kRegValueAutoRunOnOSUpgrade, &auto_run) !=
@@ -218,8 +180,9 @@ AppCommandRunner::LoadAutoRunOnOsUpgradeAppCommands(
 
     HResultOr<AppCommandRunner> runner =
         LoadAppCommand(scope, app_id, it.Name());
-    if (runner.has_value())
+    if (runner.has_value()) {
       app_command_runners.push_back(*runner);
+    }
   }
 
   return app_command_runners;
@@ -234,6 +197,7 @@ HRESULT AppCommandRunner::Run(const std::vector<std::wstring>& substitutions,
   return ExecuteAppCommand(executable_, parameters_, substitutions, process);
 }
 
+// static
 HRESULT AppCommandRunner::StartProcess(const base::FilePath& executable,
                                        const std::wstring& parameters,
                                        base::Process& process) {
@@ -257,7 +221,8 @@ HRESULT AppCommandRunner::StartProcess(const base::FilePath& executable,
 
   process = base::LaunchProcess(
       base::StrCat(
-          {QuoteForCommandLineToArgvW(executable.value()), L" ", parameters}),
+          {base::CommandLine::QuoteForCommandLineToArgvW(executable.value()),
+           L" ", parameters}),
       options);
   if (!process.IsValid()) {
     const HRESULT hr = HRESULTFromLastError();
@@ -269,6 +234,7 @@ HRESULT AppCommandRunner::StartProcess(const base::FilePath& executable,
   return S_OK;
 }
 
+// static
 HRESULT AppCommandRunner::GetAppCommandFormatComponents(
     UpdaterScope scope,
     std::wstring command_format,
@@ -293,35 +259,55 @@ HRESULT AppCommandRunner::GetAppCommandFormatComponents(
 
   executable = exe;
   parameters.clear();
-  for (int i = 1; i < num_args; ++i)
+  for (int i = 1; i < num_args; ++i) {
     parameters.push_back(argv.get()[i]);
+  }
 
   return S_OK;
 }
 
+// static
+absl::optional<std::wstring> AppCommandRunner::FormatParameter(
+    const std::wstring& parameter,
+    const std::vector<std::wstring>& substitutions) {
+  return base::internal::DoReplaceStringPlaceholders(
+      /*format_string*/ parameter, /*subst*/ substitutions,
+      /*placeholder_prefix*/ L'%',
+      /*should_escape_multiple_placeholder_prefixes*/ false,
+      /*is_strict_mode*/ true, /*offsets*/ nullptr);
+}
+
+// static
 absl::optional<std::wstring> AppCommandRunner::FormatAppCommandLine(
     const std::vector<std::wstring>& parameters,
     const std::vector<std::wstring>& substitutions) {
   std::wstring formatted_command_line;
   for (size_t i = 0; i < parameters.size(); ++i) {
     absl::optional<std::wstring> formatted_parameter =
-        FormatParameter(substitutions, parameters[i]);
+        FormatParameter(parameters[i], substitutions);
     if (!formatted_parameter) {
       VLOG(1) << __func__ << " FormatParameter failed: " << parameters[i]
               << ": " << substitutions.size();
       return absl::nullopt;
     }
 
+    constexpr wchar_t kQuotableCharacters[] = L" \t\\\"";
     formatted_command_line.append(
-        QuoteForCommandLineToArgvW(*formatted_parameter));
+        formatted_parameter->find_first_of(kQuotableCharacters) ==
+                std::wstring::npos
+            ? *formatted_parameter  // no quoting needed, use as-is.
+            : base::CommandLine::QuoteForCommandLineToArgvW(
+                  *formatted_parameter));
 
-    if (i + 1 < parameters.size())
+    if (i + 1 < parameters.size()) {
       formatted_command_line.push_back(L' ');
+    }
   }
 
   return formatted_command_line;
 }
 
+// static
 HRESULT AppCommandRunner::ExecuteAppCommand(
     const base::FilePath& executable,
     const std::vector<std::wstring>& parameters,

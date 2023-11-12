@@ -19,6 +19,16 @@ class IBANSaveStrikeDatabase;
 // for local saves.
 class IBANSaveManager {
  public:
+  // An observer class used by browsertests that gets notified whenever
+  // particular actions occur.
+  class ObserverForTest {
+   public:
+    virtual ~ObserverForTest() = default;
+    virtual void OnOfferLocalSave() {}
+    virtual void OnAcceptSaveIbanComplete() {}
+    virtual void OnDeclineSaveIbanComplete() {}
+  };
+
   explicit IBANSaveManager(AutofillClient* client);
   IBANSaveManager(const IBANSaveManager&) = delete;
   IBANSaveManager& operator=(const IBANSaveManager&) = delete;
@@ -38,7 +48,19 @@ class IBANSaveManager {
     OnUserDidDecideOnLocalSave(user_decision, nickname);
   }
 
+  // Returns the IBANSaveStrikeDatabase for `client_`.
+  IBANSaveStrikeDatabase* GetIBANSaveStrikeDatabaseForTesting() {
+    return GetIBANSaveStrikeDatabase();
+  }
+
+  void SetEventObserverForTesting(ObserverForTest* observer) {
+    observer_for_testing_ = observer;
+  }
+
  private:
+  // Returns the IBANSaveStrikeDatabase for `client_`;
+  IBANSaveStrikeDatabase* GetIBANSaveStrikeDatabase();
+
   // Called once the user makes a decision with respect to the local IBAN
   // offer-to-save-prompt. `nickname` is the nickname for the IBAN, which should
   // only be provided in the kAccepted case if the user entered a nickname.
@@ -46,21 +68,18 @@ class IBANSaveManager {
       AutofillClient::SaveIBANOfferUserDecision user_decision,
       const absl::optional<std::u16string>& nickname = absl::nullopt);
 
-  // Returns the IBANSaveStrikeDatabase for `client_`.
-  IBANSaveStrikeDatabase* GetIBANSaveStrikeDatabase();
-
   // The IBAN to be saved if local IBAN save is accepted. It will be set if
   // imported IBAN is not empty.
   IBAN iban_save_candidate_;
-
-  // True if the offer-to-save bubble should pop-up, false if not.
-  bool show_save_prompt_ = false;
 
   // The associated autofill client. Weak reference.
   const raw_ptr<AutofillClient> client_;
 
   // StrikeDatabase used to check whether to offer to save the IBAN or not.
   std::unique_ptr<IBANSaveStrikeDatabase> iban_save_strike_database_;
+
+  // May be null.
+  raw_ptr<ObserverForTest> observer_for_testing_ = nullptr;
 
   base::WeakPtrFactory<IBANSaveManager> weak_ptr_factory_{this};
 };

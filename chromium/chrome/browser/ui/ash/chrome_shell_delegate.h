@@ -9,7 +9,7 @@
 #include <string>
 
 #include "ash/shell_delegate.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "url/gurl.h"
 
 class ChromeShellDelegate : public ash::ShellDelegate {
@@ -31,9 +31,11 @@ class ChromeShellDelegate : public ash::ShellDelegate {
   std::unique_ptr<ash::BackGestureContextualNudgeDelegate>
   CreateBackGestureContextualNudgeDelegate(
       ash::BackGestureContextualNudgeController* controller) override;
+  std::unique_ptr<ash::MediaNotificationProvider>
+  CreateMediaNotificationProvider() override;
   std::unique_ptr<ash::NearbyShareDelegate> CreateNearbyShareDelegate(
       ash::NearbyShareController* controller) const override;
-  std::unique_ptr<ash::DesksTemplatesDelegate> CreateDesksTemplatesDelegate()
+  std::unique_ptr<ash::SavedDeskDelegate> CreateSavedDeskDelegate()
       const override;
   std::unique_ptr<ash::SystemSoundsDelegate> CreateSystemSoundsDelegate()
       const override;
@@ -63,7 +65,8 @@ class ChromeShellDelegate : public ash::ShellDelegate {
   int GetUiDevToolsPort() const override;
   bool IsLoggingRedirectDisabled() const override;
   base::FilePath GetPrimaryUserDownloadsFolder() const override;
-  void OpenFeedbackPageForPersistentDesksBar() override;
+  void OpenFeedbackDialog(ShellDelegate::FeedbackSource source,
+                          const std::string& description_template) override;
   static void SetDisableLoggingRedirectForTesting(bool value);
   static void ResetDisableLoggingRedirectForTesting();
   const GURL& GetLastCommittedURLForWindowIfAny(aura::Window* window) override;

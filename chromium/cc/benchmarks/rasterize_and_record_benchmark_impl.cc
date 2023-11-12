@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/memory/raw_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/timer/lap_timer.h"
 #include "base/values.h"
 #include "cc/layers/layer_impl.h"
@@ -159,7 +160,7 @@ void RasterizeAndRecordBenchmarkImpl::DidCompleteCommit(
     layer->RunMicroBenchmark(this);
   }
 
-  base::Value result(base::Value::Type::DICTIONARY);
+  base::Value result(base::Value::Type::DICT);
   result.SetDoubleKey("rasterize_time_ms",
                       rasterize_results_.total_best_time.InMillisecondsF());
   result.SetIntKey("pixels_rasterized", rasterize_results_.pixels_rasterized);
@@ -175,7 +176,7 @@ void RasterizeAndRecordBenchmarkImpl::DidCompleteCommit(
   result.SetIntKey("total_picture_layers_off_screen",
                    rasterize_results_.total_picture_layers_off_screen);
 
-  base::Value lcd_text_pixels(base::Value::Type::DICTIONARY);
+  base::Value lcd_text_pixels(base::Value::Type::DICT);
   for (size_t i = 0; i < kLCDTextDisallowedReasonCount; i++) {
     lcd_text_pixels.SetIntKey(
         LCDTextDisallowedReasonToString(

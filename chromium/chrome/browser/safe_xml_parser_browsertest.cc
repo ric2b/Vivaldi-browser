@@ -4,8 +4,8 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_piece.h"
 #include "base/token.h"
@@ -42,9 +42,9 @@ class SafeXmlParserTest : public InProcessBrowserTest {
     SCOPED_TRACE(xml);
 
     base::RunLoop run_loop;
-    std::unique_ptr<base::Value> expected_value;
+    absl::optional<base::Value> expected_value;
     if (!expected_json.empty()) {
-      expected_value = base::JSONReader::ReadDeprecated(expected_json);
+      expected_value = base::JSONReader::Read(expected_json);
       DCHECK(expected_value) << "Bad test, incorrect JSON: " << expected_json;
     }
 
@@ -59,7 +59,7 @@ class SafeXmlParserTest : public InProcessBrowserTest {
 
  private:
   void XmlParsingDone(base::OnceClosure quit_loop_closure,
-                      std::unique_ptr<base::Value> expected_value,
+                      absl::optional<base::Value> expected_value,
                       data_decoder::DataDecoder::ValueOrError result) {
     base::ScopedClosureRunner runner(std::move(quit_loop_closure));
     if (!expected_value) {

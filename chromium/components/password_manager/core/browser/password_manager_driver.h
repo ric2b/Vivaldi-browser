@@ -8,9 +8,10 @@
 #include <map>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/types/strong_alias.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/unique_ids.h"
 #include "ui/accessibility/ax_tree_id.h"
 
@@ -52,6 +53,11 @@ class PasswordManagerDriver
   // Fills forms matching |form_data|.
   virtual void SetPasswordFillData(
       const autofill::PasswordFormFillData& form_data) = 0;
+
+  // Notifies the driver that a password field that has no associated username.
+  // This is used as an instrumentation for DevTools.
+  virtual void PasswordFieldHasNoAssociatedUsername(
+      autofill::FieldRendererId password_element_renderer_id) = 0;
 
   // Informs the driver that there are no saved credentials in the password
   // store for the current page.
@@ -109,6 +115,13 @@ class PasswordManagerDriver
 
   // Tells the driver to clear previewed password and username fields.
   virtual void ClearPreviewedForm() = 0;
+
+  // Updates the autofill availability state of the DOM node with
+  // |generation_element_id|. It is critical for a11y to keep it updated
+  // to make proper announcements.
+  virtual void SetSuggestionAvailability(
+      autofill::FieldRendererId generation_element_id,
+      const autofill::mojom::AutofillState state) = 0;
 
   // Returns the PasswordGenerationFrameHelper associated with this instance.
   virtual PasswordGenerationFrameHelper* GetPasswordGenerationHelper() = 0;

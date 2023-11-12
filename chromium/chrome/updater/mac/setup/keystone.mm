@@ -7,11 +7,11 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
@@ -83,13 +83,7 @@ bool CopyKeystoneBundle(UpdaterScope scope) {
                                      base::FILE_PERMISSION_EXECUTE_BY_GROUP |
                                      base::FILE_PERMISSION_READ_BY_OTHERS |
                                      base::FILE_PERMISSION_EXECUTE_BY_OTHERS;
-    if (!base::SetPosixFilePermissions(
-            GetLibraryFolderPath(scope)->Append(COMPANY_SHORTNAME_STRING),
-            kPermissionsMask) ||
-        !base::SetPosixFilePermissions(*GetBaseInstallDirectory(scope),
-                                       kPermissionsMask) ||
-        !base::SetPosixFilePermissions(*GetVersionedInstallDirectory(scope),
-                                       kPermissionsMask) ||
+    if (!base::SetPosixFilePermissions(dest_path.DirName(), kPermissionsMask) ||
         !base::SetPosixFilePermissions(dest_path, kPermissionsMask)) {
       LOG(ERROR) << "Failed to set permissions to drwxr-xr-x at "
                  << dest_path.value();
@@ -104,6 +98,11 @@ bool CopyKeystoneBundle(UpdaterScope scope) {
                << "' to '" << dest_keystone_bundle_path.value() << "' failed.";
     return false;
   }
+
+  if (!RemoveQuarantineAttributes(dest_keystone_bundle_path)) {
+    VLOG(1) << "Couldn't remove quarantine bits for Keystone.";
+  }
+
   return true;
 }
 

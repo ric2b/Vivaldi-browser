@@ -49,6 +49,15 @@ chromium-metrics-reviews@google.com.
   <variant name="L2tpIpsec" summary="L2TP/IPsec"/>
 </variants>
 
+<variants name="VPNType">
+  <variant name="ARC" summary="Android VPN"/>
+  <variant name="Ikev2" summary="IKEv2"/>
+  <variant name="L2tpIpsec" summary="L2TP/IPsec"/>
+  <variant name="OpenVPN" summary="OpenVPN"/>
+  <variant name="ThirdParty" summary="Chrome VpnProvider App"/>
+  <variant name="WireGuard" summary="WireGuard"/>
+</variants>
+
 <histogram name="Network.Ash.Cellular.Apn.CreateCustomApn.ApnTypes"
     enum="ApnTypes" expires_after="2023-10-18">
   <owner>gordonseto@google.com</owner>
@@ -94,6 +103,71 @@ chromium-metrics-reviews@google.com.
     Records the number of APNs saved for a cellular network every time a
     cellular network successfully connects.
   </summary>
+</histogram>
+
+<histogram name="Network.Ash.Cellular.Apn.CustomApns.{CustomApnState}.Count"
+    units="count" expires_after="2023-10-18">
+  <owner>gordonseto@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <summary>
+    Records the number of {CustomApnState} APNs saved for a cellular network
+    every time a cellular network successfully connects.
+  </summary>
+  <token key="CustomApnState">
+    <variant name="Disabled"/>
+    <variant name="Enabled"/>
+  </token>
+</histogram>
+
+<histogram name="Network.Ash.Cellular.Apn.DisableCustomApn.ApnTypes"
+    enum="ApnTypes" expires_after="2023-10-18">
+  <owner>gordonseto@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <summary>
+    Records the APN types of an APN before modification. This is emitted each
+    time a user disables a custom APN.
+  </summary>
+</histogram>
+
+<histogram name="Network.Ash.Cellular.Apn.DisableCustomApn.Result"
+    enum="BooleanSuccess" expires_after="2023-10-18">
+  <owner>gordonseto@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <summary>Records the result of an attempt to disable a custom APN.</summary>
+</histogram>
+
+<histogram name="Network.Ash.Cellular.Apn.EnableCustomApn.ApnTypes"
+    enum="ApnTypes" expires_after="2023-10-18">
+  <owner>gordonseto@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <summary>
+    Records the APN types of an APN before modification. This is emitted each
+    time a user enable a custom APN.
+  </summary>
+</histogram>
+
+<histogram name="Network.Ash.Cellular.Apn.EnableCustomApn.Result"
+    enum="BooleanSuccess" expires_after="2023-10-18">
+  <owner>gordonseto@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <summary>Records the result of an attempt to enable a custom APN.</summary>
+</histogram>
+
+<histogram name="Network.Ash.Cellular.Apn.ModifyCustomApn.ApnTypes"
+    enum="ApnTypes" expires_after="2023-10-18">
+  <owner>gordonseto@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <summary>
+    Records the APN types of an APN before modification. This is emitted each
+    time a user modifies a custom APN.
+  </summary>
+</histogram>
+
+<histogram name="Network.Ash.Cellular.Apn.ModifyCustomApn.Result"
+    enum="BooleanSuccess" expires_after="2023-10-18">
+  <owner>gordonseto@google.com</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <summary>Records the result of an attempt to modify a custom APN.</summary>
 </histogram>
 
 <histogram name="Network.Ash.Cellular.Apn.RemoveCustomApn.ApnTypes"
@@ -320,7 +394,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.CacheTransparency.CacheNotUsed"
-    enum="CacheTransparencyCacheNotUsedReason" expires_after="2023-05-07">
+    enum="CacheTransparencyCacheNotUsedReason" expires_after="2023-07-09">
   <owner>nidhijaju@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <summary>
@@ -346,7 +420,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.CacheTransparency.MarkedUnusable" units="list index"
-    expires_after="2023-05-07">
+    expires_after="2023-09-10">
+  <obsolete>
+    Removed as of 03/2023, as it is replaced by Network.CacheTransparency2.
+    MarkedUnusable which has a higher range.
+  </obsolete>
   <owner>nidhijaju@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <summary>
@@ -357,7 +435,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.CacheTransparency.MismatchedChecksums"
-    units="list index" expires_after="2023-05-07">
+    units="list index" expires_after="2023-09-10">
+  <obsolete>
+    Removed as of 03/2023, as it is replaced by Network.CacheTransparency2.
+    MismatchedChecksums which has a higher range.
+  </obsolete>
   <owner>nidhijaju@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <summary>
@@ -369,7 +451,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.CacheTransparency.SingleKeyedCacheIsUsed"
-    units="list index" expires_after="2023-05-07">
+    units="list index" expires_after="2023-09-10">
+  <obsolete>
+    Removed as of 03/2023, as it is replaced by Network.CacheTransparency2.
+    SingleKeyedCacheIsUsed which has a higher range.
+  </obsolete>
   <owner>nidhijaju@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <summary>
@@ -382,7 +468,58 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.CacheTransparency.URLMatched" units="list index"
-    expires_after="2023-05-07">
+    expires_after="2023-09-10">
+  <obsolete>
+    Removed as of 03/2023, as it is replaced by
+    Network.CacheTransparency2.URLMatched which has a higher range.
+  </obsolete>
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>ricea@chromium.org</owner>
+  <summary>
+    Records whether a requested resource's URL matched with any of the URLs in
+    the pervasive payloads list when a URL request is made. The list index is
+    the index of the URL in the pervasive payloads list.
+  </summary>
+</histogram>
+
+<histogram name="Network.CacheTransparency2.MarkedUnusable" units="list index"
+    expires_after="2023-11-01">
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>ricea@chromium.org</owner>
+  <summary>
+    Records whether a URL in the pervasive payloads list is marked as
+    &quot;unusable&quot; when the cached response is read. The list index is the
+    index of the URL in the pervasive payloads list.
+  </summary>
+</histogram>
+
+<histogram name="Network.CacheTransparency2.MismatchedChecksums"
+    units="list index" expires_after="2023-11-01">
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>ricea@chromium.org</owner>
+  <summary>
+    Records whether a URL in the pervasive payloads list has a different
+    checksum than what is expected when the response checksums are compared in
+    HttpCache::Transaction. The list index is the index of the URL in the
+    pervasive payloads list.
+  </summary>
+</histogram>
+
+<histogram name="Network.CacheTransparency2.SingleKeyedCacheIsUsed"
+    units="list index" expires_after="2023-11-01">
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>ricea@chromium.org</owner>
+  <summary>
+    Records whether the single-keyed cache is used for a URL in the pervasive
+    payloads list (not just when a cache entry is hit because there could be an
+    &quot;unusable&quot; flag set). This is recorded when the response checksum
+    matches the expected checksum in HttpCache::Transaction. The list index is
+    the index of the URL in the pervasive payloads list.
+  </summary>
+</histogram>
+
+<histogram name="Network.CacheTransparency2.URLMatched" units="list index"
+    expires_after="2023-11-01">
   <owner>nidhijaju@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <summary>
@@ -419,7 +556,7 @@ chromium-metrics-reviews@google.com.
   <owner>hsuregan@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <summary>
-    Chrome OS cellular network metric that tracks the Attach APN Toggle value
+    ChromeOS cellular network metric that tracks the Attach APN Toggle value
     when the user explicitly clicks the Save button in the 'Other' APN settings,
     with the intent of setting the cellular network APN properties.
   </summary>
@@ -535,7 +672,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.ESim.Policy.BlockNonManagedCellularBehavior"
-    enum="NetworkBlockNonManagedCellularBehavior" expires_after="2023-06-04">
+    enum="NetworkBlockNonManagedCellularBehavior" expires_after="2023-08-08">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>jiajunz@google.com</owner>
@@ -594,7 +731,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.ESim.Policy.EuiccStatusUploadResult"
-    enum="BooleanSuccess" expires_after="2023-06-04">
+    enum="BooleanSuccess" expires_after="2023-08-08">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>jiajunz@google.com</owner>
@@ -631,7 +768,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.ESim.Policy.ServiceAtLogin.Count"
-    units="units" expires_after="2023-06-04">
+    units="units" expires_after="2023-08-08">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>jiajunz@google.com</owner>
@@ -642,7 +779,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.ESim.Policy.StatusAtLogin"
-    enum="NetworkESimPolicyStatusAtLogin" expires_after="2023-06-04">
+    enum="NetworkESimPolicyStatusAtLogin" expires_after="2023-08-08">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>jiajunz@google.com</owner>
@@ -788,7 +925,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.ESim.StatusAtLogin"
-    enum="NetworkCellularESimProfileStatus" expires_after="2023-04-16">
+    enum="NetworkCellularESimProfileStatus" expires_after="2023-06-18">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>hsuregan@chromium.org</owner>
@@ -894,7 +1031,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.PrepareCellularConnection.OperationResult"
-    enum="NetworkCellularPrepareForConnectionResult" expires_after="2023-03-26">
+    enum="NetworkCellularPrepareForConnectionResult" expires_after="2023-07-30">
   <owner>azeemarshad@chromium.org</owner>
   <owner>khorimoto@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
@@ -908,7 +1045,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.PSim.OtaActivationResult"
-    enum="NetworkCellularPSimActivationResult" expires_after="2023-04-23">
+    enum="NetworkCellularPSimActivationResult" expires_after="2023-07-09">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>hsuregan@chromium.org</owner>
@@ -944,7 +1081,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.PSim.StatusAtLogin"
-    enum="NetworkCellularPSimActivationState" expires_after="2023-04-23">
+    enum="NetworkCellularPSimActivationState" expires_after="2023-06-25">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>hsuregan@chromium.org</owner>
@@ -955,7 +1092,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Cellular.PSim.Usage.Count" enum="NetworkCellularUsage"
-    expires_after="2023-04-16">
+    expires_after="2023-06-18">
   <owner>azeemarshad@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <summary>
@@ -1026,8 +1163,8 @@ chromium-metrics-reviews@google.com.
     lock or change PIN operations on their SIM while this policy is turned on.
   </summary>
   <token key="SimPinOperation">
-    <variant name="ChangeSuccess"/>
-    <variant name="RequireLockSuccess"/>
+    <variant name="ChangePin"/>
+    <variant name="RequirePin"/>
   </token>
 </histogram>
 
@@ -1144,11 +1281,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.DnsProxy.DnsOverHttpsMode"
-    enum="DnsProxy.DnsOverHttpsMode" expires_after="2023-05-07">
+    enum="DnsProxy.DnsOverHttpsMode" expires_after="2023-07-09">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the DOH mode setting
+    Diagnostic metric for ChromeOS DNS proxy that records the DOH mode setting
     whenever it is read from or changed in Chrome and propagated to shill.
   </summary>
 </histogram>
@@ -1158,20 +1295,18 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records an value
-    corresponding to the HTTP status returned when a DNS-over-HTTPS request
-    returns in error.
+    Diagnostic metric for ChromeOS DNS proxy that records an value corresponding
+    to the HTTP status returned when a DNS-over-HTTPS request returns in error.
   </summary>
 </histogram>
 
 <histogram name="Network.DnsProxy.NameserverTypes"
-    enum="DnsProxy.NameserverType" expires_after="2023-05-07">
+    enum="DnsProxy.NameserverType" expires_after="2023-07-09">
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the type of plain
-    text nameservers used whenever they are obtained from shill for a given
-    network.
+    Diagnostic metric for ChromeOS DNS proxy that records the type of plain text
+    nameservers used whenever they are obtained from shill for a given network.
   </summary>
 </histogram>
 
@@ -1180,7 +1315,7 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the duration of
+    Diagnostic metric for ChromeOS DNS proxy that records the duration of
     various stages of the resolution process, including the entire time elapsed
     processing the query. The measurement is started when the resolver first
     reads the query data from the client and completes when the reply is sent.
@@ -1216,7 +1351,7 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the duration of
+    Diagnostic metric for ChromeOS DNS proxy that records the duration of
     various stages of the resolution process, including the entire time elapsed
     processing the query. The measurement is started when the resolver first
     reads the query data from the client and completes when the reply is sent.
@@ -1252,7 +1387,7 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the number of
+    Diagnostic metric for ChromeOS DNS proxy that records the number of
     nameserver addresses whenever they are obtained from shill for a given
     network.
   </summary>
@@ -1267,7 +1402,7 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy tracking critical process events,
+    Diagnostic metric for ChromeOS DNS proxy tracking critical process events,
     which are emitted when conditions arise that cause fatal or disruptive
     conditions to the service. This metric is used to monitor the stability of
     the service and provide detailed insight into failures.
@@ -1285,7 +1420,7 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records any errors that occur
+    Diagnostic metric for ChromeOS DNS proxy that records any errors that occur
     during DNS queries made by the service. A value will be recorded whenever
     the request completes in error.
   </summary>
@@ -1300,7 +1435,7 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the duration of a
+    Diagnostic metric for ChromeOS DNS proxy that records the duration of a
     failed name resolution as part of an overall query. The measurement is
     started just before the client resolver (either plaintext or DoH) is run and
     stopped on its completion.
@@ -1321,7 +1456,7 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the duration of a
+    Diagnostic metric for ChromeOS DNS proxy that records the duration of a
     successful name resolution as part of an overall query. The measurement is
     started just before the client resolver (either plaintext or DoH) is run and
     stopped on its completion.
@@ -1342,9 +1477,9 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the results of the
-    DNS queries made by the service. A value will be recorded whenever the
-    request completes.
+    Diagnostic metric for ChromeOS DNS proxy that records the results of the DNS
+    queries made by the service. A value will be recorded whenever the request
+    completes.
   </summary>
   <token key="Type">
     <variant name="DnsOverHttps"/>
@@ -1357,10 +1492,9 @@ chromium-metrics-reviews@google.com.
   <owner>garrick@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS DNS proxy that records the results of the
-    DNS queries made by the service. A value will be recorded whenever the
-    request completes. If there are retries, only the last result will be
-    recorded.
+    Diagnostic metric for ChromeOS DNS proxy that records the results of the DNS
+    queries made by the service. A value will be recorded whenever the request
+    completes. If there are retries, only the last result will be recorded.
   </summary>
   <token key="Type">
     <variant name="DnsOverHttps"/>
@@ -1434,7 +1568,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.NetworkPortalSigninMode"
-    enum="NetworkPortalSigninMode" expires_after="2023-03-01">
+    enum="NetworkPortalSigninMode" expires_after="2023-08-20">
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-health@google.com</owner>
   <summary>
@@ -1444,12 +1578,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Patchpanel.ArcService"
-    enum="NetworkPatchpanelArcEvent" expires_after="2023-05-14">
+    enum="NetworkPatchpanelArcEvent" expires_after="2023-07-16">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for Chrome OS patchpanel's ArcService which controls the
+    Diagnostic metric for ChromeOS patchpanel's ArcService which controls the
     virtual network setup for ARC++ and ARCVM. This metrics is recorded when the
     virtual network setup for ARC or ARCVM is created, deleted, or updated to
     track success and error rates of the various platform operations (network
@@ -1464,7 +1598,7 @@ chromium-metrics-reviews@google.com.
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Diagnostic metric for the Dbus APIs implemented by Chrome OS patchpanel
+    Diagnostic metric for the Dbus APIs implemented by ChromeOS patchpanel
     network service. This metrics is recorded whenever one of patchpanel DBus
     APIs is called and tracks success and error rates of various network
     platform primitives implemented by patchpanel (port forwarding APIs,
@@ -1478,7 +1612,8 @@ chromium-metrics-reviews@google.com.
   <owner>cros-network-health@google.com</owner>
   <summary>
     Captive portal time from a portal-suspected state to an online state on
-    ChromeOS.
+    ChromeOS. NOTE: Prior to M110 this used a range that was too small so those
+    results are invalid.
   </summary>
 </histogram>
 
@@ -1493,7 +1628,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Radio.PossibleWakeupTrigger.ResolveHostPurpose2"
-    enum="ResolveHostPurpose" expires_after="2023-02-14">
+    enum="ResolveHostPurpose" expires_after="2023-04-05">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1504,7 +1639,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Radio.PossibleWakeupTrigger.URLLoaderAnnotationId2"
-    enum="TrafficAnnotationUniqueIdHash" expires_after="2023-02-12">
+    enum="TrafficAnnotationUniqueIdHash" expires_after="2023-04-05">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1515,7 +1650,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Network.Radio.PossibleWakeupTrigger.URLLoaderRequestDestination"
-    enum="RequestDestination" expires_after="2023-02-14">
+    enum="RequestDestination" expires_after="2023-04-05">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1526,7 +1661,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Network.Radio.PossibleWakeupTrigger.URLLoaderRequestIsPrefetch"
-    enum="Boolean" expires_after="2023-02-14">
+    enum="Boolean" expires_after="2023-04-05">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1536,7 +1671,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Radio.PossibleWakeupTrigger.URLLoaderRequestPriority"
-    enum="NetRequestPriority" expires_after="2023-02-14">
+    enum="NetRequestPriority" expires_after="2023-04-05">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1546,7 +1681,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Radio.SimpleURLLoaderIsThrottled" enum="Boolean"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1557,7 +1692,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Radio.SimpleURLLoaderThrottledTime" units="ms"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -1573,17 +1708,18 @@ chromium-metrics-reviews@google.com.
   <owner>cros-network-health@google.com</owner>
   <summary>
     Captive portal time from a redirect-found state to an online state on
-    ChromeOS.
+    ChromeOS. NOTE: Prior to M110 this used a range that was too small so those
+    results are invalid.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.3GPPRegistrationDelayedDrop"
     enum="NetworkCellular3GPPRegistrationDelayedDrop"
-    expires_after="2023-05-14">
+    expires_after="2023-07-30">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the number of cellular network
+    ChromeOS network diagnostic metric sampling the number of cellular network
     flakes. A network flake occurs when the signal strength goes below detection
     level for a short duration.
   </summary>
@@ -1594,7 +1730,7 @@ chromium-metrics-reviews@google.com.
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the total amount of time spent
+    ChromeOS network diagnostic metric sampling the total amount of time spent
     from the start of the first auto-connect request until when the cellular
     modem successfully connects to the network.
 
@@ -1607,16 +1743,16 @@ chromium-metrics-reviews@google.com.
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the number of auto-connect
-    tries that were attempted before the cellular modem successfully connected
-    to the network.
+    ChromeOS network diagnostic metric sampling the number of auto-connect tries
+    that were attempted before the cellular modem successfully connected to the
+    network.
 
     NOTE: This metric was expired from 2022-01-30 to 2022-04-01.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.ConnectResult"
-    enum="PlatformCellularConnectResult" expires_after="2023-05-14">
+    enum="PlatformCellularConnectResult" expires_after="2023-07-16">
   <owner>danielwinkler@google.com</owner>
   <owner>cros-connectivity@google.com</owner>
   <summary>
@@ -1629,21 +1765,21 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Cellular.DevicePresenceStatus"
-    enum="BooleanPresent" expires_after="2023-05-07">
+    enum="BooleanPresent" expires_after="2023-07-09">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the presence of a Cellular device in
-    the system. A sample is emitted once every 3 minutes.
+    ChromeOS network metric that tracks the presence of a Cellular device in the
+    system. A sample is emitted once every 3 minutes.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.Drop" enum="NetworkCellularTechnology"
-    expires_after="2023-05-14">
+    expires_after="2023-07-30">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS cellular network metric that tracks the number of drops based on
+    ChromeOS cellular network metric that tracks the number of drops based on
     the network technology.
   </summary>
 </histogram>
@@ -1653,7 +1789,7 @@ chromium-metrics-reviews@google.com.
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the length of a lease for a
+    ChromeOS network performance metric that tracks the length of a lease for a
     cellular network at the time it expired without the DHCP client being able
     to renew it.
 
@@ -1662,42 +1798,45 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Cellular.IPv6ConnectivityStatus"
-    enum="IPv6ConnectivityStatus" expires_after="2023-03-05">
+    enum="IPv6ConnectivityStatus" expires_after="2023-12-31">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the presence of complete IPv6
+    ChromeOS network metric that tracks the presence of complete IPv6
     configuration at the time when cellular connection is established.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.NetworkConnectionIPType"
-    enum="NetworkConnectionIPType" expires_after="2023-03-05">
+    enum="NetworkConnectionIPType" expires_after="2023-12-31">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the types of IP configuration used for
+    ChromeOS network metric that tracks the types of IP configuration used for
     establishing cellular connections.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.PortalAttemptsToOnline" units="units"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
+  <obsolete>
+    Removed as of 01/2023 in crrev/c/4141265.
+  </obsolete>
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the total number of portal
+    ChromeOS network diagnostic metric sampling the total number of portal
     detection attempts performed for a cellular network between the Connected
     and Online state. This includes failure, timeout and successful attempts.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.PortalResult"
-    enum="NetworkPortalResult" expires_after="2023-05-14">
+    enum="NetworkPortalResult" expires_after="2023-07-16">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the result of portal detections
+    ChromeOS network diagnostic metric sampling the result of portal detections
     for a cellular network.
   </summary>
 </histogram>
@@ -1707,109 +1846,109 @@ chromium-metrics-reviews@google.com.
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS connection manager service errors for cellular interface. NOTE:
+    ChromeOS connection manager service errors for cellular interface. NOTE:
     This metric was updated in M101. Data prior to that may be missing.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.SignalStrengthBeforeDrop" units="units"
-    expires_after="2023-05-14">
+    expires_after="2023-07-30">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the signal strength (0-100) of the
-    cellular modem before it dropped from the network.
+    ChromeOS network metric sampling the signal strength (0-100) of the cellular
+    modem before it dropped from the network.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeOnline" units="seconds"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the time spent using cellular to transport
+    ChromeOS network metric sampling the time spent using cellular to transport
     data. These data are mostly useful when summed and compared to TimeOnline
     for other network technologies (e.g. WiFi vs Cellular).
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToConfig" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to join a cellular
+    ChromeOS network performance metric sampling the time to join a cellular
     network and configure Layer 3 state.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToConnect" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to connect a cellular
+    ChromeOS network performance metric sampling the time to connect a cellular
     modem.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToDisable" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to disable a cellular
+    ChromeOS network performance metric sampling the time to disable a cellular
     modem.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToEnable" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to enable a cellular
+    ChromeOS network performance metric sampling the time to enable a cellular
     modem.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToInitialize" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-30">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to initialize a
+    ChromeOS network performance metric sampling the time to initialize a
     cellular modem.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToOnline" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that a
+    ChromeOS network performance metric sampling the time to determine that a
     cellular network is online after configuring Layer 3 state.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToPortal" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-30">
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that a
+    ChromeOS network performance metric sampling the time to determine that a
     cellular network is in a captive portal after configuring Layer 3 state.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Cellular.TimeToRedirectFound" units="ms"
-    expires_after="2023-06-04">
+    expires_after="2023-08-08">
   <owner>matthewmwang@chromium.org</owner>
   <owner>hugobenichi@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that a
+    ChromeOS network performance metric sampling the time to determine that a
     cellular network is in a captive portal with a valid redirect URL after
     configuring Layer 3 state.
   </summary>
@@ -1820,7 +1959,7 @@ chromium-metrics-reviews@google.com.
   <owner>ejcaruso@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to scan a cellular
+    ChromeOS network performance metric sampling the time to scan a cellular
     network and register a modem.
 
     NOTE: This metric was expired from 2021-12-01 to 2022-04-01.
@@ -1828,12 +1967,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.ConnectionDiagnosticsIssue"
-    enum="ConnectionDiagnosticsIssue" expires_after="2023-05-07">
+    enum="ConnectionDiagnosticsIssue" expires_after="2023-07-09">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks Layer 3 connectivity issues diagnosed
-    by the ConnectionDiagnostics class in Shill ran on a connected network after
+    ChromeOS network metric that tracks Layer 3 connectivity issues diagnosed by
+    the ConnectionDiagnostics class in Shill ran on a connected network after
     Shill portal detection has failed to validate the network. This metric is
     logged each time a ConnectionDiagnostics object completes its diagnostics
     actions and reports the results to its caller.
@@ -1848,7 +1987,7 @@ chromium-metrics-reviews@google.com.
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS cellular network metric that tracks the number of corrupted
+    ChromeOS cellular network metric that tracks the number of corrupted
     profiles encountered by Shill.
   </summary>
 </histogram>
@@ -1862,10 +2001,10 @@ chromium-metrics-reviews@google.com.
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS device time on line in the previous 24-hour sample period.
-    &quot;On line&quot; means shill believes the device is on the internet. The
-    shill state is sampled every 5 minutes. The start of each 24-hour period is
-    the end of the previous period, unless the device is inactive at that time
+    ChromeOS device time on line in the previous 24-hour sample period. &quot;On
+    line&quot; means shill believes the device is on the internet. The shill
+    state is sampled every 5 minutes. The start of each 24-hour period is the
+    end of the previous period, unless the device is inactive at that time
     (suspended or off), in which case it is the time of the next
     resume/power-on.
   </summary>
@@ -1880,29 +2019,29 @@ chromium-metrics-reviews@google.com.
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the connection status of
-    the device. A sample is emitted once every 3 minutes.
+    ChromeOS network performance metric that tracks the connection status of the
+    device. A sample is emitted once every 3 minutes.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.DevicePresenceStatus"
-    enum="BooleanPresent" expires_after="2023-05-07">
+    enum="BooleanPresent" expires_after="2023-07-09">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the presence of an Ethernet device in
+    ChromeOS network metric that tracks the presence of an Ethernet device in
     the system. A sample is emitted once every 3 minutes.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.ExpiredLeaseLengthSeconds2"
-    units="seconds" expires_after="2023-06-11">
+    units="seconds" expires_after="2023-08-20">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the length of a lease for
-    an Ethernet network at the time it expired without the DHCP client being
-    able to renew it.
+    ChromeOS network performance metric that tracks the length of a lease for an
+    Ethernet network at the time it expired without the DHCP client being able
+    to renew it.
 
     NOTE: This metric was expired from 2021-12-01 to 2022-04-01.
   </summary>
@@ -1910,10 +2049,13 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Network.Shill.Ethernet.PortalAttemptsToOnline" units="units"
     expires_after="2023-05-07">
+  <obsolete>
+    Removed as of 01/2023 in crrev/c/4141265.
+  </obsolete>
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the total number of portal
+    ChromeOS network diagnostic metric sampling the total number of portal
     detection attempts performed for an Ethernet network between the Connected
     and Online state. This includes failure, timeout and successful attempts.
 
@@ -1922,11 +2064,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.PortalResult"
-    enum="NetworkPortalResult" expires_after="2023-05-07">
+    enum="NetworkPortalResult" expires_after="2023-07-09">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the result of portal detections
+    ChromeOS network diagnostic metric sampling the result of portal detections
     for an Ethernet network.
 
     NOTE: This metric was expired from 2021-12-01 to 2022-04-01.
@@ -1934,21 +2076,21 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.ServiceErrors"
-    enum="NetworkServiceError" expires_after="2023-05-14">
+    enum="NetworkServiceError" expires_after="2023-07-30">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS connection manager service errors for ethernet interface. NOTE:
+    ChromeOS connection manager service errors for ethernet interface. NOTE:
     This metric was updated in M101. Data prior to that may be missing.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.TimeOnline" units="seconds"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the time spent using Ethernet to transport
+    ChromeOS network metric sampling the time spent using Ethernet to transport
     data. These data are mostly useful when summed and compared to TimeOnline
     for other network technologies (e.g. WiFi vs Cellular).
 
@@ -1957,11 +2099,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.TimeToConfig" units="ms"
-    expires_after="2023-06-11">
+    expires_after="2023-08-13">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to join a wired
+    ChromeOS network performance metric sampling the time to join a wired
     Ethernet network and configure Layer 3 state (typically acquire a DHCP
     lease).
 
@@ -1970,11 +2112,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.TimeToInitialize" units="ms"
-    expires_after="2023-05-07">
+    expires_after="2023-07-09">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to initialize an
+    ChromeOS network performance metric sampling the time to initialize an
     Ethernet device.
 
     NOTE: This metric was expired from 2021-12-01 to 2022-04-01.
@@ -1982,11 +2124,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.TimeToOnline" units="ms"
-    expires_after="2023-05-07">
+    expires_after="2023-07-09">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that an
+    ChromeOS network performance metric sampling the time to determine that an
     Ethernet network is online after configuring Layer 3 state.
 
     NOTE: This metric was expired from 2021-12-01 to 2022-04-01.
@@ -1994,11 +2136,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.TimeToPortal" units="ms"
-    expires_after="2023-05-07">
+    expires_after="2023-07-09">
   <owner>hugobenichi@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that an
+    ChromeOS network performance metric sampling the time to determine that an
     Ethernet network is in a captive portal after configuring Layer 3 state.
 
     NOTE: This metric was expired from 2021-12-01 to 2022-04-01.
@@ -2006,12 +2148,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Ethernet.TimeToRedirectFound" units="ms"
-    expires_after="2023-05-14">
+    expires_after="2023-07-30">
   <owner>matthewmwang@chromium.org</owner>
   <owner>hugobenichi@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that an
+    ChromeOS network performance metric sampling the time to determine that an
     Ethernet network is in a captive portal with a valid redirect URL after
     configuring Layer 3 state.
 
@@ -2028,7 +2170,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric recording portal detection results of both the HTTP
+    ChromeOS network metric recording portal detection results of both the HTTP
     and HTTPS probes. This is recorded every time a portal detection trial
     finishes.
   </summary>
@@ -2193,7 +2335,7 @@ chromium-metrics-reviews@google.com.
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the MTU value provided by the
+    ChromeOS network diagnostic metric sampling the MTU value provided by the
     upstream PPP peer for L2TP VPN connections. A sample is emitted each time
     the client successfully negotiates an MTU value via PPP.
   </summary>
@@ -2208,18 +2350,18 @@ chromium-metrics-reviews@google.com.
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the number of suspend actions
+    ChromeOS network diagnostic metric sampling the number of suspend actions
     that successfully complete or fail when shill suspends.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.SuspendActionTimeTaken" units="ms"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the time in milliseconds it
+    ChromeOS network diagnostic metric sampling the time in milliseconds it
     takes suspend actions to complete when shill suspends.
   </summary>
 </histogram>
@@ -2229,7 +2371,7 @@ chromium-metrics-reviews@google.com.
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network stability metric sampling the time in seconds between the
+    ChromeOS network stability metric sampling the time in seconds between the
     networking going online to going offline. Offline events due to device
     shutdown or suspend are ignored (along with the online time before that
     offline event).
@@ -2237,66 +2379,50 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Vpn.Driver" enum="VPNDriver"
-    expires_after="2023-05-07">
+    expires_after="2023-07-09">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric sampled on each successful VPN connection
-    that tracks the VPN connection type.
+    ChromeOS network usage metric sampled on each successful VPN connection that
+    tracks the VPN connection type.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.Ikev2.AuthenticationType"
-    enum="VPNIPsecAuthenticationType" expires_after="2023-06-04">
+    enum="VPNIPsecAuthenticationType" expires_after="2023-08-20">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful IKEv2 VPN
+    ChromeOS network usage metric emitted on each successful IKEv2 VPN
     connection that tracks how the client authenticates itself to the server.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.Ikev2.EndReason" enum="NetworkServiceError"
-    expires_after="2023-06-11">
+    expires_after="2023-08-20">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on the end of each IKEv2 VPN
+    ChromeOS network usage metric emitted on the end of each IKEv2 VPN
     connection that tracks the reason that the connection is ended. This metric
     will be emitted no matter if the connection is established successfully,
     i.e., it will be emitted if an error happens during connecting.
   </summary>
 </histogram>
 
-<histogram name="Network.Shill.Vpn.L2tpIpsec.StrokeEndReason"
-    enum="NetworkServiceError" expires_after="2023-02-19">
-  <owner>jiejiang@chromium.org</owner>
-  <owner>cros-connectivity@google.com</owner>
-  <owner>cros-network-metrics@google.com</owner>
-  <summary>
-    Chrome OS network usage metric emitted on the end of each L2TP/IPsec VPN
-    connection initiated by the stroke-based driver that tracks the reason that
-    the connection is ended. This metric will be emitted no matter if the
-    connection is established successfully, i.e., it will be emitted if an error
-    happens during connecting. This metric will be used to compare the stability
-    of the stroke-based driver and swanctl-based driver (b/204261554).
-  </summary>
-</histogram>
-
 <histogram name="Network.Shill.Vpn.L2tpIpsec.SwanctlEndReason"
-    enum="NetworkServiceError" expires_after="2023-04-23">
+    enum="NetworkServiceError" expires_after="2023-06-25">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on the end of each L2TP/IPsec VPN
+    ChromeOS network usage metric emitted on the end of each L2TP/IPsec VPN
     connection initiated by the swanctl-based driver that tracks the reason that
     the connection is ended. This metric will be emitted no matter if the
     connection is established successfully, i.e., it will be emitted if an error
-    happens during connecting. This metric will be used to compare the stability
-    of the stroke-based driver and swanctl-based driver (b/204261554).
+    happens during connecting.
   </summary>
 </histogram>
 
@@ -2306,41 +2432,41 @@ chromium-metrics-reviews@google.com.
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful L2TP/IPsec VPN
+    ChromeOS network usage metric emitted on each successful L2TP/IPsec VPN
     connection that tracks whether tunnel group is used. The tunnel group
     property needs to be set when connecting to some Cisco L2TP/IPsec VPN.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.OpenVPNCipher" enum="VPNOpenVPNCipher"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>taoyl@google.com</owner>
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric emitted on each successful OpenVPN connection that
+    ChromeOS network metric emitted on each successful OpenVPN connection that
     tracks the cipher algorithm negotiated with server.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.RemoteAuthenticationType"
-    enum="VPNRemoteAuthenticationType" expires_after="2023-06-11">
+    enum="VPNRemoteAuthenticationType" expires_after="2023-08-13">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric sampled on each successful VPN connection
-    that tracks the remote authentication method.
+    ChromeOS network usage metric sampled on each successful VPN connection that
+    tracks the remote authentication method.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.TimeOnline" units="seconds"
-    expires_after="2023-06-11">
+    expires_after="2023-08-13">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the time spent using VPN to transport
-    data. These data are mostly useful when summed and compared to TimeOnline
-    for other network technologies (e.g. WiFi vs Cellular). A sample is emitted
+    ChromeOS network metric sampling the time spent using VPN to transport data.
+    These data are mostly useful when summed and compared to TimeOnline for
+    other network technologies (e.g. WiFi vs Cellular). A sample is emitted
     every time the system transitions from primary connectivity through a VPN to
     some other type of connectivity. The value of the sample is the time delta
     in seconds from the instant the system transitioned to VPN connectivity.
@@ -2348,41 +2474,41 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Vpn.TimeToConfig" units="ms"
-    expires_after="2023-06-11">
+    expires_after="2023-08-13">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to configure Layer 3
+    ChromeOS network performance metric sampling the time to configure Layer 3
     state on a VPN network (typically acquire a DHCP lease).
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.TimeToOnline" units="ms"
-    expires_after="2023-05-07">
+    expires_after="2023-07-09">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that a
+    ChromeOS network performance metric sampling the time to determine that a
     VPN connection is online after configuring Layer 3 state.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.UserAuthenticationType"
-    enum="VPNUserAuthenticationType" expires_after="2023-06-11">
+    enum="VPNUserAuthenticationType" expires_after="2023-08-13">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric sampled on each successful VPN connection
-    that tracks the user authentication method.
+    ChromeOS network usage metric sampled on each successful VPN connection that
+    tracks the user authentication method.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.WireGuardAllowedIPsType"
-    enum="VPNWireGuardAllowedIPsType" expires_after="2023-06-11">
+    enum="VPNWireGuardAllowedIPsType" expires_after="2023-08-13">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful WireGuard VPN
+    ChromeOS network usage metric emitted on each successful WireGuard VPN
     connection that tracks the type of the allowed IPs set in this connection.
   </summary>
 </histogram>
@@ -2392,17 +2518,17 @@ chromium-metrics-reviews@google.com.
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful WireGuard VPN
+    ChromeOS network usage metric emitted on each successful WireGuard VPN
     connection that tracks the source of the key pair used in this connection.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Vpn.WireGuardPeersNum" units="WireGuard peers"
-    expires_after="2023-06-11">
+    expires_after="2023-08-13">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful WireGuard VPN
+    ChromeOS network usage metric emitted on each successful WireGuard VPN
     connection that tracks the number of peers used in in this connection.
   </summary>
 </histogram>
@@ -2413,7 +2539,7 @@ chromium-metrics-reviews@google.com.
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful {VPNType} VPN
+    ChromeOS network usage metric emitted on each successful {VPNType} VPN
     connection that tracks the encryption algorithm used by the ESP protocol in
     this connection.
   </summary>
@@ -2426,7 +2552,7 @@ chromium-metrics-reviews@google.com.
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful {VPNType} VPN
+    ChromeOS network usage metric emitted on each successful {VPNType} VPN
     connection that tracks the integrity algorithm used by the ESP protocol in
     this connection.
   </summary>
@@ -2439,7 +2565,7 @@ chromium-metrics-reviews@google.com.
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful {VPNType} VPN
+    ChromeOS network usage metric emitted on each successful {VPNType} VPN
     connection that tracks the DH group used by the IKE protocol in this
     connection.
   </summary>
@@ -2452,7 +2578,7 @@ chromium-metrics-reviews@google.com.
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful {VPNType} VPN
+    ChromeOS network usage metric emitted on each successful {VPNType} VPN
     connection that tracks the encryption algorithm used by the IKE protocol in
     this connection.
   </summary>
@@ -2465,19 +2591,31 @@ chromium-metrics-reviews@google.com.
   <owner>cros-connectivity@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric emitted on each successful {VPNType} VPN
+    ChromeOS network usage metric emitted on each successful {VPNType} VPN
     connection that tracks the integrity algorithm used by the IKE protocol in
     this connection.
   </summary>
   <token key="VPNType" variants="IPsecVPNType"/>
 </histogram>
 
+<histogram name="Network.Shill.Vpn.{VPNType}.IPType" enum="VPNIPType"
+    expires_after="2023-12-01">
+  <owner>jiejiang@chromium.org</owner>
+  <owner>cros-connectivity@google.com</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    ChromeOS network usage metric emitted on each successful {VPNType} VPN
+    connection that tracks the IP family provided in this connection.
+  </summary>
+  <token key="VPNType" variants="VPNType"/>
+</histogram>
+
 <histogram name="Network.Shill.WiFi.AdapterAllowlisted"
-    enum="WiFiAdapterInAllowlist" expires_after="2023-04-16">
+    enum="WiFiAdapterInAllowlist" expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS WiFi usage metric emitted every time the WiFi adapter is enabled.
+    ChromeOS WiFi usage metric emitted every time the WiFi adapter is enabled.
     It tracks if the adapter that was detected on the device is in the allowlist
     to be reported via structured metrics (e.g. is it in AVL?) or not.
   </summary>
@@ -2488,7 +2626,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of Wireless Access Points that
+    ChromeOS network metric sampling the number of Wireless Access Points that
     support the 802.11k standard, sampled on successful connections to an AP.
   </summary>
 </histogram>
@@ -2498,7 +2636,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of Wireless Access Points that
+    ChromeOS network metric sampling the number of Wireless Access Points that
     support the 802.11r standard, sampled on successful connections to an AP.
   </summary>
 </histogram>
@@ -2508,7 +2646,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of Wireless Access Points that
+    ChromeOS network metric sampling the number of Wireless Access Points that
     support the 802.11v BSS Max Idle Period feature, sampled on successful
     connections to an AP.
   </summary>
@@ -2519,7 +2657,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of Wireless Access Points that
+    ChromeOS network metric sampling the number of Wireless Access Points that
     support the 802.11v BSS Transition feature, sampled on successful
     connections to an AP.
   </summary>
@@ -2530,47 +2668,68 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of Wireless Access Points that
+    ChromeOS network metric sampling the number of Wireless Access Points that
     support the 802.11v DMS feature, sampled on successful connections to an AP.
   </summary>
 </histogram>
 
+<histogram name="Network.Shill.WiFi.ApAlternateEDCASupport"
+    enum="WiFiApAlternateEDCASupport" expires_after="2023-12-30">
+  <owner>damiendejean@chromium.org</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    ChromeOS network metric sampling the number of Wireless Access Points that
+    support transmit opportunity negotation, emitted on successful connections
+    to an AP.
+  </summary>
+</histogram>
+
 <histogram name="Network.Shill.WiFi.ApChannelSwitch" enum="WiFiApChannelSwitch"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric sampled when an AP switches channels. Shows
+    ChromeOS network usage metric sampled when an AP switches channels. Shows
     the old frequency band and the new frequency band.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.ApDisconnectReason" enum="WiFiReasonCode"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. Reason code reported when the AP disconnects
+    ChromeOS network usage metric. Reason code reported when the AP disconnects
     a WiFi connection.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.ApDisconnectType" enum="WiFiStatusType"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. Broad category of reason AP disconnected a
+    ChromeOS network usage metric. Broad category of reason AP disconnected a
     WiFi connection.
   </summary>
 </histogram>
 
+<histogram name="Network.Shill.WiFi.ApSCSupport" enum="WiFiApSCSupport"
+    expires_after="2023-12-30">
+  <owner>damiendejean@chromium.org</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    ChromeOS network metric sampling the number of Wireless Access Points that
+    support stream classification, emitted on successful connections to an AP.
+  </summary>
+</histogram>
+
 <histogram name="Network.Shill.WiFi.AssocFailureType" enum="WiFiStatusCode"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. Status code reported when an 802.11
+    ChromeOS network usage metric. Status code reported when an 802.11
     association fails. Note that not all disconnects are caused by an assoc
     failure, and so this metric shold not be correlated with the DisconnectType
     metrics.
@@ -2578,11 +2737,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.AuthFailureType" enum="WiFiStatusCode"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. Status code reported when an 802.11
+    ChromeOS network usage metric. Status code reported when an 802.11
     authentication fails. Note that not all disconnects are caused by an auth
     failure, and so this metric should not be correlated with the DisconnectType
     metrics.
@@ -2595,18 +2754,29 @@ chromium-metrics-reviews@google.com.
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of wifi services available for
+    ChromeOS network metric sampling the number of wifi services available for
     auto-connect when auto-connect is initiated for wifi device.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.AvailableBSSesAtConnect" units="units"
-    expires_after="2023-02-12">
+    expires_after="2024-02-12">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of BSSes (endpoints) available
+    ChromeOS network metric sampling the number of BSSes (endpoints) available
     for the currently connecting wifi service.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.WiFi.BadPassphraseServiceType"
+    enum="WiFiBadPassphraseServiceType" expires_after="2023-12-01">
+  <owner>yichenyu@chromium.org</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    ChromeOS network usage metric. This is recorded when a connection failure is
+    due to bad-passphrase and indicates whether the attempt is initated by users
+    or not and if the service has been previously connected.
   </summary>
 </histogram>
 
@@ -2615,48 +2785,59 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric recording BSS Transition Management statuses. This
+    ChromeOS network metric recording BSS Transition Management statuses. This
     is recorded every time a BSS Transition Management request is received from
     a wireless access point.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.Channel" enum="NetworkChannelType"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. The channel used for each successful WiFi
+    ChromeOS network usage metric. The channel used for each successful WiFi
     connection.
   </summary>
 </histogram>
 
+<histogram name="Network.Shill.WiFi.CiscoAdaptiveFTSupport"
+    enum="WiFiCiscoAdaptiveFTSupport" expires_after="2023-12-01">
+  <owner>matthewmwang@chromium.org</owner>
+  <owner>cros-network-metrics@google.com</owner>
+  <summary>
+    ChromeOS network metric sampling the number of Wireless Access Points that
+    support Cisco's Adaptive FT feature, sampled on successful connections to an
+    AP.
+  </summary>
+</histogram>
+
 <histogram name="Network.Shill.WiFi.ClientDisconnectReason"
-    enum="WiFiReasonCode" expires_after="2023-04-16">
+    enum="WiFiReasonCode" expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. Reason code reported when the client
+    ChromeOS network usage metric. Reason code reported when the client
     disconnects a WiFi connection.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.ClientDisconnectType" enum="WiFiStatusType"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. Broad category of reason client disconnected
+    ChromeOS network usage metric. Broad category of reason client disconnected
     a WiFi connection.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.CQMNotification"
-    enum="WiFiCQMNotificationType" expires_after="2023-04-16">
+    enum="WiFiCQMNotificationType" expires_after="2023-08-20">
   <owner>kuabhs@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS Wifi Connection Quality Monitor(CQM) Notifications metric. This is
+    ChromeOS Wifi Connection Quality Monitor(CQM) Notifications metric. This is
     emitted when any packet or beacon loss is observed for signal strength
     greater than -80 dBm. This metric is rate-limited such that it is never
     emitted more than once every 6 minutes.
@@ -2664,23 +2845,22 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.DevicePresenceStatus" enum="BooleanPresent"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the presence of a WiFi device in the
+    ChromeOS network metric that tracks the presence of a WiFi device in the
     system. A sample is emitted once every 3 minutes.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.Disconnect" enum="NetworkDisconnectType"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric that tracks whether an 802.11 wireless
-    network was disconnected due to an error or was explicitly disconnected by
-    the user.
+    ChromeOS network usage metric that tracks whether an 802.11 wireless network
+    was disconnected due to an error or was explicitly disconnected by the user.
   </summary>
 </histogram>
 
@@ -2689,7 +2869,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric sampled on each successful 802.1x wireless
+    ChromeOS network usage metric sampled on each successful 802.1x wireless
     connection that tracks the configured inner authentication method.
   </summary>
 </histogram>
@@ -2699,7 +2879,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric sampled on each successful 802.1x wireless
+    ChromeOS network usage metric sampled on each successful 802.1x wireless
     connection that tracks the configured outer authentication method.
   </summary>
 </histogram>
@@ -2709,7 +2889,7 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the length of a lease for a
+    ChromeOS network performance metric that tracks the length of a lease for a
     WiFi network at the time it expired without the DHCP client being able to
     renew it.
   </summary>
@@ -2720,20 +2900,20 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the result of the fallback
+    ChromeOS network performance metric that tracks the result of the fallback
     DNS test. The fallback DNS test is performed when portal detection failed
     due to DNS failure.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.Hidden.EverConnected"
-    enum="BooleanConnected" expires_after="2023-06-04">
+    enum="BooleanConnected" expires_after="2023-08-08">
   <owner>jonmann@chromium.org</owner>
   <owner>tnagel@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <owner>pwg-cros@google.com</owner>
   <summary>
-    Chrome OS network metric tracking whether there has ever been a successful
+    ChromeOS network metric tracking whether there has ever been a successful
     connection for each WiFi network which is configured with a hidden SSID. The
     metric includes networks from system and user profile and it's recorded each
     time a user configuration profile is loaded, such as when a user logs in.
@@ -2742,13 +2922,13 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.Hidden.LastConnected" units="days"
-    expires_after="2023-06-04">
+    expires_after="2023-08-08">
   <owner>jonmann@chromium.org</owner>
   <owner>tnagel@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <owner>pwg-cros@google.com</owner>
   <summary>
-    Chrome OS network metric tracking the number of days since the last
+    ChromeOS network metric tracking the number of days since the last
     connection for each WiFi network configured with hidden SSID. The metric
     includes networks from system and user profile and it's recorded each time a
     user configuration profile is loaded, such as when a user logs in.
@@ -2756,12 +2936,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.HiddenSSIDEverConnected"
-    enum="BooleanEverConnected" expires_after="2023-05-07">
+    enum="BooleanEverConnected" expires_after="2023-07-09">
   <owner>tnagel@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <owner>cros-privacy-core@google.com</owner>
   <summary>
-    Chrome OS network metric tracking whether WiFi networks configured with
+    ChromeOS network metric tracking whether WiFi networks configured with
     hidden SSID have ever been connected. The metric includes networks from
     system and user profile and it's recorded each time a user configuration
     profile is loaded, such as when a user logs in.
@@ -2769,12 +2949,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.HiddenSSIDNetworkCount" units="units"
-    expires_after="2023-05-07">
+    expires_after="2023-07-09">
   <owner>tnagel@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <owner>cros-privacy-core@google.com</owner>
   <summary>
-    Chrome OS network metric tracking WiFi networks configured with hidden SSID.
+    ChromeOS network metric tracking WiFi networks configured with hidden SSID.
     The metric includes networks from system and user profile and it's recorded
     each time a user configuration profile is loaded, such as when a user logs
     in. The fraction of non-zero buckets should roughly correspond to the
@@ -2784,55 +2964,55 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.HS20Support" enum="HotspotSupport"
-    expires_after="2023-04-23">
+    expires_after="2023-06-25">
   <owner>kglund@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the Hotspot 2.0 support of access
-    points that devices connect to. Results are recorded every time a device
-    connects to an access point. The metric records either the HS20 version the
-    AP supports, or that the AP does not support HS20.
+    ChromeOS network metric that tracks the Hotspot 2.0 support of access points
+    that devices connect to. Results are recorded every time a device connects
+    to an access point. The metric records either the HS20 version the AP
+    supports, or that the AP does not support HS20.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.IPv6ConnectivityStatus"
-    enum="IPv6ConnectivityStatus" expires_after="2023-04-16">
+    enum="IPv6ConnectivityStatus" expires_after="2023-06-18">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the presence of complete IPv6
+    ChromeOS network metric that tracks the presence of complete IPv6
     configuration at the time when WiFi connection is established.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.MBOSupport" enum="MBOSupport"
-    expires_after="2023-02-12">
+    expires_after="2024-02-12">
   <owner>matthewmwang@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the Multi-Band Operation (MBO) support
+    ChromeOS network metric that tracks the Multi-Band Operation (MBO) support
     of access points that devices connect to. Results are recorded every time a
     device connects to an access point.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.NeighborLinkMonitorFailure"
-    enum="NeighborLinkMonitorFailureType" expires_after="2023-05-07">
+    enum="NeighborLinkMonitorFailureType" expires_after="2023-07-09">
   <owner>jiejiang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS metric that signals the type of failure the NeighborLinkMonitor
+    ChromeOS metric that signals the type of failure the NeighborLinkMonitor
     detected on 802.11 wireless network. Recorded after the NeighborLinkMonitor
     detects a layer 2 connectivity failure to a neighbor.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.NetworkConnectionIPType"
-    enum="NetworkConnectionIPType" expires_after="2023-04-16">
+    enum="NetworkConnectionIPType" expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric that tracks the types of IP configuration used for
+    ChromeOS network metric that tracks the types of IP configuration used for
     establishing WiFi connections.
   </summary>
 </histogram>
@@ -2842,7 +3022,7 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the network problems
+    ChromeOS network performance metric that tracks the network problems
     encountered by TrafficMonitor after WiFi connection is established.
   </summary>
 </histogram>
@@ -2852,7 +3032,7 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. The standard advertised by the AP for each
+    ChromeOS network usage metric. The standard advertised by the AP for each
     successful WiFi connection. It is not necessarily the same as the standard
     used by the AP and STA to communicate. For example, if the AP supports
     802.11ax and the STA only supports 802.11ac, this metric will report
@@ -2862,12 +3042,15 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.PortalAttemptsToOnline" units="units"
-    expires_after="2023-04-16">
+    expires_after="2023-06-18">
+  <obsolete>
+    Removed as of 01/2023 in https://crrev/c/4141265.
+  </obsolete>
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the total number of portal
+    ChromeOS network diagnostic metric sampling the total number of portal
     detection attempts performed for an 802.11 wireless network between the
     Connected and Online state. This includes failure, timeout and successful
     attempts.
@@ -2875,12 +3058,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.PortalResult" enum="NetworkPortalResult"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>matthewmwang@chromium.org</owner>
   <owner>stevenjb@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the result of portal detections
+    ChromeOS network diagnostic metric sampling the result of portal detections
     for an 802.11 wireless network.
   </summary>
 </histogram>
@@ -2890,18 +3073,18 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric that tracks which country the WiFi regulatory
+    ChromeOS network usage metric that tracks which country the WiFi regulatory
     domain is set to. Recorded every time a WiFi regulatory domain change is
     triggered or determined initially (Shill startup).
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.RememberedNetworkCount" units="units"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network diagnostic metric sampling the number of 802.11 wireless
+    ChromeOS network diagnostic metric sampling the number of 802.11 wireless
     networks known by the connection manager at the time a configuration profile
     has been loaded. A configuration profile is loaded at each system startup,
     and when a user logs in.
@@ -2913,7 +3096,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of 802.11 wireless networks
+    ChromeOS network metric sampling the number of 802.11 wireless networks
     configured from the system configuration profile. This metric is sampled
     each time a user configuration profile is loaded, such as when a user logs
     in.
@@ -2925,24 +3108,24 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.RememberedUserNetworkCount" units="units"
-    expires_after="2023-02-12">
+    expires_after="2024-02-12">
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the number of 802.11 wireless networks
+    ChromeOS network metric sampling the number of 802.11 wireless networks
     configured from a user configuration profile. This metric is sampled each
     time a user configuration profile is loaded, such as when a user logs in.
   </summary>
 </histogram>
 
 <histogram base="true" name="Network.Shill.WiFi.RoamComplete"
-    enum="WiFiRoamComplete" expires_after="2023-04-16">
+    enum="WiFiRoamComplete" expires_after="2023-08-20">
 <!-- Name completed by histogram_suffixes name="RoamSecurityType" -->
 
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric recording roam successes or failures. This is
+    ChromeOS network metric recording roam successes or failures. This is
     recorded every time a client succeeds or fails to roam from one wireless
     access point to another.
   </summary>
@@ -2955,19 +3138,19 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric recording roam time in milliseconds. This is
+    ChromeOS network metric recording roam time in milliseconds. This is
     recorded every time a successful roam from one wireless access point to
     another occurs.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.WiFi.ScanResult" enum="WiFiScanResult"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric describing, for a WiFi scan attempt, what
-    scan method is used and whether it ends in a connection.
+    ChromeOS network usage metric describing, for a WiFi scan attempt, what scan
+    method is used and whether it ends in a connection.
   </summary>
 </histogram>
 
@@ -2976,27 +3159,27 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric describing, for a WiFi scan attempt, how many
+    ChromeOS network usage metric describing, for a WiFi scan attempt, how many
     milliseconds were spent waiting to talk to the kernel/drivers.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.Security" enum="NetworkSecurityType"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. The security setting for each successful
-    WiFi connection.
+    ChromeOS network usage metric. The security setting for each successful WiFi
+    connection.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.SecurityChange"
-    enum="NetworkSecurityChange" expires_after="2023-06-04">
+    enum="NetworkSecurityChange" expires_after="2023-08-08">
   <owner>andrzejo@google.com</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric for WiFi security changes. It is emitted every time
+    ChromeOS network metric for WiFi security changes. It is emitted every time
     a new BSSID is being added to a network, this network has already been
     connected before and configuration of this new BSSID causes network security
     to be changed in a non-trivial way - that is a downgrade or an upgrade that
@@ -3005,11 +3188,11 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.ServiceErrors" enum="NetworkServiceError"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>kuabhs@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS connection manager service errors for wifi interface.
+    ChromeOS connection manager service errors for wifi interface.
   </summary>
 </histogram>
 
@@ -3020,7 +3203,7 @@ chromium-metrics-reviews@google.com.
   <owner>matthewmwang@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric recording session length in milliseconds. This is
+    ChromeOS network metric recording session length in milliseconds. This is
     recorded every time an uninterrupted session with a wireless access point is
     terminated.
   </summary>
@@ -3045,21 +3228,21 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.SignalAtDisconnect" units="negative dBm"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>kuabhs@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric indicating the negative of the dBm received signal
+    ChromeOS network metric indicating the negative of the dBm received signal
     strength recorded at the time of a WiFi disconnect.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.SignalStrength" units="negative dBm"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>kuabhs@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric indicating the negative of the dBm received signal
+    ChromeOS network metric indicating the negative of the dBm received signal
     strength recorded at the time a successful WiFi connection started.
   </summary>
 </histogram>
@@ -3082,7 +3265,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.TimeFromRekeyToFailureSeconds"
-    units="seconds" expires_after="2023-04-30">
+    units="seconds" expires_after="2023-07-02">
   <owner>billyzhao@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -3094,22 +3277,22 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeOnline" units="seconds"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the time spent using WiFi to transport
+    ChromeOS network metric sampling the time spent using WiFi to transport
     data. These data are mostly useful when summed and compared to TimeOnline
     for other network technologies (e.g. WiFi vs Cellular).
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeResumeToReady" units="ms"
-    expires_after="2023-02-12">
+    expires_after="2023-12-01">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time from the resume event
+    ChromeOS network performance metric sampling the time from the resume event
     to the time when an 802.11 wireless network has configured its Layer 3
     state.
   </summary>
@@ -3120,17 +3303,17 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to configure Layer 3
+    ChromeOS network performance metric sampling the time to configure Layer 3
     state on an 802.11 wireless network (typically acquire a DHCP lease).
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToConnect" units="ms"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to connect to a WiFi
+    ChromeOS network performance metric sampling the time to connect to a WiFi
     Basic Service Set (which consists of the access point and associated
     stations on a particular WiFi channel for a specific network).
   </summary>
@@ -3141,7 +3324,7 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to initialize an
+    ChromeOS network performance metric sampling the time to initialize an
     802.11 wireless device.
   </summary>
 </histogram>
@@ -3151,61 +3334,61 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to join (associate
+    ChromeOS network performance metric sampling the time to join (associate
     plus authenticate) an 802.11 wireless network.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToOnline" units="ms"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that an
+    ChromeOS network performance metric sampling the time to determine that an
     802.11 wireless network is online after configuring Layer 3 state.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToPortal" units="ms"
-    expires_after="2023-02-12">
+    expires_after="2023-12-31">
   <owner>matthewmwang@chromium.org</owner>
   <owner>hugobenichi@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that an
+    ChromeOS network performance metric sampling the time to determine that an
     802.11 wireless network is in a captive portal after configuring Layer 3
     state.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToRedirectFound" units="ms"
-    expires_after="2023-04-16">
+    expires_after="2023-12-31">
   <owner>matthewmwang@chromium.org</owner>
   <owner>hugobenichi@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to determine that an
+    ChromeOS network performance metric sampling the time to determine that an
     802.11 wireless network is in a captive portal with a valid redirect URL
     after configuring Layer 3 state.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToScan" units="ms"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time to scan WiFi until a
+    ChromeOS network performance metric sampling the time to scan WiFi until a
     connection is found.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.TimeToScanAndConnect" units="ms"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric sampling the time between the beginning
+    ChromeOS network performance metric sampling the time between the beginning
     of a WiFi scan (if the scan includes both a progressive scan and a full
     scan, the TimeToScanAndConnect starts with the first scan of the series) and
     the completion of a successful connection.
@@ -3213,22 +3396,22 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.TransmitBitrateMbps" units="Mbps"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the transmit bitrate in
-    Mbps for the wifi device when it is connected to a network. The bitrate is
+    ChromeOS network performance metric that tracks the transmit bitrate in Mbps
+    for the wifi device when it is connected to a network. The bitrate is
     reported once every minute after the wifi connection is established.
   </summary>
 </histogram>
 
 <histogram name="Network.Shill.Wifi.UnreliableLinkSignalStrength" units="units"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network metric sampling the signal strength (0-100) of the wifi
+    ChromeOS network metric sampling the signal strength (0-100) of the wifi
     network when it becomes unreliable (experiencing multiple link failures in a
     short period of time).
   </summary>
@@ -3239,7 +3422,7 @@ chromium-metrics-reviews@google.com.
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the reasons of failed
+    ChromeOS network performance metric that tracks the reasons of failed
     user-initiated WiFi connection attempts. The result of the user-initiated
     WiFi connection attempts are being tracked by
     Network.Shill.WiFi.UserInitiatedConnectionResult.
@@ -3247,12 +3430,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Network.Shill.WiFi.UserInitiatedConnectionResult"
-    enum="ConnectionResult" expires_after="2023-04-16">
+    enum="ConnectionResult" expires_after="2023-08-20">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
-    Chrome OS network performance metric that tracks the result of
-    user-initiated WiFi connection attempts.
+    ChromeOS network performance metric that tracks the result of user-initiated
+    WiFi connection attempts.
   </summary>
 </histogram>
 
@@ -3261,7 +3444,7 @@ chromium-metrics-reviews@google.com.
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <owner>cast-analytics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. The channel used for each successful WiFi
+    ChromeOS network usage metric. The channel used for each successful WiFi
     connection.
   </summary>
 </histogram>
@@ -3271,7 +3454,7 @@ chromium-metrics-reviews@google.com.
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <owner>cast-analytics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. The channel type used for each successful
+    ChromeOS network usage metric. The channel type used for each successful
     WiFi connection.
   </summary>
 </histogram>
@@ -3290,109 +3473,120 @@ chromium-metrics-reviews@google.com.
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <owner>cast-analytics@google.com</owner>
   <summary>
-    Chrome OS network usage metric. The security setting for each successful
-    WiFi connection.
+    ChromeOS network usage metric. The security setting for each successful WiFi
+    connection.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.Connection.FailureReason"
-    enum="ConnectionFailureReason" expires_after="2023-04-16">
+    enum="ConnectionFailureReason" expires_after="2023-08-20">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric that tracks the failure reason for all connection attempts,
+    ChromeOS metric that tracks the failure reason for all connection attempts,
     manual or automatic, to Wi-Fi networks which were added from Chrome Sync.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.Connection.Result" enum="BooleanSuccess"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric that tracks the result of all connection attempts, manual
-    or automatic, to Wi-Fi networks which were added from Chrome Sync.
+    ChromeOS metric that tracks the result of all connection attempts, manual or
+    automatic, to Wi-Fi networks which were added from Chrome Sync.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.Hidden.Fixed" units="networks"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>jonmann@chromium.org</owner>
   <owner>tnagel@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <owner>cros-privacy-core@google.com</owner>
   <summary>
-    Chrome OS network metric tracking the count of synced networks that were
+    ChromeOS network metric tracking the count of synced networks that were
     fixed after getting saved to the device when out of range and marked as
     hidden. See b/178089463 for more details.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.ManualConnection.FailureReason"
-    enum="ConnectionFailureReason" expires_after="2023-02-14">
+    enum="ConnectionFailureReason" expires_after="2023-06-18">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric that tracks the failure reason for manual connection
+    ChromeOS metric that tracks the failure reason for manual connection
     attempts to Wi-Fi networks which were added from Chrome Sync.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.ManualConnection.Result"
-    enum="BooleanSuccess" expires_after="2023-04-16">
+    enum="BooleanSuccess" expires_after="2023-06-18">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric that tracks the result of manual connection attempts to
+    ChromeOS metric that tracks the result of manual connection attempts to
     Wi-Fi networks which were added from Chrome Sync.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.TotalCount" units="units"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric that tracks the total number of Wi-Fi networks which are
+    ChromeOS metric that tracks the total number of Wi-Fi networks which are
     stored in Chrome Sync for the active user.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.UpdateOperation.FailureReason"
-    enum="ConnectionFailureReason" expires_after="2023-02-14">
+    enum="ConnectionFailureReason" expires_after="2023-06-18">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric that tracks the failure reason for update attempts to
-    synced Wi-Fi networks. This includes create/modify/remove operations. Each
-    retry is counted seperately.
+    ChromeOS metric that tracks the failure reason for update attempts to synced
+    Wi-Fi networks. This includes create/modify/remove operations. Each retry is
+    counted seperately.
+  </summary>
+</histogram>
+
+<histogram
+    name="Network.Wifi.Synced.UpdateOperation.GenerateLocalNetworkConfig.Result"
+    enum="BooleanSuccess" expires_after="2023-06-18">
+  <owner>jonmann@chromium.org</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    ChromeOS metric that tracks the success or failure to generate a local
+    network config. Emitted on success and failure of add/update operations.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.UpdateOperation.Result"
-    enum="BooleanSuccess" expires_after="2023-02-14">
+    enum="BooleanSuccess" expires_after="2023-06-18">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric that tracks the result of update attempts to synced Wi-Fi
+    ChromeOS metric that tracks the result of update attempts to synced Wi-Fi
     networks. This includes create/modify/remove operations. failures are only
     recorded after all retries have been exhausted.
   </summary>
 </histogram>
 
 <histogram name="Network.Wifi.Synced.ZeroNetworksEligibleForSync.Reason"
-    enum="NetworkEligibilityStatus" expires_after="2023-02-14">
+    enum="NetworkEligibilityStatus" expires_after="2023-06-18">
   <owner>jonmann@chromium.org</owner>
   <owner>better-together-dev@google.com</owner>
   <summary>
-    Chrome OS metric logged for users who have the feature enabled but have zero
+    ChromeOS metric logged for users who have the feature enabled but have zero
     networks eligible for sync. Tracks the reasons why none of the networks are
     eligible.
   </summary>
 </histogram>
 
 <histogram name="NetworkService.ClearStaleDataDirectoryResult"
-    enum="DeleteStaleCookiesResult" expires_after="2023-04-30">
+    enum="DeleteStaleCookiesResult" expires_after="2023-07-02">
   <owner>wfh@chromium.org</owner>
   <owner>pasko@chromium.org</owner>
   <summary>
@@ -3403,7 +3597,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.CorsPreflightMethodAllowed"
-    enum="NetworkServiceCorsPreflightMethodAllowed" expires_after="2023-02-12">
+    enum="NetworkServiceCorsPreflightMethodAllowed" expires_after="2023-06-18">
   <owner>hiroshige@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <summary>
@@ -3436,7 +3630,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.DeletedOldCacheData" enum="Boolean"
-    expires_after="2023-01-22">
+    expires_after="2023-06-30">
   <owner>wfh@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -3456,18 +3650,6 @@ chromium-metrics-reviews@google.com.
     data files, and migrate the data if a migration is requested. This is
     reported each time a network context instance is created on the network
     service, even when the sandbox is not enabled or no migration is requested.
-  </summary>
-</histogram>
-
-<histogram name="NetworkService.GrantSandboxToCacheResult"
-    enum="NetworkServiceSandboxGrantResult" expires_after="2023-02-19">
-  <owner>wfh@chromium.org</owner>
-  <owner>mmenke@chromium.org</owner>
-  <summary>
-    The result of the attempt to grant the sandbox access to a network context
-    HTTP cache files. This is reported each time a network context instance is
-    created on the network service and it has a valid HTTP cache path and HTTP
-    cache is enabled.
   </summary>
 </histogram>
 
@@ -3495,7 +3677,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.MemoryCache.ContentLength.{RequestDestination}"
-    units="bytes" expires_after="2023-02-22">
+    units="bytes" expires_after="2023-07-10">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -3522,7 +3704,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.MemoryCache.FreshnessAtStore" units="seconds"
-    expires_after="2023-02-22">
+    expires_after="2023-07-10">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -3532,7 +3714,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.NetworkLoaderCompletionTime.{Source}"
-    units="ms" expires_after="2023-02-22">
+    units="ms" expires_after="2023-07-10">
   <owner>bashi@chromium.org</owner>
   <owner>blink-network-stack@google.com</owner>
   <summary>
@@ -3590,7 +3772,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.TimeToGrantCacheAccess" units="ms"
-    expires_after="2023-06-04">
+    expires_after="2023-08-08">
   <owner>wfh@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -3604,7 +3786,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.TimeToGrantDataAccess" units="ms"
-    expires_after="2023-06-04">
+    expires_after="2023-08-08">
   <owner>wfh@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -3619,7 +3801,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NetworkService.TimeToMigrateData" units="ms"
-    expires_after="2023-04-30">
+    expires_after="2023-07-02">
   <owner>wfh@chromium.org</owner>
   <owner>mmenke@chromium.org</owner>
   <summary>
@@ -3673,106 +3855,6 @@ chromium-metrics-reviews@google.com.
   <owner>cduvall@chromium.org</owner>
   <summary>
     The time it takes for each invocation of URLLoaderFactory.UpdateLoadInfo.
-  </summary>
-</histogram>
-
-<histogram name="NetworkTimeTracker.ClockDivergence.Negative" units="seconds"
-    expires_after="M77">
-  <owner>estark@chromium.org</owner>
-  <owner>mab@chromium.org</owner>
-  <summary>
-    NetworkTimeTracker observes a tick clock and a wall clock to determine
-    whether a timestamp retrieved from the network in the past can be used to
-    compute a current timestamp. When the tick clock and wall clock diverge from
-    each other, the NetworkTimeTracker must discard the network timestamp
-    because it has no way to compute a reliable current timestamp. Whenever the
-    NetworkTimeTracker discards a network timestamp due to the tick and wall
-    clocks diverging, this histogram records the difference of the tick clock's
-    delta minus the wall clock's delta since the network timestamp was
-    retrieved. For cases where the the tick clock delta is bigger than the wall
-    clock delta, see NetworkTimeTracker.ClockDivergence.Positive.
-  </summary>
-</histogram>
-
-<histogram name="NetworkTimeTracker.ClockDivergence.Positive" units="seconds"
-    expires_after="M77">
-  <owner>estark@chromium.org</owner>
-  <owner>mab@chromium.org</owner>
-  <summary>
-    NetworkTimeTracker observes a tick clock and a wall clock to determine
-    whether a timestamp retrieved from the network in the past can be used to
-    compute a current timestamp. When the tick clock and wall clock diverge from
-    each other, the NetworkTimeTracker must discard the network timestamp
-    because it has no way to compute a reliable current timestamp. Whenever the
-    NetworkTimeTracker discards a network timestamp due to the tick and wall
-    clocks diverging, this histogram records the difference of the tick clock's
-    delta minus the wall clock's delta since the network timestamp was
-    retrieved. For cases where the the wall clock delta is bigger than the tick
-    clock delta, see NetworkTimeTracker.ClockDivergence.Negative.
-  </summary>
-</histogram>
-
-<histogram name="NetworkTimeTracker.TimeBetweenFetches" units="ms"
-    expires_after="M77">
-  <owner>estark@chromium.org</owner>
-  <owner>mab@chromium.org</owner>
-  <summary>
-    NetworkTimeTracker makes periodic queries to obtain a secure timestamp over
-    the network. This histogram records the delta between each secure timestamp
-    and the previous one, to measure how often time queries are made. The first
-    time query is not recorded, because there is no previous query from which to
-    compute a delta.
-  </summary>
-</histogram>
-
-<histogram name="NetworkTimeTracker.TimeQueryLatency" units="ms"
-    expires_after="M77">
-  <owner>estark@chromium.org</owner>
-  <owner>mab@chromium.org</owner>
-  <summary>
-    NetworkTimeTracker makes periodic queries to obtain a secure timestamp over
-    the network. This histogram records the latency of each time query.
-  </summary>
-</histogram>
-
-<histogram name="NetworkTimeTracker.UpdateTimeFetchFailed" enum="NetErrorCodes"
-    expires_after="M77">
-  <owner>estark@chromium.org</owner>
-  <owner>mab@chromium.org</owner>
-  <summary>
-    NetworkTimeTracker makes periodic queries to obtain a secure timestamp over
-    the network. This histogram records the request's net error code whenever a
-    secure timestamp fetch results in a network error or a non-200 HTTP status
-    code.
-  </summary>
-</histogram>
-
-<histogram name="NetworkTimeTracker.UpdateTimeFetchValid" enum="BooleanValid"
-    expires_after="M77">
-  <owner>estark@chromium.org</owner>
-  <owner>mab@chromium.org</owner>
-  <summary>
-    NetworkTimeTracker makes periodic queries to obtain a secure timestamp over
-    the network. Whenever one of these requests results in a successful 200
-    status code, this histogram records true if the response parsed and
-    validated successfully, and false otherwise.
-  </summary>
-</histogram>
-
-<histogram name="NetworkTimeTracker.WallClockRanBackwards" units="seconds"
-    expires_after="M77">
-  <owner>estark@chromium.org</owner>
-  <owner>mab@chromium.org</owner>
-  <summary>
-    NetworkTimeTracker observes a tick clock and a wall clock to determine
-    whether a timestamp retrieved from the network in the past can be used to
-    compute a current timestamp. When the NetworkTimeTracker observes that the
-    wall clock ran backwards, the NetworkTimeTracker must discard the network
-    timestamp because it has no way to compute a reliable current timestamp.
-    Whenever the NetworkTimeTracker discards a network timestamp due to the wall
-    clock running backwards, this histogram records the magnitude of the
-    difference of the current wall clock time minus the wall clock time when the
-    network timestamp was retrieved.
   </summary>
 </histogram>
 

@@ -7,56 +7,94 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 
 import {BrowserProxyImpl} from 'chrome://resources/cr_components/history_clusters/browser_proxy.js';
 import {HistoryClustersElement} from 'chrome://resources/cr_components/history_clusters/clusters.js';
-import {Cluster, PageCallbackRouter, PageHandlerRemote, PageRemote, QueryResult, RawVisitData, URLVisit} from 'chrome://resources/cr_components/history_clusters/history_clusters.mojom-webui.js';
-import {assertEquals} from 'chrome://webui-test/chai_assert.js';
+import {Cluster, RawVisitData, URLVisit} from 'chrome://resources/cr_components/history_clusters/history_cluster_types.mojom-webui.js';
+import {PageCallbackRouter, PageHandlerRemote, PageRemote, QueryResult} from 'chrome://resources/cr_components/history_clusters/history_clusters.mojom-webui.js';
+import {ImageServiceBrowserProxy} from 'chrome://resources/cr_components/image_service/browser_proxy.js';
+import {ClientId as ImageServiceClientId, ImageServiceHandlerRemote} from 'chrome://resources/cr_components/image_service/image_service.mojom-webui.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
+import {assertEquals, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
-import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+import {TestMock} from 'chrome://webui-test/test_mock.js';
 
-let handler: PageHandlerRemote&TestBrowserProxy;
+let handler: TestMock<PageHandlerRemote>&PageHandlerRemote;
 let callbackRouterRemote: PageRemote;
+let imageServiceHandler: TestMock<ImageServiceHandlerRemote>&
+    ImageServiceHandlerRemote;
 
 function createBrowserProxy() {
-  handler = TestBrowserProxy.fromClass(PageHandlerRemote);
+  handler = TestMock.fromClass(PageHandlerRemote);
   const callbackRouter = new PageCallbackRouter();
   BrowserProxyImpl.setInstance(new BrowserProxyImpl(handler, callbackRouter));
   callbackRouterRemote = callbackRouter.$.bindNewPipeAndPassRemote();
+
+  imageServiceHandler = TestMock.fromClass(ImageServiceHandlerRemote);
+  ImageServiceBrowserProxy.setInstance(
+      new ImageServiceBrowserProxy(imageServiceHandler));
 }
 
 suite('history-clusters', () => {
+  suiteSetup(() => {
+    loadTimeData.overrideValues({
+      isHistoryClustersImagesEnabled: true,
+    });
+  });
+
   setup(() => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     createBrowserProxy();
   });
 
-  function getTestResult() {
-    const cluster1 = new Cluster();
-    const urlVisit1 = new URLVisit();
-    urlVisit1.normalizedUrl = {url: 'https://www.google.com'};
-    urlVisit1.urlForDisplay = 'https://www.google.com';
-    urlVisit1.pageTitle = '';
-    urlVisit1.titleMatchPositions = [];
-    urlVisit1.urlForDisplayMatchPositions = [];
-    urlVisit1.duplicates = [];
-    urlVisit1.relativeDate = '';
-    urlVisit1.annotations = [];
-    urlVisit1.hidden = false;
-    urlVisit1.debugInfo = {};
-    const rawVisitData = new RawVisitData();
-    rawVisitData.url = {url: ''};
-    rawVisitData.visitTime = {internalValue: BigInt(0)};
-    urlVisit1.rawVisitData = rawVisitData;
-    cluster1.visits = [urlVisit1];
-    cluster1.labelMatchPositions = [];
-    cluster1.relatedSearches = [];
-    const cluster2 = new Cluster();
-    cluster2.visits = [];
-    cluster2.labelMatchPositions = [];
-    cluster2.relatedSearches = [];
+  function getTestResult(): QueryResult {
+    const rawVisitData: RawVisitData = {
+      url: {url: ''},
+      visitTime: {internalValue: BigInt(0)},
+    };
 
-    const queryResult = new QueryResult();
-    queryResult.query = '';
-    queryResult.clusters = [cluster1, cluster2];
+    const urlVisit1: URLVisit = {
+      visitId: BigInt(1),
+      normalizedUrl: {url: 'https://www.google.com'},
+      urlForDisplay: 'https://www.google.com',
+      pageTitle: '',
+      titleMatchPositions: [],
+      urlForDisplayMatchPositions: [],
+      duplicates: [],
+      relativeDate: '',
+      annotations: [],
+      debugInfo: {},
+      rawVisitData: rawVisitData,
+      isKnownToSync: false,
+      imageUrl: undefined,
+    };
+
+    const cluster1: Cluster = {
+      id: BigInt(111),
+      visits: [urlVisit1],
+      label: undefined,
+      labelMatchPositions: [],
+      relatedSearches: [],
+      imageUrl: undefined,
+      fromPersistence: false,
+      debugInfo: undefined,
+    };
+
+    const cluster2: Cluster = {
+      id: BigInt(222),
+      visits: [],
+      label: undefined,
+      labelMatchPositions: [],
+      relatedSearches: [],
+      imageUrl: undefined,
+      fromPersistence: false,
+      debugInfo: undefined,
+    };
+
+    const queryResult: QueryResult = {
+      query: '',
+      clusters: [cluster1, cluster2],
+      canLoadMore: false,
+      isContinuation: false,
+    };
 
     return queryResult;
   }
@@ -173,5 +211,38 @@ suite('history-clusters', () => {
     assertEquals(urlVisit!.$.url.innerHTML, openHistoryClusterArgs[0].url);
     assertEquals(true, openHistoryClusterArgs[1].shiftKey);
     assertEquals(1, handler.getCallCount('openHistoryCluster'));
+  });
+
+  test('url visit requests image', async () => {
+    const clustersElement = await setupClustersElement();
+
+    callbackRouterRemote.onClustersQueryResult(getTestResult());
+    await callbackRouterRemote.$.flushForTesting();
+    flushTasks();
+
+    // Set a result for the image handler to pass back to the favicon component,
+    // so it doesn't throw a console error.
+    imageServiceHandler.setResultFor('getPageImageUrl', Promise.resolve({
+      result: {imageUrl: {url: 'https://example.com/image.png'}},
+    }));
+
+    const urlVisit =
+        clustersElement.$.clusters.querySelector('history-cluster')!.$.container
+            .querySelector('url-visit');
+    assertTrue(!!urlVisit);
+    // Assign a copied visit object with `isKnownToSync` set to true.
+    urlVisit.visit = Object.assign({}, urlVisit.visit, {isKnownToSync: true});
+
+    const [clientId, pageUrl] =
+        await imageServiceHandler.whenCalled('getPageImageUrl');
+    assertEquals(ImageServiceClientId.Journeys, clientId);
+    assertEquals(urlVisit.visit.normalizedUrl, pageUrl);
+
+    // Verify the icon element received the handler's response.
+    const icon = urlVisit.shadowRoot!.querySelector('page-favicon');
+    assertTrue(!!icon);
+    const imageUrl = icon.getImageUrlForTesting();
+    assertTrue(!!imageUrl);
+    assertEquals('https://example.com/image.png', imageUrl.url);
   });
 });

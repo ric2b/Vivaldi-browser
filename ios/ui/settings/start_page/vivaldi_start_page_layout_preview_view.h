@@ -13,8 +13,7 @@
 - (instancetype)init;
 
 // SETTERS
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
-                  isLandscape:(BOOL)isLandscape;
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style;
 @end
 
 #endif  // IOS_UI_SETTINGS_START_PAGE_VIVALDI_START_PAGE_LAYOUT_PREVIEW_VIEW_H_

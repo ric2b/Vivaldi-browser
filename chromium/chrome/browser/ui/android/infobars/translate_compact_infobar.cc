@@ -12,7 +12,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "chrome/android/chrome_jni_headers/TranslateCompactInfoBar_jni.h"
 #include "chrome/browser/android/tab_android.h"
@@ -126,15 +126,13 @@ void TranslateCompactInfoBar::ApplyStringTranslateOption(
   if (option == translate::TranslateUtils::OPTION_SOURCE_CODE) {
     std::string source_code =
         base::android::ConvertJavaStringToUTF8(env, value);
-    if (delegate->source_language_code().compare(source_code) != 0)
-      delegate->UpdateSourceLanguage(source_code);
+    delegate->UpdateSourceLanguage(source_code);
     delegate->ReportUIInteraction(
         translate::UIInteraction::kChangeSourceLanguage);
   } else if (option == translate::TranslateUtils::OPTION_TARGET_CODE) {
     std::string target_code =
         base::android::ConvertJavaStringToUTF8(env, value);
-    if (delegate->target_language_code().compare(target_code) != 0)
-      delegate->UpdateTargetLanguage(target_code);
+    delegate->UpdateTargetLanguage(target_code);
     delegate->ReportUIInteraction(
         translate::UIInteraction::kChangeTargetLanguage);
   } else {

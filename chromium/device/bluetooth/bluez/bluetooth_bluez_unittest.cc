@@ -9,10 +9,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -4268,8 +4268,8 @@ TEST_P(BluetoothBlueZTestP, GetConnectionInfoForConnectedDevice) {
 }
 
 TEST_F(BluetoothBlueZTest, GetDiscoverableTimeout) {
-  constexpr uint32_t kShortDiscoverableTimeout = 30;
-  constexpr uint32_t kLongDiscoverableTimeout = 240;
+  constexpr base::TimeDelta kShortDiscoverableTimeout = base::Seconds(30);
+  constexpr base::TimeDelta kLongDiscoverableTimeout = base::Seconds(240);
   GetAdapter();
   BluetoothAdapterBlueZ* adapter_bluez =
       static_cast<BluetoothAdapterBlueZ*>(adapter_.get());

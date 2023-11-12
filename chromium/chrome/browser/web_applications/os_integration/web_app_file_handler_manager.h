@@ -12,7 +12,6 @@
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
-#include "mojo/public/cpp/bindings/associated_remote.h"
 
 class Profile;
 
@@ -30,14 +29,6 @@ class WebAppFileHandlerManager {
 
   void SetSubsystems(WebAppSyncBridge* sync_bridge);
   void Start();
-
-  // Disables OS integrations, such as shortcut creation on Linux or modifying
-  // the registry on Windows, to prevent side effects while testing.
-  // `set_os_integration` will be invoked every time OS integration would have
-  // been toggled with a boolean that is true for enabled. Note: When disabled,
-  // file handling integration will not work on most operating systems.
-  static void DisableOsIntegrationForTesting(
-      const base::RepeatingCallback<void(bool)>& set_os_integration);
 
   // Called by tests to enable file handling icon infrastructure on a platform
   // independently of whether it's needed or used in production. Note that the
@@ -72,13 +63,8 @@ class WebAppFileHandlerManager {
   // the app they belong to.
   const apps::FileHandlers* GetEnabledFileHandlers(const AppId& app_id) const;
 
-  // Determines whether file handling is allowed for |app_id|.
-  bool IsFileHandlingAPIAvailable(const AppId& app_id) const;
-
   // Returns true when the system supports file type association icons.
   static bool IconsEnabled();
-
-  void SyncOsIntegrationStateForTesting();
 
  protected:
   // Gets all file handlers for |app_id|. |nullptr| if the app has no file
@@ -87,6 +73,8 @@ class WebAppFileHandlerManager {
   // `virtual` for testing.
   virtual const apps::FileHandlers* GetAllFileHandlers(
       const AppId& app_id) const;
+
+  virtual bool IsDisabledForTesting();
 
  private:
   // Sets whether `app_id` should have its File Handling abilities surfaces in
@@ -99,11 +87,6 @@ class WebAppFileHandlerManager {
   // `SetOsIntegrationState()`, there may be a mismatch with the actual OS
   // registry.
   bool ShouldOsIntegrationBeEnabled(const AppId& app_id) const;
-
-  // Refreshes the OS integration state for all apps. This is useful to handle
-  // the case where the File Handling feature became enabled or disabled since
-  // the last time Chromium ran.
-  void SyncOsIntegrationState();
 
   const WebAppRegistrar* GetRegistrar() const;
 

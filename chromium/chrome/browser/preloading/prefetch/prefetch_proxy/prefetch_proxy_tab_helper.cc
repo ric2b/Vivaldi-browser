@@ -7,11 +7,11 @@
 #include <string>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -941,6 +941,7 @@ void PrefetchProxyTabHelper::StartSinglePrefetch() {
 void PrefetchProxyTabHelper::OnPrefetchRedirect(
     network::SimpleURLLoader* loader,
     const GURL& original_url,
+    const GURL& url_before_redirect,
     const net::RedirectInfo& redirect_info,
     const network::mojom::URLResponseHead& response_head,
     std::vector<std::string>* removed_headers) {
@@ -1477,7 +1478,7 @@ PrefetchProxyTabHelper::CheckEligibilityOfURLSansUserData(
     return std::make_pair(false, absl::nullopt);
   }
 
-  if (data_saver::IsDataSaverEnabled(profile)) {
+  if (data_saver::IsDataSaverEnabled()) {
     return std::make_pair(
         false,
         PrefetchProxyPrefetchStatus::kPrefetchNotEligibleDataSaverEnabled);
@@ -1585,7 +1586,7 @@ void PrefetchProxyTabHelper::CheckEligibilityOfURL(
   // constructed with the top-level site to ensure correct partitioning.
   bool site_has_service_worker =
       service_worker_context_->MaybeHasRegistrationForStorageKey(
-          blink::StorageKey(url::Origin::Create(url)));
+          blink::StorageKey::CreateFirstParty(url::Origin::Create(url)));
   if (site_has_service_worker) {
     std::move(result_callback)
         .Run(url, false,

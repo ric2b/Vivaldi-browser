@@ -28,12 +28,7 @@ constexpr float kTrayItemCornerRadius = kTrayItemSize / 2.f;
 constexpr int kTrayMenuWidth = 360;
 
 // The width of the revamped tray menu.
-constexpr int kRevampedTrayMenuWidth = 440;
-
-// TODO(b/258072559): Update this height once we have finalized UX specs for
-// tray height.
-// The maximum height of the revamped tray menu.
-constexpr int kRevampedTrayMenuMaxHeight = 508;
+constexpr int kRevampedTrayMenuWidth = 400;
 
 constexpr int kTrayPopupAutoCloseDelayInSeconds = 2;
 constexpr int kTrayPopupAutoCloseDelayInSecondsWithSpokenFeedback = 5;
@@ -133,6 +128,11 @@ constexpr auto kMicGainSliderPadding = gfx::Insets::TLBR(0, 8, 0, 48);
 
 // Constants used in the QuickSettingsSlider of the `QuickSettingsView`.
 constexpr int kQsSliderIconSize = 20;
+constexpr auto kRadioSliderIconPadding = gfx::Insets::VH(0, 2);
+constexpr auto kRadioSliderPadding = gfx::Insets::TLBR(0, 4, 0, 24);
+constexpr auto kRadioSliderPreferredSize = gfx::Size(0, 44);
+constexpr auto kRadioSliderViewPadding = gfx::Insets::TLBR(0, 20, 0, 0);
+constexpr int kRadioSliderViewSpacing = 8;
 
 constexpr int kMessageCenterCollapseThreshold = 175;
 constexpr int kStackedNotificationBarHeight = 32;
@@ -217,7 +217,6 @@ constexpr int kUnifiedFeaturePodMaxItemsInCollapsed = 5;
 constexpr int kUnifiedFeaturePodsPageSpacing = 48;
 
 // Constants used in FeatureTiles of QuickSettingsView.
-constexpr int kFeatureTileItemsInRow = 2;
 constexpr int kFeatureTileMaxRows = 4;
 constexpr int kFeatureTileMinRows = 1;
 constexpr int kFeatureTileHeight = 64;

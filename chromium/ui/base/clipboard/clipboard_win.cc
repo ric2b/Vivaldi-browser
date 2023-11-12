@@ -13,9 +13,9 @@
 #include <cstdint>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
@@ -674,7 +674,8 @@ void ClipboardWin::WriteHTML(const char* markup_data,
   if (url_len > 0)
     url.assign(url_data, url_len);
 
-  std::string html_fragment = ClipboardUtil::HtmlToCFHtml(markup, url);
+  std::string html_fragment = ClipboardUtil::HtmlToCFHtml(
+      markup, url, ClipboardContentType::kSanitized);
   HGLOBAL glob = CreateGlobalData(html_fragment);
 
   WriteToClipboard(ClipboardFormatType::HtmlType(), glob);

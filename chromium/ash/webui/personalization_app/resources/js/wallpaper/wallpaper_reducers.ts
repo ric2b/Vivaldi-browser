@@ -5,14 +5,14 @@
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 
+import {WallpaperCollection} from '../../personalization_app.mojom-webui.js';
 import {Actions} from '../personalization_actions.js';
-import {WallpaperCollection} from '../personalization_app.mojom-webui.js';
 import {ReducerFunction} from '../personalization_reducers.js';
 import {PersonalizationState} from '../personalization_state.js';
 import {isImageDataUrl, isNonEmptyArray} from '../utils.js';
 
 import {DefaultImageSymbol, kDefaultImageSymbol} from './constants.js';
-import {isDefaultImage, isFilePath} from './utils.js';
+import {findAlbumById, isDefaultImage, isFilePath} from './utils.js';
 import {WallpaperActionName} from './wallpaper_actions.js';
 import {DailyRefreshType, WallpaperState} from './wallpaper_state.js';
 
@@ -189,6 +189,24 @@ function loadingReducer(
         googlePhotos: {
           ...state.googlePhotos,
           albums: false,
+        },
+      };
+    case WallpaperActionName.BEGIN_LOAD_GOOGLE_PHOTOS_SHARED_ALBUMS:
+      assert(state.googlePhotos.albumsShared === false);
+      return {
+        ...state,
+        googlePhotos: {
+          ...state.googlePhotos,
+          albumsShared: true,
+        },
+      };
+    case WallpaperActionName.APPEND_GOOGLE_PHOTOS_SHARED_ALBUMS:
+      assert(state.googlePhotos.albumsShared === true);
+      return {
+        ...state,
+        googlePhotos: {
+          ...state.googlePhotos,
+          albumsShared: false,
         },
       };
     case WallpaperActionName.BEGIN_LOAD_GOOGLE_PHOTOS_ENABLED:
@@ -398,17 +416,24 @@ function googlePhotosReducer(
     case WallpaperActionName.BEGIN_LOAD_GOOGLE_PHOTOS_ALBUM:
       // The list of photos for an album should be loaded only while additional
       // photos exist.
-      assert(!!state.albums);
-      assert(state.albums.some(album => album.id === action.albumId));
+      assert(
+          findAlbumById(action.albumId, state.albums) ||
+              findAlbumById(action.albumId, state.albumsShared),
+          'No matching album id found in Google Photos albums.');
       assert(
           !state.photosByAlbumId[action.albumId] ||
-          state.resumeTokens.photosByAlbumId[action.albumId]);
+              state.resumeTokens.photosByAlbumId[action.albumId],
+          'No photos available in the given Google Photos album.');
       return state;
     case WallpaperActionName.APPEND_GOOGLE_PHOTOS_ALBUM:
-      assert(!!state.albums);
-      assert(state.albums.some(album => album.id === action.albumId));
-      assert(action.albumId !== undefined);
-      assert(action.photos !== undefined);
+      assert(action.albumId !== undefined, 'Album id is undefined.');
+      assert(
+          action.photos !== undefined,
+          'List of Google Photos photos is undefined.');
+      assert(
+          findAlbumById(action.albumId, state.albums) ||
+              findAlbumById(action.albumId, state.albumsShared),
+          'No matching album id found in Google Photos albums.');
       // Case: First batch of photos.
       if (!Array.isArray(state.photosByAlbumId[action.albumId])) {
         return {
@@ -457,10 +482,12 @@ function googlePhotosReducer(
       };
     case WallpaperActionName.BEGIN_LOAD_GOOGLE_PHOTOS_ALBUMS:
       // The list of albums should be loaded only while additional albums exist.
-      assert(!state.albums || state.resumeTokens.albums);
+      assert(
+          !state.albums || state.resumeTokens.albums,
+          'Additional owned albums do not exist.');
       return state;
     case WallpaperActionName.APPEND_GOOGLE_PHOTOS_ALBUMS:
-      assert(action.albums !== undefined);
+      assert(action.albums !== undefined, 'No owned albums fetched.');
       // Case: First batch of albums.
       if (!Array.isArray(state.albums)) {
         return {
@@ -489,6 +516,43 @@ function googlePhotosReducer(
         resumeTokens: {
           ...state.resumeTokens,
           albums: action.resumeToken,
+        },
+      };
+    case WallpaperActionName.BEGIN_LOAD_GOOGLE_PHOTOS_SHARED_ALBUMS:
+      assert(
+          !state.albumsShared || state.resumeTokens.albumsShared,
+          'Additional shared albums do not exist.');
+      return state;
+    case WallpaperActionName.APPEND_GOOGLE_PHOTOS_SHARED_ALBUMS:
+      assert(action.albums !== undefined, 'No shared albums fetched.');
+      // Case: First batch of albums.
+      if (!Array.isArray(state.albumsShared)) {
+        return {
+          ...state,
+          albumsShared: action.albums,
+          resumeTokens: {
+            ...state.resumeTokens,
+            albumsShared: action.resumeToken,
+          },
+        };
+      }
+      // Case: Subsequent batches of albums.
+      if (Array.isArray(action.albums)) {
+        return {
+          ...state,
+          albumsShared: [...state.albumsShared, ...action.albums],
+          resumeTokens: {
+            ...state.resumeTokens,
+            albumsShared: action.resumeToken,
+          },
+        };
+      }
+      // Case: Error.
+      return {
+        ...state,
+        resumeTokens: {
+          ...state.resumeTokens,
+          albumsShared: action.resumeToken,
         },
       };
     case WallpaperActionName.BEGIN_LOAD_GOOGLE_PHOTOS_ENABLED:

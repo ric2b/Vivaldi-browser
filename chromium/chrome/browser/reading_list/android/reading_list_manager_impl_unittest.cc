@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/guid.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/reading_list/android/reading_list_manager.h"
@@ -16,6 +17,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/reading_list/core/fake_reading_list_model_storage.h"
 #include "components/reading_list/core/reading_list_model_impl.h"
+#include "components/sync/base/storage_type.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -63,8 +65,8 @@ class ReadingListManagerImplTest : public testing::Test {
     base::WeakPtr<FakeReadingListModelStorage> storage_ptr =
         storage->AsWeakPtr();
 
-    reading_list_model_ =
-        std::make_unique<ReadingListModelImpl>(std::move(storage), &clock_);
+    reading_list_model_ = std::make_unique<ReadingListModelImpl>(
+        std::move(storage), syncer::StorageType::kUnspecified, &clock_);
     manager_ =
         std::make_unique<ReadingListManagerImpl>(reading_list_model_.get());
     manager_->AddObserver(observer());
@@ -118,9 +120,10 @@ TEST_F(ReadingListManagerImplTest, Load) {
   ASSERT_FALSE(manager()->IsLoaded());
 
   // Mimic the completion of storage loading with one initial entry.
-  std::vector<ReadingListEntry> entries;
+  std::vector<scoped_refptr<ReadingListEntry>> entries;
   GURL url(kURL);
-  entries.emplace_back(url, kTitle, clock()->Now());
+  entries.push_back(
+      base::MakeRefCounted<ReadingListEntry>(url, kTitle, clock()->Now()));
   ASSERT_TRUE(fake_storage->TriggerLoadCompletion(std::move(entries)));
   EXPECT_TRUE(manager()->IsLoaded());
 

@@ -7,8 +7,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
@@ -31,6 +31,10 @@ SecurityKeyIpcClient::~SecurityKeyIpcClient() {
 
 bool SecurityKeyIpcClient::CheckForSecurityKeyIpcServerChannel() {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  if (test_ipc_channel_pipe_.is_valid()) {
+    return true;
+  }
 
   if (!channel_handle_.is_valid()) {
     channel_handle_ =
@@ -88,6 +92,11 @@ void SecurityKeyIpcClient::CloseIpcConnection() {
 void SecurityKeyIpcClient::SetIpcChannelHandleForTest(
     const mojo::NamedPlatformChannel::ServerName& server_name) {
   named_channel_handle_ = server_name;
+}
+
+void SecurityKeyIpcClient::SetIpcChannelPipeForTest(
+    mojo::ScopedMessagePipeHandle pipe) {
+  test_ipc_channel_pipe_ = std::move(pipe);
 }
 
 void SecurityKeyIpcClient::SetExpectedIpcServerSessionIdForTest(
@@ -154,15 +163,18 @@ void SecurityKeyIpcClient::ConnectToIpcChannel() {
   // Verify that any existing IPC connection has been closed.
   CloseIpcConnection();
 
-  if (!channel_handle_.is_valid() && !CheckForSecurityKeyIpcServerChannel()) {
-    LOG(ERROR) << "Invalid channel handle.";
-    OnChannelError();
-    return;
+  mojo::ScopedMessagePipeHandle pipe = std::move(test_ipc_channel_pipe_);
+  if (!pipe.is_valid()) {
+    if (!channel_handle_.is_valid() && !CheckForSecurityKeyIpcServerChannel()) {
+      LOG(ERROR) << "Invalid channel handle.";
+      OnChannelError();
+      return;
+    }
+    pipe = mojo_connection_.Connect(std::move(channel_handle_));
   }
 
   ipc_channel_ = IPC::Channel::CreateClient(
-      mojo_connection_.Connect(std::move(channel_handle_)).release(), this,
-      base::SingleThreadTaskRunner::GetCurrentDefault());
+      pipe.release(), this, base::SingleThreadTaskRunner::GetCurrentDefault());
 
   if (!ipc_channel_->Connect()) {
     LOG(ERROR) << "Failed to connect IPC Channel.";

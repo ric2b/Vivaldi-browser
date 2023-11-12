@@ -17,7 +17,6 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "sync/vivaldi_sync_auth_manager.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 
 namespace vivaldi {
 
@@ -141,8 +140,8 @@ void VivaldiSyncServiceImpl::OnEngineInitialized(
   error.error_type = syncer::CLIENT_DATA_OBSOLETE;
   error.action = syncer::RESET_LOCAL_SYNC_DATA;
 
-  base::SequencedTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(&SyncServiceImpl::OnActionableError,
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&SyncServiceImpl::OnActionableProtocolError,
                                 weak_factory_.GetWeakPtr(), error));
 }
 

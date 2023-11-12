@@ -17,7 +17,7 @@ static jlong JNI_VivaldiSyncService_Init(
     const base::android::JavaParamRef<jobject>& obj) {
   VivaldiSyncServiceAndroid* vivaldi_account_manager_android =
       new VivaldiSyncServiceAndroid(env, obj);
-  if (!vivaldi_account_manager_android->Init()) {
+  if (!vivaldi_account_manager_android->Init(env)) {
     delete vivaldi_account_manager_android;
     return 0;
   }
@@ -38,7 +38,7 @@ VivaldiSyncServiceAndroid::~VivaldiSyncServiceAndroid() {
   sync_service_->RemoveObserver(this);
 }
 
-bool VivaldiSyncServiceAndroid::Init() {
+bool VivaldiSyncServiceAndroid::Init(JNIEnv* env) {
   if (sync_service_) {
     sync_service_->AddObserver(this);
     return true;
@@ -48,49 +48,38 @@ bool VivaldiSyncServiceAndroid::Init() {
 
 jboolean VivaldiSyncServiceAndroid::SetEncryptionPassword(
     JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jstring>& password) {
   return sync_service_->ui_helper()->SetEncryptionPassword(
       base::android::ConvertJavaStringToUTF8(env, password));
 }
 
-void VivaldiSyncServiceAndroid::ClearServerData(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
+void VivaldiSyncServiceAndroid::ClearServerData(JNIEnv* env) {
   if (vivaldi::IsVivaldiRunning())
     sync_service_->ClearSyncData();
 }
 
-void VivaldiSyncServiceAndroid::StopAndClear(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
+void VivaldiSyncServiceAndroid::StopAndClear(JNIEnv* env) {
   sync_service_->StopAndClear();
 }
 
-jboolean VivaldiSyncServiceAndroid::HasServerError(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
+jboolean VivaldiSyncServiceAndroid::HasServerError(JNIEnv* env) {
   return sync_service_->GetSyncTokenStatusForDebugging().connection_status ==
          syncer::CONNECTION_SERVER_ERROR;
 }
 
 jboolean VivaldiSyncServiceAndroid::IsSetupInProgress(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
+    JNIEnv* env) {
   return sync_service_->IsSetupInProgress();
 }
 
 base::android::ScopedJavaLocalRef<jstring>
-VivaldiSyncServiceAndroid::GetBackupEncryptionToken(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
+VivaldiSyncServiceAndroid::GetBackupEncryptionToken(JNIEnv* env) {
   return base::android::ConvertUTF8ToJavaString(
       env, sync_service_->ui_helper()->GetBackupEncryptionToken());
 }
 
 jboolean VivaldiSyncServiceAndroid::RestoreEncryptionToken(
     JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
     const base::android::JavaParamRef<jstring>& token) {
   return sync_service_->ui_helper()->RestoreEncryptionToken(
       base::android::ConvertJavaStringToUTF8(env, token));

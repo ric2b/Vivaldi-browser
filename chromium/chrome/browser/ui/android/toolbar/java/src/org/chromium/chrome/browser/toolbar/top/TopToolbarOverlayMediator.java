@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.toolbar.top;
 
 import android.content.Context;
+import android.view.View;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.VisibleForTesting;
@@ -21,6 +22,7 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
+import org.chromium.chrome.browser.toolbar.ToolbarFeatures;
 import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -65,7 +67,10 @@ public class TopToolbarOverlayMediator {
     private boolean mIsVisibilityManuallyControlled;
 
     /** Whether the android view for this overlay is visible. */
-    private boolean mIsAndroidViewVisible;
+    private boolean mIsToolbarAndroidViewVisible;
+
+    /** Whether the parent of the view for this overlay is visible. */
+    private boolean mIsBrowserControlsAndroidViewVisible;
 
     /** Whether the overlay should be visible despite other signals. */
     private boolean mManualVisibility;
@@ -142,11 +147,23 @@ public class TopToolbarOverlayMediator {
                 updateShadowState();
                 updateVisibility();
             }
+
+            @Override
+            public void onAndroidControlsVisibilityChanged(int visibility) {
+                if (ToolbarFeatures.shouldSuppressCaptures()) {
+                    mIsBrowserControlsAndroidViewVisible = visibility == View.VISIBLE;
+                    updateShadowState();
+                }
+            }
         };
         // Note(david@vivaldi.com): There is an adequate observer in |VivaldiTopToolbarCoordinator|
         // which handles the correct yOffset calculation of the toolbar layer.
         if (!BuildConfig.IS_VIVALDI)
         mBrowserControlsStateProvider.addObserver(mBrowserControlsObserver);
+        if (ToolbarFeatures.shouldSuppressCaptures()) {
+            mIsBrowserControlsAndroidViewVisible =
+                    mBrowserControlsStateProvider.getAndroidControlsVisibility() == View.VISIBLE;
+        }
     }
 
     /**
@@ -154,7 +171,7 @@ public class TopToolbarOverlayMediator {
      * @param isVisible Whether the android view is visible.
      */
     void setIsAndroidViewVisible(boolean isVisible) {
-        mIsAndroidViewVisible = isVisible;
+        mIsToolbarAndroidViewVisible = isVisible;
         updateShadowState();
     }
 
@@ -163,10 +180,16 @@ public class TopToolbarOverlayMediator {
      * android view is not shown.
      */
     private void updateShadowState() {
-        boolean drawControlsAsTexture =
-                BrowserControlsUtils.drawControlsAsTexture(mBrowserControlsStateProvider);
-        boolean showShadow = drawControlsAsTexture || !mIsAndroidViewVisible
+        boolean drawControlsAsTexture;
+        if (ToolbarFeatures.shouldSuppressCaptures()) {
+            drawControlsAsTexture = !mIsBrowserControlsAndroidViewVisible;
+        } else {
+            drawControlsAsTexture =
+                    BrowserControlsUtils.drawControlsAsTexture(mBrowserControlsStateProvider);
+        }
+        boolean showShadow = drawControlsAsTexture || !mIsToolbarAndroidViewVisible
                 || mIsVisibilityManuallyControlled;
+
         mModel.set(TopToolbarOverlayProperties.SHOW_SHADOW, showShadow);
     }
 

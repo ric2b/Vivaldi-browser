@@ -10,17 +10,17 @@
 
 @synthesize title = _title;
 @synthesize subtitle = _subtitle;
-@synthesize option = _option;
+@synthesize type = _type;
 
 #pragma mark - INITIALIZER
 - (instancetype) initWithTitle:(NSString*)title
                       subtitle:(NSString*)subtitle
-                        option:(ATBSettingOption)option {
+                          type:(ATBSettingType)type {
   self = [super init];
   if (self) {
     _title = title;
     _subtitle = subtitle;
-    _option = option;
+    _type = type;
   }
   return self;
 }

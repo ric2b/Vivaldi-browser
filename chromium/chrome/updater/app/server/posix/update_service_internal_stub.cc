@@ -7,15 +7,11 @@
 #include <iterator>
 #include <utility>
 
-#include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/process/process_handle.h"
-#include "chrome/updater/app/server/posix/mojom/updater_service_internal.mojom-forward.h"
 #include "chrome/updater/ipc/ipc_names.h"
-#include "chrome/updater/updater_version.h"
+#include "chrome/updater/ipc/ipc_security.h"
 #include "components/named_mojo_ipc_server/connection_info.h"
 #include "components/named_mojo_ipc_server/named_mojo_ipc_server.h"
 
@@ -33,7 +29,7 @@ UpdateServiceInternalStub::UpdateServiceInternalStub(
           base::BindRepeating(
               [](mojom::UpdateServiceInternal* interface,
                  std::unique_ptr<named_mojo_ipc_server::ConnectionInfo> info) {
-                return ConnectionHasSamePrivilege(*info) ? interface : nullptr;
+                return IsConnectionTrusted(*info) ? interface : nullptr;
               },
               this)),
       impl_(impl),

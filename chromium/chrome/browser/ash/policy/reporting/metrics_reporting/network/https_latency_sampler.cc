@@ -16,6 +16,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace reporting {
+
 namespace {
 
 namespace network_diagnostics_mojom = ::chromeos::network_diagnostics::mojom;
@@ -69,11 +70,11 @@ void ConvertMojomRoutineResultToTelemetry(
       break;
   }
 }
+
 }  // namespace
 
 void HttpsLatencySampler::Delegate::BindDiagnosticsReceiver(
-    mojo::PendingReceiver<
-        ::chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>
+    mojo::PendingReceiver<network_diagnostics_mojom::NetworkDiagnosticsRoutines>
         receiver) {
   ash::network_health::NetworkHealthManager::GetInstance()
       ->BindDiagnosticsReceiver(std::move(receiver));
@@ -114,14 +115,13 @@ void HttpsLatencySampler::MaybeCollect(OptionalMetricCallback callback) {
       base::BindOnce(&HttpsLatencySampler::OnHttpsLatencyRoutineCompleted,
                      weak_ptr_factory_.GetWeakPtr());
   network_diagnostics_service_->RunHttpsLatency(
-      base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                         std::move(routine_callback)));
+      base::BindPostTaskToCurrentDefault(std::move(routine_callback)));
 
   is_routine_running_ = true;
 }
 
 void HttpsLatencySampler::OnHttpsLatencyRoutineCompleted(
-    ::chromeos::network_diagnostics::mojom::RoutineResultPtr routine_result) {
+    network_diagnostics_mojom::RoutineResultPtr routine_result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   is_routine_running_ = false;

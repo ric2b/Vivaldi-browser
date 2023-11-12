@@ -5,12 +5,12 @@
 #ifndef DEVICE_BLUETOOTH_FLOSS_BLUETOOTH_GATT_CONNECTION_FLOSS_H_
 #define DEVICE_BLUETOOTH_FLOSS_BLUETOOTH_GATT_CONNECTION_FLOSS_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "device/bluetooth/bluetooth_gatt_connection.h"
 #include "device/bluetooth/floss/floss_adapter_client.h"
 #include "device/bluetooth/floss/floss_dbus_client.h"
-#include "device/bluetooth/floss/floss_gatt_client.h"
+#include "device/bluetooth/floss/floss_gatt_manager_client.h"
 
 namespace device {
 class BluetoothAdapter;

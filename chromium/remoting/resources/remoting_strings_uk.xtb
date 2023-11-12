@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Виявлено несумісну версію протоколу. Переконайтеся, що на обох комп’ютерах установлено найновішу версію програмного забезпечення, і повторіть спробу.</translation>
 <translation id="1008557486741366299">Не зараз</translation>
 <translation id="1201402288615127009">Далі</translation>
+<translation id="1296511125400541222">© The Chromium Authors 2023. Усі права захищено.</translation>
 <translation id="1297009705180977556">Не вдалося з’єднатися з хостом <ph name="HOSTNAME" /></translation>
 <translation id="1450760146488584666">Такого об’єкта немає.</translation>
 <translation id="1480046233931937785">Учасники</translation>
@@ -36,7 +37,6 @@
 <translation id="2599300881200251572">Ця служба дозволяє встановлювати вхідні з’єднання з клієнтів Віддаленого керування Chrome.</translation>
 <translation id="2647232381348739934">Служба Віддалений доступ ОС Chrome</translation>
 <translation id="2676780859508944670">Виконується…</translation>
-<translation id="2692522824157224199">© Google LLC 2022. Усі права захищено.</translation>
 <translation id="2699970397166997657">Віддалений доступ ОС Chrome</translation>
 <translation id="2758123043070977469">Не вдалось автентифікуватись. Увійдіть ще раз.</translation>
 <translation id="2803375539583399270">Введіть PIN-код</translation>
@@ -73,7 +73,6 @@
 <translation id="4257751272692708833">Додаток <ph name="PRODUCT_NAME" /> для переадресації URL-адрес</translation>
 <translation id="4277736576214464567">Недійсний код доступу. Повторіть спробу.</translation>
 <translation id="4281844954008187215">Умови використання</translation>
-<translation id="4372650392690220936">© The Chromium Authors 2022. Усі права захищено.</translation>
 <translation id="4405930547258349619">Коренева бібліотека</translation>
 <translation id="443560535555262820">Відкрити параметри спеціальних можливостей</translation>
 <translation id="4450893287417543264">Більше не показувати</translation>
@@ -90,6 +89,7 @@
 <translation id="4808503597364150972">Введіть PIN-код для хосту <ph name="HOSTNAME" />.</translation>
 <translation id="4812684235631257312">Хост</translation>
 <translation id="4867841927763172006">Надіслати команду PrtScn</translation>
+<translation id="4960795469833295568">© Google LLC 2023. Усі права захищено.</translation>
 <translation id="4974476491460646149">З’єднання з хостом <ph name="HOSTNAME" /> розірвано</translation>
 <translation id="4985296110227979402">Спершу налаштуйте комп’ютер для віддаленого доступу</translation>
 <translation id="4987330545941822761">Віддалене керування Chrome не може визначити веб-переглядач, у якому потрібно локально відкривати URL-адреси. Виберіть його зі списку нижче.</translation>

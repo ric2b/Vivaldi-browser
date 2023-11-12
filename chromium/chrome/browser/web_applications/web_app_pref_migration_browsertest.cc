@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_registration.h"
 
 #include <string>
@@ -30,7 +31,7 @@ const auto kExpectedInstallSource =
 
 }  // namespace
 
-class WebAppPrefMigrationBrowserTest : public InProcessBrowserTest {
+class WebAppPrefMigrationBrowserTest : public WebAppControllerBrowserTest {
  public:
   WebAppPrefMigrationBrowserTest() = default;
   ~WebAppPrefMigrationBrowserTest() override = default;
@@ -56,7 +57,8 @@ IN_PROC_BROWSER_TEST_F(WebAppPrefMigrationBrowserTest, PRE_Migration) {
     UpdateIntWebAppPref(prefs(), app_id, "latest_web_app_install_source",
                         static_cast<int>(kExpectedInstallSource));
     ScopedRegistryUpdate update(
-        &WebAppProvider::GetForTest(browser()->profile())->sync_bridge());
+        &WebAppProvider::GetForTest(browser()->profile())
+             ->sync_bridge_unsafe());
     WebApp* web_app = update->UpdateApp(app_id);
     web_app->SetInstallSourceForMetrics(absl::nullopt);
   }

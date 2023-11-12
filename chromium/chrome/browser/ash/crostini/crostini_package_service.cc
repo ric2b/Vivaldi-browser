@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ash/crostini/crostini_package_service.h"
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -606,6 +606,11 @@ std::string CrostiniPackageService::GetUniqueNotificationId() {
 
 CrostiniManager::RestartId CrostiniPackageService::GetRestartIdForTesting() {
   return restart_id_for_testing_;
+}
+
+// static
+void CrostiniPackageService::EnsureFactoryBuilt() {
+  CrostiniPackageServiceFactory::GetInstance();
 }
 
 }  // namespace crostini

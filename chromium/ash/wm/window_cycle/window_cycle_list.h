@@ -42,6 +42,12 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
   WindowCycleList& operator=(const WindowCycleList&) = delete;
   ~WindowCycleList() override;
 
+  void set_user_did_accept(bool user_did_accept) {
+    user_did_accept_ = user_did_accept;
+  }
+
+  bool same_app_only() const { return same_app_only_; }
+
   const WindowCycleView* cycle_view() const { return cycle_view_; }
 
   // Returns the |target_window_| from |cycle_view_|.
@@ -96,10 +102,6 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
   // Updates the tab slider mode UI when alt-tab mode in user prefs changes.
   void OnModePrefsChanged();
 
-  void set_user_did_accept(bool user_did_accept) {
-    user_did_accept_ = user_did_accept;
-  }
-
   static void SetDisableInitialDelayForTesting(bool disabled);
 
  private:
@@ -134,6 +136,10 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
   // SetFocusedWindow() before this.
   void Scroll(int offset);
 
+  // Removes windows from `windows_` if they don't have the same app id as the
+  // MRU window.
+  void MakeSameAppOnly();
+
   // Returns the index for the window |offset| away from |current_index_|. Can
   // only be called if |windows_| is not empty. Also checks that the window for
   // the returned index exists.
@@ -145,6 +151,11 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
 
   // Returns the number of windows in the window cycle list for all desks.
   int GetNumberOfWindowsAllDesks() const;
+
+  // Computes and reports the number of non-same-app windows skipped metric if
+  // `same_app_only_`. This must be called from the destructor before the call
+  // to `SelectWindow()` as it relies on the previous state of the MRU list.
+  void MaybeReportNonSameAppSkippedWindows(aura::Window* target_window) const;
 
   // List of weak pointers to windows to use while cycling with the keyboard.
   // List is built when the user initiates the gesture (i.e. hits alt-tab the
@@ -162,6 +173,9 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
 
   // True if one of the windows in the list has already been selected.
   bool window_selected_ = false;
+
+  // True if we are only cycling through windows of the same app.
+  const bool same_app_only_;
 
   // The top level View for the window cycle UI. May be null if the UI is not
   // showing.
@@ -183,6 +197,9 @@ class ASH_EXPORT WindowCycleList : public aura::WindowObserver,
   // Tracks what window was active when starting to cycle and used to determine
   // if alt-tab should highlight the first or the second window in the list.
   aura::Window* active_window_before_window_cycle_ = nullptr;
+
+  // The most recent direction `Step()` was called with.
+  WindowCycleController::WindowCyclingDirection last_cycling_direction_;
 };
 
 }  // namespace ash

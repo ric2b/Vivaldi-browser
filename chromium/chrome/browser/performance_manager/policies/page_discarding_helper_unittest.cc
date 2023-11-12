@@ -206,6 +206,13 @@ TEST_F(PageDiscardingHelperTest, TestCannotDiscardPageWithFormInteractions) {
           page_node()));
 }
 
+TEST_F(PageDiscardingHelperTest, TestCannotDiscardPageWithUserEdits) {
+  frame_node()->SetHadUserEdits();
+  EXPECT_FALSE(
+      PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
+          page_node()));
+}
+
 TEST_F(PageDiscardingHelperTest, TestCannotDiscardIsActiveTab) {
   PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
       ->SetIsActiveTabForTesting(true);
@@ -282,6 +289,22 @@ TEST_F(PageDiscardingHelperTest, TestCannotDiscardPageOnNoDiscardList) {
       static_cast<PageNode*>(page_node())->GetBrowserContextID(), {});
   frame_node()->OnNavigationCommitted(GURL("https://www.google.com"), false);
   EXPECT_TRUE(
+      PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
+          page_node()));
+}
+
+TEST_F(PageDiscardingHelperTest, TestCannotDiscardIsPinnedTab) {
+  PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
+      ->SetIsPinnedTabForTesting(true);
+  EXPECT_FALSE(
+      PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
+          page_node()));
+}
+
+TEST_F(PageDiscardingHelperTest, TestCannotDiscardIsDevToolsOpen) {
+  PageLiveStateDecorator::Data::GetOrCreateForPageNode(page_node())
+      ->SetIsDevToolsOpenForTesting(true);
+  EXPECT_FALSE(
       PageDiscardingHelper::GetFromGraph(graph())->CanUrgentlyDiscardForTesting(
           page_node()));
 }

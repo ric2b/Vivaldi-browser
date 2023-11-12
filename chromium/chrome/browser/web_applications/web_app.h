@@ -11,10 +11,10 @@
 
 #include "base/time/time.h"
 #include "base/values.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
-#include "chrome/browser/web_applications/isolation_data.h"
+#include "build/chromeos_buildflags.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
@@ -30,6 +30,10 @@
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
+#endif
 
 namespace web_app {
 
@@ -79,7 +83,7 @@ class WebApp {
 
   DisplayMode display_mode() const { return display_mode_; }
 
-  absl::optional<UserDisplayMode> user_display_mode() const {
+  absl::optional<mojom::UserDisplayMode> user_display_mode() const {
     return user_display_mode_;
   }
 
@@ -102,7 +106,9 @@ class WebApp {
     ClientData(const ClientData& client_data);
     base::Value AsDebugValue() const;
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     absl::optional<ash::SystemWebAppData> system_web_app_data;
+#endif
   };
 
   const ClientData& client_data() const { return client_data_; }
@@ -192,6 +198,10 @@ class WebApp {
 
   const apps::UrlHandlers& url_handlers() const { return url_handlers_; }
 
+  const std::vector<ScopeExtensionInfo>& scope_extensions() const {
+    return scope_extensions_;
+  }
+
   RunOnOsLoginMode run_on_os_login_mode() const {
     return run_on_os_login_mode_;
   }
@@ -249,8 +259,6 @@ class WebApp {
     return manifest_id_;
   }
 
-  bool IsStorageIsolated() const { return is_storage_isolated_; }
-
   const absl::optional<LaunchHandler>& launch_handler() const {
     return launch_handler_;
   }
@@ -303,13 +311,26 @@ class WebApp {
     return always_show_toolbar_in_fullscreen_;
   }
 
-  const absl::optional<proto::WebAppOsIntegrationState>&
-  current_os_integration_states() const {
+  const proto::WebAppOsIntegrationState& current_os_integration_states() const {
     return current_os_integration_states_;
   }
 
   // If present, signals that this app is an Isolated Web App, and contains
   // IWA-specific information like bundle location.
+  struct IsolationData {
+    explicit IsolationData(IsolatedWebAppLocation location);
+    ~IsolationData();
+    IsolationData(const IsolationData&);
+    IsolationData& operator=(const IsolationData&);
+    IsolationData(IsolationData&&);
+    IsolationData& operator=(IsolationData&&);
+
+    bool operator==(const IsolationData&) const;
+    bool operator!=(const IsolationData&) const;
+    base::Value AsDebugValue() const;
+
+    IsolatedWebAppLocation location;
+  };
   const absl::optional<IsolationData>& isolation_data() const {
     return isolation_data_;
   }
@@ -345,7 +366,7 @@ class WebApp {
   void SetBackgroundColor(absl::optional<SkColor> background_color);
   void SetDarkModeBackgroundColor(absl::optional<SkColor> background_color);
   void SetDisplayMode(DisplayMode display_mode);
-  void SetUserDisplayMode(UserDisplayMode user_display_mode);
+  void SetUserDisplayMode(mojom::UserDisplayMode user_display_mode);
   void SetDisplayModeOverride(std::vector<DisplayMode> display_mode_override);
   void SetUserPageOrdinal(syncer::StringOrdinal page_ordinal);
   void SetUserLaunchOrdinal(syncer::StringOrdinal launch_ordinal);
@@ -375,6 +396,7 @@ class WebApp {
   void SetDisallowedLaunchProtocols(
       base::flat_set<std::string> disallowed_launch_protocols);
   void SetUrlHandlers(apps::UrlHandlers url_handlers);
+  void SetScopeExtensions(std::vector<ScopeExtensionInfo> scope_extensions);
   void SetLockScreenStartUrl(const GURL& lock_screen_start_url);
   void SetNoteTakingNewNoteUrl(const GURL& note_taking_new_note_url);
   void SetLastBadgingTime(const base::Time& time);
@@ -388,7 +410,6 @@ class WebApp {
   void SetManifestUrl(const GURL& manifest_url);
   void SetManifestId(const absl::optional<std::string>& manifest_id);
   void SetWindowControlsOverlayEnabled(bool enabled);
-  void SetStorageIsolated(bool is_storage_isolated);
   void SetLaunchHandler(absl::optional<LaunchHandler> launch_handler);
   void SetParentAppId(const absl::optional<AppId>& parent_app_id);
   void SetPermissionsPolicy(blink::ParsedPermissionsPolicy permissions_policy);
@@ -400,8 +421,7 @@ class WebApp {
       ExternalConfigMap management_to_external_config_map);
   void SetTabStrip(absl::optional<blink::Manifest::TabStrip> tab_strip);
   void SetCurrentOsIntegrationStates(
-      absl::optional<proto::WebAppOsIntegrationState>
-          current_os_integration_states);
+      proto::WebAppOsIntegrationState current_os_integration_states);
   void SetIsolationData(IsolationData isolation_data);
 
   void AddPlaceholderInfoToManagementExternalConfigMap(
@@ -428,6 +448,10 @@ class WebApp {
   // For logging and debug purposes.
   bool operator==(const WebApp&) const;
   bool operator!=(const WebApp&) const;
+  // Used by the WebAppTest suite to cover only platform agnostic fields to
+  // avoid needing multiple platform specific expectation files per test.
+  // Otherwise, the same as AsDebugValue().
+  base::Value AsDebugValueWithOnlyPlatformAgnosticFields() const;
   base::Value AsDebugValue() const;
 
  private:
@@ -449,12 +473,12 @@ class WebApp {
   absl::optional<SkColor> background_color_;
   absl::optional<SkColor> dark_mode_background_color_;
   DisplayMode display_mode_ = DisplayMode::kUndefined;
-  absl::optional<UserDisplayMode> user_display_mode_ = absl::nullopt;
+  absl::optional<mojom::UserDisplayMode> user_display_mode_ = absl::nullopt;
   std::vector<DisplayMode> display_mode_override_;
   syncer::StringOrdinal user_page_ordinal_;
   syncer::StringOrdinal user_launch_ordinal_;
   absl::optional<WebAppChromeOsData> chromeos_data_;
-  bool is_locally_installed_ = true;
+  bool is_locally_installed_ = false;
   bool is_from_sync_and_pending_installation_ = false;
   // Note: This field is not persisted in the database.
   // TODO(crbug.com/1162477): Add this field to the protocol buffer file and
@@ -474,7 +498,9 @@ class WebApp {
   std::vector<apps::ProtocolHandlerInfo> protocol_handlers_;
   base::flat_set<std::string> allowed_launch_protocols_;
   base::flat_set<std::string> disallowed_launch_protocols_;
+  // TODO(crbug.com/1072058): No longer aiming to ship, remove.
   apps::UrlHandlers url_handlers_;
+  std::vector<ScopeExtensionInfo> scope_extensions_;
   GURL lock_screen_start_url_;
   GURL note_taking_new_note_url_;
   base::Time last_badging_time_;
@@ -485,6 +511,8 @@ class WebApp {
   // Tracks if the app run on os login mode has been registered with the OS.
   // This might go out of sync with actual OS integration status, as Chrome does
   // not actively monitor OS registries.
+  // TODO(crbug.com/1401125): Remove after all OS Integration sub managers have
+  // been implemented and Synchronize() is running fine.
   absl::optional<RunOnOsLoginMode> run_on_os_login_os_integration_state_;
   SyncFallbackData sync_fallback_data_;
   blink::mojom::CaptureLinks capture_links_ =
@@ -501,7 +529,6 @@ class WebApp {
   OsIntegrationState file_handler_os_integration_state_ =
       OsIntegrationState::kDisabled;
   bool window_controls_overlay_enabled_ = false;
-  bool is_storage_isolated_ = false;
   absl::optional<LaunchHandler> launch_handler_;
   absl::optional<AppId> parent_app_id_;
   blink::ParsedPermissionsPolicy permissions_policy_;
@@ -523,8 +550,8 @@ class WebApp {
   // Only used on Mac.
   bool always_show_toolbar_in_fullscreen_ = true;
 
-  absl::optional<proto::WebAppOsIntegrationState>
-      current_os_integration_states_ = absl::nullopt;
+  proto::WebAppOsIntegrationState current_os_integration_states_ =
+      proto::WebAppOsIntegrationState();
 
   absl::optional<IsolationData> isolation_data_;
 

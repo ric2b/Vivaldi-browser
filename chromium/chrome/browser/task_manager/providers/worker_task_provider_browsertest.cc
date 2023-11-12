@@ -5,9 +5,9 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
@@ -182,7 +182,7 @@ IN_PROC_BROWSER_TEST_F(WorkerTaskProviderBrowserTest,
       base::CompareCase::INSENSITIVE_ASCII));
 
   GetServiceWorkerContext(browser())->StopAllServiceWorkersForStorageKey(
-      blink::StorageKey(
+      blink::StorageKey::CreateFirstParty(
           url::Origin::Create(embedded_test_server()->base_url())));
   WaitUntilTaskCount(0);
 
@@ -220,7 +220,7 @@ IN_PROC_BROWSER_TEST_F(WorkerTaskProviderBrowserTest,
       base::CompareCase::INSENSITIVE_ASCII));
 
   GetServiceWorkerContext(incognito)->StopAllServiceWorkersForStorageKey(
-      blink::StorageKey(
+      blink::StorageKey::CreateFirstParty(
           url::Origin::Create(embedded_test_server()->base_url())));
   WaitUntilTaskCount(0);
 
@@ -276,13 +276,13 @@ IN_PROC_BROWSER_TEST_F(WorkerTaskProviderBrowserTest,
                                base::CompareCase::INSENSITIVE_ASCII));
 
   GetServiceWorkerContext(browser_1)->StopAllServiceWorkersForStorageKey(
-      blink::StorageKey(
+      blink::StorageKey::CreateFirstParty(
           url::Origin::Create(embedded_test_server()->base_url())));
   WaitUntilTaskCount(1);
   EXPECT_EQ(task_2, tasks()[0]);
 
   GetServiceWorkerContext(browser_2)->StopAllServiceWorkersForStorageKey(
-      blink::StorageKey(
+      blink::StorageKey::CreateFirstParty(
           url::Origin::Create(embedded_test_server()->base_url())));
   WaitUntilTaskCount(0);
 
@@ -317,7 +317,7 @@ IN_PROC_BROWSER_TEST_F(WorkerTaskProviderBrowserTest, CreateExistingTasks) {
       base::CompareCase::INSENSITIVE_ASCII));
 
   GetServiceWorkerContext(browser())->StopAllServiceWorkersForStorageKey(
-      blink::StorageKey(
+      blink::StorageKey::CreateFirstParty(
           url::Origin::Create(embedded_test_server()->base_url())));
   WaitUntilTaskCount(0);
 

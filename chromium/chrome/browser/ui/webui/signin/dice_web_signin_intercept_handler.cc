@@ -6,8 +6,8 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -58,9 +58,13 @@ SkColor GetProfileHighlightColor(Profile* profile) {
 DiceWebSigninInterceptHandler::DiceWebSigninInterceptHandler(
     const DiceWebSigninInterceptor::Delegate::BubbleParameters&
         bubble_parameters,
-    base::OnceCallback<void(SigninInterceptionUserChoice)> callback)
-    : bubble_parameters_(bubble_parameters), callback_(std::move(callback)) {
-  DCHECK(callback_);
+    base::OnceCallback<void(int)> show_widget_with_height_callback,
+    base::OnceCallback<void(SigninInterceptionUserChoice)> completion_callback)
+    : bubble_parameters_(bubble_parameters),
+      show_widget_with_height_callback_(
+          std::move(show_widget_with_height_callback)),
+      completion_callback_(std::move(completion_callback)) {
+  DCHECK(completion_callback_);
 }
 
 DiceWebSigninInterceptHandler::~DiceWebSigninInterceptHandler() = default;
@@ -81,6 +85,11 @@ void DiceWebSigninInterceptHandler::RegisterMessages() {
       "pageLoaded",
       base::BindRepeating(&DiceWebSigninInterceptHandler::HandlePageLoaded,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "initializedWithHeight",
+      base::BindRepeating(
+          &DiceWebSigninInterceptHandler::HandleInitializedWithHeight,
+          base::Unretained(this)));
 }
 
 void DiceWebSigninInterceptHandler::OnJavascriptAllowed() {
@@ -123,19 +132,22 @@ const AccountInfo& DiceWebSigninInterceptHandler::intercepted_account() {
 
 void DiceWebSigninInterceptHandler::HandleAccept(
     const base::Value::List& args) {
-  if (callback_)
-    std::move(callback_).Run(SigninInterceptionUserChoice::kAccept);
+  if (completion_callback_) {
+    std::move(completion_callback_).Run(SigninInterceptionUserChoice::kAccept);
+  }
 }
 
 void DiceWebSigninInterceptHandler::HandleCancel(
     const base::Value::List& args) {
-  if (callback_)
-    std::move(callback_).Run(SigninInterceptionUserChoice::kDecline);
+  if (completion_callback_) {
+    std::move(completion_callback_).Run(SigninInterceptionUserChoice::kDecline);
+  }
 }
 
 void DiceWebSigninInterceptHandler::HandleGuest(const base::Value::List& args) {
-  if (callback_)
-    std::move(callback_).Run(SigninInterceptionUserChoice::kGuest);
+  if (completion_callback_) {
+    std::move(completion_callback_).Run(SigninInterceptionUserChoice::kGuest);
+  }
 }
 
 void DiceWebSigninInterceptHandler::HandlePageLoaded(
@@ -164,6 +176,18 @@ void DiceWebSigninInterceptHandler::HandlePageLoaded(
   DCHECK(!args.empty());
   const base::Value& callback_id = args[0];
   ResolveJavascriptCallback(callback_id, GetInterceptionParametersValue());
+}
+
+void DiceWebSigninInterceptHandler::HandleInitializedWithHeight(
+    const base::Value::List& args) {
+  AllowJavascript();
+  CHECK_EQ(1u, args.size());
+  int height = args[0].GetInt();
+  CHECK_GE(height, 0);
+
+  if (show_widget_with_height_callback_) {
+    std::move(show_widget_with_height_callback_).Run(height);
+  }
 }
 
 base::Value::Dict DiceWebSigninInterceptHandler::GetAccountInfoValue(
@@ -249,11 +273,6 @@ std::string DiceWebSigninInterceptHandler::GetBodyTitle() {
         IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_TITLE);
   }
 
-  if (base::FeatureList::IsEnabled(kSigninInterceptBubbleV2)) {
-    return l10n_util::GetStringUTF8(
-        IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE_V2);
-  }
-
   return l10n_util::GetStringUTF8(
       IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE);
 }
@@ -263,11 +282,6 @@ std::string DiceWebSigninInterceptHandler::GetBodyText() {
       DiceWebSigninInterceptor::SigninInterceptionType::kProfileSwitch) {
     return l10n_util::GetStringUTF8(
         IDS_SIGNIN_DICE_WEB_INTERCEPT_SWITCH_BUBBLE_DESC);
-  }
-
-  if (base::FeatureList::IsEnabled(kSigninInterceptBubbleV2)) {
-    return l10n_util::GetStringUTF8(
-        IDS_SIGNIN_DICE_WEB_INTERCEPT_CONSUMER_BUBBLE_DESC_V2);
   }
 
   switch (bubble_parameters_.interception_type) {
@@ -307,9 +321,7 @@ std::string DiceWebSigninInterceptHandler::GetConfirmButtonLabel() {
   }
 
   return l10n_util::GetStringUTF8(
-      base::FeatureList::IsEnabled(kSigninInterceptBubbleV2)
-          ? IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL_V2
-          : IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL);
+      IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL);
 }
 
 std::string DiceWebSigninInterceptHandler::GetCancelButtonLabel() {

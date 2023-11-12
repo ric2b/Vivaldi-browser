@@ -13,6 +13,9 @@ import androidx.annotation.ColorInt;
 
 import org.chromium.ui.UiUtils;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * This view is used to obscure content and bring focus to a foreground view (i.e. the bottom sheet
  * or the omnibox suggestions).
@@ -23,6 +26,10 @@ class ScrimView extends View {
 
     /** The default background color. */
     private final int mDefaultBackgroundColor;
+
+    // Vivaldi
+    final int SCRIM_TAG = 999;
+    // End Vivaldi
 
     /** A means of passing all touch events to an external handler. */
     private ScrimCoordinator.TouchEventDelegate mEventDelegate;
@@ -46,6 +53,9 @@ class ScrimView extends View {
         setBackgroundColor(mDefaultBackgroundColor);
         setLayoutParams(new ViewGroup.MarginLayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        if (BuildConfig.IS_VIVALDI)
+            setTag(SCRIM_TAG);
     }
 
     /**

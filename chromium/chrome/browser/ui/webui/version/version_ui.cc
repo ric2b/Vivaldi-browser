@@ -70,9 +70,9 @@ using content::WebUIDataSource;
 
 namespace {
 
-WebUIDataSource* CreateVersionUIDataSource() {
+void CreateAndAddVersionUIDataSource(Profile* profile) {
   WebUIDataSource* html_source =
-      WebUIDataSource::Create(chrome::kChromeUIVersionHost);
+      WebUIDataSource::CreateAndAdd(profile, chrome::kChromeUIVersionHost);
   // These localized strings are used to label version details.
   static constexpr webui::LocalizedString kStrings[] = {
     {version_ui::kTitle, IDS_VERSION_UI_TITLE},
@@ -123,8 +123,6 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->SetDefaultResource(IDR_VERSION_UI_HTML);
 
   vivaldi::UpdateVersionUIDataSource(html_source);
-
-  return html_source;
 }
 
 std::string GetProductModifier() {
@@ -162,7 +160,7 @@ VersionUI::VersionUI(content::WebUI* web_ui)
   content::URLDataSource::Add(profile, std::make_unique<ThemeSource>(profile));
 #endif
 
-  WebUIDataSource::Add(profile, CreateVersionUIDataSource());
+  CreateAndAddVersionUIDataSource(profile);
 }
 
 VersionUI::~VersionUI() {}

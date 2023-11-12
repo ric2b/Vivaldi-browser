@@ -56,7 +56,7 @@ template("vivaldi_extract_untranslated") {
   # List of Chromium strings visible in the Vivaldi UI.
   idlist = "//vivaldi/vivapp/bin/gettext/ids.txt"
 
-  foreach(locale, platform_pak_locales + vivaldi_pending_locales + vivaldi_pending_mobile_locales - ["ar-XB", "en-US", "en-XA"]) {
+  foreach(locale, platform_pak_locales + vivaldi_pending_locales + vivaldi_pending_mobile_locales - ["ar-XB", "en-US", "en-XA"] - ["ca@valencia"] + ["ca-valencia"]) {
     name = "${target_name}_extract_$locale"
     deps_list += [":"+name]
 

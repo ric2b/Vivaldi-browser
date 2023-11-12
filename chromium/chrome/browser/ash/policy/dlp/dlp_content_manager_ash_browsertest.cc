@@ -2,18 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/test/bind.h"
+#include "base/time/time.h"
 #include "chrome/browser/ash/policy/dlp/dlp_content_manager_ash.h"
 
 #include <functional>
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/test_future.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/media/webrtc/fake_desktop_media_picker_factory.h"
 #include "chrome/browser/media/webrtc/tab_capture_access_handler.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/capture_mode/chrome_capture_mode_delegate.h"
 #include "chrome/browser/ui/ash/screenshot_area.h"
 #include "chrome/browser/ui/browser.h"
@@ -46,7 +48,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/test/shell_surface_builder.h"
-#include "components/exo/wm_helper_chromeos.h"
+#include "components/exo/wm_helper.h"
 #include "content/public/browser/desktop_media_id.h"
 #include "content/public/browser/desktop_streams_registry.h"
 #include "content/public/browser/media_stream_request.h"
@@ -95,8 +97,13 @@ constexpr char kExampleUrl[] = "https://example.com";
 constexpr char kGoogleUrl[] = "https://google.com";
 constexpr char kChromeUrl[] = "https://chromium.org";
 constexpr char kSrcPattern[] = "example.com";
+constexpr char kRuleName[] = "rule #1";
+constexpr char kRuleId[] = "testid1";
 constexpr char kLabel[] = "label";
+const DlpRulesManager::RuleMetadata kRuleMetadata(kRuleName, kRuleId);
 const std::u16string kApplicationTitle = u"example.com";
+
+const base::TimeDelta kScreenShareResumeDelayForTesting = base::Milliseconds(0);
 
 content::MediaStreamRequest CreateMediaStreamRequest(
     content::WebContents* web_contents,
@@ -164,8 +171,9 @@ class DlpContentManagerAshBrowserTest : public InProcessBrowserTest {
             base::Unretained(this)));
     ASSERT_TRUE(DlpRulesManagerFactory::GetForPrimaryProfile());
 
-    EXPECT_CALL(*mock_rules_manager_, GetSourceUrlPattern(_, _, _))
-        .WillRepeatedly(testing::Return(kSrcPattern));
+    EXPECT_CALL(*mock_rules_manager_, GetSourceUrlPattern(_, _, _, _))
+        .WillRepeatedly(testing::DoAll(testing::SetArgPointee<3>(kRuleMetadata),
+                                       testing::Return(kSrcPattern)));
     EXPECT_CALL(*mock_rules_manager_, IsRestricted(_, _))
         .WillRepeatedly(testing::Return(DlpRulesManager::Level::kAllow));
     EXPECT_CALL(*mock_rules_manager_, GetReportingManager())
@@ -186,8 +194,9 @@ class DlpContentManagerAshBrowserTest : public InProcessBrowserTest {
                    size_t count) {
     EXPECT_EQ(events_.size(), count);
     for (size_t i = 0; i < count; ++i) {
-      EXPECT_THAT(events_[i], IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                                  kSrcPattern, restriction, level)));
+      EXPECT_THAT(events_[i],
+                  IsDlpPolicyEvent(CreateDlpPolicyEvent(
+                      kSrcPattern, restriction, kRuleName, kRuleId, level)));
     }
   }
 
@@ -392,14 +401,15 @@ IN_PROC_BROWSER_TEST_F(ScreenshotTest, WarningProceededReportedAfterCapture) {
   ASSERT_EQ(events_.size(), 2u);
   EXPECT_THAT(events_[1],
               IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                  kSrcPattern, DlpRulesManager::Restriction::kScreenshot)));
+                  kSrcPattern, DlpRulesManager::Restriction::kScreenshot,
+                  kRuleName, kRuleId)));
 }
 
 IN_PROC_BROWSER_TEST_F(ScreenshotTest, CheckRestriction_Blocked_Lacros) {
   SetupReporting();
 
   // Create a Lacros-like Exo surface.
-  exo::WMHelperChromeOS wm_helper;
+  exo::WMHelper wm_helper;
   std::unique_ptr<exo::ShellSurface> shell_surface =
       exo::test::ShellSurfaceBuilder({640, 480}).BuildShellSurface();
   shell_surface->root_surface()->window()->TrackOcclusionState();
@@ -947,6 +957,19 @@ class DlpContentManagerAshScreenShareBrowserTest
         /*shift=*/false, /*alt=*/false, /*command=*/false));
   }
 
+  // Blocks the test execution to wait for a screen share to be resumed.
+  void WaitForScreenShareResume() {
+    // Changing the confidentiality or calling CheckRunningScreenShares() posts
+    // a delayed task to resume the screen share to the default task runner. By
+    // posting another task to the same runner with the same delay, we guarantee
+    // that the expectations are checked at the right time, as the tasks are
+    // executed in a sequenced manner.
+    base::RunLoop run_loop;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, run_loop.QuitClosure(), kScreenShareResumeDelayForTesting);
+    run_loop.Run();
+  }
+
   testing::StrictMock<
       base::MockCallback<content::MediaStreamUI::StateChangeCallback>>
       state_change_cb_;
@@ -1009,7 +1032,7 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerAshScreenShareBrowserTest,
   SetupReporting();
 
   // Create a Lacros-like Exo surface.
-  exo::WMHelperChromeOS wm_helper;
+  exo::WMHelper wm_helper;
   std::unique_ptr<exo::ShellSurface> shell_surface =
       exo::test::ShellSurfaceBuilder({640, 480}).BuildShellSurface();
   shell_surface->root_surface()->window()->TrackOcclusionState();
@@ -1049,6 +1072,7 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerAshScreenShareBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(DlpContentManagerAshScreenShareBrowserTest,
                        ScreenShareNotification) {
+  helper_->SetScreenShareResumeDelay(kScreenShareResumeDelayForTesting);
   SetupReporting();
   NotificationDisplayServiceTester display_service_tester(browser()->profile());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl)));
@@ -1088,6 +1112,7 @@ IN_PROC_BROWSER_TEST_F(DlpContentManagerAshScreenShareBrowserTest,
       GetDlpHistogramPrefix() + dlp::kScreenSharePausedOrResumedUMA, false, 0);
 
   helper_->ChangeConfidentiality(web_contents, kEmptyRestrictionSet);
+  WaitForScreenShareResume();
 
   EXPECT_FALSE(
       display_service_tester.GetNotification(kScreenSharePausedNotificationId));
@@ -1259,12 +1284,13 @@ IN_PROC_BROWSER_TEST_P(CheckAndStartScreenShareTest, FullScreenShare) {
   EXPECT_THAT(events_[0],
               IsDlpPolicyEvent(CreateDlpPolicyEvent(
                   kSrcPattern, DlpRulesManager::Restriction::kScreenShare,
-                  param.level)));
+                  kRuleName, kRuleId, param.level)));
 
   if (param.expect_warning_proceeded) {
     EXPECT_THAT(events_[1],
                 IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare)));
+                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare,
+                    kRuleName, kRuleId)));
     histogram_tester_.ExpectBucketCount(
         GetDlpHistogramPrefix() + dlp::kScreenShareWarnProceededUMA, true, 1);
     histogram_tester_.ExpectBucketCount(
@@ -1301,12 +1327,13 @@ IN_PROC_BROWSER_TEST_P(CheckAndStartScreenShareTest, TabShare) {
   EXPECT_THAT(events_[0],
               IsDlpPolicyEvent(CreateDlpPolicyEvent(
                   kSrcPattern, DlpRulesManager::Restriction::kScreenShare,
-                  param.level)));
+                  kRuleName, kRuleId, param.level)));
 
   if (param.expect_warning_proceeded) {
     EXPECT_THAT(events_[1],
                 IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare)));
+                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare,
+                    kRuleName, kRuleId)));
     histogram_tester_.ExpectBucketCount(
         GetDlpHistogramPrefix() + dlp::kScreenShareWarnProceededUMA, true, 1);
     histogram_tester_.ExpectBucketCount(
@@ -1318,6 +1345,7 @@ IN_PROC_BROWSER_TEST_P(CheckAndStartScreenShareTest, TabShare) {
 
 IN_PROC_BROWSER_TEST_P(CheckRunningScreenShareTest, FullScreenShare) {
   const ScreenShareTestParams& param = GetParam();
+  helper_->SetScreenShareResumeDelay(kScreenShareResumeDelayForTesting);
   SetupReporting();
   NotificationDisplayServiceTester display_service_tester(browser()->profile());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl)));
@@ -1360,7 +1388,8 @@ IN_PROC_BROWSER_TEST_P(CheckRunningScreenShareTest, FullScreenShare) {
   if (param.expect_warning_proceeded) {
     EXPECT_THAT(events_[1],
                 IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare)));
+                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare,
+                    kRuleName, kRuleId)));
     histogram_tester_.ExpectBucketCount(
         GetDlpHistogramPrefix() + dlp::kScreenShareWarnProceededUMA, true, 1);
     histogram_tester_.ExpectBucketCount(
@@ -1377,10 +1406,12 @@ IN_PROC_BROWSER_TEST_P(CheckRunningScreenShareTest, FullScreenShare) {
                         /*warned_suffix=*/dlp::kScreenShareWarnedUMA);
 
   helper_->ChangeConfidentiality(web_contents, kEmptyRestrictionSet);
+  WaitForScreenShareResume();
 }
 
 IN_PROC_BROWSER_TEST_P(CheckRunningScreenShareTest, TabShare) {
   const ScreenShareTestParams& param = GetParam();
+  helper_->SetScreenShareResumeDelay(kScreenShareResumeDelayForTesting);
   SetupReporting();
   NotificationDisplayServiceTester display_service_tester(browser()->profile());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), GURL(kExampleUrl)));
@@ -1400,10 +1431,10 @@ IN_PROC_BROWSER_TEST_P(CheckRunningScreenShareTest, TabShare) {
   EXPECT_CALL(state_change_cb_,
               Run(testing::_, blink::mojom::MediaStreamStateChange::PAUSE))
       .Times(param.paused_count);
+  EXPECT_CALL(stop_cb_, Run).Times(param.stopped_count);
   // For resuming tab shares we do not use the state_change_cb_ but the
   // source_cb_ instead:
   EXPECT_CALL(source_cb_, Run).Times(param.resumed_count);
-  EXPECT_CALL(stop_cb_, Run).Times(param.stopped_count);
 
   helper_->ChangeConfidentiality(web_contents, param.restriction_set);
   VerifyHistogramCounts(param.blocked_count, param.warned_count,
@@ -1423,7 +1454,8 @@ IN_PROC_BROWSER_TEST_P(CheckRunningScreenShareTest, TabShare) {
   if (param.expect_warning_proceeded) {
     EXPECT_THAT(events_[1],
                 IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare)));
+                    kSrcPattern, DlpRulesManager::Restriction::kScreenShare,
+                    kRuleName, kRuleId)));
     histogram_tester_.ExpectBucketCount(
         GetDlpHistogramPrefix() + dlp::kScreenShareWarnProceededUMA, true, 1);
     histogram_tester_.ExpectBucketCount(
@@ -1440,6 +1472,7 @@ IN_PROC_BROWSER_TEST_P(CheckRunningScreenShareTest, TabShare) {
                         /*warned_suffix=*/dlp::kScreenShareWarnedUMA);
 
   helper_->ChangeConfidentiality(web_contents, kEmptyRestrictionSet);
+  WaitForScreenShareResume();
 }
 
 // Tests that a paused screen share is resumed when the user navigates to
@@ -1805,6 +1838,7 @@ class ScreenShareNavigateWebContentsTest
 IN_PROC_BROWSER_TEST_P(ScreenShareNavigateWebContentsTest, Reporting) {
   const ScreenshareNavigateTestParams& param = GetParam();
 
+  helper_->SetScreenShareResumeDelay(kScreenShareResumeDelayForTesting);
   SetupReporting();
   const GURL restricted_url(kGoogleUrl);
   const GURL reported_url(kExampleUrl);
@@ -1817,11 +1851,12 @@ IN_PROC_BROWSER_TEST_P(ScreenShareNavigateWebContentsTest, Reporting) {
   // Start sharing unrestricted content.
   helper_->UpdateConfidentiality(web_contents, kEmptyRestrictionSet);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), unrestricted_url));
+  MaybeStartTabShare(web_contents);
+
   // Although the share should be paused and resumed, DLP will only call
   // state_change_cb_ once to pause it. When it's supposed to be resumed, it
-  // will call source_cb which also resumes the share after a successful source
-  // change.
-  MaybeStartTabShare(web_contents);
+  // will call source_cb only first and resume only the new stream once
+  // notified.
   EXPECT_CALL(state_change_cb_,
               Run(testing::_, blink::mojom::MediaStreamStateChange::PAUSE))
       .Times(1);
@@ -1866,7 +1901,7 @@ IN_PROC_BROWSER_TEST_P(ScreenShareNavigateWebContentsTest, Reporting) {
   EXPECT_THAT(events_[1],
               IsDlpPolicyEvent(CreateDlpPolicyEvent(
                   kSrcPattern, DlpRulesManager::Restriction::kScreenShare,
-                  param.level)));
+                  kRuleName, kRuleId, param.level)));
   if (param.level == DlpRulesManager::Level::kWarn) {
     // Proceed, as otherwise the screen share would be stopped.
     DismissDialog(/*allow=*/true);
@@ -1887,6 +1922,7 @@ IN_PROC_BROWSER_TEST_P(ScreenShareNavigateWebContentsTest, Reporting) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), reported_url));
   helper_->CheckRunningScreenShares();
   EXPECT_EQ(events_.size(), prev_events_size);
+  WaitForScreenShareResume();
 
   // Expect resume notification.
   EXPECT_TRUE(display_service_tester.GetNotification(

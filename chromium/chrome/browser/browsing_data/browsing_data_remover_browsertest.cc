@@ -6,9 +6,9 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -24,6 +24,7 @@
 #include "chrome/browser/browsing_data/local_data_container.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
+#include "chrome/browser/media/clear_key_cdm_test_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -70,7 +71,6 @@
 #include "base/threading/platform_thread.h"
 #endif
 #include "base/memory/scoped_refptr.h"
-#include "chrome/browser/media/library_cdm_test_helper.h"
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -278,8 +278,6 @@ class BrowsingDataRemoverBrowserTest
     // it uses the External Clear Key CDM.
     RegisterClearKeyCdm(command_line);
 #endif
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "StorageFoundationAPI");
   }
 };
 
@@ -784,7 +782,7 @@ class BrowsingDataRemoverWithPasswordsAccountStorageBrowserTest
         /*origin=*/origin,
         /*clear_cookies=*/true, /*clear_storage=*/true,
         /*clear_cache=*/true,
-        /*storage_buckets_to_remove=*/ storage_buckets_to_remove,
+        /*storage_buckets_to_remove=*/storage_buckets_to_remove,
         /*avoid_closing_connections=*/true,
         /*cookie_partition_key=*/cookie_partition_key,
         /*storage_key=*/storage_key,
@@ -912,7 +910,8 @@ IN_PROC_BROWSER_TEST_F(
       {
           url::Origin::Create(kFirstPartyURL),
           net::CookiePartitionKey::FromURLForTesting(kFirstPartyURL),
-          blink::StorageKey(url::Origin::Create(kFirstPartyURL)),
+          blink::StorageKey::CreateFirstParty(
+              url::Origin::Create(kFirstPartyURL)),
           false,
       },
       {
@@ -924,9 +923,9 @@ IN_PROC_BROWSER_TEST_F(
       {
           url::Origin::Create(kFirstPartyURL),
           net::CookiePartitionKey::FromURLForTesting(kCrossSiteURL),
-          blink::StorageKey::CreateWithOptionalNonce(
+          blink::StorageKey::Create(
               url::Origin::Create(kCrossSiteURL),
-              net::SchemefulSite(url::Origin::Create(kFirstPartyURL)), nullptr,
+              net::SchemefulSite(url::Origin::Create(kFirstPartyURL)),
               blink::mojom::AncestorChainBit::kCrossSite),
           true,
       },
@@ -958,8 +957,14 @@ class BrowsingDataRemoverStorageBucketsBrowserTest
   void ClearSiteDataAndWait(
       const url::Origin& origin,
       const absl::optional<blink::StorageKey>& storage_key,
-      const std::set<std::string>& storage_buckets_to_remove) {
+      const std::set<std::string>& storage_buckets_to_remove = {}) {
     base::RunLoop loop;
+
+    // Passing an empty set of storage_buckets_to_remove should clear all
+    // buckets for the given origin. Update this test if that assumption is
+    // ever changed.
+    const bool clear_storage = storage_buckets_to_remove.empty();
+
     content::ClearSiteData(
         /*browser_context_getter=*/base::BindRepeating(
             [](content::BrowserContext* browser_context) {
@@ -967,9 +972,9 @@ class BrowsingDataRemoverStorageBucketsBrowserTest
             },
             base::Unretained(GetBrowser()->profile())),
         /*origin=*/origin,
-        /*clear_cookies=*/true, /*clear_storage=*/false,
+        /*clear_cookies=*/true, clear_storage,
         /*clear_cache=*/true,
-        /*storage_buckets_to_remove=*/ storage_buckets_to_remove,
+        /*storage_buckets_to_remove=*/storage_buckets_to_remove,
         /*avoid_closing_connections=*/true,
         /*cookie_partition_key=*/absl::nullopt,
         /*storage_key=*/storage_key,
@@ -985,7 +990,7 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverStorageBucketsBrowserTest,
                        ClearSiteDataStorageBuckets) {
   GURL url("https://example.com");
   url::Origin origin = url::Origin::Create(url);
-  auto storage_key = blink::StorageKey(origin);
+  const auto storage_key = blink::StorageKey::CreateFirstParty(origin);
 
   storage::QuotaManager* quota_manager =
       GetBrowser()->profile()->GetDefaultStoragePartition()->GetQuotaManager();
@@ -994,19 +999,19 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverStorageBucketsBrowserTest,
 
   quota_manager_proxy->CreateBucketForTesting(
       storage_key, "drafts", blink::mojom::StorageType::kTemporary,
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(
           [](storage::QuotaErrorOr<storage::BucketInfo> error_or_bucket_info) {
           }));
   quota_manager_proxy->CreateBucketForTesting(
       storage_key, "inbox", blink::mojom::StorageType::kTemporary,
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(
           [](storage::QuotaErrorOr<storage::BucketInfo> error_or_bucket_info) {
           }));
   quota_manager_proxy->CreateBucketForTesting(
       storage_key, "attachments", blink::mojom::StorageType::kTemporary,
-      base::SequencedTaskRunnerHandle::Get(),
+      base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce(
           [](storage::QuotaErrorOr<storage::BucketInfo> error_or_bucket_info) {
           }));
@@ -1015,10 +1020,22 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverStorageBucketsBrowserTest,
 
   quota_manager_proxy->GetBucketsForStorageKey(
       storage_key, blink::mojom::StorageType::kTemporary,
-      /*delete_expired*/ false, base::SequencedTaskRunnerHandle::Get(),
+      /*delete_expired*/ false, base::SequencedTaskRunner::GetCurrentDefault(),
       base::BindOnce([](storage::QuotaErrorOr<std::set<storage::BucketInfo>>
                             error_or_buckets) {
         EXPECT_EQ(1u, error_or_buckets.value().size());
+      }));
+
+  // Now, clear the storage without any specific buckets and all the buckets
+  // should be deleted.
+  ClearSiteDataAndWait(origin, storage_key);
+
+  quota_manager_proxy->GetBucketsForStorageKey(
+      storage_key, blink::mojom::StorageType::kTemporary,
+      /*delete_expired*/ false, base::SequencedTaskRunner::GetCurrentDefault(),
+      base::BindOnce([](storage::QuotaErrorOr<std::set<storage::BucketInfo>>
+                            error_or_buckets) {
+        EXPECT_TRUE(error_or_buckets.value().empty());
       }));
 }
 
@@ -1188,10 +1205,6 @@ IN_PROC_BROWSER_TEST_P(BrowsingDataRemoverBrowserTestP,
                        EmptyFileSystemIncognitoDeletion) {
   UseIncognitoBrowser();
   TestEmptySiteData("FileSystem", GetParam());
-}
-
-IN_PROC_BROWSER_TEST_P(BrowsingDataRemoverBrowserTestP, NativeIODeletion) {
-  TestSiteData("StorageFoundation", GetParam());
 }
 
 // TODO(crbug.com/1317431): WebSQL does not work on Fuchsia.
@@ -1436,10 +1449,8 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 const std::vector<std::string> kStorageTypes{
-    "Cookie",         "LocalStorage", "FileSystem",
-    "SessionStorage", "IndexedDb",    "WebSql",
-    "ServiceWorker",  "CacheStorage", "StorageFoundation",
-    "MediaLicense"};
+    "Cookie", "LocalStorage",  "FileSystem",   "SessionStorage", "IndexedDb",
+    "WebSql", "ServiceWorker", "CacheStorage", "MediaLicense"};
 
 // Test that storage doesn't leave any traces on disk.
 IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
@@ -1476,12 +1487,11 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
 IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest,
                        PRE_StorageRemovedFromDisk) {
   EXPECT_EQ(1, GetSiteDataCount());
-  // Expect all datatypes from above except SessionStorage, NativeIO, and
-  // possibly MediaLicense. SessionStorage is not supported by the
-  // CookieTreeModel yet. NativeIO is shown as FileSystem in the CookieTree
-  // model. MediaLicense is integrated into the quota node, which is not yet
-  // fully hooked into CookieTreeModel (see crbug.com/1307796).
-  ExpectCookieTreeModelCount(kStorageTypes.size() - 3);
+  // Expect all datatypes from above except SessionStorage and possibly
+  // MediaLicense. SessionStorage is not supported by the CookieTreeModel yet.
+  // MediaLicense is integrated into the quota node, which is not yet fully
+  // hooked into CookieTreeModel (see crbug.com/1307796).
+  ExpectCookieTreeModelCount(kStorageTypes.size() - 2);
   RemoveAndWait(chrome_browsing_data_remover::DATA_TYPE_SITE_DATA |
                 content::BrowsingDataRemover::DATA_TYPE_CACHE |
                 chrome_browsing_data_remover::DATA_TYPE_HISTORY |

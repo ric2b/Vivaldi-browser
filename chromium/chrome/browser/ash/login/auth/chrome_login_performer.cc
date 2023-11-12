@@ -6,11 +6,9 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "chrome/browser/ash/login/easy_unlock/easy_unlock_user_login_flow.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/core/device_local_account_policy_service.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -18,6 +16,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "components/account_id/account_id.h"
+#include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace ash {
@@ -41,10 +40,11 @@ bool ChromeLoginPerformer::RunTrustedCheck(base::OnceClosure callback) {
                          weak_factory_.GetWeakPtr(), &callback));
   // Must not proceed without signature verification.
   if (status == CrosSettingsProvider::PERMANENTLY_UNTRUSTED) {
-    if (delegate_)
+    if (delegate_) {
       delegate_->PolicyLoadFailed();
-    else
+    } else {
       NOTREACHED();
+    }
     return true;  // Some callback was called.
   } else if (status == CrosSettingsProvider::TEMPORARILY_UNTRUSTED) {
     // Value of AllowNewUser setting is still not verified.
@@ -67,10 +67,11 @@ void ChromeLoginPerformer::DidRunTrustedCheck(base::OnceClosure* callback) {
                          weak_factory_.GetWeakPtr(), callback));
   // Must not proceed without signature verification.
   if (status == CrosSettingsProvider::PERMANENTLY_UNTRUSTED) {
-    if (delegate_)
+    if (delegate_) {
       delegate_->PolicyLoadFailed();
-    else
+    } else {
       NOTREACHED();
+    }
   } else if (status == CrosSettingsProvider::TEMPORARILY_UNTRUSTED) {
     // Value of AllowNewUser setting is still not verified.
     // Another attempt will be invoked after verification completion.
@@ -99,7 +100,9 @@ void ChromeLoginPerformer::RunOnlineAllowlistCheck(
   policy::BrowserPolicyConnectorAsh* connector =
       g_browser_process->platform_part()->browser_policy_connector_ash();
   if (connector->IsCloudManaged() && wildcard_match &&
-      !connector->IsNonEnterpriseUser(account_id.GetUserEmail())) {
+      (signin::AccountManagedStatusFinder::IsEnterpriseUserBasedOnEmail(
+           account_id.GetUserEmail()) ==
+       signin::AccountManagedStatusFinder::EmailEnterpriseStatus::kUnknown)) {
     wildcard_login_checker_ = std::make_unique<policy::WildcardLoginChecker>();
     if (refresh_token.empty()) {
       NOTREACHED() << "Refresh token must be present.";
@@ -121,12 +124,6 @@ void ChromeLoginPerformer::RunOnlineAllowlistCheck(
 
 scoped_refptr<Authenticator> ChromeLoginPerformer::CreateAuthenticator() {
   return UserSessionManager::GetInstance()->CreateAuthenticator(this);
-}
-
-void ChromeLoginPerformer::SetupEasyUnlockUserFlow(
-    const AccountId& account_id) {
-  ChromeUserManager::Get()->SetUserFlow(
-      account_id, new EasyUnlockUserLoginFlow(account_id));
 }
 
 bool ChromeLoginPerformer::CheckPolicyForUser(const AccountId& account_id) {

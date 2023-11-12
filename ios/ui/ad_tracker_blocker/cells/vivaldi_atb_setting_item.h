@@ -13,18 +13,19 @@
 - (instancetype)initWithType:(NSInteger)type;
 
 @property(nonatomic, strong) VivaldiATBItem* item;
-@property(nonatomic, assign) ATBSettingOption userPreferredOption;
-@property(nonatomic, assign) ATBSettingOption globalDefaultOption;
+@property(nonatomic, assign) ATBSettingType userPreferredOption;
+@property(nonatomic, assign) ATBSettingType globalDefaultOption;
+@property(nonatomic, assign) BOOL showDefaultMarker;
 
 @end
 
 // TableViewCell that displays Ad and tracker setting option.
-@interface VivaldiATBSettingItemCell
-    : TableViewCell
+@interface VivaldiATBSettingItemCell: TableViewCell
 
 - (void)configurWithItem:(VivaldiATBItem*)item
-     userPreferredOption:(ATBSettingOption)userPreferred
-     globalDefaultOption:(ATBSettingOption)globalDefault;
+     userPreferredOption:(ATBSettingType)userPreferred
+     globalDefaultOption:(ATBSettingType)globalDefault
+       showDefaultMarker:(BOOL)showDefaultMarker;
 
 @end
 

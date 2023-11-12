@@ -81,7 +81,7 @@ BASE_FEATURE(kNewExtensionFaviconHandling,
 
 // Determine if dynamic extension URLs are handled and redirected.
 BASE_FEATURE(kExtensionDynamicURLRedirection,
-             "kExtensionDynamicURLRedirection",
+             "ExtensionDynamicURLRedirection",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Enables enhanced site control for extensions and allowing the user to control
@@ -95,7 +95,7 @@ BASE_FEATURE(kExtensionsMenuAccessControl,
 // creating the script context too early which can be bad for performance.
 BASE_FEATURE(kAvoidEarlyExtensionScriptContextCreation,
              "AvoidEarlyExtensionScriptContextCreation",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // The feature enabling offscreen documents in Manifest V3 extensions.
 BASE_FEATURE(kExtensionsOffscreenDocuments,
@@ -114,8 +114,8 @@ BASE_FEATURE(kExtensionSidePanelIntegration,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // File Handlers.
-BASE_FEATURE(kFileHandlersMV3,
-             "FileHandlersMV3",
+BASE_FEATURE(kWebFileHandlers,
+             "WebFileHandlers",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // IsValidSourceUrl enforcement for ExtensionHostMsg_OpenChannelToExtension IPC.
@@ -127,6 +127,8 @@ BASE_FEATURE(kExtensionSourceUrlEnforcement,
 // view MPArch migration. See
 // https://docs.google.com/document/d/1RVbtvklXUg9QCNvMT0r-1qDwJNeQFGoTCOD1Ur9mDa4/edit?usp=sharing
 // for details.
+// TODO(crbug.com/1261928): When enabling this by default, also launch the
+// ChromeAppsWebViewPermissiveBehaviorAllowed enterprise policy.
 BASE_FEATURE(kWebviewTagMPArchBehavior,
              "WebviewTagMPArchBehavior",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -137,7 +139,7 @@ BASE_FEATURE(kWebviewTagMPArchBehavior,
 // mv2 extension by default but the error messages will improperly mention
 // enterprise policy.
 BASE_FEATURE(kExtensionsManifestV3Only,
-             "kExtensionsManifestV3Only",
+             "ExtensionsManifestV3Only",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, the minimum MV3 Content-Security-Policy will include
@@ -146,5 +148,19 @@ BASE_FEATURE(kExtensionsManifestV3Only,
 BASE_FEATURE(kMinimumMV3CSPWithInlineSpeculationRules,
              "MinimumMV3CSPWithInlineSpeculationRules",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// If enabled, APIs of the Telemetry Extension platform that have pending
+// approval will be enabled. Read more about the platform here:
+// https://chromium.googlesource.com/chromium/src/+/master/docs/telemetry_extension/README.md.
+BASE_FEATURE(kTelemetryExtensionPendingApprovalApi,
+             "TelemetryExtensionPendingApprovalApi",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, user permitted sites are granted access. This should only happen
+// if kExtensionsMenuAccessControl is enabled, since it's the only entry point
+// where user could set permitted sites.
+BASE_FEATURE(kExtensionsMenuAccessControlWithPermittedSites,
+             "ExtensionsMenuAccessControlWithPermittedSitesName",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace extensions_features

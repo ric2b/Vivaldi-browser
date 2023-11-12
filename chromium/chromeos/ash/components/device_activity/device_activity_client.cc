@@ -7,6 +7,7 @@
 #include "ash/constants/ash_features.h"
 #include "base/check.h"
 #include "chromeos/ash/components/device_activity/device_active_use_case.h"
+#include "chromeos/ash/components/device_activity/fresnel_pref_names.h"
 #include "chromeos/ash/components/device_activity/fresnel_service.pb.h"
 // TODO(https://crbug.com/1269900): Migrate to use SFUL library.
 #include "base/metrics/histogram_functions.h"
@@ -15,10 +16,13 @@
 #include "chromeos/ash/components/dbus/system_clock/system_clock_sync_observation.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
+#include "components/prefs/pref_service.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
+#include "third_party/icu/source/i18n/unicode/gregocal.h"
+#include "third_party/icu/source/i18n/unicode/timezone.h"
 
 namespace ash::device_activity {
 
@@ -28,6 +32,9 @@ namespace {
 
 // Amount of time to wait before retriggering repeating timer.
 constexpr base::TimeDelta kTimeToRepeat = base::Hours(1);
+
+// Milliseconds per minute.
+constexpr int kMillisecondsPerMinute = 60000;
 
 // General upper bound of expected Fresnel response size in bytes.
 constexpr size_t kMaxFresnelResponseSizeBytes = 5 << 20;  // 5MB;
@@ -60,6 +67,10 @@ const char kHistogramStateCount[] = "Ash.DeviceActiveClient.StateCount";
 // Record the preserved file state.
 const char kHistogramsPreservedFileState[] =
     "Ash.DeviceActiveClient.PreservedFileState";
+
+// Record the Check Membership process cases.
+const char kCheckMembershipProcessCase[] =
+    "Ash.DeviceActiveClient.CheckMembershipCases";
 
 // Duration histogram uses State variant in order to create
 // unique histograms measuring durations by State.
@@ -106,6 +117,88 @@ const net::NetworkTrafficAnnotationTag check_membership_traffic_annotation =
           policy_exception_justification: "Not implemented."
         })");
 
+// Returns the total offset between Pacific Time (PT) and GMT.
+// Parameter ts is expected to be GMT/UTC.
+// TODO(hirthanan): Create utils library for commonly used methods.
+base::Time ConvertToPT(base::Time ts) {
+  // America/Los_Angleles is PT.
+  std::unique_ptr<icu::TimeZone> time_zone(
+      icu::TimeZone::createTimeZone("America/Los_Angeles"));
+  if (*time_zone == icu::TimeZone::getUnknown()) {
+    LOG(ERROR) << "Failed to get America/Los_Angeles timezone. "
+               << "Returning UTC-8 timezone as default.";
+    return ts - base::Hours(8);
+  }
+
+  // Calculate timedelta between PT and GMT. This method does not take day light
+  // savings (DST) into account.
+  const base::TimeDelta raw_time_diff =
+      base::Minutes(time_zone->getRawOffset() / kMillisecondsPerMinute);
+
+  UErrorCode status = U_ZERO_ERROR;
+  auto gregorian_calendar =
+      std::make_unique<icu::GregorianCalendar>(*time_zone, status);
+
+  // Calculates the time difference adjust by the possible daylight savings
+  // offset. If the status of any step fails, returns the default time
+  // difference without considering daylight savings.
+  if (!gregorian_calendar) {
+    return ts + raw_time_diff;
+  }
+
+  // Convert ts object to UDate.
+  UDate current_date =
+      static_cast<UDate>(ts.ToDoubleT() * base::Time::kMillisecondsPerSecond);
+  status = U_ZERO_ERROR;
+  gregorian_calendar->setTime(current_date, status);
+  if (U_FAILURE(status)) {
+    return ts + raw_time_diff;
+  }
+
+  status = U_ZERO_ERROR;
+  UBool day_light = gregorian_calendar->inDaylightTime(status);
+  if (U_FAILURE(status)) {
+    return ts + raw_time_diff;
+  }
+
+  // Calculate timedelta between PT and GMT, taking DST into account for an
+  // accurate PT.
+  int gmt_offset = time_zone->getRawOffset();
+  if (day_light) {
+    gmt_offset += time_zone->getDSTSavings();
+  }
+
+  return ts + base::Minutes(gmt_offset / kMillisecondsPerMinute);
+}
+
+base::Time GetNextMonth(base::Time ts) {
+  base::Time::Exploded exploded;
+  ts.UTCExplode(&exploded);
+
+  // Set new time to the first midnight of the next month.
+  exploded.day_of_month = 1;
+  exploded.month += 1;
+  exploded.hour = 0;
+  exploded.minute = 0;
+  exploded.second = 0;
+  exploded.millisecond = 0;
+
+  // Handle case when month is December.
+  if (exploded.month > 12) {
+    exploded.year += 1;
+    exploded.month = 1;
+  }
+
+  base::Time new_month_ts;
+  bool success = base::Time::FromUTCExploded(exploded, &new_month_ts);
+
+  if (!success) {
+    return base::Time();
+  }
+
+  return new_month_ts;
+}
+
 // Generates the full histogram name for histogram variants based on state.
 std::string HistogramVariantName(const std::string& histogram_prefix,
                                  DeviceActivityClient::State state) {
@@ -140,11 +233,11 @@ void RecordSavePreservedFile(bool success) {
                             success);
 }
 
-// Return the minute of the current UTC time.
+// Return the minute of the current PT time.
 int GetCurrentMinute() {
-  base::Time cur_time = base::Time::Now();
+  base::Time cur_time = ConvertToPT(base::Time::Now());
 
-  // Extract minute from exploded |cur_time| in UTC.
+  // Extract minute from exploded |cur_time|.
   base::Time::Exploded exploded_utc;
   cur_time.UTCExplode(&exploded_utc);
 
@@ -202,6 +295,14 @@ void RecordPreservedFileState(
                                 preserved_file_state);
 }
 
+// Histogram to record number of different failed/success cases for check
+// membership process.
+void RecordCheckMembershipCases(
+    DeviceActivityClient::CheckMembershipResponseCases check_membership_case) {
+  base::UmaHistogramEnumeration(kCheckMembershipProcessCase,
+                                check_membership_case);
+}
+
 std::unique_ptr<network::ResourceRequest> GenerateResourceRequest(
     const std::string& request_method,
     const GURL& url,
@@ -228,19 +329,23 @@ void DeviceActivityClient::RecordDeviceActivityMethodCalled(
 }
 
 DeviceActivityClient::DeviceActivityClient(
+    ChurnActiveStatus* churn_active_status_ptr,
+    PrefService* local_state,
     NetworkStateHandler* handler,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     std::unique_ptr<base::RepeatingTimer> report_timer,
     const std::string& fresnel_base_url,
     const std::string& api_key,
-    std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases,
-    base::Time chrome_first_run_time)
-    : chrome_first_run_time_(chrome_first_run_time),
+    base::Time chrome_first_run_time,
+    std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases)
+    : churn_active_status_ptr_(churn_active_status_ptr),
+      local_state_(local_state),
       network_state_handler_(handler),
       url_loader_factory_(url_loader_factory),
       report_timer_(std::move(report_timer)),
       fresnel_base_url_(fresnel_base_url),
       api_key_(api_key),
+      chrome_first_run_time_(chrome_first_run_time),
       use_cases_(std::move(use_cases)) {
   RecordDeviceActivityMethodCalled(DeviceActivityClient::DeviceActivityMethod::
                                        kDeviceActivityClientConstructor);
@@ -300,56 +405,186 @@ std::vector<DeviceActiveUseCase*> DeviceActivityClient::GetUseCases() const {
   return use_cases_ptr;
 }
 
+DeviceActiveUseCase* DeviceActivityClient::GetUseCasePtr(
+    psm_rlwe::RlweUseCase psm_use_case) const {
+  for (auto* use_case : GetUseCases()) {
+    if (use_case->GetPsmUseCase() == psm_use_case) {
+      return use_case;
+    }
+  }
+
+  VLOG(1) << "Use Case is not supported yet.";
+  return nullptr;
+}
+
+void DeviceActivityClient::UpdateChurnLocalStateAfterCheckIn(
+    DeviceActiveUseCase* current_use_case) {
+  if (current_use_case->GetPsmUseCase() ==
+      private_membership::rlwe::RlweUseCase::
+          CROS_FRESNEL_CHURN_MONTHLY_COHORT) {
+    base::Time prev_active_month =
+        churn_active_status_ptr_->GetCurrentActiveMonth();
+
+    // Update the active value based on the new ping timestamp.
+    // This will also require updating the booleans in local state that store
+    // whether a device has pinged in the past 3 months relative to the current
+    // month.
+    churn_active_status_ptr_->UpdateValue(last_transition_out_of_idle_time_);
+    base::Time new_active_month =
+        churn_active_status_ptr_->GetCurrentActiveMonth();
+    int new_active_value = churn_active_status_ptr_->GetValueAsInt();
+
+    // No updates were made to the churn active status.
+    if (prev_active_month == new_active_month) {
+      return;
+    }
+
+    // Read the current relative observation period reported status.
+    bool is_active_current_period_minus_0 = local_state_->GetBoolean(
+        prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus0);
+    bool is_active_current_period_minus_1 = local_state_->GetBoolean(
+        prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus1);
+    bool is_active_current_period_minus_2 = local_state_->GetBoolean(
+        prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus2);
+
+    // Determine how many months have passed between new_active_value and
+    // prev_active_value. This will tell us how many months the relative
+    // observation status should shift by in the local state.
+    for (int i = 0; i < 3; i++) {
+      if (prev_active_month == new_active_month) {
+        break;
+      }
+
+      // Shift relative observation windows reported status by 1.
+      // This is for the cohort use case, which happens before the observation
+      // use case. This means that after a successful churn cohort ping in a
+      // new month, the device may have false observation report statuses.
+      is_active_current_period_minus_2 = is_active_current_period_minus_1;
+      is_active_current_period_minus_1 = is_active_current_period_minus_0;
+      is_active_current_period_minus_0 = false;
+
+      prev_active_month = GetNextMonth(prev_active_month);
+    }
+
+    // Update the local state values after determining all other values.
+    local_state_->SetBoolean(
+        prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus0,
+        is_active_current_period_minus_0);
+    local_state_->SetBoolean(
+        prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus1,
+        is_active_current_period_minus_1);
+    local_state_->SetBoolean(
+        prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus2,
+        is_active_current_period_minus_2);
+    local_state_->SetInteger(prefs::kDeviceActiveLastKnownChurnActiveStatus,
+                             new_active_value);
+  }
+
+  // Update the relative local state observation period boolean if the
+  // observation use case had set a value for the observation period.
+  if (current_use_case->GetPsmUseCase() ==
+      private_membership::rlwe::RlweUseCase::
+          CROS_FRESNEL_CHURN_MONTHLY_OBSERVATION) {
+    if (!current_use_case->GetObservationPeriod(0).empty()) {
+      local_state_->SetBoolean(
+          prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus0, true);
+    }
+
+    if (!current_use_case->GetObservationPeriod(1).empty()) {
+      local_state_->SetBoolean(
+          prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus1, true);
+    }
+
+    if (!current_use_case->GetObservationPeriod(2).empty()) {
+      local_state_->SetBoolean(
+          prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus2, true);
+    }
+  }
+}
+
+void DeviceActivityClient::ReadChurnPreservedFile(
+    const private_computing::ActiveStatus& status) {
+  private_computing::PrivateComputingUseCase use_case = status.use_case();
+
+  if (use_case == private_computing::PrivateComputingUseCase::
+                      CROS_FRESNEL_CHURN_MONTHLY_COHORT) {
+    int churn_status_value = 0;
+    if (status.has_churn_active_status()) {
+      churn_status_value = status.churn_active_status();
+    }
+    if (local_state_->GetInteger(
+            prefs::kDeviceActiveLastKnownChurnActiveStatus) == 0 &&
+        churn_status_value != 0) {
+      churn_active_status_ptr_->InitializeValue(churn_status_value);
+      local_state_->SetInteger(prefs::kDeviceActiveLastKnownChurnActiveStatus,
+                               churn_status_value);
+    }
+  }
+
+  if (use_case == private_computing::PrivateComputingUseCase::
+                      CROS_FRESNEL_CHURN_MONTHLY_OBSERVATION) {
+    bool is_active_current_period_minus_0 = false;
+    bool is_active_current_period_minus_1 = false;
+    bool is_active_current_period_minus_2 = false;
+
+    // Get preserved file period status values.
+    if (status.has_period_status()) {
+      private_computing::ChurnObservationStatus period_status =
+          status.period_status();
+      is_active_current_period_minus_0 =
+          period_status.is_active_current_period_minus_0();
+      is_active_current_period_minus_1 =
+          period_status.is_active_current_period_minus_1();
+      is_active_current_period_minus_2 =
+          period_status.is_active_current_period_minus_2();
+    }
+
+    // Try to update the local state using the preserved file values.
+    // The preserved file may update the period status to true if the device
+    // sent the observation window previously and then was powerwashed.
+    // The local state will not currently be updated on recovery since that data
+    // needs to be recovered using check membership requests in the future.
+    if (!local_state_->GetBoolean(
+            prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus0)) {
+      local_state_->SetBoolean(
+          prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus0,
+          is_active_current_period_minus_0);
+    }
+    if (!local_state_->GetBoolean(
+            prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus1)) {
+      local_state_->SetBoolean(
+          prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus1,
+          is_active_current_period_minus_1);
+    }
+    if (!local_state_->GetBoolean(
+            prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus2)) {
+      local_state_->SetBoolean(
+          prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus2,
+          is_active_current_period_minus_2);
+    }
+
+    // Update churn observation last ping timestamp in local state based on
+    // active status value. The cohort use case is recovered before the
+    // observation use case, so we use the latest active status value.
+    local_state_->SetTime(
+        prefs::kDeviceActiveChurnObservationMonthlyPingTimestamp,
+        churn_active_status_ptr_->GetCurrentActiveMonth());
+  }
+}
+
 private_computing::SaveStatusRequest
 DeviceActivityClient::GetSaveStatusRequest() {
   // private_computing:
   private_computing::SaveStatusRequest request;
 
   for (auto* use_case : GetUseCases()) {
-    private_computing::ActiveStatus status;
-
-    // TODO: Before submission, check handling a last known ts that is
-    // unset / unix::epoch.
-    std::string last_ping_utc_date =
-        use_case->FormatUTCDateString(use_case->GetLastKnownPingTimestamp());
-
-    psm_rlwe::RlweUseCase psm_use_case = use_case->GetPsmUseCase();
-    switch (psm_use_case) {
-      case psm_rlwe::RlweUseCase::CROS_FRESNEL_DAILY:
-        status.set_use_case(
-            private_computing::PrivateComputingUseCase::CROS_FRESNEL_DAILY);
-        status.set_last_ping_utc_date(last_ping_utc_date);
-        break;
-      case psm_rlwe::RlweUseCase::CROS_FRESNEL_28DAY_ACTIVE:
-        status.set_use_case(private_computing::PrivateComputingUseCase::
-                                CROS_FRESNEL_28DAY_ACTIVE);
-        status.set_last_ping_utc_date(last_ping_utc_date);
-        break;
-      case psm_rlwe::RlweUseCase::CROS_FRESNEL_FIRST_ACTIVE:
-        break;
-      default:
-        VLOG(1) << "Use case is not supported yet. "
-                << psm_rlwe::RlweUseCase_Name(use_case->GetPsmUseCase());
-        break;
-    }
-
+    private_computing::ActiveStatus status = use_case->GenerateActiveStatus();
     if (status.has_use_case()) {
       *request.add_active_status() = status;
     }
   }
 
   return request;
-}
-
-DeviceActiveUseCase* DeviceActivityClient::GetUseCasePtr(
-    psm_rlwe::RlweUseCase psm_use_case) const {
-  for (auto* use_case : GetUseCases()) {
-    if (use_case->GetPsmUseCase() == psm_use_case)
-      return use_case;
-  }
-
-  VLOG(1) << "Use Case is not supported yet.";
-  return nullptr;
 }
 
 void DeviceActivityClient::SaveLastPingDatesStatus() {
@@ -401,13 +636,25 @@ void DeviceActivityClient::OnGetLastPingDatesStatusFetched(
     // 1. Iterate FileContent for the active_statuses and update use case
     // timestamps.
     for (auto& status : response.active_status()) {
-      std::string last_ping_utc_date = status.last_ping_utc_date();
-      base::Time last_ping_utc_time;
-      bool success = base::Time::FromUTCString(last_ping_utc_date.c_str(),
-                                               &last_ping_utc_time);
+      // One of last_ping_date and period_status is set in ActiveStatus proto.
+      base::Time last_ping_time;
+      if (status.has_last_ping_date()) {
+        std::string last_ping_pt_date = status.last_ping_date();
 
-      if (!success)
-        continue;
+        bool success = base::Time::FromUTCString(last_ping_pt_date.c_str(),
+                                                 &last_ping_time);
+
+        if (!success) {
+          continue;
+        }
+      }
+
+      // TODO(hirthanan): Get/Set period status for churn observation status in
+      // future CL.
+      private_computing::ChurnObservationStatus period_status;
+      if (status.has_period_status()) {
+        period_status = status.period_status();
+      }
 
       DeviceActiveUseCase* device_active_use_case_ptr;
 
@@ -423,9 +670,14 @@ void DeviceActivityClient::OnGetLastPingDatesStatusFetched(
               GetUseCasePtr(psm_rlwe::RlweUseCase::CROS_FRESNEL_28DAY_ACTIVE);
           break;
         case private_computing::PrivateComputingUseCase::
-            CROS_FRESNEL_FIRST_ACTIVE:
-          device_active_use_case_ptr =
-              GetUseCasePtr(psm_rlwe::RlweUseCase::CROS_FRESNEL_FIRST_ACTIVE);
+            CROS_FRESNEL_CHURN_MONTHLY_COHORT:
+          device_active_use_case_ptr = GetUseCasePtr(
+              psm_rlwe::RlweUseCase::CROS_FRESNEL_CHURN_MONTHLY_COHORT);
+          break;
+        case private_computing::PrivateComputingUseCase::
+            CROS_FRESNEL_CHURN_MONTHLY_OBSERVATION:
+          device_active_use_case_ptr = GetUseCasePtr(
+              psm_rlwe::RlweUseCase::CROS_FRESNEL_CHURN_MONTHLY_OBSERVATION);
           break;
         default:
           LOG(ERROR) << "PSM use case is not supported yet.";
@@ -439,16 +691,29 @@ void DeviceActivityClient::OnGetLastPingDatesStatusFetched(
         return;
       }
 
+      // Recover the churn active value and ChurnActiveStatus
+      // if set in preserved file but not in local state.
+      ReadChurnPreservedFile(status);
+
       if (!device_active_use_case_ptr->IsLastKnownPingTimestampSet()) {
-        RecordPreservedFileState(
-            DeviceActivityClient::PreservedFileState::kReadOkLocalStateEmpty);
+        if (use_case ==
+            private_computing::PrivateComputingUseCase::CROS_FRESNEL_DAILY) {
+          // Only record the successfully read from preserved file for daily use
+          // case.
+          RecordPreservedFileState(
+              DeviceActivityClient::PreservedFileState::kReadOkLocalStateEmpty);
+        }
         VLOG(1) << "Updating local pref timestamp value with file timestamp = "
-                << last_ping_utc_time;
-        device_active_use_case_ptr->SetLastKnownPingTimestamp(
-            last_ping_utc_time);
+                << last_ping_time;
+        device_active_use_case_ptr->SetLastKnownPingTimestamp(last_ping_time);
       } else {
-        RecordPreservedFileState(
-            DeviceActivityClient::PreservedFileState::kReadOkLocalStateSet);
+        if (use_case ==
+            private_computing::PrivateComputingUseCase::CROS_FRESNEL_DAILY) {
+          // Only record the successfully read from preserved file for daily use
+          // case.
+          RecordPreservedFileState(
+              DeviceActivityClient::PreservedFileState::kReadOkLocalStateSet);
+        }
         VLOG(1) << "Preserved File was read successfully but local state is "
                    "already set. "
                 << "Device was most likely restarted and not powerwashed, so "
@@ -568,8 +833,8 @@ void DeviceActivityClient::ReportUseCases() {
     return;
   }
 
-  // The network is connected and the client |state_| is kIdle.
-  last_transition_out_of_idle_time_ = base::Time::Now();
+  // Adjust UTC time object to represent PT for entire device activity client.
+  last_transition_out_of_idle_time_ = ConvertToPT(base::Time::Now());
 
   for (auto& use_case : use_cases_) {
     // Ownership of the use cases will be maintained by the |use_cases_| vector.
@@ -615,7 +880,7 @@ void DeviceActivityClient::TransitionOutOfIdle(
   // Begin phase one of checking membership if the device has not pinged yet
   // within the given use case window.
   // TODO(https://crbug.com/1262187): Remove hardcoded use case when adding
-  // support for additional use cases (i.e MONTHLY, FIRST_ACTIVE, etc.).
+  // support for additional use cases.
   if (current_use_case->IsDevicePingRequired(
           last_transition_out_of_idle_time_)) {
     bool success = current_use_case->SetWindowIdentifier(
@@ -626,90 +891,21 @@ void DeviceActivityClient::TransitionOutOfIdle(
       return;
     }
 
-    switch (current_use_case->GetPsmUseCase()) {
-      case psm_rlwe::RlweUseCase::CROS_FRESNEL_DAILY:
-        // Check membership continues when the cached local state pref
-        // is not set. The local state pref may not be set if the device is
-        // new, powerwashed, recovered, RMA, or the local state was corrupted.
-        if (base::FeatureList::IsEnabled(
-                features::kDeviceActiveClientDailyCheckMembership) &&
-            !current_use_case->IsLastKnownPingTimestampSet()) {
-          TransitionToCheckMembershipOprf(current_use_case);
-          return;
-        } else {
-          // |TransitionToCheckIn| if the local state pref is set.
-          TransitionToCheckIn(current_use_case);
-          return;
-        }
-      case psm_rlwe::RlweUseCase::CROS_FRESNEL_MONTHLY:
-        // Check membership continues when the cached local state pref is not
-        // set. The local state pref may not be set if the device is
-        // new, powerwashed, recovered, RMA, or the local state was corrupted.
-        if (base::FeatureList::IsEnabled(
-                features::kDeviceActiveClientMonthlyCheckMembership) &&
-            !current_use_case->IsLastKnownPingTimestampSet()) {
-          TransitionToCheckMembershipOprf(current_use_case);
-          return;
-        }
+    // Check membership continues when the cached local state pref
+    // is not set. The local state pref may not be set if the device is
+    // new, powerwashed, recovered, RMA, or the local state was corrupted.
+    if (current_use_case->IsEnabledCheckMembership() &&
+        !current_use_case->IsLastKnownPingTimestampSet()) {
+      TransitionToCheckMembershipOprf(current_use_case);
+      return;
+    }
 
-        // |TransitionToCheckIn| if the local state pref is set.
-        if (base::FeatureList::IsEnabled(
-                features::kDeviceActiveClientMonthlyCheckIn)) {
-          // During rollout, we perform CheckIn without CheckMembership for
-          // powerwash, recovery, or RMA devices.
-          TransitionToCheckIn(current_use_case);
-          return;
-        }
-
-        break;
-      case psm_rlwe::RlweUseCase::CROS_FRESNEL_FIRST_ACTIVE:
-        // Check membership continues when the cached local state pref
-        // is not set. The local state pref may not be set if the device is
-        // new, powerwashed, recovered, RMA, or the local state was corrupted.
-        if (base::FeatureList::IsEnabled(
-                features::kDeviceActiveClientFirstActiveCheckMembership) &&
-            !current_use_case->IsLastKnownPingTimestampSet()) {
-          TransitionToCheckMembershipOprf(current_use_case);
-          return;
-        }
-
-        // |TransitionToCheckIn| if the local state pref is set.
-        if (base::FeatureList::IsEnabled(
-                features::kDeviceActiveClientFirstActiveCheckIn)) {
-          // During rollout, we perform CheckIn without CheckMembership for
-          // powerwash, recovery, or RMA devices.
-          TransitionToCheckIn(current_use_case);
-          return;
-        }
-
-        break;
-      case psm_rlwe::RlweUseCase::CROS_FRESNEL_28DAY_ACTIVE:
-        // Check membership continues when the cached local state pref
-        // is not set. The local state pref may not be set if the device is
-        // new, powerwashed, recovered, RMA, or the local state was corrupted.
-        if (base::FeatureList::IsEnabled(
-                features::kDeviceActiveClient28DayActiveCheckMembership) &&
-            !current_use_case->IsLastKnownPingTimestampSet()) {
-          TransitionToCheckMembershipOprf(current_use_case);
-          return;
-        }
-
-        // |TransitionToCheckIn| if the local state pref is set.
-        if (base::FeatureList::IsEnabled(
-                features::kDeviceActiveClient28DayActiveCheckIn)) {
-          // During rollout, we perform CheckIn without CheckMembership for
-          // powerwash, recovery, or RMA devices.
-          TransitionToCheckIn(current_use_case);
-          return;
-        }
-
-        break;
-      default:
-        VLOG(1) << "Use case is not supported yet. "
-                << psm_rlwe::RlweUseCase_Name(
-                       current_use_case->GetPsmUseCase());
-        TransitionToIdle(current_use_case);
-        return;
+    // |TransitionToCheckIn| if the local state pref is set.
+    // During rollout, we perform CheckIn without CheckMembership for
+    // powerwash, recovery, or RMA devices.
+    if (current_use_case->IsEnabledCheckIn()) {
+      TransitionToCheckIn(current_use_case);
+      return;
     }
   }
 
@@ -822,6 +1018,9 @@ void DeviceActivityClient::TransitionToCheckMembershipOprf(
       current_use_case->GetPsmRlweClient()->CreateOprfRequest();
   if (!status_or_oprf_request.ok()) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kOprfResponseBodyFailed);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -873,6 +1072,9 @@ void DeviceActivityClient::OnCheckMembershipOprfDone(
   FresnelPsmRlweOprfResponse psm_oprf_response;
   if (!response_body || !psm_oprf_response.ParseFromString(*response_body)) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kOprfResponseBodyFailed);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -880,6 +1082,9 @@ void DeviceActivityClient::OnCheckMembershipOprfDone(
   // Parse |fresnel_oprf_response| for oprf_response.
   if (!psm_oprf_response.has_rlwe_oprf_response()) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kNotHasRlweOprfResponse);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -914,6 +1119,9 @@ void DeviceActivityClient::TransitionToCheckMembershipQuery(
       current_use_case->GetPsmRlweClient()->CreateQueryRequest(oprf_response);
   if (!status_or_query_request.ok()) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kCreateQueryRequestFailed);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -965,6 +1173,9 @@ void DeviceActivityClient::OnCheckMembershipQueryDone(
   FresnelPsmRlweQueryResponse psm_query_response;
   if (!response_body || !psm_query_response.ParseFromString(*response_body)) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kQueryResponseBodyFailed);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -972,6 +1183,9 @@ void DeviceActivityClient::OnCheckMembershipQueryDone(
   // Parse |fresnel_query_response| for psm query_response.
   if (!psm_query_response.has_rlwe_query_response()) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kNotHasRlweQueryResponse);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -984,6 +1198,9 @@ void DeviceActivityClient::OnCheckMembershipQueryDone(
 
   if (!status_or_response.ok()) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kProcessQueryResponseFailed);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -995,6 +1212,9 @@ void DeviceActivityClient::OnCheckMembershipQueryDone(
 
   if (rlwe_membership_responses.membership_responses_size() != 1) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::
+            kMembershipResponsesSizeIsNotOne);
     TransitionToIdle(current_use_case);
     return;
   }
@@ -1003,32 +1223,26 @@ void DeviceActivityClient::OnCheckMembershipQueryDone(
       rlwe_membership_responses.membership_responses(0).membership_response();
 
   bool is_psm_id_member = membership_response.is_member();
-  std::string timestamp_ciphertext = membership_response.value();
 
   // Record the query membership result to UMA histogram.
   RecordQueryMembershipResultBoolean(is_psm_id_member);
 
   if (!is_psm_id_member) {
     RecordDurationStateMetric(state_, state_timer_.Elapsed());
+    RecordCheckMembershipCases(
+        DeviceActivityClient::CheckMembershipResponseCases::kIsNotPsmIdMember);
     TransitionToCheckIn(current_use_case);
     return;
   }
 
-  if (current_use_case->GetPsmUseCase() ==
-      psm_rlwe::RlweUseCase::CROS_FRESNEL_FIRST_ACTIVE) {
-    // The first active use case stores the first active ts ciphertext
-    // in the psm serverside.
-    // This allows us to retrieve and decrypt the timestamp since the
-    // membership is true.
-    current_use_case->SetLastKnownPingTimestamp(
-        current_use_case->DecryptPsmValueAsTimestamp(timestamp_ciphertext));
-  } else {
-    // Update local state to signal ping has already been sent for use case
-    // window.
-    current_use_case->SetLastKnownPingTimestamp(
-        last_transition_out_of_idle_time_);
-  }
+  // Update local state to signal ping has already been sent for use case
+  // window.
+  current_use_case->SetLastKnownPingTimestamp(
+      last_transition_out_of_idle_time_);
 
+  RecordCheckMembershipCases(
+      DeviceActivityClient::CheckMembershipResponseCases::
+          kSuccessfullySetLocalState);
   RecordDurationStateMetric(state_, state_timer_.Elapsed());
   TransitionToIdle(current_use_case);
   return;
@@ -1077,23 +1291,17 @@ void DeviceActivityClient::TransitionToCheckIn(
   // Report UMA histogram for transitioning state to |kCheckingIn|.
   RecordStateCountMetric(state_);
 
-  if (current_use_case->GetPsmUseCase() ==
-          psm_rlwe::RlweUseCase::CROS_FRESNEL_FIRST_ACTIVE &&
-      !current_use_case->EncryptPsmValueAsCiphertext(
-          last_transition_out_of_idle_time_)) {
-    VLOG(1) << "Failed to encrypt and store psm value as ciphertext for the "
-               "first active use case.";
+  // Generate Fresnel PSM import request body.
+  absl::optional<FresnelImportDataRequest> import_request =
+      current_use_case->GenerateImportRequestBody();
+
+  if (!import_request.has_value()) {
     TransitionToIdle(current_use_case);
-    RecordDurationStateMetric(state_, state_timer_.Elapsed());
     return;
   }
 
-  // Generate Fresnel PSM import request body.
-  FresnelImportDataRequest import_request =
-      current_use_case->GenerateImportRequestBody();
-
   std::string request_body;
-  import_request.SerializeToString(&request_body);
+  import_request.value().SerializeToString(&request_body);
 
   auto resource_request = GenerateResourceRequest(
       net::HttpRequestHeaders::kPostMethod, GetFresnelURL(), api_key_);
@@ -1131,6 +1339,10 @@ void DeviceActivityClient::OnCheckInDone(
     // Update local state pref to record reporting device active.
     current_use_case->SetLastKnownPingTimestamp(
         last_transition_out_of_idle_time_);
+
+    // Update churn local state and active status values after successful
+    // churn use case ping (either cohort or observation).
+    UpdateChurnLocalStateAfterCheckIn(current_use_case);
   }
 
   RecordDurationStateMetric(state_, state_timer_.Elapsed());

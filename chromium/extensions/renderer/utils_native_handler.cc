@@ -4,7 +4,7 @@
 
 #include "extensions/renderer/utils_native_handler.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "extensions/renderer/script_context.h"
 #include "third_party/blink/public/web/web_serialized_script_value.h"
 
@@ -13,7 +13,7 @@ namespace extensions {
 UtilsNativeHandler::UtilsNativeHandler(ScriptContext* context)
     : ObjectBackedNativeHandler(context) {}
 
-UtilsNativeHandler::~UtilsNativeHandler() {}
+UtilsNativeHandler::~UtilsNativeHandler() = default;
 
 void UtilsNativeHandler::AddRoutes() {
   RouteHandlerFunction("deepCopy",

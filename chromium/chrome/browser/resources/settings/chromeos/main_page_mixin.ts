@@ -6,10 +6,11 @@ import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {beforeNextRender, dedupingMixin, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {castExists} from './assert_extras.js';
+import {Constructor} from './common/types.js';
 import {ensureLazyLoaded} from './ensure_lazy_loaded.js';
 import {SettingsIdleLoadElement} from './os_settings_page/settings_idle_load.js';
 import {RouteObserverMixin, RouteObserverMixinInterface} from './route_observer_mixin.js';
-import {MinimumRoutes, Route, Router} from './router.js';
+import {Route, Router} from './router.js';
 
 /**
  * A categorization of every possible Settings URL, necessary for implementing
@@ -33,7 +34,7 @@ function classifyRoute(route: Route|undefined): RouteState {
   if (!route) {
     return RouteState.INITIAL;
   }
-  const routes = Router.getInstance().getRoutes() as MinimumRoutes;
+  const routes = Router.getInstance().routes;
   if (route === routes.BASIC || route === routes.ABOUT) {
     return RouteState.TOP_LEVEL;
   }
@@ -71,8 +72,6 @@ const VALID_TRANSITIONS = new Map([
   [RouteState.TOP_LEVEL, ALL_STATES],
 ]);
 
-type Constructor<T> = new (...args: any[]) => T;
-
 export interface MainPageMixinInterface extends RouteObserverMixinInterface {
   containsRoute(route: Route|undefined): boolean;
   querySection(section: string): HTMLElement|null;
@@ -107,7 +106,7 @@ export const MainPageMixin = dedupingMixin(
         }
 
         private shouldExpandAdvanced_(route: Route): boolean {
-          const routes = Router.getInstance().getRoutes() as MinimumRoutes;
+          const routes = Router.getInstance().routes;
           return (this.tagName === 'OS-SETTINGS-PAGE') && routes.ADVANCED &&
               routes.ADVANCED.contains(route);
         }

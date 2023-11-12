@@ -8,14 +8,17 @@
 #include <tuple>
 
 #include "base/values.h"
+#include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/trigger_registration.h"
+#include "net/base/schemeful_site.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
 
@@ -38,6 +41,16 @@ std::ostream& operator<<(std::ostream& out, const FilterData& filter_data) {
   return out << filter_data.ToJson();
 }
 
+bool operator==(const FilterPair& a, const FilterPair& b) {
+  return a.positive == b.positive && a.negative == b.negative;
+}
+
+std::ostream& operator<<(std::ostream& out, const FilterPair& filters) {
+  base::Value::Dict dict;
+  filters.SerializeIfNotEmpty(dict);
+  return out << dict;
+}
+
 bool operator==(const Filters& a, const Filters& b) {
   return a.filter_values() == b.filter_values();
 }
@@ -46,9 +59,18 @@ std::ostream& operator<<(std::ostream& out, const Filters& filters) {
   return out << filters.ToJson();
 }
 
+bool operator==(const DestinationSet& a, const DestinationSet& b) {
+  return a.destinations() == b.destinations();
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const DestinationSet& destination_set) {
+  return out << destination_set.ToJson();
+}
+
 bool operator==(const SourceRegistration& a, const SourceRegistration& b) {
   auto tie = [](const SourceRegistration& s) {
-    return std::make_tuple(s.source_event_id, s.destination, s.expiry,
+    return std::make_tuple(s.source_event_id, s.destination_set, s.expiry,
                            s.event_report_window, s.aggregatable_report_window,
                            s.priority, s.filter_data, s.debug_key,
                            s.aggregation_keys, s.debug_reporting);
@@ -72,7 +94,7 @@ bool operator==(const AggregatableTriggerData& a,
                 const AggregatableTriggerData& b) {
   const auto tie = [](const AggregatableTriggerData& trigger_data) {
     return std::make_tuple(trigger_data.key_piece(), trigger_data.source_keys(),
-                           trigger_data.filters(), trigger_data.not_filters());
+                           trigger_data.filters());
   };
   return tie(a) == tie(b);
 }
@@ -84,8 +106,7 @@ std::ostream& operator<<(std::ostream& out,
 
 bool operator==(const EventTriggerData& a, const EventTriggerData& b) {
   const auto tie = [](const EventTriggerData& t) {
-    return std::make_tuple(t.data, t.priority, t.dedup_key, t.filters,
-                           t.not_filters);
+    return std::make_tuple(t.data, t.priority, t.dedup_key, t.filters);
   };
   return tie(a) == tie(b);
 }
@@ -97,8 +118,9 @@ std::ostream& operator<<(std::ostream& out,
 
 bool operator==(const TriggerRegistration& a, const TriggerRegistration& b) {
   auto tie = [](const TriggerRegistration& reg) {
-    return std::make_tuple(reg.debug_key, reg.aggregatable_dedup_key,
-                           reg.event_triggers, reg.aggregatable_trigger_data,
+    return std::make_tuple(reg.filters, reg.debug_key,
+                           reg.aggregatable_dedup_keys, reg.event_triggers,
+                           reg.aggregatable_trigger_data,
                            reg.aggregatable_values, reg.debug_reporting,
                            reg.aggregation_coordinator);
   };
@@ -115,6 +137,18 @@ bool operator==(const SuitableOrigin& a, const SuitableOrigin& b) {
 
 std::ostream& operator<<(std::ostream& out, const SuitableOrigin& origin) {
   return out << *origin;
+}
+
+bool operator==(const AggregatableDedupKey& a, const AggregatableDedupKey& b) {
+  const auto tie = [](const AggregatableDedupKey& t) {
+    return std::make_tuple(t.dedup_key, t.filters);
+  };
+  return tie(a) == tie(b);
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const AggregatableDedupKey& aggregatable_dedup_key) {
+  return out << aggregatable_dedup_key.ToJson();
 }
 
 }  // namespace attribution_reporting

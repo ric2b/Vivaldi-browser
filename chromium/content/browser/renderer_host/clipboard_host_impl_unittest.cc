@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/pickle.h"
 #include "base/run_loop.h"
@@ -90,7 +90,7 @@ class PolicyControllerTest : public ui::DataTransferPolicyController {
                     base::OnceCallback<void(bool)> callback));
 
   MOCK_METHOD3(DropIfAllowed,
-               void(const ui::DataTransferEndpoint* data_src,
+               void(const ui::OSExchangeData* drag_data,
                     const ui::DataTransferEndpoint* data_dst,
                     base::OnceClosure drop_cb));
 };

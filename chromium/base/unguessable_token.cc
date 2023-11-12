@@ -33,13 +33,15 @@ const UnguessableToken& UnguessableToken::Null() {
 }
 
 // static
-UnguessableToken UnguessableToken::Deserialize(uint64_t high, uint64_t low) {
+absl::optional<UnguessableToken> UnguessableToken::Deserialize(uint64_t high,
+                                                               uint64_t low) {
   // Receiving a zeroed out UnguessableToken from another process means that it
-  // was never initialized via Create(). The real check for this is in the
-  // StructTraits in mojo/public/cpp/base/unguessable_token_mojom_traits.cc
-  // where a zero-ed out token will fail to deserialize. This DCHECK is a
-  // backup check.
-  DCHECK(!(high == 0 && low == 0));
+  // was never initialized via Create(). Since this method might also be used to
+  // create an UnguessableToken from data on disk, we will handle this case more
+  // gracefully since data could have been corrupted.
+  if (high == 0 && low == 0) {
+    return absl::nullopt;
+  }
   return UnguessableToken(Token{high, low});
 }
 

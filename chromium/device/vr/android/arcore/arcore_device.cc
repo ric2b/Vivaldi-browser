@@ -7,12 +7,13 @@
 #include <algorithm>
 
 #include "base/android/android_hardware_buffer_compat.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/numerics/math_constants.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include "device/base/features.h"
 #include "device/vr/android/arcore/ar_image_transport.h"
 #include "device/vr/android/arcore/arcore_gl.h"
 #include "device/vr/android/arcore/arcore_gl_thread.h"
@@ -32,18 +33,18 @@ namespace {
 
 const std::vector<mojom::XRSessionFeature>& GetSupportedFeatures() {
   static base::NoDestructor<std::vector<mojom::XRSessionFeature>>
-      kSupportedFeatures{{
-    mojom::XRSessionFeature::REF_SPACE_VIEWER,
-    mojom::XRSessionFeature::REF_SPACE_LOCAL,
-    mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR,
-    mojom::XRSessionFeature::REF_SPACE_UNBOUNDED,
-    mojom::XRSessionFeature::DOM_OVERLAY,
-    mojom::XRSessionFeature::LIGHT_ESTIMATION,
-    mojom::XRSessionFeature::ANCHORS,
-    mojom::XRSessionFeature::PLANE_DETECTION,
-    mojom::XRSessionFeature::DEPTH,
-    mojom::XRSessionFeature::IMAGE_TRACKING
-  }};
+      kSupportedFeatures{{mojom::XRSessionFeature::REF_SPACE_VIEWER,
+                          mojom::XRSessionFeature::REF_SPACE_LOCAL,
+                          mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR,
+                          mojom::XRSessionFeature::REF_SPACE_UNBOUNDED,
+                          mojom::XRSessionFeature::DOM_OVERLAY,
+                          mojom::XRSessionFeature::LIGHT_ESTIMATION,
+                          mojom::XRSessionFeature::ANCHORS,
+                          mojom::XRSessionFeature::PLANE_DETECTION,
+                          mojom::XRSessionFeature::DEPTH,
+                          mojom::XRSessionFeature::IMAGE_TRACKING,
+                          mojom::XRSessionFeature::HIT_TEST,
+                          mojom::XRSessionFeature::FRONT_FACING}};
 
   return *kSupportedFeatures;
 }
@@ -76,10 +77,6 @@ ArCoreDevice::ArCoreDevice(
   std::vector<mojom::XRSessionFeature> device_features(
         GetSupportedFeatures());
 
-  // Only support hit test if the feature flag is enabled.
-  if (base::FeatureList::IsEnabled(features::kWebXrHitTest))
-      device_features.emplace_back(mojom::XRSessionFeature::HIT_TEST);
-
   // Only support camera access if the device supports shared buffers.
   if (base::AndroidHardwareBufferCompat::IsSupportAvailable())
     device_features.emplace_back(mojom::XRSessionFeature::CAMERA_ACCESS);
@@ -94,8 +91,8 @@ ArCoreDevice::~ArCoreDevice() {
 
   // Ensure that any active sessions are terminated. Terminating the GL thread
   // would normally do so via its session_shutdown_callback_, but that happens
-  // asynchronously via CreateMainThreadCallback, and it doesn't seem safe to
-  // depend on all posted tasks being handled before the thread is shut down.
+  // asynchronously and it doesn't seem safe to depend on all posted tasks being
+  // handled before the thread is shut down.
   // Repeated EndSession calls are a no-op, so it's OK to do this redundantly.
   OnSessionEnded();
 
@@ -166,7 +163,8 @@ void ArCoreDevice::RequestSession(
 
   session_state_->arcore_gl_thread_ = std::make_unique<ArCoreGlThread>(
       std::move(ar_image_transport_factory_), std::move(mailbox_bridge_),
-      CreateMainThreadCallback(
+      base::BindPostTask(
+          main_thread_task_runner_,
           base::BindOnce(&ArCoreDevice::OnGlThreadReady, GetWeakPtr(),
                          options->render_process_id, options->render_frame_id,
                          use_dom_overlay)));
@@ -345,8 +343,9 @@ void ArCoreDevice::CallDeferredRequestSessionCallback(
   PostTaskToGlThread(base::BindOnce(
       &ArCoreGl::CreateSession,
       session_state_->arcore_gl_thread_->GetArCoreGl()->GetWeakPtr(),
-      CreateMainThreadCallback(std::move(create_callback)),
-      CreateMainThreadCallback(std::move(shutdown_callback))));
+      base::BindPostTask(main_thread_task_runner_, std::move(create_callback)),
+      base::BindPostTask(main_thread_task_runner_,
+                         std::move(shutdown_callback))));
 }
 
 void ArCoreDevice::OnCreateSessionCallback(
@@ -392,9 +391,8 @@ void ArCoreDevice::OnCreateSessionCallback(
 
 void ArCoreDevice::PostTaskToGlThread(base::OnceClosure task) {
   DCHECK(IsOnMainThread());
-  session_state_->arcore_gl_thread_->GetArCoreGl()
-      ->GetGlThreadTaskRunner()
-      ->PostTask(FROM_HERE, std::move(task));
+  session_state_->arcore_gl_thread_->task_runner()->PostTask(FROM_HERE,
+                                                             std::move(task));
 }
 
 bool ArCoreDevice::IsOnMainThread() {
@@ -432,8 +430,10 @@ void ArCoreDevice::RequestArCoreGlInitialization(
         session_state_->optional_features_,
         std::move(session_state_->tracked_images_),
         std::move(session_state_->depth_options_),
-        CreateMainThreadCallback(base::BindOnce(
-            &ArCoreDevice::OnArCoreGlInitializationComplete, GetWeakPtr()))));
+        base::BindPostTask(
+            main_thread_task_runner_,
+            base::BindOnce(&ArCoreDevice::OnArCoreGlInitializationComplete,
+                           GetWeakPtr()))));
     return;
   }
 

@@ -22,6 +22,7 @@
 #include "net/base/privacy_mode.h"
 #include "net/base/request_priority.h"
 #include "net/cookies/canonical_cookie.h"
+#include "net/cookies/cookie_setting_override.h"
 #include "net/filter/source_stream.h"
 #include "net/http/http_raw_request_headers.h"
 #include "net/http/http_response_headers.h"
@@ -352,6 +353,10 @@ class NET_EXPORT URLRequestJob {
   // On return, |this| may be deleted.
   void ReadRawDataComplete(int bytes_read);
 
+  const absl::optional<net::SchemefulSite>& request_initiator_site() const {
+    return request_initiator_site_;
+  }
+
   // The request that initiated this job. This value will never be nullptr.
   const raw_ptr<URLRequest> request_;
 
@@ -437,6 +442,11 @@ class NET_EXPORT URLRequestJob {
   // Set when a redirect is deferred. Redirects are deferred after validity
   // checks are performed, so this field must not be modified.
   absl::optional<RedirectInfo> deferred_redirect_info_;
+
+  // The request's initiator never changes, so we store it in format of
+  // SchemefulSite so that we don't recompute (including looking up the
+  // registrable domain) it during every redirect.
+  absl::optional<net::SchemefulSite> request_initiator_site_;
 
   // Non-null if ReadRawData() returned ERR_IO_PENDING, and the read has not
   // completed.

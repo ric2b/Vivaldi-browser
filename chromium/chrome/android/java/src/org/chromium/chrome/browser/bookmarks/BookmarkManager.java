@@ -20,14 +20,14 @@ import androidx.recyclerview.widget.RecyclerView.AdapterDataObserver;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkActivity;
 import org.chromium.chrome.browser.commerce.ShoppingFeatures;
 import org.chromium.chrome.browser.commerce.ShoppingServiceFactory;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksReader;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.subscriptions.CommerceSubscriptionsServiceFactory;
-import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -35,6 +35,7 @@ import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.browser_ui.widget.dragreorder.DragStateDelegate;
+import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.SearchDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
@@ -44,19 +45,24 @@ import org.chromium.url.GURL;
 import java.util.List;
 import java.util.Stack;
 
+// Vivaldi
+import android.graphics.Rect;
+
 import org.vivaldi.browser.bookmarks.VivaldiBookmarksPageObserver;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+// End Vivaldi
 
 /**
  * The new bookmark manager that is planned to replace the existing bookmark manager. It holds all
  * views and shared logics between tablet and phone. For tablet/phone specific logics, see
  * {@link BookmarkActivity} (phone) and {@link BookmarkPage} (tablet).
  */
-public class BookmarkManager
-        implements BookmarkDelegate, SearchDelegate, PartnerBookmarksReader.FaviconUpdateObserver {
+public class BookmarkManager implements BookmarkDelegate, SearchDelegate,
+                                        PartnerBookmarksReader.FaviconUpdateObserver,
+                                        BackPressHandler {
     private static final int FAVICON_MAX_CACHE_SIZE_BYTES =
             10 * ConversionUtils.BYTES_PER_MEGABYTE; // 10MB
 
@@ -65,7 +71,6 @@ public class BookmarkManager
     private static boolean sPreventLoadingForTesting;
 
     private Context mContext;
-    private ComponentName mOpenBookmarkComponentName;
     private ViewGroup mMainView;
     private BookmarkModel mBookmarkModel;
     private BookmarkUndoController mUndoController;
@@ -75,7 +80,23 @@ public class BookmarkManager
     private RecyclerView mRecyclerView;
     private BookmarkActionBar mToolbar;
     private SelectionDelegate<BookmarkId> mSelectionDelegate;
-    private final Stack<BookmarkUIState> mStateStack = new Stack<>();
+    private final Stack<BookmarkUIState> mStateStack = new Stack<>() {
+        @Override
+        public BookmarkUIState push(BookmarkUIState item) {
+            // The back press state depends on the size of stack. So push/pop item first in order
+            // to keep the size update-to-date.
+            var state = super.push(item);
+            onBackPressStateChanged();
+            return state;
+        }
+
+        @Override
+        public synchronized BookmarkUIState pop() {
+            var state = super.pop();
+            onBackPressStateChanged();
+            return state;
+        }
+    };
     private LargeIconBridge mLargeIconBridge;
     private boolean mFaviconsNeedRefresh;
     private String mInitialUrl;
@@ -86,9 +107,14 @@ public class BookmarkManager
     // Vivaldi
     private VivaldiBookmarksPageObserver mBookmarksPageObserver;
 
-    private BookmarkItemsAdapter mAdapter;
-    private BookmarkDragStateDelegate mDragStateDelegate;
-    private AdapterDataObserver mAdapterDataObserver;
+    private final BookmarkItemsAdapter mAdapter;
+    private final BookmarkManagerCoordinator mBookmarkManagerCoordinator;
+    private final BookmarkDragStateDelegate mDragStateDelegate;
+    private final AdapterDataObserver mAdapterDataObserver;
+    private final BookmarkOpener mBookmarkOpener;
+
+    private final ObservableSupplierImpl<Boolean> mBackPressStateSupplier =
+            new ObservableSupplierImpl<>();
 
     private final BookmarkModelObserver mBookmarkModelObserver = new BookmarkModelObserver() {
         @Override
@@ -201,7 +227,6 @@ public class BookmarkManager
     public BookmarkManager(Context context, ComponentName openBookmarkComponentName,
             boolean isDialogUi, boolean isIncognito, SnackbarManager snackbarManager) {
         mContext = context;
-        mOpenBookmarkComponentName = openBookmarkComponentName;
         mIsDialogUi = isDialogUi;
         mIsIncognito = isIncognito;
 
@@ -222,13 +247,7 @@ public class BookmarkManager
         mBookmarkModel = BookmarkModel.getForProfile(profile);
         mMainView = (ViewGroup) LayoutInflater.from(mContext).inflate(R.layout.bookmark_main, null);
 
-        // TODO(1293885): Remove this validator once we have an API on the backend that sends
-        //                success/failure information back.
-        if (ShoppingFeatures.isShoppingListEnabled()) {
-            PowerBookmarkUtils.validateBookmarkedCommerceSubscriptions(mBookmarkModel,
-                    new CommerceSubscriptionsServiceFactory()
-                            .getForLastUsedProfile()
-                            .getSubscriptionsManager());
+        if (ShoppingFeatures.isShoppingListEligible()) {
             ShoppingServiceFactory.getForProfile(profile).scheduleSavedProductUpdate();
         }
 
@@ -237,12 +256,15 @@ public class BookmarkManager
                 mMainView.findViewById(R.id.selectable_list);
         mSelectableListLayout = selectableList;
         mSelectableListLayout.initializeEmptyView(R.string.bookmarks_folder_empty);
+        mSelectableListLayout.getHandleBackPressChangedSupplier().addObserver(
+                (x) -> onBackPressStateChanged());
 
         if (ChromeApplicationImpl.isVivaldi())
             mSelectableListLayout.setBackgroundColor(ApiCompatibilityUtils.
                     getColor(mContext.getResources(), android.R.color.transparent));
 
-        mAdapter = new BookmarkItemsAdapter(mContext, snackbarManager);
+        mAdapter = new BookmarkItemsAdapter(mContext, profile);
+        mBookmarkManagerCoordinator = new BookmarkManagerCoordinator(profile, snackbarManager);
 
         mAdapterDataObserver = new AdapterDataObserver() {
             @Override
@@ -258,6 +280,21 @@ public class BookmarkManager
         mAdapter.registerAdapterDataObserver(mAdapterDataObserver);
         mRecyclerView = mSelectableListLayout.initializeRecyclerView(
                 (RecyclerView.Adapter<RecyclerView.ViewHolder>) mAdapter);
+
+        if (ChromeApplicationImpl.isVivaldi()) {
+                    mRecyclerView.addItemDecoration(new RecyclerView.ItemDecoration() {
+                @Override
+                public void getItemOffsets(
+                        Rect outRect, View view, RecyclerView parent, RecyclerView.State state) {
+                    super.getItemOffsets(outRect, view, parent, state);
+                    if (parent.getChildAdapterPosition(view) ==
+                            parent.getAdapter().getItemCount() - 1) {
+                        outRect.bottom = (int)mContext.getResources().getDimension(
+                                R.dimen.bottom_panel_bottom_padding);
+                    }
+                }
+            });
+        } // End Vivaldi
 
         mToolbar = (BookmarkActionBar) mSelectableListLayout.initializeToolbar(
                 R.layout.bookmark_action_bar, mSelectionDelegate, 0, R.id.normal_menu_group,
@@ -275,7 +312,10 @@ public class BookmarkManager
         if (!sPreventLoadingForTesting) {
             Runnable modelLoadedRunnable = () -> {
                 mDragStateDelegate.onBookmarkDelegateInitialized(BookmarkManager.this);
-                mAdapter.onBookmarkDelegateInitialized(BookmarkManager.this);
+                mAdapter.onBookmarkDelegateInitialized(
+                        BookmarkManager.this, mBookmarkManagerCoordinator::createView);
+                mBookmarkManagerCoordinator.onBookmarkDelegateInitialized(
+                        this, mAdapter.getPromoHeaderManager());
                 mToolbar.onBookmarkDelegateInitialized(BookmarkManager.this);
                 mAdapter.addDragListener(mToolbar);
 
@@ -294,6 +334,8 @@ public class BookmarkManager
                 Math.min(activityManager.getMemoryClass() / 4 * ConversionUtils.BYTES_PER_MEGABYTE,
                         FAVICON_MAX_CACHE_SIZE_BYTES);
         mLargeIconBridge.createCache(maxSize);
+
+        mBookmarkOpener = new BookmarkOpener(mBookmarkModel, mContext, openBookmarkComponentName);
 
         RecordUserAction.record("MobileBookmarkManagerOpen");
         if (!isDialogUi) {
@@ -359,6 +401,27 @@ public class BookmarkManager
             }
         }
         return false;
+    }
+
+    private void onBackPressStateChanged() {
+        if (mIsDestroyed) {
+            mBackPressStateSupplier.set(false);
+            return;
+        }
+        mBackPressStateSupplier.set(
+                Boolean.TRUE.equals(mSelectableListLayout.getHandleBackPressChangedSupplier().get())
+                || mStateStack.size() > 1);
+    }
+
+    // BackPressHandler Overrides
+    @Override
+    public @BackPressResult int handleBackPress() {
+        return onBackPressed() ? BackPressResult.SUCCESS : BackPressResult.FAILURE;
+    }
+
+    @Override
+    public ObservableSupplier<Boolean> getHandleBackPressChangedSupplier() {
+        return mBackPressStateSupplier;
     }
 
     /**
@@ -545,30 +608,18 @@ public class BookmarkManager
     }
 
     @Override
-    public void openBookmarks(List<BookmarkId> bookmarks, boolean openInNewTab, Boolean incognito) {
-        if (bookmarks == null || bookmarks.size() == 0) return;
+    public void openBookmark(BookmarkId bookmark) {
+        if (!mBookmarkOpener.openBookmarkInCurrentTab(bookmark, mIsIncognito)) return;
 
-        boolean anyOpened = false;
-        for (int i = 0; i < bookmarks.size(); i++) {
-            BookmarkId bookmark = bookmarks.get(i);
-
-            @TabLaunchType
-            Integer tabLaunchType = null;
-            if (bookmark.getType() == BookmarkType.READING_LIST) {
-                tabLaunchType = TabLaunchType.FROM_READING_LIST;
-            } else if (openInNewTab) {
-                // Only new tab opens should have a TabLaunchType.
-                tabLaunchType = TabLaunchType.FROM_LONGPRESS_BACKGROUND;
-            }
-
-            boolean success = BookmarkUtils.openBookmark(mContext, mOpenBookmarkComponentName,
-                    mBookmarkModel, bookmark, incognito == null ? mIsIncognito : incognito,
-                    tabLaunchType, openInNewTab);
-            anyOpened = success || anyOpened;
+        // Close bookmark UI. Keep the reading list page open.
+        if (bookmark != null && bookmark.getType() != BookmarkType.READING_LIST) {
+            BookmarkUtils.finishActivityOnPhone(mContext);
         }
+    }
 
-        if (anyOpened && bookmarks.get(0) != null
-                && bookmarks.get(0).getType() != BookmarkType.READING_LIST) {
+    @Override
+    public void openBookmarksInNewTabs(List<BookmarkId> bookmarks, boolean incognito) {
+        if (mBookmarkOpener.openBookmarksInNewTabs(bookmarks, incognito)) {
             BookmarkUtils.finishActivityOnPhone(mContext);
         }
     }
@@ -664,6 +715,10 @@ public class BookmarkManager
     @VisibleForTesting
     public static void preventLoadingForTesting(boolean preventLoading) {
         sPreventLoadingForTesting = preventLoading;
+    }
+
+    public BookmarkOpener getBookmarkOpenerForTesting() {
+        return mBookmarkOpener;
     }
 
     /** Vivaldi **/

@@ -186,11 +186,6 @@ void VivaldiBrowserObserver::OnBrowserRemoved(Browser* browser) {
     closing_windows_.erase(closing_windows_.begin() + i);
   }
 
-  int id = browser->session_id().id();
-  ::vivaldi::BroadcastEvent(vivaldi::window_private::OnWindowClosed::kEventName,
-                            vivaldi::window_private::OnWindowClosed::Create(id),
-                            browser->profile());
-
   if (chrome::GetTotalBrowserCount() == 1) {
     for (Browser* browser_it : *BrowserList::GetInstance()) {
       // If this is the last normal window, close the settings

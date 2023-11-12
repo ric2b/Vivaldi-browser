@@ -132,6 +132,12 @@ static_library("browser") {
   } else {
     #deps += [ "//chrome/utility" ]
   }
+  if (is_android) {
+    sources += [
+      "android/media/vivaldi_background_media_playback_enabler.h",
+      "android/media/vivaldi_background_media_playback_enabler.cc",
+    ]
+  }
 }
 
 source_set("internal_handlers") {

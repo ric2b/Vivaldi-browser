@@ -10,6 +10,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.INITIAL_SCROLL_INDEX;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_INCOGNITO;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.IS_VISIBLE;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.MODE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.SHADOW_TOP_OFFSET;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.TOP_MARGIN;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerProperties.VISIBILITY_LISTENER;
@@ -17,9 +18,9 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListContainerP
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.os.Handler;
-import android.os.SystemClock;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -30,14 +31,12 @@ import org.chromium.base.CallbackController;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.StrictModeContext;
-import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
-import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
@@ -69,8 +68,8 @@ import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher.TabSwitcherV
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.features.start_surface.StartSurfaceUserData;
 import org.chromium.chrome.tab_ui.R;
-import org.chromium.components.browser_ui.util.FirstDrawDetector;
-import org.chromium.content_public.browser.UiThreadTaskTraits;
+import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.List;
@@ -86,13 +85,8 @@ import org.vivaldi.browser.tasks.tab_management.TabSwitcherView;
 class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView.VisibilityListener,
                                      TabListMediator.GridCardOnClickListenerProvider,
                                      PriceMessageService.PriceWelcomeMessageReviewActionProvider,
-                                     TabSwitcherCustomViewManager.Delegate {
+                                     TabSwitcherCustomViewManager.Delegate, BackPressHandler {
     private static final String TAG = "TabSwitcherMediator";
-
-    // This should be the same as TabListCoordinator.GRID_LAYOUT_SPAN_COUNT for the selected tab
-    // to be on the 2nd row.
-    static final int INITIAL_SCROLL_INDEX_OFFSET_GTS = 2;
-    static final int INITIAL_SCROLL_INDEX_OFFSET_CAROUSEL = 1;
 
     private static final int DEFAULT_TOP_PADDING = 0;
 
@@ -120,6 +114,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     private final BrowserControlsStateProvider.Observer mBrowserControlsObserver;
     private final ViewGroup mContainerView;
     private final TabContentManager mTabContentManager;
+    private final boolean mIsStartSurfaceEnabled;
+    private final boolean mIsStartSurfaceRefactorEnabled;
+    private final boolean mIsTablet;
     private final MultiWindowModeStateDispatcher mMultiWindowModeStateDispatcher;
     private final MultiWindowModeStateDispatcher.MultiWindowModeObserver mMultiWindowModeObserver;
     private final ObservableSupplierImpl<Boolean> mBackPressChangedSupplier =
@@ -156,12 +153,12 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     private CallbackController mCallbackController;
     private Integer mSoftCleanupDelayMsForTesting;
     private Integer mCleanupDelayMsForTesting;
-    private TabGridDialogMediator.DialogController mTabGridDialogController;
+    private OneshotSupplier<TabGridDialogMediator.DialogController>
+            mTabGridDialogControllerSupplier;
     private TabSelectionEditorCoordinator
             .TabSelectionEditorController mTabSelectionEditorController;
     private TabSwitcher.OnTabSelectingListener mOnTabSelectingListener;
     private PriceMessageService mPriceMessageService;
-    private boolean mIsOnHomepage;
 
     /**
      * This allows to check if re-auth is pending when tab switcher is shown in Incognito mode.
@@ -193,24 +190,6 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
     private boolean mShowTabsInMruOrder;
 
-    private static class FirstMeaningfulPaintRecorder {
-        private final long mActivityCreationTimeMs;
-
-        private FirstMeaningfulPaintRecorder(long activityCreationTimeMs) {
-            mActivityCreationTimeMs = activityCreationTimeMs;
-        }
-
-        private void record(int numOfThumbnails) {
-            assert numOfThumbnails >= 0;
-            long elapsed = SystemClock.elapsedRealtime() - mActivityCreationTimeMs;
-            PostTask.postTask(UiThreadTaskTraits.BEST_EFFORT,
-                    ()
-                            -> ReturnToChromeUtil.recordTimeToGTSFirstMeaningfulPaint(
-                                    elapsed, numOfThumbnails));
-        }
-    }
-    private FirstMeaningfulPaintRecorder mFirstMeaningfulPaintRecorder;
-    private boolean mRegisteredFirstMeaningfulPaintRecorder;
     private @TabListCoordinator.TabListMode int mMode;
     private Context mContext;
     private SnackbarManager mSnackbarManager;
@@ -305,6 +284,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
      * @param mode One of the {@link TabListMode}.
      * @param incognitoReauthControllerSupplier {@link OneshotSupplier<IncognitoReauthController>}
      *         to detect pending re-auth when tab switcher is shown.
+     * @param backPressManager {@link BackPressManager} to handle back press gesture.
+     * @param tabGridDialogControllerSupplier {@link TabGridDialogMediator.DialogController}
+     *         supplier for lazy initialization on first use.
      */
     TabSwitcherMediator(Context context, ResetHandler resetHandler,
             PropertyModel containerViewModel, TabModelSelector tabModelSelector,
@@ -312,15 +294,21 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             TabContentManager tabContentManager, MessageItemsController messageItemsController,
             PriceWelcomeMessageController priceWelcomeMessageController,
             MultiWindowModeStateDispatcher multiWindowModeStateDispatcher, @TabListMode int mode,
-            @Nullable OneshotSupplier<IncognitoReauthController>
-                    incognitoReauthControllerSupplier) {
+            @Nullable OneshotSupplier<IncognitoReauthController> incognitoReauthControllerSupplier,
+            @Nullable BackPressManager backPressManager,
+            @Nullable OneshotSupplier<TabGridDialogMediator.DialogController>
+                    tabGridDialogControllerSupplier) {
         mResetHandler = resetHandler;
         mContainerViewModel = containerViewModel;
         mTabModelSelector = tabModelSelector;
         mBrowserControlsStateProvider = browserControlsStateProvider;
         mMultiWindowModeStateDispatcher = multiWindowModeStateDispatcher;
         mMode = mode;
+        mContainerViewModel.set(MODE, mode);
         mContext = context;
+        mIsStartSurfaceEnabled = ReturnToChromeUtil.isStartSurfaceEnabled(context);
+        mIsStartSurfaceRefactorEnabled = ReturnToChromeUtil.isStartSurfaceRefactorEnabled(context);
+        mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
 
         if (incognitoReauthControllerSupplier != null) {
             mCallbackController = new CallbackController();
@@ -348,8 +336,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
                 mContainerViewModel.set(IS_INCOGNITO, currentTabModelFilter.isIncognito());
                 notifyBackPressStateChangedInternal();
-                if (mTabGridDialogController != null) {
-                    mTabGridDialogController.hideDialog(false);
+                if (mTabGridDialogControllerSupplier != null
+                        && mTabGridDialogControllerSupplier.hasValue()) {
+                    mTabGridDialogControllerSupplier.get().hideDialog(false);
                 }
                 if (!mContainerViewModel.get(IS_VISIBLE)) return;
 
@@ -362,7 +351,8 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
         mTabModelObserver = new TabModelObserver() {
             @Override
-            public void didAddTab(Tab tab, int type, @TabCreationState int creationState) {
+            public void didAddTab(Tab tab, int type, @TabCreationState int creationState,
+                    boolean markedForSelection) {
                 // TODO(wychen): move didAddTab and didSelectTab to another observer and inject
                 //  after restoreCompleted.
                 if (!mTabModelSelector.isTabStateInitialized()) {
@@ -534,6 +524,11 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         if (mMode == TabListMode.GRID) {
             mContainerViewModel.set(BOTTOM_PADDING,
                     (int) context.getResources().getDimension(R.dimen.tab_grid_bottom_padding));
+            if (backPressManager != null && BackPressManager.isEnabled()) {
+                assert !mIsStartSurfaceEnabled || mIsStartSurfaceRefactorEnabled;
+                backPressManager.addHandler(this, BackPressHandler.Type.TAB_SWITCHER);
+                notifyBackPressStateChangedInternal();
+            }
         }
 
         mContainerView = containerView;
@@ -557,6 +552,14 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         };
         mMultiWindowModeStateDispatcher.addObserver(mMultiWindowModeObserver);
         notifyBackPressStateChangedInternal();
+
+        mTabGridDialogControllerSupplier = tabGridDialogControllerSupplier;
+        if (mTabGridDialogControllerSupplier != null) {
+            mTabGridDialogControllerSupplier.onAvailable((tabGridDialogController) -> {
+                tabGridDialogController.getHandleBackPressChangedSupplier().addObserver(
+                        mNotifyBackPressedCallback);
+            });
+        }
     }
 
     /**
@@ -583,17 +586,6 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             mTabSelectionEditorController.getHandleBackPressChangedSupplier().addObserver(
                     mNotifyBackPressedCallback);
         }
-    }
-
-    /**
-     * Set the controller of the TabGridDialog so that it can be directly controlled.
-     * @param tabGridDialogController The handler of the Grid Dialog
-     */
-    void setTabGridDialogController(
-            TabGridDialogMediator.DialogController tabGridDialogController) {
-        mTabGridDialogController = tabGridDialogController;
-        mTabGridDialogController.getHandleBackPressChangedSupplier().addObserver(
-                mNotifyBackPressedCallback);
     }
 
     @VisibleForTesting
@@ -647,11 +639,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             return;
         }
 
-        // The polished version of the grid tab switcher for tablets translates up over top of the
-        // browser controls.
-        if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(mContext)) {
-            final int toolbarHeight =
-                    mContext.getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
+        // The grid tab switcher for tablets translates up over top of the browser controls.
+        if (mIsTablet) {
+            final int toolbarHeight = getToolbarHeight();
 
             mContainerViewModel.set(TOP_MARGIN, toolbarHeight);
             mContainerViewModel.set(SHADOW_TOP_OFFSET, toolbarHeight);
@@ -759,10 +749,11 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
 
     @Override
     public void prepareHideTabSwitcherView() {
-        if (mTabGridDialogController != null) {
+        if (mTabGridDialogControllerSupplier != null
+                && mTabGridDialogControllerSupplier.hasValue()) {
             // Don't wait until switcher container view hides.
             // Hide dialog before GTS hides.
-            mTabGridDialogController.hideDialog(false);
+            mTabGridDialogControllerSupplier.get().hideDialog(false);
         }
     }
 
@@ -772,39 +763,12 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         setVisibility(false);
         mContainerViewModel.set(ANIMATE_VISIBILITY_CHANGES, true);
 
-        if (mTabGridDialogController != null) {
+        if (mTabGridDialogControllerSupplier != null
+                && mTabGridDialogControllerSupplier.hasValue()) {
             // Don't wait until didSelectTab(), which is after the GTS animation.
             // We need to hide the dialog immediately.
-            mTabGridDialogController.hideDialog(false);
+            mTabGridDialogControllerSupplier.get().hideDialog(false);
         }
-    }
-
-    void registerFirstMeaningfulPaintRecorder() {
-        ThreadUtils.assertOnUiThread();
-
-        if (mFirstMeaningfulPaintRecorder == null) return;
-        if (mRegisteredFirstMeaningfulPaintRecorder) return;
-        mRegisteredFirstMeaningfulPaintRecorder = true;
-
-        boolean hasTabs = getTabCount() > 0;
-
-        if (!hasTabs) {
-            FirstDrawDetector.waitForFirstDraw(
-                    mContainerView, this::notifyOnFirstMeaningfulPaintNoTab);
-        } else {
-            mTabContentManager.addOnLastThumbnailListener(this::notifyOnFirstMeaningfulPaint);
-        }
-    }
-
-    private void notifyOnFirstMeaningfulPaintNoTab() {
-        notifyOnFirstMeaningfulPaint(0);
-    }
-
-    private void notifyOnFirstMeaningfulPaint(int numOfThumbnails) {
-        ThreadUtils.assertOnUiThread();
-
-        mFirstMeaningfulPaintRecorder.record(numOfThumbnails);
-        mFirstMeaningfulPaintRecorder = null;
     }
 
     boolean prepareTabSwitcherView() {
@@ -829,12 +793,9 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             return;
         }
 
-        int offset = mMode == TabListMode.CAROUSEL ? INITIAL_SCROLL_INDEX_OFFSET_CAROUSEL
-                                                   : INITIAL_SCROLL_INDEX_OFFSET_GTS;
-        int initialPosition = Math.max(
-                mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter().index()
-                        - offset,
-                0);
+        int initialPosition =
+                mTabModelSelector.getTabModelFilterProvider().getCurrentTabModelFilter().index();
+
         // In MRU order, selected Tab is always at the first position.
         if (mShowTabsInMruOrder) initialPosition = 0;
         mContainerViewModel.set(INITIAL_SCROLL_INDEX, initialPosition);
@@ -902,7 +863,17 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     }
 
     @Override
-    public boolean onBackPressed(boolean isOnHomepage) {
+    public boolean onBackPressed() {
+        boolean ret = onBackPressedInternal();
+        if (ret && (!mIsStartSurfaceEnabled || mIsStartSurfaceRefactorEnabled)) {
+            // When SS is enabled or refactor is disabled, StartSurfaceMediator will consume back
+            // press and call this method if necessary.
+            BackPressManager.record(BackPressHandler.Type.TAB_SWITCHER);
+        }
+        return ret;
+    }
+
+    private boolean onBackPressedInternal() {
         // The TabSelectionEditor dialog can be shown on the Start surface without showing the Grid
         // Tab switcher, so skip the check of visibility of mContainerViewModel here.
         if (mTabSelectionEditorController != null
@@ -920,12 +891,13 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             return false;
         }
 
-        if (mTabGridDialogController != null && mTabGridDialogController.handleBackPressed()) {
+        if (mTabGridDialogControllerSupplier != null && mTabGridDialogControllerSupplier.hasValue()
+                && mTabGridDialogControllerSupplier.get().handleBackPressed()) {
             return true;
         }
 
         // When the Start surface is showing, we no longer need to call onTabSelecting().
-        if (isOnHomepage && mMode == TabListCoordinator.TabListMode.CAROUSEL) return false;
+        if (mMode == TabListCoordinator.TabListMode.CAROUSEL) return false;
 
         if (mTabModelSelector.getCurrentTab() == null) {
             assert !BackPressManager.isEnabled() : "No tab: Backpress must be handled";
@@ -938,9 +910,8 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     }
 
     @Override
-    public void handleBackPress() {
-        boolean ret = onBackPressed(mIsOnHomepage);
-        assert ret;
+    public @BackPressResult int handleBackPress() {
+        return onBackPressedInternal() ? BackPressResult.SUCCESS : BackPressResult.FAILURE;
     }
 
     @Override
@@ -954,7 +925,8 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
             return true;
         }
 
-        if (mTabGridDialogController != null && mTabGridDialogController.isVisible()) {
+        if (mTabGridDialogControllerSupplier != null && mTabGridDialogControllerSupplier.hasValue()
+                && mTabGridDialogControllerSupplier.get().isVisible()) {
             return true;
         }
         return false;
@@ -963,11 +935,6 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     @Override
     public ObservableSupplier<Boolean> isDialogVisibleSupplier() {
         return mIsDialogVisibleSupplier;
-    }
-
-    @Override
-    public void enableRecordingFirstMeaningfulPaint(long activityCreateTimeMs) {
-        mFirstMeaningfulPaintRecorder = new FirstMeaningfulPaintRecorder(activityCreateTimeMs);
     }
 
     @Override
@@ -988,8 +955,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     }
 
     @Override
-    public void onHomepageChanged(boolean isOnHomepage) {
-        mIsOnHomepage = isOnHomepage;
+    public void onHomepageChanged() {
         notifyBackPressStateChangedInternal();
     }
 
@@ -1011,7 +977,19 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     @Override
     public void addCustomView(@NonNull View customView, @Nullable Runnable backPressRunnable) {
         assert mCustomView == null : "Only one client at a time is supported to add a custom view.";
-        mContainerView.addView(customView);
+
+        // The grid tab switcher for tablets translates up over top of the browser controls, causing
+        // the custom view to do the same.
+        if (mIsTablet) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT);
+            params.topMargin = getToolbarHeight();
+
+            mContainerView.addView(customView, params);
+        } else {
+            mContainerView.addView(customView);
+        }
+
         mCustomView = customView;
         mCustomViewBackPressRunnable = backPressRunnable;
         notifyBackPressStateChangedInternal();
@@ -1067,9 +1045,11 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
                     mNotifyBackPressedCallback);
         }
 
-        if (mTabGridDialogController != null) {
-            mTabGridDialogController.getHandleBackPressChangedSupplier().removeObserver(
-                    mNotifyBackPressedCallback);
+        if (mTabGridDialogControllerSupplier != null
+                && mTabGridDialogControllerSupplier.hasValue()) {
+            mTabGridDialogControllerSupplier.get()
+                    .getHandleBackPressChangedSupplier()
+                    .removeObserver(mNotifyBackPressedCallback);
         }
 
         if (mIncognitoReauthController != null) {
@@ -1101,13 +1081,13 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     public TabListMediator.TabActionListener openTabGridDialog(Tab tab) {
         if (!ableToOpenDialog(tab)) return null;
         assert getRelatedTabs(tab.getId()).size() != 1;
-        assert mTabGridDialogController != null;
+        assert mTabGridDialogControllerSupplier != null;
         return tabId -> {
             List<Tab> relatedTabs = getRelatedTabs(tabId);
             if (relatedTabs.size() == 0) {
                 relatedTabs = null;
             }
-            mTabGridDialogController.resetWithListOfTabs(relatedTabs);
+            mTabGridDialogControllerSupplier.get().resetWithListOfTabs(relatedTabs);
             RecordUserAction.record("TabGridDialog.ExpandedFromSwitcher");
         };
     }
@@ -1176,6 +1156,10 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         mBackPressChangedSupplier.set(shouldInterceptBackPress());
     }
 
+    private int getToolbarHeight() {
+        return mContext.getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
+    }
+
     /**
      * A method to indicate whether back press should be intercepted. The respective interceptors
      * should also take care of invoking #notifyBackPressStateChangedInternal each time their
@@ -1191,7 +1175,7 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
         if (!mContainerViewModel.get(IS_VISIBLE)) return false;
 
         // When the Start surface is showing, we no longer need to call onTabSelecting().
-        if (mIsOnHomepage && mMode == TabListCoordinator.TabListMode.CAROUSEL) return false;
+        if (mMode == TabListCoordinator.TabListMode.CAROUSEL) return false;
 
         if (mTabModelSelector.getCurrentTab() == null) return false;
 
@@ -1218,13 +1202,10 @@ class TabSwitcherMediator implements TabSwitcher.Controller, TabListRecyclerView
     /* Vivaldi: Computes the scroll index separately for each tab switcher view.
      */
     private void computeInitialScrollIndexOffset() {
-        int offset = mMode == TabListMode.CAROUSEL ? INITIAL_SCROLL_INDEX_OFFSET_CAROUSEL
-                                                   : INITIAL_SCROLL_INDEX_OFFSET_GTS;
         for (int i = 0; i <= TabSwitcherView.PAGE.PRIVATE; i++) {
             int initPos = Math.max(mTabModelSelector.getTabModelFilterProvider()
                                            .getTabModelFilter(i == TabSwitcherView.PAGE.PRIVATE)
-                                           .index()
-                            - offset,
+                                           .index(),
                     0);
             // In MRU order, selected Tab is always at the first position.
             if (mShowTabsInMruOrder) initPos = 0;

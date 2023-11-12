@@ -16,7 +16,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/crostini/fake_crostini_features.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
-#include "chrome/browser/extensions/extension_apitest.h"
+#include "chrome/browser/ash/login/test/logged_in_user_mixin.h"
+#include "chrome/browser/extensions/mixin_based_extension_apitest.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/test/base/devtools_listener.h"
@@ -40,6 +41,15 @@ class KeyEvent;
 namespace file_manager {
 
 enum GuestMode { NOT_IN_GUEST_MODE, IN_GUEST_MODE, IN_INCOGNITO };
+enum TestAccountType {
+  kTestAccountTypeNotSet,
+  kEnterprise,
+  kChild,
+  kNonManaged,
+  // Non-managed account as a non owner profile on a device.
+  kNonManagedNonOwner,
+};
+enum DeviceMode { kDeviceModeNotSet, kConsumerOwned, kEnrolled };
 
 class DriveFsTestVolume;
 class FakeTestVolume;
@@ -53,15 +63,32 @@ class SmbfsTestVolume;
 class HiddenTestVolume;
 class GuestOsTestVolume;
 
-class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
-                                   public extensions::ExtensionApiTest {
+ash::LoggedInUserMixin::LogInType LogInTypeFor(
+    TestAccountType test_account_type);
+
+absl::optional<AccountId> AccountIdFor(TestAccountType test_account_type);
+
+class FileManagerBrowserTestBase
+    : public content::DevToolsAgentHostObserver,
+      public extensions::MixinBasedExtensionApiTest {
  public:
   struct Options {
     Options();
     Options(const Options&);
+    ~Options();
 
     // Should test run in Guest or Incognito mode?
     GuestMode guest_mode = NOT_IN_GUEST_MODE;
+
+    // Account type used to log-in for a test session. This option is valid only
+    // for `LoggedInUserFilesAppBrowserTest`. This won't work with `guest_mode`
+    // option.
+    TestAccountType test_account_type = kTestAccountTypeNotSet;
+
+    // Device mode used for a test session. This option is valid only for
+    // `LoggedInUserFilesAppBrowserTest`. This might not work with `guest_mode`
+    // option.
+    DeviceMode device_mode = kDeviceModeNotSet;
 
     // Whether test runs in tablet mode.
     bool tablet_mode = false;
@@ -78,14 +105,14 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
     // Whether test requires a browser to be started.
     bool browser = false;
 
-    // Whether test should enable drive dss pinning.
-    bool drive_dss_pin = false;
-
     // Whether Drive should act as if offline.
     bool offline = false;
 
     // Whether test needs the files-app-experimental feature.
     bool files_experimental = false;
+
+    // Whether test should enable the conflict dialog.
+    bool enable_conflict_dialog = false;
 
     // Whether test needs a native SMB file system provider.
     bool native_smb = true;
@@ -118,11 +145,8 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
     // Whether test should run with the Upload Office to Cloud feature.
     bool enable_upload_office_to_cloud = false;
 
-    // Whether test should run Android with the virtio-blk for /data.
-    bool enable_virtio_blk_for_data = false;
-
-    // Whether test needs the files-filters-in-recents-v2 flag.
-    bool enable_filters_in_recents_v2 = false;
+    // Whether test should run with ARCVM enabled.
+    bool enable_arc_vm = false;
 
     // Whether test should run with the DriveFsMirroring flag.
     bool enable_mirrorsync = false;
@@ -139,8 +163,17 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
     // Whether tests should enable V2 of search.
     bool enable_search_v2 = false;
 
-    // Whether testt should enable OS Feedback.
+    // Whether tests should enable OS Feedback.
     bool enable_os_feedback = false;
+
+    // Whether tests should enable Google One offer Files banner.
+    bool enable_google_one_offer_files_banner = false;
+
+    // Whether tests should enable the Google Drive bulk pinning feature.
+    bool enable_drive_bulk_pinning = false;
+
+    // Feature IDs associated for mapping test cases and features.
+    std::vector<std::string> feature_ids;
   };
 
   FileManagerBrowserTestBase(const FileManagerBrowserTestBase&) = delete;
@@ -174,6 +207,10 @@ class FileManagerBrowserTestBase : public content::DevToolsAgentHostObserver,
   virtual const char* GetTestCaseName() const = 0;
   virtual std::string GetFullTestCaseName() const = 0;
   virtual const char* GetTestExtensionManifestName() const = 0;
+
+  // Returns an account id used for a test. The base class provides a default
+  // implementation.
+  virtual AccountId GetAccountId();
 
   // Launches the test extension from GetTestExtensionManifestName() and uses
   // it to drive the testing the actual FileManager component extension under

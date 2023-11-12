@@ -9,6 +9,7 @@
 #include "base/files/file_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -23,8 +24,8 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -109,8 +110,7 @@ class WebAppOpaqueBrowserFrameViewTest : public InProcessBrowserTest {
 
     opaque_browser_frame_view_ =
         static_cast<OpaqueBrowserFrameView*>(frame_view);
-    web_app_frame_toolbar_ =
-        opaque_browser_frame_view_->web_app_frame_toolbar_for_testing();
+    web_app_frame_toolbar_ = browser_view_->web_app_frame_toolbar_for_testing();
     DCHECK(web_app_frame_toolbar_);
     DCHECK(web_app_frame_toolbar_->GetVisible());
 
@@ -358,7 +358,8 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
     web_app_info->start_url = start_url;
     web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
-    web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
+    web_app_info->user_display_mode =
+        web_app::mojom::UserDisplayMode::kStandalone;
     web_app_info->title = u"A Web App";
     web_app_info->display_override = {
         blink::mojom::DisplayMode::kWindowControlsOverlay};
@@ -386,7 +387,7 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
     opaque_browser_frame_view_ =
         static_cast<OpaqueBrowserFrameView*>(frame_view);
     auto* web_app_frame_toolbar =
-        opaque_browser_frame_view_->web_app_frame_toolbar_for_testing();
+        browser_view_->web_app_frame_toolbar_for_testing();
     DCHECK(web_app_frame_toolbar);
     DCHECK(web_app_frame_toolbar->GetVisible());
 
@@ -396,7 +397,9 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
   void ToggleWindowControlsOverlayEnabledAndWait() {
     auto* web_contents = browser_view_->GetActiveWebContents();
     web_app_frame_toolbar_helper_.SetupGeometryChangeCallback(web_contents);
-    browser_view_->ToggleWindowControlsOverlayEnabled();
+    base::test::TestFuture<void> future;
+    browser_view_->ToggleWindowControlsOverlayEnabled(future.GetCallback());
+    EXPECT_TRUE(future.Wait());
     content::TitleWatcher title_watcher(web_contents, u"ongeometrychange");
     std::ignore = title_watcher.WaitAndGetTitle();
   }

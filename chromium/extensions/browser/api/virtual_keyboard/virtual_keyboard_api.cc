@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "build/chromeos_buildflags.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_delegate.h"
 #include "extensions/browser/api/virtual_keyboard_private/virtual_keyboard_private_api.h"
@@ -17,9 +17,6 @@
 #endif
 
 namespace extensions {
-
-VirtualKeyboardRestrictFeaturesFunction::
-    VirtualKeyboardRestrictFeaturesFunction() {}
 
 void VirtualKeyboardRestrictFeaturesFunction::OnRestrictFeatures(
     api::virtual_keyboard::FeatureRestrictions update) {

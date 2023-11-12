@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/speech/speech_recognizer.h"
 #include "chrome/browser/speech/speech_recognizer_delegate.h"
+#include "media/audio/audio_system.h"
 #include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -43,6 +44,7 @@ class SpeechRecognitionRecognizerClientImpl
   SpeechRecognitionRecognizerClientImpl(
       const base::WeakPtr<SpeechRecognizerDelegate>& delegate,
       Profile* profile,
+      const std::string& device_id,
       media::mojom::SpeechRecognitionOptionsPtr options);
   ~SpeechRecognitionRecognizerClientImpl() override;
   SpeechRecognitionRecognizerClientImpl(
@@ -64,9 +66,12 @@ class SpeechRecognitionRecognizerClientImpl
       media::mojom::LanguageIdentificationEventPtr event) override;
   void OnSpeechRecognitionStopped() override;
 
- private:
-  friend class SpeechRecognitionRecognizerClientImplTest;
+  void set_audio_system_for_testing(
+      std::unique_ptr<media::AudioSystem> audio_system) {
+    audio_system_ = std::move(audio_system);
+  }
 
+ private:
   void OnRecognizerBound(bool success);
   void OnRecognizerDisconnected();
   void StartFetchingOnInputDeviceInfo(
@@ -76,16 +81,17 @@ class SpeechRecognitionRecognizerClientImpl
   // only when the status has changed.
   void UpdateStatus(SpeechRecognizerStatus state);
 
-  SpeechRecognizerStatus state_;
-  bool is_multichannel_supported_;
+  SpeechRecognizerStatus state_{SpeechRecognizerStatus::SPEECH_RECOGNIZER_OFF};
+  std::string device_id_;
+  bool is_multichannel_supported_{false};
   std::string language_;
 
   // Whether we are waiting for the AudioParameters callback to return. Used
   // to ensure Start doesn't keep starting if Stop or Error were called
   // in between requesting the callback and it running.
-  bool waiting_for_params_;
+  bool waiting_for_params_{false};
 
-  // Tests may set audio_system_ after constructing an
+  // Tests may use the audio system setter above after constructing an
   // SpeechRecognitionRecognizerClientImpl to override default behavior.
   std::unique_ptr<media::AudioSystem> audio_system_;
 

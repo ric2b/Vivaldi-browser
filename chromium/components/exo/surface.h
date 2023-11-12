@@ -9,7 +9,7 @@
 #include <set>
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -101,15 +101,21 @@ class Surface final : public ui::PropertyHandler {
   // Type-checking downcast routine.
   static Surface* AsSurface(const aura::Window* window);
 
-  aura::Window* window() { return window_.get(); }
+  aura::Window* window() const { return window_.get(); }
 
   void set_leave_enter_callback(LeaveEnterCallback callback) {
     leave_enter_callback_ = callback;
   }
 
+  void set_legacy_buffer_release_skippable(bool skippable) {
+    legacy_buffer_release_skippable_ = skippable;
+  }
+
   // Called when the display the surface is on has changed.
   // Returns true if successful, and false if it fails.
   bool UpdateDisplay(int64_t old_id, int64_t new_id);
+
+  display::Display GetDisplay() const;
 
   // Called when the output is added for new display.
   void OnNewOutputAdded();
@@ -302,6 +308,7 @@ class Surface final : public ui::PropertyHandler {
   void AppendSurfaceHierarchyContentsToFrame(
       const gfx::PointF& origin,
       float device_scale_factor,
+      bool client_submits_in_pixel_coords,
       FrameSinkResourceManager* resource_manager,
       viz::CompositorFrame* frame);
 
@@ -568,6 +575,7 @@ class Surface final : public ui::PropertyHandler {
   // the |frame|.
   void AppendContentsToFrame(const gfx::PointF& origin,
                              float device_scale_factor,
+                             bool client_submits_in_pixel_coords,
                              viz::CompositorFrame* frame);
 
   // Update surface content size base on current buffer size.
@@ -657,6 +665,7 @@ class Surface final : public ui::PropertyHandler {
   LeaveEnterCallback leave_enter_callback_;
 
   bool keyboard_shortcuts_inhibited_ = false;
+  bool legacy_buffer_release_skippable_ = false;
 };
 
 class ScopedSurface {

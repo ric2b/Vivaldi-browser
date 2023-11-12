@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
 import("//build/config/nacl/config.gni")
 import("//ppapi/buildflags/buildflags.gni")
 import("//tools/grit/grit_rule.gni")
@@ -12,7 +13,7 @@ config("content_implementation") {
   configs = [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
-assert(!is_ios, "Chromium/iOS shouldn't use anything in //content")
+assert(use_blink, "Chromium without blink shouldn't use anything in //content")
 
 # When targets depend on, e.g. //content/public/browser, what happens? To
 # facilitate the complexity here, the "public" targets are groups that forward
@@ -117,15 +118,8 @@ grit("dev_ui_content_resources") {
     "dev_ui_content_resources.pak",
   ]
   deps = [
-    "//components/attribution_reporting:mojom_js__generator",
-    "//content/browser/aggregation_service:mojo_bindings_js__generator",
-    "//content/browser/attribution_reporting:internals_mojo_bindings_js__generator",
-    "//content/browser/attribution_reporting:mojo_bindings_js__generator",
-    "//content/browser/resources/aggregation_service:build_ts",
-    "//content/browser/resources/attribution_reporting:build_ts",
     "//content/browser/resources/gpu:html_wrapper_files",
     "//content/browser/resources/process:build_ts",
-    "//storage/browser/quota:mojo_bindings_js__generator",
   ]
 }
 

@@ -8,9 +8,9 @@
 #include <limits>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -25,7 +25,7 @@
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image_builder.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
-#include "components/viz/common/resources/resource_format.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -60,7 +60,7 @@
 #define GBR_TO_RGB_ORDER(y, y_stride, u, u_stride, v, v_stride) \
   (v), (v_stride), (y), (y_stride), (u), (u_stride)
 #define LIBYUV_NV12_TO_ARGB_MATRIX libyuv::NV12ToARGBMatrix
-#define RESOURCE_FORMAT viz::ResourceFormat::BGRA_8888
+#define SHARED_IMAGE_FORMAT viz::SinglePlaneFormat::kBGRA_8888
 #elif SK_R32_SHIFT == 0 && SK_G32_SHIFT == 8 && SK_B32_SHIFT == 16 && \
     SK_A32_SHIFT == 24
 #define OUTPUT_ARGB 0
@@ -71,7 +71,7 @@
 #define GBR_TO_RGB_ORDER(y, y_stride, u, u_stride, v, v_stride) \
   (u), (u_stride), (y), (y_stride), (v), (v_stride)
 #define LIBYUV_NV12_TO_ARGB_MATRIX libyuv::NV21ToARGBMatrix
-#define RESOURCE_FORMAT viz::ResourceFormat::RGBA_8888
+#define SHARED_IMAGE_FORMAT viz::SinglePlaneFormat::kRGBA_8888
 #else
 #error Unexpected Skia ARGB_8888 layout!
 #endif
@@ -740,23 +740,23 @@ class VideoImageGenerator : public cc::PaintImageGenerator {
 
   sk_sp<SkData> GetEncodedData() const override { return nullptr; }
 
-  bool GetPixels(const SkImageInfo& info,
-                 void* pixels,
-                 size_t row_bytes,
+  bool GetPixels(SkPixmap dst_pixmap,
                  size_t frame_index,
                  cc::PaintImage::GeneratorClientId client_id,
                  uint32_t lazy_pixel_ref) override {
     DCHECK_EQ(frame_index, 0u);
 
     // If skia couldn't do the YUV conversion on GPU, we will on CPU.
-    PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(frame_.get(), pixels,
-                                                           row_bytes);
+    PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
+        frame_.get(), dst_pixmap.writable_addr(), dst_pixmap.rowBytes());
 
     if (!SkColorSpace::Equals(GetSkImageInfo().colorSpace(),
-                              info.colorSpace())) {
-      SkPixmap src(GetSkImageInfo(), pixels, row_bytes);
-      if (!src.readPixels(info, pixels, row_bytes))
+                              dst_pixmap.colorSpace())) {
+      SkPixmap src(GetSkImageInfo(), dst_pixmap.writable_addr(),
+                   dst_pixmap.rowBytes());
+      if (!src.readPixels(dst_pixmap)) {
         return false;
+      }
     }
     return true;
   }
@@ -932,7 +932,7 @@ class VideoTextureBacking : public cc::TextureBacking {
                                    src_y);
     }
     ri->ReadbackImagePixels(mailbox_, dst_info, dst_info.minRowBytes(), src_x,
-                            src_y, dst_pixels);
+                            src_y, /*plane_index=*/0, dst_pixels);
     return true;
   }
 
@@ -1010,7 +1010,7 @@ void PaintCanvasVideoRenderer::Paint(
         video_frame->format() == PIXEL_FORMAT_XBGR ||
         video_frame->HasTextures())) {
     cc::PaintFlags black_with_alpha_flags;
-    black_with_alpha_flags.setAlpha(flags.getAlpha());
+    black_with_alpha_flags.setAlphaf(flags.getAlphaf());
     canvas->drawRect(dest, black_with_alpha_flags);
     canvas->flush();
     return;
@@ -1027,7 +1027,7 @@ void PaintCanvasVideoRenderer::Paint(
   DCHECK(image);
 
   cc::PaintFlags video_flags;
-  video_flags.setAlpha(flags.getAlpha());
+  video_flags.setAlphaf(flags.getAlphaf());
   video_flags.setBlendMode(flags.getBlendMode());
 
   const bool need_rotation = video_transformation.rotation != VIDEO_ROTATION_0;
@@ -1408,8 +1408,8 @@ void PaintCanvasVideoRenderer::ConvertVideoFrameToRGBPixels(
 }
 
 // static
-viz::ResourceFormat PaintCanvasVideoRenderer::GetRGBPixelsOutputFormat() {
-  return RESOURCE_FORMAT;
+viz::SharedImageFormat PaintCanvasVideoRenderer::GetRGBPixelsOutputFormat() {
+  return SHARED_IMAGE_FORMAT;
 }
 
 bool PaintCanvasVideoRenderer::CopyVideoFrameTexturesToGLTexture(
@@ -1737,7 +1737,7 @@ bool PaintCanvasVideoRenderer::CopyVideoFrameYUVDataToGLTexture(
     }
 
     yuv_cache_.mailbox = sii->CreateSharedImage(
-        RESOURCE_FORMAT, video_frame->coded_size(),
+        SHARED_IMAGE_FORMAT, video_frame->coded_size(),
         GetVideoFrameRGBColorSpacePreferringSRGB(video_frame.get()),
         kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, usage,
         gpu::kNullSurfaceHandle);
@@ -1948,7 +1948,7 @@ bool PaintCanvasVideoRenderer::UpdateLastImage(
           flags |= gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
         }
         mailbox = sii->CreateSharedImage(
-            RESOURCE_FORMAT, video_frame->coded_size(),
+            SHARED_IMAGE_FORMAT, video_frame->coded_size(),
             GetVideoFrameRGBColorSpacePreferringSRGB(video_frame.get()),
             kTopLeft_GrSurfaceOrigin, kPremul_SkAlphaType, flags,
             gpu::kNullSurfaceHandle);
@@ -1961,11 +1961,11 @@ bool PaintCanvasVideoRenderer::UpdateLastImage(
             GetVideoFrameMailboxHolder(video_frame.get());
         ri->WaitSyncTokenCHROMIUM(
             frame_mailbox_holder.sync_token.GetConstData());
-        ri->CopySubTexture(frame_mailbox_holder.mailbox, mailbox, GL_TEXTURE_2D,
-                           0, 0, 0, 0, video_frame->coded_size().width(),
-                           video_frame->coded_size().height(),
-                           !video_frame->metadata().texture_origin_is_top_left,
-                           GL_FALSE);
+        ri->CopySharedImage(
+            frame_mailbox_holder.mailbox, mailbox, GL_TEXTURE_2D, 0, 0, 0, 0,
+            video_frame->coded_size().width(),
+            video_frame->coded_size().height(),
+            !video_frame->metadata().texture_origin_is_top_left, GL_FALSE);
       } else {
         DCHECK(video_frame->metadata().texture_origin_is_top_left);
         gpu::MailboxHolder dest_holder{mailbox, gpu::SyncToken(),

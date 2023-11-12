@@ -12,6 +12,7 @@
 #include "ash/wm/window_state.h"
 #include "chromeos/ui/wm/features.h"
 #include "ui/aura/window.h"
+#include "ui/base/hit_test.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
@@ -41,11 +42,12 @@ TabletModeFloatWindowResizer::TabletModeFloatWindowResizer(
       split_view_drag_indicators_(std::make_unique<SplitViewDragIndicators>(
           window_state->window()->GetRootWindow())),
       last_location_in_parent_(details().initial_location_in_parent) {
-  DCHECK(chromeos::wm::features::IsFloatWindowEnabled());
+  DCHECK(chromeos::wm::features::IsWindowLayoutMenuEnabled());
   // TODO(sophiewen): Remove this once the untuck window widget is implemented.
   Shell::Get()->float_controller()->MaybeUntuckFloatedWindowForTablet(
       GetTarget());
   split_view_drag_indicators_->SetDraggedWindow(GetTarget());
+  window_state->OnDragStarted(HTCAPTION);
 }
 
 TabletModeFloatWindowResizer::~TabletModeFloatWindowResizer() {
@@ -79,7 +81,6 @@ void TabletModeFloatWindowResizer::Drag(const gfx::PointF& location_in_parent,
       /*minimum_drag_distance=*/kMinDragDistance,
       /*horizontal_edge_inset=*/kScreenEdgeInsetForSnap,
       /*vertical_edge_inset=*/kScreenEdgeInsetForSnap);
-  // TODO(crbug.com/1351562): Ensure that this works for all orientations.
   split_view_drag_indicators_->SetWindowDraggingState(
       SplitViewDragIndicators::ComputeWindowDraggingState(
           /*is_dragging=*/true,
@@ -113,48 +114,56 @@ void TabletModeFloatWindowResizer::CompleteDrag() {
     // TODO(crbug.com/1351562): Ensure that this works for all orientations.
     split_view_controller->OnWindowDragEnded(
         float_window, snap_position_, gfx::ToRoundedPoint(location_in_screen));
+    window_state_->OnCompleteDrag(last_location_in_parent_);
     return;
   }
 
   // `FloatController` will magnetize windows to one of the corners if it
   // remains in float state and not tucked.
-  auto* float_controller = Shell::Get()->float_controller();
-  float_controller->OnDragCompletedForTablet(float_window,
-                                             last_location_in_parent_);
+  Shell::Get()->float_controller()->OnDragCompletedForTablet(float_window);
+  window_state_->OnCompleteDrag(last_location_in_parent_);
 }
 
 void TabletModeFloatWindowResizer::RevertDrag() {
   GetTarget()->SetBounds(details().initial_bounds_in_parent);
+  window_state_->OnRevertDrag(details().initial_location_in_parent);
 }
 
 void TabletModeFloatWindowResizer::FlingOrSwipe(ui::GestureEvent* event) {
   DCHECK(window_state_->IsFloated());
   const ui::GestureEventDetails& details = event->details();
-  // Emplace `left` if the gesture has a horizontal component.
-  absl::optional<bool> left;
-  bool up;
+  float velocity_x = 0.f, velocity_y = 0.f;
   if (event->type() == ui::ET_SCROLL_FLING_START) {
-    float velocity_x = details.velocity_x();
-    float velocity_y = details.velocity_y();
-    float fling_amount = velocity_x * velocity_x + velocity_y * velocity_y;
+    velocity_x = details.velocity_x();
+    velocity_y = details.velocity_y();
+
     // If the fling wasn't large enough, update the window position based on its
     // drag location.
+    float fling_amount = velocity_x * velocity_x + velocity_y * velocity_y;
     if (fling_amount <= kFlingToTuckVelocityThresholdSquared) {
       CompleteDrag();
       return;
     }
-    if (velocity_x != 0.f) {
-      left.emplace(velocity_x < 0.f);
-    }
-    up = velocity_y < 0.f;
   } else {
     DCHECK_EQ(ui::ET_GESTURE_SWIPE, event->type());
-    if (details.swipe_left() || details.swipe_right())
-      left.emplace(details.swipe_left());
-    up = details.swipe_up();
+
+    // Use any negative value if `swipe_left()` or `swipe_up()`, otherwise use
+    // any positive value.
+    if (details.swipe_left()) {
+      velocity_x = -1.f;
+    } else if (details.swipe_right()) {
+      velocity_x = 1.f;
+    }
+
+    if (details.swipe_up()) {
+      velocity_y = -1.f;
+    } else if (details.swipe_down()) {
+      velocity_y = 1.f;
+    }
   }
-  Shell::Get()->float_controller()->OnFlingOrSwipeForTablet(GetTarget(), left,
-                                                            up);
+  Shell::Get()->float_controller()->OnFlingOrSwipeForTablet(
+      GetTarget(), velocity_x, velocity_y);
+  window_state_->OnCompleteDrag(last_location_in_parent_);
 }
 
 }  // namespace ash

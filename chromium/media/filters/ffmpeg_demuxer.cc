@@ -10,9 +10,9 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -20,12 +20,12 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/sys_byteorder.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/demuxer.h"
 #include "media/base/demuxer_memory_limit.h"
@@ -685,7 +685,7 @@ void FFmpegDemuxerStream::FlushBuffers(bool preserve_packet_position) {
 void FFmpegDemuxerStream::Abort() {
   aborted_ = true;
   if (read_cb_)
-    std::move(read_cb_).Run(DemuxerStream::kAborted, nullptr);
+    std::move(read_cb_).Run(DemuxerStream::kAborted, {});
 }
 
 void FFmpegDemuxerStream::Stop() {
@@ -696,7 +696,7 @@ void FFmpegDemuxerStream::Stop() {
   end_of_stream_ = true;
   if (read_cb_) {
     std::move(read_cb_).Run(DemuxerStream::kOk,
-                            DecoderBuffer::CreateEOSBuffer());
+                            {DecoderBuffer::CreateEOSBuffer()});
   }
 }
 
@@ -710,29 +710,31 @@ StreamLiveness FFmpegDemuxerStream::liveness() const {
   return liveness_;
 }
 
-void FFmpegDemuxerStream::Read(ReadCB read_cb) {
+void FFmpegDemuxerStream::Read(uint32_t count, ReadCB read_cb) {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   CHECK(!read_cb_) << "Overlapping reads are not supported";
-  read_cb_ = BindToCurrentLoop(std::move(read_cb));
-
+  read_cb_ = base::BindPostTaskToCurrentDefault(std::move(read_cb));
+  requested_buffer_count_ = static_cast<size_t>(count);
+  DVLOG(3) << __func__
+           << " requested_buffer_count_ = " << requested_buffer_count_;
   // Don't accept any additional reads if we've been told to stop.
   // The |demuxer_| may have been destroyed in the pipeline thread.
   //
   // TODO(scherkus): it would be cleaner to reply with an error message.
   if (!demuxer_) {
     std::move(read_cb_).Run(DemuxerStream::kOk,
-                            DecoderBuffer::CreateEOSBuffer());
+                            {DecoderBuffer::CreateEOSBuffer()});
     return;
   }
 
   if (!is_enabled_) {
     DVLOG(1) << "Read from disabled stream, returning EOS";
-    std::move(read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb_).Run(kOk, {DecoderBuffer::CreateEOSBuffer()});
     return;
   }
 
   if (aborted_) {
-    std::move(read_cb_).Run(kAborted, nullptr);
+    std::move(read_cb_).Run(kAborted, {});
     return;
   }
 
@@ -832,7 +834,7 @@ void FFmpegDemuxerStream::SetEnabled(bool enabled, base::TimeDelta timestamp) {
   }
   if (!is_enabled_ && read_cb_) {
     DVLOG(1) << "Read from disabled stream, returning EOS";
-    std::move(read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    std::move(read_cb_).Run(kOk, {DecoderBuffer::CreateEOSBuffer()});
   }
 }
 
@@ -850,13 +852,21 @@ void FFmpegDemuxerStream::SatisfyPendingRead() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
   if (read_cb_) {
     if (!buffer_queue_.IsEmpty()) {
-      std::move(read_cb_).Run(DemuxerStream::kOk, buffer_queue_.Pop());
+      DemuxerStream::DecoderBufferVector output_buffers;
+
+      for (size_t i = 0;
+           i < std::min(requested_buffer_count_, buffer_queue_.queue_size());
+           ++i) {
+        output_buffers.emplace_back(buffer_queue_.Pop());
+      }
+      DVLOG(3) << __func__ << " Status:kOk, return output_buffers.size = "
+               << output_buffers.size();
+      std::move(read_cb_).Run(DemuxerStream::kOk, std::move(output_buffers));
     } else if (end_of_stream_) {
       std::move(read_cb_).Run(DemuxerStream::kOk,
-                              DecoderBuffer::CreateEOSBuffer());
+                              {DecoderBuffer::CreateEOSBuffer()});
     }
   }
-
   // Have capacity? Ask for more!
   if (HasAvailableCapacity() && !end_of_stream_) {
     demuxer_->NotifyCapacityAvailable();
@@ -948,7 +958,7 @@ void FFmpegDemuxer::Initialize(DemuxerHost* host,
   // Give a WeakPtr to BlockingUrlProtocol since we'll need to release it on the
   // blocking thread pool.
   url_protocol_ = std::make_unique<BlockingUrlProtocol>(
-      data_source_, BindToCurrentLoop(base::BindRepeating(
+      data_source_, base::BindPostTaskToCurrentDefault(base::BindRepeating(
                         &FFmpegDemuxer::OnDataSourceError, weak_this_)));
   glue_ = std::make_unique<FFmpegGlue>(url_protocol_.get());
   AVFormatContext* format_context = glue_->format_context();
@@ -1056,6 +1066,10 @@ void FFmpegDemuxer::Seek(base::TimeDelta time, PipelineStatusCallback cb) {
   pending_seek_cb_ = std::move(cb);
   SeekInternal(time, base::BindOnce(&FFmpegDemuxer::OnSeekFrameSuccess,
                                     weak_factory_.GetWeakPtr()));
+}
+
+bool FFmpegDemuxer::IsSeekable() const {
+  return true;
 }
 
 void FFmpegDemuxer::SeekInternal(base::TimeDelta time,

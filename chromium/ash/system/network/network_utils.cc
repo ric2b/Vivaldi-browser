@@ -64,9 +64,6 @@ void RecordNetworkTypeToggled(
 
 absl::optional<std::u16string> GetPortalStateSubtext(
     const chromeos::network_config::mojom::PortalState& portal_state) {
-  if (!ash::features::IsCaptivePortalUI2022Enabled()) {
-    return absl::nullopt;
-  }
   using chromeos::network_config::mojom::PortalState;
   switch (portal_state) {
     case PortalState::kUnknown:
@@ -106,6 +103,13 @@ bool IsNetworkDisabled(
 
   if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted() &&
       cellular->sim_locked) {
+    return true;
+  }
+
+  if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted() &&
+      cellular->activation_state ==
+          chromeos::network_config::mojom::ActivationStateType::kNotActivated &&
+      network_properties->type_state->get_cellular()->eid.empty()) {
     return true;
   }
 

@@ -7,7 +7,7 @@
 #include <cstring>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "extensions/common/api/messaging/message.h"
 #include "extensions/common/mojom/event_dispatcher.mojom.h"
 #include "extensions/renderer/api/messaging/messaging_util.h"
@@ -49,7 +49,7 @@ GinPort::GinPort(v8::Local<v8::Context> context,
                               weak_factory_.GetWeakPtr()));
 }
 
-GinPort::~GinPort() {}
+GinPort::~GinPort() = default;
 
 gin::WrapperInfo GinPort::kWrapperInfo = {gin::kEmbedderNativeGin};
 

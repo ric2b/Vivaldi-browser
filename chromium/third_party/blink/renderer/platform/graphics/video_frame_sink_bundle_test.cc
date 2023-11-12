@@ -68,7 +68,8 @@ viz::mojom::blink::BeginFrameInfoPtr MakeBeginFrameInfo(uint32_t sink_id) {
       viz::BeginFrameArgs::Create(BEGINFRAME_FROM_HERE, 1, 1, base::TimeTicks(),
                                   base::TimeTicks(), base::TimeDelta(),
                                   viz::BeginFrameArgs::NORMAL),
-      WTF::HashMap<uint32_t, viz::FrameTimingDetails>());
+      WTF::HashMap<uint32_t, viz::FrameTimingDetails>(),
+      /*frame_ack=*/false, WTF::Vector<viz::ReturnedResource>());
 }
 
 class MockFrameSinkBundleClient
@@ -90,7 +91,7 @@ class MockFrameSinkBundleClient
 
 const viz::LocalSurfaceId kTestSurfaceId(
     1,
-    base::UnguessableToken::Deserialize(1, 2));
+    base::UnguessableToken::CreateForTesting(1, 2));
 
 class VideoFrameSinkBundleTest : public testing::Test {
  public:

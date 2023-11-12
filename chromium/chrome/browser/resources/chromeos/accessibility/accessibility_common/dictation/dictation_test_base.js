@@ -112,7 +112,10 @@ DictationE2ETestBase = class extends E2ETestBase {
     await this.setPref(Dictation.DICTATION_LOCALE_PREF, 'en-US');
 
     // By default, Dictation JS tests should use regex parsing.
-    accessibilityCommon.dictation_.disablePumpkinForTesting_();
+    accessibilityCommon.dictation_.disablePumpkinForTesting();
+    // Increase Dictation's NO_FOCUSED_IME timeout to reduce flakiness on slower
+    // builds.
+    accessibilityCommon.dictation_.increaseNoFocusedImeTimeoutForTesting();
   }
 
   /** @override */
@@ -121,8 +124,8 @@ DictationE2ETestBase = class extends E2ETestBase {
     GEN(`
 #include "ash/accessibility/accessibility_delegate.h"
 #include "ash/shell.h"
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/command_line.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "ui/accessibility/accessibility_features.h"
@@ -134,6 +137,7 @@ DictationE2ETestBase = class extends E2ETestBase {
   /** @override */
   testGenPreamble() {
     super.testGenPreamble();
+
     GEN(`
   browser()->profile()->GetPrefs()->SetBoolean(
         ash::prefs::kDictationAcceleratorDialogHasBeenAccepted, true);
@@ -143,6 +147,20 @@ DictationE2ETestBase = class extends E2ETestBase {
         base::Unretained(ash::AccessibilityManager::Get()),
         true);
     `);
+
+    // Allow informational Pumpkin messages.
+    super.testGenPreambleCommon(
+        /*extensionIdName=*/ 'kAccessibilityCommonExtensionId',
+        /*failOnConsoleError=*/ true,
+        /*allowedMessages=*/[
+          'Pumpkin installed, but data is empty',
+          `wasm streaming compile failed: TypeError: Failed to execute ` +
+              `'compile' on 'WebAssembly': Incorrect response MIME type. ` +
+              `Expected 'application/wasm'.`,
+          'falling back to ArrayBuffer instantiation',
+          'Pumpkin module loaded.',
+          `Unchecked runtime.lastError: Couldn't retrieve Pumpkin data.`,
+        ]);
   }
 
   /** Turns on Dictation and checks IME and Speech Recognition state. */
@@ -356,19 +374,20 @@ DictationE2ETestBase = class extends E2ETestBase {
    * @return {!Promise}
    */
   async waitForUIProperties(targetProps) {
-    // Poll until the updateDictationBubble() API gets called with
-    // `targetProps`.
-    return new Promise(resolve => {
-      const printErrorMessageTimeoutId = setTimeout(() => {
-        this.printErrorMessage_(targetProps);
-      }, 3.5 * 1000);
-      const intervalId = setInterval(() => {
+    if (this.uiPropertiesMatch_(targetProps)) {
+      return;
+    }
+
+    await new Promise(resolve => {
+      const onUpdateDictationBubble = () => {
         if (this.uiPropertiesMatch_(targetProps)) {
-          clearTimeout(printErrorMessageTimeoutId);
-          clearInterval(intervalId);
+          this.mockAccessibilityPrivate.removeUpdateDictationBubbleListener();
           resolve();
         }
-      }, 100);
+      };
+
+      this.mockAccessibilityPrivate.addUpdateDictationBubbleListener(
+          onUpdateDictationBubble);
     });
   }
 
@@ -406,18 +425,6 @@ DictationE2ETestBase = class extends E2ETestBase {
     }
 
     return true;
-  }
-
-  /**
-   * @param {DictationBubbleProperties} props
-   * @private
-   */
-  printErrorMessage_(props) {
-    console.error(`Still waiting for UI properties
-      visible: ${props.visible}
-      icon: ${props.icon}
-      text: ${props.text}
-      hints: ${props.hints}`);
   }
 
   /**
@@ -471,7 +478,7 @@ DictationE2ETestBase = class extends E2ETestBase {
     }
 
     if (expectedName) {
-      assertEquals(expectedName, macro.getMacroNameString());
+      assertEquals(expectedName, macro.getNameAsString());
     }
     if (expectedRepeat) {
       assertEquals(expectedRepeat, macro.repeat_);
@@ -479,27 +486,5 @@ DictationE2ETestBase = class extends E2ETestBase {
     if (expectedSmart) {
       assertEquals(expectedSmart, macro.isSmart());
     }
-  }
-};
-
-/** A Dictation test class that fails on console warnings and errors. */
-DictationE2ETestDisallowConsole = class extends DictationE2ETestBase {
-  /** @override */
-  testGenPreamble() {
-    super.testGenPreamble();
-    super.testGenPreambleCommon(
-        /*extensionIdName=*/ 'kAccessibilityCommonExtensionId',
-        /*failOnConsoleError=*/ true);
-  }
-};
-
-/** A Dictation test class that ignores console warnings and errors. */
-DictationE2ETestAllowConsole = class extends DictationE2ETestBase {
-  /** @override */
-  testGenPreamble() {
-    super.testGenPreamble();
-    super.testGenPreambleCommon(
-        /*extensionIdName=*/ 'kAccessibilityCommonExtensionId',
-        /*failOnConsoleError=*/ false);
   }
 };

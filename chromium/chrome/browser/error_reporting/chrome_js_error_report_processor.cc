@@ -7,8 +7,8 @@
 #include <tuple>
 #include <utility>
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/escape.h"
@@ -24,7 +24,7 @@
 #include "components/crash/content/browser/error_reporting/javascript_error_report.h"
 #include "components/crash/core/app/client_upload_info.h"
 #include "components/crash/core/app/crashpad.h"
-#include "components/feedback/redaction_tool.h"
+#include "components/feedback/redaction_tool/redaction_tool.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/variations/variations_crash_keys.h"
 #include "content/public/browser/browser_context.h"
@@ -72,7 +72,7 @@ void RemoveErrorMessageFromStackTrace(const std::string& error_message,
 }
 
 std::string RedactErrorMessage(const std::string& message) {
-  return feedback::RedactionTool(/*first_party_extension_ids=*/nullptr)
+  return redaction::RedactionTool(/*first_party_extension_ids=*/nullptr)
       .Redact(message);
 }
 

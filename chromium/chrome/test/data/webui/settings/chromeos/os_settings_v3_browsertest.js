@@ -48,15 +48,21 @@ var OSSettingsDevicePageV3Test = class extends OSSettingsV3BrowserTest {
       enabled: [
         'ash::features::kAudioSettingsPage',
         'ash::features::kInputDeviceSettingsSplit',
-        'features::kAllowDisableTouchpadHapticFeedback',
-        'features::kAllowTouchpadHapticClickSettings',
       ],
     };
   }
 };
 
-TEST_F(
-    'OSSettingsDevicePageV3Test', 'All',
+// TODO(https://crbug.com/1422799): The test is flaky on ChromeOS debug.
+TEST_F_WITH_PREAMBLE(
+    `
+#if !defined(NDEBUG)
+#define MAYBE_All DISABLED_All
+#else
+#define MAYBE_All All
+#endif
+    `,
+    'OSSettingsDevicePageV3Test', 'MAYBE_All',
     () => mocha.grep('/^((?!arrow_key_arrangement_disabled).)*$/').run());
 
 // TODO(crbug.com/1347746): move this to the generic test lists below after the
@@ -281,46 +287,6 @@ TEST_F('OSSettingsInternetPageV3Test', 'AllJsTests', () => {
   mocha.run();
 });
 
-// TODO(b/239477916) Move this test back into the list of tests below once
-// hotspot is launched.
-var OSSettingsHotspotSubpageV3Test = class extends OSSettingsV3BrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://os-settings/test_loader.html?module=settings/chromeos/hotspot_subpage_tests.js&host=test';
-  }
-
-  /** @override */
-  get featureList() {
-    return {
-      enabled: super.featureList.enabled.concat(['ash::features::kHotspot'])
-    };
-  }
-};
-
-TEST_F('OSSettingsHotspotSubpageV3Test', 'AllJsTests', () => {
-  mocha.run();
-});
-
-// TODO(b/239477916) Move this test back into the list of tests below once
-// hotspot is launched.
-var OSSettingsHotspotSummaryItemV3Test = class extends OSSettingsV3BrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://os-settings/test_loader.html?module=settings/chromeos/hotspot_summary_item_tests.js&host=test';
-  }
-
-  /** @override */
-  get featureList() {
-    return {
-      enabled: super.featureList.enabled.concat(['ash::features::kHotspot'])
-    };
-  }
-};
-
-TEST_F('OSSettingsHotspotSummaryItemV3Test', 'AllJsTests', () => {
-  mocha.run();
-});
-
 function crostiniTestGenPreamble() {
   GEN('crostini::FakeCrostiniFeatures fake_crostini_features;');
   GEN('fake_crostini_features.SetAll(true);');
@@ -426,12 +392,31 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ['EsimRemoveProfileDialog', 'esim_remove_profile_dialog_test.js'],
  ['EsimRenameDialog', 'esim_rename_dialog_test.js'],
  ['FakeCrosAudioConfig', 'fake_cros_audio_config_test.js'],
+ ['FakeInputDeviceSettings', 'fake_input_device_settings_provider_test.js'],
  ['FilesPage', 'os_files_page_test.js'],
  ['FingerprintPage', 'fingerprint_browsertest_chromeos.js'],
- ['FindShortcutBehaviorTest', 'find_shortcut_behavior_test.js'],
  ['GoogleAssistantPage', 'google_assistant_page_test.js'],
  ['GuestOsSharedPaths', 'guest_os_shared_paths_test.js'],
  ['GuestOsSharedUsbDevices', 'guest_os_shared_usb_devices_test.js'],
+ [
+   'HotspotConfigDialog',
+   'hotspot_config_dialog_tests.js',
+   {enabled: ['ash::features::kHotspot']},
+ ],
+ [
+   'HotspotSubpage',
+   'hotspot_subpage_tests.js',
+   {enabled: ['ash::features::kHotspot']},
+ ],
+ [
+   'HotspotSummaryItem',
+   'hotspot_summary_item_tests.js',
+   {enabled: ['ash::features::kHotspot']},
+ ],
+ [
+   'InputDeviceMojoInterfaceProvider',
+   'input_device_mojo_interface_provider_test.js'
+ ],
  ['InputMethodOptionPage', 'input_method_options_page_test.js'],
  ['InputPage', 'input_page_test.js'],
  ['InternetConfig', 'internet_config_test.js'],
@@ -447,6 +432,7 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ['KeyboardShortcutBanner', 'keyboard_shortcut_banner_test.js'],
  ['LockScreenPage', 'lock_screen_tests.js'],
  ['ManageAccessibilityPage', 'manage_accessibility_page_tests.js'],
+ ['ManageUsersPage', 'manage_users_page_tests.js'],
  ['MultideviceCombinedSetupItem', 'multidevice_combined_setup_item_tests.js'],
  // TODO(b/208932892): Re-enable once flakiness is fixed.
  // ['MultideviceFeatureItem', 'multidevice_feature_item_tests.js'],
@@ -482,6 +468,7 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ['NetworkProxySection', 'network_proxy_section_test.js'],
  ['NetworkSummary', 'network_summary_test.js'],
  ['NetworkSummaryItem', 'network_summary_item_test.js'],
+ ['OfficeFilesPage', 'office_page_test.js'],
  ['OncMojoTest', 'onc_mojo_test.js'],
  ['OsBluetoothPage', 'os_bluetooth_page_tests.js'],
  ['OsBluetoothPairingDialog', 'os_bluetooth_pairing_dialog_tests.js'],
@@ -520,6 +507,25 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ['PeoplePage', 'os_people_page_test.js'],
  ['PeoplePageQuickUnlock', 'quick_unlock_authenticate_browsertest_chromeos.js'],
  [
+   'PerDeviceKeyboard', 'per_device_keyboard_test.js',
+   {enabled: ['ash::features::kInputDeviceSettingsSplit']}
+ ],
+ [
+   'PerDeviceKeyboardRemapKeys', 'per_device_keyboard_remap_keys_test.js',
+   {enabled: ['ash::features::kInputDeviceSettingsSplit']}
+ ],
+ [
+   'PerDeviceKeyboardSubsection',
+   'per_device_keyboard_subsection_test.js',
+   {enabled: ['ash::features::kInputDeviceSettingsSplit']},
+ ],
+ ['PerDeviceMouseSubsection', 'per_device_mouse_subsection_test.js'],
+ [
+   'PerDevicePointingStickSubsection',
+   'per_device_pointing_stick_subsection_test.js'
+ ],
+ ['PerDeviceTouchpadSubsection', 'per_device_touchpad_subsection_test.js'],
+ [
    'PersonalizationPageWithPersonalizationHub',
    'personalization_page_with_personalization_hub_test.js',
  ],
@@ -557,7 +563,6 @@ TEST_F('OSSettingsCrostiniExtraContainerPageV3Test', 'AllJsTests', () => {
  ['TimezoneSelector', 'timezone_selector_test.js'],
  ['TimezoneSubpage', 'timezone_subpage_test.js'],
  ['TtsSubpage', 'tts_subpage_test.js'],
- ['UserPage', 'user_page_tests.js'],
 ].forEach(test => registerTest(...test));
 
 function registerTest(testName, module, featureList) {
@@ -612,6 +617,11 @@ function registerTest(testName, module, featureList) {
     TEST_F(className, 'OfficialBuild' || 'All', () => {
       mocha.grep('SearchFeedback_OfficialBuild').run();
     });
+    GEN('#endif');
+  } else if (testName === 'OsSettingsPage') {
+    // TODO(crbug.com/1411677): times out (flaky) debug builds
+    GEN('#if defined(NDEBUG)');
+    TEST_F(className, 'All', () => mocha.run());
     GEN('#endif');
   } else {
     TEST_F(className, 'All', () => mocha.run());

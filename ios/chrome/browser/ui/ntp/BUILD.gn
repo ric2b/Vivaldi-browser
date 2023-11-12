@@ -2,8 +2,6 @@ import("//build/config/ios/swift_source_set.gni")
 
 source_set("vivaldi_ntp") {
   sources = [
-    "vivaldi_new_tab_page_view_controller.h",
-    "vivaldi_new_tab_page_view_controller.mm",
     "vivaldi_ntp_constants.h",
     "vivaldi_ntp_constants.mm",
     "vivaldi_speed_dial_constants.h",
@@ -37,7 +35,6 @@ source_set("vivaldi_ntp") {
     "//base:i18n",
     "//ios/chrome/app/strings",
     "//ios/chrome/common/ui/util",
-    "//ios/public/provider/chrome/browser",
     "//ios/third_party/material_components_ios",
     "//vivaldi/ios/chrome/browser/ui/ntp/cells",
     "//vivaldi/ios/chrome/browser/ui/ntp/top_menu",
@@ -57,7 +54,9 @@ source_set("vivaldi_ntp") {
     "resources:vivaldi_ntp_add_new_speed_dial_folder",
     "resources:vivaldi_private_tab_bg",
     "resources:vivaldi_private_tab_ghost",
-    "resources:vivaldi_ntp_sd_empty_view_icon"
+    "resources:vivaldi_ntp_sd_empty_view_icon",
+    "resources:vivaldi_ntp_fallback_favicon",
+    "resources:vivaldi_ntp_internal_favicon",
   ]
 
   frameworks = [

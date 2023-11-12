@@ -5,15 +5,16 @@
 #include <memory>
 #include <tuple>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
@@ -4339,7 +4340,7 @@ void CursorUpdateReceivedFromCrossSiteIframeHelper(
   // This should only return nullptr on Android.
   EXPECT_TRUE(root_view->GetCursorManager());
 
-  WebCursor cursor;
+  ui::Cursor cursor;
   EXPECT_FALSE(
       root_view->GetCursorManager()->GetCursorForTesting(root_view, cursor));
   EXPECT_FALSE(
@@ -4387,7 +4388,7 @@ void CursorUpdateReceivedFromCrossSiteIframeHelper(
   EXPECT_TRUE(
       root_view->GetCursorManager()->GetCursorForTesting(child_view, cursor));
   // Since this moused over a text box, this should not be the default cursor.
-  EXPECT_EQ(cursor.cursor().type(), ui::mojom::CursorType::kIBeam);
+  EXPECT_EQ(cursor.type(), ui::mojom::CursorType::kIBeam);
 }
 
 }  // namespace
@@ -4461,7 +4462,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     EXPECT_EQ(120, set_cursor_interceptor->cursor()->custom_bitmap().height());
   }
   // A cursor without enough room to be fully enclosed within the root view
-  // should not be shown, even if the iframe is at an offset.
+  // should not be shown, even if the iframe is at an offset. The default cursor
+  // should be shown instead.
   {
     blink::WebMouseEvent mouse_event(
         blink::WebInputEvent::Type::kMouseMove,
@@ -4475,8 +4477,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
     // We should see a new cursor come in that replaces the large one.
     set_cursor_interceptor->Wait();
     EXPECT_TRUE(set_cursor_interceptor->cursor().has_value());
-    EXPECT_NE(120, set_cursor_interceptor->cursor()->custom_bitmap().width());
-    EXPECT_NE(120, set_cursor_interceptor->cursor()->custom_bitmap().height());
+    EXPECT_EQ(ui::mojom::CursorType::kPointer,
+              set_cursor_interceptor->cursor());
   }
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -6207,8 +6209,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
 // Tests that a <select>'s visibility is correctly computed and thus shows the
 // popup when clicked.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CASTOS)
+// TODO(crbug.com/1405317): Test is flaky on every platform.
 IN_PROC_BROWSER_TEST_F(SitePerProcessHitTestBrowserTest,
-                       ScrolledMainFrameSelectInLongIframe) {
+                       DISABLED_ScrolledMainFrameSelectInLongIframe) {
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/frame_tree/page_with_tall_positioned_frame.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));

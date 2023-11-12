@@ -19,6 +19,7 @@
 #include "base/observer_list_types.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/framework_specific_implementation.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace ui {
 
@@ -50,6 +51,20 @@ class COMPONENT_EXPORT(UI_BASE) TrackedElement
 
   ElementIdentifier identifier() const { return identifier_; }
   ElementContext context() const { return context_; }
+
+  // Returns the bounds of the element on the screen, or an empty rect if it
+  // cannot be determined.
+  //
+  // Note: it is not yet necessary to set up a general method for listening to
+  // bounds changes, as they are (a) somewhat difficult to track and (b) tend to
+  // be handled correctly by most frameworks in terms of element positioning
+  // (e.g. anchoring logic for User Education help bubbles). Specific
+  // implementations that need to do additional tracking can implement their own
+  // methods.
+  virtual gfx::Rect GetScreenBounds() const;
+
+  // FrameworkSpecificImplementation:
+  std::string ToString() const override;
 
  protected:
   TrackedElement(ElementIdentifier identifier, ElementContext context);
@@ -232,9 +247,21 @@ class COMPONENT_EXPORT(UI_BASE) SafeElementReference {
   SafeElementReference& operator=(const SafeElementReference& other);
   ~SafeElementReference();
 
-  TrackedElement* get() { return element_; }
+  TrackedElement* get() const { return element_; }
   explicit operator bool() const { return element_; }
   bool operator!() const { return !element_; }
+  bool operator==(const SafeElementReference& other) const {
+    return element_ == other.element_;
+  }
+  bool operator!=(const SafeElementReference& other) const {
+    return element_ != other.element_;
+  }
+  bool operator==(const TrackedElement* other) const {
+    return element_ == other;
+  }
+  bool operator!=(const TrackedElement* other) const {
+    return element_ != other;
+  }
 
  private:
   void Subscribe();
@@ -254,6 +281,14 @@ class COMPONENT_EXPORT(UI_BASE) SafeElementReference {
   DECLARE_ELEMENT_IDENTIFIER_VALUE(EventName)
 #define DEFINE_CUSTOM_ELEMENT_EVENT_TYPE(EventName) \
   DEFINE_ELEMENT_IDENTIFIER_VALUE(EventName)
+
+// Macros for declaring custom class element event type. Put the DECLARE call in
+// your .h file in your class declaration, and the DEFINE in the corresponding
+// .cc file.
+#define DECLARE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(EventName) \
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(EventName)
+#define DEFINE_CLASS_CUSTOM_ELEMENT_EVENT_TYPE(ClassName, EventName) \
+  DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(ClassName, EventName)
 
 // This produces a unique, mangled name that can safely be used in tests
 // without having to worry about global name collisions. For production code,

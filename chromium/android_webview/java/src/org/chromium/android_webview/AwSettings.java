@@ -155,6 +155,7 @@ public class AwSettings {
     private final boolean mPasswordEchoEnabled;
 
     // Not accessed by the native side.
+    private boolean mBlockSpecialFileUrls;
     private boolean mBlockNetworkLoads;  // Default depends on permission of embedding APK.
     private boolean mAllowContentUrlAccess = true;
     private boolean mAllowFileUrlAccess;
@@ -299,6 +300,13 @@ public class AwSettings {
             mAllowGeolocationOnInsecureOrigins = allowGeolocationOnInsecureOrigins;
             mDoNotUpdateSelectionOnMutatingSelectionRange =
                     doNotUpdateSelectionOnMutatingSelectionRange;
+
+            // The application context we receive in the sdk runtime is a separate
+            // context from the context that actual SDKs receive (and contains asset
+            // file links). This means file urls will not work in this environment.
+            // Explicitly block this to cause confusion in the case of accidentally
+            // hitting assets in the application context.
+            mBlockSpecialFileUrls = ContextUtils.isSdkSandboxProcess();
 
             mAllowFileUrlAccess =
                     ContextUtils.getApplicationContext().getApplicationInfo().targetSdkVersion
@@ -1319,6 +1327,19 @@ public class AwSettings {
         }
     }
 
+    public void setBlockSpecialFileUrls(boolean block) {
+        if (TRACE) Log.i(TAG, "setBlockSpecialFileUrls=" + block);
+        synchronized (mAwSettingsLock) {
+            mBlockSpecialFileUrls = block;
+        }
+    }
+
+    public boolean getBlockSpecialFileUrls() {
+        synchronized (mAwSettingsLock) {
+            return mBlockSpecialFileUrls;
+        }
+    }
+
     @CalledByNative
     private boolean getSupportMultipleWindowsLocked() {
         assert Thread.holdsLock(mAwSettingsLock);
@@ -1991,6 +2012,22 @@ public class AwSettings {
         }
     }
 
+    /**
+     * Enable sensitive web content restrictions per WebView.
+     */
+    public void enableRestrictSensitiveWebContent() {
+        synchronized (mAwSettingsLock) {
+            mEventHandler.runOnUiThreadBlockingAndLocked(() -> {
+                assert Thread.holdsLock(mAwSettingsLock);
+                AwOriginVerificationScheduler.initAndScheduleAll(null);
+                if (mNativeAwSettings != 0) {
+                    AwSettingsJni.get().setRestrictSensitiveWebContentEnabled(
+                            mNativeAwSettings, AwSettings.this, true);
+                }
+            });
+        }
+    }
+
     @NativeMethods
     interface Natives {
         long init(AwSettings caller, WebContents webContents);
@@ -2016,5 +2053,7 @@ public class AwSettings {
         boolean getEnterpriseAuthenticationAppLinkPolicyEnabled(
                 long nativeAwSettings, AwSettings caller);
         String[] updateXRequestedWithAllowListOriginMatcher(long nativeAwSettings, String[] rules);
+        void setRestrictSensitiveWebContentEnabled(
+                long nativeAwSettings, AwSettings caller, boolean enabled);
     }
 }

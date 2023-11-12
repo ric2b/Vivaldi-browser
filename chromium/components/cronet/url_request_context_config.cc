@@ -90,7 +90,6 @@ const char kQuicHostWhitelist[] = "host_whitelist";
 const char kQuicEnableSocketRecvOptimization[] =
     "enable_socket_recv_optimization";
 const char kQuicVersion[] = "quic_version";
-const char kQuicObsoleteVersionsAllowed[] = "obsolete_versions_allowed2";
 const char kQuicFlags[] = "set_quic_flags";
 const char kQuicIOSNetworkServiceType[] = "ios_network_service_type";
 const char kRetryWithoutAltSvcOnQuicErrors[] =
@@ -183,9 +182,10 @@ const char kBidiStreamDetectBrokenConnection[] =
 const char kUseDnsHttpsSvcbFieldTrialName[] = "UseDnsHttpsSvcb";
 const char kUseDnsHttpsSvcbUseAlpn[] = "use_alpn";
 
-// Runtime flag to bypass Cronet's logging: When set to true logging calls will
-// be skipped. If missing, logging will happen.
-const char kSkipLogging[] = "skip_logging";
+// Runtime flag to enable Cronet Telemetry, defaults to false. To enable Cronet
+// Telemetry, this must be set to true alongside the manifest file flag
+// specified by CronetManifest.TELEMETRY_OPT_IN_META_DATA_STR.
+const char kEnableTelemetry[] = "enable_telemetry";
 
 // "goaway_sessions_on_ip_change" is default on for iOS unless overridden via
 // experimental options explicitly.
@@ -309,7 +309,7 @@ URLRequestContextConfig::URLRequestContextConfig(
       network_thread_priority(network_thread_priority),
       bidi_stream_detect_broken_connection(false),
       heartbeat_interval(base::Seconds(0)),
-      skip_logging(false) {
+      enable_telemetry(false) {
   SetContextConfigExperimentalOptions();
 }
 
@@ -398,17 +398,17 @@ void URLRequestContextConfig::SetContextConfigExperimentalOptions() {
     }
   }
 
-  const base::Value* skip_logging_value =
-      experimental_options.Find(kSkipLogging);
-  if (skip_logging_value) {
-    if (!skip_logging_value->is_bool()) {
-      LOG(ERROR) << "\"" << kSkipLogging << "\" config params \""
-                 << skip_logging_value << "\" is not a bool";
-      experimental_options.Remove(kSkipLogging);
-      effective_experimental_options.Remove(kSkipLogging);
+  const base::Value* enable_telemetry_value =
+      experimental_options.Find(kEnableTelemetry);
+  if (enable_telemetry_value) {
+    if (!enable_telemetry_value->is_bool()) {
+      LOG(ERROR) << "\"" << kEnableTelemetry << "\" config params \""
+                 << enable_telemetry_value << "\" is not a bool";
+      experimental_options.Remove(kEnableTelemetry);
+      effective_experimental_options.Remove(kEnableTelemetry);
     } else {
-      skip_logging = skip_logging_value->GetBool();
-      experimental_options.Remove(kSkipLogging);
+      enable_telemetry = enable_telemetry_value->GetBool();
+      experimental_options.Remove(kEnableTelemetry);
     }
   }
 }
@@ -445,19 +445,17 @@ void URLRequestContextConfig::SetContextBuilderExperimentalOptions(
       if (quic_version_string) {
         quic::ParsedQuicVersionVector supported_versions =
             quic::ParseQuicVersionVectorString(*quic_version_string);
-        if (!quic_args.FindBool(kQuicObsoleteVersionsAllowed).value_or(false)) {
-          quic::ParsedQuicVersionVector filtered_versions;
-          quic::ParsedQuicVersionVector obsolete_versions =
-              net::ObsoleteQuicVersions();
-          for (const quic::ParsedQuicVersion& version : supported_versions) {
-            if (!base::Contains(obsolete_versions, version)) {
-              filtered_versions.push_back(version);
-            }
+        quic::ParsedQuicVersionVector filtered_versions;
+        quic::ParsedQuicVersionVector obsolete_versions =
+            net::ObsoleteQuicVersions();
+        for (const quic::ParsedQuicVersion& version : supported_versions) {
+          if (!base::Contains(obsolete_versions, version)) {
+            filtered_versions.push_back(version);
           }
-          supported_versions = filtered_versions;
         }
-        if (!supported_versions.empty())
-          quic_params->supported_versions = supported_versions;
+        if (!filtered_versions.empty()) {
+          quic_params->supported_versions = filtered_versions;
+        }
       }
 
       const std::string* quic_connection_options =

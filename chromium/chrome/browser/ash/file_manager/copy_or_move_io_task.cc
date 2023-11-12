@@ -9,9 +9,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/check_op.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "chrome/browser/ash/file_manager/copy_or_move_io_task_impl.h"
 #include "chrome/browser/ash/file_manager/copy_or_move_io_task_scanning_impl.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
@@ -93,6 +93,12 @@ void CopyOrMoveIOTask::Execute(IOTask::ProgressCallback progress_callback,
   }
 
   impl_->Execute(std::move(progress_callback), std::move(complete_callback));
+}
+
+void CopyOrMoveIOTask::Resume(ResumeParams params) {
+  if (impl_) {
+    impl_->Resume(std::move(params));
+  }
 }
 
 void CopyOrMoveIOTask::Cancel() {

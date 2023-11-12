@@ -11,17 +11,18 @@
 
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/scoped_observation.h"
@@ -41,7 +42,6 @@
 #include "chrome/browser/ash/customization/customization_document.h"
 #include "chrome/browser/ash/login/auth/chrome_login_performer.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
-#include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/ash/login/enterprise_user_session_metrics.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/profile_auth_data.h"
@@ -76,7 +76,6 @@
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
@@ -192,23 +191,6 @@ void TransferHttpAuthCaches() {
           ->GetNetworkContext();
   default_network_context->SaveHttpAuthCacheProxyEntries(base::BindOnce(
       &TransferHttpAuthCacheToSystemNetworkContext, completion_callback));
-}
-
-// Record UMA for password login of regular user when Signin with Smart Lock is
-// enabled. Excludes signins in the multi-signin context; only records for the
-// signin screen context.
-void RecordPasswordLoginEvent(const UserContext& user_context) {
-  // If a user is already logged in, this is a multi-signin attempt. Disregard.
-  if (session_manager::SessionManager::Get()->IsInSecondaryLoginScreen())
-    return;
-
-  EasyUnlockService* easy_unlock_service =
-      EasyUnlockService::Get(ProfileHelper::GetSigninProfile());
-  if (user_context.GetUserType() == user_manager::USER_TYPE_REGULAR &&
-      user_context.GetAuthFlow() == UserContext::AUTH_FLOW_OFFLINE &&
-      easy_unlock_service) {
-    easy_unlock_service->RecordPasswordLoginEvent(user_context.GetAccountId());
-  }
 }
 
 bool IsUpdateRequiredDeadlineReached() {
@@ -657,7 +639,6 @@ void ExistingUserController::PerformLogin(
   new_user_context.SetIsForcingDircrypto(
       ShouldForceDircrypto(new_user_context.GetAccountId()));
   login_performer_->PerformLogin(new_user_context, auth_mode);
-  RecordPasswordLoginEvent(new_user_context);
   SendAccessibilityAlert(
       l10n_util::GetStringUTF8(IDS_CHROMEOS_ACC_LOGIN_SIGNING_IN));
   if (timer_init_) {
@@ -752,7 +733,7 @@ void ExistingUserController::ShowTPMError() {
   GetLoginDisplayHost()->StartWizard(TpmErrorView::kScreenId);
 }
 
-void ExistingUserController::ShowPasswordChangedDialog(
+void ExistingUserController::ShowPasswordChangedDialogLegacy(
     const UserContext& user_context) {
   VLOG(1) << "Show password changed dialog"
           << ", count=" << login_performer_->password_changed_callback_count();
@@ -761,7 +742,7 @@ void ExistingUserController::ShowPasswordChangedDialog(
   bool show_invalid_old_password_error =
       login_performer_->password_changed_callback_count() > 1;
 
-  GetLoginDisplayHost()->GetSigninUI()->ShowPasswordChangedDialog(
+  GetLoginDisplayHost()->GetSigninUI()->ShowPasswordChangedDialogLegacy(
       user_context.GetAccountId(), show_invalid_old_password_error);
 }
 
@@ -1051,25 +1032,58 @@ void ExistingUserController::OnOffTheRecordAuthSuccess() {
     auth_status_consumer.OnOffTheRecordAuthSuccess();
 }
 
-void ExistingUserController::OnPasswordChangeDetected(
+void ExistingUserController::OnPasswordChangeDetectedLegacy(
     const UserContext& user_context) {
+  DCHECK(!ash::features::IsCryptohomeRecoveryEnabled());
   is_login_in_progress_ = false;
 
   // Must not proceed without signature verification.
   if (CrosSettingsProvider::TRUSTED !=
-      cros_settings_->PrepareTrustedValues(
-          base::BindOnce(&ExistingUserController::OnPasswordChangeDetected,
-                         weak_factory_.GetWeakPtr(), user_context))) {
+      cros_settings_->PrepareTrustedValues(base::BindOnce(
+          &ExistingUserController::OnPasswordChangeDetectedLegacy,
+          weak_factory_.GetWeakPtr(), user_context))) {
     // Value of owner email is still not verified.
     // Another attempt will be invoked after verification completion.
     return;
   }
 
   for (auto& auth_status_consumer : auth_status_consumers_)
-    auth_status_consumer.OnPasswordChangeDetected(user_context);
+    auth_status_consumer.OnPasswordChangeDetectedLegacy(user_context);
 
-  // TODO(b/239420386): Start Cryptohome recovery when feature is enabled.
-  ShowPasswordChangedDialog(user_context);
+  ShowPasswordChangedDialogLegacy(user_context);
+}
+
+void ExistingUserController::OnPasswordChangeDetected(
+    std::unique_ptr<UserContext> user_context) {
+  // Workaround for PrepareTrustedValues and need to move unique_ptr:
+  base::OnceClosure callback =
+      base::BindOnce(&ExistingUserController::OnPasswordChangeDetectedImpl,
+                     weak_factory_.GetWeakPtr(), std::move(user_context));
+  auto [continue_async, continue_now] =
+      base::SplitOnceCallback(std::move(callback));
+  // Must not proceed without signature verification.
+  if (CrosSettingsProvider::TRUSTED !=
+      cros_settings_->PrepareTrustedValues(std::move(continue_async))) {
+    // Value of owner email is still not verified.
+    // Callback will be invoked after verification completion.
+    return;
+  }
+  std::move(continue_now).Run();
+}
+
+void ExistingUserController::OnPasswordChangeDetectedImpl(
+    std::unique_ptr<UserContext> user_context) {
+  DCHECK(ash::features::IsCryptohomeRecoveryEnabled());
+  DCHECK(user_context);
+  is_login_in_progress_ = false;
+
+  for (auto& auth_status_consumer : auth_status_consumers_) {
+    auth_status_consumer.OnPasswordChangeDetectedFor(
+        user_context->GetAccountId());
+  }
+
+  GetLoginDisplayHost()->GetSigninUI()->StartCryptohomeRecovery(
+      std::move(user_context));
 }
 
 void ExistingUserController::OnOldEncryptionDetected(
@@ -1190,6 +1204,11 @@ user_manager::UserList ExistingUserController::ExtractLoginUsers(
       filtered_users.push_back(user);
   }
   return filtered_users;
+}
+
+void ExistingUserController::LoginAuthenticated(
+    std::unique_ptr<UserContext> user_context) {
+  login_performer_->LoginAuthenticated(std::move(user_context));
 }
 
 void ExistingUserController::LoginAsGuest() {

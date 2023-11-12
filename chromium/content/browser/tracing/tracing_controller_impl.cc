@@ -9,12 +9,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
 #include "base/dcheck_is_on.h"
 #include "base/files/file_tracing.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
@@ -183,7 +183,7 @@ TracingControllerImpl::TracingControllerImpl()
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Bind hwclass once the statistics are available.
-  chromeos::system::StatisticsProvider::GetInstance()
+  ash::system::StatisticsProvider::GetInstance()
       ->ScheduleOnMachineStatisticsLoaded(
           base::BindOnce(&TracingControllerImpl::OnMachineStatisticsLoaded,
                          weak_ptr_factory_.GetWeakPtr()));
@@ -252,7 +252,8 @@ void TracingControllerImpl::GenerateMetadataPacket(
 }
 
 // Can be called on any thread.
-absl::optional<base::Value> TracingControllerImpl::GenerateMetadataDict() {
+absl::optional<base::Value::Dict>
+TracingControllerImpl::GenerateMetadataDict() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::Value::Dict metadata_dict;
 
@@ -377,7 +378,7 @@ absl::optional<base::Value> TracingControllerImpl::GenerateMetadataDict() {
     }
   }
 
-  return base::Value(std::move(metadata_dict));
+  return metadata_dict;
 }
 
 TracingControllerImpl* TracingControllerImpl::GetInstance() {
@@ -563,8 +564,8 @@ void TracingControllerImpl::OnReadBuffersComplete() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 void TracingControllerImpl::OnMachineStatisticsLoaded() {
   if (const absl::optional<base::StringPiece> hardware_class =
-          chromeos::system::StatisticsProvider::GetInstance()
-              ->GetMachineStatistic(chromeos::system::kHardwareClassKey)) {
+          ash::system::StatisticsProvider::GetInstance()->GetMachineStatistic(
+              ash::system::kHardwareClassKey)) {
     hardware_class_ = std::string(hardware_class.value());
   }
   are_statistics_loaded_ = true;

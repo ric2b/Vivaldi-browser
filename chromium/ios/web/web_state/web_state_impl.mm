@@ -12,6 +12,7 @@
 #import "base/feature_list.h"
 #import "base/time/time.h"
 #import "ios/web/common/features.h"
+#import "ios/web/js_messaging/web_frames_manager_impl.h"
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/session/crw_session_storage.h"
@@ -56,6 +57,11 @@ void CheckForOverRealization() {
   }
 }
 
+// Key used to store an empty base::SupportsUserData::Data to all WebStateImpl
+// instances. Used by WebStateImpl::FromWebState(...) to assert the pointer is
+// pointing to a WebStateImpl instance and not another sub-class of WebState.
+const char kWebStateIsWebStateImpl[] = "WebStateIsWebStateImpl";
+
 }  // namespace
 
 void IgnoreOverRealizationCheck() {
@@ -84,11 +90,17 @@ WebStateImpl::WebStateImpl(const CreateParams& params)
 
 WebStateImpl::WebStateImpl(const CreateParams& params,
                            CRWSessionStorage* session_storage) {
+  // Store an empty base::SupportsUserData::Data that mark the current instance
+  // as a WebStateImpl. Need to be done before anything else, so that casting
+  // can safely be performed even before the end of the constructor.
+  SetUserData(kWebStateIsWebStateImpl,
+              std::make_unique<base::SupportsUserData::Data>());
+
   if (session_storage) {
     saved_ = std::make_unique<SerializedData>(this, params, session_storage);
   } else {
     pimpl_ = std::make_unique<RealizedWebState>(this);
-    pimpl_->Init(params, session_storage);
+    pimpl_->Init(params, session_storage, FaviconStatus{});
   }
 
   // Send creation event.
@@ -102,6 +114,16 @@ WebStateImpl::~WebStateImpl() {
   } else {
     saved_->TearDown();
   }
+}
+
+/* static */
+WebStateImpl* WebStateImpl::FromWebState(WebState* web_state) {
+  if (!web_state) {
+    return nullptr;
+  }
+
+  DCHECK(web_state->GetUserData(kWebStateIsWebStateImpl));
+  return static_cast<WebStateImpl*>(web_state);
 }
 
 /* static */
@@ -150,15 +172,6 @@ void WebStateImpl::OnRenderProcessGone() {
   RealizedState()->OnRenderProcessGone();
 }
 
-void WebStateImpl::OnScriptCommandReceived(const std::string& command,
-                                           const base::Value& value,
-                                           const GURL& page_url,
-                                           bool user_is_interacting,
-                                           WebFrame* sender_frame) {
-  RealizedState()->OnScriptCommandReceived(command, value, page_url,
-                                           user_is_interacting, sender_frame);
-}
-
 void WebStateImpl::SetIsLoading(bool is_loading) {
   RealizedState()->SetIsLoading(is_loading);
 }
@@ -186,7 +199,7 @@ int WebStateImpl::GetNavigationItemCount() const {
 }
 
 WebFramesManagerImpl& WebStateImpl::GetWebFramesManagerImpl() {
-  return RealizedState()->GetWebFramesManager();
+  return RealizedState()->GetPageWorldWebFramesManager();
 }
 
 SessionCertificatePolicyCacheImpl&
@@ -211,6 +224,12 @@ void WebStateImpl::ClearWebUI() {
 
 bool WebStateImpl::HasWebUI() const {
   return LIKELY(pimpl_) ? pimpl_->HasWebUI() : false;
+}
+
+void WebStateImpl::HandleWebUIMessage(const GURL& source_url,
+                                      base::StringPiece message,
+                                      const base::Value::List& args) {
+  RealizedState()->HandleWebUIMessage(source_url, message, args);
 }
 
 void WebStateImpl::SetContentsMimeType(const std::string& mime_type) {
@@ -370,8 +389,7 @@ WebState* WebStateImpl::ForceRealized() {
     // Perform the initialisation of the RealizedWebState. No outside
     // code should be able to observe the WebStateImpl with both `saved_`
     // and `pimpl_` set.
-    pimpl_->Init(params, session_storage);
-    pimpl_->SetFaviconStatus(favicon_status);
+    pimpl_->Init(params, session_storage, std::move(favicon_status));
 
     // Notify all observers that the WebState has become realized.
     for (auto& observer : observers_)
@@ -468,12 +486,12 @@ NavigationManager* WebStateImpl::GetNavigationManager() {
   return &RealizedState()->GetNavigationManager();
 }
 
-const WebFramesManager* WebStateImpl::GetWebFramesManager() const {
-  return LIKELY(pimpl_) ? &pimpl_->GetWebFramesManager() : nullptr;
+const WebFramesManager* WebStateImpl::GetPageWorldWebFramesManager() const {
+  return LIKELY(pimpl_) ? &pimpl_->GetPageWorldWebFramesManager() : nullptr;
 }
 
-WebFramesManager* WebStateImpl::GetWebFramesManager() {
-  return &RealizedState()->GetWebFramesManager();
+WebFramesManager* WebStateImpl::GetPageWorldWebFramesManager() {
+  return &RealizedState()->GetPageWorldWebFramesManager();
 }
 
 const SessionCertificatePolicyCache*
@@ -543,6 +561,10 @@ bool WebStateImpl::IsBeingDestroyed() const {
   return is_being_destroyed_;
 }
 
+bool WebStateImpl::IsWebPageInFullscreenMode() const {
+  return LIKELY(pimpl_) ? pimpl_->IsWebPageInFullscreenMode() : false;
+}
+
 const FaviconStatus& WebStateImpl::GetFaviconStatus() const {
   return LIKELY(pimpl_) ? pimpl_->GetFaviconStatus()
                         : saved_->GetFaviconStatus();
@@ -567,16 +589,6 @@ const GURL& WebStateImpl::GetLastCommittedURL() const {
 
 GURL WebStateImpl::GetCurrentURL(URLVerificationTrustLevel* trust_level) const {
   return LIKELY(pimpl_) ? pimpl_->GetCurrentURL(trust_level) : GURL();
-}
-
-base::CallbackListSubscription WebStateImpl::AddScriptCommandCallback(
-    const ScriptCommandCallback& callback,
-    const std::string& command_prefix) {
-  DCHECK(!command_prefix.empty());
-  DCHECK(command_prefix.find_first_of('.') == std::string::npos);
-  DCHECK(script_command_callbacks_.count(command_prefix) == 0 ||
-         script_command_callbacks_[command_prefix].empty());
-  return script_command_callbacks_[command_prefix].Add(callback);
 }
 
 id<CRWWebViewProxy> WebStateImpl::GetWebViewProxy() const {
@@ -681,6 +693,30 @@ void WebStateImpl::DownloadCurrentPage(NSString* destination_file,
                                  destinationPath:destination_file
                                         delegate:delegate
                                          handler:handler];
+}
+
+bool WebStateImpl::IsFindInteractionSupported() {
+  return [GetWebController() findInteractionSupported];
+}
+
+bool WebStateImpl::IsFindInteractionEnabled() {
+  return [GetWebController() findInteractionEnabled];
+}
+
+void WebStateImpl::SetFindInteractionEnabled(bool enabled) {
+  [GetWebController() setFindInteractionEnabled:enabled];
+}
+
+id<CRWFindInteraction> WebStateImpl::GetFindInteraction()
+    API_AVAILABLE(ios(16)) {
+  return [GetWebController() findInteraction];
+}
+
+id WebStateImpl::GetActivityItem() API_AVAILABLE(ios(16.4)) {
+  if (UNLIKELY(!IsRealized())) {
+    return nil;
+  }
+  return [GetWebController() activityItem];
 }
 
 #pragma mark - WebStateImpl private methods

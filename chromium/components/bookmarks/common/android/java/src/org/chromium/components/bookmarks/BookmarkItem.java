@@ -154,4 +154,7 @@ public class BookmarkItem {
         public boolean isDefaultBookmark() {
             return (mThumbnailPath != null) && (mThumbnailPath.startsWith("/resources"));
         }
+
+        /** Vivaldi **/
+        public void setThumbnailPath(String path) { mThumbnailPath = path; }
 }

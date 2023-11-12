@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -128,6 +128,9 @@ class ComponentLoader {
   void set_ignore_allowlist_for_testing(bool value) {
     ignore_allowlist_for_testing_ = value;
   }
+
+  // Allows setting the profile used by the loader for testing purposes.
+  void set_profile_for_testing(Profile* profile) { profile_ = profile; }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ComponentLoaderTest, ParseManifest);

@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Havaittiin yhteensopimaton protokollaversio. Varmista, että molemmissa tietokoneissa on ohjelman uusimmat versiot, ja yritä uudelleen.</translation>
 <translation id="1008557486741366299">Ei nyt</translation>
 <translation id="1201402288615127009">Seuraava</translation>
+<translation id="1296511125400541222">Copyright 2023 The Chromium Authors. Kaikki oikeudet pidätetään.</translation>
 <translation id="1297009705180977556">Virhe yhdistettäessä isäntään <ph name="HOSTNAME" /></translation>
 <translation id="1450760146488584666">Pyydettyä kohdetta ei ole olemassa.</translation>
 <translation id="1480046233931937785">Tekijät</translation>
@@ -36,7 +37,6 @@ Jos <ph name="SERVICE_SCRIPT_NAME" /> on jo valittuna, poista valinta ja valitse
 <translation id="2599300881200251572">Tämä palvelu mahdollistaa Chrome-etäkäytön asiakkaiden muodostamat yhteydet.</translation>
 <translation id="2647232381348739934">Chromoting-palvelu</translation>
 <translation id="2676780859508944670">Käsitellään…</translation>
-<translation id="2692522824157224199">Copyright 2022 Google LLC. Kaikki oikeudet pidätetään.</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2758123043070977469">Todennusvirhe – kirjaudu uudelleen sisään.</translation>
 <translation id="2803375539583399270">Lisää PIN-koodi</translation>
@@ -73,7 +73,6 @@ Jos <ph name="SERVICE_SCRIPT_NAME" /> on jo valittuna, poista valinta ja valitse
 <translation id="4257751272692708833">URL-osoitteen välittäjä: <ph name="PRODUCT_NAME" /></translation>
 <translation id="4277736576214464567">Käyttökoodi on virheellinen. Yritä uudelleen.</translation>
 <translation id="4281844954008187215">Käyttöehdot</translation>
-<translation id="4372650392690220936">Copyright 2022 The Chromium Authors. Kaikki oikeudet pidätetään.</translation>
 <translation id="4405930547258349619">Ydinkirjasto</translation>
 <translation id="443560535555262820">Avaa esteettömyysasetukset</translation>
 <translation id="4450893287417543264">Älä näytä uudelleen</translation>
@@ -90,6 +89,7 @@ Jos <ph name="SERVICE_SCRIPT_NAME" /> on jo valittuna, poista valinta ja valitse
 <translation id="4808503597364150972">Anna kohteen <ph name="HOSTNAME" /> PIN-koodi.</translation>
 <translation id="4812684235631257312">Isäntä</translation>
 <translation id="4867841927763172006">Lähetä PrtScn</translation>
+<translation id="4960795469833295568">Copyright 2023 Google LLC. Kaikki oikeudet pidätetään.</translation>
 <translation id="4974476491460646149">Yhteys suljettu isäntään <ph name="HOSTNAME" /></translation>
 <translation id="4985296110227979402">Määritä ensin tietokone, johon haluat muodostaa etäyhteyden.</translation>
 <translation id="4987330545941822761">Chrome-etäkäyttö ei tunnista URL-osoitteiden paikalliseen avaamiseen käytettävää selainta. Valitse se listalta.</translation>

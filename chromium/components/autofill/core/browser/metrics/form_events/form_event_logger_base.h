@@ -67,6 +67,12 @@ class FormEventLoggerBase {
   void OnTypedIntoNonFilledField();
   void OnEditedAutofilledField();
 
+  // Must be called right before the event logger is destroyed. It triggers the
+  // logging of funnel and key metrics.
+  // The function must not be called from the destructor, since this makes it
+  // impossible to dispatch virtual functions into the derived classes.
+  void OnDestroyed();
+
   // See BrowserAutofillManager::SuggestionContext for the definitions of the
   // AblationGroup parameters.
   void SetAblationStatus(AblationGroup ablation_group,
@@ -77,7 +83,7 @@ class FormEventLoggerBase {
   void OnAutofilledFieldWasClearedByJavaScriptShortlyAfterFill(
       const FormStructure& form);
 
-  void Log(FormEvent event, const FormStructure& form) const;
+  void Log(FormEvent event, const FormStructure& form);
 
   void OnTextFieldDidChange(const FieldGlobalId& field_global_id);
 
@@ -85,8 +91,16 @@ class FormEventLoggerBase {
     return form_interaction_counts_;
   }
 
+  void SetFastCheckoutRunId(int64_t run_id) { fast_checkout_run_id_ = run_id; }
+
+  AutofillMetrics::FormEventSet GetFormEvents(FormGlobalId form_global_id);
+
   const FormInteractionsFlowId& form_interactions_flow_id_for_test() const {
     return flow_id_;
+  }
+
+  const absl::optional<int64_t> fast_checkout_run_id_for_test() const {
+    return fast_checkout_run_id_;
   }
 
  protected:
@@ -124,14 +138,37 @@ class FormEventLoggerBase {
                      FormEvent event,
                      const FormStructure& form) const {}
 
-  // Records UMA metrics on the funnel and key metrics. This is not virtual
-  // because it is called in the destructor.
-  void RecordFunnelAndKeyMetrics();
+  // Records UMA metrics on the funnel and key metrics, and writes logs to
+  // autofill-internals.
+  void RecordFunnelMetrics() const;
+  // For each key metric, a separate function is defined below. By making them
+  // virtual, derived classes can change the behavior for specific metrics.
+  // `RecordKeyMetrics()` checks the necessary pre-conditions for metrics to be
+  // emitted and calls the relevant functions.
+  void RecordKeyMetrics() const;
+
+  // Whether for a submitted form, Chrome had data stored that could be
+  // filled.
+  void RecordFillingReadiness(LogBuffer& logs) const;
+
+  // Whether a user accepted a filling suggestion they saw for a form that
+  // was later submitted.
+  void RecordFillingAcceptance(LogBuffer& logs) const;
+
+  // Whether a filled form and submitted form required no fixes to filled
+  // fields.
+  virtual void RecordFillingCorrectness(LogBuffer& logs) const;
+
+  // Whether a submitted form was filled.
+  virtual void RecordFillingAssistance(LogBuffer& logs) const;
+
+  // Whether a (non-)autofilled form was submitted.
+  void RecordFormSubmission(LogBuffer& logs) const;
 
   // Records UMA metrics if this form submission happened as part of an ablation
   // study or the corresponding control group. This is not virtual because it is
   // called in the destructor.
-  void RecordAblationMetrics();
+  void RecordAblationMetrics() const;
 
   void UpdateFlowId();
 
@@ -156,6 +193,7 @@ class FormEventLoggerBase {
   bool has_logged_edited_autofilled_field_ = false;
   bool has_logged_autofilled_field_was_cleared_by_javascript_after_fill_ =
       false;
+  bool has_called_on_destoryed_ = false;
   AblationGroup ablation_group_ = AblationGroup::kDefault;
   AblationGroup conditional_ablation_group_ = AblationGroup::kDefault;
   absl::optional<base::TimeDelta> time_from_interaction_to_submission_;
@@ -171,9 +209,14 @@ class FormEventLoggerBase {
   // Unique random id that is set on the first form interaction and identical
   // during the flow.
   FormInteractionsFlowId flow_id_;
+  // Unique ID of a Fast Checkout run. Used for metrics.
+  absl::optional<int64_t> fast_checkout_run_id_;
 
-  // Form types of the submitted form
+  // Form types of the submitted form.
   DenseSet<FormType> submitted_form_types_;
+
+  // A map of the form's global id and its form events.
+  std::map<FormGlobalId, AutofillMetrics::FormEventSet> form_events_set_;
 
   // Weak reference.
   raw_ptr<AutofillMetrics::FormInteractionsUkmLogger>

@@ -28,7 +28,7 @@ namespace web {
 
 FaviconJavaScriptFeature::FaviconJavaScriptFeature()
     : JavaScriptFeature(
-          ContentWorld::kAnyContentWorld,
+          ContentWorld::kIsolatedWorld,
           {FeatureScript::CreateWithFilename(
                kScriptName,
                FeatureScript::InjectionTime::kDocumentEnd,
@@ -64,8 +64,9 @@ void FaviconJavaScriptFeature::ScriptMessageReceived(
   if (!ExtractFaviconURL(message.body()->GetList(), url, &urls))
     return;
 
-  if (!urls.empty())
-    static_cast<WebStateImpl*>(web_state)->OnFaviconUrlUpdated(urls);
+  if (!urls.empty()) {
+    WebStateImpl::FromWebState(web_state)->OnFaviconUrlUpdated(urls);
+  }
 }
 
 }  // namespace web

@@ -21,7 +21,7 @@
   void BeforeUnloadFired(content::WebContents* web_contents, bool proceed,
                          bool* proceed_to_fire_unload) override;
   // From WebContentsObserver, avoid compile error on the above override.
-  void BeforeUnloadFired(bool proceed, const base::TimeTicks& proceed_time) override {}
+  void BeforeUnloadFired(bool proceed) override {}
 
   // Vivaldi customs below
   bool IsVivaldiMail();
@@ -73,6 +73,9 @@
       const gfx::Rect& rect,
       const base::UnguessableToken& guid,
       content::RenderFrameHost* render_frame_host) override;
+  blink::mojom::DisplayMode GetDisplayMode(
+      const content::WebContents* source) override;
+  void ActivateContents(content::WebContents* contents) override;
 
   // Vivaldi WebContentsObserver implementation.
   void OnVisibilityChanged(content::Visibility visibility) override;
@@ -103,6 +106,9 @@
                                int windowId,
                                bool activePage = true,
                                bool inherit_opener = true);
+
+  // Maybe add the guest to the tabstrip of the opener.
+  void MaybeAddToOpenersTabStrip(const base::Value::Dict& create_params);
 
   // Starts loading in the current WebContents if this is needed.
   void LoadTabContentsIfNecessary();

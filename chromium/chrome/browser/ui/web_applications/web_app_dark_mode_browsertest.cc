@@ -8,8 +8,8 @@
 #include "chrome/browser/ui/web_applications/web_app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/web_applications/manifest_update_manager.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "components/embedder_support/switches.h"
@@ -40,7 +40,7 @@ class WebAppDarkModeBrowserTest : public WebAppControllerBrowserTest {
     web_app_info->start_url = https_server()->GetURL("/hung");
     web_app_info->title = u"A Web App";
     web_app_info->display_mode = DisplayMode::kStandalone;
-    web_app_info->user_display_mode = UserDisplayMode::kStandalone;
+    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
     web_app_info->theme_color = SK_ColorBLUE;
     web_app_info->background_color = SK_ColorBLUE;
     web_app_info->dark_mode_theme_color = SK_ColorRED;
@@ -118,14 +118,15 @@ IN_PROC_BROWSER_TEST_F(WebAppDarkModeBrowserTest, NoUserPreferences) {
       blink::mojom::WebFeature::kWebAppManifestUserPreferences, 0);
 }
 
-class WebAppDarkModeOriginTrialBrowserTest : public InProcessBrowserTest {
+class WebAppDarkModeOriginTrialBrowserTest
+    : public WebAppControllerBrowserTest {
  public:
   WebAppDarkModeOriginTrialBrowserTest() {
     feature_list_.InitAndDisableFeature(blink::features::kWebAppEnableDarkMode);
   }
   ~WebAppDarkModeOriginTrialBrowserTest() override = default;
 
-  // InProcessBrowserTest:
+  // WebAppControllerBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     // Using the test public key from docs/origin_trials_integration.md#Testing.
     command_line->AppendSwitchASCII(
@@ -133,14 +134,13 @@ class WebAppDarkModeOriginTrialBrowserTest : public InProcessBrowserTest {
         "dRCs+TocuKkocNKa0AtZ4awrt9XKH2SQCI6o4FY6BNA=");
   }
   void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
+    WebAppControllerBrowserTest::SetUpOnMainThread();
     web_app::test::WaitUntilReady(
         web_app::WebAppProvider::GetForTest(browser()->profile()));
   }
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
 };
 namespace {
 
@@ -191,7 +191,8 @@ constexpr char kOriginTrialToken[] =
 }  // namespace
 
 IN_PROC_BROWSER_TEST_F(WebAppDarkModeOriginTrialBrowserTest, OriginTrial) {
-  ManifestUpdateManager::BypassWindowCloseWaitingForTesting() = true;
+  ManifestUpdateManager::ScopedBypassWindowCloseWaitingForTesting
+      bypass_window_close_waiting;
 
   bool serve_token = true;
   content::URLLoaderInterceptor interceptor(base::BindLambdaForTesting(

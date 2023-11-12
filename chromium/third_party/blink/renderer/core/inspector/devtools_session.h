@@ -7,7 +7,8 @@
 
 #include <memory>
 #include <type_traits>
-#include "base/callback.h"
+#include "base/functional/callback.h"
+#include "base/task/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -32,6 +33,7 @@ class Document;
 class DocumentLoader;
 class InspectorAgent;
 class LocalFrame;
+class InspectorAccessibilityAgent;
 class InspectorAuditsAgent;
 class InspectorCSSAgent;
 class InspectorCacheStorageAgent;
@@ -83,6 +85,7 @@ class CORE_EXPORT DevToolsSession : public GarbageCollected<DevToolsSession>,
     return agent;
   }
   void Detach();
+  void DetachFromV8();
   void Trace(Visitor*) const;
 
   // protocol::FrontendChannel implementation.
@@ -136,6 +139,7 @@ class CORE_EXPORT DevToolsSession : public GarbageCollected<DevToolsSession>,
     return std::disjunction_v<std::is_same<T, InspectorAuditsAgent>,
                               std::is_same<T, InspectorCSSAgent>,
                               std::is_same<T, InspectorCacheStorageAgent>,
+                              std::is_same<T, InspectorAccessibilityAgent>,
                               std::is_same<T, InspectorDOMAgent>,
                               std::is_same<T, InspectorDOMDebuggerAgent>,
                               std::is_same<T, InspectorDOMSnapshotAgent>,

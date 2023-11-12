@@ -46,7 +46,7 @@ const char kNoXshm[] = "no-xshm";
 namespace features {
 BASE_FEATURE(kOddHeightMultiPlanarBuffers,
              "OddHeightMultiPlanarBuffers",
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -55,7 +55,7 @@ BASE_FEATURE(kOddHeightMultiPlanarBuffers,
 
 BASE_FEATURE(kOddWidthMultiPlanarBuffers,
              "OddWidthMultiPlanarBuffers",
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
              base::FEATURE_ENABLED_BY_DEFAULT
 #else
              base::FEATURE_DISABLED_BY_DEFAULT
@@ -64,21 +64,16 @@ BASE_FEATURE(kOddWidthMultiPlanarBuffers,
 
 BASE_FEATURE(kPPAPISharedImagesSwapChain,
              "PPAPISharedImagesSwapChain",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_CHROMEOS)
+BASE_FEATURE(kVariableGoogleSansFont,
+             "VariableGoogleSansFont",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-GFX_SWITCHES_EXPORT bool UseSharedImagesSwapChainForPPAPI() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisablePPAPISharedImagesSwapChain)) {
-    // This log is to make diagnosing any outages for Enterprise customers
-    // easier.
-    LOG(WARNING) << "NaCL SwapChain: Disabled by policy";
-    return false;
-  }
-
-  auto enabled = base::FeatureList::IsEnabled(kPPAPISharedImagesSwapChain);
-  // This log is to make diagnosing any outages for Enterprise customers easier.
-  LOG(WARNING) << "NaCL SwapChain: Feature Controled: " << enabled;
-  return enabled;
+GFX_SWITCHES_EXPORT bool UseVariableGoogleSansFont() {
+  return base::FeatureList::IsEnabled(kVariableGoogleSansFont);
 }
+#endif
 
 }  // namespace features

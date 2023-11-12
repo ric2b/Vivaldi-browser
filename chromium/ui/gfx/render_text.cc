@@ -42,10 +42,6 @@
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/utf16_indexing.h"
 
-#if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
 namespace gfx {
 
 namespace {
@@ -257,25 +253,23 @@ UChar32 ReplaceControlCharacter(UChar32 codepoint) {
     // Support Microsoft defined PUA on Windows.
     // see:
     // https://docs.microsoft.com/en-us/windows/uwp/design/style/segoe-ui-symbol-font
-    if (base::win::GetVersion() >= base::win::Version::WIN10) {
-      switch (codepoint) {
-        case 0xF093:  // ButtonA
-        case 0xF094:  // ButtonB
-        case 0xF095:  // ButtonY
-        case 0xF096:  // ButtonX
-        case 0xF108:  // LeftStick
-        case 0xF109:  // RightStick
-        case 0xF10A:  // TriggerLeft
-        case 0xF10B:  // TriggerRight
-        case 0xF10C:  // BumperLeft
-        case 0xF10D:  // BumperRight
-        case 0xF10E:  // Dpad
-        case 0xEECA:  // ButtonView2
-        case 0xEDE3:  // ButtonMenu
-          return codepoint;
-        default:
-          break;
-      }
+    switch (codepoint) {
+      case 0xF093:  // ButtonA
+      case 0xF094:  // ButtonB
+      case 0xF095:  // ButtonY
+      case 0xF096:  // ButtonX
+      case 0xF108:  // LeftStick
+      case 0xF109:  // RightStick
+      case 0xF10A:  // TriggerLeft
+      case 0xF10B:  // TriggerRight
+      case 0xF10C:  // BumperLeft
+      case 0xF10D:  // BumperRight
+      case 0xF10E:  // Dpad
+      case 0xEECA:  // ButtonView2
+      case 0xEDE3:  // ButtonMenu
+        return codepoint;
+      default:
+        break;
     }
 #endif
     const int8_t codepoint_category = u_charType(codepoint);
@@ -1377,6 +1371,46 @@ Range RenderText::ExpandRangeToGraphemeBoundary(const Range& range) const {
                              : Range(min_index, max_index);
 }
 
+Range RenderText::ExpandRangeToWordBoundary(const Range& range) const {
+  const size_t length = text().length();
+  DCHECK_LE(range.GetMax(), length);
+  if (obscured()) {
+    return range.is_reversed() ? Range(length, 0) : Range(0, length);
+  }
+
+  base::i18n::BreakIterator iter(text(), base::i18n::BreakIterator::BREAK_WORD);
+  const bool success = iter.Init();
+  DCHECK(success);
+  if (!success) {
+    return range;
+  }
+
+  size_t range_min = range.GetMin();
+  if (range_min == length && range_min != 0) {
+    --range_min;
+  }
+
+  for (; range_min != 0; --range_min) {
+    if (iter.IsStartOfWord(range_min) || iter.IsEndOfWord(range_min)) {
+      break;
+    }
+  }
+
+  size_t range_max = range.GetMax();
+  if (range_min == range_max && range_max != length) {
+    ++range_max;
+  }
+
+  for (; range_max < length; ++range_max) {
+    if (iter.IsEndOfWord(range_max) || iter.IsStartOfWord(range_max)) {
+      break;
+    }
+  }
+
+  return range.is_reversed() ? Range(range_max, range_min)
+                             : Range(range_min, range_max);
+}
+
 bool RenderText::IsNewlineSegment(const internal::LineSegment& segment) const {
   return IsNewlineSegment(text_, segment);
 }
@@ -2320,38 +2354,6 @@ size_t RenderText::GetNearestWordStartBoundary(size_t index) const {
       return i;
 
   return length;
-}
-
-Range RenderText::ExpandRangeToWordBoundary(const Range& range) const {
-  const size_t length = text().length();
-  DCHECK_LE(range.GetMax(), length);
-  if (obscured())
-    return range.is_reversed() ? Range(length, 0) : Range(0, length);
-
-  base::i18n::BreakIterator iter(text(), base::i18n::BreakIterator::BREAK_WORD);
-  const bool success = iter.Init();
-  DCHECK(success);
-  if (!success)
-    return range;
-
-  size_t range_min = range.GetMin();
-  if (range_min == length && range_min != 0)
-    --range_min;
-
-  for (; range_min != 0; --range_min)
-    if (iter.IsStartOfWord(range_min) || iter.IsEndOfWord(range_min))
-      break;
-
-  size_t range_max = range.GetMax();
-  if (range_min == range_max && range_max != length)
-    ++range_max;
-
-  for (; range_max < length; ++range_max)
-    if (iter.IsEndOfWord(range_max) || iter.IsStartOfWord(range_max))
-      break;
-
-  return range.is_reversed() ? Range(range_max, range_min)
-                             : Range(range_min, range_max);
 }
 
 }  // namespace gfx

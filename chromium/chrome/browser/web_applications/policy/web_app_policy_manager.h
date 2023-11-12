@@ -14,7 +14,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate_map.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_manager.h"
@@ -24,6 +23,7 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_delegate_map.h"
 #include "chrome/browser/policy/system_features_disable_list_policy_handler.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -62,12 +62,18 @@ class WebAppPolicyManager {
       WebAppRegistrar* app_registrar,
       WebAppSyncBridge* sync_bridge,
       OsIntegrationManager* os_integration_manager);
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void SetSystemWebAppDelegateMap(
       const ash::SystemWebAppDelegateMap* system_web_apps_delegate_map);
+#endif
 
+  // `initialization_complete` waits for the first `SynchronizeInstalledApps` to
+  // finish if it's triggered on `Start`.
   void Start(base::OnceClosure initialization_complete);
 
-  void ReinstallPlaceholderAppIfNecessary(const GURL& url);
+  void ReinstallPlaceholderAppIfNecessary(
+      const GURL& url,
+      ExternallyManagedAppManager::OnceInstallCallback on_complete);
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
@@ -148,10 +154,11 @@ class WebAppPolicyManager {
   RunOnOsLoginPolicy GetUrlRunOnOsLoginPolicyByUnhashedAppId(
       const std::string& unhashed_app_id) const;
 
-  // Parses install options from a Value, which represents one entry of the
-  // kWepAppInstallForceList. If the value contains a custom_name or
-  // custom_icon, it is inserted into the custom_manifest_values_by_url_ map.
-  ExternalInstallOptions ParseInstallPolicyEntry(const base::Value& entry);
+  // Parses install options from a `base::Value::Dict`, which represents one
+  // entry of the kWepAppInstallForceList. If the value contains a custom_name
+  // or custom_icon, it is inserted into the custom_manifest_values_by_url_ map.
+  ExternalInstallOptions ParseInstallPolicyEntry(
+      const base::Value::Dict& entry);
 
   void ObserveDisabledSystemFeaturesPolicy();
 
@@ -162,6 +169,7 @@ class WebAppPolicyManager {
   // Populates ids lists of web apps disabled by SystemFeaturesDisableList
   // policy.
   void PopulateDisabledWebAppsIdsLists();
+  void OnWebAppForceInstallPolicyParsed();
 
   raw_ptr<Profile> profile_;
   raw_ptr<PrefService> pref_service_;
@@ -172,8 +180,10 @@ class WebAppPolicyManager {
       nullptr;
   raw_ptr<WebAppRegistrar> app_registrar_ = nullptr;
   raw_ptr<WebAppSyncBridge> sync_bridge_ = nullptr;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   raw_ptr<const ash::SystemWebAppDelegateMap, DanglingUntriaged>
       system_web_apps_delegate_map_ = nullptr;
+#endif
   raw_ptr<OsIntegrationManager, DanglingUntriaged> os_integration_manager_ =
       nullptr;
 
@@ -190,7 +200,7 @@ class WebAppPolicyManager {
 
   // Testing callbacks
   base::OnceClosure refresh_policy_settings_completed_;
-  base::OnceClosure on_apps_synchronized_;
+  base::OnceClosure on_apps_synchronized_for_testing_;
 
   bool is_refreshing_ = false;
   bool needs_refresh_ = false;
@@ -200,6 +210,9 @@ class WebAppPolicyManager {
   std::unique_ptr<WebAppSetting> default_settings_;
 
   ExternallyInstalledWebAppPrefs externally_installed_app_prefs_;
+
+  base::OnceClosure initialization_complete_;
+
 #if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<IsolatedWebAppPolicyManager> iwa_policy_manager_;
 #endif

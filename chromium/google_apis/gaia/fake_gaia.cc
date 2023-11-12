@@ -9,12 +9,12 @@
 
 #include "base/base64.h"
 #include "base/base_paths.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -429,6 +429,10 @@ void FakeGaia::IssueOAuthToken(const std::string& auth_token,
 void FakeGaia::RegisterSamlUser(const std::string& account_id,
                                 const GURL& saml_idp) {
   saml_account_idp_map_[account_id] = saml_idp;
+}
+
+void FakeGaia::RemoveSamlIdpForUser(const std::string& account_id) {
+  saml_account_idp_map_.erase(account_id);
 }
 
 void FakeGaia::RegisterSamlDomainRedirectUrl(const std::string& domain,
@@ -930,8 +934,8 @@ void FakeGaia::HandleGetCheckConnectionInfo(const HttpRequest& request,
 
 void FakeGaia::HandleGetReAuthProofToken(const HttpRequest& request,
                                          BasicHttpResponse* http_response) {
-  base::Value response_dict(base::Value::Type::DICTIONARY);
-  base::Value error(base::Value::Type::DICTIONARY);
+  base::Value response_dict(base::Value::Type::DICT);
+  base::Value error(base::Value::Type::DICT);
 
   switch (next_reauth_status_) {
     case GaiaAuthConsumer::ReAuthProofTokenStatus::kSuccess:

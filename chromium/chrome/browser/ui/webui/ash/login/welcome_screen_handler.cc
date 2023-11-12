@@ -10,9 +10,9 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -247,6 +247,11 @@ void WelcomeScreenHandler::GetAdditionalParameters(base::Value::Dict* dict) {
                                     input_method_manager));
   dict->Set("timezoneList", GetTimezoneList());
   dict->Set("demoModeCountryList", DemoSession::GetCountryList());
+
+  // If this switch is set allow to open advanced options and configure device
+  // requisition.
+  dict->Set("isDeviceRequisitionConfigurable",
+            switches::IsDeviceRequisitionConfigurable());
 }
 
 // WelcomeScreenHandler, private: ----------------------------------------------

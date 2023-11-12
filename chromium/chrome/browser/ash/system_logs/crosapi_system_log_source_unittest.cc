@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ash/system_logs/crosapi_system_log_source.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "chrome/browser/ash/crosapi/fake_browser_manager.h"
 #include "content/public/test/browser_task_environment.h"
@@ -32,7 +32,7 @@ class CrosapiSystemLogSourceTest : public ::testing::Test {
                           base::Unretained(this));
   }
 
-  void SetupBrowserManagerResponse(base::Value response) {
+  void SetupBrowserManagerResponse(base::Value::Dict response) {
     browser_manager_->SetGetFeedbackDataResponse(std::move(response));
   }
 
@@ -69,8 +69,8 @@ class CrosapiSystemLogSourceTest : public ::testing::Test {
 TEST_F(CrosapiSystemLogSourceTest, OnFeedbackData) {
   // Set up FakeBrowserManager to send log data with 1 log entry for
   // the log source.
-  base::Value system_log_entries(base::Value::Type::DICTIONARY);
-  system_log_entries.SetStringKey("testing log key", "testing log content");
+  base::Value::Dict system_log_entries;
+  system_log_entries.Set("testing log key", "testing log content");
   SetupBrowserManagerResponse(std::move(system_log_entries));
 
   // Fetch log data and wait until fetch_callback() is called.

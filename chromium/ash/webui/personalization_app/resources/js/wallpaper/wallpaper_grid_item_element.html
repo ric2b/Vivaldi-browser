@@ -24,9 +24,11 @@
     outline: none;
   }
 
+  /* TODO(b/258686035): Clean up style once jelly is on by default. */
   :host([aria-selected='true']:not([placeholder])) .item {
-    background-color: rgba(var(--cros-color-prominent-rgb),
-        var(--personalization-app-second-tone-opacity));
+    background-color: var(--cros-sys-highlight_shape, rgba(
+      var(--cros-color-prominent-rgb),
+      var(--personalization-app-second-tone-opacity)));
     border-radius:
       calc(var(--personalization-app-grid-item-border-radius) + 4px);
   }
@@ -75,25 +77,6 @@
     width: 100%;
   }
 
-  :host(:not([collage])[google-photos-tile]) img {
-    height: 64px;
-    margin: 12px;
-    position: absolute;
-    top: 0;
-    width: 64px;
-  }
-
-  :host(:not([collage])[aria-disabled='true'][google-photos-tile]) img {
-    /* Background color should stay light even in dark mode. */
-    background-color: white;
-    border-radius: 100%;
-    box-sizing: border-box;
-    filter: grayscale(100%);
-    height: 54px;
-    padding: 4px;
-    width: 54px;
-  }
-
   :host(:not([collage])) img:has(+ img) {
     clip-path: inset(0 50% 0 0);
   }
@@ -138,10 +121,6 @@
     z-index: 1;
   }
 
-  :host([google-photos-tile][aria-disabled='true']) #textShadow {
-    display: none;
-  }
-
   #text {
     bottom: 0;
     box-sizing: border-box;
@@ -182,6 +161,12 @@
     font: var(--cros-annotation-2-font);
   }
 
+  #infoIcon {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+  }
+
   iron-icon {
     --iron-icon-height: 20px;
     --iron-icon-width: 20px;
@@ -215,13 +200,14 @@
         is-google-photos="[[isGooglePhotos]]"
         is="cr-auto-img"
         on-error="onImgError_"
-        on-load="onImgLoad_">
+        on-load="onImgLoad_"
+        part="image">
   </template>
   <div class="wallpaper-grid-item-border"></div>
   <template is="dom-if"
       if="[[isTextVisible_(imageStatus_, primaryText, secondaryText)]]"
       restamp>
-    <div id="textShadow"></div>
+    <div id="textShadow" part="textShadow"></div>
     <div id="text">
       <slot name="text">
         <template is="dom-if" if="[[isPrimaryTextVisible_(primaryText)]]" restamp>
@@ -237,5 +223,10 @@
       </slot>
     </div>
   </template>
-  <iron-icon icon="personalization:checkmark"></iron-icon>
+  <template is="dom-if" if="[[shouldShowInfoText_(imageStatus_, infoText)]]"
+      restamp>
+    <!-- TODO(b/268400442) better contrast required -->
+    <info-svg id="infoIcon" title$="[[infoText]]"></info-svg>
+  </template>
+  <iron-icon icon="[[checkmarkIcon_]]"></iron-icon>
 </div>

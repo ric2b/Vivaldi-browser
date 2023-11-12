@@ -10,9 +10,9 @@
 #include <memory>
 #include <set>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/rand_util.h"
@@ -133,13 +133,13 @@ bool ViewAndLayerTreeAreConsistent(const views::View* view,
       return false;
 
     // Check if the visibility states of the View and the Layer are in sync.
-    EXPECT_EQ(l->IsDrawn(), v->IsDrawn());
-    if (v->IsDrawn() != l->IsDrawn()) {
+    EXPECT_EQ(l->IsVisible(), v->IsDrawn());
+    if (v->IsDrawn() != l->IsVisible()) {
       for (const views::View* vv = v; vv; vv = vv->parent())
         LOG(ERROR) << "V: " << vv << " " << vv->GetVisible() << " "
                    << vv->IsDrawn() << " " << vv->layer();
       for (const ui::Layer* ll = l; ll; ll = ll->parent())
-        LOG(ERROR) << "L: " << ll << " " << ll->IsDrawn();
+        LOG(ERROR) << "L: " << ll << " " << ll->IsVisible();
       return false;
     }
 
@@ -4304,19 +4304,19 @@ TEST_F(ViewLayerTest, ToggleVisibilityWithLayer) {
   content_view->AddChildView(v1);
   EXPECT_TRUE(
       LayerIsAncestor(widget()->GetCompositor()->root_layer(), v1->layer()));
-  EXPECT_TRUE(v1->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
 
   v1->SetVisible(false);
-  EXPECT_FALSE(v1->layer()->IsDrawn());
+  EXPECT_FALSE(v1->layer()->IsVisible());
 
   v1->SetVisible(true);
-  EXPECT_TRUE(v1->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
 
   widget()->Hide();
-  EXPECT_FALSE(v1->layer()->IsDrawn());
+  EXPECT_FALSE(v1->layer()->IsVisible());
 
   widget()->Show();
-  EXPECT_TRUE(v1->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
 }
 
 // Tests that the layers in the subtree are orphaned after a View is removed
@@ -4332,7 +4332,7 @@ TEST_F(ViewLayerTest, OrphanLayerAfterViewRemove) {
   v2->SetPaintToLayer();
   EXPECT_TRUE(
       LayerIsAncestor(widget()->GetCompositor()->root_layer(), v2->layer()));
-  EXPECT_TRUE(v2->layer()->IsDrawn());
+  EXPECT_TRUE(v2->layer()->IsVisible());
 
   content_view->RemoveChildView(v1);
 
@@ -4346,7 +4346,7 @@ TEST_F(ViewLayerTest, OrphanLayerAfterViewRemove) {
   v1 = nullptr;
   EXPECT_TRUE(
       LayerIsAncestor(widget()->GetCompositor()->root_layer(), v2->layer()));
-  EXPECT_TRUE(v2->layer()->IsDrawn());
+  EXPECT_TRUE(v2->layer()->IsVisible());
 }
 
 class PaintTrackingView : public View {
@@ -4447,32 +4447,32 @@ TEST_F(ViewLayerTest, VisibilityChildLayers) {
   View* v4 = v3->AddChildView(std::make_unique<View>());
   v4->SetPaintToLayer();
 
-  EXPECT_TRUE(v1->layer()->IsDrawn());
-  EXPECT_FALSE(v4->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
+  EXPECT_FALSE(v4->layer()->IsVisible());
 
   v2->SetVisible(false);
-  EXPECT_TRUE(v1->layer()->IsDrawn());
-  EXPECT_FALSE(v4->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
+  EXPECT_FALSE(v4->layer()->IsVisible());
 
   v2->SetVisible(true);
-  EXPECT_TRUE(v1->layer()->IsDrawn());
-  EXPECT_FALSE(v4->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
+  EXPECT_FALSE(v4->layer()->IsVisible());
 
   v2->SetVisible(false);
-  EXPECT_TRUE(v1->layer()->IsDrawn());
-  EXPECT_FALSE(v4->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
+  EXPECT_FALSE(v4->layer()->IsVisible());
   EXPECT_TRUE(ViewAndLayerTreeAreConsistent(v1, v1->layer()));
 
   v3->SetVisible(true);
-  EXPECT_TRUE(v1->layer()->IsDrawn());
-  EXPECT_FALSE(v4->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
+  EXPECT_FALSE(v4->layer()->IsVisible());
   EXPECT_TRUE(ViewAndLayerTreeAreConsistent(v1, v1->layer()));
 
   // Reparent |v3| to |v1|.
   v2->RemoveChildView(v3);
   v1->AddChildView(v3);
-  EXPECT_TRUE(v1->layer()->IsDrawn());
-  EXPECT_TRUE(v4->layer()->IsDrawn());
+  EXPECT_TRUE(v1->layer()->IsVisible());
+  EXPECT_TRUE(v4->layer()->IsVisible());
   EXPECT_TRUE(ViewAndLayerTreeAreConsistent(v1, v1->layer()));
 }
 
@@ -4690,14 +4690,14 @@ TEST_F(ViewLayerTest, LayerBeneathTriggersPaintToLayer) {
 
   ui::Layer layer1;
   ui::Layer layer2;
-  view->AddLayerBeneathView(&layer1);
+  view->AddLayerToRegion(&layer1, LayerRegion::kBelow);
   EXPECT_NE(nullptr, view->layer());
-  view->AddLayerBeneathView(&layer2);
+  view->AddLayerToRegion(&layer2, LayerRegion::kBelow);
   EXPECT_NE(nullptr, view->layer());
 
-  view->RemoveLayerBeneathView(&layer1);
+  view->RemoveLayerFromRegions(&layer1);
   EXPECT_NE(nullptr, view->layer());
-  view->RemoveLayerBeneathView(&layer2);
+  view->RemoveLayerFromRegions(&layer2);
   EXPECT_EQ(nullptr, view->layer());
 }
 
@@ -4708,11 +4708,11 @@ TEST_F(ViewLayerTest, LayerBeneathAddedToTree) {
   ui::Layer layer;
   View* view = root.AddChildView(std::make_unique<View>());
 
-  view->AddLayerBeneathView(&layer);
+  view->AddLayerToRegion(&layer, LayerRegion::kBelow);
   ASSERT_NE(nullptr, view->layer());
   EXPECT_TRUE(view->layer()->parent()->Contains(&layer));
 
-  view->RemoveLayerBeneathView(&layer);
+  view->RemoveLayerFromRegions(&layer);
   EXPECT_EQ(nullptr, layer.parent());
 }
 
@@ -4728,13 +4728,13 @@ TEST_F(ViewLayerTest, LayerBeneathAtFractionalScale) {
   View* view = widget()->SetContentsView(std::make_unique<View>());
 
   ui::Layer layer;
-  view->AddLayerBeneathView(&layer);
+  view->AddLayerToRegion(&layer, LayerRegion::kBelow);
 
   view->SetBoundsRect(gfx::Rect(1, 1, 10, 10));
   EXPECT_NE(gfx::Vector2dF(), view->layer()->GetSubpixelOffset());
   EXPECT_EQ(view->layer()->GetSubpixelOffset(), layer.GetSubpixelOffset());
 
-  view->RemoveLayerBeneathView(&layer);
+  view->RemoveLayerFromRegions(&layer);
 }
 
 TEST_F(ViewLayerTest, LayerBeneathRemovedOnDestruction) {
@@ -4745,7 +4745,7 @@ TEST_F(ViewLayerTest, LayerBeneathRemovedOnDestruction) {
   View* view = root.AddChildView(std::make_unique<View>());
 
   // No assertions, just get coverage of deleting the layer while it is added.
-  view->AddLayerBeneathView(layer.get());
+  view->AddLayerToRegion(layer.get(), LayerRegion::kBelow);
   layer.reset();
   root.RemoveChildView(view);
   delete view;
@@ -4760,7 +4760,7 @@ TEST_F(ViewLayerTest, LayerBeneathVisibilityUpdated) {
   // Make a parent view that has no layer, and a child view that has a layer.
   View* parent = root.AddChildView(std::make_unique<View>());
   View* child = parent->AddChildView(std::make_unique<View>());
-  child->AddLayerBeneathView(&layer);
+  child->AddLayerToRegion(&layer, LayerRegion::kBelow);
 
   EXPECT_EQ(nullptr, parent->layer());
   EXPECT_NE(nullptr, child->layer());
@@ -4786,16 +4786,16 @@ TEST_F(ViewLayerTest, LayerBeneathVisibilityUpdated) {
   child->SetVisible(true);
   EXPECT_TRUE(layer.visible());
 
-  child->RemoveLayerBeneathView(&layer);
+  child->RemoveLayerFromRegions(&layer);
 
   // Now check the visibility upon adding.
   child->SetVisible(false);
-  child->AddLayerBeneathView(&layer);
+  child->AddLayerToRegion(&layer, LayerRegion::kBelow);
   EXPECT_FALSE(layer.visible());
   child->SetVisible(true);
   EXPECT_TRUE(layer.visible());
 
-  child->RemoveLayerBeneathView(&layer);
+  child->RemoveLayerFromRegions(&layer);
 }
 
 TEST_F(ViewLayerTest, LayerBeneathHasCorrectBounds) {
@@ -4812,18 +4812,18 @@ TEST_F(ViewLayerTest, LayerBeneathHasCorrectBounds) {
 
   // First check when |view| is already painting to a layer.
   view->SetPaintToLayer();
-  view->AddLayerBeneathView(&layer);
+  view->AddLayerToRegion(&layer, LayerRegion::kBelow);
   EXPECT_NE(nullptr, layer.parent());
   EXPECT_EQ(gfx::Rect(25, 25, 25, 25), layer.bounds());
 
-  view->RemoveLayerBeneathView(&layer);
+  view->RemoveLayerFromRegions(&layer);
   EXPECT_EQ(nullptr, layer.parent());
   layer.SetBounds(gfx::Rect(25, 25));
 
   // Next check when |view| wasn't painting to a layer.
   view->DestroyLayer();
   EXPECT_EQ(nullptr, view->layer());
-  view->AddLayerBeneathView(&layer);
+  view->AddLayerToRegion(&layer, LayerRegion::kBelow);
   EXPECT_NE(nullptr, view->layer());
   EXPECT_NE(nullptr, layer.parent());
   EXPECT_EQ(gfx::Rect(25, 25, 25, 25), layer.bounds());
@@ -4832,7 +4832,7 @@ TEST_F(ViewLayerTest, LayerBeneathHasCorrectBounds) {
   view->SetBoundsRect(gfx::Rect(50, 50, 50, 50));
   EXPECT_EQ(gfx::Rect(50, 50, 25, 25), layer.bounds());
 
-  view->RemoveLayerBeneathView(&layer);
+  view->RemoveLayerFromRegions(&layer);
 }
 
 TEST_F(ViewLayerTest, LayerBeneathTransformed) {
@@ -4842,7 +4842,7 @@ TEST_F(ViewLayerTest, LayerBeneathTransformed) {
   ui::Layer layer;
   View* view = root.AddChildView(std::make_unique<View>());
   view->SetPaintToLayer();
-  view->AddLayerBeneathView(&layer);
+  view->AddLayerToRegion(&layer, LayerRegion::kBelow);
   EXPECT_TRUE(layer.transform().IsIdentity());
 
   gfx::Transform transform;
@@ -4892,7 +4892,7 @@ TEST_F(ViewLayerTest, LayerBeneathStackedCorrectly) {
   View* v3 = root.AddChildView(std::make_unique<View>());
 
   // Check that |layer| is stacked correctly as we add more layers to the tree.
-  v2->AddLayerBeneathView(&layer);
+  v2->AddLayerToRegion(&layer, LayerRegion::kBelow);
   v2->layer()->SetName("v2");
   EXPECT_EQ(ChildLayerNamesAsString(*root.layer()), "layer v2");
   v3->SetPaintToLayer();
@@ -4902,7 +4902,7 @@ TEST_F(ViewLayerTest, LayerBeneathStackedCorrectly) {
   v1->layer()->SetName("v1");
   EXPECT_EQ(ChildLayerNamesAsString(*root.layer()), "v1 layer v2 v3");
 
-  v2->RemoveLayerBeneathView(&layer);
+  v2->RemoveLayerFromRegions(&layer);
 }
 
 TEST_F(ViewLayerTest, LayerBeneathOrphanedOnRemoval) {
@@ -4911,7 +4911,7 @@ TEST_F(ViewLayerTest, LayerBeneathOrphanedOnRemoval) {
 
   ui::Layer layer;
   View* view = root.AddChildView(std::make_unique<View>());
-  view->AddLayerBeneathView(&layer);
+  view->AddLayerToRegion(&layer, LayerRegion::kBelow);
   EXPECT_EQ(layer.parent(), root.layer());
 
   // Ensure that the layer beneath is orphaned and re-parented appropriately.
@@ -4920,7 +4920,7 @@ TEST_F(ViewLayerTest, LayerBeneathOrphanedOnRemoval) {
   root.AddChildView(view);
   EXPECT_EQ(layer.parent(), root.layer());
 
-  view->RemoveLayerBeneathView(&layer);
+  view->RemoveLayerFromRegions(&layer);
 }
 
 TEST_F(ViewLayerTest, LayerBeneathMovedWithView) {
@@ -4945,7 +4945,7 @@ TEST_F(ViewLayerTest, LayerBeneathMovedWithView) {
   v3->layer()->SetName("v3");
 
   // Verify that |layer| is stacked correctly.
-  v3->AddLayerBeneathView(&layer);
+  v3->AddLayerToRegion(&layer, LayerRegion::kBelow);
   EXPECT_EQ(ChildLayerNamesAsString(*v1->layer()), "layer v3");
 
   // Move |v3| to under |v2| and check |layer|'s stacking.
@@ -5087,13 +5087,13 @@ TEST_F(ViewLayerPixelCanvasTest, LayerBeneathOnPixelCanvas) {
   View* view = widget()->SetContentsView(std::make_unique<View>());
 
   ui::Layer layer;
-  view->AddLayerBeneathView(&layer);
+  view->AddLayerToRegion(&layer, LayerRegion::kBelow);
 
   view->SetBoundsRect(gfx::Rect(1, 1, 10, 10));
   EXPECT_NE(gfx::Vector2dF(), view->layer()->GetSubpixelOffset());
   EXPECT_EQ(view->layer()->GetSubpixelOffset(), layer.GetSubpixelOffset());
 
-  view->RemoveLayerBeneathView(&layer);
+  view->RemoveLayerFromRegions(&layer);
 }
 
 TEST_F(ViewTest, FocusableAssertions) {

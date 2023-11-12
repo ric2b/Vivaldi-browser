@@ -10,8 +10,6 @@ source_set("browser") {
     "browser/leveldb_persistence_provider.h",
     "browser/origin_trials.cc",
     "browser/origin_trials.h",
-    "browser/prefservice_persistence_provider.cc",
-    "browser/prefservice_persistence_provider.h",
   ]
   deps = [
     ":common",
@@ -22,6 +20,7 @@ source_set("browser") {
     "//components/prefs",
     "//components/user_prefs",
     "//content/public/browser",
+    "//net",
     "//third_party/blink/public/common:headers",
     "//url:url",
   ]
@@ -67,7 +66,6 @@ source_set("unit_tests") {
   sources = [
     "browser/leveldb_persistence_provider_unittest.cc",
     "browser/origin_trials_unittest.cc",
-    "browser/prefservice_persistence_provider_unittest.cc",
     "common/persisted_trial_token_unittest.cc",
   ]
   deps = [

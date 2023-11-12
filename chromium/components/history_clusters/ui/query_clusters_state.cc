@@ -11,11 +11,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/history_clusters_service.h"
+#include "components/history_clusters/core/history_clusters_service_task_get_most_recent_clusters.h"
 #include "components/history_clusters/core/history_clusters_util.h"
-#include "components/image_service/image_service.h"
 #include "url/gurl.h"
 
 namespace history_clusters {
@@ -44,8 +45,8 @@ class QueryClustersState::PostProcessor
 
     // We have to do this AFTER applying the search query, because applying the
     // search query re-scores matching visits to promote them above non-matching
-    // visits.
-    HideAndCullLowScoringVisits(clusters);
+    // visits. Show 1-visit clusters only in query mode.
+    HideAndCullLowScoringVisits(clusters, query_.empty() ? 2 : 1);
     // Do this AFTER we cull the low scoring visits, so those visits don't get
     // their related searches coalesced onto the cluster level.
     CoalesceRelatedSearches(clusters);
@@ -67,11 +68,9 @@ class QueryClustersState::PostProcessor
 
 QueryClustersState::QueryClustersState(
     base::WeakPtr<HistoryClustersService> service,
-    base::WeakPtr<image_service::ImageService> image_service,
     const std::string& query,
     bool recluster)
     : service_(service),
-      image_service_(image_service),
       query_(query),
       recluster_(recluster),
       post_processing_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
@@ -87,13 +86,12 @@ void QueryClustersState::LoadNextBatchOfClusters(ResultCallback callback) {
     return;
 
   base::TimeTicks query_start_time = base::TimeTicks::Now();
-  query_clusters_task = service_->QueryClusters(
-      ClusteringRequestSource::kJourneysPage,
+  query_clusters_task_ = service_->QueryClusters(
+      ClusteringRequestSource::kJourneysPage, QueryClustersFilterParams(),
       /*begin_time=*/base::Time(), continuation_params_, recluster_,
       base::BindOnce(&QueryClustersState::OnGotRawClusters,
                      weak_factory_.GetWeakPtr(), query_start_time,
-                     std::move(callback)),
-      HistoryClustersServiceTaskGetMostRecentClusters::Source::kWebUi);
+                     std::move(callback)));
 }
 
 void QueryClustersState::OnGotRawClusters(
@@ -158,23 +156,6 @@ void QueryClustersState::OnGotClusters(
   // than just doing this simple computation on the main thread.
   UpdateUniqueRawLabels(clusters);
 
-  if (GetConfig().images && image_service_) {
-    image_service_->PopulateEntityImagesFor(
-        std::move(clusters),
-        base::BindOnce(&QueryClustersState::OnGotImagedClusters,
-                       weak_factory_.GetWeakPtr(), query_start_time,
-                       std::move(callback), std::move(continuation_params)));
-  } else {
-    OnGotImagedClusters(query_start_time, std::move(callback),
-                        std::move(continuation_params), std::move(clusters));
-  }
-}
-
-void QueryClustersState::OnGotImagedClusters(
-    base::TimeTicks query_start_time,
-    ResultCallback callback,
-    QueryClustersContinuationParams continuation_params,
-    std::vector<history::Cluster> clusters) {
   size_t clusters_size = clusters.size();
   bool is_continuation = number_clusters_sent_to_page_ > 0;
   std::move(callback).Run(query_, std::move(clusters),

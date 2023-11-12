@@ -9,7 +9,6 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.Card
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;
-import android.text.TextUtils;
 import android.util.Size;
 import android.view.View;
 import android.view.ViewGroup;
@@ -23,9 +22,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.ViewCompat;
+import androidx.core.widget.ImageViewCompat;
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab.state.ShoppingPersistedTabData;
@@ -113,6 +112,12 @@ class TabGridViewBinder {
                     model.get(TabProperties.IS_SELECTED));
             updateFavicon(view, model);
         } else if (TabProperties.FAVICON == propertyKey) {
+            if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) return;
+
+            updateFavicon(view, model);
+        } else if (TabProperties.FAVICON_FETCHER == propertyKey) {
+            if (!TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) return;
+
             updateFavicon(view, model);
         } else if (TabProperties.THUMBNAIL_FETCHER == propertyKey) {
             updateThumbnail(view, model);
@@ -228,25 +233,6 @@ class TabGridViewBinder {
                             }
                         });
             }, false);
-        } else if (TabProperties.STORE_PERSISTED_TAB_DATA_FETCHER == propertyKey) {
-            StoreHoursCardView storeHoursCardView =
-                    (StoreHoursCardView) view.fastFindViewById(R.id.store_hours_box_outer);
-            if (model.get(TabProperties.STORE_PERSISTED_TAB_DATA_FETCHER) != null) {
-                model.get(TabProperties.STORE_PERSISTED_TAB_DATA_FETCHER)
-                        .fetch((storePersistedTabData) -> {
-                            if (storePersistedTabData == null
-                                    || TextUtils.isEmpty(
-                                            storePersistedTabData.getStoreHoursString())) {
-                                storeHoursCardView.setVisibility(View.GONE);
-                            } else {
-                                storeHoursCardView.setStoreHours(
-                                        storePersistedTabData.getStoreHoursString());
-                                storeHoursCardView.setVisibility(View.VISIBLE);
-                            }
-                        });
-            } else {
-                storeHoursCardView.setVisibility(View.GONE);
-            }
         } else if (TabProperties.SHOULD_SHOW_PRICE_DROP_TOOLTIP == propertyKey) {
             if (model.get(TabProperties.SHOULD_SHOW_PRICE_DROP_TOOLTIP)) {
                 PriceCardView priceCardView =
@@ -406,7 +392,31 @@ class TabGridViewBinder {
      * #bindCommonProperties}.
      */
     private static void updateFavicon(ViewLookupCachingFrameLayout rootView, PropertyModel model) {
+        if (TabUiFeatureUtilities.ENABLE_DEFERRED_FAVICON.getValue()) {
+            final TabListFaviconProvider.TabFaviconFetcher fetcher =
+                    model.get(TabProperties.FAVICON_FETCHER);
+            if (fetcher == null) {
+                setFavicon(rootView, model, null);
+                return;
+            }
+            fetcher.fetch(tabFavicon -> {
+                if (fetcher != model.get(TabProperties.FAVICON_FETCHER)) return;
+
+                setFavicon(rootView, model, tabFavicon);
+            });
+            return;
+        }
         TabListFaviconProvider.TabFavicon favicon = model.get(TabProperties.FAVICON);
+        setFavicon(rootView, model, favicon);
+    }
+
+    /**
+     * Set the favicon drawable to use from {@link TabListFaviconProvider.TabFavicon}, and the
+     * padding around it. The color work is already handled when favicon is bind in {@link
+     * #bindCommonProperties}.
+     */
+    private static void setFavicon(ViewLookupCachingFrameLayout rootView, PropertyModel model,
+            TabListFaviconProvider.TabFavicon favicon) {
         ImageView faviconView = (ImageView) rootView.fastFindViewById(R.id.tab_favicon);
         if (favicon == null) {
             faviconView.setImageDrawable(null);
@@ -453,7 +463,7 @@ class TabGridViewBinder {
     private static void updateColorForActionButton(
             ViewLookupCachingFrameLayout rootView, boolean isIncognito, boolean isSelected) {
         ImageView actionButton = (ImageView) rootView.fastFindViewById(R.id.action_button);
-        ApiCompatibilityUtils.setImageTintList(actionButton,
+        ImageViewCompat.setImageTintList(actionButton,
                 TabUiThemeProvider.getActionButtonTintList(
                         actionButton.getContext(), isIncognito, isSelected));
     }
@@ -473,7 +483,7 @@ class TabGridViewBinder {
 
         // The check should be invisible if not selected.
         actionButton.getDrawable().setAlpha(isSelected ? 255 : 0);
-        ApiCompatibilityUtils.setImageTintList(actionButton,
+        ImageViewCompat.setImageTintList(actionButton,
                 isSelected ? TabUiThemeProvider.getToggleActionButtonCheckedDrawableTintList(
                         rootView.getContext(), isIncognito)
                            : null);

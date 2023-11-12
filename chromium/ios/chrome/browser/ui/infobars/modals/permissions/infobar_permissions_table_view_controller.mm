@@ -10,6 +10,7 @@
 #import "base/notreached.h"
 #import "ios/chrome/browser/infobars/infobar_metrics_recorder.h"
 #import "ios/chrome/browser/ui/infobars/modals/infobar_modal_constants.h"
+#import "ios/chrome/browser/ui/infobars/modals/infobar_modal_delegate.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_modal_presentation_handler.h"
 #import "ios/chrome/browser/ui/permissions/permission_info.h"
 #import "ios/chrome/browser/ui/permissions/permission_metrics_util.h"
@@ -167,7 +168,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [[NSMutableAttributedString alloc]
           initWithAttributedString:PutBoldPartInString(
                                        self.permissionsDescription,
-                                       kTableViewSublabelFontStyle)];
+                                       UIFontTextStyleFootnote)];
 
   NSDictionary* attrs = @{
     NSForegroundColorAttributeName : [UIColor colorNamed:kTextSecondaryColor]

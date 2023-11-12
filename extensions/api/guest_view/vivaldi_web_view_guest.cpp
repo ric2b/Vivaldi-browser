@@ -482,6 +482,11 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
                                            int windowId,
                                            bool activePage,
                                            bool inherit_opener) {
+  if (chrome::FindBrowserWithWebContents(guest->web_contents())) {
+    // The guest is already added to a tabstrip.
+    return;
+  }
+
   Browser* browser =
       chrome::FindBrowserWithID(SessionID::FromSerializedValue(windowId));
 
@@ -491,9 +496,6 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
     // correct browser.
     content::BrowserContext* context =
         guest->web_contents()->GetBrowserContext();
-
-    // We are done with the guest, get rid of it so the teardown will be clean.
-    guest->WebContentsDestroyed();
 
     Profile* profile = Profile::FromBrowserContext(context);
 
@@ -1066,6 +1068,75 @@ void WebViewGuest::VivaldiCreateWebContents(
 
   std::move(webcontentents_created_callback)
       .Run(std::move(owned_this), std::move(new_contents));
+}
+
+blink::mojom::DisplayMode WebViewGuest::GetDisplayMode(
+    const content::WebContents* source) {
+  return owner_web_contents()->GetDelegate()->GetDisplayMode(source);
+}
+
+void WebViewGuest::MaybeAddToOpenersTabStrip(
+    const base::Value::Dict& create_params) {
+
+  absl::optional<int> opener_process_id =
+      create_params.FindInt("opener_process_id");
+  absl::optional<int> opener_frame_id =
+      create_params.FindInt("opener_render_frame_id");
+  absl::optional<int> disposition =
+      create_params.FindInt("disposition");
+
+  WindowOpenDisposition window_open_disposition =
+      (disposition ? static_cast<WindowOpenDisposition>(*disposition)
+                   : WindowOpenDisposition::NEW_FOREGROUND_TAB);
+
+  if ((opener_process_id &&
+       *opener_process_id != content::ChildProcessHost::kInvalidUniqueID) &&
+      (opener_frame_id && *opener_frame_id != MSG_ROUTING_NONE)) {
+    content::WebContents* opener_web_contents =
+        content::WebContents::FromRenderFrameHost(
+            content::RenderFrameHost::FromID(
+                *opener_process_id,
+                *opener_frame_id));
+
+    auto* opener_guest = WebViewGuest::FromWebContents(opener_web_contents);
+
+    WebViewGuest* opener = GetOpener();
+
+    CHECK_NE(opener, opener_guest);
+
+    SetOpener(opener_guest);
+  }
+  WebViewGuest* opener = GetOpener();
+  if (opener && (window_open_disposition != WindowOpenDisposition::NEW_POPUP)) {
+
+    Browser* browser =
+        chrome::FindBrowserWithWebContents(opener->web_contents());
+    if (browser) {
+      opener->AddGuestToTabStripModel(
+          this, browser->session_id().id(),
+          /*bool activePage =*/
+          (window_open_disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB),
+          /*bool inherit_opener =*/true);
+    }
+  }
+}
+
+void WebViewGuest::ActivateContents(content::WebContents* web_contents) {
+  if (!attached() || !embedder_web_contents()->GetDelegate())
+    return;
+
+  if (VivaldiTabCheck::IsVivaldiTab(web_contents)) {
+    Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
+    if (browser) {
+      browser->ActivateContents(web_contents);
+    }
+    return;
+  }
+
+  // Fallback: will focus the embedder if attached, as in
+  // GuestViewBase::ActivateContents
+  embedder_web_contents()->GetDelegate()->ActivateContents(
+    embedder_web_contents());
 }
 
 }  // namespace extensions

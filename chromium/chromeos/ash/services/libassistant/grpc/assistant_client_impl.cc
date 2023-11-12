@@ -6,14 +6,13 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_forward.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/system/sys_info.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/ash/services/libassistant/callback_utils.h"
 #include "chromeos/ash/services/libassistant/grpc/assistant_client_v1.h"
@@ -90,7 +89,18 @@ AssistantClientImpl::AssistantClientImpl(
       grpc_services_(libassistant_service_address, assistant_service_address),
       libassistant_client_(grpc_services_.GrpcLibassistantClient()) {}
 
-AssistantClientImpl::~AssistantClientImpl() = default;
+AssistantClientImpl::~AssistantClientImpl() {
+  // The following sequence is used to prevent unnecessary heart beats from
+  // being sent during shutdown:
+  // 1. Stop GrpcHttpConnectionService by destroying the client and inform the
+  //    service. For the current implementation, it is the client to initialize
+  //    the stop request.
+  // 2. Stop other LibAssistant gRPC services by destroying the
+  // `assistant_manager_`.
+  // 3. Stop assistant_grpc service by destroying `grpc_services_`.
+  grpc_services_.StopGrpcHttpConnectionClient();
+  ResetAssistantManager();
+}
 
 void AssistantClientImpl::StartServices(
     ServicesStatusObserver* services_status_observer) {
@@ -235,11 +245,6 @@ void AssistantClientImpl::SendVoicelessInteraction(
 void AssistantClientImpl::RegisterActionModule(
     assistant_client::ActionModule* action_module) {
   grpc_services_.GetActionService()->RegisterActionModule(action_module);
-}
-
-void AssistantClientImpl::SendScreenContextRequest(
-    const std::vector<std::string>& context_protos) {
-  NOTIMPLEMENTED();
 }
 
 void AssistantClientImpl::StartVoiceInteraction() {

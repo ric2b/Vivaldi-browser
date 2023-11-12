@@ -57,8 +57,10 @@ All changes to this list should go through Blink's feature review process: http:
     align-self
     alignment-baseline
     all
+    anchor-default
     anchor-name
     anchor-scroll
+    animation-composition
     animation-delay-end
     animation-delay-start
     animation-direction
@@ -67,6 +69,8 @@ All changes to this list should go through Blink's feature review process: http:
     animation-iteration-count
     animation-name
     animation-play-state
+    animation-range-end
+    animation-range-start
     animation-timeline
     animation-timing-function
     app-region
@@ -379,11 +383,13 @@ All changes to this list should go through Blink's feature review process: http:
     text-transform
     text-underline-offset
     text-underline-position
+    text-wrap
     toggle-group
     toggle-root
     toggle-trigger
     toggle-visibility
     top
+    top-layer
     touch-action
     transform
     transform-box
@@ -401,6 +407,7 @@ All changes to this list should go through Blink's feature review process: http:
     view-timeline-axis
     view-timeline-inset
     view-timeline-name
+    view-transition-name
     visibility
     white-space
     widows
@@ -459,6 +466,9 @@ All changes to this list should go through Blink's feature review process: http:
     animation-delay
         animation-delay-end
         animation-delay-start
+    animation-range
+        animation-range-end
+        animation-range-start
     background
         background-attachment
         background-clip
@@ -609,7 +619,11 @@ All changes to this list should go through Blink's feature review process: http:
         flex-wrap
     font
         font-family
+        font-feature-settings
+        font-kerning
+        font-optical-sizing
         font-size
+        font-size-adjust
         font-stretch
         font-style
         font-variant-alternates
@@ -618,6 +632,7 @@ All changes to this list should go through Blink's feature review process: http:
         font-variant-ligatures
         font-variant-numeric
         font-variant-position
+        font-variation-settings
         font-weight
         line-height
     font-synthesis

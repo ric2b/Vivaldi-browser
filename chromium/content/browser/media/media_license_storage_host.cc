@@ -9,8 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
@@ -28,6 +29,24 @@
 namespace content {
 
 using CdmFileId = MediaLicenseManager::CdmFileId;
+
+// static
+void MediaLicenseStorageHost::ReportDatabaseOpenError(
+    MediaLicenseStorageHostOpenError error,
+    bool is_incognito) {
+  DCHECK_NE(error, MediaLicenseStorageHostOpenError::kOk);
+  const std::string kDatabaseOpenErrorUmaName =
+      "Media.EME.MediaLicenseStorageHostOpenError";
+  base::UmaHistogramEnumeration(kDatabaseOpenErrorUmaName, error);
+
+  if (is_incognito) {
+    base::UmaHistogramEnumeration(kDatabaseOpenErrorUmaName + ".Incognito",
+                                  error);
+  } else {
+    base::UmaHistogramEnumeration(kDatabaseOpenErrorUmaName + ".NotIncognito",
+                                  error);
+  }
+}
 
 MediaLicenseStorageHost::MediaLicenseStorageHost(
     MediaLicenseManager* manager,
@@ -54,17 +73,23 @@ void MediaLicenseStorageHost::Open(const std::string& file_name,
 
   if (bucket_locator_.id.is_null()) {
     DVLOG(1) << "Could not retrieve valid bucket.";
+    ReportDatabaseOpenError(MediaLicenseStorageHostOpenError::kInvalidBucket,
+                            in_memory());
     std::move(callback).Run(Status::kFailure, mojo::NullAssociatedRemote());
     return;
   }
 
   if (file_name.empty()) {
     DVLOG(1) << "No file specified.";
+    ReportDatabaseOpenError(MediaLicenseStorageHostOpenError::kNoFileSpecified,
+                            in_memory());
     std::move(callback).Run(Status::kFailure, mojo::NullAssociatedRemote());
     return;
   }
 
   if (!CdmFileImpl::IsValidName(file_name)) {
+    ReportDatabaseOpenError(MediaLicenseStorageHostOpenError::kInvalidFileName,
+                            in_memory());
     std::move(callback).Run(Status::kFailure, mojo::NullAssociatedRemote());
     return;
   }
@@ -86,13 +111,15 @@ void MediaLicenseStorageHost::BindReceiver(
   receivers_.Add(this, std::move(receiver), binding_context);
 }
 
-void MediaLicenseStorageHost::DidOpenFile(const std::string& file_name,
-                                          BindingContext binding_context,
-                                          OpenCallback callback,
-                                          bool success) {
+void MediaLicenseStorageHost::DidOpenFile(
+    const std::string& file_name,
+    BindingContext binding_context,
+    OpenCallback callback,
+    MediaLicenseStorageHostOpenError error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!success) {
+  if (error != MediaLicenseStorageHostOpenError::kOk) {
+    ReportDatabaseOpenError(error, in_memory());
     std::move(callback).Run(Status::kFailure, mojo::NullAssociatedRemote());
     return;
   }

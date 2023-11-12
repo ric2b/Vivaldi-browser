@@ -64,11 +64,6 @@
 // ui::PAGE_TRANSITION_TYPED and returns without waiting for the page to load.
 + (void)startLoadingURL:(NSString*)spec;
 
-// If the current WebState is HTML content, will wait until the window ID is
-// injected. Returns YES if the injection is successful or if the WebState is
-// not HTML content.
-+ (BOOL)waitForWindowIDInjectionIfNeeded;
-
 // Returns YES if the current WebState is loading.
 + (BOOL)isLoading;
 
@@ -215,11 +210,6 @@
 // Returns YES if the current WebState in window with given number is loading.
 + (BOOL)isLoadingInWindowWithNumber:(int)windowNumber [[nodiscard]];
 
-// If the current WebState in window with given number is HTML content, will
-// wait until the window ID is injected. Returns YES if the injection is
-// successful or if the WebState is not HTML content.
-+ (BOOL)waitForWindowIDInjectionIfNeededInWindowWithNumber:(int)windowNumber;
-
 // Returns YES if the current WebState in window with given number contains
 // `text`.
 + (BOOL)webStateContainsText:(NSString*)text
@@ -365,6 +355,11 @@
 + (NSError*)waitForSyncFeatureEnabled:(BOOL)isEnabled
                           syncTimeout:(base::TimeDelta)timeout;
 
+// Waits for sync to become fully active; see
+// SyncService::TransportState::ACTIVE for details. If not succeeded a
+// GREYAssert is induced.
++ (NSError*)waitForSyncTransportStateActiveWithTimeout:(base::TimeDelta)timeout;
+
 // Returns the current sync cache GUID. The sync server must be running when
 // calling this.
 + (NSString*)syncCacheGUID;
@@ -450,6 +445,11 @@
 // SessionsHierarchy class for documentation regarding the verification.
 + (NSError*)verifySessionsOnSyncServerWithSpecs:(NSArray<NSString*>*)specs;
 
+// Verifies the URLs (in the HISTORY data type) on the Sync FakeServer.
+// `specs` is the collection of expected URLs. On failure, returns a NSError
+// describing the failure.
++ (NSError*)verifyHistoryOnSyncServerWithURLs:(NSArray<NSURL*>*)URLs;
+
 // Verifies that `count` entities of the given `type` and `name` exist on the
 // sync FakeServer. Folders are not included in this count. Returns NSError
 // if there is a failure or if the count does not match.
@@ -502,6 +502,9 @@
 // Returns YES if DemographicMetricsReporting feature is enabled.
 + (BOOL)isDemographicMetricsReportingEnabled [[nodiscard]];
 
+// Returns YES if the SyncEnableHistoryDataType feature is enabled.
++ (BOOL)isSyncHistoryDataTypeEnabled [[nodiscard]];
+
 // Returns YES if the `launchSwitch` is found in host app launch switches.
 + (BOOL)appHasLaunchSwitch:(NSString*)launchSwitch;
 
@@ -522,12 +525,6 @@
 
 // Returns whether the NewOverflowMenu feature is enabled.
 + (BOOL)isNewOverflowMenuEnabled;
-
-// Returns whether the OmniboxPopupUpdatedUI feature is enabled.
-+ (BOOL)isNewOmniboxPopupEnabled;
-
-// Returns whether the kIOSNewOmniboxImplementation feature is enabled.
-+ (BOOL)isExperimentalOmniboxEnabled;
 
 // Returns whether the UseLensToSearchForImage feature is enabled.
 + (BOOL)isUseLensToSearchForImageEnabled;

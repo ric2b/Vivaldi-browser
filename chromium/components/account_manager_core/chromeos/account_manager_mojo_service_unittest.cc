@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
@@ -283,6 +283,13 @@ class AccountManagerMojoServiceTest : public ::testing::Test {
                        const GoogleServiceAuthError& error) {
     account_manager_mojo_service_->ReportAuthError(
         account_manager::ToMojoAccountKey(account_key),
+        account_manager::ToMojoGoogleServiceAuthError(error));
+  }
+
+  void ReportAuthError(crosapi::mojom::AccountKeyPtr account_key_ptr,
+                       const GoogleServiceAuthError& error) {
+    account_manager_mojo_service_->ReportAuthError(
+        std::move(account_key_ptr),
         account_manager::ToMojoGoogleServiceAuthError(error));
   }
 
@@ -727,6 +734,28 @@ TEST_F(AccountManagerMojoServiceTest,
   FlushMojoForTesting();
 
   // Transient errors should not be reported.
+  EXPECT_EQ(0, observer.GetNumAuthErrors());
+}
+
+// Regression test for http://b/266465922
+TEST_F(AccountManagerMojoServiceTest,
+       ReportAuthErrorGracefullyHandlesInvalidAccountIds) {
+  // Set up observer.
+  ASSERT_TRUE(InitializeAccountManager());
+  TestAccountManagerObserver observer;
+  observer.Observe(account_manager_async_waiter());
+  ASSERT_EQ(1, GetNumObservers());
+
+  EXPECT_EQ(0, observer.GetNumAuthErrors());
+  const GoogleServiceAuthError error =
+      GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+          GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+              CREDENTIALS_REJECTED_BY_SERVER);
+  // Report an error for an invalid (empty) account.
+  ReportAuthError(crosapi::mojom::AccountKey::New(), error);
+  FlushMojoForTesting();
+
+  // No error should be reported and we should not crash.
   EXPECT_EQ(0, observer.GetNumAuthErrors());
 }
 

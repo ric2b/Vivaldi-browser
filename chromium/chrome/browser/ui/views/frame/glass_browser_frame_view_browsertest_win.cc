@@ -6,10 +6,11 @@
 
 #include <tuple>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -22,8 +23,8 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -169,8 +170,7 @@ class WebAppGlassBrowserFrameViewTest : public InProcessBrowserTest {
       return false;
     glass_frame_view_ = static_cast<GlassBrowserFrameView*>(frame_view);
 
-    web_app_frame_toolbar_ =
-        glass_frame_view_->web_app_frame_toolbar_for_testing();
+    web_app_frame_toolbar_ = browser_view_->web_app_frame_toolbar_for_testing();
     DCHECK(web_app_frame_toolbar_);
     DCHECK(web_app_frame_toolbar_->GetVisible());
     return true;
@@ -208,8 +208,10 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewTest, MaximizedLayout) {
   glass_frame_view_->frame()->Maximize();
   RunScheduledLayouts();
 
-  DCHECK_GT(glass_frame_view_->window_title_for_testing()->x(), 0);
-  DCHECK_GE(glass_frame_view_->web_app_frame_toolbar_for_testing()->y(), 0);
+  views::View* const window_title =
+      glass_frame_view_->GetViewByID(VIEW_ID_WINDOW_TITLE);
+  DCHECK_GT(window_title->x(), 0);
+  DCHECK_GE(web_app_frame_toolbar_->y(), 0);
 }
 
 IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewTest, RTLTopRightHitTest) {
@@ -250,13 +252,13 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewTest, ContainerHeight) {
       ->LayoutRootViewIfNecessary();
 
   EXPECT_EQ(
-      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      web_app_frame_toolbar_->height(),
       glass_frame_view_->caption_button_container_for_testing()->height());
 
   glass_frame_view_->frame()->Maximize();
 
   EXPECT_EQ(
-      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      web_app_frame_toolbar_->height(),
       glass_frame_view_->caption_button_container_for_testing()->height());
 }
 
@@ -289,7 +291,8 @@ class WebAppGlassBrowserFrameViewWindowControlsOverlayTest
     web_app_info->start_url = start_url;
     web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
-    web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
+    web_app_info->user_display_mode =
+        web_app::mojom::UserDisplayMode::kStandalone;
     web_app_info->title = u"A Web App";
     web_app_info->display_override = display_overrides;
 
@@ -319,7 +322,7 @@ class WebAppGlassBrowserFrameViewWindowControlsOverlayTest
 
     glass_frame_view_ = static_cast<GlassBrowserFrameView*>(frame_view);
     auto* web_app_frame_toolbar =
-        glass_frame_view_->web_app_frame_toolbar_for_testing();
+        browser_view_->web_app_frame_toolbar_for_testing();
 
     DCHECK(web_app_frame_toolbar);
     DCHECK(web_app_frame_toolbar->GetVisible());
@@ -329,7 +332,9 @@ class WebAppGlassBrowserFrameViewWindowControlsOverlayTest
   void ToggleWindowControlsOverlayEnabledAndWait() {
     auto* web_contents = browser_view_->GetActiveWebContents();
     web_app_frame_toolbar_helper_.SetupGeometryChangeCallback(web_contents);
-    browser_view_->ToggleWindowControlsOverlayEnabled();
+    base::test::TestFuture<void> future;
+    browser_view_->ToggleWindowControlsOverlayEnabled(future.GetCallback());
+    EXPECT_TRUE(future.Wait());
     content::TitleWatcher title_watcher(web_contents, u"ongeometrychange");
     std::ignore = title_watcher.WaitAndGetTitle();
   }
@@ -350,13 +355,13 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewWindowControlsOverlayTest,
   ToggleWindowControlsOverlayEnabledAndWait();
 
   EXPECT_EQ(
-      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      browser_view_->web_app_frame_toolbar_for_testing()->height(),
       glass_frame_view_->caption_button_container_for_testing()->height());
 
   glass_frame_view_->frame()->Maximize();
 
   EXPECT_EQ(
-      glass_frame_view_->web_app_frame_toolbar_for_testing()->height(),
+      browser_view_->web_app_frame_toolbar_for_testing()->height(),
       glass_frame_view_->caption_button_container_for_testing()->height());
 }
 
@@ -453,7 +458,7 @@ IN_PROC_BROWSER_TEST_F(WebAppGlassBrowserFrameViewWindowControlsOverlayTest,
   glass_frame_view_->UpdateWindowTitle();
 
   WebAppFrameToolbarView* web_app_frame_toolbar =
-      glass_frame_view_->web_app_frame_toolbar_for_testing();
+      browser_view_->web_app_frame_toolbar_for_testing();
 
   // Verify that the center container doesn't consume space by expecting the
   // right container to consume the full width of the WebAppFrameToolbarView.

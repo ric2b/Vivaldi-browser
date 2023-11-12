@@ -12,7 +12,6 @@ include_rules = [
   "-chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity.java",
   "-chrome/android/java/src/org/chromium/chrome/browser/ChromeTabbedActivity2.java",
 
-  "+ash/components/arc",
   "+chrome/android/native_j_unittests_jni_headers",
   "+chrome/android/chrome_jni_headers",
   "+chrome/android/features/dev_ui",
@@ -74,7 +73,6 @@ include_rules = [
   "+components/browser_ui/site_settings",
   "+components/browser_ui/strings",
   "+components/browser_ui/styles",
-  "+components/browser_watcher",
   "+components/browsing_data/content",
   "+components/browsing_data/core",
   "+components/browsing_topics",
@@ -98,7 +96,6 @@ include_rules = [
   "+components/constrained_window",
   "+components/content_capture/browser",
   "+components/content_creation/notes/core",
-  "+components/content_creation/reactions/core",
   "+components/content_settings/browser",
   "+components/content_settings/core/browser",
   "+components/content_settings/core/test",
@@ -159,6 +156,7 @@ include_rules = [
   "+components/grit",
   "+components/guest_view/browser",
   "+components/handoff",
+  "+components/headless",
   "+components/heap_profiling",
   "+components/heavy_ad_intervention",
   "+components/history/content/browser",
@@ -293,9 +291,9 @@ include_rules = [
   "+components/security_state/content",
   "+components/security_state/core",
   "+components/segmentation_platform/public",
+  "+components/segmentation_platform/embedder",
   "+components/send_tab_to_self",
   "+components/services/app_service/public",
-  "+components/services/app_service/public/mojom",
   "+components/services/filesystem/public/mojom",
   "+components/services/heap_profiling",
   "+components/services/language_detection/public/cpp",
@@ -328,7 +326,8 @@ include_rules = [
   "+components/subresource_filter/core/browser",
   "+components/subresource_filter/core/common",
   "+components/subresource_filter/core/mojom",
-  "+components/supervised_user_error_page",
+  "+components/supervised_user/core/browser",
+  "+components/supervised_user/core/common",
   "+components/sync",
   "+components/sync_bookmarks",
   "+components/sync_device_info",
@@ -398,8 +397,7 @@ include_rules = [
   "+media/audio", # For media audio hang monitor.
   "+media/base",  # For media switches
   "+media/capabilities", # For InMemoryVideoDecodeStatsDB
-  "+media/cdm/cdm_paths.h",
-  "+media/cdm/win/media_foundation_cdm.h",
+  "+media/cdm",
   "+media/remoting/device_capability_checker.h",
   "+media/capture",
   "+media/midi",  # For midi switches
@@ -453,15 +451,15 @@ include_rules = [
   "+third_party/widevine/cdm/widevine_cdm_common.h",
   "+chrome/services/machine_learning",
   "+chrome/services/speech",
+
   # Code under //ash should be accessed via its public API. See //ash/README.md.
   "-ash",
-  "+ash/components",
+  "+ash/components/arc",
   "+ash/constants",
-  "+ash/webui",
-  "+ash/public",
   "+ash/keyboard/ui/grit",
   "+ash/keyboard/ui/resources",
-  "+ash/services",
+  "+ash/public",
+  "+ash/webui",
 
   # The message center should only be accessed through
   # //chrome/browser/notifications.
@@ -485,6 +483,7 @@ include_rules = [
   # TODO(crbug.com/1112591): Remove the exceptions below.
   "-chrome/browser/ui/views",
   "+chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h",
+  "+chrome/browser/ui/views/bubble/bubble_contents_wrapper_service_factory.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_lacros.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h",
@@ -585,5 +584,8 @@ specific_include_rules = {
   ],
   "browsing_data_model_browsertest.cc" : [
     "+components/services/storage/shared_storage/shared_storage_manager.h",
+  ],
+  "render_view_context_menu_browsertest.cc" : [
+    "+third_party/libwebp/src/src/webp/decode.h",
   ]
 }

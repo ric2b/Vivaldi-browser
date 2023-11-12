@@ -17,11 +17,11 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/wallpaper/wallpaper_utils/wallpaper_ephemeral_user.h"
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/containers/adapters.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -352,17 +352,35 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
                         prefs::kSyncableWallpaperInfo);
   }
 
-  void CacheProminentColors(const AccountId& account_id,
-                            const std::vector<SkColor>& colors) override {
-    WallpaperInfo old_info;
-    if (!GetLocalWallpaperInfo(account_id, &old_info)) {
-      return;
+  absl::optional<WallpaperCalculatedColors> GetCachedWallpaperColors(
+      base::StringPiece location) const override {
+    absl::optional<std::vector<SkColor>> cached_colors =
+        GetCachedProminentColors(location);
+    absl::optional<SkColor> cached_k_mean_color = GetCachedKMeanColor(location);
+    if (!features::IsJellyEnabled()) {
+      if (cached_colors.has_value() && cached_k_mean_color.has_value()) {
+        return WallpaperCalculatedColors(cached_colors.value(),
+                                         cached_k_mean_color.value(),
+                                         SK_ColorTRANSPARENT);
+      }
+
+      return absl::nullopt;
     }
 
-    // TODO(crbug.com/787134): A blank key cannot be used as a key. This should
-    // be fixed (with a key that will not collide).
-    if (old_info.location.empty())
+    absl::optional<SkColor> cached_celebi_color = GetCelebiColor(location);
+    if (cached_k_mean_color.has_value() && cached_celebi_color.has_value()) {
+      return WallpaperCalculatedColors({}, cached_k_mean_color.value(),
+                                       cached_celebi_color.value());
+    }
+
+    return absl::nullopt;
+  }
+
+  void CacheProminentColors(base::StringPiece location,
+                            const std::vector<SkColor>& colors) override {
+    if (location.empty()) {
       return;
+    }
 
     ScopedDictPrefUpdate wallpaper_colors_update(local_state_,
                                                  prefs::kWallpaperColors);
@@ -370,8 +388,7 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
     for (SkColor color : colors)
       wallpaper_colors.Append(static_cast<double>(color));
     base::Value wallpaper_colors_value(std::move(wallpaper_colors));
-    wallpaper_colors_update->Set(old_info.location,
-                                 std::move(wallpaper_colors_value));
+    wallpaper_colors_update->Set(location, std::move(wallpaper_colors_value));
   }
 
   void RemoveProminentColors(const AccountId& account_id) override {
@@ -388,7 +405,6 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
 
   absl::optional<std::vector<SkColor>> GetCachedProminentColors(
       const base::StringPiece location) const override {
-    // TODO(crbug.com/787134): When we can handle blank keys, remove this.
     if (location.empty())
       return absl::nullopt;
 
@@ -407,47 +423,30 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
     return cached_colors_out;
   }
 
-  void CacheKMeanColor(const AccountId& account_id,
+  void CacheKMeanColor(base::StringPiece location,
                        SkColor k_mean_color) override {
-    WallpaperInfo old_info;
-    if (!GetLocalWallpaperInfo(account_id, &old_info)) {
-      return;
-    }
-
-    // TODO(crbug.com/787134): A blank key cannot be used as a key. This should
-    // be fixed (with a key that will not collide).
-    if (old_info.location.empty())
-      return;
-
-    ScopedDictPrefUpdate k_mean_colors(local_state_,
-                                       prefs::kWallpaperMeanColors);
-    k_mean_colors->Set(old_info.location, static_cast<double>(k_mean_color));
+    CacheSingleColor(prefs::kWallpaperMeanColors, location, k_mean_color);
   }
 
   absl::optional<SkColor> GetCachedKMeanColor(
       const base::StringPiece location) const override {
-    // TODO(crbug.com/787134): When we can handle blank keys, remove this.
-    if (location.empty())
-      return absl::nullopt;
-
-    const base::Value::Dict& k_mean_colors =
-        local_state_->GetDict(prefs::kWallpaperMeanColors);
-    auto* k_mean_color_value = k_mean_colors.Find(location);
-    if (!k_mean_color_value)
-      return absl::nullopt;
-    return static_cast<SkColor>(k_mean_color_value->GetDouble());
+    return GetSingleCachedColor(prefs::kWallpaperMeanColors, location);
   }
 
   void RemoveKMeanColor(const AccountId& account_id) override {
-    WallpaperInfo old_info;
-    if (!GetLocalWallpaperInfo(account_id, &old_info)) {
-      return;
-    }
+    RemoveCachedColor(prefs::kWallpaperMeanColors, account_id);
+  }
 
-    // Remove the color cache of the previous wallpaper if it exists.
-    ScopedDictPrefUpdate k_mean_colors(local_state_,
-                                       prefs::kWallpaperMeanColors);
-    k_mean_colors->Remove(old_info.location);
+  void CacheCelebiColor(base::StringPiece location,
+                        SkColor celebi_color) override {
+    CacheSingleColor(prefs::kWallpaperCelebiColors, location, celebi_color);
+  }
+  absl::optional<SkColor> GetCelebiColor(
+      const base::StringPiece location) const override {
+    return GetSingleCachedColor(prefs::kWallpaperCelebiColors, location);
+  }
+  void RemoveCelebiColor(const AccountId& account_id) override {
+    RemoveCachedColor(prefs::kWallpaperCelebiColors, account_id);
   }
 
   bool SetDailyGooglePhotosWallpaperIdCache(
@@ -543,6 +542,50 @@ class WallpaperPrefManagerImpl : public WallpaperPrefManager {
   }
 
  private:
+  // Caches a single `color` in the dictionary for `pref_name`.
+  void CacheSingleColor(const std::string& pref_name,
+                        base::StringPiece location,
+                        SkColor color) {
+    // Blank keys are not allowed and will not be stored.
+    if (location.empty()) {
+      return;
+    }
+
+    ScopedDictPrefUpdate color_dict(local_state_, pref_name);
+    color_dict->Set(location, static_cast<double>(color));
+  }
+
+  // Returns the cached color for `location` in `pref_name` if it can be found.
+  absl::optional<SkColor> GetSingleCachedColor(
+      const std::string& pref_name,
+      base::StringPiece location) const {
+    // We don't support blank keys.
+    if (location.empty()) {
+      return absl::nullopt;
+    }
+
+    const base::Value::Dict& color_dict = local_state_->GetDict(pref_name);
+    auto* color_value = color_dict.Find(location);
+    if (!color_value) {
+      return absl::nullopt;
+    }
+    return static_cast<SkColor>(color_value->GetDouble());
+  }
+
+  // Deletes the cached color for the current wallpaper of `account_id` in
+  // `pref_name`.
+  void RemoveCachedColor(const std::string& pref_name,
+                         const AccountId& account_id) {
+    WallpaperInfo old_info;
+    if (!GetLocalWallpaperInfo(account_id, &old_info)) {
+      return;
+    }
+
+    // Remove the color cache of the previous wallpaper if it exists.
+    ScopedDictPrefUpdate color_dict(local_state_, pref_name);
+    color_dict->Remove(old_info.location);
+  }
+
   PrefService* local_state_ = nullptr;
   std::unique_ptr<WallpaperProfileHelper> profile_helper_;
 
@@ -592,6 +635,7 @@ void WallpaperPrefManager::RegisterLocalStatePrefs(
   registry->RegisterDictionaryPref(prefs::kUserWallpaperInfo);
   registry->RegisterDictionaryPref(prefs::kWallpaperColors);
   registry->RegisterDictionaryPref(prefs::kWallpaperMeanColors);
+  registry->RegisterDictionaryPref(prefs::kWallpaperCelebiColors);
   registry->RegisterDictionaryPref(prefs::kRecentDailyGooglePhotosWallpapers);
 }
 

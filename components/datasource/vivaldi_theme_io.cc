@@ -17,7 +17,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -338,7 +337,7 @@ class Exporter : public base::RefCountedThreadSafe<Exporter> {
   }
 
   const scoped_refptr<base::SequencedTaskRunner> ui_thread_runner_ =
-      base::SequencedTaskRunnerHandle::Get();
+      base::SequencedTaskRunner::GetCurrentDefault();
 
   const scoped_refptr<base::SequencedTaskRunner> work_sequence_ =
       GetOneShotFileTaskRunner();
@@ -604,7 +603,7 @@ class Importer : public base::RefCountedThreadSafe<Importer> {
   base::WeakPtr<Profile> profile_;
 
   const scoped_refptr<base::SequencedTaskRunner> ui_thread_runner_ =
-      base::SequencedTaskRunnerHandle::Get();
+      base::SequencedTaskRunner::GetCurrentDefault();
 
   const scoped_refptr<base::SequencedTaskRunner> work_sequence_ =
       GetOneShotFileTaskRunner();

@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/observer_list.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -46,7 +46,7 @@ RulesCacheDelegate::RulesCacheDelegate(Type type, bool log_storage_init_delay)
       log_storage_init_delay_(log_storage_init_delay),
       notified_registry_(false) {}
 
-RulesCacheDelegate::~RulesCacheDelegate() {}
+RulesCacheDelegate::~RulesCacheDelegate() = default;
 
 // Returns the key to use for storing whether the rules have been stored.
 // static

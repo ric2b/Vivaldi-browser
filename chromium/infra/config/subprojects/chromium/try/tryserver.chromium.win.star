@@ -5,31 +5,29 @@
 
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "goma", "os", "reclient")
+load("//lib/builders.star", "os", "reclient")
 load("//lib/try.star", "try_")
 load("//lib/consoles.star", "consoles")
 
 try_.defaults.set(
-    builder_group = "tryserver.chromium.win",
     executable = try_.DEFAULT_EXECUTABLE,
+    builder_group = "tryserver.chromium.win",
+    pool = try_.DEFAULT_POOL,
     builderless = True,
     cores = 8,
     os = os.WINDOWS_DEFAULT,
-    pool = try_.DEFAULT_POOL,
-    service_account = try_.DEFAULT_SERVICE_ACCOUNT,
     compilator_cores = 16,
-    compilator_goma_jobs = goma.jobs.J300,
     compilator_reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     execution_timeout = try_.DEFAULT_EXECUTION_TIMEOUT,
-    goma_backend = goma.backend.RBE_PROD,
     orchestrator_cores = 2,
     reclient_instance = reclient.instance.DEFAULT_UNTRUSTED,
     reclient_jobs = reclient.jobs.LOW_JOBS_FOR_CQ,
+    service_account = try_.DEFAULT_SERVICE_ACCOUNT,
 )
 
 consoles.list_view(
     name = "tryserver.chromium.win",
-    branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
 )
 
 try_.builder(
@@ -43,14 +41,12 @@ try_.builder(
         "ci/win-asan",
     ],
     execution_timeout = 6 * time.hour,
-    goma_backend = None,
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
 )
 
 try_.builder(
     name = "win-celab-try-rel",
     executable = "recipe:celab",
-    goma_backend = None,
     properties = {
         "exclude": "chrome_only",
         "pool_name": "celab-chromium-try",
@@ -61,20 +57,18 @@ try_.builder(
 
 try_.builder(
     name = "win-libfuzzer-asan-rel",
-    branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
     executable = "recipe:chromium_libfuzzer_trybot",
     builderless = False,
     os = os.WINDOWS_ANY,
     main_list_view = "try",
-    goma_backend = None,
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(),
 )
 
 try_.orchestrator_builder(
     name = "win-rel",
-    branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
-    compilator = "win-rel-compilator",
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
     mirrors = [
         "ci/Win x64 Builder",
         "ci/Win10 Tests x64",
@@ -86,13 +80,16 @@ try_.orchestrator_builder(
             condition = builder_config.rts_condition.QUICK_RUN_ONLY,
         ),
     ),
-    main_list_view = "try",
-    check_for_flakiness = True,
+    compilator = "win-rel-compilator",
+    # TODO (crbug.com/1413505) - disabling due to high pending times. test
+    # history inaccuracies causing additional tests to be run.
+    # check_for_flakiness = True,
     coverage_test_types = ["unit", "overall"],
-    tryjob = try_.job(),
     experiments = {
         "chromium_rts.inverted_rts": 100,
     },
+    main_list_view = "try",
+    tryjob = try_.job(),
     use_clang_coverage = True,
     # TODO (crbug.com/1372179): Use orchestrator pool once overloaded test pools
     # are addressed
@@ -101,11 +98,11 @@ try_.orchestrator_builder(
 
 try_.compilator_builder(
     name = "win-rel-compilator",
-    branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
-    main_list_view = "try",
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
     check_for_flakiness = True,
     # TODO (crbug.com/1245171): Revert when root issue is fixed
     grace_period = 4 * time.minute,
+    main_list_view = "try",
 )
 
 try_.builder(
@@ -113,12 +110,11 @@ try_.builder(
     mirrors = [
         "ci/win32-archive-rel",
     ],
-    goma_backend = None,
 )
 
 try_.builder(
     name = "win_chromium_compile_dbg_ng",
-    branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
     mirrors = [
         "ci/Win Builder (dbg)",
     ],
@@ -130,7 +126,6 @@ try_.builder(
     cores = 16,
     ssd = True,
     main_list_view = "try",
-    goma_backend = None,
     reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CQ,
     tryjob = try_.job(
         # TODO(crbug.com/1335555) Remove once cancelling doesn't wipe
@@ -148,7 +143,6 @@ try_.builder(
         include_all_triggered_testers = True,
         is_compile_only = True,
     ),
-    goma_backend = None,
 )
 
 try_.builder(
@@ -156,7 +150,6 @@ try_.builder(
     mirrors = [
         "ci/Win x64 Builder",
     ],
-    goma_backend = None,
 )
 
 try_.builder(
@@ -166,7 +159,6 @@ try_.builder(
     cores = 32,
     os = os.WINDOWS_ANY,
     execution_timeout = 6 * time.hour,
-    goma_backend = None,
     reclient_instance = None,
 )
 
@@ -184,7 +176,6 @@ try_.builder(
         "ci/Win10 Tests x64 (dbg)",
     ],
     os = os.WINDOWS_10,
-    goma_backend = None,
 )
 
 try_.builder(
@@ -212,7 +203,6 @@ try_.builder(
     builderless = True,
     os = os.WINDOWS_10,
     coverage_test_types = ["unit", "overall"],
-    goma_backend = None,
     use_clang_coverage = True,
 )
 
@@ -225,30 +215,6 @@ try_.builder(
         "ci/Win10 x64 Release (NVIDIA)",
     ],
     os = os.WINDOWS_10,
-)
-
-try_.orchestrator_builder(
-    name = "win-rel-inverse-fyi",
-    compilator = "win-rel-compilator",
-    mirrors = [
-        "ci/Win x64 Builder",
-        "ci/Win10 Tests x64",
-        "ci/GPU Win x64 Builder",
-        "ci/Win10 x64 Release (NVIDIA)",
-    ],
-    try_settings = builder_config.try_settings(
-        rts_config = builder_config.rts_config(
-            condition = builder_config.rts_condition.QUICK_RUN_ONLY,
-        ),
-    ),
-    check_for_flakiness = True,
-    coverage_test_types = ["unit", "overall"],
-    experiments = {
-        "chromium_rts.inverted_rts": 100,
-        "chromium_rts.inverted_rts_bail_early": 100,
-    },
-    use_clang_coverage = True,
-    use_orchestrator_pool = True,
 )
 
 try_.builder(
@@ -264,9 +230,15 @@ try_.builder(
     ],
 )
 
+try_.builder(
+    name = "win10-code-coverage",
+    mirrors = ["ci/win10-code-coverage"],
+    execution_timeout = 20 * time.hour,
+)
+
 try_.gpu.optional_tests_builder(
     name = "win_optional_gpu_tests_rel",
-    branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
+    branch_selector = branches.selector.WINDOWS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -289,7 +261,6 @@ try_.gpu.optional_tests_builder(
     ),
     os = os.WINDOWS_DEFAULT,
     main_list_view = "try",
-    goma_backend = None,
     tryjob = try_.job(
         location_filters = [
             cq.location_filter(path_regexp = "chrome/browser/vr/.+"),

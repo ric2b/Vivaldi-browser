@@ -45,7 +45,6 @@ static_library("notes") {
     "//ui/base:base",
     "//url:url",
     "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
     "//vivaldi/sync/notes:sync_notes",
     "//vivaldi/sync/file_sync",
   ]
@@ -62,6 +61,7 @@ static_library("notes") {
     deps += [
       "//components/keyed_service/content:content",
       "//content/public/browser",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
     ]
   }
 }

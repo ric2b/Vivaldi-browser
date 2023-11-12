@@ -65,6 +65,10 @@ BASE_FEATURE(kUseDnsHttpsSvcbAlpn,
              "UseDnsHttpsSvcbAlpn",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSHA1ServerSignature,
+             "SHA1ServerSignature",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kEnableTLS13EarlyData,
              "EnableTLS13EarlyData",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -93,10 +97,6 @@ BASE_FEATURE(kPartitionConnectionsByNetworkIsolationKey,
              "PartitionConnectionsByNetworkIsolationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kForceIsolationInfoFrameOriginToTopLevelFrame,
-             "ForceIsolationInfoFrameOriginToTopLevelFrame",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPartitionHttpServerPropertiesByNetworkIsolationKey,
              "PartitionHttpServerPropertiesByNetworkIsolationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -109,10 +109,6 @@ BASE_FEATURE(kPartitionNelAndReportingByNetworkIsolationKey,
              "PartitionNelAndReportingByNetworkIsolationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnableDoubleKeyNetworkAnonymizationKey,
-             "EnableDoubleKeyNetworkAnonymizationKey",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnableCrossSiteFlagNetworkAnonymizationKey,
              "EnableCrossSiteFlagNetworkAnonymizationKey",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -123,6 +119,10 @@ BASE_FEATURE(kTLS13KeyUpdate,
 
 BASE_FEATURE(kPermuteTLSExtensions,
              "PermuteTLSExtensions",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPostQuantumKyber,
+             "PostQuantumKyber",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPostQuantumCECPQ2,
@@ -133,15 +133,6 @@ BASE_FEATURE(kPostQuantumCECPQ2SomeDomains,
              base::FEATURE_DISABLED_BY_DEFAULT);
 const base::FeatureParam<std::string>
     kPostQuantumCECPQ2Prefix(&kPostQuantumCECPQ2SomeDomains, "prefix", "a");
-
-// This is feature-gated, but enabled, to act as a kill switch, in case there
-// are unforeseen consequences to fully removing TLS 1.0/1.1.
-//
-// TODO(https://crbug.com/1376584): Remove this feature and all TLS 1.0/1.1
-// support code.
-BASE_FEATURE(kSSLMinVersionAtLeastTLS12,
-             "SSLMinVersionAtLeastTLS12",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNetUnusedIdleSocketTimeout,
              "NetUnusedIdleSocketTimeout",
@@ -181,6 +172,12 @@ const base::FeatureParam<int> kChromeRootStoreSysImpl{&kChromeRootStoreUsed,
                                                       "sysimpl", 0};
 #endif /* BUILDFLAG(IS_MAC) */
 #endif /* BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED) */
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(USE_NSS_CERTS) || BUILDFLAG(IS_WIN)
+BASE_FEATURE(kTrustStoreTrustedLeafSupport,
+             "TrustStoreTrustedLeafSupport",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif
 
 BASE_FEATURE(kTurnOffStreamingMediaCachingOnBattery,
              "TurnOffStreamingMediaCachingOnBattery",
@@ -238,10 +235,6 @@ BASE_FEATURE(kCookieSameSiteConsidersRedirectChain,
              "CookieSameSiteConsidersRedirectChain",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kSamePartyCookiesConsideredFirstParty,
-             "SamePartyCookiesConsideredFirstParty",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kSamePartyAttributeEnabled,
              "SamePartyAttributeEnabled",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -279,56 +272,6 @@ BASE_FEATURE(kBlockSetCookieHeader,
 BASE_FEATURE(kOptimisticBlockfileWrite,
              "OptimisticBlockfileWrite",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Read as much of the net::URLRequest as there is space in the Mojo data pipe.
-BASE_FEATURE(kOptimizeNetworkBuffers,
-             "OptimizeNetworkBuffers2",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-const base::FeatureParam<int> kOptimizeNetworkBuffersBytesReadLimit{
-    &kOptimizeNetworkBuffers, "bytes_read_limit", 64 * 1024};
-
-// If InputStream.available() returns less than this,
-// kOptimizeNetworkBuffersMinInputStreamReadSize will be used instead.
-const base::FeatureParam<int>
-    kOptimizeNetworkBuffersMinInputStreamAvailableValueToIgnore{
-        &kOptimizeNetworkBuffers, "min_input_stream_available_value_to_ignore",
-        16};
-
-// The smallest amount we'll try to read at a time if InputStream.available()
-// returned less than
-// kOptimizeNetworkBuffersMinInputStreamAvailableValueToIgnore.
-const base::FeatureParam<int> kOptimizeNetworkBuffersMinInputStreamReadSize{
-    &kOptimizeNetworkBuffers, "min_input_stream_read_size", 1024};
-
-const base::FeatureParam<int>
-    kOptimizeNetworkBuffersMaxInputStreamBytesToReadWhenAvailableUnknown{
-        &kOptimizeNetworkBuffers, "max_input_stream_bytes_available_unknown",
-        2 * 1024};
-
-const base::FeatureParam<int>
-    kOptimizeNetworkBuffersFilterSourceStreamBufferSize{
-        &kOptimizeNetworkBuffers, "filter_source_stream_buffer_size",
-        32 * 1024};
-
-const base::FeatureParam<bool> kOptimizeNetworkBuffersInputStreamCheckAvailable{
-    &kOptimizeNetworkBuffers, "input_stream_check_available", true};
-
-BASE_FEATURE(kStorageAccessAPI,
-             "StorageAccessAPI",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-constexpr int kStorageAccessAPIDefaultImplicitGrantLimit = 5;
-const base::FeatureParam<int> kStorageAccessAPIImplicitGrantLimit{
-    &kStorageAccessAPI, "storage-access-api-implicit-grant-limit",
-    kStorageAccessAPIDefaultImplicitGrantLimit};
-const base::FeatureParam<bool> kStorageAccessAPIGrantsUnpartitionedStorage(
-    &kStorageAccessAPI,
-    "storage-access-api-grants-unpartitioned-storage",
-    false);
-const base::FeatureParam<bool> kStorageAccessAPIAutoGrantInFPS{
-    &kStorageAccessAPI, "storage_access_api_auto_grant_in_fps", true};
-const base::FeatureParam<bool> kStorageAccessAPIAutoDenyOutsideFPS{
-    &kStorageAccessAPI, "storage_access_api_auto_deny_outside_fps", true};
 
 // Enables partitioning of third party storage (IndexedDB, CacheStorage, etc.)
 // by the top level site to reduce fingerprinting.
@@ -375,5 +318,16 @@ BASE_FEATURE(kPlatformKeyProbeSHA256,
              "PlatformKeyProbeSHA256",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
+
+// Enable support for HTTP extensible priorities (RFC 9218)
+BASE_FEATURE(kPriorityIncremental,
+             "PriorityIncremental",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Prefetch to follow normal semantics instead of 5-minute rule
+// https://crbug.com/1345207
+BASE_FEATURE(kPrefetchFollowsNormalCacheSemantics,
+             "PrefetchFollowsNormalCacheSemantics",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace net::features

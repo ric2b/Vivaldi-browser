@@ -4,8 +4,8 @@
 
 #include "chromeos/ash/components/dbus/arc/arcvm_data_migrator_client.h"
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -51,6 +51,20 @@ class ArcVmDataMigratorClientImpl : public ArcVmDataMigratorClient {
       delete;
 
   // ArcVmDataMigratorClient overrides:
+  void HasDataToMigrate(
+      const arc::data_migrator::HasDataToMigrateRequest& request,
+      chromeos::DBusMethodCallback<bool> callback) override {
+    dbus::MethodCall method_call(
+        arc::data_migrator::kArcVmDataMigratorInterface,
+        arc::data_migrator::kHasDataToMigrateMethod);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendProtoAsArrayOfBytes(request);
+    proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::BindOnce(&ArcVmDataMigratorClientImpl::OnBoolMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  }
+
   void StartMigration(const arc::data_migrator::StartMigrationRequest& request,
                       chromeos::VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(
@@ -89,6 +103,22 @@ class ArcVmDataMigratorClientImpl : public ArcVmDataMigratorClient {
   void OnVoidMethod(chromeos::VoidDBusMethodCallback callback,
                     dbus::Response* response) {
     std::move(callback).Run(response);
+  }
+
+  void OnBoolMethod(chromeos::DBusMethodCallback<bool> callback,
+                    dbus::Response* response) {
+    if (!response) {
+      std::move(callback).Run(absl::nullopt);
+      return;
+    }
+    dbus::MessageReader reader(response);
+    bool result = false;
+    if (!reader.PopBool(&result)) {
+      LOG(ERROR) << "Invalid response: " << response->ToString();
+      std::move(callback).Run(absl::nullopt);
+      return;
+    }
+    std::move(callback).Run(result);
   }
 
   base::ObserverList<Observer> observers_;

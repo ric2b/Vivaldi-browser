@@ -5,10 +5,11 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_PEERCONNECTION_RTC_STATS_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_PEERCONNECTION_RTC_STATS_H_
 
-#include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/functional/callback.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_vector.h"
+#include "third_party/blink/renderer/platform/allow_discouraged_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/hash_map.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -28,7 +29,7 @@ enum class NonStandardGroupId;
 
 namespace blink {
 
-class RTCStats;
+class RTCStatsWrapper;
 class RTCStatsMember;
 
 PLATFORM_EXPORT BASE_DECLARE_FEATURE(WebRtcUnshipDeprecatedStats);
@@ -44,23 +45,30 @@ class PLATFORM_EXPORT RTCStatsReportPlatform {
  public:
   RTCStatsReportPlatform(
       const scoped_refptr<const webrtc::RTCStatsReport>& stats_report,
-      const Vector<webrtc::NonStandardGroupId>& exposed_group_ids);
+      const Vector<webrtc::NonStandardGroupId>& exposed_group_ids,
+      bool is_track_stats_deprecation_trial_enabled);
   virtual ~RTCStatsReportPlatform();
+
   // Creates a new report object that is a handle to the same underlying stats
   // report (the stats are not copied). The new report's iterator is reset,
   // useful when needing multiple iterators.
   std::unique_ptr<RTCStatsReportPlatform> CopyHandle() const;
 
   // Gets stats object by |id|, or null if no stats with that |id| exists.
-  std::unique_ptr<RTCStats> GetStats(const String& id) const;
+  std::unique_ptr<RTCStatsWrapper> GetStats(const String& id) const;
 
   // The next stats object, or null if the end has been reached.
-  std::unique_ptr<RTCStats> Next();
+  std::unique_ptr<RTCStatsWrapper> Next();
+
+  const webrtc::RTCStatsReport& stats_report() const { return *stats_report_; }
+  bool unship_deprecated_stats() const { return unship_deprecated_stats_; }
+  const webrtc::RTCStats* NextStats();
 
   // The number of stats objects.
   size_t Size() const;
 
  private:
+  const bool is_track_stats_deprecation_trial_enabled_;
   const bool unship_deprecated_stats_;
   const scoped_refptr<const webrtc::RTCStatsReport> stats_report_;
   webrtc::RTCStatsReport::ConstIterator it_;
@@ -70,17 +78,18 @@ class PLATFORM_EXPORT RTCStatsReportPlatform {
   const size_t size_;
 };
 
-class PLATFORM_EXPORT RTCStats {
+class PLATFORM_EXPORT RTCStatsWrapper {
  public:
-  RTCStats(const scoped_refptr<const webrtc::RTCStatsReport>& stats_owner,
-           const webrtc::RTCStats* stats,
-           const Vector<webrtc::NonStandardGroupId>& exposed_group_ids,
-           bool unship_deprecated_stats);
-  virtual ~RTCStats();
+  RTCStatsWrapper(
+      const scoped_refptr<const webrtc::RTCStatsReport>& stats_owner,
+      const webrtc::RTCStats* stats,
+      const Vector<webrtc::NonStandardGroupId>& exposed_group_ids,
+      bool unship_deprecated_stats);
+  virtual ~RTCStatsWrapper();
 
   String Id() const;
   String GetType() const;
-  double Timestamp() const;
+  double TimestampMs() const;
 
   size_t MembersCount() const;
   std::unique_ptr<RTCStatsMember> GetMember(size_t i) const;
@@ -91,7 +100,8 @@ class PLATFORM_EXPORT RTCStats {
   // Pointer to a stats object that is owned by |stats_owner_|.
   const webrtc::RTCStats* const stats_;
   // Members of the |stats_| object, equivalent to |stats_->Members()|.
-  const std::vector<const webrtc::RTCStatsMemberInterface*> stats_members_;
+  const std::vector<const webrtc::RTCStatsMemberInterface*> stats_members_
+      ALLOW_DISCOURAGED_TYPE("Matches webrtc::RTCStats::Members()");
 };
 
 class PLATFORM_EXPORT RTCStatsMember {
@@ -139,7 +149,8 @@ rtc::scoped_refptr<webrtc::RTCStatsCollectorCallback>
 CreateRTCStatsCollectorCallback(
     scoped_refptr<base::SingleThreadTaskRunner> main_thread,
     RTCStatsReportCallback callback,
-    const Vector<webrtc::NonStandardGroupId>& exposed_group_ids);
+    const Vector<webrtc::NonStandardGroupId>& exposed_group_ids,
+    bool is_track_stats_deprecation_trial_enabled);
 
 // A stats collector callback.
 // It is invoked on the WebRTC signaling thread and will post a task to invoke
@@ -155,7 +166,8 @@ class PLATFORM_EXPORT RTCStatsCollectorCallbackImpl
   RTCStatsCollectorCallbackImpl(
       scoped_refptr<base::SingleThreadTaskRunner> main_thread,
       RTCStatsReportCallback callback,
-      const Vector<webrtc::NonStandardGroupId>& exposed_group_ids);
+      const Vector<webrtc::NonStandardGroupId>& exposed_group_ids,
+      bool is_track_stats_deprecation_trial_enabled);
   ~RTCStatsCollectorCallbackImpl() override;
 
   void OnStatsDeliveredOnMainThread(
@@ -164,6 +176,7 @@ class PLATFORM_EXPORT RTCStatsCollectorCallbackImpl
   const scoped_refptr<base::SingleThreadTaskRunner> main_thread_;
   RTCStatsReportCallback callback_;
   Vector<webrtc::NonStandardGroupId> exposed_group_ids_;
+  bool is_track_stats_deprecation_trial_enabled_;
 };
 
 }  // namespace blink

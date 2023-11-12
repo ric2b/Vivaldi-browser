@@ -6,33 +6,31 @@
 
 #include "base/check.h"
 #include "base/check_op.h"
-#include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/json/json_writer.h"
-#include "base/ranges/algorithm.h"
 #include "base/time/time.h"
 #include "base/values.h"
-#include "components/attribution_reporting/filters.h"
-#include "content/browser/attribution_reporting/attribution_source_type.h"
+#include "components/attribution_reporting/source_type.mojom.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
 
 namespace content {
 
 namespace {
 
+using ::attribution_reporting::mojom::SourceType;
+
 constexpr base::TimeDelta kWindowDeadlineOffset = base::Hours(1);
 
-base::span<const base::TimeDelta> EarlyDeadlines(
-    AttributionSourceType source_type) {
+base::span<const base::TimeDelta> EarlyDeadlines(SourceType source_type) {
   static constexpr base::TimeDelta kEarlyDeadlinesNavigation[] = {
       base::Days(2),
       base::Days(7),
   };
 
   switch (source_type) {
-    case AttributionSourceType::kNavigation:
+    case SourceType::kNavigation:
       return kEarlyDeadlinesNavigation;
-    case AttributionSourceType::kEvent:
+    case SourceType::kEvent:
       return base::span<const base::TimeDelta>();
   }
 }
@@ -88,7 +86,7 @@ base::Time ComputeReportTime(const CommonSourceInfo& source,
   return ReportTimeFromDeadline(source.source_time(), deadline_to_use);
 }
 
-int NumReportWindows(AttributionSourceType source_type) {
+int NumReportWindows(SourceType source_type) {
   // Add 1 for the expiry deadline.
   return 1 + EarlyDeadlines(source_type).size();
 }
@@ -109,6 +107,10 @@ base::Time ReportTimeAtWindow(const CommonSourceInfo& source,
   return ReportTimeFromDeadline(source.source_time(), deadline);
 }
 
+base::Time LastTriggerTimeForReportTime(base::Time report_time) {
+  return report_time - kWindowDeadlineOffset;
+}
+
 std::string SerializeAttributionJson(base::ValueView body, bool pretty_print) {
   int options = pretty_print ? base::JSONWriter::OPTIONS_PRETTY_PRINT : 0;
 
@@ -117,63 +119,6 @@ std::string SerializeAttributionJson(base::ValueView body, bool pretty_print) {
       base::JSONWriter::WriteWithOptions(body, options, &output_json);
   DCHECK(success);
   return output_json;
-}
-
-bool AttributionFilterDataMatch(const attribution_reporting::FilterData& source,
-                                AttributionSourceType source_type,
-                                const attribution_reporting::Filters& trigger,
-                                bool negated) {
-  // A filter is considered matched if the filter key is only present either on
-  // the source or trigger, or the intersection of the filter values is
-  // non-empty.
-  // Returns true if all the filters matched.
-  //
-  // If the filters are negated, the behavior should be that every single filter
-  // key does not match between the two (negating the function result is not
-  // sufficient by the API definition).
-  return base::ranges::all_of(
-      trigger.filter_values(), [&](const auto& trigger_filter) {
-        if (trigger_filter.first ==
-            attribution_reporting::FilterData::kSourceTypeFilterKey) {
-          bool has_intersection = base::ranges::any_of(
-              trigger_filter.second, [&](const std::string& value) {
-                return value == AttributionSourceTypeToString(source_type);
-              });
-
-          return negated != has_intersection;
-        }
-
-        auto source_filter = source.filter_values().find(trigger_filter.first);
-        if (source_filter == source.filter_values().end())
-          return true;
-
-        // Desired behavior is to treat any empty set of values as a single
-        // unique value itself. This means:
-        //  - x:[] match x:[] is false when negated, and true otherwise.
-        //  - x:[1,2,3] match x:[] is true when negated, and false otherwise.
-        if (trigger_filter.second.empty())
-          return negated != source_filter->second.empty();
-
-        bool has_intersection = base::ranges::any_of(
-            trigger_filter.second, [&](const std::string& value) {
-              return base::Contains(source_filter->second, value);
-            });
-        // Negating filters are considered matched if the intersection of the
-        // filter values is empty.
-        return negated != has_intersection;
-      });
-}
-
-bool AttributionFiltersMatch(
-    const attribution_reporting::FilterData& source_filter_data,
-    AttributionSourceType source_type,
-    const attribution_reporting::Filters& trigger_filters,
-    const attribution_reporting::Filters& trigger_not_filters) {
-  return AttributionFilterDataMatch(source_filter_data, source_type,
-                                    trigger_filters) &&
-         AttributionFilterDataMatch(source_filter_data, source_type,
-                                    trigger_not_filters,
-                                    /*negated=*/true);
 }
 
 }  // namespace content

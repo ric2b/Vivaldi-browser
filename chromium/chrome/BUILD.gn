@@ -14,6 +14,7 @@ import("//build/config/ui.gni")
 import("//build/config/win/console_app.gni")
 import("//build/config/win/manifest.gni")
 import("//build/toolchain/toolchain.gni")
+import("//chrome/browser/buildflags.gni")
 import("//chrome/chrome_paks.gni")
 import("//chrome/common/features.gni")
 import("//chrome/process_version_rc_template.gni")
@@ -168,7 +169,10 @@ if (!is_android && !is_mac) {
     data_deps = []
 
     if (is_chromeos_ash) {
-      data_deps += [ "//sandbox/linux:chrome_sandbox" ]
+      data_deps += [
+        "//components/variations/cros:evaluate_seed",
+        "//sandbox/linux:chrome_sandbox",
+      ]
       deps += [
         "//components/exo/wayland:ui_controls_protocol_stub",
         "//components/exo/wayland:weston_test_stub",
@@ -200,6 +204,7 @@ if (!is_android && !is_mac) {
         "//base",
         "//build:branding_buildflags",
         "//chrome/app:chrome_exe_main_exports",
+        "//chrome/app:exit_code_watcher",
         "//chrome/app/version_assembly:chrome_exe_manifest",
         "//chrome/browser:active_use_util",
         "//chrome/browser:chrome_process_finder",
@@ -210,7 +215,6 @@ if (!is_android && !is_mac) {
         "//chrome/install_static:secondary_module",
         "//chrome/installer/util:constants",
         "//chrome/installer/util:did_run_support",
-        "//components/browser_watcher:browser_watcher_client",
         "//components/crash/core/app",
         "//components/crash/core/app:run_as_crashpad_handler",
         "//components/crash/core/common",
@@ -390,6 +394,7 @@ if (is_win) {
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
     configs -= [ "//build/config/compiler:thinlto_optimize_default" ]
     configs += [ "//build/config/compiler:thinlto_optimize_max" ]
+
     defines = []
 
     sources = [
@@ -414,12 +419,11 @@ if (is_win) {
       "//chrome/common/profiler",
       "//chrome/install_static:install_static_util",
       "//chrome/install_static:secondary_module",
-      "//components/browser_watcher:stability_client",
       "//components/crash/core/app",
       "//components/policy:generated",
       "//content/public/app",
       "//crypto",
-      "//headless:headless_renderer",
+      "//headless:headless_non_renderer",
       "//headless:headless_shell_browser_lib",
       "//net:net_resources",
       "//ppapi/buildflags",
@@ -475,12 +479,16 @@ if (is_win) {
       "--breakpad=0",
       "--scm=1",
       "--bundle_id=$chrome_mac_bundle_id",
-      #"--privileged_helper_id=$privileged_helper_name",
     ]
-    if (is_chrome_branded) {
-      args += [ "--keystone=1" ]
-      if (current_cpu == "arm64") {
-        args += [ "--keystone-base-tag=arm64" ]
+    if (enable_updater) {
+      args += [ "--privileged_helper_id=$privileged_helper_name" ]
+      if (is_chrome_branded) {
+        args += [ "--keystone=1" ]
+        if (current_cpu == "arm64") {
+          args += [ "--keystone-base-tag=arm64" ]
+        }
+      } else {
+        args += [ "--keystone=0" ]
       }
     } else {
       args += [ "--keystone=0" ]
@@ -1317,6 +1325,7 @@ if (is_win) {
                rebase_path(get_label_info(dump_syms, "root_out_dir") + "/" +
                                get_label_info(dump_syms, "name"),
                            root_build_dir),
+               "-d",
                "-m",
                "-g",
                rebase_path(

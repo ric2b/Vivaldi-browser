@@ -1,33 +1,38 @@
-# Copyright 2022 Vivaldi Technologies. All rights reserved.
+# Copyright 2022-2023 Vivaldi Technologies. All rights reserved.
 
 source_set("vivaldi_sync_settings") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_text_edit_item.h",
-    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_text_edit_item.mm",
-    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h",
-    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.mm",
-    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h",
-    "//vivaldi/ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.mm",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_coordinator.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_coordinator.mm",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_encryption_password_view_controller.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_encryption_password_view_controller.mm",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_login_view_controller.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_login_view_controller.mm",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_mediator.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_mediator.mm",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_command_handler.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_constants.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_constants.mm",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_consumer.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_view_controller_model_delegate.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_view_controller.h",
-    "//vivaldi/ios/ui/settings/sync/vivaldi_sync_settings_view_controller.mm",
+    "vivaldi_create_account_ui_helper.h",
+    "vivaldi_create_account_ui_helper.mm",
+    "vivaldi_sync_activate_account_view_controller.h",
+    "vivaldi_sync_activate_account_view_controller.mm",
+    "vivaldi_sync_coordinator.h",
+    "vivaldi_sync_coordinator.mm",
+    "vivaldi_sync_create_account_password_view_controller.h",
+    "vivaldi_sync_create_account_password_view_controller.mm",
+    "vivaldi_sync_create_account_user_view_controller.h",
+    "vivaldi_sync_create_account_user_view_controller.mm",
+    "vivaldi_sync_encryption_password_view_controller.h",
+    "vivaldi_sync_encryption_password_view_controller.mm",
+    "vivaldi_sync_login_view_controller.h",
+    "vivaldi_sync_login_view_controller.mm",
+    "vivaldi_sync_mediator.h",
+    "vivaldi_sync_mediator.mm",
+    "vivaldi_sync_settings_command_handler.h",
+    "vivaldi_sync_settings_constants.h",
+    "vivaldi_sync_settings_constants.mm",
+    "vivaldi_sync_settings_consumer.h",
+    "vivaldi_sync_settings_view_controller_model_delegate.h",
+    "vivaldi_sync_settings_view_controller.h",
+    "vivaldi_sync_settings_view_controller.mm",
+    "settings_root_table_view_controller+vivaldi.h",
+    "settings_root_table_view_controller+vivaldi.mm"
   ]
   deps = [
     "//base",
-    "//services/network/public/mojom",
+    "cells:vivaldi_sync_settings_table_view_cells",
+    "//vivaldi/ios/ui/settings/resources:blue_vivaldi_icon",
     "//vivaldi/ios/ui/settings/resources:sync_autofill",
     "//vivaldi/ios/ui/settings/resources:sync_bookmarks",
     "//vivaldi/ios/ui/settings/resources:sync_extensions",
@@ -36,5 +41,6 @@ source_set("vivaldi_sync_settings") {
     "//vivaldi/ios/ui/settings/resources:sync_passwords",
     "//vivaldi/ios/ui/settings/resources:sync_readinglist",
     "//vivaldi/ios/ui/settings/resources:sync_settings",
+    "//vivaldi/ios/ui/modal_page:vivaldi_modal_page",
   ]
 }

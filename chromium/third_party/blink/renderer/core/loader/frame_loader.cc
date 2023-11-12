@@ -54,8 +54,8 @@
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/runtime_feature_state/runtime_feature_state.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
-#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -92,6 +92,7 @@
 #include "third_party/blink/renderer/core/loader/form_submission.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/frame_loader_types.h"
+#include "third_party/blink/renderer/core/loader/idna_util.h"
 #include "third_party/blink/renderer/core/loader/mixed_content_checker.h"
 #include "third_party/blink/renderer/core/loader/progress_tracker.h"
 #include "third_party/blink/renderer/core/navigation_api/navigation_api.h"
@@ -123,6 +124,7 @@
 #include "third_party/blink/renderer/platform/network/http_parsers.h"
 #include "third_party/blink/renderer/platform/network/mime/mime_type_registry.h"
 #include "third_party/blink/renderer/platform/network/network_utils.h"
+#include "third_party/blink/renderer/platform/runtime_feature_state/runtime_feature_state_override_context.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
@@ -818,10 +820,30 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
     }
   }
 
+  // Warn if the resource URL's hostname contains IDNA deviation characters.
+  // Only warn if the resource URL's origin is different than its requestor
+  // (we don't want to warn for <img src="faß.de/image.img"> on faß.de).
+  // TODO(crbug.com/1396475): Remove once Non-Transitional mode is shipped.
+  if (resource_request.RequestorOrigin() &&
+      !resource_request.RequestorOrigin()->IsSameOriginWith(
+          SecurityOrigin::Create(url).get()) &&
+      url.HasIDNA2008DeviationCharacter()) {
+    String message = GetConsoleWarningForIDNADeviationCharacters(url);
+    if (!message.empty()) {
+      request.GetOriginWindow()->AddConsoleMessage(
+          MakeGarbageCollected<ConsoleMessage>(
+              mojom::ConsoleMessageSource::kSecurity,
+              mojom::ConsoleMessageLevel::kWarning, message));
+      origin_window->CountUse(
+          WebFeature::kIDNA2008DeviationCharacterInHostnameOfIFrame);
+    }
+  }
+
   Client()->BeginNavigation(
-      resource_request, request.GetFrameType(), origin_window,
-      nullptr /* document_loader */, navigation_type,
+      resource_request, request.GetRequestorBaseURL(), request.GetFrameType(),
+      origin_window, nullptr /* document_loader */, navigation_type,
       request.GetNavigationPolicy(), frame_load_type,
+      request.ForceHistoryPush(),
       CalculateClientRedirectPolicy(
           request.ClientRedirectReason(), frame_load_type,
           IsOnInitialEmptyDocument()) == ClientRedirectPolicy::kClientRedirect,
@@ -1034,47 +1056,6 @@ void FrameLoader::CommitNavigation(
     extra_data = document_loader_->TakeExtraData();
   }
 
-  // Fenced frame reporting metadata persists across same-origin navigations
-  // initiated from inside the fenced frame. Embedder-initiated navigations
-  // use a unique origin (in `FencedFrame::Navigate`), so the requestor is
-  // always considered cross-origin by the check (in MPArch).
-  bool is_requestor_same_origin =
-      !navigation_params->requestor_origin.IsNull() &&
-      navigation_params->requestor_origin.IsSameOriginWith(
-          WebSecurityOrigin::Create(navigation_params->url));
-  if (is_requestor_same_origin) {
-    for (const WebNavigationParams::RedirectInfo& redirect :
-         navigation_params->redirects) {
-      is_requestor_same_origin &=
-          navigation_params->requestor_origin.IsSameOriginWith(
-              WebSecurityOrigin::Create(redirect.new_url));
-    }
-  }
-  if (is_requestor_same_origin) {
-    const absl::optional<blink::FencedFrameReporting>&
-        old_fenced_frame_reporting = document_loader_->FencedFrameReporting();
-    // In urn iframes, embedder-initiated navigations may be same-origin, so
-    // this isn't true.
-    if (navigation_params->fenced_frame_reporting) {
-      DCHECK(!frame_->IsFencedFrameRoot() &&
-             blink::features::IsAllowURNsInIframeEnabled());
-    }
-
-    if (!navigation_params->fenced_frame_reporting &&
-        old_fenced_frame_reporting) {
-      navigation_params->fenced_frame_reporting.emplace();
-      for (const auto& [destination, event_type_url] :
-           old_fenced_frame_reporting->metadata) {
-        base::flat_map<std::string, GURL> data;
-        for (const auto& [event_type, url] : event_type_url) {
-          data.emplace(event_type.Utf8(), url);
-        }
-        navigation_params->fenced_frame_reporting->metadata.emplace(
-            destination, std::move(data));
-      }
-    }
-  }
-
   // Create the OldDocumentInfoForCommit for the old document (that might be in
   // another FrameLoader) and save it in ScopedOldDocumentInfoForCommitCapturer,
   // so that the old document can access it and fill in the information as it
@@ -1164,6 +1145,10 @@ void FrameLoader::CommitNavigation(
     policy_container = PolicyContainer::CreateFromWebPolicyContainer(
         std::move(navigation_params->policy_container));
   }
+
+  base::flat_map<mojom::blink::RuntimeFeatureState, bool> override_values =
+      navigation_params->modified_runtime_features;
+
   // TODO(dgozman): get rid of provisional document loader and most of the code
   // below. We should probably call DocumentLoader::CommitNavigation directly.
   DocumentLoader* new_document_loader = MakeGarbageCollected<DocumentLoader>(
@@ -1174,6 +1159,14 @@ void FrameLoader::CommitNavigation(
       new_document_loader,
       ScopedOldDocumentInfoForCommitCapturer::CurrentInfo()->history_item,
       commit_reason);
+
+  // Now that the RuntimeFeatureStateOverrideContext has been created, set the
+  // override values.
+  // TODO(crbug.com/1377000): Move this inside CommitNavigation() and put it
+  // alongside the other state initialization.
+  frame_->DomWindow()
+      ->GetRuntimeFeatureStateOverrideContext()
+      ->ApplyOverrideValuesFromParams(override_values);
 
   RestoreScrollPositionAndViewState();
 
@@ -1372,8 +1365,7 @@ void FrameLoader::RestoreScrollPositionAndViewState(
   view->ScheduleAnimation();
 }
 
-String FrameLoader::ApplyUserAgentOverrideAndLog(
-    const String& user_agent) const {
+String FrameLoader::ApplyUserAgentOverride(const String& user_agent) const {
   String user_agent_override;
   probe::ApplyUserAgentOverride(probe::ToCoreProbeSink(frame_->GetDocument()),
                                 &user_agent_override);
@@ -1386,39 +1378,19 @@ String FrameLoader::ApplyUserAgentOverrideAndLog(
     user_agent_override = user_agent;
   }
 
-  if (base::FeatureList::IsEnabled(features::kUserAgentOverrideExperiment)) {
-    String ua_original = Platform::Current()->UserAgent();
-
-    auto it = user_agent_override.Find(ua_original);
-    UserAgentOverride::UserAgentOverrideHistogram histogram =
-        UserAgentOverride::UserAgentOverrideHistogram::UserAgentOverriden;
-    if (it == 0) {
-      histogram = UserAgentOverride::UserAgentOverrideHistogram::
-          UserAgentOverrideSuffix;
-    } else if (it != kNotFound) {
-      histogram = UserAgentOverride::UserAgentOverrideHistogram::
-          UserAgentOverrideSubstring;
-    }
-
-    if (document_loader_) {
-      document_loader_->GetUseCounter().CountUserAgentOverride(histogram,
-                                                               frame_.Get());
-    }
-  }
-
   return user_agent_override;
 }
 
 String FrameLoader::UserAgent() const {
-  return ApplyUserAgentOverrideAndLog(Client()->UserAgent());
+  return ApplyUserAgentOverride(Client()->UserAgent());
 }
 
 String FrameLoader::FullUserAgent() const {
-  return ApplyUserAgentOverrideAndLog(Client()->FullUserAgent());
+  return ApplyUserAgentOverride(Client()->FullUserAgent());
 }
 
 String FrameLoader::ReducedUserAgent() const {
-  return ApplyUserAgentOverrideAndLog(Client()->ReducedUserAgent());
+  return ApplyUserAgentOverride(Client()->ReducedUserAgent());
 }
 
 absl::optional<blink::UserAgentMetadata> FrameLoader::UserAgentMetadata()
@@ -1743,71 +1715,6 @@ void FrameLoader::ModifyRequestForCSP(
   MixedContentChecker::UpgradeInsecureRequest(
       resource_request, fetch_client_settings_object, window_for_logging,
       frame_type, frame_->GetContentSettingsClient());
-}
-
-void FrameLoader::ReportLegacyTLSVersion(const KURL& url,
-                                         bool is_subresource,
-                                         bool is_ad_resource) {
-  document_loader_->GetUseCounter().Count(
-      is_subresource
-          ? WebFeature::kLegacyTLSVersionInSubresource
-          : (frame_->IsOutermostMainFrame()
-                 ? WebFeature::kLegacyTLSVersionInMainFrameResource
-                 : WebFeature::kLegacyTLSVersionInSubframeMainResource),
-      frame_.Get());
-
-  // For non-main-frame loads, we have to use the main frame's document for
-  // the UKM recorder and source ID.
-  auto& root = frame_->LocalFrameRoot();
-  ukm::builders::Net_LegacyTLSVersion(root.GetDocument()->UkmSourceID())
-      .SetIsMainFrame(frame_->IsMainFrame())
-      .SetIsSubresource(is_subresource)
-      .SetIsAdResource(is_ad_resource)
-      .Record(root.GetDocument()->UkmRecorder());
-
-  String origin = SecurityOrigin::Create(url)->ToString();
-  // To prevent log spam, only log the message once per origin.
-  if (tls_version_warning_origins_.Contains(origin))
-    return;
-
-  // After |kMaxSecurityWarningMessages| warnings, stop printing messages to the
-  // console. At exactly |kMaxSecurityWarningMessages| warnings, print a message
-  // that additional resources on the page use legacy certificates without
-  // specifying which exact resources. Before |kMaxSecurityWarningMessages|
-  // messages, print the exact resource URL in the message to help the developer
-  // pinpoint the problematic resources.
-  const size_t kMaxSecurityWarningMessages = 10;
-  size_t num_warnings = tls_version_warning_origins_.size();
-  if (num_warnings > kMaxSecurityWarningMessages)
-    return;
-
-  String console_message;
-  if (num_warnings == kMaxSecurityWarningMessages) {
-    console_message =
-        "Additional resources on this page were loaded with TLS 1.0 or TLS "
-        "1.1, which are deprecated and will be disabled in the future. Once "
-        "disabled, users will be prevented from loading these resources. "
-        "Servers should enable TLS 1.2 or later. See "
-        "https://www.chromestatus.com/feature/5654791610957824 for more "
-        "information.";
-  } else {
-    console_message =
-        "The connection used to load resources from " + origin +
-        " used TLS 1.0 or TLS "
-        "1.1, which are deprecated and will be disabled in the future. Once "
-        "disabled, users will be prevented from loading these resources. The "
-        "server should enable TLS 1.2 or later. See "
-        "https://www.chromestatus.com/feature/5654791610957824 for more "
-        "information.";
-  }
-  tls_version_warning_origins_.insert(origin);
-  // To avoid spamming the console, use verbose message level for subframe
-  // resources, and only use the warning level for main-frame resources.
-  frame_->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
-      mojom::ConsoleMessageSource::kOther,
-      frame_->IsOutermostMainFrame() ? mojom::ConsoleMessageLevel::kWarning
-                                     : mojom::ConsoleMessageLevel::kVerbose,
-      console_message));
 }
 
 void FrameLoader::WriteIntoTrace(perfetto::TracedValue context) const {

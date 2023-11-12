@@ -132,6 +132,7 @@ declare global {
 
       export interface PasswordExportProgress {
         status: ExportProgressStatus;
+        filePath?: string;
         folderName?: string;
       }
 
@@ -155,6 +156,10 @@ declare global {
         username: string;
         password: string;
         note?: string;
+      }
+
+      export interface PasswordUiEntryList {
+        entries: PasswordUiEntry[];
       }
 
       export function recordPasswordsPageAccessInSettings(): void;
@@ -181,6 +186,8 @@ declare global {
       export function isOptedInForAccountStorage(): Promise<boolean>;
       export function optInForAccountStorage(optIn: boolean): void;
       export function getInsecureCredentials(): Promise<PasswordUiEntry[]>;
+      export function getCredentialsWithReusedPassword():
+          Promise<PasswordUiEntryList[]>;
       export function muteInsecureCredential(credential: PasswordUiEntry):
           Promise<void>;
       export function unmuteInsecureCredential(credential: PasswordUiEntry):
@@ -197,6 +204,7 @@ declare global {
       export function extendAuthValidity(): Promise<void>;
       export function switchBiometricAuthBeforeFillingState(): void;
       export function showAddShortcutDialog(): void;
+      export function showExportedFileInShell(filePath: string): void;
 
       export const onSavedPasswordsListChanged:
           ChromeEvent<(entries: PasswordUiEntry[]) => void>;

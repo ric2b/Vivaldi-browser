@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 load("//lib/builder_config.star", "builder_config")
-load("//lib/builders.star", "builder", "cpu", "defaults", "goma", "os", "xcode")
+load("//lib/builders.star", "builder", "cpu", "defaults", "os", "reclient", "xcode")
 
 luci.bucket(
     name = "webrtc",
@@ -37,6 +37,8 @@ defaults.execution_timeout.set(2 * time.hour)
 defaults.os.set(os.LINUX_DEFAULT)
 defaults.service_account.set("chromium-ci-builder@chops-service-accounts.iam.gserviceaccount.com")
 defaults.triggered_by.set(["chromium-gitiles-trigger"])
+defaults.reclient_instance.set(reclient.instance.DEFAULT_TRUSTED)
+defaults.reclient_jobs.set(reclient.jobs.DEFAULT)
 
 defaults.properties.set({
     "perf_dashboard_machine_group": "ChromiumWebRTC",
@@ -66,11 +68,11 @@ builder(
         android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-webrtc",
     ),
-    goma_backend = goma.backend.RBE_PROD,
 )
 
 builder(
     name = "WebRTC Chromium Android Tester",
+    triggered_by = ["WebRTC Chromium Android Builder"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
         gclient_config = builder_config.gclient_config(
@@ -92,7 +94,6 @@ builder(
         android_config = builder_config.android_config(config = "base_config"),
         build_gs_bucket = "chromium-webrtc",
     ),
-    triggered_by = ["WebRTC Chromium Android Builder"],
 )
 
 builder(
@@ -113,11 +114,11 @@ builder(
         ),
         build_gs_bucket = "chromium-webrtc",
     ),
-    goma_backend = goma.backend.RBE_PROD,
 )
 
 builder(
     name = "WebRTC Chromium Linux Tester",
+    triggered_by = ["WebRTC Chromium Linux Builder"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
         gclient_config = builder_config.gclient_config(config = "chromium_webrtc"),
@@ -132,7 +133,6 @@ builder(
         ),
         build_gs_bucket = "chromium-webrtc",
     ),
-    triggered_by = ["WebRTC Chromium Linux Builder"],
 )
 
 builder(
@@ -156,11 +156,11 @@ builder(
     ),
     os = os.MAC_ANY,
     xcode = xcode.x14main,
-    goma_backend = goma.backend.RBE_PROD,
 )
 
 builder(
     name = "WebRTC Chromium Mac Tester",
+    triggered_by = ["WebRTC Chromium Mac Builder"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
         gclient_config = builder_config.gclient_config(config = "chromium_webrtc"),
@@ -176,7 +176,6 @@ builder(
         ),
         build_gs_bucket = "chromium-webrtc",
     ),
-    triggered_by = ["WebRTC Chromium Mac Builder"],
     xcode = xcode.x14main,
 )
 
@@ -199,12 +198,11 @@ builder(
         build_gs_bucket = "chromium-webrtc",
     ),
     os = os.WINDOWS_ANY,
-    goma_backend = goma.backend.RBE_PROD,
-    goma_enable_ats = True,
 )
 
 builder(
     name = "WebRTC Chromium Win10 Tester",
+    triggered_by = ["WebRTC Chromium Win Builder"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
         gclient_config = builder_config.gclient_config(config = "chromium_webrtc"),
@@ -219,5 +217,4 @@ builder(
         ),
         build_gs_bucket = "chromium-webrtc",
     ),
-    triggered_by = ["WebRTC Chromium Win Builder"],
 )

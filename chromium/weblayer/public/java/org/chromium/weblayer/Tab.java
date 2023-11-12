@@ -22,6 +22,7 @@ import org.chromium.weblayer_private.interfaces.IExternalIntentInIncognitoCallba
 import org.chromium.weblayer_private.interfaces.IFullscreenCallbackClient;
 import org.chromium.weblayer_private.interfaces.IGoogleAccountsCallbackClient;
 import org.chromium.weblayer_private.interfaces.IObjectWrapper;
+import org.chromium.weblayer_private.interfaces.IStringCallback;
 import org.chromium.weblayer_private.interfaces.ITab;
 import org.chromium.weblayer_private.interfaces.ITabClient;
 import org.chromium.weblayer_private.interfaces.IWebMessageCallbackClient;
@@ -131,6 +132,14 @@ class Tab {
 
     int getId() {
         return mId;
+    }
+
+    String getUri() {
+        try {
+            return mImpl.getUri();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
     }
 
     void setBrowser(Browser browser) {
@@ -249,12 +258,12 @@ class Tab {
      * scripts. Use with caution, only pass false for this argument if you know this isn't an issue
      * or you need to interact with first-party scripts.
      */
-    public void executeScript(@NonNull String script, boolean useSeparateIsolate,
-            @Nullable ValueCallback<String> callback) {
+    public void executeScript(
+            @NonNull String script, boolean useSeparateIsolate, IStringCallback callback) {
         ThreadCheck.ensureOnUiThread();
         throwIfDestroyed();
         try {
-            mImpl.executeScript(script, useSeparateIsolate, ObjectWrapper.wrap(callback));
+            mImpl.executeScript(script, useSeparateIsolate, callback);
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -510,6 +519,14 @@ class Tab {
             mImpl.setExternalIntentInIncognitoCallbackClient(callback == null
                             ? null
                             : new ExternalIntentInIncognitoCallbackClientImpl(callback));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    void postMessage(String message, String targetOrigin) {
+        try {
+            mImpl.postMessage(message, targetOrigin);
         } catch (RemoteException e) {
             throw new APICallException(e);
         }
@@ -996,6 +1013,12 @@ class Tab {
             for (TabCallback callback : mCallbacks) {
                 callback.onVerticalOverscroll(accumulatedOverscrollY);
             }
+        }
+
+        @Override
+        public void onPostMessage(String message, String origin) {
+            StrictModeWorkaround.apply();
+            mTabProxy.onPostMessage(message, origin);
         }
     }
 

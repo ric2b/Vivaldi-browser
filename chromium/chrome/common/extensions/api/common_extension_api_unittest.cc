@@ -278,7 +278,7 @@ TEST(ExtensionAPITest, APIFeaturesAlias) {
                            .Set("name", "extension")
                            .Set("version", "1")
                            .Set("manifest_version", 2)
-                           .BuildDict())
+                           .Build())
           .Build();
   const Feature* test_feature =
       api_feature_provider.GetFeature("alias_api_source");
@@ -303,12 +303,12 @@ TEST(ExtensionAPITest, IsAnyFeatureAvailableToContext) {
                                 DictionaryBuilder()
                                     .Set("scripts", ListBuilder()
                                                         .Append("background.js")
-                                                        .BuildList())
-                                    .BuildDict())
-                           .BuildDict())
+                                                        .Build())
+                                    .Build())
+                           .Build())
                   .Set("version", "1")
                   .Set("manifest_version", 2)
-                  .BuildDict())
+                  .Build())
           .Build();
   scoped_refptr<const Extension> extension =
       ExtensionBuilder()
@@ -316,7 +316,7 @@ TEST(ExtensionAPITest, IsAnyFeatureAvailableToContext) {
                            .Set("name", "extension")
                            .Set("version", "1")
                            .Set("manifest_version", 2)
-                           .BuildDict())
+                           .Build())
           .Build();
 
   struct {
@@ -393,12 +393,12 @@ TEST(ExtensionAPITest, SessionTypeFeature) {
                                 DictionaryBuilder()
                                     .Set("scripts", ListBuilder()
                                                         .Append("background.js")
-                                                        .BuildList())
-                                    .BuildDict())
-                           .BuildDict())
+                                                        .Build())
+                                    .Build())
+                           .Build())
                   .Set("version", "1")
                   .Set("manifest_version", 2)
-                  .BuildDict())
+                  .Build())
           .Build();
 
   const std::vector<FeatureSessionTypesTestData> kTestData(
@@ -473,9 +473,9 @@ scoped_refptr<Extension> CreateExtensionWithPermissions(
   manifest.Set("version", "1.0");
   manifest.Set("manifest_version", 2);
   {
-    base::Value permissions_list(base::Value::Type::LIST);
-    for (auto i = permissions.begin(); i != permissions.end(); ++i) {
-      permissions_list.Append(*i);
+    base::Value::List permissions_list;
+    for (const auto& i : permissions) {
+      permissions_list.Append(i);
     }
     manifest.Set("permissions", std::move(permissions_list));
   }
@@ -590,9 +590,9 @@ scoped_refptr<Extension> CreatePackagedAppWithPermissions(
   app.Set("background", std::move(background));
   values.Set(manifest_keys::kApp, std::move(app));
   {
-    base::Value permissions_list(base::Value::Type::LIST);
-    for (auto i = permissions.begin(); i != permissions.end(); ++i) {
-      permissions_list.Append(*i);
+    base::Value::List permissions_list;
+    for (const auto& i : permissions) {
+      permissions_list.Append(i);
     }
     values.Set("permissions", std::move(permissions_list));
   }
@@ -1033,11 +1033,10 @@ TEST(ExtensionAPITest, GetSchemaFromDifferentThreads) {
         another_thread_schema = res;
         run_loop.Quit();
       });
-  auto task = base::BindOnce(&ExtensionAPI::GetSchema,
-                             base::Unretained(shared_instance), "storage")
-                  .Then(base::BindPostTask(
-                      base::SequencedTaskRunner::GetCurrentDefault(),
-                      std::move(result_cb)));
+  auto task =
+      base::BindOnce(&ExtensionAPI::GetSchema,
+                     base::Unretained(shared_instance), "storage")
+          .Then(base::BindPostTaskToCurrentDefault(std::move(result_cb)));
   t.task_runner()->PostTask(FROM_HERE, std::move(task));
 
   const auto* current_thread_schema = shared_instance->GetSchema("storage");

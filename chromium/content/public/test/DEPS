@@ -19,7 +19,6 @@ include_rules = [
   "+components/breadcrumbs/core",
   "+components/discardable_memory/service",
   "+components/download/public/common",
-  "+components/enterprise/common/download_item_reroute_info.h",
   "+components/leveldb_proto/public",
   "+components/network_session_configurator/common/network_switches.h",
   "+components/services/storage/privileged",
@@ -63,6 +62,9 @@ specific_include_rules = {
   # directly.
   "content_browser_test_shell_main_delegate.h": [
     "+content/shell/app/shell_main_delegate.h"
+  ],
+  "content_browser_test_content_browser_client.h": [
+    "+content/shell/browser/shell_content_browser_client.h"
   ],
   "browser_test_base.cc": [
     "+ui/platform_window/fuchsia/initialize_presenter_api_view.h"

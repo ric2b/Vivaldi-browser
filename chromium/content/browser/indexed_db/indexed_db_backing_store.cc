@@ -8,10 +8,10 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/dcheck_is_on.h"
 #include "base/files/file_path.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -24,6 +24,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/trace_event/base_tracing.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -1085,6 +1086,8 @@ bool IndexedDBBackingStore::ShouldSyncOnCommit(
     blink::mojom::IDBTransactionDurability durability) {
   switch (durability) {
     case blink::mojom::IDBTransactionDurability::Default:
+      NOTREACHED();
+      ABSL_FALLTHROUGH_INTENDED;
     case blink::mojom::IDBTransactionDurability::Strict:
       return true;
     case blink::mojom::IDBTransactionDurability::Relaxed:
@@ -3038,6 +3041,8 @@ IndexedDBBackingStore::Transaction::Transaction(
                          : nullptr),
       durability_(durability),
       mode_(mode) {
+  // `Default` should have already been converted to the bucket's setting.
+  DCHECK(durability_ != blink::mojom::IDBTransactionDurability::Default);
   DCHECK(!backing_store_ ||
          backing_store_->idb_task_runner()->RunsTasksInCurrentSequence());
 }

@@ -25,7 +25,8 @@ size_t GetDefaultMaxNumUtilityThreads(size_t max_num_foreground_threads_in) {
   int num_of_efficient_processors = SysInfo::NumberOfEfficientProcessors();
   if (num_of_efficient_processors != 0) {
     DCHECK_GT(num_of_efficient_processors, 0);
-    return static_cast<size_t>(num_of_efficient_processors);
+    return std::min(max_num_foreground_threads_in,
+                    static_cast<size_t>(num_of_efficient_processors));
   }
   return std::max<size_t>(1, max_num_foreground_threads_in / 2);
 }
@@ -64,6 +65,20 @@ ThreadPoolInstance::ScopedBestEffortExecutionFence::
     ~ScopedBestEffortExecutionFence() {
   DCHECK(g_thread_pool);
   g_thread_pool->EndBestEffortFence();
+}
+
+ThreadPoolInstance::ScopedFizzleBlockShutdownTasks::
+    ScopedFizzleBlockShutdownTasks() {
+  // It's possible for this to be called without a ThreadPool present in tests.
+  if (g_thread_pool)
+    g_thread_pool->BeginFizzlingBlockShutdownTasks();
+}
+
+ThreadPoolInstance::ScopedFizzleBlockShutdownTasks::
+    ~ScopedFizzleBlockShutdownTasks() {
+  // It's possible for this to be called without a ThreadPool present in tests.
+  if (g_thread_pool)
+    g_thread_pool->EndFizzlingBlockShutdownTasks();
 }
 
 #if !BUILDFLAG(IS_NACL)

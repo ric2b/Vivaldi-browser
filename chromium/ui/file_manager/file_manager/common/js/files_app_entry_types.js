@@ -287,6 +287,16 @@ export class EntryList {
   }
 
   /**
+   * Removes all entries that match the volumeType.
+   * @param {!VolumeManagerCommon.VolumeType} volumeType to be removed.
+   * This method is specific to VolumeEntry/EntryList instance.
+   */
+  removeAllByVolumeType(volumeType) {
+    this.children_ = this.children_.filter(
+        entry => /** @type {VolumeEntry} */ (entry).volumeType !== volumeType);
+  }
+
+  /**
    * Removes the entry.
    * @param {!Entry|FilesAppEntry} entry to be removed.
    * This method is specific to EntryList and VolumeEntry instance.
@@ -357,6 +367,11 @@ export class VolumeEntry {
    */
   get volumeInfo() {
     return this.volumeInfo_;
+  }
+
+  /** @return {!VolumeManagerCommon.VolumeType} */
+  get volumeType() {
+    return this.volumeInfo_.volumeType;
   }
 
   /**
@@ -586,6 +601,16 @@ export class VolumeEntry {
   }
 
   /**
+   * Removes all entries that match the volumeType.
+   * @param {!VolumeManagerCommon.VolumeType} volumeType to be removed.
+   * This method is specific to VolumeEntry/EntryList instance.
+   */
+  removeAllByVolumeType(volumeType) {
+    this.children_ = this.children_.filter(
+        entry => /** @type {VolumeEntry} */ (entry).volumeType !== volumeType);
+  }
+
+  /**
    * Removes the entry.
    * @param {!Entry|FilesAppEntry} entry to be removed.
    * This method is specific to EntryList and VolumeEntry instance.
@@ -614,10 +639,10 @@ export class FakeEntryImpl {
    * @param {!VolumeManagerCommon.RootType} rootType Root type of this entry.
    * @param {chrome.fileManagerPrivate.SourceRestriction=} opt_sourceRestriction
    *    used on Recents to filter the source of recent files/directories.
-   * @param {chrome.fileManagerPrivate.RecentFileType=} opt_recentFileType
+   * @param {chrome.fileManagerPrivate.FileCategory=} opt_fileCategory
    *    used on Recents to filter recent files by their file types.
    */
-  constructor(label, rootType, opt_sourceRestriction, opt_recentFileType) {
+  constructor(label, rootType, opt_sourceRestriction, opt_fileCategory) {
     /**
      * @public {string} label: Label to be used when displaying to user, it
      *      should be already translated.
@@ -637,6 +662,12 @@ export class FakeEntryImpl {
     this.isFile = false;
 
     /**
+     * @public {boolean} false FakeEntry can be disabled if it represents the
+     * placeholder of the real volume.
+     */
+    this.disabled = false;
+
+    /**
      * @public {chrome.fileManagerPrivate.SourceRestriction|undefined} It's used
      * to communicate restrictions about sources to
      * chrome.fileManagerPrivate.getRecentFiles API.
@@ -644,11 +675,11 @@ export class FakeEntryImpl {
     this.sourceRestriction = opt_sourceRestriction;
 
     /**
-     * @public {chrome.fileManagerPrivate.RecentFileType|undefined} It's used to
+     * @public {chrome.fileManagerPrivate.FileCategory|undefined} It's used to
      * communicate file-type filter to chrome.fileManagerPrivate.getRecentFiles
      * API.
      */
-    this.recentFileType = opt_recentFileType;
+    this.fileCategory = opt_fileCategory;
 
     /**
      * @public {string} the class name for this class. It's workaround for the
@@ -673,8 +704,8 @@ export class FakeEntryImpl {
   /** @override */
   toURL() {
     let url = 'fake-entry://' + this.rootType;
-    if (this.recentFileType) {
-      url += '/' + this.recentFileType;
+    if (this.fileCategory) {
+      url += '/' + this.fileCategory;
     }
     return url;
   }

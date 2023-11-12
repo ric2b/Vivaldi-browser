@@ -14,8 +14,6 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer_entry.h"
-#include "third_party/blink/renderer/core/layout/deferred_shaping.h"
-#include "third_party/blink/renderer/core/layout/deferred_shaping_controller.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
@@ -251,40 +249,31 @@ bool DisplayLockDocumentState::MarkAncestorContextsHaveTopLayerElement(
   return had_locked_ancestor;
 }
 
-void DisplayLockDocumentState::NotifySharedElementPseudoTreeChanged() {
-  // Note that this function doesn't use
-  // DisplayLockContext::DetermineIfInSharedElementTransitionChain, since that
-  // would mean we have to call UpdateSharedElementAncestorLocks for each lock.
-  // This function only calls it once by hoisting it out of the context calls.
-
-  // Reset the flag and determine if the ancestor is shared element.
+void DisplayLockDocumentState::NotifyViewTransitionPseudoTreeChanged() {
+  // Reset the view transition element flag.
+  // TODO(vmpstr): This should be optimized to keep track of elements that
+  // actually have this flag set.
   for (auto context : display_lock_contexts_)
-    context->ResetAndDetermineIfAncestorIsSharedElement();
+    context->ResetDescendantIsViewTransitionElement();
 
-  // Also process the shared elements to check if the shared element's ancestors
-  // are locks. These two parts give us the full chain (either locks are
-  // ancestors of shared or shared are ancestor of locks).
-  UpdateSharedElementAncestorLocks();
+  // Process the view transition elements to check if their ancestors are
+  // locks that need to be made relevant.
+  UpdateViewTransitionElementAncestorLocks();
 }
 
-void DisplayLockDocumentState::UpdateSharedElementAncestorLocks() {
+void DisplayLockDocumentState::UpdateViewTransitionElementAncestorLocks() {
   auto* transition = ViewTransitionUtils::GetActiveTransition(*document_);
   if (!transition)
     return;
 
-  const auto& shared_elements = transition->GetTransitioningElements();
-  for (auto element : shared_elements) {
+  const auto& transitioning_elements = transition->GetTransitioningElements();
+  for (auto element : transitioning_elements) {
     auto* ancestor = element.Get();
-    // When the element which has c-v:auto is itself a shared element, marking
-    // it as such could go in either walk (from the function naming) but it
-    // happens in the ancestor chain check and skipped here. This DCHECK
-    // verifies this.
-    DCHECK(!element->GetDisplayLockContext() ||
-           element->GetDisplayLockContext()->IsInSharedElementAncestorChain());
-
+    // When the element which has c-v:auto is itself a view transition element,
+    // we keep it locked. So start with the parent.
     while ((ancestor = FlatTreeTraversal::ParentElement(*ancestor))) {
       if (auto* context = ancestor->GetDisplayLockContext())
-        context->SetInSharedElementTransitionChain();
+        context->SetDescendantIsViewTransitionElement();
     }
   }
 }

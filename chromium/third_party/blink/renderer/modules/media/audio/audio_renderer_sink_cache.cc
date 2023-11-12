@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/synchronization/lock.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_renderer_sink.h"
@@ -68,7 +69,8 @@ enum GetOutputDeviceInfoCacheUtilization {
 
   // If session id is used to specify a device, we always have to create and
   // cache a new sink.
-  SINK_CACHE_MISS_CANNOT_LOOKUP_BY_SESSION_ID = 1,
+  // DEPRECATED: Do not edit, to preserve UMAs.
+  // SINK_CACHE_MISS_CANNOT_LOOKUP_BY_SESSION_ID = 1,
 
   // Output parmeters for an already-cached sink are requested.
   SINK_CACHE_HIT = 2,
@@ -124,34 +126,13 @@ AudioRendererSinkCache::~AudioRendererSinkCache() {
 
 media::OutputDeviceInfo AudioRendererSinkCache::GetSinkInfo(
     const LocalFrameToken& source_frame_token,
-    const base::UnguessableToken& session_id,
     const std::string& device_id) {
   TRACE_EVENT_BEGIN2("audio", "AudioRendererSinkCache::GetSinkInfo",
                      "frame_token", source_frame_token.ToString(), "device id",
                      device_id);
-
-  if (media::AudioDeviceDescription::UseSessionIdToSelectDevice(session_id,
-                                                                device_id)) {
-    // We are provided with session id instead of device id. Session id is
-    // unique, so we can't find any matching sink. Creating a new one.
-    scoped_refptr<media::AudioRendererSink> sink =
-        create_sink_cb_.Run(source_frame_token, {session_id, device_id});
-
-    MaybeCacheSink(source_frame_token, sink->GetOutputDeviceInfo().device_id(),
-                   sink);
-
-    UMA_HISTOGRAM_ENUMERATION(
-        "Media.Audio.Render.SinkCache.GetOutputDeviceInfoCacheUtilization",
-        SINK_CACHE_MISS_CANNOT_LOOKUP_BY_SESSION_ID, SINK_CACHE_LAST_ENTRY);
-    TRACE_EVENT_END1("audio", "AudioRendererSinkCache::GetSinkInfo", "result",
-                     "Cache not used due to using |session_id|");
-
-    return sink->GetOutputDeviceInfo();
-  }
-  // Ignore session id.
   {
     base::AutoLock auto_lock(cache_lock_);
-    auto cache_iter = FindCacheEntry_Locked(source_frame_token, device_id);
+    auto* cache_iter = FindCacheEntry_Locked(source_frame_token, device_id);
     if (cache_iter != cache_.end()) {
       // A matching cached sink is found.
       UMA_HISTOGRAM_ENUMERATION(
@@ -164,9 +145,8 @@ media::OutputDeviceInfo AudioRendererSinkCache::GetSinkInfo(
   }
 
   // No matching sink found, create a new one.
-  scoped_refptr<media::AudioRendererSink> sink = create_sink_cb_.Run(
-      source_frame_token,
-      media::AudioSinkParameters(base::UnguessableToken(), device_id));
+  scoped_refptr<media::AudioRendererSink> sink =
+      create_sink_cb_.Run(source_frame_token, device_id);
 
   MaybeCacheSink(source_frame_token, device_id, sink);
 
@@ -203,7 +183,7 @@ void AudioRendererSinkCache::DeleteSink(
     base::AutoLock auto_lock(cache_lock_);
 
     // Looking up the sink by its pointer.
-    auto cache_iter = base::ranges::find(
+    auto* cache_iter = base::ranges::find(
         cache_, sink_ptr, [](const CacheEntry& val) { return val.sink.get(); });
 
     if (cache_iter == cache_.end())
@@ -264,7 +244,7 @@ void AudioRendererSinkCache::MaybeCacheSink(
 void AudioRendererSinkCache::DropSinksForFrame(
     const LocalFrameToken& source_frame_token) {
   base::AutoLock auto_lock(cache_lock_);
-  base::EraseIf(cache_, [source_frame_token](const CacheEntry& val) {
+  WTF::EraseIf(cache_, [source_frame_token](const CacheEntry& val) {
     if (val.source_frame_token == source_frame_token) {
       val.sink->Stop();
       return true;
@@ -273,7 +253,7 @@ void AudioRendererSinkCache::DropSinksForFrame(
   });
 }
 
-size_t AudioRendererSinkCache::GetCacheSizeForTesting() {
+wtf_size_t AudioRendererSinkCache::GetCacheSizeForTesting() {
   base::AutoLock auto_lock(cache_lock_);
   return cache_.size();
 }

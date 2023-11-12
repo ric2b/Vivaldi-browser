@@ -25,6 +25,7 @@ namespace {
 // changes.
 OptionalTrustTokenParams NonemptyTrustTokenParams() {
   return mojom::TrustTokenParams(
+      mojom::TrustTokenMajorVersion::kPrivateStateTokenV1,
       mojom::TrustTokenOperationType::kRedemption,
       mojom::TrustTokenRefreshPolicy::kRefresh, "custom_key_commitment",
       url::Origin::Create(GURL("https://custom-issuer.com")),
@@ -80,14 +81,20 @@ TEST(OptionalTrustTokenParams, CopyAndMove) {
 
 TEST(OptionalTrustTokenParams, Dereference) {
   OptionalTrustTokenParams in = NonemptyTrustTokenParams();
-  EXPECT_EQ(in->type, mojom::TrustTokenOperationType::kRedemption);
-  EXPECT_EQ(in.as_ptr()->type, mojom::TrustTokenOperationType::kRedemption);
-  EXPECT_EQ(in.value().type, mojom::TrustTokenOperationType::kRedemption);
+  EXPECT_EQ(in->version, mojom::TrustTokenMajorVersion::kPrivateStateTokenV1);
+  EXPECT_EQ(in.as_ptr()->version,
+            mojom::TrustTokenMajorVersion::kPrivateStateTokenV1);
+  EXPECT_EQ(in.value().version,
+            mojom::TrustTokenMajorVersion::kPrivateStateTokenV1);
+  EXPECT_EQ(in->operation, mojom::TrustTokenOperationType::kRedemption);
+  EXPECT_EQ(in.as_ptr()->operation,
+            mojom::TrustTokenOperationType::kRedemption);
+  EXPECT_EQ(in.value().operation, mojom::TrustTokenOperationType::kRedemption);
 }
 
 TEST(OptionalTrustTokenParams, DereferenceEmpty) {
   OptionalTrustTokenParams in = absl::nullopt;
-  EXPECT_CHECK_DEATH(std::ignore = in->type);
+  EXPECT_CHECK_DEATH(std::ignore = in->operation);
   EXPECT_CHECK_DEATH(std::ignore = in.value());
   EXPECT_EQ(in.as_ptr(), mojom::TrustTokenParamsPtr());
 }

@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/component_export.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback.h"
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/platform_thread.h"
@@ -25,6 +25,7 @@
 #include "build/chromeos_buildflags.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
+#include "ui/base/clipboard/clipboard_content_type.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/clipboard_sequence_number_token.h"
 #include "ui/base/clipboard/file_info.h"
@@ -330,7 +331,15 @@ class COMPONENT_EXPORT(UI_BASE_CLIPBOARD) Clipboard
   // kWebCustomFormatMap           char array
   // kEncodedDataTransferEndpoint  char array
   using ObjectMapParam = std::vector<char>;
-  using ObjectMapParams = std::vector<ObjectMapParam>;
+  struct ObjectMapParams {
+    ObjectMapParams(std::vector<ObjectMapParam> data,
+                    ClipboardContentType content_type);
+    ObjectMapParams(const ObjectMapParams& other);
+    ObjectMapParams();
+    ~ObjectMapParams();
+    std::vector<ObjectMapParam> data;
+    ClipboardContentType content_type;
+  };
   using ObjectMap = base::flat_map<PortableFormat, ObjectMapParams>;
 
   // PlatformRepresentation is used for DispatchPlatformRepresentations, and

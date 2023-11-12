@@ -4,7 +4,7 @@
 
 #include "extensions/renderer/api/declarative_content_hooks_delegate.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "extensions/common/api/declarative/declarative_constants.h"
 #include "extensions/renderer/bindings/api_type_reference_map.h"
 #include "extensions/renderer/bindings/argument_spec.h"
@@ -159,8 +159,8 @@ bool Validate(const ArgumentSpec* spec,
 
 }  // namespace
 
-DeclarativeContentHooksDelegate::DeclarativeContentHooksDelegate() {}
-DeclarativeContentHooksDelegate::~DeclarativeContentHooksDelegate() {}
+DeclarativeContentHooksDelegate::DeclarativeContentHooksDelegate() = default;
+DeclarativeContentHooksDelegate::~DeclarativeContentHooksDelegate() = default;
 
 void DeclarativeContentHooksDelegate::InitializeTemplate(
     v8::Isolate* isolate,

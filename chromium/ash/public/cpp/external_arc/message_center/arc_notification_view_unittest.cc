@@ -16,7 +16,7 @@
 #include "ash/system/message_center/message_view_factory.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/desks/desks_util.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -275,7 +275,13 @@ TEST_P(ArcNotificationViewTest, SlideOut) {
   EXPECT_TRUE(IsRemovedAfterIdle(notification_id));
 }
 
-TEST_P(ArcNotificationViewTest, SlideOutNested) {
+// TODO(crbug.com/1410724): Flaky on MSAN bots.
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_SlideOutNested DISABLED_SlideOutNested
+#else
+#define MAYBE_SlideOutNested SlideOutNested
+#endif
+TEST_P(ArcNotificationViewTest, MAYBE_SlideOutNested) {
   ui::ScopedAnimationDurationScaleMode zero_duration_scope(
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
 

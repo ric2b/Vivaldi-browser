@@ -15,7 +15,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/default_clock.h"
 #include "build/build_config.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "components/download/public/common/download_item.h"
 #include "components/offline_items_collection/core/offline_item.h"
 #include "components/safe_browsing/buildflags.h"
@@ -30,9 +29,15 @@
 
 using offline_items_collection::ContentId;
 
+class Profile;
+
 namespace content {
 class WebContents;
 }  // namespace content
+
+namespace gfx {
+class FontList;
+}  // namespace gfx
 
 // This class is an abstraction for common UI tasks and properties associated
 // with a download.
@@ -220,6 +225,10 @@ class DownloadUIModel {
 
   // Returns a short one-line status string for the download.
   std::u16string GetStatusText() const;
+#if !BUILDFLAG(IS_ANDROID)
+  std::u16string GetStatusTextForLabel(const gfx::FontList& font_list,
+                                       float available_pixel_width) const;
+#endif
 
   // Returns a string suitable for use as a tooltip. For a regular download, the
   // tooltip is the filename. For an interrupted download, the string states the
@@ -375,9 +384,6 @@ class DownloadUIModel {
   // otherwise.
   virtual const download::DownloadItem* GetDownloadItem() const;
   download::DownloadItem* GetDownloadItem();
-
-  // Returns the display name for the web drive where the file is rerouted to.
-  virtual std::u16string GetWebDriveName() const;
 
   // Returns the file-name that should be reported to the user.
   virtual base::FilePath GetFileNameToReportUser() const;
@@ -546,9 +552,6 @@ class DownloadUIModel {
 
   // Returns whether the download is triggered by an extension.
   virtual bool IsExtensionDownload() const;
-
-  // Returns the message, if any, to be displayed for file rerouted.
-  virtual std::u16string GetWebDriveMessage(bool verbose) const;
 
   raw_ptr<Delegate> delegate_ = nullptr;
 

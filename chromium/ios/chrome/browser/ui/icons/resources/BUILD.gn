@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ios/asset_catalog.gni")
+import("//build/config/ios/ios_sdk.gni")
 
 symbolset("arrow_clockwise") {
   sources = [
@@ -22,6 +23,13 @@ symbolset("checkermark_shield") {
   sources = [
     "checkermark_shield.symbolset/Contents.json",
     "checkermark_shield.symbolset/checkermark.shield.cr.svg",
+  ]
+}
+
+symbolset("dino") {
+  sources = [
+    "dino.symbolset/Contents.json",
+    "dino.symbolset/dino.cr.svg",
   ]
 }
 
@@ -51,6 +59,29 @@ symbolset("password") {
     "password.symbolset/Contents.json",
     "password.symbolset/password.cr.svg",
   ]
+}
+
+symbolset("location") {
+  sources = [
+    "location.symbolset/Contents.json",
+    "location.symbolset/location.cr.svg",
+  ]
+}
+
+symbolset("location.fill") {
+  sources = [
+    "location.fill.symbolset/Contents.json",
+    "location.fill.symbolset/location.fill.cr.svg",
+  ]
+}
+
+if (target_environment != "catalyst") {
+  symbolset("multicolor_password") {
+    sources = [
+      "multicolor_password.symbolset/Contents.json",
+      "multicolor_password.symbolset/multicolor.password.cr.svg",
+    ]
+  }
 }
 
 symbolset("password_manager") {
@@ -174,6 +205,36 @@ symbolset("shield") {
   ]
 }
 
+symbolset("cloud_slash") {
+  sources = [
+    "cloud_slash.symbolset/Contents.json",
+    "cloud_slash.symbolset/cloud.slash.cr.svg",
+  ]
+}
+
+imageset("legacy_cloud_slash") {
+  sources = [
+    "legacy_cloud_slash.imageset/Contents.json",
+    "legacy_cloud_slash.imageset/legacy_cloud_slash@2x.png",
+    "legacy_cloud_slash.imageset/legacy_cloud_slash@3x.png",
+  ]
+}
+
+symbolset("cloud_and_arrow_up") {
+  sources = [
+    "cloud_and_arrow_up.symbolset/Contents.json",
+    "cloud_and_arrow_up.symbolset/cloud.and.arrow.up.cr.svg",
+  ]
+}
+
+imageset("legacy_cloud_and_arrow_up") {
+  sources = [
+    "legacy_cloud_and_arrow_up.imageset/Contents.json",
+    "legacy_cloud_and_arrow_up.imageset/legacy_cloud_and_arrow_up@2x.png",
+    "legacy_cloud_and_arrow_up.imageset/legacy_cloud_and_arrow_up@3x.png",
+  ]
+}
+
 imageset("tab_grid_new_tab_button_ios14") {
   sources = [
     "tab_grid_new_tab_button_ios14.imageset/Contents.json",
@@ -203,5 +264,12 @@ imageset("tab_grid_new_tab_floating_button_incognito_ios14") {
     "tab_grid_new_tab_floating_button_incognito_ios14.imageset/Contents.json",
     "tab_grid_new_tab_floating_button_incognito_ios14.imageset/tab_grid_new_tab_floating_button_incognito_ios14@2x.png",
     "tab_grid_new_tab_floating_button_incognito_ios14.imageset/tab_grid_new_tab_floating_button_incognito_ios14@3x.png",
+  ]
+}
+
+symbolset("chrome_product") {
+  sources = [
+    "chrome_product.symbolset/Contents.json",
+    "chrome_product.symbolset/chrome.product.cr.svg",
   ]
 }

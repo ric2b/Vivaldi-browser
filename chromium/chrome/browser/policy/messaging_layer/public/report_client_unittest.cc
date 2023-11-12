@@ -9,17 +9,14 @@
 #include <string>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
-#include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
-#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/policy/messaging_layer/util/dm_token_retriever_provider.h"
 #include "chrome/browser/policy/messaging_layer/util/reporting_server_connector.h"
 #include "chrome/browser/policy/messaging_layer/util/reporting_server_connector_test_util.h"
@@ -47,12 +44,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
-#include "chrome/test/base/testing_profile.h"
-#include "components/user_manager/scoped_user_manager.h"
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
 using ::testing::_;
 using ::testing::Eq;
 using ::testing::Invoke;
@@ -74,23 +65,6 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
  protected:
   void SetUp() override {
     ASSERT_TRUE(location_.CreateUniqueTempDir());
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    // Set up fake primary profile.
-    auto mock_user_manager =
-        std::make_unique<testing::NiceMock<ash::FakeChromeUserManager>>();
-    profile_ = std::make_unique<TestingProfile>(
-        base::FilePath(FILE_PATH_LITERAL("/home/chronos/u-0123456789abcdef")));
-    const AccountId account_id(AccountId::FromUserEmailGaiaId(
-        profile_->GetProfileUserName(), "12345"));
-    const user_manager::User* user =
-        mock_user_manager->AddPublicAccountUser(account_id);
-    mock_user_manager->UserLoggedIn(account_id, user->username_hash(),
-                                    /*browser_restart=*/false,
-                                    /*is_child=*/false);
-    ash::ProfileHelper::Get()->ActiveUserHashChanged(user->username_hash());
-    user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::move(mock_user_manager));
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
     // Encryption is enabled by default.
     ASSERT_TRUE(EncryptionModuleInterface::is_enabled());
@@ -113,7 +87,7 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
     }
 
     // Provide a mock cloud policy client.
-    mock_client_.SetDMToken(kDMToken);
+    test_env_.client()->SetDMToken(kDMToken);
     test_reporting_ = std::make_unique<ReportingClient::TestEnvironment>(
         base::FilePath(location_.GetPath()),
         base::StringPiece(
@@ -128,11 +102,6 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
   void TearDown() override {
     // Let everything ongoing to finish.
     task_environment_.RunUntilIdle();
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    user_manager_.reset();
-    profile_.reset();
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
   }
 
   SignedEncryptionInfo GenerateAndSignKey() {
@@ -253,7 +222,7 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
 
   auto GetVerifyDataInvocation() {
     return [this](base::Value::Dict payload,
-                  CloudPolicyClient::ResponseCallback done_cb) {
+                  ::policy::CloudPolicyClient::ResponseCallback done_cb) {
       base::Value::List* const records = payload.FindList("encryptedRecord");
       ASSERT_THAT(records, Ne(nullptr));
       ASSERT_THAT(*records, SizeIs(1));
@@ -315,12 +284,7 @@ class ReportClientTest : public ::testing::TestWithParam<bool> {
   scoped_refptr<test::Decryptor> decryptor_;
   SignedEncryptionInfo signed_encryption_key_;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  std::unique_ptr<TestingProfile> profile_;
-  std::unique_ptr<user_manager::ScopedUserManager> user_manager_;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-  MockCloudPolicyClient mock_client_;
-  ReportingServerConnector::TestEnvironment test_env_{&mock_client_};
+  ReportingServerConnector::TestEnvironment test_env_;
   raw_ptr<ReportQueueConfiguration> report_queue_config_;
   const Destination destination_ = Destination::UPLOAD_EVENTS;
   ReportQueueConfiguration::PolicyCheckCallback policy_checker_callback_ =
@@ -399,7 +363,7 @@ TEST_P(ReportClientTest, EnqueueMessageAndUpload) {
 
     // Uploader is available, let it set the key.
     EXPECT_CALL(
-        mock_client_,
+        *test_env_.client(),
         UploadEncryptedReport(IsEncryptionKeyRequestUploadRequestValid(), _, _))
         .WillOnce(WithArgs<0, 2>(Invoke(GetEncryptionKeyInvocation())))
         .RetiresOnSaturation();
@@ -413,7 +377,7 @@ TEST_P(ReportClientTest, EnqueueMessageAndUpload) {
 
   if (StorageSelector::is_uploader_required() &&
       !StorageSelector::is_use_missive()) {
-    EXPECT_CALL(mock_client_,
+    EXPECT_CALL(*test_env_.client(),
                 UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
         .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
   }
@@ -441,12 +405,12 @@ TEST_P(ReportClientTest, SpeculativelyEnqueueMessageAndUpload) {
   if (StorageSelector::is_uploader_required() &&
       !StorageSelector::is_use_missive()) {
     if (is_encryption_enabled()) {
-      EXPECT_CALL(mock_client_,
+      EXPECT_CALL(*test_env_.client(),
                   UploadEncryptedReport(
                       IsEncryptionKeyRequestUploadRequestValid(), _, _))
           .WillOnce(WithArgs<0, 2>(Invoke(GetEncryptionKeyInvocation())));
     }
-    EXPECT_CALL(mock_client_,
+    EXPECT_CALL(*test_env_.client(),
                 UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
         .WillOnce(WithArgs<0, 2>(Invoke(GetVerifyDataInvocation())));
   }

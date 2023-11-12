@@ -15,11 +15,11 @@
 #import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_consumer.h"
 #import "ios/chrome/browser/ui/ntp/logo_animation_controller.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_focus_delegate.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_presenter.h"
 #import "ios/chrome/browser/ui/page_info/requirements/page_info_presentation.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_presenter.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_delegate.h"
 #import "ios/chrome/browser/web/web_navigation_ntp_delegate.h"
 #import "ios/chrome/browser/web/web_state_container_view_provider.h"
 
@@ -29,22 +29,22 @@
 #import "ios/web/public/web_state.h"
 // End Vivaldi
 
+@protocol ApplicationCommands;
 class Browser;
-@class BookmarkInteractionController;
+@class BookmarksCoordinator;
 @class BrowserContainerViewController;
+@protocol BrowserCoordinatorCommands;
 @class BubblePresenter;
-@class CommandDispatcher;
 @protocol CRWResponderInputView;
 @class DefaultBrowserPromoNonModalScheduler;
 @protocol DefaultPromoNonModalPresentationDelegate;
-// TODO(crbug.com/1331229): Remove all use of the download manager coordinator
-// from BVC
-@class DownloadManagerCoordinator;
+@protocol FindInPageCommands;
 class FullscreenController;
 @protocol HelpCommands;
 @class KeyCommandsProvider;
 @class NewTabPageCoordinator;
 @class LensCoordinator;
+@protocol OmniboxCommands;
 @protocol PopupMenuCommands;
 @class PopupMenuCoordinator;
 // TODO(crbug.com/1328039): Remove all use of the prerender service from BVC
@@ -58,21 +58,20 @@ class PrerenderService;
 @class TabStripLegacyCoordinator;
 @protocol TextZoomCommands;
 @class ToolbarAccessoryPresenter;
+@protocol ToolbarCommands;
 @protocol IncognitoReauthCommands;
+@protocol LoadQueryCommands;
 
 // Vivaldi
 @class PanelInteractionController;
 // End Vivaldi
 
 // TODO(crbug.com/1328039): Remove all use of the prerender service from BVC
-// TODO(crbug.com/1331229): Remove all use of the download manager coordinator
-// from BVC
 typedef struct {
   PrerenderService* prerenderService;
   BubblePresenter* bubblePresenter;
   ToolbarAccessoryPresenter* toolbarAccessoryPresenter;
   PopupMenuCoordinator* popupMenuCoordinator;
-  DownloadManagerCoordinator* downloadManagerCoordinator;
   NewTabPageCoordinator* ntpCoordinator;
   LensCoordinator* lensCoordinator;
   PrimaryToolbarCoordinator* primaryToolbarCoordinator;
@@ -80,12 +79,19 @@ typedef struct {
   TabStripCoordinator* tabStripCoordinator;
   TabStripLegacyCoordinator* legacyTabStripCoordinator;
   SideSwipeController* sideSwipeController;
-  BookmarkInteractionController* bookmarkInteractionController;
+  BookmarksCoordinator* bookmarksCoordinator;
   FullscreenController* fullscreenController;
   id<TextZoomCommands> textZoomHandler;
   id<HelpCommands> helpHandler;
   id<PopupMenuCommands> popupMenuCommandsHandler;
   id<SnackbarCommands> snackbarCommandsHandler;
+  id<ApplicationCommands> applicationCommandsHandler;
+  id<BrowserCoordinatorCommands> browserCoordinatorCommandsHandler;
+  id<FindInPageCommands> findInPageCommandsHandler;
+  id<ToolbarCommands> toolbarCommandsHandler;
+  id<LoadQueryCommands> loadQueryCommandsHandler;
+  id<OmniboxCommands> omniboxCommandsHandler;
+  BOOL isOffTheRecord;
 
   // Vivaldi
   PanelInteractionController* panelInteractionController;
@@ -99,9 +105,9 @@ typedef struct {
     : UIViewController <FindBarPresentationDelegate,
                         IncognitoReauthConsumer,
                         LogoAnimationControllerOwnerOwner,
+                        OmniboxFocusDelegate,
                         OmniboxPopupPresenterDelegate,
                         ThumbStripSupporting,
-                        ToolbarCoordinatorDelegate,
                         WebStateContainerViewProvider,
                         BrowserCommands>
 
@@ -109,13 +115,11 @@ typedef struct {
 // `browser` is the browser whose tabs this BVC will display.
 // `browserContainerViewController` is the container object this BVC will exist
 // inside.
-// `dispatcher` is the dispatcher instance this BVC will use.
 // TODO(crbug.com/992582): Remove references to model objects -- including
-//   `browser` and `dispatcher` -- from this class.
+//   `browser` -- from this class.
 - (instancetype)initWithBrowser:(Browser*)browser
     browserContainerViewController:
         (BrowserContainerViewController*)browserContainerViewController
-                        dispatcher:(CommandDispatcher*)dispatcher
                keyCommandsProvider:(KeyCommandsProvider*)keyCommandsProvider
                       dependencies:
                           (BrowserViewControllerDependencies)dependencies
@@ -125,9 +129,6 @@ typedef struct {
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
-
-// Command dispatcher.
-@property(nonatomic, weak) CommandDispatcher* commandDispatcher;
 
 // Handler for reauth commands.
 @property(nonatomic, weak) id<IncognitoReauthCommands> reauthHandler;
@@ -180,9 +181,13 @@ typedef struct {
 // Shows the voice search UI.
 - (void)startVoiceSearch;
 
+// Displays or refreshes the current tab.
+// TODO:(crbug.com/1385847): Remove this when BVC is refactored to not know
+// about model layer objects such as webstates.
+- (void)displayCurrentTab;
+
 // Vivaldi
 - (ChromeBrowserState*)getBrowserState;
-- (CommandDispatcher*)getCommandDispatcher;
 - (NSString* const)getSnackbarCategory;
 - (web::WebState*)getCurrentWebState;
 // End Vivaldi

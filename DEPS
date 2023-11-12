@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I380cddd91b50eb60161b4003af2cd764ab731caa",
+  "upstream_commit_id": "I4493761b09bf6432d129b2498c829d98dfe353e5",
 }
 
 hooks = [
@@ -336,12 +336,24 @@ hooks = [
   {
     'name': 'Fetch Android AFDO profile',
     'pattern': '.',
-    'condition': 'checkout_android or checkout_linux',
+    'condition': 'checkout_android',
     'action': [ 'python3',
                 'chromium/tools/download_optimization_profile.py',
                 '--newest_state=chromium/chrome/android/profiles/newest.txt',
                 '--local_state=chromium/chrome/android/profiles/local.txt',
                 '--output_name=chromium/chrome/android/profiles/afdo.prof',
+                '--gs_url_base=chromeos-prebuilt/afdo-job/llvm',
+    ],
+  },
+  {
+    'name': 'Fetch Android Arm AFDO profile',
+    'pattern': '.',
+    'condition': 'checkout_android',
+    'action': [ 'python3',
+                'chromium/tools/download_optimization_profile.py',
+                '--newest_state=chromium/chrome/android/profiles/arm.newest.txt',
+                '--local_state=chromium/chrome/android/profiles/arm.local.txt',
+                '--output_name=chromium/chrome/android/profiles/arm.afdo.prof',
                 '--gs_url_base=chromeos-prebuilt/afdo-job/llvm',
     ],
   },

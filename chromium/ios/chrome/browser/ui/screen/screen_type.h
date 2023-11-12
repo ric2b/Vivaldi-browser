@@ -7,13 +7,10 @@
 
 // The types of the start up screens.
 typedef NS_ENUM(NSInteger, ScreenType) {
-  kWelcomeAndConsent,
-  kSignInAndSync,
   kSignIn,
-  kLegacySignIn,
-  kSync,
   kTangibleSync,
   kDefaultBrowserPromo,
+
   // It isn't a screen, but a signal that no more screen should be
   // presented.
   kStepsCompleted,

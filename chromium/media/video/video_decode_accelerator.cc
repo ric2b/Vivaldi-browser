@@ -8,6 +8,7 @@
 #include <GLES2/gl2ext.h>
 
 #include "base/logging.h"
+#include "base/task/single_thread_task_runner.h"
 #include "media/base/video_util.h"
 
 namespace media {
@@ -83,9 +84,9 @@ void VideoDecodeAccelerator::Decode(scoped_refptr<DecoderBuffer> buffer,
   NOTREACHED() << "By default DecoderBuffer is not supported.";
 }
 
-bool VideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
+bool VideoDecodeAccelerator::TryToSetupDecodeOnSeparateSequence(
     const base::WeakPtr<Client>& decode_client,
-    const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
+    const scoped_refptr<base::SequencedTaskRunner>& decode_task_runner) {
   // Implementations in the process that VDA runs in must override this.
   LOG(FATAL) << "This may only be called in the same process as VDA impl.";
   return false;

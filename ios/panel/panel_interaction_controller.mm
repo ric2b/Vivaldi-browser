@@ -8,26 +8,25 @@
 #import "base/ios/ios_util.h"
 #import "base/strings/utf_string_conversions.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_interaction_controller.h"
+#import "ios/chrome/browser/ui/bookmarks/bookmarks_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
+#import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
-#import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
-#import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "ios/notes/note_interaction_controller.h"
 #import "ios/notes/note_home_view_controller.h"
+#import "ios/notes/note_interaction_controller.h"
 #import "ios/panel/panel_constants.h"
 #import "ios/panel/panel_transitioning_delegate.h"
 #import "ios/panel/panel_view_controller.h"
 #import "ios/panel/sidebar_panel_view_controller.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
-#import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 
 using l10n_util::GetNSString;
@@ -60,7 +59,8 @@ enum class PresentedState {
   __weak UIViewController* _parentController;
 
   NoteInteractionController* _noteInteractionController;
-  BookmarkInteractionController* _bookmarkInteractionController;
+  BookmarksCoordinator* _bookmarksCoordinator;
+  ReadingListCoordinator* _readinglistCoordinator;
 }
 
 @property(nonatomic, strong) HistoryCoordinator* historyCoordinator;
@@ -83,7 +83,6 @@ enum class PresentedState {
 - (void)dismissPanelBrowserAnimated:(BOOL)animated
                            inIncognito:(BOOL)inIncognito
                                 newTab:(BOOL)newTab;
-- (void)panelBrowserDismissed;
 @end
 
 @implementation PanelInteractionController
@@ -95,7 +94,6 @@ enum class PresentedState {
   if (self) {
     _browser = browser;
     _currentPresentedState = PresentedState::NONE;
-    DCHECK(_parentController);
   }
   return self;
 }
@@ -105,11 +103,11 @@ enum class PresentedState {
 }
 
 - (void)shutdown {
-  [self panelBrowserDismissed];
     _noteInteractionController = nil;
     // shutdown
     _historyCoordinator = nil;
-    _bookmarkInteractionController = nil;
+    _bookmarksCoordinator = nil;
+    _readinglistCoordinator = nil;
 }
 
 - (void)dismissPanelBrowserAnimated:(BOOL)animated
@@ -122,16 +120,13 @@ enum class PresentedState {
   self.currentPresentedState = PresentedState::NONE;
 }
 
-- (void)panelBrowserDismissed {
-
-}
 - (void)presentPanel:(PanelPage)page
     withSearchString:(NSString*)searchString {
   DCHECK_EQ(PresentedState::NONE, self.currentPresentedState);
   DCHECK(!self.panelController);
 
   UIViewController* vc;
-  if (_parentController.isDeviceIPad) {
+  if (self.showSidePanel) {
       SidebarPanelViewController* sidebar =
         [[SidebarPanelViewController alloc] init];
       self.tc = [[PanelTransitioningDelegate alloc] init];
@@ -150,20 +145,23 @@ enum class PresentedState {
 
   [self initializeNoteInteractionController:vc];
   [_noteInteractionController showNotes];
-  [self initializeBookmarkInteractionController:vc];
-  [_bookmarkInteractionController presentBookmarks];
+  [self initializeBookmarksCoordinator:vc];
+  [_bookmarksCoordinator presentBookmarks];
   [self showHistory:vc withSearchString:searchString];
+  [self showReadinglist:vc];
   _noteInteractionController.panelDelegate = self;
-  _bookmarkInteractionController.panelDelegate = self;
+  _bookmarksCoordinator.panelDelegate = self;
+  _readinglistCoordinator.panelDelegate = self;
   self.historyCoordinator.panelDelegate = self;
   int index = 0;
   switch (page) {
     case PanelPage::BookmarksPage: index = 0; break;
-    case PanelPage::NotesPage: index = 1; break;
+    case PanelPage::ReadinglistPage: index = 1; break;
     case PanelPage::HistoryPage: index = 2; break;
+    case PanelPage::NotesPage: index = 3; break;
   }
 
-  if (_parentController.isDeviceIPad) {
+  if (self.showSidePanel) {
       [self setupAndPresentiPadPanel:index];
   } else {
       [self setupAndPresentPhonePanel:index];
@@ -176,7 +174,9 @@ enum class PresentedState {
      (NoteNavigationController*)
        _noteInteractionController.noteNavigationController
       withBookmarkController:
-       _bookmarkInteractionController.bookmarkNavigationController
+       _bookmarksCoordinator.bookmarkNavigationController
+      andReadinglistController:
+       _readinglistCoordinator.navigationController
       andHistoryController:self.historyCoordinator.historyNavigationController];
     self.sidebarPanelController.view.backgroundColor =
         [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
@@ -192,7 +192,9 @@ enum class PresentedState {
        (NoteNavigationController*)
      _noteInteractionController.noteNavigationController
       withBookmarkController:
-       _bookmarkInteractionController.bookmarkNavigationController
+       _bookmarksCoordinator.bookmarkNavigationController
+     andReadinglistController:
+       _readinglistCoordinator.navigationController
       andHistoryController:self.historyCoordinator.historyNavigationController];
     self.panelController.view.backgroundColor =
       [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
@@ -240,11 +242,22 @@ enum class PresentedState {
 }
 
 // Initializes the bookmark interaction controller if not already initialized.
-- (void)initializeBookmarkInteractionController:(UIViewController*)vc {
-  if (_bookmarkInteractionController)
+- (void)initializeBookmarksCoordinator:(UIViewController*)vc {
+  if (_bookmarksCoordinator)
     return;
-  _bookmarkInteractionController =
-    [[BookmarkInteractionController alloc] initWithBrowser:_browser];
+  _bookmarksCoordinator =
+    [[BookmarksCoordinator alloc] initWithBrowser:_browser];
+}
+
+// Initializes the reading list interaction controller
+// if not already initialized.
+- (void)showReadinglist:(UIViewController*)vc {
+  if (_readinglistCoordinator)
+    return;
+  _readinglistCoordinator = [[ReadingListCoordinator alloc]
+      initWithBaseViewController:vc
+                         browser:_browser];
+    [_readinglistCoordinator start];
 }
 
 - (void)dismissPanelModalControllerAnimated:(BOOL)animated {
@@ -254,17 +267,25 @@ enum class PresentedState {
 }
 
 - (void)panelDismissed {
-    if (self.panelController) {
-        [self.panelController panelDismissed];
-        self.panelController = nil;
+  if (self.panelController) {
+    [self.panelController panelDismissed];
+    [self dismissPanelModalControllerAnimated:YES];
+    self.panelController = nil;
+  }
+  if (self.sidebarPanelController) {
+    [self.sidebarPanelController panelDismissed];
+    if (self.showSidePanel) {
+      [self.sidebarPanelController.view removeFromSuperview];
+      [self.sidebarPanelController removeFromParentViewController];
+      self.sidebarPanelController = nil;
     }
-    if (self.sidebarPanelController) {
-        [self.sidebarPanelController panelDismissed];
-        if (_parentController.isDeviceIPad) {
-            [self.sidebarPanelController.view removeFromSuperview];
-            [self.sidebarPanelController removeFromParentViewController];
-            self.sidebarPanelController = nil;
-        }
-    }
+  }
 }
+
+/// Returns true if device is iPad and multitasking UI has
+/// enough space to show iPad side panel.
+- (BOOL)showSidePanel {
+  return VivaldiGlobalHelpers.canShowSidePanel;
+}
+
 @end

@@ -311,15 +311,8 @@ public class ManualFillingControllerTest {
         when(mMockSoftKeyboardDelegate.calculateSoftKeyboardHeight(any())).thenReturn(0);
         when(mMockActivity.getTabModelSelector()).thenReturn(mMockTabModelSelector);
         when(mMockActivity.getActivityTabProvider()).thenReturn(mActivityTabProvider);
-        BrowserControlsManager browserControlsManager = new BrowserControlsManager(
-                mMockActivity, 0) {
-            @Override
-            protected boolean isInVr() {
-                return false;
-            }
-            @Override
-            protected void rawTopContentOffsetChangedForVr() {}
-        };
+        BrowserControlsManager browserControlsManager =
+                new BrowserControlsManager(mMockActivity, 0);
         when(mMockActivity.getBrowserControlsManager()).thenReturn(browserControlsManager);
         when(mMockActivity.getFullscreenManager()).thenReturn(mMockFullscreenManager);
         ObservableSupplierImpl<CompositorViewHolder> compositorViewHolderSupplier =
@@ -1189,7 +1182,7 @@ public class ManualFillingControllerTest {
         when(mMockTabModelSelector.getCurrentTab()).thenReturn(tab);
         mActivityTabProvider.set(tab);
         mediator.getTabModelObserverForTesting().didAddTab(
-                tab, FROM_BROWSER_ACTIONS, TabCreationState.LIVE_IN_FOREGROUND);
+                tab, FROM_BROWSER_ACTIONS, TabCreationState.LIVE_IN_FOREGROUND, false);
         mediator.getTabObserverForTesting().onShown(tab, FROM_NEW);
         mediator.getTabModelObserverForTesting().didSelectTab(tab, FROM_NEW, lastId);
         setContentAreaDimensions(2.f, 300, 128);

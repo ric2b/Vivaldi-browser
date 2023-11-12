@@ -12,16 +12,15 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/stack.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/preloading/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
@@ -960,6 +959,60 @@ RenderFrameHostImpl* DescendantRenderFrameHostImplAt(
   return DescendantRenderFrameHostAtInternal(
       static_cast<RenderFrameHostImpl*>(adapter.render_frame_host()), "rfh",
       descendant_indices);
+}
+
+EffectiveURLContentBrowserTestContentBrowserClient::
+    EffectiveURLContentBrowserTestContentBrowserClient(
+        bool requires_dedicated_process)
+    : helper_(requires_dedicated_process) {}
+
+EffectiveURLContentBrowserTestContentBrowserClient::
+    EffectiveURLContentBrowserTestContentBrowserClient(
+        const GURL& url_to_modify,
+        const GURL& url_to_return,
+        bool requires_dedicated_process)
+    : helper_(requires_dedicated_process) {
+  AddTranslation(url_to_modify, url_to_return);
+}
+
+EffectiveURLContentBrowserTestContentBrowserClient::
+    ~EffectiveURLContentBrowserTestContentBrowserClient() = default;
+
+void EffectiveURLContentBrowserTestContentBrowserClient::AddTranslation(
+    const GURL& url_to_modify,
+    const GURL& url_to_return) {
+  helper_.AddTranslation(url_to_modify, url_to_return);
+}
+
+GURL EffectiveURLContentBrowserTestContentBrowserClient::GetEffectiveURL(
+    BrowserContext* browser_context,
+    const GURL& url) {
+  return helper_.GetEffectiveURL(url);
+}
+
+bool EffectiveURLContentBrowserTestContentBrowserClient::
+    DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
+                                    const GURL& effective_site_url) {
+  return helper_.DoesSiteRequireDedicatedProcess(browser_context,
+                                                 effective_site_url);
+}
+
+CustomStoragePartitionBrowserClient::CustomStoragePartitionBrowserClient(
+    const GURL& site_to_isolate)
+    : site_to_isolate_(site_to_isolate) {}
+
+StoragePartitionConfig
+CustomStoragePartitionBrowserClient::GetStoragePartitionConfigForSite(
+    BrowserContext* browser_context,
+    const GURL& site) {
+  // Override for |site_to_isolate_|.
+  if (site == site_to_isolate_) {
+    return StoragePartitionConfig::Create(
+        browser_context, "blah_isolated_storage", "blah_isolated_storage",
+        false /* in_memory */);
+  }
+
+  return StoragePartitionConfig::CreateDefault(browser_context);
 }
 
 }  // namespace content

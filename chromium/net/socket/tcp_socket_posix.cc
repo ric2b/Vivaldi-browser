@@ -12,9 +12,9 @@
 #include <memory>
 
 #include "base/atomicops.h"
-#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -47,7 +47,6 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "net/android/network_library.h"
-#include "net/android/radio_activity_tracker.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // If we don't have a definition for TCPI_OPT_SYN_DATA, create one.
@@ -340,10 +339,6 @@ int TCPSocketPosix::Write(
     const NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(socket_);
   DCHECK(!callback.is_null());
-
-#if BUILDFLAG(IS_ANDROID)
-  android::MaybeRecordTCPWriteForWakeupTrigger(traffic_annotation);
-#endif  // BUILDFLAG(IS_ANDROID)
 
   CompletionOnceCallback write_callback = base::BindOnce(
       &TCPSocketPosix::WriteCompleted,

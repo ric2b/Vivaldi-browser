@@ -2,30 +2,20 @@
 
 #import "ios/notes/note_add_edit_view_controller.h"
 
-#include <memory>
-#include <set>
+#import <memory>
+#import <set>
 
 #import "base/auto_reset.h"
 #import "base/check_op.h"
 #import "base/ios/block_types.h"
 #import "base/mac/foundation_util.h"
-
 #import "base/mac/scoped_cftyperef.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/url_formatter/url_fixer.h"
-#import "ios/notes/notes_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/flags/system_flags.h"
+#import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
-#import "ios/notes/note_folder_view_controller.h"
-#import "ios/notes/note_mediator.h"
-#import "ios/notes/note_model_bridge_observer.h"
-#import "ios/notes/note_ui_constants.h"
-#import "ios/notes/note_utils_ios.h"
-#import "ios/notes/cells/note_parent_folder_item.h"
-#import "ios/notes/cells/note_text_field_item.h"
-#import "ios/notes/cells/note_text_view_item.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/image_util/image_util.h"
@@ -34,15 +24,24 @@
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/notes/cells/note_parent_folder_item.h"
+#import "ios/notes/cells/note_text_field_item.h"
+#import "ios/notes/cells/note_text_view_item.h"
+#import "ios/notes/note_folder_view_controller.h"
+#import "ios/notes/note_mediator.h"
+#import "ios/notes/note_model_bridge_observer.h"
+#import "ios/notes/note_ui_constants.h"
+#import "ios/notes/note_utils_ios.h"
+#import "ios/notes/notes_factory.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/gfx/image/image.h"
 #import "url/gurl.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -209,7 +208,6 @@ const CGFloat kEstimatedTableSectionFooterHeight = 40;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.tableView.backgroundColor = self.styler.tableViewBackgroundColor;
   self.tableView.estimatedRowHeight = kEstimatedTableRowHeight;
   self.tableView.rowHeight = UITableViewAutomaticDimension;
   self.tableView.sectionHeaderHeight = 0;

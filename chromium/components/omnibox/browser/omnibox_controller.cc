@@ -4,13 +4,13 @@
 
 #include "components/omnibox/browser/omnibox_controller.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram.h"
+#include "base/trace_event/trace_event.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
+#include "components/omnibox/browser/autocomplete_controller_emitter.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_client.h"
-#include "components/omnibox/browser/omnibox_controller_emitter.h"
-#include "components/omnibox/browser/omnibox_edit_controller.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
@@ -25,7 +25,8 @@ OmniboxController::OmniboxController(OmniboxEditModel* omnibox_edit_model,
           AutocompleteClassifier::DefaultOmniboxProviders())) {
   autocomplete_controller_->AddObserver(this);
 
-  OmniboxControllerEmitter* emitter = client_->GetOmniboxControllerEmitter();
+  AutocompleteControllerEmitter* emitter =
+      client_->GetAutocompleteControllerEmitter();
   if (emitter)
     autocomplete_controller_->AddObserver(emitter);
 }
@@ -35,6 +36,7 @@ OmniboxController::~OmniboxController() {
 
 void OmniboxController::StartAutocomplete(
     const AutocompleteInput& input) const {
+  TRACE_EVENT0("omnibox", "OmniboxController::StartAutocomplete");
   ClearPopupKeywordMode();
 
   // We don't explicitly clear OmniboxPopupModel::manually_selected_match, as
@@ -44,6 +46,7 @@ void OmniboxController::StartAutocomplete(
 
 void OmniboxController::OnResultChanged(AutocompleteController* controller,
                                         bool default_match_changed) {
+  TRACE_EVENT0("omnibox", "OmniboxController::OnResultChanged");
   DCHECK(controller == autocomplete_controller_.get());
 
   const bool was_open = omnibox_edit_model_->PopupIsOpen();
@@ -80,11 +83,10 @@ void OmniboxController::OnResultChanged(AutocompleteController* controller,
 
   // Note: The client outlives |this|, so bind a weak pointer to the callback
   // passed in to eliminate the potential for crashes on shutdown.
-  // `should_prerender` is set to `controller->done()` as prerender may only
-  // want to start prerendering a result after all Autocomplete results are
-  // ready.
+  // `should_preload` is set to `controller->done()` as prerender may only want
+  // to start preloading a result after all Autocomplete results are ready.
   client_->OnResultChanged(
-      result(), default_match_changed, /*should_prerender=*/controller->done(),
+      result(), default_match_changed, /*should_preload=*/controller->done(),
       base::BindRepeating(&OmniboxController::SetRichSuggestionBitmap,
                           weak_ptr_factory_.GetWeakPtr()));
 }
@@ -94,6 +96,7 @@ void OmniboxController::InvalidateCurrentMatch() {
 }
 
 void OmniboxController::ClearPopupKeywordMode() const {
+  TRACE_EVENT0("omnibox", "OmniboxController::ClearPopupKeywordMode");
   if (omnibox_edit_model_->PopupIsOpen()) {
     OmniboxPopupSelection selection = omnibox_edit_model_->GetPopupSelection();
     if (selection.state == OmniboxPopupSelection::KEYWORD_MODE) {

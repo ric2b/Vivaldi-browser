@@ -9,6 +9,7 @@
 #include "base/strings/string_piece_forward.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
+#include "components/tab_groups/tab_group_info.h"
 #include "ui/base/ui_base_types.h"
 
 namespace crosapi {
@@ -55,12 +56,16 @@ class BrowserAction {
   static std::unique_ptr<BrowserAction> OpenForFullRestore(
       bool skip_crash_restore);
   static std::unique_ptr<BrowserAction> RestoreTab();
-  static std::unique_ptr<BrowserAction> HandleTabScrubbing(float x_offset);
+  static std::unique_ptr<BrowserAction> HandleTabScrubbing(
+      float x_offset,
+      bool is_fling_scroll_event);
   static std::unique_ptr<BrowserAction> CreateBrowserWithRestoredData(
       const std::vector<GURL>& urls,
       const gfx::Rect& bounds,
+      const std::vector<tab_groups::TabGroupInfo>& tab_group_infos,
       ui::WindowShowState show_state,
       int32_t active_tab_index,
+      int32_t first_non_pinned_tab_index,
       base::StringPiece app_name,
       int32_t restore_window_id);
 

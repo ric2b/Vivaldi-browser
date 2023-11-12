@@ -54,6 +54,17 @@ extern const base::FeatureParam<int> kHighEfficiencyModePromoTabCountThreshold;
 extern const base::FeatureParam<int>
     kHighEfficiencyModePromoMemoryPercentThreshold;
 
+// Flag to control a baseline HaTS survey for Chrome performance.
+BASE_DECLARE_FEATURE(kPerformanceControlsPerformanceSurvey);
+BASE_DECLARE_FEATURE(kPerformanceControlsBatteryPerformanceSurvey);
+BASE_DECLARE_FEATURE(kPerformanceControlsHighEfficiencyOptOutSurvey);
+BASE_DECLARE_FEATURE(kPerformanceControlsBatterySaverOptOutSurvey);
+
+// Defines the time delta to look back when checking if a device has used
+// battery.
+extern const base::FeatureParam<base::TimeDelta>
+    kPerformanceControlsBatterySurveyLookback;
+
 // On certain platforms (ChromeOS), the battery level displayed to the user is
 // artificially lower than the actual battery level. Unfortunately, the battery
 // level that Battery Saver Mode looks at is the "actual" level, so users on

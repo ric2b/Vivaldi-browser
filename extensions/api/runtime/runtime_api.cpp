@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -44,7 +45,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/devtools/devtools_connector.h"
-
+#include "ui/vivaldi_browser_window.h"
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_runtime_feature.h"
 #include "extensions/api/window/window_private_api.h"
@@ -166,10 +167,18 @@ void RuntimeAPI::OnProfileAvatarChanged(Profile* profile) {
 }
 
 ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
-  // Free any open devtools if the user selects Exit from the menu.
-  DevtoolsConnectorAPI::CloseAllDevtools();
+  using vivaldi::runtime_private::Exit::Params;
 
-  chrome::CloseAllBrowsersAndQuit();
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  if (!browser_shutdown::IsTryingToQuit()) {
+    // Free any open devtools if the user selects Exit from the menu.
+    DevtoolsConnectorAPI::CloseAllDevtools();
+
+    VivaldiBrowserWindow::SetPromptOnQuit(params->prompt);
+
+    chrome::CloseAllBrowsersAndQuit();
+  }
 
   return RespondNow(NoArguments());
 }

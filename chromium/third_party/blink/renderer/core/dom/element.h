@@ -83,6 +83,7 @@ class DOMRectList;
 class DOMStringMap;
 class DOMTokenList;
 class DisplayLockContext;
+class DisplayStyle;
 class Document;
 class EditContext;
 class ElementAnimations;
@@ -116,6 +117,8 @@ class StylePropertyMapReadOnly;
 class StyleRecalcContext;
 class StyleRequest;
 class V8UnionBooleanOrScrollIntoViewOptions;
+class ComputedStyleBuilder;
+class StyleAdjuster;
 
 enum class CSSPropertyID;
 enum class CSSValueID;
@@ -583,11 +586,16 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual void CloneNonAttributePropertiesFrom(const Element&,
                                                CloneChildrenFlag) {}
 
+  // NOTE: This shadows Node::GetComputedStyle().
+  // The definition is in node_computed_style.h.
+  inline const ComputedStyle* GetComputedStyle() const;
+
   void AttachLayoutTree(AttachContext&) override;
   void DetachLayoutTree(bool performing_reattach = false) override;
 
   virtual LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout);
-  virtual bool LayoutObjectIsNeeded(const ComputedStyle&) const;
+  virtual bool LayoutObjectIsNeeded(const DisplayStyle&) const;
+  bool LayoutObjectIsNeeded(const ComputedStyle&) const;
 
   const ComputedStyle* ParentComputedStyle() const;
 
@@ -885,7 +893,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   //
   // This is appropriate to use if the cached version is invalid in a given
   // situation.
-  scoped_refptr<ComputedStyle> UncachedStyleForPseudoElement(
+  scoped_refptr<const ComputedStyle> UncachedStyleForPseudoElement(
       const StyleRequest&);
 
   // This is the same as UncachedStyleForPseudoElement, except that the caller
@@ -893,8 +901,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // queries are evaluated correctly.
   //
   // See StyleRecalcContext for more information.
-  scoped_refptr<ComputedStyle> StyleForPseudoElement(const StyleRecalcContext&,
-                                                     const StyleRequest&);
+  scoped_refptr<const ComputedStyle> StyleForPseudoElement(
+      const StyleRecalcContext&,
+      const StyleRequest&);
 
   // Returns the ComputedStyle after applying the declarations in the @try block
   // at the given index. Returns nullptr if the current element doesn't use
@@ -1006,7 +1015,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsSpellCheckingEnabled() const;
 
   // FIXME: public for LayoutTreeBuilder, we shouldn't expose this though.
-  scoped_refptr<ComputedStyle> StyleForLayoutObject(const StyleRecalcContext&);
+  scoped_refptr<const ComputedStyle> StyleForLayoutObject(
+      const StyleRecalcContext&);
+
+  // Called by StyleAdjuster during style resolution. Provides an opportunity to
+  // make final Element-specific adjustments to the ComputedStyle.
+  void AdjustStyle(base::PassKey<StyleAdjuster>, ComputedStyleBuilder&);
 
   bool HasID() const;
   bool HasClass() const;
@@ -1092,6 +1106,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   ContainerQueryEvaluator* GetContainerQueryEvaluator() const;
   ContainerQueryEvaluator& EnsureContainerQueryEvaluator();
   bool SkippedContainerStyleRecalc() const;
+
+  // See PostStyleUpdateScope::PseudoData::AddPendingBackdrop
+  void ApplyPendingBackdropPseudoElementUpdate();
 
   virtual void SetActive(bool active);
   virtual void SetHovered(bool hovered);
@@ -1180,7 +1197,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void IncrementAnchoredPopoverCount();
 
   // https://drafts.csswg.org/css-anchor-1/#implicit-anchor-element
-  Element* ImplicitAnchorElement() const;
+  Element* ImplicitAnchorElement();
 
  protected:
   bool HasElementData() const { return element_data_; }
@@ -1214,8 +1231,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   virtual void WillRecalcStyle(const StyleRecalcChange);
   virtual void DidRecalcStyle(const StyleRecalcChange);
-  virtual scoped_refptr<ComputedStyle> CustomStyleForLayoutObject(
+  virtual scoped_refptr<const ComputedStyle> CustomStyleForLayoutObject(
       const StyleRecalcContext&);
+  virtual void AdjustStyle(ComputedStyleBuilder&);
 
   virtual NamedItemType GetNamedItemType() const {
     return NamedItemType::kNone;
@@ -1254,7 +1272,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   static bool AttributeValueIsJavaScriptURL(const Attribute&);
 
-  scoped_refptr<ComputedStyle> OriginalStyleForLayoutObject(
+  scoped_refptr<const ComputedStyle> OriginalStyleForLayoutObject(
       const StyleRecalcContext&);
 
   // Step 4 of http://domparsing.spec.whatwg.org/#insertadjacenthtml()
@@ -1317,7 +1335,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   // these changes can be directly propagated to this element (the child).
   // If these conditions are met, propagates the changes to the current style
   // and returns the new style. Otherwise, returns null.
-  scoped_refptr<ComputedStyle> PropagateInheritedProperties();
+  scoped_refptr<const ComputedStyle> PropagateInheritedProperties();
 
   const ComputedStyle* EnsureOwnComputedStyle(
       const StyleRecalcContext&,
@@ -1356,6 +1374,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     kRebuildLayoutTree,
     kAttachLayoutTree,
   };
+
+  bool ShouldUpdateBackdropPseudoElement(const StyleRecalcChange);
+
+  void UpdateBackdropPseudoElement(const StyleRecalcChange,
+                                   const StyleRecalcContext&);
 
   void UpdateFirstLetterPseudoElement(StyleUpdatePhase,
                                       const StyleRecalcContext&);
@@ -1480,6 +1503,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   inline void UpdateCallbackSelectors(const ComputedStyle* old_style,
                                       const ComputedStyle* new_style);
+  inline void NotifyIfMatchedDocumentRulesSelectorsChanged(
+      const ComputedStyle* old_style,
+      const ComputedStyle* new_style);
 
   // Clone is private so that non-virtual CloneElementWithChildren and
   // CloneElementWithoutChildren are used instead.
@@ -1573,12 +1599,21 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void PseudoStateChanged(CSSSelector::PseudoType pseudo,
                           AffectedByPseudoStateChange&&);
 
+  enum class HighlightRecalc {
+    // No highlight recalc is needed.
+    kNone,
+    // The HighlightData from the old style can be re-used.
+    kReuse,
+    // Highlights must be calculated in full.
+    kFull,
+  };
+
   // Highlight pseudos inherit all properties from the corresponding highlight
   // in the parent, but virtually all existing content uses universal rules
   // like *::selection. To improve runtime and keep copy-on-write inheritance,
   // avoid recalc if neither parent nor child matched any non-universal rules.
-  bool TryToSkipHighlightPseudos(const ComputedStyle* old_style,
-                                 ComputedStyle& new_style) const;
+  HighlightRecalc CalculateHighlightRecalc(const ComputedStyle* old_style,
+                                           const ComputedStyle* new_style);
 
   Member<ElementData> element_data_;
 };

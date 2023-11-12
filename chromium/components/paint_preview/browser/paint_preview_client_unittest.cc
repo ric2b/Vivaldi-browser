@@ -192,8 +192,9 @@ TEST_P(PaintPreviewClientRenderViewHostTest, CaptureMainFrameMock) {
         EXPECT_EQ(status, mojom::PaintPreviewStatus::kOk);
 
         auto token = base::UnguessableToken::Deserialize(
-            result->proto.root_frame().embedding_token_high(),
-            result->proto.root_frame().embedding_token_low());
+                         result->proto.root_frame().embedding_token_high(),
+                         result->proto.root_frame().embedding_token_low())
+                         .value();
         EXPECT_NE(token, base::UnguessableToken::Null());
 
         // The token for the main frame is set internally since the render frame

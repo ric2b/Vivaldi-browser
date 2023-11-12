@@ -8,14 +8,13 @@
 
 #include "base/check.h"
 
-namespace policy {
-
-namespace dlp_test_util {
+namespace policy::dlp_test_util {
 
 namespace {
 
 const char kName[] = "name";
 const char kDescription[] = "description";
+const char kRuleId[] = "rule_id";
 const char kSources[] = "sources";
 const char kUrls[] = "urls";
 const char kDestinations[] = "destinations";
@@ -26,52 +25,105 @@ const char kLevel[] = "level";
 
 }  // namespace
 
-base::Value CreateSources(base::Value urls) {
-  base::Value srcs(base::Value::Type::DICTIONARY);
-  srcs.SetKey(kUrls, std::move(urls));
+base::Value::Dict CreateSources(base::Value::List urls) {
+  base::Value::Dict srcs;
+  srcs.Set(kUrls, std::move(urls));
   return srcs;
 }
 
-base::Value CreateDestinations(absl::optional<base::Value> urls,
-                               absl::optional<base::Value> components) {
-  base::Value dsts(base::Value::Type::DICTIONARY);
+base::Value::Dict CreateDestinations(
+    absl::optional<base::Value::List> urls,
+    absl::optional<base::Value::List> components) {
+  base::Value::Dict dsts;
   if (urls.has_value()) {
-    DCHECK(urls->is_list());
-    dsts.SetKey(kUrls, std::move(urls.value()));
+    dsts.Set(kUrls, std::move(urls.value()));
   }
   if (components.has_value()) {
-    DCHECK(components->is_list());
-    dsts.SetKey(kComponents, std::move(components.value()));
+    dsts.Set(kComponents, std::move(components.value()));
   }
   return dsts;
 }
 
-base::Value CreateRestrictionWithLevel(const std::string& restriction,
-                                       const std::string& level) {
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetStringKey(kClass, restriction);
-  dict.SetStringKey(kLevel, level);
+base::Value::Dict CreateRestrictionWithLevel(const std::string& restriction,
+                                             const std::string& level) {
+  base::Value::Dict dict;
+  dict.Set(kClass, restriction);
+  dict.Set(kLevel, level);
   return dict;
 }
 
-base::Value CreateRule(const std::string& name,
-                       const std::string& desc,
-                       base::Value src_urls,
-                       absl::optional<base::Value> dst_urls,
-                       absl::optional<base::Value> dst_components,
-                       base::Value restrictions) {
-  base::Value rule(base::Value::Type::DICTIONARY);
-  rule.SetStringKey(kName, name);
-  rule.SetStringKey(kDescription, desc);
-  DCHECK(src_urls.is_list());
-  rule.SetKey(kSources, CreateSources(std::move(src_urls)));
-  rule.SetKey(kDestinations, CreateDestinations(std::move(dst_urls),
-                                                std::move(dst_components)));
-  DCHECK(restrictions.is_list());
-  rule.SetKey(kRestrictions, std::move(restrictions));
+base::Value::Dict CreateRule(const std::string& name,
+                             const std::string& desc,
+                             const std::string& rule_id,
+                             base::Value::List src_urls,
+                             absl::optional<base::Value::List> dst_urls,
+                             absl::optional<base::Value::List> dst_components,
+                             base::Value::List restrictions) {
+  base::Value::Dict rule;
+  rule.Set(kName, name);
+  rule.Set(kDescription, desc);
+  if (!rule_id.empty()) {
+    rule.Set(kRuleId, rule_id);
+  }
+  rule.Set(kSources, CreateSources(std::move(src_urls)));
+  rule.Set(kDestinations,
+           CreateDestinations(std::move(dst_urls), std::move(dst_components)));
+  rule.Set(kRestrictions, std::move(restrictions));
   return rule;
 }
 
-}  // namespace dlp_test_util
+DlpRule::DlpRule(const std::string& name,
+                 const std::string& description,
+                 const std::string& id)
+    : name(name), description(description), id(id) {}
+DlpRule::DlpRule() = default;
+DlpRule::~DlpRule() = default;
+DlpRule::DlpRule(const DlpRule& other) = default;
+DlpRule& DlpRule::AddSrcUrl(const std::string& url) {
+  src_urls.emplace_back(url);
+  return *this;
+}
+DlpRule& DlpRule::AddDstUrl(const std::string& url) {
+  dst_urls.emplace_back(url);
+  return *this;
+}
+DlpRule& DlpRule::AddDstComponent(const std::string& component) {
+  dst_components.emplace_back(component);
+  return *this;
+}
+DlpRule& DlpRule::AddRestriction(const std::string& type,
+                                 const std::string& level) {
+  restrictions.emplace_back(type, level);
+  return *this;
+}
 
-}  // namespace policy
+base::Value::Dict DlpRule::Create() const {
+  base::Value::List src_urls_list;
+  for (const std::string& src : src_urls) {
+    src_urls_list.Append(src);
+  }
+
+  base::Value::List dst_urls_list;
+  for (std::string dst : dst_urls) {
+    dst_urls_list.Append(dst);
+  }
+
+  base::Value::List dst_components_list;
+  for (std::string component : dst_components) {
+    dst_components_list.Append(component);
+  }
+
+  base::Value::List restrictions_list;
+  for (const auto& [type, level] : restrictions) {
+    base::Value::Dict class_level_dict;
+    class_level_dict.Set("class", type);
+    class_level_dict.Set("level", level);
+    restrictions_list.Append(std::move(class_level_dict));
+  }
+
+  return CreateRule(name, description, id, std::move(src_urls_list),
+                    std::move(dst_urls_list), std::move(dst_components_list),
+                    std::move(restrictions_list));
+}
+
+}  // namespace policy::dlp_test_util

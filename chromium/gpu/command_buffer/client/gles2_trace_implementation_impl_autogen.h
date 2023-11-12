@@ -2406,6 +2406,42 @@ void GLES2TraceImplementation::EndSharedImageAccessDirectCHROMIUM(
   gl_->EndSharedImageAccessDirectCHROMIUM(texture);
 }
 
+void GLES2TraceImplementation::ConvertRGBAToYUVAMailboxesINTERNAL(
+    GLenum planes_yuv_color_space,
+    GLenum plane_config,
+    GLenum subsampling,
+    const GLbyte* mailboxes) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::ConvertRGBAToYUVAMailboxesINTERNAL");
+  gl_->ConvertRGBAToYUVAMailboxesINTERNAL(planes_yuv_color_space, plane_config,
+                                          subsampling, mailboxes);
+}
+
+void GLES2TraceImplementation::ConvertYUVAMailboxesToRGBINTERNAL(
+    GLenum planes_yuv_color_space,
+    GLenum plane_config,
+    GLenum subsampling,
+    const GLbyte* mailboxes) {
+  TRACE_EVENT_BINARY_EFFICIENT0(
+      "gpu", "GLES2Trace::ConvertYUVAMailboxesToRGBINTERNAL");
+  gl_->ConvertYUVAMailboxesToRGBINTERNAL(planes_yuv_color_space, plane_config,
+                                         subsampling, mailboxes);
+}
+
+void GLES2TraceImplementation::CopySharedImageINTERNAL(
+    GLint xoffset,
+    GLint yoffset,
+    GLint x,
+    GLint y,
+    GLsizei width,
+    GLsizei height,
+    GLboolean unpack_flip_y,
+    const GLbyte* mailboxes) {
+  TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::CopySharedImageINTERNAL");
+  gl_->CopySharedImageINTERNAL(xoffset, yoffset, x, y, width, height,
+                               unpack_flip_y, mailboxes);
+}
+
 void GLES2TraceImplementation::EnableiOES(GLenum target, GLuint index) {
   TRACE_EVENT_BINARY_EFFICIENT0("gpu", "GLES2Trace::EnableiOES");
   gl_->EnableiOES(target, index);

@@ -166,8 +166,7 @@ class ArcAppInstallEventLogManagerTest : public testing::Test {
         log_file_path_(profile_.GetPath().Append(kLogFileName)),
         packages_{std::begin(kPackageNames), std::end(kPackageNames)},
         scoped_fake_statistics_provider_(
-            std::make_unique<
-                chromeos::system::ScopedFakeStatisticsProvider>()) {}
+            std::make_unique<ash::system::ScopedFakeStatisticsProvider>()) {}
 
   // testing::Test:
   void SetUp() override {
@@ -230,7 +229,7 @@ class ArcAppInstallEventLogManagerTest : public testing::Test {
   }
 
   void ExpectUploadAndCaptureCallback(
-      CloudPolicyClient::StatusCallback* callback) {
+      CloudPolicyClient::ResultCallback* callback) {
     events_value_.clear();
     BuildReport();
 
@@ -239,8 +238,8 @@ class ArcAppInstallEventLogManagerTest : public testing::Test {
         .WillOnce(MoveArg<1>(callback));
   }
 
-  void ReportUploadSuccess(CloudPolicyClient::StatusCallback callback) {
-    std::move(callback).Run(true /* success */);
+  void ReportUploadSuccess(CloudPolicyClient::ResultCallback callback) {
+    std::move(callback).Run(CloudPolicyClient::Result(DM_STATUS_SUCCESS));
     FlushNonDelayedTasks();
   }
 
@@ -251,8 +250,8 @@ class ArcAppInstallEventLogManagerTest : public testing::Test {
     EXPECT_CALL(cloud_policy_client_,
                 UploadAppInstallReport_(MatchEvents(&events_value_), _))
         .WillOnce(Invoke([](base::Value::Dict&,
-                            CloudPolicyClient::StatusCallback& callback) {
-          std::move(callback).Run(true /* success */);
+                            CloudPolicyClient::ResultCallback& callback) {
+          std::move(callback).Run(CloudPolicyClient::Result(DM_STATUS_SUCCESS));
         }));
   }
 
@@ -307,7 +306,7 @@ class ArcAppInstallEventLogManagerTest : public testing::Test {
   const base::FilePath log_file_path_;
   const std::set<std::string> packages_;
   base::Value::Dict events_value_;
-  std::unique_ptr<chromeos::system::ScopedFakeStatisticsProvider>
+  std::unique_ptr<ash::system::ScopedFakeStatisticsProvider>
       scoped_fake_statistics_provider_;
 
   em::AppInstallReportLogEvent event_;
@@ -588,7 +587,7 @@ TEST_F(ArcAppInstallEventLogManagerTest, RequestUploadAddUpload) {
   FastForwardTo(kExpeditedUploadDelay - kOneMs);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
 
-  CloudPolicyClient::StatusCallback upload_callback;
+  CloudPolicyClient::ResultCallback upload_callback;
   ExpectUploadAndCaptureCallback(&upload_callback);
   FastForwardTo(kExpeditedUploadDelay);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
@@ -631,7 +630,7 @@ TEST_F(ArcAppInstallEventLogManagerTest, RequestUploadAddExpeditedUpload) {
   FastForwardTo(kExpeditedUploadDelay - kOneMs);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
 
-  CloudPolicyClient::StatusCallback upload_callback;
+  CloudPolicyClient::ResultCallback upload_callback;
   ExpectUploadAndCaptureCallback(&upload_callback);
   FastForwardTo(kExpeditedUploadDelay);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
@@ -682,7 +681,7 @@ TEST_F(ArcAppInstallEventLogManagerTest, RequestExpeditedUploadAddUpload) {
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);
   EXPECT_FALSE(base::PathExists(log_file_path_));
 
-  CloudPolicyClient::StatusCallback upload_callback;
+  CloudPolicyClient::ResultCallback upload_callback;
   ExpectUploadAndCaptureCallback(&upload_callback);
   FastForwardTo(offset + kExpeditedUploadDelay);
   Mock::VerifyAndClearExpectations(&cloud_policy_client_);

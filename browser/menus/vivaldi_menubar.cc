@@ -3,7 +3,7 @@
 //
 #include "browser/menus/vivaldi_menubar.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "browser/menus/vivaldi_bookmark_context_menu.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"

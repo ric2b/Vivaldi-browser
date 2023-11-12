@@ -120,8 +120,11 @@ public class SwipeRefreshHandler
         mSwipeRefreshLayout.setLayoutParams(
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         final boolean incognito = mTab.isIncognito();
+        final @ColorInt int incognitoColor = ChromeFeatureList.sBaselineGm3SurfaceColors.isEnabled()
+                ? context.getColor(R.color.default_bg_color_dark_elev_2_gm3_baseline)
+                : context.getColor(R.color.default_bg_color_dark_elev_2_baseline);
         final @ColorInt int backgroundColor = incognito
-                ? context.getColor(R.color.default_bg_color_dark_elev_2_baseline)
+                ? incognitoColor
                 : ChromeColors.getSurfaceColor(context, R.dimen.default_elevation_2);
         mSwipeRefreshLayout.setProgressBackgroundColorSchemeColor(backgroundColor);
         final @ColorInt int iconColor = incognito
@@ -196,8 +199,7 @@ public class SwipeRefreshHandler
         if (type == OverscrollAction.PULL_TO_REFRESH) {
             if (mSwipeRefreshLayout == null) initSwipeRefreshLayout(mTab.getContext());
             attachSwipeRefreshLayoutIfNecessary();
-            return mSwipeRefreshLayout.start(ChromeFeatureList.isEnabled(
-                    ChromeFeatureList.OPTIMIZE_LAYOUTS_FOR_PULL_REFRESH));
+            return mSwipeRefreshLayout.start();
         } else if (type == OverscrollAction.HISTORY_NAVIGATION) {
             if (mNavigationCoordinator != null) {
                 mNavigationCoordinator.startGesture();

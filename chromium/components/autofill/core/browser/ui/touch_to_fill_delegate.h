@@ -9,7 +9,7 @@
 
 namespace autofill {
 
-class AutofillDriver;
+class AutofillManager;
 
 // An interface for interaction with the bottom sheet UI controller, which is
 // `TouchToFillCreditCardController` on Android. The delegate will supply the
@@ -18,14 +18,14 @@ class TouchToFillDelegate {
  public:
   virtual ~TouchToFillDelegate() = default;
 
-  // TODO(crbug.com/1247698): Define the API.
-  virtual AutofillDriver* GetDriver() = 0;
+  virtual AutofillManager* GetManager() = 0;
 
   virtual bool ShouldShowScanCreditCard() = 0;
   virtual void ScanCreditCard() = 0;
   virtual void OnCreditCardScanned(const CreditCard& card) = 0;
   virtual void ShowCreditCardSettings() = 0;
-  virtual void SuggestionSelected(std::string unique_id) = 0;
+  virtual void SuggestionSelected(std::string unique_id, bool is_virtual) = 0;
+  virtual void OnDismissed(bool dismissed_by_user) = 0;
 };
 
 }  // namespace autofill

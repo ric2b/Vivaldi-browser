@@ -27,7 +27,7 @@
 
 #include <memory>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "third_party/blink/public/platform/modules/mediastream/web_media_stream_track.h"
 #include "third_party/blink/public/platform/modules/webrtc/webrtc_logging.h"
 #include "third_party/blink/public/web/modules/mediastream/media_stream_video_source.h"
@@ -47,7 +47,6 @@
 #include "third_party/blink/renderer/modules/mediastream/apply_constraints_request.h"
 #include "third_party/blink/renderer/modules/mediastream/browser_capture_media_stream_track.h"
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
-#include "third_party/blink/renderer/modules/mediastream/media_error_state.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_utils.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_video_track.h"
@@ -267,8 +266,10 @@ MediaStreamTrackImpl::MediaStreamTrackImpl(
     ExecutionContext* context,
     MediaStreamComponent* component,
     MediaStreamSource::ReadyState ready_state,
-    base::OnceClosure callback)
+    base::OnceClosure callback,
+    bool is_clone)
     : ready_state_(ready_state),
+      has_clones_(is_clone),
       component_(component),
       execution_context_(context) {
   component_->AddSourceObserver(this);
@@ -451,7 +452,7 @@ MediaStreamTrack* MediaStreamTrackImpl::clone(
   MediaStreamTrackImpl* cloned_track =
       MakeGarbageCollected<MediaStreamTrackImpl>(
           execution_context, Component()->Clone(ClonePlatformTrack()),
-          ready_state_, base::DoNothing());
+          ready_state_, base::DoNothing(), /*is_clone=*/true);
 
   // Copy state.
   CloneInternal(cloned_track);
@@ -731,12 +732,12 @@ void MediaStreamTrackImpl::SetConstraintsInternal(
 void MediaStreamTrackImpl::applyConstraints(
     ScriptPromiseResolver* resolver,
     const MediaTrackConstraints* constraints) {
-  MediaErrorState error_state;
+  String error_message;
   ExecutionContext* execution_context =
       ExecutionContext::From(resolver->GetScriptState());
   MediaConstraints web_constraints = media_constraints_impl::Create(
-      execution_context, constraints, error_state);
-  if (error_state.HadException()) {
+      execution_context, constraints, error_message);
+  if (web_constraints.IsNull()) {
     resolver->Reject(
         OverconstrainedError::Create(String(), "Cannot parse constraints"));
     return;
@@ -759,7 +760,7 @@ void MediaStreamTrackImpl::applyConstraints(
       // implementation.
       image_capture_->ClearMediaTrackConstraints();
     } else if (ConstraintsHaveImageCapture(constraints)) {
-      applyConstraintsImageCapture(resolver, constraints);
+      image_capture_->SetMediaTrackConstraints(resolver, constraints);
       return;
     }
   }
@@ -788,18 +789,6 @@ void MediaStreamTrackImpl::applyConstraints(
   return;
 }
 
-void MediaStreamTrackImpl::applyConstraintsImageCapture(
-    ScriptPromiseResolver* resolver,
-    const MediaTrackConstraints* constraints) {
-  // |constraints| empty means "remove/clear all current constraints".
-  if (!constraints->hasAdvanced() || constraints->advanced().empty()) {
-    image_capture_->ClearMediaTrackConstraints();
-    resolver->Resolve();
-  } else {
-    image_capture_->SetMediaTrackConstraints(resolver, constraints->advanced());
-  }
-}
-
 bool MediaStreamTrackImpl::Ended() const {
   return (execution_context_ && execution_context_->IsContextDestroyed()) ||
          (ready_state_ == MediaStreamSource::kReadyStateEnded);
@@ -825,12 +814,43 @@ void MediaStreamTrackImpl::SourceChangedState() {
       EnsureFeatureHandleForScheduler();
       break;
     case MediaStreamSource::kReadyStateEnded:
-      DispatchEvent(*Event::Create(event_type_names::kEnded));
+      // SourceChangedState() may be called in kReadyStateEnded during object
+      // disposal if there are no event listeners (otherwise disposal is blocked
+      // by HasPendingActivity). In that case it is not allowed to create
+      // objects, so check if there are event listeners before the event object
+      // is created.
+      if (HasEventListeners(event_type_names::kEnded)) {
+        DispatchEvent(*Event::Create(event_type_names::kEnded));
+      }
       PropagateTrackEnded();
       feature_handle_for_scheduler_.reset();
       break;
   }
   SendLogMessage(String::Format("%s()", __func__));
+}
+
+void MediaStreamTrackImpl::SourceChangedCaptureConfiguration() {
+  DCHECK(IsMainThread());
+
+  if (Ended()) {
+    return;
+  }
+
+  // Update the current image capture capabilities and settings and dispatch a
+  // configurationchange event if they differ from the old ones.
+  if (image_capture_) {
+    image_capture_->UpdateAndCheckMediaTrackSettingsAndCapabilities(
+        WTF::BindOnce(&MediaStreamTrackImpl::MaybeDispatchConfigurationChange,
+                      WrapWeakPersistent(this)));
+  }
+}
+
+void MediaStreamTrackImpl::MaybeDispatchConfigurationChange(bool has_changed) {
+  DCHECK(IsMainThread());
+
+  if (has_changed) {
+    DispatchEvent(*Event::Create(event_type_names::kConfigurationchange));
+  }
 }
 
 void MediaStreamTrackImpl::SourceChangedCaptureHandle() {
@@ -912,6 +932,23 @@ void MediaStreamTrackImpl::BeingTransferred(
   return;
 }
 
+bool MediaStreamTrackImpl::TransferAllowed(String& message) const {
+  if (Ended()) {
+    message = "MediaStreamTrack has ended.";
+    return false;
+  }
+  if (has_clones_) {
+    message = "MediaStreamTracks with clones cannot be transferred.";
+    return false;
+  }
+  if (!(device() && device()->serializable_session_id() &&
+        IsMediaStreamDeviceTransferrable(*device()))) {
+    message = "MediaStreamTrack could not be serialized.";
+    return false;
+  }
+  return true;
+}
+
 void MediaStreamTrackImpl::RegisterMediaStream(MediaStream* media_stream) {
   CHECK(!is_iterating_registered_media_streams_);
   CHECK(!registered_media_streams_.Contains(media_stream));
@@ -962,6 +999,8 @@ void MediaStreamTrackImpl::CloneInternal(MediaStreamTrackImpl* cloned_track) {
   if (image_capture_) {
     cloned_track->image_capture_ = image_capture_->Clone();
   }
+
+  has_clones_ = true;
 }
 
 void MediaStreamTrackImpl::EnsureFeatureHandleForScheduler() {

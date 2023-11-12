@@ -56,8 +56,8 @@ class FakeVideoCaptureService
       mojo::PendingReceiver<cros::mojom::CameraAppDeviceBridge> receiver)
       override {}
 
-  void ConnectToDeviceFactory(
-      mojo::PendingReceiver<video_capture::mojom::DeviceFactory> receiver)
+  void BindVideoCaptureDeviceFactory(
+      mojo::PendingReceiver<crosapi::mojom::VideoCaptureDeviceFactory> receiver)
       override {}
 
   void ConnectToVideoSourceProvider(
@@ -65,8 +65,6 @@ class FakeVideoCaptureService
       override {
     fake_provider_.Bind(std::move(receiver));
   }
-
-  void SetRetryCount(int32_t count) override {}
 
   void BindControlsForTesting(
       mojo::PendingReceiver<video_capture::mojom::TestingControls> receiver)

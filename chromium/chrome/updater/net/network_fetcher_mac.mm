@@ -11,12 +11,12 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/memory/scoped_refptr.h"
@@ -115,17 +115,9 @@ using DownloadToFileCompleteCallback =
           dataTask:(NSURLSessionDataTask*)dataTask
     didReceiveData:(NSData*)data {
   [_downloadedData appendData:data];
-
-  int64_t current = 0;
-
-  if (dataTask.countOfBytesExpectedToReceive > 0) {
-    current = (dataTask.countOfBytesReceived * 100) /
-              dataTask.countOfBytesExpectedToReceive;
-  } else {
-    current = 100;
-  }
-  _callbackRunner->PostTask(FROM_HERE,
-                            base::BindOnce(_progressCallback, current));
+  _callbackRunner->PostTask(
+      FROM_HERE,
+      base::BindOnce(_progressCallback, dataTask.countOfBytesReceived));
   [dataTask resume];
 }
 

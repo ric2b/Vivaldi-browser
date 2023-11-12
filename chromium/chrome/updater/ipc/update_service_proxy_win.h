@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "chrome/updater/update_service.h"
@@ -42,6 +42,7 @@ class UpdateServiceProxy : public UpdateService {
               const std::string& install_data_index,
               Priority priority,
               PolicySameVersionUpdate policy_same_version_update,
+              bool do_update_check_only,
               StateChangeCallback state_update,
               Callback callback) override;
   void Install(const RegistrationRequest& registration,

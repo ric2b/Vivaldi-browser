@@ -43,6 +43,7 @@
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notes_model_loaded_observer.h"
+#include "sessions/index_service_factory.h"
 #include "ui/lazy_load_service_factory.h"
 #include "vivaldi/prefs/vivaldi_gen_pref_enums.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -179,6 +180,8 @@ void VivaldiInitProfile(Profile* profile) {
   menu_model->AddObserver(new menus::MenuModelLoadedObserver());
   // The context menu model content is loaded on demand so no observer here.
   menus::ContextMenuServiceFactory::GetForBrowserContext(profile);
+  // Index is loaded on demand.
+  sessions::IndexServiceFactory::GetForBrowserContext(profile);
 
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance()
       ->Get(profile)

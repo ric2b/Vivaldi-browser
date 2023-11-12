@@ -55,8 +55,8 @@ bool VariationsHeaderKey::operator<(const VariationsHeaderKey& other) const {
 // implemented depends on the request type.
 // There are three cases:
 // 1. Subresources request in renderer, it is implemented by
-// WebURLLoaderImpl::Context::Start() by adding a VariationsURLLoaderThrottle
-// to a content::URLLoaderThrottle vector.
+// URLLoader::Context::Start() by adding a VariationsURLLoaderThrottle to a
+// content::URLLoaderThrottle vector.
 // 2. Navigations/Downloads request in browser, it is implemented in
 // ChromeContentBrowserClient::CreateURLLoaderThrottles() which calls
 // CreateContentBrowserURLLoaderThrottles which also adds a
@@ -301,13 +301,6 @@ void VariationsIdsProvider::InitVariationIDsCacheIfNeeded() {
   if (variation_ids_cache_initialized_)
     return;
 
-  // Query the kRestrictGoogleWebVisibility feature to activate the
-  // associated field trial, if any, so that querying it in
-  // OnFieldTrialGroupFinalized() does not result in deadlock.
-  //
-  // Note: Must be done before the AddObserver() call below.
-  base::FeatureList::IsEnabled(internal::kRestrictGoogleWebVisibility);
-
   // Register for additional cache updates. This is done before initializing the
   // cache to avoid a race that could cause registered FieldTrials to be missed.
   bool success = base::FieldTrialList::AddObserver(this);
@@ -379,21 +372,15 @@ std::string VariationsIdsProvider::GenerateBase64EncodedProto(
   for (const VariationIDEntry& entry : all_variation_ids_set) {
     switch (entry.second) {
       case GOOGLE_WEB_PROPERTIES_SIGNED_IN:
-        if (is_signed_in)
+        if (is_signed_in) {
           proto.add_variation_id(entry.first);
+        }
         break;
       case GOOGLE_WEB_PROPERTIES_ANY_CONTEXT:
         proto.add_variation_id(entry.first);
         break;
       case GOOGLE_WEB_PROPERTIES_FIRST_PARTY:
-        if (base::FeatureList::IsEnabled(
-                internal::kRestrictGoogleWebVisibility)) {
-          if (is_first_party_context)
-            proto.add_variation_id(entry.first);
-        } else {
-          // When the feature is not enabled, treat VariationIDs associated with
-          // GOOGLE_WEB_PROPERTIES_FIRST_PARTY in the same way as those
-          // associated with GOOGLE_WEB_PROPERTIES_ANY_CONTEXT.
+        if (is_first_party_context) {
           proto.add_variation_id(entry.first);
         }
         break;
@@ -401,14 +388,7 @@ std::string VariationsIdsProvider::GenerateBase64EncodedProto(
         proto.add_trigger_variation_id(entry.first);
         break;
       case GOOGLE_WEB_PROPERTIES_TRIGGER_FIRST_PARTY:
-        if (base::FeatureList::IsEnabled(
-                internal::kRestrictGoogleWebVisibility)) {
-          if (is_first_party_context)
-            proto.add_trigger_variation_id(entry.first);
-        } else {
-          // When the feature is not enabled, treat VariationIDs associated with
-          // GOOGLE_WEB_PROPERTIES_TRIGGER_FIRST_PARTY in the same way as those
-          // associated with GOOGLE_WEB_PROPERTIES_TRIGGER_ANY_CONTEXT.
+        if (is_first_party_context) {
           proto.add_trigger_variation_id(entry.first);
         }
         break;

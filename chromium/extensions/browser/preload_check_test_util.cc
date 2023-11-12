@@ -4,9 +4,9 @@
 
 #include "extensions/browser/preload_check_test_util.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
 #include "extensions/common/extension.h"
@@ -16,7 +16,7 @@ namespace extensions {
 
 // PreloadCheckRunner:
 PreloadCheckRunner::PreloadCheckRunner() : called_(false) {}
-PreloadCheckRunner::~PreloadCheckRunner() {}
+PreloadCheckRunner::~PreloadCheckRunner() = default;
 
 void PreloadCheckRunner::Run(PreloadCheck* check) {
   check->Start(GetCallback());
@@ -58,7 +58,7 @@ void PreloadCheckRunner::OnCheckComplete(const PreloadCheck::Errors& errors) {
 PreloadCheckStub::PreloadCheckStub(const Errors& errors)
     : PreloadCheck(nullptr), errors_(errors) {}
 
-PreloadCheckStub::~PreloadCheckStub() {}
+PreloadCheckStub::~PreloadCheckStub() = default;
 
 void PreloadCheckStub::Start(ResultCallback callback) {
   DCHECK(!callback.is_null());

@@ -9,11 +9,11 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
@@ -47,10 +47,6 @@
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
-#include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
-#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
-#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
@@ -128,6 +124,13 @@
 #include "components/offline_pages/core/client_namespace_constants.h"
 #endif
 
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+#include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
+#endif
+
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_internal_handlers.h"
 #include "components/infobars/content/content_infobar_manager.h"
@@ -139,8 +142,11 @@ using download::DownloadItem;
 using download::DownloadPathReservationTracker;
 using download::PathValidationResult;
 using safe_browsing::DownloadFileType;
-using safe_browsing::DownloadProtectionService;
 using ConnectionType = net::NetworkChangeNotifier::ConnectionType;
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+using safe_browsing::DownloadProtectionService;
+#endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 using extensions::CrxInstaller;
@@ -878,14 +884,6 @@ void ChromeDownloadManagerDelegate::OpenDownload(DownloadItem* download) {
   DownloadUtils::OpenDownload(download, DownloadOpenSource::kUnknown);
 #else
 
-  download::DownloadItemRenameHandler* handler = download->GetRenameHandler();
-  if (handler) {
-    handler->OpenDownload();
-    RecordDownloadOpen(DOWNLOAD_OPEN_METHOD_RENAME_HANDLER,
-                       download->GetMimeType());
-    return;
-  }
-
   if (vivaldi::HandleDownload(profile_, download))
     return;
 
@@ -957,12 +955,6 @@ void ChromeDownloadManagerDelegate::ShowDownloadInShell(
   MaybeSendDangerousDownloadOpenedReport(download,
                                          true /* show_download_in_folder */);
 
-  download::DownloadItemRenameHandler* handler = download->GetRenameHandler();
-  if (handler) {
-    handler->ShowDownloadInContext();
-    return;
-  }
-
   base::FilePath platform_path(
       GetPlatformDownloadPath(download, PLATFORM_CURRENT_PATH));
   DCHECK(!platform_path.empty());
@@ -974,18 +966,19 @@ ChromeDownloadManagerDelegate::ApplicationClientIdForFileScanning() {
   return std::string(chrome::kApplicationClientIDStringForAVScanning);
 }
 
+#if BUILDFLAG(FULL_SAFE_BROWSING)
 DownloadProtectionService*
 ChromeDownloadManagerDelegate::GetDownloadProtectionService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-#if BUILDFLAG(FULL_SAFE_BROWSING)
   safe_browsing::SafeBrowsingService* sb_service =
       g_browser_process->safe_browsing_service();
   if (sb_service && sb_service->download_protection_service()) {
     return sb_service->download_protection_service();
   }
-#endif
+
   return nullptr;
 }
+#endif
 
 void ChromeDownloadManagerDelegate::GetInsecureDownloadStatus(
     download::DownloadItem* download,
@@ -1253,7 +1246,7 @@ void ChromeDownloadManagerDelegate::GenerateUniqueFileNameDone(
   // After a new, unique filename has been generated, display the error dialog
   // with the filename automatically set to be the unique filename.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (result == PathValidationResult::SUCCESS) {
+  if (download::IsPathValidationSuccessful(result)) {
     if (download_prefs_->PromptForDownload()) {
       ShowDownloadDialog(
           native_window, 0 /* total_bytes */,
@@ -1664,10 +1657,8 @@ bool ChromeDownloadManagerDelegate::ShouldBlockFile(
     return true;
 
   bool file_type_dangerous =
-      (item &&
-       DownloadItemModel(item).GetDangerLevel() !=
-           DownloadFileType::NOT_DANGEROUS &&
-       danger_type == download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS);
+      (item && DownloadItemModel(item).GetDangerLevel() !=
+                   DownloadFileType::NOT_DANGEROUS);
 
   switch (download_restriction) {
     case (DownloadPrefs::DownloadRestriction::NONE):

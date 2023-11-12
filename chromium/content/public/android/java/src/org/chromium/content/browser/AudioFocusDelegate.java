@@ -18,6 +18,10 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
+
 /**
  * AudioFocusDelegate is the Java counterpart of content::AudioFocusDelegateAndroid.
  * It is being used to communicate from content::AudioFocusDelegateAndroid
@@ -66,12 +70,22 @@ public class AudioFocusDelegate implements AudioManager.OnAudioFocusChangeListen
         assert ThreadUtils.runningOnUiThread();
         mFocusType = transientFocus ? AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
                                     : AudioManager.AUDIOFOCUS_GAIN;
+        // Vivaldi
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
+            OemLynkcoExtensions.getInstance().requestAudioFocus();
+            return true;
+        }
         return requestAudioFocusInternal();
     }
 
     @CalledByNative
     private void abandonAudioFocus() {
         assert ThreadUtils.runningOnUiThread();
+        // Vivaldi
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
+            OemLynkcoExtensions.getInstance().abandonAudioFocus();
+            return;
+        }
         AudioManager am = (AudioManager) ContextUtils.getApplicationContext().getSystemService(
                 Context.AUDIO_SERVICE);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

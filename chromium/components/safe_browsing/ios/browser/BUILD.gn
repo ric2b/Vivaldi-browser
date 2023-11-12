@@ -8,14 +8,17 @@ source_set("allow_list") {
     "safe_browsing_url_allow_list.mm",
   ]
 
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
+
   deps = [
     "//components/safe_browsing/core/browser/db:v4_protocol_manager_util",
     "//components/security_interstitials/core:unsafe_resource",
     "//ios/web/public",
     "//url",
   ]
-
-  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 # As parts of components/safe_browsing become buildable on iOS, they will
@@ -33,6 +36,7 @@ source_set("unit_tests") {
     "//components/safe_browsing/core/browser/db:unit_tests_local_db",
     "//components/safe_browsing/core/browser/realtime:unit_tests",
     "//components/safe_browsing/core/browser/tailored_security_service:unit_tests",
+    "//components/safe_browsing/core/browser/utils:unit_tests",
     "//components/safe_browsing/core/common",
     "//components/safe_browsing/core/common:unit_tests",
     "//ios/web/public",

@@ -1935,7 +1935,8 @@ TEST(FormParserTest, SSN_and_OTP) {
       password_manager::features::kNewRegexForOtpFields);
   for (const char16_t* field_name :
        {u"SocialSecurityNumber", u"OneTimePassword", u"SMS-token", u"otp-code",
-        u"input_SMS", u"second.factor"}) {
+        u"input_SMS", u"second.factor", u"2FA", u"Sms{Otp}",
+        u"login$$verif_vcode"}) {
     CheckTestData({
         {
             .description_for_logging = "Field name matches the SSN/OTP pattern,"
@@ -1967,6 +1968,24 @@ TEST(FormParserTest, SSN_and_OTP) {
         },
     });
   }
+}
+
+TEST(FormParserTest, OtpRegexMetric) {
+  base::HistogramTester histogram_tester;
+  CheckTestData({{
+      .fields =
+          {
+              {.role = ElementRole::USERNAME, .form_control_type = "text"},
+              {.name = u"OneTimePassword", .form_control_type = "password"},
+              {.role = ElementRole::CURRENT_PASSWORD,
+               .form_control_type = "password"},
+          },
+      .fallback_only = false,
+  }});
+  // Two samples because |CheckTestData| parses the form in two modes: filling
+  // and saving.
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.ParserDetectedOtpFieldWithRegex", true, 2);
 }
 
 // The parser should avoid identifying NOT_PASSWORD fields as passwords.

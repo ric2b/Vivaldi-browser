@@ -612,6 +612,7 @@ const GetMarkers = natives.GetMarkers;
 /**
  * @param {string} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
+ * @param {!automation.PositionType} type
  * @param {number} offset
  * @param {boolean} isUpstream
  * @return {!Object}
@@ -1021,9 +1022,9 @@ AutomationNodeImpl.prototype = {
     return GetMarkers(this.treeID, this.id);
   },
 
-  createPosition: function(offset, opt_isUpstream) {
+  createPosition: function(type, offset, opt_isUpstream) {
     const nativePosition = CreateAutomationPosition(
-        this.treeID, this.id, offset, !!opt_isUpstream);
+        this.treeID, this.id, type, offset, Boolean(opt_isUpstream));
 
     // Attach a getter for the node, which is only available in js.
     Object.defineProperty(nativePosition, 'node', {
@@ -1570,8 +1571,10 @@ const nodeRefAttributes = [
   ['inPageLinkTargetId', 'inPageLinkTarget', null],
   ['nextFocusId', 'nextFocus', null],
   ['nextOnLineId', 'nextOnLine', null],
+  ['nextWindowFocusId', 'nextWindowFocus', null],
   ['previousFocusId', 'previousFocus', null],
   ['previousOnLineId', 'previousOnLine', null],
+  ['previousWindowFocusId', 'previousWindowFocus', null],
   ['tableColumnHeaderId', 'tableColumnHeader', null],
   ['tableHeaderId', 'tableHeader', null],
   ['tableRowHeaderId', 'tableRowHeader', null],

@@ -8,8 +8,8 @@
 
 #include "ui/views/vivaldi_window_widget_delegate.h"
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -29,6 +29,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/api/window/window_private_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/draggable_region.h"
@@ -50,6 +51,7 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/api/window/window_private_api.h"
+#include "extensions/tools/vivaldi_tools.h"
 #include "ui/views/vivaldi_window_frame_view.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_quit_confirmation_dialog.h"
@@ -85,18 +87,10 @@ class VivaldiWindowClientView : public views::ClientView {
 
   // views::ClientView:
   views::CloseRequestResult OnWindowCloseRequested() override {
-    // This is to cach platform closing of windows, Alt+F4
     views::CloseRequestResult result =
         (window_->ConfirmWindowClose()
              ? views::CloseRequestResult::kCanClose
              : views::CloseRequestResult::kCannotClose);
-
-    // If we are not asking before closing a window we must try to move pinned
-    // tabs as soon as possible.
-    if (!window_->browser()->profile()->GetPrefs()->GetBoolean(
-            vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog)) {
-      window_->MovePersistentTabsToOtherWindowIfNeeded();
-    }
     return result;
   }
 
@@ -269,12 +263,8 @@ void VivaldiWindowWidgetDelegate::SaveWindowPlacement(
     ui::WindowShowState show_state) {
   if (window_->browser() &&
       chrome::ShouldSaveWindowPlacement(window_->browser()) &&
-      // If IsFullscreen() is true, we've just changed into fullscreen mode,
-      // and we're catching the going-into-fullscreen sizing and positioning
-      // calls, which we want to ignore.
-      !window_->IsFullscreen() &&
-      // VB-35145: Don't save placement after Hide() in
-      // VivaldiBrowserWindow::ConfirmWindowClose() unmaximizes.
+      // VB-92099 fix: [MAC] restores Vivaldi window for start
+      // page at the previously set size.
       !window_->is_hidden()) {
     WidgetDelegate::SaveWindowPlacement(bounds, show_state);
     chrome::SaveWindowPlacement(window_->browser(), bounds, show_state);
@@ -360,4 +350,17 @@ bool VivaldiWindowWidgetDelegate::ExecuteWindowsCommand(int command_id) {
 #endif
 
   return chrome::ExecuteCommand(window_->browser(), command_id);
+}
+
+void VivaldiWindowWidgetDelegate::WindowClosing() {
+
+  Browser* browser = window_->browser();
+  if (!browser)
+    return;
+
+  int id = browser->session_id().id();
+  ::vivaldi::BroadcastEvent(extensions::vivaldi::window_private::OnWindowClosed::kEventName,
+                            extensions::vivaldi::window_private::OnWindowClosed::Create(id),
+                            browser->profile());
+
 }

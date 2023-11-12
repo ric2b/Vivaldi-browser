@@ -11,7 +11,7 @@ buildflag_header("buildflags") {
   header = "buildflags.h"
   flags = [
     "ENABLE_LENS_DESKTOP=$enable_lens_desktop",
-    "ENABLE_LENS_DESKTOP_SIDE_PANEL=$enable_lens_desktop_side_panel",
+    "ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES=$enable_lens_desktop_google_branded_features",
   ]
 }
 
@@ -20,6 +20,8 @@ static_library("lens") {
     "lens_entrypoints.h",
     "lens_metadata.cc",
     "lens_metadata.h",
+    "lens_metrics.cc",
+    "lens_metrics.h",
     "lens_rendering_environment.h",
     "lens_testing_utils.cc",
     "lens_testing_utils.h",

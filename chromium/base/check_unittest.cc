@@ -4,11 +4,12 @@
 
 #include <tuple>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check_deref.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -17,43 +18,27 @@
 
 namespace {
 
-// Helper class which expects a check to fire with a certain location and
-// message before the end of the current scope.
-class ScopedCheckExpectation {
- public:
-  ScopedCheckExpectation(const char* file, int line, std::string msg)
-      : file_(file),
-        line_(line),
-        msg_(msg),
-        assert_handler_(base::BindRepeating(&ScopedCheckExpectation::Check,
-                                            base::Unretained(this))),
-        fired_(false) {}
-  ~ScopedCheckExpectation() {
-    EXPECT_TRUE(fired_) << "CHECK at " << file_ << ":" << line_
-                        << " never fired!";
+MATCHER_P2(LogErrorMatches, line, expected_msg, "") {
+  EXPECT_THAT(arg, testing::HasSubstr(
+                       base::StringPrintf("check_unittest.cc(%d)] ", line)));
+  if (std::string(expected_msg).find("=~") == 0) {
+    EXPECT_THAT(std::string(arg),
+                testing::ContainsRegex(std::string(expected_msg).substr(2)));
+  } else {
+    EXPECT_THAT(std::string(arg), testing::HasSubstr(expected_msg));
   }
+  return true;
+}
 
- private:
-  void Check(const char* file,
-             int line,
-             const base::StringPiece msg,
-             const base::StringPiece stack) {
-    fired_ = true;
-    EXPECT_EQ(file, file_);
-    EXPECT_EQ(line, line_);
-    if (msg_.find("=~") == 0) {
-      EXPECT_THAT(std::string(msg), testing::MatchesRegex(msg_.substr(2)));
-    } else {
-      EXPECT_EQ(std::string(msg), msg_);
-    }
-  }
-
-  std::string file_;
-  int line_;
-  std::string msg_;
-  logging::ScopedLogAssertHandler assert_handler_;
-  bool fired_;
-};
+// TODO(pbos): Upstream support for ignoring matchers in gtest when death
+// testing is not available.
+// Without this we get a compile failure on iOS because
+// GTEST_UNSUPPORTED_DEATH_TEST does not compile with a MATCHER as parameter.
+#if GTEST_HAS_DEATH_TEST
+#define CHECK_MATCHER(line, msg) LogErrorMatches(line, msg)
+#else
+#define CHECK_MATCHER(line, msg) msg
+#endif
 
 // Macro which expects a CHECK to fire with a certain message. If msg starts
 // with "=~", it's interpreted as a regular expression.
@@ -66,21 +51,19 @@ class ScopedCheckExpectation {
     EXPECT_CHECK_DEATH(check_expr);   \
   } while (0)
 #else
-#define EXPECT_CHECK(msg, check_expr)                          \
-  do {                                                         \
-    ScopedCheckExpectation check_exp(__FILE__, __LINE__, msg); \
-    check_expr;                                                \
-  } while (0)
+#define EXPECT_CHECK(msg, check_expr) \
+  EXPECT_DEATH_IF_SUPPORTED(check_expr, CHECK_MATCHER(__LINE__, msg))
 #endif  // !CHECK_WILL_STREAM()
 
 // Macro which expects a DCHECK to fire if DCHECKs are enabled.
 //
 // Note: Please use the `CheckDeathTest` fixture when using this check.
+// TODO(pbos): Try to update this macro to detect that non-fatal DCHECKs do
+// upload crash dumps without crashing.
 #define EXPECT_DCHECK(msg, check_expr)                                         \
   do {                                                                         \
     if (DCHECK_IS_ON() && logging::LOGGING_DCHECK == logging::LOGGING_FATAL) { \
-      ScopedCheckExpectation check_exp(__FILE__, __LINE__, msg);               \
-      check_expr;                                                              \
+      EXPECT_DEATH_IF_SUPPORTED(check_expr, CHECK_MATCHER(__LINE__, msg));     \
     } else {                                                                   \
       check_expr;                                                              \
     }                                                                          \
@@ -231,6 +214,11 @@ TEST(CheckDeathTest, MAYBE_Dcheck) {
 #endif
 
   EXPECT_DCHECK("Check failed: false. ", DCHECK(false));
+
+  // Produce a consistent error code so that both the main instance of this test
+  // and the EXPECT_DEATH invocation below get the same error codes for DPCHECK.
+  const char file[] = "/nonexistentfile123";
+  std::ignore = fopen(file, "r");
   std::string err =
       logging::SystemErrorCodeToString(logging::GetLastSystemErrorCode());
   EXPECT_DCHECK("Check failed: false. : " + err, DPCHECK(false));
@@ -312,10 +300,18 @@ TEST(CheckTest, CheckEqStatements) {
 
 #if BUILDFLAG(DCHECK_IS_CONFIGURABLE)
 TEST(CheckDeathTest, ConfigurableDCheck) {
-  // Verify that DCHECKs default to non-fatal in configurable-DCHECK builds.
-  // Note that we require only that DCHECK is non-fatal by default, rather
-  // than requiring that it be exactly INFO, ERROR, etc level.
-  EXPECT_LT(logging::LOGGING_DCHECK, logging::LOGGING_FATAL);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          "gtest_internal_run_death_test")) {
+    // This specific test relies on LOGGING_DCHECK not starting out as FATAL,
+    // even when run part of death tests (should die only after LOGGING_DCHECK
+    // gets reconfigured to FATAL below).
+    logging::LOGGING_DCHECK = logging::LOGGING_ERROR;
+  } else {
+    // Verify that DCHECKs default to non-fatal in configurable-DCHECK builds.
+    // Note that we require only that DCHECK is non-fatal by default, rather
+    // than requiring that it be exactly INFO, ERROR, etc level.
+    EXPECT_LT(logging::LOGGING_DCHECK, logging::LOGGING_FATAL);
+  }
   DCHECK(false);
 
   // Verify that DCHECK* aren't hard-wired to crash on failure.
@@ -412,7 +408,8 @@ TEST(CheckDeathTest, OstreamVsToString) {
                CHECK_EQ(g, h));
 }
 
-#define EXPECT_LOG_ERROR(expected_line, expr, msg)                             \
+#define EXPECT_LOG_ERROR_WITH_FILENAME(expected_file, expected_line, expr,     \
+                                       msg)                                    \
   do {                                                                         \
     static bool got_log_message = false;                                       \
     ASSERT_EQ(logging::GetLogMessageHandler(), nullptr);                       \
@@ -423,7 +420,7 @@ TEST(CheckDeathTest, OstreamVsToString) {
       got_log_message = true;                                                  \
       EXPECT_EQ(severity, logging::LOG_ERROR);                                 \
       EXPECT_EQ(str.substr(message_start), (msg));                             \
-      EXPECT_STREQ(__FILE__, file);                                            \
+      EXPECT_STREQ(expected_file, file);                                       \
       EXPECT_EQ(expected_line, line);                                          \
       return true;                                                             \
     });                                                                        \
@@ -431,6 +428,9 @@ TEST(CheckDeathTest, OstreamVsToString) {
     EXPECT_TRUE(got_log_message);                                              \
     logging::SetLogMessageHandler(nullptr);                                    \
   } while (0)
+
+#define EXPECT_LOG_ERROR(expected_line, expr, msg) \
+  EXPECT_LOG_ERROR_WITH_FILENAME(__FILE__, expected_line, expr, msg)
 
 #define EXPECT_NO_LOG(expr)                                                    \
   do {                                                                         \
@@ -445,15 +445,35 @@ TEST(CheckDeathTest, OstreamVsToString) {
     logging::SetLogMessageHandler(nullptr);                                    \
   } while (0)
 
+// This non-void function is here to make sure that NOTREACHED_NORETURN() is
+// properly annotated as [[noreturn]] and does not require a return statement.
+int NotReachedNoreturnInFunction() {
+  NOTREACHED_NORETURN();
+  // No return statement here.
+}
+
 TEST(CheckDeathTest, NotReached) {
-#if BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED) && !DCHECK_IS_ON()
+#if BUILDFLAG(DCHECK_IS_CONFIGURABLE)
+  // This specific death test relies on LOGGING_DCHECK not being FATAL, even
+  // when run as part of a death test.
+  ScopedDcheckSeverity dcheck_severity(logging::LOGGING_ERROR);
+#endif
+
+#if DCHECK_IS_ON()
+  // Expect a DCHECK with streamed params intact.
+  EXPECT_DCHECK("Check failed: false. foo", NOTREACHED() << "foo");
+#elif CHECK_WILL_STREAM() || BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED)
   // Expect LOG(ERROR) that looks like CHECK(false) with streamed params intact.
   EXPECT_LOG_ERROR(__LINE__, NOTREACHED() << "foo",
                    "Check failed: false. foo\n");
 #else
-  // Expect a DCHECK with streamed params intact.
-  EXPECT_DCHECK("Check failed: false. foo", NOTREACHED() << "foo");
+  // Expect LOG(ERROR) that looks like CHECK(false) without file, line or
+  // streamed params.
+  EXPECT_LOG_ERROR_WITH_FILENAME("", -1, NOTREACHED() << "foo",
+                                 "Check failed: false. \n");
 #endif
+  EXPECT_DEATH_IF_SUPPORTED(NotReachedNoreturnInFunction(),
+                            CHECK_WILL_STREAM() ? "NOTREACHED hit. " : "");
 }
 
 TEST(CheckTest, NotImplemented) {

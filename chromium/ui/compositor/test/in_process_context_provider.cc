@@ -4,8 +4,8 @@
 
 #include "ui/compositor/test/in_process_context_provider.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -112,7 +112,7 @@ gpu::ContextResult InProcessContextProvider::BindToCurrentSequence() {
   if (gles2_context_) {
     gles2_raster_impl_ =
         std::make_unique<gpu::raster::RasterImplementationGLES>(
-            ContextGL(), ContextSupport());
+            ContextGL(), ContextSupport(), ContextCapabilities());
   }
 
   return bind_result_;

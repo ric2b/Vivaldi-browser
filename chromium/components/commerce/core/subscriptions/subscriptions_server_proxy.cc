@@ -6,11 +6,12 @@
 #include <string>
 #include <unordered_map>
 
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/json/values_util.h"
+#include "components/commerce/core/account_checker.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
 #include "components/commerce/core/subscriptions/subscriptions_server_proxy.h"
@@ -23,13 +24,6 @@
 namespace {
 
 // For creating endpoint fetcher.
-const char kOAuthScope[] = "https://www.googleapis.com/auth/chromememex";
-const char kOAuthName[] = "subscriptions_svc";
-const char kGetHttpMethod[] = "GET";
-const char kPostHttpMethod[] = "POST";
-const char kContentType[] = "application/json; charset=UTF-8";
-const char kEmptyPostData[] = "";
-
 const int kDefaultTimeoutMs = 5000;
 const char kTimeoutParam[] = "subscriptions_server_request_timeout";
 constexpr base::FeatureParam<int> kTimeoutMs{&commerce::kShoppingList,
@@ -84,14 +78,14 @@ void SubscriptionsServerProxy::Create(
     return;
   }
 
-  base::Value subscriptions_list(base::Value::Type::LIST);
+  base::Value::List subscriptions_list;
   for (const auto& subscription : *subscriptions) {
     subscriptions_list.Append(Serialize(subscription));
   }
-  base::Value subscriptions_json(base::Value::Type::DICTIONARY);
-  subscriptions_json.SetKey(kSubscriptionsKey, std::move(subscriptions_list));
-  base::Value request_json(base::Value::Type::DICTIONARY);
-  request_json.SetKey(kCreateRequestParamsKey, std::move(subscriptions_json));
+  base::Value::Dict subscriptions_json;
+  subscriptions_json.Set(kSubscriptionsKey, std::move(subscriptions_list));
+  base::Value::Dict request_json;
+  request_json.Set(kCreateRequestParamsKey, std::move(subscriptions_json));
   std::string post_data;
   base::JSONWriter::Write(request_json, &post_data);
 
@@ -150,15 +144,15 @@ void SubscriptionsServerProxy::Delete(
     return;
   }
 
-  base::Value deletions_list(base::Value::Type::LIST);
+  base::Value::List deletions_list;
   for (const auto& subscription : *subscriptions) {
     if (subscription.timestamp != kUnknownSubscriptionTimestamp)
       deletions_list.Append(base::Int64ToValue(subscription.timestamp));
   }
-  base::Value deletions_json(base::Value::Type::DICTIONARY);
-  deletions_json.SetKey(kEventTimestampsKey, std::move(deletions_list));
-  base::Value request_json(base::Value::Type::DICTIONARY);
-  request_json.SetKey(kDeleteRequestParamsKey, std::move(deletions_json));
+  base::Value::Dict deletions_json;
+  deletions_json.Set(kEventTimestampsKey, std::move(deletions_list));
+  base::Value::Dict request_json;
+  request_json.Set(kDeleteRequestParamsKey, std::move(deletions_json));
   std::string post_data;
   base::JSONWriter::Write(request_json, &post_data);
 
@@ -293,8 +287,8 @@ void SubscriptionsServerProxy::OnManageSubscriptionsJsonParsed(
     ManageSubscriptionsFetcherCallback callback,
     data_decoder::DataDecoder::ValueOrError result) {
   if (result.has_value() && result->is_dict()) {
-    if (auto* status_value = result->FindKey(kStatusKey)) {
-      if (auto status_code = status_value->FindIntKey(kStatusCodeKey)) {
+    if (auto* status_value = result->GetDict().FindDict(kStatusKey)) {
+      if (auto status_code = status_value->FindInt(kStatusCodeKey)) {
         std::move(callback).Run(
             *status_code == kBackendCanonicalCodeSuccess
                 ? SubscriptionsRequestStatus::kSuccess
@@ -350,7 +344,7 @@ void SubscriptionsServerProxy::OnGetSubscriptionsJsonParsed(
 
 base::Value SubscriptionsServerProxy::Serialize(
     const CommerceSubscription& subscription) {
-  base::Value subscription_json(base::Value::Type::DICTIONARY);
+  base::Value subscription_json(base::Value::Type::DICT);
   subscription_json.SetStringKey(kSubscriptionTypeKey,
                                  SubscriptionTypeToString(subscription.type));
   subscription_json.SetStringKey(
@@ -360,7 +354,7 @@ base::Value SubscriptionsServerProxy::Serialize(
       kSubscriptionManagementTypeKey,
       SubscriptionManagementTypeToString(subscription.management_type));
   if (auto seen_offer = subscription.user_seen_offer) {
-    base::Value seen_offer_json(base::Value::Type::DICTIONARY);
+    base::Value seen_offer_json(base::Value::Type::DICT);
     seen_offer_json.SetStringKey(kSeenOfferIdKey, seen_offer->offer_id);
     seen_offer_json.SetStringKey(
         kSeenOfferPriceKey, base::NumberToString(seen_offer->user_seen_price));
@@ -380,7 +374,7 @@ absl::optional<CommerceSubscription> SubscriptionsServerProxy::Deserialize(
     auto* id = value.FindStringKey(kSubscriptionIdKey);
     auto* management_type = value.FindStringKey(kSubscriptionManagementTypeKey);
     auto timestamp =
-        base::ValueToInt64(value.FindKey(kSubscriptionTimestampKey));
+        base::ValueToInt64(value.GetDict().Find(kSubscriptionTimestampKey));
     if (type && id_type && id && management_type && timestamp) {
       return absl::make_optional<CommerceSubscription>(
           StringToSubscriptionType(*type), StringToSubscriptionIdType(*id_type),

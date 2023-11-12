@@ -7,7 +7,6 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/test/gtest_util.h"
@@ -22,7 +21,6 @@
 #include "chrome/browser/ash/login/test/device_state_mixin.h"
 #include "chrome/browser/ash/login/test/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/login/test/enrollment_ui_mixin.h"
-#include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
 #include "chrome/browser/ash/login/test/js_checker.h"
 #include "chrome/browser/ash/login/test/kiosk_apps_mixin.h"
 #include "chrome/browser/ash/login/test/kiosk_test_helpers.h"
@@ -39,17 +37,16 @@
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/policy/enrollment/auto_enrollment_type_checker.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
-#include "chrome/browser/ash/policy/enrollment/psm/fake_rlwe_client.h"
+#include "chrome/browser/ash/policy/enrollment/psm/rlwe_test_support.h"
 #include "chrome/browser/ash/policy/server_backed_state/server_backed_state_keys_broker.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ash/login/device_disabled_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/signin_screen_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/test/base/fake_gaia_mixin.h"
 #include "chromeos/ash/components/attestation/mock_attestation_flow.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
@@ -389,8 +386,7 @@ class EnrollmentOnRevenWithNoStateKeysResponse
     // disables Forced Re-Enrollment (FRE). If FRE is enabled, state keys are
     // required.
     fake_statistics_provider_.SetMachineStatistic(
-        chromeos::system::kFirmwareTypeKey,
-        chromeos::system::kFirmwareTypeValueNonchrome);
+        system::kFirmwareTypeKey, system::kFirmwareTypeValueNonchrome);
     // When using a fresh ScopedFakeStatisticsProvider we also need to configure
     // a few entries (serial number, machine model).
     // ConfigureFakeStatisticsForZeroTouch does that for us.
@@ -1082,7 +1078,7 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest, EnrollmentForced) {
   WizardController::default_controller()
       ->GetAutoEnrollmentControllerForTesting()
       ->SetRlweClientFactoryForTesting(
-          base::BindRepeating(&policy::psm::FakeRlweClient::Create));
+          policy::psm::testing::CreateClientFactory(/*is_member=*/true));
 
   OobeScreenWaiter(EnrollmentScreenView::kScreenId).Wait();
 
@@ -1124,7 +1120,7 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest,
   WizardController::default_controller()
       ->GetAutoEnrollmentControllerForTesting()
       ->SetRlweClientFactoryForTesting(
-          base::BindRepeating(&policy::psm::FakeRlweClient::Create));
+          policy::psm::testing::CreateClientFactory(/*is_member=*/true));
 
   OobeScreenWaiter(EnrollmentScreenView::kScreenId).Wait();
 
@@ -1164,7 +1160,7 @@ IN_PROC_BROWSER_TEST_F(InitialEnrollmentTest,
   WizardController::default_controller()
       ->GetAutoEnrollmentControllerForTesting()
       ->SetRlweClientFactoryForTesting(
-          base::BindRepeating(&policy::psm::FakeRlweClient::Create));
+          policy::psm::testing::CreateClientFactory(/*is_member=*/true));
 
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepDeviceAttributes);
   enrollment_ui_.SubmitDeviceAttributes(test::values::kAssetId,

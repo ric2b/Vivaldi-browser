@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
@@ -256,7 +256,7 @@ AudioInputStream::OpenOutcome AUAudioInputStream::Open() {
   // Verify that we have a valid device. Send appropriate error code to
   // HandleError() to ensure that the error type is added to UMA stats.
   if (input_device_id_ == kAudioObjectUnknown) {
-    NOTREACHED() << "Device ID is unknown";
+    LOG(ERROR) << "Device ID is unknown";
     HandleError(kAudioUnitErr_InvalidElement);
     return OpenOutcome::kFailed;
   }
@@ -276,7 +276,7 @@ AudioInputStream::OpenOutcome AUAudioInputStream::Open() {
     return OpenOutcome::kFailed;
 
   // The hardware latency is fixed and will not change during the call.
-  hardware_latency_ = AudioManagerMac::GetHardwareLatency(
+  hardware_latency_ = core_audio_mac::GetHardwareLatency(
       audio_unit_, input_device_id_, kAudioDevicePropertyScopeInput,
       format_.mSampleRate);
 
@@ -729,7 +729,7 @@ void AUAudioInputStream::Close() {
 double AUAudioInputStream::GetMaxVolume() {
   // Verify that we have a valid device.
   if (input_device_id_ == kAudioObjectUnknown) {
-    NOTREACHED() << "Device ID is unknown";
+    LOG(ERROR) << "Device ID is unknown";
     return 0.0;
   }
 
@@ -751,7 +751,7 @@ void AUAudioInputStream::SetVolume(double volume) {
 
   // Verify that we have a valid device.
   if (input_device_id_ == kAudioObjectUnknown) {
-    NOTREACHED() << "Device ID is unknown";
+    LOG(ERROR) << "Device ID is unknown";
     return;
   }
 
@@ -798,7 +798,7 @@ void AUAudioInputStream::SetVolume(double volume) {
 double AUAudioInputStream::GetVolume() {
   // Verify that we have a valid device.
   if (input_device_id_ == kAudioObjectUnknown) {
-    NOTREACHED() << "Device ID is unknown";
+    LOG(ERROR) << "Device ID is unknown";
     return 0.0;
   }
 
@@ -1224,8 +1224,8 @@ void AUAudioInputStream::HandleError(OSStatus err) {
   // carries one extra level of information.
   base::UmaHistogramSparse("Media.InputErrorMac",
                            GetInputCallbackIsActive() ? err : (err * -1));
-  NOTREACHED() << "error " << logging::DescriptionFromOSStatus(err) << " ("
-               << err << ")";
+  LOG(ERROR) << "Input error " << logging::DescriptionFromOSStatus(err) <<
+      " (" << err << ")";
   if (sink_)
     sink_->OnError();
 }

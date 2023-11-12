@@ -11,6 +11,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "components/cast_streaming/public/config_conversions.h"
 #include "components/cast_streaming/test/cast_message_port_sender_impl.h"
+#include "third_party/openscreen/src/platform/base/span.h"
 
 namespace cast_streaming {
 
@@ -47,8 +48,8 @@ openscreen::cast::EncodedFrame DecoderBufferToEncodedFrame(
           std::chrono::milliseconds>(timestamp, rtp_timebase);
   encoded_frame.reference_time = openscreen::Clock::time_point(timestamp);
 
-  encoded_frame.data = absl::Span<uint8_t>(decoder_buffer->writable_data(),
-                                           decoder_buffer->data_size());
+  encoded_frame.data = openscreen::ByteView(decoder_buffer->writable_data(),
+                                            decoder_buffer->data_size());
 
   return encoded_frame;
 }
@@ -142,10 +143,15 @@ void CastStreamingTestSender::Start(
 void CastStreamingTestSender::Stop() {
   VLOG(1) << __func__;
 
-  sender_session_.reset();
-  message_port_.reset();
+  // Senders must be deconstructed before the session that hosts them.
   audio_sender_observer_.reset();
   video_sender_observer_.reset();
+
+  // Disconnect the message port before destructing its client.
+  message_port_->ResetClient();
+  sender_session_.reset();
+  message_port_.reset();
+
   audio_decoder_config_.reset();
   video_decoder_config_.reset();
   has_startup_completed_ = false;

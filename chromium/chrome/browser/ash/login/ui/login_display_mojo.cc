@@ -7,7 +7,7 @@
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/login_screen_model.h"
 #include "ash/public/cpp/login_types.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/login/challenge_response_auth_keys_loader.h"
 #include "chrome/browser/ash/login/existing_user_controller.h"
@@ -127,12 +127,7 @@ void LoginDisplayMojo::Init(const user_manager::UserList& filtered_users,
   }
 }
 
-void LoginDisplayMojo::SetUIEnabled(bool is_enabled) {
-  // OOBE UI is null iff we display the user adding screen.
-  if (is_enabled && host_->GetOobeUI() != nullptr) {
-    host_->GetOobeUI()->ShowOobeUI(false);
-  }
-}
+void LoginDisplayMojo::SetUIEnabled(bool is_enabled) {}
 
 void LoginDisplayMojo::OnUserImageChanged(const user_manager::User& user) {
   LoginScreen::Get()->GetModel()->SetAvatarForUser(

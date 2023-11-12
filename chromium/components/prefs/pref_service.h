@@ -19,8 +19,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
@@ -334,7 +334,7 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // If INCLUDE_DEFAULTS is requested, preferences set to their default values
   // will be included. Otherwise, these will be omitted from the returned
   // dictionary.
-  base::Value GetPreferenceValues(IncludeDefaults include_defaults) const;
+  base::Value::Dict GetPreferenceValues(IncludeDefaults include_defaults) const;
 
   bool ReadOnly() const;
 
@@ -468,8 +468,8 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   };
 
   // Sends notification of a changed preference. This needs to be called by
-  // a ScopedUserPrefUpdate or ScopedDictionaryPrefUpdate if a DictionaryValue
-  // or ListValue is changed.
+  // a ScopedDictPrefUpdate or ScopedListPrefUpdate if a Value::Dict or
+  // Value::List is changed.
   void ReportUserPrefChanged(const std::string& key);
   void ReportUserPrefChanged(
       const std::string& key,
@@ -492,7 +492,7 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // This will create a dictionary or list if one does not exist in the user
   // pref store. This method returns NULL only if you're requesting an
   // unregistered pref or a non-dict/non-list pref.
-  // |type| may only be Values::Type::DICTIONARY or Values::Type::LIST and
+  // |type| may only be Values::Type::DICT or Values::Type::LIST and
   // |path| must point to a registered preference of type |type|.
   // Ownership of the returned value remains at the user pref store.
   base::Value* GetMutableUserPref(const std::string& path,

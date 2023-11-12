@@ -2,31 +2,31 @@
 
 #import "ios/notes/note_home_mediator.h"
 
-#include "base/check.h"
-#include "base/mac/foundation_util.h"
-#include "base/strings/sys_string_conversions.h"
+#import "base/check.h"
+#import "base/mac/foundation_util.h"
+#import "base/strings/sys_string_conversions.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
-#include "components/prefs/pref_change_registrar.h"
-#include "components/prefs/pref_service.h"
-#include "components/sync/driver/sync_service.h"
-#include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/sync/sync_service_factory.h"
+#import "components/prefs/pref_change_registrar.h"
+#import "components/prefs/pref_service.h"
+#import "components/sync/driver/sync_service.h"
+#import "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#import "ios/chrome/browser/sync/sync_observer_bridge.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
 #import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/ui/authentication/signin_presenter.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
-#import "ios/chrome/browser/sync/sync_observer_bridge.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/notes/cells/note_home_node_item.h"
 #import "ios/notes/note_home_consumer.h"
 #import "ios/notes/note_home_shared_state.h"
 #import "ios/notes/note_model_bridge_observer.h"
-#import "ios/notes/cells/note_home_node_item.h"
-#include "notes/notes_model.h"
-#include "ui/base/l10n/l10n_util.h"
+#import "notes/notes_model.h"
+#import "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -164,31 +164,30 @@ class NoteModelBridge;
 // Generate the table view data when the current root node is the outermost
 // root.
 - (void)generateTableViewDataForRootNode {
-  // If all the permanent nodes are empty, do not create items for any of them.
+
   if (![self hasNotesOrFolders]) {
     return;
   }
 
-  // Add "Mobile Notes" to the table.
-  const NoteNode* mobileNode =
+  // Add root "Notes" to the table.
+  const NoteNode* rootNode =
       self.sharedState.notesModel->main_node();
   NoteHomeNodeItem* mobileItem =
       [[NoteHomeNodeItem alloc] initWithType:NoteHomeItemTypeNote
-                                    noteNode:mobileNode];
+                                    noteNode:rootNode];
   [self.sharedState.tableViewModel
                       addItem:mobileItem
       toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
 
-  const NoteNode* trashNotes =
+  // Add "Trash" notes to the table.
+  const NoteNode* trashNode =
       self.sharedState.notesModel->trash_node();
-  if (!trashNotes->children().empty()) {
-    NoteHomeNodeItem* trashItem =
-        [[NoteHomeNodeItem alloc] initWithType:NoteHomeItemTypeNote
-                                      noteNode:trashNotes];
-    [self.sharedState.tableViewModel
-                        addItem:trashItem
-        toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
-  }
+  NoteHomeNodeItem* trashItem =
+      [[NoteHomeNodeItem alloc] initWithType:NoteHomeItemTypeNote
+                                    noteNode:trashNode];
+  [self.sharedState.tableViewModel
+                      addItem:trashItem
+      toSectionWithIdentifier:NoteHomeSectionIdentifierNotes];
 }
 
 - (void)computeNoteTableViewDataMatching:(NSString*)searchText
@@ -296,7 +295,10 @@ class NoteModelBridge;
   // The current root folder's children changed. Reload everything.
   // (When adding new folder, table is already been updated. So no need to
   // reload here.)
-  if (noteNode == self.sharedState.tableViewDisplayedRootNode &&
+  // Or the current roots grand children changed
+  if ((noteNode == self.sharedState.tableViewDisplayedRootNode ||
+      noteNode->parent() == self.sharedState.tableViewDisplayedRootNode
+      ) &&
       !self.sharedState.addingNewFolder && !self.sharedState.addingNewNote) {
     [self.consumer refreshContents];
     return;
@@ -304,13 +306,17 @@ class NoteModelBridge;
 }
 
 // The node has moved to a new parent folder.
+// This might mean the count needs updating
 - (void)noteNode:(const NoteNode*)noteNode
      movedFromParent:(const NoteNode*)oldParent
             toParent:(const NoteNode*)newParent {
   if (oldParent == self.sharedState.tableViewDisplayedRootNode ||
-      newParent == self.sharedState.tableViewDisplayedRootNode) {
-    // A folder was added or removed from the current root folder.
-    [self.consumer refreshContents];
+      newParent == self.sharedState.tableViewDisplayedRootNode ||
+      oldParent->parent() == self.sharedState.tableViewDisplayedRootNode ||
+      newParent->parent() == self.sharedState.tableViewDisplayedRootNode
+      ) {
+      // A folder was added or removed from the current root folder or its child.
+     [self.consumer refreshContents];
   }
 }
 
@@ -382,16 +388,9 @@ class NoteModelBridge;
 - (BOOL)hasNotesOrFolders {
   if (self.sharedState.tableViewDisplayedRootNode ==
       self.sharedState.notesModel->root_node()) {
-    // The root node always has its permanent nodes. If all the permanent nodes
-    // are empty, we treat it as if the root itself is empty.
-    const auto& childrenOfRootNode =
-        self.sharedState.tableViewDisplayedRootNode->children();
-    for (const auto& child : childrenOfRootNode) {
-      if (!child->children().empty()) {
-        return YES;
-      }
-    }
-    return NO;
+    // The root node always has its permanent nodes. We will consider it has
+    // folders as we will display empty  folders on the root page.
+    return YES;
   }
   return self.sharedState.tableViewDisplayedRootNode &&
          !self.sharedState.tableViewDisplayedRootNode->children().empty();

@@ -22,6 +22,7 @@
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/tests_hook.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_observer_bridge.h"
 #import "ios/chrome/browser/discover_feed/discover_feed_service.h"
@@ -30,17 +31,21 @@
 #import "ios/chrome/browser/discover_feed/feed_model_configuration.h"
 #import "ios/chrome/browser/follow/follow_browser_agent.h"
 #import "ios/chrome/browser/follow/followed_web_site.h"
+#import "ios/chrome/browser/follow/followed_web_site_state.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/prefs/pref_names.h"
-#import "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/capabilities_types.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/system_identity_manager.h"
+#import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -52,15 +57,12 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_coordinator.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_commands.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizer.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller.h"
-#import "ios/chrome/browser/ui/content_suggestions/ntp_home_mediator.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_metrics.h"
 #import "ios/chrome/browser/ui/context_menu/link_preview/link_preview_coordinator.h"
 #import "ios/chrome/browser/ui/main/layout_guide_util.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
-#import "ios/chrome/browser/ui/main/scene_state_observer.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/discover_feed_preview_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_control_delegate.h"
@@ -73,20 +75,23 @@
 #import "ios/chrome/browser/ui/ntp/feed_sign_in_promo_delegate.h"
 #import "ios/chrome/browser/ui/ntp/feed_top_section/feed_top_section_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/feed_wrapper_view_controller.h"
-#import "ios/chrome/browser/ui/ntp/incognito_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/incognito/incognito_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_content_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator+private.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_follow_delegate.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_mediator.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_view_controller.h"
 #import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
 #import "ios/chrome/browser/ui/settings/utils/pref_backed_boolean.h"
+#import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/ui_utils/ui_utils_api.h"
@@ -105,7 +110,7 @@
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
-#import "ios/chrome/browser/ui/ntp/vivaldi_new_tab_page_view_controller.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_base_controller.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_util.h"
@@ -123,6 +128,16 @@ using vivaldi::IsVivaldiRunning;
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+bool IsNTPActiveForWebState(web::WebState* web_state) {
+  if (!web_state) {
+    return false;
+  }
+  NewTabPageTabHelper* helper = NewTabPageTabHelper::FromWebState(web_state);
+  return helper && helper->IsActive();
+}
+}  // namespace
 
 @interface NewTabPageCoordinator () <AppStateObserver,
                                      BooleanObserver,
@@ -143,7 +158,7 @@ using vivaldi::IsVivaldiRunning;
                                      PrefObserverDelegate,
                                      SceneStateObserver,
                                      CRWWebStateObserver,
-                                     VivaldiNewTabPageViewControllerDelegate> {
+                                     VivaldiSpeedDialBaseControllerDelegate> {
   // Pref observer to track changes to prefs.
   std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
   // Registrar for pref changes notifications.
@@ -155,6 +170,9 @@ using vivaldi::IsVivaldiRunning;
 
   // Observes changes in the DiscoverFeed.
   std::unique_ptr<DiscoverFeedObserverBridge> _discoverFeedObserverBridge;
+
+  // Bridges C++ WebStateListObserver methods to this NewTabPageCoordinator.
+  std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
 
   // Vivaldi
   WebStateList* _webStateList;
@@ -173,10 +191,10 @@ using vivaldi::IsVivaldiRunning;
     ContentSuggestionsCoordinator* contentSuggestionsCoordinator;
 
 // View controller for the regular NTP.
-@property(nonatomic, strong) NewTabPageViewController* ntpViewController;
+@property(nonatomic, strong) NewTabPageViewController* NTPViewController;
 
-// Mediator owned by this Coordinator.
-@property(nonatomic, strong) NTPHomeMediator* ntpMediator;
+// Mediator owned by this coordinator.
+@property(nonatomic, strong) NewTabPageMediator* NTPMediator;
 
 // View controller wrapping the feed.
 @property(nonatomic, strong)
@@ -190,7 +208,8 @@ using vivaldi::IsVivaldiRunning;
 
 // Tracks the visibility of the NTP to report NTP usage metrics.
 // True if the NTP view is currently displayed to the user.
-@property(nonatomic, assign) BOOL visible;
+// Redefined to readwrite.
+@property(nonatomic, assign, readwrite) BOOL visible;
 
 // Whether the view is new tab view is currently presented (possibly in
 // background). Used to report NTP usage metrics.
@@ -198,11 +217,6 @@ using vivaldi::IsVivaldiRunning;
 
 // Wheter the scene is currently in foreground.
 @property(nonatomic, assign) BOOL sceneInForeground;
-
-// Handles interactions with the content suggestions header and the fake
-// omnibox.
-@property(nonatomic, strong)
-    ContentSuggestionsHeaderSynchronizer* headerSynchronizer;
 
 // The ViewController displayed by this Coordinator. This is the returned
 // ViewController and will contain the `containedViewController` (Which can
@@ -264,6 +278,12 @@ using vivaldi::IsVivaldiRunning;
 // Currently selected feed. Redefined to readwrite.
 @property(nonatomic, assign, readwrite) FeedType selectedFeed;
 
+// The Webstate associated with this coordinator.
+@property(nonatomic, assign) web::WebState* webState;
+
+// Returns `YES` if the coordinator is started.
+@property(nonatomic, assign) BOOL started;
+
 // Vivaldi
 // Bookmarks model that holds all the bookmarks data
 @property (assign,nonatomic) BookmarkModel* bookmarks;
@@ -313,10 +333,22 @@ using vivaldi::IsVivaldiRunning;
   }
 
   DCHECK(self.browser);
-  DCHECK(self.webState);
   DCHECK(self.toolbarDelegate);
   DCHECK(!self.contentSuggestionsCoordinator);
 
+  self.webState = self.browser->GetWebStateList()->GetActiveWebState();
+  DCHECK(self.webState);
+
+  // Start observing WebStateList changes.
+  _webStateListObserver = std::make_unique<WebStateListObserverBridge>(self);
+  self.browser->GetWebStateList()->AddObserver(_webStateListObserver.get());
+
+  // Start observing SceneState changes.
+  SceneState* sceneState =
+      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
+  [sceneState addObserver:self];
+  self.sceneInForeground =
+      sceneState.activationLevel >= SceneActivationLevelForegroundInactive;
   // Configures incognito NTP if user is in incognito mode.
   if (self.browser->GetBrowserState()->IsOffTheRecord()) {
     DCHECK(!self.incognitoViewController);
@@ -325,6 +357,7 @@ using vivaldi::IsVivaldiRunning;
     self.incognitoViewController =
         [[IncognitoViewController alloc] initWithUrlLoader:URLLoader];
     self.started = YES;
+    [self NTPDidChangeVisibility:YES];
     return;
   }
 
@@ -332,9 +365,26 @@ using vivaldi::IsVivaldiRunning;
     [self initializeServices];
     [self configureVivaldiNTPViewController];
   } else {
+  NewTabPageTabHelper* NTPHelper =
+      NewTabPageTabHelper::FromWebState(self.webState);
+  if (NTPHelper) {
+    self.selectedFeed = NTPHelper->GetNextNTPFeedType();
+  }
+
+  // NOTE: anything that executes below WILL NOT execute for OffTheRecord
+  // browsers!
+
   [self initializeServices];
   [self initializeNTPComponents];
   [self startObservers];
+
+  // Do not focus on omnibox for voice over if there are other screens to
+  // show.
+  AppState* appState = sceneState.appState;
+  [appState addObserver:self];
+  if (appState.initStage < InitStageFinal) {
+    self.NTPViewController.focusAccessibilityOmniboxWhenViewAppears = NO;
+  }
 
   // Updates feed asynchronously if the account is subject to parental controls.
   [self updateFeedVisibilityForSupervision];
@@ -344,36 +394,48 @@ using vivaldi::IsVivaldiRunning;
     [self configureFeedAndHeader];
   }
   [self configureHeaderController];
-  [self configureNTPMediator];
   [self configureContentSuggestionsCoordinator];
+  [self configureNTPMediator];
   [self configureFeedMetricsRecorder];
   [self configureNTPViewController];
   } // End Vivaldi
 
   self.started = YES;
+  [self NTPDidChangeVisibility:YES];
 }
 
 - (void)stop {
   if (!self.started)
     return;
 
-  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
-    self.incognitoViewController = nil;
-    self.started = NO;
-    return;
-  }
-  self.viewPresented = NO;
-  [self updateVisible];
+  self.browser->GetWebStateList()->RemoveObserver(_webStateListObserver.get());
+  _webStateListObserver.reset();
+  _webState = nullptr;
 
   SceneState* sceneState =
       SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
   [sceneState removeObserver:self];
 
+  if (self.browser->GetBrowserState()->IsOffTheRecord()) {
+    self.incognitoViewController = nil;
+    self.started = NO;
+    self.viewPresented = NO;
+    [self updateVisible];
+    return;
+  }
+
+  // NOTE: anything that executes below WILL NOT execute for OffTheRecord
+  // browsers!
+
+  [sceneState.appState removeObserver:self];
+
+  self.viewPresented = NO;
+  [self updateVisible];
+
   [self.feedManagementCoordinator stop];
   self.feedManagementCoordinator = nil;
   [self.contentSuggestionsCoordinator stop];
   self.contentSuggestionsCoordinator = nil;
-  self.headerSynchronizer = nil;
   self.headerController = nil;
   // Remove before nil to ensure View Hierarchy doesn't hold last strong
   // reference.
@@ -381,11 +443,10 @@ using vivaldi::IsVivaldiRunning;
   [self.containedViewController.view removeFromSuperview];
   [self.containedViewController removeFromParentViewController];
   self.containedViewController = nil;
-  self.ntpViewController.feedHeaderViewController = nil;
-  self.ntpViewController = nil;
+  self.NTPViewController.feedHeaderViewController = nil;
+  self.NTPViewController = nil;
   self.feedHeaderViewController.ntpDelegate = nil;
   self.feedHeaderViewController = nil;
-  self.feedTopSectionCoordinator.ntpDelegate = nil;
   [self.feedTopSectionCoordinator stop];
   self.feedTopSectionCoordinator = nil;
 
@@ -401,8 +462,8 @@ using vivaldi::IsVivaldiRunning;
   self.authService = nil;
   self.templateURLService = nil;
 
-  [self.ntpMediator shutdown];
-  self.ntpMediator = nil;
+  [self.NTPMediator shutdown];
+  self.NTPMediator = nil;
 
   if (self.feedViewController) {
     self.discoverFeedService->RemoveFeedViewController(self.feedViewController);
@@ -424,54 +485,60 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - Public
 
-- (void)setWebState:(web::WebState*)webState {
-  if (_webState == webState) {
-    return;
+- (void)stopIfNeeded {
+  WebStateList* webStateList = self.browser->GetWebStateList();
+  for (int i = 0; i < webStateList->count(); i++) {
+    NewTabPageTabHelper* iterNtpHelper =
+        NewTabPageTabHelper::FromWebState(webStateList->GetWebStateAt(i));
+    if (iterNtpHelper->IsActive()) {
+      return;
+    }
   }
-  self.contentSuggestionsCoordinator.webState = webState;
-  self.ntpMediator.webState = webState;
-  _webState = webState;
+
+  // No active NTPs were found.
+  [self stop];
 }
 
 - (void)stopScrolling {
   if (!self.contentSuggestionsCoordinator) {
     return;
   }
-  [self.ntpViewController stopScrolling];
+  [self.NTPViewController stopScrolling];
 }
 
 - (BOOL)isScrolledToTop {
-  return [self.ntpViewController isNTPScrolledToTop];
+  return [self.NTPViewController isNTPScrolledToTop];
 }
 
 - (void)willUpdateSnapshot {
   if (self.contentSuggestionsCoordinator.started) {
-    [self.ntpViewController willUpdateSnapshot];
+    [self.NTPViewController willUpdateSnapshot];
   }
 }
 
 - (void)focusFakebox {
-  if (self.feedViewController) {
-    [self.ntpViewController focusFakebox];
-  } else {
-    [self.headerController focusFakebox];
-  }
+  [self.NTPViewController focusFakebox];
 }
 
 - (void)reload {
   if (self.browser->GetBrowserState()->IsOffTheRecord()) {
     return;
   }
-  self.discoverFeedService->RefreshFeed();
+  // Call this before RefreshFeed() to ensure some NTP state configs are reset
+  // before callbacks in repsonse to a feed refresh are called, ensuring the NTP
+  // returns to a state at the top of the surface upon refresh.
+  [self.NTPViewController resetStateUponReload];
+  self.discoverFeedService->RefreshFeed(/*feed_visible=*/true);
   [self reloadContentSuggestions];
 }
 
 - (void)locationBarDidBecomeFirstResponder {
-  [self.contentSuggestionsCoordinator locationBarDidBecomeFirstResponder];
+  [self.headerController locationBarBecomesFirstResponder];
+  self.NTPViewController.omniboxFocused = YES;
 }
 
 - (void)locationBarDidResignFirstResponder {
-  [self.contentSuggestionsCoordinator locationBarDidResignFirstResponder];
+  [self.NTPViewController omniboxDidResignFirstResponder];
 }
 
 - (void)constrainDiscoverHeaderMenuButtonNamedGuide {
@@ -495,56 +562,38 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)handleFeedModelDidEndUpdates:(FeedType)feedType {
-  DCHECK(self.ntpViewController);
-  if (!self.feedViewController || !self.ntpViewController.viewDidAppear) {
+  DCHECK(self.NTPViewController);
+  if (!self.feedViewController) {
     return;
   }
   // When the visible feed has been updated, recalculate the minimum NTP height.
   if (feedType == self.selectedFeed) {
-    [self.ntpViewController updateFeedInsetsForMinimumHeight];
-    [self.ntpViewController updateStickyElements];
+    [self.NTPViewController feedLayoutDidEndUpdates];
   }
 }
 
-- (void)ntpDidChangeVisibility:(BOOL)visible {
-  if (!self.browser->GetBrowserState()->IsOffTheRecord()) {
-    [self updateStartForVisibilityChange:visible];
-    if (visible && self.started) {
-      if ([self isFollowingFeedAvailable]) {
-        self.ntpViewController.shouldScrollIntoFeed = self.shouldScrollIntoFeed;
-        self.shouldScrollIntoFeed = NO;
-        // Reassign the sort type in case it changed in another tab.
-        self.feedHeaderViewController.followingFeedSortType =
-            self.followingFeedSortType;
-        // Update the header so that it's synced with the currently selected
-        // feed, which could have been changed when a new web state was
-        // inserted.
-        [self.feedHeaderViewController updateForSelectedFeed];
-        self.feedMetricsRecorder.feedControlDelegate = self;
-        self.feedMetricsRecorder.followDelegate = self;
-      }
-    }
-    if (!visible) {
-      // Unfocus omnibox, to prevent it from lingering when it should be
-      // dismissed (for example, when navigating away or when changing feed
-      // visibility). Do this after the MVC classes are deallocated so no reset
-      // animations are fired in response to this cancel.
-      id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
-          self.browser->GetCommandDispatcher(), OmniboxCommands);
-      [omniboxCommandHandler cancelOmniboxEdit];
-    }
-    // Check if feed is visible before reporting NTP visibility as the feed
-    // needs to be visible in order to use for metrics.
-    // TODO(crbug.com/1373650) Move isFeedVisible check to the metrics recorder
-    if (IsGoodVisitsMetricEnabled()) {
-      if (self.started && [self isFeedVisible]) {
-        [self.feedMetricsRecorder recordNTPDidChangeVisibility:visible];
-      }
-    }
+- (void)didNavigateToNTP {
+  if (self.started) {
+    self.webState = self.browser->GetWebStateList()->GetActiveWebState();
+    [self NTPDidChangeVisibility:YES];
   }
+}
 
-  self.viewPresented = visible;
-  [self updateVisible];
+- (void)didNavigateAwayFromNTP {
+  [self NTPDidChangeVisibility:NO];
+  self.webState = nullptr;
+  [self stopIfNeeded];
+}
+
+#pragma mark - Setters
+
+- (void)setSelectedFeed:(FeedType)selectedFeed {
+  if (_selectedFeed == selectedFeed) {
+    return;
+  }
+  // Tell Metrics Recorder the feed has changed.
+  [self.feedMetricsRecorder recordFeedTypeChangedFromFeed:_selectedFeed];
+  _selectedFeed = selectedFeed;
 }
 
 #pragma mark - Initializers
@@ -597,42 +646,25 @@ using vivaldi::IsVivaldiRunning;
   // Start observing DiscoverFeedService.
   _discoverFeedObserverBridge = std::make_unique<DiscoverFeedObserverBridge>(
       self, self.discoverFeedService);
-
-  SceneState* sceneState =
-      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
-  [sceneState addObserver:self];
-  self.sceneInForeground =
-      sceneState.activationLevel >= SceneActivationLevelForegroundInactive;
-
-  AppState* appState = sceneState.appState;
-  [appState addObserver:self];
-
-  // Do not focus on omnibox for voice over if there are other screens to
-  // show.
-  if (appState.initStage < InitStageFinal) {
-    self.headerController.focusOmniboxWhenViewAppears = NO;
-  }
 }
 
 // Creates all the NTP components.
 - (void)initializeNTPComponents {
-  self.ntpViewController = [[NewTabPageViewController alloc] init];
-  self.ntpMediator = [[NTPHomeMediator alloc]
-           initWithWebState:self.webState
-         templateURLService:self.templateURLService
-                  URLLoader:UrlLoadingBrowserAgent::FromBrowser(self.browser)
-                authService:self.authService
-            identityManager:IdentityManagerFactory::GetForBrowserState(
-                                self.browser->GetBrowserState())
-      accountManagerService:ChromeAccountManagerServiceFactory::
-                                GetForBrowserState(
-                                    self.browser->GetBrowserState())
-                 logoVendor:ios::provider::CreateLogoVendor(self.browser,
-                                                            self.webState)];
+  self.NTPViewController = [[NewTabPageViewController alloc] init];
   self.headerController = [[ContentSuggestionsHeaderViewController alloc] init];
-  self.headerSynchronizer = [[ContentSuggestionsHeaderSynchronizer alloc]
-      initWithCollectionController:self.ntpViewController
-                  headerController:self.headerController];
+  self.NTPMediator = [[NewTabPageMediator alloc]
+              initWithWebState:self.webState
+            templateURLService:self.templateURLService
+                     URLLoader:UrlLoadingBrowserAgent::FromBrowser(self.browser)
+                   authService:self.authService
+               identityManager:IdentityManagerFactory::GetForBrowserState(
+                                   self.browser->GetBrowserState())
+         accountManagerService:ChromeAccountManagerServiceFactory::
+                                   GetForBrowserState(
+                                       self.browser->GetBrowserState())
+                    logoVendor:ios::provider::CreateLogoVendor(self.browser,
+                                                               self.webState)
+      identityDiscImageUpdater:self.headerController];
   self.contentSuggestionsCoordinator = [[ContentSuggestionsCoordinator alloc]
       initWithBaseViewController:nil
                          browser:self.browser];
@@ -644,9 +676,9 @@ using vivaldi::IsVivaldiRunning;
 // Creates and configures the feed and feed header based on user prefs.
 - (void)configureFeedAndHeader {
   DCHECK([self isFeedHeaderVisible]);
-  DCHECK(self.ntpViewController);
+  DCHECK(self.NTPViewController);
 
-  self.ntpViewController.feedHeaderViewController =
+  self.NTPViewController.feedHeaderViewController =
       self.feedHeaderViewController;
 
   // Requests feeds here if the correct flags and prefs are enabled.
@@ -675,8 +707,7 @@ using vivaldi::IsVivaldiRunning;
 // Configures `self.headerController`.
 - (void)configureHeaderController {
   DCHECK(self.headerController);
-  DCHECK(self.ntpMediator);
-  DCHECK(self.headerSynchronizer);
+  DCHECK(self.NTPMediator);
 
   self.headerController.isGoogleDefaultSearchEngine =
       [self isGoogleDefaultSearchEngine];
@@ -687,39 +718,38 @@ using vivaldi::IsVivaldiRunning;
                      FakeboxFocuser, LensCommands>>(
           self.browser->GetCommandDispatcher());
   self.headerController.commandHandler = self;
-  self.headerController.delegate = self.ntpMediator;
+  self.headerController.delegate = self.NTPViewController;
   self.headerController.layoutGuideCenter =
       LayoutGuideCenterForBrowser(self.browser);
-  self.headerController.readingListModel =
-      ReadingListModelFactory::GetForBrowserState(
-          self.browser->GetBrowserState());
   self.headerController.toolbarDelegate = self.toolbarDelegate;
   self.headerController.baseViewController = self.baseViewController;
-  self.headerController.collectionSynchronizer = self.headerSynchronizer;
   if (NewTabPageTabHelper::FromWebState(self.webState)
           ->ShouldShowStartSurface()) {
     self.headerController.isStartShowing = YES;
   }
 }
 
-// Configures `self.ntpMediator`.
-- (void)configureNTPMediator {
-  DCHECK(self.ntpMediator);
-  self.ntpMediator.headerCollectionInteractionHandler = self.headerSynchronizer;
-  self.ntpMediator.browser = self.browser;
-  self.ntpMediator.ntpViewController = self.ntpViewController;
-  self.ntpMediator.feedControlDelegate = self;
-  self.ntpMediator.consumer = self.headerController;
-}
-
 // Configures `self.contentSuggestionsCoordiantor`.
 - (void)configureContentSuggestionsCoordinator {
   DCHECK(self.contentSuggestionsCoordinator);
   self.contentSuggestionsCoordinator.webState = self.webState;
-  self.contentSuggestionsCoordinator.ntpMediator = self.ntpMediator;
   self.contentSuggestionsCoordinator.ntpDelegate = self;
   self.contentSuggestionsCoordinator.feedDelegate = self;
   [self.contentSuggestionsCoordinator start];
+}
+
+// Configures `self.NTPMediator`.
+- (void)configureNTPMediator {
+  NewTabPageMediator* NTPMediator = self.NTPMediator;
+  DCHECK(NTPMediator);
+  DCHECK(self.contentSuggestionsCoordinator.contentSuggestionsMediator);
+  NTPMediator.browser = self.browser;
+  NTPMediator.feedControlDelegate = self;
+  NTPMediator.contentSuggestionsHeaderConsumer = self.headerController;
+  NTPMediator.consumer = self.NTPViewController;
+  NTPMediator.suggestionsMediator =
+      self.contentSuggestionsCoordinator.contentSuggestionsMediator;
+  [NTPMediator setUp];
 }
 
 // Configures `self.feedMetricsRecorder`.
@@ -728,37 +758,36 @@ using vivaldi::IsVivaldiRunning;
   self.feedMetricsRecorder.followDelegate = self;
 }
 
-// Configures `self.ntpViewController` and sets it up as the main ViewController
+// Configures `self.NTPViewController` and sets it up as the main ViewController
 // managed by this Coordinator.
 - (void)configureNTPViewController {
-  DCHECK(self.ntpViewController);
+  DCHECK(self.NTPViewController);
 
-  self.ntpViewController.contentSuggestionsViewController =
+  self.NTPViewController.contentSuggestionsViewController =
       self.contentSuggestionsCoordinator.viewController;
 
-  self.ntpViewController.panGestureHandler = self.panGestureHandler;
-  self.ntpViewController.feedVisible = [self isFeedVisible];
-  self.ntpViewController.headerSynchronizer = self.headerSynchronizer;
+  self.NTPViewController.panGestureHandler = self.panGestureHandler;
+  self.NTPViewController.feedVisible = [self isFeedVisible];
 
   self.feedWrapperViewController = [[FeedWrapperViewController alloc]
         initWithDelegate:self
       feedViewController:self.feedViewController];
 
   if ([self isFeedTopSectionVisible]) {
-    self.ntpViewController.feedTopSectionViewController =
+    self.NTPViewController.feedTopSectionViewController =
         self.feedTopSectionCoordinator.viewController;
   }
 
-  self.ntpViewController.feedWrapperViewController =
+  self.NTPViewController.feedWrapperViewController =
       self.feedWrapperViewController;
-  self.ntpViewController.overscrollDelegate = self;
-  self.ntpViewController.ntpContentDelegate = self;
+  self.NTPViewController.overscrollDelegate = self;
+  self.NTPViewController.ntpContentDelegate = self;
 
-  self.ntpViewController.headerController = self.headerController;
+  self.NTPViewController.headerController = self.headerController;
 
-  [self configureMainViewControllerUsing:self.ntpViewController];
-  self.ntpViewController.feedMetricsRecorder = self.feedMetricsRecorder;
-  self.ntpViewController.bubblePresenter = self.bubblePresenter;
+  [self configureMainViewControllerUsing:self.NTPViewController];
+  self.NTPViewController.feedMetricsRecorder = self.feedMetricsRecorder;
+  self.NTPViewController.bubblePresenter = self.bubblePresenter;
 }
 
 // Configures the main ViewController managed by this Coordinator.
@@ -782,8 +811,7 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - Properties
 
 - (UIViewController*)viewController {
-  // TODO(crbug.com/1348459): Stop lazy loading in NTPCoordinator.
-  [self start];
+  DCHECK(self.started);
   if (self.browser->GetBrowserState()->IsOffTheRecord()) {
     return self.incognitoViewController;
   } else {
@@ -792,13 +820,13 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (id<ThumbStripSupporting>)thumbStripSupporting {
-  return self.ntpViewController;
+  return self.NTPViewController;
 }
 
 #pragma mark - NewTabPageConfiguring
 
 - (void)selectFeedType:(FeedType)feedType {
-  if (!self.ntpViewController.viewDidAppear ||
+  if (!self.NTPViewController.viewDidAppear ||
       ![self isFollowingFeedAvailable]) {
     self.selectedFeed = feedType;
     return;
@@ -809,7 +837,29 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - ContentSuggestionsHeaderCommands
 
 - (void)updateForHeaderSizeChange {
-  [self updateFeedLayout];
+  [self.NTPViewController updateHeightAboveFeedAndScrollToTopIfNeeded];
+}
+
+- (void)identityDiscWasTapped {
+  base::RecordAction(base::UserMetricsAction("MobileNTPIdentityDiscTapped"));
+  id<ApplicationCommands> handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), ApplicationCommands);
+  BOOL isSignedIn =
+      self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
+  BOOL isSigninNotAllowed = self.authService->GetServiceStatus() !=
+                            AuthenticationService::ServiceStatus::SigninAllowed;
+  BOOL isSyncDisabled = IsSyncDisabledByPolicy(
+      SyncServiceFactory::GetForBrowserState(self.browser->GetBrowserState()));
+  if (isSignedIn || isSigninNotAllowed || isSyncDisabled) {
+    [handler showSettingsFromViewController:self.baseViewController];
+  } else {
+    ShowSigninCommand* const showSigninCommand = [[ShowSigninCommand alloc]
+        initWithOperation:AuthenticationOperationSigninAndSync
+              accessPoint:signin_metrics::AccessPoint::
+                              ACCESS_POINT_NTP_SIGNED_OUT_ICON];
+    [handler showSignin:showSigninCommand
+        baseViewController:self.baseViewController];
+  }
 }
 
 #pragma mark - FeedMenuCommands
@@ -824,7 +874,7 @@ using vivaldi::IsVivaldiRunning;
   // for the frame.
   UIButton* menuButton = self.feedHeaderViewController.menuButton;
   self.alertCoordinator = [[ActionSheetCoordinator alloc]
-      initWithBaseViewController:self.ntpViewController
+      initWithBaseViewController:self.NTPViewController
                          browser:self.browser
                            title:nil
                          message:nil
@@ -866,7 +916,7 @@ using vivaldi::IsVivaldiRunning;
           addItemWithTitle:l10n_util::GetNSString(
                                IDS_IOS_DISCOVER_FEED_MENU_MANAGE_ACTIVITY_ITEM)
                     action:^{
-                      [weakSelf.ntpMediator handleFeedManageActivityTapped];
+                      [weakSelf.NTPMediator handleFeedManageActivityTapped];
                     }
                      style:UIAlertActionStyleDefault];
 
@@ -874,7 +924,7 @@ using vivaldi::IsVivaldiRunning;
           addItemWithTitle:l10n_util::GetNSString(
                                IDS_IOS_DISCOVER_FEED_MENU_MANAGE_INTERESTS_ITEM)
                     action:^{
-                      [weakSelf.ntpMediator handleFeedManageInterestsTapped];
+                      [weakSelf.NTPMediator handleFeedManageInterestsTapped];
                     }
                      style:UIAlertActionStyleDefault];
     }
@@ -885,7 +935,7 @@ using vivaldi::IsVivaldiRunning;
       addItemWithTitle:l10n_util::GetNSString(
                            IDS_IOS_DISCOVER_FEED_MENU_LEARN_MORE_ITEM)
                 action:^{
-                  [weakSelf.ntpMediator handleFeedLearnMoreTapped];
+                  [weakSelf.NTPMediator handleFeedLearnMoreTapped];
                 }
                  style:UIAlertActionStyleDefault];
 
@@ -944,11 +994,10 @@ using vivaldi::IsVivaldiRunning;
   if (self.selectedFeed == feedType) {
     return;
   }
-
   self.selectedFeed = feedType;
 
   // Saves scroll position before changing feed.
-  CGFloat scrollPosition = [self.ntpViewController scrollPosition];
+  CGFloat scrollPosition = [self.NTPViewController scrollPosition];
 
   if (feedType == FeedTypeFollowing && IsDotEnabledForNewFollowedContent()) {
     // Clears dot and notifies service that the Following feed content has
@@ -962,7 +1011,7 @@ using vivaldi::IsVivaldiRunning;
 
   // Scroll position resets when changing the feed, so we set it back to what it
   // was.
-  [self.ntpViewController setContentOffsetToTopOfFeed:scrollPosition];
+  [self.NTPViewController setContentOffsetToTopOfFeed:scrollPosition];
 }
 
 - (void)handleSortTypeForFollowingFeed:(FollowingFeedSortType)sortType {
@@ -973,7 +1022,7 @@ using vivaldi::IsVivaldiRunning;
   }
 
   // Save the scroll position before changing sort type.
-  CGFloat scrollPosition = [self.ntpViewController scrollPosition];
+  CGFloat scrollPosition = [self.NTPViewController scrollPosition];
 
   [self.feedMetricsRecorder recordFollowingFeedSortTypeSelected:sortType];
   self.prefService->SetInteger(prefs::kNTPFollowingFeedSortType, sortType);
@@ -986,12 +1035,11 @@ using vivaldi::IsVivaldiRunning;
 
   // Scroll position resets when changing the feed, so we set it back to what it
   // was.
-  [self.ntpViewController setContentOffsetToTopOfFeed:scrollPosition];
+  [self.NTPViewController setContentOffsetToTopOfFeed:scrollPosition];
 }
 
 - (BOOL)shouldFeedBeVisible {
-  return [self isFeedHeaderVisible] && [self.feedExpandedPref value] &&
-         !IsFeedAblationEnabled();
+  return [self isFeedHeaderVisible] && [self.feedExpandedPref value];
 }
 
 - (BOOL)isFollowingFeedAvailable {
@@ -1006,30 +1054,25 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - FeedDelegate
 
 - (void)contentSuggestionsWasUpdated {
-  [self updateFeedLayout];
-}
-
-- (void)returnToRecentTabWasAdded {
-  [self updateFeedLayout];
-  [self setContentOffsetToTop];
+  [self.NTPViewController updateHeightAboveFeedAndScrollToTopIfNeeded];
 }
 
 #pragma mark - FeedManagementNavigationDelegate
 
 - (void)handleNavigateToActivity {
-  [self.ntpMediator handleFeedManageActivityTapped];
+  [self.NTPMediator handleFeedManageActivityTapped];
 }
 
 - (void)handleNavigateToInterests {
-  [self.ntpMediator handleFeedManageInterestsTapped];
+  [self.NTPMediator handleFeedManageInterestsTapped];
 }
 
 - (void)handleNavigateToHidden {
-  [self.ntpMediator handleFeedManageHiddenTapped];
+  [self.NTPMediator handleFeedManageHiddenTapped];
 }
 
 - (void)handleNavigateToFollowedURL:(const GURL&)url {
-  [self.ntpMediator handleVisitSiteFromFollowManagementList:url];
+  [self.NTPMediator handleVisitSiteFromFollowManagementList:url];
 }
 
 #pragma mark - FeedSignInPromoDelegate
@@ -1037,7 +1080,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)showSignInPromoUI {
   // Show a sign-in promo half sheet.
   self.feedSignInPromoCoordinator = [[FeedSignInPromoCoordinator alloc]
-      initWithBaseViewController:self.ntpViewController
+      initWithBaseViewController:self.NTPViewController
                          browser:self.browser];
   [self.feedSignInPromoCoordinator start];
 }
@@ -1052,7 +1095,7 @@ using vivaldi::IsVivaldiRunning;
       initWithOperation:AuthenticationOperationSigninAndSync
             accessPoint:access_point];
   signin_metrics::RecordSigninUserActionForAccessPoint(access_point);
-  [handler showSignin:command baseViewController:self.ntpViewController];
+  [handler showSignin:command baseViewController:self.NTPViewController];
 }
 
 #pragma mark - FeedWrapperViewControllerDelegate
@@ -1079,6 +1122,24 @@ using vivaldi::IsVivaldiRunning;
   [self.feedTopSectionCoordinator signinPromoHasChangedVisibility:visible];
 }
 
+- (void)cancelOmniboxEdit {
+  id<OmniboxCommands> omniboxCommandHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), OmniboxCommands);
+  [omniboxCommandHandler cancelOmniboxEdit];
+}
+
+- (void)onFakeboxBlur {
+  id<FakeboxFocuser> fakeboxFocuserHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), FakeboxFocuser);
+  [fakeboxFocuserHandler onFakeboxBlur];
+}
+
+- (void)focusOmnibox {
+  id<FakeboxFocuser> fakeboxFocuserHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(), FakeboxFocuser);
+  [fakeboxFocuserHandler fakeboxFocused];
+}
+
 #pragma mark - NewTabPageDelegate
 
 - (void)updateFeedLayout {
@@ -1087,13 +1148,16 @@ using vivaldi::IsVivaldiRunning;
   if (!self.started) {
     return;
   }
+  // TODO(crbug.com/1406940): Investigate why this order is correct. Intuition
+  // would be that the layout update should happen before telling UIKit to
+  // relayout.
   [self.containedViewController.view setNeedsLayout];
   [self.containedViewController.view layoutIfNeeded];
-  [self.ntpViewController updateNTPLayout];
+  [self.NTPViewController updateNTPLayout];
 }
 
 - (void)setContentOffsetToTop {
-  [self.ntpViewController setContentOffsetToTop];
+  [self.NTPViewController setContentOffsetToTop];
 }
 
 - (BOOL)isGoogleDefaultSearchEngine {
@@ -1108,14 +1172,21 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (BOOL)isStartSurface {
-  DCHECK(self.webState);
+  // TODO(crbug.com/1425382): This condition should be removed once the issue of
+  // having this coordinator started with no valid webstate (e.g. visible NTP in
+  // non-active tab) is resolved. At that point, we should just leave the
+  // `self.webState` DCHECK.
+  if (!self.webState) {
+    DCHECK(NO);
+    return NO;
+  }
   NewTabPageTabHelper* NTPHelper =
       NewTabPageTabHelper::FromWebState(self.webState);
   return NTPHelper && NTPHelper->ShouldShowStartSurface();
 }
 
 - (void)handleFeedTopSectionClosed {
-  [self.ntpViewController updateScrollPositionForFeedTopSectionClosed];
+  [self.NTPViewController updateScrollPositionForFeedTopSectionClosed];
 }
 
 #pragma mark - NewTabPageFollowDelegate
@@ -1126,8 +1197,9 @@ using vivaldi::IsVivaldiRunning;
 
 - (BOOL)doesFollowingFeedHaveContent {
   for (FollowedWebSite* web_site in self.followedWebSites) {
-    if (web_site.available)
+    if (web_site.state == FollowedWebSiteStateStateActive) {
       return YES;
+    }
   }
 
   return NO;
@@ -1196,7 +1268,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (CGFloat)headerInsetForOverscrollActionsController:
     (OverscrollActionsController*)controller {
-  return [self.ntpViewController heightAboveFeed];
+  return [self.NTPViewController heightAboveFeed];
 }
 
 - (CGFloat)headerHeightForOverscrollActionsController:
@@ -1222,7 +1294,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)appState:(AppState*)appState
     didTransitionFromInitStage:(InitStage)previousInitStage {
   if (previousInitStage == InitStageFirstRun) {
-    self.headerController.focusOmniboxWhenViewAppears = YES;
+    self.NTPViewController.focusAccessibilityOmniboxWhenViewAppears = YES;
     [self.headerController focusAccessibilityOnOmnibox];
 
     [appState removeObserver:self];
@@ -1238,15 +1310,14 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - DiscoverFeedObserverBridge
 
 - (void)discoverFeedModelWasCreated {
-  if (self.ntpViewController.viewDidAppear) {
+  if (self.NTPViewController.viewDidAppear) {
     [self updateNTPForFeed];
 
     if (IsWebChannelsEnabled()) {
       [self.feedHeaderViewController updateForFollowingFeedVisibilityChanged];
-      [self.ntpViewController updateNTPLayout];
       [self updateFeedLayout];
-      [self.ntpViewController setContentOffsetToTop];
     }
+    [self.NTPViewController setContentOffsetToTop];
   }
 }
 
@@ -1296,7 +1367,35 @@ using vivaldi::IsVivaldiRunning;
   [self updateVisible];
 }
 
+#pragma mark - WebStateListObserving methods
+
+- (void)webStateList:(WebStateList*)webStateList
+    didChangeActiveWebState:(web::WebState*)newWebState
+                oldWebState:(web::WebState*)oldWebState
+                    atIndex:(int)atIndex
+                     reason:(ActiveWebStateChangeReason)reason {
+  [self didChangeActiveWebState:newWebState];
+}
+
 #pragma mark - Private
+
+// Handles a change in the active WebState.
+- (void)didChangeActiveWebState:(web::WebState*)newWebState {
+  if (self.webState == newWebState) {
+    return;
+  }
+
+  if (IsNTPActiveForWebState(self.webState)) {
+    [self NTPDidChangeVisibility:NO];
+  }
+
+  bool active = IsNTPActiveForWebState(newWebState);
+  self.webState = active ? newWebState : nullptr;
+
+  if (active) {
+    [self NTPDidChangeVisibility:YES];
+  }
+}
 
 // Updates the feed visibility or content based on the supervision state
 // of the account defined in `value`.
@@ -1368,20 +1467,22 @@ using vivaldi::IsVivaldiRunning;
 // Updates the NTP to take into account a new feed, or a change in feed
 // visibility.
 - (void)updateNTPForFeed {
-  DCHECK(self.ntpViewController);
+  DCHECK(self.NTPViewController);
 
   if (!self.started) {
     return;
   }
 
-  [self.ntpViewController resetViewHierarchy];
+  [self.NTPViewController resetViewHierarchy];
 
   if (self.feedViewController) {
     self.discoverFeedService->RemoveFeedViewController(self.feedViewController);
   }
 
-  self.ntpViewController.feedWrapperViewController = nil;
-  self.ntpViewController.feedTopSectionViewController = nil;
+  [self.feedTopSectionCoordinator stop];
+
+  self.NTPViewController.feedWrapperViewController = nil;
+  self.NTPViewController.feedTopSectionViewController = nil;
   self.feedWrapperViewController = nil;
   self.feedViewController = nil;
   self.feedTopSectionCoordinator = nil;
@@ -1391,36 +1492,42 @@ using vivaldi::IsVivaldiRunning;
   if ([self isFeedHeaderVisible]) {
     [self configureFeedAndHeader];
   } else {
-    self.ntpViewController.feedHeaderViewController = nil;
+    self.NTPViewController.feedHeaderViewController = nil;
     self.feedHeaderViewController = nil;
   }
 
   if ([self isFeedTopSectionVisible]) {
-    self.ntpViewController.feedTopSectionViewController =
+    self.NTPViewController.feedTopSectionViewController =
         self.feedTopSectionCoordinator.viewController;
   }
 
-  self.ntpViewController.feedVisible = [self isFeedVisible];
+  self.NTPViewController.feedVisible = [self isFeedVisible];
 
   self.feedWrapperViewController = [[FeedWrapperViewController alloc]
         initWithDelegate:self
       feedViewController:self.feedViewController];
 
-  self.ntpViewController.feedWrapperViewController =
+  self.NTPViewController.feedWrapperViewController =
       self.feedWrapperViewController;
 
-  [self.ntpViewController layoutContentInParentCollectionView];
+  [self.NTPViewController layoutContentInParentCollectionView];
 
   [self updateFeedLayout];
 }
 
-// Feed header is always visible unless it is disabled from the Chrome settings
-// menu, or by an enterprise policy.
+// Feed header is always visible unless it is disabled (eg. Disabled from Chrome
+// settings, enterprise policy, safe mode, etc.).
 - (BOOL)isFeedHeaderVisible {
+  // Feed is disabled in safe mode.
+  SceneState* sceneState =
+      SceneStateBrowserAgent::FromBrowser(self.browser)->GetSceneState();
+  BOOL isSafeMode = [sceneState.appState resumingFromSafeMode];
+
   return self.prefService->GetBoolean(prefs::kArticlesForYouEnabled) &&
          self.prefService->GetBoolean(prefs::kNTPContentSuggestionsEnabled) &&
          !IsFeedAblationEnabled() &&
-         IsContentSuggestionsForSupervisedUserEnabled(self.prefService);
+         IsContentSuggestionsForSupervisedUserEnabled(self.prefService) &&
+         !isSafeMode;
 }
 
 // Returns `YES` if the feed is currently visible on the NTP.
@@ -1475,7 +1582,7 @@ using vivaldi::IsVivaldiRunning;
   DiscoverFeedViewControllerConfiguration* viewControllerConfig =
       [[DiscoverFeedViewControllerConfiguration alloc] init];
   viewControllerConfig.browser = self.browser;
-  viewControllerConfig.scrollDelegate = self.ntpViewController;
+  viewControllerConfig.scrollDelegate = self.NTPViewController;
   viewControllerConfig.previewDelegate = self;
   viewControllerConfig.signInPromoDelegate = self;
 
@@ -1488,8 +1595,6 @@ using vivaldi::IsVivaldiRunning;
   DCHECK(self.prefService);
   DCHECK(self.authService);
 
-  ios::ChromeIdentityService* identity_service =
-      ios::GetChromeBrowserProvider().GetChromeIdentityService();
   id<SystemIdentity> identity =
       self.authService->GetPrimaryIdentity(signin::ConsentLevel::kSignin);
   if (!identity) {
@@ -1497,20 +1602,23 @@ using vivaldi::IsVivaldiRunning;
     return;
   }
 
+  using CapabilityResult = SystemIdentityCapabilityResult;
+
   __weak NewTabPageCoordinator* weakSelf = self;
-  identity_service->IsSubjectToParentalControls(
-      identity, ^(ios::ChromeIdentityCapabilityResult result) {
-        [weakSelf updateFeedWithIsSupervisedUser:
-                      result == ios::ChromeIdentityCapabilityResult::kTrue];
-      });
+  GetApplicationContext()
+      ->GetSystemIdentityManager()
+      ->IsSubjectToParentalControls(
+          identity, base::BindOnce(^(CapabilityResult result) {
+            const bool isSupervisedUser = result == CapabilityResult::kTrue;
+            [weakSelf updateFeedWithIsSupervisedUser:isSupervisedUser];
+          }));
 }
 
 // Handles how the NTP reacts when the default search engine is changed.
 - (void)defaultSearchEngineDidChange {
   [self.feedHeaderViewController updateForDefaultSearchEngineChanged];
-  [self.ntpViewController updateNTPLayout];
   [self updateFeedLayout];
-  [self.ntpViewController setContentOffsetToTop];
+  [self.NTPViewController setContentOffsetToTop];
 }
 
 // Toggles feed visibility between hidden or expanded using the feed header
@@ -1524,10 +1632,10 @@ using vivaldi::IsVivaldiRunning;
 
 // Configures and returns the feed top section coordinator.
 - (FeedTopSectionCoordinator*)createFeedTopSectionCoordinator {
-  DCHECK(self.ntpViewController);
+  DCHECK(self.NTPViewController);
   FeedTopSectionCoordinator* feedTopSectionCoordinator =
       [[FeedTopSectionCoordinator alloc]
-          initWithBaseViewController:self.ntpViewController
+          initWithBaseViewController:self.NTPViewController
                              browser:self.browser];
   feedTopSectionCoordinator.ntpDelegate = self;
   [feedTopSectionCoordinator start];
@@ -1540,7 +1648,7 @@ using vivaldi::IsVivaldiRunning;
   self.feedManagementCoordinator = nil;
 
   self.feedManagementCoordinator = [[FeedManagementCoordinator alloc]
-      initWithBaseViewController:self.ntpViewController
+      initWithBaseViewController:self.NTPViewController
                          browser:self.browser];
   self.feedManagementCoordinator.navigationDelegate = self;
   self.feedManagementCoordinator.feedMetricsRecorder = self.feedMetricsRecorder;
@@ -1553,6 +1661,68 @@ using vivaldi::IsVivaldiRunning;
   [self updateNTPForFeed];
   [self setContentOffsetToTop];
   [self.feedHeaderViewController updateForFeedVisibilityChanged];
+}
+
+// Private setter for the `webState` property.
+- (void)setWebState:(web::WebState*)webState {
+  if (_webState == webState) {
+    return;
+  }
+
+  _webState = webState;
+  self.NTPMediator.webState = _webState;
+  self.contentSuggestionsCoordinator.webState = _webState;
+}
+
+// Called when the NTP changes visibility, either when the user navigates to
+// or away from the NTP, or when the active WebState changes.
+- (void)NTPDidChangeVisibility:(BOOL)visible {
+  DCHECK(self.started);
+  DCHECK(self.webState);
+
+  if (!self.browser->GetBrowserState()->IsOffTheRecord()) {
+    [self updateStartForVisibilityChange:visible];
+
+    if (visible) {
+      if ([self isFollowingFeedAvailable]) {
+        NewTabPageTabHelper* helper =
+            NewTabPageTabHelper::FromWebState(self.webState);
+        self.shouldScrollIntoFeed = helper->GetNextNTPScrolledToFeed();
+        [self selectFeedType:helper->GetNextNTPFeedType()];
+        helper->SetNextNTPFeedType(NewTabPageTabHelper::DefaultFeedType());
+
+        self.NTPViewController.shouldScrollIntoFeed = self.shouldScrollIntoFeed;
+        // Reassign the sort type in case it changed in another tab.
+        self.feedHeaderViewController.followingFeedSortType =
+            self.followingFeedSortType;
+        // Update the header so that it's synced with the currently selected
+        // feed, which could have been changed when a new web state was
+        // inserted.
+        [self.feedHeaderViewController updateForSelectedFeed];
+        self.feedMetricsRecorder.feedControlDelegate = self;
+        self.feedMetricsRecorder.followDelegate = self;
+      }
+    } else {
+      // Unfocus omnibox, to prevent it from lingering when it should be
+      // dismissed (for example, when navigating away or when changing feed
+      // visibility). Do this after the MVC classes are deallocated so no reset
+      // animations are fired in response to this cancel.
+      id<OmniboxCommands> omniboxCommandHandler = HandlerForProtocol(
+          self.browser->GetCommandDispatcher(), OmniboxCommands);
+      [omniboxCommandHandler cancelOmniboxEdit];
+    }
+    // Check if feed is visible before reporting NTP visibility as the feed
+    // needs to be visible in order to use for metrics.
+    // TODO(crbug.com/1373650) Move isFeedVisible check to the metrics recorder
+    if (IsGoodVisitsMetricEnabled()) {
+      if ([self isFeedVisible]) {
+        [self.feedMetricsRecorder recordNTPDidChangeVisibility:visible];
+      }
+    }
+  }
+
+  self.viewPresented = visible;
+  [self updateVisible];
 }
 
 #pragma mark - Getters
@@ -1584,8 +1754,11 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - VIVALDI
 - (void)configureVivaldiNTPViewController {
-  VivaldiNewTabPageViewController* newVC =
-      [[VivaldiNewTabPageViewController alloc] initWithBrowser:self.browser];
+  VivaldiSpeedDialBaseController* baseController =
+      [[VivaldiSpeedDialBaseController alloc] initWithBrowser:self.browser];
+  UINavigationController *newVC =
+        [[UINavigationController alloc]
+          initWithRootViewController:baseController];
   [newVC
       willMoveToParentViewController:self.containerViewController];
   [self.containerViewController addChildViewController:newVC];
@@ -1593,15 +1766,13 @@ using vivaldi::IsVivaldiRunning;
   [newVC
       didMoveToParentViewController:self.containerViewController];
 
-  newVC.delegate = self;
-  newVC.popupMenuCommandsHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), PopupMenuCommands);
+  baseController.delegate = self;
   [newVC.view fillSuperview];
   self.containedViewController = newVC;
 }
 
-- (void)didTapSpeedDial:(VivaldiSpeedDialItem*)item
-       captureSnapshot:(BOOL)captureSnapshot {
+- (void)didTapSpeedDialWithItem:(VivaldiSpeedDialItem*)item
+                captureSnapshot:(BOOL)captureSnapshot {
   self.currentItem = item;
   self.captureSnapshot = captureSnapshot;
   // Resign the edit mode of omnibox

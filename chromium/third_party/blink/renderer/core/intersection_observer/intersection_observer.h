@@ -5,7 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_INTERSECTION_OBSERVER_INTERSECTION_OBSERVER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_INTERSECTION_OBSERVER_INTERSECTION_OBSERVER_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
@@ -118,8 +118,6 @@ class CORE_EXPORT IntersectionObserver final
       MarginTarget margin_target = kApplyMarginToRoot,
       bool use_overflow_clip_edge = false,
       ExceptionState& = ASSERT_NO_EXCEPTION);
-
-  static void ResumeSuspendedObservers();
 
   explicit IntersectionObserver(IntersectionObserverDelegate&,
                                 Node*,

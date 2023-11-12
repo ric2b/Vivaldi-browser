@@ -229,7 +229,7 @@ class LocalDeviceInstrumentationTestRun(
           # manually invoke its __enter__ and __exit__ methods in setup and
           # teardown.
           system_app_context = system_app.ReplaceSystemApp(
-              dev, replacement_apk=self._test_instance.replace_system_package)
+              dev, self._test_instance.replace_system_package)
           # Pylint is not smart enough to realize that this field has
           # an __enter__ method, and will complain loudly.
           # pylint: disable=no-member
@@ -265,14 +265,15 @@ class LocalDeviceInstrumentationTestRun(
         @trace_event.traced
         def install_helper_internal(d, apk_path=None):
           # pylint: disable=unused-argument
-          d.Install(
-              apk,
-              modules=modules,
-              fake_modules=fake_modules,
-              permissions=permissions,
-              additional_locales=additional_locales,
-              instant_app=instant_app,
-              force_queryable=self._test_instance.IsApkForceQueryable(apk))
+          with self._ArchiveLogcat(d, 'install_apk'):
+            d.Install(
+                apk,
+                modules=modules,
+                fake_modules=fake_modules,
+                permissions=permissions,
+                additional_locales=additional_locales,
+                instant_app=instant_app,
+                force_queryable=self._test_instance.IsApkForceQueryable(apk))
 
         return install_helper_internal
 

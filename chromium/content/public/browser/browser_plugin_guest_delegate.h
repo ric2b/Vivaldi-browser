@@ -9,6 +9,7 @@
 #include "content/public/browser/web_contents.h"
 
 namespace content {
+class RenderFrameHost;
 
 class BrowserPluginGuest;
 
@@ -16,13 +17,23 @@ class BrowserPluginGuest;
 // WebContents and to provide necessary functionality.
 class CONTENT_EXPORT BrowserPluginGuestDelegate {
  public:
-  virtual ~BrowserPluginGuestDelegate() {}
+  virtual ~BrowserPluginGuestDelegate() = default;
 
+  // NOTE(andre@vivaldi.com) : We had to make sure the webcontents is added to
+  // a tabstrip to get extension-events from the beginning of life.
+  // |disposition| is ours.
   virtual std::unique_ptr<WebContents> CreateNewGuestWindow(
-      const WebContents::CreateParams& create_params);
+      const WebContents::CreateParams& create_params,
+      int disposition);
 
   // Returns the WebContents that currently owns this guest.
   virtual WebContents* GetOwnerWebContents();
+
+  // Returns the RenderFrameHost that owns this guest, but has not yet attached
+  // it.
+  // TODO(crbug.com/769461): Have all guest types return the specific owner
+  // RenderFrameHost and not assume it's the owner's main frame.
+  virtual RenderFrameHost* GetProspectiveOuterDocument();
 
   // NOTE(andre@vivaldi.com):
   // It is always set for tab and inspected webviews that might move between

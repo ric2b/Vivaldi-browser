@@ -9,9 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/path_service.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -33,8 +35,9 @@ absl::optional<base::FilePath> GetOfflineManifest(
     const std::string& app_id) {
   // Check manifest with fixed name first.
   base::FilePath manifest_path = offline_dir.AppendASCII("OfflineManifest.gup");
-  if (base::PathExists(manifest_path))
+  if (base::PathExists(manifest_path)) {
     return manifest_path;
+  }
 
   // Then check the legacy app specific manifest.
   manifest_path =
@@ -82,20 +85,38 @@ std::unique_ptr<ProtocolParserXML> ParseOfflineManifest(
 
 }  // namespace
 
+// TODO(crbug/1409111): Handle errors for offline dir or manifest errors.
 void ReadInstallCommandFromManifest(
-    const base::FilePath& offline_dir,
+    const std::wstring& offline_dir_guid,
     const std::string& app_id,
     const std::string& install_data_index,
     update_client::ProtocolParser::Results& results,
     base::FilePath& installer_path,
     std::string& install_args,
     std::string& install_data) {
-  if (offline_dir.empty()) {
+  if (offline_dir_guid.empty()) {
     VLOG(1) << "Unexpected: offline install without an offline directory.";
     return;
   }
 
-  std::unique_ptr<ProtocolParserXML> manifest_parser =
+  if (!IsGuid(offline_dir_guid)) {
+    VLOG(1) << "Unexpected: offline directory needs to be a GUID: "
+            << offline_dir_guid;
+    return;
+  }
+
+  const base::FilePath offline_dir = [&offline_dir_guid]() {
+    base::FilePath offline_dir;
+    return base::PathService::Get(base::DIR_EXE, &offline_dir)
+               ? offline_dir.Append(L"Offline").Append(offline_dir_guid)
+               : base::FilePath();
+  }();
+  if (offline_dir.empty()) {
+    VLOG(1) << "Unexpected: offline directory empty.";
+    return;
+  }
+
+  const std::unique_ptr<ProtocolParserXML> manifest_parser =
       ParseOfflineManifest(offline_dir, app_id);
   if (!manifest_parser) {
     return;
@@ -112,7 +133,18 @@ void ReadInstallCommandFromManifest(
     VLOG(2) << "No manifest data for app: " << app_id;
     return;
   }
-  installer_path = offline_dir.AppendASCII(it->manifest.run);
+
+  installer_path = [&offline_dir, &app_id, &it]() {
+    const base::FilePath app_dir(offline_dir.AppendASCII(app_id));
+    const base::FilePath path(app_dir.AppendASCII(it->manifest.run));
+    return base::PathExists(path)
+               ? path
+               : base::FileEnumerator(
+                     app_dir, false, base::FileEnumerator::FILES, {},
+                     base::FileEnumerator::FolderSearchPolicy::ALL,
+                     base::FileEnumerator::ErrorPolicy::IGNORE_ERRORS)
+                     .Next();
+  }();
   install_args = it->manifest.arguments;
 
   if (!install_data_index.empty()) {
@@ -129,8 +161,9 @@ void ReadInstallCommandFromManifest(
 
 bool IsArchitectureSupported(const std::string& arch,
                              const std::string& current_architecture) {
-  if (arch.empty())
+  if (arch.empty()) {
     return true;
+  }
 
   // This code accounts for Omaha 3 Offline manifests having `arch` as "x64",
   // but `GetArchitecture` returning "x86_64" for amd64.
@@ -176,15 +209,17 @@ bool IsArchitectureCompatible(const std::string& arch_list,
   std::vector<std::string> architectures = base::SplitString(
       arch_list, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-  if (architectures.empty())
+  if (architectures.empty()) {
     return true;
+  }
 
   base::ranges::sort(architectures);
 
   if (base::ranges::find_if(
           architectures, [&current_architecture](const std::string& narch) {
-            if (narch[0] != '-')
+            if (narch[0] != '-') {
               return false;
+            }
 
             const std::string arch = narch.substr(1);
 
@@ -211,8 +246,9 @@ bool IsArchitectureCompatible(const std::string& arch_list,
 }
 
 bool IsOSVersionCompatible(const std::string& min_os_version) {
-  if (min_os_version.empty())
+  if (min_os_version.empty()) {
     return true;
+  }
 
   // `base::win::OSInfo` gets the `major`, `minor` and `build` from
   // `::GetVersionEx`, and the `patch` from the `UBR` value under the registry

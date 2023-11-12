@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/auto_reset.h"
+#include "base/check_deref.h"
 #include "base/containers/contains.h"
 #include "base/json/json_reader.h"
 #include "base/run_loop.h"
@@ -17,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
+#include "base/values.h"
 #include "base/win/atl.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_safearray.h"
@@ -2109,11 +2111,70 @@ TEST_F(AXPlatformNodeWinTest,
   target.Reset();
 }
 
+TEST_F(AXPlatformNodeWinTest, IAccessible2_TestRelationTargetsOfType) {
+  AXNodeData root;
+  root.id = 1;
+  root.role = ax::mojom::Role::kRootWebArea;
+  root.AddIntListAttribute(ax::mojom::IntListAttribute::kDetailsIds, {2, 3});
+
+  AXNodeData child1;
+  child1.id = 2;
+  child1.role = ax::mojom::Role::kStaticText;
+
+  root.child_ids.push_back(2);
+
+  AXNodeData child2;
+  child2.id = 3;
+  child2.role = ax::mojom::Role::kStaticText;
+  std::vector<AXNodeID> labelledby_ids = {1, 4};
+  child2.AddIntListAttribute(ax::mojom::IntListAttribute::kLabelledbyIds,
+                             labelledby_ids);
+
+  root.child_ids.push_back(3);
+
+  AXNodeData child3;
+  child3.id = 4;
+  child3.role = ax::mojom::Role::kStaticText;
+  child3.AddIntListAttribute(ax::mojom::IntListAttribute::kDetailsIds, {2});
+
+  root.child_ids.push_back(4);
+
+  Init(root, child1, child2, child3);
+  ComPtr<IAccessible> root_iaccessible(GetRootIAccessible());
+  ComPtr<IAccessible2_2> root_iaccessible2 = ToIAccessible2_2(root_iaccessible);
+
+  ComPtr<IDispatch> result;
+  EXPECT_EQ(S_OK, root_iaccessible2->get_accChild(ScopedVariant(1), &result));
+  ComPtr<IAccessible2_2> ax_child1;
+  EXPECT_EQ(S_OK, result.As(&ax_child1));
+  result.Reset();
+
+  EXPECT_EQ(S_OK, root_iaccessible2->get_accChild(ScopedVariant(2), &result));
+  ComPtr<IAccessible2_2> ax_child2;
+  EXPECT_EQ(S_OK, result.As(&ax_child2));
+  result.Reset();
+
+  {
+    ScopedBstr type(L"details");
+    IUnknown** targets;
+    LONG n_targets;
+    EXPECT_EQ(S_OK, root_iaccessible2->get_relationTargetsOfType(
+                        type.Get(), 0, &targets, &n_targets));
+    ASSERT_EQ(2, n_targets);
+    CoTaskMemFree(targets);
+
+    EXPECT_EQ(S_OK, root_iaccessible2->get_relationTargetsOfType(
+                        type.Get(), 1, &targets, &n_targets));
+    ASSERT_EQ(1, n_targets);
+    CoTaskMemFree(targets);
+  }
+}
+
 TEST_F(AXPlatformNodeWinTest, DISABLED_TestRelationTargetsOfType) {
   AXNodeData root;
   root.id = 1;
   root.role = ax::mojom::Role::kRootWebArea;
-  root.AddIntListAttribute(ax::mojom::IntListAttribute::kDetailsIds, {2});
+  root.AddIntListAttribute(ax::mojom::IntListAttribute::kDetailsIds, {2, 3});
 
   AXNodeData child1;
   child1.id = 2;
@@ -2162,7 +2223,7 @@ TEST_F(AXPlatformNodeWinTest, DISABLED_TestRelationTargetsOfType) {
     IUnknown** targets;
     LONG n_targets;
     EXPECT_EQ(S_OK, root_iaccessible2->get_relationTargetsOfType(
-                        type.Get(), 0, &targets, &n_targets));
+                        type.Get(), 1, &targets, &n_targets));
     ASSERT_EQ(1, n_targets);
     EXPECT_EQ(ax_child1.Get(), targets[0]);
     CoTaskMemFree(targets);
@@ -4105,6 +4166,98 @@ TEST_F(AXPlatformNodeWinTest, UIAControlContentPropertyForTableElements) {
                      false);
   EXPECT_UIA_BOOL_EQ(generic_container_provider, UIA_IsContentElementPropertyId,
                      false);
+}
+
+TEST_F(AXPlatformNodeWinTest, IsUIAControlColorWellInsideTable) {
+  // ++1 kRootWebArea
+  // ++++2 kTable
+  // ++++++3 kLayoutTableCell
+  // ++++++++4 kColorWell
+  // ++++++++++5 kStaticText
+  // ++++++6 kColumnHeader
+  // ++++++++7 kColorWell
+  // ++++++++++8 kStaticText
+  // ++++++9 kRowHeader
+  // ++++++++10 kColorWell
+  // ++++++++++11 kStaticText
+
+  AXNodeData root_1;
+  AXNodeData table_2;
+  AXNodeData cell_3;
+  AXNodeData color_4;
+  AXNodeData st_5;
+  AXNodeData column_header_6;
+  AXNodeData color_7;
+  AXNodeData st_8;
+  AXNodeData row_header_9;
+  AXNodeData color_10;
+  AXNodeData st_11;
+
+  root_1.id = 1;
+  table_2.id = 2;
+  cell_3.id = 3;
+  color_4.id = 4;
+  st_5.id = 5;
+  column_header_6.id = 6;
+  color_7.id = 7;
+  st_8.id = 8;
+  row_header_9.id = 9;
+  color_10.id = 10;
+  st_11.id = 11;
+
+  root_1.role = ax::mojom::Role::kRootWebArea;
+  root_1.child_ids = {table_2.id};
+
+  table_2.role = ax::mojom::Role::kTable;
+  table_2.child_ids = {cell_3.id, column_header_6.id, row_header_9.id};
+
+  cell_3.role = ax::mojom::Role::kLayoutTableCell;
+  cell_3.child_ids = {color_4.id};
+
+  color_4.role = ax::mojom::Role::kColorWell;
+  color_4.child_ids = {st_5.id};
+
+  st_5.role = ax::mojom::Role::kStaticText;
+
+  column_header_6.role = ax::mojom::Role::kColumnHeader;
+  column_header_6.child_ids = {color_7.id};
+
+  color_7.role = ax::mojom::Role::kColorWell;
+  color_7.child_ids = {st_8.id};
+
+  st_8.role = ax::mojom::Role::kStaticText;
+
+  row_header_9.role = ax::mojom::Role::kRowHeader;
+  row_header_9.child_ids = {color_10.id};
+
+  color_10.role = ax::mojom::Role::kColorWell;
+  color_10.child_ids = {st_11.id};
+
+  st_11.role = ax::mojom::Role::kStaticText;
+
+  Init(root_1, table_2, cell_3, color_4, st_5, column_header_6, color_7, st_8,
+       row_header_9, color_10, st_11);
+
+  // Turn on web content mode for the AXTree.
+  TestAXNodeWrapper::SetGlobalIsWebContent(true);
+
+  AXNode* root_node = GetRoot();
+  AXNode* table_node = root_node->children()[0];
+  AXNode* st_5_node = table_node->children()[0]->children()[0]->children()[0];
+  AXNode* st_8_node = table_node->children()[1]->children()[0]->children()[0];
+  AXNode* st_11_node = table_node->children()[2]->children()[0]->children()[0];
+
+  ComPtr<IRawElementProviderSimple> st_5_provider =
+      QueryInterfaceFromNode<IRawElementProviderSimple>(st_5_node);
+  EXPECT_UIA_BOOL_EQ(st_5_provider, UIA_IsControlElementPropertyId, true);
+
+  ComPtr<IRawElementProviderSimple> st_8_provider =
+      QueryInterfaceFromNode<IRawElementProviderSimple>(st_8_node);
+  EXPECT_UIA_BOOL_EQ(st_8_provider, UIA_IsControlElementPropertyId, true);
+
+  ComPtr<IRawElementProviderSimple> st_11_provider =
+      QueryInterfaceFromNode<IRawElementProviderSimple>(st_11_node);
+  EXPECT_UIA_BOOL_EQ(st_11_provider, UIA_IsControlElementPropertyId, true);
 }
 
 TEST_F(AXPlatformNodeWinTest, IsUIAControlForTextNodes) {
@@ -7772,11 +7925,12 @@ TEST_F(AXPlatformNodeWinTest, DISABLED_BulkFetch) {
 
   // Note: base::JSONReader is fine for unit tests, but production code
   // that parses untrusted JSON should always use DataDecoder instead.
-  absl::optional<base::Value> result =
+  absl::optional<base::Value> result_val =
       base::JSONReader::Read(response, base::JSON_ALLOW_TRAILING_COMMAS);
-  ASSERT_TRUE(result);
-  ASSERT_TRUE(result->FindKey("role"));
-  ASSERT_EQ("scrollBar", result->FindKey("role")->GetString());
+  ASSERT_TRUE(result_val);
+  const base::Value::Dict& result = result_val->GetDict();
+  ASSERT_TRUE(result.contains("role"));
+  ASSERT_EQ("scrollBar", CHECK_DEREF(result.FindString("role")));
 }
 
 TEST_F(AXPlatformNodeWinTest, AsyncHitTest) {

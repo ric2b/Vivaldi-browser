@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -43,7 +43,9 @@ struct AuctionConfig;
 
 namespace content {
 
+class AttributionDataHostManager;
 class InterestGroupManagerImpl;
+class PrivateAggregationManager;
 
 // An InterestGroupAuction Handles running an auction, or a component auction.
 // Consumers should use AuctionRunner, which sets up InterestGroupAuction and
@@ -101,6 +103,9 @@ class CONTENT_EXPORT InterestGroupAuction
       ContentBrowserClient::InterestGroupApiOperation
           interest_group_api_operation,
       const url::Origin& origin)>;
+
+  using PrivateAggregationRequests =
+      std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>;
 
   // Result of an auction or a component auction. Used for histograms. Only
   // recorded for valid auctions. These are used in histograms, so values of
@@ -181,10 +186,10 @@ class CONTENT_EXPORT InterestGroupAuction
     // there's a crash if this is dereferenced after move.
     std::unique_ptr<StorageInterestGroup> bidder;
 
-    // Set of render URLs that are k-anonymous for use as ad or ad component
-    // render URLs for this interest group.
+    // Set of render keys that are k-anonymous and correspond to ad or ad
+    // component render URLs for this interest group.
     // (Not set if we are not configured to care).
-    base::flat_map<GURL, bool> kanon_render_urls;
+    base::flat_map<std::string, bool> kanon_keys;
 
     // This starts off as the base priority of the interest group, but is
     // updated by sparse vector multiplications using first the priority vector
@@ -219,6 +224,11 @@ class CONTENT_EXPORT InterestGroupAuction
     // generateBid() is running.
     absl::optional<mojo::ReceiverId> generate_bid_client_receiver_id;
 
+    // Mojo pipe to use to fill in potentially promise-provided arguments.
+    // Only populated in between BeginGenerateBid and FinishGenerateBid().
+    mojo::AssociatedRemote<auction_worklet::mojom::GenerateBidFinalizer>
+        bid_finalizer;
+
     // True when OnBiddingSignalsReceived() has been invoked. Needed to
     // correctly handle the case the bidder worklet pipe is closed before
     // OnBiddingSignalsReceived() is invoked.
@@ -230,6 +240,11 @@ class CONTENT_EXPORT InterestGroupAuction
     // interest groups to receive their final priorities. In other cases, the
     // callback is invoked immediately.
     base::OnceClosure resume_generate_bid_callback;
+
+    // Used to avoid sending direct-from-seller signals twice if they are
+    // available by time of GenerateBid(). This can be true even if no signals
+    // are actually available, just so long as that's known.
+    bool handled_direct_from_seller_signals_in_begin_generate_bid = false;
 
     // True if the worklet successfully made a bid.
     bool made_bid = false;
@@ -258,6 +273,14 @@ class CONTENT_EXPORT InterestGroupAuction
     // auction, won it, and was then scored by the top-level seller.
     absl::optional<GURL> top_level_seller_debug_win_report_url;
     absl::optional<GURL> top_level_seller_debug_loss_report_url;
+
+    // Requests made to Private aggregation API in generateBid() and scoreAd().
+    // Keyed by reporting origin of the associated requests, i.e., buyer origin
+    // for generateBid() and seller origin for scoreAd().
+    // TODO(qingxinwu): Consider only saving the requests without saving Origin,
+    // since copying Origin is expensive.
+    std::map<url::Origin, PrivateAggregationRequests>
+        private_aggregation_requests;
 
     // The reason this bid was rejected by the auction (i.e., reason why score
     // was non-positive).
@@ -322,6 +345,12 @@ class CONTENT_EXPORT InterestGroupAuction
     // The Auction with the interest group that made this bid. Important in the
     // case of component auctions.
     const raw_ptr<InterestGroupAuction> auction;
+
+    // Time where tracing for wait_seller_deps began; if it ever did.
+    base::TimeTicks trace_wait_seller_deps_start;
+    // How long various inputs were waited for.
+    base::TimeDelta wait_worklet;
+    base::TimeDelta wait_promises;
   };
 
   // Combines a Bid with seller score and seller state needed to invoke its
@@ -355,9 +384,6 @@ class CONTENT_EXPORT InterestGroupAuction
   // Callback that's called when a phase of the InterestGroupAuction completes.
   // Always invoked asynchronously.
   using AuctionPhaseCompletionCallback = base::OnceCallback<void(bool success)>;
-
-  using PrivateAggregationRequests =
-      std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>;
 
   // All passed in raw pointers must remain valid until the InterestGroupAuction
   // is destroyed. `config` is typically owned by the AuctionRunner's
@@ -413,7 +439,29 @@ class CONTENT_EXPORT InterestGroupAuction
   // Takes ownership of the `auction_config`, so that the reporter can outlive
   // other auction-related classes.
   std::unique_ptr<InterestGroupAuctionReporter> CreateReporter(
-      std::unique_ptr<blink::AuctionConfig> auction_config);
+      AttributionDataHostManager* attribution_data_host_manager,
+      PrivateAggregationManager* private_aggregation_manager,
+      InterestGroupAuctionReporter::LogPrivateAggregationRequestsCallback
+          log_private_aggregation_requests_callback,
+      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+      std::unique_ptr<blink::AuctionConfig> auction_config,
+      const url::Origin& main_frame_origin,
+      const url::Origin& frame_origin,
+      network::mojom::ClientSecurityStatePtr client_security_state,
+      blink::InterestGroupSet interest_groups_that_bid);
+
+  // Called by AuctionRunner (for component auctions, indirectly via
+  // NotifyComponentConfigPromisesResolved) when all promises relevant to this
+  // particular auction have been resolved (not called when there were no
+  // promises to wait for to start with).
+  void NotifyConfigPromisesResolved();
+
+  // Called by AuctionRunner when all promises relevant to component auction
+  // with position `pos` in the original configuration have been resolved.
+  //
+  // Assumes that `pos` has already been range-checked, and that this is
+  // a parent auction.
+  void NotifyComponentConfigPromisesResolved(uint32_t pos);
 
   // Close all Mojo pipes and release all weak pointers. Called when an
   // auction fails and on auction complete.
@@ -428,21 +476,43 @@ class CONTENT_EXPORT InterestGroupAuction
   // Returns all interest groups that bid in an auction. Expected to be called
   // after the bidding and scoring phase completes. Returns an empty set if the
   // auction failed for any reason other than the seller rejecting all bids.
-  void GetInterestGroupsThatBid(blink::InterestGroupSet& interest_groups) const;
+  void GetInterestGroupsThatBidAndReportBidCounts(
+      blink::InterestGroupSet& interest_groups) const;
 
-  // Retrieves any debug reporting URLs. May only be called once, since it
-  // takes ownership of stored reporting URLs.
-  void TakeDebugReportUrls(std::vector<GURL>& debug_win_report_urls,
-                           std::vector<GURL>& debug_loss_report_urls);
+  // Retrieves any debug reporting URLs. May only be called once, since it takes
+  // ownership of stored reporting URLs. This is called internally by
+  // CreateReporter() so may only be called in the case an auction has no
+  // winner, and thus CreateReporter() need not be called.
+  //
+  // Note: Temporarily, this function also fills post auction signals to private
+  // aggregation requests from generateBid() and scoreAd(), so this function
+  // must be called before TakePrivateAggregationRequests() to make sure that
+  // function gets private aggregation requests with post auction signals filled
+  // in.
+  // TODO(qingxinwu): Refactor this to fill post auction signals to private
+  // aggregation report in TakePrivateAggregationRequests(), ideally reuse the
+  // post auction signals calculated from this method.
+  void TakeDebugReportUrlsAndFillInPrivateAggregationRequests(
+      std::vector<GURL>& debug_win_report_urls,
+      std::vector<GURL>& debug_loss_report_urls);
 
-  // Retrieves all requests to the Private Aggregation API returned by
-  // GenerateBid() and ScoreAd(). The return value is keyed by reporting origin
-  // of the associated requests. May only be called by external consumers after
-  // an auction has failed (on success, used internally to pass them to the
-  // InterestGroupAuctionReporter). May only be called once, since it takes
-  // ownership of stored reporting URLs.
+  // Retrieves all requests with reserved event type to the Private Aggregation
+  // API returned by GenerateBid() and ScoreAd(). The return value is keyed by
+  // reporting origin of the associated requests. May only be called by external
+  // consumers after an auction has failed (on success, used internally to pass
+  // them to the InterestGroupAuctionReporter). May only be called once, since
+  // it takes ownership of stored reporting URLs.
   std::map<url::Origin, PrivateAggregationRequests>
-  TakePrivateAggregationRequests();
+  TakeReservedPrivateAggregationRequests();
+
+  // Retrieves all requests with non-reserved event type to the Private
+  // Aggregation API returned by GenerateBid(). The return value is keyed by
+  // event type of the associated requests. May only be called by external
+  // consumers after an auction has failed (on success, used internally to pass
+  // them to the InterestGroupAuctionReporter). May only be called once, since
+  // it takes ownership of stored reporting URLs.
+  std::map<std::string, PrivateAggregationRequests>
+  TakeNonReservedPrivateAggregationRequests();
 
   // Retrieves any errors from the auction. May only be called once, since it
   // takes ownership of stored errors.
@@ -456,10 +526,46 @@ class CONTENT_EXPORT InterestGroupAuction
   // only be called once, since it moves the stored origins.
   void TakePostAuctionUpdateOwners(std::vector<url::Origin>& owners);
 
+  // Reports (via extended private aggregation) the number of interest groups
+  // loaded for the owner of `interest_group` iff `interest_group` has
+  // authorized this auction's seller to receive such information.
+  //
+  // The reported value isn't limited by the auction config's
+  // perBuyerGroupLimits.
+  //
+  // Returns true iff a report was issued.
+  bool ReportInterestGroupCount(const blink::InterestGroup& interest_group,
+                                size_t count);
+
+  // Reports (via extended private aggregation) the number of interest groups
+  // that bid for the owner of `interest_group` iff `interest_group` has
+  // authorized this auction's seller to receive such information.
+  //
+  // Returns true iff a report was issued.
+  bool ReportBidCount(const blink::InterestGroup& interest_group, size_t count);
+
+  // Reports (via extended private aggregation) the time taken to fetch trusted
+  // signals iff `interest_group` has authorized this auction's seller to
+  // receive such information.
+  void ReportTrustedSignalsFetchLatency(
+      const blink::InterestGroup& interest_group,
+      base::TimeDelta trusted_signals_fetch_latency);
+
+  // Reports (via extended private aggregation) the time taken to perform
+  // bidding (including the pre-kanonymous bid, and failed bids) iff
+  // `interest_group` has authorized this auction's seller to receive such
+  // information.
+  void ReportBiddingLatency(const blink::InterestGroup& interest_group,
+                            base::TimeDelta bidding_latency);
+
   // Retrieves the keys that need to be joined as a result of the auction. A
   // failed auction may result in keys that still need to be joined, for
   // instance if the reason the auction failed was that none of the bids were
   // k-anonymous.
+  //
+  // If CreateReporter() is invoked, the returned reporter will automatically
+  // join the k-anon sets if it's informed the winning ad has been navigated to,
+  // so there's no need for anything else to invoke this method.
   base::flat_set<std::string> GetKAnonKeysToJoin() const;
 
   // Returns the top bid of whichever auction (k-anon or not, depending on the
@@ -488,21 +594,23 @@ class CONTENT_EXPORT InterestGroupAuction
   // Gets the buyer DirectFromSellerSignals auction-signals in `config` for
   // buyer.  Public so that InterestGroupAuctionReporter can use it.
   static absl::optional<GURL> GetDirectFromSellerAuctionSignals(
-      const SubresourceUrlBuilder& subresource_url_builder);
+      const SubresourceUrlBuilder* subresource_url_builder);
 
   // Gets the buyer DirectFromSellerSignals per-buyer-signals in `config` for
   // buyer. Public so that InterestGroupAuctionReporter can use it.
   static absl::optional<GURL> GetDirectFromSellerPerBuyerSignals(
-      const SubresourceUrlBuilder& subresource_url_builder,
+      const SubresourceUrlBuilder* subresource_url_builder,
       const url::Origin& owner);
 
   // Gets the buyer DirectFromSellerSignals seller-signals in `config` for
   // buyer. Public so that InterestGroupAuctionReporter can use it.
   static absl::optional<GURL> GetDirectFromSellerSellerSignals(
-      const SubresourceUrlBuilder& subresource_url_builder);
+      const SubresourceUrlBuilder* subresource_url_builder);
 
  private:
-  using AuctionList = std::list<std::unique_ptr<InterestGroupAuction>>;
+  // Note: this needs to be a type with iterator stability, since we both pass
+  // iterators around and remove things from here.
+  using AuctionMap = std::map<uint32_t, std::unique_ptr<InterestGroupAuction>>;
 
   // BuyerHelpers create and own the BidStates for a particular buyer, to
   // better handle per-buyer cross-interest-group behavior (e.g., enforcing
@@ -550,7 +658,7 @@ class CONTENT_EXPORT InterestGroupAuction
 
   // Invoked when the interest groups for an entire component auction have
   // loaded. If `success` is false, removes the component auction.
-  void OnComponentInterestGroupsRead(AuctionList::iterator component_auction,
+  void OnComponentInterestGroupsRead(AuctionMap::iterator component_auction,
                                      bool success);
 
   // Invoked when the interest groups for a buyer or for an entire component
@@ -579,9 +687,19 @@ class CONTENT_EXPORT InterestGroupAuction
   // Requests a seller worklet from the AuctionWorkletManager.
   void RequestSellerWorklet();
 
+  // True if all async prerequisites for calling ScoreBid on the SellerWorklet
+  // are done.
+  bool ReadyToScoreBids() const {
+    return seller_worklet_received_ && config_promises_resolved_;
+  }
+
   // Called when RequestSellerWorklet() returns. Starts scoring bids, if there
-  // are any.
+  // are any and config has been resolved.
   void OnSellerWorkletReceived();
+
+  // Score bids if both the seller worklet and config with all promises resolved
+  // are ready.
+  void ScoreQueuedBidsIfReady();
 
   // Invoked by the AuctionWorkletManager on fatal errors, at any point after
   // a SellerWorklet has been provided. Results in auction immediately
@@ -714,6 +832,35 @@ class CONTENT_EXPORT InterestGroupAuction
       const absl::optional<auction_worklet::mojom::RejectReason> reject_reason =
           absl::nullopt);
 
+  // Determines if an extended private aggregation buyers request should be
+  // made, and if so, issues the request. Otherwise, does nothing.
+  //
+  // That is, issues the request if all of the following are true:
+  //
+  // 1. `interest_group` has authorized the seller of this auction the
+  // capability of type `capability`.
+  //
+  // 2. `config_`'s `auction_report_buyers` and `auction_report_buyer_keys` have
+  // requested that such a report be made for the owner of `interest_group`.
+  //
+  // 3. `config_`'s `auction_report_buyers` has a key equal to
+  // `buyer_report_type`.
+  //
+  // The issued extended private aggregation report's bucket is calculated from
+  // `config_`'s `auction_report_buyer_keys` and `auction_report_buyers`, and
+  // value equals to `value` times the `scalar` from `config_`'s
+  // `auction_report_buyers`.
+  //
+  // Returns true iff a report was issued.
+  //
+  // TODO(crbug.com/1416621): Consider pre-aggregating metrics before sending to
+  // the server.
+  bool ReportPaBuyersValueIfAllowed(
+      const blink::InterestGroup& interest_group,
+      blink::SellerCapabilities capability,
+      blink::AuctionConfig::NonSharedParams::BuyerReportType buyer_report_type,
+      int value);
+
   // Returns how and whether k-anonymity is being handled.
   auction_worklet::mojom::KAnonymityBidMode kanon_mode() const {
     return kanon_mode_;
@@ -724,12 +871,18 @@ class CONTENT_EXPORT InterestGroupAuction
   // Returns true if the non-k-anonymous winner of the auction is k-anonymous.
   bool NonKAnonWinnerIsKAnon() const;
 
+  // Returns the subresource builder if the promise configuring it has resolved,
+  // creating it if needed.
+  SubresourceUrlBuilder* SubresourceUrlBuilderIfReady();
+
   // Tracing ID associated with the Auction. A nestable
-  // async "Auction" trace
-  // event lasts for the lifetime of `this`. Sequential events that apply to
-  // the entire auction are logged using this ID, including potentially
+  // async "Auction" trace event lasts for the combined lifetime of `this` and a
+  // possible InterestGroupAuctionReporter. Sequential events that apply to the
+  // entire auction are logged using this ID, including potentially
   // out-of-process events by bidder and seller worklet reporting methods.
-  const uint64_t trace_id_;
+  //
+  // Cleared if the ID got transferred to InterestGroupAuctionReporter.
+  absl::optional<uint64_t> trace_id_;
 
   // Whether k-anonymity enforcement or simulation (or none) are performed.
   const auction_worklet::mojom::KAnonymityBidMode kanon_mode_;
@@ -739,15 +892,25 @@ class CONTENT_EXPORT InterestGroupAuction
 
   // Configuration of this auction.
   raw_ptr<const blink::AuctionConfig> config_;
+
+  // True once all promises in this and component auction's configuration have
+  // been resolved. (Note that if `this` is a component auction, it only looks
+  // at itself; while main auctions do look at their components recursively).
+  bool config_promises_resolved_ = false;
+
   // If this is a component auction, the parent Auction. Null, otherwise.
   const raw_ptr<const InterestGroupAuction> parent_;
 
   // Component auctions that are part of this auction. This auction manages
   // their state transition, and their bids may participate in this auction as
   // well. Component auctions that fail in the load phase are removed from
-  // this list, to avoid trying to load their worklets during the scoring
+  // this map, to avoid trying to load their worklets during the scoring
   // phase.
-  AuctionList component_auctions_;
+  //
+  // The key of the map is the original index of the auction's AuctionConfig
+  // in `config_->non_shared_params.component_auctions`; there may be
+  // discontinuities if some entries got removed in the load phase.
+  AuctionMap component_auctions_;
 
   // Final result of the auction, once completed. Null before completion.
   absl::optional<AuctionResult> final_auction_result_;
@@ -807,11 +970,9 @@ class CONTENT_EXPORT InterestGroupAuction
   const base::TimeTicks creation_time_;
 
   // Holds the computed subresource URLs (renderer-supplied prefix + browser
-  // produced suffix).
-  //
-  // Not null until moved into the InterestGroupAuctionReporter. The move occurs
-  // while the seller and bidder worklet handles, which hold raw pointers to it,
-  // are still alive.
+  // produced suffix). This gets constructed on-demand once the prefix actually
+  // comes in from a potential promises, and in successful auctions gets
+  // transferred to InterestGroupAuctionReporter.
   std::unique_ptr<SubresourceUrlBuilder> subresource_url_builder_;
 
   // The number of buyers in the AuctionConfig that passed the
@@ -842,12 +1003,19 @@ class CONTENT_EXPORT InterestGroupAuction
   // Holds a reference to the SellerWorklet used by the auction.
   std::unique_ptr<AuctionWorkletManager::WorkletHandle> seller_worklet_handle_;
 
-  // Stores all pending Private Aggregation API report requests from the bidding
-  // and scoring phase. These are passed to the InterestGroupAuctionReporter
-  // when it's created. Keyed by the origin of the script that issued the
-  // request (i.e. the reporting origin).
+  // Stores all pending Private Aggregation API report requests of reserved
+  // event type from the bidding and scoring phase. These are passed to the
+  // InterestGroupAuctionReporter when it's created. Keyed by the origin of the
+  // script that issued the request (i.e. the reporting origin).
   std::map<url::Origin, PrivateAggregationRequests>
-      private_aggregation_requests_;
+      private_aggregation_requests_reserved_;
+
+  // Stores all pending Private Aggregation API report requests of non-reserved
+  // event type. Only comes from bidding phase of winning buyer. These are
+  // passed to the InterestGroupAuctionReporter when it's created. Keyed by the
+  // request's event type.
+  std::map<std::string, PrivateAggregationRequests>
+      private_aggregation_requests_non_reserved_;
 
   // All errors reported by worklets thus far.
   std::vector<std::string> errors_;

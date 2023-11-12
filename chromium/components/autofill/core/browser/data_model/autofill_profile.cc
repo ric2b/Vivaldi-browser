@@ -58,8 +58,6 @@ using ::i18n::addressinput::AddressField;
 
 namespace autofill {
 
-using structured_address::VerificationStatus;
-
 namespace {
 
 // Stores the data types that are relevant for the structured address/name.
@@ -232,8 +230,11 @@ AutofillProfile::AutofillProfile(RecordType type, const std::string& server_id)
   DCHECK(type == SERVER_PROFILE);
 }
 
+AutofillProfile::AutofillProfile(Source source)
+    : AutofillProfile(base::GenerateGUID(), std::string(), source) {}
+
 AutofillProfile::AutofillProfile()
-    : AutofillProfile(base::GenerateGUID(), std::string()) {}
+    : AutofillProfile(Source::kLocalOrSyncable) {}
 
 AutofillProfile::AutofillProfile(const AutofillProfile& profile)
     : AutofillDataModel(std::string(), std::string()),
@@ -277,6 +278,8 @@ AutofillProfile& AutofillProfile::operator=(const AutofillProfile& profile) {
   has_converted_ = profile.has_converted();
 
   source_ = profile.source_;
+  initial_creator_id_ = profile.initial_creator_id_;
+  last_modifier_id_ = profile.last_modifier_id_;
 
   return *this;
 }
@@ -286,6 +289,20 @@ AutofillMetadata AutofillProfile::GetMetadata() const {
   metadata.id = (record_type_ == LOCAL_PROFILE ? guid() : server_id_);
   metadata.has_converted = has_converted_;
   return metadata;
+}
+
+double AutofillProfile::GetRankingScore(base::Time current_time) const {
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableRankingFormulaAddressProfiles)) {
+    // Exponentially decay the use count by the days since the data model was
+    // last used.
+    return log10(use_count() + 1) *
+           exp(-GetDaysSinceLastUse(current_time) /
+               features::kAutofillRankingFormulaAddressProfilesUsageHalfLife
+                   .Get());
+  }
+  // Default to legacy frecency scoring.
+  return AutofillDataModel::GetRankingScore(current_time);
 }
 
 bool AutofillProfile::SetMetadata(const AutofillMetadata& metadata) {
@@ -433,12 +450,12 @@ int AutofillProfile::Compare(const AutofillProfile& profile) const {
     if (profile.GetRawInfo(type).empty())
       continue;
 
-    if (structured_address::IsLessSignificantVerificationStatus(
+    if (IsLessSignificantVerificationStatus(
             GetVerificationStatus(type), profile.GetVerificationStatus(type))) {
       return -1;
     }
-    if (structured_address::IsLessSignificantVerificationStatus(
-            profile.GetVerificationStatus(type), GetVerificationStatus(type))) {
+    if (IsLessSignificantVerificationStatus(profile.GetVerificationStatus(type),
+                                            GetVerificationStatus(type))) {
       return 1;
     }
   }
@@ -587,8 +604,8 @@ bool AutofillProfile::MergeStructuredDataFrom(const AutofillProfile& profile,
   // names and addresses are mergeable.
   // However, the structure should only be merged if the full names or addresses
   // are token equivalent.
-  if (structured_address::AreStringTokenEquivalent(
-          GetRawInfo(NAME_FULL), profile.GetRawInfo(NAME_FULL))) {
+  if (AreStringTokenEquivalent(GetRawInfo(NAME_FULL),
+                               profile.GetRawInfo(NAME_FULL))) {
     NameInfo name;
     if (!comparator.MergeNames(profile, *this, name)) {
       NOTREACHED();
@@ -600,7 +617,7 @@ bool AutofillProfile::MergeStructuredDataFrom(const AutofillProfile& profile,
     }
   }
 
-  if (structured_address::AreStringTokenEquivalent(
+  if (AreStringTokenEquivalent(
           GetRawInfo(ADDRESS_HOME_STREET_ADDRESS),
           profile.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS))) {
     Address address;
@@ -1137,6 +1154,19 @@ bool AutofillProfile::HasStructuredData() {
   return base::ranges::any_of(kStructuredDataTypes, [this](auto type) {
     return !this->GetRawInfo(type).empty();
   });
+}
+
+AutofillProfile AutofillProfile::ConvertToAccountProfile() const {
+  DCHECK_EQ(source(), Source::kLocalOrSyncable);
+  AutofillProfile account_profile = *this;
+  // Since GUIDs are assumed to be unique across all profile sources, a new GUID
+  // is assigned.
+  account_profile.set_guid(base::GenerateGUID());
+  account_profile.source_ = Source::kAccount;
+  // Initial creator and last modifier are unused for kLocalOrSyncable profiles.
+  account_profile.initial_creator_id_ = kInitialCreatorOrModifierChrome;
+  account_profile.last_modifier_id_ = kInitialCreatorOrModifierChrome;
+  return account_profile;
 }
 
 ServerFieldTypeSet AutofillProfile::FindInaccessibleProfileValues() const {

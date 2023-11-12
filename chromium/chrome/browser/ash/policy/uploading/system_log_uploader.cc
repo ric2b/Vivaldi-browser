@@ -9,12 +9,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -33,7 +33,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "components/feedback/redaction_tool.h"
+#include "components/feedback/redaction_tool/redaction_tool.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/browser/policy_conversions.h"
 #include "components/prefs/pref_service.h"
@@ -111,7 +111,7 @@ std::string ZipFiles(
   return compressed_logs;
 }
 
-std::string ReadAndRedactLogFile(feedback::RedactionTool* redactor,
+std::string ReadAndRedactLogFile(redaction::RedactionTool* redactor,
                                  const base::FilePath& file_path) {
   std::string data;
   if (!base::ReadFileToStringWithMaxSize(file_path, &data, kLogCutoffSize) &&
@@ -133,7 +133,7 @@ std::string ReadAndRedactLogFile(feedback::RedactionTool* redactor,
 // as pairs (file name, data) and returns. Called on blocking thread.
 std::unique_ptr<SystemLogUploader::SystemLogs> ReadFiles() {
   auto system_logs = std::make_unique<SystemLogUploader::SystemLogs>();
-  feedback::RedactionTool redactor(
+  redaction::RedactionTool redactor(
       extension_misc::kBuiltInFirstPartyExtensionIds);
   for (const char* file_path : kSystemLogFileNames) {
     if (!base::PathExists(base::FilePath(file_path)))
@@ -396,7 +396,7 @@ void SystemLogUploader::OnFailure(UploadJob::ErrorCode error_code) {
 
 // static
 std::string SystemLogUploader::RemoveSensitiveData(
-    feedback::RedactionTool* redactor,
+    redaction::RedactionTool* redactor,
     const std::string& data) {
   return redactor->Redact(data);
 }
@@ -553,12 +553,12 @@ base::Time SystemLogUploader::UpdateLocalStateForLogs() {
     updated_log_uploads.erase(updated_log_uploads.begin());
 
   // Create a list to be updated for the pref.
-  base::Value updated_prev_log_uploads(base::Value::Type::LIST);
+  base::Value::List updated_prev_log_uploads;
   for (auto it : updated_log_uploads) {
     updated_prev_log_uploads.Append(it.ToDoubleT());
   }
-  local_state->Set(prefs::kStoreLogStatesAcrossReboots,
-                   updated_prev_log_uploads);
+  local_state->SetList(prefs::kStoreLogStatesAcrossReboots,
+                       std::move(updated_prev_log_uploads));
 
   // Write the changes to the disk to prevent loss of changes.
   local_state->CommitPendingWrite();

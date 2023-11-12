@@ -94,9 +94,6 @@ class UserSelectionScreen
   ScreenType GetScreenType() const override;
 
   void Unlock(const AccountId& account_id) override;
-  void AttemptEasySignin(const AccountId& account_id,
-                         const std::string& secret,
-                         const std::string& key_label) override;
 
   // session_manager::SessionManagerObserver
   void OnSessionStateChanged() override;
@@ -146,9 +143,6 @@ class UserSelectionScreen
   // Map of account ids to their current authentication type. If a user is not
   // contained in the map, it is using the default authentication type.
   std::map<AccountId, proximity_auth::mojom::AuthType> user_auth_type_map_;
-
-  // Timer for measuring idle state duration before password clear.
-  base::OneShotTimer password_clear_timer_;
 
   // Token handler util for checking user OAuth token status.
   std::unique_ptr<TokenHandleUtil> token_handle_util_;

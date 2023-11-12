@@ -154,8 +154,8 @@ sql::InitStatus ContactDatabase::EnsureCurrentVersion() {
       if (!db_.Execute("ALTER TABLE contacts ADD COLUMN trusted INT"))
         return LogMigrationFailure(cur_version);
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -183,8 +183,8 @@ sql::InitStatus ContactDatabase::EnsureCurrentVersion() {
         return LogMigrationFailure(cur_version);
 
       ++cur_version;
-      meta_table_.SetVersionNumber(cur_version);
-      meta_table_.SetCompatibleVersionNumber(
+      std::ignore = meta_table_.SetVersionNumber(cur_version);
+      std::ignore = meta_table_.SetCompatibleVersionNumber(
           std::min(cur_version, kCompatibleVersionNumber));
     }
   }

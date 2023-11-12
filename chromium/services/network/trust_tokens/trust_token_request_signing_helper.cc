@@ -42,7 +42,7 @@ const char kRedemptionRecordHeaderRedemptionRecordKey[] = "redemption-record";
 void LogOutcome(const net::NetLogWithSource& log, base::StringPiece outcome) {
   log.EndEvent(net::NetLogEventType::TRUST_TOKEN_OPERATION_BEGIN_SIGNING,
                [outcome]() {
-                 base::Value ret(base::Value::Type::DICTIONARY);
+                 base::Value ret(base::Value::Type::DICT);
                  ret.SetStringKey("outcome", outcome);
                  return ret;
                });
@@ -206,7 +206,7 @@ TrustTokenRequestSigningHelper::CollectOperationResultWithStatus(
   mojom::TrustTokenOperationResultPtr operation_result =
       mojom::TrustTokenOperationResult::New();
   operation_result->status = status;
-  operation_result->type = mojom::TrustTokenOperationType::kRedemption;
+  operation_result->operation = mojom::TrustTokenOperationType::kRedemption;
   operation_result->top_level_origin = params_.toplevel;
   return operation_result;
 }

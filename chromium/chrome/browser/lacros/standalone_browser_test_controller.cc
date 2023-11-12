@@ -12,7 +12,7 @@
 #include "chrome/browser/extensions/extension_keeplist_chromeos.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/speech/tts_crosapi_util.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -40,17 +40,17 @@ blink::mojom::DisplayMode WindowModeToDisplayMode(
   }
 }
 
-web_app::UserDisplayMode WindowModeToUserDisplayMode(
+web_app::mojom::UserDisplayMode WindowModeToUserDisplayMode(
     apps::WindowMode window_mode) {
   switch (window_mode) {
     case apps::WindowMode::kBrowser:
-      return web_app::UserDisplayMode::kBrowser;
+      return web_app::mojom::UserDisplayMode::kBrowser;
     case apps::WindowMode::kTabbedWindow:
-      return web_app::UserDisplayMode::kTabbed;
+      return web_app::mojom::UserDisplayMode::kTabbed;
     case apps::WindowMode::kWindow:
-      return web_app::UserDisplayMode::kStandalone;
+      return web_app::mojom::UserDisplayMode::kStandalone;
     case apps::WindowMode::kUnknown:
-      return web_app::UserDisplayMode::kBrowser;
+      return web_app::mojom::UserDisplayMode::kBrowser;
   }
 }
 
@@ -171,6 +171,24 @@ void StandaloneBrowserTestController::TtsSpeak(
   lacros_utterance_event_delegates_.emplace(lacros_utterance->GetId(),
                                             std ::move(event_delegate));
   tts_crosapi_util::SpeakForTesting(std::move(lacros_utterance));
+}
+
+void StandaloneBrowserTestController::InstallSubApp(
+    const web_app::AppId& parent_app_id,
+    const std::string& sub_app_start_url,
+    InstallSubAppCallback callback) {
+  auto info = std::make_unique<WebAppInstallInfo>();
+  info->start_url = GURL(sub_app_start_url);
+  info->parent_app_id = parent_app_id;
+
+  Profile* profile = ProfileManager::GetPrimaryUserProfile();
+  auto* provider = web_app::WebAppProvider::GetForWebApps(profile);
+  provider->scheduler().InstallFromInfo(
+      std::move(info),
+      /*overwrite_existing_manifest_fields=*/false,
+      webapps::WebappInstallSource::SUB_APP,
+      base::BindOnce(&StandaloneBrowserTestController::WebAppInstallationDone,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void StandaloneBrowserTestController::OnUtteranceFinished(int utterance_id) {

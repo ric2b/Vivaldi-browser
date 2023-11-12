@@ -11,7 +11,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/prefs/pref_service.h"
@@ -165,7 +164,7 @@ VivaldiAccountManager::VivaldiAccountManager(
     std::string refresh_token;
     if (OSCrypt::DecryptString(encrypted_refresh_token, &refresh_token)) {
       refresh_token_ = refresh_token;
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&VivaldiAccountManager::RequestNewToken,
                                     weak_factory_.GetWeakPtr()));
       return;
@@ -354,7 +353,7 @@ void VivaldiAccountManager::OnTokenRequestDone(
   if (response_code == net::HTTP_BAD_REQUEST) {
     std::string server_message = ParseFailureResponse(std::move(response_body));
     if (!using_password && !password_handler_.password().empty()) {
-      base::SequencedTaskRunnerHandle::Get()->PostTask(
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&VivaldiAccountManager::Login,
                          weak_factory_.GetWeakPtr(), account_info_.username,

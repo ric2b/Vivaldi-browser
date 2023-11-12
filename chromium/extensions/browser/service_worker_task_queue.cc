@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -98,9 +98,9 @@ ServiceWorkerTaskQueue::~ServiceWorkerTaskQueue() {
     service_worker_context->RemoveObserver(this);
 }
 
-ServiceWorkerTaskQueue::TestObserver::TestObserver() {}
+ServiceWorkerTaskQueue::TestObserver::TestObserver() = default;
 
-ServiceWorkerTaskQueue::TestObserver::~TestObserver() {}
+ServiceWorkerTaskQueue::TestObserver::~TestObserver() = default;
 
 // static
 ServiceWorkerTaskQueue* ServiceWorkerTaskQueue::Get(BrowserContext* context) {
@@ -423,7 +423,7 @@ void ServiceWorkerTaskQueue::VerifyRegistration(
     const SequencedContextId& context_id,
     const GURL& scope) {
   service_worker_context->CheckHasServiceWorker(
-      scope, blink::StorageKey(url::Origin::Create(scope)),
+      scope, blink::StorageKey::CreateFirstParty(url::Origin::Create(scope)),
       base::BindOnce(&ServiceWorkerTaskQueue::DidVerifyRegistration,
                      weak_factory_.GetWeakPtr(), context_id));
 }
@@ -444,7 +444,9 @@ void ServiceWorkerTaskQueue::RegisterServiceWorker(
   content::ServiceWorkerContext* service_worker_context =
       GetServiceWorkerContext(extension.id());
   service_worker_context->RegisterServiceWorker(
-      script_url, blink::StorageKey(url::Origin::Create(option.scope)), option,
+      script_url,
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(option.scope)),
+      option,
       base::BindOnce(&ServiceWorkerTaskQueue::DidRegisterServiceWorker,
                      weak_factory_.GetWeakPtr(), context_id, reason,
                      base::Time::Now()));
@@ -474,7 +476,8 @@ void ServiceWorkerTaskQueue::DeactivateExtension(const Extension* extension) {
       GetServiceWorkerContext(extension->id());
 
   service_worker_context->UnregisterServiceWorker(
-      extension->url(), blink::StorageKey(extension->origin()),
+      extension->url(),
+      blink::StorageKey::CreateFirstParty(extension->origin()),
       base::BindOnce(&ServiceWorkerTaskQueue::DidUnregisterServiceWorker,
                      weak_factory_.GetWeakPtr(), extension_id, *sequence));
 
@@ -492,16 +495,12 @@ void ServiceWorkerTaskQueue::RunTasksAfterStartWorker(
   WorkerState* worker_state = GetWorkerState(context_id);
   DCHECK_NE(BrowserState::kStarted, worker_state->browser_state_);
 
-  content::StoragePartition* partition =
-      util::GetStoragePartitionForExtensionId(
-          lazy_context_id.extension_id(), lazy_context_id.browser_context());
-
   content::ServiceWorkerContext* service_worker_context =
-      partition->GetServiceWorkerContext();
+      GetServiceWorkerContext(lazy_context_id.extension_id());
 
   const GURL& scope = context_id.first.service_worker_scope();
   service_worker_context->StartWorkerForScope(
-      scope, blink::StorageKey(url::Origin::Create(scope)),
+      scope, blink::StorageKey::CreateFirstParty(url::Origin::Create(scope)),
       base::BindOnce(&ServiceWorkerTaskQueue::DidStartWorkerForScope,
                      weak_factory_.GetWeakPtr(), context_id, base::Time::Now()),
       base::BindOnce(&ServiceWorkerTaskQueue::DidStartWorkerFail,
@@ -722,8 +721,8 @@ ServiceWorkerTaskQueue::WorkerState* ServiceWorkerTaskQueue::GetWorkerState(
 
 content::ServiceWorkerContext* ServiceWorkerTaskQueue::GetServiceWorkerContext(
     const ExtensionId& extension_id) {
-  return util::GetStoragePartitionForExtensionId(extension_id, browser_context_)
-      ->GetServiceWorkerContext();
+  return util::GetServiceWorkerContextForExtensionId(extension_id,
+                                                     browser_context_);
 }
 
 void ServiceWorkerTaskQueue::StartObserving(

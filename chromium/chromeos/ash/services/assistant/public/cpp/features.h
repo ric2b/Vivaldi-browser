@@ -46,10 +46,6 @@ BASE_DECLARE_FEATURE(kEnablePowerManager);
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 BASE_DECLARE_FEATURE(kEnableLibAssistantBetaBackend);
 
-// Enables the sandbox of LibAssistant service.
-COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
-BASE_DECLARE_FEATURE(kEnableLibAssistantSandbox);
-
 // Enables the LibAssistantV2 APIs and related features.
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 BASE_DECLARE_FEATURE(kEnableLibAssistantV2);
@@ -71,8 +67,6 @@ COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsPowerManagerEnabled();
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC)
 bool IsLibAssistantBetaBackendEnabled();
 
-COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsRoutinesEnabled();
-
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsStereoAudioInputEnabled();
 
 COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsVoiceMatchDisabled();
@@ -88,7 +82,8 @@ COMPONENT_EXPORT(ASSISTANT_SERVICE_PUBLIC) bool IsLibAssistantDlcEnabled();
 
 }  // namespace ash::assistant::features
 
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
+// TODO(b/258750971): remove when internal assistant codes are migrated to
+// namespace ash.
 namespace chromeos::assistant {
 namespace features = ::ash::assistant::features;
 }

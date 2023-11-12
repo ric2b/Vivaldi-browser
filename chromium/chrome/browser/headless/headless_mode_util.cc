@@ -13,10 +13,11 @@
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
 #include "base/base_switches.h"
+#include "chrome/common/chrome_switches.h"
 
 #if BUILDFLAG(IS_LINUX)
-#include "ui/gl/gl_switches.h"
-#include "ui/ozone/public/ozone_switches.h"
+#include "ui/gl/gl_switches.h"               // nogncheck
+#include "ui/ozone/public/ozone_switches.h"  // nogncheck
 #endif  // BUILDFLAG(IS_LINUX)
 
 namespace headless {
@@ -59,6 +60,13 @@ bool IsOldHeadlessMode() {
 
 void SetUpCommandLine(const base::CommandLine* command_line) {
   DCHECK(IsHeadlessMode());
+  // Default to incognito mode unless it is forced or user data directory is
+  // explicitly specified.
+  if (!command_line->HasSwitch(::switches::kIncognito) &&
+      !command_line->HasSwitch(::switches::kUserDataDir)) {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ::switches::kIncognito);
+  }
   // Enable unattended mode.
   if (!command_line->HasSwitch(::switches::kNoErrorDialogs)) {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(

@@ -9,9 +9,9 @@
 
 #include "base/barrier_closure.h"
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/ranges/algorithm.h"
@@ -141,11 +141,12 @@ void OnDeviceOpened(AndroidUsbDevices* devices,
                     AndroidDeviceInfo android_device_info,
                     mojo::Remote<device::mojom::UsbDevice> device,
                     const base::RepeatingClosure& barrier,
-                    device::mojom::UsbOpenDeviceError error) {
-  // For UsbOpenDeviceError::OK and UsbOpenDeviceError::ALREADY_OPEN we all try
-  // to claim the interface because the device may be opened by other modules or
-  // extensions for different interface.
-  if (error != device::mojom::UsbOpenDeviceError::ACCESS_DENIED) {
+                    device::mojom::UsbOpenDeviceResultPtr result) {
+  // If the error is UsbOpenDeviceError::ALREADY_OPEN we all try to claim the
+  // interface because the device may be opened by other modules or extensions
+  // for different interface.
+  if (result->is_success() ||
+      result->get_error() == device::mojom::UsbOpenDeviceError::ALREADY_OPEN) {
     DCHECK(device);
     auto* device_raw = device.get();
     device_raw->ClaimInterface(

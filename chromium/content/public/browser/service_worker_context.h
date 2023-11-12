@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
+#include "base/task/sequenced_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/service_worker_external_request_result.h"
@@ -184,8 +185,9 @@ class CONTENT_EXPORT ServiceWorkerContext {
   virtual bool MaybeHasRegistrationForStorageKey(
       const blink::StorageKey& key) = 0;
 
-  // TODO(crbug.com/1199077): Update name when StorageUsageInfo uses StorageKey.
-  virtual void GetAllOriginsInfo(GetUsageInfoCallback callback) = 0;
+  // Used in response to browsing data and quota manager requests to get
+  // the per-StorageKey size and last time used data.
+  virtual void GetAllStorageKeysInfo(GetUsageInfoCallback callback) = 0;
 
   // Deletes all registrations for `key` and clears all service workers
   // belonging to the registrations. All clients controlled by those service

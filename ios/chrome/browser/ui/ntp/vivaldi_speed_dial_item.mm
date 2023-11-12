@@ -1,12 +1,12 @@
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_item.h"
 
+#import "base/mac/foundation_util.h"
+#import "base/strings/string_util.h"
+#import "base/strings/sys_string_conversions.h"
+#import "components/bookmarks/browser/bookmark_node.h"
+#import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/cells/bookmark_folder_item.h"
-#include "base/mac/foundation_util.h"
-#include "base/strings/string_util.h"
-#include "base/strings/sys_string_conversions.h"
-#include "components/bookmarks/browser/bookmark_node.h"
-#include "components/bookmarks/vivaldi_bookmark_kit.h"
 
 using vivaldi_bookmark_kit::GetNickname;
 using vivaldi_bookmark_kit::GetThumbnail;
@@ -76,6 +76,37 @@ using vivaldi_bookmark_kit::GetDescription;
 
 - (NSString*)urlString {
   return base::SysUTF8ToNSString(self.url.spec());
+}
+
+- (NSString*)host {
+  NSURL* nsURL = [NSURL URLWithString:[self urlString]];
+  NSString* host = [nsURL host];
+
+  NSString* replaceRange = @"www.";
+  if (([host length] >= [replaceRange length]) &&
+      ([[host substringToIndex: [replaceRange length]]
+        isEqualToString:replaceRange]))
+    return [host substringFromIndex: [replaceRange length]];
+  else
+      return host;
+}
+
+- (BOOL)isInternalPage {
+  NSString* prefixStringVivaldi = @"vivaldi://";
+  NSString* prefixStringChrome = @"chrome://";
+  NSString* urlString = [[self urlString] lowercaseString];
+
+  BOOL isInternal = NO;
+
+  if (urlString.length > 0) {
+    if ([urlString containsString:prefixStringVivaldi] ||
+        [urlString containsString:prefixStringChrome])
+      isInternal = YES;
+  } else {
+    return NO;
+  }
+
+  return isInternal;
 }
 
 - (NSString*)thumbnail {

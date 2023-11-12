@@ -20,7 +20,6 @@
 # by the time the app target is done, the info.plist is correct.
 #
 
-from __future__ import print_function
 
 import optparse
 import os
@@ -262,6 +261,17 @@ def _RemoveSparkleKeys(plist):
     'SUAllowsAutomaticUpdates',
     'SUFeedURL')
 
+# Vivaldi
+def _RemoveIOSVoiceSearchShortcutKeys(plist):
+  """Removes voice search related shortcut keys"""
+  for idx, dict_item in enumerate(plist['UIApplicationShortcutItems']):
+      if dict_item['UIApplicationShortcutItemIconFile'] == 'quick_action_voice_search':
+        try:
+          del plist['UIApplicationShortcutItems'][idx]
+        except:
+          pass
+# End Vivaldi
+
 def Main(argv):
   parser = optparse.OptionParser('%prog [options]')
   parser.add_option('--plist',
@@ -353,6 +363,15 @@ def Main(argv):
   parser.add_option('--sparkle', dest='use_sparkle', action='store',
       type='int', default=False, help='Enable Sparkle [1 or 0]')
 
+  # Vivaldi
+  parser.add_option('--vivaldi_plist',
+                    dest='vivaldi_plist',
+                    action='store',
+                    type='int',
+                    default=False,
+                    help='Updates for vivaldi.')
+  # End Vivaldi
+
   (options, args) = parser.parse_args(argv)
 
   if len(args) > 0:
@@ -432,6 +451,10 @@ def Main(argv):
                      options.use_breakpad_staging)
   else:
     _RemoveBreakpadKeys(plist)
+
+  # Remove Voice Search shortcut item from Vivaldi iOS
+  if (options.vivaldi_plist and options.platform == 'ios'):
+    _RemoveIOSVoiceSearchShortcutKeys(plist)
 
   # Add Keystone if configured to do so.
   if options.use_keystone:

@@ -27,6 +27,7 @@
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/ash/services/assistant/public/cpp/switches.h"
 #include "content/public/test/browser_test.h"
+#include "sandbox/policy/switches.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/aura/window.h"
 #include "ui/events/test/event_generator.h"
@@ -188,16 +189,33 @@ class MockMessageCenterObserver
 
 // AssistantTimersBrowserTest --------------------------------------------------
 
-class AssistantTimersBrowserTest : public MixinBasedInProcessBrowserTest {
+class AssistantTimersBrowserTest : public MixinBasedInProcessBrowserTest,
+                                   public testing::WithParamInterface<bool> {
  public:
   AssistantTimersBrowserTest() {
-    // TODO(b/190633242): enable sandbox in browser tests.
-    feature_list_.InitAndDisableFeature(features::kEnableLibAssistantSandbox);
+    // Disable V2 feature because LibAssistant V2 binary does not run on linux
+    // bot.
+    if (GetParam()) {
+      feature_list_.InitWithFeatures(
+          /*enabled_features=*/{features::kEnableLibAssistantDlc},
+          /*disabled_features=*/{features::kEnableLibAssistantV2});
+    } else {
+      feature_list_.InitWithFeatures(
+          /*enabled_features=*/{},
+          /*disabled_features=*/{features::kEnableLibAssistantDlc,
+                                 features::kEnableLibAssistantV2});
+    }
 
     // Do not log to file in test. Otherwise multiple tests may create/delete
     // the log file at the same time. See http://crbug.com/1307868.
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kDisableLibAssistantLogfile);
+
+    // In browser tests, the fake_s3_server uses gRPC framework, which is not
+    // allowed in the sandbox by default. Instead of enabling and setting up the
+    // gRPC policy, we do not enable sandbox in the tests.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        sandbox::policy::switches::kNoSandbox);
   }
 
   AssistantTimersBrowserTest(const AssistantTimersBrowserTest&) = delete;
@@ -226,7 +244,7 @@ class AssistantTimersBrowserTest : public MixinBasedInProcessBrowserTest {
 
 // Timer notifications should be dismissed when disabling Assistant in settings.
 // Flaky. See https://crbug.com/1196564.
-IN_PROC_BROWSER_TEST_F(
+IN_PROC_BROWSER_TEST_P(
     AssistantTimersBrowserTest,
     DISABLED_ShouldDismissTimerNotificationsWhenDisablingAssistant) {
   tester()->StartAssistantAndWaitForReady();
@@ -257,7 +275,7 @@ IN_PROC_BROWSER_TEST_F(
 // Pressing the "STOP" action button in a timer notification should result in
 // the timer being removed.
 // Flaky. See https://crbug.com/1196564.
-IN_PROC_BROWSER_TEST_F(AssistantTimersBrowserTest,
+IN_PROC_BROWSER_TEST_P(AssistantTimersBrowserTest,
                        DISABLED_ShouldRemoveTimerWhenStoppingViaNotification) {
   tester()->StartAssistantAndWaitForReady();
 
@@ -298,7 +316,7 @@ IN_PROC_BROWSER_TEST_F(AssistantTimersBrowserTest,
 }
 
 // Verifies that timer notifications are ticked at regular intervals.
-IN_PROC_BROWSER_TEST_F(AssistantTimersBrowserTest,
+IN_PROC_BROWSER_TEST_P(AssistantTimersBrowserTest,
                        ShouldTickNotificationsAtRegularIntervals) {
   // Observe notifications.
   MockMessageCenterObserver mock;
@@ -387,5 +405,9 @@ IN_PROC_BROWSER_TEST_F(AssistantTimersBrowserTest,
       }));
   notification_update_run_loop.Run();
 }
+
+INSTANTIATE_TEST_SUITE_P(/* no label */,
+                         AssistantTimersBrowserTest,
+                         /*values=*/testing::Bool());
 
 }  // namespace ash::assistant

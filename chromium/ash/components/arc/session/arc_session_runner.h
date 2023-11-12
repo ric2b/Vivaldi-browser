@@ -13,7 +13,7 @@
 #include "ash/components/arc/session/arc_session.h"
 #include "ash/components/arc/session/arc_stop_reason.h"
 #include "ash/components/arc/session/arc_upgrade_params.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
@@ -123,6 +123,7 @@ class ArcSessionRunner : public ArcSession::Observer {
     default_device_scale_factor_ = scale_factor;
   }
 
+  bool use_virtio_blk_data() { return use_virtio_blk_data_; }
   void set_use_virtio_blk_data(bool use_virtio_blk_data) {
     use_virtio_blk_data_ = use_virtio_blk_data;
   }

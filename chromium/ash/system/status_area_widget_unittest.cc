@@ -37,8 +37,8 @@
 #include "ash/system/virtual_keyboard/virtual_keyboard_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_ash_web_view_factory.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/callback_helpers.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/ash/components/network/cellular_metrics_logger.h"
 #include "chromeos/ash/components/network/network_handler.h"
@@ -599,6 +599,9 @@ TEST_F(StatusAreaWidgetCollapseStateTest, NewTrayShownWhileCollapsed) {
   EXPECT_FALSE(ime_menu_->GetVisible());
   EXPECT_FALSE(virtual_keyboard_->GetVisible());
   EXPECT_TRUE(palette_->GetVisible());
+  // We should also check the opacity to make sure the tray isn't visible with
+  // zero opacity; see b/265165818.
+  EXPECT_EQ(palette_->layer()->opacity(), 1);
 }
 
 TEST_F(StatusAreaWidgetCollapseStateTest, TrayHiddenWhileCollapsed) {
@@ -639,8 +642,7 @@ TEST_F(StatusAreaWidgetCollapseStateTest, AllTraysFitInCollapsedState) {
 class StatusAreaWidgetQSRevampTest : public AshTestBase {
  protected:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kQsRevamp, features::kQsRevampWip}, {});
+    scoped_feature_list_.InitAndEnableFeature(features::kQsRevamp);
     AshTestBase::SetUp();
   }
 
@@ -659,8 +661,7 @@ class StatusAreaWidgetQSRevampTest : public AshTestBase {
 // otherwise.
 TEST_F(StatusAreaWidgetQSRevampTest, DateTrayRoundedCornerBehavior) {
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({features::kQsRevamp, features::kQsRevampWip},
-                                {});
+  feature_list.InitAndEnableFeature(features::kQsRevamp);
 
   StatusAreaWidget* status_area =
       StatusAreaWidgetTestHelper::GetStatusAreaWidget();

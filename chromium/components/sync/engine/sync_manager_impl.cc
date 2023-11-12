@@ -8,10 +8,10 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/task/sequenced_task_runner.h"
@@ -403,9 +403,10 @@ void SyncManagerImpl::OnSyncCycleEvent(const SyncCycleEvent& event) {
   }
 }
 
-void SyncManagerImpl::OnActionableError(const SyncProtocolError& error) {
+void SyncManagerImpl::OnActionableProtocolError(
+    const SyncProtocolError& error) {
   for (SyncManager::Observer& observer : observers_) {
-    observer.OnActionableError(error);
+    observer.OnActionableProtocolError(error);
   }
 }
 

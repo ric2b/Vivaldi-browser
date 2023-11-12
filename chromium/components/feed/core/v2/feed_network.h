@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "components/feed/core/proto/v2/wire/consistency_token.pb.h"
 #include "components/feed/core/proto/v2/wire/feed_query.pb.h"
 #include "components/feed/core/proto/v2/wire/request.pb.h"
@@ -144,6 +144,18 @@ struct SingleWebFeedListContentsDiscoverApi {
   static base::StringPiece Method() { return "POST"; }
   static base::StringPiece RequestPath(const Request&) { return "v1/contents"; }
   static bool SendRequestMetadata() { return false; }
+};
+
+struct QueryWebFeedDiscoverApi {
+  using Request = feedwire::webfeed::QueryWebFeedRequest;
+  using Response = feedwire::webfeed::QueryWebFeedResponse;
+  static constexpr NetworkRequestType kRequestType =
+      NetworkRequestType::kQueryWebFeed;
+  static base::StringPiece Method() { return "POST"; }
+  static base::StringPiece RequestPath(const Request&) {
+    return "v1:queryWebFeed";
+  }
+  static bool SendRequestMetadata() { return true; }
 };
 
 class FeedNetwork {

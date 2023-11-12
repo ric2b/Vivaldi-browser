@@ -5,6 +5,8 @@
 #include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 
 #include "chrome/browser/ash/bruschetta/bruschetta_pref_names.h"
+#include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
+#include "chrome/browser/ash/guest_os/virtual_machines/virtual_machines_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 
@@ -15,6 +17,10 @@ absl::optional<const base::Value::Dict*> GetConfigWithEnabledLevel(
     const Profile* profile,
     const std::string& config_id,
     prefs::PolicyEnabledState enabled_level) {
+  if (!virtual_machines::AreVirtualMachinesAllowedByPolicy()) {
+    return absl::nullopt;
+  }
+
   const auto* config_ptr = profile->GetPrefs()
                                ->GetDict(prefs::kBruschettaVMConfiguration)
                                .FindDict(config_id);
@@ -27,10 +33,15 @@ absl::optional<const base::Value::Dict*> GetConfigWithEnabledLevel(
 }
 }  // namespace
 
+const char kToolsDlc[] = "termina-tools-dlc";
+
 const char kBruschettaVmName[] = "bru";
 const char kBruschettaDisplayName[] = "Bruschetta";
 
-const char kBiosPath[] = "Downloads/bios";
+const char kBiosPath[] = "Downloads/CROSVM_CODE.fd";
+const char kPflashPath[] = "Downloads/CROSVM_VARS.google.fd";
+
+const char kBruschettaPolicyId[] = "glinux-latest";
 
 const char* BruschettaResultString(const BruschettaResult res) {
 #define ENTRY(name)            \
@@ -43,6 +54,7 @@ const char* BruschettaResultString(const BruschettaResult res) {
     ENTRY(kBiosNotAccessible);
     ENTRY(kStartVmFailed);
     ENTRY(kTimeout);
+    ENTRY(kForbiddenByPolicy);
   }
 #undef ENTRY
   return "unknown code";
@@ -73,6 +85,42 @@ absl::optional<const base::Value::Dict*> GetInstallableConfig(
     const std::string& config_id) {
   return GetConfigWithEnabledLevel(profile, config_id,
                                    prefs::PolicyEnabledState::INSTALL_ALLOWED);
+}
+
+bool HasInstallableConfig(const Profile* profile,
+                          const std::string& config_id) {
+  return GetInstallableConfig(profile, config_id).has_value();
+}
+
+bool IsInstalled(Profile* profile, const guest_os::GuestId& guest_id) {
+  const base::Value* value = guest_os::GetContainerPrefValue(
+      profile, guest_id, guest_os::prefs::kVmNameKey);
+  return value != nullptr;
+}
+
+absl::optional<RunningVmPolicy> GetLaunchPolicyForConfig(
+    Profile* profile,
+    std::string config_id) {
+  auto config_option = GetRunnableConfig(profile, config_id);
+  if (!config_option.has_value()) {
+    return absl::nullopt;
+  }
+  const auto* config = *config_option;
+
+  RunningVmPolicy ret = {.vtpm_enabled =
+                             config->FindDict(prefs::kPolicyVTPMKey)
+                                 ->FindBool(prefs::kPolicyVTPMEnabledKey)
+                                 .value()};
+
+  return ret;
+}
+
+std::string GetVmUsername(const Profile* profile) {
+  std::string username = profile->GetProfileUserName();
+  // Return the part before the '@' if this is an email. Since find returns
+  // std::string::npos if it can't find the token this will return the full
+  // username in that case.
+  return username.substr(0, username.find("@"));
 }
 
 }  // namespace bruschetta

@@ -7,42 +7,21 @@
 #import "base/mac/foundation_util.h"
 #import "base/numerics/safe_conversions.h"
 #import "base/strings/sys_string_conversions.h"
-#import "notes/notes_model.h"
 #import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/app/tests_hook.h"
-#import "ios/notes/notes_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/drag_and_drop/drag_item_util.h"
 #import "ios/chrome/browser/drag_and_drop/table_view_url_drag_drop_handler.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #import "ios/chrome/browser/policy/policy_util.h"
-#import "ios/chrome/browser/ui/activity_services/activity_params.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/cells/table_view_signin_promo_item.h"
-#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
-#import "ios/notes/note_add_edit_view_controller.h"
-#import "ios/notes/note_empty_background.h"
-#import "ios/notes/note_folder_view_controller.h"
-#import "ios/notes/note_home_consumer.h"
-#import "ios/notes/note_home_mediator.h"
-#import "ios/notes/note_home_shared_state.h"
-#import "ios/notes/note_interaction_controller.h"
-#import "ios/notes/note_interaction_controller_delegate.h"
-#import "ios/notes/note_model_bridge_observer.h"
-#import "ios/notes/note_navigation_controller.h"
-#import "ios/notes/note_path_cache.h"
-#import "ios/notes/note_ui_constants.h"
-#import "ios/notes/note_utils_ios.h"
-#import "ios/notes/cells/note_folder_item.h"
-#import "ios/notes/cells/note_text_field_item.h"
-#import "ios/notes/cells/note_home_node_item.h"
-#import "ios/notes/cells/table_view_note_cell.h"
-#import "ios/notes/cells/note_table_cell_title_edit_delegate.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #import "ios/chrome/browser/ui/elements/home_waiting_view.h"
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_scene_agent.h"
@@ -51,6 +30,7 @@
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
+#import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_url_item.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/ui/table_view/table_view_illustrated_empty_view.h"
@@ -58,7 +38,6 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
@@ -66,16 +45,37 @@
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
+#import "ios/chrome/common/ui/util/ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ios/notes/cells/note_folder_item.h"
+#import "ios/notes/cells/note_home_node_item.h"
+#import "ios/notes/cells/note_table_cell_title_edit_delegate.h"
+#import "ios/notes/cells/note_text_field_item.h"
+#import "ios/notes/cells/table_view_note_cell.h"
+#import "ios/notes/note_add_edit_view_controller.h"
+#import "ios/notes/note_empty_background.h"
+#import "ios/notes/note_folder_view_controller.h"
+#import "ios/notes/note_home_consumer.h"
+#import "ios/notes/note_home_mediator.h"
+#import "ios/notes/note_home_shared_state.h"
+#import "ios/notes/note_interaction_controller_delegate.h"
+#import "ios/notes/note_interaction_controller.h"
+#import "ios/notes/note_model_bridge_observer.h"
+#import "ios/notes/note_navigation_controller.h"
+#import "ios/notes/note_path_cache.h"
+#import "ios/notes/note_ui_constants.h"
+#import "ios/notes/note_utils_ios.h"
+#import "ios/notes/notes_factory.h"
 #import "ios/panel/panel_constants.h"
+#import "ios/ui/custom_views/vivaldi_search_bar_view.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
-#import "ui/base/l10n/l10n_util.h"
+#import "notes/notes_model.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+#import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -125,8 +125,7 @@ const int kRowsHiddenByNavigationBar = 3;
                                           TableViewURLDragDataSource,
                                           TableViewURLDropDelegate,
                                           UIGestureRecognizerDelegate,
-                                          UISearchControllerDelegate,
-                                          UISearchResultsUpdating,
+                                          VivaldiSearchBarViewDelegate,
                                           UITableViewDataSource,
                                           UITableViewDelegate> {
   // Bridge to register for note changes.
@@ -134,8 +133,6 @@ const int kRowsHiddenByNavigationBar = 3;
 
   // The root node, whose child nodes are shown in the note table view.
   const vivaldi::NoteNode* _rootNode;
-
-  UIView* searchBarContainer;
 }
 
 // Shared state between NoteHome classes.  Used as a temporary refactoring
@@ -178,9 +175,6 @@ const int kRowsHiddenByNavigationBar = 3;
 // The current search term.  Set to the empty string when no search is active.
 @property(nonatomic, copy) NSString* searchTerm;
 
-// This ViewController's searchController;
-@property(nonatomic, strong) UISearchController* searchController;
-
 // Navigation UIToolbar Delete button.
 @property(nonatomic, strong) UIBarButtonItem* deleteButton;
 
@@ -215,6 +209,9 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Coordinator in charge of handling sharing use cases.
 @property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
+
+// Custom tableHeaderView to host search bar.
+@property(nonatomic, strong) VivaldiSearchBarView* vivaldiSearchBarView;
 
 @end
 
@@ -329,27 +326,7 @@ const int kRowsHiddenByNavigationBar = 3;
   self.navigationController.toolbar.accessibilityIdentifier =
       kNoteHomeUIToolbarIdentifier;
 
-  // SearchController Configuration.
-  // Init the searchController with nil so the results are displayed on the
-  // same TableView.
-  self.searchController =
-      [[UISearchController alloc] initWithSearchResultsController:nil];
-  self.searchController.obscuresBackgroundDuringPresentation = NO;
-  self.searchController.searchBar.userInteractionEnabled = NO;
-  self.searchController.delegate = self;
-  self.searchController.searchResultsUpdater = self;
-  self.searchController.searchBar.backgroundColor = UIColor.clearColor;
-  self.searchController.searchBar.accessibilityIdentifier =
-      kNoteHomeSearchBarIdentifier;
-  self.searchController.hidesNavigationBarDuringPresentation = NO;
-
-  if (self.isDeviceIPad)
-    [self setupHeaderWithSearchForIPad];
-  else
-    [self setupHeaderWithSearch];
-
-  self.navigationItem.searchController = nil;
-  self.navigationItem.hidesSearchBarWhenScrolling = NO;
+  [self setupHeaderWithSearch];
 
   self.searchTerm = @"";
 
@@ -423,7 +400,6 @@ const int kRowsHiddenByNavigationBar = 3;
                                   animated:NO];
     self.cachedIndexPathRow = 0;
   }
-  self.searchController.searchBar.frame = searchBarContainer.bounds;
 }
 
 - (BOOL)prefersStatusBarHidden {
@@ -495,8 +471,6 @@ const int kRowsHiddenByNavigationBar = 3;
   if (self.isReconstructingFromCache) {
     [self setupUIStackCacheIfApplicable];
   }
-
-  self.searchController.searchBar.userInteractionEnabled = YES;
 
   DCHECK(self.notes->loaded());
   DCHECK([self isViewLoaded]);
@@ -586,7 +560,6 @@ const int kRowsHiddenByNavigationBar = 3;
       showSnackbarMessage:note_utils_ios::MoveNotesWithUndoToast(
                               nodes, self.notes, trashFolder,
                               self.browserState)];
-
   [self setTableViewEditing:NO];
 }
 
@@ -654,10 +627,6 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (void)navigationBarCancel:(id)sender {
   [self navigateAway];
-
-  if (self.searchController.active) {
-      self.searchController.active = NO;
-  }
   [self dismissWithURL:GURL()];
 }
 
@@ -711,25 +680,7 @@ const int kRowsHiddenByNavigationBar = 3;
     }
 
     [self navigateAway];
-
-    // At root, since there's a large title, the search bar is lower than on
-    // whatever destination folder it is transitioning to (root is never
-    // reachable through search). To avoid a kink in the animation, the title
-    // is set to regular size, which means the search bar is at same level at
-    // beginning and end of animation. This controller will be replaced in
-    // |stack| so there's no need to care about restoring this.
-    if ([self isDisplayingNoteRoot]) {
-      self.navigationItem.largeTitleDisplayMode =
-        UINavigationItemLargeTitleDisplayModeNever;
-    }
-
-    __weak NoteHomeViewController* weakSelf = self;
-    auto completion = ^{
-      [weakSelf.navigationController setViewControllers:stack animated:YES];
-    };
-
-    [self.searchController dismissViewControllerAnimated:YES
-                                              completion:completion];
+    [self.navigationController setViewControllers:stack animated:YES];
     return;
   }
   NoteHomeViewController* controller =
@@ -981,10 +932,7 @@ const int kRowsHiddenByNavigationBar = 3;
 // Note that when adding a controller that can present, it should be added in
 // context here.
 - (BOOL)isAnyControllerPresenting {
-  return (([self presentedViewController] &&
-           [self presentedViewController] != self.searchController) ||
-          [self.searchController presentedViewController] ||
-          [self.navigationController presentedViewController]);
+  return ([self.navigationController presentedViewController]);
 }
 
 - (void)setupUIStackCacheIfApplicable {
@@ -1003,11 +951,8 @@ const int kRowsHiddenByNavigationBar = 3;
     self.navigationController.toolbarHidden = NO;
     [self setContextBarState:NotesContextBarDefault];
   } else {
-      self.navigationController.toolbarHidden = YES;
-      if (_notes->main_node()->children().empty()) {
-          self.navigationController.toolbarHidden = NO;
-      }
-    [self setContextBarState:NotesContextBarDefault];
+    self.navigationController.toolbarHidden = YES;
+    [self setContextBarState:NotesContextBarNone];
   }
 }
 
@@ -1161,10 +1106,6 @@ const int kRowsHiddenByNavigationBar = 3;
   self.sharedState.currentlyInEditMode = editing;
   [self setContextBarState:editing ? NotesContextBarBeginSelection
                                    : NotesContextBarDefault];
-  self.searchController.searchBar.userInteractionEnabled = !editing;
-  self.searchController.searchBar.alpha =
-      editing ? kTableViewNavigationAlphaForDisabledSearchBar : 1.0;
-
   self.tableView.dragInteractionEnabled = !editing;
 }
 
@@ -1258,8 +1199,8 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Returns YES if the given node can be edited by user.
 - (BOOL)isNodeEditableByUser:(const NoteNode*)node {
-  // Note that CanBeEditedByUser() below returns true for Notes Bar, Mobile
-  // Notes, and Other Notes since the user can add, delete, and edit
+  // Note that CanBeEditedByUser() below returns true for Notes
+  //  since the user can add, delete, and edit
   // items within those folders. CanBeEditedByUser() returns false for the
   // managed_node and all nodes that are descendants of managed_node.
   return YES;
@@ -1331,23 +1272,16 @@ const int kRowsHiddenByNavigationBar = 3;
   return nodes;
 }
 
-// Dismiss the search controller when there's a touch event on the scrim.
-- (void)dismissSearchController:(UIControl*)sender {
-  if (self.searchController.active) {
-    self.searchController.active = NO;
-  }
-}
-
 // Triggers the URL sharing flow for the given |URL| and |title|, with the
 // |indexPath| for the cell representing the UI component for that URL.
 - (void)shareText:(NSString*)noteText
            title:(NSString*)title
        indexPath:(NSIndexPath*)indexPath {
   UIView* cellView = [self.tableView cellForRowAtIndexPath:indexPath];
-  ActivityParams* params =
-      [[ActivityParams alloc] initWithText:noteText
+  SharingParams* params =
+      [[SharingParams alloc] initWithText:noteText
                                      title:title
-                                  scenario:ActivityScenario::VivaldiNote];
+                                  scenario:SharingScenario::VivaldiNote];
   self.sharingCoordinator =
       [[SharingCoordinator alloc] initWithBaseViewController:self
                                                      browser:self.browser
@@ -1407,46 +1341,48 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Shows empty notes background view.
 - (void)showEmptyBackground {
-    if (!self.emptyViewBackground) {
-      self.emptyViewBackground = [[TableViewIllustratedEmptyView alloc]
-          initWithFrame:self.sharedState.tableView.bounds
-                  image:[UIImage imageNamed:@"vivaldi_notes_empty"]
-                  title:GetNSString(IDS_VIVALDI_NOTE_EMPTY_TITLE)
-               subtitle:GetNSString(IDS_VIVALDI_NOTE_EMPTY_MESSAGE)];
-    }
-    // If the Signin promo is visible on the root view, we have to shift the
-    // empty TableView background to make it fully visible on all devices.
-    if ([self isDisplayingNoteRoot]) {
-      // Reload the data to ensure consistency between the model and the table
-      // (an example scenario can be found at crbug.com/1116408). Reloading the
-      // data should only be done for the root note folder since it can be
-      // very expensive in other folders.
-      [self.sharedState.tableView reloadData];
+  if (!self.emptyViewBackground) {
+    NSString* titleString = [self isDisplayingNoteRoot]
+    ? GetNSString(IDS_VIVALDI_NOTE_EMPTY_TITLE)
+    : GetNSString(IDS_VIVALDI_FOLDER_NO_ITEMS);
 
-      self.navigationItem.largeTitleDisplayMode =
-          UINavigationItemLargeTitleDisplayModeNever;
-      self.emptyViewBackground.scrollViewContentInsets =
-            self.view.safeAreaInsets;
-    }
+    NSString* subtitleString = [self isDisplayingNoteRoot]
+    ? GetNSString(IDS_VIVALDI_NOTE_EMPTY_MESSAGE)
+    : @"";
 
-    self.sharedState.tableView.backgroundView = self.emptyViewBackground;
-    self.navigationItem.searchController = nil;
+    self.emptyViewBackground = [[TableViewIllustratedEmptyView alloc]
+                                initWithFrame:self.sharedState.tableView.bounds
+                                image:[UIImage imageNamed:@"vivaldi_notes_empty"]
+                                title:titleString
+                                subtitle:subtitleString];
+  }
+  // If the Signin promo is visible on the root view, we have to shift the
+  // empty TableView background to make it fully visible on all devices.
+  if ([self isDisplayingNoteRoot]) {
+    // Reload the data to ensure consistency between the model and the table
+    // (an example scenario can be found at crbug.com/1116408). Reloading the
+    // data should only be done for the root note folder since it can be
+    // very expensive in other folders.
+    [self.sharedState.tableView reloadData];
 
-    // Vivaldi
-    self.searchController.searchBar.hidden = YES;
+    self.navigationItem.largeTitleDisplayMode =
+    UINavigationItemLargeTitleDisplayModeNever;
+    self.emptyViewBackground.scrollViewContentInsets =
+    self.view.safeAreaInsets;
+  }
+
+  self.sharedState.tableView.backgroundView = self.emptyViewBackground;
+  self.navigationItem.searchController = nil;
+
+  self.vivaldiSearchBarView.hidden = YES;
 }
 
 - (void)hideEmptyBackground {
   if (self.sharedState.tableView.backgroundView == self.emptyViewBackground) {
     self.sharedState.tableView.backgroundView = nil;
   }
-  if ([self isDisplayingNoteRoot]) {
-    self.navigationItem.largeTitleDisplayMode =
-        UINavigationItemLargeTitleDisplayModeAutomatic;
-  }
 
-  // Vivaldi
-  self.searchController.searchBar.hidden = NO;
+  self.vivaldiSearchBarView.hidden = NO;
 }
 
 #pragma mark - ContextBarDelegate implementation
@@ -1728,6 +1664,24 @@ const int kRowsHiddenByNavigationBar = 3;
                          }
                           style:UIAlertActionStyleDefault
                         enabled:editEnabled];
+
+    std::set<int64_t> nodeIds;
+    nodeIds.insert(node->id());
+    titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_MOVE);
+    [coordinator
+        addItemWithTitle:titleString
+                  action:^{
+                    NoteHomeViewController* strongSelf = weakSelf;
+                    if (!strongSelf)
+                      return;
+
+                    absl::optional<std::set<const NoteNode*>> nodesFromIds =
+                        note_utils_ios::FindNodesByIds(strongSelf.notes,
+                                                           nodeIds);
+                    if (nodesFromIds)
+                      [strongSelf moveNodes:*nodesFromIds];
+                  }
+     style:UIAlertActionStyleDefault];
   GURL nodeURL = node->GetURL();
   if (!nodeURL.is_empty()) {
       titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_OPEN);
@@ -1900,49 +1854,8 @@ const int kRowsHiddenByNavigationBar = 3;
   // Trash, Other Notes. Permanent nodes
   // do not include descendants of Managed Notes. Also, context menus are
   // only supported on notes or folders.
-  return (node && !node->is_permanent_node()) || node->is_folder();
-}
-
-#pragma mark UISearchResultsUpdating
-
-- (void)updateSearchResultsForSearchController:
-    (UISearchController*)searchController {
-  DCHECK_EQ(self.searchController, searchController);
-  NSString* text = searchController.searchBar.text;
-  self.searchTerm = text;
-
-  if (text.length == 0) {
-    if (self.sharedState.currentlyShowingSearchResults) {
-      self.sharedState.currentlyShowingSearchResults = NO;
-      // Restore current list.
-      [self.mediator computeNoteTableViewData];
-      [self.sharedState.tableView reloadData];
-    }
-  } else {
-    if (!self.sharedState.currentlyShowingSearchResults) {
-      self.sharedState.currentlyShowingSearchResults = YES;
-    }
-    // Replace current list with search result, but doesn't change
-    // the 'regular' model for this page, which we can restore when search
-    // is terminated.
-    NSString* noResults = GetNSString(IDS_HISTORY_NO_SEARCH_RESULTS);
-    [self.mediator computeNoteTableViewDataMatching:text
-                             orShowMessageWhenNoResults:noResults];
-    [self.sharedState.tableView reloadData];
-    [self setupContextBar];
-  }
-}
-
-#pragma mark UISearchControllerDelegate
-
-- (void)willPresentSearchController:(UISearchController*)searchController {
-}
-
-- (void)willDismissSearchController:(UISearchController*)searchController {
-  self.sharedState.currentlyShowingSearchResults = NO;
-  // Restore current list.
-  [self.mediator computeNoteTableViewData];
-  [self.sharedState.tableView reloadData];
+  return (node && !node->is_permanent_node() &&
+          (node->is_folder() || node->is_note()));
 }
 
 #pragma mark - NoteHomeSharedStateObserver
@@ -1983,28 +1896,7 @@ const int kRowsHiddenByNavigationBar = 3;
         [tableCell startEdit];
         tableCell.textDelegate = strongSelf;
       });
-    } else if (
-        (nodeItem.noteNode->is_note() &&
-            nodeItem.noteNode == self.sharedState.editingNoteNode)){
-                TableViewNoteCell* tableCell =
-                      base::mac::ObjCCastStrict<TableViewNoteCell>(cell);
-                  // Delay starting edit, so that the cell is fully created. This is
-                  // needed when scrolling away and then back into the editingCell,
-                  // without the delay the cell will resign first responder before its
-                  // created.
-                  __weak NoteHomeViewController* weakSelf = self;
-                  dispatch_async(dispatch_get_main_queue(), ^{
-                    NoteHomeViewController* strongSelf = weakSelf;
-                    if (!strongSelf){
-                        return;
-                    }
-                    strongSelf.sharedState.editingNoteCell = tableCell;
-                      [tableCell startEdit];
-
-                     tableCell.textDelegate = strongSelf;
-                      self.sharedState.addingNewNote = NO;
-                  });
-                }
+    }
   }
 
   return cell;
@@ -2135,17 +2027,11 @@ const int kRowsHiddenByNavigationBar = 3;
       return;
     }
     [self.sharedState.editingFolderCell stopEdit];
-      [self.sharedState.editingNoteCell stopEdit];
+    [self.sharedState.editingNoteCell stopEdit];
 
     if (node->is_folder()) {
       [self handleSelectFolderForNavigation:node];
     } else {
-      if (self.sharedState.currentlyShowingSearchResults) {
-        // Set the searchController active property to NO or the SearchBar will
-        // cause the navigation controller to linger for a second  when
-        // dismissing.
-        self.searchController.active = NO;
-      }
       // Open note editor
       [self editNode:node];
     }
@@ -2322,11 +2208,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (void)presentationControllerWillDismiss:
     (UIPresentationController*)presentationController {
-  if (self.searchController.active) {
-    // Dismiss the keyboard if trying to dismiss the VC so the keyboard doesn't
-    // linger until the VC dismissal has completed.
-    [self.searchController.searchBar endEditing:YES];
-  }
+  // no op.
 }
 
 - (void)presentationControllerDidDismiss:
@@ -2422,62 +2304,54 @@ const int kRowsHiddenByNavigationBar = 3;
   }
 }
 
-- (void)setupSearchBarWithStyle {
-    searchBarContainer = [[UIView alloc] init];
-    searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
-    searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    [searchBarContainer addSubview:self.searchController.searchBar];
-    self.searchController.searchBar.autoresizingMask =
-        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.searchController.searchBar.backgroundColor =
-        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-    self.searchController.searchBar.alpha = 1.0;
-    self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    [self.searchController.searchBar sizeToFit];
-}
-
-- (void)setupHeaderWithSearchForIPad {
-    [self setupSearchBarWithStyle];
-    self.tableView.tableHeaderView = searchBarContainer;
-
-    [searchBarContainer.topAnchor
-      constraintEqualToAnchor:self.tableView.topAnchor].active = YES;
-    [searchBarContainer.leadingAnchor
-      constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
-    [searchBarContainer.trailingAnchor
-      constraintEqualToAnchor:self.view.trailingAnchor].active = YES;
-    [searchBarContainer.widthAnchor
-      constraintEqualToAnchor:self.view.widthAnchor].active = YES;
-    [searchBarContainer.heightAnchor
-      constraintEqualToConstant:search_bar_height].active = YES;
-}
-
 - (void)setupHeaderWithSearch {
-    UIView* headerView = [[UIView alloc] init];
-    headerView.frame = CGRectMake(0, 0, 0, panel_header_height);
-    UIView* topView = [[UIView alloc] init];
-    topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
-    [headerView addSubview:topView];
-    [topView fillSuperviewWithPadding:UIEdgeInsetsMake(
-                                                 0,0, search_bar_height, 0)];
+  UIView* tableHeaderView =
+      [[UIView alloc] initWithFrame:
+       CGRectMake(0, 0,self.tableView.bounds.size.width,
+                  self.showingSidePanel ? panel_search_view_height :
+                  panel_header_height)];
+  VivaldiSearchBarView* searchBarView = [VivaldiSearchBarView new];
+  _vivaldiSearchBarView = searchBarView;
+  [tableHeaderView addSubview:searchBarView];
+  [searchBarView
+      fillSuperviewWithPadding:UIEdgeInsetsMake(self.showingSidePanel ? 0 :
+                                                search_bar_height, 0, 0, 0)];
+  searchBarView.delegate = self;
+  [searchBarView setPlaceholder:GetNSString(IDS_VIVALDI_SEARCHBAR_PLACEHOLDER)];
+  self.tableView.tableHeaderView = tableHeaderView;
+}
 
-    [self setupSearchBarWithStyle];
-    [headerView addSubview:searchBarContainer];
-    [searchBarContainer fillSuperviewWithPadding:UIEdgeInsetsMake(
-                                                 search_bar_height, 0,0,0)];
-    self.tableView.tableHeaderView = headerView;
+#pragma mark: VIVALDI_SEARCH_BAR_VIEW_DELEGATE
+- (void)searchBarTextDidChange:(NSString*)searchText {
+  self.searchTerm = searchText;
 
-    headerView.translatesAutoresizingMaskIntoConstraints = NO;
-    [headerView.leadingAnchor
-      constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
-    [headerView.trailingAnchor
-      constraintEqualToAnchor:self.view.trailingAnchor].active = YES;
-    [headerView.topAnchor
-      constraintEqualToAnchor:self.tableView.topAnchor].active = YES;
-    [headerView.heightAnchor
-      constraintEqualToConstant:panel_header_height].active = YES;
-    [headerView.widthAnchor
-      constraintEqualToAnchor:self.view.widthAnchor].active = YES;
+  if (searchText.length == 0) {
+    if (self.sharedState.currentlyShowingSearchResults) {
+      self.sharedState.currentlyShowingSearchResults = NO;
+      // Restore current list.
+      [self.mediator computeNoteTableViewData];
+      [self.sharedState.tableView reloadData];
+    }
+  } else {
+    if (!self.sharedState.currentlyShowingSearchResults) {
+      self.sharedState.currentlyShowingSearchResults = YES;
+      [self.mediator computeNoteTableViewData];
+    }
+    // Replace current list with search result, but doesn't change
+    // the 'regular' model for this page, which we can restore when search
+    // is terminated.
+    NSString* noResults = GetNSString(IDS_HISTORY_NO_SEARCH_RESULTS);
+    [self.mediator computeNoteTableViewDataMatching:searchText
+                         orShowMessageWhenNoResults:noResults];
+    [self.sharedState.tableView reloadData];
+    [self setupContextBar];
+  }
+}
+
+/// Returns true if device is iPad and multitasking UI has
+/// enough space to show iPad side panel.
+- (BOOL)showingSidePanel {
+  return VivaldiGlobalHelpers.canShowSidePanel;
 }
 
 @end

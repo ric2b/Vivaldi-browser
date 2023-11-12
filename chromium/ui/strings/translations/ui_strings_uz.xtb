@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 oy}other{# oy}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 soat va }other{# soat va }}</translation>
+<translation id="185013357618350178">&amp;Tanlash</translation>
 <translation id="1859234291848436338">Yozuv yo‘nalishi</translation>
 <translation id="1860796786778352021">Bildirishnomani yopish</translation>
 <translation id="186476001994626254">Internetdan smart joylangan kontent</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{1 soatdan keyin}other{# soatdan keyin}}</translation>
 <translation id="2583543531130364912">Sensorli ekranni kalibrlang</translation>
 <translation id="2586657967955657006">Klipbord</translation>
+<translation id="2653844658857826081">YANGI</translation>
 <translation id="2666092431469916601">Tepaga</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> orqali ulashilgan</translation>
 <translation id="271033894570825754">Yangi</translation>

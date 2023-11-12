@@ -42,7 +42,7 @@ namespace {
 // Current version number. We write databases at the "current" version number,
 // but any previous version that can read the "compatible" one can make do with
 // our database without *too* many bad effects.
-const int kCurrentVersionNumber = 13;
+const int kCurrentVersionNumber = 14;
 const int kCompatibleVersionNumber = 13;
 
 sql::InitStatus LogMigrationFailure(int from_version) {
@@ -221,8 +221,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -233,8 +233,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -244,8 +244,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -255,8 +255,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -266,8 +266,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -277,8 +277,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -288,8 +288,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -299,8 +299,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -310,8 +310,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -321,8 +321,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -332,8 +332,8 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 
@@ -343,8 +343,19 @@ sql::InitStatus CalendarDatabase::EnsureCurrentVersion() {
       return LogMigrationFailure(cur_version);
     }
     ++cur_version;
-    meta_table_.SetVersionNumber(cur_version);
-    meta_table_.SetCompatibleVersionNumber(
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
+        std::min(cur_version, kCompatibleVersionNumber));
+  }
+
+  if (cur_version == 13) {
+    // VB-95275 re-sync certain events to update invalid reccurrence
+    if (!MigrateCalendarToVersion14()) {
+      return LogMigrationFailure(cur_version);
+    }
+    ++cur_version;
+    std::ignore = meta_table_.SetVersionNumber(cur_version);
+    std::ignore = meta_table_.SetCompatibleVersionNumber(
         std::min(cur_version, kCompatibleVersionNumber));
   }
 

@@ -26,7 +26,8 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
   r.COOKIES = r.PRIVACY.createChild('/cookies');
   r.SECURITY = r.PRIVACY.createChild('/security');
 
-  if (loadTimeData.getBoolean('isPrivacySandboxSettings4')) {
+  if (loadTimeData.getBoolean('isPrivacySandboxSettings4') &&
+      !loadTimeData.getBoolean('isPrivacySandboxRestricted')) {
     r.PRIVACY_SANDBOX = r.PRIVACY.createChild('/adPrivacy');
     r.PRIVACY_SANDBOX_TOPICS =
         r.PRIVACY_SANDBOX.createChild('/adPrivacy/interests');
@@ -50,6 +51,10 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
     // </if>
   }
 
+  if (loadTimeData.getBoolean('showPreloadingSubPage')) {
+    r.PRELOADING = r.COOKIES.createChild('/preloading');
+  }
+
   r.SITE_SETTINGS_ALL = r.SITE_SETTINGS.createChild('all');
   r.SITE_SETTINGS_SITE_DETAILS =
       r.SITE_SETTINGS_ALL.createChild('/content/siteDetails');
@@ -59,6 +64,9 @@ function addPrivacyChildRoutes(r: Partial<SettingsRoutes>) {
   // TODO(tommycli): Find a way to refactor these repetitive category
   // routes.
   r.SITE_SETTINGS_ADS = r.SITE_SETTINGS.createChild('ads');
+  if (loadTimeData.getBoolean('privateStateTokensEnabled')) {
+    r.SITE_SETTINGS_ANTI_ABUSE = r.SITE_SETTINGS.createChild('antiAbuse');
+  }
   r.SITE_SETTINGS_AR = r.SITE_SETTINGS.createChild('ar');
   r.SITE_SETTINGS_AUTOMATIC_DOWNLOADS =
       r.SITE_SETTINGS.createChild('automaticDownloads');
@@ -130,9 +138,9 @@ function createBrowserSettingsRoutes(): SettingsRoutes {
   if (!loadTimeData.getBoolean('isGuest')) {
     r.PEOPLE = r.BASIC.createSection(
         '/people', 'people', loadTimeData.getString('peoplePageTitle'));
+    // <if expr="not chromeos_ash">
     r.SIGN_OUT = r.PEOPLE.createChild('/signOut');
     r.SIGN_OUT.isNavigableDialog = true;
-    // <if expr="not chromeos_ash">
     r.IMPORT_DATA = r.PEOPLE.createChild('/importData');
     r.IMPORT_DATA.isNavigableDialog = true;
     // </if>
@@ -253,7 +261,7 @@ function createBrowserSettingsRoutes(): SettingsRoutes {
     if (visibility.performance !== false &&
         ((loadTimeData.getBoolean('highEfficiencyModeAvailable')) ||
          (loadTimeData.getBoolean('batterySaverModeAvailable')))) {
-      r.PERFORMANCE = r.ADVANCED!.createSection(
+      r.PERFORMANCE = r.BASIC.createSection(
           '/performance', 'performance',
           loadTimeData.getString('performancePageTitle'));
     }

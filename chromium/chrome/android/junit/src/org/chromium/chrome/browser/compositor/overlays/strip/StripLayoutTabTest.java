@@ -15,7 +15,6 @@ import androidx.test.core.app.ApplicationProvider;
 
 import com.google.android.material.color.MaterialColors;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -27,7 +26,7 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.browser.tasks.tab_management.TabManagementFieldTrial;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
@@ -52,12 +51,6 @@ public class StripLayoutTabTest {
                 ApplicationProvider.getApplicationContext(), R.style.Theme_BrowserUI_DayNight);
         mNormalTab = createStripLayoutTab(false);
         mIncognitoTab = createStripLayoutTab(true);
-    }
-
-    @After
-    public void tearDown() {
-        TabUiFeatureUtilities.setTabStripRedesignEnableFolioForTesting(false);
-        TabUiFeatureUtilities.setTabStripRedesignEnableDetachedForTesting(false);
     }
 
     @Test
@@ -92,7 +85,7 @@ public class StripLayoutTabTest {
     @Feature("Tab Strip Redesign")
     @Features.EnableFeatures({ChromeFeatureList.TAB_STRIP_REDESIGN})
     public void testGetTint_TabStripRedesignFolio() {
-        TabUiFeatureUtilities.setTabStripRedesignEnableFolioForTesting(true);
+        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_FOLIO.setForTesting(true);
         int expectedColor;
 
         // Normal active tab color.
@@ -101,8 +94,8 @@ public class StripLayoutTabTest {
                 mNormalTab.getTint(true));
 
         // Normal inactive tab color.
-        expectedColor = Color.TRANSPARENT;
-        assertEquals("Folio inactive tab containers should be transparent.", expectedColor,
+        expectedColor = ChromeColors.getSurfaceColor(mContext, R.dimen.default_elevation_0);
+        assertEquals("Folio inactive tab containers should be Surface-0.", expectedColor,
                 mNormalTab.getTint(false));
 
         // Incognito active tab color.
@@ -111,8 +104,8 @@ public class StripLayoutTabTest {
                 mIncognitoTab.getTint(true));
 
         // Incognito inactive tab color.
-        expectedColor = Color.TRANSPARENT;
-        assertEquals("Folio inactive tab containers should be transparent.", expectedColor,
+        expectedColor = mContext.getColor(R.color.default_bg_color_dark);
+        assertEquals("Incognito inactive folio should be baseline Surface-0.", expectedColor,
                 mIncognitoTab.getTint(false));
     }
 
@@ -120,7 +113,7 @@ public class StripLayoutTabTest {
     @Feature("Tab Strip Redesign")
     @Features.EnableFeatures({ChromeFeatureList.TAB_STRIP_REDESIGN})
     public void testGetTint_TabStripRedesignDetached() {
-        TabUiFeatureUtilities.setTabStripRedesignEnableDetachedForTesting(true);
+        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_DETACHED.setForTesting(true);
         int expectedColor;
 
         // Normal active tab color.
@@ -129,8 +122,8 @@ public class StripLayoutTabTest {
                 mNormalTab.getTint(true));
 
         // Normal inactive tab color.
-        expectedColor = Color.TRANSPARENT;
-        assertEquals("Detached inactive tab containers should be transparent.", expectedColor,
+        expectedColor = ChromeColors.getSurfaceColor(mContext, R.dimen.default_elevation_5);
+        assertEquals("Detached inactive tab containers should be Surface-5.", expectedColor,
                 mNormalTab.getTint(false));
 
         // Incognito active tab color.
@@ -139,8 +132,8 @@ public class StripLayoutTabTest {
                 mIncognitoTab.getTint(true));
 
         // Incognito inactive tab color.
-        expectedColor = Color.TRANSPARENT;
-        assertEquals("Detached inactive tab containers should be transparent.", expectedColor,
+        expectedColor = mContext.getColor(R.color.default_bg_color_dark_elev_5_baseline);
+        assertEquals("Detached incognito inactive should be baseline Surface-5.", expectedColor,
                 mIncognitoTab.getTint(false));
     }
 
@@ -180,7 +173,7 @@ public class StripLayoutTabTest {
     @Feature("Tab Strip Redesign")
     @Features.EnableFeatures({ChromeFeatureList.TAB_STRIP_REDESIGN})
     public void testGetOutlineTint_TabStripRedesignFolio() {
-        TabUiFeatureUtilities.setTabStripRedesignEnableFolioForTesting(true);
+        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_FOLIO.setForTesting(true);
         int expectedColor = Color.TRANSPARENT;
 
         // Normal.
@@ -200,7 +193,7 @@ public class StripLayoutTabTest {
     @Feature("Tab Strip Redesign")
     @Features.EnableFeatures({ChromeFeatureList.TAB_STRIP_REDESIGN})
     public void testGetOutlineTint_TabStripRedesignDetached() {
-        TabUiFeatureUtilities.setTabStripRedesignEnableDetachedForTesting(true);
+        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_DETACHED.setForTesting(true);
         int expectedColor = Color.TRANSPARENT;
 
         // Normal.
@@ -234,7 +227,7 @@ public class StripLayoutTabTest {
     @Feature("Tab Strip Redesign")
     @Features.EnableFeatures({ChromeFeatureList.TAB_STRIP_REDESIGN})
     public void testGetDividerTint_TabStripRedesignFolio() {
-        TabUiFeatureUtilities.setTabStripRedesignEnableFolioForTesting(true);
+        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_FOLIO.setForTesting(true);
         int expectedColor;
 
         // Normal.
@@ -254,7 +247,7 @@ public class StripLayoutTabTest {
     @Feature("Tab Strip Redesign")
     @Features.EnableFeatures({ChromeFeatureList.TAB_STRIP_REDESIGN})
     public void testGetDividerTint_TabStripRedesignDetached() {
-        TabUiFeatureUtilities.setTabStripRedesignEnableDetachedForTesting(true);
+        TabManagementFieldTrial.TAB_STRIP_REDESIGN_ENABLE_DETACHED.setForTesting(true);
         int expectedColor;
 
         // Normal.

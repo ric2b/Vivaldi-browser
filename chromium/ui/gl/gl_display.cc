@@ -32,7 +32,6 @@
 #endif  // BUILDFLAG(IS_OZONE)
 
 #if BUILDFLAG(IS_ANDROID)
-#include <android/native_window_jni.h>
 #include "base/android/build_info.h"
 #endif
 
@@ -121,6 +120,7 @@
 #define EGL_ANGLE_platform_angle_device_id
 #define EGL_PLATFORM_ANGLE_DEVICE_ID_HIGH_ANGLE 0x34D6
 #define EGL_PLATFORM_ANGLE_DEVICE_ID_LOW_ANGLE 0x34D7
+#define EGL_PLATFORM_ANGLE_DISPLAY_KEY_ANGLE 0x34DC
 #endif /* EGL_ANGLE_platform_angle_device_id */
 
 // From ANGLE's egl/eglext.h.
@@ -252,7 +252,8 @@ EGLDisplay GetDisplayFromType(
     const std::vector<std::string>& enabled_angle_features,
     const std::vector<std::string>& disabled_angle_features,
     bool disable_all_angle_features,
-    uint64_t system_device_id) {
+    uint64_t system_device_id,
+    DisplayKey display_key) {
   std::vector<EGLAttrib> extra_display_attribs;
   if (disable_all_angle_features) {
     extra_display_attribs.push_back(EGL_FEATURE_ALL_DISABLED_ANGLE);
@@ -267,6 +268,10 @@ EGLDisplay GetDisplayFromType(
     uint32_t high_part = (system_device_id >> 32) & 0xffffffff;
     extra_display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_ID_HIGH_ANGLE);
     extra_display_attribs.push_back(high_part);
+  }
+  if (display_key != DisplayKey::kDefault) {
+    extra_display_attribs.push_back(EGL_PLATFORM_ANGLE_DISPLAY_KEY_ANGLE);
+    extra_display_attribs.push_back(static_cast<EGLint>(display_key));
   }
   EGLNativeDisplayType display = native_display.GetDisplay();
   switch (display_type) {
@@ -393,9 +398,11 @@ ANGLEImplementation GetANGLEImplementationFromDisplayType(
     case ANGLE_D3D11on12:
       return ANGLEImplementation::kD3D11;
     case ANGLE_OPENGL:
+    case ANGLE_OPENGL_EGL:
     case ANGLE_OPENGL_NULL:
       return ANGLEImplementation::kOpenGL;
     case ANGLE_OPENGLES:
+    case ANGLE_OPENGLES_EGL:
     case ANGLE_OPENGLES_NULL:
       return ANGLEImplementation::kOpenGLES;
     case ANGLE_NULL:
@@ -457,13 +464,6 @@ const char* DisplayTypeString(DisplayType display_type) {
   }
 }
 
-void AddInitDisplay(std::vector<DisplayType>* init_displays,
-                    DisplayType display_type) {
-  // Make sure to not add the same display type twice.
-  if (!base::Contains(*init_displays, display_type))
-    init_displays->push_back(display_type);
-}
-
 const char* GetDebugMessageTypeString(EGLint source) {
   switch (source) {
     case EGL_DEBUG_MSG_CRITICAL_KHR:
@@ -507,167 +507,14 @@ void EGLAPIENTRY LogEGLDebugMessage(EGLenum error,
   }
 }
 
-void GetEGLInitDisplays(bool supports_angle_d3d,
-                        bool supports_angle_opengl,
-                        bool supports_angle_null,
-                        bool supports_angle_vulkan,
-                        bool supports_angle_swiftshader,
-                        bool supports_angle_egl,
-                        bool supports_angle_metal,
-                        const base::CommandLine* command_line,
-                        std::vector<DisplayType>* init_displays) {
-  // Check which experiment groups we're in. Check these early in the function
-  // so that finch assigns a group before the final decision to use the API is
-  // made. If we check too late, it will appear that some users are missing from
-  // the group if they are falling back to another path due to crashes or
-  // missing support.
-  bool default_angle_opengl =
-      base::FeatureList::IsEnabled(features::kDefaultANGLEOpenGL);
-  bool default_angle_metal =
-      base::FeatureList::IsEnabled(features::kDefaultANGLEMetal);
-  bool default_angle_vulkan = features::IsDefaultANGLEVulkan();
-
-  // If we're already requesting software GL, make sure we don't fallback to the
-  // GPU
-  bool forceSoftwareGL = IsSoftwareGLImplementation(GetGLImplementationParts());
-
-  std::string requested_renderer =
-      forceSoftwareGL ? kANGLEImplementationSwiftShaderName
-                      : command_line->GetSwitchValueASCII(switches::kUseANGLE);
-
-  bool use_angle_default =
-      !forceSoftwareGL &&
-      (!command_line->HasSwitch(switches::kUseANGLE) ||
-       requested_renderer == kANGLEImplementationDefaultName);
-
-  if (supports_angle_null &&
-      requested_renderer == kANGLEImplementationNullName) {
-    AddInitDisplay(init_displays, ANGLE_NULL);
-    return;
-  }
-
-  // If no display has been explicitly requested and the DefaultANGLEOpenGL
-  // experiment is enabled, try creating OpenGL displays first.
-  // TODO(oetuaho@nvidia.com): Only enable this path on specific GPUs with a
-  // blocklist entry. http://crbug.com/693090
-  if (supports_angle_opengl && use_angle_default && default_angle_opengl) {
-    AddInitDisplay(init_displays, ANGLE_OPENGL);
-    AddInitDisplay(init_displays, ANGLE_OPENGLES);
-  }
-
-  if (supports_angle_metal && use_angle_default && default_angle_metal) {
-    AddInitDisplay(init_displays, ANGLE_METAL);
-  }
-
-  if (supports_angle_vulkan && use_angle_default && default_angle_vulkan) {
-    AddInitDisplay(init_displays, ANGLE_VULKAN);
-  }
-
-  if (supports_angle_d3d) {
-    if (use_angle_default) {
-      // Default mode for ANGLE - try D3D11, else try D3D9
-      if (!command_line->HasSwitch(switches::kDisableD3D11)) {
-        AddInitDisplay(init_displays, ANGLE_D3D11);
-      }
-      AddInitDisplay(init_displays, ANGLE_D3D9);
-    } else {
-      if (requested_renderer == kANGLEImplementationD3D11Name) {
-        AddInitDisplay(init_displays, ANGLE_D3D11);
-      } else if (requested_renderer == kANGLEImplementationD3D9Name) {
-        AddInitDisplay(init_displays, ANGLE_D3D9);
-      } else if (requested_renderer == kANGLEImplementationD3D11NULLName) {
-        AddInitDisplay(init_displays, ANGLE_D3D11_NULL);
-      } else if (requested_renderer == kANGLEImplementationD3D11on12Name) {
-        AddInitDisplay(init_displays, ANGLE_D3D11on12);
-      }
-    }
-  }
-
-  if (supports_angle_opengl) {
-    if (use_angle_default && !supports_angle_d3d) {
-#if BUILDFLAG(IS_ANDROID)
-      // Don't request desktopGL on android
-      AddInitDisplay(init_displays, ANGLE_OPENGLES);
-#else
-      AddInitDisplay(init_displays, ANGLE_OPENGL);
-      AddInitDisplay(init_displays, ANGLE_OPENGLES);
-#endif  // BUILDFLAG(IS_ANDROID)
-    } else {
-      if (requested_renderer == kANGLEImplementationOpenGLName) {
-        AddInitDisplay(init_displays, ANGLE_OPENGL);
-      } else if (requested_renderer == kANGLEImplementationOpenGLESName) {
-        AddInitDisplay(init_displays, ANGLE_OPENGLES);
-      } else if (requested_renderer == kANGLEImplementationOpenGLNULLName) {
-        AddInitDisplay(init_displays, ANGLE_OPENGL_NULL);
-      } else if (requested_renderer == kANGLEImplementationOpenGLESNULLName) {
-        AddInitDisplay(init_displays, ANGLE_OPENGLES_NULL);
-      } else if (requested_renderer == kANGLEImplementationOpenGLEGLName &&
-                 supports_angle_egl) {
-        AddInitDisplay(init_displays, ANGLE_OPENGL_EGL);
-      } else if (requested_renderer == kANGLEImplementationOpenGLESEGLName &&
-                 supports_angle_egl) {
-        AddInitDisplay(init_displays, ANGLE_OPENGLES_EGL);
-      }
-    }
-  }
-
-  if (supports_angle_vulkan) {
-    if (use_angle_default) {
-      if (!supports_angle_d3d && !supports_angle_opengl) {
-        AddInitDisplay(init_displays, ANGLE_VULKAN);
-      }
-    } else if (requested_renderer == kANGLEImplementationVulkanName) {
-      AddInitDisplay(init_displays, ANGLE_VULKAN);
-    } else if (requested_renderer == kANGLEImplementationVulkanNULLName) {
-      AddInitDisplay(init_displays, ANGLE_VULKAN_NULL);
-    }
-  }
-
-  if (supports_angle_swiftshader) {
-    if (requested_renderer == kANGLEImplementationSwiftShaderName ||
-        requested_renderer == kANGLEImplementationSwiftShaderForWebGLName) {
-      AddInitDisplay(init_displays, ANGLE_SWIFTSHADER);
-    }
-  }
-
-  if (supports_angle_metal) {
-    if (use_angle_default) {
-      if (!supports_angle_opengl) {
-        AddInitDisplay(init_displays, ANGLE_METAL);
-      }
-    } else if (requested_renderer == kANGLEImplementationMetalName) {
-      AddInitDisplay(init_displays, ANGLE_METAL);
-    } else if (requested_renderer == kANGLEImplementationMetalNULLName) {
-      AddInitDisplay(init_displays, ANGLE_METAL_NULL);
-    }
-  }
-
-  // If no displays are available due to missing angle extensions or invalid
-  // flags, request the default display.
-  if (init_displays->empty()) {
-    init_displays->push_back(DEFAULT);
-  }
-}
-
 }  // namespace
 
-void GetEGLInitDisplaysForTesting(bool supports_angle_d3d,
-                                  bool supports_angle_opengl,
-                                  bool supports_angle_null,
-                                  bool supports_angle_vulkan,
-                                  bool supports_angle_swiftshader,
-                                  bool supports_angle_egl,
-                                  bool supports_angle_metal,
-                                  const base::CommandLine* command_line,
-                                  std::vector<DisplayType>* init_displays) {
-  GetEGLInitDisplays(supports_angle_d3d, supports_angle_opengl,
-                     supports_angle_null, supports_angle_vulkan,
-                     supports_angle_swiftshader, supports_angle_egl,
-                     supports_angle_metal, command_line, init_displays);
-}
-
-GLDisplay::GLDisplay(uint64_t system_device_id, DisplayPlatform type)
-    : system_device_id_(system_device_id), type_(type) {}
+GLDisplay::GLDisplay(uint64_t system_device_id,
+                     DisplayKey display_key,
+                     DisplayPlatform type)
+    : system_device_id_(system_device_id),
+      display_key_(display_key),
+      type_(type) {}
 
 GLDisplay::~GLDisplay() = default;
 
@@ -708,8 +555,8 @@ void GLDisplayEGL::EGLGpuSwitchingObserver::OnGpuSwitched(
   eglHandleGPUSwitchANGLE(display_);
 }
 
-GLDisplayEGL::GLDisplayEGL(uint64_t system_device_id)
-    : GLDisplay(system_device_id, EGL), display_(EGL_NO_DISPLAY) {
+GLDisplayEGL::GLDisplayEGL(uint64_t system_device_id, DisplayKey display_key)
+    : GLDisplay(system_device_id, display_key, EGL), display_(EGL_NO_DISPLAY) {
   ext = std::make_unique<DisplayExtensionsEGL>();
 }
 
@@ -738,7 +585,7 @@ void GLDisplayEGL::Shutdown() {
   egl_context_priority_supported_ = false;
   egl_android_native_fence_sync_supported_ = false;
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   CleanupMetalSharedEvent();
 #endif
 }
@@ -781,12 +628,71 @@ bool GLDisplayEGL::IsANGLEExternalContextAndSurfaceSupported() {
   return this->ext->b_EGL_ANGLE_external_context_and_surface;
 }
 
-bool GLDisplayEGL::Initialize(EGLDisplayPlatform native_display) {
+bool GLDisplayEGL::Initialize(bool supports_angle,
+                              std::vector<DisplayType> init_displays,
+                              EGLDisplayPlatform native_display) {
   if (display_ != EGL_NO_DISPLAY)
     return true;
 
-  if (!InitializeDisplay(native_display))
+  if (!InitializeDisplay(supports_angle, init_displays, native_display)) {
     return false;
+  }
+  InitializeCommon();
+
+  if (ext->b_EGL_ANGLE_power_preference) {
+    gpu_switching_observer_ =
+        std::make_unique<EGLGpuSwitchingObserver>(display_);
+    ui::GpuSwitchingManager::GetInstance()->AddObserver(
+        gpu_switching_observer_.get());
+  }
+  return true;
+}
+
+bool GLDisplayEGL::InitializeFromDisplay(GLDisplay* other_display) {
+  GLDisplayEGL* other_display_egl = other_display->GetAs<GLDisplayEGL>();
+  if (!other_display_egl->IsInitialized()) {
+    return false;
+  }
+
+  if (display_key_ == other_display->display_key()) {
+    return true;
+  }
+
+  if (display_ != EGL_NO_DISPLAY) {
+    return true;
+  }
+
+  if (other_display_egl->system_device_id() != system_device_id_) {
+    return false;
+  }
+
+  type_ = other_display_egl->type();
+  display_type_ = other_display_egl->GetDisplayType();
+  native_display_ = other_display_egl->GetNativeDisplay();
+  ext = std::make_unique<DisplayExtensionsEGL>(*other_display_egl->ext.get());
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  std::vector<std::string> enabled_angle_features =
+      GetStringVectorFromCommandLine(command_line,
+                                     switches::kEnableANGLEFeatures);
+  std::vector<std::string> disabled_angle_features =
+      GetStringVectorFromCommandLine(command_line,
+                                     switches::kDisableANGLEFeatures);
+  bool disable_all_angle_features =
+      command_line->HasSwitch(switches::kDisableGpuDriverBugWorkarounds);
+
+  EGLDisplay display =
+      GetDisplayFromType(display_type_, native_display_, enabled_angle_features,
+                         disabled_angle_features, disable_all_angle_features,
+                         system_device_id_, display_key_);
+
+  if (!eglInitialize(display, nullptr, nullptr)) {
+    LOG(ERROR) << "Failed to initialize new display from existing display.";
+    return false;
+  }
+
+  display_ = display;
+
   InitializeCommon();
 
   if (ext->b_EGL_ANGLE_power_preference) {
@@ -813,7 +719,9 @@ bool GLDisplayEGL::InitializeExtensionSettings() {
 
 // InitializeDisplay is necessary because the static binding code
 // needs a full Display init before it can query the Display extensions.
-bool GLDisplayEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
+bool GLDisplayEGL::InitializeDisplay(bool supports_angle,
+                                     std::vector<DisplayType> init_displays,
+                                     EGLDisplayPlatform native_display) {
   if (display_ != EGL_NO_DISPLAY)
     return true;
 
@@ -837,41 +745,7 @@ bool GLDisplayEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
     eglDebugMessageControlKHR(&LogEGLDebugMessage, controls);
   }
 
-  bool supports_angle_d3d = false;
-  bool supports_angle_opengl = false;
-  bool supports_angle_null = false;
-  bool supports_angle_vulkan = false;
-  bool supports_angle_swiftshader = false;
-  bool supports_angle_egl = false;
-  bool supports_angle_metal = false;
-  // Check for availability of ANGLE extensions.
-  if (g_driver_egl.client_ext.b_EGL_ANGLE_platform_angle) {
-    supports_angle_d3d = g_driver_egl.client_ext.b_EGL_ANGLE_platform_angle_d3d;
-    supports_angle_opengl =
-        g_driver_egl.client_ext.b_EGL_ANGLE_platform_angle_opengl;
-    supports_angle_null =
-        g_driver_egl.client_ext.b_EGL_ANGLE_platform_angle_null;
-    supports_angle_vulkan =
-        g_driver_egl.client_ext.b_EGL_ANGLE_platform_angle_vulkan;
-    supports_angle_swiftshader =
-        g_driver_egl.client_ext
-            .b_EGL_ANGLE_platform_angle_device_type_swiftshader;
-    supports_angle_egl = g_driver_egl.client_ext
-                             .b_EGL_ANGLE_platform_angle_device_type_egl_angle;
-    supports_angle_metal =
-        g_driver_egl.client_ext.b_EGL_ANGLE_platform_angle_metal;
-  }
-
-  bool supports_angle = supports_angle_d3d || supports_angle_opengl ||
-                        supports_angle_null || supports_angle_vulkan ||
-                        supports_angle_swiftshader || supports_angle_metal;
-
-  std::vector<DisplayType> init_displays;
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  GetEGLInitDisplays(supports_angle_d3d, supports_angle_opengl,
-                     supports_angle_null, supports_angle_vulkan,
-                     supports_angle_swiftshader, supports_angle_egl,
-                     supports_angle_metal, command_line, &init_displays);
 
   std::vector<std::string> enabled_angle_features =
       GetStringVectorFromCommandLine(command_line,
@@ -885,12 +759,14 @@ bool GLDisplayEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
 
   for (size_t disp_index = 0; disp_index < init_displays.size(); ++disp_index) {
     DisplayType display_type = init_displays[disp_index];
-    EGLDisplay display = GetDisplayFromType(
-        display_type, native_display, enabled_angle_features,
-        disabled_angle_features, disable_all_angle_features, system_device_id_);
+    EGLDisplay display =
+        GetDisplayFromType(display_type, native_display, enabled_angle_features,
+                           disabled_angle_features, disable_all_angle_features,
+                           system_device_id_, display_key_);
     if (display == EGL_NO_DISPLAY) {
-      LOG(ERROR) << "EGL display query failed with error "
-                 << GetLastEGLErrorString();
+      // Assume this is not an error, so don't verbosely report it;
+      // simply try the next display type.
+      continue;
     }
 
     // Init ANGLE platform now that we have the global display.
@@ -939,6 +815,8 @@ bool GLDisplayEGL::InitializeDisplay(EGLDisplayPlatform native_display) {
     ext->InitializeExtensionSettings(display);
     return true;
   }
+
+  LOG(ERROR) << "Initialization of all EGL display types failed.";
 
   return false;
 }

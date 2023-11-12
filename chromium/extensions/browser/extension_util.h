@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "extensions/common/manifest.h"
 #include "url/gurl.h"
 
@@ -18,6 +18,7 @@ class FilePath;
 
 namespace content {
 class BrowserContext;
+class ServiceWorkerContext;
 class SiteInstance;
 class StoragePartition;
 class StoragePartitionConfig;
@@ -30,7 +31,7 @@ class ExtensionSet;
 
 namespace util {
 
-// TODO(benwells): Move functions from
+// TODO(crbug.com/1417028): Move functions from
 // chrome/browser/extensions/extension_util.h/cc that are only dependent on
 // extensions/ here.
 
@@ -61,6 +62,11 @@ content::StoragePartition* GetStoragePartitionForExtensionId(
     const ExtensionId& extension_id,
     content::BrowserContext* browser_context,
     bool can_create = true);
+
+// Returns the ServiceWorkerContext associated with the given `extension_id`.
+content::ServiceWorkerContext* GetServiceWorkerContextForExtensionId(
+    const ExtensionId& extension_id,
+    content::BrowserContext* browser_context);
 
 // Maps a |file_url| to a |file_path| on the local filesystem, including
 // resources in extensions. Returns true on success. See NaClBrowserDelegate for
@@ -109,6 +115,15 @@ std::string GetExtensionIdFromFrame(
 // *does* host this specific extension at this point in time.)
 bool CanRendererHostExtensionOrigin(int render_process_id,
                                     const ExtensionId& extension_id);
+
+// Returns true if `extension_id` can be launched (possibly only after being
+// enabled).
+bool IsAppLaunchable(const std::string& extension_id,
+                     content::BrowserContext* context);
+
+// Returns true if `extension_id` can be launched without being enabled first.
+bool IsAppLaunchableWithoutEnabling(const std::string& extension_id,
+                                    content::BrowserContext* context);
 
 }  // namespace util
 }  // namespace extensions

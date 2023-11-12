@@ -129,8 +129,9 @@ class LocationBarMediator
          * Record the NTP navigation events on omnibox.
          * @param url The URL to which the user navigated.
          * @param transition The transition type of the navigation.
+         * @param isNtp Whether the current page is a NewTabPage.
          */
-        void recordNavigationOnNtp(String url, int transition);
+        void recordNavigationOnNtp(String url, int transition, boolean isNtp);
     }
 
     private final FloatProperty<LocationBarMediator> mUrlFocusChangeFractionProperty =
@@ -315,15 +316,16 @@ class LocationBarMediator
 
         if (hasFocus && mLocationBarDataProvider.hasTab()
                 && !mLocationBarDataProvider.isIncognito()) {
-            if (mNativeInitialized
-                    && mTemplateUrlServiceSupplier.get().isDefaultSearchEngineGoogle()) {
-                GeolocationHeader.primeLocationForGeoHeaderIfEnabled(
-                        mProfileSupplier.get(), mTemplateUrlServiceSupplier.get());
+            if (mTemplateUrlServiceSupplier.hasValue()) {
+                if (mTemplateUrlServiceSupplier.get().isDefaultSearchEngineGoogle()) {
+                    GeolocationHeader.primeLocationForGeoHeaderIfEnabled(
+                            mProfileSupplier.get(), mTemplateUrlServiceSupplier.get());
+                }
             } else {
-                mDeferredNativeRunnables.add(() -> {
-                    if (mTemplateUrlServiceSupplier.get().isDefaultSearchEngineGoogle()) {
+                mTemplateUrlServiceSupplier.onAvailable((templateUrlService) -> {
+                    if (templateUrlService.isDefaultSearchEngineGoogle()) {
                         GeolocationHeader.primeLocationForGeoHeaderIfEnabled(
-                                mProfileSupplier.get(), mTemplateUrlServiceSupplier.get());
+                                mProfileSupplier.get(), templateUrlService);
                     }
                 });
             }
@@ -340,17 +342,17 @@ class LocationBarMediator
     /*package */ void onFinishNativeInitialization() {
         mNativeInitialized = true;
         mOmniboxPrerender = new OmniboxPrerender();
-        TemplateUrlService templateUrlService = mTemplateUrlServiceSupplier.get();
-        if (templateUrlService != null) {
+        mTemplateUrlServiceSupplier.onAvailable((templateUrlService) -> {
             templateUrlService.addObserver(this);
-        }
-        mAssistantVoiceSearchServiceSupplier.set(new AssistantVoiceSearchService(mContext,
-                ExternalAuthUtils.getInstance(), templateUrlService, GSAState.getInstance(), this,
-                SharedPreferencesManager.getInstance(),
-                IdentityServicesProvider.get().getIdentityManager(
-                        Profile.getLastUsedRegularProfile()),
-                AccountManagerFacadeProvider.getInstance()));
-        onAssistantVoiceSearchServiceChanged();
+            mAssistantVoiceSearchServiceSupplier.set(new AssistantVoiceSearchService(mContext,
+                    ExternalAuthUtils.getInstance(), templateUrlService, GSAState.getInstance(),
+                    LocationBarMediator.this, SharedPreferencesManager.getInstance(),
+                    IdentityServicesProvider.get().getIdentityManager(
+                            Profile.getLastUsedRegularProfile()),
+                    AccountManagerFacadeProvider.getInstance()));
+            onAssistantVoiceSearchServiceChanged();
+        });
+
         mLocationBarLayout.onFinishNativeInitialization();
         setProfile(mProfileSupplier.get());
         onPrimaryColorChanged();
@@ -517,18 +519,21 @@ class LocationBarMediator
         assert mNativeInitialized : "Loading URL before native side initialized";
 
         // TODO(crbug.com/1085812): Should be taking a full loaded LoadUrlParams.
-        if (mOverrideUrlLoadingDelegate.willHandleLoadUrlWithPostData(url, transition, postDataType,
-                    postData, mLocationBarDataProvider.isIncognito())) {
+        if (mOverrideUrlLoadingDelegate.willHandleLoadUrlWithPostData(url, transition, inputStart,
+                    postDataType, postData, mLocationBarDataProvider.isIncognito())) {
             return;
         }
 
-        if (currentTab != null
-                && (currentTab.isNativePage() || UrlUtilities.isNTPUrl(currentTab.getUrl()))) {
-            mOmniboxUma.recordNavigationOnNtp(url, transition);
-            // Passing in an empty string should not do anything unless the user is at the NTP.
-            // Since the NTP has no url, pressing enter while clicking on the URL bar should refresh
-            // the page as it does when you click and press enter on any other site.
-            if (url.isEmpty()) url = currentTab.getUrl().getSpec();
+        if (currentTab != null) {
+            boolean isCurrentTabNtpUrl = UrlUtilities.isNTPUrl(currentTab.getUrl());
+            if (currentTab.isNativePage() || isCurrentTabNtpUrl) {
+                mOmniboxUma.recordNavigationOnNtp(
+                        url, transition, !currentTab.isIncognito() && isCurrentTabNtpUrl);
+                // Passing in an empty string should not do anything unless the user is at the NTP.
+                // Since the NTP has no url, pressing enter while clicking on the URL bar should
+                // refresh the page as it does when you click and press enter on any other site.
+                if (url.isEmpty()) url = currentTab.getUrl().getSpec();
+            }
         }
 
         // Loads the |url| in a new tab or the current ContentView and gives focus to the
@@ -625,6 +630,10 @@ class LocationBarMediator
 
     /* package */ void micButtonClicked(View view) {
         if (!mNativeInitialized) return;
+        // Hide keyboard before launch voice search to avoid keyboard action announcement in
+        // TalkBack to be picked up by voice search.
+        mUrlCoordinator.setKeyboardVisibility(false, false);
+
         RecordUserAction.record("MobileOmniboxVoiceSearch");
         mVoiceRecognitionHandler.startVoiceRecognition(
                 VoiceRecognitionHandler.VoiceInteractionSource.OMNIBOX);
@@ -1496,8 +1505,10 @@ class LocationBarMediator
     // BackPressHandler implementation.
     // Modern way to intercept back press starting from T.
     @Override
-    public void handleBackPress() {
+    public @BackPressResult int handleBackPress() {
+        int res = mUrlHasFocus ? BackPressResult.SUCCESS : BackPressResult.FAILURE;
         backKeyPressed();
+        return res;
     }
 
     @Override

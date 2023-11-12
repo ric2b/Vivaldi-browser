@@ -10,10 +10,10 @@
 
 #include "base/allocator/buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
-#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_metrics.h"
@@ -39,6 +39,7 @@
 #include "extensions/buildflags/buildflags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/browser_metrics.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
@@ -46,6 +47,7 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/child_process_binding_types.h"
+#include "base/android/meminfo_dump_provider.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -218,6 +220,8 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
     // of it being claimed by renderers.
     {"gpu/shared_images", "SharedImages", MetricSize::kLarge, kSize,
      EmitTo::kSizeInUmaOnly, nullptr},
+    {"gpu/shared_images", "SharedImages.Purgeable", MetricSize::kLarge,
+     "purgeable_size", EmitTo::kSizeInUmaOnly, nullptr},
     {"gpu/transfer_cache", "ServiceTransferCache", MetricSize::kCustom, kSize,
      EmitTo::kSizeInUmaOnly, nullptr, ImageSizeMetricRange},
     {"gpu/transfer_cache", "ServiceTransferCache.AvgImageSize",
@@ -531,6 +535,15 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
     {"web_cache/Other_resources", "WebCache.OtherResources", MetricSize::kSmall,
      kEffectiveSize, EmitTo::kSizeInUkmAndUma,
      &Memory_Experimental::SetWebCache_OtherResources},
+#if BUILDFLAG(IS_ANDROID)
+    {base::android::MeminfoDumpProvider::kDumpName, "AndroidOtherPss",
+     MetricSize::kLarge, base::android::MeminfoDumpProvider::kPssMetricName,
+     EmitTo::kSizeInUmaOnly, nullptr},
+    {base::android::MeminfoDumpProvider::kDumpName, "AndroidOtherPrivateDirty",
+     MetricSize::kLarge,
+     base::android::MeminfoDumpProvider::kPrivateDirtyMetricName,
+     EmitTo::kSizeInUmaOnly, nullptr},
+#endif
 };
 
 #if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
@@ -919,8 +932,11 @@ void EmitRendererMemoryMetrics(
     int number_of_extensions,
     const absl::optional<base::TimeDelta>& uptime,
     bool record_uma) {
+  // If the renderer doesn't host a single page, no page_info will be passed in,
+  // and there's no single URL to associate its memory with.
   ukm::SourceId ukm_source_id =
-      page_info ? page_info->ukm_source_id : ukm::UkmRecorder::GetNewSourceID();
+      page_info ? page_info->ukm_source_id : ukm::NoURLSourceId();
+
   Memory_Experimental builder(ukm_source_id);
   builder.SetProcessType(static_cast<int64_t>(
       memory_instrumentation::mojom::ProcessType::RENDERER));
@@ -1422,9 +1438,16 @@ void ProcessMemoryMetricsEmitter::GetProcessToPageInfoMap(
     if (process_node->GetProcessId() == base::kNullProcessId)
       continue;
 
-    ProcessInfo process_info;
+    // First add all processes and their basic information.
+    ProcessInfo& process_info = process_infos.emplace_back();
     process_info.pid = process_node->GetProcessId();
     process_info.launch_time = process_node->GetLaunchTime();
+
+    // Then add information about their associated page nodes. Only renderers
+    // are associated with page nodes.
+    if (process_node->GetProcessType() != content::PROCESS_TYPE_RENDERER) {
+      continue;
+    }
 
     base::flat_set<const performance_manager::PageNode*> page_nodes =
         performance_manager::GraphOperations::GetAssociatedPageNodes(
@@ -1436,7 +1459,7 @@ void ProcessMemoryMetricsEmitter::GetProcessToPageInfoMap(
       if (page_id_map.find(page_node) == page_id_map.end())
         page_id_map.insert(std::make_pair(page_node, page_id_map.size() + 1));
 
-      PageInfo page_info;
+      PageInfo& page_info = process_info.page_infos.emplace_back();
       page_info.ukm_source_id = page_node->GetUkmSourceID();
 
       DCHECK(page_id_map.find(page_node) != page_id_map.end());
@@ -1447,9 +1470,7 @@ void ProcessMemoryMetricsEmitter::GetProcessToPageInfoMap(
           page_node->GetTimeSinceLastVisibilityChange();
       page_info.time_since_last_navigation =
           page_node->GetTimeSinceLastNavigation();
-      process_info.page_infos.push_back(std::move(page_info));
     }
-    process_infos.push_back(std::move(process_info));
   }
   std::move(callback).Run(std::move(process_infos));
 }

@@ -9,10 +9,11 @@
 #include <wrl/module.h>
 
 #include <memory>
+#include <string>
 #include <tuple>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/fake_iasync_operation_win.h"
@@ -278,12 +279,6 @@ IFACEMETHODIMP FakeStorageFileStatics::CreateStreamedFileAsync(
     IStreamedFileDataRequestedHandler* data_requested,
     IRandomAccessStreamReference* thumbnail,
     IAsyncOperation<StorageFile*>** operation) {
-  if (!base::win::ScopedHString::ResolveCoreWinRTStringDelayload()) {
-    ADD_FAILURE() << "Attempted to use FakeStorageFileStatics in an "
-                     "environment that doesn't support ScopedHStrings.";
-    return E_UNEXPECTED;
-  }
-
   auto fake_iasync_operation =
       Make<base::win::FakeIAsyncOperation<StorageFile*>>();
   HRESULT hr = fake_iasync_operation->QueryInterface(IID_PPV_ARGS(operation));

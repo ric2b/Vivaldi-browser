@@ -10,10 +10,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
@@ -39,7 +39,6 @@
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
 #include "services/tracing/public/cpp/perfetto/system_producer.h"
 #include "services/tracing/public/cpp/perfetto/trace_string_lookup.h"
-#include "services/tracing/public/cpp/perfetto/traced_value_proto_writer.h"
 #include "services/tracing/public/cpp/perfetto/track_event_thread_local_event_sink.h"
 #include "services/tracing/public/cpp/perfetto/track_name_recorder.h"
 #include "services/tracing/public/cpp/trace_event_args_allowlist.h"
@@ -182,27 +181,27 @@ void TraceEventMetadataSource::WriteMetadataPacket(
   }
 }
 
-absl::optional<base::Value>
+absl::optional<base::Value::Dict>
 TraceEventMetadataSource::GenerateTraceConfigMetadataDict() {
   AutoLockWithDeferredTaskPosting lock(lock_);
   if (chrome_config_.empty()) {
     return absl::nullopt;
   }
 
-  base::Value metadata_dict(base::Value::Type::DICTIONARY);
+  base::Value::Dict metadata;
   // If argument filtering is enabled, we need to check if the trace config is
   // allowlisted before emitting it.
   // TODO(eseckler): Figure out a way to solve this without calling directly
   // into IsMetadataAllowlisted().
   if (!parsed_chrome_config_->IsArgumentFilterEnabled() ||
       IsMetadataAllowlisted("trace-config")) {
-    metadata_dict.SetStringKey("trace-config", chrome_config_);
+    metadata.Set("trace-config", chrome_config_);
   } else {
-    metadata_dict.SetStringKey("trace-config", "__stripped__");
+    metadata.Set("trace-config", "__stripped__");
   }
 
   chrome_config_ = std::string();
-  return metadata_dict;
+  return metadata;
 }
 
 void TraceEventMetadataSource::GenerateMetadataFromGenerator(
@@ -216,8 +215,8 @@ void TraceEventMetadataSource::GenerateMetadataFromGenerator(
   }
   DataSourceProxy::Trace([&](DataSourceProxy::TraceContext ctx) {
     auto packet = ctx.NewTracePacket();
-    packet->set_timestamp(perfetto::TrackEvent::GetTraceTimeNs());
-    packet->set_timestamp_clock_id(perfetto::TrackEvent::GetTraceClockId());
+    packet->set_timestamp(base::TrackEvent::GetTraceTimeNs());
+    packet->set_timestamp_clock_id(base::TrackEvent::GetTraceClockId());
     auto* chrome_metadata = packet->set_chrome_metadata();
     generator.Run(chrome_metadata, privacy_filtering_enabled_);
   });
@@ -249,8 +248,8 @@ void TraceEventMetadataSource::GenerateMetadataPacket(
   }
   DataSourceProxy::Trace([&](DataSourceProxy::TraceContext ctx) {
     auto packet = ctx.NewTracePacket();
-    packet->set_timestamp(perfetto::TrackEvent::GetTraceTimeNs());
-    packet->set_timestamp_clock_id(perfetto::TrackEvent::GetTraceClockId());
+    packet->set_timestamp(base::TrackEvent::GetTraceTimeNs());
+    packet->set_timestamp_clock_id(base::TrackEvent::GetTraceClockId());
     generator.Run(packet.get(), privacy_filtering_enabled_);
   });
 #else   // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
@@ -274,10 +273,10 @@ void TraceEventMetadataSource::GenerateJsonMetadataFromGenerator(
   DCHECK(origin_task_runner_->RunsTasksInCurrentSequence());
 
   auto write_to_bundle = [&generator](ChromeEventBundle* bundle) {
-    absl::optional<base::Value> metadata_dict = generator.Run();
+    absl::optional<base::Value::Dict> metadata_dict = generator.Run();
     if (!metadata_dict)
       return;
-    for (auto it : metadata_dict->DictItems()) {
+    for (auto it : *metadata_dict) {
       auto* new_metadata = bundle->add_metadata();
       new_metadata->set_name(it.first.c_str());
 
@@ -307,8 +306,8 @@ void TraceEventMetadataSource::GenerateJsonMetadataFromGenerator(
   }
   DataSourceProxy::Trace([&](DataSourceProxy::TraceContext ctx) {
     auto packet = ctx.NewTracePacket();
-    packet->set_timestamp(perfetto::TrackEvent::GetTraceTimeNs());
-    packet->set_timestamp_clock_id(perfetto::TrackEvent::GetTraceClockId());
+    packet->set_timestamp(base::TrackEvent::GetTraceTimeNs());
+    packet->set_timestamp_clock_id(base::TrackEvent::GetTraceClockId());
     write_to_bundle(packet->set_chrome_events());
   });
 #else   // !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
@@ -360,16 +359,15 @@ void TraceEventMetadataSource::GenerateMetadata(
   DataSourceProxy::Trace([&](DataSourceProxy::TraceContext ctx) {
     for (auto& generator : *packet_generators) {
       auto packet = ctx.NewTracePacket();
-      packet->set_timestamp(perfetto::TrackEvent::GetTraceTimeNs());
-      packet->set_timestamp_clock_id(perfetto::TrackEvent::GetTraceClockId());
+      packet->set_timestamp(base::TrackEvent::GetTraceTimeNs());
+      packet->set_timestamp_clock_id(base::TrackEvent::GetTraceClockId());
       generator.Run(packet.get(), privacy_filtering_enabled);
     }
 
     {
       auto trace_packet = ctx.NewTracePacket();
-      trace_packet->set_timestamp(perfetto::TrackEvent::GetTraceTimeNs());
-      trace_packet->set_timestamp_clock_id(
-          perfetto::TrackEvent::GetTraceClockId());
+      trace_packet->set_timestamp(base::TrackEvent::GetTraceTimeNs());
+      trace_packet->set_timestamp_clock_id(base::TrackEvent::GetTraceClockId());
       auto* chrome_metadata = trace_packet->set_chrome_metadata();
       for (auto& generator : *proto_generators) {
         generator.Run(chrome_metadata, privacy_filtering_enabled);
@@ -378,9 +376,8 @@ void TraceEventMetadataSource::GenerateMetadata(
 
     if (!privacy_filtering_enabled) {
       auto trace_packet = ctx.NewTracePacket();
-      trace_packet->set_timestamp(perfetto::TrackEvent::GetTraceTimeNs());
-      trace_packet->set_timestamp_clock_id(
-          perfetto::TrackEvent::GetTraceClockId());
+      trace_packet->set_timestamp(base::TrackEvent::GetTraceTimeNs());
+      trace_packet->set_timestamp_clock_id(base::TrackEvent::GetTraceClockId());
       ChromeEventBundle* event_bundle = trace_packet->set_chrome_events();
       for (auto& generator : *json_generators) {
         GenerateJsonMetadataFromGenerator(generator, event_bundle);
@@ -600,7 +597,6 @@ TraceEventDataSource::~TraceEventDataSource() = default;
 
 void TraceEventDataSource::RegisterStartupHooks() {
 #if !BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-  RegisterTracedValueProtoWriter();
   base::trace_event::EnableTypedTraceEvents(
       &TraceEventDataSource::OnAddTypedTraceEvent,
       &TraceEventDataSource::OnAddTracePacket,
@@ -1179,9 +1175,10 @@ void TraceEventDataSource::ReturnTraceWriter(
 
   // Return the TraceWriter on the sequence that the PerfettoProducers run on.
   // Needed as the TrackEventThreadLocalEventSink gets deleted on thread
-  // shutdown and we can't safely call TaskRunnerHandle::Get() at that point
-  // (which can happen as the TraceWriter destructor might issue a Mojo call
-  // synchronously, which can trigger a call to TaskRunnerHandle::Get()).
+  // shutdown and we can't safely call task runner GetCurrentDefault() at that
+  // point (which can happen as the TraceWriter destructor might issue a Mojo
+  // call synchronously, which can trigger a call to
+  // task runner GetCurrentDefault()).
   auto* trace_writer_raw = trace_writer.release();
   ANNOTATE_LEAKING_OBJECT_PTR(trace_writer_raw);
   // Use PostTask() on PerfettoTaskRunner to ensure we comply with

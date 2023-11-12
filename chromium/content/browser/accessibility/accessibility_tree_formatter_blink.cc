@@ -113,6 +113,8 @@ std::string IntAttrToString(const ui::AXNode& node,
       return ui::ToString(static_cast<ax::mojom::HasPopup>(value));
     case ax::mojom::IntAttribute::kInvalidState:
       return ui::ToString(static_cast<ax::mojom::InvalidState>(value));
+    case ax::mojom::IntAttribute::kIsPopup:
+      return ui::ToString(static_cast<ax::mojom::IsPopup>(value));
     case ax::mojom::IntAttribute::kListStyle:
       return ui::ToString(static_cast<ax::mojom::ListStyle>(value));
     case ax::mojom::IntAttribute::kNameFrom:
@@ -153,10 +155,12 @@ std::string IntAttrToString(const ui::AXNode& node,
     case ax::mojom::IntAttribute::kMemberOfId:
     case ax::mojom::IntAttribute::kNextFocusId:
     case ax::mojom::IntAttribute::kNextOnLineId:
+    case ax::mojom::IntAttribute::kNextWindowFocusId:
     case ax::mojom::IntAttribute::kPosInSet:
     case ax::mojom::IntAttribute::kPopupForId:
     case ax::mojom::IntAttribute::kPreviousFocusId:
     case ax::mojom::IntAttribute::kPreviousOnLineId:
+    case ax::mojom::IntAttribute::kPreviousWindowFocusId:
     case ax::mojom::IntAttribute::kScrollX:
     case ax::mojom::IntAttribute::kScrollXMax:
     case ax::mojom::IntAttribute::kScrollXMin:

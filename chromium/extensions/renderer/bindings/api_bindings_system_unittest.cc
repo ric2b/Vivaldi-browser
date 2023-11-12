@@ -4,9 +4,9 @@
 
 #include "extensions/renderer/bindings/api_bindings_system_unittest.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/stringprintf.h"
 #include "extensions/common/mojom/event_dispatcher.mojom.h"
 #include "extensions/renderer/bindings/api_binding.h"
@@ -126,7 +126,7 @@ bool AllowPromises(v8::Local<v8::Context> context) {
 
 }  // namespace
 
-APIBindingsSystemTest::APIBindingsSystemTest() {}
+APIBindingsSystemTest::APIBindingsSystemTest() = default;
 APIBindingsSystemTest::~APIBindingsSystemTest() = default;
 
 void APIBindingsSystemTest::SetUp() {
@@ -372,9 +372,8 @@ TEST_F(APIBindingsSystemTest, TestCustomHooks) {
   auto test_hooks = std::make_unique<APIBindingHooksTestDelegate>();
   test_hooks->AddHandler("alpha.functionWithCallback",
                          base::BindRepeating(hook, &did_call));
-  APIBindingHooks* binding_hooks =
-      bindings_system()->GetHooksForAPI(kAlphaAPIName);
-  binding_hooks->SetDelegate(std::move(test_hooks));
+  bindings_system()->RegisterHooksDelegate(kAlphaAPIName,
+                                           std::move(test_hooks));
 
   v8::Local<v8::Object> alpha_api =
       bindings_system()->CreateAPIInstance(kAlphaAPIName, context, nullptr);
@@ -596,9 +595,8 @@ TEST_F(APIBindingsSystemTest, TestCustomEvent) {
 
   auto test_hooks = std::make_unique<APIBindingHooksTestDelegate>();
   test_hooks->SetCustomEvent(base::BindRepeating(create_custom_event));
-  APIBindingHooks* binding_hooks =
-      bindings_system()->GetHooksForAPI(kAlphaAPIName);
-  binding_hooks->SetDelegate(std::move(test_hooks));
+  bindings_system()->RegisterHooksDelegate(kAlphaAPIName,
+                                           std::move(test_hooks));
 
   v8::Local<v8::Object> api =
       bindings_system()->CreateAPIInstance(kAlphaAPIName, context, nullptr);

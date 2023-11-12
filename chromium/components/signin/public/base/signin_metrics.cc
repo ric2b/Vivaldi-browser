@@ -124,7 +124,27 @@ void LogSigninAccessPointCompleted(AccessPoint access_point,
 }
 
 void LogSigninReason(Reason reason) {
-  UMA_HISTOGRAM_ENUMERATION("Signin.SigninReason", reason);
+  base::UmaHistogramEnumeration("Signin.SigninReason", reason);
+}
+
+void LogSignInOffered(AccessPoint access_point) {
+  base::UmaHistogramEnumeration("Signin.SignIn.Offered", access_point,
+                                AccessPoint::ACCESS_POINT_MAX);
+}
+
+void LogSignInStarted(AccessPoint access_point) {
+  base::UmaHistogramEnumeration("Signin.SignIn.Started", access_point,
+                                AccessPoint::ACCESS_POINT_MAX);
+}
+
+void LogSyncOptInStarted(AccessPoint access_point) {
+  base::UmaHistogramEnumeration("Signin.SyncOptIn.Started", access_point,
+                                AccessPoint::ACCESS_POINT_MAX);
+}
+
+void LogSyncSettingsOpened(AccessPoint access_point) {
+  base::UmaHistogramEnumeration("Signin.SyncOptIn.OpenedSyncSettings",
+                                access_point, AccessPoint::ACCESS_POINT_MAX);
 }
 
 void RecordAccountsPerProfile(int total_number_accounts) {
@@ -146,8 +166,7 @@ void LogSigninAccountReconciliationDuration(base::TimeDelta duration,
 }
 
 void LogSignout(ProfileSignout source_metric, SignoutDelete delete_metric) {
-  UMA_HISTOGRAM_ENUMERATION("Signin.SignoutProfile", source_metric,
-                            NUM_PROFILE_SIGNOUT_METRICS);
+  base::UmaHistogramEnumeration("Signin.SignoutProfile", source_metric);
   if (delete_metric != SignoutDelete::kIgnoreMetric) {
     UMA_HISTOGRAM_BOOLEAN(
         "Signin.SignoutDeleteProfile",
@@ -401,6 +420,7 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_WEB_SIGNIN:
     case AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case AccessPoint::ACCESS_POINT_POST_DEVICE_RESTORE_BACKGROUND_SIGNIN:
+    case AccessPoint::ACCESS_POINT_DESKTOP_SIGNIN_MANAGER:
       NOTREACHED() << "Access point " << static_cast<int>(access_point)
                    << " is not supposed to log signin user actions.";
       break;
@@ -427,6 +447,10 @@ void RecordSigninUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_NTP_FEED_BOTTOM_PROMO:
       base::RecordAction(base::UserMetricsAction(
           "Signin_Signin_FromNTPFeedBottomSigninPromo"));
+      break;
+    case AccessPoint::ACCESS_POINT_FOR_YOU_FRE:
+      base::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromForYouFre"));
       break;
     case AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED();
@@ -549,6 +573,8 @@ void RecordSigninImpressionUserActionForAccessPoint(AccessPoint access_point) {
     case AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case AccessPoint::ACCESS_POINT_POST_DEVICE_RESTORE_BACKGROUND_SIGNIN:
     case AccessPoint::ACCESS_POINT_NTP_SIGNED_OUT_ICON:
+    case AccessPoint::ACCESS_POINT_DESKTOP_SIGNIN_MANAGER:
+    case AccessPoint::ACCESS_POINT_FOR_YOU_FRE:
       NOTREACHED() << "Signin_Impression_From* user actions"
                    << " are not recorded for access point "
                    << static_cast<int>(access_point);

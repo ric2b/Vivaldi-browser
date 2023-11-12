@@ -13,15 +13,16 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/public/ash_interfaces.h"
 #include "ash/public/cpp/ash_prefs.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/system/sys_info.h"
 #include "chrome/browser/ash/accessibility/magnification_manager.h"
 #include "chrome/browser/ash/base/locale_util.h"
 #include "chrome/browser/ash/child_accounts/parent_access_code/parent_access_service.h"
@@ -51,7 +52,7 @@
 #include "chromeos/ash/components/dbus/update_engine/update_engine_client.h"
 #include "chromeos/ash/components/peripheral_notification/peripheral_notification_manager.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
-#include "chromeos/ash/components/system/devicemode.h"
+#include "chromeos/ash/components/standalone_browser/lacros_availability.h"
 #include "chromeos/ash/components/system/statistics_provider.h"
 #include "chromeos/ash/components/timezone/timezone_resolver.h"
 #include "chromeos/components/disks/disks_prefs.h"
@@ -75,7 +76,7 @@
 #include "ui/base/ime/ash/extension_ime_util.h"
 #include "ui/base/ime/ash/ime_keyboard.h"
 #include "ui/base/ime/ash/input_method_manager.h"
-#include "ui/chromeos/events/modifier_key.h"
+#include "ui/chromeos/events/mojom/modifier_key.mojom.h"
 #include "ui/chromeos/events/pref_names.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
@@ -145,7 +146,8 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(::prefs::kMinimumAllowedChromeVersion, "");
   registry->RegisterIntegerPref(
       ::prefs::kLacrosLaunchSwitch,
-      static_cast<int>(crosapi::browser_util::LacrosAvailability::kUserChoice));
+      static_cast<int>(
+          ash::standalone_browser::LacrosAvailability::kUserChoice));
   registry->RegisterIntegerPref(
       ::prefs::kLacrosSelection,
       static_cast<int>(
@@ -159,6 +161,8 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kLoginScreenWebUILazyLoading, false);
   registry->RegisterBooleanPref(::prefs::kConsumerAutoUpdateToggle, true);
   registry->RegisterBooleanPref(::prefs::kHindiInscriptLayoutEnabled, false);
+  registry->RegisterBooleanPref(::prefs::kDeviceHindiInscriptLayoutEnabled,
+                                false);
 
   RegisterLocalStatePrefs(registry);
   ash::consolidated_consent_field_trial::RegisterLocalStatePrefs(registry);
@@ -174,7 +178,7 @@ void Preferences::RegisterProfilePrefs(
 
   std::string hardware_keyboard_id;
   // TODO(yusukes): Remove the runtime hack.
-  if (chromeos::IsRunningAsSystemCompositor()) {
+  if (base::SysInfo::IsRunningOnChromeOS()) {
     DCHECK(g_browser_process);
     PrefService* local_state = g_browser_process->local_state();
     DCHECK(local_state);
@@ -206,16 +210,16 @@ void Preferences::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
 
   registry->RegisterBooleanPref(
-      ::prefs::kPrimaryMouseButtonRight, false,
+      prefs::kPrimaryMouseButtonRight, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
       ::prefs::kPrimaryPointingStickButtonRight, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ::prefs::kMouseAcceleration, true,
+      prefs::kMouseAcceleration, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
-      ::prefs::kMouseScrollAcceleration, true,
+      prefs::kMouseScrollAcceleration, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterBooleanPref(
       ::prefs::kPointingStickAcceleration, true,
@@ -235,10 +239,10 @@ void Preferences::RegisterProfilePrefs(
                                 false);
 
   registry->RegisterIntegerPref(
-      ::prefs::kMouseSensitivity, 3,
+      prefs::kMouseSensitivity, 3,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
-      ::prefs::kMouseScrollSensitivity, 3,
+      prefs::kMouseScrollSensitivity, 3,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       ::prefs::kPointingStickSensitivity, 3,
@@ -301,19 +305,19 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapSearchKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kSearchKey),
+      static_cast<int>(ui::mojom::ModifierKey::kMeta),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapControlKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kControlKey),
+      static_cast<int>(ui::mojom::ModifierKey::kControl),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapAltKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kAltKey),
+      static_cast<int>(ui::mojom::ModifierKey::kAlt),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapAssistantKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kAssistantKey),
+      static_cast<int>(ui::mojom::ModifierKey::kAssistant),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
 
   // Even though most of the Chrome OS devices don't have the CapsLock key - the
@@ -321,28 +325,28 @@ void Preferences::RegisterProfilePrefs(
   // syncing the pref to support this case.
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapCapsLockKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kCapsLockKey),
+      static_cast<int>(ui::mojom::ModifierKey::kCapsLock),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
 
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapEscapeKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kEscapeKey),
+      static_cast<int>(ui::mojom::ModifierKey::kEscape),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapBackspaceKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kBackspaceKey),
+      static_cast<int>(ui::mojom::ModifierKey::kBackspace),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   // The Command key on external Apple keyboards is remapped by default to Ctrl
   // until the user changes it from the keyboard settings.
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapExternalCommandKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kControlKey),
+      static_cast<int>(ui::mojom::ModifierKey::kControl),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   // The Meta key (Search or Windows keys) on external keyboards is remapped by
   // default to Search until the user changes it from the keyboard settings.
   registry->RegisterIntegerPref(
       ::prefs::kLanguageRemapExternalMetaKeyTo,
-      static_cast<int>(ui::chromeos::ModifierKey::kSearchKey),
+      static_cast<int>(ui::mojom::ModifierKey::kMeta),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PRIORITY_PREF);
   // The following pref isn't synced since the user may desire a different value
   // depending on whether an external keyboard is attached to a particular
@@ -463,6 +467,15 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(::prefs::kHatsGeneralCameraIsSelected, false);
 
+  registry->RegisterInt64Pref(::prefs::kHatsBluetoothRevampCycleEndTs, 0);
+
+  registry->RegisterBooleanPref(::prefs::kHatsBluetoothRevampIsSelected, false);
+
+  registry->RegisterBooleanPref(::prefs::kHatsPrivacyHubBaselineIsSelected,
+                                false);
+
+  registry->RegisterInt64Pref(::prefs::kHatsPrivacyHubBaselineCycleEndTs, 0);
+
   // Personalization HaTS survey prefs for avatar, screensaver, and wallpaper
   // features.
   registry->RegisterInt64Pref(
@@ -517,6 +530,8 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(prefs::kSyncOobeCompleted, false);
 
+  registry->RegisterBooleanPref(prefs::kRecordArcAppSyncMetrics, false);
+
   registry->RegisterBooleanPref(::prefs::kTPMFirmwareUpdateCleanupDismissed,
                                 false);
 
@@ -553,6 +568,8 @@ void Preferences::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   registry->RegisterBooleanPref(prefs::kUsbDetectorNotificationEnabled, true);
+
+  registry->RegisterBooleanPref(prefs::kShowTouchpadScrollScreenEnabled, true);
 }
 
 void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
@@ -572,20 +589,20 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   natural_scroll_.Init(prefs::kNaturalScroll, prefs, callback);
   mouse_reverse_scroll_.Init(prefs::kMouseReverseScroll, prefs, callback);
 
-  mouse_sensitivity_.Init(::prefs::kMouseSensitivity, prefs, callback);
-  mouse_scroll_sensitivity_.Init(::prefs::kMouseScrollSensitivity, prefs,
+  mouse_sensitivity_.Init(prefs::kMouseSensitivity, prefs, callback);
+  mouse_scroll_sensitivity_.Init(prefs::kMouseScrollSensitivity, prefs,
                                  callback);
   touchpad_sensitivity_.Init(::prefs::kTouchpadSensitivity, prefs, callback);
   touchpad_scroll_sensitivity_.Init(::prefs::kTouchpadScrollSensitivity, prefs,
                                     callback);
   pointing_stick_sensitivity_.Init(::prefs::kPointingStickSensitivity, prefs,
                                    callback);
-  primary_mouse_button_right_.Init(::prefs::kPrimaryMouseButtonRight, prefs,
+  primary_mouse_button_right_.Init(prefs::kPrimaryMouseButtonRight, prefs,
                                    callback);
   primary_pointing_stick_button_right_.Init(
       ::prefs::kPrimaryPointingStickButtonRight, prefs, callback);
-  mouse_acceleration_.Init(::prefs::kMouseAcceleration, prefs, callback);
-  mouse_scroll_acceleration_.Init(::prefs::kMouseScrollAcceleration, prefs,
+  mouse_acceleration_.Init(prefs::kMouseAcceleration, prefs, callback);
+  mouse_scroll_acceleration_.Init(prefs::kMouseScrollAcceleration, prefs,
                                   callback);
   pointing_stick_acceleration_.Init(::prefs::kPointingStickAcceleration, prefs,
                                     callback);
@@ -834,12 +851,9 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     const bool enabled = mouse_reverse_scroll_.GetValue();
     if (user_is_active)
       mouse_settings.SetReverseScroll(enabled);
-    ReportBooleanPrefApplication(reason, "Mouse.ReverseScroll.Changed",
-                                 "Mouse.ReverseScroll.Started", enabled);
   }
 
-  if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kMouseSensitivity) {
+  if (reason != REASON_PREF_CHANGED || pref_name == prefs::kMouseSensitivity) {
     const int sensitivity_int = mouse_sensitivity_.GetValue();
     if (user_is_active) {
       mouse_settings.SetSensitivity(sensitivity_int);
@@ -854,7 +868,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
                                      sensitivity_int);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kMouseScrollSensitivity) {
+      pref_name == prefs::kMouseScrollSensitivity) {
     // With the flag off, use to normal sensitivity (legacy fallback).
     // TODO(https://crbug.com/836258): Remove check when flag is removed.
     const int sensitivity_int = AreScrollSettingsAllowed()
@@ -902,7 +916,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
         "Touchpad.ScrollSensitivity.Started", sensitivity_int);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kPrimaryMouseButtonRight) {
+      pref_name == prefs::kPrimaryMouseButtonRight) {
     const bool right = primary_mouse_button_right_.GetValue();
     if (user_is_active)
       mouse_settings.SetPrimaryButtonRight(right);
@@ -930,16 +944,13 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       }
     }
   }
-  if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kMouseAcceleration) {
+  if (reason != REASON_PREF_CHANGED || pref_name == prefs::kMouseAcceleration) {
     const bool enabled = mouse_acceleration_.GetValue();
     if (user_is_active)
       mouse_settings.SetAcceleration(enabled);
-    ReportBooleanPrefApplication(reason, "Mouse.Acceleration.Changed",
-                                 "Mouse.Acceleration.Started", enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
-      pref_name == ::prefs::kMouseScrollAcceleration) {
+      pref_name == prefs::kMouseScrollAcceleration) {
     const bool enabled = mouse_scroll_acceleration_.GetValue();
     if (user_is_active)
       mouse_settings.SetScrollAcceleration(enabled);
@@ -957,8 +968,6 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     const bool enabled = touchpad_acceleration_.GetValue();
     if (user_is_active)
       touchpad_settings.SetAcceleration(enabled);
-    ReportBooleanPrefApplication(reason, "Touchpad.Acceleration.Changed",
-                                 "Touchpad.Acceleration.Started", enabled);
   }
   if (reason != REASON_PREF_CHANGED ||
       pref_name == ::prefs::kTouchpadScrollAcceleration) {
@@ -1014,6 +1023,10 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     if (user_is_active)
       UpdateAutoRepeatRate();
   }
+
+  if (reason == REASON_INITIALIZATION)
+    SetInputMethodList();
+
   if (reason != REASON_PREF_CHANGED ||
       pref_name == ::prefs::kLanguageAllowedInputMethods) {
     const std::vector<std::string> allowed_input_methods =
@@ -1043,9 +1056,6 @@ void Preferences::ApplyPreferences(ApplyReason reason,
     // values.
     locale_util::RemoveDisallowedLanguagesFromPreferred(prefs_);
   }
-
-  if (reason == REASON_INITIALIZATION)
-    SetInputMethodList();
 
   if (pref_name == ::prefs::kLanguagePreloadEngines &&
       reason == REASON_PREF_CHANGED) {

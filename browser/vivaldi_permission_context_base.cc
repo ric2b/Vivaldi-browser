@@ -4,7 +4,7 @@
 #include "components/permissions/permission_context_base.h"
 
 #include "app/vivaldi_apptools.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "components/permissions/permission_request_id.h"
 #include "extensions/buildflags/buildflags.h"
 

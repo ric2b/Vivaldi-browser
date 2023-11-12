@@ -264,8 +264,8 @@ BrowserParamsProxy::LacrosSelection() const {
   return BrowserInitParams::Get()->lacros_selection;
 }
 
-bool BrowserParamsProxy::IsFloatWindowEnabled() const {
-  return BrowserInitParams::Get()->enable_float_window;
+bool BrowserParamsProxy::IsWindowLayoutMenuEnabled() const {
+  return BrowserInitParams::Get()->enable_window_layout_menu;
 }
 
 bool BrowserParamsProxy::IsCloudGamingDevice() const {
@@ -282,12 +282,14 @@ BrowserParamsProxy::ExtensionKeepList() const {
   return BrowserInitParams::Get()->extension_keep_list;
 }
 
-bool BrowserParamsProxy::IsPartialSplitEnabled() const {
-  return BrowserInitParams::Get()->enable_partial_split;
-}
-
 bool BrowserParamsProxy::VcControlsUiEnabled() const {
   return BrowserInitParams::Get()->vc_controls_ui_enabled;
+}
+
+const crosapi::mojom::StandaloneBrowserAppServiceBlockList*
+BrowserParamsProxy::StandaloneBrowserAppServiceBlockList() const {
+  return BrowserInitParams::Get()
+      ->standalone_browser_app_service_blocklist.get();
 }
 
 }  // namespace chromeos

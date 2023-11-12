@@ -47,17 +47,6 @@ enum class InsecureType {
   kMaxValue = kReused
 };
 
-enum class PasswordNoteChangeResult {
-  // A new credential is added with the note field not empty.
-  kNoteAdded = 0,
-  // The note changed from a non-empty to another non-empty.
-  kNoteEdited = 1,
-  // The note changed from non-empty to empty.
-  kNoteRemoved = 2,
-  // The note did not change.
-  kNoteNotChanged = 3
-};
-
 // Metadata for insecure credentials
 struct InsecurityMetadata {
   InsecurityMetadata();
@@ -335,10 +324,10 @@ struct PasswordForm {
   Type type = Type::kFormSubmission;
 
   // The number of times that this username/password has been used to
-  // authenticate the user.
+  // authenticate the user in an HTML form.
   //
   // When parsing an HTML form, this is not used.
-  int times_used = 0;
+  int times_used_in_html_form = 0;
 
   // Autofill representation of this form. Used to communicate with the
   // Autofill servers if necessary. Currently this is only used to help
@@ -436,12 +425,17 @@ struct PasswordForm {
   // with a syncing account AND it was associated with one in the past.
   std::string previously_associated_sync_account_email;
 
-  // Return true if we consider this form to be a signup form. It's based on
-  // local heuristics and may be inaccurate.
+  // Returns true if this form is considered to be a login form, i.e. it has
+  // a username field, a password field and no new password field. It's based
+  // on heuristics and may be inaccurate.
+  bool IsLikelyLoginForm() const;
+
+  // Returns true if we consider this form to be a signup form. It's based on
+  // heuristics and may be inaccurate.
   bool IsLikelySignupForm() const;
 
-  // Return true if we consider this form to be a change password form and not
-  // a signup form. It's based on local heuristics and may be inaccurate.
+  // Returns true if we consider this form to be a change password form and not
+  // a signup form. It's based on heuristics and may be inaccurate.
   bool IsLikelyChangePasswordForm() const;
 
   // Returns true if current password element is set.
@@ -473,10 +467,8 @@ struct PasswordForm {
   // otherwise returns an nullopt.
   absl::optional<std::u16string> GetNoteWithEmptyUniqueDisplayName() const;
 
-  // Updates the note with an empty `unique_display_name` and returns the status
-  // as `PasswordNoteAction`.
-  PasswordNoteChangeResult SetNoteWithEmptyUniqueDisplayName(
-      const std::u16string& new_note_value);
+  // Updates the note with an empty `unique_display_name`.
+  void SetNoteWithEmptyUniqueDisplayName(const std::u16string& new_note_value);
 
   PasswordForm();
   PasswordForm(const PasswordForm& other);

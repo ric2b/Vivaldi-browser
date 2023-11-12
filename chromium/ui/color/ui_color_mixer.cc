@@ -26,6 +26,11 @@ void AddUiColorMixer(ColorProvider* provider,
   mixer[kColorAvatarHeaderArt] = {kColorMidground};
   mixer[kColorAvatarIconGuest] = {kColorSecondaryForeground};
   mixer[kColorAvatarIconIncognito] = {kColorPrimaryForeground};
+  mixer[kColorBadgeBackground] =
+      PickGoogleColor(kColorAccent, kColorDialogBackground,
+                      color_utils::kMinimumVisibleContrastRatio);
+  mixer[kColorBadgeForeground] =
+      GetColorWithMaxContrast(kColorButtonBackgroundProminent);
   mixer[kColorBubbleBackground] = {kColorPrimaryBackground};
   mixer[kColorBubbleBorder] = {kColorMidground};
   mixer[kColorBubbleBorderShadowLarge] = {SetAlpha(kColorShadowBase, 0x1A)};
@@ -35,11 +40,16 @@ void AddUiColorMixer(ColorProvider* provider,
   mixer[kColorBubbleFooterBorder] = {kColorMidground};
   mixer[kColorButtonBackground] = {kColorPrimaryBackground};
   mixer[kColorButtonBackgroundPressed] = {kColorButtonBackground};
-  mixer[kColorButtonBackgroundProminent] = {kColorAccent};
+  mixer[kColorButtonBackgroundProminent] =
+      PickGoogleColor(kColorAccent, kColorDialogBackground,
+                      color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorButtonBackgroundProminentDisabled] = {
       kColorSubtleEmphasisBackground};
   mixer[kColorButtonBackgroundProminentFocused] = {
       kColorButtonBackgroundProminent};
+  mixer[kColorButtonBackgroundTonal] = {kColorSysPrimaryContainer};
+  mixer[kColorButtonBackgroundTonalDisabled] = {kColorSubtleEmphasisBackground};
+  mixer[kColorButtonBackgroundTonalFocused] = {kColorButtonBackgroundTonal};
   mixer[kColorButtonBorder] = {kColorMidground};
   mixer[kColorButtonBorderDisabled] = {kColorSubtleEmphasisBackground};
   mixer[kColorButtonForeground] =
@@ -49,7 +59,15 @@ void AddUiColorMixer(ColorProvider* provider,
   mixer[kColorButtonForegroundDisabled] = {kColorDisabledForeground};
   mixer[kColorButtonForegroundProminent] =
       GetColorWithMaxContrast(kColorButtonBackgroundProminent);
+  mixer[kColorButtonForegroundTonal] = {kColorSysOnPrimaryContainer};
   mixer[kColorButtonForegroundUnchecked] = {kColorSecondaryForeground};
+  mixer[kColorCheckboxForegroundUnchecked] = {kColorSecondaryForeground};
+  mixer[kColorCheckboxForegroundChecked] = {kColorButtonForeground};
+  mixer[kColorMultitaskFeedbackButtonLabelBackground] = {
+      dark_mode ? SetAlpha(SK_ColorWHITE, 0x1A)
+                : SetAlpha(SK_ColorBLACK, 0x0D)};
+  mixer[kColorMultitaskFeedbackButtonLabelForeground] = {
+      dark_mode ? gfx::kGoogleGrey200 : gfx::kGoogleGrey900};
   mixer[kColorCustomFrameCaptionForeground] = {SK_ColorWHITE};
   mixer[kColorDebugBoundsOutline] = SetAlpha(SK_ColorRED, 0x30);
   mixer[kColorDebugContentOutline] = SetAlpha(SK_ColorBLUE, 0x30);
@@ -97,9 +115,11 @@ void AddUiColorMixer(ColorProvider* provider,
   mixer[kColorMenuBorder] = {kColorMidground};
   mixer[kColorMenuDropmarker] = {kColorPrimaryForeground};
   mixer[kColorMenuIcon] = {kColorIcon};
-  mixer[kColorMenuItemBackgroundAlertedInitial] = SetAlpha(kColorAccent, 0x4D);
+  mixer[kColorMenuItemBackgroundAlertedInitial] =
+      SetAlpha(kColorAccentWithGuaranteedContrastAtopPrimaryBackground, 0x4D);
   mixer[kColorMenuItemBackgroundAlertedTarget] =
-      SetAlpha(kColorAccent, gfx::kGoogleGreyAlpha200);
+      SetAlpha(kColorAccentWithGuaranteedContrastAtopPrimaryBackground,
+               gfx::kGoogleGreyAlpha200);
   mixer[kColorMenuItemBackgroundHighlighted] = {kColorSubtleEmphasisBackground};
   mixer[kColorMenuItemBackgroundSelected] = {kColorMenuSelectionBackground};
   mixer[kColorMenuItemForeground] = {kColorPrimaryForeground};
@@ -119,7 +139,10 @@ void AddUiColorMixer(ColorProvider* provider,
       kColorNotificationBackgroundInactive};
   mixer[kColorNotificationImageBackground] = {
       kColorNotificationBackgroundActive};
-  mixer[kColorNotificationInputBackground] = {kColorAccent};
+  mixer[kColorNotificationInputBackground] = PickGoogleColorTwoBackgrounds(
+      kColorAccent, kColorNotificationBackgroundActive,
+      kColorNotificationBackgroundInactive,
+      color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorNotificationInputForeground] =
       GetColorWithMaxContrast(kColorNotificationInputBackground);
   mixer[kColorNotificationInputPlaceholderForeground] =
@@ -153,21 +176,9 @@ void AddUiColorMixer(ColorProvider* provider,
       SetAlpha(GetColorWithMaxContrast(kColorOverlayScrollbarFillHoveredLight),
                gfx::kGoogleGreyAlpha500);
   mixer[kColorProgressBarPaused] = {kColorDisabledForeground};
-  mixer[kColorProgressBar] = {kColorAccent};
-  mixer[kColorReadAnythingBackground] = {
-      dark_mode ? kColorReadAnythingBackgroundDark
-                : kColorReadAnythingBackgroundLight};
-  mixer[kColorReadAnythingBackgroundBlue] = {gfx::kGoogleBlue200};
-  mixer[kColorReadAnythingBackgroundDark] = {gfx::kGoogleGrey900};
-  mixer[kColorReadAnythingBackgroundLight] = {gfx::kGoogleGrey050};
-  mixer[kColorReadAnythingBackgroundYellow] = {gfx::kGoogleYellow200};
-  mixer[kColorReadAnythingForeground] = {
-      dark_mode ? kColorReadAnythingForegroundDark
-                : kColorReadAnythingForegroundLight};
-  mixer[kColorReadAnythingForegroundBlue] = {gfx::kGoogleGrey900};
-  mixer[kColorReadAnythingForegroundDark] = {gfx::kGoogleGrey200};
-  mixer[kColorReadAnythingForegroundLight] = {gfx::kGoogleGrey800};
-  mixer[kColorReadAnythingForegroundYellow] = {gfx::kGoogleGrey800};
+  mixer[kColorProgressBar] =
+      PickGoogleColor(kColorAccent, kColorDialogBackground,
+                      color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorScrollbarArrowBackgroundHovered] = {
       dark_mode ? SkColorSetRGB(0x4F, 0x4F, 0x4F)
                 : SkColorSetRGB(0xD2, 0xD2, 0xD2)};
@@ -204,7 +215,9 @@ void AddUiColorMixer(ColorProvider* provider,
       SetAlpha(kColorShadowBase, 0x1a);
   mixer[kColorSidePanelComboboxBorder] = {SK_ColorTRANSPARENT};
   mixer[kColorSidePanelComboboxBackground] = {kColorPrimaryBackground};
-  mixer[kColorSliderThumb] = {kColorAccent};
+  mixer[kColorSliderThumb] =
+      PickGoogleColor(kColorAccent, kColorDialogBackground,
+                      color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorSliderThumbMinimal] = {kColorSecondaryForeground};
   mixer[kColorSliderTrack] = {kColorSubtleAccent};
   mixer[kColorSliderTrackMinimal] = {kColorMidground};
@@ -212,7 +225,8 @@ void AddUiColorMixer(ColorProvider* provider,
   mixer[kColorSyncInfoBackgroundError] =
       SetAlpha(kColorAlertHighSeverity, gfx::kGoogleGreyAlpha100);
   mixer[kColorSyncInfoBackgroundPaused] =
-      SetAlpha(kColorAccent, gfx::kGoogleGreyAlpha100);
+      SetAlpha(kColorAccentWithGuaranteedContrastAtopPrimaryBackground,
+               gfx::kGoogleGreyAlpha100);
   {
     auto tab_background_base =
         PickGoogleColor(kColorAccent, kColorPrimaryBackground, 6.0f);
@@ -220,7 +234,9 @@ void AddUiColorMixer(ColorProvider* provider,
     mixer[kColorTabBackgroundHighlightedFocused] =
         SetAlpha(std::move(tab_background_base), 0x53);
   }
-  mixer[kColorTabBorderSelected] = {kColorAccent};
+  mixer[kColorTabBorderSelected] =
+      PickGoogleColor(kColorAccent, kColorDialogBackground,
+                      color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorTabContentSeparator] = {kColorMidground};
   mixer[kColorTabForeground] = {kColorSecondaryForeground};
   mixer[kColorTabForegroundSelected] =
@@ -242,16 +258,22 @@ void AddUiColorMixer(ColorProvider* provider,
   mixer[kColorTextfieldBackground] = {kColorEndpointBackground};
   mixer[kColorTextfieldBackgroundDisabled] = {kColorPrimaryBackground};
   mixer[kColorTextfieldForeground] = {kColorPrimaryForeground};
+  mixer[kColorTextfieldForegroundInvalid] = {kColorTextfieldForeground};
   mixer[kColorTextfieldForegroundDisabled] = {kColorDisabledForeground};
   mixer[kColorTextfieldForegroundPlaceholder] = {
       kColorTextfieldForegroundDisabled};
   mixer[kColorTextfieldSelectionBackground] = {kColorTextSelectionBackground};
   mixer[kColorTextfieldSelectionForeground] = {kColorTextSelectionForeground};
-  mixer[kColorThrobber] = {kColorAccent};
+  mixer[kColorTextfieldInvalidOutline] = {kColorAlertHighSeverity};
+  mixer[kColorThrobber] =
+      PickGoogleColor(kColorAccent, kColorDialogBackground,
+                      color_utils::kMinimumVisibleContrastRatio);
   mixer[kColorThrobberPreconnect] = {kColorSubtleAccent};
   mixer[kColorToggleButtonShadow] = {kColorMidground};
   mixer[kColorToggleButtonThumbOff] = {kColorSecondaryForeground};
-  mixer[kColorToggleButtonThumbOn] = {kColorAccent};
+  mixer[kColorToggleButtonThumbOn] =
+      PickGoogleColor(kColorAccent, kColorDialogBackground,
+                      color_utils::kMinimumVisibleContrastRatio);
   if (dark_mode) {
     mixer[kColorToggleButtonThumbOff] +=
         AlphaBlend(kColorPrimaryForeground, FromTransformInput(), 0x0D);

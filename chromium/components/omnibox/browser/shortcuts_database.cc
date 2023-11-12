@@ -7,7 +7,7 @@
 #include <string>
 #include <tuple>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -306,7 +306,9 @@ bool ShortcutsDatabase::EnsureTable() {
   for (int i = current_version + 1; i <= kCurrentVersionNumber; ++i) {
     if (!DoMigration(i))
       return false;
-    meta_table_.SetVersionNumber(i);
+    if (!meta_table_.SetVersionNumber(i)) {
+      return false;
+    }
   }
 
   return true;

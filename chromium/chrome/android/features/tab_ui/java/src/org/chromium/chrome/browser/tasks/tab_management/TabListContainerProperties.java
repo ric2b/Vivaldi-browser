@@ -41,15 +41,11 @@ class TabListContainerProperties {
             new PropertyModel.WritableIntPropertyKey();
 
     /**
-     * A property which controls whether to use the default animator specified in the underlying
-     * {@link TabListRecyclerView} or use a null item animator.
-     *
-     * TODO(crbug.com/1227656): This property is used only by the Incognito re-auth client and once
-     * the re-auth integration with tab-switcher design is further improved then remove this if no
-     * other clients use this property.
+     * Same as {@link TabListCoordinator.TabListMode}.
      */
-    public static final PropertyModel.WritableBooleanPropertyKey TAB_LIST_ITEM_ANIMATOR_ENABLED =
-            new PropertyModel.WritableBooleanPropertyKey();
+    public static final PropertyModel.WritableIntPropertyKey MODE =
+            new PropertyModel.WritableIntPropertyKey();
+
 
     // Vivaldi
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_NORMAL =
@@ -61,6 +57,6 @@ class TabListContainerProperties {
 
     public static final PropertyKey[] ALL_KEYS = new PropertyKey[] {IS_VISIBLE, IS_INCOGNITO,
             VISIBILITY_LISTENER, INITIAL_SCROLL_INDEX, ANIMATE_VISIBILITY_CHANGES, TOP_MARGIN,
-            BOTTOM_CONTROLS_HEIGHT, SHADOW_TOP_OFFSET, BOTTOM_PADDING,
+            BOTTOM_CONTROLS_HEIGHT, SHADOW_TOP_OFFSET, BOTTOM_PADDING, MODE,
             SCROLL_INDEX_NORMAL, SCROLL_INDEX_PRIVATE}; // Vivaldi
 }

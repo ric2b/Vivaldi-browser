@@ -11,6 +11,8 @@
 #include <memory>
 #include <set>
 
+#include "base/scoped_observation.h"
+#include "chromeos/dbus/dlp/dlp_client.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/url_matcher/url_matcher.h"
 
@@ -25,7 +27,8 @@ class DlpReportingManager;
 class DlpFilesController;
 #endif
 
-class DlpRulesManagerImpl : public DlpRulesManager {
+class DlpRulesManagerImpl : public DlpRulesManager,
+                            public chromeos::DlpClient::Observer {
  public:
   using RuleId = int;
   using UrlConditionId = base::MatcherStringPattern::ID;
@@ -40,17 +43,19 @@ class DlpRulesManagerImpl : public DlpRulesManager {
                      Restriction restriction) const override;
   Level IsRestrictedByAnyRule(const GURL& source,
                               Restriction restriction,
-                              std::string* out_source_pattern) const override;
-  Level IsRestrictedDestination(
-      const GURL& source,
-      const GURL& destination,
-      Restriction restriction,
-      std::string* out_source_pattern,
-      std::string* out_destination_pattern) const override;
+                              std::string* out_source_pattern,
+                              RuleMetadata* out_rule_metadata) const override;
+  Level IsRestrictedDestination(const GURL& source,
+                                const GURL& destination,
+                                Restriction restriction,
+                                std::string* out_source_pattern,
+                                std::string* out_destination_pattern,
+                                RuleMetadata* out_rule_metadata) const override;
   Level IsRestrictedComponent(const GURL& source,
                               const Component& destination,
                               Restriction restriction,
-                              std::string* out_source_pattern) const override;
+                              std::string* out_source_pattern,
+                              RuleMetadata* out_rule_metadata) const override;
   AggregatedDestinations GetAggregatedDestinations(
       const GURL& source,
       Restriction restriction) const override;
@@ -64,11 +69,16 @@ class DlpRulesManagerImpl : public DlpRulesManager {
   DlpFilesController* GetDlpFilesController() const override;
 #endif
 
-  std::string GetSourceUrlPattern(const GURL& source_url,
-                                  Restriction restriction,
-                                  Level level) const override;
+  std::string GetSourceUrlPattern(
+      const GURL& source_url,
+      Restriction restriction,
+      Level level,
+      RuleMetadata* out_rule_metadata) const override;
   size_t GetClipboardCheckSizeLimitInBytes() const override;
   bool IsFilesPolicyEnabled() const override;
+
+  // chromeos::DlpClient::Observer overrides:
+  void DlpDaemonRestarted() override;
 
  protected:
   friend class DlpRulesManagerFactory;
@@ -109,16 +119,23 @@ class DlpRulesManagerImpl : public DlpRulesManager {
 
   // Map from the URL matching conditions IDs of the sources to their string
   // patterns.
-  std::map<UrlConditionId, std::string> src_pattterns_mapping_;
+  std::map<UrlConditionId, std::string> src_patterns_mapping_;
 
   // Map from the URL matching conditions IDs of the destinations to their
   // string patterns.
-  std::map<UrlConditionId, std::string> dst_pattterns_mapping_;
+  std::map<UrlConditionId, std::string> dst_patterns_mapping_;
+
+  // Map from RuleIds to the rule metadata.
+  std::map<RuleId, RuleMetadata> rules_id_metadata_mapping_;
 
   // System-wide singleton instantiated when required by rules configuration.
   std::unique_ptr<DlpReportingManager> reporting_manager_;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Observe to re-notify DLP daemon in case of restart.
+  base::ScopedObservation<chromeos::DlpClient, chromeos::DlpClient::Observer>
+      dlp_client_observation_{this};
+
   // System-wide singleton instantiated when there are rules involving files.
   std::unique_ptr<DlpFilesController> files_controller_;
 #endif

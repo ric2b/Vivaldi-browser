@@ -8,9 +8,10 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
@@ -36,6 +37,7 @@
 #include "content/public/browser/media_session.h"
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/url_util.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -77,9 +79,24 @@ std::u16string GetLiveCaptionTitle(PrefService* profile_prefs) {
   return l10n_util::GetStringUTF16(IDS_GLOBAL_MEDIA_CONTROLS_LIVE_CAPTION);
 }
 
-const std::string GetRemotePlaybackRouteId(const std::string& item_id,
-                                           content::BrowserContext* context) {
-  if (!base::FeatureList::IsEnabled(media::kMediaRemotingWithoutFullscreen)) {
+const std::string GetRemotePlaybackRouteId(
+    const std::string& item_id,
+    base::WeakPtr<media_message_center::MediaNotificationItem> item,
+    content::BrowserContext* context) {
+  // Return an empty string if the item is not a local media session or the
+  // media session doesn't have an associated Remote Playback route.
+  if (!base::FeatureList::IsEnabled(media::kMediaRemotingWithoutFullscreen) ||
+      !item ||
+      item->SourceType() !=
+          media_message_center::SourceType::kLocalMediaSession) {
+    return "";
+  }
+  const auto* media_session_item =
+      static_cast<global_media_controls::MediaSessionNotificationItem*>(
+          item.get());
+  if (!media_session_item->GetRemotePlaybackMetadata() ||
+      !media_session_item->GetRemotePlaybackMetadata()
+           ->remote_playback_started) {
     return "";
   }
 
@@ -89,27 +106,33 @@ const std::string GetRemotePlaybackRouteId(const std::string& item_id,
     return "";
   }
 
-  SessionID::id_type item_tab_id =
+  const int item_tab_id =
       sessions::SessionTabHelper::IdForTab(web_contents).id();
-  for (auto route :
+  for (const auto& route :
        media_router::MediaRouterFactory::GetApiForBrowserContext(context)
            ->GetCurrentRoutes()) {
-    if (!route.media_source().IsRemotePlaybackSource()) {
-      continue;
+    media_router::MediaSource media_source = route.media_source();
+    absl::optional<int> tab_id_from_route_id;
+    if (media_source.IsRemotePlaybackSource()) {
+      tab_id_from_route_id = media_source.TabIdFromRemotePlaybackSource();
+    } else if (media_source.IsTabMirroringSource()) {
+      tab_id_from_route_id = media_source.TabId();
     }
-    std::string media_source_tab_id;
-    net::GetValueForKeyInQuery(route.media_source().url(), "tab_id",
-                               &media_source_tab_id);
-    if (base::NumberToString(item_tab_id) == media_source_tab_id) {
+
+    if (tab_id_from_route_id.has_value() &&
+        tab_id_from_route_id.value() == item_tab_id) {
       return route.media_route_id();
     }
   }
+
   return "";
 }
 
-bool ShouldShowDeviceSelectorView(const std::string& item_id,
-                                  media_message_center::SourceType source_type,
-                                  Profile* profile) {
+bool ShouldShowDeviceSelectorView(
+    const std::string& item_id,
+    base::WeakPtr<media_message_center::MediaNotificationItem> item,
+    Profile* profile) {
+  auto source_type = item->SourceType();
   if (source_type == media_message_center::SourceType::kCast) {
     return false;
   }
@@ -123,7 +146,7 @@ bool ShouldShowDeviceSelectorView(const std::string& item_id,
   // Hide device selector view if the local media session has started Remote
   // Playback.
   if (source_type == media_message_center::SourceType::kLocalMediaSession &&
-      !GetRemotePlaybackRouteId(item_id, profile).empty()) {
+      !GetRemotePlaybackRouteId(item_id, item, profile).empty()) {
     return false;
   }
 
@@ -222,22 +245,24 @@ global_media_controls::MediaItemUI* MediaDialogView::ShowMediaItem(
   active_sessions_view_->ShowItem(id, std::move(view));
   UpdateBubbleSize();
 
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnMediaSessionShown();
-
+  }
   return view_ptr;
 }
 
 void MediaDialogView::HideMediaItem(const std::string& id) {
   active_sessions_view_->HideItem(id);
 
-  if (active_sessions_view_->empty())
+  if (active_sessions_view_->empty()) {
     HideDialog();
-  else
+  } else {
     UpdateBubbleSize();
+  }
 
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnMediaSessionHidden();
+  }
 }
 
 void MediaDialogView::RefreshMediaItem(
@@ -280,9 +305,9 @@ void MediaDialogView::AddedToWidget() {
 
 gfx::Size MediaDialogView::CalculatePreferredSize() const {
   // If we have active sessions, then fit to them.
-  if (!active_sessions_view_->empty())
+  if (!active_sessions_view_->empty()) {
     return views::BubbleDialogDelegateView::CalculatePreferredSize();
-
+  }
   // Otherwise, use a standard size for bubble dialogs.
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH);
@@ -291,9 +316,9 @@ gfx::Size MediaDialogView::CalculatePreferredSize() const {
 
 void MediaDialogView::UpdateBubbleSize() {
   SizeToContents();
-  if (!captions::IsLiveCaptionFeatureSupported())
+  if (!captions::IsLiveCaptionFeatureSupported()) {
     return;
-
+  }
   const int width = active_sessions_view_->GetPreferredSize().width();
   const int height = live_caption_container_->GetPreferredSize().height();
   live_caption_container_->SetPreferredSize(gfx::Size(width, height));
@@ -304,13 +329,15 @@ void MediaDialogView::OnMediaItemUISizeChanged() {
 }
 
 void MediaDialogView::OnMediaItemUIMetadataChanged() {
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnMediaSessionMetadataUpdated();
+  }
 }
 
 void MediaDialogView::OnMediaItemUIActionsChanged() {
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.OnMediaSessionActionsChanged();
+  }
 }
 
 void MediaDialogView::OnMediaItemUIDestroyed(const std::string& id) {
@@ -363,8 +390,9 @@ MediaDialogView::MediaDialogView(
 }
 
 MediaDialogView::~MediaDialogView() {
-  for (auto item_pair : observed_items_)
+  for (auto item_pair : observed_items_) {
     item_pair.second->RemoveObserver(this);
+  }
 }
 
 void MediaDialogView::Init() {
@@ -447,8 +475,10 @@ void MediaDialogView::ToggleLiveCaption(bool enabled) {
 }
 
 void MediaDialogView::OnSodaInstalled(speech::LanguageCode language_code) {
-  if (!prefs::IsLanguageCodeForLiveCaption(language_code, profile_->GetPrefs()))
+  if (!prefs::IsLanguageCodeForLiveCaption(language_code,
+                                           profile_->GetPrefs())) {
     return;
+  }
   speech::SodaInstaller::GetInstance()->RemoveObserver(this);
   SetLiveCaptionTitle(GetLiveCaptionTitle(profile_->GetPrefs()));
 }
@@ -517,7 +547,7 @@ MediaDialogView::BuildFooterView(
     return footer_view;
   }
 
-  // Show a footerview for a Cast item.
+  // Show a footer view for a Cast item.
   if (item->SourceType() == media_message_center::SourceType::kCast &&
       media_router::GlobalMediaControlsCastStartStopEnabled(profile_)) {
     return std::make_unique<MediaItemUILegacyCastFooterView>(
@@ -533,7 +563,7 @@ MediaDialogView::BuildFooterView(
       media_message_center::SourceType::kLocalMediaSession) {
     return nullptr;
   }
-  auto route_id = GetRemotePlaybackRouteId(id, profile_);
+  auto route_id = GetRemotePlaybackRouteId(id, item, profile_);
   if (route_id.empty()) {
     return nullptr;
   }
@@ -555,7 +585,7 @@ std::unique_ptr<MediaItemUIDeviceSelectorView>
 MediaDialogView::BuildDeviceSelector(
     const std::string& id,
     base::WeakPtr<media_message_center::MediaNotificationItem> item) {
-  if (!ShouldShowDeviceSelectorView(id, item->SourceType(), profile_)) {
+  if (!ShouldShowDeviceSelectorView(id, item, profile_)) {
     return nullptr;
   }
 
@@ -566,16 +596,20 @@ MediaDialogView::BuildDeviceSelector(
       media_router::GlobalMediaControlsCastStartStopEnabled(profile_);
   const bool show_expand_button =
       !base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI);
-  std::unique_ptr<media_router::CastDialogController> cast_controller;
+  mojo::PendingRemote<global_media_controls::mojom::DeviceListHost> provider;
+  mojo::PendingRemote<global_media_controls::mojom::DeviceListClient> observer;
+  auto observer_receiver = observer.InitWithNewPipeAndPassReceiver();
   if (gmc_cast_start_stop_enabled) {
-    cast_controller =
-        is_local_media_session
-            ? service_->CreateCastDialogControllerForSession(id)
-            : service_->CreateCastDialogControllerForPresentationRequest();
+    if (is_local_media_session) {
+      service_->GetDeviceListHostForSession(
+          id, provider.InitWithNewPipeAndPassReceiver(), std::move(observer));
+    } else {
+      service_->GetDeviceListHostForPresentation(
+          provider.InitWithNewPipeAndPassReceiver(), std::move(observer));
+    }
   }
-
   return std::make_unique<MediaItemUIDeviceSelectorView>(
-      id, service_, std::move(cast_controller),
+      id, service_, std::move(provider), std::move(observer_receiver),
       /* has_audio_output */ is_local_media_session, entry_point_,
       show_expand_button);
 }

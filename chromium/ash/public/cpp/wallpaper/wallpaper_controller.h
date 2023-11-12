@@ -7,16 +7,15 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include "ash/public/cpp/ash_public_export.h"
 #include "ash/public/cpp/wallpaper/google_photos_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/online_wallpaper_params.h"
 #include "ash/public/cpp/wallpaper/wallpaper_info.h"
 #include "ash/public/cpp/wallpaper/wallpaper_types.h"
-#include "base/callback_helpers.h"
 #include "base/containers/lru_cache.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_helpers.h"
 #include "base/time/time.h"
 #include "components/user_manager/user_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -62,6 +61,11 @@ class ASH_PUBLIC_EXPORT WallpaperController {
                     const base::FilePath& wallpapers,
                     const base::FilePath& custom_wallpapers,
                     const base::FilePath& device_policy_wallpaper) = 0;
+
+  // Whether the user with `account_id` can set wallpaper. Users may be
+  // disallowed from setting wallpaper based on enterprise policy or if the
+  // device is running in kiosk mode.
+  virtual bool CanSetUserWallpaper(const AccountId& account_id) const = 0;
 
   // Sets the wallpaper from a local file and updates the saved wallpaper info
   // for the user.
@@ -134,17 +138,6 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   virtual bool GetDailyGooglePhotosWallpaperIdCache(
       const AccountId& account_id,
       DailyGooglePhotosIdCache& ids_out) const = 0;
-
-  // Deprecated. Use |SetOnlineWallpaper| instead because it will handle
-  // downloading the image if it is not on disk yet.
-  // Sets wallpaper from the Chrome OS wallpaper picker. If the
-  // wallpaper file corresponding to |url| already exists in local file system
-  // (i.e. |SetOnlineWallpaper| was called earlier with the same |url|),
-  // returns true and sets wallpaper for the user, otherwise returns false.
-  // |params|: The parameters of the online wallpaper.
-  // Responds with true if the wallpaper file exists in local file system.
-  virtual void SetOnlineWallpaperIfExists(const OnlineWallpaperParams& params,
-                                          SetWallpaperCallback callback) = 0;
 
   // Sets the user's wallpaper to be the default wallpaper. Note: different user
   // types may have different default wallpapers.
@@ -263,7 +256,8 @@ class ASH_PUBLIC_EXPORT WallpaperController {
 
   // Removes all of the user's saved wallpapers and related info.
   // |account_id|: The user's account id.
-  virtual void RemoveUserWallpaper(const AccountId& account_id) = 0;
+  virtual void RemoveUserWallpaper(const AccountId& account_id,
+                                   base::OnceClosure on_removed) = 0;
 
   // Removes all of the user's saved wallpapers and related info if the
   // wallpaper was set by |SetPolicyWallpaper|. In addition, sets the user's
@@ -272,14 +266,6 @@ class ASH_PUBLIC_EXPORT WallpaperController {
   // next time |ShowUserWallpaper| is called.
   // |account_id|: The user's account id.
   virtual void RemovePolicyWallpaper(const AccountId& account_id) = 0;
-
-  // Returns the urls of the wallpapers that exist in local file system (i.e.
-  // |SetOnlineWallpaper| was called earlier). The url is used as id
-  // to identify which wallpapers are available to be set offline.
-  using GetOfflineWallpaperListCallback =
-      base::OnceCallback<void(const std::vector<std::string>&)>;
-  virtual void GetOfflineWallpaperList(
-      GetOfflineWallpaperListCallback callback) = 0;
 
   // Sets wallpaper animation duration. Passing an empty value disables the
   // animation.

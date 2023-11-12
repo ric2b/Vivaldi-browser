@@ -28,7 +28,6 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Rule;
@@ -46,13 +45,12 @@ import org.robolectric.annotation.LooperMode;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider.LayoutStateObserver;
 import org.chromium.chrome.browser.layouts.LayoutType;
-import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
-import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabImpl;
@@ -69,8 +67,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
-import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils;
-import org.chromium.chrome.browser.tasks.ConditionalTabStripUtils.FeatureStatus;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -132,8 +128,6 @@ public class TabGroupUiMediatorUnitTest {
     @Mock
     TabGridDialogMediator.DialogController mTabGridDialogController;
     @Mock
-    ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
-    @Mock
     Context mContext;
     @Mock
     SnackbarManager mSnackbarManager;
@@ -151,8 +145,6 @@ public class TabGroupUiMediatorUnitTest {
     ArgumentCaptor<IncognitoStateObserver> mIncognitoStateObserverArgumentCaptor;
     @Captor
     ArgumentCaptor<TabGroupModelFilter.Observer> mTabGroupModelFilterObserverArgumentCaptor;
-    @Captor
-    ArgumentCaptor<PauseResumeWithNativeObserver> mPauseResumeWithNativeObserverArgumentCaptor;
     @Captor
     ArgumentCaptor<TabObserver> mTabObserverCaptor;
     @Captor
@@ -214,10 +206,12 @@ public class TabGroupUiMediatorUnitTest {
         TabGridDialogMediator.DialogController controller =
                 TabUiFeatureUtilities.isTabGroupsAndroidEnabled(mContext) ? mTabGridDialogController
                                                                           : null;
+        Supplier<TabGridDialogMediator.DialogController> controllerSupplier = () -> {
+            return controller;
+        };
         mTabGroupUiMediator = new TabGroupUiMediator(mContext, mVisibilityController, mResetHandler,
                 mModel, mTabModelSelector, mTabCreatorManager, mLayoutStateProviderSupplier,
-                mIncognitoStateProvider, controller, mActivityLifecycleDispatcher, mSnackbarManager,
-                mOmniboxFocusStateSupplier);
+                mIncognitoStateProvider, controllerSupplier, mOmniboxFocusStateSupplier);
 
         if (currentTab == null) {
             verifyNeverReset();
@@ -225,26 +219,15 @@ public class TabGroupUiMediatorUnitTest {
         }
 
         // Verify strip button content description setup.
-        if (TabUiFeatureUtilities.isConditionalTabStripEnabled()) {
-            verify(mContext).getString(R.string.accessibility_bottom_tab_strip_close_strip);
-            verify(mContext).getString(R.string.accessibility_toolbar_btn_new_tab);
-        } else {
-            verify(mContext).getString(R.string.accessibility_bottom_tab_strip_expand_tab_sheet);
-            verify(mContext).getString(R.string.bottom_tab_grid_new_tab);
-        }
+        verify(mContext).getString(R.string.accessibility_bottom_tab_strip_expand_tab_sheet);
+        verify(mContext).getString(R.string.bottom_tab_grid_new_tab);
 
         // Verify strip initial reset.
-        if (TabUiFeatureUtilities.isConditionalTabStripEnabled()) {
+        List<Tab> tabs = mTabGroupModelFilter.getRelatedTabList(currentTab.getId());
+        if (tabs.size() < 2) {
             verifyResetStrip(false, null);
-            assertThat(mTabGroupUiMediator.getConditionalTabStripFeatureStatusForTesting(),
-                    equalTo(FeatureStatus.DEFAULT));
         } else {
-            List<Tab> tabs = mTabGroupModelFilter.getRelatedTabList(currentTab.getId());
-            if (tabs.size() < 2) {
-                verifyResetStrip(false, null);
-            } else {
-                verifyResetStrip(true, tabs);
-            }
+            verifyResetStrip(true, tabs);
         }
     }
 
@@ -285,40 +268,19 @@ public class TabGroupUiMediatorUnitTest {
         doNothing().when(mTab2).addObserver(mTabObserverCaptor.capture());
         doNothing().when(mTab3).addObserver(mTabObserverCaptor.capture());
 
-        if (TabUiFeatureUtilities.isConditionalTabStripEnabled()) {
-            doReturn(false).when(mTabModelFilter).isIncognito();
-            doReturn(3).when(mTabModelFilter).getCount();
-            doReturn(new ArrayList<>(Arrays.asList(mTab1)))
-                    .when(mTabModelFilter)
-                    .getRelatedTabList(TAB1_ID);
-            doReturn(new ArrayList<>(Arrays.asList(mTab1)))
-                    .when(mTabModelFilter)
-                    .getRelatedTabList(TAB2_ID);
-            doReturn(new ArrayList<>(Arrays.asList(mTab1)))
-                    .when(mTabModelFilter)
-                    .getRelatedTabList(TAB3_ID);
+        // Setup TabGroupModelFilter.
+        doReturn(false).when(mTabGroupModelFilter).isIncognito();
+        doReturn(2).when(mTabGroupModelFilter).getCount();
+        doReturn(mTabGroup1).when(mTabGroupModelFilter).getRelatedTabList(TAB1_ID);
+        doReturn(mTabGroup2).when(mTabGroupModelFilter).getRelatedTabList(TAB2_ID);
+        doReturn(mTabGroup2).when(mTabGroupModelFilter).getRelatedTabList(TAB3_ID);
 
-            doReturn(mTabModelFilter).when(mTabModelFilterProvider).getCurrentTabModelFilter();
-            doReturn(mTabModelFilter).when(mTabModelFilterProvider).getTabModelFilter(true);
-            doReturn(mTabModelFilter).when(mTabModelFilterProvider).getTabModelFilter(false);
-            doNothing()
-                    .when(mActivityLifecycleDispatcher)
-                    .register(mPauseResumeWithNativeObserverArgumentCaptor.capture());
-        } else {
-            // Setup TabGroupModelFilter.
-            doReturn(false).when(mTabGroupModelFilter).isIncognito();
-            doReturn(2).when(mTabGroupModelFilter).getCount();
-            doReturn(mTabGroup1).when(mTabGroupModelFilter).getRelatedTabList(TAB1_ID);
-            doReturn(mTabGroup2).when(mTabGroupModelFilter).getRelatedTabList(TAB2_ID);
-            doReturn(mTabGroup2).when(mTabGroupModelFilter).getRelatedTabList(TAB3_ID);
-
-            doReturn(mTabGroupModelFilter).when(mTabModelFilterProvider).getCurrentTabModelFilter();
-            doReturn(mTabGroupModelFilter).when(mTabModelFilterProvider).getTabModelFilter(true);
-            doReturn(mTabGroupModelFilter).when(mTabModelFilterProvider).getTabModelFilter(false);
-            doNothing()
-                    .when(mTabGroupModelFilter)
-                    .addTabGroupObserver(mTabGroupModelFilterObserverArgumentCaptor.capture());
-        }
+        doReturn(mTabGroupModelFilter).when(mTabModelFilterProvider).getCurrentTabModelFilter();
+        doReturn(mTabGroupModelFilter).when(mTabModelFilterProvider).getTabModelFilter(true);
+        doReturn(mTabGroupModelFilter).when(mTabModelFilterProvider).getTabModelFilter(false);
+        doNothing()
+                .when(mTabGroupModelFilter)
+                .addTabGroupObserver(mTabGroupModelFilterObserverArgumentCaptor.capture());
 
         // Set up TabModelSelector and TabModelFilterProvider.
         List<TabModel> tabModelList = new ArrayList<>();
@@ -363,11 +325,6 @@ public class TabGroupUiMediatorUnitTest {
         mResetHandlerInOrder = inOrder(mResetHandler);
         mVisibilityControllerInOrder = inOrder(mVisibilityController);
         mModel = new PropertyModel(TabGroupUiProperties.ALL_KEYS);
-    }
-
-    @After
-    public void tearDown() {
-        ConditionalTabStripUtils.setFeatureStatus(FeatureStatus.DEFAULT);
     }
 
     /*********************** Tab group related tests *************************/
@@ -580,9 +537,9 @@ public class TabGroupUiMediatorUnitTest {
         doReturn(tabs).when(mTabGroupModelFilter).getRelatedTabList(TAB4_ID);
 
         mTabModelObserverArgumentCaptor.getValue().didAddTab(
-                newTab, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
+                newTab, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND, false);
         mTabModelObserverArgumentCaptor.getValue().didAddTab(
-                newTab, TabLaunchType.FROM_RESTORE, TabCreationState.FROZEN_ON_RESTORE);
+                newTab, TabLaunchType.FROM_RESTORE, TabCreationState.FROZEN_ON_RESTORE, false);
 
         // Strip should be not be reset when adding a single new tab.
         verifyNeverReset();
@@ -599,7 +556,8 @@ public class TabGroupUiMediatorUnitTest {
         doReturn(tabs).when(mTabGroupModelFilter).getRelatedTabList(TAB4_ID);
 
         mTabModelObserverArgumentCaptor.getValue().didAddTab(newTab,
-                TabLaunchType.FROM_LONGPRESS_BACKGROUND, TabCreationState.LIVE_IN_FOREGROUND);
+                TabLaunchType.FROM_LONGPRESS_BACKGROUND, TabCreationState.LIVE_IN_FOREGROUND,
+                false);
 
         // Strip should be be reset when long pressing a link and add a tab into group.
         verifyResetStrip(true, tabs);
@@ -617,7 +575,7 @@ public class TabGroupUiMediatorUnitTest {
 
         mTabModelObserverArgumentCaptor.getValue().didAddTab(newTab,
                 TabLaunchType.FROM_LONGPRESS_BACKGROUND_IN_GROUP,
-                TabCreationState.LIVE_IN_FOREGROUND);
+                TabCreationState.LIVE_IN_FOREGROUND, false);
 
         // Strip should be be reset when long pressing a link and add a tab into group.
         verifyResetStrip(true, tabs);
@@ -636,11 +594,12 @@ public class TabGroupUiMediatorUnitTest {
         doReturn(mTabGroup1).when(mTabGroupModelFilter).getRelatedTabList(TAB4_ID);
 
         mTabModelObserverArgumentCaptor.getValue().didAddTab(
-                newTab, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
+                newTab, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND, false);
         mTabModelObserverArgumentCaptor.getValue().didAddTab(
-                newTab, TabLaunchType.FROM_RESTORE, TabCreationState.FROZEN_ON_RESTORE);
+                newTab, TabLaunchType.FROM_RESTORE, TabCreationState.FROZEN_ON_RESTORE, false);
         mTabModelObserverArgumentCaptor.getValue().didAddTab(newTab,
-                TabLaunchType.FROM_LONGPRESS_BACKGROUND, TabCreationState.LIVE_IN_FOREGROUND);
+                TabLaunchType.FROM_LONGPRESS_BACKGROUND, TabCreationState.LIVE_IN_FOREGROUND,
+                false);
 
         // Strip should be not be reset through these two types of launching.
         verifyNeverReset();
@@ -656,8 +615,8 @@ public class TabGroupUiMediatorUnitTest {
         mTabGroup2.add(newTab);
         doReturn(mTabGroup2).when(mTabGroupModelFilter).getRelatedTabList(TAB4_ID);
 
-        mTabModelObserverArgumentCaptor.getValue().didAddTab(
-                newTab, TabLaunchType.FROM_TAB_GROUP_UI, TabCreationState.LIVE_IN_FOREGROUND);
+        mTabModelObserverArgumentCaptor.getValue().didAddTab(newTab,
+                TabLaunchType.FROM_TAB_GROUP_UI, TabCreationState.LIVE_IN_FOREGROUND, false);
 
         // Strip should be not be reset through adding tab from UI.
         verifyNeverReset();
@@ -796,14 +755,24 @@ public class TabGroupUiMediatorUnitTest {
 
     @Test
     @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
-    public void tabClosureUndone_UiNotVisible_ShowingOverviewMode() {
+    public void tabClosureUndone_UiNotVisible_ShowingTabSwitcherMode() {
+        tabClosureUndone_UiNotVisible_ShowingOverviewModeImpl(LayoutType.TAB_SWITCHER);
+    }
+
+    @Test
+    @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
+    public void tabClosureUndone_UiNotVisible_ShowingStartSurface() {
+        tabClosureUndone_UiNotVisible_ShowingOverviewModeImpl(LayoutType.START_SURFACE);
+    }
+
+    private void tabClosureUndone_UiNotVisible_ShowingOverviewModeImpl(@LayoutType int layoutType) {
         // Assume mTab1 is selected.
         initAndAssertProperties(mTab1);
         // OverviewMode is hiding by default.
         assertThat(mTabGroupUiMediator.getIsShowingOverViewModeForTesting(), equalTo(false));
 
         // Simulate the overview mode is showing, which hides the strip.
-        mLayoutStateObserverCaptor.getValue().onStartedShowing(LayoutType.TAB_SWITCHER, true);
+        mLayoutStateObserverCaptor.getValue().onStartedShowing(layoutType, true);
         assertThat(mTabGroupUiMediator.getIsShowingOverViewModeForTesting(), equalTo(true));
         mVisibilityControllerInOrder.verify(mVisibilityController).setBottomControlsVisible(false);
 
@@ -819,9 +788,19 @@ public class TabGroupUiMediatorUnitTest {
     @Test
     @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
     public void overViewStartedShowing() {
+        overViewStartedShowingImpl(LayoutType.TAB_SWITCHER);
+    }
+
+    @Test
+    @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
+    public void overViewStartedShowing_StartSurface() {
+        overViewStartedShowingImpl(LayoutType.START_SURFACE);
+    }
+
+    private void overViewStartedShowingImpl(@LayoutType int layoutType) {
         initAndAssertProperties(mTab1);
 
-        mLayoutStateObserverCaptor.getValue().onStartedShowing(LayoutType.TAB_SWITCHER, true);
+        mLayoutStateObserverCaptor.getValue().onStartedShowing(layoutType, true);
 
         verifyResetStrip(false, null);
     }
@@ -829,9 +808,19 @@ public class TabGroupUiMediatorUnitTest {
     @Test
     @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
     public void overViewFinishedHiding_NoCurrentTab() {
+        overViewFinishedHiding_NoCurrentTabImpl(LayoutType.TAB_SWITCHER);
+    }
+
+    @Test
+    @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
+    public void overViewFinishedHiding_NoCurrentTab_StartSurface() {
+        overViewFinishedHiding_NoCurrentTabImpl(LayoutType.START_SURFACE);
+    }
+
+    private void overViewFinishedHiding_NoCurrentTabImpl(@LayoutType int layoutType) {
         initAndAssertProperties(null);
 
-        mLayoutStateObserverCaptor.getValue().onFinishedHiding(LayoutType.TAB_SWITCHER);
+        mLayoutStateObserverCaptor.getValue().onFinishedHiding(layoutType);
 
         verifyNeverReset();
     }
@@ -839,9 +828,19 @@ public class TabGroupUiMediatorUnitTest {
     @Test
     @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
     public void overViewFinishedHiding_CurrentTabSingle() {
+        overViewFinishedHiding_CurrentTabSingleImpl(LayoutType.TAB_SWITCHER);
+    }
+
+    @Test
+    @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
+    public void overViewFinishedHiding_CurrentTabSingle_StartSurface() {
+        overViewFinishedHiding_CurrentTabSingleImpl(LayoutType.START_SURFACE);
+    }
+
+    private void overViewFinishedHiding_CurrentTabSingleImpl(@LayoutType int layoutType) {
         initAndAssertProperties(mTab1);
 
-        mLayoutStateObserverCaptor.getValue().onFinishedHiding(LayoutType.TAB_SWITCHER);
+        mLayoutStateObserverCaptor.getValue().onFinishedHiding(layoutType);
 
         verifyResetStrip(false, null);
     }
@@ -849,9 +848,19 @@ public class TabGroupUiMediatorUnitTest {
     @Test
     @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
     public void overViewFinishedHiding_CurrentTabInGroup() {
+        overViewFinishedHiding_CurrentTabInGroupImpl(LayoutType.TAB_SWITCHER);
+    }
+
+    @Test
+    @Features.EnableFeatures(ChromeFeatureList.TAB_GROUPS_ANDROID)
+    public void overViewFinishedHiding_CurrentTabInGroup_StartSurface() {
+        overViewFinishedHiding_CurrentTabInGroupImpl(LayoutType.START_SURFACE);
+    }
+
+    public void overViewFinishedHiding_CurrentTabInGroupImpl(@LayoutType int layoutType) {
         initAndAssertProperties(mTab2);
 
-        mLayoutStateObserverCaptor.getValue().onFinishedHiding(LayoutType.TAB_SWITCHER);
+        mLayoutStateObserverCaptor.getValue().onFinishedHiding(layoutType);
 
         verifyResetStrip(true, mTabGroup2);
     }

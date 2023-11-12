@@ -19,16 +19,13 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
 #include "base/win/scoped_localalloc.h"
 #include "build/branding_buildflags.h"
 #include "chrome/updater/test_scope.h"
 #include "chrome/updater/updater_branding.h"
-#include "chrome/updater/updater_version.h"
 #include "chrome/updater/util/unittest_util_win.h"
 #include "chrome/updater/util/win_util.h"
-#include "chrome/updater/win/test/test_executables.h"
 #include "chrome/updater/win/win_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -132,6 +129,56 @@ TEST_F(AppCommandRunnerTest, GetAppCommandFormatComponents_ProgramFilesPaths) {
   }
 }
 
+TEST_F(AppCommandRunnerTest, FormatParameter) {
+  const std::vector<std::wstring> no_substitutions = {};
+  const std::vector<std::wstring> p1p2p3 = {L"p1", L"p2", L"p3"};
+
+  const struct {
+    const wchar_t* format_string;
+    const wchar_t* expected_output;
+    const std::vector<std::wstring>& substitutions;
+  } test_cases[] = {
+      // Format string does not have any placeholders.
+      {L"abc=1 xyz=2 q", L"abc=1 xyz=2 q", no_substitutions},
+      {L" abc=1    xyz=2 q ", L" abc=1    xyz=2 q ", no_substitutions},
+
+      // Format string has placeholders.
+      {L"abc=%1", L"abc=p1", p1p2p3},
+      {L"abc=%1  %3 %2=x  ", L"abc=p1  p3 p2=x  ", p1p2p3},
+
+      // Format string has correctly escaped literal `%` signs.
+      {L"%1", L"p1", p1p2p3},
+      {L"%%1", L"%1", p1p2p3},
+      {L"%%%1", L"%p1", p1p2p3},
+      {L"abc%%def%%", L"abc%def%", p1p2p3},
+      {L"%12", L"p12", p1p2p3},
+      {L"%1%2", L"p1p2", p1p2p3},
+
+      // Format string has incorrect escaped `%` signs.
+      {L"unescaped percent %", nullptr, p1p2p3},
+      {L"unescaped %%% percents", nullptr, p1p2p3},
+      {L"always escape percent otherwise %error", nullptr, p1p2p3},
+      {L"% percents need to be escaped%", nullptr, p1p2p3},
+
+      // Format string has invalid values for the placeholder index.
+      {L"placeholder needs to be between 1 and 9, not %A", nullptr, p1p2p3},
+      {L"placeholder %4  is > size of substitutions vector", nullptr, p1p2p3},
+      {L"%1 is ok, but %8 or %9 is not ok", nullptr, p1p2p3},
+      {L"%4", nullptr, p1p2p3},
+      {L"abc=%1", nullptr, no_substitutions},
+  };
+
+  for (const auto& test_case : test_cases) {
+    absl::optional<std::wstring> output = AppCommandRunner::FormatParameter(
+        test_case.format_string, test_case.substitutions);
+    if (test_case.expected_output) {
+      EXPECT_EQ(output.value(), test_case.expected_output);
+    } else {
+      EXPECT_EQ(output, absl::nullopt);
+    }
+  }
+}
+
 TEST_F(AppCommandRunnerTest,
        GetAppCommandFormatComponents_And_FormatAppCommandLine) {
   const std::vector<std::wstring> nosubstitutions = {};
@@ -192,23 +239,21 @@ TEST_F(AppCommandRunnerTest,
 
       // Special characters in the substitution.
       // embedded \ and \\.
-      {{L"%1"}, L"a\\b\\\\c", {L"a\\b\\\\c"}},
+      {{L"%1"}, L"\"a\\b\\\\c\"", {L"a\\b\\\\c"}},
       // trailing \.
-      {{L"%1"}, L"a\\", {L"a\\"}},
+      {{L"%1"}, L"\"a\\\\\"", {L"a\\"}},
       // trailing \\.
-      {{L"%1"}, L"a\\\\", {L"a\\\\"}},
+      {{L"%1"}, L"\"a\\\\\\\\\"", {L"a\\\\"}},
       // only \\.
-      {{L"%1"}, L"\\\\", {L"\\\\"}},
-      // empty.
-      {{L"%1"}, L"\"\"", {L""}},
+      {{L"%1"}, L"\"\\\\\\\\\"", {L"\\\\"}},
       // embedded quote.
-      {{L"%1"}, L"a\\\"b", {L"a\"b"}},
+      {{L"%1"}, L"\"a\\\"b\"", {L"a\"b"}},
       // trailing quote.
-      {{L"%1"}, L"abc\\\"", {L"abc\""}},
+      {{L"%1"}, L"\"abc\\\"\"", {L"abc\""}},
       // embedded \\".
-      {{L"%1"}, L"a\\\\\\\\\\\"b", {L"a\\\\\"b"}},
+      {{L"%1"}, L"\"a\\\\\\\\\\\"b\"", {L"a\\\\\"b"}},
       // trailing \\".
-      {{L"%1"}, L"abc\\\\\\\\\\\"", {L"abc\\\\\""}},
+      {{L"%1"}, L"\"abc\\\\\\\\\\\"\"", {L"abc\\\\\""}},
       // embedded space.
       {{L"%1"}, L"\"abc def\"", {L"abc def"}},
       // trailing space.
@@ -243,8 +288,9 @@ TEST_F(AppCommandRunnerTest,
 
     EXPECT_EQ(command_line.value(), test_case.output);
 
-    if (test_case.input[0] != L"%1" || test_case.substitutions.size() != 1)
+    if (test_case.input[0] != L"%1" || test_case.substitutions.size() != 1) {
       continue;
+    }
 
     // The formatted output is now sent through ::CommandLineToArgvW to
     // verify that it produces the original substitution.
@@ -341,8 +387,9 @@ TEST_F(AppCommandRunnerTest, CheckChromeBrandedName) {
 }
 
 TEST_F(AppCommandRunnerTest, RunProcessLauncherFormat) {
-  if (!IsSystemInstall(GetTestScope()))
+  if (!IsSystemInstall(GetTestScope())) {
     return;
+  }
 
   const struct {
     const wchar_t* app_name;
@@ -399,8 +446,9 @@ TEST_F(AppCommandRunnerTest, RunProcessLauncherFormat) {
     ASSERT_EQ(
         app_command_runner.has_value() ? S_OK : app_command_runner.error(),
         test_case.expected_hr);
-    if (FAILED(test_case.expected_hr))
+    if (FAILED(test_case.expected_hr)) {
       continue;
+    }
 
     ASSERT_HRESULT_SUCCEEDED(app_command_runner->Run({}, process));
 
@@ -412,8 +460,9 @@ TEST_F(AppCommandRunnerTest, RunProcessLauncherFormat) {
 }
 
 TEST_F(AppCommandRunnerTest, RunBothFormats) {
-  if (!IsSystemInstall(GetTestScope()))
+  if (!IsSystemInstall(GetTestScope())) {
     return;
+  }
 
   const struct {
     const wchar_t* cmd_id_to_execute;
@@ -479,13 +528,12 @@ TEST_F(AppCommandRunnerTest, LoadAutoRunOnOsUpgradeAppCommands) {
       {{L"/c", L"exit 5420"}, kCmdId2},
   };
 
-  base::ranges::for_each(
-      test_cases, [&](const auto& test_case) {
-        CreateAppCommandOSUpgradeRegistry(
-            GetTestScope(), kAppId1, test_case.command_id,
-            base::StrCat({cmd_exe_command_line_.GetCommandLineString(), L" ",
-                          base::JoinString(test_case.input, L" ")}));
-      });
+  base::ranges::for_each(test_cases, [&](const auto& test_case) {
+    CreateAppCommandOSUpgradeRegistry(
+        GetTestScope(), kAppId1, test_case.command_id,
+        base::StrCat({cmd_exe_command_line_.GetCommandLineString(), L" ",
+                      base::JoinString(test_case.input, L" ")}));
+  });
 
   const std::vector<AppCommandRunner> app_command_runners =
       AppCommandRunner::LoadAutoRunOnOsUpgradeAppCommands(GetTestScope(),

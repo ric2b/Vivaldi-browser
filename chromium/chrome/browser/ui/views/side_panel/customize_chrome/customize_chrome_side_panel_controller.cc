@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/views/side_panel/customize_chrome/customize_chrome_side_panel_controller.h"
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -64,13 +64,25 @@ void CustomizeChromeSidePanelController::DeregisterEntry() {
       SidePanelEntry::Key(SidePanelEntry::Id::kCustomizeChrome));
 }
 
-void CustomizeChromeSidePanelController::ShowCustomizeChromeSidePanel() {
+void CustomizeChromeSidePanelController::SetCustomizeChromeSidePanelVisible(
+    bool visible,
+    CustomizeChromeSection section) {
   auto* browser_view = GetBrowserView();
   if (!browser_view)
     return;
   DCHECK(IsCustomizeChromeEntryAvailable());
-  browser_view->side_panel_coordinator()->Show(
-      SidePanelEntry::Id::kCustomizeChrome);
+  if (visible) {
+    browser_view->side_panel_coordinator()->Show(
+        SidePanelEntry::Id::kCustomizeChrome);
+    if (customize_chrome_ui_) {
+      customize_chrome_ui_->ScrollToSection(section);
+      section_.reset();
+    } else {
+      section_ = section;
+    }
+  } else {
+    browser_view->side_panel_coordinator()->Close();
+  }
 }
 
 bool CustomizeChromeSidePanelController::IsCustomizeChromeEntryShowing() const {
@@ -115,6 +127,13 @@ CustomizeChromeSidePanelController::CreateCustomizeChromeWebView() {
               /*webui_resizes_host=*/false,
               /*esc_closes_ui=*/false));
   customize_chrome_web_view->ShowUI();
+  customize_chrome_ui_ = customize_chrome_web_view->contents_wrapper()
+                             ->GetWebUIController()
+                             ->GetWeakPtr();
+  if (section_.has_value()) {
+    customize_chrome_ui_->ScrollToSection(*section_);
+    section_.reset();
+  }
   return customize_chrome_web_view;
 }
 

@@ -13,9 +13,9 @@
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/source_registration_error.mojom-forward.h"
-#include "components/attribution_reporting/suitable_origin.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace mojo {
@@ -24,14 +24,19 @@ struct DefaultConstructTraits;
 
 namespace attribution_reporting {
 
+COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
+void RecordSourceRegistrationError(mojom::SourceRegistrationError);
+
 struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) SourceRegistration {
+  // Doesn't log metric on parsing failures.
   static base::expected<SourceRegistration, mojom::SourceRegistrationError>
       Parse(base::Value::Dict);
 
+  // Logs metric on parsing failures.
   static base::expected<SourceRegistration, mojom::SourceRegistrationError>
   Parse(base::StringPiece json);
 
-  explicit SourceRegistration(SuitableOrigin destination);
+  explicit SourceRegistration(DestinationSet);
 
   ~SourceRegistration();
 
@@ -44,7 +49,7 @@ struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) SourceRegistration {
   base::Value::Dict ToJson() const;
 
   uint64_t source_event_id = 0;
-  SuitableOrigin destination;
+  DestinationSet destination_set;
   absl::optional<base::TimeDelta> expiry;
   absl::optional<base::TimeDelta> event_report_window;
   absl::optional<base::TimeDelta> aggregatable_report_window;

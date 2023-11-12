@@ -26,13 +26,15 @@
 @property(nonatomic) id<OmniboxIcon> icon;
 @property(nonatomic) id<OmniboxPedal, OmniboxIcon> pedal;
 @property(nonatomic) BOOL isTailSuggestion;
-@property(nonatomic, readonly) NSString* commonPrefix;
+@property(nonatomic, readonly, copy) NSString* commonPrefix;
 @property(nonatomic, strong) NSNumber* suggestionGroupId;
 @property(nonatomic, strong) NSNumber* suggestionSectionId;
 
 @property(nonatomic) NSAttributedString* omniboxPreviewText;
 @property(nonatomic) UIImage* matchTypeIcon;
+@property(nonatomic) NSString* matchTypeIconAccessibilityIdentifier;
 @property(nonatomic, getter=isMatchTypeSearch) BOOL matchTypeSearch;
+@property(nonatomic, readonly) BOOL isWrapping;
 @property(nonatomic) CrURL* destinationUrl;
 
 // Simple suggestion with text.

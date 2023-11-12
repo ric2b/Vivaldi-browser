@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "chromeos/ash/components/tether/asynchronous_shutdown_object_container_impl.h"
 #include "chromeos/ash/components/tether/crash_recovery_manager_impl.h"
@@ -169,6 +169,7 @@ class TetherComponentImplTest : public testing::Test {
         nullptr /* tether_host_fetcher */, nullptr /* notification_presenter */,
         nullptr /* gms_core_notifications_state_tracker */,
         nullptr /* pref_service */, nullptr /* network_state_handler */,
+        nullptr /* technology_state_controller */,
         nullptr /* managed_network_configuration_handler */,
         nullptr /* network_connect */, nullptr /* network_connection_handler */,
         nullptr /* adapter */, nullptr /* session_manager */);

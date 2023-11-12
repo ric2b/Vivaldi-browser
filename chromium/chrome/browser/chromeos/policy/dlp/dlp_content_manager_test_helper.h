@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_CHROMEOS_POLICY_DLP_DLP_CONTENT_MANAGER_TEST_HELPER_H_
 
 #include <memory>
+
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
@@ -64,6 +65,8 @@ class DlpContentManagerTestHelper {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   base::TimeDelta GetPrivacyScreenOffDelay() const;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+  void SetScreenShareResumeDelay(base::TimeDelta delay) const;
 
   DlpContentManager* GetContentManager() const;
   DlpReportingManager* GetReportingManager() const;

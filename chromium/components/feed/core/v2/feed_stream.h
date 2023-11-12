@@ -82,6 +82,9 @@ class FeedStream : public FeedApi,
     virtual TabGroupEnabledState GetTabGroupEnabledState() = 0;
     virtual void ClearAll() = 0;
     virtual AccountInfo GetAccountInfo() = 0;
+    // Returns true if Sync is enabled for the user. If the user is not signed
+    // in it also returns false.
+    virtual bool IsSyncOn() = 0;
     virtual void PrefetchImage(const GURL& url) = 0;
     virtual void RegisterExperiments(const Experiments& experiments) = 0;
     virtual void RegisterFeedUserSettingsFieldTrial(
@@ -242,6 +245,7 @@ class FeedStream : public FeedApi,
   void PrefetchImage(const GURL& url);
 
   bool IsSignedIn() const { return !delegate_->GetAccountInfo().IsEmpty(); }
+  bool IsSyncOn() const { return delegate_->IsSyncOn(); }
   AccountInfo GetAccountInfo() const { return delegate_->GetAccountInfo(); }
 
   // Determines if we should attempt loading the stream or refreshing at all.
@@ -267,6 +271,9 @@ class FeedStream : public FeedApi,
   bool ShouldForceSignedOutFeedQueryRequest(
       const StreamType& stream_type) const;
 
+  // Returns the Chrome sign in status
+  feedwire::ChromeSignInStatus::SignInStatus GetSignInStatus() const;
+
   // Unloads one stream model. Surfaces are not updated, and will remain frozen
   // until a model load is requested.
   void UnloadModel(const StreamType& stream_type);
@@ -277,7 +284,8 @@ class FeedStream : public FeedApi,
   // is not true. Returns CARDS_UNSPECIFIED if loading is to proceed, or another
   // DiscoverLaunchResult if loading will not be attempted.
   feedwire::DiscoverLaunchResult TriggerStreamLoad(
-      const StreamType& stream_type);
+      const StreamType& stream_type,
+      SingleWebFeedEntryPoint entry_point = SingleWebFeedEntryPoint::kOther);
 
   // Only to be called by ClearAllTask. This clears other stream data stored in
   // memory.

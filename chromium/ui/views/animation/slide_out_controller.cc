@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -84,7 +84,7 @@ void SlideOutController::OnGestureEvent(ui::GestureEvent* event) {
         gesture_amount_ = swipe_control_width_;
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_NORETURN();
     }
     delegate_->OnSlideStarted();
   } else if (event->type() == ui::ET_GESTURE_SCROLL_UPDATE) {

@@ -9,17 +9,195 @@
     },
     "types": [
       {
+        "id": "ContentType",
+        "type": "string",
+        "description": "Defines role of a node in content. 'group' is the same as a stack.",
+        "enum": [ "window", "workspace", "pinned", "group", "tab" ]
+      },
+      {
+        "id": "WorkspaceItem",
+        "type": "object",
+        "description": "Holds information of a workspace. Not actual tabs, but the workspace itself.",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Unique identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name shown in UI."
+          },
+          "icon": {
+            "type": "string",
+            "description": "Icon shown in UI."
+          },
+          "emoji": {
+            "type": "string",
+            "description": "emoji shown in UI."
+          }
+        }
+      },
+      {
+        "id": "TabContent",
+        "type": "object",
+        "description": "Holds information of a tab",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Unique identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Active page title. Can be empty."
+          },
+          "url": {
+            "type": "string",
+            "description": "Url of active entry in navigation list."
+          },
+          "pinned": {
+            "type": "boolean",
+            "description": "Pinned state of the tab."
+          },
+          "quarantine": {
+            "type": "boolean",
+            "description": "Tab is not installed if true"
+          },
+          "group": {
+            "type": "string",
+            "description": "The group (stack) the tab belongs to. Can be empty which means no group."
+          },
+          "groupName": {
+            "type": "string",
+            "description": "Name shown in UI. Only set for tabs in a stack. Can be empty even then."
+          }
+        }
+      },
+      {
+        "id": "WindowContent",
+        "type": "object",
+        "description": "Holds information of a window",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Unique identifier."
+          },
+          "quarantine": {
+            "type": "boolean",
+            "description": "Window is not installed if true"
+          },
+          "tabs": {
+            "type": "array",
+            "items": { "$ref": "TabContent" },
+            "description": "Tabs in window."
+          }
+        }
+      },
+      {
+        "id": "WorkspaceContent",
+        "type": "object",
+        "description": "Holds information, including tabs of a workspace.",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Unique identifier."
+          },
+          "quarantine": {
+            "type": "boolean",
+            "description": "Window is not installed if true"
+          },
+          "tabs": {
+            "type": "array",
+            "items": { "$ref": "TabContent" },
+            "description": "Tabs in workspace."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name shown in UI."
+          },
+          "icon": {
+            "type": "string",
+            "description": "Icon shown in UI."
+          },
+          "emoji": {
+            "type": "string",
+            "description": "emoji shown in UI."
+          }
+        }
+      },
+      {
+        "id": "ContentModel",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number",
+            "description": "Session identifier."
+          },
+          "windows": {
+            "type": "array",
+            "items": { "$ref": "WindowContent" }
+          },
+          "workspaces": {
+            "type": "array",
+            "items": { "$ref": "WorkspaceContent" }
+          }
+        }
+      },
+      {
+        "id": "ContentCommands",
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": { "type": "number" },
+            "description": "Tabs and windows in a session."
+          },
+          "type": {
+            "$ref": "ContentType",
+            "optional": true,
+            "description": "Used for commands: ['title']."
+          },
+          "quarantine": {
+            "type": "boolean",
+            "optional": true,
+            "description": "For setting quarantine state."
+          },
+          "title": {
+            "type": "string",
+            "optional": true,
+            "description": "For setting title. Ignored if number of ids is not 1."
+          }
+        }
+      },
+      {
+        "id": "ItemType",
+        "type": "string",
+        "description": "Defines supported items",
+        "enum": [ "folder", "node", "history" ]
+      },
+      {
         "id": "SessionItem",
         "type": "object",
         "description": "Object that holds all information about a single session.",
         "properties": {
+          "id": {
+            "type": "number",
+            "description": "Unique identifier."
+          },
+          "type": {
+            "$ref": "ItemType",
+            "description": "Tells what kind of item. 'folder' or 'node'. A 'node' can have children (it is then a container)."
+          },
           "name": {
             "type": "string",
-            "description": "Session display name created from the filename"
+            "description": "Session display name."
           },
           "createDateJS": {
             "type": "number",
             "description": "Session save date in JS format."
+          },
+          "modifyDateJS": {
+            "type": "number",
+            "description": "Session update date in JS format."
           },
           "windows": {
             "type": "number",
@@ -28,6 +206,58 @@
           "tabs": {
             "type": "number",
             "description": "Number of tabs in this session."
+          },
+          "workspaces": {
+            "type": "array",
+            "items": { "$ref": "WorkspaceItem" },
+            "description": "List of workspaces in session."
+          },
+          "parentId": {
+            "type": "number",
+            "description": "Unique identifier."
+          },
+          "containerId": {
+            "type": "number",
+            "description": "Set for elements in a container or trash, -1 otherwise."
+          },
+          "content": {
+            "$ref": "ContentModel",
+            "optional": true,
+            "descripton": "Detailed content of a session. Set on demand in JS, neven in C++. Included as member to simplify handling."
+          },
+          "children": {
+            "type": "array",
+            "optional": true,
+            "items": { "$ref": "SessionItem" },
+            "description": "An ordered list of children of this node."
+          }
+        }
+      },
+      {
+        "id": "SessionList",
+        "type": "array",
+        "items": {
+          "$ref": "SessionItem"
+        }
+      },
+      {
+        "id": "SessionModel",
+        "type": "object",
+        "properties": {
+          "items": {
+            "$ref": "SessionList"
+          },
+          "rootId": {
+            "type": "number"
+          },
+          "autosaveId": {
+            "type": "number"
+          },
+          "trashId": {
+            "type": "number"
+          },
+          "loadingFailed": {
+            "type": "boolean"
           }
         }
       },
@@ -36,26 +266,94 @@
         "type": "object",
         "description": "Options for opening the session.",
         "properties": {
-          "openInNewWindow": {
+          "newWindow": {
             "type": "boolean",
             "description": "The session will open in a new window."
+          },
+          "oneWindow": {
+            "type": "boolean",
+            "description": "All tabs will open in one windows."
+          },
+          "withWorkspace": {
+            "type": "boolean",
+            "description": "Open workspace tabs."
           }
         }
       },
       {
-        "id": "SessionSaveOptions",
+        "id": "SessionAddOptions",
         "type": "object",
-        "description": "Options for saving the session.",
+        "description": "Options for adding a new session or updating an existing session.",
         "properties": {
-          "saveOnlyWindowId": {
+          "name": {
+            "type": "string",
+            "description": "User friendly description of the session. [add, duplicate]."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Filename without extension. Final name be extended with numbers (N) on collision. [all]"
+          },
+          "parentId": {
+            "type": "number",
+            "description": "Parent of new session node in the model. [add, duplicate]."
+          },
+          "index": {
+            "type": "number",
+            "description": "Where to insert among parent's siblings. [add, duplicate]."
+          },
+          "owner": {
+            "type": "string",
+            "description": "Free form token that is passed back with the event. Allows proper handling when data is added. [add, duplicate]."
+          },
+          "fromId": {
+            "type": "number",
+            "optional": true,
+            "description": "If set, the new entry is copied from the given."
+          },
+          "windowId": {
             "type": "integer",
-            "description": "Save only the given window."
+            "optional": true,
+            "description": "Save only the given window. 0 or not set means all windows. Ignored if 'fromId' is set. [add, update]"
           },
           "ids": {
             "type": "array",
             "items": { "type": "integer" },
             "optional": true,
-            "description": "List of tab identifiers to be saved."
+            "description": "List of tab identifiers to be saved. Ignored if 'fromId' is set. [add, upddate]"
+          },
+          "backup": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Special flag for timed backups. No other options are then used. Setting this to false leads to a noop."
+          }
+        }
+      },
+      {
+        "id": "SessionChange",
+        "type": "string",
+        "description": "Defines what has changed.",
+        "enum": [ "added", "changed", "deleted", "moved", "content" ]
+      },
+      {
+        "id": "SessionChangeData",
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Caller component (in UI) identifier."
+          },
+          "parentId": {
+            "type": "number",
+            "description": "Set for 'added' and 'moved' events."
+          },
+          "index": {
+            "type": "number",
+            "description": "Set for 'added' and 'moved' events."
+          },
+          "item": {
+            "$ref": "SessionItem",
+            "optional": true,
+            "description": "Set for 'added' and 'changed' event."
           }
         }
       }
@@ -70,29 +368,167 @@
           "name": "callback",
           "parameters": [
             {
-              "name": "sessions",
-              "type": "array",
-              "items": {
-                "$ref": "SessionItem"
-              }
+              "name": "model",
+              "$ref": "SessionModel"
             }
           ]
         }
       },
       {
-        "name": "saveOpenTabs",
+        "name": "add",
         "type": "function",
         "description": "Saves all open tabs to the named session.",
         "parameters": [
           {
-            "type": "string",
-            "name": "name",
-            "description": "Name of the session to save to."
+            "name": "options",
+            "description": "Controls the adding behavior.",
+            "$ref": "SessionAddOptions"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      },
+      {
+        "name": "delete",
+        "type": "function",
+        "description": "Deletes session. Items in the trash folder are permanently removed. Others are moved to trash.",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "id",
+            "description": "Identifier of session to delete."
           },
           {
-            "name": "options",
-            "description": "Session save options.",
-            "$ref": "SessionSaveOptions"
+            "type": "number",
+            "name": "index",
+            "description": "Index to move to in trash folder."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      },
+      {
+        "name": "emptyTrash",
+        "type": "function",
+        "description": "Permanently deletes all trashed session.",
+        "parameters": [
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      },
+      {
+        "name": "getContent",
+        "type": "function",
+        "description": "Returns contents of a session.",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "id",
+            "description": "Identifier of session."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "model",
+              "$ref": "ContentModel"
+            }
+          ]
+        }
+      },
+      {
+        "name": "makeContainer",
+        "type": "function",
+        "description": "Turns a history session into the default entry of the container.",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "id",
+            "description": "Session identifier."
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      },
+      {
+        "name": "modifyContent",
+        "type": "function",
+        "description": "Changes internal settings in a session",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "id",
+            "description": "Session identifier."
+          },
+          {
+            "name": "commands",
+            "description": "Describes changes to be made",
+            "$ref": "ContentCommands"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      },
+      {
+        "name": "move",
+        "type": "function",
+        "description": "Moves session.",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "id",
+            "description": "Identifier of session to move."
+          },
+          {
+            "type": "number",
+            "name": "parentId",
+            "description": "New parent"
+          },
+          {
+            "type": "number",
+            "name": "index",
+            "description": "Position in new parent's child list."
           }
         ],
         "returns_async": {
@@ -112,17 +548,16 @@
         "description": "Open a specific named session.",
         "parameters": [
           {
+            "type": "number",
+            "name": "id",
+            "description": "Identifier of session to open."
+          },
+          {
             "name": "windowId",
             "type": "integer"
           },
           {
-            "type": "string",
-            "name": "name",
-            "description": "Name of the session to open."
-          },
-          {
             "name": "options",
-            "optional": true,
             "description": "Session open options.",
             "$ref": "SessionOpenOptions"
           }
@@ -140,14 +575,19 @@
         }
       },
       {
-        "name": "delete",
+        "name": "rename",
         "type": "function",
-        "description": "Deletes the named session.",
+        "description": "Renames the named session.",
         "parameters": [
+          {
+            "type": "number",
+            "name": "id",
+            "description": "Identifier of session to rename."
+          },
           {
             "type": "string",
             "name": "name",
-            "description": "Name of the session to delete."
+            "description": "New name."
           }
         ],
         "returns_async": {
@@ -160,6 +600,54 @@
             }
           ]
         }
+      },
+      {
+        "name": "update",
+        "type": "function",
+        "description": "Updates a session with current open tabs.",
+        "parameters": [
+          {
+            "type": "number",
+            "name": "id",
+            "description": "Identifier of session to update."
+          },
+          {
+            "name": "options",
+            "description": "Controls the update behavior.",
+            "$ref": "SessionAddOptions"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "status",
+              "type": "integer",
+              "description": "0 for success, error code for any error."
+            }
+          ]
+        }
+      }
+    ],
+    "events": [
+      {
+        "name": "onChanged",
+        "type": "function",
+        "description": "Fired when a session is added or removed.",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "number"
+          },
+          {
+            "name": "change",
+            "$ref": "SessionChange"
+          },
+          {
+            "name": "data",
+            "$ref": "SessionChangeData"
+          }
+        ]
       }
     ]
   }

@@ -4,7 +4,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -27,11 +27,9 @@
 #include "components/policy/core/common/schema_registry.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_change_processor.h"
-#include "components/sync/model/sync_error_factory.h"
 #include "components/sync/model/syncable_service.h"
 #include "components/sync/test/fake_sync_change_processor.h"
 #include "components/sync/test/sync_change_processor_wrapper_for_test.h"
-#include "components/sync/test/sync_error_factory_mock.h"
 #include "components/version_info/channel.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/api/storage/backend_task_runner.h"
@@ -142,8 +140,7 @@ class ExtensionSettingsApiTest : public ExtensionApiTest {
             ->MergeDataAndStartSyncing(
                 kModelType, syncer::SyncDataList(),
                 std::make_unique<syncer::SyncChangeProcessorWrapperForTest>(
-                    sync_processor),
-                std::make_unique<NiceMock<syncer::SyncErrorFactoryMock>>())
+                    sync_processor))
             .has_value());
   }
 
@@ -659,7 +656,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionSettingsManagedStorageApiTest,
   ASSERT_TRUE(schema);
 
   ASSERT_TRUE(schema->valid());
-  ASSERT_EQ(base::Value::Type::DICTIONARY, schema->type());
+  ASSERT_EQ(base::Value::Type::DICT, schema->type());
   ASSERT_TRUE(schema->GetKnownProperty("string-policy").valid());
   EXPECT_EQ(base::Value::Type::STRING,
             schema->GetKnownProperty("string-policy").type());
@@ -687,13 +684,13 @@ IN_PROC_BROWSER_TEST_P(ExtensionSettingsManagedStorageApiTest,
 
   policy::Schema dict = schema->GetKnownProperty("dict-policy");
   ASSERT_TRUE(dict.valid());
-  ASSERT_EQ(base::Value::Type::DICTIONARY, dict.type());
+  ASSERT_EQ(base::Value::Type::DICT, dict.type());
   list = dict.GetKnownProperty("list");
   ASSERT_TRUE(list.valid());
   ASSERT_EQ(base::Value::Type::LIST, list.type());
   dict = list.GetItems();
   ASSERT_TRUE(dict.valid());
-  ASSERT_EQ(base::Value::Type::DICTIONARY, dict.type());
+  ASSERT_EQ(base::Value::Type::DICT, dict.type());
   ASSERT_TRUE(dict.GetProperty("anything").valid());
   EXPECT_EQ(base::Value::Type::INTEGER, dict.GetProperty("anything").type());
 }
@@ -715,20 +712,20 @@ IN_PROC_BROWSER_TEST_P(ExtensionSettingsManagedStorageApiTest, ManagedStorage) {
                                   .Append("one")
                                   .Append("two")
                                   .Append("three")
-                                  .BuildList())
+                                  .Build())
           .Set("dict-policy",
                extensions::DictionaryBuilder()
                    .Set("list", extensions::ListBuilder()
                                     .Append(extensions::DictionaryBuilder()
                                                 .Set("one", 1)
                                                 .Set("two", 2)
-                                                .BuildDict())
+                                                .Build())
                                     .Append(extensions::DictionaryBuilder()
                                                 .Set("three", 3)
-                                                .BuildDict())
-                                    .BuildList())
-                   .BuildDict())
-          .BuildDict();
+                                                .Build())
+                                    .Build())
+                   .Build())
+          .Build();
   SetPolicies(policy);
   // Now run the extension.
   ASSERT_TRUE(RunExtensionTest("settings/managed_storage")) << message_;
@@ -747,7 +744,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionSettingsManagedStorageApiTest,
                                  .Set("constant-policy", "aaa")
                                  .Set("changes-policy", "bbb")
                                  .Set("deleted-policy", "ccc")
-                                 .BuildDict();
+                                 .Build();
   SetPolicies(policy);
 
   ExtensionTestMessageListener ready_listener("ready");
@@ -767,7 +764,7 @@ IN_PROC_BROWSER_TEST_P(ExtensionSettingsManagedStorageApiTest,
                .Set("constant-policy", "aaa")
                .Set("changes-policy", "ddd")
                .Set("new-policy", "eee")
-               .BuildDict();
+               .Build();
   SetPolicies(policy);
   EXPECT_TRUE(events_result_catcher_.GetNextResult())
       << events_result_catcher_.message();

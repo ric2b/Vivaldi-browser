@@ -8,13 +8,16 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/random_session_id.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker.h"
+#include "chrome/browser/nearby_sharing/public/cpp/nearby_connections_manager.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 
 namespace ash::quick_start {
 
 class FastPairAdvertiser;
 
-class TargetDeviceConnectionBrokerImpl : public TargetDeviceConnectionBroker {
+class TargetDeviceConnectionBrokerImpl
+    : public TargetDeviceConnectionBroker,
+      public NearbyConnectionsManager::IncomingConnectionListener {
  public:
   using FeatureSupportStatus =
       TargetDeviceConnectionBroker::FeatureSupportStatus;
@@ -40,7 +43,8 @@ class TargetDeviceConnectionBrokerImpl : public TargetDeviceConnectionBroker {
         bluetooth_adapter_factory_wrapper_for_testing_;
   };
 
-  explicit TargetDeviceConnectionBrokerImpl(RandomSessionId session_id);
+  TargetDeviceConnectionBrokerImpl(RandomSessionId session_id,
+                                   base::WeakPtr<NearbyConnectionsManager>);
   TargetDeviceConnectionBrokerImpl(TargetDeviceConnectionBrokerImpl&) = delete;
   TargetDeviceConnectionBrokerImpl& operator=(
       TargetDeviceConnectionBrokerImpl&) = delete;
@@ -53,10 +57,19 @@ class TargetDeviceConnectionBrokerImpl : public TargetDeviceConnectionBroker {
   void StopAdvertising(base::OnceClosure on_stop_advertising_callback) override;
 
  private:
+  // Used to access the |random_session_id_| in tests, and to allow testing
+  // |GenerateEndpointInfo()| directly.
   friend class TargetDeviceConnectionBrokerImplTest;
+
+  // NearbyConnectionsManager::IncomingConnectionListener:
+  void OnIncomingConnection(const std::string& endpoint_id,
+                            const std::vector<uint8_t>& endpoint_info,
+                            NearbyConnection* connection) override;
 
   void GetBluetoothAdapter();
   void OnGetBluetoothAdapter(scoped_refptr<device::BluetoothAdapter> adapter);
+  void StartFastPairAdvertising(ResultCallback callback);
+  void OnStartFastPairAdvertisingSuccess(ResultCallback callback);
   void OnStartFastPairAdvertisingError(ResultCallback callback);
   void OnStopFastPairAdvertising(base::OnceClosure callback);
 
@@ -64,11 +77,22 @@ class TargetDeviceConnectionBrokerImpl : public TargetDeviceConnectionBroker {
   // be in the Nearby Connections advertisement.
   std::vector<uint8_t> GenerateEndpointInfo();
 
+  void StartNearbyConnectionsAdvertising(ResultCallback callback);
+  void StopNearbyConnectionsAdvertising(base::OnceClosure callback);
+  void OnStartNearbyConnectionsAdvertising(
+      ResultCallback callback,
+      NearbyConnectionsManager::ConnectionsStatus status);
+  void OnStopNearbyConnectionsAdvertising(
+      base::OnceClosure callback,
+      NearbyConnectionsManager::ConnectionsStatus status);
+
   scoped_refptr<device::BluetoothAdapter> bluetooth_adapter_;
   base::OnceClosure deferred_start_advertising_callback_;
 
   std::unique_ptr<FastPairAdvertiser> fast_pair_advertiser_;
   RandomSessionId random_session_id_;
+
+  base::WeakPtr<NearbyConnectionsManager> nearby_connections_manager_;
 
   base::WeakPtrFactory<TargetDeviceConnectionBrokerImpl> weak_ptr_factory_{
       this};

@@ -13,12 +13,12 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -190,6 +190,13 @@ Status PrepareDesktopCommandLine(const Capabilities& capabilities,
     LOG(WARNING) << "excluding remote-debugging-port switch is not supported";
   }
   if (switches.HasSwitch("user-data-dir")) {
+    if (switches.HasSwitch("headless")) {
+      // The old headless mode fails to start without a starting page provided
+      // See: https://crbug.com/1414672
+      // TODO(https://crbub.com/chromedriver/4358): Remove this workaround
+      // after the migration to the New Headless
+      command.AppendArg("data:,");
+    }
     base::FilePath::StringType user_data_dir_value =
         switches.GetSwitchValueNative("user-data-dir");
     if (user_data_dir_value.empty())
@@ -987,8 +994,8 @@ Status ProcessExtension(const std::string& extension,
   std::string manifest_data;
   if (!base::ReadFileToString(manifest_path, &manifest_data))
     return Status(kUnknownError, "cannot read manifest");
-  std::unique_ptr<base::Value> manifest_value =
-      base::JSONReader::ReadDeprecated(manifest_data);
+  absl::optional<base::Value> manifest_value =
+      base::JSONReader::Read(manifest_data);
   base::Value::Dict* manifest =
       manifest_value ? manifest_value->GetIfDict() : nullptr;
   if (!manifest)

@@ -26,7 +26,7 @@ export class CompositeTts {
   /**
    * Adds a TTS engine to the composite TTS
    * @param {TtsInterface} tts The TTS to add.
-   * @return {CompositeTts} this.
+   * @return {!CompositeTts} this.
    */
   add(tts) {
     this.ttsEngines_.push(tts);
@@ -113,10 +113,5 @@ export class CompositeTts {
     this.ttsEngines_.forEach(
         engine => value = value || engine.toggleSpeechOnOrOff());
     return value;
-  }
-
-  /** @override */
-  resetTextToSpeechSettings() {
-    this.ttsEngines_.forEach(engine => engine.resetTextToSpeechSettings());
   }
 }

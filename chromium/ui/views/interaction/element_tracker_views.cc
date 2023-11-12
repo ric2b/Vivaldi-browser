@@ -8,6 +8,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <string>
 
 #include "base/containers/contains.h"
 #include "base/debug/stack_trace.h"
@@ -32,6 +33,17 @@ TrackedElementViews::TrackedElementViews(View* view,
     : TrackedElement(identifier, context), view_(view) {}
 
 TrackedElementViews::~TrackedElementViews() = default;
+
+gfx::Rect TrackedElementViews::GetScreenBounds() const {
+  return view()->GetBoundsInScreen();
+}
+
+std::string TrackedElementViews::ToString() const {
+  auto result = TrackedElement::ToString();
+  result.append(" with view ");
+  result.append(view()->GetClassName());
+  return result;
+}
 
 DEFINE_FRAMEWORK_SPECIFIC_METADATA(TrackedElementViews)
 
@@ -196,19 +208,16 @@ class ElementTrackerViews::ElementDataViews : public ViewObserver,
           data.element.get());
       data.element.reset();
     } else if (visible && old_context != data.context) {
-      if (update_reason == UpdateReason::kVisbilityFromRoot) {
-        // This can happen in some tests where a widget is closed before it
-        // actually becomes visible, or a parent widget is closed underneath us.
-        if (!view->GetWidget()->IsVisible()) {
-          ui::ElementTracker::GetFrameworkDelegate()->NotifyElementHidden(
-              data.element.get());
-          data.element.reset();
-        }
-      } else {
-        NOTREACHED()
-            << "We should always get a removed-from-widget notification before "
-               "an added-to-widget notification, the context should never "
-               "change while a view is visible.";
+      CHECK(update_reason == UpdateReason::kVisbilityFromRoot)
+          << "We should always get a removed-from-widget notification before "
+             "an added-to-widget notification, the context should never "
+             "change while a view is visible.";
+      // This can happen in some tests where a widget is closed before it
+      // actually becomes visible, or a parent widget is closed underneath us.
+      if (!view->GetWidget()->IsVisible()) {
+        ui::ElementTracker::GetFrameworkDelegate()->NotifyElementHidden(
+            data.element.get());
+        data.element.reset();
       }
     }
   }

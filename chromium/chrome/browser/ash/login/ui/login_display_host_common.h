@@ -57,6 +57,7 @@ class LoginDisplayHostCommon : public LoginDisplayHost,
   void SetDisplayEmail(const std::string& email) final;
   void SetDisplayAndGivenName(const std::string& display_name,
                               const std::string& given_name) final;
+  bool IsGaiaDialogVisibleForTesting() final;
   void ShowAllowlistCheckFailedError() final;
   void LoadWallpaper(const AccountId& account_id) final;
   void LoadSigninWallpaper() final;
@@ -66,11 +67,12 @@ class LoginDisplayHostCommon : public LoginDisplayHost,
   void CancelPasswordChangedFlow() final;
   void MigrateUserData(const std::string& old_password) final;
   void ResyncUserData() final;
-  bool HandleAccelerator(LoginAcceleratorAction action) final;
   void AddWizardCreatedObserverForTests(
       base::RepeatingClosure on_created) final;
   base::WeakPtr<quick_start::TargetDeviceBootstrapController>
   GetQuickStartBootstrapController() final;
+  // Most of the accelerators are handled in a same way, but not all.
+  bool HandleAccelerator(LoginAcceleratorAction action) override;
 
   // SigninUI:
   void SetAuthSessionForOnboarding(const UserContext& user_context) final;

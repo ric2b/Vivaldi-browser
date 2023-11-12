@@ -7,14 +7,16 @@
 
 #include "ash/constants/ash_switches.h"
 #include "base/containers/contains.h"
-#include "chrome/browser/ash/login/test/fake_gaia_mixin.h"
+#include "base/time/time.h"
 #include "chrome/browser/ash/login/test/login_manager_mixin.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
 #include "chrome/browser/ash/login/test/user_policy_mixin.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/ash/settings/stub_cros_settings_provider.h"
+#include "chrome/browser/chromeos/reporting/metric_default_utils.h"
 #include "chrome/browser/policy/dm_token_utils.h"
+#include "chrome/test/base/fake_gaia_mixin.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/ash/services/cros_healthd/public/cpp/fake_cros_healthd.h"
 #include "chromeos/ash/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
@@ -30,6 +32,16 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace reporting {
+
+class UsbBrowserTestHelper {
+ public:
+  UsbBrowserTestHelper() {
+    // Set collection delay to zero seconds. We don't use
+    // |ScopedMockTimeMessageLoopTaskRunner| here because we are not able to
+    // make it work with mojom.
+    metrics::PeripheralCollectionDelayParam::SetForTesting(base::Seconds(0));
+  }
+};
 namespace {
 
 namespace cros_healthd = ::ash::cros_healthd;
@@ -126,16 +138,57 @@ class UsbEventsBrowserTest : public ::policy::DevicePolicyCrosBrowserTest {
     return telemetry_info;
   }
 
+  void EmitUsbAddEventForTesting() {
+    cros_healthd::mojom::UsbEventInfo info;
+    info.state = cros_healthd::mojom::UsbEventInfo::State::kAdd;
+    cros_healthd::FakeCrosHealthd::Get()->EmitEventForCategory(
+        cros_healthd::mojom::EventCategoryEnum::kUsb,
+        cros_healthd::mojom::EventInfo::NewUsbEventInfo(info.Clone()));
+  }
+
   const AccountId test_account_id_ = AccountId::FromUserEmailGaiaId(
       kTestUserEmail,
       signin::GetTestGaiaIdForEmail(kTestUserEmail));
 
   ash::UserPolicyMixin user_policy_mixin_{&mixin_host_, test_account_id_};
-  ash::FakeGaiaMixin fake_gaia_mixin_{&mixin_host_};
+  FakeGaiaMixin fake_gaia_mixin_{&mixin_host_};
   ash::LoginManagerMixin login_manager_mixin_{
       &mixin_host_, ash::LoginManagerMixin::UserList(), &fake_gaia_mixin_};
   ash::ScopedTestingCrosSettings scoped_testing_cros_settings_;
+  UsbBrowserTestHelper usb_browser_test_helper_;
 };
+
+IN_PROC_BROWSER_TEST_F(UsbEventsBrowserTest,
+                       UsbEventDrivenTelemetryCollectedOnUsbEvent) {
+  EnableUsbPolicy();
+  LoginAffiliatedUser();
+
+  chromeos::MissiveClientTestObserver missive_observer_(
+      Destination::PERIPHERAL_EVENTS);
+
+  auto usb_telemetry = CreateUsbTelemetry();
+  cros_healthd::FakeCrosHealthd::Get()->SetProbeTelemetryInfoResponseForTesting(
+      usb_telemetry);
+
+  // Any USB event should trigger event driven telemetry collection
+  EmitUsbAddEventForTesting();
+
+  Record record = std::get<1>(missive_observer_.GetNextEnqueuedRecord());
+  MetricData record_data;
+
+  // First record should be the USB added event
+  ASSERT_TRUE(record_data.ParseFromString(record.data()));
+  EXPECT_THAT(record_data.event_data().type(),
+              ::testing::Eq(MetricEventType::USB_ADDED));
+
+  // Second record should be the USB telemetry
+  record = std::get<1>(missive_observer_.GetNextEnqueuedRecord());
+  ASSERT_TRUE(record_data.ParseFromString(record.data()));
+  EXPECT_TRUE(record_data.has_telemetry_data());
+  EXPECT_TRUE(record_data.telemetry_data().has_peripherals_telemetry());
+  // Since telemetry is not an event, it shouldn't have event data or event type
+  EXPECT_FALSE(record_data.has_event_data());
+}
 
 IN_PROC_BROWSER_TEST_F(
     UsbEventsBrowserTest,
@@ -147,7 +200,7 @@ IN_PROC_BROWSER_TEST_F(
   chromeos::MissiveClientTestObserver missive_observer_(
       Destination::PERIPHERAL_EVENTS);
 
-  cros_healthd::FakeCrosHealthd::Get()->EmitUsbAddEventForTesting();
+  EmitUsbAddEventForTesting();
   std::tuple<Priority, Record> entry =
       missive_observer_.GetNextEnqueuedRecord();
   Record record = std::get<1>(entry);
@@ -208,7 +261,7 @@ IN_PROC_BROWSER_TEST_F(
 
   LoginUnaffiliatedUser();
 
-  cros_healthd::FakeCrosHealthd::Get()->EmitUsbAddEventForTesting();
+  EmitUsbAddEventForTesting();
   EXPECT_TRUE(NoUsbEventsEnqueued(
       chromeos::MissiveClient::Get()->GetTestInterface()->GetEnqueuedRecords(
           Priority::SECURITY)));
@@ -221,7 +274,7 @@ IN_PROC_BROWSER_TEST_F(
 
   LoginAffiliatedUser();
 
-  cros_healthd::FakeCrosHealthd::Get()->EmitUsbAddEventForTesting();
+  EmitUsbAddEventForTesting();
 
   // Shouldn't be any USB event related records in the MissiveClient queue
   EXPECT_TRUE(NoUsbEventsEnqueued(
@@ -236,7 +289,7 @@ IN_PROC_BROWSER_TEST_F(
 
   LoginUnaffiliatedUser();
 
-  cros_healthd::FakeCrosHealthd::Get()->EmitUsbAddEventForTesting();
+  EmitUsbAddEventForTesting();
 
   // Shouldn't be any USB event related records in the MissiveClient queue
   EXPECT_TRUE(NoUsbEventsEnqueued(

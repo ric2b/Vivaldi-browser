@@ -7,12 +7,12 @@ package org.chromium.chrome.browser.feed;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.AdditionalMatchers.leq;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyFloat;
-import static org.mockito.Mockito.anyLong;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyFloat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -43,9 +43,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLog;
 import org.robolectric.shadows.ShadowSystemClock;
 
-import org.chromium.base.FeatureList;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.xsurface.ListLayoutHelper;
 
 import java.util.Arrays;
@@ -90,10 +88,6 @@ public class FeedSliceViewTrackerTest {
 
     @Before
     public void setUp() {
-        FeatureList.TestValues testValues = new FeatureList.TestValues();
-        testValues.addFeatureFlagOverride(ChromeFeatureList.FEED_CLIENT_GOOD_VISITS, true);
-        FeatureList.setTestValues(testValues);
-
         ShadowLog.stream = System.out;
         MockitoAnnotations.initMocks(this);
         mContentManager = new NtpListContentManager();
@@ -310,7 +304,11 @@ public class FeedSliceViewTrackerTest {
         mTracker.destroy();
         verify(mViewTreeObserver).removeOnPreDrawListener(any());
 
-        mTracker.destroy(); // A second destroy() does nothing.
+        // These calls shouldn't do anything.
+        mTracker.destroy();
+        mTracker.clear();
+        mTracker.watchForFirstVisible("c/key1", 0.5f, () -> {});
+        mTracker.stopWatchingForFirstVisible("c/key1", () -> {});
     }
 
     @Test

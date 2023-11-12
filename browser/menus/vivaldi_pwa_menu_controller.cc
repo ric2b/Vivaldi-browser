@@ -50,7 +50,7 @@ void PWAMenuController::PopulateModel(ui::SimpleMenuModel* menu_model) {
         l10n_util::GetStringFUTF16(
             IDS_OPEN_IN_APP_WINDOW,
             gfx::TruncateString(
-                base::UTF8ToUTF16(provider->registrar().GetAppShortName(*pwa)),
+                base::UTF8ToUTF16(provider->registrar_unsafe().GetAppShortName(*pwa)),
                 kMaxAppNameLength, gfx::CHARACTER_BREAK)));
   } else {
     absl::optional<std::u16string> install_pwa_item_name =

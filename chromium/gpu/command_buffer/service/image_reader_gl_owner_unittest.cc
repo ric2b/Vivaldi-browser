@@ -11,10 +11,9 @@
 
 #include "base/android/android_image_reader_compat.h"
 #include "base/test/task_environment.h"
-#include "gpu/command_buffer/service/abstract_texture.h"
+#include "gpu/command_buffer/service/abstract_texture_android.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/image_reader_gl_owner.h"
-#include "gpu/command_buffer/service/mock_abstract_texture.h"
 #include "gpu/command_buffer/service/ref_counted_lock_for_test.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_feature_info.h"
@@ -44,7 +43,7 @@ class ImageReaderGLOwnerTest : public testing::Test {
         /*fallback_to_software_gl=*/false,
         /*disable_gl_drawing=*/false,
         /*init_extensions=*/true,
-        /*system_device_id=*/0);
+        /*gpu_preference=*/gl::GpuPreference::kDefault);
 
     surface_ = new gl::PbufferGLSurfaceEGL(gl::GLSurfaceEGL::GetGLDisplayEGL(),
                                            gfx::Size(320, 240));
@@ -67,10 +66,9 @@ class ImageReaderGLOwnerTest : public testing::Test {
     // Create a texture.
     glGenTextures(1, &texture_id_);
 
-    std::unique_ptr<MockAbstractTexture> texture =
-        std::make_unique<MockAbstractTexture>(texture_id_);
+    auto texture = AbstractTextureAndroid::CreateForTesting(texture_id_);
     abstract_texture_ = texture->AsWeakPtr();
-    image_reader_ = TextureOwner::Create(
+    image_reader_ = new ImageReaderGLOwner(
         std::move(texture), SecureMode(), std::move(context_state),
         features::NeedThreadSafeAndroidMedia()
             ? base::MakeRefCounted<gpu::RefCountedLockForTest>()
@@ -98,7 +96,7 @@ class ImageReaderGLOwnerTest : public testing::Test {
   scoped_refptr<TextureOwner> image_reader_;
   GLuint texture_id_ = 0;
 
-  base::WeakPtr<MockAbstractTexture> abstract_texture_;
+  base::WeakPtr<AbstractTextureAndroid> abstract_texture_;
 
   scoped_refptr<gl::GLContext> context_;
   scoped_refptr<gl::GLShareGroup> share_group_;

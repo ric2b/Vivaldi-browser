@@ -9,6 +9,7 @@ import static android.os.Build.VERSION_CODES.Q;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.longClick;
 import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.contrib.RecyclerViewActions.actionOnItemAtPosition;
@@ -77,7 +78,6 @@ import org.junit.runner.RunWith;
 import org.chromium.base.Callback;
 import org.chromium.base.GarbageCollectionTestUtils;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.test.metrics.HistogramTestRule;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
@@ -85,6 +85,7 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
@@ -109,6 +110,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabSwitcherCoordinator;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeProvider;
+import org.chromium.chrome.browser.tasks.tab_management.UndoGroupSnackbarController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.undo_tab_close_snackbar.UndoBarController;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
@@ -151,7 +153,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         "force-fieldtrials=Study/Group"})
 @EnableFeatures({ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID + "<Study"})
-// TODO(1347089): make this test suite works for testing both TabSwitcherAndStartSurfaceLayout and
+// TODO(1315676): make this test suite works for testing both TabSwitcherAndStartSurfaceLayout and
 // TabSwitcherLayout.
 @DisableFeatures({ChromeFeatureList.START_SURFACE_REFACTOR})
 @Restriction(
@@ -160,7 +162,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     // clang-format on
     private static final String BASE_PARAMS = "force-fieldtrial-params="
             + "Study.Group:soft-cleanup-delay/0/cleanup-delay/0/skip-slow-zooming/false"
-            + "/zooming-min-sdk-version/19/zooming-min-memory-mb/512";
+            + "/zooming-min-memory-mb/512";
 
     // Tests need animation on.
     @ClassRule
@@ -176,9 +178,6 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
                     .setRevision(1)
                     .setBugComponent(ChromeRenderTestRule.Component.UI_BROWSER_MOBILE_START)
                     .build();
-
-    @Rule
-    public HistogramTestRule mHistogramTester = new HistogramTestRule();
 
     @SuppressWarnings("FieldCanBeLocal")
     private EmbeddedTestServer mTestServer;
@@ -765,7 +764,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     // clang-format off
     @DisableIf.Build(message = "Flaky on Android P, see https://crbug.com/1063991",
         sdk_is_greater_than = VERSION_CODES.O_MR1, sdk_is_less_than = VERSION_CODES.Q)
-    public void testIncognitoToggle_tabCount() {
+    public void testIncognitoToggle_tabCount() throws InterruptedException{
         // clang-format on
         mActivityTestRule.loadUrl(mUrl);
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -1109,7 +1108,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
             ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/0.75/enable_launch_polish/true"})
     @DisabledTest(message = "https://crbug.com/1122657")
-    public void testThumbnailAspectRatio_point75() {
+    public void testThumbnailAspectRatio_point75() throws InterruptedException{
         // clang-format on
         prepareTabs(2, 0, "about:blank");
         enterTabSwitcher(mActivityTestRule.getActivity());
@@ -1162,28 +1161,17 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS})
     public void testThumbnailFetchingResult_liveLayer() throws Exception {
+        var histograms = HistogramWatcher.newSingleRecordWatcher(
+                TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
+                TabContentManager.ThumbnailFetchingResult.GOT_NOTHING);
+
         prepareTabs(1, 0, "about:blank");
         enterTabSwitcher(mActivityTestRule.getActivity());
         // There might be an additional one from capturing thumbnail for the live layer.
         CriteriaHelper.pollUiThread(
                 () -> Criteria.checkThat(mAllBitmaps.size(), Matchers.greaterThanOrEqualTo(1)));
 
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_JPEG));
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_ETC1));
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_DIFFERENT_ASPECT_RATIO_JPEG));
-        assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_NOTHING));
+        histograms.assertExpected();
     }
 
     @Test
@@ -1191,6 +1179,10 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS})
     public void testThumbnailFetchingResult_jpeg() throws Exception {
+        var histograms = HistogramWatcher.newSingleRecordWatcher(
+                TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
+                TabContentManager.ThumbnailFetchingResult.GOT_JPEG);
+
         prepareTabs(1, 0, "about:blank");
         simulateJpegHasCachedWithDefaultAspectRatio();
 
@@ -1199,22 +1191,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
         CriteriaHelper.pollUiThread(
                 () -> Criteria.checkThat(mAllBitmaps.size(), Matchers.greaterThanOrEqualTo(1)));
 
-        assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_JPEG));
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_ETC1));
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_DIFFERENT_ASPECT_RATIO_JPEG));
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_NOTHING));
+        histograms.assertExpected();
     }
 
     @Test
@@ -1223,6 +1200,10 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/2.0/allow_to_refetch/true"})
     @DisabledTest(message = "crbug.com/1315676#c20")
     public void testThumbnailFetchingResult_changingAspectRatio() throws Exception {
+        var histograms = HistogramWatcher.newSingleRecordWatcher(
+                TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
+                TabContentManager.ThumbnailFetchingResult.GOT_DIFFERENT_ASPECT_RATIO_JPEG);
+
         prepareTabs(1, 0, "about:blank");
         // Simulate Jpeg has cached with default aspect ratio.
         simulateJpegHasCachedWithDefaultAspectRatio();
@@ -1231,19 +1212,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
         CriteriaHelper.pollUiThread(
                 () -> Criteria.checkThat(mAllBitmaps.size(), Matchers.greaterThanOrEqualTo(1)));
 
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_JPEG));
-        assertEquals(0,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_ETC1));
-        assertEquals(1,
-                mHistogramTester.getHistogramValueCount(
-                        TabContentManager.UMA_THUMBNAIL_FETCHING_RESULT,
-                        TabContentManager.ThumbnailFetchingResult.GOT_DIFFERENT_ASPECT_RATIO_JPEG));
-
+        histograms.assertExpected();
         onViewWaiting(tabSwitcherViewMatcher())
                 .check(ThumbnailAspectRatioAssertion.havingAspectRatio(2.0));
     }
@@ -1279,8 +1248,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     // clang-format off
     @EnableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study"})
     @CommandLineFlags.Add({BASE_PARAMS + "/thumbnail_aspect_ratio/0.75"})
-    @DisabledTest(message = "https://crbug.com/1367310")
-    public void testExpandTab_withAspectRatioPoint75() {
+    public void testExpandTab_withAspectRatioPoint75() throws InterruptedException {
         // clang-format on
         prepareTabs(1, 0, mUrl);
         enterTabSwitcher(mActivityTestRule.getActivity());
@@ -1809,7 +1777,7 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
         // Create a tab group.
         mergeAllNormalTabsToAGroup(cta);
         verifyTabSwitcherCardCount(cta, 1);
-        assertNull(snackbarManager.getCurrentSnackbarForTesting());
+        assertNotNull(snackbarManager.getCurrentSnackbarForTesting());
 
         // Verify close this tab group and undo in tab switcher.
         closeFirstTabInTabSwitcher(cta);
@@ -1818,6 +1786,184 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
         verifyTabSwitcherCardCount(cta, 0);
         CriteriaHelper.pollInstrumentationThread(TabUiTestHelper::verifyUndoBarShowingAndClickUndo);
         verifyTabSwitcherCardCount(cta, 1);
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.TAB_SELECTION_EDITOR_V2})
+    @MediumTest
+    public void testLongPressTab_entryInTabSwitcher_verifyNoSelectionOccurs() {
+        TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY.setForTesting(true);
+
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        createTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+
+        // LongPress entry to TabSelectionEditor.
+        onView(tabSwitcherViewMatcher())
+                .perform(RecyclerViewActions.actionOnItemAtPosition(0, longClick()));
+
+        TabSelectionEditorTestingRobot mSelectionEditorRobot = new TabSelectionEditorTestingRobot();
+        mSelectionEditorRobot.resultRobot.verifyTabSelectionEditorIsVisible();
+
+        // Verify no selection action occurred to switch the selected tab in the tab model
+        Criteria.checkThat(
+                mActivityTestRule.getActivity().getCurrentTabModel().index(), Matchers.is(1));
+
+        TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY.setForTesting(false);
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.TAB_SELECTION_EDITOR_V2})
+    @MediumTest
+    public void testLongPressTabGroup_entryInTabSwitcher() {
+        TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY.setForTesting(true);
+
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        createTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+
+        // Create a tab group.
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
+
+        // LongPress entry to TabSelectionEditor.
+        onView(tabSwitcherViewMatcher())
+                .perform(RecyclerViewActions.actionOnItemAtPosition(0, longClick()));
+
+        TabSelectionEditorTestingRobot mSelectionEditorRobot = new TabSelectionEditorTestingRobot();
+        mSelectionEditorRobot.resultRobot.verifyTabSelectionEditorIsVisible();
+
+        TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY.setForTesting(false);
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.TAB_SELECTION_EDITOR_V2})
+    @MediumTest
+    public void testLongPressTab_verifyPostLongPressClickNoSelectionEditor() {
+        TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY.setForTesting(true);
+
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        createTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+
+        // LongPress entry to TabSelectionEditor.
+        onView(tabSwitcherViewMatcher())
+                .perform(RecyclerViewActions.actionOnItemAtPosition(0, longClick()));
+
+        TabSelectionEditorTestingRobot mSelectionEditorRobot = new TabSelectionEditorTestingRobot();
+        mSelectionEditorRobot.resultRobot.verifyTabSelectionEditorIsVisible();
+        mSelectionEditorRobot.actionRobot.clickItemAtAdapterPosition(0);
+        mSelectionEditorRobot.resultRobot.verifyItemSelectedAtAdapterPosition(0);
+        Espresso.pressBack();
+
+        onView(tabSwitcherViewMatcher())
+                .perform(RecyclerViewActions.actionOnItemAtPosition(0, click()));
+        // Check the selected tab in the tab model switches from the second tab to the first to
+        // verify clicking the tab worked.
+        Criteria.checkThat(
+                mActivityTestRule.getActivity().getCurrentTabModel().index(), Matchers.is(0));
+
+        TabUiFeatureUtilities.ENABLE_TAB_SELECTION_EDITOR_V2_LONGPRESS_ENTRY.setForTesting(false);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
+    public void testUndoGroupMergeInTabSwitcher_TabToTab() {
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
+        createTabs(cta, false, 2);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+
+        // Create a tab group.
+        mergeAllNormalTabsToAGroup(cta);
+        assertTrue(snackbarManager.getCurrentSnackbarForTesting().getController()
+                           instanceof UndoGroupSnackbarController);
+
+        // Undo merge in tab switcher.
+        verifyTabSwitcherCardCount(cta, 1);
+        assertEquals("2", snackbarManager.getCurrentSnackbarForTesting().getTextForTesting());
+        CriteriaHelper.pollInstrumentationThread(TabUiTestHelper::verifyUndoBarShowingAndClickUndo);
+        verifyTabSwitcherCardCount(cta, 2);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
+    public void testUndoGroupMergeInTabSwitcher_TabToGroupAdjacent() {
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
+        createTabs(cta, false, 3);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 3);
+
+        // Merge first two tabs into a group.
+        TabModel normalTabModel = cta.getTabModelSelector().getModel(false);
+        List<Tab> tabGroup = new ArrayList<>(
+                Arrays.asList(normalTabModel.getTabAt(0), normalTabModel.getTabAt(1)));
+        createTabGroup(cta, false, tabGroup);
+        verifyTabSwitcherCardCount(cta, 2);
+        assertTrue(snackbarManager.getCurrentSnackbarForTesting().getController()
+                           instanceof UndoGroupSnackbarController);
+        assertEquals("2", snackbarManager.getCurrentSnackbarForTesting().getTextForTesting());
+
+        // Merge tab group of 2 at first index with the 3rd tab.
+        mergeAllNormalTabsToAGroup(cta);
+        assertTrue(snackbarManager.getCurrentSnackbarForTesting().getController()
+                           instanceof UndoGroupSnackbarController);
+
+        // Undo merge in tab switcher.
+        verifyTabSwitcherCardCount(cta, 1);
+        assertEquals("3", snackbarManager.getCurrentSnackbarForTesting().getTextForTesting());
+        CriteriaHelper.pollInstrumentationThread(TabUiTestHelper::verifyUndoBarShowingAndClickUndo);
+        verifyTabSwitcherCardCount(cta, 2);
+    }
+
+    @Test
+    @MediumTest
+    @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
+    public void testUndoGroupMergeInTabSwitcher_GroupToGroupNonAdjacent() {
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
+        createTabs(cta, false, 5);
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 5);
+
+        // Merge last two tabs into a group.
+        TabModel normalTabModel = cta.getTabModelSelector().getModel(false);
+        List<Tab> tabGroup = new ArrayList<>(
+                Arrays.asList(normalTabModel.getTabAt(3), normalTabModel.getTabAt(4)));
+        createTabGroup(cta, false, tabGroup);
+        verifyTabSwitcherCardCount(cta, 4);
+        assertTrue(snackbarManager.getCurrentSnackbarForTesting().getController()
+                           instanceof UndoGroupSnackbarController);
+        assertEquals("2", snackbarManager.getCurrentSnackbarForTesting().getTextForTesting());
+
+        // Merge first two tabs into a group.
+        List<Tab> tabGroup2 = new ArrayList<>(
+                Arrays.asList(normalTabModel.getTabAt(0), normalTabModel.getTabAt(1)));
+        createTabGroup(cta, false, tabGroup2);
+        verifyTabSwitcherCardCount(cta, 3);
+        assertTrue(snackbarManager.getCurrentSnackbarForTesting().getController()
+                           instanceof UndoGroupSnackbarController);
+        assertEquals("2", snackbarManager.getCurrentSnackbarForTesting().getTextForTesting());
+
+        // Merge the two tab groups into a group.
+        List<Tab> tabGroup3 = new ArrayList<>(
+                Arrays.asList(normalTabModel.getTabAt(0), normalTabModel.getTabAt(3)));
+        createTabGroup(cta, false, tabGroup3);
+        assertTrue(snackbarManager.getCurrentSnackbarForTesting().getController()
+                           instanceof UndoGroupSnackbarController);
+
+        // Undo merge in tab switcher.
+        verifyTabSwitcherCardCount(cta, 2);
+        assertEquals("4", snackbarManager.getCurrentSnackbarForTesting().getTextForTesting());
+        CriteriaHelper.pollInstrumentationThread(TabUiTestHelper::verifyUndoBarShowingAndClickUndo);
+        verifyTabSwitcherCardCount(cta, 3);
     }
 
     private TabSwitcher.TabListDelegate getTabListDelegateFromUIThread() {
@@ -1904,12 +2050,12 @@ public class TabSwitcherAndStartSurfaceLayoutTest {
     /**
      * If thumbnail checking is not needed, use {@link TabUiTestHelper#leaveTabSwitcher} instead.
      */
-    private void leaveGTSAndVerifyThumbnailsAreReleased() {
+    private void leaveGTSAndVerifyThumbnailsAreReleased() throws InterruptedException {
         assertTrue(mActivityTestRule.getActivity().getLayoutManager().isLayoutVisible(
                 LayoutType.TAB_SWITCHER));
 
         StartSurface startSurface = mTabSwitcherAndStartSurfaceLayout.getStartSurfaceForTesting();
-        TestThreadUtils.runOnUiThreadBlocking(() -> { startSurface.onBackPressed(); });
+        TabUiTestHelper.pressBackOnGts(startSurface);
         // TODO(wychen): using default timeout or even converting to
         //  OverviewModeBehaviorWatcher shouldn't increase flakiness.
         LayoutTestUtils.waitForLayout(

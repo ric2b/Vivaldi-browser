@@ -25,6 +25,7 @@
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
@@ -71,11 +72,6 @@ class IsolatedWebAppPolicyManagerAshBrowserTest
   IsolatedWebAppPolicyManagerAshBrowserTest() = default;
 
   ~IsolatedWebAppPolicyManagerAshBrowserTest() override = default;
-
-  void SetUp() override {
-    scoped_feature_list_.InitWithFeatures({features::kIsolatedWebApps}, {});
-    policy::DevicePolicyCrosBrowserTest::SetUp();
-  }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     DevicePolicyCrosBrowserTest::SetUpCommandLine(command_line);
@@ -156,8 +152,9 @@ class IsolatedWebAppPolicyManagerAshBrowserTest
   }
 
   void WaitForSessionStart() {
-    if (session_manager::SessionManager::Get()->IsSessionStarted())
+    if (session_manager::SessionManager::Get()->IsSessionStarted()) {
       return;
+    }
     if (ash::WizardController::default_controller()) {
       ash::WizardController::default_controller()
           ->SkipPostLoginScreensForTesting();
@@ -229,7 +226,7 @@ IN_PROC_BROWSER_TEST_F(IsolatedWebAppPolicyManagerAshBrowserTest,
             IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(iwa_bundle_.id)
                 .app_id());
   const WebAppProvider* provider = WebAppProvider::GetForTest(profile);
-  ASSERT_TRUE(provider->registrar().IsInstalled(id));
+  ASSERT_TRUE(provider->registrar_unsafe().IsInstalled(id));
 }
 
 }  // namespace web_app

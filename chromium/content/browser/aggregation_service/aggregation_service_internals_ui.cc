@@ -7,8 +7,10 @@
 #include <memory>
 #include <utility>
 
+#include "base/containers/span.h"
 #include "content/browser/aggregation_service/aggregation_service_internals_handler_impl.h"
-#include "content/grit/dev_ui_content_resources.h"
+#include "content/grit/aggregation_service_internals_resources.h"
+#include "content/grit/aggregation_service_internals_resources_map.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -27,19 +29,13 @@ AggregationServiceInternalsUI::AggregationServiceInternalsUI(WebUI* web_ui)
       web_ui->GetWebContents()->GetBrowserContext(),
       kChromeUIPrivateAggregationInternalsHost);
 
-  source->AddResourcePath("aggregation_service_internals.mojom-webui.js",
-                          IDR_AGGREGATION_SERVICE_INTERNALS_MOJOM_JS);
-  source->AddResourcePath("aggregation_service_internals.js",
-                          IDR_AGGREGATION_SERVICE_INTERNALS_JS);
-  source->AddResourcePath("aggregation_service_internals_table.js",
-                          IDR_AGGREGATION_SERVICE_INTERNALS_TABLE_JS);
-  source->AddResourcePath("aggregation_service_internals_table.html.js",
-                          IDR_AGGREGATION_SERVICE_INTERNALS_TABLE_HTML_JS);
-  source->AddResourcePath("table_model.js",
-                          IDR_AGGREGATION_SERVICE_INTERNALS_TABLE_MODEL_JS);
-  source->AddResourcePath("aggregation_service_internals.css",
-                          IDR_AGGREGATION_SERVICE_INTERNALS_CSS);
-  source->SetDefaultResource(IDR_AGGREGATION_SERVICE_INTERNALS_HTML);
+  source->AddResourcePaths(
+      base::make_span(kAggregationServiceInternalsResources,
+                      kAggregationServiceInternalsResourcesSize));
+
+  source->SetDefaultResource(
+      IDR_AGGREGATION_SERVICE_INTERNALS_AGGREGATION_SERVICE_INTERNALS_HTML);
+
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::TrustedTypes,
       "trusted-types static-types;");
@@ -57,10 +53,19 @@ void AggregationServiceInternalsUI::WebUIRenderFrameCreated(
 }
 
 void AggregationServiceInternalsUI::BindInterface(
+    mojo::PendingReceiver<aggregation_service_internals::mojom::Factory>
+        factory) {
+  factory_.reset();
+  factory_.Bind(std::move(factory));
+}
+
+void AggregationServiceInternalsUI::Create(
+    mojo::PendingRemote<aggregation_service_internals::mojom::Observer>
+        observer,
     mojo::PendingReceiver<aggregation_service_internals::mojom::Handler>
-        receiver) {
+        handler) {
   ui_handler_ = std::make_unique<AggregationServiceInternalsHandlerImpl>(
-      web_ui(), std::move(receiver));
+      web_ui(), std::move(observer), std::move(handler));
 }
 
 }  // namespace content

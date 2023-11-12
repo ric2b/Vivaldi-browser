@@ -5,10 +5,11 @@
 #import "ios/chrome/browser/ui/autofill/chrome_autofill_client_ios.h"
 
 #import <utility>
+#import <vector>
 
-#import "base/bind.h"
-#import "base/callback.h"
 #import "base/check.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback.h"
 #import "base/memory/ptr_util.h"
 #import "base/notreached.h"
 #import "base/strings/string_util.h"
@@ -97,10 +98,10 @@ ChromeAutofillClientIOS::ChromeAutofillClientIOS(
           browser_state->GetOriginalChromeBrowserState())),
       payments_client_(std::make_unique<payments::PaymentsClient>(
           base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-              web_state_->GetBrowserState()->GetURLLoaderFactory()),
+              browser_state_->GetURLLoaderFactory()),
           identity_manager_,
           personal_data_manager_,
-          web_state_->GetBrowserState()->IsOffTheRecord())),
+          browser_state_->IsOffTheRecord())),
       form_data_importer_(std::make_unique<FormDataImporter>(
           this,
           payments_client_.get(),
@@ -129,6 +130,25 @@ version_info::Channel ChromeAutofillClientIOS::GetChannel() const {
   return ::GetChannel();
 }
 
+bool ChromeAutofillClientIOS::IsOffTheRecord() {
+  return web_state_->GetBrowserState()->IsOffTheRecord();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+ChromeAutofillClientIOS::GetURLLoaderFactory() {
+  return base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+      web_state_->GetBrowserState()->GetURLLoaderFactory());
+}
+
+AutofillDownloadManager* ChromeAutofillClientIOS::GetDownloadManager() {
+  if (!download_manager_) {
+    // Lazy initialization to avoid virtual function calls in the constructor.
+    download_manager_ = std::make_unique<AutofillDownloadManager>(
+        this, GetChannel(), GetLogManager());
+  }
+  return download_manager_.get();
+}
+
 PersonalDataManager* ChromeAutofillClientIOS::GetPersonalDataManager() {
   return personal_data_manager_;
 }
@@ -138,9 +158,9 @@ ChromeAutofillClientIOS::GetAutocompleteHistoryManager() {
   return autocomplete_history_manager_;
 }
 
-CreditCardCVCAuthenticator* ChromeAutofillClientIOS::GetCVCAuthenticator() {
+CreditCardCvcAuthenticator* ChromeAutofillClientIOS::GetCvcAuthenticator() {
   if (!cvc_authenticator_)
-    cvc_authenticator_ = std::make_unique<CreditCardCVCAuthenticator>(this);
+    cvc_authenticator_ = std::make_unique<CreditCardCvcAuthenticator>(this);
   return cvc_authenticator_.get();
 }
 
@@ -236,8 +256,7 @@ std::string ChromeAutofillClientIOS::GetVariationConfigCountryCode() const {
              : std::string();
 }
 
-void ChromeAutofillClientIOS::ShowAutofillSettings(
-    bool show_credit_card_settings) {
+void ChromeAutofillClientIOS::ShowAutofillSettings(PopupType popup_type) {
   NOTREACHED();
 }
 
@@ -263,10 +282,8 @@ void ChromeAutofillClientIOS::ConfirmSaveCreditCardLocally(
     LocalSaveCardPromptCallback callback) {
   DCHECK(options.show_prompt);
   infobar_manager_->AddInfoBar(CreateSaveCardInfoBarMobile(
-      std::make_unique<AutofillSaveCardInfoBarDelegateMobile>(
-          /*upload=*/false, options, card, LegalMessageLines(),
-          /*upload_save_card_callback=*/UploadSaveCardPromptCallback(),
-          /*local_save_card_callback=*/std::move(callback), AccountInfo())));
+      AutofillSaveCardInfoBarDelegateMobile::CreateForLocalSave(
+          options, card, std::move(callback))));
 }
 
 void ChromeAutofillClientIOS::ConfirmAccountNameFixFlow(
@@ -307,10 +324,9 @@ void ChromeAutofillClientIOS::ConfirmSaveCreditCardToCloud(
   AccountInfo account_info = identity_manager_->FindExtendedAccountInfo(
       identity_manager_->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin));
   infobar_manager_->AddInfoBar(CreateSaveCardInfoBarMobile(
-      std::make_unique<AutofillSaveCardInfoBarDelegateMobile>(
-          /*upload=*/true, options, card, legal_message_lines,
-          /*upload_save_card_callback=*/std::move(callback),
-          LocalSaveCardPromptCallback(), account_info)));
+      AutofillSaveCardInfoBarDelegateMobile::CreateForUploadSave(
+          options, card, std::move(callback), legal_message_lines,
+          account_info)));
 }
 
 void ChromeAutofillClientIOS::CreditCardUploadCompleted(bool card_saved) {
@@ -384,20 +400,17 @@ bool ChromeAutofillClientIOS::IsFastCheckoutSupported() {
   return false;
 }
 
-bool ChromeAutofillClientIOS::IsFastCheckoutTriggerForm(
+bool ChromeAutofillClientIOS::TryToShowFastCheckout(
     const FormData& form,
-    const FormFieldData& field) {
+    const FormFieldData& field,
+    base::WeakPtr<AutofillManager> autofill_manager) {
   return false;
 }
 
-bool ChromeAutofillClientIOS::ShowFastCheckout(
-    base::WeakPtr<FastCheckoutDelegate> delegate) {
-  NOTREACHED();
-  return false;
-}
+void ChromeAutofillClientIOS::HideFastCheckout(bool allow_further_runs) {}
 
-void ChromeAutofillClientIOS::HideFastCheckout() {
-  NOTREACHED();
+bool ChromeAutofillClientIOS::IsShowingFastCheckoutUI() {
+  return false;
 }
 
 bool ChromeAutofillClientIOS::IsTouchToFillCreditCardSupported() {
@@ -406,7 +419,7 @@ bool ChromeAutofillClientIOS::IsTouchToFillCreditCardSupported() {
 
 bool ChromeAutofillClientIOS::ShowTouchToFillCreditCard(
     base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const CreditCard* const> cards_to_suggest) {
+    base::span<const CreditCard> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -427,10 +440,9 @@ void ChromeAutofillClientIOS::UpdateAutofillPopupDataListValues(
   // No op. ios/web_view does not support display datalist.
 }
 
-base::span<const Suggestion> ChromeAutofillClientIOS::GetPopupSuggestions()
-    const {
+std::vector<Suggestion> ChromeAutofillClientIOS::GetPopupSuggestions() const {
   NOTIMPLEMENTED();
-  return base::span<const Suggestion>();
+  return {};
 }
 
 void ChromeAutofillClientIOS::PinPopupView() {
@@ -483,14 +495,6 @@ void ChromeAutofillClientIOS::DidFillOrPreviewField(
 
 bool ChromeAutofillClientIOS::IsContextSecure() const {
   return IsContextSecureForWebState(web_state_);
-}
-
-bool ChromeAutofillClientIOS::ShouldShowSigninPromo() {
-  return false;
-}
-
-bool ChromeAutofillClientIOS::AreServerCardsSupported() const {
-  return true;
 }
 
 void ChromeAutofillClientIOS::ExecuteCommand(int id) {

@@ -63,6 +63,8 @@
   E_CPONLY(kColorDownloadShelfForeground) \
   E_CPONLY(kColorDownloadStartedAnimationForeground) \
   E_CPONLY(kColorDownloadToolbarButtonActive) \
+  E_CPONLY(kColorDownloadToolbarButtonAnimationBackground) \
+  E_CPONLY(kColorDownloadToolbarButtonAnimationForeground) \
   E_CPONLY(kColorDownloadToolbarButtonInactive) \
   E_CPONLY(kColorDownloadToolbarButtonRingBackground) \
   /* Extension colors. */ \
@@ -159,7 +161,7 @@
   E_CPONLY(kColorNewTabPageDialogForeground) \
   E_CPONLY(kColorNewTabPageDialogSecondaryForeground) \
   E_CPONLY(kColorNewTabPageFirstRunBackground) \
-  E_CPONLY(kColorNewTabPageFocusShadow) \
+  E_CPONLY(kColorNewTabPageFocusRing) \
   E_CPONLY(kColorNewTabPageHeader) \
   E_CPONLY(kColorNewTabPagePromoBackground) \
   E_CPONLY(kColorNewTabPagePromoImageBackground) \
@@ -203,6 +205,8 @@
   /* Omnibox colors. */ \
   E_CPONLY(kColorOmniboxAnswerIconBackground) \
   E_CPONLY(kColorOmniboxAnswerIconForeground) \
+  E_CPONLY(kColorOmniboxAnswerIconGM3Background) \
+  E_CPONLY(kColorOmniboxAnswerIconGM3Foreground) \
   E_CPONLY(kColorOmniboxBubbleOutline) \
   E_CPONLY(kColorOmniboxBubbleOutlineExperimentalKeywordMode) \
   E_CPONLY(kColorOmniboxChipBackground) \
@@ -217,6 +221,7 @@
   E_CPONLY(kColorOmniboxResultsButtonInkDropSelected) \
   E_CPONLY(kColorOmniboxResultsFocusIndicator) \
   E_CPONLY(kColorOmniboxResultsIcon) \
+  E_CPONLY(kColorOmniboxResultsIconGM3Background) \
   E_CPONLY(kColorOmniboxResultsIconSelected) \
   E_CPONLY(kColorOmniboxResultsStarterPackIcon) \
   E_CPONLY(kColorOmniboxResultsTextDimmed) \
@@ -256,7 +261,9 @@
   E_CPONLY(kColorPipWindowBackToTabButtonBackground) \
   E_CPONLY(kColorPipWindowBackground) \
   E_CPONLY(kColorPipWindowControlsBackground) \
+  E_CPONLY(kColorPipWindowTopBarBackground) \
   E_CPONLY(kColorPipWindowForeground) \
+  E_CPONLY(kColorPipWindowForegroundInactive) \
   E_CPONLY(kColorPipWindowHangUpButtonForeground) \
   E_CPONLY(kColorPipWindowSkipAdButtonBackground) \
   E_CPONLY(kColorPipWindowSkipAdButtonBorder) \
@@ -305,7 +312,19 @@
   E_CPONLY(kColorScreenshotCapturedImageBorder) \
   /* Side panel colors. */ \
   E_CPONLY(kColorSidePanelBackground) \
+  E_CPONLY(kColorSidePanelBadgeBackground) \
+  E_CPONLY(kColorSidePanelBadgeBackgroundUpdated) \
+  E_CPONLY(kColorSidePanelBadgeForeground) \
+  E_CPONLY(kColorSidePanelBadgeForegroundUpdated) \
   E_CPONLY(kColorSidePanelContentAreaSeparator) \
+  E_CPONLY(kColorSidePanelContentBackground) \
+  E_CPONLY(kColorSidePanelFilterChipBorder) \
+  E_CPONLY(kColorSidePanelFilterChipForeground) \
+  E_CPONLY(kColorSidePanelFilterChipForegroundSelected) \
+  E_CPONLY(kColorSidePanelFilterChipIcon) \
+  E_CPONLY(kColorSidePanelFilterChipIconSelected) \
+  E_CPONLY(kColorSidePanelFilterChipBackgroundSelected) \
+  E_CPONLY(kColorSidePanelTextfieldBorder) \
   /* Status bubble colors. */ \
   E_CPONLY(kColorStatusBubbleBackgroundFrameActive) \
   E_CPONLY(kColorStatusBubbleBackgroundFrameInactive) \
@@ -469,7 +488,23 @@
   E_CPONLY(kColorWebUiTabStripTabWaitingSpinning) \
   /* Window control button background colors. */ \
   E_CPONLY(kColorWindowControlButtonBackgroundActive) \
-  E_CPONLY(kColorWindowControlButtonBackgroundInactive)
+  E_CPONLY(kColorWindowControlButtonBackgroundInactive) \
+  /* Read Anything colors. */ \
+  E_CPONLY(kColorReadAnythingBackground) \
+  E_CPONLY(kColorReadAnythingBackgroundBlue) \
+  E_CPONLY(kColorReadAnythingBackgroundDark) \
+  E_CPONLY(kColorReadAnythingBackgroundLight) \
+  E_CPONLY(kColorReadAnythingBackgroundYellow) \
+  E_CPONLY(kColorReadAnythingForeground) \
+  E_CPONLY(kColorReadAnythingForegroundBlue) \
+  E_CPONLY(kColorReadAnythingForegroundDark) \
+  E_CPONLY(kColorReadAnythingForegroundLight) \
+  E_CPONLY(kColorReadAnythingForegroundYellow) \
+  E_CPONLY(kColorReadAnythingSeparator) \
+  E_CPONLY(kColorReadAnythingSeparatorBlue) \
+  E_CPONLY(kColorReadAnythingSeparatorDark) \
+  E_CPONLY(kColorReadAnythingSeparatorLight) \
+  E_CPONLY(kColorReadAnythingSeparatorYellow) \
 
 #if BUILDFLAG(IS_CHROMEOS)
 #define CHROME_PLATFORM_SPECIFIC_COLOR_IDS \

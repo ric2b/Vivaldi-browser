@@ -12,11 +12,11 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/guid.h"
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/timezone.h"
@@ -34,7 +34,7 @@
 #include "components/autofill/core/browser/autofill_download_manager.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
-#include "components/autofill/core/browser/autofill_profile_save_strike_database.h"
+#include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/data_model/credit_card_art_image.h"
 #include "components/autofill/core/browser/data_model/phone_number.h"
@@ -44,9 +44,15 @@
 #include "components/autofill/core/browser/geo/country_data.h"
 #include "components/autofill/core/browser/geo/country_names.h"
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
+#include "components/autofill/core/browser/manual_testing_profile_import.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
+#include "components/autofill/core/browser/metrics/payments/iban_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/offers_metrics.h"
+#include "components/autofill/core/browser/metrics/payments/wallet_usage_data_metrics.h"
+#include "components/autofill/core/browser/metrics/stored_profile_metrics.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
+#include "components/autofill/core/browser/strike_databases/autofill_profile_migration_strike_database.h"
+#include "components/autofill/core/browser/strike_databases/autofill_profile_save_strike_database.h"
 #include "components/autofill/core/browser/ui/autofill_image_fetcher.h"
 #include "components/autofill/core/browser/ui/label_formatter.h"
 #include "components/autofill/core/browser/ui/label_formatter_utils.h"
@@ -61,6 +67,8 @@
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/consent_level.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/driver/sync_auth_util.h"
 #include "components/sync/driver/sync_service.h"
@@ -318,6 +326,9 @@ void PersonalDataManager::Init(
   }
 
   if (strike_database) {
+    profile_migration_strike_database_ =
+        std::make_unique<AutofillProfileMigrationStrikeDatabase>(
+            strike_database);
     profile_save_strike_database_ =
         std::make_unique<AutofillProfileSaveStrikeDatabase>(strike_database);
     profile_update_strike_database_ =
@@ -337,6 +348,11 @@ void PersonalDataManager::Init(
 
   personal_data_manager_cleaner_ = std::make_unique<PersonalDataManagerCleaner>(
       this, alternative_state_name_map_updater_.get(), pref_service);
+
+  // Potentially import profiles for testing. `Init()` is called whenever the
+  // corresponding Chrome profile is created. This is either during start-up or
+  // when the Chrome profile is changed (including incognito mode).
+  MaybeImportProfilesForManualTesting(weak_factory_.GetWeakPtr());
 }
 
 PersonalDataManager::~PersonalDataManager() {
@@ -430,7 +446,8 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
          pending_creditcards_query_ || pending_server_creditcards_query_ ||
          pending_server_creditcard_cloud_token_data_query_ ||
          pending_ibans_query_ || pending_customer_data_query_ ||
-         pending_upi_ids_query_ || pending_offer_data_query_);
+         pending_upi_ids_query_ || pending_offer_data_query_ ||
+         pending_virtual_card_usage_data_query_);
 
   if (!result) {
     // Error from the web database.
@@ -454,6 +471,9 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
       pending_upi_ids_query_ = 0;
     else if (h == pending_offer_data_query_)
       pending_offer_data_query_ = 0;
+    else if (h == pending_virtual_card_usage_data_query_) {
+      pending_virtual_card_usage_data_query_ = 0;
+    }
   } else {
     switch (result->GetType()) {
       case AUTOFILL_PROFILES_RESULT:
@@ -523,6 +543,14 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
             << "received autofill offer data from invalid request.";
         ReceiveLoadedDbValues(h, result.get(), &pending_offer_data_query_,
                               &autofill_offer_data_);
+        break;
+      case AUTOFILL_VIRTUAL_CARD_USAGE_DATA:
+        DCHECK_EQ(h, pending_virtual_card_usage_data_query_)
+            << "received autofill virtual card usage data from invalid "
+               "request.";
+        ReceiveLoadedDbValues(h, result.get(),
+                              &pending_virtual_card_usage_data_query_,
+                              &autofill_virtual_card_usage_data_);
         break;
       default:
         NOTREACHED();
@@ -597,6 +625,17 @@ bool PersonalDataManager::IsSyncFeatureEnabled() const {
 void PersonalDataManager::OnAccountsCookieDeletedByUserAction() {
   // Clear all the Sync Transport feature opt-ins.
   prefs::ClearSyncTransportOptIns(pref_service_);
+}
+
+absl::optional<CoreAccountInfo> PersonalDataManager::GetPrimaryAccountInfo()
+    const {
+  if (identity_manager_ &&
+      identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
+    return identity_manager_->GetPrimaryAccountInfo(
+        signin::ConsentLevel::kSignin);
+  }
+
+  return absl::nullopt;
 }
 
 AutofillSyncSigninState PersonalDataManager::GetSyncSigninState() const {
@@ -769,17 +808,21 @@ void PersonalDataManager::UpdateProfile(const AutofillProfile& profile) {
 }
 
 AutofillProfile* PersonalDataManager::GetProfileByGUID(
-    const std::string& guid) {
+    const std::string& guid) const {
   // GUIDs are unique among profile sources.
-  return GetProfileFromProfilesByGUID(guid, GetProfiles());
-}
-
-// static
-AutofillProfile* PersonalDataManager::GetProfileFromProfilesByGUID(
-    const std::string& guid,
-    const std::vector<AutofillProfile*>& profiles) {
+  std::vector<AutofillProfile*> profiles = GetProfiles();
   auto iter = FindElementByGUID(profiles, guid);
   return iter != profiles.end() ? *iter : nullptr;
+}
+
+void PersonalDataManager::MigrateProfileToAccount(
+    const AutofillProfile& profile) {
+  DCHECK_EQ(profile.source(), AutofillProfile::Source::kLocalOrSyncable);
+  AutofillProfile account_profile = profile.ConvertToAccountProfile();
+  DCHECK_NE(profile.guid(), account_profile.guid());
+  // Update the database (and this way indirectly Sync).
+  RemoveByGUID(profile.guid());
+  AddProfile(account_profile);
 }
 
 std::string PersonalDataManager::AddIBAN(const IBAN& iban) {
@@ -813,7 +856,6 @@ std::string PersonalDataManager::AddIBAN(const IBAN& iban) {
 }
 
 std::string PersonalDataManager::UpdateIBAN(const IBAN& iban) {
-  DCHECK_EQ(IBAN::LOCAL_IBAN, iban.record_type());
   if (is_off_the_record_)
     return std::string();
 
@@ -1266,7 +1308,7 @@ gfx::Image* PersonalDataManager::GetCreditCardArtImageForUrl(
   if (cached_image)
     return cached_image;
 
-  FetchImagesForURLs(base::make_span(&card_art_url, 1));
+  FetchImagesForURLs(base::make_span(&card_art_url, 1u));
   return nullptr;
 }
 
@@ -1291,6 +1333,20 @@ gfx::Image* PersonalDataManager::GetCachedCardArtImageForUrl(
   return nullptr;
 }
 
+std::vector<VirtualCardUsageData*>
+PersonalDataManager::GetVirtualCardUsageData() const {
+  if (!IsAutofillWalletImportEnabled() || !IsAutofillCreditCardEnabled()) {
+    return {};
+  }
+
+  std::vector<VirtualCardUsageData*> result;
+  result.reserve(autofill_virtual_card_usage_data_.size());
+  for (const auto& data : autofill_virtual_card_usage_data_) {
+    result.push_back(data.get());
+  }
+  return result;
+}
+
 void PersonalDataManager::Refresh() {
   LoadProfiles();
   LoadCreditCards();
@@ -1299,6 +1355,7 @@ void PersonalDataManager::Refresh() {
   LoadPaymentsCustomerData();
   LoadUpiIds();
   LoadAutofillOffers();
+  LoadVirtualCardUsageData();
 }
 
 std::vector<AutofillProfile*> PersonalDataManager::GetProfilesToSuggest()
@@ -1309,14 +1366,16 @@ std::vector<AutofillProfile*> PersonalDataManager::GetProfilesToSuggest()
   // Suggest `kAccount` and `kLocalOrSyncable` profiles.
   std::vector<AutofillProfile*> profiles = GetProfiles();
 
-  // Rank the suggestions by ranking score.
-  const base::Time comparison_time = AutofillClock::Now();
-  std::sort(
-      profiles.begin(), profiles.end(),
-      [comparison_time](const AutofillProfile* a, const AutofillProfile* b) {
-        return a->HasGreaterRankingThan(b, comparison_time);
-      });
-
+  // TODO(crbug.com/1411114): Remove code duplication for sorting profiles.
+  if (profiles.size() > 1) {
+    // Rank the suggestions by ranking score.
+    const base::Time comparison_time = AutofillClock::Now();
+    std::sort(
+        profiles.begin(), profiles.end(),
+        [comparison_time](const AutofillProfile* a, const AutofillProfile* b) {
+          return a->HasGreaterRankingThan(b, comparison_time);
+        });
+  }
   return profiles;
 }
 
@@ -1394,37 +1453,31 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
   suggestion_selection::PrepareSuggestions(labels, &unique_suggestions,
                                            comparator);
 
-  // If this feature is enabled, we add an icon to the address (profile)
-  // suggestion if there is more than on profile related field in the form.
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillUseConsistentPopupSettingsIcons)) {
-    // Returns true if |type| is related to address profiles.
-    auto is_field_type_profile_related = [](ServerFieldType type) {
-      FieldTypeGroup group = AutofillType(type).group();
-      return group == FieldTypeGroup::kName ||
-             group == FieldTypeGroup::kAddressHome ||
-             group == FieldTypeGroup::kPhoneHome ||
-             group == FieldTypeGroup::kEmail;
-    };
-
-    if (base::ranges::count_if(field_types, is_field_type_profile_related) >
-        1) {
-      for (auto& suggestion : unique_suggestions) {
-        suggestion.icon = "accountIcon";
-      }
+  // We add an icon to the address (profile) suggestion if there is more than
+  // one profile related field in the form. Returns true if |type| is related to
+  // address profiles.
+  auto is_field_type_profile_related = [](ServerFieldType type) {
+    FieldTypeGroup group = AutofillType(type).group();
+    return group == FieldTypeGroup::kName ||
+           group == FieldTypeGroup::kAddressHome ||
+           group == FieldTypeGroup::kPhoneHome ||
+           group == FieldTypeGroup::kEmail;
+  };
+  if (base::ranges::count_if(field_types, is_field_type_profile_related) > 1) {
+    for (auto& suggestion : unique_suggestions) {
+      suggestion.icon = "accountIcon";
     }
   }
-
   return unique_suggestions;
 }
 
-const std::vector<CreditCard*> PersonalDataManager::GetCreditCardsToSuggest(
-    bool include_server_cards) const {
+const std::vector<CreditCard*> PersonalDataManager::GetCreditCardsToSuggest()
+    const {
   if (!IsAutofillCreditCardEnabled())
     return std::vector<CreditCard*>{};
 
   std::vector<CreditCard*> credit_cards;
-  if (include_server_cards && ShouldSuggestServerCards()) {
+  if (ShouldSuggestServerCards()) {
     credit_cards = GetCreditCards();
   } else {
     credit_cards = GetLocalCreditCards();
@@ -1442,14 +1495,17 @@ const std::vector<CreditCard*> PersonalDataManager::GetCreditCardsToSuggest(
   // Rank the cards by ranking score (see AutofillDataModel for details). All
   // expired cards should be suggested last, also by ranking score.
   base::Time comparison_time = AutofillClock::Now();
-  std::stable_sort(cards_to_suggest.begin(), cards_to_suggest.end(),
-                   [comparison_time](const CreditCard* a, const CreditCard* b) {
-                     bool a_is_expired = a->IsExpired(comparison_time);
-                     if (a_is_expired != b->IsExpired(comparison_time))
-                       return !a_is_expired;
+  if (cards_to_suggest.size() > 1) {
+    std::sort(cards_to_suggest.begin(), cards_to_suggest.end(),
+              [comparison_time](const CreditCard* a, const CreditCard* b) {
+                const bool a_is_expired = a->IsExpired(comparison_time);
+                if (a_is_expired != b->IsExpired(comparison_time)) {
+                  return !a_is_expired;
+                }
 
-                     return a->HasGreaterRankingThan(b, comparison_time);
-                   });
+                return a->HasGreaterRankingThan(b, comparison_time);
+              });
+  }
 
   return cards_to_suggest;
 }
@@ -1687,6 +1743,33 @@ bool PersonalDataManager::SetProfilesForSource(
   return change_happened;
 }
 
+bool PersonalDataManager::IsProfileMigrationBlocked(
+    const std::string& guid) const {
+  AutofillProfile* profile = GetProfileByGUID(guid);
+  DCHECK(profile == nullptr ||
+         profile->source() == AutofillProfile::Source::kLocalOrSyncable);
+  if (!GetProfileMigrationStrikeDatabase()) {
+    return false;
+  }
+  return GetProfileMigrationStrikeDatabase()->ShouldBlockFeature(guid);
+}
+
+void PersonalDataManager::AddStrikeToBlockProfileMigration(
+    const std::string& guid) {
+  if (!GetProfileMigrationStrikeDatabase()) {
+    return;
+  }
+  GetProfileMigrationStrikeDatabase()->AddStrike(guid);
+}
+
+void PersonalDataManager::RemoveStrikesToBlockProfileMigration(
+    const std::string& guid) {
+  if (!GetProfileMigrationStrikeDatabase()) {
+    return;
+  }
+  GetProfileMigrationStrikeDatabase()->ClearStrikes(guid);
+}
+
 bool PersonalDataManager::IsNewProfileImportBlockedForDomain(
     const GURL& url) const {
   if (!GetProfileSaveStrikeDatabase() || !url.is_valid() || !url.has_host()) {
@@ -1717,7 +1800,6 @@ bool PersonalDataManager::IsProfileUpdateBlocked(
   if (!GetProfileUpdateStrikeDatabase()) {
     return false;
   }
-
   return GetProfileUpdateStrikeDatabase()->ShouldBlockFeature(guid);
 }
 
@@ -1725,7 +1807,6 @@ void PersonalDataManager::AddStrikeToBlockProfileUpdate(
     const std::string& guid) {
   if (!GetProfileUpdateStrikeDatabase())
     return;
-
   GetProfileUpdateStrikeDatabase()->AddStrike(guid);
 }
 
@@ -1735,6 +1816,22 @@ void PersonalDataManager::RemoveStrikesToBlockProfileUpdate(
     return;
   }
   GetProfileUpdateStrikeDatabase()->ClearStrikes(guid);
+}
+
+bool PersonalDataManager::IsSyncEnabledFor(syncer::ModelType model_type) const {
+  return sync_service_ != nullptr && sync_service_->CanSyncFeatureStart() &&
+         sync_service_->GetPreferredDataTypes().Has(model_type);
+}
+
+AutofillProfileMigrationStrikeDatabase*
+PersonalDataManager::GetProfileMigrationStrikeDatabase() {
+  return const_cast<AutofillProfileMigrationStrikeDatabase*>(
+      std::as_const(*this).GetProfileMigrationStrikeDatabase());
+}
+
+const AutofillProfileMigrationStrikeDatabase*
+PersonalDataManager::GetProfileMigrationStrikeDatabase() const {
+  return profile_migration_strike_database_.get();
 }
 
 AutofillProfileSaveStrikeDatabase*
@@ -1886,6 +1983,17 @@ void PersonalDataManager::LoadAutofillOffers() {
       database_helper_->GetServerDatabase()->GetAutofillOffers(this);
 }
 
+void PersonalDataManager::LoadVirtualCardUsageData() {
+  if (!database_helper_->GetServerDatabase()) {
+    return;
+  }
+
+  CancelPendingServerQuery(&pending_virtual_card_usage_data_query_);
+
+  pending_virtual_card_usage_data_query_ =
+      database_helper_->GetServerDatabase()->GetVirtualCardUsageData(this);
+}
+
 void PersonalDataManager::CancelPendingLocalQuery(
     WebDataServiceBase::Handle* handle) {
   if (*handle) {
@@ -1916,6 +2024,7 @@ void PersonalDataManager::CancelPendingServerQueries() {
   CancelPendingServerQuery(&pending_customer_data_query_);
   CancelPendingServerQuery(&pending_server_creditcard_cloud_token_data_query_);
   CancelPendingServerQuery(&pending_offer_data_query_);
+  CancelPendingServerQuery(&pending_virtual_card_usage_data_query_);
 }
 
 void PersonalDataManager::LoadPaymentsCustomerData() {
@@ -2008,32 +2117,8 @@ std::string PersonalDataManager::SaveImportedIBAN(IBAN& imported_iban) {
 
 void PersonalDataManager::LogStoredProfileMetrics() const {
   if (!has_logged_stored_profile_metrics_) {
-    // Track the number of disused profiles and profiles without country
-    // information.
-    size_t num_disused_profiles = 0;
-    size_t num_profiles_without_country = 0;
-
-    // Determine the number of disused and country-less profiles
-    const base::Time now = AutofillClock::Now();
-    // TODO(crbug.com/1348294): Create a separate metric for `kAccount`
-    // profiles.
-    const std::vector<AutofillProfile*> local_profiles =
-        GetProfilesFromSource(AutofillProfile::Source::kLocalOrSyncable);
-    for (const AutofillProfile* profile : local_profiles) {
-      const base::TimeDelta time_since_last_use = now - profile->use_date();
-      AutofillMetrics::LogStoredProfileDaysSinceLastUse(
-          time_since_last_use.InDays());
-      if (time_since_last_use > kDisusedDataModelTimeDelta)
-        ++num_disused_profiles;
-      if (profile->GetRawInfo(ADDRESS_HOME_COUNTRY).empty())
-        ++num_profiles_without_country;
-    }
-
-    AutofillMetrics::LogStoredProfileCountStatistics(
-        local_profiles.size(), num_disused_profiles,
-        num_profiles_without_country);
-
-    // Only log this info once per chrome user profile load.
+    autofill_metrics::LogStoredProfileMetrics(GetProfiles());
+    // Only log this info once per Chrome user profile load.
     has_logged_stored_profile_metrics_ = true;
   }
 }
@@ -2044,16 +2129,36 @@ void PersonalDataManager::LogStoredCreditCardMetrics() const {
         local_credit_cards_, server_credit_cards_,
         GetServerCardWithArtImageCount(), kDisusedDataModelTimeDelta);
 
-    // Only log this info once per chrome user profile load.
+    // Only log this info once per Chrome user profile load.
     has_logged_stored_credit_card_metrics_ = true;
+  }
+}
+
+void PersonalDataManager::LogStoredIbanMetrics() const {
+  if (!has_logged_stored_iban_metrics_) {
+    autofill_metrics::LogStoredIbanMetrics(local_ibans_,
+                                           kDisusedDataModelTimeDelta);
+
+    // Only log this info once per Chrome user profile load.
+    has_logged_stored_iban_metrics_ = true;
   }
 }
 
 void PersonalDataManager::LogStoredOfferMetrics() const {
   if (!has_logged_stored_offer_metrics_) {
     autofill_metrics::LogStoredOfferMetrics(autofill_offer_data_);
-    // Only log this info once per chrome user profile load.
+    // Only log this info once per Chrome user profile load.
     has_logged_stored_offer_metrics_ = true;
+  }
+}
+
+void PersonalDataManager::LogStoredVirtualCardUsageMetrics() const {
+  if (!has_logged_stored_virtual_card_usage_metrics_) {
+    autofill_metrics::LogStoredVirtualCardUsageCount(
+        autofill_virtual_card_usage_data_.size());
+
+    // Only log this info once per chrome user profile load.
+    has_logged_stored_virtual_card_usage_metrics_ = true;
   }
 }
 
@@ -2266,7 +2371,11 @@ void PersonalDataManager::OnCreditCardSaved(bool is_local_card) {}
 void PersonalDataManager::ConvertWalletAddressesAndUpdateWalletCards() {
   // If the full Sync feature isn't enabled, then do NOT convert any Wallet
   // addresses to local ones.
-  if (!IsSyncFeatureEnabled()) {
+  // When syncing of account profiles is enabled, converting wallet addresses
+  // is unnecessary, since they are available through the ContactInfoSyncBridge.
+  if (!IsSyncFeatureEnabled() ||
+      base::FeatureList::IsEnabled(
+          features::kAutofillAccountProfilesUnionView)) {
     // PDM expects that each call to
     // ConvertWalletAddressesAndUpdateWalletCards() is followed by a
     // AutofillAddressConversionCompleted() notification, simulate the
@@ -2432,12 +2541,8 @@ bool PersonalDataManager::HasPendingQueries() {
          pending_server_creditcards_query_ != 0 ||
          pending_server_creditcard_cloud_token_data_query_ != 0 ||
          pending_customer_data_query_ != 0 || pending_upi_ids_query_ != 0 ||
-         pending_offer_data_query_ != 0;
-}
-
-bool PersonalDataManager::IsSyncEnabledFor(syncer::ModelType model_type) {
-  return sync_service_ != nullptr && sync_service_->CanSyncFeatureStart() &&
-         sync_service_->GetPreferredDataTypes().Has(model_type);
+         pending_offer_data_query_ != 0 ||
+         pending_virtual_card_usage_data_query_ != 0;
 }
 
 scoped_refptr<AutofillWebDataService> PersonalDataManager::GetLocalDatabase() {

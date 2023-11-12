@@ -52,6 +52,7 @@ class VivaldiWindowWidgetDelegate final : public views::WidgetDelegate {
   views::ClientView* CreateClientView(views::Widget* widget) override;
   std::string GetWindowName() const override;
   bool ExecuteWindowsCommand(int command_id) override;
+  void WindowClosing() override;
 
  private:
   friend VivaldiBrowserWindow;

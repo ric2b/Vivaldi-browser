@@ -5,18 +5,22 @@
 #ifndef ASH_CLIPBOARD_VIEWS_CLIPBOARD_HISTORY_BITMAP_ITEM_VIEW_H_
 #define ASH_CLIPBOARD_VIEWS_CLIPBOARD_HISTORY_BITMAP_ITEM_VIEW_H_
 
-#include "ash/clipboard/clipboard_history_item.h"
 #include "ash/clipboard/views/clipboard_history_item_view.h"
+#include "base/unguessable_token.h"
 #include "ui/base/clipboard/clipboard_data.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 
 namespace ash {
+class ClipboardHistory;
 class ClipboardHistoryResourceManager;
 
 // The menu item showing a bitmap.
 class ClipboardHistoryBitmapItemView : public ClipboardHistoryItemView {
  public:
+  METADATA_HEADER(ClipboardHistoryBitmapItemView);
   ClipboardHistoryBitmapItemView(
-      const ClipboardHistoryItem* clipboard_history_item,
+      const base::UnguessableToken& item_id,
+      const ClipboardHistory* clipboard_history,
       const ClipboardHistoryResourceManager* resource_manager,
       views::MenuItemView* container);
   ClipboardHistoryBitmapItemView(const ClipboardHistoryBitmapItemView& rhs) =
@@ -29,9 +33,7 @@ class ClipboardHistoryBitmapItemView : public ClipboardHistoryItemView {
   class BitmapContentsView;
 
   // ClipboardHistoryItemView:
-  const char* GetClassName() const override;
   std::unique_ptr<ContentsView> CreateContentsView() override;
-  std::u16string GetAccessibleName() const override;
 
   // Owned by ClipboardHistoryController.
   const ClipboardHistoryResourceManager* const resource_manager_;

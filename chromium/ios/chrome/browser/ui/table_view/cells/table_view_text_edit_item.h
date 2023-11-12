@@ -25,14 +25,19 @@ typedef NS_ENUM(NSInteger, TableViewTextEditItemIconType) {
 // The delegate for this table view text edit item.
 @property(nonatomic, weak) id<TableViewTextEditItemDelegate> delegate;
 
-// The name of the text field.
-@property(nonatomic, copy) NSString* textFieldName;
+// Name of the text field.
+// Displayed in a label next to the text field.
+@property(nonatomic, copy) NSString* fieldNameLabelText;
 
 // The placeholder of the text field.
 @property(nonatomic, copy) NSString* textFieldPlaceholder;
 
 // The value of the text field.
 @property(nonatomic, copy) NSString* textFieldValue;
+
+// Text color for the text field of the cell. Default is [UIColor
+// colorNamed:kTextPrimaryColor].
+@property(nonatomic, strong) UIColor* textFieldTextColor;
 
 // An icon identifying the text field or its current value, if any.
 @property(nonatomic, copy) UIImage* identifyingIcon;
@@ -82,7 +87,8 @@ typedef NS_ENUM(NSInteger, TableViewTextEditItemIconType) {
 // and a text field.
 @interface TableViewTextEditCell : TableViewCell
 
-// Label at the leading edge of the cell. It displays the item's textFieldName.
+// Label at the leading edge of the cell. It displays the item's
+// fieldNameLabelText.
 @property(nonatomic, strong) UILabel* textLabel;
 
 // Text field at the trailing edge of the cell. It displays the item's

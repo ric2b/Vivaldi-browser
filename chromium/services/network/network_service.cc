@@ -8,8 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
@@ -19,6 +17,8 @@
 #include "base/environment.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -81,6 +81,7 @@
 #include "services/network/public/mojom/key_pinning.mojom.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
 #include "services/network/public/mojom/system_dns_resolution.mojom-forward.h"
+#include "services/network/restricted_cookie_manager.h"
 #include "services/network/url_loader.h"
 
 #if BUILDFLAG(IS_ANDROID) && defined(ARCH_CPU_ARMEL)
@@ -231,6 +232,42 @@ void ResolveSystemDnsWithMojo(
                                std::move(results_cb_with_default_invoke));
 }
 
+// Creating an instance of this class starts exporting UMA data related to
+// RestrictedCookieManager. There should only be one instance of this class at a
+// time and it should be kept around for the duration of the program. This is
+// accomplished by having NetworkService own the instance.
+class RestrictedCookieManagerMetrics
+    : public RestrictedCookieManager::UmaMetricsUpdater {
+ public:
+  RestrictedCookieManagerMetrics() {
+    histogram_ = base::Histogram::FactoryGet(
+        "Net.RestrictedCookieManager.GetCookiesString.Count30Seconds", 1, 10000,
+        50, base::HistogramBase::kUmaTargetedHistogramFlag);
+    timer_.Start(
+        FROM_HERE, base::Seconds(30),
+        base::BindRepeating(&RestrictedCookieManagerMetrics::OnTimerTick,
+                            base::Unretained(this)));
+  }
+  ~RestrictedCookieManagerMetrics() override = default;
+
+ private:
+  void OnGetCookiesString() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    ++get_cookies_string_count_;
+  }
+
+  void OnTimerTick() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    histogram_->Add(get_cookies_string_count_);
+    get_cookies_string_count_ = 0;
+  }
+
+  SEQUENCE_CHECKER(sequence_checker_);
+  uint64_t get_cookies_string_count_{0};
+  raw_ptr<base::HistogramBase> histogram_;
+  base::RepeatingTimer timer_;
+};
+
 }  // namespace
 
 // static
@@ -315,8 +352,6 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
   // Make sure OpenSSL is initialized before using it to histogram data.
   crypto::EnsureOpenSSLInit();
 
-  // Measure CPUs with broken NEON units. See https://crbug.com/341598.
-  UMA_HISTOGRAM_BOOLEAN("Net.HasBrokenNEON", CRYPTO_has_broken_NEON());
   // Measure Android kernels with missing AT_HWCAP2 auxv fields. See
   // https://crbug.com/boringssl/46.
   UMA_HISTOGRAM_BOOLEAN("Net.NeedsHWCAP2Workaround",
@@ -388,6 +423,10 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
   sct_auditing_cache_ =
       std::make_unique<SCTAuditingCache>(kMaxSCTAuditingCacheEntries);
 #endif
+
+  if (base::FeatureList::IsEnabled(features::kGetCookiesStringUma)) {
+    metrics_updater_ = std::make_unique<RestrictedCookieManagerMetrics>();
+  }
 }
 
 NetworkService::~NetworkService() {
@@ -412,7 +451,8 @@ NetworkService::~NetworkService() {
     trace_net_log_observer_.StopWatchForTraceStart();
 }
 
-void NetworkService::ReplaceSystemDnsConfigForTesting() {
+void NetworkService::ReplaceSystemDnsConfigForTesting(
+    base::OnceClosure replace_cb) {
   // Create a test `net::DnsConfigService` that will yield a dummy config once.
   auto config_service = std::make_unique<net::TestDnsConfigService>();
   config_service->SetConfigForRefresh(
@@ -423,8 +463,7 @@ void NetworkService::ReplaceSystemDnsConfigForTesting() {
   auto* notifier = net::NetworkChangeNotifier::GetSystemDnsConfigNotifier();
   DCHECK(notifier);
   notifier->SetDnsConfigServiceForTesting(  // IN-TEST
-      std::move(config_service));
-  notifier->RefreshConfig();
+      std::move(config_service), std::move(replace_cb));
 
   // Force-disable the system resolver so that HostResolverManager will actually
   // use the replacement config.
@@ -505,8 +544,6 @@ void NetworkService::SetParams(mojom::NetworkServiceParamsPtr params) {
 
 void NetworkService::SetSystemDnsResolver(
     mojo::PendingRemote<mojom::SystemDnsResolver> override_remote) {
-  CHECK(
-      base::FeatureList::IsEnabled(features::kOutOfProcessSystemDnsResolution));
   CHECK(override_remote);
 
   // Using a Remote (as opposed to a SharedRemote) is fine as system host
@@ -820,7 +857,7 @@ void NetworkService::DumpWithoutCrashing(base::Time dump_request_time) {
 }
 #endif
 
-void NetworkService::BindTestInterface(
+void NetworkService::BindTestInterfaceForTesting(
     mojo::PendingReceiver<mojom::NetworkServiceTest> receiver) {
   if (registry_) {
     auto pipe = receiver.PassPipe();

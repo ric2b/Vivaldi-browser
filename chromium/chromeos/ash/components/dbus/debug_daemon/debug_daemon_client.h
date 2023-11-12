@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/component_export.h"
 #include "base/files/file.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/observer_list_types.h"
 #include "base/task/task_runner.h"
@@ -145,6 +145,19 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   // |requested_logs|: The list of requested logs. All available logs will be
   // requested if left empty.
   virtual void GetFeedbackLogsV2(
+      const cryptohome::AccountIdentifier& id,
+      const std::vector<debugd::FeedbackLogType>& requested_logs,
+      GetLogsCallback callback) = 0;
+
+  // Gets feedback logs from debugd that are very large and cannot be
+  // returned directly from D-Bus. These logs will include ARC and cheets
+  // system information. This method is the same as GetFeedbackLogsV2 except
+  // that it tries to gather logs in parallel.
+  // |id|: Cryptohome Account identifier for the user to get
+  // logs for.
+  // |requested_logs|: The list of requested logs. All available logs will be
+  // requested if left empty.
+  virtual void GetFeedbackLogsV3(
       const cryptohome::AccountIdentifier& id,
       const std::vector<debugd::FeedbackLogType>& requested_logs,
       GetLogsCallback callback) = 0;
@@ -377,10 +390,5 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::DebugDaemonClient;
-}
 
 #endif  // CHROMEOS_ASH_COMPONENTS_DBUS_DEBUG_DAEMON_DEBUG_DAEMON_CLIENT_H_

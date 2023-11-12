@@ -75,13 +75,6 @@ SkBitmap GetSuggestionChipViewBitmap(SuggestionChipView* view) {
   return canvas.GetBitmap();
 }
 
-SkBitmap GetFocusRingBitmap(views::FocusRing* focus_ring) {
-  gfx::Canvas canvas(focus_ring->size(), /*image_scale=*/1.0f,
-                     /*is_opaque=*/false);
-  focus_ring->OnPaint(&canvas);
-  return canvas.GetBitmap();
-}
-
 }  // namespace
 
 // Tests -----------------------------------------------------------------------
@@ -154,27 +147,12 @@ TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
   EXPECT_EQ(label->GetEnabledColor(),
             ColorProvider::Get()->GetContentLayerColor(
                 ColorProvider::ContentLayerType::kTextColorSecondary));
-  EXPECT_TRUE(
-      cc::ExactPixelComparator(/*discard_alpha=*/false)
-          .Compare(GetSuggestionChipViewBitmap(suggestion_chip_view),
-                   GetBitmapWithInnerRoundedRect(
-                       kSuggestionChipViewSize, /*stroke_width=*/1,
-                       ColorProvider::Get()->GetContentLayerColor(
-                           ColorProvider::ContentLayerType::kSeparatorColor))));
-
-  // Focus the chip view and confirm that focus ring is rendered.
-  suggestion_chip_view->RequestFocus();
-  views::test::RunScheduledLayout(views::FocusRing::Get(suggestion_chip_view));
-  EXPECT_TRUE(
-      cc::ExactPixelComparator(/*discard_alpha=*/false)
-          .Compare(
-              GetFocusRingBitmap(views::FocusRing::Get(suggestion_chip_view)),
-              GetBitmapWithInnerRoundedRect(
-                  kSuggestionChipViewSize, /*stroke_width=*/2,
-                  ColorProvider::Get()->GetControlsLayerColor(
-                      ColorProvider::ControlsLayerType::kFocusRingColor))));
-
-  suggestion_chip_view->GetFocusManager()->ClearFocus();
+  EXPECT_TRUE(cc::ExactPixelComparator().Compare(
+      GetSuggestionChipViewBitmap(suggestion_chip_view),
+      GetBitmapWithInnerRoundedRect(
+          kSuggestionChipViewSize, /*stroke_width=*/1,
+          ColorProvider::Get()->GetContentLayerColor(
+              ColorProvider::ContentLayerType::kSeparatorColor))));
 
   // Switch the color mode.
   dark_light_mode_controller->ToggleColorMode();
@@ -184,24 +162,12 @@ TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
   EXPECT_EQ(label->GetEnabledColor(),
             ColorProvider::Get()->GetContentLayerColor(
                 ColorProvider::ContentLayerType::kTextColorSecondary));
-  EXPECT_TRUE(
-      cc::ExactPixelComparator(/*discard_alpha=*/false)
-          .Compare(GetSuggestionChipViewBitmap(suggestion_chip_view),
-                   GetBitmapWithInnerRoundedRect(
-                       kSuggestionChipViewSize, /*stroke_width=*/1,
-                       ColorProvider::Get()->GetContentLayerColor(
-                           ColorProvider::ContentLayerType::kSeparatorColor))));
-
-  // Focus the chip view and confirm that focus ring is rendered.
-  suggestion_chip_view->RequestFocus();
-  EXPECT_TRUE(
-      cc::ExactPixelComparator(/*discard_alpha=*/false)
-          .Compare(
-              GetFocusRingBitmap(views::FocusRing::Get(suggestion_chip_view)),
-              GetBitmapWithInnerRoundedRect(
-                  kSuggestionChipViewSize, /*stroke_width=*/2,
-                  ColorProvider::Get()->GetControlsLayerColor(
-                      ColorProvider::ControlsLayerType::kFocusRingColor))));
+  EXPECT_TRUE(cc::ExactPixelComparator().Compare(
+      GetSuggestionChipViewBitmap(suggestion_chip_view),
+      GetBitmapWithInnerRoundedRect(
+          kSuggestionChipViewSize, /*stroke_width=*/1,
+          ColorProvider::Get()->GetContentLayerColor(
+              ColorProvider::ContentLayerType::kSeparatorColor))));
 }
 
 TEST_F(SuggestionChipViewTest, FontWeight) {

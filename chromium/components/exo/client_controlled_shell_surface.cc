@@ -806,6 +806,11 @@ void ClientControlledShellSurface::UnsetPip() {
   SetRestored();
 }
 
+void ClientControlledShellSurface::SetFloat() {
+  TRACE_EVENT0("exo", "ClientControlledShellSurface::SetFloat");
+  pending_window_state_ = chromeos::WindowStateType::kFloated;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // aura::WindowObserver overrides:
 
@@ -1211,16 +1216,23 @@ bool ClientControlledShellSurface::OnPreWidgetCommit() {
             ash::WindowState::BoundsChangeAnimationType::kCrossFade;
       }
       break;
-
+    case chromeos::WindowStateType::kFloated:
+      animation_type =
+          ash::WindowState::BoundsChangeAnimationType::kCrossFadeFloat;
+      break;
     case chromeos::WindowStateType::kMaximized:
     case chromeos::WindowStateType::kFullscreen:
       if (!window_state->IsPip())
         animation_type =
             ash::WindowState::BoundsChangeAnimationType::kCrossFade;
       break;
-
     default:
       break;
+  }
+
+  if (window_state->IsFloated()) {
+    animation_type =
+        ash::WindowState::BoundsChangeAnimationType::kCrossFadeUnfloat;
   }
 
   bool wasPip = window_state->IsPip();

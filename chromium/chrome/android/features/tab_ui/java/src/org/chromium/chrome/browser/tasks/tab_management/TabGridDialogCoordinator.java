@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import android.app.Activity;
-import android.content.Context;
 import android.graphics.Rect;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
@@ -20,7 +19,6 @@ import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -62,11 +60,13 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
             TabListMediator.GridCardOnClickListenerProvider gridCardOnClickListenerProvider,
             TabGridDialogMediator.AnimationSourceViewProvider animationSourceViewProvider,
             Supplier<ShareDelegate> shareDelegateSupplier, ScrimCoordinator scrimCoordinator,
-            ViewGroup rootView) {
+            TabGroupTitleEditor tabGroupTitleEditor, ViewGroup rootView) {
         try (TraceEvent e = TraceEvent.scoped("TabGridDialogCoordinator.constructor")) {
             mActivity = activity;
             mComponentName = animationSourceViewProvider == null ? "TabGridDialogFromStrip"
                                                                  : "TabGridDialogInSwitcher";
+            mTabModelSelector = tabModelSelector;
+            mTabContentManager = tabContentManager;
 
             mModel = new PropertyModel(TabGridPanelProperties.ALL_KEYS);
             mRootView = rootView;
@@ -101,7 +101,7 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
                     },
                     null, false, gridCardOnClickListenerProvider,
                     mMediator.getTabGridDialogHandler(), TabProperties.UiType.CLOSABLE, null, null,
-                    containerView, false, mComponentName, rootView, null);
+                    containerView, false, mComponentName, rootView, null, mMediator);
             TabListRecyclerView recyclerView = mTabListCoordinator.getContainerView();
 
             TabGroupUiToolbarView toolbarView =
@@ -120,15 +120,10 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
                     TabGridPanelViewBinder::bind);
             mBackPressChangedSupplier.set(isVisible());
             mModel.addObserver((source, key) -> mBackPressChangedSupplier.set(isVisible()));
-        }
-    }
 
-    public void initWithNative(Context context, TabModelSelector tabModelSelector,
-            TabContentManager tabContentManager, TabGroupTitleEditor tabGroupTitleEditor) {
-        try (TraceEvent e = TraceEvent.scoped("TabGridDialogCoordinator.initWithNative")) {
-            mTabModelSelector = tabModelSelector;
-            mTabContentManager = tabContentManager;
-
+            // This is always created post-native so calling these immediately is safe.
+            // TODO(crbug/1418690): Consider inlining these behaviors in their respective
+            // constructors if possible.
             mMediator.initWithNative(this::getTabSelectionEditorController, tabGroupTitleEditor);
             mTabListCoordinator.initWithNative(null);
         }
@@ -209,11 +204,9 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
     @Override
     public void postHiding() {
         mTabListCoordinator.postHiding();
-        if (ChromeFeatureList.sDiscardOccludedBitmaps.isEnabled()) {
-            // TODO(crbug/1366128): This shouldn't be required if resetWithListOfTabs(null) is
-            // called. Find out why this helps and fix upstream if possible.
-            mTabListCoordinator.softCleanup();
-        }
+        // TODO(crbug/1366128): This shouldn't be required if resetWithListOfTabs(null) is called.
+        // Find out why this helps and fix upstream if possible.
+        mTabListCoordinator.softCleanup();
     }
 
     @Override
@@ -224,9 +217,10 @@ public class TabGridDialogCoordinator implements TabGridDialogMediator.DialogCon
     }
 
     @Override
-    public void handleBackPress() {
+    public @BackPressResult int handleBackPress() {
         mMediator.hideDialog(true);
         RecordUserAction.record("TabGridDialog.Exit");
+        return isVisible() ? BackPressResult.FAILURE : BackPressResult.SUCCESS;
     }
 
     @Override

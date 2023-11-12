@@ -28,8 +28,13 @@ WaylandDesktopCapturer::WaylandDesktopCapturer(
                               // Note: RemoteDesktopPortal doesn't own `this`
                               std::make_unique<xdg_portal::RemoteDesktopPortal>(
                                   this,
-                                  options.prefer_cursor_embedded())) {}
-WaylandDesktopCapturer::~WaylandDesktopCapturer() {}
+                                  options.prefer_cursor_embedded())) {
+  base_capturer_pipewire_.SendFramesImmediately(true);
+}
+
+WaylandDesktopCapturer::~WaylandDesktopCapturer() {
+  WaylandManager::Get()->OnDesktopCapturerDestroyed();
+}
 
 void WaylandDesktopCapturer::Start(Callback* callback) {
   base_capturer_pipewire_.Start(callback);
@@ -53,6 +58,10 @@ void WaylandDesktopCapturer::SetScreenResolution(ScreenResolution resolution,
   // is managed by this capturer.
   base_capturer_pipewire_.UpdateResolution(resolution.dimensions().width(),
                                            resolution.dimensions().height());
+}
+
+void WaylandDesktopCapturer::SetMaxFrameRate(uint32_t max_frame_rate) {
+  base_capturer_pipewire_.SetMaxFrameRate(max_frame_rate);
 }
 
 #if defined(WEBRTC_USE_GIO)
@@ -83,6 +92,10 @@ void WaylandDesktopCapturer::OnScreenCastRequestResult(RequestResponse result,
 
 void WaylandDesktopCapturer::OnScreenCastSessionClosed() {
   base_capturer_pipewire_.OnScreenCastSessionClosed();
+}
+
+bool WaylandDesktopCapturer::SupportsFrameCallbacks() {
+  return true;
 }
 
 }  // namespace remoting

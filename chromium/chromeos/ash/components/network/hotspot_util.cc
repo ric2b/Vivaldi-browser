@@ -5,7 +5,6 @@
 #include "chromeos/ash/components/network/hotspot_util.h"
 
 #include "base/strings/string_number_conversions.h"
-#include "base/values.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "chromeos/ash/services/hotspot_config/public/mojom/cros_hotspot_config.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -16,28 +15,22 @@ namespace ash {
 namespace {
 
 // TODO (jiajunz): Use shill constants after they are added.
-const char kShillTetheringBand2_4GHz[] = "2.4GHz";
-const char kShillTetheringBand5GHz[] = "5GHz";
-const char kShillInvalidProperties[] = "invalid_properties";
-const char kShillUpstreamNotReady[] = "upstream_not_ready";
 const char kShillNetworkingFailure[] = "network_failure";
 const char kShillWifiDriverFailure[] = "wifi_driver_failure";
 const char kShillCellularAttachFailure[] = "cellular_attach_failure";
-const char kShillNoUpstreamConnection[] = "no_upstream";
-const char kShillEnableTetheringSuccess[] = "success";
 
 hotspot_config::mojom::WiFiBand ShillBandToMojom(
     const std::string& shill_band) {
   using hotspot_config::mojom::WiFiBand;
 
-  if (shill_band == kShillTetheringBand2_4GHz) {
+  if (shill_band == shill::kBand2GHz) {
     return WiFiBand::k2_4GHz;
   }
-  if (shill_band == kShillTetheringBand5GHz) {
-    return WiFiBand::k5GHz;
+  if (shill_band == shill::kBandAll) {
+    return WiFiBand::kAutoChoose;
   }
   NOTREACHED() << "Unexpected shill tethering band: " << shill_band;
-  return WiFiBand::k5GHz;
+  return WiFiBand::kAutoChoose;
 }
 
 std::string MojomBandToString(hotspot_config::mojom::WiFiBand mojom_band) {
@@ -45,9 +38,9 @@ std::string MojomBandToString(hotspot_config::mojom::WiFiBand mojom_band) {
 
   switch (mojom_band) {
     case WiFiBand::k2_4GHz:
-      return kShillTetheringBand2_4GHz;
-    case WiFiBand::k5GHz:
-      return kShillTetheringBand5GHz;
+      return shill::kBand2GHz;
+    case WiFiBand::kAutoChoose:
+      return shill::kBandAll;
   }
 }
 
@@ -96,10 +89,6 @@ hotspot_config::mojom::HotspotState ShillTetheringStateToMojomState(
     return HotspotState::kEnabling;
   }
 
-  if (shill_state == shill::kTetheringStateStopping) {
-    return HotspotState::kDisabling;
-  }
-
   NOTREACHED() << "Unexpected shill tethering state: " << shill_state;
   return HotspotState::kDisabled;
 }
@@ -123,27 +112,27 @@ hotspot_config::mojom::WiFiSecurityMode ShillSecurityToMojom(
 }
 
 hotspot_config::mojom::HotspotConfigPtr ShillTetheringConfigToMojomConfig(
-    const base::Value& shill_tethering_config) {
+    const base::Value::Dict& shill_tethering_config) {
   using hotspot_config::mojom::HotspotConfig;
 
   auto result = HotspotConfig::New();
-  absl::optional<bool> auto_disable = shill_tethering_config.GetDict().FindBool(
-      shill::kTetheringConfAutoDisableProperty);
+  absl::optional<bool> auto_disable =
+      shill_tethering_config.FindBool(shill::kTetheringConfAutoDisableProperty);
   if (!auto_disable) {
     NET_LOG(ERROR) << "Auto_disable not found in tethering config.";
   }
   result->auto_disable = auto_disable.value_or(true);
-  const std::string* wifi_band = shill_tethering_config.GetDict().FindString(
-      shill::kTetheringConfBandProperty);
+  const std::string* wifi_band =
+      shill_tethering_config.FindString(shill::kTetheringConfBandProperty);
   if (!wifi_band) {
     NET_LOG(ERROR) << "WiFi band not found in tethering config.";
-    result->band = hotspot_config::mojom::WiFiBand::k5GHz;
+    result->band = hotspot_config::mojom::WiFiBand::kAutoChoose;
   } else {
     result->band = ShillBandToMojom(*wifi_band);
   }
 
-  const std::string* security = shill_tethering_config.GetDict().FindString(
-      shill::kTetheringConfSecurityProperty);
+  const std::string* security =
+      shill_tethering_config.FindString(shill::kTetheringConfSecurityProperty);
   if (!security) {
     NET_LOG(ERROR) << "WiFi security mode not found in tethering config.";
     result->security = hotspot_config::mojom::WiFiSecurityMode::kWpa2;
@@ -151,21 +140,20 @@ hotspot_config::mojom::HotspotConfigPtr ShillTetheringConfigToMojomConfig(
     result->security = ShillSecurityToMojom(*security);
   }
 
-  const std::string* ssid = shill_tethering_config.GetDict().FindString(
-      shill::kTetheringConfSSIDProperty);
+  const std::string* ssid =
+      shill_tethering_config.FindString(shill::kTetheringConfSSIDProperty);
   if (!ssid) {
     NET_LOG(ERROR) << "SSID not found in tethering config.";
   }
   result->ssid = ssid ? HexDecode(*ssid) : std::string();
-  const std::string* passphrase = shill_tethering_config.GetDict().FindString(
+  const std::string* passphrase = shill_tethering_config.FindString(
       shill::kTetheringConfPassphraseProperty);
   if (!passphrase) {
     NET_LOG(ERROR) << "Passphrase not found in tethering config.";
   }
   result->passphrase = passphrase ? *passphrase : std::string();
   absl::optional<bool> bssid_randomization =
-      shill_tethering_config.GetDict().FindBool(
-          shill::kTetheringConfMARProperty);
+      shill_tethering_config.FindBool(shill::kTetheringConfMARProperty);
   if (!bssid_randomization) {
     NET_LOG(ERROR) << shill::kTetheringConfMARProperty
                    << " not found in tethering config.";
@@ -180,7 +168,7 @@ base::Value MojomConfigToShillConfig(
     const hotspot_config::mojom::HotspotConfigPtr mojom_config) {
   using hotspot_config::mojom::HotspotConfig;
 
-  base::Value result(base::Value::Type::DICTIONARY);
+  base::Value result(base::Value::Type::DICT);
   result.GetDict().Set(shill::kTetheringConfAutoDisableProperty,
                        base::Value(mojom_config->auto_disable));
   result.GetDict().Set(shill::kTetheringConfBandProperty,
@@ -201,14 +189,15 @@ hotspot_config::mojom::HotspotControlResult SetTetheringEnabledResultToMojom(
     const std::string& shill_enabled_result) {
   using hotspot_config::mojom::HotspotControlResult;
 
-  if (shill_enabled_result == kShillEnableTetheringSuccess) {
+  if (shill_enabled_result == shill::kTetheringEnableResultSuccess) {
     return HotspotControlResult::kSuccess;
   }
-  if (shill_enabled_result == kShillInvalidProperties) {
+  if (shill_enabled_result == shill::kTetheringEnableResultInvalidProperties) {
     return HotspotControlResult::kInvalidConfiguration;
   }
-  if (shill_enabled_result == kShillUpstreamNotReady) {
-    return HotspotControlResult::kUpstreamNotReady;
+  if (shill_enabled_result ==
+      shill::kTetheringEnableResultUpstreamNotAvailable) {
+    return HotspotControlResult::kUpstreamNotAvailable;
   }
   if (shill_enabled_result == kShillNetworkingFailure) {
     return HotspotControlResult::kNetworkSetupFailure;
@@ -218,9 +207,6 @@ hotspot_config::mojom::HotspotControlResult SetTetheringEnabledResultToMojom(
   }
   if (shill_enabled_result == kShillCellularAttachFailure) {
     return HotspotControlResult::kCellularAttachFailure;
-  }
-  if (shill_enabled_result == kShillNoUpstreamConnection) {
-    return HotspotControlResult::kNoUpstreamConnection;
   }
 
   NET_LOG(ERROR) << "Unknown enable/disable tethering error: "

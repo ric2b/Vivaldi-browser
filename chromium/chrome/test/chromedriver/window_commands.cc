@@ -15,8 +15,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/containers/adapters.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -850,7 +850,7 @@ Status ExecuteNewWindow(Session* session,
     return status;
 
   base::Value::Dict dict;
-  dict.Set("handle", WebViewIdToWindowHandle(handle));
+  dict.Set("handle", handle);
   dict.Set("type",
            (window_type == Chrome::WindowType::kWindow) ? "window" : "tab");
   auto results = std::make_unique<base::Value>(std::move(dict));
@@ -1474,8 +1474,8 @@ Status ProcessInputActionSequence(Session* session,
                 origin_dict->FindString(GetElementKey());
             if (!element_id)
               return Status(kInvalidArgument, "'element' is missing");
-            base::Value* origin_result = action_dict.Set(
-                "origin", base::Value(base::Value::Type::DICTIONARY));
+            base::Value* origin_result =
+                action_dict.Set("origin", base::Value(base::Value::Type::DICT));
             origin_result->GetDict().SetByDottedPath(GetElementKey(),
                                                      *element_id);
           } else {
@@ -2473,6 +2473,23 @@ Status ExecuteDeleteAllCookies(Session* session,
   }
 
   return Status(kOk);
+}
+
+Status ExecuteSetRPHRegistrationMode(Session* session,
+                                     WebView* web_view,
+                                     const base::Value::Dict& params,
+                                     std::unique_ptr<base::Value>* value,
+                                     Timeout* timeout) {
+  const std::string* mode = params.FindString("mode");
+  if (!mode) {
+    return Status(kInvalidArgument, "missing parameter 'mode'");
+  }
+
+  base::Value::Dict body;
+  body.Set("mode", *mode);
+
+  return web_view->SendCommandAndGetResult("Page.setRPHRegistrationMode", body,
+                                           value);
 }
 
 Status ExecuteSetLocation(Session* session,

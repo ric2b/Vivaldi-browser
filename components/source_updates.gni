@@ -2,6 +2,7 @@ import ("//vivaldi/testing/testing.gni")
 
 update_target("//content/public/browser:browser_sources") {
   sources += [
+    "//vivaldi/components/content/vivaldi_browser_plugin_guest_delegate.cc",
     "//vivaldi/components/content/vivaldi_web_contents_delegate.cc",
     "//vivaldi/components/datasource/vivaldi_url_data_source.cc",
   ]
@@ -17,6 +18,7 @@ update_template_instance("//third_party/blink/renderer/core:core") {
   sources += [
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.cc",
     "//vivaldi/components/blink/vivaldi_add_search_context_menu.h",
+    "//vivaldi/components/blink/vivaldi_data_transfer.cc",
     "//vivaldi/components/blink/vivaldi_web_settings_impl.cc",
     "//vivaldi/components/blink/vivaldi_web_view_impl.cc",
   ]
@@ -212,5 +214,21 @@ if (is_android) {
     }
 
     deps += [ "//vivaldi/components:prep_search_engines_types" ]
+  }
+}
+
+update_target("//components/embedder_support:browser_util"){
+  sources += [
+    "//vivaldi/components/browser/vivaldi_brand_select.cc",
+    "//vivaldi/components/browser/vivaldi_brand_select.h",
+  ]
+}
+
+if (is_win) {
+  update_target("//sandbox/win:sandbox") {
+    sources += [
+      "//vivaldi/components/sandbox/vivaldi_module_name.cc",
+      "//vivaldi/components/sandbox/vivaldi_module_name.h",
+    ]
   }
 }

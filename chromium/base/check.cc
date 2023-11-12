@@ -22,9 +22,9 @@ namespace logging {
 
 namespace {
 
-// DCHECK_IS_CONFIGURABLE and ENABLE_LOG_ERROR_NOT_REACHED are both interested
-// in non-FATAL DCHECK()/NOTREACHED() reports.
-#if BUILDFLAG(DCHECK_IS_CONFIGURABLE) || BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED)
+// TODO(crbug.com/851128): Once landed this needs to be under
+// BUILDFLAG(DCHECK_IS_CONFIGURABLE) and NotReachedLogMessage cleaned up and
+// instead just be a LogMessage using FATAL.
 void DumpOnceWithoutCrashing(LogMessage* log_message) {
   // Best-effort gate to prevent multiple DCHECKs from being dumped. This will
   // race if multiple threads DCHECK at the same time, but we'll eventually stop
@@ -63,10 +63,6 @@ class NotReachedLogMessage : public LogMessage {
     }
   }
 };
-#else
-using NotReachedLogMessage = LogMessage;
-#endif  // BUILDFLAG(DCHECK_IS_CONFIGURABLE) ||
-        // BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED)
 
 #if BUILDFLAG(DCHECK_IS_CONFIGURABLE)
 
@@ -184,10 +180,24 @@ std::ostream& CheckError::stream() {
 }
 
 CheckError::~CheckError() {
+  // TODO(crbug.com/1409729): Consider splitting out CHECK from DCHECK so that
+  // the destructor can be marked [[noreturn]] and we don't need to check
+  // severity in the destructor.
+  const bool is_fatal = log_message_->severity() == LOGGING_FATAL;
   // Note: This function ends up in crash stack traces. If its full name
   // changes, the crash server's magic signature logic needs to be updated.
   // See cl/306632920.
   delete log_message_;
+
+  // Make sure we crash even if LOG(FATAL) has been overridden.
+  // TODO(crbug.com/1409729): Include Windows here too. This is done in steps to
+  // prevent backsliding on platforms where this goes through CQ.
+  // Windows is blocked by:
+  //   * All/RenderProcessHostWriteableFileDeathTest.
+  //       PassUnsafeWriteableExecutableFile/2
+  if (is_fatal && !BUILDFLAG(IS_WIN)) {
+    base::ImmediateCrash();
+  }
 }
 
 NotReachedError NotReachedError::NotReached(const char* file, int line) {
@@ -201,7 +211,47 @@ NotReachedError NotReachedError::NotReached(const char* file, int line) {
   return NotReachedError(log_message);
 }
 
+void NotReachedError::TriggerNotReached() {
+  // This triggers a NOTREACHED() error as the returned NotReachedError goes out
+  // of scope.
+  NotReached("", -1);
+}
+
 NotReachedError::~NotReachedError() = default;
+
+NotReachedNoreturnError::NotReachedNoreturnError(const char* file, int line)
+    : CheckError([file, line]() {
+        auto* const log_message = new LogMessage(file, line, LOGGING_FATAL);
+        log_message->stream() << "NOTREACHED hit. ";
+        return log_message;
+      }()) {}
+
+// Note: This function ends up in crash stack traces. If its full name changes,
+// the crash server's magic signature logic needs to be updated. See
+// cl/306632920.
+NotReachedNoreturnError::~NotReachedNoreturnError() {
+  delete log_message_;
+
+  // Make sure we die if we haven't. LOG(FATAL) is not yet [[noreturn]] as of
+  // writing this.
+  base::ImmediateCrash();
+}
+
+LogMessage* CheckOpResult::CreateLogMessage(bool is_dcheck,
+                                            const char* file,
+                                            int line,
+                                            const char* expr_str,
+                                            char* v1_str,
+                                            char* v2_str) {
+  LogMessage* const log_message =
+      is_dcheck ? new DCheckLogMessage(file, line, LOGGING_DCHECK)
+                : new LogMessage(file, line, LOGGING_FATAL);
+  log_message->stream() << "Check failed: " << expr_str << " (" << v1_str
+                        << " vs. " << v2_str << ")";
+  free(v1_str);
+  free(v2_str);
+  return log_message;
+}
 
 void RawCheck(const char* message) {
   RawLog(LOGGING_FATAL, message);

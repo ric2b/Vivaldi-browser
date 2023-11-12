@@ -18,9 +18,9 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "chrome/browser/supervised_user/kids_chrome_management/kids_access_token_fetcher.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -39,6 +39,7 @@ using ::base::StringPiece;
 using ::base::TimeDelta;
 using ::base::TimeTicks;
 using ::base::UmaHistogramEnumeration;
+using ::base::UmaHistogramSparse;
 using ::base::UmaHistogramTimes;
 using ::base::Unretained;
 using ::kids_chrome_management::ListFamilyMembersRequest;
@@ -61,6 +62,14 @@ bool HasHttpOkResponse(const network::SimpleURLLoader& loader) {
          net::HTTP_OK;
 }
 
+int CombineNetAndHttpErrors(const network::SimpleURLLoader& loader) {
+  if (loader.NetError() != net::OK || !loader.ResponseInfo() ||
+      !loader.ResponseInfo()->headers) {
+    return loader.NetError();
+  }
+  return loader.ResponseInfo()->headers->response_code();
+}
+
 std::unique_ptr<network::SimpleURLLoader> InitializeSimpleUrlLoader(
     StringPiece payload,
     StringPiece access_token,
@@ -73,7 +82,7 @@ std::unique_ptr<network::SimpleURLLoader> InitializeSimpleUrlLoader(
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   resource_request->headers.SetHeader(
       net::HttpRequestHeaders::kAuthorization,
-      base::StringPrintf(supervised_users::kAuthorizationHeaderFormat,
+      base::StringPrintf(supervised_user::kAuthorizationHeaderFormat,
                          access_token));
   std::unique_ptr<network::SimpleURLLoader> simple_url_loader =
       network::SimpleURLLoader::Create(std::move(resource_request),
@@ -104,16 +113,22 @@ std::string CreateMetricKey(StringPiece metric_id, StringPiece metric_suffix) {
                     ".");
 }
 
+// The returned value must match one of the labels in
+// chromium/src/tools/metrics/histograms/enums.xml/histogram-configuration/enums/enum[@name='KidsExternalFetcherStatus'],
+// and should be reflected in tokens in
+// chromium/src/tools/metrics/histograms/metadata/signin/histograms.xml/histogram-configuration/histograms/histogram[@name='Signin.ListFamilyMembersRequest.{Status}.*']
 std::string ConvertStateToMetricLabel(KidsExternalFetcherStatus::State state) {
   switch (state) {
     case KidsExternalFetcherStatus::NO_ERROR:
       return "NoError";
     case KidsExternalFetcherStatus::GOOGLE_SERVICE_AUTH_ERROR:
       return "AuthError";
-    case KidsExternalFetcherStatus::HTTP_ERROR:
+    case KidsExternalFetcherStatus::NET_OR_HTTP_ERROR:
       return "HttpError";
     case KidsExternalFetcherStatus::INVALID_RESPONSE:
-      return "InvalidResponse";
+      return "ParseError";
+    case KidsExternalFetcherStatus::DATA_ERROR:
+      return "DataError";
   }
 }
 
@@ -203,6 +218,10 @@ class FetcherImpl final : public KidsExternalFetcher<Request, Response> {
                                       std::unique_ptr<Response> response) {
     TimeDelta latency = TimeTicks::Now() - start_time;
     UmaHistogramEnumeration(CreateMetricKey<Request>("Status"), status.state());
+    if (status.state() == KidsExternalFetcherStatus::State::NET_OR_HTTP_ERROR) {
+      UmaHistogramSparse(CreateMetricKey<Request>("NetOrHttpStatus"),
+                         status.net_or_http_error_code().value());
+    }
     UmaHistogramTimes(CreateMetricKey<Request>("Latency"), latency);
     UmaHistogramTimes(CreateMetricKey<Request>(
                           "Latency", ConvertStateToMetricLabel(status.state())),
@@ -255,7 +274,8 @@ class FetcherImpl final : public KidsExternalFetcher<Request, Response> {
                                  std::unique_ptr<std::string> response_body) {
     if (!IsLoadingSuccessful(*simple_url_loader_) ||
         !HasHttpOkResponse(*simple_url_loader_)) {
-      std::move(callback).Run(KidsExternalFetcherStatus::HttpError(),
+      std::move(callback).Run(KidsExternalFetcherStatus::NetOrHttpError(
+                                  CombineNetAndHttpErrors(*simple_url_loader_)),
                               std::make_unique<Response>());
       return;
     }
@@ -297,6 +317,9 @@ KidsExternalFetcherStatus::KidsExternalFetcherStatus(State state)
   DCHECK(state != State::GOOGLE_SERVICE_AUTH_ERROR);
 }
 KidsExternalFetcherStatus::KidsExternalFetcherStatus(
+    NetOrHttpErrorType error_code)
+    : state_(State::NET_OR_HTTP_ERROR), net_or_http_error_code_(error_code) {}
+KidsExternalFetcherStatus::KidsExternalFetcherStatus(
     class GoogleServiceAuthError google_service_auth_error)
     : KidsExternalFetcherStatus(GOOGLE_SERVICE_AUTH_ERROR,
                                 google_service_auth_error) {}
@@ -313,18 +336,22 @@ KidsExternalFetcherStatus KidsExternalFetcherStatus::GoogleServiceAuthError(
     class GoogleServiceAuthError error) {
   return KidsExternalFetcherStatus(error);
 }
-KidsExternalFetcherStatus KidsExternalFetcherStatus::HttpError() {
-  return KidsExternalFetcherStatus(State::HTTP_ERROR);
+KidsExternalFetcherStatus KidsExternalFetcherStatus::NetOrHttpError(
+    int net_or_http_error_code) {
+  return KidsExternalFetcherStatus(NetOrHttpErrorType(net_or_http_error_code));
 }
 KidsExternalFetcherStatus KidsExternalFetcherStatus::InvalidResponse() {
   return KidsExternalFetcherStatus(State::INVALID_RESPONSE);
+}
+KidsExternalFetcherStatus KidsExternalFetcherStatus::DataError() {
+  return KidsExternalFetcherStatus(State::DATA_ERROR);
 }
 
 bool KidsExternalFetcherStatus::IsOk() const {
   return state_ == State::NO_ERROR;
 }
 bool KidsExternalFetcherStatus::IsTransientError() const {
-  if (state_ == State::HTTP_ERROR) {
+  if (state_ == State::NET_OR_HTTP_ERROR) {
     return true;
   }
   if (state_ == State::GOOGLE_SERVICE_AUTH_ERROR) {
@@ -336,6 +363,9 @@ bool KidsExternalFetcherStatus::IsPersistentError() const {
   if (state_ == State::INVALID_RESPONSE) {
     return true;
   }
+  if (state_ == State::DATA_ERROR) {
+    return true;
+  }
   if (state_ == State::GOOGLE_SERVICE_AUTH_ERROR) {
     return google_service_auth_error_.IsPersistentError();
   }
@@ -345,6 +375,11 @@ bool KidsExternalFetcherStatus::IsPersistentError() const {
 KidsExternalFetcherStatus::State KidsExternalFetcherStatus::state() const {
   return state_;
 }
+KidsExternalFetcherStatus::NetOrHttpErrorType
+KidsExternalFetcherStatus::net_or_http_error_code() const {
+  return net_or_http_error_code_;
+}
+
 const GoogleServiceAuthError&
 KidsExternalFetcherStatus::google_service_auth_error() const {
   return google_service_auth_error_;

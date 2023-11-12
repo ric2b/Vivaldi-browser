@@ -6,7 +6,6 @@
 
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
-#include "components/prefs/pref_service.h"
 
 #include "app/vivaldi_apptools.h"
 
@@ -83,6 +82,21 @@ extern const char kPrivacySandboxFirstPartySetsDataAccessAllowedInitialized[] =
 extern const char kPrivacySandboxFirstPartySetsEnabled[] =
     "privacy_sandbox.first_party_sets_enabled";
 
+extern const char kPrivacySandboxTopicsConsentGiven[] =
+    "privacy_sandbox.topics_consent.consent_given";
+
+extern const char kPrivacySandboxTopicsConsentLastUpdateTime[] =
+    "privacy_sandbox.topics_consent.last_update_time";
+
+extern const char kPrivacySandboxTopicsConsentLastUpdateReason[] =
+    "privacy_sandbox.topics_consent.last_update_reason";
+
+extern const char kPrivacySandboxTopicsConsentTextAtLastUpdate[] =
+    "privacy_sandbox.topics_consent.text_at_last_update";
+
+extern const char kPrivacySandboxAntiAbuseInitialized[] =
+    "privacy_sandbox.anti_abuse_initialized";
+
 }  // namespace prefs
 
 namespace privacy_sandbox {
@@ -151,6 +165,18 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kPrivacySandboxFirstPartySetsEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(prefs::kPrivacySandboxTopicsConsentGiven,
+                                false);
+  registry->RegisterTimePref(prefs::kPrivacySandboxTopicsConsentLastUpdateTime,
+                             base::Time());
+  registry->RegisterIntegerPref(
+      prefs::kPrivacySandboxTopicsConsentLastUpdateReason,
+      static_cast<int>(TopicsConsentUpdateSource::kDefaultValue));
+  registry->RegisterStringPref(
+      prefs::kPrivacySandboxTopicsConsentTextAtLastUpdate, "");
+  registry->RegisterBooleanPref(prefs::kPrivacySandboxAntiAbuseInitialized,
+                                false);
 }
 
 }  // namespace privacy_sandbox

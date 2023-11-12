@@ -4,7 +4,7 @@
 #define EXTENSIONS_API_READING_LIST_API_H_
 
 #include "base/scoped_observation.h"
-#include "chrome/browser/ui/read_later/reading_list_model_factory.h"
+#include "chrome/browser/reading_list/reading_list_model_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "components/reading_list/core/reading_list_entry.h"
 #include "components/reading_list/core/reading_list_model.h"

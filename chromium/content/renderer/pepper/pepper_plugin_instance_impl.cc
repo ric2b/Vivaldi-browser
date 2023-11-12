@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/char_iterator.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -2027,7 +2027,7 @@ uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputSampleRate(
              ? blink::AudioDeviceFactory::GetInstance()
                    ->GetOutputDeviceInfo(
                        render_frame()->GetWebFrame()->GetLocalFrameToken(),
-                       media::AudioSinkParameters())
+                       std::string())
                    .output_params()
                    .sample_rate()
              : 0;
@@ -2039,7 +2039,7 @@ uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputBufferSize(
              ? blink::AudioDeviceFactory::GetInstance()
                    ->GetOutputDeviceInfo(
                        render_frame()->GetWebFrame()->GetLocalFrameToken(),
-                       media::AudioSinkParameters())
+                       std::string())
                    .output_params()
                    .frames_per_buffer()
              : 0;
@@ -2155,21 +2155,17 @@ PP_Bool PepperPluginInstanceImpl::SetCursor(PP_Instance instance,
   if (!auto_mapper.is_valid())
     return PP_FALSE;
 
-  auto custom_cursor =
-      std::make_unique<ui::Cursor>(ui::mojom::CursorType::kCustom);
-  custom_cursor->set_custom_hotspot(gfx::Point(hot_spot->x, hot_spot->y));
-
   SkBitmap bitmap(image_data->GetMappedBitmap());
   // Make a deep copy, so that the cursor remains valid even after the original
   // image data gets freed.
-  SkBitmap dst = custom_cursor->custom_bitmap();
+  SkBitmap dst;
   if (!dst.tryAllocPixels(bitmap.info()) ||
       !bitmap.readPixels(dst.info(), dst.getPixels(), dst.rowBytes(), 0, 0)) {
     return PP_FALSE;
   }
-  custom_cursor->set_custom_bitmap(dst);
 
-  DoSetCursor(std::move(custom_cursor));
+  DoSetCursor(std::make_unique<ui::Cursor>(ui::Cursor::NewCustom(
+      std::move(dst), gfx::Point(hot_spot->x, hot_spot->y))));
   return PP_TRUE;
 }
 

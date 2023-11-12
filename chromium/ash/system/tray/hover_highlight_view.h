@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "ash/system/tray/actionable_view.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/text_constants.h"
@@ -68,11 +68,15 @@ class ASH_EXPORT HoverHighlightView : public ActionableView {
 
   // Adds an optional right icon to an already populated view. |icon_size| is
   // the size of the icon in DP.
-  void AddRightIcon(const gfx::ImageSkia& image, int icon_size);
+  void AddRightIcon(const ui::ImageModel& image, int icon_size);
 
   // Adds an optional right view to an already populated view.
   void AddRightView(views::View* view,
                     std::unique_ptr<views::Border> border = nullptr);
+
+  // Adds an additional right view next to the `right_view_`.
+  // TODO (b/266761290): Remove this method when it's not needed.
+  void AddAdditionalRightView(views::View* view);
 
   // Hides or shows the right view for an already populated view.
   void SetRightViewVisible(bool visible);

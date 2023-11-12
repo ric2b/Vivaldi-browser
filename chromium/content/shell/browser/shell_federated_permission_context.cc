@@ -22,6 +22,7 @@ ShellFederatedPermissionContext::GetApiPermissionStatus(
              : PermissionStatus::BLOCKED_VARIATIONS;
 }
 
+// FederatedIdentityApiPermissionContextDelegate
 void ShellFederatedPermissionContext::RecordDismissAndEmbargo(
     const url::Origin& relying_party_embedder) {}
 
@@ -31,6 +32,29 @@ void ShellFederatedPermissionContext::RemoveEmbargoAndResetCounts(
 bool ShellFederatedPermissionContext::ShouldCompleteRequestImmediately() const {
   return switches::IsRunWebTestsSwitchPresent();
 }
+
+// FederatedIdentityAutoReauthnPermissionContextDelegate
+bool ShellFederatedPermissionContext::HasAutoReauthnContentSetting() {
+  return auto_reauthn_permission_;
+}
+
+bool ShellFederatedPermissionContext::IsAutoReauthnEmbargoed(
+    const url::Origin& relying_party_embedder) {
+  return false;
+}
+
+base::Time ShellFederatedPermissionContext::GetAutoReauthnEmbargoStartTime(
+    const url::Origin& relying_party_embedder) {
+  return base::Time();
+}
+
+void ShellFederatedPermissionContext::RecordDisplayAndEmbargo(
+    const url::Origin& relying_party_embedder) {}
+
+void ShellFederatedPermissionContext::AddIdpSigninStatusObserver(
+    IdpSigninStatusObserver* observer) {}
+void ShellFederatedPermissionContext::RemoveIdpSigninStatusObserver(
+    IdpSigninStatusObserver* observer) {}
 
 // FederatedIdentityActiveSessionPermissionContextDelegate
 bool ShellFederatedPermissionContext::HasActiveSession(
@@ -99,6 +123,20 @@ void ShellFederatedPermissionContext::SetIdpSigninStatus(
   // explicit helper code to signal completion.
   if (idp_signin_status_closure_)
     idp_signin_status_closure_.Run();
+}
+
+void ShellFederatedPermissionContext::RegisterIdP(const ::GURL& configURL) {
+  idp_registry_.push_back(configURL);
+}
+
+void ShellFederatedPermissionContext::UnregisterIdP(const ::GURL& configURL) {
+  idp_registry_.erase(
+      std::remove(idp_registry_.begin(), idp_registry_.end(), configURL),
+      idp_registry_.end());
+}
+
+std::vector<GURL> ShellFederatedPermissionContext::GetRegisteredIdPs() {
+  return idp_registry_;
 }
 
 }  // namespace content

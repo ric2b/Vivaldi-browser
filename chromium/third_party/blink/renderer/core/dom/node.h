@@ -222,7 +222,9 @@ class CORE_EXPORT Node : public EventTarget {
   ContainerNode* ParentElementOrShadowRoot() const;
   ContainerNode* ParentElementOrDocumentFragment() const;
   Node* previousSibling() const { return previous_; }
+  bool HasPreviousSibling() const { return previous_; }
   Node* nextSibling() const { return next_; }
+  bool HasNextSibling() const { return next_; }
   NodeList* childNodes();
   Node* firstChild() const;
   Node* lastChild() const;
@@ -339,10 +341,9 @@ class CORE_EXPORT Node : public EventTarget {
 
   DISABLE_CFI_PERF bool IsPseudoElement() const {
 #if DCHECK_IS_ON()
-    DCHECK_EQ(HasRareData() && DataAsNodeRareData()->IsPseudoElement(),
-              GetPseudoId() != kPseudoIdNone);
+    DCHECK_EQ(data_->IsPseudoElement(), GetPseudoId() != kPseudoIdNone);
 #endif
-    return HasRareData() && DataAsNodeRareData()->IsPseudoElement();
+    return data_->IsPseudoElement();
   }
   DISABLE_CFI_PERF bool IsBeforePseudoElement() const {
     return GetPseudoId() == kPseudoIdBefore;
@@ -722,11 +723,7 @@ class CORE_EXPORT Node : public EventTarget {
   // in hot code paths.
   // Note that if a Node has a layoutObject, it's parentNode is guaranteed to
   // have one as well.
-  LayoutObject* GetLayoutObject() const {
-    return HasRareData()
-               ? DataAsNodeRareData()->GetNodeRenderingData()->GetLayoutObject()
-               : DataAsNodeRenderingData()->GetLayoutObject();
-  }
+  LayoutObject* GetLayoutObject() const { return data_->GetLayoutObject(); }
   void SetLayoutObject(LayoutObject*);
   // Use these two methods with caution.
   LayoutBox* GetLayoutBox() const;
@@ -1140,6 +1137,7 @@ class CORE_EXPORT Node : public EventTarget {
 
     return CreateRareData();
   }
+  NodeData& EnsureMutableData();
 
   void SetHasCustomStyleCallbacks() {
     SetFlag(true, kHasCustomStyleCallbacksFlag);
@@ -1154,6 +1152,8 @@ class CORE_EXPORT Node : public EventTarget {
   }
 
   void InvalidateIfHasEffectiveAppearance() const;
+
+  inline const ComputedStyle* GetComputedStyleAssumingElement() const;
 
  private:
   // Gets nodeName without caching AtomicStrings. Used by
@@ -1192,21 +1192,21 @@ class CORE_EXPORT Node : public EventTarget {
     DCHECK(HasRareData());
     return reinterpret_cast<NodeRareData*>(data_.Get());
   }
-  NodeRenderingData* DataAsNodeRenderingData() const {
-    DCHECK(!HasRareData());
-    return reinterpret_cast<NodeRenderingData*>(data_.Get());
-  }
   ShadowRoot* GetSlotAssignmentRoot() const;
 
   void AddCandidateDirectionalityForSlot();
 
-  uint32_t node_flags_;
-  Member<Node> parent_or_shadow_host_node_;
-  Member<TreeScope> tree_scope_;
+  // Both parent and tree_scope are hot accessed members. Keep them uncompressed
+  // for performance reasons.
+  subtle::UncompressedMember<Node> parent_or_shadow_host_node_;
+  subtle::UncompressedMember<TreeScope> tree_scope_;
+  // Compressed members and flags are after uncompressed members to minimize
+  // padding.
   Member<Node> previous_;
   Member<Node> next_;
   // When a node has rare data we move the layoutObject into the rare data.
   Member<NodeData> data_;
+  uint32_t node_flags_;
 };
 
 inline void Node::SetParentOrShadowHostNode(ContainerNode* parent) {

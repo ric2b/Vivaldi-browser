@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "build/build_config.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/broadcast_channel/broadcast_channel_provider.h"
@@ -536,6 +536,7 @@ DedicatedWorkerHost::CreateNetworkFactoryForSubresources(
               blink::mojom::PermissionsPolicyFeature::kTrustTokenRedemption)
               ? network::mojom::TrustTokenRedemptionPolicy::kPotentiallyPermit
               : network::mojom::TrustTokenRedemptionPolicy::kForbid,
+          ancestor_render_frame_host->GetCookieSettingOverrides(),
           "DedicatedWorkerHost::CreateNetworkFactoryForSubresources");
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       worker_process_host_->GetBrowserContext(),
@@ -881,7 +882,7 @@ void DedicatedWorkerHost::MaybeCountWebFeature(const GURL& script_url) {
         return;
 
       service_worker_context->GetRegistrationsForStorageKey(
-          blink::StorageKey(
+          blink::StorageKey::CreateFirstParty(
               ancestor_render_frame_host->GetLastCommittedOrigin()),
           base::BindOnce(&DedicatedWorkerHost::ContinueOnMaybeCountWebFeature,
                          weak_factory_.GetWeakPtr(), script_url,
@@ -1003,6 +1004,11 @@ void DedicatedWorkerHost::GetSandboxedFileSystemForBucket(
     blink::mojom::BucketHost::GetDirectoryCallback callback) {
   GetProcessHost()->GetSandboxedFileSystemForBucket(bucket.ToBucketLocator(),
                                                     std::move(callback));
+}
+
+GlobalRenderFrameHostId DedicatedWorkerHost::GetAssociatedRenderFrameHostId()
+    const {
+  return GetAncestorRenderFrameHostId();
 }
 
 blink::scheduler::WebSchedulerTrackedFeatures

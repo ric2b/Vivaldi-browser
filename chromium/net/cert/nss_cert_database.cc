@@ -14,8 +14,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list_threadsafe.h"
@@ -434,7 +434,6 @@ bool NSSCertDatabase::IsReadOnly(const CERTCertificate* cert) {
 }
 
 // static
-DISABLE_CFI_DLSYM
 bool NSSCertDatabase::IsHardwareBacked(const CERTCertificate* cert) {
   PK11SlotInfo* slot = cert->slot;
   if (!slot)
@@ -446,20 +445,15 @@ bool NSSCertDatabase::IsHardwareBacked(const CERTCertificate* cert) {
   // TPM does not support the key algorithm. Chaps sets a kKeyInSoftware
   // attribute to true for private keys that aren't wrapped by the TPM.
   if (crypto::IsSlotProvidedByChaps(slot)) {
-    static PK11HasAttributeSetFunction pk11_has_attribute_set =
-        reinterpret_cast<PK11HasAttributeSetFunction>(
-            dlsym(RTLD_DEFAULT, "PK11_HasAttributeSet"));
-    if (pk11_has_attribute_set) {
-      constexpr CK_ATTRIBUTE_TYPE kKeyInSoftware = CKA_VENDOR_DEFINED + 5;
-      SECKEYPrivateKey* private_key = PK11_FindPrivateKeyFromCert(
-          slot, const_cast<CERTCertificate*>(cert), nullptr);
-      // PK11_HasAttributeSet returns true if the object in the given slot has
-      // the attribute set to true. Otherwise it returns false.
-      if (private_key &&
-          pk11_has_attribute_set(slot, private_key->pkcs11ID, kKeyInSoftware,
-                                 /*haslock=*/PR_FALSE)) {
-        return false;
-      }
+    constexpr CK_ATTRIBUTE_TYPE kKeyInSoftware = CKA_VENDOR_DEFINED + 5;
+    SECKEYPrivateKey* private_key = PK11_FindPrivateKeyFromCert(
+        slot, const_cast<CERTCertificate*>(cert), nullptr);
+    // PK11_HasAttributeSet returns true if the object in the given slot has
+    // the attribute set to true. Otherwise it returns false.
+    if (private_key &&
+        PK11_HasAttributeSet(slot, private_key->pkcs11ID, kKeyInSoftware,
+                             /*haslock=*/PR_FALSE)) {
+      return false;
     }
     // All keys in chaps without the attribute are hardware backed.
     return true;
@@ -509,11 +503,11 @@ NSSCertDatabase::CertInfoList NSSCertDatabase::ListCertsInfoImpl(
                                                 base::BlockingType::MAY_BLOCK);
 
   CertInfoList certs_info;
-  CERTCertList* cert_list = nullptr;
+  crypto::ScopedCERTCertList cert_list = nullptr;
   if (slot)
-    cert_list = PK11_ListCertsInSlot(slot.get());
+    cert_list.reset(PK11_ListCertsInSlot(slot.get()));
   else
-    cert_list = PK11_ListCerts(PK11CertListUnique, nullptr);
+    cert_list.reset(PK11_ListCerts(PK11CertListUnique, nullptr));
   // PK11_ListCerts[InSlot] can return nullptr, e.g. because the PKCS#11 token
   // that was backing the specified slot is not available anymore.
   // Treat it as no certificates being present on the slot.
@@ -538,7 +532,6 @@ NSSCertDatabase::CertInfoList NSSCertDatabase::ListCertsInfoImpl(
 
     certs_info.push_back(std::move(cert_info));
   }
-  CERT_DestroyCertList(cert_list);
   return certs_info;
 }
 

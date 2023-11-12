@@ -4,7 +4,7 @@
 
 #include "chromeos/ash/services/recording/recording_service_test_api.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_checker.h"
 
@@ -84,6 +84,12 @@ void RecordingServiceTestApi::RequestAndWaitForVideoFrame(
   recording_service_.video_capturer_remote_.FlushForTesting();
 
   run_loop.Run();
+}
+
+bool RecordingServiceTestApi::IsDoingAudioRecording() const {
+  DCHECK_CALLED_ON_VALID_THREAD(recording_service_.main_thread_checker_);
+
+  return !!recording_service_.audio_capturer_;
 }
 
 }  // namespace recording

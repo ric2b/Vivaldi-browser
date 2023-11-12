@@ -5,13 +5,14 @@
 #import <memory>
 #import <vector>
 
-#import "base/bind.h"
+#import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_constants.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
 #import "ios/chrome/browser/ui/content_suggestions/new_tab_page_app_interface.h"
@@ -81,25 +82,19 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
 + (void)setUpHelper {
   [self closeAllTabs];
-
-  [NewTabPageAppInterface setUpService];
 }
 
 + (void)tearDown {
   [self closeAllTabs];
-
-  [NewTabPageAppInterface resetService];
 
   [super tearDown];
 }
 
 - (void)setUp {
   [super setUp];
-  [NewTabPageAppInterface makeSuggestionsAvailable];
 }
 
 - (void)tearDown {
-  [NewTabPageAppInterface disableSuggestions];
   [ChromeEarlGrey clearBrowsingHistory];
   [super tearDown];
 }
@@ -187,8 +182,8 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
   // Check the snack bar notifying the user that an element has been removed is
   // displayed.
   [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_IOS_NEW_TAB_MOST_VISITED_ITEM_REMOVED)]
+      selectElementWithMatcher:
+          grey_accessibilityID(@"MDCSnackbarMessageTitleAutomationIdentifier")]
       assertWithMatcher:grey_sufficientlyVisible()];
 
   // Tap on undo.

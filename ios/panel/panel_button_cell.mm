@@ -29,7 +29,6 @@
 
 #pragma mark - SET UP UI COMPONENTS
 - (void)setUpUI {
-
   // Container to hold the items
   UIView *container = [UIView new];
   [self addSubview:container];
@@ -42,24 +41,11 @@
   _imageView.clipsToBounds = YES;
 
   [container addSubview:_imageView];
-  [_imageView anchorTop:container.topAnchor
-                 leading:container.leadingAnchor
+  [_imageView anchorTop:  container.topAnchor
+                 leading: container.leadingAnchor
                   bottom: nil
                 trailing: container.trailingAnchor
                  padding: UIEdgeInsetsZero];
-}
-
-- (void)setSelected:(BOOL)selected {
-    [super setSelected:selected];
-  [self toggleHighlight];
-}
-
-- (void)toggleHighlight {
-  [UIView transitionWithView: self.imageView
-                    duration: 0.25
-                     options: UIViewAnimationOptionTransitionCrossDissolve
-                  animations:nil
-                  completion: nil];
 }
 
 #pragma mark - SETTERS
@@ -67,6 +53,9 @@
   if (index == PanelPage::BookmarksPage)
       self.imageView.image = [UIImage
                         imageNamed:@"bookmark_panel"];
+  else if (index == PanelPage::ReadinglistPage)
+      self.imageView.image = [UIImage
+                        imageNamed:@"readinglist_panel"];
   else if (index == PanelPage::NotesPage)
       self.imageView.image = [UIImage
                         imageNamed:@"notes_panel"];
@@ -76,10 +65,13 @@
 }
 
 - (void)configureHighlightedCellWithIndex:(NSInteger)index {
-    if (index == PanelPage::BookmarksPage) {
-        self.imageView.image = [UIImage
-                                imageNamed:@"bookmark_panel_active"];
-    }  else if (index == PanelPage::NotesPage)
+  if (index == PanelPage::BookmarksPage) {
+      self.imageView.image = [UIImage
+                             imageNamed:@"bookmark_panel_active"];
+  } else if (index == PanelPage::ReadinglistPage)
+      self.imageView.image = [UIImage
+                        imageNamed:@"readinglist_panel_active"];
+  else if (index == PanelPage::NotesPage)
       self.imageView.image = [UIImage
                         imageNamed:@"notes_panel_active"];
   else if (index == PanelPage::HistoryPage)
@@ -87,6 +79,5 @@
                         imageNamed:@"history_panel_active"];
     [self setNeedsLayout];
 }
-
 
 @end

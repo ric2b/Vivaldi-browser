@@ -5,6 +5,8 @@
 #include "third_party/blink/renderer/core/css/style_rule_keyframe.h"
 
 #include <memory>
+
+#include "third_party/blink/renderer/core/animation/timing.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
@@ -21,10 +23,12 @@ String StyleRuleKeyframe::KeyText() const {
 
   StringBuilder key_text;
   for (unsigned i = 0; i < keys_.size(); ++i) {
-    if (i)
+    if (i) {
       key_text.Append(", ");
-    if (keys_.at(i).phase != Timing::TimelineNamedPhase::kNone) {
-      key_text.Append(Timing::TimelineRangeNameToString(keys_.at(i).phase));
+    }
+    if (keys_.at(i).name != TimelineOffset::NamedRange::kNone) {
+      key_text.Append(
+          TimelineOffset::TimelineRangeNameToString(keys_.at(i).name));
       key_text.Append(" ");
     }
     key_text.AppendNumber(keys_.at(i).percent * 100);
@@ -42,8 +46,9 @@ bool StyleRuleKeyframe::SetKeyText(const ExecutionContext* execution_context,
 
   std::unique_ptr<Vector<KeyframeOffset>> keys =
       CSSParser::ParseKeyframeKeyList(context, key_text);
-  if (!keys || keys->empty())
+  if (!keys || keys->empty()) {
     return false;
+  }
 
   keys_ = *keys;
   return true;
@@ -54,8 +59,9 @@ const Vector<KeyframeOffset>& StyleRuleKeyframe::Keys() const {
 }
 
 MutableCSSPropertyValueSet& StyleRuleKeyframe::MutableProperties() {
-  if (!properties_->IsMutable())
+  if (!properties_->IsMutable()) {
     properties_ = properties_->MutableCopy();
+  }
   return *To<MutableCSSPropertyValueSet>(properties_.Get());
 }
 
@@ -65,8 +71,9 @@ String StyleRuleKeyframe::CssText() const {
   result.Append(" { ");
   String decls = properties_->AsText();
   result.Append(decls);
-  if (!decls.empty())
+  if (!decls.empty()) {
     result.Append(' ');
+  }
   result.Append('}');
   return result.ReleaseString();
 }

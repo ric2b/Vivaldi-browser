@@ -4,10 +4,10 @@
 
 #include "components/mirroring/service/video_capture_client.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
+#include "base/task/bind_post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_pool.h"
 #include "media/base/video_util.h"
@@ -20,15 +20,19 @@ namespace {
 
 // Required by mojom::VideoCaptureHost interface. Can be any nonzero value.
 const base::UnguessableToken& DeviceId() {
+  // TODO(https://crbug.com/1406986): Investigate whether there's a better way
+  // to accomplish this (without using UnguessableToken::Deserialize).
   static const base::UnguessableToken device_id(
-      base::UnguessableToken::Deserialize(1, 1));
+      base::UnguessableToken::Deserialize(1, 1).value());
   return device_id;
 }
 
 // Required by mojom::VideoCaptureHost interface. Can be any nonzero value.
 const base::UnguessableToken& SessionId() {
+  // TODO(https://crbug.com/1406986): Investigate whether there's a better way
+  // to accomplish this (without using UnguessableToken::Deserialize).
   static const base::UnguessableToken session_id(
-      base::UnguessableToken::Deserialize(1, 1));
+      base::UnguessableToken::Deserialize(1, 1).value());
   return session_id;
 }
 
@@ -217,9 +221,10 @@ void VideoCaptureClient::OnBufferReady(
     frame = media::VideoFrame::WrapUnacceleratedIOSurface(
         buffer_iter->second->get_gpu_memory_buffer_handle().Clone(),
         buffer->info->visible_rect, buffer->info->timestamp);
-    buffer_finished_callback = media::BindToCurrentLoop(base::BindOnce(
-        &VideoCaptureClient::OnClientBufferFinished, weak_factory_.GetWeakPtr(),
-        buffer->buffer_id, MappingKeepAlive()));
+    buffer_finished_callback =
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &VideoCaptureClient::OnClientBufferFinished,
+            weak_factory_.GetWeakPtr(), buffer->buffer_id, MappingKeepAlive()));
 #else
     NOTREACHED();
 #endif
@@ -235,9 +240,10 @@ void VideoCaptureClient::OnBufferReady(
           mapping.GetMemoryAs<uint8_t>(), frame_allocation_size,
           buffer->info->timestamp);
     }
-    buffer_finished_callback = media::BindToCurrentLoop(base::BindOnce(
-        &VideoCaptureClient::OnClientBufferFinished, weak_factory_.GetWeakPtr(),
-        buffer->buffer_id, std::move(mapping)));
+    buffer_finished_callback =
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &VideoCaptureClient::OnClientBufferFinished,
+            weak_factory_.GetWeakPtr(), buffer->buffer_id, std::move(mapping)));
   } else {
     base::ReadOnlySharedMemoryMapping mapping =
         buffer_iter->second->get_read_only_shmem_region().Map();
@@ -252,9 +258,10 @@ void VideoCaptureClient::OnBufferReady(
           const_cast<uint8_t*>(mapping.GetMemoryAs<uint8_t>()),
           frame_allocation_size, buffer->info->timestamp);
     }
-    buffer_finished_callback = media::BindToCurrentLoop(base::BindOnce(
-        &VideoCaptureClient::OnClientBufferFinished, weak_factory_.GetWeakPtr(),
-        buffer->buffer_id, std::move(mapping)));
+    buffer_finished_callback =
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &VideoCaptureClient::OnClientBufferFinished,
+            weak_factory_.GetWeakPtr(), buffer->buffer_id, std::move(mapping)));
   }
 
   if (!frame) {

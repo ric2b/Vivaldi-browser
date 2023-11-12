@@ -5,7 +5,9 @@
 /**
  * @fileoverview Handles media automation events.
  */
+import {AsyncUtil} from '../../common/async_util.js';
 import {LocalStorage} from '../../common/local_storage.js';
+import {SettingsManager} from '../common/settings_manager.js';
 import {TtsCapturingEventListener} from '../common/tts_interface.js';
 
 import {BaseAutomationHandler} from './base_automation_handler.js';
@@ -26,24 +28,26 @@ export class MediaAutomationHandler extends BaseAutomationHandler {
 
     /** @type {Date} @private */
     this.lastTtsEvent_ = new Date();
-
-    ChromeVox.tts.addCapturingEventListener(this);
-
-    chrome.automation.getDesktop(node => {
-      this.node_ = node;
-
-      this.addListener_(
-          EventType.MEDIA_STARTED_PLAYING, this.onMediaStartedPlaying);
-      this.addListener_(
-          EventType.MEDIA_STOPPED_PLAYING, this.onMediaStoppedPlaying);
-    });
   }
 
-  static init() {
+  /** @private */
+  async addListeners_() {
+    ChromeVox.tts.addCapturingEventListener(this);
+
+    this.node_ = await AsyncUtil.getDesktop();
+
+    this.addListener_(
+        EventType.MEDIA_STARTED_PLAYING, this.onMediaStartedPlaying);
+    this.addListener_(
+        EventType.MEDIA_STOPPED_PLAYING, this.onMediaStoppedPlaying);
+  }
+
+  static async init() {
     if (MediaAutomationHandler.instance) {
       throw 'Error: trying to create two instances of singleton MediaAutomationHandler';
     }
     MediaAutomationHandler.instance = new MediaAutomationHandler();
+    await MediaAutomationHandler.instance.addListeners_();
   }
 
   /** @override */
@@ -55,14 +59,14 @@ export class MediaAutomationHandler extends BaseAutomationHandler {
   /** @override */
   onTtsEnd() {
     const now = new Date();
-    setTimeout(function() {
+    setTimeout(() => {
       const then = this.lastTtsEvent_;
       if (now < then) {
         return;
       }
       this.lastTtsEvent_ = now;
       this.update_({end: true});
-    }.bind(this), MediaAutomationHandler.MIN_WAITTIME_MS);
+    }, MediaAutomationHandler.MIN_WAITTIME_MS);
   }
 
   /** @override */
@@ -75,7 +79,7 @@ export class MediaAutomationHandler extends BaseAutomationHandler {
    */
   onMediaStartedPlaying(evt) {
     this.mediaRoots_.add(evt.target);
-    const audioStrategy = LocalStorage.get('audioStrategy');
+    const audioStrategy = SettingsManager.get('audioStrategy');
     if (ChromeVox.tts.isSpeaking() && audioStrategy === 'audioDuck') {
       this.update_({start: true});
     }
@@ -97,7 +101,7 @@ export class MediaAutomationHandler extends BaseAutomationHandler {
   update_(options) {
     const it = this.mediaRoots_.values();
     let item = it.next();
-    const audioStrategy = LocalStorage.get('audioStrategy');
+    const audioStrategy = SettingsManager.get('audioStrategy');
     while (!item.done) {
       const root = item.value;
       if (options.start) {

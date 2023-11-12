@@ -23,6 +23,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
@@ -31,6 +32,7 @@
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
@@ -63,6 +65,8 @@
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/loader/fetch/fetch_initiator_type_names.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_timing_utils.h"
 #include "third_party/blink/renderer/platform/network/network_state_notifier.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
@@ -97,8 +101,7 @@ bool IsFrameLazyLoadable(ExecutionContext* context,
                          const KURL& url,
                          bool is_loading_attr_lazy,
                          bool should_lazy_load_children) {
-  if (!RuntimeEnabledFeatures::LazyFrameLoadingEnabled() &&
-      !RuntimeEnabledFeatures::LazyFrameVisibleLoadTimeMetricsEnabled()) {
+  if (!RuntimeEnabledFeatures::LazyFrameLoadingEnabled()) {
     return false;
   }
 
@@ -476,17 +479,67 @@ void HTMLFrameOwnerElement::FrameOwnerPropertiesChanged() {
                                      std::move(properties));
 }
 
-void HTMLFrameOwnerElement::AddResourceTiming(const ResourceTimingInfo& info) {
+void HTMLFrameOwnerElement::AddResourceTiming(
+    mojom::blink::ResourceTimingInfoPtr info) {
   // Resource timing info should only be reported if the subframe is attached.
   DCHECK(ContentFrame() && ContentFrame()->IsLocalFrame());
+
+  // Make sure we don't double-report, e.g. in the case of restored iframes.
+  if (!HasPendingFallbackTimingInfo()) {
+    return;
+  }
+
+  // This would only happen in rare cases, where the frame is navigated from the
+  // outside, e.g. by a web extension or window.open() with target, and that
+  // navigation would cancel the container-initiated navigation. This safeguard
+  // would make this type of race harmless.
+  // TODO(crbug.com/1410705): fix this properly by moving IFrame reporting to
+  // the browser side.
+  if (fallback_timing_info_->name != info->name) {
+    return;
+  }
+
   DOMWindowPerformance::performance(*GetDocument().domWindow())
-      ->GenerateAndAddResourceTiming(info, localName());
+      ->AddResourceTiming(std::move(info), localName());
+  DidReportResourceTiming();
+}
+
+bool HTMLFrameOwnerElement::HasPendingFallbackTimingInfo() const {
+  return !!fallback_timing_info_;
+}
+
+void HTMLFrameOwnerElement::DidReportResourceTiming() {
+  fallback_timing_info_.reset();
+}
+
+void HTMLFrameOwnerElement::WillPerformContainerInitiatedNavigation(
+    const KURL& url) {
+  if (!url.ProtocolIsInHTTPFamily() &&
+      !url.ProtocolIs(url::kUuidInPackageScheme)) {
+    return;
+  }
+
+  fallback_timing_info_ = CreateResourceTimingInfo(base::TimeTicks::Now(), url,
+                                                   /*response=*/nullptr);
+}
+
+// This will report fallback timing only if the "real" resource timing had not
+// been previously reported: e.g. a cross-origin iframe without TAO.
+void HTMLFrameOwnerElement::ReportFallbackResourceTimingIfNeeded() {
+  if (!fallback_timing_info_) {
+    return;
+  }
+
+  mojom::blink::ResourceTimingInfoPtr resource_timing_info;
+  resource_timing_info.Swap(&fallback_timing_info_);
+  resource_timing_info->response_end = base::TimeTicks::Now();
+
+  DOMWindowPerformance::performance(*GetDocument().domWindow())
+      ->AddResourceTiming(std::move(resource_timing_info), localName());
 }
 
 void HTMLFrameOwnerElement::DispatchLoad() {
-  if (lazy_load_frame_observer_)
-    lazy_load_frame_observer_->RecordMetricsOnLoadFinished();
-
+  ReportFallbackResourceTimingIfNeeded();
   DispatchScopedEvent(*Event::Create(event_type_names::kLoad));
 }
 
@@ -598,9 +651,6 @@ bool HTMLFrameOwnerElement::LazyLoadIfPossible(
 
   lazy_load_frame_observer_ = MakeGarbageCollected<LazyLoadFrameObserver>(
       *this, LazyLoadFrameObserver::LoadType::kSubsequent);
-
-  if (RuntimeEnabledFeatures::LazyFrameVisibleLoadTimeMetricsEnabled())
-    lazy_load_frame_observer_->StartTrackingVisibilityMetrics();
 
   // TODO(crbug.com/1341892) Remove having multiple booleans here. We eventually
   // select one reason to decide the timeout, so essentially we don't have to

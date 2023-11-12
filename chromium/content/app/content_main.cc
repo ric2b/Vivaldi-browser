@@ -10,7 +10,6 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
-#include "base/debug/activity_tracker.h"
 #include "base/debug/debugger.h"
 #include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
@@ -35,7 +34,6 @@
 #include "content/app/content_main_runner_impl.h"
 #include "content/common/mojo_core_library_support.h"
 #include "content/common/set_process_title.h"
-#include "content/common/shared_file_util.h"
 #include "content/public/app/content_main_delegate.h"
 #include "content/public/common/content_switches.h"
 #include "mojo/core/embedder/configuration.h"
@@ -61,8 +59,7 @@
 #include <locale.h>
 #include <signal.h>
 
-#include "base/file_descriptor_store.h"
-#include "base/posix/global_descriptors.h"
+#include "content/common/shared_file_util.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
@@ -72,7 +69,9 @@
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "content/app/mac_init.h"
+#endif
 
+#if BUILDFLAG(IS_APPLE)
 #if BUILDFLAG(USE_ALLOCATOR_SHIM)
 #include "base/allocator/partition_allocator/shim/allocator_shim.h"
 #endif
@@ -109,27 +108,6 @@ void SetupSignalHandlers() {
                                          SIGTERM, SIGCHLD, SIGBUS,  SIGTRAP};
   for (int signal_to_reset : signals_to_reset)
     CHECK_EQ(0, sigaction(signal_to_reset, &sigact, nullptr));
-}
-
-void PopulateFDsFromCommandLine() {
-  const std::string& shared_file_param =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kSharedFiles);
-  if (shared_file_param.empty())
-    return;
-
-  absl::optional<std::map<int, std::string>> shared_file_descriptors =
-      ParseSharedFileSwitchValue(shared_file_param);
-  if (!shared_file_descriptors)
-    return;
-
-  for (const auto& descriptor : *shared_file_descriptors) {
-    base::MemoryMappedFile::Region region;
-    const std::string& key = descriptor.second;
-    base::ScopedFD fd = base::GlobalDescriptors::GetInstance()->TakeFD(
-        descriptor.first, &region);
-    base::FileDescriptorStore::GetInstance().Set(key, std::move(fd), region);
-  }
 }
 
 #endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID)
@@ -207,7 +185,6 @@ RunContentProcess(ContentMainParams params,
   base::PlatformThread::SetCurrentThreadType(base::ThreadType::kDefault);
 #endif
   int exit_code = -1;
-  base::debug::GlobalActivityTracker* tracker = nullptr;
 #if BUILDFLAG(IS_MAC)
   std::unique_ptr<base::mac::ScopedNSAutoreleasePool> autorelease_pool;
 #endif
@@ -223,7 +200,7 @@ RunContentProcess(ContentMainParams params,
     content_main_runner->ReInitializeParams(std::move(params));
   } else {
     is_initialized = true;
-#if BUILDFLAG(IS_MAC) && BUILDFLAG(USE_ALLOCATOR_SHIM)
+#if BUILDFLAG(IS_APPLE) && BUILDFLAG(USE_ALLOCATOR_SHIM)
     allocator_shim::InitializeAllocatorShim();
 #endif
     base::EnableTerminationOnOutOfMemory();
@@ -261,7 +238,7 @@ RunContentProcess(ContentMainParams params,
     base::CommandLine::Init(argc, argv);
 
 #if BUILDFLAG(IS_POSIX)
-    PopulateFDsFromCommandLine();
+    PopulateFileDescriptorStoreFromFdTable();
 #endif
 
     base::EnableTerminationOnHeapCorruption();
@@ -305,20 +282,23 @@ RunContentProcess(ContentMainParams params,
     InitializeMac();
 #endif
 
+#if BUILDFLAG(IS_IOS)
+    // TODO(crbug.com/1412835): Remove this initialization on iOS. Everything
+    // runs in process for now as we have no fork.
+    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+    command_line->AppendSwitch(switches::kSingleProcess);
+    command_line->AppendSwitch(switches::kEnableViewport);
+    command_line->AppendSwitch(switches::kUseMobileUserAgent);
+#endif
+
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
     base::subtle::EnableFDOwnershipEnforcement(true);
 #endif
 
     ui::RegisterPathProvider();
-    tracker = base::debug::GlobalActivityTracker::Get();
     exit_code = content_main_runner->Initialize(std::move(params));
 
     if (exit_code >= 0) {
-      if (tracker) {
-        tracker->SetProcessPhase(
-            base::debug::GlobalActivityTracker::PROCESS_LAUNCH_FAILED);
-        tracker->process_data().SetInt("exit-code", exit_code);
-      }
       return exit_code;
     }
 
@@ -342,17 +322,6 @@ RunContentProcess(ContentMainParams params,
   if (IsSubprocess())
     CommonSubprocessInit();
   exit_code = content_main_runner->Run();
-
-  if (tracker) {
-    if (exit_code == 0) {
-      tracker->SetProcessPhaseIfEnabled(
-          base::debug::GlobalActivityTracker::PROCESS_EXITED_CLEANLY);
-    } else {
-      tracker->SetProcessPhaseIfEnabled(
-          base::debug::GlobalActivityTracker::PROCESS_EXITED_WITH_CODE);
-      tracker->process_data().SetInt("exit-code", exit_code);
-    }
-  }
 
 #if BUILDFLAG(IS_MAC)
   autorelease_pool.reset();

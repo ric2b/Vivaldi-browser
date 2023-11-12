@@ -18,7 +18,6 @@
 #include "weblayer/browser/feature_list_creator.h"
 #include "weblayer/browser/persistence/browser_persister.h"
 #include "weblayer/browser/persistence/browser_persister_file_utils.h"
-#include "weblayer/browser/persistence/minimal_browser_persister.h"
 #include "weblayer/browser/profile_impl.h"
 #include "weblayer/browser/tab_impl.h"
 #include "weblayer/common/weblayer_paths.h"
@@ -143,34 +142,9 @@ void BrowserImpl::PrepareForShutdown(JNIEnv* env) {
   PrepareForShutdown();
 }
 
-ScopedJavaLocalRef<jstring> BrowserImpl::GetPersistenceId(JNIEnv* env) {
-  return ScopedJavaLocalRef<jstring>(
-      base::android::ConvertUTF8ToJavaString(env, GetPersistenceId()));
-}
-
-void BrowserImpl::SaveBrowserPersisterIfNecessary(JNIEnv* env) {
-  browser_persister_->SaveIfNecessary();
-}
-
-ScopedJavaLocalRef<jbyteArray> BrowserImpl::GetBrowserPersisterCryptoKey(
-    JNIEnv* env) {
-  std::vector<uint8_t> key;
-  if (browser_persister_)
-    key = browser_persister_->GetCryptoKey();
-  return base::android::ToJavaByteArray(env, key);
-}
-
-ScopedJavaLocalRef<jbyteArray> BrowserImpl::GetMinimalPersistenceState(
-    JNIEnv* env,
-    int max_navigations_per_tab) {
-  return base::android::ToJavaByteArray(
-      env, GetMinimalPersistenceState(max_navigations_per_tab, 0));
-}
-
 void BrowserImpl::RestoreStateIfNecessary(
     JNIEnv* env,
-    const JavaParamRef<jstring>& j_persistence_id,
-    const JavaParamRef<jbyteArray>& j_persistence_crypto_key) {
+    const JavaParamRef<jstring>& j_persistence_id) {
   if (!j_persistence_id.obj())
     return;
 
@@ -180,24 +154,7 @@ void BrowserImpl::RestoreStateIfNecessary(
   if (persistence_info.id.empty())
     return;
 
-  if (j_persistence_crypto_key.obj()) {
-    base::android::JavaByteArrayToByteVector(
-        env, j_persistence_crypto_key, &(persistence_info.last_crypto_key));
-  }
   RestoreStateIfNecessary(persistence_info);
-}
-
-void BrowserImpl::RestoreMinimalState(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jbyteArray>&
-        j_minimal_persistence_state) {
-  if (!j_minimal_persistence_state.obj())
-    return;
-
-  std::vector<uint8_t> minimal_state;
-  base::android::JavaByteArrayToByteVector(env, j_minimal_persistence_state,
-                                           &minimal_state);
-  RestoreMinimalStateForBrowser(this, minimal_state);
 }
 
 void BrowserImpl::WebPreferencesChanged(JNIEnv* env) {
@@ -219,12 +176,6 @@ void BrowserImpl::OnFragmentPause(JNIEnv* env) {
 }
 
 #endif
-
-std::vector<uint8_t> BrowserImpl::GetMinimalPersistenceState(
-    int max_navigations_per_tab,
-    int max_size_in_bytes) {
-  return PersistMinimalState(this, max_navigations_per_tab, max_size_in_bytes);
-}
 
 void BrowserImpl::SetWebPreferences(blink::web_pref::WebPreferences* prefs) {
 #if BUILDFLAG(IS_ANDROID)
@@ -351,14 +302,8 @@ std::string BrowserImpl::GetPersistenceId() {
   return persistence_id_;
 }
 
-std::vector<uint8_t> BrowserImpl::GetMinimalPersistenceState() {
-  // 0 means use the default max.
-  return GetMinimalPersistenceState(0, 0);
-}
-
 bool BrowserImpl::IsRestoringPreviousState() {
-  return is_minimal_restore_in_progress_ ||
-         (browser_persister_ && browser_persister_->is_restore_in_progress());
+  return browser_persister_ && browser_persister_->is_restore_in_progress();
 }
 
 void BrowserImpl::AddObserver(BrowserObserver* observer) {
@@ -407,8 +352,8 @@ void BrowserImpl::RestoreStateIfNecessary(
     const PersistenceInfo& persistence_info) {
   persistence_id_ = persistence_info.id;
   if (!persistence_id_.empty()) {
-    browser_persister_ = std::make_unique<BrowserPersister>(
-        GetBrowserPersisterDataPath(), this, persistence_info.last_crypto_key);
+    browser_persister_ =
+        std::make_unique<BrowserPersister>(GetBrowserPersisterDataPath(), this);
   }
 }
 
@@ -474,15 +419,18 @@ void BrowserImpl::UpdateFragmentResumedState(bool state) {
 // friended, as it requires browser_impl.h to include BrowserImpl_jni.h, which
 // is problematic (meaning not really supported and generates compile errors).
 BrowserImpl* CreateBrowserForAndroid(ProfileImpl* profile,
+                                     const std::string& package_name,
                                      const JavaParamRef<jobject>& java_impl) {
   BrowserImpl* browser = new BrowserImpl(profile);
   browser->java_impl_ = java_impl;
+  browser->package_name_ = package_name;
   return browser;
 }
 
 static jlong JNI_BrowserImpl_CreateBrowser(
     JNIEnv* env,
     jlong profile,
+    const base::android::JavaParamRef<jstring>& package_name,
     const JavaParamRef<jobject>& java_impl) {
   // The android side does not trigger restore from the constructor as at the
   // time this is called not enough of WebLayer has been wired up. Specifically,
@@ -491,7 +439,8 @@ static jlong JNI_BrowserImpl_CreateBrowser(
   // fully created, leading to all sort of assertions if Tabs are created
   // and/or navigations start (which restore may trigger).
   return reinterpret_cast<intptr_t>(CreateBrowserForAndroid(
-      reinterpret_cast<ProfileImpl*>(profile), java_impl));
+      reinterpret_cast<ProfileImpl*>(profile),
+      base::android::ConvertJavaStringToUTF8(env, package_name), java_impl));
 }
 
 static void JNI_BrowserImpl_DeleteBrowser(JNIEnv* env, jlong browser) {

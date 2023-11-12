@@ -10,12 +10,12 @@
 #include <algorithm>
 #include <memory>
 #include <string>
-
 #include "app/vivaldi_constants.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "browser/sessions/vivaldi_session_utils.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
@@ -36,6 +36,7 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -242,6 +243,19 @@ bool VivaldiSessionService::ShouldTrackWindow(Browser* browser) {
       !browser->is_trusted_source()) {
     return false;
   }
+
+  // Prevent tracking another "person" (user profile).
+  if (profile_->GetPath() != browser->profile()->GetPath()) {
+    return false;
+  }
+
+  // Prevent tracking otr (and quest) profiles form a regular.
+  if (profile_ != browser->profile()) {
+    if (!profile_->IsOffTheRecord() && browser->profile()->IsOffTheRecord()) {
+      return false;
+    }
+  }
+
   if (!SessionServiceBase::ShouldTrackVivaldiBrowser(browser)) {
     return false;
   }
@@ -363,15 +377,15 @@ void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser,
       browser->session_id(), browser->tab_strip_model()->active_index()));
 }
 
-bool VivaldiSessionService::Load(const base::FilePath& path,
-                                 Browser* browser,
-                                 const SessionOptions& opts) {
+int VivaldiSessionService::Load(const base::FilePath& path,
+                                Browser* browser,
+                                const SessionOptions& opts) {
   browser_ = browser;
   opts_ = opts;
   current_session_file_.reset(
       new base::File(path, base::File::FLAG_OPEN | base::File::FLAG_READ));
   if (!current_session_file_->IsValid())
-    return false;
+    return sessions::kErrorLoadFailure;
 
   std::vector<std::unique_ptr<sessions::SessionCommand>> commands;
   std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
@@ -383,9 +397,11 @@ bool VivaldiSessionService::Load(const base::FilePath& path,
     RemoveUnusedRestoreWindows(&valid_windows);
     std::vector<SessionRestoreDelegate::RestoredTab> created_contents;
     ProcessSessionWindows(&valid_windows, active_window_id, &created_contents);
-    return true;
+    return created_contents.size() == 0
+      ? sessions::kErrorNoContent
+      : sessions::kNoError;
   }
-  return false;
+  return sessions::kErrorLoadFailure;
 }
 
 std::vector<std::unique_ptr<sessions::SessionCommand>>
@@ -506,6 +522,15 @@ content::WebContents* VivaldiSessionService::RestoreTab(
     const int tab_index,
     Browser* browser,
     bool is_selected_tab) {
+  if (sessions::IsQuarantined(tab.viv_ext_data)) {
+    return nullptr;
+  }
+
+  if (!opts_.withWorkspace_ &&
+      extensions::IsTabInAWorkspace(tab.viv_ext_data)) {
+    return nullptr;
+  }
+
   // It's possible (particularly for foreign sessions) to receive a tab
   // without valid navigations. In that case, just skip it.
   // See crbug.com/154129.
@@ -596,20 +621,29 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
         (*i)->type == sessions::SessionWindow::TYPE_NORMAL) {
       has_tabbed_browser = true;
     }
-    if (i == windows->begin() && !opts_.openInNewWindow_ &&
+    if (i == windows->begin() && !opts_.newWindow_ &&
         (*i)->type == sessions::SessionWindow::TYPE_NORMAL && browser_ &&
         browser_->is_type_normal() && !browser_->profile()->IsOffTheRecord()) {
       // The first set of tabs is added to the existing browser.
       browser = browser_;
     } else {
-      // Show the first window if none are visible.
-      ui::WindowShowState show_state = (*i)->show_state;
-      if (!has_visible_browser) {
-        show_state = ui::SHOW_STATE_NORMAL;
-        has_visible_browser = true;
+      if (opts_.oneWindow_ && last_browser) {
+        browser = last_browser;
+      } else {
+        // Do not create a browser with no tabs.
+        if (!HasTabs(*(*i).get())) {
+          continue;
+        }
+        // Show the first window if none are visible.
+        ui::WindowShowState show_state = (*i)->show_state;
+        if (!has_visible_browser) {
+          show_state = ui::SHOW_STATE_NORMAL;
+          has_visible_browser = true;
+        }
+        browser = CreateRestoredBrowser(BrowserTypeForWindowType((*i)->type),
+                                        (*i)->bounds, show_state,
+                                        (*i)->app_name);
       }
-      browser = CreateRestoredBrowser(BrowserTypeForWindowType((*i)->type),
-                                      (*i)->bounds, show_state, (*i)->app_name);
     }
     if ((*i)->type == sessions::SessionWindow::TYPE_NORMAL) {
       last_browser = browser;
@@ -643,6 +677,25 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
       ->GetDOMStorageContext()
       ->StartScavengingUnusedSessionStorage();
   return last_browser;
+}
+
+// Same tests as in RestoreTab
+bool VivaldiSessionService::HasTabs(const sessions::SessionWindow& window) {
+  for (int i = 0; i < static_cast<int>(window.tabs.size()); ++i) {
+    const sessions::SessionTab& tab = *(window.tabs[i]);
+    if (sessions::IsQuarantined(tab.viv_ext_data)) {
+      continue;
+    }
+    if (!opts_.withWorkspace_ &&
+      extensions::IsTabInAWorkspace(tab.viv_ext_data)) {
+      continue;
+    }
+    if (tab.navigations.empty()) {
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
 // RemoveUnusedRestoreWindows from session_service.cc

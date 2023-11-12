@@ -10,6 +10,7 @@
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "components/crx_file/id_util.h"
@@ -367,8 +368,11 @@ class SitePermissionsHelperWithUserHostControlsUnitTest
     : public SitePermissionsHelperUnitTest {
  public:
   SitePermissionsHelperWithUserHostControlsUnitTest() {
-    feature_list_.InitAndEnableFeature(
-        extensions_features::kExtensionsMenuAccessControl);
+    std::vector<base::test::FeatureRef> enabled_features = {
+        extensions_features::kExtensionsMenuAccessControl,
+        extensions_features::kExtensionsMenuAccessControlWithPermittedSites};
+    std::vector<base::test::FeatureRef> disabled_features;
+    feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
   ~SitePermissionsHelperWithUserHostControlsUnitTest() override = default;
 

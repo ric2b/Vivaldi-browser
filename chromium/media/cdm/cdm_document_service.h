@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "build/build_config.h"
 #include "media/base/media_export.h"
 
@@ -20,10 +20,18 @@ namespace media {
 
 // Important events happened to the CDM.
 enum class CdmEvent {
-  kSignificantPlayback,  // Significant (e.g. played >1 minute) successful
-                         // playback happened using the CDM.
-  kPlaybackError,        // Error happened during playback using the CDM.
-  kCdmError,             // Error happened in the CDM.
+  // Significant (e.g. played >1 minute) successful playback happened using the
+  // CDM.
+  kSignificantPlayback,
+
+  // Error happened during playback using the CDM.
+  kPlaybackError,
+
+  // Error happened in the CDM except for Hardware Context Reset.
+  kCdmError,
+
+  // Hardware context reset happened.
+  kHardwareContextReset,
 };
 
 class MEDIA_EXPORT CdmDocumentService {

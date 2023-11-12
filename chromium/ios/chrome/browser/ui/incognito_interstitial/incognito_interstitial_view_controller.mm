@@ -8,8 +8,8 @@
 #import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/ui/elements/extended_touch_target_button.h"
 #import "ios/chrome/browser/ui/incognito_interstitial/incognito_interstitial_constants.h"
-#import "ios/chrome/browser/ui/ntp/incognito_view.h"
-#import "ios/chrome/browser/ui/ntp/revamped_incognito_view.h"
+#import "ios/chrome/browser/ui/ntp/incognito/incognito_view.h"
+#import "ios/chrome/browser/ui/ntp/incognito/revamped_incognito_view.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -276,10 +276,19 @@ const int kURLLabelDefaultNumberOfLines = 3;
                                            primaryAction:readMoreAction];
     [_expandURLButton setAttributedTitle:readMoreString
                                 forState:UIControlStateNormal];
+
+    // TODO(crbug.com/1418068): Remove after minimum version required is >=
+    // iOS 15.
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+    _expandURLButton.configuration.contentInsets = NSDirectionalEdgeInsetsMake(
+        CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON);
+#else
     _expandURLButton.titleEdgeInsets = UIEdgeInsetsMake(
         CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON);
     _expandURLButton.contentEdgeInsets = UIEdgeInsetsMake(
         CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON, CGFLOAT_EPSILON);
+#endif
+
     _expandURLButton.backgroundColor = self.view.backgroundColor;
     _expandURLButton.translatesAutoresizingMaskIntoConstraints = NO;
     // On voice over, the full info is on the URL field and this button isn't

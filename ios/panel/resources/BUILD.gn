@@ -44,6 +44,13 @@ imageset("notes_panel") {
   ]
 }
 
+imageset("readinglist_panel") {
+  sources = [
+    "readinglist_panel.imageset/Contents.json",
+    "readinglist_panel.imageset/readinglist_panel.pdf"
+  ]
+}
+
 imageset("bookmark_panel_active") {
   sources = [
     "bookmark_panel_active.imageset/Contents.json",
@@ -62,5 +69,12 @@ imageset("notes_panel_active") {
   sources = [
     "notes_panel_active.imageset/Contents.json",
     "notes_panel_active.imageset/notes_panel_active.pdf"
+  ]
+}
+
+imageset("readinglist_panel_active") {
+  sources = [
+    "readinglist_panel_active.imageset/Contents.json",
+    "readinglist_panel_active.imageset/readinglist_panel_active.pdf"
   ]
 }

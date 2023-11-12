@@ -14,6 +14,9 @@ const char kDisableOverscrollEdgeEffect[] = "disable-overscroll-edge-effect";
 
 // Disable the pull-to-refresh effect when vertically overscrolling content.
 const char kDisablePullToRefreshEffect[] = "disable-pull-to-refresh-effect";
+
+// Use Toat manager for managing/queuing Android toast UIs.
+const char kUseToastManager[] = "use-toast-manager";
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -34,9 +37,6 @@ const char kEnableResourcesFileSharing[] = "enable-resources-file-sharing";
 // Disables layer-edge anti-aliasing in the compositor.
 const char kDisableCompositedAntialiasing[] = "disable-composited-antialiasing";
 
-// Disables use of DWM composition for top level windows.
-const char kDisableDwmComposition[] = "disable-dwm-composition";
-
 // Disables touch event based drag and drop.
 const char kDisableTouchDragDrop[] = "disable-touch-drag-drop";
 
@@ -44,6 +44,10 @@ const char kDisableTouchDragDrop[] = "disable-touch-drag-drop";
 // Intended only for use in layout or pixel tests to reduce noise.
 const char kDisallowNonExactResourceReuse[] =
     "disallow-non-exact-resource-reuse";
+
+// Treats DRM virtual connector as external to enable display mode change in VM.
+const char kDRMVirtualConnectorIsExternal[] =
+    "drm-virtual-connector-is-external";
 
 // Enables touch event based drag and drop.
 const char kEnableTouchDragDrop[] = "enable-touch-drag-drop";

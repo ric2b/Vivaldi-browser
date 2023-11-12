@@ -29,10 +29,12 @@
 
 #include <memory>
 
+#include "base/task/single_thread_task_runner.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/content_security_policy.mojom-blink.h"
 #include "third_party/blink/public/common/frame/fullscreen_request_token.h"
+#include "third_party/blink/public/common/frame/history_user_activation_state.h"
 #include "third_party/blink/public/common/frame/payment_request_token.h"
 #include "third_party/blink/public/common/metrics/post_message_counter.h"
 #include "third_party/blink/public/common/scheduler/task_attribution_id.h"
@@ -45,7 +47,6 @@
 #include "third_party/blink/renderer/core/editing/suggestion/text_suggestion_controller.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/dom_window.h"
-#include "third_party/blink/renderer/core/frame/history_user_activation_state.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/use_counter_impl.h"
 #include "third_party/blink/renderer/core/html/closewatcher/close_watcher.h"
@@ -193,6 +194,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
       // current JS file would be used as source_file instead.
       const String& source_file = g_empty_string) const final;
   void SetIsInBackForwardCache(bool) final;
+  bool HasStorageAccess() const final;
 
   void AddConsoleMessageImpl(ConsoleMessage*, bool discard_duplicates) final;
 
@@ -466,6 +468,14 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   const BlinkStorageKey& GetStorageKey() const { return storage_key_; }
   void SetStorageKey(const BlinkStorageKey& storage_key);
 
+  // This storage key must only be used when binding session storage.
+  //
+  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  const BlinkStorageKey& GetSessionStorageKey() const {
+    return session_storage_key_;
+  }
+  void SetSessionStorageKey(const BlinkStorageKey& session_storage_key);
+
   void DidReceiveUserActivation();
 
   // Returns the state of the |PaymentRequestToken| in this document.
@@ -495,10 +505,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
     return closewatcher_stack_;
   }
 
-  HistoryUserActivationState& history_user_activation_state() {
-    return history_user_activation_state_;
-  }
-
   void IncrementNavigationId() { navigation_id_++; }
   uint32_t GetNavigationId() const { return navigation_id_; }
 
@@ -511,6 +517,10 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
       bool is_picture_in_picture) {
     is_picture_in_picture_window_ = is_picture_in_picture;
   }
+
+  // Sets the HasStorageAccess member. Note that it can only be granted for a
+  // given window, it cannot be taken away.
+  void SetHasStorageAccess();
 
  protected:
   // EventTarget overrides.
@@ -622,6 +632,13 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // The storage key for this LocalDomWindow.
   BlinkStorageKey storage_key_;
 
+  // The storage key here is the one to use when binding session storage. This
+  // may differ from `storage_key_` as a deprecation trial can prevent the
+  // partitioning of session storage.
+  //
+  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  BlinkStorageKey session_storage_key_;
+
   // Fire "online" and "offline" events.
   Member<NetworkStateObserver> network_state_observer_;
 
@@ -636,8 +653,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   Member<CloseWatcher::WatcherStack> closewatcher_stack_;
 
-  HistoryUserActivationState history_user_activation_state_;
-
   // If set, this window is a Document Picture in Picture window.
   // https://wicg.github.io/document-picture-in-picture/
   bool is_picture_in_picture_window_ = false;
@@ -646,6 +661,10 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   // like bfcache navigation or soft navigation. It increments when navigations
   // of these types occur.
   uint32_t navigation_id_ = 1;
+
+  // Records whether this window has obtained storage access. It cannot be
+  // revoked once set to true.
+  bool has_storage_access_ = false;
 };
 
 template <>

@@ -18,10 +18,9 @@
 #include "ash/style/pill_button.h"
 #include "ash/style/system_toast_style.h"
 #include "ash/wm/work_area_insets.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -172,12 +171,10 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
   params.accept_events = true;
   params.z_order = ui::ZOrderLevel::kFloatingUIElement;
   params.bounds = CalculateOverlayBounds();
-  // Notifications show on the bottom right in `kShellWindowId_ShelfContainer`,
-  // we want to be sure to show over them, and below the lock screen.
+  // Show toasts above the app list and below the lock screen.
   params.parent = root_window_->GetChildById(
       show_on_lock_screen ? kShellWindowId_LockSystemModalContainer
-                          : kShellWindowId_DragImageAndTooltipContainer);
-
+                          : kShellWindowId_SystemModalContainer);
   overlay_widget_->Init(std::move(params));
   overlay_widget_->SetVisibilityChangedAnimationsEnabled(true);
   overlay_widget_->SetContentsView(overlay_view_.get());
@@ -253,26 +250,24 @@ bool ToastOverlay::MaybeActivateHighlightedDismissButton() {
 
 gfx::Rect ToastOverlay::CalculateOverlayBounds() {
   // If the native window has not been initialized, as in the first call, get
-  // the default root window. Otherwise get the window for this `overlay_widget`
+  // the default root window. Otherwise get the window for this overlay_widget
   // to handle multiple monitors properly.
   auto* window = overlay_widget_->IsNativeWidgetInitialized()
                      ? overlay_widget_->GetNativeWindow()
                      : root_window_;
-
   auto* window_controller = RootWindowController::ForWindow(window);
   auto* hotseat_widget = window_controller->shelf()->hotseat_widget();
 
-  gfx::Rect work_area_bounds = GetUserWorkAreaBounds(window);
+  gfx::Rect bounds = GetUserWorkAreaBounds(window);
 
   if (hotseat_widget)
-    AdjustWorkAreaBoundsForHotseatState(work_area_bounds, hotseat_widget);
+    AdjustWorkAreaBoundsForHotseatState(bounds, hotseat_widget);
 
-  return gfx::Rect(
-      gfx::Point(work_area_bounds.right() - widget_size_.width() -
-                     ToastOverlay::kOffset,
-                 work_area_bounds.bottom() - widget_size_.height() -
-                     ToastOverlay::kOffset),
-      widget_size_);
+  int target_y =
+      bounds.bottom() - widget_size_.height() - ToastOverlay::kOffset;
+  bounds.ClampToCenteredSize(widget_size_);
+  bounds.set_y(target_y);
+  return bounds;
 }
 
 void ToastOverlay::OnButtonClicked() {

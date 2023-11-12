@@ -27,6 +27,7 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/feature_engagement/public/feature_constants.h"
+#include "components/feature_engagement/test/scoped_iph_feature_list.h"
 #include "components/feature_engagement/test/test_tracker.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/common/result_codes.h"
@@ -41,10 +42,8 @@
 class SideSearchV2Test : public SideSearchBrowserTest {
  public:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures(
-        {features::kSideSearch, features::kSideSearchDSESupport,
-         features::kUnifiedSidePanel, features::kSearchWebInSidePanel},
-        {});
+    scoped_feature_list_.InitWithFeatures({features::kSearchWebInSidePanel},
+                                          {});
     SideSearchBrowserTest::SetUp();
   }
 
@@ -443,26 +442,6 @@ IN_PROC_BROWSER_TEST_F(SideSearchV2Test,
             GetActiveSidePanelWebContents(browser())->GetVisibleURL());
 }
 
-IN_PROC_BROWSER_TEST_F(SideSearchV2Test,
-                       SidePanelButtonIsNotShownWhenSRPIsUnavailable) {
-  // Set the side panel SRP be unavailable.
-  SetIsSidePanelSRPAvailableAt(browser(), 0, false);
-
-  // If no previous matched search page has been navigated to the button should
-  // not be visible.
-  NavigateActiveTab(browser(), GetNonMatchingUrl());
-  EXPECT_FALSE(GetSidePanelFor(browser())->GetVisible());
-
-  // The side panel button should never be visible on the matched search page.
-  NavigateActiveTab(browser(), GetMatchingSearchUrl());
-  EXPECT_FALSE(GetSidePanelFor(browser())->GetVisible());
-
-  // The side panel button should not be visible if the side panel SRP is not
-  // available.
-  NavigateActiveTab(browser(), GetNonMatchingUrl());
-  EXPECT_FALSE(GetSidePanelFor(browser())->GetVisible());
-}
-
 IN_PROC_BROWSER_TEST_F(
     SideSearchV2Test,
     SidePanelStatePreservedWhenMovingTabsAcrossBrowserWindows) {
@@ -562,10 +541,10 @@ IN_PROC_BROWSER_TEST_F(SideSearchV2Test,
   EXPECT_FALSE(side_panel->GetVisible());
 }
 
-IN_PROC_BROWSER_TEST_F(SideSearchV2Test, SidePanelCrashesCloseSidePanel) {
+IN_PROC_BROWSER_TEST_F(SideSearchV2Test, SideSearchCrashesCloseSideSearch) {
   auto* browser_view = BrowserViewFor(browser());
   auto* coordinator = browser_view->side_panel_coordinator();
-  coordinator->SetNoDelaysForTesting();
+  coordinator->SetNoDelaysForTesting(true);
 
   // Open two tabs with the side panel open.
   NavigateToMatchingSearchPageAndOpenSidePanel(browser());
@@ -609,9 +588,9 @@ IN_PROC_BROWSER_TEST_F(SideSearchV2Test, SidePanelCrashesCloseSidePanel) {
   EXPECT_TRUE(rph_first_tab->Shutdown(content::RESULT_CODE_KILLED));
   crash_observer_first_tab.Wait();
 
-  // Switch to the first tab, the side panel should still be closed.
+  // Switch to the first tab, the side panel should still be open.
   ActivateTabAt(browser(), 0);
-  EXPECT_FALSE(side_panel->GetVisible());
+  EXPECT_TRUE(side_panel->GetVisible());
   EXPECT_EQ(nullptr, GetSidePanelContentsFor(browser(), 0));
 
   // Reopening the side panel should restore the side panel and its contents.
@@ -623,7 +602,7 @@ IN_PROC_BROWSER_TEST_F(SideSearchV2Test, SidePanelCrashesCloseSidePanel) {
 IN_PROC_BROWSER_TEST_F(SideSearchV2Test, SwitchSidePanelInSingleTab) {
   auto* browser_view = BrowserViewFor(browser());
   auto* coordinator = browser_view->side_panel_coordinator();
-  coordinator->SetNoDelaysForTesting();
+  coordinator->SetNoDelaysForTesting(true);
 
   // Tab 0 with side search available and open.
   AppendTab(browser(), GetMatchingSearchUrl());
@@ -650,7 +629,7 @@ IN_PROC_BROWSER_TEST_F(SideSearchV2Test, SwitchSidePanelInSingleTab) {
 IN_PROC_BROWSER_TEST_F(SideSearchV2Test, SwitchTabsWithGlobalSidePanel) {
   auto* browser_view = BrowserViewFor(browser());
   auto* coordinator = browser_view->side_panel_coordinator();
-  coordinator->SetNoDelaysForTesting();
+  coordinator->SetNoDelaysForTesting(true);
 
   // Tab 0 without side search available and open with reading list.
   NavigateActiveTab(browser(), GetNonMatchingUrl());
@@ -823,6 +802,20 @@ IN_PROC_BROWSER_TEST_F(SideSearchV2Test,
   browser()->tab_strip_model()->CloseAllTabs();
 }
 
+IN_PROC_BROWSER_TEST_F(
+    SideSearchV2Test,
+    SidePanelAvailabilityChangedShouldNotCloseSidePanelWhenSideSearchIsNotOpen) {
+  auto* browser_view = BrowserViewFor(browser());
+  auto* coordinator = browser_view->side_panel_coordinator();
+  coordinator->SetNoDelaysForTesting(true);
+  coordinator->Show(SidePanelEntry::Id::kReadingList);
+  EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+  auto* side_search_controller = UnifiedSideSearchController::FromWebContents(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  side_search_controller->SidePanelAvailabilityChanged(true);
+  EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+}
+
 // Fixture base to test feature engagement functionality for the side search
 // feature.
 class SideSearchFeatureEngagementTest : public SideSearchBrowserTest {
@@ -884,16 +877,16 @@ class SideSearchAutoTriggeringBrowserTest
     constexpr char kTriggerCount[] = "2";
     base::FieldTrialParams params = {{kParam, kTriggerCount}};
 
-    feature_list_.InitWithFeaturesAndParameters(
-        {
-            {features::kSideSearch, {}},
-            {features::kSideSearchDSESupport, {}},
-            {features::kUnifiedSidePanel, {}},
-            {features::kSideSearchAutoTriggering, params},
-            {feature_engagement::kIPHSideSearchAutoTriggeringFeature,
-             GetFeatureEngagementParams()},
-        },
-        {});
+    feature_list_.InitAndEnableFeaturesWithParameters({
+        {features::kSideSearchAutoTriggering, params},
+        {feature_engagement::kIPHSideSearchAutoTriggeringFeature,
+         GetFeatureEngagementParams()},
+    });
+  }
+
+  void SetUp() override {
+    set_open_about_blank_on_browser_launch(true);
+    SideSearchFeatureEngagementTest::SetUp();
   }
 
   void SetUpOnMainThread() override {
@@ -928,20 +921,11 @@ class SideSearchAutoTriggeringBrowserTest
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_;
+  feature_engagement::test::ScopedIphFeatureList feature_list_;
 };
 
-// TODO(crbug.com/1368921): Flaky on lacros.
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
-#define MAYBE_SidePanelAutoTriggersAfterReturningToAPreviousSRP \
-  DISABLED_SidePanelAutoTriggersAfterReturningToAPreviousSRP
-#else
-#define MAYBE_SidePanelAutoTriggersAfterReturningToAPreviousSRP \
-  SidePanelAutoTriggersAfterReturningToAPreviousSRP
-#endif
-IN_PROC_BROWSER_TEST_F(
-    SideSearchAutoTriggeringBrowserTest,
-    MAYBE_SidePanelAutoTriggersAfterReturningToAPreviousSRP) {
+IN_PROC_BROWSER_TEST_F(SideSearchAutoTriggeringBrowserTest,
+                       SidePanelAutoTriggersAfterReturningToAPreviousSRP) {
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kPrimaryTabId);
   DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kSidePanelWebContentsId);
 
@@ -1022,19 +1006,14 @@ class SideSearchPageActionLabelTriggerBrowserTest
     : public SideSearchFeatureEngagementTest {
  public:
   SideSearchPageActionLabelTriggerBrowserTest() {
-    feature_list_.InitWithFeaturesAndParameters(
-        {
-            {features::kSideSearch, {}},
-            {features::kSideSearchDSESupport, {}},
-            {features::kUnifiedSidePanel, {}},
-            {feature_engagement::kIPHSideSearchPageActionLabelFeature,
-             GetFeatureEngagementParams()},
-        },
-        {});
+    feature_list_.InitAndEnableFeaturesWithParameters({
+        {feature_engagement::kIPHSideSearchPageActionLabelFeature,
+         GetFeatureEngagementParams()},
+    });
   }
 
  private:
-  base::test::ScopedFeatureList feature_list_;
+  feature_engagement::test::ScopedIphFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(SideSearchPageActionLabelTriggerBrowserTest,

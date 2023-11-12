@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
 import("//build/config/ozone.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 
@@ -17,6 +18,7 @@ mojom("mojom") {
     "delegated_ink_point_renderer.mojom",
     "display_color_spaces.mojom",
     "font_render_params.mojom",
+    "frame_data.mojom",
     "gpu_extra_info.mojom",
     "gpu_fence_handle.mojom",
     "hdr_metadata.mojom",
@@ -33,7 +35,7 @@ mojom("mojom") {
     "transform.mojom",
   ]
 
-  if (is_mac) {
+  if (is_apple) {
     sources += [ "ca_layer_result.mojom" ]
   }
 
@@ -202,17 +204,6 @@ mojom("mojom") {
     {
       types = [
         {
-          mojom = "gfx.mojom.CALayerParams"
-          cpp = "::gfx::CALayerParams"
-        },
-      ]
-      traits_sources = [ "ca_layer_params_mojom_traits.cc" ]
-      traits_headers = [ "ca_layer_params_mojom_traits.h" ]
-      traits_public_deps = [ "//ui/gfx" ]
-    },
-    {
-      types = [
-        {
           mojom = "gfx.mojom.CALayerResult"
           cpp = "::gfx::CALayerResult"
         },
@@ -336,7 +327,33 @@ mojom("mojom") {
       traits_headers = [ "linear_gradient_mojom_traits.h" ]
       traits_public_deps = [ "//ui/gfx/geometry:geometry_skia" ]
     },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.FrameData"
+          cpp = "::gfx::FrameData"
+        },
+      ]
+      traits_headers = [ "frame_data_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
   ]
+
+  if (use_blink) {
+    cpp_typemaps += [
+      {
+        types = [
+          {
+            mojom = "gfx.mojom.CALayerParams"
+            cpp = "::gfx::CALayerParams"
+          },
+        ]
+        traits_sources = [ "ca_layer_params_mojom_traits.cc" ]
+        traits_headers = [ "ca_layer_params_mojom_traits.h" ]
+        traits_public_deps = [ "//ui/gfx" ]
+      },
+    ]
+  }
 
   cpp_typemaps += shared_cpp_typemaps
   blink_cpp_typemaps = shared_cpp_typemaps

@@ -43,6 +43,9 @@ std::string GetCallerId(
   switch (flow_type) {
     case parent_access_ui::mojom::ParentAccessParams::FlowType::kWebsiteAccess:
       return "39454505";
+    case parent_access_ui::mojom::ParentAccessParams::FlowType::
+        kExtensionAccess:
+      return "12367dff";
       // NOTE:  Do not add default case here, to ensure that adding new flow
       // types to ParentAccessParams forces this case statement to be updated.
   }
@@ -71,18 +74,19 @@ ParentAccessUIHandlerImpl::GetParentAccessWidgetErrorHistogramForFlowType(
       return base::JoinString({kParentAccessWidgetErrorHistogramBase,
                                kParentAccessWidgetErrorSuffixWebApprovals},
                               separator);
+    case parent_access_ui::mojom::ParentAccessParams::FlowType::
+        kExtensionAccess:
+      // TODO(b/262451256): Implement metrics for extension flow.
+      return std::string();
   }
 }
 
 void ParentAccessUIHandlerImpl::RecordParentAccessWidgetError(
     ParentAccessUIHandlerImpl::ParentAccessWidgetError error) {
   if (delegate_) {
-    // TODO(b/260144025): Reduce the number of times params are cloned.
-    parent_access_ui::mojom::ParentAccessParamsPtr params =
-        delegate_->CloneParentAccessParams();
     base::UmaHistogramEnumeration(
         ParentAccessUIHandlerImpl::
-            GetParentAccessWidgetErrorHistogramForFlowType(params->flow_type),
+            GetParentAccessWidgetErrorHistogramForFlowType(params_->flow_type),
         error);
   }
 
@@ -100,15 +104,13 @@ ParentAccessUIHandlerImpl::ParentAccessUIHandlerImpl(
     ParentAccessUIHandlerDelegate* delegate)
     : identity_manager_(identity_manager),
       delegate_(delegate),
-      receiver_(this, std::move(receiver)) {
+      receiver_(this, std::move(receiver)),
+      params_(delegate_ ? delegate_->CloneParentAccessParams() : nullptr) {
   // ParentAccess state is only tracked when a dialog is created. i.e. not when
   // chrome://parent-access is directly accessed.
   if (delegate_) {
-    // TODO(b/260144025): Reduce the number of times params are cloned.
-    parent_access_ui::mojom::ParentAccessParamsPtr params =
-        delegate_->CloneParentAccessParams();
     state_tracker_ =
-        std::make_unique<ParentAccessStateTracker>(params->flow_type);
+        std::make_unique<ParentAccessStateTracker>(params_->flow_type);
   }
 }
 
@@ -166,8 +168,7 @@ void ParentAccessUIHandlerImpl::GetParentAccessParams(
     std::move(callback).Run(parent_access_ui::mojom::ParentAccessParams::New());
     return;
   }
-  // TODO(b/260144025): Reduce the number of times params are cloned.
-  std::move(callback).Run(delegate_->CloneParentAccessParams());
+  std::move(callback).Run(params_->Clone());
   return;
 }
 
@@ -243,16 +244,12 @@ void ParentAccessUIHandlerImpl::GetParentAccessURL(
     DCHECK(GURL(url).DomainIs("google.com"));
   }
 
-  // TODO(b/260144025): Reduce the number of times params are cloned.
-  parent_access_ui::mojom::ParentAccessParamsPtr params =
-      delegate_->CloneParentAccessParams();
-
   const GURL base_url(url);
   GURL::Replacements replacements;
   std::string query_string = base::StringPrintf(
       "callerid=%s&hl=%s&platform_version=%s&cros-origin=chrome://"
       "parent-access",
-      GetCallerId(params->flow_type).c_str(), language_code.c_str(),
+      GetCallerId(params_->flow_type).c_str(), language_code.c_str(),
       platform_version.c_str());
   replacements.SetQueryStr(query_string);
   const GURL result = base_url.ReplaceComponents(replacements);

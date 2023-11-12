@@ -18,6 +18,7 @@
 #include "chromeos/ash/components/dbus/shill/shill_ipconfig_client.h"
 #include "chromeos/ash/components/dbus/shill/shill_service_client.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
+#include "chromeos/ash/components/mojo_service_manager/fake_mojo_service_manager.h"
 #include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_handler_test_helper.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
@@ -134,14 +135,14 @@ class NetworkTelemetrySamplerTest : public ::testing::Test {
           base::Value(network_data.signal_strength));
       service_client->SetServiceProperty(service_path, shill::kDeviceProperty,
                                          base::Value(device_path));
-      base::DictionaryValue ip_config_properties;
-      ip_config_properties.SetKey(shill::kAddressProperty,
-                                  base::Value(network_data.ip_address));
-      ip_config_properties.SetKey(shill::kGatewayProperty,
-                                  base::Value(network_data.gateway));
+      base::Value::Dict ip_config_properties;
+      ip_config_properties.Set(shill::kAddressProperty,
+                               network_data.ip_address);
+      ip_config_properties.Set(shill::kGatewayProperty, network_data.gateway);
       const std::string kIPConfigPath =
           base::StrCat({"test_ip_config", network_data.guid});
-      ip_config_client->AddIPConfig(kIPConfigPath, ip_config_properties);
+      ip_config_client->AddIPConfig(kIPConfigPath,
+                                    std::move(ip_config_properties));
       service_client->SetServiceProperty(service_path, shill::kIPConfigProperty,
                                          base::Value(kIPConfigPath));
       if (network_data.type == shill::kTypeCellular) {
@@ -158,6 +159,7 @@ class NetworkTelemetrySamplerTest : public ::testing::Test {
   }
 
   base::test::TaskEnvironment task_environment_;
+  ::ash::mojo_service_manager::FakeMojoServiceManager fake_service_manager_;
 
   ::ash::NetworkHandlerTestHelper network_handler_test_helper_;
 

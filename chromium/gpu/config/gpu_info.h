@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/clang_profiling_buildflags.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/time/time.h"
@@ -154,6 +155,7 @@ struct GPU_EXPORT VideoEncodeAcceleratorSupportedProfile {
   gfx::Size max_resolution;
   uint32_t max_framerate_numerator;
   uint32_t max_framerate_denominator;
+  bool is_software_codec;
 };
 using VideoEncodeAcceleratorSupportedProfiles =
     std::vector<VideoEncodeAcceleratorSupportedProfile>;
@@ -364,6 +366,15 @@ struct GPU_EXPORT GPUInfo {
   // See machine_model_name's comment.
   std::string machine_model_version;
 
+  // The GL implementation.
+  std::string gl_implementation;
+
+  // The ANGLE implementation.
+  std::string angle_implementation;
+
+  // The DisplayType requested from ANGLE.
+  std::string display_type;
+
   // The GL_VERSION string.
   std::string gl_version;
 
@@ -417,6 +428,13 @@ struct GPU_EXPORT GPUInfo {
   bool is_asan = true;
 #else
   bool is_asan = false;
+#endif
+
+// Whether the browser was built with Clang coverage enabled or not.
+#if BUILDFLAG(USE_CLANG_COVERAGE) || BUILDFLAG(CLANG_PROFILING)
+  bool is_clang_coverage = true;
+#else
+  bool is_clang_coverage = false;
 #endif
 
 #if defined(ARCH_CPU_64_BITS)

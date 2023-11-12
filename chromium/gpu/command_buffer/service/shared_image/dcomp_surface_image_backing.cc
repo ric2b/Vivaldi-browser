@@ -69,7 +69,7 @@ class DCompSurfaceImageBacking::D3DTextureGLSurfaceEGL
   bool IsOffscreen() override { return true; }
 
   gfx::SwapResult SwapBuffers(PresentationCallback callback,
-                              gl::FrameData data) override {
+                              gfx::FrameData data) override {
     NOTREACHED()
         << "Attempted to call SwapBuffers on a D3DTextureGLSurfaceEGL.";
     return gfx::SwapResult::SWAP_FAILED;
@@ -250,8 +250,6 @@ sk_sp<SkSurface> DCompSurfaceImageBacking::BeginDraw(
   POINT update_offset = {};
   HRESULT hr = dcomp_surface_->BeginDraw(&rect, IID_PPV_ARGS(&draw_texture),
                                          &update_offset);
-  hr = dcomp_surface_->BeginDraw(&rect, IID_PPV_ARGS(&draw_texture),
-                                 &update_offset);
   if (FAILED(hr)) {
     DCHECK_NE(hr, DCOMPOSITION_ERROR_SURFACE_BEING_RENDERED)
         << "Concurrent writes to multiple DCompSurfaceImageBacking "

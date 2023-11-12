@@ -36,6 +36,7 @@
 #include "third_party/blink/renderer/core/css/css_length_resolver.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/layout/geometry/axis.h"
+#include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/text/writing_mode.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
@@ -43,9 +44,10 @@
 namespace blink {
 
 class ComputedStyle;
-class LayoutView;
-class Font;
 class Element;
+class Font;
+class FontSizeStyle;
+class LayoutView;
 
 class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
   STACK_ALLOCATED();
@@ -57,21 +59,32 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
    public:
     FontSizes() = default;
     FontSizes(float em, float rem, const Font*, float font_zoom);
-    FontSizes(const ComputedStyle*, const ComputedStyle* root_style);
+    FontSizes(float em,
+              float rem,
+              const Font* font,
+              const Font* root_font,
+              float font_zoom,
+              float root_font_zoom);
+    FontSizes(const FontSizeStyle&, const ComputedStyle* root_style);
 
     float Em(float zoom) const { return em_ * zoom; }
     float Rem(float zoom) const { return rem_ * zoom; }
     float Ex(float zoom) const;
+    float Rex(float zoom) const;
     float Ch(float zoom) const;
+    float Rch(float zoom) const;
     float Ic(float zoom) const;
+    float Ric(float zoom) const;
 
    private:
     float em_ = 0;
     float rem_ = 0;
     const Font* font_ = nullptr;
+    const Font* root_font_ = nullptr;
     // Font-metrics-based units (ex, ch, ic) are pre-zoomed by a factor of
     // `font_zoom_`.
     float font_zoom_ = 1;
+    float root_font_zoom_ = 1;
   };
 
   class CORE_EXPORT LineHeightSize {
@@ -81,18 +94,34 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
     LineHeightSize() = default;
     LineHeightSize(const Length& line_height, const Font* font, float font_zoom)
         : line_height_(line_height), font_(font), font_zoom_(font_zoom) {}
-    explicit LineHeightSize(const ComputedStyle&);
+    LineHeightSize(const Length& line_height,
+                   const Length& root_line_height,
+                   const Font* font,
+                   const Font* root_font,
+                   float font_zoom,
+                   float root_font_zoom)
+        : line_height_(line_height),
+          root_line_height_(root_line_height),
+          font_(font),
+          root_font_(root_font),
+          font_zoom_(font_zoom),
+          root_font_zoom_(root_font_zoom) {}
+    LineHeightSize(const FontSizeStyle& style, const ComputedStyle* root_style);
 
     float Lh(float zoom) const;
+    float Rlh(float zoom) const;
 
    private:
     Length line_height_;
+    Length root_line_height_;
     // Note that this Font may be different from the instance held
     // by FontSizes (for the same CSSToLengthConversionData object).
     const Font* font_ = nullptr;
+    const Font* root_font_ = nullptr;
     // Like ex/ch/ic, lh is also based on font-metrics and is pre-zoomed by
     // a factor of `font_zoom_`.
     float font_zoom_ = 1;
+    float root_font_zoom_ = 1;
   };
 
   class CORE_EXPORT ViewportSize {
@@ -176,27 +205,66 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
     mutable absl::optional<double> cached_height_;
   };
 
+  using Flags = uint8_t;
+
+  // Flags represent the units seen in a conversion. They are used for targeted
+  // invalidation, e.g. when root font-size changes, only elements dependent on
+  // rem units are recalculated.
+  enum class Flag : Flags {
+    // em
+    kEm = 1u << 0,
+    // rem
+    kRootFontRelative = 1u << 1,
+    // ex, ch, ic, lh
+    kGlyphRelative = 1u << 2,
+    // rex, rch, ric have both kRootFontRelative and kGlyphRelative
+    // lh
+    kLineHeightRelative = 1u << 3,
+    // sv*, lv*, v*
+    kStaticViewport = 1u << 4,
+    // dv*
+    kDynamicViewport = 1u << 5,
+    // cq*
+    kContainerRelative = 1u << 6,
+  };
+
   CSSToLengthConversionData() : CSSLengthResolver(1 /* zoom */) {}
-  CSSToLengthConversionData(const ComputedStyle* element_style,
-                            WritingMode,
+  CSSToLengthConversionData(WritingMode,
                             const FontSizes&,
                             const LineHeightSize&,
                             const ViewportSize&,
                             const ContainerSizes&,
-                            float zoom);
-  CSSToLengthConversionData(const ComputedStyle* element_style,
+                            float zoom,
+                            Flags&);
+  template <typename ComputedStyleOrBuilder>
+  CSSToLengthConversionData(const ComputedStyleOrBuilder& element_style,
                             const ComputedStyle* parent_style,
                             const ComputedStyle* root_style,
-                            const LayoutView*,
-                            const ContainerSizes&,
-                            float zoom);
+                            const LayoutView* layout_view,
+                            const ContainerSizes& container_sizes,
+                            float zoom,
+                            Flags& flags)
+      : CSSToLengthConversionData(
+            element_style.GetWritingMode(),
+            FontSizes(element_style.GetFontSizeStyle(), root_style),
+            LineHeightSize(parent_style ? parent_style->GetFontSizeStyle()
+                                        : element_style.GetFontSizeStyle(),
+                           root_style),
+            ViewportSize(layout_view),
+            container_sizes,
+            zoom,
+            flags) {}
 
   float EmFontSize(float zoom) const override;
   float RemFontSize(float zoom) const override;
   float ExFontSize(float zoom) const override;
+  float RexFontSize(float zoom) const override;
   float ChFontSize(float zoom) const override;
+  float RchFontSize(float zoom) const override;
   float IcFontSize(float zoom) const override;
+  float RicFontSize(float zoom) const override;
   float LineHeight(float zoom) const override;
+  float RootLineHeight(float zoom) const override;
   double ViewportWidth() const override;
   double ViewportHeight() const override;
   double SmallViewportWidth() const override;
@@ -221,35 +289,28 @@ class CORE_EXPORT CSSToLengthConversionData : public CSSLengthResolver {
   ContainerSizes PreCachedContainerSizesCopy() const;
 
   CSSToLengthConversionData CopyWithAdjustedZoom(float new_zoom) const {
-    return CSSToLengthConversionData(style_, writing_mode_, font_sizes_,
+    DCHECK(flags_);
+    return CSSToLengthConversionData(writing_mode_, font_sizes_,
                                      line_height_size_, viewport_size_,
-                                     container_sizes_, new_zoom);
+                                     container_sizes_, new_zoom, *flags_);
   }
   CSSToLengthConversionData Unzoomed() const {
     return CopyWithAdjustedZoom(1.0f);
   }
 
  private:
-  const ComputedStyle* style_ = nullptr;
+  void SetFlag(Flag flag) const {
+    if (flags_) {
+      *flags_ |= static_cast<Flags>(flag);
+    }
+  }
+
   WritingMode writing_mode_ = WritingMode::kHorizontalTb;
   FontSizes font_sizes_;
   LineHeightSize line_height_size_;
   ViewportSize viewport_size_;
   ContainerSizes container_sizes_;
-};
-
-class ScopedCSSToLengthConversionData : public CSSToLengthConversionData {
-  STACK_ALLOCATED();
-
- public:
-  ScopedCSSToLengthConversionData(const CSSToLengthConversionData& data,
-                                  const TreeScope* scope)
-      : CSSToLengthConversionData(data), tree_scope_(scope) {}
-
-  const TreeScope* GetTreeScope() const override { return tree_scope_; }
-
- private:
-  const TreeScope* tree_scope_;
+  mutable Flags* flags_ = nullptr;
 };
 
 }  // namespace blink

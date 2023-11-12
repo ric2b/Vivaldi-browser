@@ -4,6 +4,7 @@
 
 #include "ash/clipboard/views/clipboard_history_item_view.h"
 
+#include "ash/clipboard/clipboard_history.h"
 #include "ash/clipboard/clipboard_history_item.h"
 #include "ash/clipboard/clipboard_history_util.h"
 #include "ash/clipboard/views/clipboard_history_bitmap_item_view.h"
@@ -13,10 +14,12 @@
 #include "ash/clipboard/views/clipboard_history_text_item_view.h"
 #include "ash/clipboard/views/clipboard_history_view_constants.h"
 #include "base/auto_reset.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/unguessable_token.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard_data.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/border.h"
@@ -27,6 +30,15 @@
 namespace ash {
 namespace {
 using Action = clipboard_history_util::Action;
+
+const ClipboardHistoryItem* GetClipboardHistoryItemImpl(
+    const base::UnguessableToken& item_id,
+    const ClipboardHistory* clipboard_history) {
+  const auto& items = clipboard_history->GetItems();
+  const auto& item_iter =
+      base::ranges::find(items, item_id, &ClipboardHistoryItem::id);
+  return item_iter == items.cend() ? nullptr : &(*item_iter);
+}
 }  // namespace
 
 ClipboardHistoryItemView::ContentsView::ContentsView(
@@ -55,10 +67,6 @@ void ClipboardHistoryItemView::ContentsView::OnHostPseudoFocusUpdated() {
   }
 }
 
-const char* ClipboardHistoryItemView::ContentsView::GetClassName() const {
-  return "ContenstView";
-}
-
 // Accepts the event only when |delete_button_| should be the handler.
 bool ClipboardHistoryItemView::ContentsView::DoesIntersectRect(
     const views::View* target,
@@ -75,31 +83,37 @@ bool ClipboardHistoryItemView::ContentsView::DoesIntersectRect(
 // static
 std::unique_ptr<ClipboardHistoryItemView>
 ClipboardHistoryItemView::CreateFromClipboardHistoryItem(
-    const ClipboardHistoryItem& item,
+    const base::UnguessableToken& item_id,
+    const ClipboardHistory* clipboard_history,
     const ClipboardHistoryResourceManager* resource_manager,
     views::MenuItemView* container) {
-  const auto display_format =
-      clipboard_history_util::CalculateDisplayFormat(item.data());
+  const auto* item = GetClipboardHistoryItemImpl(item_id, clipboard_history);
+  const auto display_format = item->display_format();
   UMA_HISTOGRAM_ENUMERATION(
       "Ash.ClipboardHistory.ContextMenu.DisplayFormatShown", display_format);
   switch (display_format) {
-    case clipboard_history_util::DisplayFormat::kText:
-      return std::make_unique<ClipboardHistoryTextItemView>(&item, container);
-    case clipboard_history_util::DisplayFormat::kPng:
-    case clipboard_history_util::DisplayFormat::kHtml:
+    case ClipboardHistoryItem::DisplayFormat::kText:
+      return std::make_unique<ClipboardHistoryTextItemView>(
+          item_id, clipboard_history, container);
+    case ClipboardHistoryItem::DisplayFormat::kPng:
+    case ClipboardHistoryItem::DisplayFormat::kHtml:
       return std::make_unique<ClipboardHistoryBitmapItemView>(
-          &item, resource_manager, container);
-    case clipboard_history_util::DisplayFormat::kFile:
-      return std::make_unique<ClipboardHistoryFileItemView>(&item, container);
+          item_id, clipboard_history, resource_manager, container);
+    case ClipboardHistoryItem::DisplayFormat::kFile:
+      return std::make_unique<ClipboardHistoryFileItemView>(
+          item_id, clipboard_history, container);
   }
 }
 
 ClipboardHistoryItemView::~ClipboardHistoryItemView() = default;
 
 ClipboardHistoryItemView::ClipboardHistoryItemView(
-    const ClipboardHistoryItem* clipboard_history_item,
+    const base::UnguessableToken& item_id,
+    const ClipboardHistory* clipboard_history,
     views::MenuItemView* container)
-    : clipboard_history_item_(clipboard_history_item), container_(container) {}
+    : item_id_(item_id),
+      clipboard_history_(clipboard_history),
+      container_(container) {}
 
 bool ClipboardHistoryItemView::AdvancePseudoFocus(bool reverse) {
   if (pseudo_focus_ == PseudoFocus::kEmpty) {
@@ -245,23 +259,9 @@ void ClipboardHistoryItemView::OnMouseClickOnDescendantCanceled() {
   Activate(Action::kSelectItemHoveredByMouse, ui::EF_NONE);
 }
 
-void ClipboardHistoryItemView::MaybeRecordButtonPressedHistogram() const {
-  switch (action_) {
-    case Action::kDelete:
-      clipboard_history_util::RecordClipboardHistoryItemDeleted(
-          *clipboard_history_item_);
-      return;
-    case Action::kPaste:
-      clipboard_history_util::RecordClipboardHistoryItemPasted(
-          *clipboard_history_item_);
-      return;
-    case Action::kSelect:
-    case Action::kSelectItemHoveredByMouse:
-      return;
-    case Action::kEmpty:
-      NOTREACHED();
-      return;
-  }
+const ClipboardHistoryItem* ClipboardHistoryItemView::GetClipboardHistoryItem()
+    const {
+  return GetClipboardHistoryItemImpl(item_id_, clipboard_history_);
 }
 
 gfx::Size ClipboardHistoryItemView::CalculatePreferredSize() const {
@@ -288,7 +288,6 @@ void ClipboardHistoryItemView::Activate(Action action, int event_flags) {
   DCHECK_NE(action_, action);
 
   base::AutoReset<Action> action_to_take(&action_, action);
-  MaybeRecordButtonPressedHistogram();
 
   views::MenuDelegate* delegate = container_->GetDelegate();
   const int command_id = container_->GetCommand();
@@ -342,5 +341,11 @@ void ClipboardHistoryItemView::SetPseudoFocus(PseudoFocus new_pseudo_focus) {
   contents_view_->OnHostPseudoFocusUpdated();
   main_button_->OnHostPseudoFocusUpdated();
 }
+
+BEGIN_METADATA(ClipboardHistoryItemView, ContentsView, views::View)
+END_METADATA
+
+BEGIN_METADATA(ClipboardHistoryItemView, views::View)
+END_METADATA
 
 }  // namespace ash

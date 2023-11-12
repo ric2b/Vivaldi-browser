@@ -4,11 +4,12 @@
 
 #include "components/media_router/common/providers/cast/channel/libcast_socket_service.h"
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 #include "components/media_router/common/providers/cast/channel/cast_message_util.h"
 #include "components/media_router/common/providers/cast/channel/cast_socket.h"
 #include "components/media_router/common/providers/cast/channel/cast_transport.h"
@@ -136,6 +137,8 @@ class CastSocketWrapper final : public CastSocket {
 
   ChannelError error_state() const override { return error_state_; }
 
+  CastChannelFlags flags() const override { return flags_; }
+
   bool keep_alive() const override { return !!keep_alive_handler_; }
 
   bool audio_only() const override { return socket_->audio_only(); }
@@ -160,6 +163,7 @@ class CastSocketWrapper final : public CastSocket {
   Transport transport_;
   ReadyState ready_state_ = ReadyState::OPEN;
   ChannelError error_state_ = ChannelError::NONE;
+  CastChannelFlags flags_ = 0;
   std::unique_ptr<KeepAliveHandler> keep_alive_handler_;
 };
 

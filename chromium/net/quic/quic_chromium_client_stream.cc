@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -299,11 +299,10 @@ void QuicChromiumClientStream::Handle::
 }
 
 void QuicChromiumClientStream::Handle::SetPriority(
-    const spdy::SpdyStreamPrecedence& precedence) {
-  if (stream_)
-    stream_->SetPriority(quic::QuicStreamPriority{
-        precedence.spdy3_priority(),
-        quic::QuicStreamPriority::kDefaultIncremental});
+    const quic::QuicStreamPriority& priority) {
+  if (stream_) {
+    stream_->SetPriority(priority);
+  }
 }
 
 void QuicChromiumClientStream::Handle::Reset(
@@ -618,7 +617,7 @@ size_t QuicChromiumClientStream::WriteHeaders(
   net_log_.AddEvent(
       NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_SEND_REQUEST_HEADERS,
       [&](NetLogCaptureMode capture_mode) {
-        return QuicRequestNetLogParams(id(), &header_block, priority().urgency,
+        return QuicRequestNetLogParams(id(), &header_block, priority(),
                                        capture_mode);
       });
   size_t len = quic::QuicSpdyStream::WriteHeaders(std::move(header_block), fin,
@@ -629,9 +628,6 @@ size_t QuicChromiumClientStream::WriteHeaders(
 
 bool QuicChromiumClientStream::WriteStreamData(absl::string_view data,
                                                bool fin) {
-  // For gQUIC, this must not be called when data is buffered because headers
-  // are sent on the dedicated header stream.
-  DCHECK(!HasBufferedData() || VersionUsesHttp3(quic_version_));
   // Writes the data, or buffers it.
   WriteOrBufferBody(data, fin);
   return !HasBufferedData();  // Was all data written?
@@ -641,9 +637,6 @@ bool QuicChromiumClientStream::WritevStreamData(
     const std::vector<scoped_refptr<IOBuffer>>& buffers,
     const std::vector<int>& lengths,
     bool fin) {
-  // For gQUIC, this must not be called when data is buffered because headers
-  // are sent on the dedicated header stream.
-  DCHECK(!HasBufferedData() || VersionUsesHttp3(quic_version_));
   // Writes the data, or buffers it.
   for (size_t i = 0; i < buffers.size(); ++i) {
     bool is_fin = fin && (i == buffers.size() - 1);
@@ -831,12 +824,8 @@ void QuicChromiumClientStream::DisableConnectionMigrationToCellularNetwork() {
 }
 
 bool QuicChromiumClientStream::IsFirstStream() {
-  if (VersionUsesHttp3(quic_version_)) {
-    return id() == quic::QuicUtils::GetFirstBidirectionalStreamId(
-                       quic_version_, quic::Perspective::IS_CLIENT);
-  }
-  return id() == quic::QuicUtils::GetHeadersStreamId(quic_version_) +
-                     quic::QuicUtils::StreamIdDelta(quic_version_);
+  return id() == quic::QuicUtils::GetFirstBidirectionalStreamId(
+                     quic_version_, quic::Perspective::IS_CLIENT);
 }
 
 }  // namespace net

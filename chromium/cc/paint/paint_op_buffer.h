@@ -10,19 +10,14 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/bits.h"
 #include "base/check_op.h"
-#include "base/debug/alias.h"
+#include "base/functional/callback.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
-#include "base/memory/scoped_refptr.h"
-#include "base/notreached.h"
-#include "cc/base/math_util.h"
 #include "cc/paint/paint_export.h"
-#include "gpu/command_buffer/common/mailbox.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/skia/include/core/SkM44.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -32,11 +27,16 @@ class SkImage;
 class SkStrikeClient;
 class SkStrikeServer;
 
+namespace gpu {
+struct Mailbox;
+}
+
 namespace cc {
 
 class ClientPaintCache;
 class ImageProvider;
 class PaintOp;
+class PaintRecord;
 class ServicePaintCache;
 class SkottieSerializationHistory;
 class TransferCacheDeserializeHelper;
@@ -157,8 +157,11 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
 
   enum { kInitialBufferSize = 4096 };
   static constexpr size_t kPaintOpAlign = 8;
-  static inline size_t ComputeOpSkip(size_t sizeof_op) {
-    return MathUtil::UncheckedRoundUp(sizeof_op, kPaintOpAlign);
+  template <typename Op>
+  static constexpr uint16_t ComputeOpAlignedSize() {
+    constexpr size_t size = base::bits::AlignUp(sizeof(Op), kPaintOpAlign);
+    static_assert(size <= std::numeric_limits<uint16_t>::max());
+    return static_cast<uint16_t>(size);
   }
 
   PaintOpBuffer();
@@ -201,6 +204,8 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   // Returns the size of the paint op buffer. That is, the number of ops
   // contained in it.
   size_t size() const { return op_count_; }
+  bool empty() const { return !size(); }
+
   // Returns the number of bytes used by the paint op buffer.
   size_t bytes_used() const {
     return sizeof(*this) + reserved_ + subrecord_bytes_used_;
@@ -230,32 +235,29 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   // Resize the PaintOpBuffer to exactly fit the current amount of used space.
   void ShrinkToFit();
 
-  // Takes the contents of this. The result is shrunk to fit. If the
-  // shrinking-to-fit allocates a new data buffer, this PaintOpBuffer retains
-  // the original data buffer for future use.
-  sk_sp<PaintOpBuffer> MoveRetainingBufferIfPossible();
+  // Takes the contents of this as a PaintRecord. The result is shrunk to fit.
+  // If the shrinking-to-fit allocates a new data buffer, this PaintOpBuffer
+  // retains the original data buffer for future use.
+  PaintRecord ReleaseAsRecord();
 
-  bool operator==(const PaintOpBuffer& other) const;
-  bool operator!=(const PaintOpBuffer& other) const {
-    return !(*this == other);
-  }
+  bool EqualsForTesting(const PaintOpBuffer& other) const;
 
   const PaintOp& GetFirstOp() const {
+    DCHECK(!empty());
     return reinterpret_cast<const PaintOp&>(*data_);
   }
 
   template <typename T, typename... Args>
   const T& push(Args&&... args) {
+    DCHECK(is_mutable());
     static_assert(std::is_base_of<PaintOp, T>::value, "T not a PaintOp.");
     static_assert(alignof(T) <= kPaintOpAlign, "");
-    static_assert(sizeof(T) < std::numeric_limits<uint16_t>::max(),
-                  "Cannot fit op code in skip");
-    uint16_t skip = static_cast<uint16_t>(ComputeOpSkip(sizeof(T)));
-    T* op = reinterpret_cast<T*>(AllocatePaintOp(skip));
+    uint16_t aligned_size = ComputeOpAlignedSize<T>();
+    T* op = reinterpret_cast<T*>(AllocatePaintOp(aligned_size));
 
     new (op) T{std::forward<Args>(args)...};
-    DCHECK_EQ(op->type, static_cast<uint32_t>(T::kType));
-    op->skip = skip;
+    DCHECK_EQ(op->type, static_cast<uint8_t>(T::kType));
+    op->aligned_size = aligned_size;
     AnalyzeAddedOp(op);
     return *op;
   }
@@ -266,6 +268,8 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   void AnalyzeAddedOp(const T* op) {
     static_assert(!std::is_same<T, PaintOp>::value,
                   "AnalyzeAddedOp needs a subtype of PaintOp");
+    DCHECK(is_mutable());
+    DCHECK(op->IsValid());
 
     if (num_slow_paths_up_to_min_for_MSAA_ < kMinNumberOfSlowPathsForMSAA) {
       num_slow_paths_up_to_min_for_MSAA_ += op->CountSlowPathsFromFlags();
@@ -288,12 +292,6 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
         op->HasEffectsPreventingLCDTextForSaveLayerAlpha();
   }
 
-  template <typename T>
-  const T* GetOpAtForTesting(size_t index) const {
-    return static_cast<const T*>(GetOpAtForTesting(index, T::kType));
-  }
-  const PaintOp* GetOpAtForTesting(size_t index, PaintOpType type) const;
-
   size_t GetOpOffsetForTracing(const PaintOp& op) const {
     DCHECK_GE(reinterpret_cast<const char*>(&op), data_.get());
     size_t result =
@@ -301,6 +299,8 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
     DCHECK_LT(result, used_);
     return result;
   }
+
+  const char* DataBufferForTesting() const { return data_.get(); }
 
   class Iterator;
   class OffsetIterator;
@@ -320,6 +320,8 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   friend class SolidColorAnalyzer;
   using BufferDataPtr = std::unique_ptr<char, base::AlignedFreeDeleter>;
 
+  bool is_mutable() const { return unique(); }
+
   void DestroyOps();
 
   // Replays the paint op buffer into the canvas. If |indices| is specified, it
@@ -338,7 +340,7 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   BufferDataPtr ReallocIfNeededToFit();
 
   // Returns the allocated op.
-  void* AllocatePaintOp(size_t skip);
+  void* AllocatePaintOp(uint16_t aligned_size);
 
   void ResetRetainingBuffer();
 

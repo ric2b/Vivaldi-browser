@@ -3,19 +3,18 @@
 // found in the LICENSE file.
 
 #include "third_party/blink/renderer/modules/credentialmanagement/web_identity_requester.h"
+#include "base/metrics/histogram_macros.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/scoped_abort_state.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/credential_manager_type_converters.h"
 #include "third_party/blink/renderer/modules/credentialmanagement/identity_credential.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
-WebIdentityRequester::WebIdentityRequester(
-    ExecutionContext* context,
-    std::unique_ptr<ScopedAbortState> scoped_abort_state)
-    : execution_context_(context),
-      scoped_abort_state_(std::move(scoped_abort_state)) {}
+WebIdentityRequester::WebIdentityRequester(ExecutionContext* context)
+    : execution_context_(context) {}
 
 void WebIdentityRequester::OnRequestToken(
     mojom::blink::RequestTokenStatus status,
@@ -77,7 +76,8 @@ void WebIdentityRequester::RequestToken() {
 void WebIdentityRequester::AppendGetCall(
     ScriptPromiseResolver* resolver,
     const HeapVector<Member<IdentityProviderConfig>>& providers,
-    bool prefer_auto_sign_in) {
+    bool auto_reauthn,
+    mojom::blink::RpContext rp_context) {
   if (is_requesting_token_) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotAllowedError,
@@ -105,8 +105,8 @@ void WebIdentityRequester::AppendGetCall(
   }
 
   mojom::blink::IdentityProviderGetParametersPtr get_params =
-      mojom::blink::IdentityProviderGetParameters::New(std::move(idp_ptrs),
-                                                       prefer_auto_sign_in);
+      mojom::blink::IdentityProviderGetParameters::New(
+          std::move(idp_ptrs), auto_reauthn, rp_context);
   idp_get_params_.push_back(std::move(get_params));
 
   if (window_onload_event_listener_ || has_posted_task_)
@@ -120,11 +120,7 @@ void WebIdentityRequester::AppendGetCall(
     // All get calls up until the window onload event is fired are collated into
     // a single token request. Once the window onload event is fired, we post a
     // task with all collated IDPs to RequestToken.
-    window_onload_event_listener_ =
-        MakeGarbageCollected<WebIdentityWindowOnloadEventListener>(
-            document, WrapPersistent(this));
-    resolver->DomWindow()->addEventListener(event_type_names::kLoad,
-                                            window_onload_event_listener_);
+    InitWindowOnloadEventListener(resolver);
     return;
   }
 
@@ -135,6 +131,60 @@ void WebIdentityRequester::AppendGetCall(
       ->PostTask(FROM_HERE, WTF::BindOnce(&WebIdentityRequester::RequestToken,
                                           WrapPersistent(this)));
   has_posted_task_ = true;
+}
+
+void WebIdentityRequester::InsertScopedAbortState(
+    std::unique_ptr<ScopedAbortState> scoped_abort_state) {
+  scoped_abort_states_.insert(std::move(scoped_abort_state));
+}
+
+void WebIdentityRequester::InitWindowOnloadEventListener(
+    ScriptPromiseResolver* resolver) {
+  window_onload_event_listener_ =
+      MakeGarbageCollected<WebIdentityWindowOnloadEventListener>(
+          resolver->DomWindow()->document(), WrapPersistent(this));
+  resolver->DomWindow()->addEventListener(event_type_names::kLoad,
+                                          window_onload_event_listener_);
+}
+
+void WebIdentityRequester::StartDelayTimer(ScriptPromiseResolver* resolver) {
+  DCHECK(!RuntimeEnabledFeatures::FedCmMultipleIdentityProvidersEnabled(
+      execution_context_));
+
+  Document* document = resolver->DomWindow()->document();
+  delay_start_time_ = base::TimeTicks::Now();
+  bool timer_started_before_onload = !document->IsLoadCompleted();
+
+  // Before window.onload event, we add a listener to the window onload event.
+  // Once the window onload event is fired, we post a task to
+  // StopDelayTimer.
+  if (timer_started_before_onload) {
+    InitWindowOnloadEventListener(resolver);
+    return;
+  }
+
+  // During or after window.onload event, we post a task to StopDelayTimer.
+  document->GetTaskRunner(TaskType::kInternalDefault)
+      ->PostTask(FROM_HERE, WTF::BindOnce(&WebIdentityRequester::StopDelayTimer,
+                                          WrapPersistent(this),
+                                          timer_started_before_onload));
+}
+
+void WebIdentityRequester::StopDelayTimer(bool timer_started_before_onload) {
+  DCHECK(!RuntimeEnabledFeatures::FedCmMultipleIdentityProvidersEnabled(
+      execution_context_));
+
+  UMA_HISTOGRAM_BOOLEAN("Blink.FedCm.IsAfterWindowOnload",
+                        !timer_started_before_onload);
+
+  base::TimeDelta delay_duration = base::TimeTicks::Now() - delay_start_time_;
+  if (timer_started_before_onload) {
+    UMA_HISTOGRAM_MEDIUM_TIMES("Blink.FedCm.Timing.WindowOnloadDelayDuration",
+                               delay_duration);
+    return;
+  }
+  UMA_HISTOGRAM_MEDIUM_TIMES("Blink.FedCm.Timing.PostTaskDelayDuration",
+                             delay_duration);
 }
 
 void WebIdentityRequester::Trace(Visitor* visitor) const {

@@ -19,7 +19,7 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -27,6 +27,9 @@ using vivaldi::IsVivaldiRunning;
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+UIControlEvents TabGridPageChangeByTapEvent = 1 << 24;
+UIControlEvents TabGridPageChangeByDragEvent = 1 << 25;
 
 // Structure of this control:
 //
@@ -408,6 +411,11 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   [self updateRegularLabels];
 }
 
+- (void)setPinnedTabCount:(NSUInteger)pinnedTabCount {
+  _pinnedTabCount = pinnedTabCount;
+  [self updateRegularLabels];
+}
+
 #pragma mark - Public methods
 
 - (void)setSelectedPage:(TabGridPage)selectedPage animated:(BOOL)animated {
@@ -462,7 +470,9 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   [super touchesBegan:touches withEvent:event];
   DCHECK(!self.multipleTouchEnabled);
   DCHECK_EQ(1U, touches.count);
-  DCHECK(!self.draggingSlider);
+  if (self.draggingSlider) {
+    return;
+  }
   UITouch* touch = [touches anyObject];
   CGPoint locationInSlider = [touch locationInView:self.sliderView];
   if ([self.sliderView pointInside:locationInSlider withEvent:event]) {
@@ -494,7 +504,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   DCHECK_EQ(1U, touches.count);
   self.draggingSlider = NO;
   [self setSelectedPage:self.selectedPage animated:YES];
-  [self sendActionsForControlEvents:UIControlEventTouchUpInside];
+  [self sendActionsForControlEvents:TabGridPageChangeByDragEvent];
 }
 
 - (void)touchesCancelled:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
@@ -507,7 +517,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
   // sent and don't need to be sent again here.
   if (self.tapRecognizer.state != UIGestureRecognizerStateEnded) {
     [self setSelectedPage:self.selectedPage animated:YES];
-    [self sendActionsForControlEvents:UIControlEventTouchUpInside];
+    [self sendActionsForControlEvents:TabGridPageChangeByDragEvent];
   }
 }
 
@@ -1018,10 +1028,11 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 
 // Updates the labels displaying the regular tab count.
 - (void)updateRegularLabels {
+  NSUInteger totalTabsCount = self.regularTabCount + self.pinnedTabCount;
   self.regularLabel.attributedText =
-      TextForTabCount(self.regularTabCount, kLabelSize * kLabelSizeToFontSize);
+      TextForTabCount(totalTabsCount, kLabelSize * kLabelSizeToFontSize);
   self.regularSelectedLabel.attributedText = TextForTabCount(
-      self.regularTabCount, kSelectedLabelSize * kLabelSizeToFontSize);
+      totalTabsCount, kSelectedLabelSize * kLabelSizeToFontSize);
 }
 
 // Creates a label for use in this control.
@@ -1075,7 +1086,7 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 
   if (page != self.selectedPage) {
     [self setSelectedPage:page animated:YES];
-    [self sendActionsForControlEvents:UIControlEventTouchUpInside];
+    [self sendActionsForControlEvents:TabGridPageChangeByTapEvent];
   }
 }
 
@@ -1119,14 +1130,12 @@ UIImageView* ImageViewForSymbol(NSString* symbolName, bool selected) {
 
 - (UIPointerRegion*)pointerInteraction:(UIPointerInteraction*)interaction
                       regionForRequest:(UIPointerRegionRequest*)request
-                         defaultRegion:(UIPointerRegion*)defaultRegion
-    API_AVAILABLE(ios(13.4)) {
+                         defaultRegion:(UIPointerRegion*)defaultRegion {
   return defaultRegion;
 }
 
 - (UIPointerStyle*)pointerInteraction:(UIPointerInteraction*)interaction
-                       styleForRegion:(UIPointerRegion*)region
-    API_AVAILABLE(ios(13.4)) {
+                       styleForRegion:(UIPointerRegion*)region {
   UIPointerHighlightEffect* effect = [UIPointerHighlightEffect
       effectWithPreview:[[UITargetedPreview alloc]
                             initWithView:interaction.view]];

@@ -16,10 +16,11 @@
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/string_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -46,7 +47,12 @@ void ResetVirtualKeyboard() {
 }  // namespace
 
 VirtualKeyboardController::VirtualKeyboardController()
-    : ignore_external_keyboard_(false), ignore_internal_keyboard_(false) {
+    : ignore_external_keyboard_(false),
+      ignore_internal_keyboard_(false),
+      bluetooth_devices_observer_(
+          std::make_unique<BluetoothDevicesObserver>(base::BindRepeating(
+              &VirtualKeyboardController::OnBluetoothAdapterOrDeviceChanged,
+              base::Unretained(this)))) {
   Shell::Get()->tablet_mode_controller()->AddObserver(this);
   Shell::Get()->session_controller()->AddObserver(this);
   ui::DeviceDataManager::GetInstance()->AddObserver(this);
@@ -57,11 +63,6 @@ VirtualKeyboardController::VirtualKeyboardController()
       &VirtualKeyboardController::ForceShowKeyboardWithKeyset,
       base::Unretained(this), input_method::ImeKeyset::kEmoji));
   keyboard::KeyboardUIController::Get()->AddObserver(this);
-
-  bluetooth_devices_observer_ =
-      std::make_unique<BluetoothDevicesObserver>(base::BindRepeating(
-          &VirtualKeyboardController::OnBluetoothAdapterOrDeviceChanged,
-          base::Unretained(this)));
 }
 
 VirtualKeyboardController::~VirtualKeyboardController() {

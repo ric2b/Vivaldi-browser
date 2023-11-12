@@ -377,7 +377,7 @@ void SharesheetBubbleView::PopulateLayoutsWithTargets(
         base::BindRepeating(&SharesheetBubbleView::TargetButtonPressed,
                             base::Unretained(this), target),
         display_name, secondary_display_name, icon,
-        delegator_->GetVectorIcon(display_name)));
+        delegator_->GetVectorIcon(display_name), target.is_dlp_blocked));
   }
 }
 
@@ -482,7 +482,7 @@ void SharesheetBubbleView::SetUpDialog() {
   // We set the dialog role because views::BubbleDialogDelegate defaults this to
   // an alert dialog. This would make screen readers announce all of this dialog
   // which is undesirable.
-  SetAccessibleRole(ax::mojom::Role::kDialog);
+  SetAccessibleWindowRole(ax::mojom::Role::kDialog);
   SetAccessibleTitle(l10n_util::GetStringUTF16(IDS_SHARESHEET_TITLE_LABEL));
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));
 }

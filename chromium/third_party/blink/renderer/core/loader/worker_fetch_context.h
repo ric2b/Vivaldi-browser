@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
+#include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 
 namespace blink {
 
@@ -73,7 +74,6 @@ class WorkerFetchContext final : public BaseFetchContext {
                                                  const KURL&) const override;
   const KURL& Url() const override;
   ContentSecurityPolicy* GetContentSecurityPolicy() const override;
-  void AddConsoleMessage(ConsoleMessage*) const override;
 
   // FetchContext implementation:
   void PrepareRequest(ResourceRequest&,
@@ -81,7 +81,8 @@ class WorkerFetchContext final : public BaseFetchContext {
                       WebScopedVirtualTimePauser&,
                       ResourceType) override;
   void AddAdditionalRequestHeaders(ResourceRequest&) override;
-  void AddResourceTiming(const ResourceTimingInfo&) override;
+  void AddResourceTiming(mojom::blink::ResourceTimingInfoPtr,
+                         const AtomicString& initiator_type) override;
   void PopulateResourceRequest(ResourceType,
                                const FetchParameters::ResourceWidth&,
                                ResourceRequest&,

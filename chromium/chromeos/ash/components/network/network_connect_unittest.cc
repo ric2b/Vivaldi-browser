@@ -54,7 +54,9 @@ class MockDelegate : public NetworkConnect::Delegate {
   MOCK_METHOD1(ShowEnrollNetwork, bool(const std::string& network_id));
   MOCK_METHOD1(ShowMobileSetupDialog, void(const std::string& network_id));
   MOCK_METHOD1(ShowCarrierAccountDetail, void(const std::string& network_id));
-  MOCK_METHOD1(ShowPortalSignin, void(const std::string& network_id));
+  MOCK_METHOD2(ShowPortalSignin,
+               void(const std::string& network_id,
+                    NetworkConnect::Source source));
   MOCK_METHOD2(ShowNetworkConnectError,
                void(const std::string& error_name,
                     const std::string& network_id));
@@ -228,7 +230,7 @@ TEST_F(NetworkConnectTest, ConfigureAndConnectToNetwork_NoConfiguration) {
               ShowNetworkConnectError(NetworkConnectionHandler::kErrorNotFound,
                                       "bad guid"));
 
-  base::Value properties(base::Value::Type::DICTIONARY);
+  base::Value properties(base::Value::Type::DICT);
   NetworkConnect::Get()->ConfigureNetworkIdAndConnect("bad guid", properties,
                                                       true);
 }
@@ -239,7 +241,7 @@ TEST_F(NetworkConnectTest,
               ShowNetworkConnectError(
                   NetworkConnectionHandler::kErrorConfigureFailed, kWiFi1Guid));
 
-  base::Value properties(base::Value::Type::DICTIONARY);
+  base::Value properties(base::Value::Type::DICT);
   NetworkConnect::Get()->ConfigureNetworkIdAndConnect(kWiFi1Guid, properties,
                                                       false);
 }
@@ -328,13 +330,14 @@ TEST_F(NetworkConnectTest, ConnectToCellularNetwork_OutOfCredits) {
 }
 
 TEST_F(NetworkConnectTest, ShowPortalSignin) {
-  EXPECT_CALL(*mock_delegate_, ShowPortalSignin(kWiFi1Guid));
+  EXPECT_CALL(*mock_delegate_, ShowPortalSignin(kWiFi1Guid, _));
 
   service_test_->SetServiceProperty(kWiFi1ServicePath, shill::kStateProperty,
                                     base::Value(shill::kStateRedirectFound));
   base::RunLoop().RunUntilIdle();
 
-  NetworkConnect::Get()->ShowPortalSignin(kWiFi1Guid);
+  NetworkConnect::Get()->ShowPortalSignin(kWiFi1Guid,
+                                          NetworkConnect::Source::kSettings);
   base::RunLoop().RunUntilIdle();
 }
 

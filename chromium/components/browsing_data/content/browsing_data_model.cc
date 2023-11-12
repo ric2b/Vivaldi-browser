@@ -5,15 +5,15 @@
 #include "components/browsing_data/content/browsing_data_model.h"
 
 #include "base/barrier_closure.h"
-#include "base/callback.h"
 #include "base/containers/enum_set.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "components/services/storage/public/mojom/storage_usage_info.mojom.h"
 #include "components/services/storage/shared_storage/shared_storage_manager.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/network_context.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/features.h"
@@ -77,6 +77,14 @@ GetPrimaryHost::operator()<content::InterestGroupManager::InterestGroupDataKey>(
     const content::InterestGroupManager::InterestGroupDataKey& data_key) const {
   DCHECK_EQ(BrowsingDataModel::StorageType::kInterestGroup, storage_type_);
   return data_key.owner.host();
+}
+
+template <>
+std::string GetPrimaryHost::operator()<content::AttributionDataModel::DataKey>(
+    const content::AttributionDataModel::DataKey& data_key) const {
+  DCHECK_EQ(BrowsingDataModel::StorageType::kAttributionReporting,
+            storage_type_);
+  return data_key.reporting_origin().host();
 }
 
 // Helper which allows the lifetime management of a deletion action to occur
@@ -190,6 +198,19 @@ void StorageRemoverHelper::Visitor::operator()<
   }
 }
 
+template <>
+void StorageRemoverHelper::Visitor::operator()<
+    content::AttributionDataModel::DataKey>(
+    const content::AttributionDataModel::DataKey& data_key) {
+  if (types.Has(BrowsingDataModel::StorageType::kAttributionReporting)) {
+    helper->storage_partition_->GetAttributionDataModel()
+        ->RemoveAttributionDataByDataKey(data_key,
+                                         helper->GetCompleteCallback());
+  } else {
+    NOTREACHED();
+  }
+}
+
 base::OnceClosure StorageRemoverHelper::GetCompleteCallback() {
   callbacks_expected_++;
   return base::BindOnce(&StorageRemoverHelper::BackendFinished,
@@ -243,6 +264,18 @@ void OnInterestGroupsLoaded(
     model->AddBrowsingData(data_key,
                            BrowsingDataModel::StorageType::kInterestGroup,
                            kModerateAmountOfDataInBytes);
+  }
+  std::move(loaded_callback).Run();
+}
+
+void OnAttributionReportingLoaded(
+    BrowsingDataModel* model,
+    base::OnceClosure loaded_callback,
+    std::vector<content::AttributionDataModel::DataKey> attribution_reporting) {
+  for (const auto& data_key : attribution_reporting) {
+    model->AddBrowsingData(
+        data_key, BrowsingDataModel::StorageType::kAttributionReporting,
+        kSmallAmountOfDataInBytes);
   }
   std::move(loaded_callback).Run();
 }
@@ -322,12 +355,12 @@ BrowsingDataModel::Iterator BrowsingDataModel::end() const {
 BrowsingDataModel::~BrowsingDataModel() = default;
 
 void BrowsingDataModel::BuildFromDisk(
-    content::BrowserContext* browser_context,
+    content::StoragePartition* storage_partition,
     base::OnceCallback<void(std::unique_ptr<BrowsingDataModel>)>
         complete_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  auto model = BuildEmpty(browser_context);
+  auto model = BuildEmpty(storage_partition);
   auto* model_pointer = model.get();
 
   // This functor will own the unique_ptr for the model during construction,
@@ -344,9 +377,9 @@ void BrowsingDataModel::BuildFromDisk(
 }
 
 std::unique_ptr<BrowsingDataModel> BrowsingDataModel::BuildEmpty(
-    content::BrowserContext* browser_context) {
-  return base::WrapUnique(new BrowsingDataModel(
-      browser_context->GetDefaultStoragePartition()));  // Private constructor
+    content::StoragePartition* storage_partition) {
+  return base::WrapUnique(
+      new BrowsingDataModel(storage_partition));  // Private constructor
 }
 
 void BrowsingDataModel::AddBrowsingData(const DataKey& data_key,
@@ -393,13 +426,21 @@ void BrowsingDataModel::PopulateFromDisk(base::OnceClosure finished_callback) {
       base::FeatureList::IsEnabled(blink::features::kSharedStorageAPI);
   bool is_interest_group_enabled =
       base::FeatureList::IsEnabled(blink::features::kAdInterestGroupAPI);
+  bool is_attribution_reporting_enabled =
+      base::FeatureList::IsEnabled(blink::features::kConversionMeasurement);
+
   // TODO(crbug.com/1271155): Derive this from the StorageTypeSet directly.
   int storage_backend_count = 1;
-  if (is_shared_storage_enabled)
+  if (is_shared_storage_enabled) {
     storage_backend_count++;
-  if (is_interest_group_enabled)
+  }
+  if (is_interest_group_enabled) {
     storage_backend_count++;
+  }
 
+  if (is_attribution_reporting_enabled) {
+    storage_backend_count++;
+  }
   base::RepeatingClosure completion =
       base::BarrierClosure(storage_backend_count, std::move(finished_callback));
 
@@ -421,6 +462,12 @@ void BrowsingDataModel::PopulateFromDisk(base::OnceClosure finished_callback) {
   if (is_interest_group_enabled) {
     storage_partition_->GetInterestGroupManager()->GetAllInterestGroupDataKeys(
         base::BindOnce(&OnInterestGroupsLoaded, this, completion));
+  }
+
+  // Attribution Reporting
+  if (is_attribution_reporting_enabled) {
+    storage_partition_->GetAttributionDataModel()->GetAllDataKeys(
+        base::BindOnce(&OnAttributionReportingLoaded, this, completion));
   }
 }
 

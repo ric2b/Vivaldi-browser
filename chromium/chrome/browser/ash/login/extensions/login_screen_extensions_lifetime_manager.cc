@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ash/login/extensions/login_screen_extensions_lifetime_manager.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/check_is_test.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
@@ -160,7 +160,7 @@ LoginScreenExtensionsLifetimeManager::GetPolicyExtensionIds() const {
   const PrefService::Preference* const pref =
       prefs->FindPreference(extensions::pref_names::kInstallForceList);
   if (!pref || !pref->IsManaged() ||
-      pref->GetType() != base::Value::Type::DICTIONARY) {
+      pref->GetType() != base::Value::Type::DICT) {
     return {};
   }
   extensions::ExtensionIdList extension_ids;

@@ -45,4 +45,7 @@
     void setData(DOMString format, DOMString data);
     void clearData(optional DOMString format);
     [SameObject] readonly attribute FileList files;
+
+    // Vivaldi
+    void SetURLAndTitle(DOMString url, DOMString title);
 };

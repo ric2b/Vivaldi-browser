@@ -16,10 +16,12 @@ class OfferNotificationBubbleController;
 class SaveUpdateAddressProfileBubbleController;
 class EditAddressProfileDialogController;
 class SaveCardBubbleController;
+class IbanBubbleController;
 class SaveUPIBubble;
 class SaveUPIBubbleController;
 class VirtualCardManualFallbackBubbleController;
 class VirtualCardEnrollBubbleController;
+enum class IbanBubbleType;
 
 // TODO(crbug.com/1337392): consider removing this class and give the logic back
 // to each bubble's controller. This class serves also the avatar button /
@@ -45,6 +47,11 @@ class AutofillBubbleHandler {
       content::WebContents* web_contents,
       LocalCardMigrationBubbleController* controller,
       bool is_user_gesture) = 0;
+
+  virtual AutofillBubbleBase* ShowIbanBubble(content::WebContents* web_contents,
+                                             IbanBubbleController* controller,
+                                             bool is_user_gesture,
+                                             IbanBubbleType bubble_type) = 0;
 
   virtual AutofillBubbleBase* ShowOfferNotificationBubble(
       content::WebContents* web_contents,

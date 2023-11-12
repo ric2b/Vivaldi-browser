@@ -6,10 +6,10 @@
 
 #import <UIKit/UIKit.h>
 
-#import "base/bind.h"
-#import "base/callback_helpers.h"
 #import "base/files/file_path.h"
 #import "base/format_macros.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback_helpers.h"
 #import "base/location.h"
 #import "base/logging.h"
 #import "base/mac/foundation_util.h"
@@ -22,7 +22,6 @@
 #import "base/threading/scoped_blocking_call.h"
 #import "base/time/time.h"
 #import "ios/chrome/browser/sessions/scene_util.h"
-#import "ios/chrome/browser/sessions/session_features.h"
 #import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_ios_factory.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
@@ -33,15 +32,6 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-// When C++ exceptions are disabled, the C++ library defines `try` and
-// `catch` so as to allow exception-expecting C++ code to build properly when
-// language support for exceptions is not present.  These macros interfere
-// with the use of `@try` and `@catch` in Objective-C files such as this one.
-// Undefine these macros here, after everything has been #included, since
-// there will be no C++ uses and only Objective-C uses from this point on.
-#undef try
-#undef catch
 
 namespace {
 const NSTimeInterval kSaveDelay = 2.5;     // Value taken from Desktop Chrome.
@@ -235,14 +225,13 @@ NSString* const kRootObjectKey = @"root";  // Key for the root object.
         for (NSString* path : paths) {
           if (![fileManager fileExistsAtPath:path])
             continue;
-          [self deleteSessionPaths:path keepFiles:@[]];
+          [self deleteSessionPaths:path];
         }
       }),
       std::move(callback));
 }
 
-- (void)deleteSessionPaths:(NSString*)sessionPath
-                 keepFiles:(NSArray*)keepFiles {
+- (void)deleteSessionPaths:(NSString*)sessionPath {
   NSFileManager* fileManager = [NSFileManager defaultManager];
   NSString* directory = [sessionPath stringByDeletingLastPathComponent];
   NSString* sessionFilename = [sessionPath lastPathComponent];
@@ -260,8 +249,7 @@ NSString* const kRootObjectKey = @"root";  // Key for the root object.
                  << base::SysNSStringToUTF8([error description]);
   }
   for (NSString* filename : fileList) {
-    if (![filename hasPrefix:sessionFilename] ||
-        [keepFiles containsObject:filename]) {
+    if (![filename hasPrefix:sessionFilename]) {
       continue;
     }
     NSString* filepath = [directory stringByAppendingPathComponent:filename];
@@ -299,10 +287,6 @@ NSString* const kRootObjectKey = @"root";  // Key for the root object.
     NSData* sessionData = [NSKeyedArchiver archivedDataWithRootObject:session
                                                 requiringSecureCoding:NO
                                                                 error:&error];
-    NSDictionary* tabContentsById = nil;
-    if (sessions::ShouldSaveSessionTabsToSeparateFiles()) {
-      tabContentsById = [session sessionTabContents];
-    }
     UmaHistogramTimes("Session.WebStates.ArchivedDataWithRootObjectTime",
                       base::TimeTicks::Now() - start_time);
     if (!sessionData || error) {
@@ -321,7 +305,6 @@ NSString* const kRootObjectKey = @"root";  // Key for the root object.
 
     _taskRunner->PostTask(FROM_HERE, base::BindOnce(^{
                             [self performSaveSessionData:sessionData
-                                             tabContents:tabContentsById
                                              sessionPath:sessionPath];
                           }));
   } @catch (NSException* exception) {
@@ -337,14 +320,12 @@ NSString* const kRootObjectKey = @"root";  // Key for the root object.
 @implementation SessionServiceIOS (SubClassing)
 
 - (void)performSaveSessionData:(NSData*)sessionData
-                   tabContents:(NSDictionary*)tabContents
                    sessionPath:(NSString*)sessionPath {
   base::ScopedBlockingCall scoped_blocking_call(
             FROM_HERE, base::BlockingType::MAY_BLOCK);
 
   NSFileManager* fileManager = [NSFileManager defaultManager];
   NSString* directory = [sessionPath stringByDeletingLastPathComponent];
-  NSString* sessionFilename = [sessionPath lastPathComponent];
 
   NSError* error = nil;
   BOOL isDirectory = NO;
@@ -371,33 +352,6 @@ NSString* const kRootObjectKey = @"root";  // Key for the root object.
   NSDataWritingOptions options =
       NSDataWritingAtomic |
       NSDataWritingFileProtectionCompleteUntilFirstUserAuthentication;
-
-  NSMutableArray* filesToKeep =
-      [NSMutableArray arrayWithArray:@[ sessionFilename ]];
-  if (sessions::ShouldSaveSessionTabsToSeparateFiles()) {
-    for (NSString* sessionId : tabContents) {
-      [filesToKeep
-          addObject:[SessionServiceIOS filePathForTabID:sessionId
-                                            sessionPath:sessionFilename]];
-    }
-  }
-
-  [self deleteSessionPaths:sessionPath keepFiles:filesToKeep];
-  if (sessions::ShouldSaveSessionTabsToSeparateFiles()) {
-    for (NSString* existingTab : tabContents) {
-      NSData* data = tabContents[existingTab];
-      NSString* filepath = [SessionServiceIOS filePathForTabID:existingTab
-                                                   sessionPath:sessionPath];
-      if (data.length) {
-        if (![data writeToFile:filepath options:options error:&error]) {
-          NOTREACHED() << "Error writing session file: "
-                       << base::SysNSStringToUTF8(filepath) << ": "
-                       << base::SysNSStringToUTF8([error description]);
-          return;
-        }
-      }
-    }
-  }
 
   base::TimeTicks start_time = base::TimeTicks::Now();
   if (![sessionData writeToFile:sessionPath options:options error:&error]) {

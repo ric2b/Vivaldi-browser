@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.init;
 
 import android.app.Activity;
-import android.os.Build;
 import android.os.Process;
 import android.os.StrictMode;
 
@@ -199,15 +198,8 @@ public class ChromeBrowserInitializer {
      * Running in an AsyncTask as pre-loading itself may cause I/O.
      */
     private void warmUpSharedPrefs() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK, () -> {
-                DownloadManagerService.warmUpSharedPrefs();
-                BackgroundTaskSchedulerFactory.warmUpSharedPrefs();
-            });
-        } else {
-            DownloadManagerService.warmUpSharedPrefs();
-            BackgroundTaskSchedulerFactory.warmUpSharedPrefs();
-        }
+        PostTask.postTask(TaskTraits.BEST_EFFORT_MAY_BLOCK,
+                () -> { DownloadManagerService.warmUpSharedPrefs(); });
     }
 
     private void preInflationStartup() {

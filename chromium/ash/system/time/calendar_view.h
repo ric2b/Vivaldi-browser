@@ -46,6 +46,8 @@ class IconButton;
 // The header of the calendar view, which shows the current month and year.
 class CalendarHeaderView : public views::View {
  public:
+  METADATA_HEADER(CalendarHeaderView);
+
   CalendarHeaderView(const std::u16string& month, const std::u16string& year);
   CalendarHeaderView(const CalendarHeaderView& other) = delete;
   CalendarHeaderView& operator=(const CalendarHeaderView& other) = delete;
@@ -323,16 +325,31 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   // shown in `scroll_view_`'s visible window.
   int CalculateFirstFullyVisibleRow();
 
-  // Set the bounds of the EventListView to be flush with the bottom of the
-  // scroll view. Only the position will be animated, so give the view its final
-  // bounds.
-  void SetEventListViewBounds();
+  // Sets the bounds of the container of the `up_next_view_` and
+  // `event_list_view_` to be flush with the bottom of the scroll view. Only the
+  // position will be animated, so give the view its final bounds.
+  void SetCalendarSlidingSurfaceBounds(bool event_list_view_open);
 
-  // Conditionally displays the "Up next" view.
+  // Conditionally displays the `up_next_view_`.
   void MaybeShowUpNextView();
 
-  // Removes the "Up next" view.
+  // Removes the `up_next_view_`.
   void RemoveUpNextView();
+
+  // Animation callback.
+  void OnShowUpNextComplete();
+
+  // Used by the `CalendarUpNextView` to open the event list for today's date.
+  void OpenEventListForTodaysDate();
+
+  enum class ScrollViewState {
+    FULL_HEIGHT,
+    UP_NEXT_SHOWING,
+    EVENT_LIST_SHOWING
+  };
+  // Used for clipping the calendar scroll view height to the different states
+  // that the calendar view can be in.
+  void ClipScrollViewHeight(ScrollViewState state_to_change_to);
 
   // Setters for animation flags.
   void set_should_header_animate(bool should_animate) {
@@ -346,6 +363,7 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   UnifiedSystemTrayController* controller_;
 
   std::unique_ptr<CalendarViewController> calendar_view_controller_;
+
   // Reset `scrolling_settled_timer_`.
   void reset_scrolling_settled_timer() { scrolling_settled_timer_.Reset(); }
 
@@ -371,11 +389,14 @@ class ASH_EXPORT CalendarView : public CalendarModel::Observer,
   IconButton* managed_button_ = nullptr;
   IconButton* up_button_ = nullptr;
   IconButton* down_button_ = nullptr;
+  views::View* calendar_sliding_surface_ = nullptr;
   CalendarEventListView* event_list_view_ = nullptr;
   CalendarUpNextView* up_next_view_ = nullptr;
   std::map<base::Time, CalendarModel::FetchingStatus> on_screen_month_;
   CalendarModel* calendar_model_ =
       Shell::Get()->system_tray_model()->calendar_model();
+
+  std::unique_ptr<ui::LayerOwner> up_next_view_mask_;
 
   // If it `is_resetting_scroll_`, we don't calculate the scroll position and we
   // don't need to check if we need to update the month or not.

@@ -6,8 +6,9 @@
 
 #include "chrome/browser/chrome_content_browser_client.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -21,7 +22,10 @@
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
+#include "chrome/browser/signin/google_accounts_private_api_host.h"
+#include "chrome/browser/sync/sync_encryption_keys_tab_helper.h"
 #include "chrome/common/buildflags.h"
+#include "chrome/common/chrome_features.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/content_capture/browser/onscreen_content_provider.h"
 #include "components/metrics/call_stack_profile_collector.h"
@@ -33,6 +37,7 @@
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/spellcheck/spellcheck_buildflags.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
@@ -97,7 +102,6 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/badging/badge_manager.h"
-#include "chrome/browser/sync/sync_encryption_keys_tab_helper.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #endif
 
@@ -134,7 +138,7 @@ namespace {
 // thread.
 void MaybeCreateSafeBrowsingForRenderer(
     int process_id,
-    content::ResourceContext* resource_context,
+    base::WeakPtr<content::ResourceContext> resource_context,
     base::RepeatingCallback<scoped_refptr<safe_browsing::UrlCheckerDelegate>(
         bool safe_browsing_enabled,
         bool should_check_on_sb_disabled,
@@ -161,7 +165,7 @@ void MaybeCreateSafeBrowsingForRenderer(
       FROM_HERE,
       base::BindOnce(
           &safe_browsing::MojoSafeBrowsingImpl::MaybeCreate, process_id,
-          resource_context,
+          std::move(resource_context),
           base::BindRepeating(get_checker_delegate, safe_browsing_enabled,
                               // Navigation initiated from renderer should never
                               // check when safe browsing is disabled, because
@@ -296,7 +300,7 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
     registry->AddInterface<safe_browsing::mojom::SafeBrowsing>(
         base::BindRepeating(
             &MaybeCreateSafeBrowsingForRenderer, render_process_host->GetID(),
-            resource_context,
+            resource_context->GetWeakPtr(),
             base::BindRepeating(
                 &ChromeContentBrowserClient::GetSafeBrowsingUrlCheckerDelegate,
                 base::Unretained(this))),
@@ -511,7 +515,6 @@ void ChromeContentBrowserClient::
           },
           &render_frame_host));
 #endif  // BUILDFLAG(ENABLE_PLUGINS) || BUILDFLAG(IS_ANDROID)
-#if !BUILDFLAG(IS_ANDROID)
   associated_registry.AddInterface<chrome::mojom::SyncEncryptionKeysExtension>(
       base::BindRepeating(
           [](content::RenderFrameHost* render_frame_host,
@@ -521,7 +524,17 @@ void ChromeContentBrowserClient::
                 std::move(receiver), render_frame_host);
           },
           &render_frame_host));
-#endif  // !BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kWebAuthFlowInBrowserTab)) {
+    associated_registry.AddInterface<
+        chrome::mojom::GoogleAccountsPrivateApiExtension>(base::BindRepeating(
+        [](content::RenderFrameHost* render_frame_host,
+           mojo::PendingAssociatedReceiver<
+               chrome::mojom::GoogleAccountsPrivateApiExtension> receiver) {
+          GoogleAccountsPrivateApiHost::BindHost(std::move(receiver),
+                                                 render_frame_host);
+        },
+        &render_frame_host));
+  }
   associated_registry.AddInterface<
       content_capture::mojom::ContentCaptureReceiver>(base::BindRepeating(
       [](content::RenderFrameHost* render_frame_host,

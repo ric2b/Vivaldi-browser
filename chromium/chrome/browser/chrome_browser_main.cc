@@ -14,10 +14,8 @@
 #include <utility>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "base/at_exit.h"
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/debugger.h"
@@ -25,11 +23,13 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
@@ -224,18 +224,17 @@
 #include "components/crash/core/app/breakpad_linux.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
-#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/arc/metrics/stability_metrics_manager.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
 #include "chrome/browser/ash/settings/hardware_data_usage_controller.h"
 #include "chrome/browser/ash/settings/stats_reporting_controller.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
+#else
+#include "components/enterprise/browser/controller/chrome_browser_cloud_management_controller.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
@@ -434,8 +433,12 @@ StartupProfileInfo CreateInitialProfile(
 
   profile_info = GetStartupProfile(cur_dir, parsed_command_line);
 
-  if (profile_info.mode == StartupProfileMode::kError && !last_used_profile_set)
+  if (profile_info.mode == StartupProfileMode::kError &&
+      !last_used_profile_set) {
     profile_info = GetFallbackStartupProfile();
+    base::UmaHistogramEnumeration(
+        "ProfilePicker.StartupMode.FallbackProfileUsed", profile_info.mode);
+  }
 
   if (profile_info.mode == StartupProfileMode::kError) {
     ProfileErrorType error_type =
@@ -478,6 +481,9 @@ void ProcessSingletonNotificationCallbackImpl(
   StartupProfilePathInfo startup_profile_path_info =
       GetStartupProfilePath(current_directory, command_line,
                             /*ignore_profile_picker=*/false);
+  base::UmaHistogramEnumeration(
+      "ProfilePicker.StartupMode.NotificationCallback",
+      startup_profile_path_info.mode);
 
   DCHECK_NE(startup_profile_path_info.mode, StartupProfileMode::kError);
 
@@ -496,13 +502,11 @@ bool ShouldInstallSodaDuringPostProfileInit(
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return base::FeatureList::IsEnabled(
       ash::features::kOnDeviceSpeechRecognition);
-#else
-#if BUILDFLAG(ENABLE_COMPONENT_UPDATER)
+#elif !BUILDFLAG(IS_CHROMEOS_LACROS) && BUILDFLAG(ENABLE_COMPONENT_UPDATER)
   return !command_line.HasSwitch(switches::kDisableComponentUpdate);
 #else
   return false;
-#endif  // BUILDFLAG(ENABLE_COMPONENT_UPDATER)
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -646,10 +650,6 @@ void ChromeBrowserMainParts::StartMetricsRecording() {
 #endif
 
   g_browser_process->GetMetricsServicesManager()->UpdateUploadPermissions(true);
-
-#if BUILDFLAG(ENABLE_PROCESS_SINGLETON)
-  ChromeProcessSingleton::RegisterEarlySingletonFeature();
-#endif
 }
 
 void ChromeBrowserMainParts::RecordBrowserStartupTime() {
@@ -1555,6 +1555,8 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // and more directly Profile.CreateAndInitializeProfile.
   StartupProfileInfo profile_info = CreateInitialProfile(
       /*cur_dir=*/base::FilePath(), *base::CommandLine::ForCurrentProcess());
+  base::UmaHistogramEnumeration(
+      "ProfilePicker.StartupMode.CreateInitialProfile", profile_info.mode);
 
   if (profile_info.mode == StartupProfileMode::kError)
     return content::RESULT_CODE_NORMAL_EXIT;
@@ -1617,11 +1619,7 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // Execute first run specific code after the PrefService has been initialized
   // and preferences have been registered since some of the import code depends
   // on preferences.
-  if (first_run::IsChromeFirstRun()) {
-    if (vivaldi::IsVivaldiRunning()) {
-      first_run::SetShouldShowWelcomePage();
-    } else {
-      // clang-format off
+  if (!vivaldi::IsVivaldiRunning() && first_run::IsChromeFirstRun()) {
     // `profile` may be nullptr even on first run, for example when the
     // "BrowserSignin" policy is set to "Force". If so, skip the auto import.
     if (profile) {
@@ -1635,8 +1633,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     // a SIGTERM, and call chrome::AttemptExit(). Exit cleanly in that case.
     if (browser_shutdown::IsTryingToQuit())
       return content::RESULT_CODE_NORMAL_EXIT;
-      // clang-format on
-    }
   }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 

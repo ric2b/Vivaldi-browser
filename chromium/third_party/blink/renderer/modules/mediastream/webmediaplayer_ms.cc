@@ -11,8 +11,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -595,7 +595,8 @@ WebMediaPlayer::LoadTiming WebMediaPlayerMS::Load(
 
   client_->DidMediaMetadataChange(
       HasAudio(), HasVideo(), media::AudioCodec::kUnknown,
-      media::VideoCodec::kUnknown, media::MediaContentType::OneShot);
+      media::VideoCodec::kUnknown, media::MediaContentType::OneShot,
+      /* is_encrypted_media */ false);
   delegate_->DidMediaMetadataChange(delegate_id_, HasAudio(), HasVideo(),
                                     media::MediaContentType::OneShot);
 
@@ -623,8 +624,9 @@ void WebMediaPlayerMS::OnSurfaceIdUpdated(viz::SurfaceId surface_id) {
   // disabled.
   // The viz::SurfaceId may be updated when the video begins playback or when
   // the size of the video changes.
-  if (client_)
+  if (client_ && !client_->IsAudioElement()) {
     client_->OnPictureInPictureStateChange();
+  }
 }
 
 void WebMediaPlayerMS::TrackAdded(const WebString& track_id) {
@@ -737,7 +739,8 @@ void WebMediaPlayerMS::ReloadVideo() {
   // focus changes. See https://crbug.com/596516 for more details.
   client_->DidMediaMetadataChange(
       HasAudio(), HasVideo(), media::AudioCodec::kUnknown,
-      media::VideoCodec::kUnknown, media::MediaContentType::OneShot);
+      media::VideoCodec::kUnknown, media::MediaContentType::OneShot,
+      /* is_encrypted_media */ false);
   delegate_->DidMediaMetadataChange(delegate_id_, HasAudio(), HasVideo(),
                                     media::MediaContentType::OneShot);
 }
@@ -798,7 +801,8 @@ void WebMediaPlayerMS::ReloadAudio() {
   // focus changes. See https://crbug.com/596516 for more details.
   client_->DidMediaMetadataChange(
       HasAudio(), HasVideo(), media::AudioCodec::kUnknown,
-      media::VideoCodec::kUnknown, media::MediaContentType::OneShot);
+      media::VideoCodec::kUnknown, media::MediaContentType::OneShot,
+      /* is_encrypted_media */ false);
   delegate_->DidMediaMetadataChange(delegate_id_, HasAudio(), HasVideo(),
                                     media::MediaContentType::OneShot);
 }

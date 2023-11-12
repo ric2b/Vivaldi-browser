@@ -94,7 +94,6 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   ChromeAppListItem* FindFolderItem(const std::string& folder_id) override;
   bool FindItemIndexForTest(const std::string& id, size_t* index) override;
   bool SearchEngineIsGoogle() override;
-  void GetIdToAppListIndexMap(GetIdToAppListIndexMapCallback callback) override;
   size_t BadgedItemCount() override;
   void GetContextMenuModel(const std::string& id,
                            ash::AppListItemContext item_context,
@@ -188,10 +187,6 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   // Calculates the reorder params for reverting the temporary order.
   std::vector<app_list::reorder::ReorderParam>
   CalculateReorderParamsForRevertOrder() const;
-
-  // If folder with the provided ID has a single child, it reparents the child
-  // to the root app list.
-  void ClearFolderIfItHasSingleChild(const std::string& folder_id);
 
   // Updates the item positions in the ash side. `reorder_params` specifies
   // target positions.

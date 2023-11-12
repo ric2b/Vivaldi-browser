@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
@@ -212,7 +212,8 @@ int TransportConnectSubJob::DoEndpointLockComplete() {
   if (auto* factory = parent_job_->socket_performance_watcher_factory();
       factory != nullptr) {
     socket_performance_watcher = factory->CreateSocketPerformanceWatcher(
-        SocketPerformanceWatcherFactory::PROTOCOL_TCP, one_address);
+        SocketPerformanceWatcherFactory::PROTOCOL_TCP,
+        CurrentAddress().address());
   }
 
   const NetLogWithSource& net_log = parent_job_->net_log();

@@ -9,8 +9,8 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -29,7 +29,6 @@
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/keep_alive/scoped_profile_keep_alive.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -92,7 +91,6 @@
 #include "ui/content/vivaldi_tab_check.h"
 #include "ui/devtools/devtools_connector.h"
 
-using base::DictionaryValue;
 using blink::WebInputEvent;
 using content::BrowserThread;
 using content::DevToolsAgentHost;
@@ -332,7 +330,7 @@ bool DevToolsEventForwarder::ForwardEvent(
   if (whitelisted_keys_.find(key) == whitelisted_keys_.end())
     return false;
 
-  base::Value event_data(base::Value::Type::DICTIONARY);
+  base::Value event_data(base::Value::Type::DICT);
   event_data.SetStringKey("type", event_type);
   event_data.SetStringKey("key", ui::KeycodeConverter::DomKeyToKeyString(
                                      static_cast<ui::DomKey>(event.dom_key)));
@@ -482,6 +480,12 @@ DevToolsWindow::~DevToolsWindow() {
   // access it.
   if (reattach_complete_callback_) {
     std::move(reattach_complete_callback_).Run();
+  }
+
+  // If window gets destroyed during a test run, need to stop the test.
+  if (!ready_for_test_callback_.is_null()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(ready_for_test_callback_));
   }
 }
 
@@ -1721,13 +1725,13 @@ void DevToolsWindow::SetEyeDropperActive(bool active) {
 }
 
 void DevToolsWindow::ColorPickedInEyeDropper(int r, int g, int b, int a) {
-  base::DictionaryValue color;
-  color.SetIntKey("r", r);
-  color.SetIntKey("g", g);
-  color.SetIntKey("b", b);
-  color.SetIntKey("a", a);
+  base::Value::Dict color;
+  color.Set("r", r);
+  color.Set("g", g);
+  color.Set("b", b);
+  color.Set("a", a);
   bindings_->CallClientMethod("DevToolsAPI", "eyeDropperPickedColor",
-                              std::move(color));
+                              base::Value(std::move(color)));
 }
 
 void DevToolsWindow::InspectedContentsClosing() {

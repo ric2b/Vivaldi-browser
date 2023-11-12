@@ -9,9 +9,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/login/version_updater/update_time_estimator.h"
@@ -165,7 +164,9 @@ void VersionUpdater::RequestUpdateCheck() {
 
   if (NetworkHandler::IsInitialized())
     NetworkHandler::Get()->network_state_handler()->RemoveObserver(this);
-  UpdateEngineClient::Get()->AddObserver(this);
+  if (!UpdateEngineClient::Get()->HasObserver(this)) {
+    UpdateEngineClient::Get()->AddObserver(this);
+  }
   VLOG(1) << "Initiate update check";
   UpdateEngineClient::Get()->RequestUpdateCheck(base::BindOnce(
       &VersionUpdater::OnUpdateCheckStarted, weak_ptr_factory_.GetWeakPtr()));

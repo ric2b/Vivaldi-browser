@@ -7,10 +7,10 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/sequenced_task_runner.h"
@@ -140,7 +140,7 @@ void RegisterItem(OperationResult* result,
   absl::optional<base::Value> registered_items =
       read.settings().Extract(kStoreKeyRegisteredItems);
   if (!registered_items)
-    registered_items = base::Value(base::Value::Type::DICTIONARY);
+    registered_items = base::Value(base::Value::Type::DICT);
 
   if (!registered_items->is_dict()) {
     *result = OperationResult::kFailed;

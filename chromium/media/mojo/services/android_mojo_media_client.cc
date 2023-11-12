@@ -8,7 +8,8 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
+#include "base/task/single_thread_task_runner.h"
 #include "media/base/android/android_cdm_factory.h"
 #include "media/base/audio_decoder.h"
 #include "media/base/cdm_factory.h"
@@ -29,7 +30,7 @@ AndroidMojoMediaClient::~AndroidMojoMediaClient() {}
 // MojoMediaClient overrides.
 
 std::unique_ptr<AudioDecoder> AndroidMojoMediaClient::CreateAudioDecoder(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
   return std::make_unique<MediaCodecAudioDecoder>(task_runner);
 }
 

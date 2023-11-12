@@ -32,9 +32,9 @@ class WebUsageEnablerBrowserAgent;
 // save sessions when the active webState changes, and when each web state
 // completes a navigation.
 class SessionRestorationBrowserAgent
-    : BrowserObserver,
+    : public BrowserObserver,
       public BrowserUserData<SessionRestorationBrowserAgent>,
-      WebStateListObserver,
+      public WebStateListObserver,
       public web::WebStateObserver {
  public:
   ~SessionRestorationBrowserAgent() override;
@@ -47,6 +47,9 @@ class SessionRestorationBrowserAgent
   // Set a session identification string that will be used to locate which
   // session to restore. Must be set before restoring/saving the session.
   void SetSessionID(NSString* session_identifier);
+
+  // Returns the session identifier for the associated browser.
+  NSString* GetSessionID() const;
 
   // Adds/Removes Observer to session restoration events.
   void AddObserver(SessionRestorationObserver* observer);

@@ -12,11 +12,11 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/no_destructor.h"
@@ -135,7 +135,7 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/latency/latency_info.h"
-#include "ui/resources/grit/webui_generated_resources.h"
+#include "ui/resources/grit/webui_resources.h"
 
 #if BUILDFLAG(IS_WIN)
 #include <combaseapi.h>
@@ -3188,15 +3188,20 @@ TestNavigationManager::~TestNavigationManager() {
   ResumeIfPaused();
 }
 
-void TestNavigationManager::WaitForFirstYieldAfterDidStartNavigation() {
+bool TestNavigationManager::WaitForFirstYieldAfterDidStartNavigation() {
   TRACE_EVENT(
       "test",
       "TestNavigationManager::WaitForFirstYieldAfterDidStartNavigation");
   if (current_state_ >= NavigationState::WILL_START)
-    return;
+    return true;
 
   DCHECK_EQ(desired_state_, NavigationState::WILL_START);
-  WaitForDesiredState();
+  // Ignore the result because DidStartNavigation will update |desired_state_|
+  // we check below.
+  (void)WaitForDesiredState();
+  // This returns false if the runloop was terminated by a timeout rather than
+  // reaching the |WILL_START|.
+  return current_state_ >= NavigationState::WILL_START;
 }
 
 bool TestNavigationManager::WaitForRequestStart() {
@@ -3224,10 +3229,10 @@ bool TestNavigationManager::WaitForResponse() {
   return WaitForDesiredState();
 }
 
-void TestNavigationManager::WaitForNavigationFinished() {
+bool TestNavigationManager::WaitForNavigationFinished() {
   TRACE_EVENT("test", "TestNavigationManager::WaitForNavigationFinished");
   desired_state_ = NavigationState::FINISHED;
-  WaitForDesiredState();
+  return WaitForDesiredState();
 }
 
 void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
@@ -3515,6 +3520,12 @@ NavigationHandle* TestActivationManager::GetNavigationHandle() {
   return request_;
 }
 
+void TestActivationManager::SetCallbackCalledAfterActivationIsReady(
+    base::OnceClosure callback) {
+  DCHECK(!callback_in_last_condition);
+  callback_in_last_condition = std::move(callback);
+}
+
 CommitDeferringCondition::Result TestActivationManager::FirstConditionCallback(
     CommitDeferringCondition& condition,
     base::OnceClosure resume_callback) {
@@ -3549,6 +3560,10 @@ CommitDeferringCondition::Result TestActivationManager::FirstConditionCallback(
 CommitDeferringCondition::Result TestActivationManager::LastConditionCallback(
     CommitDeferringCondition& condition,
     base::OnceClosure resume_callback) {
+  if (callback_in_last_condition) {
+    std::move(callback_in_last_condition).Run();
+  }
+
   if (request_ != &condition.GetNavigationHandle())
     return CommitDeferringCondition::Result::kProceed;
 
@@ -3800,7 +3815,8 @@ void VerifyStaleContentOnFrameEviction(
   EvictionStateWaiter waiter{delegated_frame_host};
   render_widget_host_view_aura->WasOccluded();
   static_cast<viz::FrameEvictorClient*>(delegated_frame_host)
-      ->EvictDelegatedFrame();
+      ->EvictDelegatedFrame(delegated_frame_host->GetFrameEvictorForTesting()
+                                ->CollectSurfaceIdsForEviction());
   EXPECT_EQ(delegated_frame_host->frame_eviction_state(),
             DelegatedFrameHost::FrameEvictionState::kPendingEvictionRequests);
   // Wait until the stale frame content is copied and set onto the layer, i.e.
@@ -3995,7 +4011,7 @@ int LoadBasicRequest(RenderFrameHost* frame, const GURL& url) {
 }
 
 void EnsureCookiesFlushed(BrowserContext* browser_context) {
-  browser_context->ForEachStoragePartition(
+  browser_context->ForEachLoadedStoragePartition(
       base::BindRepeating([](StoragePartition* partition) {
         base::RunLoop run_loop;
         partition->GetCookieManagerForBrowserProcess()->FlushCookieStore(

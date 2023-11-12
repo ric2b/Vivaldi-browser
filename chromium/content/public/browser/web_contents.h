@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
-#include "base/callback_helpers.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/functional/function_ref.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
@@ -35,7 +35,6 @@
 #include "content/public/browser/save_page_type.h"
 #include "content/public/browser/visibility.h"
 #include "content/public/common/stop_find_action.h"
-#include "services/data_decoder/public/mojom/web_bundler.mojom.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-forward.h"
@@ -43,6 +42,7 @@
 #include "third_party/blink/public/mojom/frame/remote_frame.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/pointer_lock_result.mojom.h"
 #include "third_party/blink/public/mojom/media/capture_handle_config.mojom-forward.h"
+#include "third_party/blink/public/mojom/picture_in_picture_window_options/picture_in_picture_window_options.mojom.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_mode.h"
@@ -262,23 +262,36 @@ class WebContents : public PageNavigator,
     // invariant violations to a particular flavor of WebContents).
     base::Location creator_location;
 
+#if BUILDFLAG(IS_ANDROID)
+    // Same as `creator_location`, for WebContents created via Java. This
+    // java.lang.Throwable contains the entire
+    // WebContentsCreator.createWebContents() stack trace.
+    base::android::ScopedJavaGlobalRef<jthrowable> java_creator_location;
+#endif  // BUILDFLAG(IS_ANDROID)
+
     // Enables contents to hold wake locks, for example, to keep the screen on
     // while playing video.
     bool enable_wake_locks = true;
 
     // Options specific to WebContents created for picture-in-picture windows.
-    float initial_picture_in_picture_aspect_ratio = 0;
-    bool lock_picture_in_picture_aspect_ratio = false;
+    absl::optional<blink::mojom::PictureInPictureWindowOptions>
+        picture_in_picture_options;
   };
 
   // Creates a new WebContents.
   //
   // The caller is responsible for ensuring that the returned WebContents is
   // destroyed (e.g. closed) *before* the BrowserContext associated with
-  // `params` is destroyed.  It is a bug if WebContents haven't been destroyed
-  // when the destructor of BrowserContext starts running.  It is not
+  // `params` is destroyed.  It is a security bug if WebContents haven't been
+  // destroyed when the destructor of BrowserContext starts running.  It is not
   // necessarily a bug if WebContents haven't been destroyed when
   // BrowserContext::NotifyWillBeDestroyed starts running.
+  //
+  // Best practices for managing the lifetime of `WebContents` and
+  // `BrowserContext` will vary across different //content embedders.  For
+  // example, for information specific to the //chrome layer, please see the
+  // "Managing lifetime of a Profile" section in
+  // //chrome/browser/profiles/README.md.
   CONTENT_EXPORT static std::unique_ptr<WebContents> Create(
       const CreateParams& params);
 
@@ -1018,13 +1031,6 @@ class WebContents : public PageNavigator,
       const MHTMLGenerationParams& params,
       MHTMLGenerationResult::GenerateMHTMLCallback callback) = 0;
 
-  // Generates a Web Bundle representation of the current page.
-  virtual void GenerateWebBundle(
-      const base::FilePath& file_path,
-      base::OnceCallback<void(uint64_t /* file_size */,
-                              data_decoder::mojom::WebBundlerError)>
-          callback) = 0;
-
   // Returns the contents MIME type after a navigation.
   virtual const std::string& GetContentsMimeType() = 0;
 
@@ -1284,6 +1290,10 @@ class WebContents : public PageNavigator,
       const base::android::JavaRef<jobject>& jweb_contents_android);
   virtual base::android::ScopedJavaLocalRef<jobject> GetJavaWebContents() = 0;
 
+  // Returns the value from CreateParams::java_creator_location.
+  virtual base::android::ScopedJavaLocalRef<jthrowable>
+  GetJavaCreatorLocation() = 0;
+
   // Selects and zooms to the find result nearest to the point (x,y) defined in
   // find-in-page coordinates.
   virtual void ActivateNearestFindResult(float x, float y) = 0;
@@ -1349,11 +1359,9 @@ class WebContents : public PageNavigator,
   // Returns the value from CreateParams::creator_location.
   virtual const base::Location& GetCreatorLocation() = 0;
 
-  // Returns the initial_aspect_ratio value from CreateParams.
-  virtual float GetPictureInPictureInitialAspectRatio() = 0;
-
-  // Returns the lock_aspect_ratio value from CreateParams.
-  virtual bool GetPictureInPictureLockAspectRatio() = 0;
+  // Returns the parameters associated with PictureInPicture WebContents
+  virtual const absl::optional<blink::mojom::PictureInPictureWindowOptions>&
+  GetPictureInPictureOptions() const = 0;
 
   // Hide or show the browser controls for the given WebContents, based on
   // allowed states, desired state and whether the transition should be animated
@@ -1391,14 +1399,6 @@ class WebContents : public PageNavigator,
       PreloadingAttempt* preloading_attempt,
       absl::optional<base::RepeatingCallback<bool(const GURL&)>>
           url_match_predicate = absl::nullopt) = 0;
-
-  // Disables Prerender2 for this WebContents.
-  // See
-  // https://docs.google.com/document/d/1P2VKCLpmnNm_cRAjUeE-bqLL0bslL_zKqiNeCzNom_w/
-  virtual void DisablePrerender2() = 0;
-  // Set Prerender2 disabled = false, but this does not imply Prerender2 is
-  // enabled.
-  virtual void ResetPrerender2Disabled() = 0;
 
  private:
   // This interface should only be implemented inside content.

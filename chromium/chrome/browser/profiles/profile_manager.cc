@@ -14,15 +14,15 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/values_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -43,7 +43,6 @@
 #include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_lifetime_manager_factory.h"
 #include "chrome/browser/buildflags.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
@@ -86,10 +85,10 @@
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "components/sync/base/stop_source.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
@@ -112,13 +111,13 @@
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/accessibility/live_caption_controller_factory.h"
+#include "chrome/browser/accessibility/live_caption/live_caption_controller_factory.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "chrome/browser/ui/browser.h"
@@ -128,15 +127,17 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/components/arc/arc_features.h"
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/components/arc/session/arc_management_transition.h"
 #include "ash/constants/ash_switches.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/system/sys_info.h"
 #include "chrome/browser/ash/account_manager/account_manager_policy_controller_factory.h"
 #include "chrome/browser/ash/account_manager/child_account_type_changed_user_data.h"
 #include "chrome/browser/ash/arc/policy/arc_policy_util.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process_platform_part_ash.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -159,9 +160,17 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
-#include "chrome/browser/ash/extensions/desk_api/desk_api_extension_manager.h"
 #include "chrome/browser/chromeos/extensions/contact_center_insights/contact_center_insights_extension_manager.h"
-#endif
+#include "chrome/browser/chromeos/extensions/desk_api/desk_api_extension_manager.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+#include "chrome/browser/signin/bound_session_credentials/bound_session_cookie_refresh_service_factory.h"
+#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+
+#include "app/vivaldi_apptools.h"
+#include "browser/sessions/vivaldi_session_utils.h"
+#include "sessions/index_service_factory.h"
 
 using content::BrowserThread;
 
@@ -324,7 +333,7 @@ void UpdateSupervisedUserPref(Profile* profile, bool is_child) {
   DCHECK(profile);
   if (is_child) {
     profile->GetPrefs()->SetString(prefs::kSupervisedUserId,
-                                   supervised_users::kChildAccountSUID);
+                                   supervised_user::kChildAccountSUID);
   } else {
     profile->GetPrefs()->ClearPref(prefs::kSupervisedUserId);
   }
@@ -428,6 +437,12 @@ void ProfileManager::ShutdownSessionServices() {
   for (auto* profile : pm->GetLoadedProfiles()) {
     // Don't construct SessionServices for every type just to
     // shut them down. If they were never created, just skip.
+    if (vivaldi::IsVivaldiRunning()) {
+      if (sessions::IndexServiceFactory::GetForBrowserContextIfExists(
+            profile)) {
+        sessions::AutoSave(profile);
+      }
+    }
     if (SessionServiceFactory::GetForProfileIfExisting(profile))
       SessionServiceFactory::ShutdownForProfile(profile);
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -456,10 +471,12 @@ Profile* ProfileManager::GetLastUsedProfile() {
   // since it may refer to profile that has been in use in previous session.
   // That profile dir may not be mounted in this session so instead return
   // active profile from current session.
-  base::FilePath profile_dir =
-      ash::ProfileHelper::Get()->GetActiveUserProfileDir();
+  user_manager::UserManager* manager = user_manager::UserManager::Get();
+  // IsLoggedIn check above ensures |user| is non-null.
+  const auto* user = manager->GetActiveUser();
   Profile* profile = profile_manager->GetProfileByPath(
-      profile_manager->user_data_dir().Append(profile_dir));
+      ash::BrowserContextHelper::Get()->GetBrowserContextPathByUserIdHash(
+          user->username_hash()));
 #else
   // TODO(crbug.com/1363933): Once Lacros is launched pre-login, we should
   // probably do something analogous to the !IsLoggedIn() check above.
@@ -567,6 +584,18 @@ Profile* ProfileManager::GetPrimaryUserProfile() {
                   "It probably means that something is wrong with a calling "
                   "code. Please report in http://crbug.com/361528 if you see "
                   "this message.";
+
+    // Taking metrics to make sure this code path is not used in production.
+    // TODO(crbug.com/1325210): Remove the following code, once we made sure
+    // they are not used in the production.
+    if (base::SysInfo::IsRunningOnChromeOS()) {
+      base::UmaHistogramBoolean(
+          "Ash.BrowserContext.UnexpectedGetPrimaryUserProfile", true);
+      // Also taking the stack trace, so we can identify who's the caller on
+      // unexpected cases.
+      base::debug::DumpWithoutCrashing();
+    }
+
     Profile* profile = ProfileManager::GetActiveUserProfile();
     if (profile && manager->IsLoggedInAsGuest())
       profile = profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
@@ -739,8 +768,14 @@ bool ProfileManager::IsValidProfile(const void* profile) {
 
 base::FilePath ProfileManager::GetInitialProfileDir() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (IsLoggedIn())
-    return ash::ProfileHelper::Get()->GetActiveUserProfileDir();
+  if (IsLoggedIn()) {
+    user_manager::UserManager* manager = user_manager::UserManager::Get();
+    // IsLoggedIn check above ensures |user| is non-null.
+    const auto* user = manager->GetActiveUser();
+    return base::FilePath(
+        ash::BrowserContextHelper::GetUserBrowserContextDirName(
+            user->username_hash()));
+  }
 #endif
   base::FilePath relative_profile_dir;
   // TODO(mirandac): should not automatically be default profile.
@@ -1350,16 +1385,6 @@ void ProfileManager::DoFinalInit(ProfileInfo* profile_info,
   for (auto& observer : observers_)
     observer.OnProfileAdded(profile);
 
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_PROFILE_ADDED, content::Source<Profile>(profile),
-      content::NotificationService::NoDetails());
-
-  // At this point, the user policy service and the child account service
-  // had enough time to initialize and should have updated the user signout
-  // flag attached to the profile.
-  signin_util::UserSignoutSetting::GetForProfile(profile)
-      ->InitializeUserSignoutSettingIfNeeded();
-
   if (PrimaryAccountPolicyManager* primary_account_policy_manager =
           PrimaryAccountPolicyManagerFactory::GetForProfile(profile)) {
     primary_account_policy_manager->Initialize();
@@ -1447,6 +1472,10 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
 
   IdentityManagerFactory::GetForProfile(profile)->OnNetworkInitialized();
   AccountReconcilorFactory::GetForProfile(profile);
+
+#if BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
+  BoundSessionCookieRefreshServiceFactory::GetForProfile(profile);
+#endif  // BUILDFLAG(ENABLE_BOUND_SESSION_CREDENTIALS)
 
   // Initialization needs to happen after the browser context is available
   // because SyncService needs the URL context getter.
@@ -1874,10 +1903,11 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
           !entry->CanBeManaged()) {
         content::GetUIThreadTaskRunner({})->PostTask(
             FROM_HERE,
-            base::BindOnce(
-                &ClearPrimaryAccountForProfile, profile->GetWeakPtr(),
-                signin_metrics::AUTHENTICATION_FAILED_WITH_FORCE_SIGNIN,
-                signin_metrics::SignoutDelete::kIgnoreMetric));
+            base::BindOnce(&ClearPrimaryAccountForProfile,
+                           profile->GetWeakPtr(),
+                           signin_metrics::ProfileSignout::
+                               kAuthenticationFailedWithForceSignin,
+                           signin_metrics::SignoutDelete::kIgnoreMetric));
       }
 #endif
       return;

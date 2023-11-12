@@ -6,10 +6,10 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -34,7 +34,6 @@
 #include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/offline_login_screen_handler.h"
-#include "chrome/browser/ui/webui/ash/login/signin_screen_handler.h"
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/ash/components/network/network_connection_handler.h"
 #include "chromeos/ash/components/network/network_handler.h"
@@ -100,13 +99,15 @@ ErrorScreen::~ErrorScreen() {
 }
 
 void ErrorScreen::AllowGuestSignin(bool allowed) {
-  if (view_)
+  if (view_) {
     view_->SetGuestSigninAllowed(allowed);
+  }
 }
 
 void ErrorScreen::ShowOfflineLoginOption(bool show) {
-  if (view_)
+  if (view_) {
     view_->SetOfflineSigninAllowed(show);
+  }
 }
 
 void ErrorScreen::OnOfflineLoginClicked() {
@@ -145,15 +146,17 @@ OobeScreenId ErrorScreen::GetParentScreen() const {
 }
 
 void ErrorScreen::HideCaptivePortal() {
-  if (captive_portal_window_proxy_.get())
+  if (captive_portal_window_proxy_.get()) {
     captive_portal_window_proxy_->Close();
+  }
 }
 
 void ErrorScreen::SetUIState(NetworkError::UIState ui_state) {
   LOG(WARNING) << __func__ << " to " << ui_state;
   ui_state_ = ui_state;
-  if (view_)
+  if (view_) {
     view_->SetUIState(ui_state);
+  }
 }
 
 void ErrorScreen::SetErrorState(NetworkError::ErrorState error_state,
@@ -183,13 +186,15 @@ void ErrorScreen::ShowCaptivePortal() {
 }
 
 void ErrorScreen::ShowConnectingIndicator(bool show) {
-  if (view_)
+  if (view_) {
     view_->SetShowConnectingIndicator(show);
+  }
 }
 
 void ErrorScreen::SetIsPersistentError(bool is_persistent) {
-  if (view_)
+  if (view_) {
     view_->SetIsPersistentError(is_persistent);
+  }
 }
 
 base::CallbackListSubscription ErrorScreen::RegisterConnectRequestCallback(
@@ -218,8 +223,9 @@ void ErrorScreen::ShowNetworkErrorMessage(NetworkStateInformer::State state,
   const bool is_loading_timeout =
       (reason == NetworkError::ERROR_REASON_LOADING_TIMEOUT);
 
-  if (!is_behind_captive_portal)
+  if (!is_behind_captive_portal) {
     HideCaptivePortal();
+  }
 
   if (is_proxy_error) {
     SetErrorState(NetworkError::ERROR_STATE_PROXY, std::string());
@@ -253,8 +259,9 @@ void ErrorScreen::ShowImpl() {
     SetHideCallback(base::BindOnce(&ErrorScreen::DefaultHideCallback,
                                    weak_factory_.GetWeakPtr()));
   }
-  if (!view_)
+  if (!view_) {
     return;
+  }
 
   view_->Show();
   LOG(WARNING) << "Network error screen message is shown";
@@ -263,8 +270,9 @@ void ErrorScreen::ShowImpl() {
 }
 
 void ErrorScreen::HideImpl() {
-  if (!view_ || is_hidden())
+  if (!view_ || is_hidden()) {
     return;
+  }
 
   LOG(WARNING) << "Network error screen message is hidden";
   if (on_hide_callback_) {
@@ -331,7 +339,13 @@ void ErrorScreen::OnOffTheRecordAuthSuccess() {
   RestartChrome(command_line, RestartChromeReason::kGuest);
 }
 
-void ErrorScreen::OnPasswordChangeDetected(const UserContext& user_context) {
+void ErrorScreen::OnPasswordChangeDetectedLegacy(
+    const UserContext& user_context) {
+  LOG(FATAL);
+}
+
+void ErrorScreen::OnPasswordChangeDetected(
+    std::unique_ptr<UserContext> user_context) {
   LOG(FATAL);
 }
 
@@ -344,8 +358,9 @@ void ErrorScreen::PolicyLoadFailed() {
 }
 
 void ErrorScreen::DefaultHideCallback() {
-  if (parent_screen_ != OOBE_SCREEN_UNKNOWN && view_)
+  if (parent_screen_ != OOBE_SCREEN_UNKNOWN && view_) {
     view_->ShowOobeScreen(parent_screen_);
+  }
 
   // TODO(antrim): Due to potential race with GAIA reload and hiding network
   // error UI we can't just reset parent screen to SCREEN_UNKNOWN here.
@@ -421,21 +436,24 @@ void ErrorScreen::StartGuestSessionAfterOwnershipCheck(
       return;
     case CrosSettingsProvider::PERMANENTLY_UNTRUSTED:
       // Only allow guest sessions if there is no owner yet.
-      if (ownership_status == DeviceSettingsService::OWNERSHIP_NONE)
+      if (ownership_status == DeviceSettingsService::OWNERSHIP_NONE) {
         break;
+      }
       return;
     case CrosSettingsProvider::TRUSTED: {
       // Honor kAccountsPrefAllowGuest.
       bool allow_guest = false;
       CrosSettings::Get()->GetBoolean(kAccountsPrefAllowGuest, &allow_guest);
-      if (allow_guest)
+      if (allow_guest) {
         break;
+      }
       return;
     }
   }
 
-  if (guest_login_performer_)
+  if (guest_login_performer_) {
     return;
+  }
 
   guest_login_performer_ =
       std::make_unique<ChromeLoginPerformer>(this, AuthMetricsRecorder::Get());

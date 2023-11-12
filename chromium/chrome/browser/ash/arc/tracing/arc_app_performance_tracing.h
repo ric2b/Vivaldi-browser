@@ -13,7 +13,7 @@
 #include <string>
 
 #include "ash/components/arc/mojom/metrics.mojom.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #include "components/exo/surface_observer.h"
@@ -115,6 +115,8 @@ class ArcAppPerformanceTracing : public KeyedService,
   // Returns currently active ARC window or null. It may or may not be currently
   // profiled.
   aura::Window* active_window() { return arc_active_window_; }
+
+  static void EnsureFactoryBuilt();
 
  private:
   // May be start tracing session if all conditions are met. Window creating is

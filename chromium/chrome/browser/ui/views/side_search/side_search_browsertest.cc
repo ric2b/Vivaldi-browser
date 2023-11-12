@@ -6,6 +6,7 @@
 
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -62,7 +63,6 @@ void SideSearchBrowserTest::SetUpOnMainThread() {
       [](const GURL& url) { return !IsSearchURLMatch(url); }));
   config->SetGenerateSideSearchURLCallback(
       base::BindRepeating([](const GURL& url) { return url; }));
-  SetIsSidePanelSRPAvailableAt(browser(), 0, true);
   config->set_skip_on_template_url_changed_for_testing(true);
 }
 
@@ -77,8 +77,6 @@ void SideSearchBrowserTest::ActivateTabAt(Browser* browser, int index) {
 
 void SideSearchBrowserTest::AppendTab(Browser* browser, const GURL& url) {
   chrome::AddTabAt(browser, url, -1, true);
-  SetIsSidePanelSRPAvailableAt(
-      browser, browser->tab_strip_model()->GetTabCount() - 1, true);
 }
 
 void SideSearchBrowserTest::NavigateActiveTab(Browser* browser,
@@ -146,13 +144,6 @@ void SideSearchBrowserTest::NotifyReadLaterButtonClick(Browser* browser) {
       .NotifyClick(GetDummyEvent());
 }
 
-void SideSearchBrowserTest::SetIsSidePanelSRPAvailableAt(Browser* browser,
-                                                         int index,
-                                                         bool is_available) {
-  SideSearchConfig::Get(browser->profile())
-      ->set_is_side_panel_srp_available(is_available);
-}
-
 BrowserView* SideSearchBrowserTest::BrowserViewFor(Browser* browser) {
   return BrowserView::GetBrowserViewForBrowser(browser);
 }
@@ -179,7 +170,7 @@ views::Button* SideSearchBrowserTest::GetSidePanelButtonFor(Browser* browser) {
 void SideSearchBrowserTest::TestSidePanelOpenEntrypointState(Browser* browser) {
   // If the side panel is visible and DSE support is enabled then the
   // entrypoint should be hidden. Otherwise the entrypoint should be visible.
-  if (side_search::IsDSESupportEnabled(browser->profile())) {
+  if (IsSideSearchEnabled(browser->profile())) {
     EXPECT_FALSE(GetSideSearchButtonFor(browser)->GetVisible());
   } else {
     EXPECT_TRUE(GetSideSearchButtonFor(browser)->GetVisible());

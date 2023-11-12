@@ -71,10 +71,6 @@ void FakeLocalFrame::Focus() {}
 
 void FakeLocalFrame::ClearFocusedElement() {}
 
-void FakeLocalFrame::GetResourceSnapshotForWebBundle(
-    mojo::PendingReceiver<data_decoder::mojom::ResourceSnapshotForWebBundle>
-        receiver) {}
-
 void FakeLocalFrame::CopyImageAt(const gfx::Point& window_point) {}
 
 void FakeLocalFrame::SaveImageAt(const gfx::Point& window_point) {}
@@ -83,6 +79,10 @@ void FakeLocalFrame::ReportBlinkFeatureUsage(
     const std::vector<blink::mojom::WebFeature>&) {}
 
 void FakeLocalFrame::RenderFallbackContent() {}
+
+void FakeLocalFrame::AddResourceTimingEntryFromNonNavigatedFrame(
+    blink::mojom::ResourceTimingInfoPtr timing,
+    blink::FrameOwnerElementType parent_frame_element_type) {}
 
 void FakeLocalFrame::RenderFallbackContentWithResourceTiming(
     blink::mojom::ResourceTimingInfoPtr,

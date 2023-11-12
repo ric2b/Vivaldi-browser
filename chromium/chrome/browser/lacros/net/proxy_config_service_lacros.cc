@@ -6,15 +6,14 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chrome/browser/lacros/net/lacros_extension_proxy_tracker.h"
 #include "chrome/browser/lacros/net/network_settings_translation.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/lacros/lacros_service.h"
 #include "components/prefs/pref_registry_simple.h"

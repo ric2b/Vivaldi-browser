@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -78,8 +79,7 @@ class TestComboboxModel : public ui::ComboboxModel {
       if (separators_.find(index) == separators_.end())
         return index;
     }
-    NOTREACHED();
-    return 0;
+    NOTREACHED_NORETURN();
   }
 
   void SetSeparators(const std::set<size_t>& separators) {
@@ -349,6 +349,22 @@ TEST_F(ComboboxTest, DisabilityTest) {
   View* container = widget_->SetContentsView(std::make_unique<View>());
   combobox_ = container->AddChildView(std::move(combobox));
   EXPECT_FALSE(combobox_->GetEnabled());
+}
+
+// Ensure the border on the combobox is set correctly when Enabled state
+// changes.
+TEST_F(ComboboxTest, DisabledBorderTest) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kChromeRefresh2023);
+  InitCombobox(nullptr);
+  ASSERT_TRUE(combobox_->GetEnabled());
+  ASSERT_NE(combobox_->GetBorder(), nullptr);
+  combobox_->SetEnabled(false);
+  ASSERT_FALSE(combobox_->GetEnabled());
+  ASSERT_EQ(combobox_->GetBorder(), nullptr);
+  combobox_->SetEnabled(true);
+  ASSERT_TRUE(combobox_->GetEnabled());
+  ASSERT_NE(combobox_->GetBorder(), nullptr);
 }
 
 // On Mac, key events can't change the currently selected index directly for a
@@ -860,9 +876,18 @@ TEST_F(ComboboxTest, SetTooltipTextNotifiesAccessibilityEvent) {
   std::u16string test_tooltip_text = u"Test Tooltip Text";
   test::AXEventCounter counter(AXEventManager::Get());
   EXPECT_EQ(0, counter.GetCount(ax::mojom::Event::kTextChanged));
+
+  // `SetTooltipTextAndAccessibleName` does two things:
+  // 1. sets the tooltip text on the arrow button. `Button::SetTooltipText`
+  //    fires a text-changed event.
+  // 2. if the accessible name is empty, calls `View::SetAccessibleName`
+  //    on the combobox. `SetAccessibleName` fires a text-changed event.
   combobox_->SetTooltipTextAndAccessibleName(test_tooltip_text);
   EXPECT_EQ(test_tooltip_text, combobox_->GetTooltipTextAndAccessibleName());
-  EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kTextChanged));
+  EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kTextChanged,
+                                ax::mojom::Role::kButton));
+  EXPECT_EQ(1, counter.GetCount(ax::mojom::Event::kTextChanged,
+                                ax::mojom::Role::kPopUpButton));
   EXPECT_EQ(test_tooltip_text, combobox_->GetAccessibleName());
   ui::AXNodeData data;
   combobox_->GetAccessibleNodeData(&data);

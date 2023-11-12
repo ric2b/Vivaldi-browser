@@ -86,16 +86,11 @@ if (generate_untranslated) {
     source = "ios/vivaldi_ios_native_strings.grd"
     source_translations = "ios/strings/vivaldi_ios_strings_"
   }
-  vivaldi_extract_untranslated("Extract_strings_vivaldi_mobile_common_native_strings_grd") {
-    source = "mobile_common/vivaldi_mobile_common_native_strings.grd"
-    source_translations = "mobile_common/strings/vivaldi_mobile_common_native_strings_"
-  }
   group("generate_untranslated") {
     deps = [
       ":Extract_strings_vivaldi_native_strings",
       ":Extract_strings_vivaldi_android_strings_grd",
       ":Extract_strings_vivaldi_ios_strings_grd",
-      ":Extract_strings_vivaldi_mobile_common_native_strings_grd",
     ] + extract_deps
     if (is_win || (generate_untranslated && !is_android)) {
       deps += [
@@ -155,6 +150,8 @@ if (is_android) {
         locale = "b+sr+Latn"
       } else if (locale == "fil") {
         locale = "tl"
+      } else if (locale == "ca-valencia" || locale == "ca@valencia") {
+        locale = "b+ca+valencia"
       }
       outputs += [ "values-$locale/vivaldi_android_strings.xml" ]
     }
@@ -168,69 +165,10 @@ if (is_ios) {
     resource_ids = "//vivaldi/app/gritsettings/resource_ids"
     outputs = [ "grit/vivaldi_ios_native_strings.h" ]
     foreach(locale, locales_with_pseudolocales+vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales) {
-      outputs += [ "$root_gen_dir/vivaldi/ios/vivaldi_ios_native_strings_$locale.pak" ]
-    }
-  }
-}
-
-if (is_ios || is_android) {
-  if (is_ios) {
-    target_type = "grit"
-  } else {
-    target_type = "java_strings_grd"
-  }
-
-  target(target_type, "vivaldi_mobile_common_native_strings_grd") {
-    source = "mobile_common/vivaldi_mobile_common_native_strings.grd"
-    outputs = []
-    if (is_ios) {
-      resource_ids = "//vivaldi/app/gritsettings/resource_ids"
-      output_dir = "$root_gen_dir/vivaldi/mobile_common/"
-      outputs += [ "grit/vivaldi_mobile_common_native_strings.h" ]
-      build_locales = locales_with_pseudolocales+vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales
-    }
-    if (is_android) {
-      grd_file = source
-      outputs += [ "values/vivaldi_mobile_common_native_strings.xml" ]
-      build_locales = android_bundle_locales_as_resources + vivaldi_pending_locales
-    }
-    foreach(locale, build_locales) {
-      if (is_android) {
-        if (locale == "en-GB") {
-          locale = "en-rGB"
-        } else if (locale == "de-CH") {
-          locale = "de-rCH"
-        } else if (locale == "pt-BR") {
-          locale = "pt-rBR"
-        } else if (locale == "pt-PT") {
-          locale = "pt-rPT"
-        } else if (locale == "zh-TW") {
-          locale = "zh-rTW"
-        } else if (locale == "zh-CN") {
-          locale = "zh-rCN"
-        } else if (locale == "es-419") {
-          locale = "es-rUS"
-        } else if (locale == "es-PE") {
-          locale = "es-rPE"
-        } else if (locale == "he") {
-          locale = "iw"
-        } else if (locale == "id") {
-          locale = "in"
-        } else if (locale == "ja-KS") {
-          locale = "ja-rKS"
-        } else if (locale == "fr-CA") {
-          locale = "fr-rCA"
-        } else if (locale == "zh-HK") {
-          locale = "zh-rHK"
-        } else if (locale == "sr-Latn") {
-          locale = "b+sr+Latn"
-        } else if (locale == "fil") {
-          locale = "tl"
-        }
-        outputs += [ "values-$locale/vivaldi_mobile_common_native_strings.xml" ]
-      } else {
-        outputs += [ "$root_gen_dir/vivaldi/mobile_common/vivaldi_mobile_common_native_strings_$locale.pak" ]
+      if (locale == "ca-valencia" || locale == "ca@valencia") {
+        locale = "ca-valencia"
       }
+      outputs += [ "$root_gen_dir/vivaldi/ios/vivaldi_ios_native_strings_$locale.pak" ]
     }
   }
 }
@@ -255,12 +193,15 @@ grit("vivaldi_unscaled_native_resources") {
     "is_official_build=$is_official_build",
   ]
   if (is_android) {
-    defines += [ "is_oem_automotive_build=$is_vivaldi_automotive"]
-    defines += [ "is_oem_polestar_build=$is_vivaldi_polestar" ]
-    defines += [ "is_oem_renault_build=$is_vivaldi_renault" ]
-    defines += [ "is_oem_lynkco_build=$is_vivaldi_lynkco" ]
-    defines += [ "is_oem_mercedes_build=$is_vivaldi_mercedes" ]
-    defines += [ "is_oem_preloaded_build=$is_vivaldi_preloaded" ]
+    defines += [
+      "is_oem_automotive_build=$is_vivaldi_automotive",
+      "is_oem_preloaded_build=$is_vivaldi_preloaded",
+      "is_oem_polestar_build=$is_vivaldi_polestar",
+      "is_oem_renault_build=$is_vivaldi_renault",
+      "is_oem_lynkco_build=$is_vivaldi_lynkco",
+      "is_oem_mercedes_build=$is_vivaldi_mercedes",
+      "is_oem_volvo_build=$is_vivaldi_volvo",
+    ]
   }
   output_dir = "$root_gen_dir/vivaldi"
   resource_ids = "//vivaldi/app/gritsettings/resource_ids"
@@ -279,7 +220,7 @@ action("write_translation_xml_generation_script") {
   inputs = [ script ]
   outputs = [ "$root_out_dir/generate_translation_xml.py" ]
 
-  args = rebase_path(outputs, root_out_dir) + all_chrome_locales + vivaldi_pending_locales
+  args = rebase_path(outputs, root_out_dir) + all_chrome_locales + vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
 }
 
 action("write_pakfile_xml_generation_script") {
@@ -287,7 +228,7 @@ action("write_pakfile_xml_generation_script") {
   inputs = [ script ]
   outputs = [ "$root_out_dir/generate_pak_xml.py" ]
 
-  args = rebase_path(outputs, root_out_dir) + vivaldi_pending_locales
+  args = rebase_path(outputs, root_out_dir) + vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
 }
 
 action("write_full_pakfile_xml_generation_script") {
@@ -295,7 +236,7 @@ action("write_full_pakfile_xml_generation_script") {
   inputs = [ script ]
   outputs = [ "$root_out_dir/generate_full_pak_xml.py" ]
 
-  args = rebase_path(outputs, root_out_dir) + all_chrome_locales + vivaldi_pending_locales
+  args = rebase_path(outputs, root_out_dir) + all_chrome_locales + vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
 }
 
 config("vivaldi_app_config") {
@@ -343,8 +284,8 @@ if(!is_ios) {
       "//ui/strings",
       "//vivaldi/app:vivaldi_native_strings",
     ]
-    input_locales = vivaldi_pending_locales
-    output_locales = vivaldi_pending_locales
+    input_locales = vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
+    output_locales = vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
   }
 }
 
@@ -359,7 +300,6 @@ if(is_ios) {
       "${root_gen_dir}/ui/strings/ui_strings_",
       "${root_gen_dir}/vivaldi/app/vivaldi_native_strings_",
       "${root_gen_dir}/vivaldi/ios/vivaldi_ios_native_strings_",
-      "${root_gen_dir}/vivaldi/mobile_common/vivaldi_mobile_common_native_strings_",
     ]
     deps = [
       "//components/strings:components_google_chrome_strings",
@@ -370,10 +310,9 @@ if(is_ios) {
       "//ui/strings:ui_strings",
       "//vivaldi/app:vivaldi_native_strings",
       "//vivaldi/app:vivaldi_ios_native_strings",
-      "//vivaldi/app:vivaldi_mobile_common_native_strings_grd",
     ]
-    input_locales = vivaldi_pending_locales
-    output_locales = vivaldi_pending_locales
+    input_locales = vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
+    output_locales = vivaldi_pending_locales - ["ca@valencia"] + ["ca-valencia"]
     copy_data_to_bundle = true
   }
 }

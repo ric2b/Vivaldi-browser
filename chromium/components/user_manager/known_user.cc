@@ -624,11 +624,12 @@ void KnownUser::SetChallengeResponseKeys(const AccountId& account_id,
   SetPath(account_id, kChallengeResponseKeys, base::Value(std::move(value)));
 }
 
-base::Value KnownUser::GetChallengeResponseKeys(const AccountId& account_id) {
+base::Value::List KnownUser::GetChallengeResponseKeys(
+    const AccountId& account_id) {
   const base::Value* value = FindPath(account_id, kChallengeResponseKeys);
   if (!value || !value->is_list())
-    return base::Value();
-  return value->Clone();
+    return base::Value::List();
+  return value->GetList().Clone();
 }
 
 void KnownUser::SetLastOnlineSignin(const AccountId& account_id,
@@ -721,6 +722,10 @@ void KnownUser::SetPasswordSyncToken(const AccountId& account_id,
 const std::string* KnownUser::GetPasswordSyncToken(
     const AccountId& account_id) const {
   return FindStringPath(account_id, kPasswordSyncToken);
+}
+
+void KnownUser::ClearPasswordSyncToken(const AccountId& account_id) {
+  SetPath(account_id, kPasswordSyncToken, absl::nullopt);
 }
 
 void KnownUser::SetOnboardingCompletedVersion(

@@ -8,7 +8,7 @@
 
 #include "ash/login/ui/views_utils.h"
 #include "ash/style/ash_color_provider.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_highlight.h"
@@ -47,7 +47,8 @@ LoginButton::LoginButton(PressedCallback callback)
                          radius * 2);
 
         return std::make_unique<views::FloodFillInkDropRipple>(
-            host->size(), host->GetLocalBounds().InsetsFrom(bounds),
+            views::InkDrop::Get(host), host->size(),
+            host->GetLocalBounds().InsetsFrom(bounds),
             views::InkDrop::Get(host)->GetInkDropCenterBasedOnLastEvent(),
             kInkDropRippleColor, 1.f /*visible_opacity*/);
       },

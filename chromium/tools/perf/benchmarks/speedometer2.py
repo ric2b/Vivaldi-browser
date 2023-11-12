@@ -23,7 +23,8 @@ _SPEEDOMETER_DIR = os.path.join(path_util.GetChromiumSrcDir(),
     'third_party', 'blink', 'perf_tests', 'speedometer')
 
 
-@benchmark.Info(emails=['hablich@chromium.org'], component='Blink>JavaScript')
+@benchmark.Info(emails=['cbruni@chromium.org', 'vahl@chromium.org'],
+                component='Blink>JavaScript')
 class Speedometer2(press._PressBenchmark): # pylint: disable=protected-access
   """Speedometer2 Benchmark.
 
@@ -126,7 +127,8 @@ class Speedometer2(press._PressBenchmark): # pylint: disable=protected-access
       cls.iteration_count = args.iteration_count
 
 
-@benchmark.Info(emails=['hablich@chromium.org'], component='Blink>JavaScript')
+@benchmark.Info(emails=['cbruni@chromium.org', 'vahl@chromium.org'],
+                component='Blink>JavaScript')
 class V8Speedometer2Future(Speedometer2):
   """Speedometer2 benchmark with the V8 flag --future.
 
@@ -171,19 +173,3 @@ class Speedometer2MinorMC(Speedometer2):
 
   def SetExtraBrowserOptions(self, options):
     options.AppendExtraBrowserArgs('--js-flags=--minor-mc')
-
-
-@benchmark.Info(emails=['hablich@chromium.org'], component='Blink>JavaScript')
-class Speedometer2ChromeHealth(Speedometer2):
-  """Speedometer2 benchmark, but run for only one iteration.
-
-  For use with the Chrome Health Project.
-  """
-
-  @classmethod
-  def Name(cls):
-    return 'speedometer2-chrome-health'
-
-  def CreateStorySet(self, options):
-    self.iteration_count = 1
-    return super(Speedometer2ChromeHealth, self).CreateStorySet(options)

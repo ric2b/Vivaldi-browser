@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -132,14 +132,19 @@ void MojoWebUIBrowserTest::SetupHandlers() {
 
 void MojoWebUIBrowserTest::BrowsePreload(const GURL& browse_to) {
   BaseWebUIBrowserTest::BrowsePreload(browse_to);
-  content::WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (use_mojo_modules_)
     return;
 
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
   std::string test_mojo_lite_js =
       ui::ResourceBundle::GetSharedInstance().LoadDataResourceString(
           IDR_WEB_UI_TEST_MOJO_LITE_JS);
   web_contents->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
       base::UTF8ToUTF16(test_mojo_lite_js), base::NullCallback());
+#else
+  // Mojo browser tests not using modules are not supported on other platforms.
+  CHECK(use_mojo_modules_);
+#endif
 }

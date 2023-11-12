@@ -24,11 +24,9 @@
 - (void)configureWith:(NSArray*)speedDials
                parent:(VivaldiSpeedDialItem*)parent
         faviconLoader:(FaviconLoader*)faviconLoader
-          layoutStyle:(VivaldiStartPageLayoutStyle)style
-    deviceOrientation:(BOOL)isLandscape;
+          layoutStyle:(VivaldiStartPageLayoutStyle)style;
 
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
-                  isLandscape:(BOOL)isLandscape;
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style;
 
 @end
 

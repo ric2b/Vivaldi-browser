@@ -10,13 +10,13 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/hash/sha1.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -27,6 +27,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "base/values.h"
 #include "chrome/browser/certificate_provider/certificate_provider.h"
 #include "chrome/browser/certificate_provider/certificate_provider_service.h"
@@ -92,14 +93,6 @@ using testing::Return;
 using testing::_;
 
 namespace {
-
-void StoreDigest(std::vector<uint8_t>* digest,
-                 base::OnceClosure callback,
-                 base::Value value) {
-  ASSERT_TRUE(value.is_blob()) << "Unexpected value in StoreDigest";
-  digest->assign(value.GetBlob().begin(), value.GetBlob().end());
-  std::move(callback).Run();
-}
 
 bool RsaSignRawData(uint16_t openssl_signature_algorithm,
                     const std::vector<uint8_t>& input,
@@ -225,13 +218,13 @@ class CertificateProviderApiTest : public extensions::ExtensionApiTest {
     // certificate selection dialog.
     const std::string autoselect_pattern = R"({"pattern": "*", "filter": {}})";
 
-    base::Value autoselect_policy(base::Value::Type::LIST);
+    base::Value::List autoselect_policy;
     autoselect_policy.Append(autoselect_pattern);
 
     policy_map_.Set(policy::key::kAutoSelectCertificateForUrls,
                     policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
-                    policy::POLICY_SOURCE_CLOUD, std::move(autoselect_policy),
-                    nullptr);
+                    policy::POLICY_SOURCE_CLOUD,
+                    base::Value(std::move(autoselect_policy)), nullptr);
     provider_.UpdateChromePolicy(policy_map_);
 
     content::RunAllPendingInMessageLoop();
@@ -278,17 +271,17 @@ class CertificateProviderApiTest : public extensions::ExtensionApiTest {
 
   std::vector<scoped_refptr<net::X509Certificate>>
   GetAllProvidedCertificates() {
-    base::RunLoop run_loop;
     std::unique_ptr<chromeos::CertificateProvider> cert_provider =
         cert_provider_service_->CreateCertificateProvider();
+
+    base::test::TestFuture<net::ClientCertIdentityList> get_certificates_future;
+    cert_provider->GetCertificates(get_certificates_future.GetCallback());
+
     std::vector<scoped_refptr<net::X509Certificate>> all_provided_certificates;
-    auto callback = base::BindLambdaForTesting(
-        [&](net::ClientCertIdentityList cert_identity_list) {
-          for (const auto& cert_identity : cert_identity_list)
-            all_provided_certificates.push_back(cert_identity->certificate());
-        });
-    cert_provider->GetCertificates(callback.Then(run_loop.QuitClosure()));
-    run_loop.Run();
+    for (const auto& cert_identity : get_certificates_future.Get()) {
+      all_provided_certificates.push_back(cert_identity->certificate());
+    }
+
     return all_provided_certificates;
   }
 
@@ -431,14 +424,11 @@ class CertificateProviderApiMockedExtensionTest
                                  "signatureRequestAlgorithm;")
             .GetString();
     EXPECT_EQ(expected_request_signature_algorithm, request_algorithm);
-    std::vector<uint8_t> request_data;
-    {
-      base::RunLoop run_loop;
-      GetExtensionMainFrame()->ExecuteJavaScriptForTests(
-          u"signatureRequestData;",
-          base::BindOnce(&StoreDigest, &request_data, run_loop.QuitClosure()));
-      run_loop.Run();
-    }
+
+    base::test::TestFuture<base::Value> exec_js_future;
+    GetExtensionMainFrame()->ExecuteJavaScriptForTests(
+        u"signatureRequestData;", exec_js_future.GetCallback());
+    std::vector<uint8_t> request_data(exec_js_future.Get().GetBlob());
 
     // Load the private key.
     std::string key_pk8 = GetKeyPk8();

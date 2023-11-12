@@ -7,11 +7,16 @@ import '../strings.m.js';
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
 import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 
-import {Accelerator, AcceleratorCategory, AcceleratorId, AcceleratorInfo, AcceleratorState, AcceleratorSubcategory, AcceleratorType, DefaultAcceleratorInfo, MojoAcceleratorInfo, TextAcceleratorInfo} from './shortcut_types.js';
+import {Accelerator, AcceleratorCategory, AcceleratorId, AcceleratorInfo, AcceleratorState, AcceleratorSubcategory, AcceleratorType, MojoAcceleratorInfo, StandardAcceleratorInfo, TextAcceleratorInfo} from './shortcut_types.js';
 
 // Returns true if shortcut customization is disabled via the feature flag.
 export const isCustomizationDisabled = (): boolean => {
   return !loadTimeData.getBoolean('isCustomizationEnabled');
+};
+
+// Returns true if search is enabled via the feature flag.
+export const isSearchEnabled = (): boolean => {
+  return loadTimeData.getBoolean('isSearchEnabled');
 };
 
 export const areAcceleratorsEqual =
@@ -35,25 +40,25 @@ export const isTextAcceleratorInfo =
                        .layoutProperties.textAccelerator;
         };
 
-export const isDefaultAcceleratorInfo =
+export const isStandardAcceleratorInfo =
     (accelInfo: AcceleratorInfo|MojoAcceleratorInfo):
-        accelInfo is DefaultAcceleratorInfo => {
-          return !!(accelInfo as DefaultAcceleratorInfo)
-                       .layoutProperties.defaultAccelerator;
+        accelInfo is StandardAcceleratorInfo => {
+          return !!(accelInfo as StandardAcceleratorInfo)
+                       .layoutProperties.standardAccelerator;
         };
 
 export const createEmptyAccelInfoFromAccel =
-    (accel: Accelerator): DefaultAcceleratorInfo => {
+    (accel: Accelerator): StandardAcceleratorInfo => {
       return {
         layoutProperties:
-            {defaultAccelerator: {accelerator: accel, keyDisplay: ''}},
+            {standardAccelerator: {accelerator: accel, keyDisplay: ''}},
         locked: false,
         state: AcceleratorState.kEnabled,
         type: AcceleratorType.kUser,
       };
     };
 
-export const createEmptyAcceleratorInfo = (): DefaultAcceleratorInfo => {
+export const createEmptyAcceleratorInfo = (): StandardAcceleratorInfo => {
   return createEmptyAccelInfoFromAccel({modifiers: 0, keyCode: 0});
 };
 
@@ -66,20 +71,26 @@ const categoryPrefix = 'category';
 export const getCategoryNameStringId =
     (category: AcceleratorCategory): string => {
       switch (category) {
-        case AcceleratorCategory.kTabsAndWindows:
-          return `${categoryPrefix}TabsAndWindows`;
-        case AcceleratorCategory.kPageAndWebBrowser:
-          return `${categoryPrefix}PageAndWebBrowser`;
-        case AcceleratorCategory.kSystemAndDisplaySettings:
-          return `${categoryPrefix}SystemAndDisplaySettings`;
-        case AcceleratorCategory.kTextEditing:
-          return `${categoryPrefix}TextEditing`;
+        case AcceleratorCategory.kGeneral:
+          return `${categoryPrefix}General`;
+        case AcceleratorCategory.kDevice:
+          return `${categoryPrefix}Device`;
+        case AcceleratorCategory.kBrowser:
+          return `${categoryPrefix}Browser`;
+        case AcceleratorCategory.kText:
+          return `${categoryPrefix}Text`;
+        case AcceleratorCategory.kWindowsAndDesks:
+          return `${categoryPrefix}WindowsAndDesks`;
+        case AcceleratorCategory.kDebug:
+          return `${categoryPrefix}Debug`;
         case AcceleratorCategory.kAccessibility:
           return `${categoryPrefix}Accessibility`;
         case AcceleratorCategory.kDebug:
           return `${categoryPrefix}Debug`;
         case AcceleratorCategory.kDeveloper:
           return `${categoryPrefix}Developer`;
+        case AcceleratorCategory.kEventRewriter:
+          return `${categoryPrefix}EventRewriter`;
         default: {
           // If this case is reached, then an invalid category was passed in.
           assertNotReached();
@@ -91,12 +102,44 @@ const subcategoryPrefix = 'subcategory';
 export const getSubcategoryNameStringId =
     (subcategory: AcceleratorSubcategory): string => {
       switch (subcategory) {
+        case AcceleratorSubcategory.kGeneralControls:
+          return `${subcategoryPrefix}GeneralControls`;
+        case AcceleratorSubcategory.kApps:
+          return `${subcategoryPrefix}Apps`;
+        case AcceleratorSubcategory.kMedia:
+          return `${subcategoryPrefix}Media`;
+        case AcceleratorSubcategory.kInputs:
+          return `${subcategoryPrefix}Inputs`;
+        case AcceleratorSubcategory.kDisplay:
+          return `${subcategoryPrefix}Display`;
         case AcceleratorSubcategory.kGeneral:
           return `${subcategoryPrefix}General`;
-        case AcceleratorSubcategory.kSystemApps:
-          return `${subcategoryPrefix}SystemApps`;
-        case AcceleratorSubcategory.kSystemControls:
-          return `${subcategoryPrefix}SystemControls`;
+        case AcceleratorSubcategory.kBrowserNavigation:
+          return `${subcategoryPrefix}BrowserNavigation`;
+        case AcceleratorSubcategory.kPages:
+          return `${subcategoryPrefix}Pages`;
+        case AcceleratorSubcategory.kTabs:
+          return `${subcategoryPrefix}Tabs`;
+        case AcceleratorSubcategory.kBookmarks:
+          return `${subcategoryPrefix}Bookmarks`;
+        case AcceleratorSubcategory.kDeveloperTools:
+          return `${subcategoryPrefix}DeveloperTools`;
+        case AcceleratorSubcategory.kTextNavigation:
+          return `${subcategoryPrefix}TextNavigation`;
+        case AcceleratorSubcategory.kTextEditing:
+          return `${subcategoryPrefix}TextEditing`;
+        case AcceleratorSubcategory.kWindows:
+          return `${subcategoryPrefix}Windows`;
+        case AcceleratorSubcategory.kDesks:
+          return `${subcategoryPrefix}Desks`;
+        case AcceleratorSubcategory.kChromeVox:
+          return `${subcategoryPrefix}ChromeVox`;
+        case AcceleratorSubcategory.kVisibility:
+          return `${subcategoryPrefix}Visibility`;
+        case AcceleratorSubcategory.kAccessibilityNavigation:
+          return `${subcategoryPrefix}AccessibilityNavigation`;
+        case AcceleratorSubcategory.kSixPackKeys:
+          return `${subcategoryPrefix}SixPackKeys`;
         default: {
           // If this case is reached, then an invalid category was passed in.
           assertNotReached();
@@ -105,6 +148,6 @@ export const getSubcategoryNameStringId =
     };
 
 export const getAccelerator =
-    (acceleratorInfo: DefaultAcceleratorInfo): Accelerator => {
-      return acceleratorInfo.layoutProperties.defaultAccelerator.accelerator;
+    (acceleratorInfo: StandardAcceleratorInfo): Accelerator => {
+      return acceleratorInfo.layoutProperties.standardAccelerator.accelerator;
     };

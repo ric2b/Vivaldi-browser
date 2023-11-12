@@ -55,6 +55,9 @@ class HidChooserContext : public permissions::ObjectPermissionContextBase,
   HidChooserContext& operator=(const HidChooserContext&) = delete;
   ~HidChooserContext() override;
 
+  static base::Value DeviceInfoToValue(
+      const device::mojom::HidDeviceInfo& device);
+
   // Returns a human-readable string identifier for |device|.
   static std::u16string DisplayNameFromDeviceInfo(
       const device::mojom::HidDeviceInfo& device);
@@ -86,7 +89,7 @@ class HidChooserContext : public permissions::ObjectPermissionContextBase,
   // Returns true if `origin` is allowed to access FIDO reports.
   bool IsFidoAllowedForOrigin(const url::Origin& origin);
 
-  // For ScopedObserver.
+  // For ScopedObservation, see ScopedObservationTraits below.
   void AddDeviceObserver(DeviceObserver* observer);
   void RemoveDeviceObserver(DeviceObserver* observer);
 

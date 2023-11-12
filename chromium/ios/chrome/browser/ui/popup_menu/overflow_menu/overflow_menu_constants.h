@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_UI_POPUP_MENU_OVERFLOW_MENU_OVERFLOW_MENU_CONSTANTS_H_
 #define IOS_CHROME_BROWSER_UI_POPUP_MENU_OVERFLOW_MENU_OVERFLOW_MENU_CONSTANTS_H_
 
-#include <string>
+#import <string>
 
 namespace overflow_menu {
 enum class Destination {
@@ -18,6 +18,9 @@ enum class Destination {
   SiteInfo = 6,
   Settings = 7,
   WhatsNew = 8,
+  SpotlightDebugger = 9,
+  PriceNotifications = 10,
+
   Notes = 1001, // Vivaldi
 };
 

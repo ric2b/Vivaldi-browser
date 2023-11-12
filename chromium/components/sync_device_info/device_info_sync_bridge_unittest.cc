@@ -3,14 +3,15 @@
 // found in the LICENSE file.
 
 #include "components/sync_device_info/device_info_sync_bridge.h"
+#include "build/build_config.h"
 
 #include <algorithm>
 #include <map>
 #include <set>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -468,7 +469,7 @@ class DeviceInfoSyncBridgeTest : public testing::Test,
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     statistics_provider_ =
-        std::make_unique<chromeos::system::ScopedFakeStatisticsProvider>();
+        std::make_unique<ash::system::ScopedFakeStatisticsProvider>();
 #endif
 
     local_device_name_info_ = GetLocalDeviceNameInfoBlocking();
@@ -567,7 +568,7 @@ class DeviceInfoSyncBridgeTest : public testing::Test,
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::system::ScopedFakeStatisticsProvider* statistics_provider() {
+  ash::system::ScopedFakeStatisticsProvider* statistics_provider() {
     EXPECT_TRUE(statistics_provider_);
     return statistics_provider_.get();
   }
@@ -721,7 +722,7 @@ class DeviceInfoSyncBridgeTest : public testing::Test,
   raw_ptr<TestLocalDeviceInfoProvider> local_device_info_provider_ = nullptr;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  std::unique_ptr<chromeos::system::ScopedFakeStatisticsProvider>
+  std::unique_ptr<ash::system::ScopedFakeStatisticsProvider>
       statistics_provider_;
 #endif
 };
@@ -1173,8 +1174,16 @@ TEST_F(DeviceInfoSyncBridgeTest, CountActiveDevicesWithMalformedTimestamps) {
             bridge()->CountActiveDevicesByType());
 }
 
+// TODO(crbug.com/1416485): Re-enable this test
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ShouldFilterOutNonChromeClientsFromDeviceTracker \
+  DISABLED_ShouldFilterOutNonChromeClientsFromDeviceTracker
+#else
+#define MAYBE_ShouldFilterOutNonChromeClientsFromDeviceTracker \
+  ShouldFilterOutNonChromeClientsFromDeviceTracker
+#endif
 TEST_F(DeviceInfoSyncBridgeTest,
-       ShouldFilterOutNonChromeClientsFromDeviceTracker) {
+       MAYBE_ShouldFilterOutNonChromeClientsFromDeviceTracker) {
   InitializeAndMergeInitialData(SyncMode::kFull);
   // Local device.
   EXPECT_EQ(DeviceCountMap({{kLocalDeviceFormFactor, 1}}),

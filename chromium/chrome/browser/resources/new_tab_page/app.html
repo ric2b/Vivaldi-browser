@@ -1,5 +1,6 @@
 <style include="cr-shared-style">
   :host {
+    --cr-focus-outline-color: var(--color-new-tab-page-focus-ring);
     --ntp-theme-text-shadow: none;
     --ntp-one-google-bar-height: 56px;
     --ntp-search-box-width: 337px;
@@ -22,6 +23,15 @@
   @media (min-width: 672px) {
     :host {
       --ntp-search-box-width: 561px;
+    }
+  }
+
+  @media (min-width: 768px) {
+    :host {
+      --ntp-module-layout-width:
+          var(--ntp-module-max-width, var(--ntp-search-box-width));
+      --ntp-module-width:
+          var(--ntp-module-max-width, var(--ntp-search-box-width));
     }
   }
 
@@ -98,7 +108,6 @@
 
   ntp-realbox {
     visibility: hidden;
-    width: var(--ntp-search-box-width);
   }
 
   ntp-realbox[shown] {
@@ -124,6 +133,11 @@
     border-radius: calc(.5 * var(--cr-button-height));
     bottom: 16px;
     position: fixed;
+  }
+
+  #customizeButtonContainer:has(help-bubble) {
+    /* help-bubble parent needs z-index to overlay ntp-iframe */
+    z-index: 1001;
   }
 
   :host-context([dir='ltr']) #customizeButtonContainer {
@@ -334,10 +348,9 @@
         on-open-lens-search="onOpenLensSearch_"
         on-open-voice-search="onOpenVoiceSearch_" shown$="[[realboxShown_]]">
     </ntp-realbox>
-    <template is="dom-if" if="[[realboxLensSearchEnabled_]]">
+    <template is="dom-if" if="[[showLensUploadDialog_]]" restamp>
       <ntp-lens-upload-dialog id="lensUploadDialog"
-          on-close-lens-search="onCloseLensSearch_"
-          on-bind-open-dialog="bindOpenLensDialog_">
+          on-close-lens-search="onCloseLensSearch_">
       </ntp-lens-upload-dialog>
     </template>
   </div>
@@ -379,10 +392,9 @@
       <!-- cr-button has a transparent background. This leads to incorrect
            results when a custom background is set. Therefore, wrap customize
            button in container to enforce solid background color. -->
-      <div id="customizeButtonContainer"
-          hidden="[[customizeChromeSidePanelShowing_]]">
+      <div id="customizeButtonContainer">
         <cr-button id="customizeButton" on-click="onCustomizeClick_"
-            title="$i18n{customizeThisPage}">
+            title="$i18n{customizeThisPage}" aria-pressed="[[showCustomize_]]">
           <div id="customizeIcon"></div>
           <div id="customizeText" hidden$="[[showBackgroundImage_]]">
             $i18n{customizeButton}

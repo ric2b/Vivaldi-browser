@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/base64.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/system/sys_info.h"
@@ -42,7 +42,8 @@ class FakeParentAccessUIHandlerDelegate : public ParentAccessUIHandlerDelegate {
     return parent_access_ui::mojom::ParentAccessParams::New(
         parent_access_ui::mojom::ParentAccessParams::FlowType::kWebsiteAccess,
         parent_access_ui::mojom::FlowTypeParams::NewWebApprovalsParams(
-            parent_access_ui::mojom::WebApprovalsParams::New()));
+            parent_access_ui::mojom::WebApprovalsParams::New()),
+        /*is_disabled=*/false);
   }
 
   MOCK_METHOD2(SetApproved, void(const std::string&, const base::Time&));

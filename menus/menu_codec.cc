@@ -283,16 +283,16 @@ base::Value MenuCodec::Encode(Menu_Model* model) {
 
   Menu_Control* control = model->GetControl();
   if (control) {
-    base::Value dict(base::Value::Type::DICTIONARY);
+    base::Value dict(base::Value::Type::DICT);
     base::Value deleted_list(base::Value::Type::LIST);
     for (const auto& deleted : control->deleted) {
-      deleted_list.Append(deleted);
+      deleted_list.GetList().Append(deleted);
     }
     dict.SetKey("type", base::Value("control"));
     dict.SetKey("deleted", base::Value(std::move(deleted_list)));
     dict.SetKey("format", base::Value(control->format));
     dict.SetKey("version", base::Value(control->version));
-    list.Append(base::Value(std::move(dict)));
+    list.GetList().Append(base::Value(std::move(dict)));
   }
 
   return list;
@@ -302,12 +302,12 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
   if (node->id() == Menu_Node::mainmenu_node_id()) {
     base::Value list(base::Value::Type::LIST);
     for (const auto& child : node->children()) {
-      list.Append(EncodeNode(child.get()));
+      list.GetList().Append(EncodeNode(child.get()));
     }
     return list;
   }
 
-  base::Value dict(base::Value::Type::DICTIONARY);
+  base::Value dict(base::Value::Type::DICT);
   dict.SetKey("action", base::Value(node->action()));
   dict.SetKey("guid", base::Value(node->guid()));
   if (node->hasCustomTitle()) {
@@ -359,7 +359,7 @@ base::Value MenuCodec::EncodeNode(Menu_Node* node) {
   if (is_folder) {
     base::Value list(base::Value::Type::LIST);
     for (const auto& child : node->children()) {
-      list.Append(EncodeNode(child.get()));
+      list.GetList().Append(EncodeNode(child.get()));
     }
     dict.SetKey("children", base::Value(std::move(list)));
   }

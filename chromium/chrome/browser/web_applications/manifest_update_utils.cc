@@ -62,10 +62,6 @@ std::ostream& operator<<(std::ostream& os, ManifestUpdateResult result) {
       return os << "kIconReadFromDiskFailed";
     case ManifestUpdateResult::kAppIdMismatch:
       return os << "kAppIdMismatch";
-    case ManifestUpdateResult::kAppAssociationsUpdateFailed:
-      return os << "kAppAssociationsUpdateFailed";
-    case ManifestUpdateResult::kAppAssociationsUpdated:
-      return os << "kAppAssociationsUpdated";
   }
 }
 
@@ -79,10 +75,6 @@ std::ostream& operator<<(std::ostream& os, ManifestUpdateStage stage) {
       return os << "kPendingIconReadFromDisk";
     case ManifestUpdateStage::kPendingAppIdentityCheck:
       return os << "kPendingAppIdentityCheck";
-    case ManifestUpdateStage::kPendingMaybeReadExistingIcons:
-      return os << "kPendingMaybeReadExistingIcons";
-    case ManifestUpdateStage::kPendingAssociationsUpdate:
-      return os << "kPendingAssociationsUpdate";
     case ManifestUpdateStage::kAppWindowsClosed:
       return os << "kAppWindowsClosed";
     case ManifestUpdateStage::kPendingFinalizerUpdate:
@@ -217,7 +209,6 @@ bool IsUpdateNeededForManifest(const AppId& app_id,
 
   // TODO(crbug.com/897314): Check changes to tab_strip field once icons are
   // stored.
-  // TODO(crbug.com/1212849): Handle changes to is_storage_isolated.
   // TODO(crbug.com/926083): Check more manifest fields.
   return false;
 }

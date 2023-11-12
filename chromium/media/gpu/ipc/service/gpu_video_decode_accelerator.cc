@@ -7,13 +7,14 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/command_buffer.h"
@@ -59,7 +60,7 @@ static bool MakeDecoderContextCurrent(
   return true;
 }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
 static bool BindDecoderManagedImage(
     const base::WeakPtr<gpu::CommandBufferStub>& stub,
     uint32_t client_texture_id,
@@ -298,10 +299,10 @@ GpuVideoDecodeAccelerator::GpuVideoDecodeAccelerator(
       base::BindRepeating(&GetGLContext, stub_->AsWeakPtr());
   gl_client_.make_context_current =
       base::BindRepeating(&MakeDecoderContextCurrent, stub_->AsWeakPtr());
-  // The semantics of |bind_image| vary per-platform: On Windows and Mac it must
-  // mark the image as needing binding by the decoder, while on other platforms
-  // it must mark the image as *not* needing binding by the decoder.
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  // The semantics of |bind_image| vary per-platform: On Windows and Apple it
+  // must mark the image as needing binding by the decoder, while on other
+  // platforms it must mark the image as *not* needing binding by the decoder.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
   gl_client_.bind_image =
       base::BindRepeating(&BindDecoderManagedImage, stub_->AsWeakPtr());
 #else
@@ -487,7 +488,7 @@ bool GpuVideoDecodeAccelerator::Initialize(
   // Attempt to set up performing decoding tasks on IO thread, if supported by
   // the VDA.
   bool decode_on_io =
-      video_decode_accelerator_->TryToSetupDecodeOnSeparateThread(
+      video_decode_accelerator_->TryToSetupDecodeOnSeparateSequence(
           weak_factory_for_io_.GetWeakPtr(), io_task_runner_);
 
   // Bind the receiver on the IO thread. We wait here for it to be bound
@@ -497,7 +498,7 @@ bool GpuVideoDecodeAccelerator::Initialize(
   return filter_->Bind(std::move(receiver), io_task_runner_);
 }
 
-// Runs on IO thread if VDA::TryToSetupDecodeOnSeparateThread() succeeded,
+// Runs on IO thread if VDA::TryToSetupDecodeOnSeparateSequence() succeeded,
 // otherwise on the main thread.
 void GpuVideoDecodeAccelerator::OnDecode(BitstreamBuffer bitstream_buffer) {
   DCHECK(video_decode_accelerator_);

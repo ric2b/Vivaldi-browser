@@ -67,8 +67,10 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
                          const base::Time& date,
                          bool& opened_pwa,
                          GURL& final_event_url) override;
+  void ShowGoogleMeet(const std::string& hangout_link) override;
   void ShowChannelInfoAdditionalDetails() override;
   void ShowChannelInfoGiveFeedback() override;
+  void ShowAudioSettings() override;
   bool IsUserFeedbackEnabled() override;
 
   int show_bluetooth_settings_count() const {
@@ -127,7 +129,13 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
 
   int show_network_create_count() const { return show_network_create_count_; }
 
+  int show_access_code_casting_dialog_count() const {
+    return show_access_code_casting_dialog_count_;
+  }
+
   int show_calendar_event_count() const { return show_calendar_event_count_; }
+
+  int show_google_meet_count() const { return show_google_meet_count_; }
 
   const std::string& last_network_type() const { return last_network_type_; }
 
@@ -148,6 +156,8 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
   int show_channel_info_give_feedback_count() const {
     return show_channel_info_give_feedback_count_;
   }
+
+  int show_audio_settings_count() const { return show_audio_settings_count_; }
 
   void set_user_feedback_enabled(bool user_feedback_enabled) {
     user_feedback_enabled_ = user_feedback_enabled;
@@ -170,12 +180,15 @@ class ASH_PUBLIC_EXPORT TestSystemTrayClient : public SystemTrayClient {
   std::string last_arc_vpn_app_id_;
   int show_firmware_update_count_ = 0;
   int show_network_create_count_ = 0;
+  int show_access_code_casting_dialog_count_ = 0;
   int show_calendar_event_count_ = 0;
+  int show_google_meet_count_ = 0;
   std::string last_bluetooth_settings_device_id_;
   std::string last_network_settings_network_id_;
   std::string last_network_type_;
   int show_channel_info_additional_details_count_ = 0;
   int show_channel_info_give_feedback_count_ = 0;
+  int show_audio_settings_count_ = 0;
   bool user_feedback_enabled_ = false;
 };
 

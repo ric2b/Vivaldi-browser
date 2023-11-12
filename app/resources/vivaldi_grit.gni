@@ -21,7 +21,7 @@ template("vivaldi_strings_grit_action") {
   name = "grit_$target_name"
   deps_list += [ ":" + name ]
   inputs = []
-  foreach(locale, platform_pak_locales + vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales - ["en-US"]) {
+  foreach(locale, platform_pak_locales + vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales - ["en-US"] - ["ca@valencia"] + ["ca-valencia"]) {
     if (is_ios) {
       if (locale == "es-MX") {
         locale = "es-419"
@@ -32,7 +32,7 @@ template("vivaldi_strings_grit_action") {
     inputs += [ "$source_translations$locale.xtb" ]
   }
   outputs = [ output_header ]
-  foreach(locale, locales_with_pseudolocales + vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales) {
+  foreach(locale, locales_with_pseudolocales + vivaldi_pending_locales + vivaldi_pending_mobile_locales + vivaldi_pending_ios_locales - ["ca@valencia"] + ["ca-valencia"]) {
     outputs += [ "${source_name}_$locale.pak" ]
   }
   grit(name) {

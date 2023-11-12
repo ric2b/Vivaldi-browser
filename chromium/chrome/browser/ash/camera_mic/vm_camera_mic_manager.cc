@@ -14,8 +14,8 @@
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/vm_camera_mic_constants.h"
 #include "ash/system/privacy/privacy_indicators_controller.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/system/sys_info.h"
@@ -29,7 +29,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/ash/app_management/app_management_uma.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -209,21 +209,26 @@ class VmCameraMicManager::VmInfo : public message_center::NotificationObserver {
 
     if (notifications_.active != kNoNotification) {
       CloseNotification(notifications_.active);
+      if (features::IsPrivacyIndicatorsEnabled()) {
+        UpdatePrivacyIndicatorsView(
+            /*app_id=*/GetNotificationId(vm_type_, notifications_.active),
+            /*is_camera_used=*/false, /*is_microphone_used=*/false);
+      }
     }
+
     if (new_notification != kNoNotification) {
       OpenNotification(new_notification);
+      if (features::IsPrivacyIndicatorsEnabled()) {
+        UpdatePrivacyIndicatorsView(
+            /*app_id=*/GetNotificationId(vm_type_, new_notification),
+            /*is_camera_used=*/
+            new_notification[static_cast<size_t>(DeviceType::kCamera)],
+            /*is_microphone_used=*/
+            new_notification[static_cast<size_t>(DeviceType::kMic)]);
+      }
     }
+
     notifications_.active = new_notification;
-
-    if (features::IsPrivacyIndicatorsEnabled()) {
-      UpdatePrivacyIndicatorsView(
-          /*app_id=*/GetNotificationId(vm_type_, new_notification),
-          /*is_camera_used=*/
-          new_notification[static_cast<size_t>(DeviceType::kCamera)],
-          /*is_microphone_used=*/
-          new_notification[static_cast<size_t>(DeviceType::kMic)]);
-    }
-
     notification_changed_callback_.Run();
   }
 
@@ -283,8 +288,11 @@ class VmCameraMicManager::VmInfo : public message_center::NotificationObserver {
           l10n_util::GetStringUTF16(name_id_),
           type[static_cast<size_t>(DeviceType::kCamera)],
           type[static_cast<size_t>(DeviceType::kMic)],
-          base::MakeRefCounted<message_center::ThunkNotificationDelegate>(
-              weak_ptr_factory_.GetMutableWeakPtr()));
+          base::MakeRefCounted<PrivacyIndicatorsNotificationDelegate>(
+              /*launch_app=*/absl::nullopt,
+              /*launch_settings=*/base::BindRepeating(
+                  &VmCameraMicManager::VmInfo::OpenSettings,
+                  weak_ptr_factory_.GetMutableWeakPtr())));
       notification->set_fullscreen_visibility(
           message_center::FullscreenVisibility::OVER_USER);
 
@@ -335,6 +343,11 @@ class VmCameraMicManager::VmInfo : public message_center::NotificationObserver {
   // This open the settings page if the button is clicked on the notification.
   void Click(const absl::optional<int>& button_index,
              const absl::optional<std::u16string>& reply) override {
+    OpenSettings();
+  }
+
+  // Opens the settings page.
+  void OpenSettings() {
     switch (vm_type_) {
       case VmType::kCrostiniVm:
         chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(

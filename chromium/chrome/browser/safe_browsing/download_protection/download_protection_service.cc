@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -722,6 +722,14 @@ void DownloadProtectionService::OnDangerousDownloadOpened(
         item->GetMimeType(), /*scan_id*/ "", item->GetDangerType(),
         item->GetTotalBytes());
   }
+}
+
+base::TimeDelta DownloadProtectionService::GetDownloadRequestTimeout() const {
+  if (base::FeatureList::IsEnabled(kStrictDownloadTimeout)) {
+    return base::Milliseconds(kStrictDownloadTimeoutMilliseconds.Get());
+  }
+
+  return base::Milliseconds(download_request_timeout_ms_);
 }
 
 bool DownloadProtectionService::MaybeBeginFeedbackForDownload(

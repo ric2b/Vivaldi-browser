@@ -6,8 +6,8 @@
 
 #include <stddef.h>
 
-#include "base/bind.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/test/bind.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -162,15 +162,6 @@ void SetInputFocusOnPlugin(extensions::MimeHandlerViewGuest* guest) {
   content::SimulateMouseClickAt(
       guest->embedder_web_contents(), blink::WebInputEvent::kNoModifiers,
       blink::WebMouseEvent::Button::kLeft, point_in_root_coords);
-  focus_observer.Wait();
-}
-
-void SetInputFocusOnPlugin(content::WebContents* guest_contents) {
-  content::FocusChangedObserver focus_observer(guest_contents);
-  content::SimulateMouseClickAt(
-      guest_contents, blink::WebInputEvent::kNoModifiers,
-      blink::WebMouseEvent::Button::kLeft,
-      ConvertPageCoordToScreenCoord(guest_contents, {1, 1}));
   focus_observer.Wait();
 }
 

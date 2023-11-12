@@ -11,12 +11,12 @@
 
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
@@ -33,10 +33,10 @@
 #include "chrome/updater/crash_client.h"
 #include "chrome/updater/crash_reporter.h"
 #include "chrome/updater/mac/setup/keystone.h"
-#import "chrome/updater/mac/xpc_service_names.h"
 #include "chrome/updater/setup.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
+#include "chrome/updater/updater_version.h"
 #include "chrome/updater/util/launchd_util.h"
 #import "chrome/updater/util/mac_util.h"
 #import "chrome/updater/util/posix_util.h"
@@ -84,12 +84,25 @@ NSString* NSStringSessionType(UpdaterScope scope) {
   }
 }
 
+base::scoped_nsobject<NSString> GetWakeLaunchdLabel(UpdaterScope scope) {
+  return base::scoped_nsobject<NSString>(
+      base::mac::CFToNSCast(CopyWakeLaunchdName(scope).release()));
+}
+
 #pragma mark Setup
-bool CopyBundle(const base::FilePath& dest_path, UpdaterScope scope) {
-  if (!base::PathExists(dest_path)) {
+bool CopyBundle(UpdaterScope scope) {
+  absl::optional<base::FilePath> base_install_dir = GetInstallDirectory(scope);
+  absl::optional<base::FilePath> versioned_install_dir =
+      GetVersionedInstallDirectory(scope);
+  if (!base_install_dir || !versioned_install_dir) {
+    LOG(ERROR) << "Failed to get install directory.";
+    return false;
+  }
+  if (!base::PathExists(*versioned_install_dir)) {
     base::File::Error error;
-    if (!base::CreateDirectoryAndGetError(dest_path, &error)) {
-      LOG(ERROR) << "Failed to create '" << dest_path.value().c_str()
+    if (!base::CreateDirectoryAndGetError(*versioned_install_dir, &error)) {
+      LOG(ERROR) << "Failed to create '"
+                 << versioned_install_dir->value().c_str()
                  << "' directory: " << base::File::ErrorToString(error);
       return false;
     }
@@ -102,21 +115,21 @@ bool CopyBundle(const base::FilePath& dest_path, UpdaterScope scope) {
                                      base::FILE_PERMISSION_EXECUTE_BY_GROUP |
                                      base::FILE_PERMISSION_READ_BY_OTHERS |
                                      base::FILE_PERMISSION_EXECUTE_BY_OTHERS;
-    if (!base::SetPosixFilePermissions(
-            GetLibraryFolderPath(scope)->Append(COMPANY_SHORTNAME_STRING),
-            kPermissionsMask) ||
-        !base::SetPosixFilePermissions(*GetBaseInstallDirectory(scope),
+    if (!base::SetPosixFilePermissions(base_install_dir->DirName(),
                                        kPermissionsMask) ||
-        !base::SetPosixFilePermissions(*GetVersionedInstallDirectory(scope),
+        !base::SetPosixFilePermissions(*base_install_dir, kPermissionsMask) ||
+        !base::SetPosixFilePermissions(*versioned_install_dir,
                                        kPermissionsMask)) {
       LOG(ERROR) << "Failed to set permissions to drwxr-xr-x at "
-                 << dest_path.value().c_str();
+                 << versioned_install_dir->value();
       return false;
     }
   }
 
-  if (!base::CopyDirectory(base::mac::OuterBundlePath(), dest_path, true)) {
-    LOG(ERROR) << "Copying app to '" << dest_path.value().c_str() << "' failed";
+  if (!base::CopyDirectory(base::mac::OuterBundlePath(), *versioned_install_dir,
+                           true)) {
+    LOG(ERROR) << "Copying app to '" << versioned_install_dir->value().c_str()
+               << "' failed";
     return false;
   }
 
@@ -130,39 +143,6 @@ NSString* MakeProgramArgument(const char* argument) {
 NSString* MakeProgramArgumentWithValue(const char* argument,
                                        const char* value) {
   return base::SysUTF8ToNSString(base::StrCat({"--", argument, "=", value}));
-}
-
-base::ScopedCFTypeRef<CFDictionaryRef> CreateServiceLaunchdPlist(
-    UpdaterScope scope,
-    const base::FilePath& updater_path) {
-  // See the man page for launchd.plist.
-  NSMutableArray<NSString*>* program_arguments =
-      [NSMutableArray<NSString*> array];
-  [program_arguments addObjectsFromArray:@[
-    base::SysUTF8ToNSString(updater_path.value()),
-    MakeProgramArgument(kServerSwitch),
-    MakeProgramArgumentWithValue(kServerServiceSwitch,
-                                 kServerUpdateServiceSwitchValue),
-    MakeProgramArgument(kEnableLoggingSwitch),
-    MakeProgramArgumentWithValue(kLoggingModuleSwitch,
-                                 kLoggingModuleSwitchValue)
-
-  ]];
-  if (IsSystemInstall(scope))
-    [program_arguments addObject:MakeProgramArgument(kSystemSwitch)];
-
-  NSDictionary<NSString*, id>* launchd_plist = @{
-    @LAUNCH_JOBKEY_LABEL : GetUpdateServiceLaunchdLabel(scope),
-    @LAUNCH_JOBKEY_PROGRAMARGUMENTS : program_arguments,
-    @LAUNCH_JOBKEY_MACHSERVICES : @{GetUpdateServiceMachName(scope) : @YES},
-    @LAUNCH_JOBKEY_ABANDONPROCESSGROUP : @YES,
-    @LAUNCH_JOBKEY_LIMITLOADTOSESSIONTYPE : NSStringSessionType(scope),
-    @"AssociatedBundleIdentifiers" : @MAC_BUNDLE_IDENTIFIER_STRING
-  };
-
-  return base::ScopedCFTypeRef<CFDictionaryRef>(
-      base::mac::CFCast<CFDictionaryRef>(launchd_plist),
-      base::scoped_policy::RETAIN);
 }
 
 base::ScopedCFTypeRef<CFDictionaryRef> CreateWakeLaunchdPlist(
@@ -195,19 +175,6 @@ base::ScopedCFTypeRef<CFDictionaryRef> CreateWakeLaunchdPlist(
       base::scoped_policy::RETAIN);
 }
 
-bool CreateUpdateServiceLaunchdJobPlist(UpdaterScope scope,
-                                        const base::FilePath& updater_path) {
-  // We're creating directories and writing a file.
-  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
-                                                base::BlockingType::MAY_BLOCK);
-
-  base::ScopedCFTypeRef<CFDictionaryRef> plist(
-      CreateServiceLaunchdPlist(scope, updater_path));
-  return Launchd::GetInstance()->WritePlistToFile(
-      LaunchdDomain(scope), ServiceLaunchdType(scope),
-      CopyUpdateServiceLaunchdName(scope), plist);
-}
-
 bool CreateWakeLaunchdJobPlist(UpdaterScope scope,
                                const base::FilePath& updater_path) {
   // We're creating directories and writing a file.
@@ -220,23 +187,10 @@ bool CreateWakeLaunchdJobPlist(UpdaterScope scope,
       CopyWakeLaunchdName(scope), plist);
 }
 
-bool StartUpdateServiceVersionedLaunchdJob(
-    UpdaterScope scope,
-    const base::ScopedCFTypeRef<CFStringRef> name) {
-  return Launchd::GetInstance()->RestartJob(LaunchdDomain(scope),
-                                            ServiceLaunchdType(scope), name,
-                                            CFSessionType(scope));
-}
-
 bool StartUpdateWakeVersionedLaunchdJob(UpdaterScope scope) {
   return Launchd::GetInstance()->RestartJob(
       LaunchdDomain(scope), ServiceLaunchdType(scope),
       CopyWakeLaunchdName(scope), CFSessionType(scope));
-}
-
-bool StartLaunchdServiceJob(UpdaterScope scope) {
-  return StartUpdateServiceVersionedLaunchdJob(
-      scope, CopyUpdateServiceLaunchdName(scope));
 }
 
 bool RemoveServiceJobFromLaunchd(UpdaterScope scope,
@@ -245,27 +199,16 @@ bool RemoveServiceJobFromLaunchd(UpdaterScope scope,
                               ServiceLaunchdType(scope), name);
 }
 
-bool RemoveUpdateServiceJobFromLaunchd(
-    UpdaterScope scope,
-    base::ScopedCFTypeRef<CFStringRef> name) {
-  return RemoveServiceJobFromLaunchd(scope, name);
-}
-
-bool RemoveUpdateServiceJobFromLaunchd(UpdaterScope scope) {
-  return RemoveUpdateServiceJobFromLaunchd(scope,
-                                           CopyUpdateServiceLaunchdName(scope));
-}
-
 bool RemoveUpdateWakeJobFromLaunchd(UpdaterScope scope) {
   return RemoveServiceJobFromLaunchd(scope, CopyWakeLaunchdName(scope));
 }
 
 bool DeleteInstallFolder(UpdaterScope scope) {
-  return DeleteFolder(GetBaseInstallDirectory(scope));
+  return DeleteFolder(GetInstallDirectory(scope));
 }
 
 bool DeleteDataFolder(UpdaterScope scope) {
-  return DeleteFolder(GetBaseDataDirectory(scope));
+  return DeleteFolder(GetInstallDirectory(scope));
 }
 
 void CleanAfterInstallFailure(UpdaterScope scope) {
@@ -273,39 +216,10 @@ void CleanAfterInstallFailure(UpdaterScope scope) {
   DeleteCandidateInstallFolder(scope);
 }
 
-bool RemoveQuarantineAttributes(const base::FilePath& updater_bundle_path,
-                                const base::FilePath& updater_executable_path) {
-  if (!base::PathExists(updater_bundle_path)) {
-    VPLOG(1) << "Updater bundle path not found: "
-             << updater_bundle_path.value();
-    return false;
-  }
-
-  if (!base::mac::RemoveQuarantineAttribute(updater_bundle_path)) {
-    VPLOG(1) << "Could not remove com.apple.quarantine for the bundle.";
-    return false;
-  }
-
-  if (!base::mac::RemoveQuarantineAttribute(updater_executable_path)) {
-    VPLOG(1) << "Could not remove com.apple.quarantine for the "
-                "executable.";
-    return false;
-  }
-
-  return true;
-}
-
 int DoSetup(UpdaterScope scope) {
-  const absl::optional<base::FilePath> dest_path =
-      GetVersionedInstallDirectory(scope);
-
-  if (!dest_path)
-    return kErrorFailedToGetVersionedInstallDirectory;
-  if (!CopyBundle(*dest_path, scope))
+  if (!CopyBundle(scope)) {
     return kErrorFailedToCopyBundle;
-
-  const base::FilePath updater_executable_path =
-      dest_path->Append(GetExecutableRelativePath());
+  }
 
   // Quarantine attribute needs to be removed here as the copied bundle might be
   // given com.apple.quarantine attribute, and the server is attempted to be
@@ -314,9 +228,22 @@ int DoSetup(UpdaterScope scope) {
       GetUpdaterAppBundlePath(scope);
   if (!bundle_path)
     return kErrorFailedToGetAppBundlePath;
-  if (!RemoveQuarantineAttributes(*bundle_path, updater_executable_path)) {
+  if (!RemoveQuarantineAttributes(*bundle_path)) {
     VLOG(1) << "Couldn't remove quarantine bits for updater. This will likely "
                "cause Gatekeeper to show a prompt to the user.";
+  }
+
+  // If there is no --wake-all task, install one now.
+  if (!Launchd::GetInstance()->PlistExists(LaunchdDomain(scope),
+                                           ServiceLaunchdType(scope),
+                                           CopyWakeLaunchdName(scope))) {
+    absl::optional<base::FilePath> path = GetUpdaterExecutablePath(scope);
+    if (!path || !CreateWakeLaunchdJobPlist(scope, *path)) {
+      return kErrorFailedToCreateWakeLaunchdJobPlist;
+    }
+    if (!StartUpdateWakeVersionedLaunchdJob(scope)) {
+      return kErrorFailedToStartLaunchdWakeJob;
+    }
   }
 
   return kErrorOk;
@@ -334,49 +261,47 @@ int Setup(UpdaterScope scope) {
 int PromoteCandidate(UpdaterScope scope) {
   const absl::optional<base::FilePath> updater_executable_path =
       GetUpdaterExecutablePath(scope);
-  const absl::optional<base::FilePath> install_dir =
-      GetBaseInstallDirectory(scope);
+  const absl::optional<base::FilePath> install_dir = GetInstallDirectory(scope);
   const absl::optional<base::FilePath> bundle_path =
       GetUpdaterAppBundlePath(scope);
-  if (!updater_executable_path || !bundle_path || !install_dir) {
+  if (!updater_executable_path || !install_dir || !bundle_path) {
     return kErrorFailedToGetVersionedInstallDirectory;
   }
 
-  // Update the launcher hard link.
-  base::FilePath tmp_launcher_name = install_dir->Append("launcher_new");
-  if (link(bundle_path->Append("Contents")
-               .Append("Helpers")
-               .Append("launcher")
-               .value()
-               .c_str(),
-           tmp_launcher_name.value().c_str())) {
+  // Update the launcher sym link.
+  base::FilePath tmp_launcher_name = install_dir->Append("NewCurrent");
+  if (!base::DeleteFile(tmp_launcher_name)) {
+    VLOG(1) << "Failed to delete existing " << tmp_launcher_name.value();
+  }
+  if (symlink(kUpdaterVersion, tmp_launcher_name.value().c_str())) {
     return kErrorFailedToLinkLauncher;
   }
   if (rename(tmp_launcher_name.value().c_str(),
-             install_dir->Append("launcher").value().c_str())) {
+             install_dir->Append("Current").value().c_str())) {
     return kErrorFailedToRenameLauncher;
   }
-  // TODO(crbug.com/1339108): If kSystem, mark setuid on the launcher.
+  if (scope == UpdaterScope::kSystem) {
+    base::FilePath path =
+        bundle_path->Append("Contents").Append("Helpers").Append("launcher");
+    struct stat info;
+    if (lstat(path.value().c_str(), &info) || info.st_uid ||
+        !(S_IFREG & info.st_mode) ||
+        lchmod(path.value().c_str(),
+               S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH | S_ISUID)) {
+      VPLOG(1) << "Launcher lchmod failed. Cross-user on-demand will not work";
+      base::debug::DumpWithoutCrashing();
+    }
+  }
 
   if (!CreateWakeLaunchdJobPlist(scope, *updater_executable_path)) {
     return kErrorFailedToCreateWakeLaunchdJobPlist;
   }
 
-  if (!CreateUpdateServiceLaunchdJobPlist(scope, *updater_executable_path)) {
-    return kErrorFailedToCreateUpdateServiceLaunchdJobPlist;
-  }
-
   if (!StartUpdateWakeVersionedLaunchdJob(scope))
     return kErrorFailedToStartLaunchdWakeJob;
 
-  if (!StartLaunchdServiceJob(scope))
-    return kErrorFailedToStartLaunchdActiveServiceJob;
-
   if (!InstallKeystone(scope))
     return kErrorFailedToInstallLegacyUpdater;
-
-  // Wait for launchd to finish the load operation for the update service.
-  base::PlatformThread::Sleep(base::Seconds(2));
 
   return kErrorOk;
 }
@@ -384,7 +309,7 @@ int PromoteCandidate(UpdaterScope scope) {
 #pragma mark Uninstall
 int UninstallCandidate(UpdaterScope scope) {
   return !DeleteCandidateInstallFolder(scope) ||
-                 !DeleteFolder(GetVersionedDataDirectory(scope))
+                 !DeleteFolder(GetVersionedInstallDirectory(scope))
              ? kErrorFailedToDeleteFolder
              : kErrorOk;
 }
@@ -393,9 +318,6 @@ int Uninstall(UpdaterScope scope) {
   VLOG(1) << base::CommandLine::ForCurrentProcess()->GetCommandLineString()
           << " : " << __func__;
   int exit = UninstallCandidate(scope);
-
-  if (!RemoveUpdateServiceJobFromLaunchd(scope))
-    exit = kErrorFailedToRemoveActiveUpdateServiceJobFromLaunchd;
 
   if (!RemoveUpdateWakeJobFromLaunchd(scope))
     exit = kErrorFailedToRemoveWakeJobFromLaunchd;

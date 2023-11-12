@@ -13,9 +13,9 @@
 #include <vector>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
@@ -30,7 +30,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chromeos/ash/components/system/devicemode.h"
 #include "chromeos/ui/base/display_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
@@ -75,7 +74,7 @@ const char kMirroringDisplayCountRangesHistogram[] =
 const char kMirroringImplementationHistogram[] =
     "DisplayManager.MirroringImplementation";
 
-// The UMA historgram that logs the zoom percentage level of the intenral
+// The UMA histogram that logs the zoom percentage level of the internal
 // display.
 constexpr char kInternalDisplayZoomPercentageHistogram[] =
     "DisplayManager.InternalDisplayZoomPercentage";
@@ -333,7 +332,7 @@ DisplayManager::BeginEndNotifier::~BeginEndNotifier() {
 
 DisplayManager::DisplayManager(std::unique_ptr<Screen> screen)
     : screen_(std::move(screen)), layout_store_(new DisplayLayoutStore) {
-  configure_displays_ = chromeos::IsRunningAsSystemCompositor();
+  SetConfigureDisplays(base::SysInfo::IsRunningOnChromeOS());
   change_display_upon_host_resize_ = !configure_displays_;
   unified_desktop_enabled_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       ::switches::kEnableUnifiedDesktop);
@@ -344,6 +343,13 @@ DisplayManager::~DisplayManager() {
   // Reset the font params.
   gfx::SetFontRenderParamsDeviceScaleFactor(1.0f);
   on_display_zoom_modify_timeout_.Cancel();
+}
+
+void DisplayManager::SetConfigureDisplays(bool configure_displays) {
+  configure_displays_ = configure_displays;
+  if (display_configurator_) {
+    display_configurator_->SetConfigureDisplays(configure_displays);
+  }
 }
 
 bool DisplayManager::InitFromCommandLine() {
@@ -1020,7 +1026,7 @@ void DisplayManager::UpdateDisplaysWith(
   }
 
   // Clear focus if the display has been removed, but don't clear focus if
-  // the destkop has been moved from one display to another
+  // the desktop has been moved from one display to another
   // (mirror -> docked, docked -> single internal).
   bool clear_focus =
       !removed_displays.empty() &&
@@ -1447,6 +1453,7 @@ void DisplayManager::InitConfigurator(
   display_configurator_ = std::make_unique<display::DisplayConfigurator>();
   display_configurator_->Init(std::move(delegate),
                               false /* is_panel_fitting_enabled */);
+  display_configurator_->SetConfigureDisplays(configure_displays_);
 }
 
 void DisplayManager::ForceInitialConfigureWithObservers(
@@ -2072,6 +2079,8 @@ Display DisplayManager::CreateDisplayFromDisplayInfoById(int64_t id) {
   new_display.set_color_spaces(display_info.display_color_spaces());
   new_display.set_display_frequency(display_info.refresh_rate());
   new_display.set_label(display_info.name());
+  new_display.SetDRMFormatsAndModifiers(
+      display_info.GetDRMFormatsAndModifiers());
 
   constexpr uint32_t kNormalBitDepthNumBitsPerChannel = 8u;
   if (display_info.bits_per_channel() > kNormalBitDepthNumBitsPerChannel) {

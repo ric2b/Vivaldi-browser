@@ -20,12 +20,12 @@
 #include "chrome/browser/enterprise/connectors/reporting/extension_install_event_router.h"
 #include "chrome/browser/enterprise/connectors/service_provider_config.h"
 #include "chrome/browser/enterprise/util/affiliation.h"
+#include "chrome/browser/extensions/chrome_content_browser_client_extensions_part.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/profiles/reporting_util.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
@@ -54,9 +54,10 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/policy/core/user_cloud_policy_manager_ash.h"
-#include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/settings/device_settings_service.h"
+#include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "extensions/common/constants.h"
 #endif
 
@@ -139,10 +140,6 @@ absl::optional<std::string> GetDeviceDMToken() {
 #endif
 }  // namespace
 
-BASE_FEATURE(kEnterpriseConnectorsEnabled,
-             "EnterpriseConnectorsEnabled",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnterpriseConnectorsEnabledOnMGS,
              "EnterpriseConnectorsEnabledOnMGS",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -205,6 +202,12 @@ absl::optional<AnalysisSettings> ConnectorsService::GetAnalysisSettings(
 
   if (IsURLExemptFromAnalysis(url))
     return absl::nullopt;
+
+  if (url.SchemeIsBlob() || url.SchemeIsFileSystem()) {
+    GURL inner = url.inner_url() ? *url.inner_url() : GURL(url.path());
+    return GetCommonAnalysisSettings(
+        connectors_manager_->GetAnalysisSettings(inner, connector), connector);
+  }
 
   return GetCommonAnalysisSettings(
       connectors_manager_->GetAnalysisSettings(url, connector), connector);
@@ -445,13 +448,11 @@ absl::optional<ConnectorsService::DmToken> ConnectorsService::GetDmToken(
   Profile* profile = Profile::FromBrowserContext(context_);
   if (profile->IsMainProfile()) {
     return GetBrowserDmToken();
-  } else
-#endif
-  {
-    return GetPolicyScope(scope_pref) == policy::POLICY_SCOPE_USER
-               ? GetProfileDmToken()
-               : GetBrowserDmToken();
   }
+#endif
+  return GetPolicyScope(scope_pref) == policy::POLICY_SCOPE_USER
+             ? GetProfileDmToken()
+             : GetBrowserDmToken();
 #endif
 }
 
@@ -503,9 +504,6 @@ policy::PolicyScope ConnectorsService::GetPolicyScope(
 }
 
 bool ConnectorsService::ConnectorsEnabled() const {
-  if (!base::FeatureList::IsEnabled(kEnterpriseConnectorsEnabled))
-    return false;
-
   if (profiles::IsPublicSession() &&
       !base::FeatureList::IsEnabled(kEnterpriseConnectorsEnabledOnMGS)) {
     return false;
@@ -588,12 +586,9 @@ ConnectorsServiceFactory::~ConnectorsServiceFactory() = default;
 KeyedService* ConnectorsServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   bool observe_prefs =
-      base::FeatureList::IsEnabled(kEnterpriseConnectorsEnabled);
-
-  if (profiles::IsPublicSession()) {
-    observe_prefs &=
-        base::FeatureList::IsEnabled(kEnterpriseConnectorsEnabledOnMGS);
-  }
+      profiles::IsPublicSession()
+          ? base::FeatureList::IsEnabled(kEnterpriseConnectorsEnabledOnMGS)
+          : true;
 
   return new ConnectorsService(
       context, std::make_unique<ConnectorsManager>(
@@ -605,6 +600,13 @@ KeyedService* ConnectorsServiceFactory::BuildServiceInstanceFor(
 
 content::BrowserContext* ConnectorsServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
+  // Do not construct the connectors service if the extensions are disabled for
+  // the given context.
+  if (extensions::ChromeContentBrowserClientExtensionsPart::
+          AreExtensionsDisabledForProfile(context)) {
+    return nullptr;
+  }
+
   // On Chrome OS, settings from the primary/main profile apply to all
   // profiles, besides incognito.
   // However, the primary/main profile might not exist in tests - then the
@@ -612,13 +614,14 @@ content::BrowserContext* ConnectorsServiceFactory::GetBrowserContextToUse(
   if (context && !context->IsOffTheRecord() &&
       !Profile::FromBrowserContext(context)->AsTestingProfile()) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    Profile* primary_profile = ProfileManager::GetPrimaryUserProfile();
-    if (primary_profile)
-      return primary_profile;
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-    Profile* profile = Profile::FromBrowserContext(context);
-    if (profile)
-      return profile;
+    auto* user_manager = user_manager::UserManager::Get();
+    if (auto* primary_user = user_manager->GetPrimaryUser()) {
+      if (auto* primary_browser_context =
+              ash::BrowserContextHelper::Get()->GetBrowserContextByUser(
+                  primary_user)) {
+        return primary_browser_context;
+      }
+    }
 #endif
   }
   return context;

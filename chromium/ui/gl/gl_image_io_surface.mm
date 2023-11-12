@@ -6,8 +6,8 @@
 
 #include <map>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/memory_allocator_dump.h"
@@ -15,7 +15,6 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/buffer_format_util.h"
-#include "ui/gfx/mac/display_icc_profiles.h"
 #include "ui/gfx/mac/io_surface.h"
 #include "ui/gl/buffer_format_utils.h"
 #include "ui/gl/gl_bindings.h"
@@ -25,6 +24,10 @@
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/scoped_binders.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "ui/gfx/mac/display_icc_profiles.h"
+#endif
 
 using gfx::BufferFormat;
 
@@ -110,33 +113,13 @@ bool GLImageIOSurface::InitializeWithCVPixelBuffer(
 
   cv_pixel_buffer_.reset(cv_pixel_buffer, base::scoped_policy::RETAIN);
   disable_in_use_by_window_server_ = true;
-  GLImage::SetColorSpace(color_space);
+  color_space_ = color_space;
   return true;
 }
 
 gfx::Size GLImageIOSurface::GetSize() {
   return size_;
 }
-
-unsigned GLImageIOSurface::GetInternalFormat() {
-  return BufferFormatToGLInternalFormat(format_);
-}
-
-unsigned GLImageIOSurface::GetDataType() {
-  return BufferFormatToGLDataType(format_);
-}
-
-GLImage::BindOrCopy GLImageIOSurface::ShouldBindOrCopy() {
-  return BIND;
-}
-
-bool GLImageIOSurface::BindTexImage(unsigned target) {
-  LOG(ERROR) << "GLImageIOSurface::BindTexImage should not be reached.";
-  NOTREACHED();
-  return false;
-}
-
-void GLImageIOSurface::ReleaseTexImage(unsigned target) {}
 
 void GLImageIOSurface::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                                     uint64_t process_tracing_id,
@@ -187,15 +170,12 @@ void GLImageIOSurface::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
   }
 }
 
-GLImage::Type GLImageIOSurface::GetType() const {
-  return Type::IOSURFACE;
-}
-
 void GLImageIOSurface::SetColorSpace(const gfx::ColorSpace& color_space) {
   if (color_space_ == color_space)
     return;
-  GLImage::SetColorSpace(color_space);
+  color_space_ = color_space;
 
+#if BUILDFLAG(IS_MAC)
   // Prefer to use data from DisplayICCProfiles, which will give a byte-for-byte
   // match for color spaces of the system displays. Note that DisplayICCProfiles
   // is not used in IOSurfaceSetColorSpace because that call may be made in the
@@ -206,6 +186,7 @@ void GLImageIOSurface::SetColorSpace(const gfx::ColorSpace& color_space) {
     IOSurfaceSetValue(io_surface_, CFSTR("IOSurfaceColorSpace"), cf_data);
     return;
   }
+#endif
 
   // Only if that fails, fall back to IOSurfaceSetColorSpace, which will
   // generate a profile.

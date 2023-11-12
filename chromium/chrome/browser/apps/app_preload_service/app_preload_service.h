@@ -18,6 +18,10 @@
 
 class Profile;
 
+namespace base {
+class TimeTicks;
+}  // namespace base
+
 namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
@@ -46,25 +50,38 @@ class AppPreloadService : public KeyedService {
   // Registers prefs used for state management of the App Preload Service.
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
+  // Starts the process of installing apps for first login, exposed for tests
+  // which can't use the flow triggered on startup, or which need to trigger
+  // that flow multiple times. `callback` is once installation is complete with
+  // whether app installation was successful.
+  void StartFirstLoginFlowForTesting(base::OnceCallback<void(bool)> callback);
+
   void SetInstallationCompleteCallbackForTesting(
       base::OnceCallback<void(bool)> callback) {
     installation_complete_callback_ = std::move(callback);
   }
 
  private:
+  // Starts the process of installing apps for first login. This method checks
+  // eligibility and does not proceed with installation unless either the user
+  // is new, or has previously failed to preload apps.
+  void StartFirstLoginFlow();
   // This function begins the process to get a list of apps from the back end
   // service, processes the list and installs the app list. This call should
   // only be used the first time a profile is created on the device as this call
   // installs a set of default and OEM apps.
-  void StartAppInstallationForFirstLogin(DeviceInfo device_info);
+  void StartAppInstallationForFirstLogin(base::TimeTicks start_time,
+                                         DeviceInfo device_info);
   // Processes the list of apps retrieved by the server connector.
   void OnGetAppsForFirstLoginCompleted(
+      base::TimeTicks start_time,
       absl::optional<std::vector<PreloadAppDefinition>> apps);
-  void OnAllAppInstallationFinished(const std::vector<bool>& results);
+  void OnAllAppInstallationFinished(base::TimeTicks start_time,
+                                    const std::vector<bool>& results);
   // Called when the installation flow started by
   // `StartAppInstallationForFirstLogin` is complete, with `success` indicating
   // whether the overall flow was successful.
-  void OnFirstLoginFlowComplete(bool success);
+  void OnFirstLoginFlowComplete(bool success, base::TimeTicks start_time);
 
   bool ShouldInstallApp(const PreloadAppDefinition& app);
 

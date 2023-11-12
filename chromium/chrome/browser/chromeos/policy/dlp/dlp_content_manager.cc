@@ -8,15 +8,16 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_confidential_contents.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager_observer.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_restriction_set.h"
@@ -40,6 +41,11 @@
 namespace policy {
 
 namespace {
+// Delay to wait to resume a screen share after a change in the confidentiality
+// of captured data, to prevent flickering between resumed and paused states
+// while the new content is being loaded. See b/259181514.
+base::TimeDelta kScreenShareResumeDelay = base::Milliseconds(500);
+
 // Reports events to `reporting_manager`.
 void ReportEvent(GURL url,
                  DlpRulesManager::Restriction restriction,
@@ -52,10 +58,13 @@ void ReportEvent(GURL url,
   if (!rules_manager)
     return;
 
-  const std::string src_url =
-      rules_manager->GetSourceUrlPattern(url, restriction, level);
+  DlpRulesManager::RuleMetadata rule_metadata;
+  const std::string src_url = rules_manager->GetSourceUrlPattern(
+      url, restriction, level, &rule_metadata);
 
-  reporting_manager->ReportEvent(src_url, restriction, level);
+  reporting_manager->ReportEvent(src_url, restriction, level,
+                                 rule_metadata.name,
+                                 rule_metadata.obfuscated_id);
 }
 
 // Helper method to check whether the restriction level is kBlock.
@@ -196,6 +205,12 @@ void DlpContentManager::ResetWarnNotifierForTesting() {
   warn_notifier_ = std::make_unique<DlpWarnNotifier>();
 }
 
+// static
+void DlpContentManager::SetScreenShareResumeDelayForTesting(
+    base::TimeDelta delay) {
+  kScreenShareResumeDelay = delay;
+}
+
 DlpContentManager::ScreenShareInfo::ScreenShareInfo(
     const std::string& label,
     const content::DesktopMediaID& media_id,
@@ -235,6 +250,8 @@ void DlpContentManager::ScreenShareInfo::UpdateAfterSourceChange(
   source_callback_ = std::move(source_callback);
   auto* web_contents = GetWebContentsFromMediaId(media_id);
   web_contents_ = web_contents ? web_contents->GetWeakPtr() : nullptr;
+  // If it's a resume after source change, request to start it if pending.
+  StartIfPending();
   // This is called from AddScreenShare() which is only called when a new stream
   // is starting or when the source was successfully changed and the stream is
   // running again, so we can set the state to running.
@@ -303,6 +320,14 @@ void DlpContentManager::ScreenShareInfo::set_latest_confidential_contents_info(
   latest_confidential_contents_info_ = confidential_contents_info;
 }
 
+void DlpContentManager::ScreenShareInfo::StartIfPending() {
+  if (pending_start_on_source_change_) {
+    state_change_callback_.Run(media_id_,
+                               blink::mojom::MediaStreamStateChange::PLAY);
+    pending_start_on_source_change_ = false;
+  }
+}
+
 const RestrictionLevelAndUrl&
 DlpContentManager::ScreenShareInfo::GetLatestRestriction() const {
   return latest_confidential_contents_info_.restriction_info;
@@ -335,6 +360,8 @@ void DlpContentManager::ScreenShareInfo::Resume() {
         content::DesktopMediaID::kNullId,
         content::WebContentsMediaCaptureId(main_frame->GetProcess()->GetID(),
                                            main_frame->GetRoutingID())));
+    // Start after source will be changed and notified.
+    pending_start_on_source_change_ = true;
   } else {
     state_change_callback_.Run(media_id_,
                                blink::mojom::MediaStreamStateChange::PLAY);
@@ -429,7 +456,8 @@ void DlpContentManager::OnScreenShareSourceChanging(
     const content::DesktopMediaID& new_media_id) {
   for (auto& screen_share : running_screen_shares_) {
     if (screen_share->label() == label &&
-        screen_share->media_id() == old_media_id) {
+        screen_share->media_id() == old_media_id &&
+        screen_share->new_media_id() != new_media_id) {
       screen_share->ChangeStateBeforeSourceChange();
       screen_share->set_new_media_id(new_media_id);
     }
@@ -468,9 +496,11 @@ void DlpContentManager::ReportWarningProceededEvent(
   DlpRulesManager* rules_manager =
       DlpRulesManagerFactory::GetForPrimaryProfile();
   if (rules_manager) {
+    DlpRulesManager::RuleMetadata rule_metadata;
     const std::string src_url = rules_manager->GetSourceUrlPattern(
-        url, restriction, DlpRulesManager::Level::kWarn);
-    reporting_manager->ReportWarningProceededEvent(src_url, restriction);
+        url, restriction, DlpRulesManager::Level::kWarn, &rule_metadata);
+    reporting_manager->ReportWarningProceededEvent(
+        src_url, restriction, rule_metadata.name, rule_metadata.obfuscated_id);
   }
 }
 
@@ -771,13 +801,29 @@ void DlpContentManager::CheckRunningScreenShares() {
       continue;
     }
 
-    // No restrictions apply, only resume if necessary.
-    if (screen_share->state() == ScreenShareInfo::State::kPaused) {
-      screen_share->Resume();
-      DlpBooleanHistogram(dlp::kScreenSharePausedOrResumedUMA, false);
-      screen_share->MaybeUpdateNotifications();
-    }
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DlpContentManager::MaybeResumeScreenShare,
+                       base::Unretained(this), screen_share->GetWeakPtr()),
+        kScreenShareResumeDelay);
   }
+}
+
+void DlpContentManager::MaybeResumeScreenShare(
+    base::WeakPtr<ScreenShareInfo> screen_share) {
+  if (!screen_share ||
+      screen_share->state() != ScreenShareInfo::State::kPaused) {
+    return;
+  }
+
+  ConfidentialContentsInfo info = GetScreenShareConfidentialContentsInfo(
+      screen_share->media_id(), screen_share->web_contents().get());
+  if (IsBlocked(info.restriction_info) || IsWarn(info.restriction_info)) {
+    return;
+  }
+  screen_share->Resume();
+  DlpBooleanHistogram(dlp::kScreenSharePausedOrResumedUMA, false);
+  screen_share->MaybeUpdateNotifications();
 }
 
 void DlpContentManager::OnDlpScreenShareWarnDialogReply(

@@ -12,11 +12,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
@@ -382,7 +382,7 @@ void PrivateAggregationBudgeter::ClearDataImpl(
   for (const auto& [origin_key, budgets] :
        storage_->budgets_data()->GetAllCached()) {
     if (filter.is_null() ||
-        filter.Run(blink::StorageKey(url::Origin::Create(GURL(origin_key))))) {
+        filter.Run(blink::StorageKey::CreateFromStringForTesting(origin_key))) {
       origins_to_delete.push_back(origin_key);
     }
   }

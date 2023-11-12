@@ -6,12 +6,15 @@
 #define CHROME_BROWSER_ASH_LOGIN_OOBE_QUICK_START_TARGET_DEVICE_BOOTSTRAP_CONTROLLER_H_
 
 #include <memory>
+#include <string>
 
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
+
+class NearbyConnectionsManager;
 
 namespace ash::quick_start {
 
@@ -21,7 +24,8 @@ class IncomingConnection;
 class TargetDeviceBootstrapController
     : public TargetDeviceConnectionBroker::ConnectionLifecycleListener {
  public:
-  TargetDeviceBootstrapController();
+  explicit TargetDeviceBootstrapController(
+      base::WeakPtr<NearbyConnectionsManager> nearby_connections_manager);
   TargetDeviceBootstrapController(TargetDeviceBootstrapController&) = delete;
   TargetDeviceBootstrapController& operator=(TargetDeviceBootstrapController&) =
       delete;
@@ -33,6 +37,7 @@ class TargetDeviceBootstrapController
     ADVERTISING,
     QR_CODE_VERIFICATION,
     CONNECTED,
+    GAIA_CREDENTIALS,
   };
 
   enum class ErrorCode {
@@ -65,6 +70,10 @@ class TargetDeviceBootstrapController
 
   void GetFeatureSupportStatusAsync(
       TargetDeviceConnectionBroker::FeatureSupportStatusCallback callback);
+
+  // Returns the CryptAuth Instance ID of the connected remote device. Returns
+  // an empty string if no ID is available.
+  std::string GetPhoneInstanceId();
 
   // This function would crash (if DCHECKs are on) in case there are existing
   // valid weakptrs.

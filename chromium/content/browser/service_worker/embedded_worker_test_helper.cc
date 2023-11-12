@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -271,7 +271,7 @@ EmbeddedWorkerTestHelper::PrepareRegistrationAndVersion(
   options.scope = scope;
   pair.first = CreateNewServiceWorkerRegistration(
       context()->registry(), options,
-      blink::StorageKey(url::Origin::Create(scope)));
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(scope)));
   pair.second = CreateNewServiceWorkerVersion(
       context()->registry(), pair.first, script_url,
       blink::mojom::ScriptType::kClassic);

@@ -5,9 +5,10 @@
 #include "components/content_settings/core/browser/content_settings_pref.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/gtest_util.h"
 #include "base/values.h"
@@ -53,10 +54,10 @@ constexpr char kTagKey[] = "tag";
 //   }
 base::Value CreateDummyContentSettingValue(base::StringPiece tag,
                                            bool expired) {
-  base::Value setting(base::Value::Type::DICTIONARY);
+  base::Value setting(base::Value::Type::DICT);
   setting.SetKey(kTagKey, base::Value(tag));
 
-  base::Value pref_value(base::Value::Type::DICTIONARY);
+  base::Value pref_value(base::Value::Type::DICT);
   pref_value.SetKey(kLastModifiedKey, base::Value("13189876543210000"));
   pref_value.SetKey(kSettingKey, std::move(setting));
   pref_value.SetKey(kExpirationKey, expired ? base::Value("13189876543210001")
@@ -66,15 +67,16 @@ base::Value CreateDummyContentSettingValue(base::StringPiece tag,
 
 // Given the JSON dictionary representing the "setting" stored under a content
 // setting exception value, returns the tag.
-std::string GetTagFromDummyContentSetting(const base::Value& setting) {
-  const auto* tag = setting.FindKey(kTagKey);
-  return tag ? tag->GetString() : std::string();
+std::string GetTagFromDummyContentSetting(const base::Value::Dict& setting) {
+  const std::string* tag = setting.FindString(kTagKey);
+  return tag ? *tag : std::string();
 }
 
 // Given the JSON dictionary representing a content setting exception value,
 // returns the tag.
-std::string GetTagFromDummyContentSettingValue(const base::Value& pref_value) {
-  const auto* setting = pref_value.FindKey(kSettingKey);
+std::string GetTagFromDummyContentSettingValue(
+    const base::Value::Dict& pref_value) {
+  const base::Value::Dict* setting = pref_value.FindDict(kSettingKey);
   return setting ? GetTagFromDummyContentSetting(*setting) : std::string();
 }
 
@@ -114,7 +116,7 @@ TEST(ContentSettingsPref, CanonicalizationWhileReadingFromPrefs) {
       {kTestPatternCanonicalBeta, kTestPatternCanonicalBeta},
   };
 
-  base::Value original_pref_value(base::Value::Type::DICTIONARY);
+  base::Value original_pref_value(base::Value::Type::DICT);
   for (const auto* pattern : kTestOriginalPatterns) {
     original_pref_value.SetKey(
         pattern, CreateDummyContentSettingValue(pattern, /*expired=*/false));
@@ -142,7 +144,7 @@ TEST(ContentSettingsPref, CanonicalizationWhileReadingFromPrefs) {
     auto rule = rule_iterator->Next();
     patterns_to_tags_in_memory.emplace_back(
         CreatePatternString(rule.primary_pattern, rule.secondary_pattern),
-        GetTagFromDummyContentSetting(rule.value));
+        GetTagFromDummyContentSetting(rule.value.GetDict()));
   }
 
   EXPECT_THAT(patterns_to_tags_in_memory,
@@ -156,7 +158,8 @@ TEST(ContentSettingsPref, CanonicalizationWhileReadingFromPrefs) {
   ASSERT_TRUE(canonical_pref_value->is_dict());
   for (auto key_value : canonical_pref_value->DictItems()) {
     patterns_to_tags_in_prefs.emplace_back(
-        key_value.first, GetTagFromDummyContentSettingValue(key_value.second));
+        key_value.first,
+        GetTagFromDummyContentSettingValue(key_value.second.GetDict()));
   }
 
   EXPECT_THAT(patterns_to_tags_in_prefs,
@@ -178,7 +181,7 @@ TEST(ContentSettingsPref, ExpirationWhileReadingFromPrefs) {
 
   // Create two pre-existing entries, one that is expired and one that never
   // expires.
-  base::Value original_pref_value(base::Value::Type::DICTIONARY);
+  base::Value original_pref_value(base::Value::Type::DICT);
   original_pref_value.SetKey(
       kTestPatternCanonicalAlpha,
       CreateDummyContentSettingValue(kTestPatternCanonicalAlpha,
@@ -209,7 +212,7 @@ TEST(ContentSettingsPref, ExpirationWhileReadingFromPrefs) {
     auto rule = rule_iterator->Next();
     patterns_to_tags_in_memory.emplace_back(
         CreatePatternString(rule.primary_pattern, rule.secondary_pattern),
-        GetTagFromDummyContentSetting(rule.value));
+        GetTagFromDummyContentSetting(rule.value.GetDict()));
   }
 
   EXPECT_THAT(patterns_to_tags_in_memory,
@@ -222,7 +225,8 @@ TEST(ContentSettingsPref, ExpirationWhileReadingFromPrefs) {
   ASSERT_TRUE(canonical_pref_value->is_dict());
   for (auto key_value : canonical_pref_value->DictItems()) {
     patterns_to_tags_in_prefs.emplace_back(
-        key_value.first, GetTagFromDummyContentSettingValue(key_value.second));
+        key_value.first,
+        GetTagFromDummyContentSettingValue(key_value.second.GetDict()));
   }
 
   EXPECT_THAT(patterns_to_tags_in_prefs,
@@ -234,12 +238,12 @@ TEST(ContentSettingsPref, ExpirationWhileReadingFromPrefs) {
 TEST(ContentSettingsPref, LegacyLastModifiedLoad) {
   constexpr char kPatternPair[] = "http://example.com,*";
 
-  base::Value original_pref_value(base::Value::Type::DICTIONARY);
+  base::Value original_pref_value(base::Value::Type::DICT);
   const base::Time last_modified =
       base::Time::FromInternalValue(13189876543210000);
 
   // Create a single entry using our old internal value for last_modified.
-  base::Value pref_value(base::Value::Type::DICTIONARY);
+  base::Value pref_value(base::Value::Type::DICT);
   pref_value.SetKey(
       kLastModifiedKey,
       base::Value(base::NumberToString(last_modified.ToInternalValue())));

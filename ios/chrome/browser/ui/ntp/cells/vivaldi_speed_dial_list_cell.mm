@@ -20,6 +20,9 @@ const UIEdgeInsets titleLabelMaskViewPadding =
     UIEdgeInsetsMake(6.f, 10.f, 0.f, 40.f);
 const UIEdgeInsets urlLabelMaskViewPadding =
     UIEdgeInsetsMake(6.f, 0.f, 4.f, 62.f);
+// Padding for favicon fallback label
+const UIEdgeInsets faviconFallbackLabelPadding =
+    UIEdgeInsetsMake(2.f, 2.f, 2.f, 2.f);
 }
 
 @interface VivaldiSpeedDialListCell()
@@ -33,6 +36,8 @@ const UIEdgeInsets urlLabelMaskViewPadding =
 @property(nonatomic,weak) UIView* urlLabelMaskView;
 // Imageview for the favicon.
 @property(nonatomic,weak) UIImageView* faviconView;
+// The fallback label when there's no favicon available.
+@property(nonatomic,weak) UILabel* fallbackFaviconLabel;
 @end
 
 @implementation VivaldiSpeedDialListCell
@@ -42,6 +47,7 @@ const UIEdgeInsets urlLabelMaskViewPadding =
 @synthesize urlLabel = _urlLabel;
 @synthesize urlLabelMaskView = _urlLabelMaskView;
 @synthesize faviconView = _faviconView;
+@synthesize fallbackFaviconLabel = _fallbackFaviconLabel;
 
 #pragma mark - INITIALIZER
 - (id)initWithFrame:(CGRect)frame {
@@ -57,8 +63,11 @@ const UIEdgeInsets urlLabelMaskViewPadding =
   self.titleLabel.text = nil;
   self.urlLabel.text = nil;
   self.faviconView.image = nil;
+  self.faviconView.backgroundColor = UIColor.clearColor;
   self.titleLabelMaskView.hidden = YES;
   self.urlLabelMaskView.hidden = YES;
+  self.fallbackFaviconLabel.hidden = YES;
+  self.fallbackFaviconLabel.text = nil;
 }
 
 
@@ -104,6 +113,21 @@ const UIEdgeInsets urlLabelMaskViewPadding =
                  padding: faviconPadding
                     size: vSpeedDialItemFaviconSizeListLayout];
   [faviconView centerYInSuperview];
+
+  // Fallback favicon label
+  UILabel* fallbackFaviconLabel = [[UILabel alloc] init];
+  _fallbackFaviconLabel = fallbackFaviconLabel;
+  fallbackFaviconLabel.textColor =
+    [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
+  fallbackFaviconLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+  fallbackFaviconLabel.numberOfLines = 0;
+  fallbackFaviconLabel.textAlignment = NSTextAlignmentCenter;
+
+  [container addSubview:fallbackFaviconLabel];
+  [fallbackFaviconLabel matchToView:_faviconView
+                            padding:faviconFallbackLabelPadding];
+  fallbackFaviconLabel.hidden = YES;
 
   // Website title label
   UILabel* titleLabel = [[UILabel alloc] init];
@@ -180,16 +204,15 @@ const UIEdgeInsets urlLabelMaskViewPadding =
   self.urlLabel.text = item.urlString;
 }
 
-- (void)configureCellWithAttributes:(FaviconAttributes*)attributes {
-  if (!attributes) {
-    self.faviconView.backgroundColor = UIColor.grayColor;
-    return;
-  }
-
+- (void)configureCellWithAttributes:(const FaviconAttributes*)attributes
+                               item:(VivaldiSpeedDialItem*)item {
   if (attributes.faviconImage) {
+    self.fallbackFaviconLabel.hidden = YES;
+    self.fallbackFaviconLabel.text = nil;
+    self.faviconView.backgroundColor = UIColor.clearColor;
     self.faviconView.image = attributes.faviconImage;
   } else {
-    // Do something for fallback
+    [self showFallbackFavicon:item];
   }
 }
 
@@ -201,4 +224,22 @@ const UIEdgeInsets urlLabelMaskViewPadding =
   self.urlLabelMaskView.backgroundColor =
     [UIColor.vSystemGray03 colorWithAlphaComponent:0.4];
 }
+
+#pragma mark: PRIVATE
+
+- (void)showFallbackFavicon:(VivaldiSpeedDialItem*)sdItem {
+  if (sdItem.isInternalPage) {
+    self.faviconView.backgroundColor = UIColor.clearColor;
+    self.fallbackFaviconLabel.hidden = YES;
+    self.faviconView.image = [UIImage imageNamed:vNTPSDInternalPageFavicon];
+  } else {
+    self.fallbackFaviconLabel.hidden = NO;
+    self.faviconView.image = nil;
+    self.faviconView.backgroundColor =
+        [UIColor colorNamed: vSearchbarBackgroundColor];
+    NSString *firstLetter = [[sdItem.host substringToIndex:1] uppercaseString];
+    self.fallbackFaviconLabel.text = firstLetter;
+  }
+}
+
 @end

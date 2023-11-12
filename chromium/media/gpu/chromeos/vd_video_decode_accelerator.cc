@@ -7,10 +7,11 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/unsafe_shared_memory_region.h"
+#include "base/task/sequenced_task_runner.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "media/base/format_utils.h"
@@ -255,11 +256,12 @@ bool VdVideoDecodeAccelerator::Initialize(const Config& config,
         std::make_unique<VdaVideoFramePool>(weak_this_, client_task_runner_);
     // TODO(b/238684141): Wire a meaningful GpuDriverBugWorkarounds or remove
     // its use.
-    vd_ = create_vd_cb_.Run(gpu::GpuDriverBugWorkarounds(), client_task_runner_,
-                            std::move(frame_pool),
-                            std::make_unique<VideoFrameConverter>(),
-                            std::make_unique<NullMediaLog>(),
-                            /*oop_video_decoder=*/{});
+    vd_ = create_vd_cb_.Run(
+        gpu::GpuDriverBugWorkarounds(), client_task_runner_,
+        std::move(frame_pool), std::make_unique<VideoFrameConverter>(),
+        VideoDecoderPipeline::DefaultPreferredRenderableFourccs(),
+        std::make_unique<NullMediaLog>(),
+        /*oop_video_decoder=*/{});
     if (!vd_)
       return false;
 

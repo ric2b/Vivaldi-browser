@@ -8,7 +8,7 @@
 #include <unordered_set>
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/ranges/algorithm.h"
 #include "components/password_manager/core/browser/form_saver.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
@@ -398,10 +398,18 @@ void PasswordGenerationManager::OnPresaveBubbleResult(
     bool accepted,
     const PasswordForm& pending) {
   weak_factory_.InvalidateWeakPtrs();
-  if (driver && accepted) {
-    // See https://crbug.com/1210341 for when `driver` might be null due to a
-    // compromised renderer.
+  // See https://crbug.com/1210341 for when `driver` might be null due to a
+  // compromised renderer.
+  if (!driver) {
+    return;
+  }
+
+  if (accepted) {
     driver->GeneratedPasswordAccepted(pending.password_value);
+  } else if (base::FeatureList::IsEnabled(
+                 password_manager::features::
+                     kPasswordGenerationPreviewOnHover)) {
+    driver->ClearPreviewedForm();
   }
 }
 

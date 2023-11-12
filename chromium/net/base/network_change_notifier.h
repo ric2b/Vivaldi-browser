@@ -25,11 +25,15 @@ struct NetworkInterface;
 class SystemDnsConfigChangeNotifier;
 typedef std::vector<NetworkInterface> NetworkInterfaceList;
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 namespace internal {
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 class AddressTrackerLinux;
-}
 #endif
+
+#if BUILDFLAG(IS_FUCHSIA)
+class NetworkInterfaceCache;
+#endif
+}  // namespace internal
 
 // NetworkChangeNotifier monitors the system for network changes, and notifies
 // registered observers of those events.  Observers may register on any thread,
@@ -61,10 +65,7 @@ class NET_EXPORT NetworkChangeNotifier {
   };
 
   // This is the NetInfo v3 set of connection technologies as seen in
-  // http://w3c.github.io/netinfo/. This enum is duplicated in histograms.xml
-  // so be sure to change both at once. Additionally, since this enum is used in
-  // a UMA histogram, it should not be re-ordered and any new values should be
-  // added to the end.
+  // http://w3c.github.io/netinfo/.
   //
   // A Java counterpart will be generated for this enum.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.net
@@ -457,6 +458,11 @@ class NET_EXPORT NetworkChangeNotifier {
   static const internal::AddressTrackerLinux* GetAddressTracker();
 #endif
 
+#if BUILDFLAG(IS_FUCHSIA)
+  // Returns the NetworkInterfaceCache if present.
+  static const internal::NetworkInterfaceCache* GetNetworkInterfaceCache();
+#endif
+
   // Convenience method to determine if the user is offline.
   // Returns true if there is currently no internet connection.
   //
@@ -610,7 +616,7 @@ class NET_EXPORT NetworkChangeNotifier {
   // |omit_observers_in_constructor_for_testing| is true, internal observers
   // aren't added during construction - this is used to skip registering
   // observers from MockNetworkChangeNotifier, and allow its construction when
-  // SequencedTaskRunnerHandle isn't set.
+  // SingleThreadTaskRunner::CurrentDefaultHandle isn't set.
   explicit NetworkChangeNotifier(
       const NetworkChangeCalculatorParams& params =
           NetworkChangeCalculatorParams(),
@@ -622,6 +628,11 @@ class NET_EXPORT NetworkChangeNotifier {
   // TODO(szym): Retrieve AddressMap from NetworkState. http://crbug.com/144212
   virtual const internal::AddressTrackerLinux*
       GetAddressTrackerInternal() const;
+#endif
+
+#if BUILDFLAG(IS_FUCHSIA)
+  virtual const internal::NetworkInterfaceCache*
+  GetNetworkInterfaceCacheInternal() const;
 #endif
 
   // These are the actual implementations of the static queryable APIs.

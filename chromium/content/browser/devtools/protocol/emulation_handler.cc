@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -659,8 +659,7 @@ void EmulationHandler::UpdateDeviceEmulationStateForHost(
     if (vivaldi::IsVivaldiRunning()) {
       if (auto* touch_emulator =
               host_->GetRenderWidgetHost()->GetTouchEmulator())
-        render_widget_host->SetCursor(
-            touch_emulator->GetDefaultCursor().cursor());
+        render_widget_host->SetCursor(touch_emulator->GetDefaultCursor());
       render_widget_host->SetDeviceEmulationActive(false);
     }
 

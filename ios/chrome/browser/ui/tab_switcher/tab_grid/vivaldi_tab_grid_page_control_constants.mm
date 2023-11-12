@@ -1,7 +1,7 @@
 // Copyright 2022 Vivaldi Technologies. All rights reserved.
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_page_control_constants.h"
 
-#include <algorithm>
+#import <algorithm>
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

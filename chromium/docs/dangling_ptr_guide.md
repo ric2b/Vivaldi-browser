@@ -1,4 +1,4 @@
-# Dangling pointer guide
+# Dangling Pointer Guide
 
 A dangling pointer has been found in your patch? This doc will help you fix it.
 
@@ -9,13 +9,13 @@ See also the general instructions about the dangling pointer detector:
 [docs/dangling_ptr.md](./dangling_ptr.md)
 
 **Table of content**
-- [`Case 1` I don’t own the affected component](#-case-1--i-don-t-own-the-affected-component)
-- [`Case 2` The dangling pointer does not own the deleted object.](#-case-2--the-dangling-pointer-does-not-own-the-deleted-object)
+- [`Case 1` I don’t own the affected component](#i-don_t-own-the-affected-component)
+- [`Case 2` The dangling pointer does not own the deleted object.](#the-dangling-pointer-does-not-own-the-deleted-object)
   - [Incorrect destruction order](#incorrect-destruction-order)
   - [Observer callback](#observer-callback)
   - [Challenging lifespan](#challenging-lifespan)
   - [Fallback solution](#fallback-solution)
-- [`Case 3` The pointer manages ownership over the object](#-case-3--the-pointer-manages-ownership-over-the-object)
+- [`Case 3` The pointer manages ownership over the object](#the-pointer-manages-ownership-over-the-object)
   - [Smart pointers](#smart-pointers)
   - [Object vended from C API](#object-vended-from-c-api)
   - [Object conditionally owned](#object-conditionally-owned)
@@ -39,18 +39,18 @@ Opening and filling a P2 bug is a nice thing to do, but it is not required.
 Engineers might uncover new dangling pointers, by testing new code paths.
 Knowing about dangling pointers is a purely positive increment. In some cases,
 the affected component belongs to a different team. We don’t want to disrupt
-engineers achieving their primary goal, if they only “discovered” a dangling
-pointer. Annotating the pointer makes the issue visible directly into the code,
+engineers achieving their primary goal, if they only “discover” a dangling
+pointer. Annotating the pointer makes the issue visible directly in the code,
 improving our knowledge of Chrome.
 
-## `Case 2` The dangling pointer does not own the deleted object.
+## `Case 2` The dangling pointer does not own the deleted object
 
 ### Incorrect destruction order
 
 This represents ~25% of the dangling pointers.
 
 In the majority of cases, this happens when dependent objects are declared in
-the wrong order in a class, causing the dependency to be released first, thus 
+the wrong order in a class, causing the dependency to be released first, thus
 creating a dangling pointer in the other.
 
 It is important to reorder them correctly to prevent pre-existing and future UAF
@@ -84,7 +84,7 @@ by:
 ### Fallback solution
 
 As a last resort, when the situation is perfectly understood, and you believe it
-is better to let the pointer to dangle, the raw_ptr can be annotated with
+is better to let the pointer dangle, the raw_ptr can be annotated with
 `DisableDanglingPtrDetection`. A comment explaining why this is safe must be
 added.
 
@@ -96,9 +96,8 @@ added.
 // Usage:
 // raw_ptr<T, DisableDanglingPtrDetection> dangling_ptr;
 //
-// When using it, please provide a justification about what guarantees it will
-// never be dereferenced after becoming dangling.
-using DisableDanglingPtrDetection = base::RawPtrMayDangle;
+// When using it, please provide a justification about what guarantees that it
+// will never be dereferenced after becoming dangling.
 ```
 
 **In emergency situations**: `DanglingUntriaged` can be used similarly, in case

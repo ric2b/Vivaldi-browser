@@ -9,6 +9,7 @@
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_preview_view.h"
 #include "ash/wm/desks/desks_bar_view.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -91,7 +92,9 @@ void DeskDragProxy::InitAndScaleAndMoveToX(float location_screen_x) {
       scale_transform));
 
   // When being dragged, the shadow elevation will be increased.
-  drag_preview_->shadow()->SetType(DeskPreviewView::kDraggedShadowType);
+  if (!chromeos::features::IsJellyrollEnabled()) {
+    drag_preview_->shadow()->SetType(DeskPreviewView::kDraggedShadowType);
+  }
 
   // Perform Moving.
   DragToX(location_screen_x);
@@ -128,7 +131,9 @@ void DeskDragProxy::SnapBackToDragView() {
   layer->SetTransform(gfx::Transform());
 
   // Reset the shadow elevation when drag ends.
-  drag_preview_->shadow()->SetType(DeskPreviewView::kDefaultShadowType);
+  if (!chromeos::features::IsJellyrollEnabled()) {
+    drag_preview_->shadow()->SetType(DeskPreviewView::kDefaultShadowType);
+  }
 
   state_ = State::kSnappingBack;
 }

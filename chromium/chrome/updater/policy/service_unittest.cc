@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,6 +13,7 @@
 #include "chrome/updater/policy/manager.h"
 #include "chrome/updater/policy/service.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
 
@@ -22,7 +24,6 @@ class FakePolicyManager : public PolicyManagerInterface {
   FakePolicyManager(bool has_active_device_policies, const std::string& source)
       : has_active_device_policies_(has_active_device_policies),
         source_(source) {}
-  ~FakePolicyManager() override = default;
 
   std::string source() const override { return source_; }
   bool HasActiveDevicePolicies() const override {
@@ -103,8 +104,21 @@ class FakePolicyManager : public PolicyManagerInterface {
       const override {
     return absl::nullopt;
   }
+  absl::optional<std::vector<std::string>> GetAppsWithPolicy() const override {
+    std::set<std::string> apps_with_policy;
+    for (const auto& policy_entry : update_policies_) {
+      apps_with_policy.insert(policy_entry.first);
+    }
+    for (const auto& policy_entry : channels_) {
+      apps_with_policy.insert(policy_entry.first);
+    }
+
+    return std::vector<std::string>(apps_with_policy.begin(),
+                                    apps_with_policy.end());
+  }
 
  private:
+  ~FakePolicyManager() override = default;
   bool has_active_device_policies_;
   std::string source_;
   UpdatesSuppressedTimes suppressed_times_;
@@ -146,7 +160,7 @@ TEST(PolicyService, DefaultPolicyValue) {
 }
 
 TEST(PolicyService, SinglePolicyManager) {
-  auto manager = std::make_unique<FakePolicyManager>(true, "test_source");
+  auto manager = base::MakeRefCounted<FakePolicyManager>(true, "test_source");
   manager->SetChannel("app1", "test_channel");
   manager->SetUpdatePolicy("app2", 3);
   PolicyService::PolicyManagerVector managers;
@@ -181,7 +195,7 @@ TEST(PolicyService, SinglePolicyManager) {
 TEST(PolicyService, MultiplePolicyManagers) {
   PolicyService::PolicyManagerVector managers;
 
-  auto manager = std::make_unique<FakePolicyManager>(true, "group_policy");
+  auto manager = base::MakeRefCounted<FakePolicyManager>(true, "group_policy");
   UpdatesSuppressedTimes updates_suppressed_times;
   updates_suppressed_times.start_hour_ = 5;
   updates_suppressed_times.start_minute_ = 10;
@@ -191,13 +205,13 @@ TEST(PolicyService, MultiplePolicyManagers) {
   manager->SetUpdatePolicy("app2", 1);
   managers.push_back(std::move(manager));
 
-  manager = std::make_unique<FakePolicyManager>(true, "device_management");
+  manager = base::MakeRefCounted<FakePolicyManager>(true, "device_management");
   manager->SetUpdatesSuppressedTimes(updates_suppressed_times);
   manager->SetChannel("app1", "channel_dm");
   manager->SetUpdatePolicy("app1", 3);
   managers.push_back(std::move(manager));
 
-  manager = std::make_unique<FakePolicyManager>(true, "imaginary");
+  manager = base::MakeRefCounted<FakePolicyManager>(true, "imaginary");
   updates_suppressed_times.start_hour_ = 1;
   updates_suppressed_times.start_minute_ = 1;
   updates_suppressed_times.duration_minute_ = 20;
@@ -275,12 +289,31 @@ TEST(PolicyService, MultiplePolicyManagers) {
   EXPECT_EQ(download_preference_status.conflict_policy(), absl::nullopt);
 
   EXPECT_FALSE(policy_service->GetPackageCacheSizeLimitMBytes());
+  EXPECT_EQ(policy_service->GetAllPoliciesAsString(),
+            "{\n"
+            "  LastCheckPeriod = 270 (default)\n"
+            "  UpdatesSuppressed = "
+            "{StartHour: 5, StartMinute: 10, Duration: 30} (group_policy)\n"
+            "  DownloadPreference = cacheable (imaginary)\n"
+            "  \"app1\": {\n"
+            "    Install = 1 (default)\n"
+            "    Update = 3 (device_management)\n"
+            "    TargetChannel = channel_gp (group_policy)\n"
+            "    RollbackToTargetVersionAllowed = 0 (default)\n"
+            "  }\n"
+            "  \"app2\": {\n"
+            "    Install = 1 (default)\n"
+            "    Update = 1 (group_policy)\n"
+            "    RollbackToTargetVersionAllowed = 0 (default)\n"
+            "  }\n"
+            "}\n");
 }
 
 TEST(PolicyService, MultiplePolicyManagers_WithUnmanagedOnes) {
   PolicyService::PolicyManagerVector managers;
 
-  auto manager = std::make_unique<FakePolicyManager>(true, "device_management");
+  auto manager =
+      base::MakeRefCounted<FakePolicyManager>(true, "device_management");
   UpdatesSuppressedTimes updates_suppressed_times;
   updates_suppressed_times.start_hour_ = 5;
   updates_suppressed_times.start_minute_ = 10;
@@ -290,7 +323,7 @@ TEST(PolicyService, MultiplePolicyManagers_WithUnmanagedOnes) {
   manager->SetUpdatePolicy("app1", 3);
   managers.push_back(std::move(manager));
 
-  manager = std::make_unique<FakePolicyManager>(true, "imaginary");
+  manager = base::MakeRefCounted<FakePolicyManager>(true, "imaginary");
   updates_suppressed_times.start_hour_ = 1;
   updates_suppressed_times.start_minute_ = 1;
   updates_suppressed_times.duration_minute_ = 20;
@@ -302,7 +335,7 @@ TEST(PolicyService, MultiplePolicyManagers_WithUnmanagedOnes) {
 
   managers.push_back(GetDefaultValuesPolicyManager());
 
-  manager = std::make_unique<FakePolicyManager>(false, "group_policy");
+  manager = base::MakeRefCounted<FakePolicyManager>(false, "group_policy");
   updates_suppressed_times.start_hour_ = 5;
   updates_suppressed_times.start_minute_ = 10;
   updates_suppressed_times.duration_minute_ = 30;
@@ -371,6 +404,26 @@ TEST(PolicyService, MultiplePolicyManagers_WithUnmanagedOnes) {
   EXPECT_EQ(download_preference_status.conflict_policy(), absl::nullopt);
 
   EXPECT_FALSE(policy_service->GetPackageCacheSizeLimitMBytes());
+
+  EXPECT_EQ(
+      policy_service->GetAllPoliciesAsString(),
+      "{\n"
+      "  LastCheckPeriod = 270 (default)\n"
+      "  UpdatesSuppressed = "
+      "{StartHour: 5, StartMinute: 10, Duration: 30} (device_management)\n"
+      "  DownloadPreference = cacheable (imaginary)\n"
+      "  \"app1\": {\n"
+      "    Install = 1 (default)\n"
+      "    Update = 3 (device_management)\n"
+      "    TargetChannel = channel_dm (device_management)\n"
+      "    RollbackToTargetVersionAllowed = 0 (default)\n"
+      "  }\n"
+      "  \"app2\": {\n"
+      "    Install = 1 (default)\n"
+      "    Update = 1 (default)\n"
+      "    RollbackToTargetVersionAllowed = 0 (default)\n"
+      "  }\n"
+      "}\n");
 }
 
 }  // namespace updater

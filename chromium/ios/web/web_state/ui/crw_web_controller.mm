@@ -6,7 +6,7 @@
 
 #import <WebKit/WebKit.h>
 
-#import "base/bind.h"
+#import "base/functional/bind.h"
 #import "base/ios/block_types.h"
 #import "base/ios/ios_util.h"
 #import "base/json/string_escape.h"
@@ -17,18 +17,17 @@
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
 #import "build/branding_buildflags.h"
-#import "ios/web/annotations/annotations_text_manager.h"
 #import "ios/web/browsing_data/browsing_data_remover.h"
+#import "ios/web/common/annotations_utils.h"
 #import "ios/web/common/crw_input_view_provider.h"
 #import "ios/web/common/crw_web_view_content_view.h"
 #import "ios/web/common/features.h"
 #import "ios/web/common/uikit_ui_util.h"
 #import "ios/web/common/url_util.h"
 #import "ios/web/download/crw_web_view_download.h"
-#import "ios/web/find_in_page/find_in_page_manager_impl.h"
+#import "ios/web/find_in_page/java_script_find_in_page_manager_impl.h"
 #import "ios/web/history_state_util.h"
 #import "ios/web/js_features/scroll_helper/scroll_helper_java_script_feature.h"
-#import "ios/web/js_messaging/crw_js_window_id_manager.h"
 #import "ios/web/js_messaging/java_script_feature_util_impl.h"
 #import "ios/web/js_messaging/web_view_js_utils.h"
 #import "ios/web/js_messaging/web_view_web_state_map.h"
@@ -42,7 +41,9 @@
 #import "ios/web/navigation/navigation_context_impl.h"
 #import "ios/web/navigation/wk_back_forward_list_item_holder.h"
 #import "ios/web/navigation/wk_navigation_util.h"
+#import "ios/web/public/annotations/annotations_text_manager.h"
 #import "ios/web/public/browser_state.h"
+#import "ios/web/public/find_in_page/crw_find_interaction.h"
 #import "ios/web/public/js_messaging/web_frame_util.h"
 #import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/ui/crw_context_menu_item.h"
@@ -82,6 +83,10 @@ using web::WebStateImpl;
 
 using web::wk_navigation_util::IsRestoreSessionUrl;
 using web::wk_navigation_util::IsWKInternalUrl;
+
+namespace {
+char const kFullScreenStateHistogram[] = "IOS.Fullscreen.State";
+}  // namespace
 
 // TODO(crbug.com/1174560): Allow usage of iOS15 interactionState on iOS 14 SDK
 // based builds.
@@ -214,9 +219,6 @@ using web::wk_navigation_util::IsWKInternalUrl;
 // ContextMenu controller, handling the interactions with the context menu.
 @property(nonatomic, strong) CRWContextMenuController* contextMenuController;
 
-// Script manager for setting the windowID.
-@property(nonatomic, strong) CRWJSWindowIDManager* windowIDJSManager;
-
 // Returns the current URL of the web view, and sets `trustLevel` accordingly
 // based on the confidence in the verification.
 - (GURL)webURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel;
@@ -289,12 +291,10 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
     web::BrowserState* browserState = _webStateImpl->GetBrowserState();
     _certVerificationController = [[CRWCertVerificationController alloc]
         initWithBrowserState:browserState];
-    web::FindInPageManagerImpl::CreateForWebState(_webStateImpl);
+    web::JavaScriptFindInPageManagerImpl::CreateForWebState(_webStateImpl);
     web::TextFragmentsManagerImpl::CreateForWebState(_webStateImpl);
 
-    if (base::FeatureList::IsEnabled(
-            web::features::kEnableWebPageAnnotations) &&
-        !browserState->IsOffTheRecord()) {
+    if (web::WebPageAnnotationsEnabled() && !browserState->IsOffTheRecord()) {
       web::AnnotationsTextManager::CreateForWebState(_webStateImpl);
     }
 
@@ -425,10 +425,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 
     _webView.allowsBackForwardNavigationGestures =
         _allowsBackForwardNavigationGestures;
-    self.windowIDJSManager =
-        [[CRWJSWindowIDManager alloc] initWithWebView:_webView];
-  } else {
-    self.windowIDJSManager = nil;
   }
   self.webViewNavigationObserver.webView = _webView;
 
@@ -1054,18 +1050,53 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   handler(download);
 }
 
-#pragma mark - JavaScript
+- (BOOL)findInteractionSupported {
+  if (@available(iOS 16, *)) {
+    // The `findInteraction` property only exists for iOS 16 or later, if there
+    // is a web view.
+    return self.webView != nil;
+  }
 
-- (void)injectWindowID {
-  [_windowIDJSManager inject];
+  return false;
 }
+
+- (void)setFindInteractionEnabled:(BOOL)enabled {
+  if (@available(iOS 16, *)) {
+    self.webView.findInteractionEnabled = enabled;
+  }
+}
+
+- (BOOL)findInteractionEnabled {
+  if (@available(iOS 16, *)) {
+    return self.webView.findInteractionEnabled;
+  }
+
+  return NO;
+}
+
+- (id<CRWFindInteraction>)findInteraction API_AVAILABLE(ios(16)) {
+  if (self.webView.findInteraction) {
+    return [[CRWFindInteraction alloc]
+        initWithUIFindInteraction:self.webView.findInteraction];
+  }
+  return nil;
+}
+
+- (id)activityItem {
+  if (!self.webView || ![_containerView webViewContentView]) {
+    return nil;
+  }
+  DCHECK([self.webView isKindOfClass:[WKWebView class]]);
+  return self.webView;
+}
+
+#pragma mark - JavaScript
 
 - (void)executeJavaScript:(NSString*)javascript
         completionHandler:(void (^)(id result, NSError* error))completion {
   __block void (^stack_completion_block)(id result, NSError* error) =
       [completion copy];
-  NSString* safeScript = [self scriptByAddingWindowIDCheckForScript:javascript];
-  web::ExecuteJavaScript(self.webView, safeScript, ^(id value, NSError* error) {
+  web::ExecuteJavaScript(self.webView, javascript, ^(id value, NSError* error) {
     if (error) {
       DLOG(WARNING) << "Script execution failed with error: "
                     << base::SysNSStringToUTF16(
@@ -1098,16 +1129,6 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
   [self touched:YES];
 
   [self executeJavaScript:javascript completionHandler:completion];
-}
-
-#pragma mark - JavaScript Helpers (Private)
-
-// Returns a new script which wraps `script` with windowID check so `script` is
-// not evaluated on windowID mismatch.
-- (NSString*)scriptByAddingWindowIDCheckForScript:(NSString*)script {
-  NSString* kTemplate = @"if (__gCrWeb['windowId'] === '%@') { %@; }";
-  return [NSString
-      stringWithFormat:kTemplate, [_windowIDJSManager windowID], script];
 }
 
 #pragma mark - CRWTouchTrackingDelegate (Public)
@@ -1161,7 +1182,7 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 
 // Hides highlights triggered by custom context menu.
 - (void)hideHighlight {
-  if (base::FeatureList::IsEnabled(web::features::kEnableWebPageAnnotations)) {
+  if (web::WebPageAnnotationsEnabled()) {
     web::AnnotationsTextManager* manager =
         web::AnnotationsTextManager::FromWebState(_webStateImpl);
     if (manager) {
@@ -1783,7 +1804,7 @@ CrFullscreenState CrFullscreenStateFromWKFullscreenState(
     createWebViewWithConfiguration:(WKWebViewConfiguration*)configuration
                        forWebState:(web::WebState*)webState {
   CRWWebController* webController =
-      static_cast<web::WebStateImpl*>(webState)->GetWebController();
+      web::WebStateImpl::FromWebState(webState)->GetWebController();
   DCHECK(!webController || webState->HasOpener());
 
   [webController ensureWebViewCreatedWithConfiguration:configuration];
@@ -1911,9 +1932,14 @@ CrFullscreenState CrFullscreenStateFromWKFullscreenState(
 - (void)fullscreenStateDidChange {
 #if defined(__IPHONE_16_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_16_0
   if (@available(iOS 16.0, *)) {
-    [_containerView updateWebViewContentViewFullscreenState:
-                        CrFullscreenStateFromWKFullscreenState(
-                            self.webView.fullscreenState)];
+    CrFullscreenState fullScreenState =
+        CrFullscreenStateFromWKFullscreenState(self.webView.fullscreenState);
+    [_containerView updateWebViewContentViewFullscreenState:fullScreenState];
+    // Update state for `fullscreenModeOn` so that we can expose the current
+    // status of fullscreen mode through different interfaces.
+    _webPageInFullscreenMode =
+        fullScreenState == CrFullscreenState::kInFullscreen;
+    base::UmaHistogramEnumeration(kFullScreenStateHistogram, fullScreenState);
   }
 #endif  // defined (__IPHONE_16_0)
 }

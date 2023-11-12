@@ -6,6 +6,7 @@
 
 #include <aclapi.h>
 #include <objidl.h>
+#include <regstr.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <windows.h>
@@ -18,13 +19,13 @@
 #include <vector>
 
 #include "base/base_paths_win.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/cxx17_backports.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/free_deleter.h"
@@ -365,6 +366,25 @@ std::wstring GetRegistryKeyClientStateUpdater() {
   return GetAppClientStateKey(kUpdaterAppId);
 }
 
+bool SetRegistryKey(HKEY root,
+                    const std::wstring& key,
+                    const std::wstring& name,
+                    const std::wstring& value) {
+  base::win::RegKey rkey;
+  LONG result = rkey.Create(root, key.c_str(), Wow6432(KEY_WRITE));
+  if (result != ERROR_SUCCESS) {
+    VLOG(1) << "Failed to open (" << root << ") " << key << ": " << result;
+    return false;
+  }
+  result = rkey.WriteValue(name.c_str(), value.c_str());
+  if (result != ERROR_SUCCESS) {
+    VLOG(1) << "Failed to write (" << root << ") " << key << " @ " << name
+            << ": " << result;
+    return false;
+  }
+  return result == ERROR_SUCCESS;
+}
+
 int GetDownloadProgress(int64_t downloaded_bytes, int64_t total_bytes) {
   if (downloaded_bytes == -1 || total_bytes == -1 || total_bytes == 0)
     return -1;
@@ -699,11 +719,13 @@ std::wstring BuildMsiCommandLine(
                  {L" ",
                   base::UTF8ToWide(base::ToUpperASCII(kInstallerDataSwitch)),
                   L"=",
-                  QuoteForCommandLineToArgvW(installer_data_file->value())})
+                  base::CommandLine::QuoteForCommandLineToArgvW(
+                      installer_data_file->value())})
            : L"",
        L" REBOOT=ReallySuppress /qn /i ",
-       QuoteForCommandLineToArgvW(msi_installer.value()), L" /log ",
-       QuoteForCommandLineToArgvW(
+       base::CommandLine::QuoteForCommandLineToArgvW(msi_installer.value()),
+       L" /log ",
+       base::CommandLine::QuoteForCommandLineToArgvW(
            msi_installer.AddExtension(L".log").value())});
 }
 
@@ -716,8 +738,8 @@ std::wstring BuildExeCommandLine(
   }
 
   return base::StrCat(
-      {QuoteForCommandLineToArgvW(exe_installer.value()), L" ", arguments,
-       [&installer_data_file]() {
+      {base::CommandLine::QuoteForCommandLineToArgvW(exe_installer.value()),
+       L" ", arguments, [&installer_data_file]() {
          if (!installer_data_file)
            return std::wstring();
 
@@ -955,7 +977,7 @@ absl::optional<base::CommandLine> CommandLineForLegacyFormat(
   return command_line;
 }
 
-absl::optional<base::FilePath> GetApplicationDataDirectory(UpdaterScope scope) {
+absl::optional<base::FilePath> GetInstallDirectory(UpdaterScope scope) {
   base::FilePath app_data_dir;
   if (!base::PathService::Get(IsSystemInstall(scope) ? base::DIR_PROGRAM_FILES
                                                      : base::DIR_LOCAL_APP_DATA,
@@ -963,62 +985,107 @@ absl::optional<base::FilePath> GetApplicationDataDirectory(UpdaterScope scope) {
     LOG(ERROR) << "Can't retrieve app data directory.";
     return absl::nullopt;
   }
-  return app_data_dir;
-}
-
-absl::optional<base::FilePath> GetBaseInstallDirectory(UpdaterScope scope) {
-  absl::optional<base::FilePath> app_data_dir =
-      GetApplicationDataDirectory(scope);
-  return app_data_dir ? app_data_dir->AppendASCII(COMPANY_SHORTNAME_STRING)
-                            .AppendASCII(PRODUCT_FULLNAME_STRING)
-                      : app_data_dir;
+  return app_data_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
+      .AppendASCII(PRODUCT_FULLNAME_STRING);
 }
 
 base::FilePath GetExecutableRelativePath() {
   return base::FilePath::FromASCII(kExecutableName);
 }
 
-// TODO(crbug.com/1369674): Merge with `base::CommandLine`.
-std::wstring QuoteForCommandLineToArgvW(const std::wstring& input) {
-  if (input.empty())
-    return L"\"\"";
+bool IsGuid(const std::wstring& s) {
+  DCHECK(!s.empty());
 
-  constexpr wchar_t kCharactersThatMayNeedEncoding[] = L" \t\\\"";
-  if (input.find_first_of(kCharactersThatMayNeedEncoding) == std::wstring::npos)
-    return input;
+  GUID guid = {0};
+  return SUCCEEDED(::IIDFromString(&s[0], &guid));
+}
 
-  constexpr wchar_t kWhitespaceCharacters[] = L" \t";
-  const bool input_needs_quoting =
-      input.find_first_of(kWhitespaceCharacters) != std::wstring::npos;
-
-  std::wstring output;
-  if (input_needs_quoting)
-    output.push_back(L'"');
-
-  for (size_t i = 0; i < input.size(); ++i) {
-    if (input[i] == L'\\') {
-      size_t end = i + 1;
-      while (end < input.size() && input[end] == L'\\')
-        ++end;
-
-      // Before a quote, output 2n backslashes.
-      output.append(std::wstring(
-          (end - i) * (1 + ((end == input.size() && input_needs_quoting) ||
-                            input[end] == L'"')),
-          L'\\'));
-
-      i = end - 1;
-    } else if (input[i] == L'"') {
-      output.append(L"\\\"");
-    } else {
-      output.push_back(input[i]);
+void ForEachRegistryRunValueWithPrefix(
+    const std::wstring& prefix,
+    base::RepeatingCallback<void(const std::wstring&)> callback) {
+  for (base::win::RegistryValueIterator it(HKEY_CURRENT_USER, REGSTR_PATH_RUN,
+                                           KEY_WOW64_32KEY);
+       it.Valid(); ++it) {
+    const std::wstring run_name = it.Name();
+    if (base::StartsWith(run_name, prefix)) {
+      callback.Run(run_name);
     }
   }
+}
 
-  if (input_needs_quoting)
-    output.push_back(L'"');
+[[nodiscard]] bool DeleteRegValue(HKEY root,
+                                  const std::wstring& path,
+                                  const std::wstring& value) {
+  if (!base::win::RegKey(root, path.c_str(), Wow6432(KEY_QUERY_VALUE))
+           .Valid()) {
+    return true;
+  }
 
-  return output;
+  LONG result = base::win::RegKey(root, path.c_str(), Wow6432(KEY_WRITE))
+                    .DeleteValue(value.c_str());
+  return result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND;
+}
+
+void ForEachServiceWithPrefix(
+    const std::wstring& service_name_prefix,
+    const std::wstring& display_name_prefix,
+    base::RepeatingCallback<void(const std::wstring&)> callback) {
+  for (base::win::RegistryKeyIterator it(HKEY_LOCAL_MACHINE,
+                                         L"SYSTEM\\CurrentControlSet\\Services",
+                                         KEY_WOW64_32KEY);
+       it.Valid(); ++it) {
+    const std::wstring service_name = it.Name();
+    if (base::StartsWith(service_name, service_name_prefix)) {
+      if (display_name_prefix.empty()) {
+        callback.Run(service_name);
+        continue;
+      }
+
+      base::win::RegKey key;
+      if (key.Open(HKEY_LOCAL_MACHINE,
+                   base::StrCat(
+                       {L"SYSTEM\\CurrentControlSet\\Services\\", service_name})
+                       .c_str(),
+                   Wow6432(KEY_READ)) != ERROR_SUCCESS) {
+        continue;
+      }
+
+      std::wstring display_name;
+      if (key.ReadValue(L"DisplayName", &display_name) != ERROR_SUCCESS) {
+        continue;
+      }
+
+      if (base::StartsWith(display_name, display_name_prefix)) {
+        callback.Run(service_name);
+      }
+    }
+  }
+}
+
+[[nodiscard]] bool DeleteService(const std::wstring& service_name) {
+  SC_HANDLE scm = ::OpenSCManager(
+      nullptr, nullptr, SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE);
+  if (!scm) {
+    return false;
+  }
+
+  SC_HANDLE service = ::OpenService(scm, service_name.c_str(), DELETE);
+  bool is_service_deleted = !service;
+  if (!is_service_deleted) {
+    is_service_deleted =
+        ::DeleteService(service)
+            ? true
+            : ::GetLastError() == ERROR_SERVICE_MARKED_FOR_DELETE;
+
+    ::CloseServiceHandle(service);
+  }
+  ::CloseServiceHandle(scm);
+
+  if (!DeleteRegValue(HKEY_LOCAL_MACHINE, UPDATER_KEY, service_name)) {
+    return false;
+  }
+
+  return is_service_deleted;
 }
 
 }  // namespace updater

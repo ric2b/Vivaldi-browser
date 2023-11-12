@@ -5,7 +5,7 @@
 #ifndef CHROME_TEST_MEDIA_ROUTER_MEDIA_ROUTER_CAST_UI_FOR_TEST_H_
 #define CHROME_TEST_MEDIA_ROUTER_MEDIA_ROUTER_CAST_UI_FOR_TEST_H_
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "chrome/browser/ui/views/media_router/media_router_dialog_controller_views.h"
 #include "chrome/test/media_router/media_router_ui_for_test_base.h"
 #include "components/media_router/common/media_sink.h"
@@ -35,6 +35,9 @@ class MediaRouterCastUiForTest
   void HideDialog() override;
   void ChooseSourceType(CastDialogView::SourceType source_type) override;
   CastDialogView::SourceType GetChosenSourceType() const override;
+  std::string GetRouteIdForSink(const std::string& sink_name) const override;
+  std::string GetStatusTextForSink(const std::string& sink_name) const override;
+  std::string GetIssueTextForSink(const std::string& sink_name) const override;
   void WaitForSink(const std::string& sink_name) override;
   void WaitForSinkAvailable(const std::string& sink_name) override;
   void WaitForAnyIssue() override;

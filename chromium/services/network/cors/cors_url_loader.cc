@@ -7,14 +7,15 @@
 #include <sstream>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
 #include "net/base/load_flags.h"
+#include "net/cookies/cookie_partition_key.h"
 #include "net/http/http_status_code.h"
 #include "services/network/cors/cors_url_loader_factory.h"
 #include "services/network/cors/cors_util.h"
@@ -87,7 +88,7 @@ absl::optional<PreflightRequiredReason> NeedsPreflight(
 }
 
 base::Value NetLogCorsURLLoaderStartParams(const ResourceRequest& request) {
-  base::Value dict(base::Value::Type::DICTIONARY);
+  base::Value dict(base::Value::Type::DICT);
   dict.SetStringKey("url", request.url.possibly_invalid_spec());
   dict.SetStringKey("method", request.method);
   dict.SetStringKey("headers", request.headers.ToString());
@@ -107,7 +108,7 @@ base::Value NetLogCorsURLLoaderStartParams(const ResourceRequest& request) {
 
 base::Value NetLogPreflightRequiredParams(
     absl::optional<PreflightRequiredReason> preflight_required_reason) {
-  base::Value dict(base::Value::Type::DICTIONARY);
+  base::Value dict(base::Value::Type::DICT);
   dict.SetBoolKey("preflight_required", preflight_required_reason.has_value());
   if (preflight_required_reason) {
     std::string preflight_required_reason_param;
@@ -317,6 +318,7 @@ CorsURLLoader::CorsURLLoader(
       factory_client_security_state_(factory_client_security_state),
       cross_origin_embedder_policy_(cross_origin_embedder_policy),
       devtools_observer_(std::move(devtools_observer)),
+      weak_devtools_observer_factory_(&devtools_observer_),
       // CORS preflight related events are logged in a series of URL_REQUEST
       // logs.
       net_log_(net::NetLogWithSource::Make(net::NetLog::Get(),
@@ -782,14 +784,6 @@ void CorsURLLoader::StartRequest() {
     return;
   }
 
-  // Clone the devtools observer only if the original request has a
-  // |devtools_request_id|.
-  mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer;
-  if (devtools_observer_ && request_.devtools_request_id) {
-    devtools_observer_->Clone(
-        devtools_observer.InitWithNewPipeAndPassReceiver());
-  }
-
   // Since we're doing a preflight, we won't reuse the original request. Cancel
   // it now to free up the socket.
   network_loader_.reset();
@@ -804,7 +798,7 @@ void CorsURLLoader::StartRequest() {
       GetPrivateNetworkAccessPreflightBehavior(), tainted_,
       net::NetworkTrafficAnnotationTag(traffic_annotation_),
       network_loader_factory_, isolation_info_, CloneClientSecurityState(),
-      std::move(devtools_observer), net_log_,
+      weak_devtools_observer_factory_.GetWeakPtr(), net_log_,
       context_->acam_preflight_spec_conformant());
 }
 
@@ -926,6 +920,8 @@ void CorsURLLoader::StartNetworkRequest() {
     context_->GetMemoryCache()->CreateLoaderAndStart(
         network_loader_.BindNewPipeAndPassReceiver(), request_id_, options_,
         *cache_key, request_, net_log_,
+        net::CookiePartitionKey::FromNetworkIsolationKey(
+            isolation_info_.network_isolation_key()),
         network_client_receiver_.BindNewPipeAndPassRemote());
     memory_cache_was_used_ = true;
   } else if (sync_network_loader_factory_) {
@@ -947,7 +943,7 @@ void CorsURLLoader::StartNetworkRequest() {
 
 void CorsURLLoader::HandleComplete(const URLLoaderCompletionStatus& status) {
   if (request_.trust_token_params) {
-    HistogramTrustTokenOperationNetError(request_.trust_token_params->type,
+    HistogramTrustTokenOperationNetError(request_.trust_token_params->operation,
                                          status.trust_token_operation_status,
                                          status.error_code);
   }

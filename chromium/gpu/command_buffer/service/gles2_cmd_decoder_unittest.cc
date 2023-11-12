@@ -7,8 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
@@ -21,7 +21,6 @@
 #include "gpu/command_buffer/service/mocks.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/test_helper.h"
-#include "gpu/command_buffer/service/validating_abstract_texture_impl.h"
 #include "gpu/config/gpu_switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_image_stub.h"
@@ -30,6 +29,10 @@
 #include "ui/gl/gl_surface_stub.h"
 #include "ui/gl/gpu_timing_fake.h"
 #include "ui/gl/scoped_make_current.h"
+
+#if !BUILDFLAG(IS_ANDROID)
+#include "gpu/command_buffer/service/validating_abstract_texture_impl.h"
+#endif
 
 #if !defined(GL_DEPTH24_STENCIL8)
 #define GL_DEPTH24_STENCIL8 0x88F0
@@ -279,14 +282,10 @@ TEST_P(GLES2DecoderTest, TestImageBindingForDecoderManagement) {
   auto* validating_texture =
       static_cast<ValidatingAbstractTextureImpl*>(abstract_texture.get());
   TextureRef* texture_ref = validating_texture->GetTextureRefForTesting();
-  Texture::ImageState state;
-  EXPECT_EQ(texture_ref->texture()->GetLevelImage(target, 0, &state),
-            image.get());
+  EXPECT_EQ(texture_ref->texture()->GetLevelImage(target, 0), image.get());
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
-  EXPECT_EQ(state, Texture::ImageState::UNBOUND);
-#else
-  EXPECT_EQ(state, Texture::ImageState::BOUND);
+  EXPECT_TRUE(texture_ref->texture()->HasUnboundLevelImage(target, 0));
 #endif
 
   EXPECT_CALL(*gl_, DeleteTextures(1, _)).Times(1).RetiresOnSaturation();

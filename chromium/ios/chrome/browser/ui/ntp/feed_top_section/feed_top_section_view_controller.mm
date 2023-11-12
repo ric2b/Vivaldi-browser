@@ -13,6 +13,7 @@
 #import "ios/chrome/browser/ui/ntp/new_tab_page_delegate.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -27,8 +28,24 @@ const CGFloat kContentStackHorizontalPadding = 18;
 const CGFloat kContentStackVerticalPadding = 9;
 // Border radius of the promo container.
 const CGFloat kPromoViewContainerBorderRadius = 15;
-// The image name of the promo view's icon.
-NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
+
+// Returns an array of constraints to make all sides of `innerView` and
+// `outerView` match, with `innerView` inset by `insets`.
+NSArray<NSLayoutConstraint*>* SameConstraintsWithInsets(
+    id<EdgeLayoutGuideProvider> innerView,
+    id<EdgeLayoutGuideProvider> outerView,
+    NSDirectionalEdgeInsets insets) {
+  return @[
+    [innerView.leadingAnchor constraintEqualToAnchor:outerView.leadingAnchor
+                                            constant:insets.leading],
+    [innerView.trailingAnchor constraintEqualToAnchor:outerView.trailingAnchor
+                                             constant:-insets.trailing],
+    [innerView.topAnchor constraintEqualToAnchor:outerView.topAnchor
+                                        constant:insets.top],
+    [innerView.bottomAnchor constraintEqualToAnchor:outerView.bottomAnchor
+                                           constant:-insets.bottom],
+  ];
+}
 }  // namespace
 
 @interface FeedTopSectionViewController ()
@@ -41,6 +58,10 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
 
 // View to contain the signin promo.
 @property(nonatomic, strong) UIView* promoViewContainer;
+
+// Stores the current UI constraints for the stack view.
+@property(nonatomic, strong)
+    NSArray<NSLayoutConstraint*>* contentStackConstraints;
 
 @end
 
@@ -56,7 +77,6 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
     _contentStack.axis = UILayoutConstraintAxisVertical;
     _contentStack.distribution = UIStackViewDistributionFill;
     // TODO(crbug.com/1331010): Update background color for the view.
-    _contentStack.layoutMarginsRelativeArrangement = YES;
   }
   return self;
 }
@@ -65,7 +85,7 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
   [super viewDidLoad];
   self.view.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:self.contentStack];
-  [self applyGeneralConstraints];
+  [self applyStackViewConstraints];
 }
 
 #pragma mark - FeedTopSectionConsumer
@@ -85,19 +105,21 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
     DCHECK(!self.promoView);
     self.promoViewContainer = [[UIView alloc] init];
     self.promoViewContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.promoViewContainer.backgroundColor =
-        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    if (GetTopOfFeedPromoStyle() == SigninPromoViewStyleCompactTitled) {
+      self.promoViewContainer.backgroundColor =
+          [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
+    } else {
+      self.promoViewContainer.backgroundColor =
+          [UIColor colorNamed:kGrey100Color];
+    }
     self.promoViewContainer.layer.cornerRadius =
         kPromoViewContainerBorderRadius;
-    self.contentStack.directionalLayoutMargins = NSDirectionalEdgeInsetsMake(
-        kContentStackVerticalPadding, kContentStackHorizontalPadding,
-        kContentStackVerticalPadding, kContentStackHorizontalPadding);
 
     self.promoView = [self createPromoView];
     [self.promoViewContainer addSubview:self.promoView];
 
     [self.contentStack addArrangedSubview:self.promoViewContainer];
-    [self applyPromoViewConstraints];
+    AddSameConstraints(self.promoViewContainer, self.promoView);
   } else {
     DCHECK(self.promoViewContainer);
     DCHECK(self.promoView);
@@ -107,17 +129,15 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
     [self.promoViewContainer removeFromSuperview];
     self.promoViewContainer = nil;
     self.promoView = nil;
-    self.contentStack.directionalLayoutMargins = NSDirectionalEdgeInsetsZero;
   }
+  [self applyStackViewConstraints];
   [self.ntpDelegate updateFeedLayout];
 }
 
 - (void)updateSigninPromoWithConfigurator:
     (SigninPromoViewConfigurator*)configurator {
-  // TODO(crbug.com/1331010): Use feature params to specify which style of promo
-  // to use.
   [configurator configureSigninPromoView:self.promoView
-                               withStyle:SigninPromoViewStyleTitledCompact];
+                               withStyle:GetTopOfFeedPromoStyle()];
 }
 
 #pragma mark - Properties
@@ -129,35 +149,30 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
 
 #pragma mark - Private
 
-- (void)applyPromoViewConstraints {
-  [NSLayoutConstraint activateConstraints:@[
-    // Anchor promo and its container.
-    [self.promoViewContainer.heightAnchor
-        constraintEqualToAnchor:self.promoView.heightAnchor],
-    [self.promoViewContainer.widthAnchor
-        constraintEqualToAnchor:self.promoView.widthAnchor],
-    [self.promoView.centerXAnchor
-        constraintEqualToAnchor:self.promoViewContainer.centerXAnchor],
-    [self.promoView.centerYAnchor
-        constraintEqualToAnchor:self.promoViewContainer.centerYAnchor],
-  ]];
+// Returns insets to add a margin around the stackview if there are items
+// to display in the stackview. Otherwise returns NSDirectionalEdgeInsetsZero.
+- (NSDirectionalEdgeInsets)stackViewInsets {
+  if (self.shouldShowSigninPromo) {
+    return NSDirectionalEdgeInsetsMake(
+        kContentStackVerticalPadding, kContentStackHorizontalPadding,
+        kContentStackVerticalPadding, kContentStackHorizontalPadding);
+  } else {
+    return NSDirectionalEdgeInsetsZero;
+  }
 }
 
-// Applies constraints.
-- (void)applyGeneralConstraints {
-  [NSLayoutConstraint activateConstraints:@[
-    // Anchor content stack.
-    [self.contentStack.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-    [self.contentStack.bottomAnchor
-        constraintEqualToAnchor:self.view.bottomAnchor],
-    [self.contentStack.leadingAnchor
-        constraintEqualToAnchor:self.view.leadingAnchor],
-    [self.contentStack.widthAnchor
-        constraintEqualToAnchor:self.view.widthAnchor],
-  ]];
+// Applies constraints to the stack view.
+- (void)applyStackViewConstraints {
+  if (self.contentStackConstraints) {
+    [NSLayoutConstraint deactivateConstraints:self.contentStackConstraints];
+  }
+
+  self.contentStackConstraints = SameConstraintsWithInsets(
+      self.contentStack, self.view, [self stackViewInsets]);
+  [NSLayoutConstraint activateConstraints:self.contentStackConstraints];
 }
 
-// Configures a creates a signin promo view.
+// Configures and creates a signin promo view.
 - (SigninPromoView*)createPromoView {
   DCHECK(self.signinPromoDelegate);
   SigninPromoView* promoView =
@@ -167,18 +182,14 @@ NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
 
   SigninPromoViewConfigurator* configurator =
       self.delegate.signinPromoConfigurator;
-  SigninPromoViewStyle promoViewStyle = IsDiscoverFeedTopSyncPromoCompact()
-                                            ? SigninPromoViewStyleTitledCompact
-                                            : SigninPromoViewStyleTitled;
+  SigninPromoViewStyle promoViewStyle = GetTopOfFeedPromoStyle();
   [configurator configureSigninPromoView:promoView withStyle:promoViewStyle];
+
+  // Override promo text for top of feed.
   promoView.titleLabel.text =
       l10n_util::GetNSString(IDS_IOS_NTP_FEED_SIGNIN_PROMO_TITLE);
   promoView.textLabel.text =
-      IsDiscoverFeedTopSyncPromoCompact()
-          ? l10n_util::GetNSString(IDS_IOS_NTP_FEED_SIGNIN_COMPACT_PROMO_BODY)
-          : l10n_util::GetNSString(IDS_IOS_NTP_FEED_SIGNIN_FULL_PROMO_BODY);
-  // TODO(crbug.com/1331010): Update the Promo icon.
-  [promoView setNonProfileImage:[UIImage imageNamed:kPromoViewImageName]];
+      l10n_util::GetNSString(IDS_IOS_NTP_FEED_SIGNIN_COMPACT_PROMO_BODY);
   return promoView;
 }
 

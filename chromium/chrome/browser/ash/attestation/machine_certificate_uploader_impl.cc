@@ -7,9 +7,9 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "chrome/browser/ash/attestation/attestation_ca_client.h"
 #include "chrome/browser/ash/attestation/attestation_key_payload.pb.h"
@@ -233,8 +233,9 @@ void MachineCertificateUploaderImpl::CheckIfUploaded(
   UploadCertificate(reply.certificate());
 }
 
-void MachineCertificateUploaderImpl::OnUploadComplete(bool status) {
-  if (status) {
+void MachineCertificateUploaderImpl::OnUploadComplete(
+    policy::CloudPolicyClient::Result result) {
+  if (result.IsSuccess()) {
     VLOG(1) << "Enterprise Machine Certificate uploaded to DMServer.";
     ::attestation::GetKeyInfoRequest request;
     request.set_username("");
@@ -243,7 +244,7 @@ void MachineCertificateUploaderImpl::OnUploadComplete(bool status) {
         request, base::BindOnce(&MachineCertificateUploaderImpl::MarkAsUploaded,
                                 weak_factory_.GetWeakPtr()));
   }
-  certificate_uploaded_ = status;
+  certificate_uploaded_ = result.IsSuccess();
   RunCallbacks(certificate_uploaded_.value());
 }
 

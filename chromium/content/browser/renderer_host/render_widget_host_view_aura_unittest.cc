@@ -12,8 +12,8 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -158,7 +158,7 @@ void InstallDelegatedFrameHostClient(
 
 const viz::LocalSurfaceId kArbitraryLocalSurfaceId(
     1,
-    base::UnguessableToken::Deserialize(2, 3));
+    base::UnguessableToken::CreateForTesting(2, 3));
 
 std::string GetMessageNames(
     const MockWidgetInputHandler::MessageVector& events) {
@@ -3231,9 +3231,9 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   // Make sure |parent_view_| is evicted to avoid interfering with the code
   // below.
   parent_view_->Hide();
-  static_cast<viz::FrameEvictorClient*>(
-      parent_view_->delegated_frame_host_.get())
-      ->EvictDelegatedFrame();
+  auto* dfh = parent_view_->delegated_frame_host_.get();
+  static_cast<viz::FrameEvictorClient*>(dfh)->EvictDelegatedFrame(
+      dfh->GetFrameEvictorForTesting()->CollectSurfaceIdsForEviction());
 
   size_t max_renderer_frames =
       FrameEvictionManager::GetInstance()->GetMaxNumberOfSavedFrames();
@@ -3348,9 +3348,9 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
   // Make sure |parent_view_| is evicted to avoid interfering with the code
   // below.
   parent_view_->Hide();
-  static_cast<viz::FrameEvictorClient*>(
-      parent_view_->delegated_frame_host_.get())
-      ->EvictDelegatedFrame();
+  auto* dfh = parent_view_->delegated_frame_host_.get();
+  static_cast<viz::FrameEvictorClient*>(dfh)->EvictDelegatedFrame(
+      dfh->GetFrameEvictorForTesting()->CollectSurfaceIdsForEviction());
 
   // The test logic below relies on having max_renderer_frames > 2.  By default,
   // this value is calculated from total physical memory and causes the test to
@@ -5693,8 +5693,9 @@ TEST_F(RenderWidgetHostViewAuraTest, AllocateLocalSurfaceIdOnEviction) {
   view_->Show();
   viz::LocalSurfaceId id1 = view_->GetLocalSurfaceId();
   view_->Hide();
-  static_cast<viz::FrameEvictorClient*>(view_->delegated_frame_host_.get())
-      ->EvictDelegatedFrame();
+  auto* dfh = view_->delegated_frame_host_.get();
+  static_cast<viz::FrameEvictorClient*>(dfh)->EvictDelegatedFrame(
+      dfh->GetFrameEvictorForTesting()->CollectSurfaceIdsForEviction());
   view_->Show();
   viz::LocalSurfaceId id2 = view_->GetLocalSurfaceId();
   EXPECT_NE(id1, id2);
@@ -6173,7 +6174,7 @@ TEST_F(InputMethodResultAuraTest, ClearCompositionText) {
 }
 
 // This test is for ui::TextInputClient::InsertText with empty text.
-TEST_F(InputMethodResultAuraTest, FinishComposingText) {
+TEST_F(InputMethodResultAuraTest, InsertEmptyText) {
   base::RepeatingClosure ime_call = base::BindRepeating(
       &ui::TextInputClient::InsertText, base::Unretained(text_input_client()),
       std::u16string(),
@@ -6183,7 +6184,7 @@ TEST_F(InputMethodResultAuraTest, FinishComposingText) {
     SetHasCompositionTextToTrue();
     ime_call.Run();
     base::RunLoop().RunUntilIdle();
-    EXPECT_EQ("SetComposition FinishComposingText",
+    EXPECT_EQ("SetComposition CommitText",
               GetMessageNames(widget_hosts_[index]
                                   ->input_handler()
                                   ->GetAndResetDispatchedMessages()));

@@ -8,9 +8,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
@@ -390,7 +390,12 @@ int SSLConnectJob::DoSSLConnect() {
   SSLConfig ssl_config = params_->ssl_config();
   ssl_config.network_anonymization_key = params_->network_anonymization_key();
   ssl_config.privacy_mode = params_->privacy_mode();
-  ssl_config.disable_legacy_crypto = disable_legacy_crypto_with_fallback_;
+  // We do the fallback in both cases here to ensure we separate the effect of
+  // disabling sha1 from the effect of having a single automatic retry
+  // on a potentially unreliably network connection.
+  ssl_config.disable_sha1_server_signatures =
+      disable_legacy_crypto_with_fallback_ ||
+      !base::FeatureList::IsEnabled(features::kSHA1ServerSignature);
 
   if (ssl_client_context()->EncryptedClientHelloEnabled()) {
     if (ech_retry_configs_) {

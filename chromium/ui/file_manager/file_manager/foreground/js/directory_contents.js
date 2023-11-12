@@ -9,12 +9,16 @@ import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/ev
 import {mountGuest} from '../../common/js/api.js';
 import {AsyncQueue, ConcurrentQueue} from '../../common/js/async_util.js';
 import {createDOMError} from '../../common/js/dom_utils.js';
+import {FileType} from '../../common/js/file_type.js';
 import {metrics} from '../../common/js/metrics.js';
 import {createTrashReaders} from '../../common/js/trash.js';
 import {util} from '../../common/js/util.js';
 import {VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
+import {EntryLocation} from '../../externs/entry_location.js';
 import {FakeEntry, FilesAppDirEntry} from '../../externs/files_app_entry_interfaces.js';
+import {SearchFileType, SearchLocation, SearchOptions, SearchRecency} from '../../externs/ts/state.js';
 import {VolumeManager} from '../../externs/volume_manager.js';
+import {getDefaultSearchOptions} from '../../state/store.js';
 
 import {constants} from './constants.js';
 import {FileListModel} from './file_list_model.js';
@@ -132,7 +136,12 @@ export class DriveSearchContentScanner extends ContentScanner {
         return;
       }
       chrome.fileManagerPrivate.searchDrive(
-          {query: this.query_, nextFeed: ''}, (entries, nextFeed) => {
+          {
+            query: this.query_,
+            category: chrome.fileManagerPrivate.FileCategory.ALL,
+            nextFeed: '',
+          },
+          (entries, nextFeed) => {
             if (chrome.runtime.lastError) {
               console.error(chrome.runtime.lastError.message);
             }
@@ -218,6 +227,199 @@ export class LocalSearchContentScanner extends ContentScanner {
 }
 
 /**
+ * A content scanner capable of scanning both the local file system and Google
+ * Drive. When created you need to specify the root type, current entry
+ * in the directory tree, the search query and options. The `rootType` together
+ * with `options` is then used to determine if the search is conducted on the
+ * local folder, root folder, or on the local file system and Google Drive.
+ *
+ * NOTE: This class is a stop-gap solution when transitioning to a content
+ * scanner that talks to a browser level service. The service ultimately should
+ * be the one that determines what is being searched, and aggregates the results
+ * for the frontend client.
+ */
+export class SearchV2ContentScanner extends ContentScanner {
+  /**
+   * @param {!VolumeManagerCommon.RootType|null} rootType The root type of the
+   *    location in the directory tree, if known.
+   * @param {!DirectoryEntry} entry The current directory.
+   * @param {!string} query The query of the search.
+   * @param {SearchOptions=} options The options for the search.
+   */
+  constructor(rootType, entry, query, options = undefined) {
+    super();
+    this.rootType_ = rootType;
+    this.entry_ = entry;
+    this.query_ = query.toLowerCase();
+    this.options_ = options || getDefaultSearchOptions();
+  }
+
+  /**
+   * For the given options returns the category of files to which the search
+   * should be limited (e.g., images, videos, etc.).
+   */
+  getDesiredCategory_() {
+    switch (this.options_.type) {
+      case SearchFileType.AUDIO:
+        return chrome.fileManagerPrivate.FileCategory.AUDIO;
+      case SearchFileType.DOCUMENTS:
+        return chrome.fileManagerPrivate.FileCategory.DOCUMENT;
+      case SearchFileType.IMAGES:
+        return chrome.fileManagerPrivate.FileCategory.IMAGE;
+      case SearchFileType.VIDEOS:
+        return chrome.fileManagerPrivate.FileCategory.VIDEO;
+      default:
+        return chrome.fileManagerPrivate.FileCategory.ALL;
+    }
+  }
+
+  isSearchingRoot_() {
+    if (this.options_.location === SearchLocation.EVERYWHERE ||
+        this.options_.location === SearchLocation.THIS_CHROMEBOOK) {
+      return true;
+    }
+  }
+
+  /**
+   * @returns Whether or not the local (MY_FILES) search should be performed.
+   * @private
+   */
+  isSearchingLocal_() {
+    if (this.isSearchingRoot_()) {
+      return true;
+    }
+    if (this.options_.location === SearchLocation.THIS_FOLDER) {
+      return (this.rootType_ !== VolumeManagerCommon.RootType.DRIVE);
+    }
+    return false;
+  }
+
+  /**
+   * Computes the timestamp based on options. If the options ask for today's
+   * results, it uses the time in ms from midnight. For yesterday, it goes back
+   * by one day from midnight. For week, it goes back by 6 days from midnight.
+   * For a month, it goes back by 30 days since midnight, regardless of how
+   * many days are in the current month. For a year, it goes back by 365 days
+   * since midnight, regardless if the current year is a leap year or not.
+   * @private
+   */
+  getEarliestTimestamp_() {
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const midnightMs = midnight.getTime();
+    const dayMs = 24 * 60 * 60 * 1000;
+
+    switch (this.options_.recency) {
+      case SearchRecency.TODAY:
+        return midnightMs;
+      case SearchRecency.YESTERDAY:
+        return midnightMs - 1 * dayMs;
+      case SearchRecency.LAST_WEEK:
+        return midnightMs - 6 * dayMs;
+      case SearchRecency.LAST_MONTH:
+        return midnightMs - 30 * dayMs;
+      case SearchRecency.LAST_YEAR:
+        return midnightMs - 365 * dayMs;
+      default:
+        return 0;
+    }
+  }
+
+  /**
+   * @returns Whether or not the Google Drive search should be performed.
+   * @private
+   */
+  isSearchingDrive_() {
+    if (this.options_.location === SearchLocation.EVERYWHERE) {
+      return true;
+    }
+    if (this.options_.location === SearchLocation.THIS_FOLDER) {
+      return (this.rootType_ === VolumeManagerCommon.RootType.DRIVE);
+    }
+    return false;
+  }
+
+  /**
+   * Starts the file name search.
+   * @override
+   */
+  async scan(
+      entriesCallback, successCallback, errorCallback,
+      invalidateCache = false) {
+    const searchPromises = [];
+    const category = this.getDesiredCategory_();
+    if (this.isSearchingLocal_()) {
+      searchPromises.push(new Promise((resolve, reject) => {
+        const rootDir =
+            this.isSearchingRoot_() ? this.entry_.filesystem.root : this.entry_;
+        const timestamp = this.getEarliestTimestamp_();
+        chrome.fileManagerPrivate.searchFiles(
+            {
+              rootDir: rootDir,
+              query: this.query_,
+              types: chrome.fileManagerPrivate.SearchType.ALL,
+              maxResults: 100,
+              timestamp: timestamp,
+              category: category,
+            },
+            /**
+             * @param {!Array<!Entry>} entries
+             */
+            (entries) => {
+              if (this.cancelled_) {
+                reject(createDOMError(util.FileError.ABORT_ERR));
+              } else if (chrome.runtime.lastError) {
+                reject(createDOMError(
+                    util.FileError.NOT_READABLE_ERR,
+                    chrome.runtime.lastError.message));
+              } else {
+                resolve(entries);
+              }
+            });
+      }));
+    }
+    if (this.isSearchingDrive_()) {
+      searchPromises.push(new Promise((resolve, reject) => {
+        chrome.fileManagerPrivate.searchDrive(
+            {
+              query: this.query_,
+              category: category,
+              nextFeed: '',
+            },
+            (entries, nextFeed) => {
+              if (chrome.runtime.lastError) {
+                reject(createDOMError(
+                    util.FileError.NOT_READABLE_ERR,
+                    chrome.runtime.lastError.message));
+              } else if (this.cancelled_) {
+                reject(createDOMError(util.FileError.ABORT_ERR));
+              } else if (!entries) {
+                reject(createDOMError(util.FileError.INVALID_MODIFICATION_ERR));
+              } else {
+                resolve(entries);
+              }
+            });
+      }));
+    }
+    if (!searchPromises) {
+      console.warn(
+          `No search promises for options ${JSON.stringify(this.options_)}`);
+      successCallback();
+    }
+    Promise.allSettled(searchPromises).then((results) => {
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          errorCallback(/** @type {DOMError} */ (result.reason));
+        } else if (result.status === 'fulfilled') {
+          entriesCallback(result.value);
+        }
+      }
+      successCallback();
+    });
+  }
+}
+
+/**
  * Scanner of the entries for the metadata search on Drive File System.
  */
 export class DriveMetadataSearchContentScanner extends ContentScanner {
@@ -271,9 +473,9 @@ export class RecentContentScanner extends ContentScanner {
    * @param {string} query Search query.
    * @param {VolumeManager} volumeManager Volume manager.
    * @param {chrome.fileManagerPrivate.SourceRestriction=} opt_sourceRestriction
-   * @param {chrome.fileManagerPrivate.RecentFileType=} opt_recentFileType
+   * @param {chrome.fileManagerPrivate.FileCategory=} opt_fileCategory
    */
-  constructor(query, volumeManager, opt_sourceRestriction, opt_recentFileType) {
+  constructor(query, volumeManager, opt_sourceRestriction, opt_fileCategory) {
     super();
 
     /**
@@ -293,10 +495,10 @@ export class RecentContentScanner extends ContentScanner {
         chrome.fileManagerPrivate.SourceRestriction.ANY_SOURCE;
 
     /**
-     * @private {chrome.fileManagerPrivate.RecentFileType}
+     * @private {chrome.fileManagerPrivate.FileCategory}
      */
-    this.recentFileType_ =
-        opt_recentFileType || chrome.fileManagerPrivate.RecentFileType.ALL;
+    this.fileCategory_ =
+        opt_fileCategory || chrome.fileManagerPrivate.FileCategory.ALL;
   }
 
   /**
@@ -317,7 +519,7 @@ export class RecentContentScanner extends ContentScanner {
     const isAllowedVolume = (entry) =>
         this.volumeManager_.getVolumeInfo(entry) !== null;
     chrome.fileManagerPrivate.getRecentFiles(
-        this.sourceRestriction_, this.recentFileType_, invalidateCache,
+        this.sourceRestriction_, this.fileCategory_, invalidateCache,
         entries => {
           if (chrome.runtime.lastError) {
             console.error(chrome.runtime.lastError.message);

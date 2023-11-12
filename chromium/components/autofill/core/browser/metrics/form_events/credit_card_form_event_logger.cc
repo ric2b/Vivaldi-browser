@@ -14,6 +14,7 @@
 #include "components/autofill/core/browser/form_data_importer.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/form_events/form_events.h"
+#include "components/autofill/core/browser/metrics/payments/card_unmask_flow_metrics.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/validation.h"
@@ -65,6 +66,12 @@ void CreditCardFormEventLogger::OnDidShowSuggestions(
                                             sync_state, off_the_record);
 
   suggestion_shown_timestamp_ = AutofillTickClock::NowTicks();
+
+  // Log if metadata is shown for any of the suggestions.
+  if (metadata_logging_context_.card_product_description_shown ||
+      metadata_logging_context_.card_art_image_shown) {
+    Log(FORM_EVENT_CARD_SUGGESTION_WITH_METADATA_SHOWN, form);
+  }
 }
 
 void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
@@ -104,13 +111,9 @@ void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
       break;
   }
 
-  // Log the latency between suggestion being shown and suggestion being
-  // selected.
-  if (metadata_logging_context_.card_metadata_available) {
-    autofill_metrics::LogCardSuggestionAcceptanceLatencyMetric(
-        AutofillTickClock::NowTicks() - suggestion_shown_timestamp_,
-        metadata_logging_context_);
-  }
+  autofill_metrics::LogAcceptanceLatency(
+      AutofillTickClock::NowTicks() - suggestion_shown_timestamp_,
+      metadata_logging_context_, credit_card);
 }
 
 void CreditCardFormEventLogger::OnDidFillSuggestion(
@@ -251,7 +254,7 @@ void CreditCardFormEventLogger::LogFormSubmitted(const FormStructure& form) {
     // Log BetterAuth.FlowEvents.
     RecordCardUnmaskFlowEvent(current_authentication_flow_,
                               UnmaskAuthFlowEvent::kFormSubmitted);
-    AutofillMetrics::LogServerCardUnmaskFormSubmission(
+    autofill_metrics::LogServerCardUnmaskFormSubmission(
         AutofillClient::PaymentsRpcCardType::kVirtualCard);
   } else if (logged_suggestion_filled_was_server_data_) {
     Log(FORM_EVENT_SERVER_SUGGESTION_SUBMITTED_ONCE, form);

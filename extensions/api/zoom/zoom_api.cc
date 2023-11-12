@@ -121,6 +121,12 @@ void ZoomAPI::RemoveZoomObserver(Browser* browser) {
   }
 }
 
+void ZoomAPI::OnZoomControllerDestroyed(
+    zoom::ZoomController* zoom_controller) {
+  DCHECK(zoom_controller);
+  zoom_controller->RemoveObserver(this);
+}
+
 void ZoomAPI::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
   double zoom_factor = blink::PageZoomLevelToZoomFactor(data.new_zoom_level);

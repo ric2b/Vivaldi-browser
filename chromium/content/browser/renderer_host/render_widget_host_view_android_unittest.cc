@@ -9,7 +9,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "cc/layers/deadline_policy.h"
-#include "cc/layers/layer.h"
+#include "cc/slim/layer.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
 #include "content/browser/renderer_host/frame_tree.h"
@@ -78,6 +78,10 @@ display::ScreenInfo CustomScreenInfoRenderWidgetHostViewAndroid::GetScreenInfo()
   return screen_info_;
 }
 
+std::string PostTestCaseName(const ::testing::TestParamInfo<bool>& info) {
+  return info.param ? "FullscreenKillswitch" : "Default";
+}
+
 }  // namespace
 
 class RenderWidgetHostViewAndroidTest : public testing::Test {
@@ -132,8 +136,8 @@ class RenderWidgetHostViewAndroidTest : public testing::Test {
   std::unique_ptr<MockRenderProcessHost> process_;
   scoped_refptr<SiteInstanceGroup> site_instance_group_;
   std::unique_ptr<MockRenderWidgetHostDelegate> delegate_;
-  scoped_refptr<cc::Layer> parent_layer_;
-  scoped_refptr<cc::Layer> layer_;
+  scoped_refptr<cc::slim::Layer> parent_layer_;
+  scoped_refptr<cc::slim::Layer> layer_;
   ui::ViewAndroid parent_view_;
   ui::ViewAndroid native_view_;
   // TestRenderViewHost
@@ -213,10 +217,11 @@ void RenderWidgetHostViewAndroidTest::SetUp() {
       frame_tree_.get(), site_instance_group_.get(),
       site_instance_->GetStoragePartitionConfig(), std::move(mock_host),
       web_contents_.get(), process_->GetNextRoutingID(),
-      process_->GetNextRoutingID(), nullptr);
-  parent_layer_ = cc::Layer::Create();
+      process_->GetNextRoutingID(), nullptr,
+      CreateRenderViewHostCase::kDefault);
+  parent_layer_ = cc::slim::Layer::Create();
   parent_view_.SetLayer(parent_layer_);
-  layer_ = cc::Layer::Create();
+  layer_ = cc::slim::Layer::Create();
   native_view_.SetLayer(layer_);
   parent_view_.AddChild(&native_view_);
   EXPECT_EQ(&parent_view_, native_view_.parent());
@@ -1024,6 +1029,9 @@ RenderWidgetHostViewAndroidRotationKillswitchTest::
   if (GetParam()) {
     scoped_feature_list_.InitAndEnableFeature(
         features::kSurfaceSyncFullscreenKillswitch);
+  } else {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kSurfaceSyncFullscreenKillswitch);
   }
 }
 
@@ -1222,16 +1230,12 @@ TEST_P(RenderWidgetHostViewAndroidRotationKillswitchTest, FullscreenRotation) {
 
 // Tests Rotation improvements that launched with
 // features::kSurfaceSyncThrottling flag, and now only exist behind the
-// kSurfaceSyncFullscreenKillswitch flag.
-INSTANTIATE_TEST_SUITE_P(FullscreenKillswitch,
+// kSurfaceSyncFullscreenKillswitch flag. When off they should directly compare
+// visual properties to make throttling determination
+INSTANTIATE_TEST_SUITE_P(,
                          RenderWidgetHostViewAndroidRotationKillswitchTest,
-                         ::testing::Values(true));
-
-// Tests the Rotation and Fullscreen work that directly compares visual
-// properties to make throttling determination
-INSTANTIATE_TEST_SUITE_P(Default,
-                         RenderWidgetHostViewAndroidRotationKillswitchTest,
-                         ::testing::Values(false));
+                         ::testing::Bool(),
+                         &PostTestCaseName);
 
 // Tests that when a device's initial orientation is Landscape, that we do not
 // treat the initial UpdateScreenInfo as the start of a rotation.
@@ -1270,15 +1274,67 @@ TEST_P(RenderWidgetHostViewAndroidLandscapeStartupTest, LandscapeStartup) {
 
 // Tests Rotation improvements that launched with
 // features::kSurfaceSyncThrottling flag, and now only exist behind the
-// kSurfaceSyncFullscreenKillswitch flag.
-INSTANTIATE_TEST_SUITE_P(FullscreenKillswitch,
+// kSurfaceSyncFullscreenKillswitch flag. When off they should directly compare
+// visual properties to make throttling determination
+INSTANTIATE_TEST_SUITE_P(,
                          RenderWidgetHostViewAndroidLandscapeStartupTest,
-                         ::testing::Values(true));
+                         ::testing::Bool(),
+                         &PostTestCaseName);
 
-// Tests the Rotation and Fullscreen work that directly compares visual
-// properties to make throttling determination
-INSTANTIATE_TEST_SUITE_P(Default,
-                         RenderWidgetHostViewAndroidLandscapeStartupTest,
-                         ::testing::Values(false));
+// Tests that when the ScreenInfo and PhysicalBacking are conflicting
+// orientations, that entering Fullscreen and changing to a matching
+// PhysicalBacking does not throttle. https://crbug.com/1418321
+class RenderWidgetHostViewAndroidMixedOrientationStartupTest
+    : public RenderWidgetHostViewAndroidRotationKillswitchTest {
+ public:
+  RenderWidgetHostViewAndroidMixedOrientationStartupTest() = default;
+  ~RenderWidgetHostViewAndroidMixedOrientationStartupTest() override = default;
+
+ protected:
+  // testing::Test:
+  void SetUp() override;
+};
+
+void RenderWidgetHostViewAndroidMixedOrientationStartupTest::SetUp() {
+  // The base rotation test sets up default of Portrait for both. Skip it.
+  RenderWidgetHostViewAndroidTest::SetUp();
+  SetPortraitScreenInfo(/*rotation=*/false);
+  // Small Landscape view that will expand when switching to Fullscreen.
+  OnPhysicalBackingSizeChanged(gfx::Size(400, 200));
+}
+
+// Tests that when we EnterFullscreenMode and the PhysicalBacking changes to
+// match the Portrait ScreenInfo, that we do not block syncing.
+TEST_P(RenderWidgetHostViewAndroidMixedOrientationStartupTest,
+       EnterFullscreenMode) {
+  RenderWidgetHostViewAndroid* rwhva = render_widget_host_view_android();
+  EXPECT_TRUE(rwhva->CanSynchronizeVisualProperties());
+  const viz::LocalSurfaceId initial_local_surface_id =
+      rwhva->GetLocalSurfaceId();
+
+  // When features::kSurfaceSyncFullscreenKillswitch is enabled, entering
+  // fullscreen mode prevents syncing until we get a non-rotation change to
+  // sizes.
+  EnterFullscreenMode();
+  if (GetParam()) {
+    EXPECT_FALSE(rwhva->CanSynchronizeVisualProperties());
+  }
+
+  // This is a rotation compared to the initial physical backing, however by
+  // matching the orientation of the ScreenInfo, we should sync and no longer
+  // throttle.
+  OnPhysicalBackingSizeChanged(fullscreen_portrait_physical_backing);
+  EXPECT_TRUE(rwhva->CanSynchronizeVisualProperties());
+  GetLocalSurfaceIdAndConfirmNewerThan(initial_local_surface_id);
+}
+
+// Tests Rotation improvements that launched with
+// features::kSurfaceSyncThrottling flag, and now only exist behind the
+// kSurfaceSyncFullscreenKillswitch flag. When off they should directly compare
+// visual properties to make throttling determination
+INSTANTIATE_TEST_SUITE_P(,
+                         RenderWidgetHostViewAndroidMixedOrientationStartupTest,
+                         ::testing::Bool(),
+                         &PostTestCaseName);
 
 }  // namespace content

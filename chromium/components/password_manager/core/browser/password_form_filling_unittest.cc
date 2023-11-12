@@ -136,8 +136,6 @@ class PasswordFormFillingTest : public testing::Test {
         .WillByDefault(Return(&webauthn_credentials_delegate_));
     ON_CALL(client_, GetPasswordFeatureManager)
         .WillByDefault(Return(&feature_manager_));
-    ON_CALL(webauthn_credentials_delegate_, IsWebAuthnAutofillEnabled)
-        .WillByDefault(Return(false));
   }
 
  protected:
@@ -201,10 +199,8 @@ TEST_F(PasswordFormFillingTest, Autofill) {
   // Check that the message to the renderer (i.e. |fill_data|) is filled
   // correctly.
   EXPECT_EQ(observed_form_.url, fill_data.url);
-  EXPECT_EQ(observed_form_.username_element, fill_data.username_field.name);
-  EXPECT_EQ(saved_match_.username_value, fill_data.username_field.value);
-  EXPECT_EQ(observed_form_.password_element, fill_data.password_field.name);
-  EXPECT_EQ(saved_match_.password_value, fill_data.password_field.value);
+  EXPECT_EQ(saved_match_.username_value, fill_data.preferred_login.username);
+  EXPECT_EQ(saved_match_.password_value, fill_data.preferred_login.password);
 
   // Check that information about non-preferred best matches is filled.
   ASSERT_EQ(1u, fill_data.additional_logins.size());
@@ -286,38 +282,9 @@ TEST_F(PasswordFormFillingTest, TestFillOnLoadSuggestion) {
 }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-TEST_F(PasswordFormFillingTest, DontFillOnLoadWebAuthnCredentials) {
-  MockWebAuthnCredentialsDelegate webauthn_credentials_delegate;
-  observed_form_.accepts_webauthn_credentials = true;
-  for (bool webauthn_autofill_enabled : {false, true}) {
-    PasswordFormFillData fill_data;
-    EXPECT_CALL(client_, GetWebAuthnCredentialsDelegateForDriver)
-        .WillOnce(Return(&webauthn_credentials_delegate));
-    EXPECT_CALL(webauthn_credentials_delegate, IsWebAuthnAutofillEnabled())
-        .WillOnce(Return(webauthn_autofill_enabled));
-    EXPECT_CALL(driver_, SetPasswordFillData(_))
-        .WillOnce(SaveArg<0>(&fill_data));
-    EXPECT_CALL(client_, PasswordWasAutofilled);
-    LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
-        &client_, &driver_, observed_form_, {&saved_match_}, federated_matches_,
-        &saved_match_, /*blocked_by_user=*/false, metrics_recorder_.get(),
-        /*webauthn_suggestions_available=*/false);
-    if (webauthn_autofill_enabled) {
-      EXPECT_EQ(LikelyFormFilling::kFillOnAccountSelect, likely_form_filling);
-    } else {
-      EXPECT_EQ(LikelyFormFilling::kFillOnPageLoad, likely_form_filling);
-    }
-  }
-}
-
 TEST_F(PasswordFormFillingTest, FillWithOnlyWebAuthnCredentials) {
-  MockWebAuthnCredentialsDelegate webauthn_credentials_delegate;
   observed_form_.accepts_webauthn_credentials = true;
 
-  EXPECT_CALL(client_, GetWebAuthnCredentialsDelegateForDriver)
-      .WillOnce(Return(&webauthn_credentials_delegate));
-  EXPECT_CALL(webauthn_credentials_delegate, IsWebAuthnAutofillEnabled())
-      .WillOnce(Return(true));
   EXPECT_CALL(client_, PasswordWasAutofilled);
   LikelyFormFilling likely_form_filling = SendFillInformationToRenderer(
       &client_, &driver_, observed_form_, {&saved_match_}, federated_matches_,
@@ -407,11 +374,13 @@ TEST_F(PasswordFormFillingTest, AutofillPSLMatch) {
   // correctly.
   EXPECT_EQ(observed_form_.url, fill_data.url);
   EXPECT_TRUE(fill_data.wait_for_username);
-  EXPECT_EQ(psl_saved_match_.signon_realm, fill_data.preferred_realm);
-  EXPECT_EQ(observed_form_.username_element, fill_data.username_field.name);
-  EXPECT_EQ(saved_match_.username_value, fill_data.username_field.value);
-  EXPECT_EQ(observed_form_.password_element, fill_data.password_field.name);
-  EXPECT_EQ(saved_match_.password_value, fill_data.password_field.value);
+  EXPECT_EQ(observed_form_.username_element_renderer_id,
+            fill_data.username_element_renderer_id);
+  EXPECT_EQ(observed_form_.password_element_renderer_id,
+            fill_data.password_element_renderer_id);
+  EXPECT_EQ(psl_saved_match_.signon_realm, fill_data.preferred_login.realm);
+  EXPECT_EQ(saved_match_.username_value, fill_data.preferred_login.username);
+  EXPECT_EQ(saved_match_.password_value, fill_data.preferred_login.password);
 }
 
 TEST_F(PasswordFormFillingTest, NoAutofillOnHttp) {
@@ -481,11 +450,9 @@ TEST_F(PasswordFormFillingTest, AutofillAffiliatedWebMatch) {
   // correctly.
   EXPECT_EQ(observed_form_.url, fill_data.url);
   EXPECT_TRUE(fill_data.wait_for_username);
-  EXPECT_EQ(affiliated_match.signon_realm, fill_data.preferred_realm);
-  EXPECT_EQ(observed_form_.username_element, fill_data.username_field.name);
-  EXPECT_EQ(saved_match_.username_value, fill_data.username_field.value);
-  EXPECT_EQ(observed_form_.password_element, fill_data.password_field.name);
-  EXPECT_EQ(saved_match_.password_value, fill_data.password_field.value);
+  EXPECT_EQ(affiliated_match.signon_realm, fill_data.preferred_login.realm);
+  EXPECT_EQ(saved_match_.username_value, fill_data.preferred_login.username);
+  EXPECT_EQ(saved_match_.password_value, fill_data.preferred_login.password);
 
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.MatchedFormType",
@@ -588,7 +555,7 @@ TEST(PasswordFormFillDataTest, TestSinglePreferredMatch) {
   EXPECT_TRUE(result.wait_for_username);
   // The preferred realm should be empty since it's the same as the realm of
   // the form.
-  EXPECT_EQ(std::string(), result.preferred_realm);
+  EXPECT_EQ(std::string(), result.preferred_login.realm);
 
   PasswordFormFillData result2 = CreatePasswordFormFillData(
       form_on_page, matches, preferred_match, page_origin, false);
@@ -666,7 +633,7 @@ TEST(PasswordFormFillDataTest, TestPublicSuffixDomainMatching) {
   EXPECT_TRUE(result.wait_for_username);
   // The preferred realm should match the signon realm from the
   // preferred match so the user can see where the result came from.
-  EXPECT_EQ(preferred_match.signon_realm, result.preferred_realm);
+  EXPECT_EQ(preferred_match.signon_realm, result.preferred_login.realm);
 
   // The realm of the exact match should be empty.
   PasswordFormFillData::LoginCollection::const_iterator iter =
@@ -739,7 +706,7 @@ TEST(PasswordFormFillDataTest, TestAffiliationMatch) {
   EXPECT_FALSE(result.wait_for_username);
   // The preferred realm should match the signon realm from the
   // preferred match so the user can see where the result came from.
-  EXPECT_EQ(preferred_match.signon_realm, result.preferred_realm);
+  EXPECT_EQ(preferred_match.signon_realm, result.preferred_login.realm);
 
   // The realm of the exact match should be empty.
   PasswordFormFillData::LoginCollection::const_iterator iter =
@@ -773,7 +740,7 @@ TEST(PasswordFormFillDataTest, RendererIDs) {
   // Set renderer id related fields.
   FormData form_data;
   form_data.host_frame = autofill::LocalFrameToken(
-      base::UnguessableToken::Deserialize(98765, 43210));
+      base::UnguessableToken::CreateForTesting(98765, 43210));
   form_data.unique_renderer_id = FormRendererId(42);
   form_data.is_form_tag = true;
   form_on_page.form_data = form_data;
@@ -786,12 +753,10 @@ TEST(PasswordFormFillDataTest, RendererIDs) {
       form_on_page, {}, preferred_match, page_origin, true);
 
   EXPECT_EQ(form_data.unique_renderer_id, result.form_renderer_id);
-  EXPECT_EQ(form_data.host_frame, result.username_field.host_frame);
-  EXPECT_EQ(form_data.host_frame, result.password_field.host_frame);
   EXPECT_EQ(form_on_page.username_element_renderer_id,
-            result.username_field.unique_renderer_id);
+            result.username_element_renderer_id);
   EXPECT_EQ(form_on_page.password_element_renderer_id,
-            result.password_field.unique_renderer_id);
+            result.password_element_renderer_id);
   EXPECT_TRUE(result.username_may_use_prefilled_placeholder);
 }
 
@@ -822,8 +787,8 @@ TEST(PasswordFormFillDataTest, NoPasswordElement) {
       form_on_page, {} /* matches */, preferred_match, page_origin, true);
 
   // Check that nor username nor password fields are set.
-  EXPECT_TRUE(result.username_field.unique_renderer_id.is_null());
-  EXPECT_TRUE(result.password_field.unique_renderer_id.is_null());
+  EXPECT_TRUE(result.username_element_renderer_id.is_null());
+  EXPECT_TRUE(result.password_element_renderer_id.is_null());
 }
 
 // Tests that the constructing a PasswordFormFillData behaves correctly when
@@ -862,7 +827,7 @@ TEST(PasswordFormFillDataTest, TestAffiliationWithAppName) {
   EXPECT_FALSE(result.wait_for_username);
   // The preferred realm should match the app name from the affiliated match so
   // the user can see and understand where the result came from.
-  EXPECT_EQ(affiliated_match.app_display_name, result.preferred_realm);
+  EXPECT_EQ(affiliated_match.app_display_name, result.preferred_login.realm);
 }
 
 // Tests that the constructing a PasswordFormFillData behaves correctly inside
@@ -894,7 +859,7 @@ TEST(PasswordFormFillDataTest, TestCrossOriginIframe) {
   EXPECT_FALSE(result.wait_for_username);
 
   // The preferred realm should match the form signon_realm.
-  EXPECT_EQ(result.preferred_realm, form_on_page.signon_realm);
+  EXPECT_EQ(result.preferred_login.realm, form_on_page.signon_realm);
   // The realm of the additional login match should match the form
   // signon_realm.
   EXPECT_EQ(result.additional_logins[0].realm, additional_match.signon_realm);

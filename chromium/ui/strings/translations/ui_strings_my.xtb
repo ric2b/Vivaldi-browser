@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{၁ လ}other{# လ}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{၁ နာရီ နှင့် }other{ # နာရီ နှင့် }}</translation>
+<translation id="185013357618350178">&amp;ရွေးရန်</translation>
 <translation id="1859234291848436338">လမ်းညွှန်ချက် ရေးနေ</translation>
 <translation id="1860796786778352021">အကြောင်းကြားစာ ပိတ်ရန်</translation>
 <translation id="186476001994626254">ဝဘ် စမတ် ကူးထည့်ရန် အကြောင်းအရာ</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{၁နာရီ အတွင်း}other{#နာရီ အတွင်း}}</translation>
 <translation id="2583543531130364912">သင်၏ တို့ထိမျက်နှာပြင်ကို တိုင်းတာချိန်ညှိပါ</translation>
 <translation id="2586657967955657006">ကလစ်ဘုတ်</translation>
+<translation id="2653844658857826081">အသစ်</translation>
 <translation id="2666092431469916601">ထိပ်</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" /> ထံမှ မျှဝေထားပါသည်</translation>
 <translation id="271033894570825754">အသစသ်</translation>

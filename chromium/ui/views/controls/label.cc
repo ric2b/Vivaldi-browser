@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/i18n/rtl.h"
-#include "base/logging.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -108,27 +107,21 @@ const std::u16string& Label::GetText() const {
 void Label::SetText(const std::u16string& new_text) {
   if (new_text == GetText())
     return;
+
+  if (GetAccessibleName().empty() || GetAccessibleName() == GetText()) {
+    SetAccessibleName(new_text);
+  }
+
   full_text_->SetText(new_text);
   ClearDisplayText();
   OnPropertyChanged(&full_text_ + kLabelText,
                     kPropertyEffectsPreferredSizeChanged);
-  if (accessible_name_.empty()) {
-    NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
-  }
   stored_selection_range_ = gfx::Range::InvalidRange();
 }
 
-void Label::SetAccessibleName(const std::u16string& name) {
-  if (name == accessible_name_)
-    return;
-  accessible_name_ = name;
-  OnPropertyChanged(&accessible_name_, kPropertyEffectsNone);
-  NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
-}
-
 const std::u16string& Label::GetAccessibleName() const {
-  return accessible_name_.empty() ? full_text_->GetDisplayText()
-                                  : accessible_name_;
+  return View::GetAccessibleName().empty() ? full_text_->GetDisplayText()
+                                           : View::GetAccessibleName();
 }
 
 int Label::GetTextContext() const {
@@ -170,8 +163,9 @@ void Label::ApplyBaselineTextStyle() {
 
 void Label::SetTextStyleRange(int style, const gfx::Range& range) {
   if (style == text_style_ || !range.IsValid() || range.is_empty() ||
-      !gfx::Range(0, GetText().size()).Contains(range))
+      !gfx::Range(0, GetText().size()).Contains(range)) {
     return;
+  }
 
   const auto details = style::GetFontDetails(text_context_, style);
   // This function is not prepared to handle style requests that vary by
@@ -212,6 +206,10 @@ void Label::SetEnabledColor(SkColor color) {
   OnPropertyChanged(&requested_enabled_color_, kPropertyEffectsPaint);
 }
 
+absl::optional<ui::ColorId> Label::GetEnabledColorId() const {
+  return enabled_color_id_;
+}
+
 void Label::SetEnabledColorId(absl::optional<ui::ColorId> enabled_color_id) {
   if (enabled_color_id_ == enabled_color_id)
     return;
@@ -232,7 +230,11 @@ void Label::SetBackgroundColor(SkColor color) {
     return;
   background_color_ = color;
   background_color_set_ = true;
-  RecalculateColors();
+  if (GetWidget()) {
+    UpdateColorsFromTheme();
+  } else {
+    RecalculateColors();
+  }
   OnPropertyChanged(&background_color_, kPropertyEffectsPaint);
 }
 
@@ -242,6 +244,9 @@ void Label::SetBackgroundColorId(
     return;
 
   background_color_id_ = background_color_id;
+  if (GetWidget()) {
+    UpdateColorsFromTheme();
+  }
   OnPropertyChanged(&background_color_id_, kPropertyEffectsPaint);
 }
 
@@ -303,8 +308,9 @@ bool Label::GetSkipSubpixelRenderingOpacityCheck() const {
 void Label::SetSkipSubpixelRenderingOpacityCheck(
     bool skip_subpixel_rendering_opacity_check) {
   if (skip_subpixel_rendering_opacity_check_ ==
-      skip_subpixel_rendering_opacity_check)
+      skip_subpixel_rendering_opacity_check) {
     return;
+  }
   skip_subpixel_rendering_opacity_check_ =
       skip_subpixel_rendering_opacity_check;
   OnPropertyChanged(&skip_subpixel_rendering_opacity_check_,
@@ -690,8 +696,9 @@ int Label::GetHeightForWidth(int w) const {
 
 View* Label::GetTooltipHandlerForPoint(const gfx::Point& point) {
   if (!handles_tooltips_ ||
-      (tooltip_text_.empty() && !ShouldShowDefaultTooltip()))
+      (tooltip_text_.empty() && !ShouldShowDefaultTooltip())) {
     return nullptr;
+  }
 
   return HitTestPoint(point) ? this : nullptr;
 }
@@ -788,8 +795,9 @@ void Label::PaintText(gfx::Canvas* canvas) {
   // cases), refactoring parents to use background() or by fixing
   // subpixel-rendering issues that the DCHECK detects.
   if (!display_text_ || display_text_->subpixel_rendering_suppressed() ||
-      skip_subpixel_rendering_opacity_check_)
+      skip_subpixel_rendering_opacity_check_) {
     return;
+  }
 
   // Ensure that, if we're using subpixel rendering, we're painted to an opaque
   // region. Subpixel rendering will sample from the r,g,b color channels of the
@@ -1026,7 +1034,7 @@ bool Label::HasTextBeingDragged() const {
 }
 
 void Label::SetTextBeingDragged(bool value) {
-  NOTREACHED();
+  NOTREACHED_NORETURN();
 }
 
 int Label::GetViewHeight() const {
@@ -1054,8 +1062,7 @@ void Label::OnAfterPointerAction(bool text_changed, bool selection_changed) {
 }
 
 bool Label::PasteSelectionClipboard() {
-  NOTREACHED();
-  return false;
+  NOTREACHED_NORETURN();
 }
 
 void Label::UpdateSelectionClipboard() {
@@ -1093,7 +1100,7 @@ void Label::ExecuteCommand(int command_id, int event_flags) {
       UpdateSelectionClipboard();
       break;
     default:
-      NOTREACHED();
+      NOTREACHED_NORETURN();
   }
 }
 
@@ -1242,10 +1249,11 @@ void Label::UpdateColorsFromTheme() {
         style::GetColor(*this, text_context_, text_style_));
   }
 
-  if (background_color_id_.has_value())
+  if (background_color_id_.has_value()) {
     background_color_ = color_provider->GetColor(*background_color_id_);
-  else if (!background_color_set_)
+  } else if (!background_color_set_) {
     background_color_ = color_provider->GetColor(ui::kColorDialogBackground);
+  }
 
   if (!selection_text_color_set_) {
     requested_selection_text_color_ =
@@ -1336,7 +1344,6 @@ ADD_PROPERTY_METADATA(std::u16string, TooltipText)
 ADD_PROPERTY_METADATA(bool, HandlesTooltips)
 ADD_PROPERTY_METADATA(bool, CollapseWhenHidden)
 ADD_PROPERTY_METADATA(int, MaximumWidth)
-ADD_PROPERTY_METADATA(std::u16string, AccessibleName)
 END_METADATA
 
 }  // namespace views

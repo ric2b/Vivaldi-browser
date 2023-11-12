@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
@@ -563,11 +563,11 @@ void ViewAccessibility::OverridePreviousFocus(Widget* widget) {
     previous_focus_ = nullptr;
 }
 
-Widget* ViewAccessibility::GetNextFocus() const {
+Widget* ViewAccessibility::GetNextWindowFocus() const {
   return next_focus_.get();
 }
 
-Widget* ViewAccessibility::GetPreviousFocus() const {
+Widget* ViewAccessibility::GetPreviousWindowFocus() const {
   return previous_focus_.get();
 }
 

@@ -117,6 +117,7 @@ class SyncServiceImpl : public SyncService,
   const SyncUserSettings* GetUserSettings() const override;
   DisableReasonSet GetDisableReasons() const override;
   TransportState GetTransportState() const override;
+  UserActionableError GetUserActionableError() const override;
   bool IsLocalSyncEnabled() const override;
   CoreAccountInfo GetAccountInfo() const override;
   bool HasSyncConsent() const override;
@@ -168,8 +169,9 @@ class SyncServiceImpl : public SyncService,
   void OnProtocolEvent(const ProtocolEvent& event) override;
   void OnConnectionStatusChange(ConnectionStatus status) override;
   void OnMigrationNeededForTypes(ModelTypeSet types) override;
-  void OnActionableError(const SyncProtocolError& error) override;
+  void OnActionableProtocolError(const SyncProtocolError& error) override;
   void OnBackedOffTypesChanged() override;
+  void OnInvalidationStatusChanged() override;
 
   // DataTypeManagerObserver implementation.
   void OnConfigureDone(const DataTypeManager::ConfigureResult& result) override;

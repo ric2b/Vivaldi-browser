@@ -10,8 +10,9 @@
 #include <memory>
 #include <string>
 #include <tuple>
+#include <utility>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/clamped_math.h"
@@ -19,12 +20,12 @@
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_hdc.h"
 #include "base/win/scoped_propvariant.h"
-#include "base/win/windows_version.h"
 #include "base/win/wrapped_window_proc.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_context.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
@@ -109,11 +110,6 @@ void MediaFoundationRenderer::ReportErrorReason(ErrorReason reason) {
                                 reason);
 }
 
-// static
-bool MediaFoundationRenderer::IsSupported() {
-  return base::win::GetVersion() >= base::win::Version::WIN10;
-}
-
 MediaFoundationRenderer::MediaFoundationRenderer(
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     std::unique_ptr<MediaLog> media_log,
@@ -135,22 +131,31 @@ MediaFoundationRenderer::~MediaFoundationRenderer() {
 
   StopSendingStatistics();
 
-  if (mf_media_engine_extension_)
-    mf_media_engine_extension_->Shutdown();
-  if (mf_media_engine_notify_)
+  // 'mf_media_engine_notify_' should be shutdown first as errors are possible
+  // if source is being created while shutdown is called (causing
+  // ERROR_FILE_NOT_FOUND from Media Foundations). These errors should be
+  // ignored by 'mf_media_engine_notify_' instead of being propagated up.
+  if (mf_media_engine_notify_) {
     mf_media_engine_notify_->Shutdown();
-  if (mf_media_engine_)
+  }
+  if (mf_media_engine_extension_) {
+    mf_media_engine_extension_->Shutdown();
+  }
+  if (mf_media_engine_) {
     mf_media_engine_->Shutdown();
+  }
 
-  if (mf_source_)
+  if (mf_source_) {
     mf_source_->DetachResource();
+  }
 
   if (dxgi_device_manager_) {
     dxgi_device_manager_.Reset();
     MFUnlockDXGIDeviceManager();
   }
-  if (virtual_video_window_)
+  if (virtual_video_window_) {
     DestroyWindow(virtual_video_window_);
+  }
 }
 
 void MediaFoundationRenderer::Initialize(MediaResource* media_resource,
@@ -230,21 +235,21 @@ HRESULT MediaFoundationRenderer::CreateMediaEngine(
   auto weak_this = weak_factory_.GetWeakPtr();
   RETURN_IF_FAILED(MakeAndInitialize<MediaEngineNotifyImpl>(
       &mf_media_engine_notify_,
-      BindToCurrentLoop(base::BindRepeating(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &MediaFoundationRenderer::OnPlaybackError, weak_this)),
-      BindToCurrentLoop(base::BindRepeating(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &MediaFoundationRenderer::OnPlaybackEnded, weak_this)),
-      BindToCurrentLoop(base::BindRepeating(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &MediaFoundationRenderer::OnFormatChange, weak_this)),
-      BindToCurrentLoop(base::BindRepeating(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &MediaFoundationRenderer::OnLoadedData, weak_this)),
-      BindToCurrentLoop(base::BindRepeating(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &MediaFoundationRenderer::OnCanPlayThrough, weak_this)),
-      BindToCurrentLoop(
+      base::BindPostTaskToCurrentDefault(
           base::BindRepeating(&MediaFoundationRenderer::OnPlaying, weak_this)),
-      BindToCurrentLoop(
+      base::BindPostTaskToCurrentDefault(
           base::BindRepeating(&MediaFoundationRenderer::OnWaiting, weak_this)),
-      BindToCurrentLoop(base::BindRepeating(
+      base::BindPostTaskToCurrentDefault(base::BindRepeating(
           &MediaFoundationRenderer::OnTimeUpdate, weak_this))));
 
   ComPtr<IMFAttributes> creation_attributes;
@@ -520,7 +525,7 @@ void MediaFoundationRenderer::SetMediaFoundationRenderingMode(
                << " is unsupported";
       MEDIA_LOG(ERROR, media_log_)
           << "MediaFoundationRenderer SetMediaFoundationRenderingMode: "
-          << (int)render_mode
+          << static_cast<int>(render_mode)
           << " is not defined. No change to the rendering mode.";
       hr = E_NOT_SET;
     }
@@ -638,6 +643,7 @@ void MediaFoundationRenderer::SetOutputRect(const gfx::Rect& output_rect,
                                             SetOutputRectCB callback) {
   DVLOG_FUNC(2);
 
+  // Call SetWindowPos to reposition the video from output_rect.
   if (virtual_video_window_ &&
       !::SetWindowPos(virtual_video_window_, HWND_BOTTOM, output_rect.x(),
                       output_rect.y(), output_rect.width(),
@@ -648,7 +654,7 @@ void MediaFoundationRenderer::SetOutputRect(const gfx::Rect& output_rect,
     return;
   }
 
-  if (FAILED(UpdateVideoStream(output_rect))) {
+  if (FAILED(UpdateVideoStream(output_rect.size()))) {
     std::move(callback).Run(false);
     return;
   }
@@ -676,10 +682,24 @@ HRESULT MediaFoundationRenderer::InitializeTexturePool(const gfx::Size& size) {
   return S_OK;
 }
 
-HRESULT MediaFoundationRenderer::UpdateVideoStream(const gfx::Rect& rect) {
+HRESULT MediaFoundationRenderer::UpdateVideoStream(const gfx::Size rect_size) {
+  if (current_video_rect_size_ == rect_size) {
+    return S_OK;
+  }
+
+  current_video_rect_size_ = rect_size;
+
   ComPtr<IMFMediaEngineEx> mf_media_engine_ex;
   RETURN_IF_FAILED(mf_media_engine_.As(&mf_media_engine_ex));
-  RECT dest_rect = {0, 0, rect.width(), rect.height()};
+
+  RECT dest_rect = {0, 0, rect_size.width(), rect_size.height()};
+
+  // https://learn.microsoft.com/en-us/windows/win32/api/mfmediaengine/nf-mfmediaengine-imfmediaengineex-updatevideostream
+  // Updates the source rectangle, destination rectangle, and border color for
+  // the video. Source is set to Null so the entire frame is displayed.
+  // Position is not set because SetWindowPos sets the position already.
+  // Destination rectangle relative to the top-left corner of the window
+  // rect set in SetWindowPos.
   RETURN_IF_FAILED(mf_media_engine_ex->UpdateVideoStream(
       /*pSrc=*/nullptr, &dest_rect, /*pBorderClr=*/nullptr));
   if (rendering_mode_ == MediaFoundationRenderingMode::FrameServer) {
@@ -952,11 +972,11 @@ void MediaFoundationRenderer::OnVideoNaturalSizeChange() {
 
   // TODO(frankli): Let test code to call `UpdateVideoStream()`.
   if (force_dcomp_mode_for_testing_) {
-    const gfx::Rect test_rect(/*x=*/0, /*y=*/0, /*width=*/640, /*height=*/320);
+    const gfx::Size test_size(/*width=*/640, /*height=*/320);
     // This invokes IMFMediaEngineEx::UpdateVideoStream() for video frames to
     // be presented. Otherwise, the Media Foundation video renderer will not
     // request video samples from our source.
-    std::ignore = UpdateVideoStream(test_rect);
+    std::ignore = UpdateVideoStream(test_size);
   }
 
   if (rendering_mode_ == MediaFoundationRenderingMode::FrameServer) {

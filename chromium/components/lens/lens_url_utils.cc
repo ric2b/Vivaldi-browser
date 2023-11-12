@@ -23,14 +23,16 @@ namespace {
 constexpr char kEntryPointQueryParameter[] = "ep";
 constexpr char kChromeRegionSearchMenuItem[] = "crs";
 constexpr char kChromeSearchWithGoogleLensContextMenuItem[] = "ccm";
+constexpr char kChromeTranslateImageWithGoogleLensContextMenuItem[] = "ctrcm";
 constexpr char kChromeOpenNewTabSidePanel[] = "cnts";
 constexpr char kChromeFullscreenSearchMenuItem[] = "cfs";
-constexpr char kChromeScreenshotSearch[] = "css";
 
 constexpr char kSurfaceQueryParameter[] = "s";
+// The value of Surface.CHROMIUM expected by Lens Web
+constexpr char kChromiumSurfaceProtoValue[] = "4";
+
 constexpr char kStartTimeQueryParameter[] = "st";
 constexpr char kLensMetadataParameter[] = "lm";
-constexpr char kSidePanel[] = "csp";
 
 constexpr char kRenderingEnvironmentQueryParameter[] = "re";
 constexpr char kOneLensDesktopWebChromeSidePanel[] = "dcsp";
@@ -64,13 +66,14 @@ std::map<std::string, std::string> GetLensQueryParametersMap(
       query_parameters.insert({kEntryPointQueryParameter,
                                kChromeSearchWithGoogleLensContextMenuItem});
       break;
+    case lens::CHROME_TRANSLATE_IMAGE_WITH_GOOGLE_LENS_CONTEXT_MENU_ITEM:
+      query_parameters.insert(
+          {kEntryPointQueryParameter,
+           kChromeTranslateImageWithGoogleLensContextMenuItem});
+      break;
     case lens::CHROME_FULLSCREEN_SEARCH_MENU_ITEM:
       query_parameters.insert(
           {kEntryPointQueryParameter, kChromeFullscreenSearchMenuItem});
-      break;
-    case lens::CHROME_SCREENSHOT_SEARCH:
-      query_parameters.insert(
-          {kEntryPointQueryParameter, kChromeScreenshotSearch});
       break;
     default:
       // Empty strings are ignored when query parameters are built.
@@ -93,16 +96,8 @@ std::map<std::string, std::string> GetLensQueryParametersMap(
       // Empty strings are ignored when query parameters are built.
       break;
   }
-  // Continue to include the Surface param until Lens Web can properly handle
-  // all of our RenderingEnvironments
-  // TODO(242102743): Change Surface param to always be Chromium once Lens Web
-  // is fully backwards compatable
-  if (is_side_panel_request) {
-    query_parameters.insert({kSurfaceQueryParameter, kSidePanel});
-  } else {
-    // Set the surface parameter to an empty string to represent default value.
-    query_parameters.insert({kSurfaceQueryParameter, ""});
-  }
+
+  query_parameters.insert({kSurfaceQueryParameter, kChromiumSurfaceProtoValue});
   int64_t current_time_ms = base::Time::Now().ToJavaTime();
   query_parameters.insert(
       {kStartTimeQueryParameter, base::NumberToString(current_time_ms)});

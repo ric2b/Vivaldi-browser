@@ -55,7 +55,7 @@ void PWALinkMenuController::Populate(Browser* browser,
       IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP,
       l10n_util::GetStringFUTF16(
           open_in_app_string_id,
-          base::UTF8ToUTF16(provider->registrar().GetAppShortName(*app_id))));
+          base::UTF8ToUTF16(provider->registrar_unsafe().GetAppShortName(*app_id))));
 
   gfx::Image icon = gfx::Image::CreateFrom1xBitmap(
       provider->icon_manager().GetFavicon(*app_id));

@@ -72,8 +72,6 @@
 
 namespace blink {
 
-static const unsigned kMaximumHTMLParserDOMTreeDepth = 512;
-
 void HTMLConstructionSite::SetAttributes(Element* element,
                                          AtomicHTMLToken* token) {
   if (!is_scripting_content_allowed_)
@@ -132,8 +130,73 @@ static unsigned NextTextBreakPositionForContainer(
   return std::min(current_position + *length_limit, string_length);
 }
 
-static inline bool IsAllWhitespace(const StringView& string_view) {
-  return string_view.IsAllSpecialCharacters<IsHTMLSpace<UChar>>();
+static inline WhitespaceMode RecomputeWhiteSpaceMode(
+    const StringView& string_view) {
+  DCHECK(!string_view.empty());
+  if (string_view[0] != '\n') {
+    return string_view.IsAllSpecialCharacters<IsHTMLSpace<UChar>>()
+               ? WhitespaceMode::kAllWhitespace
+               : WhitespaceMode::kNotAllWhitespace;
+  }
+
+  auto check_whitespace = [](auto* buffer, size_t length) {
+    WhitespaceMode result = WhitespaceMode::kNewlineThenWhitespace;
+    for (size_t i = 1; i < length; ++i) {
+      if (LIKELY(buffer[i] == ' ')) {
+        continue;
+      } else if (IsHTMLSpecialWhitespace(buffer[i])) {
+        result = WhitespaceMode::kAllWhitespace;
+      } else {
+        return WhitespaceMode::kNotAllWhitespace;
+      }
+    }
+    return result;
+  };
+
+  if (string_view.Is8Bit()) {
+    return check_whitespace(string_view.Characters8(), string_view.length());
+  } else {
+    return check_whitespace(string_view.Characters16(), string_view.length());
+  }
+}
+
+enum class RecomputeMode {
+  kDontRecompute,
+  kRecomputeIfNeeded,
+};
+
+// Strings composed entirely of whitespace are likely to be repeated. Turn them
+// into AtomicString so we share a single string for each.
+static String CheckWhitespaceAndConvertToString(const StringView& string,
+                                                WhitespaceMode whitespace_mode,
+                                                RecomputeMode recompute_mode) {
+  switch (whitespace_mode) {
+    case WhitespaceMode::kNewlineThenWhitespace:
+      DCHECK(WTF::NewlineThenWhitespaceStringsTable::IsNewlineThenWhitespaces(
+          string));
+      if (string.length() <
+          WTF::NewlineThenWhitespaceStringsTable::kTableSize) {
+        return WTF::NewlineThenWhitespaceStringsTable::GetStringForLength(
+            string.length());
+      }
+      [[fallthrough]];
+    case WhitespaceMode::kAllWhitespace:
+      return string.ToAtomicString().GetString();
+    case WhitespaceMode::kNotAllWhitespace:
+      // Other strings are pretty random and unlikely to repeat.
+      return string.ToString();
+    case WhitespaceMode::kWhitespaceUnknown:
+      DCHECK_EQ(RecomputeMode::kRecomputeIfNeeded, recompute_mode);
+      return CheckWhitespaceAndConvertToString(string,
+                                               RecomputeWhiteSpaceMode(string),
+                                               RecomputeMode::kDontRecompute);
+  }
+}
+
+static String TryCanonicalizeString(const StringView& string,
+                                    WhitespaceMode mode) {
+  return CheckWhitespaceAndConvertToString(string, mode,
+                                           RecomputeMode::kRecomputeIfNeeded);
 }
 
 static inline void Insert(HTMLConstructionSiteTask& task) {
@@ -303,16 +366,10 @@ void HTMLConstructionSite::FlushPendingText() {
     }
     StringView substring_view =
         string.SubstringView(current_position, break_index - current_position);
-    String substring = g_empty_string;
-    // Strings composed entirely of whitespace are likely to be repeated. Turn
-    // them into AtomicString so we share a single string for each.
-    if (pending_text_.whitespace_mode == kAllWhitespace ||
-        (pending_text_.whitespace_mode == kWhitespaceUnknown &&
-         IsAllWhitespace(substring_view))) {
-      substring = substring_view.ToAtomicString().GetString();
-    } else {
-      substring = substring_view.ToString();
-    }
+    String substring = canonicalize_whitespace_strings_
+                           ? TryCanonicalizeString(
+                                 substring_view, pending_text_.whitespace_mode)
+                           : substring_view.ToString();
 
     DCHECK_GT(break_index, current_position);
     DCHECK_EQ(break_index - current_position, substring.length());
@@ -402,7 +459,9 @@ HTMLConstructionSite::HTMLConstructionSite(
           ScriptingContentIsAllowed(parser_content_policy)),
       is_parsing_fragment_(false),
       redirect_attach_to_foster_parent_(false),
-      in_quirks_mode_(document.InQuirksMode()) {
+      in_quirks_mode_(document.InQuirksMode()),
+      canonicalize_whitespace_strings_(
+          RuntimeEnabledFeatures::CanonicalizeWhitespaceStringsEnabled()) {
   DCHECK(document_->IsHTMLDocument() || document_->IsXHTMLDocument());
 }
 
@@ -772,8 +831,7 @@ void HTMLConstructionSite::InsertHTMLTemplateElement(
     // TODO(crbug.com/1063157): Add an attribute for imperative slot
     // assignment.
     auto slot_assignment_mode = SlotAssignmentMode::kNamed;
-    HTMLStackItem* shadow_host_stack_item =
-        open_elements_.TopRecord()->StackItem();
+    HTMLStackItem* shadow_host_stack_item = open_elements_.TopStackItem();
     Element* host = shadow_host_stack_item->GetElement();
     ShadowRootType type = declarative_shadow_root_type ==
                                   DeclarativeShadowRootType::kStreamingOpen
@@ -825,7 +883,7 @@ void HTMLConstructionSite::InsertFormattingElement(AtomicHTMLToken* token) {
   // Possible active formatting elements include:
   // a, b, big, code, em, font, i, nobr, s, small, strike, strong, tt, and u.
   InsertHTMLElement(token);
-  active_formatting_elements_.Append(CurrentElementRecord()->StackItem());
+  active_formatting_elements_.Append(CurrentStackItem());
 }
 
 void HTMLConstructionSite::InsertScriptElement(AtomicHTMLToken* token) {
@@ -904,15 +962,7 @@ void HTMLConstructionSite::InsertTextNode(const StringView& string,
                        whitespace_mode);
 }
 
-void HTMLConstructionSite::Reparent(HTMLElementStack::ElementRecord* new_parent,
-                                    HTMLElementStack::ElementRecord* child) {
-  HTMLConstructionSiteTask task(HTMLConstructionSiteTask::kReparent);
-  task.parent = new_parent->GetNode();
-  task.child = child->GetNode();
-  QueueTask(task, true);
-}
-
-void HTMLConstructionSite::Reparent(HTMLElementStack::ElementRecord* new_parent,
+void HTMLConstructionSite::Reparent(HTMLStackItem* new_parent,
                                     HTMLStackItem* child) {
   HTMLConstructionSiteTask task(HTMLConstructionSiteTask::kReparent);
   task.parent = new_parent->GetNode();
@@ -920,9 +970,8 @@ void HTMLConstructionSite::Reparent(HTMLElementStack::ElementRecord* new_parent,
   QueueTask(task, true);
 }
 
-void HTMLConstructionSite::InsertAlreadyParsedChild(
-    HTMLStackItem* new_parent,
-    HTMLElementStack::ElementRecord* child) {
+void HTMLConstructionSite::InsertAlreadyParsedChild(HTMLStackItem* new_parent,
+                                                    HTMLStackItem* child) {
   if (new_parent->CausesFosterParenting()) {
     FosterParent(child->GetNode());
     return;
@@ -935,9 +984,8 @@ void HTMLConstructionSite::InsertAlreadyParsedChild(
   QueueTask(task, true);
 }
 
-void HTMLConstructionSite::TakeAllChildren(
-    HTMLStackItem* new_parent,
-    HTMLElementStack::ElementRecord* old_parent) {
+void HTMLConstructionSite::TakeAllChildren(HTMLStackItem* new_parent,
+                                           HTMLStackItem* old_parent) {
   HTMLConstructionSiteTask task(HTMLConstructionSiteTask::kTakeAllChildren);
   task.parent = new_parent->GetNode();
   task.child = old_parent->GetNode();
@@ -1206,15 +1254,16 @@ bool HTMLConstructionSite::InQuirksMode() {
 // https://html.spec.whatwg.org/C/#appropriate-place-for-inserting-a-node
 void HTMLConstructionSite::FindFosterSite(HTMLConstructionSiteTask& task) {
   // 2.1
-  HTMLElementStack::ElementRecord* last_template =
+  HTMLStackItem* last_template =
       open_elements_.Topmost(html_names::HTMLTag::kTemplate);
 
   // 2.2
-  HTMLElementStack::ElementRecord* last_table =
+  HTMLStackItem* last_table =
       open_elements_.Topmost(html_names::HTMLTag::kTable);
 
   // 2.3
-  if (last_template && (!last_table || last_template->IsAbove(last_table))) {
+  if (last_template &&
+      (!last_table || last_template->IsAboveItemInStack(last_table))) {
     task.parent = last_template->GetElement();
     return;
   }
@@ -1234,7 +1283,7 @@ void HTMLConstructionSite::FindFosterSite(HTMLConstructionSiteTask& task) {
   }
 
   // 2.6, 2.7
-  task.parent = last_table->Next()->GetElement();
+  task.parent = last_table->NextItemInStack()->GetElement();
 }
 
 bool HTMLConstructionSite::ShouldFosterParent() const {

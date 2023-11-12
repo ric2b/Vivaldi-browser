@@ -32,7 +32,7 @@ static_library("personalization_app") {
     "//ash/public/cpp",
     "//ash/webui/personalization_app/mojom",
     "//ash/webui/personalization_app/proto",
-    "//ash/webui/resources:personalization_app_resources",
+    "//ash/webui/personalization_app/resources:resources",
     "//chromeos/ash/components/local_search_service",
     "//chromeos/ash/components/local_search_service/public/cpp",
     "//chromeos/ash/components/local_search_service/public/mojom",
@@ -41,7 +41,7 @@ static_library("personalization_app") {
     "//components/keyed_service/core",
     "//content/public/browser",
     "//ui/chromeos/styles:cros_styles_views",
-    "//ui/resources:webui_generated_resources_grd_grit",
+    "//ui/resources:webui_resources_grd_grit",
     "//ui/webui",
   ]
 }

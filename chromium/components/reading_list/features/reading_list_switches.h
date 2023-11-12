@@ -11,14 +11,6 @@
 namespace reading_list {
 namespace switches {
 
-// Feature flag used for enabling Read later on desktop and Android.
-BASE_DECLARE_FEATURE(kReadLater);
-
-// Whether Reading List is enabled on this device. On iOS this is true if the
-// buildflag for Reading List is enabled (no experiment). On Desktop it is also
-// true if `kSidePanel` is enabled as it assumes a reading list.
-bool IsReadingListEnabled();
-
 // Feature flag used for enabling the reading list backend migration.
 // When enabled, reading list data will also be stored in the Bookmarks backend.
 // This allows each platform to migrate their reading list front end to point at
@@ -32,6 +24,15 @@ BASE_DECLARE_FEATURE(kReadLaterBackendMigration);
 // Feature flag used for enabling read later reminder notification.
 BASE_DECLARE_FEATURE(kReadLaterReminderNotification);
 #endif
+
+// Feature flag that controls a technical rollout of a new codepath that doesn't
+// itself cause user-facing changes but sets the foundation for later rollouts
+// namely, `kReadingListEnableSyncTransportModeUponSignIn` below).
+BASE_DECLARE_FEATURE(kReadingListEnableDualReadingListModel);
+
+// Feature flag used for enabling sync (transport mode) for signed-in users that
+// haven't turned on full sync.
+BASE_DECLARE_FEATURE(kReadingListEnableSyncTransportModeUponSignIn);
 
 }  // namespace switches
 }  // namespace reading_list

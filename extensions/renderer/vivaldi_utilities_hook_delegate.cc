@@ -151,7 +151,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
     set_fragment16_for_sd(formatted_url, "queryForSecurityDisplay", parsed_unicode.query);
     set_fragment16_for_sd(formatted_url, "refForSecurityDisplay", parsed_unicode.ref);
 
-    DomainInfo info = GetDomainInfo(url);
+    lookalikes::DomainInfo info = lookalikes::GetDomainInfo(url);
     std::u16string tld(info.idn_result.result);
     if (!tld.empty()) {
       // tld variable now contains topleveldomain.tld, so first dot is the start
@@ -197,7 +197,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
   }
 
   if (parsed.host.is_valid()) {
-    DomainInfo info = GetDomainInfo(url);
+    lookalikes::DomainInfo info = lookalikes::GetDomainInfo(url);
     base::StringPiece tld(info.domain_and_registry);
     if (!info.domain_without_registry.empty()) {
       tld = tld.substr(info.domain_without_registry.length() + 1);

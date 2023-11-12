@@ -6,8 +6,8 @@
 #define COMPONENTS_SEGMENTATION_PLATFORM_INTERNAL_SELECTION_SEGMENT_SELECTOR_IMPL_H_
 
 #include <utility>
-#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "components/segmentation_platform/internal/database/segment_info_database.h"
 #include "components/segmentation_platform/internal/platform_options.h"
@@ -148,7 +148,7 @@ class SegmentSelectorImpl : public SegmentSelector {
   SegmentSelectionResult selected_segment_last_session_;
 
   // Pointer to the training data collector.
-  raw_ptr<TrainingDataCollector> training_data_collector_{};
+  raw_ptr<TrainingDataCollector, DanglingUntriaged> training_data_collector_{};
 
   base::WeakPtrFactory<SegmentSelectorImpl> weak_ptr_factory_{this};
 };

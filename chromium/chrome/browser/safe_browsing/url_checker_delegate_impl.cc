@@ -4,8 +4,8 @@
 
 #include "chrome/browser/safe_browsing/url_checker_delegate_impl.h"
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "chrome/browser/android/customtabs/client_data_header_web_contents_observer.h"
@@ -171,6 +171,29 @@ SafeBrowsingDatabaseManager* UrlCheckerDelegateImpl::GetDatabaseManager() {
 
 BaseUIManager* UrlCheckerDelegateImpl::GetUIManager() {
   return ui_manager_.get();
+}
+
+void UrlCheckerDelegateImpl::CheckLookupMechanismExperimentEligibility(
+    const security_interstitials::UnsafeResource& resource,
+    base::OnceCallback<void(bool)> callback,
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner) {
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &SafeBrowsingUIManager::CheckLookupMechanismExperimentEligibility,
+          ui_manager_, resource, std::move(callback), callback_task_runner));
+}
+
+void UrlCheckerDelegateImpl::CheckExperimentEligibilityAndStartBlockingPage(
+    const security_interstitials::UnsafeResource& resource,
+    base::OnceCallback<void(bool)> callback,
+    scoped_refptr<base::SequencedTaskRunner> callback_task_runner) {
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(&SafeBrowsingUIManager::
+                         CheckExperimentEligibilityAndStartBlockingPage,
+                     ui_manager_, resource, std::move(callback),
+                     callback_task_runner));
 }
 
 }  // namespace safe_browsing

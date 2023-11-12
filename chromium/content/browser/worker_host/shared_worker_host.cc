@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/unguessable_token.h"
@@ -44,6 +44,8 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "services/network/public/mojom/client_security_state.mojom-shared.h"
+#include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "storage/browser/blob/blob_url_store_impl.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
@@ -123,8 +125,7 @@ SharedWorkerHost::SharedWorkerHost(
     scoped_refptr<SiteInstanceImpl> site_instance,
     std::vector<network::mojom::ContentSecurityPolicyPtr>
         content_security_policies,
-    scoped_refptr<PolicyContainerHost> creator_policy_container_host,
-    network::mojom::ClientSecurityStatePtr creator_client_security_state)
+    scoped_refptr<PolicyContainerHost> creator_policy_container_host)
     : service_(service),
       token_(blink::SharedWorkerToken()),
       instance_(instance),
@@ -140,8 +141,7 @@ SharedWorkerHost::SharedWorkerHost(
       ukm_source_id_(ukm::ConvertToSourceId(ukm::AssignNewSourceId(),
                                             ukm::SourceIdType::WORKER_ID)),
       reporting_source_(base::UnguessableToken::Create()),
-      creator_policy_container_host_(std::move(creator_policy_container_host)),
-      creator_client_security_state_(std::move(creator_client_security_state)) {
+      creator_policy_container_host_(std::move(creator_policy_container_host)) {
   DCHECK(GetProcessHost());
   DCHECK(GetProcessHost()->IsInitializedAndNotDead());
 
@@ -226,42 +226,51 @@ void SharedWorkerHost::Start(
   if (final_response_url.SchemeIsLocal()) {
     // TODO(https://crbug.com/1146362): Inherit from the file creator instead
     // once creator policies are persisted through the filesystem store.
-    if (base::FeatureList::IsEnabled(
-            features::kPrivateNetworkAccessForWorkers)) {
+    if (creator_policy_container_host_) {
       worker_client_security_state_ =
-          mojo::Clone(creator_client_security_state_);
+          DeriveClientSecurityState(creator_policy_container_host_->policies(),
+                                    PrivateNetworkRequestContext::kWorker);
     } else {
-      worker_client_security_state_->cross_origin_embedder_policy =
-          creator_client_security_state_->cross_origin_embedder_policy;
+      auto policy = base::FeatureList::IsEnabled(
+                        features::kPrivateNetworkAccessForWorkers)
+                        ? network::mojom::PrivateNetworkRequestPolicy::kBlock
+                        : network::mojom::PrivateNetworkRequestPolicy::kAllow;
+
+      // Create a maximally restricted client security state if the policy
+      // container is missing.
+      worker_client_security_state_ = network::mojom::ClientSecurityState::New(
+          network::CrossOriginEmbedderPolicy(
+              network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp),
+          /*is_web_secure_context=*/false,
+          network::mojom::IPAddressSpace::kUnknown, policy);
     }
+
     policy_container_host = std::move(creator_policy_container_host_);
   } else {
     // https://html.spec.whatwg.org/C/#creating-a-policy-container-from-a-fetch-response
-    policy_container_host = base::MakeRefCounted<PolicyContainerHost>(
-        // This does not parse the referrer policy, which will be
-        // updated in ServiceWorkerGlobalScope::Initialize
-        PolicyContainerPolicies(final_response_url,
-                                main_script_load_params->response_head.get(),
-                                nullptr));
+    // This does not parse the referrer policy, which will be
+    // updated in `SharedWorkerGlobalScope::Initialize()`.
+    PolicyContainerPolicies policies(
+        final_response_url, main_script_load_params->response_head.get(),
+        nullptr);
+
+    // A worker context can only be secure if its creator also is.
+    if (!creator_policy_container_host_->policies().is_web_secure_context) {
+      policies.is_web_secure_context = false;
+    }
+
+    worker_client_security_state_ = DeriveClientSecurityState(
+        policies, PrivateNetworkRequestContext::kWorker);
+
+    policy_container_host =
+        base::MakeRefCounted<PolicyContainerHost>(std::move(policies));
 
     if (main_script_load_params->response_head->parsed_headers) {
       worker_client_security_state_->cross_origin_embedder_policy =
           main_script_load_params->response_head->parsed_headers
               ->cross_origin_embedder_policy;
     }
-    if (base::FeatureList::IsEnabled(
-            features::kPrivateNetworkAccessForWorkers)) {
-      worker_client_security_state_->ip_address_space =
-          policy_container_host->ip_address_space();
-      worker_client_security_state_->is_web_secure_context =
-          policy_container_host->policies().is_web_secure_context &&
-          creator_client_security_state_->is_web_secure_context;
-      worker_client_security_state_->private_network_request_policy =
-          DerivePrivateNetworkRequestPolicy(
-              worker_client_security_state_->ip_address_space,
-              worker_client_security_state_->is_web_secure_context,
-              PrivateNetworkRequestContext::kWorker);
-    }
+
     switch (worker_client_security_state_->cross_origin_embedder_policy.value) {
       case network::mojom::CrossOriginEmbedderPolicyValue::kNone:
         OnFeatureUsed(blink::mojom::WebFeature::kCoepNoneSharedWorker);
@@ -342,7 +351,8 @@ void SharedWorkerHost::Start(
   factory_.Bind(std::move(factory));
   factory_->CreateSharedWorker(
       std::move(info), token_, instance_.storage_key().origin(),
-      creator_client_security_state_->is_web_secure_context,
+      creator_policy_container_host_ &&
+          creator_policy_container_host_->policies().is_web_secure_context,
       GetContentClient()->browser()->GetUserAgentBasedOnPolicy(
           GetProcessHost()->GetBrowserContext()),
       GetContentClient()->browser()->GetFullUserAgent(),
@@ -476,6 +486,12 @@ void SharedWorkerHost::GetSandboxedFileSystemForBucket(
     blink::mojom::BucketHost::GetDirectoryCallback callback) {
   GetProcessHost()->GetSandboxedFileSystemForBucket(bucket.ToBucketLocator(),
                                                     std::move(callback));
+}
+
+GlobalRenderFrameHostId SharedWorkerHost::GetAssociatedRenderFrameHostId()
+    const {
+  // For shared workers, there is no associated `RenderFrameHost`.
+  return GlobalRenderFrameHostId();
 }
 
 void SharedWorkerHost::AllowFileSystem(

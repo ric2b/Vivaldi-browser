@@ -12,7 +12,7 @@
 #include "ash/system/message_center/message_center_constants.h"
 #include "ash/system/message_center/message_center_style.h"
 #include "ash/system/tray/tray_constants.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -328,9 +328,7 @@ bool StackedNotificationBar::Update(
       unpinned_count);
   clear_all_button_->SetTooltipText(tooltip);
   clear_all_button_->SetAccessibleName(tooltip);
-  clear_all_button_->SetState(unpinned_count == 0
-                                  ? views::Button::STATE_DISABLED
-                                  : views::Button::STATE_NORMAL);
+  clear_all_button_->SetEnabled(unpinned_count != 0);
 
   return true;
 }

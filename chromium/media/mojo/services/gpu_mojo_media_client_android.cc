@@ -5,6 +5,8 @@
 #include "media/mojo/services/gpu_mojo_media_client.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "gpu/command_buffer/service/ref_counted_lock.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "media/base/android/android_cdm_factory.h"
@@ -90,7 +92,7 @@ GetPlatformSupportedVideoDecoderConfigs(
 }
 
 std::unique_ptr<AudioDecoder> CreatePlatformAudioDecoder(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
   return std::make_unique<MediaCodecAudioDecoder>(std::move(task_runner));
 }
 

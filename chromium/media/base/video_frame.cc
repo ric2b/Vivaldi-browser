@@ -13,13 +13,14 @@
 #include <numeric>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/bits.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/process/memory.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
+#include "base/synchronization/lock.h"
 #include "build/build_config.h"
 #include "media/base/color_plane_layout.h"
 #include "media/base/format_utils.h"
@@ -448,20 +449,9 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDataWithLayout(
   StorageType storage_type = STORAGE_UNOWNED_MEMORY;
 
   if (!IsValidConfig(layout.format(), storage_type, layout.coded_size(),
-                     visible_rect, natural_size)) {
-    DLOG(ERROR) << __func__ << " Invalid config."
-                << ConfigToString(layout.format(), storage_type,
-                                  layout.coded_size(), visible_rect,
-                                  natural_size);
-    return nullptr;
-  }
-
-  const auto& last_plane = layout.planes()[layout.planes().size() - 1];
-  const size_t required_size = last_plane.offset + last_plane.size;
-  if (data_size < required_size) {
-    DLOG(ERROR) << __func__ << " Provided data size is too small. Provided "
-                << data_size << " bytes, but " << required_size
-                << " bytes are required."
+                     visible_rect, natural_size) ||
+      !layout.FitsInContiguousBufferOfSize(data_size)) {
+    DLOG(ERROR) << "Invalid config: "
                 << ConfigToString(layout.format(), storage_type,
                                   layout.coded_size(), visible_rect,
                                   natural_size);
@@ -1244,10 +1234,16 @@ gfx::ColorSpace VideoFrame::ColorSpace() const {
 }
 
 bool VideoFrame::RequiresExternalSampler() const {
+  // With SharedImageFormats NumTextures() is always 1. Use
+  // SharedImageFormatType to check for NumTextures for legacy formats and
+  // kSharedImageFormatExternalSampler for SharedImageFormats
   const bool result =
       (format() == PIXEL_FORMAT_NV12 || format() == PIXEL_FORMAT_YV12 ||
        format() == PIXEL_FORMAT_P016LE) &&
-      NumTextures() == 1;
+      ((NumTextures() == 1 &&
+        shared_image_format_type() == SharedImageFormatType::kLegacy) ||
+       shared_image_format_type() ==
+           SharedImageFormatType::kSharedImageFormatExternalSampler);
   // The texture target can be 0 for Fuchsia.
   DCHECK(!result ||
          (mailbox_holder(0).texture_target == GL_TEXTURE_EXTERNAL_OES ||
@@ -1271,6 +1267,9 @@ template <typename T>
 T VideoFrame::GetVisibleDataInternal(T data, size_t plane) const {
   DCHECK(IsValidPlane(format(), plane));
   DCHECK(IsMappable());
+  if (UNLIKELY(!data)) {
+    return nullptr;
+  }
 
   // Calculate an offset that is properly aligned for all planes.
   const gfx::Size alignment = CommonAlignment(format());
@@ -1354,6 +1353,7 @@ bool VideoFrame::HasReleaseMailboxCB() const {
 
 void VideoFrame::AddDestructionObserver(base::OnceClosure callback) {
   DCHECK(!callback.is_null());
+  base::AutoLock lock(done_callbacks_lock_);
   done_callbacks_.push_back(std::move(callback));
 }
 
@@ -1442,7 +1442,12 @@ VideoFrame::~VideoFrame() {
         .Run(release_sync_token, std::move(gpu_memory_buffer_));
   }
 
-  for (auto& callback : done_callbacks_)
+  std::vector<base::OnceClosure> done_callbacks;
+  {
+    base::AutoLock lock(done_callbacks_lock_);
+    done_callbacks = std::move(done_callbacks_);
+  }
+  for (auto& callback : done_callbacks)
     std::move(callback).Run();
 }
 

@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/oobe_quick_start/target_device_bootstrap_controller.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
@@ -48,6 +48,10 @@ class QuickStartScreen
 
   void UnbindFromBootstrapController();
   void SendRandomFiguresForTesting() const;
+
+  // Retrieves the connected phone ID and saves it for later use in OOBE on the
+  // MultideviceSetupScreen.
+  void SavePhoneInstanceID();
 
   base::WeakPtr<TView> view_;
   ScreenExitCallback exit_callback_;

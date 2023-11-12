@@ -22,9 +22,24 @@ chromium-metrics-reviews@google.com.
 
 <histograms>
 
+<histogram name="FastPair.CreateBond.Latency" units="ms"
+    expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the total time it takes for Fast Pair to finish creating a bond with
+    the peripheral. Emitted when bonding completes. No metric is emitted on
+    failure.
+  </summary>
+</histogram>
+
 <histogram name="FastPair.GattConnection" enum="FastPairGattConnectionSteps"
-    expires_after="2023-06-01">
-  <owner>jackshira@chromium.org</owner>
+    expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records each sucessful step in the GATT Connection flow. These steps are: on
@@ -34,10 +49,49 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="FastPair.GattServiceDiscovery.Latency" units="ms"
+    expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the total time it takes for GATT service discovery. Emitted when
+    GATT discovery is completed for service. No metric is emitted on failure.
+  </summary>
+</histogram>
+
+<histogram name="FastPair.Handshake.AttemptCount" units="count"
+    expires_after="2023-06-01">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the number of attempts needed to successfully create a handshake.
+    Currently the highest allowed attempt number is 3. Emitted following a
+    successful handshake. No metric is emitted on failure.
+  </summary>
+</histogram>
+
+<histogram name="FastPair.Handshake.EffectiveSuccessRate" enum="BooleanSuccess"
+    expires_after="2023-06-01">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the effective success rate of creating a handshake during the Fast
+    Pair pairing protocol. Emitted following the attempted creation of the
+    handshake and all retries.
+  </summary>
+</histogram>
+
 <histogram name="FastPair.InitialPairing"
-    enum="FastPairInitialSuccessFunnelEvent" expires_after="2023-06-01">
-  <owner>jackshira@chromium.org</owner>
-  <owner>julietlevesque@google.com</owner>
+    enum="FastPairInitialSuccessFunnelEvent" expires_after="2023-08-08">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records each successful step in the Initial Pairing flow. These steps are:
@@ -48,10 +102,63 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="FastPair.KeyBasedNotify.Latency" units="ms"
+    expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the total time it takes for the Fast Pair key based pairing notify
+    session to begin. Emitted when a key based notify session has been
+    successfully started. No metric is emitted on failure.
+  </summary>
+</histogram>
+
+<histogram name="FastPair.KeyBasedWriteRequest.Latency" units="ms"
+    expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the total time it takes for the Fast Pair key based write request to
+    complete. Emitted when a key based write request has completed successfully.
+    No metric is emitted on failure.
+  </summary>
+</histogram>
+
+<histogram name="FastPair.PasskeyNotify.Latency" units="ms"
+    expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the total time it takes for the Fast Pair passkey notify session to
+    begin. Emitted when a passkey notify session has been successfully started.
+    No metric is emitted on failure.
+  </summary>
+</histogram>
+
+<histogram name="FastPair.PasskeyWriteRequest.Latency" units="ms"
+    expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
+  <owner>chromeos-cross-device-eng@google.com</owner>
+  <summary>
+    Records the total time it takes for the Fast Pair passkey request to
+    complete. Emitted when a passkey write request has completed successfully.
+    No metric is emitted on failure.
+  </summary>
+</histogram>
+
 <histogram name="FastPair.RetroactivePairing"
-    enum="FastPairRetroactiveSuccessFunnelEvent" expires_after="2023-06-01">
-  <owner>jackshira@chromium.org</owner>
-  <owner>julietlevesque@google.com</owner>
+    enum="FastPairRetroactiveSuccessFunnelEvent" expires_after="2023-08-08">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records each successful step in the Retroactive Pairing flow. Emitted on:
@@ -63,8 +170,10 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FastPair.SubsequentPairing"
-    enum="FastPairSubsequentSuccessFunnelEvent" expires_after="2023-06-01">
-  <owner>jackshira@chromium.org</owner>
+    enum="FastPairSubsequentSuccessFunnelEvent" expires_after="2023-07-02">
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records each sucessful step in the Subsequent Pairing flow. These steps are:
@@ -74,8 +183,10 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FastPair.{FastPairPairingProtocol}.Pairing"
-    enum="FastPairProtocolPairingSteps" expires_after="2023-02-26">
+    enum="FastPairProtocolPairingSteps" expires_after="2023-07-02">
   <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records each sucessful step in the Protocol-based Pairing flow. These steps
@@ -93,8 +204,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="FastPair.{PairingScenario}.Initialization"
     enum="FastPairInitializePairingProcessEvent" expires_after="2023-06-01">
-  <owner>jackshira@chromium.org</owner>
-  <owner>julietlevesque@google.com</owner>
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records the flow for the initialization of the GATT connection and the
@@ -130,8 +242,9 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="FastPair.{PairingScenario}.Initialization.FailureReason"
     enum="FastPairPairFailure" expires_after="2023-06-01">
-  <owner>jackshira@chromium.org</owner>
-  <owner>julietlevesque@google.com</owner>
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records the failure reason for initialization of the GATT connection and
@@ -167,8 +280,9 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="FastPair.{PairingScenario}.Initialization.RetriesBeforeSuccess"
     units="count" expires_after="2023-06-01">
-  <owner>jackshira@chromium.org</owner>
-  <owner>julietlevesque@google.com</owner>
+  <owner>jackshira@google.com</owner>
+  <owner>dclasson@google.com</owner>
+  <owner>brandosocarras@google.com</owner>
   <owner>chromeos-cross-device-eng@google.com</owner>
   <summary>
     Records the number of retries that occurred before the successful completion

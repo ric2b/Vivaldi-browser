@@ -9,9 +9,11 @@
 #include "base/message_loop/message_pump_type.h"
 #include "base/task/sequence_manager/sequence_manager.h"
 #include "base/task/sequence_manager/task_queue.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_executor.h"
 #include "base/task/task_observer.h"
 #include "content/browser/scheduler/browser_task_executor.h"
+#include "content/browser/scheduler/browser_task_priority.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace content {
@@ -56,6 +58,8 @@ BrowserIOThreadDelegate::BrowserIOThreadDelegate()
     : owned_sequence_manager_(CreateUnboundSequenceManager(
           SequenceManager::Settings::Builder()
               .SetMessagePumpType(base::MessagePumpType::IO)
+              .SetPrioritySettings(
+                  internal::CreateBrowserTaskPrioritySettings())
               .Build())),
       sequence_manager_(owned_sequence_manager_.get()) {
   Init();

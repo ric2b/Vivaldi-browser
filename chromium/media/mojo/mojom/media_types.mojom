@@ -122,10 +122,13 @@ enum SVCScalabilityMode {
   // kUnsupportedMode is used to handle the enum differ of C++ and Mojo
   // SVCScalabilityMode in ToMojom, should not be used in other place.
   kUnsupportedMode,
+  kL1T1,
   kL1T2,
   kL1T3,
+  kL2T1Key,
   kL2T2Key,
   kL2T3Key,
+  kL3T1Key,
   kL3T2Key,
   kL3T3Key,
 };
@@ -191,13 +194,14 @@ struct VideoDecoderConfig {
 [Native]
 struct SubsampleEntry;
 
-// Important events happened to the CDM.
+// Important events happened to the CDM. See media/cdm/cdm_document_service.h
+// for descriptions.
 [EnableIf=is_win]
 enum CdmEvent {
-  kSignificantPlayback,  // Significant (e.g. played >1 minute) successful
-                         // playback happened using the CDM.
-  kPlaybackError,  // Error happened during playback using the CDM.
-  kCdmError,       // Error happened in the CDM.
+  kSignificantPlayback,
+  kPlaybackError,
+  kCdmError,
+  kHardwareContextReset,
 };
 
 // See media::CdmSessionClosedReason for descriptions.
@@ -207,6 +211,14 @@ enum CdmSessionClosedReason {
   kReleaseAcknowledged,
   kHardwareContextReset,
   kResourceEvicted,
+};
+
+// This defines a mojo transport format for media::SharedImageFormatType.
+// See media/base/video_frame.h for descriptions.
+enum SharedImageFormatType {
+  kLegacy,
+  kSharedImageFormat,
+  kSharedImageFormatExternalSampler,
 };
 
 // This defines a mojo transport format for media::DecryptConfig.
@@ -378,6 +390,8 @@ struct VideoFrame {
 
   gfx.mojom.ColorSpace color_space;
   gfx.mojom.HDRMetadata? hdr_metadata;
+
+  media.mojom.SharedImageFormatType shared_image_format_type;
 };
 
 // Possible choices for storing VideoFrame data.

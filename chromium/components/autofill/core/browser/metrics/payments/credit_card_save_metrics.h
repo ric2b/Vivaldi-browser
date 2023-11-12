@@ -89,7 +89,7 @@ enum class CardUploadEnabled {
   // numeric values should never be reused.
 
   kSyncServiceNull = 0,
-  kSyncServicePersistentAuthError = 1,
+  kSyncServicePaused = 1,
   kSyncServiceMissingAutofillWalletDataActiveType = 2,
   kSyncServiceMissingAutofillProfileActiveType = 3,
   // Deprecated: kAccountWalletStorageUploadDisabled = 4,
@@ -220,10 +220,6 @@ void LogSaveCardPromptResultMetric(
 
 void LogSaveCardRequestExpirationDateReasonMetric(
     SaveCardRequestExpirationDateReason metric);
-
-void LogSaveCardWithFirstAndLastNameOffered(bool is_local);
-
-void LogSaveCardWithFirstAndLastNameComplete(bool is_local);
 
 // Clank-specific metrics.
 void LogSaveCreditCardPromptResult(

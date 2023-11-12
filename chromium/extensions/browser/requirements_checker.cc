@@ -4,7 +4,7 @@
 
 #include "extensions/browser/requirements_checker.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -23,7 +23,7 @@ RequirementsChecker::RequirementsChecker(
     scoped_refptr<const Extension> extension)
     : PreloadCheck(extension) {}
 
-RequirementsChecker::~RequirementsChecker() {}
+RequirementsChecker::~RequirementsChecker() = default;
 
 void RequirementsChecker::Start(ResultCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);

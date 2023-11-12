@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -42,6 +42,7 @@
 #include "components/crx_file/crx_verifier.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "components/sync_preferences/pref_service_mock_factory.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/browser/browser_context.h"
@@ -53,7 +54,6 @@
 #include "extensions/common/extensions_client.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/extensions/install_limiter.h"
 #endif
 
@@ -158,9 +158,6 @@ ExtensionServiceTestBase::~ExtensionServiceTestBase() {
   // TODO(1269752): Since we're getting rid of at_exit_manager_, perhaps
   // we don't need this call?
   profile_.reset();
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  ash::KioskAppManager::ResetForTesting();
-#endif
 }
 
 ExtensionServiceTestBase::ExtensionServiceInitParams
@@ -340,6 +337,10 @@ void ExtensionServiceTestBase::SetUp() {
   // return a false negative.
   ExtensionsClient::Get()->InitializeWebStoreUrls(
       base::CommandLine::ForCurrentProcess());
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  kiosk_app_manager_ = std::make_unique<ash::KioskAppManager>();
+#endif
 }
 
 void ExtensionServiceTestBase::TearDown() {
@@ -352,6 +353,9 @@ void ExtensionServiceTestBase::TearDown() {
       partition->WaitForDeletionTasksForTesting();
   }
   policy_provider_.Shutdown();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  kiosk_app_manager_.reset();
+#endif
 }
 
 void ExtensionServiceTestBase::SetUpTestCase() {
@@ -366,6 +370,8 @@ content::BrowserContext* ExtensionServiceTestBase::browser_context() {
 }
 
 Profile* ExtensionServiceTestBase::profile() {
+// TODO(crbug.com/1414225): Refactor this convenience upstream to test callers.
+// Possibly just BuiltInAppTest.BuildGuestMode.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (profile_->IsGuestSession())
     return profile_->GetPrimaryOTRProfile(/*create_if_needed=*/true);

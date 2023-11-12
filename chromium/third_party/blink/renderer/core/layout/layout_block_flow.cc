@@ -42,7 +42,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
-#include "third_party/blink/renderer/core/layout/deferred_shaping_controller.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/layout_flow_thread.h"
 #include "third_party/blink/renderer/core/layout/layout_inline.h"
@@ -362,6 +361,7 @@ bool LayoutBlockFlow::IsSelfCollapsingBlock() const {
     DCHECK(CreatesNewFormattingContext());
     return false;
   }
+  DCHECK(!RuntimeEnabledFeatures::LayoutNGPrintingEnabled());
   if (!IsLayoutNGObject())
     DCHECK_EQ(!is_self_collapsing_, !CheckIfIsSelfCollapsingBlock());
   return is_self_collapsing_;
@@ -3324,11 +3324,6 @@ static void GetInlineRun(LayoutObject* start,
 void LayoutBlockFlow::MakeChildrenNonInline(LayoutObject* insertion_point) {
   NOT_DESTROYED();
 
-  if (IsShapingDeferred()) {
-    View()->GetDeferredShapingController().UnregisterDeferred(
-        *To<Element>(GetNode()));
-  }
-
   // makeChildrenNonInline takes a block whose children are *all* inline and it
   // makes sure that inline children are coalesced under anonymous blocks.
   // If |insertionPoint| is defined, then it represents the insertion point for
@@ -3996,7 +3991,6 @@ Node* LayoutBlockFlow::NodeForHitTest() const {
   // block-in-inline we're actually still inside the enclosing element
   // that was split. Use the appropriate inner node.
   if (UNLIKELY(IsBlockInInline())) {
-    DCHECK(RuntimeEnabledFeatures::LayoutNGBlockInInlineEnabled());
     DCHECK(Parent());
     DCHECK(Parent()->IsLayoutInline());
     return Parent()->NodeForHitTest();
@@ -4330,16 +4324,6 @@ void LayoutBlockFlow::CreateOrDestroyMultiColumnFlowThreadIfNeeded(
   const auto* element = DynamicTo<Element>(GetNode());
   if (element && element->IsFormControlElement())
     return;
-
-  // Make sure that we don't attempt to create a LayoutNG multicol container
-  // when the feature isn't enabled. There is a mechanism that causes us to fall
-  // back to legacy layout if columns are specified when
-  // LayoutNGBlockFragmentation is disabled, but then there are cases where
-  // we'll override this and force NG anyway (if the layout type isn't
-  // implemented in the legacy engine, which is the case for things like custom
-  // layout).
-  DCHECK(!IsLayoutNGObject() ||
-         RuntimeEnabledFeatures::LayoutNGBlockFragmentationEnabled());
 
   auto* flow_thread = LayoutMultiColumnFlowThread::CreateAnonymous(
       GetDocument(), StyleRef(), !IsLayoutNGObject());
@@ -4702,7 +4686,7 @@ void LayoutBlockFlow::AddOutlineRects(
   LayoutBlock::AddOutlineRects(rects, info, additional_offset,
                                include_block_overflows);
 
-  if (include_block_overflows == NGOutlineType::kIncludeBlockVisualOverflow &&
+  if (ShouldIncludeBlockVisualOverflow(include_block_overflows) &&
       !HasNonVisibleOverflow() && !HasControlClip()) {
     for (RootInlineBox* curr = FirstRootBox(); curr;
          curr = curr->NextRootBox()) {
@@ -4783,11 +4767,6 @@ void LayoutBlockFlow::SetOffsetMapping(NGOffsetMapping* offset_mapping) {
   DCHECK(!IsLayoutNGObject());
   DCHECK(offset_mapping);
   EnsureRareData().offset_mapping_ = offset_mapping;
-}
-
-void LayoutBlockFlow::StopDeferringShaping() const {
-  if (HasNGInlineNodeData())
-    GetNGInlineNodeData()->StopDeferringShaping();
 }
 
 }  // namespace blink

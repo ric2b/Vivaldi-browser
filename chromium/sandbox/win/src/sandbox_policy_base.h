@@ -20,7 +20,7 @@
 #include "base/process/launch.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
-#include "base/win/scoped_handle.h"
+#include "base/win/access_token.h"
 #include "base/win/windows_types.h"
 #include "sandbox/win/src/app_container_base.h"
 #include "sandbox/win/src/handle_closer.h"
@@ -29,6 +29,7 @@
 #include "sandbox/win/src/policy_engine_opcodes.h"
 #include "sandbox/win/src/policy_engine_params.h"
 #include "sandbox/win/src/sandbox_policy.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace sandbox {
 
@@ -82,6 +83,8 @@ class ConfigBase final : public TargetConfig {
                                     const wchar_t* handle_name) override;
   ResultCode SetDisconnectCsrss() override;
   void SetDesktop(Desktop desktop) override;
+  void SetFilterEnvironment(bool filter) override;
+  bool GetEnvironmentFiltered() override;
 
  private:
   // Can call Freeze()
@@ -139,6 +142,7 @@ class ConfigBase final : public TargetConfig {
   size_t memory_limit_;
   uint32_t ui_exceptions_;
   Desktop desktop_;
+  bool filter_environment_;
 
   // Object in charge of generating the low level policy. Will be reset() when
   // Freeze() is called.
@@ -169,7 +173,6 @@ class PolicyBase final : public TargetPolicy {
   ResultCode SetStdoutHandle(HANDLE handle) override;
   ResultCode SetStderrHandle(HANDLE handle) override;
   void AddHandleToShare(HANDLE handle) override;
-  void SetEffectiveToken(HANDLE token) override;
 
   // Creates a Job object with the level specified in a previous call to
   // SetJobLevel().
@@ -187,11 +190,9 @@ class PolicyBase final : public TargetPolicy {
   ResultCode DropActiveProcessLimit();
 
   // Creates the two tokens with the levels specified in a previous call to
-  // SetTokenLevel(). Also creates a lowbox token if specified based on the
-  // lowbox SID.
-  ResultCode MakeTokens(base::win::ScopedHandle* initial,
-                        base::win::ScopedHandle* lockdown,
-                        base::win::ScopedHandle* lowbox);
+  // SetTokenLevel().
+  ResultCode MakeTokens(absl::optional<base::win::AccessToken>& initial,
+                        absl::optional<base::win::AccessToken>& lockdown);
 
   // Applies the sandbox to |target| and takes ownership. Internally a
   // call to TargetProcess::Init() is issued.
@@ -252,7 +253,6 @@ class PolicyBase final : public TargetPolicy {
   // shared with the target at times.
   base::HandlesToInheritVector handles_to_share_;
 
-  HANDLE effective_token_;
   Job job_;
 };
 

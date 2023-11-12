@@ -88,7 +88,19 @@ class WebCodecsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         'sample_rate':
         48000,
         'channels':
-        2
+        2,
+        'aac_format':
+        'aac'
+    }])
+    yield ('WebCodecs_AudioEncoding_AAC_LC_ADTS', 'audio-encode-decode.html', [{
+        'codec':
+        'mp4a.67',
+        'sample_rate':
+        48000,
+        'channels':
+        2,
+        'aac_format':
+        'adts'
     }])
 
   @classmethod
@@ -114,7 +126,9 @@ class WebCodecsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
                  }])
 
     for source_type in frame_sources:
-      for codec in video_codecs:
+      # Also verify we can deal with the encoder's frame delay that we can
+      # encounter for the AVC High profile (avc1.64).
+      for codec in video_codecs + ['avc1.64001E']:
         for acc in accelerations:
           args = (source_type, codec, acc)
           yield ('WebCodecs_Encode_%s_%s_%s' % args, 'encode.html', [{

@@ -14,7 +14,7 @@
 
 #include "base/allocator/partition_allocator/address_pool_manager.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
-#include "base/allocator/partition_allocator/partition_alloc_config.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
@@ -415,8 +415,7 @@ std::ostream& operator<<(std::ostream& out, const UserspaceSwapConfig& c) {
 // KernelSupportsUserspaceSwap will test for all features necessary to enable
 // userspace swap.
 COMPONENT_EXPORT(USERSPACE_SWAP) bool KernelSupportsUserspaceSwap() {
-#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) || \
-    !defined(PA_HAS_64_BITS_POINTERS)
+#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) || !BUILDFLAG(HAS_64_BIT_POINTERS)
   // We currently only support 64bit partition alloc.
   return false;
 #else
@@ -449,7 +448,7 @@ COMPONENT_EXPORT(USERSPACE_SWAP) bool KernelSupportsUserspaceSwap() {
 
   return userfault_fd_supported && mremap_dontunmap_supported;
 #endif  // !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) ||
-        // !defined(PA_HAS_64_BITS_POINTERS)
+        // !BUILDFLAG(HAS_64_BIT_POINTERS)
 }
 
 RendererSwapData::RendererSwapData() = default;
@@ -487,8 +486,7 @@ bool GetPartitionAllocSuperPagesInUse(
     int32_t max_superpages,
     std::vector<::userspace_swap::mojom::MemoryRegionPtr>& regions) {
   regions.clear();
-#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) || \
-    !defined(PA_HAS_64_BITS_POINTERS)
+#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) || !BUILDFLAG(HAS_64_BIT_POINTERS)
   return false;
 #else
 
@@ -538,7 +536,7 @@ bool GetPartitionAllocSuperPagesInUse(
 
   return true;
 #endif  // !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) ||
-        // !defined(PA_HAS_64_BITS_POINTERS)
+        // !BUILDFLAG(HAS_64_BIT_POINTERS)
 }
 
 COMPONENT_EXPORT(USERSPACE_SWAP) uint64_t GetGlobalMemoryReclaimed() {

@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/numerics/math_constants.h"
 #include "base/strings/string_number_conversions.h"
@@ -59,6 +59,17 @@ EncryptionScheme GetEncryptionScheme(const ProtectionSchemeInfo& sinf) {
   }
   return EncryptionScheme::kUnencrypted;
 }
+
+class ExternalMemoryAdapter : public DecoderBuffer::ExternalMemory {
+ public:
+  explicit ExternalMemoryAdapter(std::vector<uint8_t> memory)
+      : memory_(std::move(memory)) {
+    span_ = {memory_.data(), memory_.size()};
+  }
+
+ private:
+  std::vector<uint8_t> memory_;
+};
 
 }  // namespace
 
@@ -149,7 +160,11 @@ bool MP4StreamParser::AppendToParseBuffer(const uint8_t* buf, size_t size) {
   // could lead to memory corruption, preferring CHECK.
   CHECK_EQ(queue_.tail(), max_parse_offset_);
 
-  queue_.Push(buf, base::checked_cast<int>(size));
+  if (!queue_.Push(buf, base::checked_cast<int>(size))) {
+    DVLOG(2) << "AppendToParseBuffer(): Failed to push buf of size " << size;
+    return false;
+  }
+
   return true;
 }
 
@@ -411,6 +426,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 #endif
 #if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
           audio_format != FOURCC_DTSC && audio_format != FOURCC_DTSX &&
+          audio_format != FOURCC_DTSE &&
 #endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
 #if BUILDFLAG(ENABLE_PLATFORM_MPEG_H_AUDIO)
           audio_format != FOURCC_MHM1 && audio_format != FOURCC_MHA1 &&
@@ -479,6 +495,9 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
             audio_type = kDTS;
           if (audio_format == FOURCC_DTSX)
             audio_type = kDTSX;
+          if (audio_format == FOURCC_DTSE) {
+            audio_type = kDTSE;
+          }
         }
 #endif  // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
         DVLOG(1) << "audio_type 0x" << std::hex << static_cast<int>(audio_type);
@@ -527,6 +546,10 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           // HDMI versions pre HDMI 2.0 can only transmit 8 raw PCM channels.
           // In the case of a 5_1_4 stream we downmix to 5_1.
           codec = AudioCodec::kDTSXP2;
+          channel_layout = GuessChannelLayout(entry.channelcount);
+          sample_per_second = entry.samplerate;
+        } else if (audio_type == kDTSE) {
+          codec = AudioCodec::kDTSE;
           channel_layout = GuessChannelLayout(entry.channelcount);
           sample_per_second = entry.samplerate;
 #endif
@@ -990,9 +1013,9 @@ ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
   StreamParserBuffer::Type buffer_type = audio ? DemuxerStream::AUDIO :
       DemuxerStream::VIDEO;
 
-  scoped_refptr<StreamParserBuffer> stream_buf =
-      StreamParserBuffer::CopyFrom(&frame_buf[0], frame_buf.size(), is_keyframe,
-                                   buffer_type, runs_->track_id());
+  auto stream_buf = StreamParserBuffer::FromExternalMemory(
+      std::make_unique<ExternalMemoryAdapter>(std::move(frame_buf)),
+      is_keyframe, buffer_type, runs_->track_id());
 
   if (decrypt_config)
     stream_buf->set_decrypt_config(std::move(decrypt_config));

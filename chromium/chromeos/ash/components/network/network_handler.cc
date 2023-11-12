@@ -17,6 +17,8 @@
 #include "chromeos/ash/components/network/client_cert_resolver.h"
 #include "chromeos/ash/components/network/geolocation_handler.h"
 #include "chromeos/ash/components/network/hidden_network_handler.h"
+#include "chromeos/ash/components/network/hotspot_allowed_flag_handler.h"
+#include "chromeos/ash/components/network/hotspot_capabilities_provider.h"
 #include "chromeos/ash/components/network/hotspot_controller.h"
 #include "chromeos/ash/components/network/hotspot_state_handler.h"
 #include "chromeos/ash/components/network/managed_cellular_pref_handler.h"
@@ -42,6 +44,7 @@
 #include "chromeos/ash/components/network/prohibited_technologies_handler.h"
 #include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/ash/components/network/stub_cellular_networks_provider.h"
+#include "chromeos/ash/components/network/technology_state_controller.h"
 
 namespace ash {
 
@@ -54,6 +57,7 @@ NetworkHandler::NetworkHandler()
   cellular_inhibitor_.reset(new CellularInhibitor());
   cellular_esim_profile_handler_.reset(new CellularESimProfileHandlerImpl());
   stub_cellular_networks_provider_.reset(new StubCellularNetworksProvider());
+  technology_state_controller_.reset(new TechnologyStateController());
   cellular_connection_handler_.reset(new CellularConnectionHandler());
   network_profile_handler_.reset(new NetworkProfileHandler());
   network_configuration_handler_.reset(new NetworkConfigurationHandler());
@@ -68,11 +72,13 @@ NetworkHandler::NetworkHandler()
   cellular_metrics_logger_.reset(new CellularMetricsLogger());
   connection_info_metrics_logger_.reset(new ConnectionInfoMetricsLogger());
   hidden_network_metrics_helper_.reset(new HiddenNetworkMetricsHelper());
+  hotspot_allowed_flag_handler_.reset(new HotspotAllowedFlagHandler());
   vpn_network_metrics_helper_.reset(new VpnNetworkMetricsHelper());
   if (base::FeatureList::IsEnabled(features::kHiddenNetworkMigration)) {
     hidden_network_handler_.reset(new HiddenNetworkHandler());
   }
   if (ash::features::IsHotspotEnabled()) {
+    hotspot_capabilities_provider_.reset(new HotspotCapabilitiesProvider());
     hotspot_state_handler_.reset(new HotspotStateHandler());
     hotspot_controller_.reset(new HotspotController());
   }
@@ -102,6 +108,7 @@ void NetworkHandler::Init() {
   stub_cellular_networks_provider_->Init(network_state_handler_.get(),
                                          cellular_esim_profile_handler_.get(),
                                          managed_cellular_pref_handler_.get());
+  technology_state_controller_->Init(network_state_handler_.get());
   cellular_connection_handler_->Init(network_state_handler_.get(),
                                      cellular_inhibitor_.get(),
                                      cellular_esim_profile_handler_.get());
@@ -135,9 +142,13 @@ void NetworkHandler::Init() {
     hidden_network_handler_->Init(managed_network_configuration_handler_.get(),
                                   network_state_handler_.get());
   }
+  hotspot_allowed_flag_handler_->Init();
   if (ash::features::IsHotspotEnabled()) {
-    hotspot_state_handler_->Init(network_state_handler_.get());
-    hotspot_controller_->Init(hotspot_state_handler_.get());
+    hotspot_capabilities_provider_->Init(network_state_handler_.get());
+    hotspot_state_handler_->Init();
+    hotspot_controller_->Init(hotspot_capabilities_provider_.get(),
+                              hotspot_state_handler_.get(),
+                              technology_state_controller_.get());
   }
   managed_cellular_pref_handler_->Init(network_state_handler_.get());
   esim_policy_login_metrics_logger_->Init(
@@ -165,7 +176,7 @@ void NetworkHandler::Init() {
   }
   prohibited_technologies_handler_->Init(
       managed_network_configuration_handler_.get(),
-      network_state_handler_.get());
+      network_state_handler_.get(), technology_state_controller_.get());
   network_sms_handler_->Init();
   geolocation_handler_->Init();
 }
@@ -270,9 +281,17 @@ CellularPolicyHandler* NetworkHandler::cellular_policy_handler() {
   return cellular_policy_handler_.get();
 }
 
+TechnologyStateController* NetworkHandler::technology_state_controller() {
+  return technology_state_controller_.get();
+}
+
 HiddenNetworkHandler* NetworkHandler::hidden_network_handler() {
   DCHECK(base::FeatureList::IsEnabled(features::kHiddenNetworkMigration));
   return hidden_network_handler_.get();
+}
+
+HotspotCapabilitiesProvider* NetworkHandler::hotspot_capabilities_provider() {
+  return hotspot_capabilities_provider_.get();
 }
 
 HotspotController* NetworkHandler::hotspot_controller() {

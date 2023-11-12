@@ -18,7 +18,7 @@ import {SkColor} from 'chrome://resources/mojo/skia/public/mojom/skcolor.mojom-w
 import {IronA11yKeysElement} from 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
 
-import {ColorScheme} from '../personalization_app.mojom-webui.js';
+import {ColorScheme, SampleColorScheme} from '../../personalization_app.mojom-webui.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {convertToRgbHexStr} from '../utils.js';
 
@@ -26,13 +26,6 @@ import {getTemplate} from './dynamic_color_element.html.js';
 import {initializeDynamicColorData, setColorSchemePref, setStaticColorPref} from './theme_controller.js';
 import {getThemeProvider} from './theme_interface_provider.js';
 import {ThemeObserver} from './theme_observer.js';
-
-export interface DynamicColorScheme {
-  id: ColorScheme;
-  primaryColor: string;
-  secondaryColor: string;
-  tertiaryColor: string;
-}
 
 export interface DynamicColorElement {
   $: {
@@ -77,39 +70,9 @@ export class DynamicColorElement extends WithPersonalizationStore {
           '#eadecd',
         ],
       },
-      colorSchemes_: {
-        type: Object,
-        readOnly: true,
-        value(): DynamicColorScheme[] {
-          return [
-            // TODO(254479725): Replace with colors fetched from the
-            // backend.
-            {
-              id: ColorScheme.kTonalSpot,
-              primaryColor: 'var(--google-blue-500)',
-              secondaryColor: 'var(--google-red-500)',
-              tertiaryColor: 'var(--google-green-500)',
-            },
-            {
-              id: ColorScheme.kNeutral,
-              primaryColor: 'var(--google-red-500)',
-              secondaryColor: 'var(--google-blue-500)',
-              tertiaryColor: 'var(--google-green-500)',
-            },
-            {
-              id: ColorScheme.kVibrant,
-              primaryColor: 'var(--google-green-500)',
-              secondaryColor: 'var(--google-red-500)',
-              tertiaryColor: 'var(--google-blue-500)',
-            },
-            {
-              id: ColorScheme.kExpressive,
-              primaryColor: 'var(--google-orange-500)',
-              secondaryColor: 'var(--google-red-500)',
-              tertiaryColor: 'var(--google-green-500)',
-            },
-          ];
-        },
+      sampleColorSchemes_: {
+        type: Array,
+        notify: true,
       },
       // The color scheme button currently highlighted by keyboard navigation.
       colorSchemeHighlightedButton_: {
@@ -125,10 +88,12 @@ export class DynamicColorElement extends WithPersonalizationStore {
   }
 
   automaticSeedColorEnabled: boolean;
+  private previousStaticColorSelected_: SkColor|null;
+  private previousColorSchemeSelected_: ColorScheme|null;
   private staticColorSelected_: SkColor|null;
   private colorSchemeSelected_: ColorScheme|null;
   private staticColors_: string[];
-  private colorSchemes_: DynamicColorScheme[];
+  private sampleColorSchemes_: SampleColorScheme[];
   private colorSchemeHighlightedButton_: CrButtonElement;
   private staticColorHighlightedButton_: CrButtonElement;
 
@@ -145,6 +110,8 @@ export class DynamicColorElement extends WithPersonalizationStore {
         'staticColorSelected_', state => state.theme.staticColorSelected);
     this.watch<DynamicColorElement['colorSchemeSelected_']>(
         'colorSchemeSelected_', state => state.theme.colorSchemeSelected);
+    this.watch<DynamicColorElement['sampleColorSchemes_']>(
+        'sampleColorSchemes_', state => state.theme.sampleColorSchemes);
     this.updateFromStore();
     initializeDynamicColorData(getThemeProvider(), this.getStore());
   }
@@ -164,10 +131,14 @@ export class DynamicColorElement extends WithPersonalizationStore {
 
   private onToggleChanged_() {
     if (this.automaticSeedColorEnabled) {
-      const staticColor = this.staticColorSelected_ || DEFAULT_STATIC_COLOR;
+      this.previousColorSchemeSelected_ = this.colorSchemeSelected_;
+      const staticColor =
+          this.previousStaticColorSelected_ || DEFAULT_STATIC_COLOR;
       setStaticColorPref(staticColor, getThemeProvider(), this.getStore());
     } else {
-      const colorScheme = this.colorSchemeSelected_ || DEFAULT_COLOR_SCHEME;
+      this.previousStaticColorSelected_ = this.staticColorSelected_;
+      const colorScheme =
+          this.previousColorSchemeSelected_ || DEFAULT_COLOR_SCHEME;
       setColorSchemePref(colorScheme, getThemeProvider(), this.getStore());
     }
   }
@@ -177,19 +148,15 @@ export class DynamicColorElement extends WithPersonalizationStore {
   }
 
   private getColorSchemeAriaChecked_(
-      colorScheme: string, colorSchemeSelected: string): 'true'|'false' {
-    if (!colorSchemeSelected) {
-      return 'false';
-    }
-    return colorSchemeSelected === colorScheme ? 'true' : 'false';
+      colorScheme: number, colorSchemeSelected: number|null): 'true'|'false' {
+    const checkedColorScheme = colorSchemeSelected || DEFAULT_COLOR_SCHEME;
+    return checkedColorScheme === colorScheme ? 'true' : 'false';
   }
 
   private getStaticColorAriaChecked_(
       staticColor: string, staticColorSelected: SkColor|null): 'true'|'false' {
-    if (!staticColorSelected) {
-      return 'false';
-    }
-    return staticColor === convertToRgbHexStr(staticColorSelected.value) ?
+    const checkedStaticColor = staticColorSelected || DEFAULT_STATIC_COLOR;
+    return staticColor === convertToRgbHexStr(checkedStaticColor.value) ?
         'true' :
         'false';
   }
@@ -235,11 +202,20 @@ export class DynamicColorElement extends WithPersonalizationStore {
     e.detail.keyboardEvent.preventDefault();
   }
 
-  private getTabIndex_(id: string): string {
-    return id === String(DEFAULT_COLOR_SCHEME) ||
-            hexColorToSkColor(id) === DEFAULT_STATIC_COLOR ?
-        '0' :
-        '-1';
+  /**
+   * Returns the tab index for static color and color scheme buttons. Static
+   * color id is a string whereas color scheme id is an enum.
+   */
+  private getTabIndex_(id: string|number): string {
+    if (typeof id === 'string' &&
+        hexColorToSkColor(id).value === DEFAULT_STATIC_COLOR.value) {
+      // Handles static color.
+      return '0';
+    } else if (typeof id === 'number' && id === DEFAULT_COLOR_SCHEME) {
+      // Handles color scheme.
+      return '0';
+    }
+    return '-1';
   }
 }
 

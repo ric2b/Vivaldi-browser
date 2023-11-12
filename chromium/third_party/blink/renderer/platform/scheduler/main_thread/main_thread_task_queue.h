@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/common/lazy_now.h"
 #include "base/task/sequence_manager/task_queue.h"
@@ -15,6 +16,8 @@
 #include "base/task/single_thread_task_runner.h"
 #include "net/base/request_priority.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/renderer/platform/scheduler/common/blink_scheduler_single_thread_task_runner.h"
+#include "third_party/blink/renderer/platform/scheduler/common/task_priority.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/budget_pool.h"
 #include "third_party/blink/renderer/platform/scheduler/common/throttling/task_queue_throttler.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/agent_group_scheduler_impl.h"
@@ -22,14 +25,11 @@
 #include "third_party/blink/renderer/platform/scheduler/public/web_scheduling_priority.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 
-namespace base {
-namespace sequence_manager {
+namespace base::sequence_manager {
 class SequenceManager;
-}
-}  // namespace base
+}  // namespace base::sequence_manager
 
-namespace blink {
-namespace scheduler {
+namespace blink::scheduler {
 
 using TaskQueue = base::sequence_manager::TaskQueue;
 
@@ -437,9 +437,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   FrameSchedulerImpl* GetFrameScheduler() const;
 
   scoped_refptr<base::SingleThreadTaskRunner> CreateTaskRunner(
-      TaskType task_type) {
-    return task_queue_->CreateTaskRunner(static_cast<int>(task_type));
-  }
+      TaskType task_type);
 
   void SetWebSchedulingPriority(WebSchedulingPriority priority);
   absl::optional<WebSchedulingPriority> web_scheduling_priority() const;
@@ -456,7 +454,7 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   // the desired task type.
   const scoped_refptr<base::SingleThreadTaskRunner>&
   GetTaskRunnerWithDefaultTaskType() {
-    return task_queue_->task_runner();
+    return task_runner_with_default_task_type_;
   }
 
   bool IsThrottled() const;
@@ -476,11 +474,12 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   void SetWakeUpBudgetPool(WakeUpBudgetPool* wake_up_budget_pool);
   WakeUpBudgetPool* GetWakeUpBudgetPool() const { return wake_up_budget_pool_; }
 
-  void SetQueuePriority(TaskQueue::QueuePriority priority) {
+  void SetQueuePriority(TaskPriority priority) {
     task_queue_->SetQueuePriority(priority);
   }
-  TaskQueue::QueuePriority GetQueuePriority() const {
-    return task_queue_->GetQueuePriority();
+
+  TaskPriority GetQueuePriority() const {
+    return static_cast<TaskPriority>(task_queue_->GetQueuePriority());
   }
 
   bool IsQueueEnabled() const { return task_queue_->IsQueueEnabled(); }
@@ -538,7 +537,12 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   // DetachFromMainThreadScheduler.
   void ClearReferencesToSchedulers();
 
+  scoped_refptr<BlinkSchedulerSingleThreadTaskRunner> WrapTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner>);
+
   scoped_refptr<TaskQueue> task_queue_;
+  scoped_refptr<base::SingleThreadTaskRunner>
+      task_runner_with_default_task_type_;
   absl::optional<TaskQueueThrottler> throttler_;
 
   const QueueType queue_type_;
@@ -567,7 +571,6 @@ class PLATFORM_EXPORT MainThreadTaskQueue
   base::WeakPtrFactory<MainThreadTaskQueue> weak_ptr_factory_{this};
 };
 
-}  // namespace scheduler
-}  // namespace blink
+}  // namespace blink::scheduler
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_SCHEDULER_MAIN_THREAD_MAIN_THREAD_TASK_QUEUE_H_

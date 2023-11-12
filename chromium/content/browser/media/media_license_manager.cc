@@ -8,11 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
@@ -32,6 +32,9 @@
 #include "url/origin.h"
 
 namespace content {
+
+using MediaLicenseStorageHostOpenError =
+    MediaLicenseStorageHost::MediaLicenseStorageHostOpenError;
 
 namespace {
 
@@ -142,6 +145,8 @@ void MediaLicenseManager::DidGetBucket(
     // We could consider falling back to using an in-memory database in this
     // case, but failing here seems easier to reason about from a website
     // author's point of view.
+    MediaLicenseStorageHost::ReportDatabaseOpenError(
+        MediaLicenseStorageHostOpenError::kBucketLocatorError, in_memory());
     DCHECK(bucket_locator.id.is_null());
     bucket_locator.storage_key = storage_key;
   }

@@ -30,17 +30,6 @@ BASE_FEATURE(kBiometricTouchToFill,
              "BiometricTouchToFill",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables submission detection for forms dynamically cleared but not removed
-// from the page.
-BASE_FEATURE(kDetectFormSubmissionOnFormClear,
-             "DetectFormSubmissionOnFormClear",
-#if BUILDFLAG(IS_IOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-);
-
 // Enables the overwriting of prefilled username fields if the server predicted
 // the field to contain a placeholder value.
 BASE_FEATURE(kEnableOverwritingPlaceholderUsernames,
@@ -62,18 +51,25 @@ BASE_FEATURE(kEnablePasswordGenerationForClearTextFields,
              "EnablePasswordGenerationForClearTextFields",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// By default, Password Manager is disabled in fenced frames for now.
+// By default, Password Manager is enabled in fenced frames as part of
+// FencedFramesAPIChanges blink experiment.
+// This flag can be used via Finch to disable PasswordManager in the
+// FencedFramesAPIChanges blink experiment without affecting the other
+// features included in the experiment.
 // TODO(crbug.com/1294378): Remove once launched.
 BASE_FEATURE(kEnablePasswordManagerWithinFencedFrame,
              "EnablePasswordManagerWithinFencedFrame",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables filling password on a website when there is saved password on
 // affiliated website.
 BASE_FEATURE(kFillingAcrossAffiliatedWebsites,
              "FillingAcrossAffiliatedWebsites",
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#else
              base::FEATURE_DISABLED_BY_DEFAULT);
-
+#endif
 // Enables the experiment for the password manager to only fill on account
 // selection, rather than autofilling on page load, with highlighting of fields.
 BASE_FEATURE(kFillOnAccountSelect,
@@ -95,12 +91,6 @@ BASE_FEATURE(kInferConfirmationPasswordField,
              "InferConfirmationPasswordField",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Feature flag that updates icons, strings, and views for Google Password
-// Manager.
-BASE_FEATURE(kIOSEnablePasswordManagerBrandingUpdate,
-             "IOSEnablePasswordManagerBrandingUpdate",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 #if BUILDFLAG(IS_IOS)
 // Removes the list of passwords from the Settings UI and adds a separate
 // Password Manager view.
@@ -112,17 +102,27 @@ BASE_FEATURE(kIOSPasswordUISplit,
 BASE_FEATURE(kIOSPasswordManagerCrossOriginIframeSupport,
              "IOSPasswordManagerCrossOriginIframeSupport",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables displaying and managing compromised, weak and reused credentials in
+// the Password Manager.
+BASE_FEATURE(kIOSPasswordCheckup,
+             "IOSPasswordCheckup",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Feature flag to show local/account storage in save/update password infobar
+// subtitle.
+BASE_FEATURE(kIOSShowPasswordStorageInSaveInfobar,
+             "IOSShowPasswordStorageInSaveInfobar",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // IS_IOS
 
-// Enables (un)muting compromised passwords from bulk leak check in settings.
-BASE_FEATURE(kMuteCompromisedPasswords,
-             "MuteCompromisedPasswords",
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
+// Enables memory mapping the word lists used in the zxcvbn library employed
+// for the password weakness check.
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)  // Desktop
+BASE_FEATURE(kMemoryMapWeaknessCheckDictionaries,
+             "MemoryMapWeaknessCheckDictionaries",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-);
 
 // Enables new regex for OTP fields.
 BASE_FEATURE(kNewRegexForOtpFields,
@@ -149,18 +149,20 @@ BASE_FEATURE(kPasswordChangeWellKnown,
              "PasswordChangeWellKnown",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Controls the ability to import passwords from Chrome's settings page.
+// Enables import passwords flow from Chrome's settings page.
 BASE_FEATURE(kPasswordImport,
              "PasswordImport",
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
              base::FEATURE_ENABLED_BY_DEFAULT);
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 BASE_FEATURE(kPasswordManagerRedesign,
              "PasswordManagerRedesign",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+BASE_FEATURE(kPasswordsImportM2,
+             "PasswordsImportM2",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 

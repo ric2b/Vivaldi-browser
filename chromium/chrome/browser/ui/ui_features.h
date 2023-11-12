@@ -71,19 +71,13 @@ extern const char kTabScrollingButtonPositionParameterName[];
 BASE_DECLARE_FEATURE(kScrollableTabStripOverflow);
 extern const char kScrollableTabStripOverflowModeName[];
 
-// TODO(pbos): Once kReadLater is cleaned up on Desktop, move definition into
-// ui_features.cc. This is currently temporarily in reading_list_switches.h.
-BASE_DECLARE_FEATURE(kSidePanelImprovedClobbering);
-
 BASE_DECLARE_FEATURE(kSidePanelWebView);
 
 BASE_DECLARE_FEATURE(kSidePanelJourneysQueryless);
+BASE_DECLARE_FEATURE(kSidePanelSearchCompanion);
 
-BASE_DECLARE_FEATURE(kSideSearch);
 BASE_DECLARE_FEATURE(kSideSearchFeedback);
-BASE_DECLARE_FEATURE(kSideSearchDSESupport);
 BASE_DECLARE_FEATURE(kSearchWebInSidePanel);
-BASE_DECLARE_FEATURE(kClobberAllSideSearchSidePanels);
 
 BASE_DECLARE_FEATURE(kSideSearchAutoTriggering);
 extern const base::FeatureParam<int> kSideSearchAutoTriggeringReturnCount;
@@ -189,8 +183,6 @@ BASE_DECLARE_FEATURE(kTabSearchUseMetricsReporter);
 BASE_DECLARE_FEATURE(kToolbarUseHardwareBitmapDraw);
 
 BASE_DECLARE_FEATURE(kTopChromeWebUIUsesSpareRenderer);
-
-BASE_DECLARE_FEATURE(kUnifiedSidePanel);
 
 BASE_DECLARE_FEATURE(kWebUIBubblePerProfilePersistence);
 

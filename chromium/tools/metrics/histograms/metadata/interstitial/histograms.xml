@@ -27,12 +27,78 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="interstitial.captive_portal"
-    enum="CaptivePortalBlockingPageEvent" expires_after="2023-04-30">
+    enum="CaptivePortalBlockingPageEvent" expires_after="2023-07-02">
   <owner>meacer@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
   <summary>
     User action when the user is shown a captive portal error page. NOTE: Metric
     was expired from M85 to M97.
+  </summary>
+</histogram>
+
+<histogram name="interstitial.enterprise_block.decision"
+    enum="SecurityInterstitialDecision" expires_after="M120">
+  <owner>domfc@chromium.org</owner>
+  <owner>snehanagpaul@google.com</owner>
+  <owner>dpr-eng@google.com</owner>
+  <summary>
+    Records when a user is blocked from visiting a site as per admin rules in an
+    enterprise managed browser.
+  </summary>
+</histogram>
+
+<histogram name="interstitial.enterprise_block.decision.repeat_visit"
+    enum="SecurityInterstitialDecision" expires_after="M120">
+  <owner>domfc@chromium.org</owner>
+  <owner>snehanagpaul@google.com</owner>
+  <owner>dpr-eng@google.com</owner>
+  <summary>
+    Records when a user is blocked from visiting a site as per admin rules in an
+    enterprise managed browser and the user tries to access it again.
+  </summary>
+</histogram>
+
+<histogram name="interstitial.enterprise_block.interaction"
+    enum="SecurityInterstitialInteraction" expires_after="M120">
+  <owner>domfc@chromium.org</owner>
+  <owner>snehanagpaul@google.com</owner>
+  <owner>dpr-eng@google.com</owner>
+  <summary>
+    Records when a user interacts with a blocking page shown for a url that
+    doesn't comply with admin rules.
+  </summary>
+</histogram>
+
+<histogram name="interstitial.enterprise_warn.decision"
+    enum="SecurityInterstitialDecision" expires_after="M120">
+  <owner>domfc@chromium.org</owner>
+  <owner>snehanagpaul@google.com</owner>
+  <owner>dpr-eng@google.com</owner>
+  <summary>
+    Records when a user is shown a warning while visiting a site that doesn't
+    comply with thadmin rules in an enterprise managed browser.
+  </summary>
+</histogram>
+
+<histogram name="interstitial.enterprise_warn.decision.repeat_visit"
+    enum="SecurityInterstitialDecision" expires_after="M120">
+  <owner>domfc@chromium.org</owner>
+  <owner>snehanagpaul@google.com</owner>
+  <owner>dpr-eng@google.com</owner>
+  <summary>
+    Records when a user revisits a page they were warned about for not complying
+    with the admin rules in an enterprise managed browser.
+  </summary>
+</histogram>
+
+<histogram name="interstitial.enterprise_warn.interaction"
+    enum="SecurityInterstitialInteraction" expires_after="M120">
+  <owner>domfc@chromium.org</owner>
+  <owner>snehanagpaul@google.com</owner>
+  <owner>dpr-eng@google.com</owner>
+  <summary>
+    Records when a user interacts with a warning page shown for a url that
+    doesn't comply with admin rules.
   </summary>
 </histogram>
 
@@ -177,7 +243,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="TypedNavigationUpgradeThrottle.Event"
-    enum="TypedNavigationUpgradeThrottleEvent" expires_after="2023-04-23">
+    enum="TypedNavigationUpgradeThrottleEvent" expires_after="2023-06-25">
   <owner>meacer@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>

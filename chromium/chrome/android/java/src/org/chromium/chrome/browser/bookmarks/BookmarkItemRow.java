@@ -20,6 +20,9 @@ import org.chromium.url.GURL;
 
 // Vivaldi
 import android.graphics.PorterDuff;
+
+import androidx.core.widget.ImageViewCompat;
+
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -151,10 +154,10 @@ public class BookmarkItemRow extends BookmarkRow implements LargeIconCallback {
                         R.color.default_text_color_disabled_light), PorterDuff.Mode.MULTIPLY);
         } else {
             mStartIconView.setColorFilter(null);
-            ApiCompatibilityUtils.setImageTintList(mStartIconView, getDefaultStartIconTint());
+            ImageViewCompat.setImageTintList(mStartIconView, getDefaultStartIconTint());
             if (mMoreIcon != null) {
                 mMoreIcon.setColorFilter(null);
-                ApiCompatibilityUtils.setImageTintList(mMoreIcon, getDefaultStartIconTint());
+                ImageViewCompat.setImageTintList(mMoreIcon, getDefaultStartIconTint());
             }
         }
     }

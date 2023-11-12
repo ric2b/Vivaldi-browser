@@ -53,6 +53,8 @@ update_target("//chrome/browser:browser") {
       "//vivaldi/browser/vivaldi_render_view_context_menu.cc",
       "//vivaldi/browser/sessions/vivaldi_session_service.cc",
       "//vivaldi/browser/sessions/vivaldi_session_service.h",
+      "//vivaldi/browser/sessions/vivaldi_session_utils.cc",
+      "//vivaldi/browser/sessions/vivaldi_session_utils.h",
       "//vivaldi/browser/sessions/page_actions_session_helper.cc",
       "//vivaldi/browser/sessions/page_actions_session_helper.h",
     ]

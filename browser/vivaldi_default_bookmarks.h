@@ -4,7 +4,7 @@
 #ifndef BROWSER_VIVALDI_DEFAULT_BOOKMARKS_H_
 #define BROWSER_VIVALDI_DEFAULT_BOOKMARKS_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 
 class PrefService;
 

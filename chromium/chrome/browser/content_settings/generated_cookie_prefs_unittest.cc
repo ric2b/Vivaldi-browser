@@ -49,7 +49,7 @@ void ValidatePrimarySettingPrefValue(
                 prefs->GetUserPref(prefs::kCookieControlsMode)->GetInt()),
             expected_cookie_controls_mode);
   EXPECT_EQ(static_cast<CookiePrimarySetting>(
-                generated_pref->GetPrefObject()->value->GetInt()),
+                generated_pref->GetPrefObject().value->GetInt()),
             pref_value);
 }
 
@@ -313,17 +313,17 @@ void SetupManagedTestConditions(
 }
 
 void ValidateManagedPreference(
-    settings_api::PrefObject* pref,
+    settings_api::PrefObject& pref,
     const PrimaryCookieSettingManagedTestCase& test_case) {
   if (test_case.expected_controlled_by != kNoControlledBy)
-    EXPECT_EQ(pref->controlled_by, test_case.expected_controlled_by);
+    EXPECT_EQ(pref.controlled_by, test_case.expected_controlled_by);
 
   if (test_case.expected_enforcement != kNoEnforcement)
-    EXPECT_EQ(pref->enforcement, test_case.expected_enforcement);
+    EXPECT_EQ(pref.enforcement, test_case.expected_enforcement);
 
   if (test_case.expected_recommended_value != kNoRecommendedValue)
     EXPECT_EQ(
-        static_cast<CookiePrimarySetting>(pref->recommended_value->GetInt()),
+        static_cast<CookiePrimarySetting>(pref.recommended_value->GetInt()),
         test_case.expected_recommended_value);
 
   // Ensure user selectable values are as expected. Ordering is enforced here
@@ -331,8 +331,8 @@ void ValidateManagedPreference(
   // First convert std::vector<std::unique_ptr<base::value(T)>> to
   // std::vector<T> for easier comparison.
   std::vector<CookiePrimarySetting> pref_user_selectable_values;
-  if (pref->user_selectable_values) {
-    for (const auto& value : *pref->user_selectable_values) {
+  if (pref.user_selectable_values) {
+    for (const auto& value : *pref.user_selectable_values) {
       pref_user_selectable_values.push_back(
           static_cast<CookiePrimarySetting>(value.GetInt()));
     }
@@ -436,7 +436,7 @@ TEST_F(GeneratedCookiePrefsTest, PrimarySettingPrefManagedState) {
         std::make_unique<content_settings::GeneratedCookiePrimarySettingPref>(
             &profile);
     auto pref_object = pref->GetPrefObject();
-    ValidateManagedPreference(pref_object.get(), test_case);
+    ValidateManagedPreference(pref_object, test_case);
   }
 }
 
@@ -450,7 +450,8 @@ TEST_F(GeneratedCookiePrefsTest, SessionOnlyPref) {
   // Ensure an allow content setting sets the preference to false and enabled.
   map->SetDefaultContentSetting(ContentSettingsType::COOKIES,
                                 ContentSetting::CONTENT_SETTING_ALLOW);
-  auto pref_object = pref->GetPrefObject();
+  absl::optional<extensions::api::settings_private::PrefObject> pref_object =
+      pref->GetPrefObject();
   EXPECT_FALSE(pref_object->value->GetBool());
   EXPECT_FALSE(*pref_object->user_control_disabled);
 
@@ -548,38 +549,35 @@ TEST_F(GeneratedCookiePrefsTest, DefaultContentSettingPref) {
   // Ensure that the preference represents the content setting value.
   map->SetDefaultContentSetting(ContentSettingsType::COOKIES,
                                 CONTENT_SETTING_ALLOW);
-  auto pref_object = pref->GetPrefObject();
-  EXPECT_EQ(pref_object->value->GetInt(), CONTENT_SETTING_ALLOW);
+  absl::optional<extensions::api::settings_private::PrefObject> pref_object =
+      pref->GetPrefObject();
+  EXPECT_EQ(pref_object->value->GetString(), "allow");
 
   // Ensure setting the preference correctly updates content settings and the
   // preference state.
-  EXPECT_EQ(
-      pref->SetPref(
-          std::make_unique<base::Value>(CONTENT_SETTING_SESSION_ONLY).get()),
-      extensions::settings_private::SetPrefResult::SUCCESS);
+  EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>("session_only").get()),
+            extensions::settings_private::SetPrefResult::SUCCESS);
   EXPECT_EQ(
       map->GetDefaultContentSetting(ContentSettingsType::COOKIES, nullptr),
       CONTENT_SETTING_SESSION_ONLY);
   pref_object = pref->GetPrefObject();
-  EXPECT_EQ(pref_object->value->GetInt(), CONTENT_SETTING_SESSION_ONLY);
+  EXPECT_EQ(pref_object->value->GetString(), "session_only");
 
-  EXPECT_EQ(
-      pref->SetPref(std::make_unique<base::Value>(CONTENT_SETTING_ALLOW).get()),
-      extensions::settings_private::SetPrefResult::SUCCESS);
+  EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>("allow").get()),
+            extensions::settings_private::SetPrefResult::SUCCESS);
   EXPECT_EQ(
       map->GetDefaultContentSetting(ContentSettingsType::COOKIES, nullptr),
       CONTENT_SETTING_ALLOW);
   pref_object = pref->GetPrefObject();
-  EXPECT_EQ(pref_object->value->GetInt(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(pref_object->value->GetString(), "allow");
 
-  EXPECT_EQ(
-      pref->SetPref(std::make_unique<base::Value>(CONTENT_SETTING_BLOCK).get()),
-      extensions::settings_private::SetPrefResult::SUCCESS);
+  EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>("block").get()),
+            extensions::settings_private::SetPrefResult::SUCCESS);
   EXPECT_EQ(
       map->GetDefaultContentSetting(ContentSettingsType::COOKIES, nullptr),
       CONTENT_SETTING_BLOCK);
   pref_object = pref->GetPrefObject();
-  EXPECT_EQ(pref_object->value->GetInt(), CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(pref_object->value->GetString(), "block");
 }
 
 TEST_F(GeneratedCookiePrefsTest, DefaultContentSettingPref_TypeMismatch) {
@@ -589,12 +587,14 @@ TEST_F(GeneratedCookiePrefsTest, DefaultContentSettingPref_TypeMismatch) {
   // Confirm that a type mismatch is reported as such.
   EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>(false).get()),
             extensions::settings_private::SetPrefResult::PREF_TYPE_MISMATCH);
-  EXPECT_EQ(
-      pref->SetPref(std::make_unique<base::Value>(CONTENT_SETTING_ASK).get()),
-      extensions::settings_private::SetPrefResult::PREF_TYPE_MISMATCH);
-  EXPECT_EQ(pref->SetPref(
-                std::make_unique<base::Value>(CONTENT_SETTING_DEFAULT).get()),
+  EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>("default").get()),
             extensions::settings_private::SetPrefResult::PREF_TYPE_MISMATCH);
+  EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>("ask").get()),
+            extensions::settings_private::SetPrefResult::PREF_TYPE_MISMATCH);
+  EXPECT_EQ(
+      pref->SetPref(
+          std::make_unique<base::Value>("detect_important_content").get()),
+      extensions::settings_private::SetPrefResult::PREF_TYPE_MISMATCH);
   EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>(100).get()),
             extensions::settings_private::SetPrefResult::PREF_TYPE_MISMATCH);
 }
@@ -614,7 +614,8 @@ TEST_F(GeneratedCookiePrefsTest, DefaultContentSettingPref_Enforced) {
   content_settings::TestUtils::OverrideProvider(
       map, std::move(provider),
       HostContentSettingsMap::CUSTOM_EXTENSION_PROVIDER);
-  auto pref_object = pref->GetPrefObject();
+  absl::optional<extensions::api::settings_private::PrefObject> pref_object =
+      pref->GetPrefObject();
   EXPECT_EQ(pref_object->controlled_by,
             settings_api::ControlledBy::CONTROLLED_BY_EXTENSION);
   EXPECT_EQ(pref_object->enforcement,
@@ -645,9 +646,8 @@ TEST_F(GeneratedCookiePrefsTest, DefaultContentSettingPref_Enforced) {
             settings_api::Enforcement::ENFORCEMENT_ENFORCED);
 
   // Ensure the preference cannot be changed when it is enforced.
-  EXPECT_EQ(
-      pref->SetPref(std::make_unique<base::Value>(CONTENT_SETTING_BLOCK).get()),
-      extensions::settings_private::SetPrefResult::PREF_NOT_MODIFIABLE);
+  EXPECT_EQ(pref->SetPref(std::make_unique<base::Value>("block").get()),
+            extensions::settings_private::SetPrefResult::PREF_NOT_MODIFIABLE);
   EXPECT_EQ(
       map->GetDefaultContentSetting(ContentSettingsType::COOKIES, nullptr),
       CONTENT_SETTING_ALLOW);

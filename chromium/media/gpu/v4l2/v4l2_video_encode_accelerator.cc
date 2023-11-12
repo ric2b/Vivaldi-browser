@@ -16,14 +16,15 @@
 #include <numeric>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/bits.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -126,6 +127,18 @@ absl::optional<VideoFrameLayout> AsMultiPlanarLayout(
   return VideoFrameLayout::CreateMultiPlanar(
       layout.format(), layout.coded_size(), layout.planes());
 }
+
+scoped_refptr<base::SequencedTaskRunner> CreateEncoderTaskRunner() {
+  if (base::FeatureList::IsEnabled(kUSeSequencedTaskRunnerForVEA)) {
+    return base::ThreadPool::CreateSequencedTaskRunner(
+        {base::WithBaseSyncPrimitives(), base::TaskPriority::USER_VISIBLE,
+         base::MayBlock()});
+  } else {
+    return base::ThreadPool::CreateSingleThreadTaskRunner(
+        {base::WithBaseSyncPrimitives(), base::MayBlock()},
+        base::SingleThreadTaskRunnerThreadMode::DEDICATED);
+  }
+}
 }  // namespace
 
 struct V4L2VideoEncodeAccelerator::BitstreamBufferRef {
@@ -169,7 +182,7 @@ base::AtomicRefCount V4L2VideoEncodeAccelerator::num_instances_(0);
 V4L2VideoEncodeAccelerator::V4L2VideoEncodeAccelerator(
     scoped_refptr<V4L2Device> device)
     : can_use_encoder_(num_instances_.Increment() < kMaxNumOfInstances),
-      child_task_runner_(base::SingleThreadTaskRunner::GetCurrentDefault()),
+      child_task_runner_(base::SequencedTaskRunner::GetCurrentDefault()),
       native_input_mode_(false),
       output_buffer_byte_size_(0),
       output_format_fourcc_(0),
@@ -178,13 +191,9 @@ V4L2VideoEncodeAccelerator::V4L2VideoEncodeAccelerator(
       device_(std::move(device)),
       input_memory_type_(V4L2_MEMORY_USERPTR),
       is_flush_supported_(false),
-      // TODO(akahuang): Change to use SequencedTaskRunner to see if the
-      // performance is affected.
       // TODO(akahuang): Remove WithBaseSyncPrimitives() after replacing poll
       // thread by V4L2DevicePoller.
-      encoder_task_runner_(base::ThreadPool::CreateSingleThreadTaskRunner(
-          {base::WithBaseSyncPrimitives(), base::MayBlock()},
-          base::SingleThreadTaskRunnerThreadMode::DEDICATED)),
+      encoder_task_runner_(CreateEncoderTaskRunner()),
       device_poll_thread_("V4L2EncoderDevicePollThread") {
   DCHECK_CALLED_ON_VALID_SEQUENCE(child_sequence_checker_);
   DETACH_FROM_SEQUENCE(encoder_sequence_checker_);
@@ -276,6 +285,8 @@ bool V4L2VideoEncodeAccelerator::Initialize(
         << "caps check failed: 0x" << std::hex << caps.capabilities;
     return false;
   }
+
+  driver_name_ = device_->GetDriverName();
 
   encoder_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&V4L2VideoEncodeAccelerator::InitializeTask,
@@ -470,6 +481,7 @@ bool V4L2VideoEncodeAccelerator::CreateImageProcessor(
     VLOGF(1) << "Failed initializing image processor";
     return false;
   }
+  VLOGF(2) << "ImageProcessor is created: " << image_processor_->backend_type();
   num_frames_in_image_processor_ = 0;
 
   // The output of image processor is the input of encoder. Output coded
@@ -785,7 +797,7 @@ void V4L2VideoEncodeAccelerator::EncodeTask(scoped_refptr<VideoFrame> frame,
     const bool is_expected_storage_type =
         native_input_mode_
             ? frame->storage_type() == VideoFrame::STORAGE_GPU_MEMORY_BUFFER
-            : frame->storage_type() == VideoFrame::STORAGE_SHMEM;
+            : frame->IsMappable();
     if (!is_expected_storage_type) {
       VLOGF(1) << "Unexpected storage: "
                << VideoFrame::StorageTypeToString(frame->storage_type());
@@ -1394,27 +1406,16 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
         NOTIFY_ERROR(kPlatformFailureError);
       }
 
-      // TODO(b/243883312): This copies the video frame to a writable buffer
-      // since the USERPTR API requires writable permission. Remove this
-      // workaround once the unreasonable permission is fixed.
-      const size_t buffer_size = frame->shm_region()->GetSize();
-      std::vector<uint8_t> writable_buffer(buffer_size);
-      std::memcpy(writable_buffer.data(), frame->data(0), buffer_size);
+      // The frame data is readable only and the driver doesn't actually write
+      // the buffer. But USRPTR buffer needs void*. So const_cast<> is required.
       std::vector<void*> user_ptrs(num_planes);
       for (size_t i = 0; i < num_planes; ++i) {
-        const std::intptr_t plane_offset =
-            reinterpret_cast<std::intptr_t>(frame->data(i)) -
-            reinterpret_cast<std::intptr_t>(frame->data(0));
-        user_ptrs[i] = writable_buffer.data() + plane_offset;
+        user_ptrs[i] = const_cast<uint8_t*>(frame->data(i));
       }
-
       if (!std::move(input_buf).QueueUserPtr(std::move(user_ptrs))) {
-        VPLOGF(1) << "Failed to queue a USRPTR buffer to input queue";
-        NOTIFY_ERROR(kPlatformFailureError);
+        VPLOGF(1) << "Failed queue a USRPTR buffer to input queue";
         return false;
       }
-      frame->AddDestructionObserver(
-          base::DoNothingWithBoundArgs(std::move(writable_buffer)));
       break;
     }
     case V4L2_MEMORY_DMABUF: {
@@ -1423,10 +1424,15 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
         VPLOGF(1) << "Failed queue a DMABUF buffer to input queue";
         return false;
       }
-      // Keep |gmb_handle| alive as long as |frame| is alive so that fds passed
-      // to the driver are valid during encoding.
-      frame->AddDestructionObserver(base::BindOnce(
-          [](gfx::GpuMemoryBufferHandle) {}, std::move(gmb_handle)));
+
+      // TODO(b/266443239): Remove this workaround once RK3399 boards reaches
+      // EOL. v4lplugin holds v4l2_buffer in QBUF without duplicating the passed
+      // fds and resumes the QBUF request later after VIDIOC_QBUF returns. It is
+      // required to keep the passed fds valid until DQBUF is complete.
+      if (driver_name_ == "hantro-vpu") {
+        frame->AddDestructionObserver(base::BindOnce(
+            [](gfx::GpuMemoryBufferHandle) {}, std::move(gmb_handle)));
+      }
       break;
     }
     default:
@@ -1435,6 +1441,8 @@ bool V4L2VideoEncodeAccelerator::EnqueueInputRecord(
       return false;
   }
 
+  // Keep |frame| in |input_record| so that a client doesn't use |frame| until
+  // a driver finishes using it, that is, VIDIOC_DQBUF is called.
   InputRecord& input_record = input_buffer_map_[buffer_id];
   input_record.frame = frame;
   input_record.ip_output_buffer_index = frame_info.ip_output_buffer_index;
@@ -1535,7 +1543,7 @@ void V4L2VideoEncodeAccelerator::NotifyError(Error error) {
   VLOGF(1) << "error=" << error;
   DCHECK(child_task_runner_);
 
-  if (child_task_runner_->BelongsToCurrentThread()) {
+  if (child_task_runner_->RunsTasksInCurrentSequence()) {
     if (client_) {
       client_->NotifyError(error);
       client_ptr_factory_.reset();
@@ -1551,7 +1559,7 @@ void V4L2VideoEncodeAccelerator::NotifyError(Error error) {
 void V4L2VideoEncodeAccelerator::SetErrorState(Error error) {
   // We can touch encoder_state_ only if this is the encoder thread or the
   // encoder thread isn't running.
-  if (!encoder_task_runner_->BelongsToCurrentThread()) {
+  if (!encoder_task_runner_->RunsTasksInCurrentSequence()) {
     encoder_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&V4L2VideoEncodeAccelerator::SetErrorState,
                                   weak_this_, error));
@@ -1585,13 +1593,9 @@ void V4L2VideoEncodeAccelerator::RequestEncodingParametersChangeTask(
   if (current_bitrate_ != bitrate) {
     switch (bitrate.mode()) {
       case Bitrate::Mode::kVariable:
-        if (!device_->SetExtCtrls(V4L2_CTRL_CLASS_MPEG,
-                                  {V4L2ExtCtrl(V4L2_CID_MPEG_VIDEO_BITRATE_PEAK,
-                                               bitrate.peak_bps())})) {
-          VLOGF(1) << "Failed to change peak bitrate";
-          NOTIFY_ERROR(kPlatformFailureError);
-          return;
-        }
+        device_->SetExtCtrls(V4L2_CTRL_CLASS_MPEG,
+                             {V4L2ExtCtrl(V4L2_CID_MPEG_VIDEO_BITRATE_PEAK,
+                                          bitrate.peak_bps())});
 
         // Both the average and peak bitrate are to be set in VBR.
         // Only the average bitrate are to be set in CBR.

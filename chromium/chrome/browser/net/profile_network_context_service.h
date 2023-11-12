@@ -9,8 +9,8 @@
 #include <string>
 #include <utility>
 
-#include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -191,7 +191,6 @@ class ProfileNetworkContextService
 #endif
 
   // PrivacySandboxSettings::Observer:
-  void OnTrustTokenBlockingChanged(bool block_trust_tokens) override;
   void OnFirstPartySetsEnabledChanged(bool enabled) override;
 
   const raw_ptr<Profile> profile_;

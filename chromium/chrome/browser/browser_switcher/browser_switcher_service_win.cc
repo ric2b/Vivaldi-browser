@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
@@ -130,7 +130,7 @@ void SaveDataToFile(const std::string& data, base::FilePath path) {
     return;
   }
 
-  base::WriteFile(tmp_path, data.c_str(), data.size());
+  base::WriteFile(tmp_path, data);
 
   success = base::Move(tmp_path, path);
   UMA_HISTOGRAM_BOOLEAN("BrowserSwitcher.CacheFile.MoveSuccess", success);

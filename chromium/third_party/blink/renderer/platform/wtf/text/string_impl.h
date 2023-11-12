@@ -29,10 +29,10 @@
 
 #include <atomic>
 
-#include "base/callback_forward.h"
 #include "base/check_op.h"
 #include "base/containers/span.h"
 #include "base/dcheck_is_on.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
@@ -48,7 +48,7 @@
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_export.h"
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 #include "base/mac/scoped_cftyperef.h"
 
 typedef const struct __CFString* CFStringRef;
@@ -59,8 +59,6 @@ typedef const struct __CFString* CFStringRef;
 #endif
 
 namespace WTF {
-
-struct AlreadyHashed;
 
 enum TextCaseSensitivity {
   kTextCaseSensitive,
@@ -76,7 +74,8 @@ enum StripBehavior { kStripExtraWhiteSpace, kDoNotStripWhiteSpace };
 
 typedef bool (*CharacterMatchFunctionPtr)(UChar);
 typedef bool (*IsWhiteSpaceFunctionPtr)(UChar);
-typedef HashMap<wtf_size_t, StringImpl*, AlreadyHashed> StaticStringsTable;
+typedef HashMap<wtf_size_t, StringImpl*, AlreadyHashedTraits>
+    StaticStringsTable;
 
 // You can find documentation about this class in this doc:
 // https://docs.google.com/document/d/1kOCUlJdh2WJMJGDf-WoEQhmnjKLaOYRbiHz5TiGJl14/edit?usp=sharing
@@ -389,6 +388,8 @@ class WTF_EXPORT StringImpl {
 
   scoped_refptr<StringImpl> Truncate(wtf_size_t length);
 
+  unsigned LengthWithStrippedWhiteSpace() const;
+
   scoped_refptr<StringImpl> StripWhiteSpace();
   scoped_refptr<StringImpl> StripWhiteSpace(IsWhiteSpaceFunctionPtr);
   scoped_refptr<StringImpl> SimplifyWhiteSpace(
@@ -476,7 +477,7 @@ class WTF_EXPORT StringImpl {
                  wtf_size_t start = 0,
                  wtf_size_t length = UINT_MAX) const;
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   base::ScopedCFTypeRef<CFStringRef> CreateCFString();
 #endif
 #ifdef __OBJC__
@@ -571,6 +572,8 @@ class WTF_EXPORT StringImpl {
                                     const UChar* replacement,
                                     wtf_size_t replacement_length);
 
+  template <class UCharPredicate>
+  unsigned LengthWithStrippedMatchedCharacters(UCharPredicate) const;
   template <class UCharPredicate>
   scoped_refptr<StringImpl> StripMatchedCharacters(UCharPredicate);
   template <typename CharType, class UCharPredicate>
@@ -948,12 +951,12 @@ inline void StringImpl::PrependTo(BufferType& result,
 }
 
 template <typename T>
-struct DefaultHash;
+struct HashTraits;
 // Defined in string_hash.h.
 template <>
-struct DefaultHash<StringImpl*>;
+struct HashTraits<StringImpl*>;
 template <>
-struct DefaultHash<scoped_refptr<StringImpl>>;
+struct HashTraits<scoped_refptr<StringImpl>>;
 
 }  // namespace WTF
 

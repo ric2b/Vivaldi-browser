@@ -40,7 +40,7 @@
 #endif
 
 using base::test::ios::kWaitForActionTimeout;
-using chrome_test_util::BookmarkHomeDoneButton;
+using chrome_test_util::BookmarksHomeDoneButton;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::GoogleServicesSettingsButton;
 using chrome_test_util::PrimarySignInButton;
@@ -130,7 +130,20 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 // Tests the Google Services settings.
 - (void)testOpeningServices {
   [self openGoogleServicesSettings];
-  [self assertNonPersonalizedServices];
+  [self
+      assertCellWithTitleID:IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_CHROME_TEXT
+               detailTextID:
+                   IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_CHROME_DETAIL];
+  [self
+      assertCellWithTitleID:
+          IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_TEXT
+               detailTextID:
+                   IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_DETAIL];
+  [self
+      assertCellWithTitleID:
+          IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_SEARCH_SUGGESTIONS_TEXT
+               detailTextID:
+                   IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_SEARCH_SUGGESTIONS_DETAIL];
 }
 
 // Tests that disabling the "Allow Chrome sign-in" > "Sign out" option blocks
@@ -235,7 +248,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   // Verify bookmarks are cleared.
   [BookmarkEarlGreyUI openBookmarks];
   [BookmarkEarlGreyUI verifyEmptyBackgroundAppears];
-  [[EarlGrey selectElementWithMatcher:BookmarkHomeDoneButton()]
+  [[EarlGrey selectElementWithMatcher:BookmarksHomeDoneButton()]
       performAction:grey_tap()];
 
   // Turn on "Allow Chrome Sign-in" feature.
@@ -304,7 +317,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   // Verify bookmarks are available.
   [BookmarkEarlGreyUI openBookmarks];
   [BookmarkEarlGreyUI verifyEmptyBackgroundIsAbsent];
-  [[EarlGrey selectElementWithMatcher:BookmarkHomeDoneButton()]
+  [[EarlGrey selectElementWithMatcher:BookmarksHomeDoneButton()]
       performAction:grey_tap()];
 
   // Turn on "Allow Chrome Sign-in" feature.
@@ -544,24 +557,6 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 - (void)assertCellWithTitleID:(int)titleID detailTextID:(int)detailTextID {
   [[self cellElementInteractionWithTitleID:titleID detailTextID:detailTextID]
       assertWithMatcher:grey_notNil()];
-}
-
-// Asserts that the non-personalized service section is visible.
-- (void)assertNonPersonalizedServices {
-  [self
-      assertCellWithTitleID:
-          IDS_IOS_GOOGLE_SERVICES_SETTINGS_AUTOCOMPLETE_SEARCHES_AND_URLS_TEXT
-               detailTextID:
-                   IDS_IOS_GOOGLE_SERVICES_SETTINGS_AUTOCOMPLETE_SEARCHES_AND_URLS_DETAIL];
-  [self
-      assertCellWithTitleID:IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_CHROME_TEXT
-               detailTextID:
-                   IDS_IOS_GOOGLE_SERVICES_SETTINGS_IMPROVE_CHROME_DETAIL];
-  [self
-      assertCellWithTitleID:
-          IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_TEXT
-               detailTextID:
-                   IDS_IOS_GOOGLE_SERVICES_SETTINGS_BETTER_SEARCH_AND_BROWSING_DETAIL];
 }
 
 @end

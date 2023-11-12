@@ -4,6 +4,7 @@
 
 #include "chrome/updater/util/win_util.h"
 
+#include <regstr.h>
 #include <shellapi.h>
 #include <shlobj.h>
 #include <windows.h>
@@ -23,13 +24,17 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/system/sys_info.h"
+#include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
 #include "base/win/atl.h"
+#include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_localalloc.h"
+#include "chrome/updater/test/integration_tests_impl.h"
 #include "chrome/updater/test_scope.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_version.h"
+#include "chrome/updater/util/unittest_util.h"
 #include "chrome/updater/util/unittest_util_win.h"
 #include "chrome/updater/win/test/test_executables.h"
 #include "chrome/updater/win/test/test_strings.h"
@@ -38,6 +43,46 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
+
+namespace {
+
+// Allows access to all authenticated users on the machine.
+CSecurityDesc GetEveryoneDaclSecurityDescriptor(ACCESS_MASK accessmask) {
+  CSecurityDesc sd;
+  CDacl dacl;
+  dacl.AddAllowedAce(Sids::System(), accessmask);
+  dacl.AddAllowedAce(Sids::Admins(), accessmask);
+  dacl.AddAllowedAce(Sids::Interactive(), accessmask);
+
+  sd.SetDacl(dacl);
+  sd.MakeAbsolute();
+  return sd;
+}
+
+[[nodiscard]] bool CreateService(const std::wstring& service_name,
+                                 const std::wstring& display_name,
+                                 const std::wstring& command_line) {
+  SC_HANDLE scm = ::OpenSCManager(
+      nullptr, nullptr, SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE);
+  if (!scm) {
+    return false;
+  }
+
+  SC_HANDLE service = ::CreateService(
+      scm, service_name.c_str(), display_name.c_str(),
+      DELETE | SERVICE_QUERY_CONFIG | SERVICE_CHANGE_CONFIG,
+      SERVICE_WIN32_OWN_PROCESS, SERVICE_DEMAND_START, SERVICE_ERROR_NORMAL,
+      command_line.c_str(), nullptr, nullptr, nullptr, nullptr, nullptr);
+  if (!service && ::GetLastError() != ERROR_SERVICE_EXISTS) {
+    return false;
+  }
+
+  ::CloseServiceHandle(service);
+  ::CloseServiceHandle(scm);
+  return true;
+}
+
+}  // namespace
 
 TEST(WinUtil, GetDownloadProgress) {
   EXPECT_EQ(GetDownloadProgress(0, 50), 0);
@@ -116,7 +161,9 @@ TEST(WinUtil, ShellExecuteAndWait) {
   EXPECT_EQ(result.error(), HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND));
 
   result = ShellExecuteAndWait(
-      GetTestProcessCommandLine(GetTestScope()).GetProgram(), {}, {});
+      GetTestProcessCommandLine(GetTestScope(), test::GetTestName())
+          .GetProgram(),
+      {}, {});
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result.value(), DWORD{0});
 }
@@ -128,30 +175,13 @@ TEST(WinUtil, RunElevated) {
     return;
 
   const base::CommandLine test_process_cmd_line =
-      GetTestProcessCommandLine(GetTestScope());
+      GetTestProcessCommandLine(GetTestScope(), test::GetTestName());
   HResultOr<DWORD> result =
       RunElevated(test_process_cmd_line.GetProgram(),
                   test_process_cmd_line.GetArgumentsString());
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result.value(), DWORD{0});
 }
-
-namespace {
-
-// Allows access to all authenticated users on the machine.
-CSecurityDesc GetEveryoneDaclSecurityDescriptor(ACCESS_MASK accessmask) {
-  CSecurityDesc sd;
-  CDacl dacl;
-  dacl.AddAllowedAce(Sids::System(), accessmask);
-  dacl.AddAllowedAce(Sids::Admins(), accessmask);
-  dacl.AddAllowedAce(Sids::Interactive(), accessmask);
-
-  sd.SetDacl(dacl);
-  sd.MakeAbsolute();
-  return sd;
-}
-
-}  // namespace
 
 TEST(WinUtil, RunDeElevated_Exe) {
   if (!::IsUserAnAdmin() || !IsUACOn())
@@ -171,13 +201,17 @@ TEST(WinUtil, RunDeElevated_Exe) {
   ASSERT_NE(event.handle(), nullptr);
 
   base::CommandLine test_process_cmd_line =
-      GetTestProcessCommandLine(GetTestScope());
+      GetTestProcessCommandLine(GetTestScope(), test::GetTestName());
   test_process_cmd_line.AppendSwitchNative(kTestEventToSignalIfMediumIntegrity,
                                            event_name);
   EXPECT_HRESULT_SUCCEEDED(
       RunDeElevated(test_process_cmd_line.GetProgram().value(),
                     test_process_cmd_line.GetArgumentsString()));
   EXPECT_TRUE(event.TimedWait(TestTimeouts::action_max_timeout()));
+
+  EXPECT_TRUE(test::WaitFor(base::BindLambdaForTesting([&]() {
+    return test::FindProcesses(kTestProcessExecutableName).empty();
+  })));
 }
 
 TEST(WinUtil, GetOSVersion) {
@@ -347,59 +381,119 @@ TEST(WinUtil, StopGoogleUpdateProcesses) {
   EXPECT_TRUE(StopGoogleUpdateProcesses(GetTestScope()));
 }
 
-TEST(WinUtil, QuoteForCommandLineToArgvW) {
-  const struct {
-    const wchar_t* input_arg;
-    const wchar_t* expected_output_arg;
-  } test_cases[] = {
-      {L"", L"\"\""},
-      {L"abc = xyz", L"\"abc = xyz\""},
-      {L"C:\\AppData\\Local\\setup.exe", L"C:\\AppData\\Local\\setup.exe"},
-      {L"C:\\Program Files\\setup.exe", L"\"C:\\Program Files\\setup.exe\""},
-      {L"\"C:\\Program Files\\setup.exe\"",
-       L"\"\\\"C:\\Program Files\\setup.exe\\\"\""},
-  };
+TEST(WinUtil, IsGuid) {
+  EXPECT_FALSE(IsGuid(L"c:\\test\\dir"));
+  EXPECT_FALSE(IsGuid(L"a"));
+  EXPECT_FALSE(IsGuid(L"CA3045BFA6B14fb8A0EFA615CEFE452C"));
 
-  for (const auto& test_case : test_cases) {
-    EXPECT_EQ(QuoteForCommandLineToArgvW(test_case.input_arg),
-              test_case.expected_output_arg);
+  // Missing {}.
+  EXPECT_FALSE(IsGuid(L"CA3045BF-A6B1-4fb8-A0EF-A615CEFE452C"));
+
+  // Invalid char X.
+  EXPECT_FALSE(IsGuid(L"{XA3045BF-A6B1-4fb8-A0EF-A615CEFE452C}"));
+
+  // Invalid binary char 0x200.
+  EXPECT_FALSE(IsGuid(L"{\0x200a3045bf-a6b1-4fb8-a0ef-a615cefe452c}"));
+
+  // Missing -.
+  EXPECT_FALSE(IsGuid(L"{CA3045BFA6B14fb8A0EFA615CEFE452C}"));
+
+  // Double quotes.
+  EXPECT_FALSE(IsGuid(L"\"{ca3045bf-a6b1-4fb8-a0ef-a615cefe452c}\""));
+
+  EXPECT_TRUE(IsGuid(L"{CA3045BF-A6B1-4fb8-A0EF-A615CEFE452C}"));
+  EXPECT_TRUE(IsGuid(L"{ca3045bf-a6b1-4fb8-a0ef-a615cefe452c}"));
+}
+
+TEST(WinUtil, ForEachRegistryRunValueWithPrefix) {
+  constexpr int kRunEntries = 6;
+  constexpr wchar_t kRunEntryPrefix[] = L"win_util_unittest";
+
+  base::win::RegKey key;
+  ASSERT_EQ(key.Open(HKEY_CURRENT_USER, REGSTR_PATH_RUN, KEY_READ | KEY_WRITE),
+            ERROR_SUCCESS);
+
+  for (int count = 0; count < kRunEntries; ++count) {
+    std::wstring entry_name(kRunEntryPrefix);
+    entry_name.push_back(L'0' + count);
+    ASSERT_EQ(key.WriteValue(entry_name.c_str(), entry_name.c_str()),
+              ERROR_SUCCESS);
+  }
+
+  int count_entries = 0;
+  ForEachRegistryRunValueWithPrefix(
+      kRunEntryPrefix,
+      base::BindLambdaForTesting([&key, &count_entries, kRunEntryPrefix](
+                                     const std::wstring& run_name) {
+        EXPECT_TRUE(base::StartsWith(run_name, kRunEntryPrefix));
+        ++count_entries;
+        EXPECT_EQ(key.DeleteValue(run_name.c_str()), ERROR_SUCCESS);
+      }));
+  EXPECT_EQ(count_entries, kRunEntries);
+}
+
+TEST(WinUtil, DeleteRegValue) {
+  constexpr int kRegValues = 6;
+  constexpr wchar_t kRegValuePrefix[] = L"win_util_unittest";
+
+  base::win::RegKey key;
+  ASSERT_EQ(key.Open(HKEY_CURRENT_USER, REGSTR_PATH_RUN, KEY_READ | KEY_WRITE),
+            ERROR_SUCCESS);
+
+  for (int count = 0; count < kRegValues; ++count) {
+    std::wstring entry_name(kRegValuePrefix);
+    entry_name.push_back(L'0' + count);
+    ASSERT_EQ(key.WriteValue(entry_name.c_str(), entry_name.c_str()),
+              ERROR_SUCCESS);
+
+    EXPECT_TRUE(key.HasValue(entry_name.c_str()));
+    EXPECT_TRUE(DeleteRegValue(HKEY_CURRENT_USER, REGSTR_PATH_RUN, entry_name));
+    EXPECT_FALSE(key.HasValue(entry_name.c_str()));
+    EXPECT_TRUE(DeleteRegValue(HKEY_CURRENT_USER, REGSTR_PATH_RUN, entry_name));
   }
 }
 
-TEST(WinUtil, QuoteForCommandLineToArgvW_After_CommandLineToArgvW) {
-  const struct {
-    std::vector<std::wstring> input_args;
-    const wchar_t* expected_output;
-  } test_cases[] = {
-      {{L"abc=1"}, L"abc=1"},
-      {{L"abc=1", L"xyz=2"}, L"abc=1 xyz=2"},
-      {{L"abc=1", L"xyz=2", L"q"}, L"abc=1 xyz=2 q"},
-      {{L" abc=1  ", L"  xyz=2", L"q "}, L"abc=1 xyz=2 q"},
-      {{L"\"abc = 1\""}, L"\"abc = 1\""},
-      {{L"abc\" = \"1", L"xyz=2"}, L"\"abc = 1\" xyz=2"},
-      {{L"\"abc = 1\""}, L"\"abc = 1\""},
-      {{L"abc\" = \"1"}, L"\"abc = 1\""},
-      {{L"\\\\", L"\\\\\\\""}, L"\\\\ \\\\\\\""},
-  };
+TEST(WinUtil, ForEachServiceWithPrefix) {
+  if (!::IsUserAnAdmin()) {
+    return;
+  }
 
-  for (const auto& test_case : test_cases) {
-    std::wstring input_command_line =
-        base::StrCat({L"c:\\test\\process.exe ",
-                      base::JoinString(test_case.input_args, L" ")});
-    int num_args = 0;
-    base::win::ScopedLocalAllocTyped<wchar_t*> argv(
-        ::CommandLineToArgvW(&input_command_line[0], &num_args));
-    ASSERT_EQ(num_args - 1U, test_case.input_args.size());
+  constexpr int kNumServices = 6;
+  constexpr wchar_t kServiceNamePrefix[] = L"win_util_unittest";
 
-    std::wstring recreated_command_line;
-    for (int i = 1; i < num_args; ++i) {
-      recreated_command_line.append(QuoteForCommandLineToArgvW(argv.get()[i]));
+  for (int count = 0; count < kNumServices; ++count) {
+    std::wstring service_name(kServiceNamePrefix);
+    service_name.push_back(L'0' + count);
+    EXPECT_TRUE(
+        CreateService(service_name, service_name, L"C:\\temp\\temp.exe"));
+  }
 
-      if (i + 1 < num_args)
-        recreated_command_line.push_back(L' ');
-    }
+  int count_entries = 0;
+  ForEachServiceWithPrefix(
+      kServiceNamePrefix, kServiceNamePrefix,
+      base::BindLambdaForTesting([&count_entries, kServiceNamePrefix](
+                                     const std::wstring& service_name) {
+        EXPECT_TRUE(base::StartsWith(service_name, kServiceNamePrefix));
+        ++count_entries;
+        EXPECT_TRUE(DeleteService(service_name));
+      }));
+  EXPECT_EQ(count_entries, kNumServices);
+}
 
-    EXPECT_EQ(recreated_command_line, test_case.expected_output);
+TEST(WinUtil, DeleteService) {
+  if (!::IsUserAnAdmin()) {
+    return;
+  }
+
+  constexpr int kNumServices = 6;
+  constexpr wchar_t kServiceNamePrefix[] = L"win_util_unittest";
+
+  for (int count = 0; count < kNumServices; ++count) {
+    std::wstring service_name(kServiceNamePrefix);
+    service_name.push_back(L'0' + count);
+    ASSERT_TRUE(
+        CreateService(service_name, service_name, L"C:\\temp\\temp.exe"));
+    EXPECT_TRUE(DeleteService(service_name));
   }
 }
 

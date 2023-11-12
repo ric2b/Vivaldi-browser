@@ -21,7 +21,8 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 using l10n_util::GetNSString;
@@ -66,7 +67,7 @@ using l10n_util::GetNSString;
                                 : [UIImage imageNamed:@"copy_link_url"];
 
   if (IsVivaldiRunning())
-    image = [UIImage systemImageNamed:@"link.badge.plus"]; // End Vivaldi
+    image = [UIImage imageNamed:vMenuLink]; // End Vivaldi
 
   return [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_COPY_LINK_ACTION_TITLE)
@@ -81,8 +82,9 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kShareSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"share"];
+
   if (IsVivaldiRunning())
-    image = [UIImage systemImageNamed:@"square.and.arrow.up"]; // End Vivaldi
+    image = [UIImage imageNamed:vMenuShare]; // End Vivaldi
 
   return
       [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_SHARE_BUTTON_LABEL)
@@ -95,10 +97,29 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kPinSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"pin"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuPin]; // End Vivaldi
+
   return [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_PINTAB)
                 image:image
                  type:MenuActionType::PinTab
+                block:block];
+}
+
+- (UIAction*)actionToUnpinTabWithBlock:(ProceduralBlock)block {
+  UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
+                                      kPinSlashSymbol, kSymbolActionPointSize)
+                                : [UIImage imageNamed:@"unpin"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuUnpin]; // End Vivaldi
+
+  return [self
+      actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_UNPINTAB)
+                image:image
+                 type:MenuActionType::UnpinTab
                 block:block];
 }
 
@@ -130,7 +151,7 @@ using l10n_util::GetNSString;
 
   if (IsVivaldiRunning())
     image =
-      [UIImage systemImageNamed:@"rectangle.center.inset.filled.badge.plus"];
+      [UIImage imageNamed:vMenuNewTab];
   // End Vivaldi
 
   return [self actionWithTitle:l10n_util::GetNSString(
@@ -153,6 +174,10 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kHideActionSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"remove"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage systemImageNamed:@"trash"]; // End Vivaldi
+
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_REMOVE_ACTION_TITLE)
                       image:image
@@ -168,7 +193,7 @@ using l10n_util::GetNSString;
                                 : [UIImage imageNamed:@"edit"];
 
   if (IsVivaldiRunning())
-    image = [UIImage systemImageNamed:@"pencil"]; // End Vivaldi
+    image = [UIImage imageNamed:vMenuEdit]; // End Vivaldi
 
   return [self actionWithTitle:l10n_util::GetNSString(IDS_IOS_EDIT_ACTION_TITLE)
                          image:image
@@ -180,6 +205,10 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kHideActionSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"remove"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage systemImageNamed:@"trash"]; // End Vivaldi
+
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_RECENT_TABS_HIDE_MENU_OPTION)
@@ -195,17 +224,16 @@ using l10n_util::GetNSString;
   if (IsVivaldiRunning()) {
     return [self
         actionWithTitle:GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
-                  image:[UIImage systemImageNamed:@"move.3d"]
+                  image:[UIImage imageNamed:vMenuMove]
                    type:MenuActionType::Move
                   block:block];
-  } else {
+  } // End Vivaldi
+
   return [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
                 image:[UIImage imageNamed:@"move_folder"]
                  type:MenuActionType::Move
                 block:block];
-  } // End Vivaldi
-
 }
 
 - (UIAction*)actionToMarkAsReadWithBlock:(ProceduralBlock)block {
@@ -213,6 +241,10 @@ using l10n_util::GetNSString;
                        ? DefaultSymbolWithPointSize(kMarkAsReadActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"mark_read"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuEyeOn]; // End Vivaldi
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_MARK_AS_READ_ACTION)
                          image:image
@@ -225,6 +257,10 @@ using l10n_util::GetNSString;
                        ? DefaultSymbolWithPointSize(kMarkAsUnreadActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"remove"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuEyeOff]; // End Vivaldi
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_MARK_AS_UNREAD_ACTION)
                          image:image
@@ -241,6 +277,9 @@ using l10n_util::GetNSString;
   ProceduralBlock completionBlock =
       [self recordMobileWebContextMenuOpenTabActionWithBlock:block];
 
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuOpenOfflineVersion]; // End Vivaldi
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_READING_LIST_OPEN_OFFLINE_BUTTON)
                          image:image
@@ -253,6 +292,10 @@ using l10n_util::GetNSString;
                        ? DefaultSymbolWithPointSize(kReadLaterActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"read_later"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuAddToReadingList]; // End Vivaldi
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_CONTENT_CONTEXT_ADDTOREADINGLIST)
                          image:image
@@ -265,6 +308,10 @@ using l10n_util::GetNSString;
                        ? DefaultSymbolWithPointSize(kAddBookmarkActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"bookmark"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuAddBookmark]; // End Vivaldi
+
   return [self actionWithTitle:l10n_util::GetNSString(
                                    IDS_IOS_CONTENT_CONTEXT_ADDTOBOOKMARKS)
                          image:image
@@ -276,6 +323,10 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kEditActionSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"bookmark"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuEditBookmark]; // End Vivaldi
+
   return [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT)
                 image:image
@@ -287,6 +338,10 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kXMarkSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"close"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuClose]; // End Vivaldi
+
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_CLOSETAB)
                 image:image
@@ -301,6 +356,10 @@ using l10n_util::GetNSString;
                        ? DefaultSymbolWithPointSize(kSaveImageActionSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"download"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuSave]; // End Vivaldi
+
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE)
                 image:image
@@ -313,6 +372,10 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kCopyActionSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"copy"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuCopy]; // End Vivaldi
+
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_COPYIMAGE)
                 image:image
@@ -327,6 +390,10 @@ using l10n_util::GetNSString;
       UseSymbols() ? CustomSymbolWithPointSize(kPhotoBadgeMagnifyingglassSymbol,
                                                kSymbolActionPointSize)
                    : [UIImage imageNamed:@"search_image"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuSearchForImage]; // End Vivaldi
+
   UIAction* action = [self actionWithTitle:title
                                      image:image
                                       type:MenuActionType::SearchImage
@@ -338,6 +405,10 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? DefaultSymbolWithPointSize(
                                       kXMarkSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"close"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuClose]; // End Vivaldi
+
   UIAction* action =
       [self actionWithTitle:l10n_util::GetNSString(
                                 IDS_IOS_CONTENT_CONTEXT_CLOSEALLTABS)
@@ -353,6 +424,10 @@ using l10n_util::GetNSString;
                        ? DefaultSymbolWithPointSize(kCheckmarkCircleSymbol,
                                                     kSymbolActionPointSize)
                        : [UIImage imageNamed:@"select"];
+
+  if (IsVivaldiRunning())
+    image = [UIImage imageNamed:vMenuSelect]; // End Vivaldi
+
   UIAction* action = [self
       actionWithTitle:l10n_util::GetNSString(IDS_IOS_CONTENT_CONTEXT_SELECTTABS)
                 image:image
@@ -365,9 +440,12 @@ using l10n_util::GetNSString;
   UIImage* image = UseSymbols() ? CustomSymbolWithPointSize(
                                       kCameraLensSymbol, kSymbolActionPointSize)
                                 : [UIImage imageNamed:@"lens_icon"];
+  int actionTitleMessageId =
+      base::FeatureList::IsEnabled(kEnableLensContextMenuAltText)
+          ? IDS_IOS_CONTEXT_MENU_SEARCHIMAGEWITHGOOGLE_ALT_TEXT
+          : IDS_IOS_CONTEXT_MENU_SEARCHIMAGEWITHGOOGLE;
   UIAction* action =
-      [self actionWithTitle:l10n_util::GetNSString(
-                                IDS_IOS_CONTEXT_MENU_SEARCHIMAGEWITHGOOGLE)
+      [self actionWithTitle:l10n_util::GetNSString(actionTitleMessageId)
                       image:image
                        type:MenuActionType::SearchImageWithLens
                       block:block];

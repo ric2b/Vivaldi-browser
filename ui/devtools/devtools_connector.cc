@@ -142,8 +142,8 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
   }
   if (need_defaults) {
     // Set defaults in prefs, based on DevToolsWindow::CreateDevToolsBrowser
-    DictionaryPrefUpdate update(prefs, prefs::kAppWindowPlacement);
-    base::Value* wp_prefs = update.Get();
+    ScopedDictPrefUpdate update(prefs, prefs::kAppWindowPlacement);
+    base::Value::Dict& wp_prefs = update.Get();
     base::Value::Dict dev_tools_defaults;
     dev_tools_defaults.Set("left", 100);
     dev_tools_defaults.Set("top", 100);
@@ -152,7 +152,7 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
     dev_tools_defaults.Set("maximized", false);
     dev_tools_defaults.Set("always_on_top", false);
 
-    wp_prefs->GetDict().Set(DevToolsWindow::kDevToolsApp,
+    wp_prefs.Set(DevToolsWindow::kDevToolsApp,
                             std::move(dev_tools_defaults));
   }
 

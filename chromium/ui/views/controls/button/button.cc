@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/debug/alias.h"
+#include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -151,7 +151,7 @@ Button::ButtonState Button::GetButtonStateFrom(ui::NativeTheme::State state) {
     case ui::NativeTheme::kPressed:
       return Button::STATE_PRESSED;
     case ui::NativeTheme::kNumStates:
-      NOTREACHED();
+      NOTREACHED_NORETURN();
   }
   return Button::STATE_NORMAL;
 }
@@ -176,16 +176,9 @@ void Button::SetCallback(PressedCallback callback) {
   callback_ = std::move(callback);
 }
 
-void Button::SetAccessibleName(const std::u16string& name) {
-  if (name == accessible_name_)
-    return;
-  accessible_name_ = name;
-  OnPropertyChanged(&accessible_name_, kPropertyEffectsNone);
-  NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
-}
-
 const std::u16string& Button::GetAccessibleName() const {
-  return accessible_name_.empty() ? tooltip_text_ : accessible_name_;
+  return View::GetAccessibleName().empty() ? tooltip_text_
+                                           : View::GetAccessibleName();
 }
 
 Button::ButtonState Button::GetState() const {
@@ -196,9 +189,7 @@ void Button::SetState(ButtonState state) {
   if (state == state_)
     return;
 
-  if (animate_on_state_change_ &&
-      (!is_throbbing_ || !hover_animation_.is_animating())) {
-    is_throbbing_ = false;
+  if (animate_on_state_change_) {
     if ((state_ == STATE_HOVERED) && (state == STATE_NORMAL)) {
       // For HOVERED -> NORMAL, animate from hovered (1) to not hovered (0).
       hover_animation_.Hide();
@@ -230,20 +221,6 @@ void Button::SetTag(int tag) {
     return;
   tag_ = tag;
   OnPropertyChanged(&tag_, kPropertyEffectsNone);
-}
-
-void Button::StartThrobbing(int cycles_til_stop) {
-  if (!animate_on_state_change_)
-    return;
-  is_throbbing_ = true;
-  hover_animation_.StartThrobbing(cycles_til_stop);
-}
-
-void Button::StopThrobbing() {
-  if (hover_animation_.is_animating()) {
-    hover_animation_.Stop();
-    SchedulePaint();
-  }
 }
 
 void Button::SetAnimationDuration(base::TimeDelta duration) {
@@ -717,7 +694,6 @@ void Button::OnEnabledChanged() {
 }
 
 BEGIN_METADATA(Button, View)
-ADD_PROPERTY_METADATA(std::u16string, AccessibleName)
 ADD_PROPERTY_METADATA(PressedCallback, Callback)
 ADD_PROPERTY_METADATA(bool, AnimateOnStateChange)
 ADD_PROPERTY_METADATA(bool, HasInkDropActionOnClick)

@@ -16,6 +16,7 @@
 #include "base/notreached.h"
 #include "base/task/bind_post_task.h"
 #include "base/threading/thread_checker.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/viz/common/features.h"
 #include "components/viz/common/frame_sinks/blit_request.h"
@@ -54,20 +55,24 @@
 #include "skia/ext/rgba_to_yuva.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/libyuv/include/libyuv/planar_functions.h"
+#include "third_party/skia/include/core/SkAlphaType.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
+#include "third_party/skia/include/core/SkColorType.h"
 #include "third_party/skia/include/core/SkDeferredDisplayList.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkPromiseImageTexture.h"
 #include "third_party/skia/include/core/SkSamplingOptions.h"
 #include "third_party/skia/include/core/SkSwizzle.h"
 #include "third_party/skia/include/core/SkYUVAInfo.h"
+#include "third_party/skia/include/gpu/GpuTypes.h"
 #include "third_party/skia/include/gpu/GrTypes.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/gpu_fence_handle.h"
+#include "ui/gl/gl_features.h"
 #include "ui/gl/gl_fence.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/presenter.h"
@@ -211,7 +216,7 @@ std::unique_ptr<gpu::SharedImageFactory> CreateSharedImageFactory(
   return std::make_unique<gpu::SharedImageFactory>(
       deps->GetGpuPreferences(), deps->GetGpuDriverBugWorkarounds(),
       deps->GetGpuFeatureInfo(), deps->GetSharedContextState().get(),
-      deps->GetSharedImageManager(), deps->GetGpuImageFactory(), memory_tracker,
+      deps->GetSharedImageManager(), memory_tracker,
       /*is_for_display_compositor=*/true);
 }
 
@@ -349,18 +354,12 @@ SkiaOutputSurfaceImplOnGpu::~SkiaOutputSurfaceImplOnGpu() {
   // first.
   output_device_.reset();
 
-  // Destroy solid color shared images created by this class.
-  for (gpu::Mailbox& mb : solid_color_images_) {
-    shared_image_factory_->DestroySharedImage(mb);
-  }
-
-  // Destroy shared images created by this class.
-  for (auto& entry : skia_representations_) {
-    shared_image_factory_->DestroySharedImage(entry.first);
-  }
   // Clear any open accesses before destroying the skia representations.
   overlay_pass_accesses_.clear();
   skia_representations_.clear();
+
+  // Destroy shared images created by this class.
+  shared_image_factory_->DestroyAllSharedImages(has_context);
 
   // Since SharedImageFactory also has a reference to ImplOnGpu's member
   // SharedContextState, we need to explicitly invoke the factory's destructor
@@ -414,7 +413,7 @@ void SkiaOutputSurfaceImplOnGpu::DrawOverdraw(
   DCHECK(overdraw_ddl);
 
   sk_sp<SkSurface> overdraw_surface = SkSurface::MakeRenderTarget(
-      gr_context(), overdraw_ddl->characterization(), SkBudgeted::kNo);
+      gr_context(), overdraw_ddl->characterization(), skgpu::Budgeted::kNo);
   overdraw_surface->draw(overdraw_ddl);
   destroy_after_swap_.push_back(std::move(overdraw_ddl));
 
@@ -1144,24 +1143,18 @@ void SkiaOutputSurfaceImplOnGpu::CopyOutputNV12(
   }
 
   // Create a destination for the scaled & clipped result:
-  auto intermediate_representation = CreateSharedImageRepresentationSkia(
-      ResourceFormat::RGBA_8888, intermediate_dst_size, color_space);
-  if (!intermediate_representation) {
-    DVLOG(1) << "failed to create shared image representation for the "
-                "intermediate surface";
+  auto intermediate_surface = SkSurface::MakeRenderTarget(
+      gr_context(), skgpu::Budgeted::kYes,
+      SkImageInfo::Make(gfx::SizeToSkISize(intermediate_dst_size),
+                        SkColorType::kRGBA_8888_SkColorType,
+                        SkAlphaType::kPremul_SkAlphaType,
+                        color_space.ToSkColorSpace()));
+
+  if (!intermediate_surface) {
+    DVLOG(1) << "failed to create surface for the intermediate texture";
     // Send empty result.
     return;
   }
-
-  SkSurfaceProps surface_props{0, kUnknown_SkPixelGeometry};
-  std::vector<GrBackendSemaphore> begin_semaphores;
-  std::vector<GrBackendSemaphore> end_semaphores;
-
-  auto intermediate_scoped_write =
-      intermediate_representation->BeginScopedWriteAccess(
-          /*final_msaa_count=*/1, surface_props, &begin_semaphores,
-          &end_semaphores,
-          gpu::SharedImageRepresentation::AllowUnclearedAccess::kYes);
 
   absl::optional<SkVector> scaling;
   if (request->is_scaled()) {
@@ -1171,20 +1164,18 @@ void SkiaOutputSurfaceImplOnGpu::CopyOutputNV12(
                                  request->scale_from().y());
   }
 
-  intermediate_scoped_write->surface()->wait(begin_semaphores.size(),
-                                             begin_semaphores.data());
-
   RenderSurface(surface, src_rect, scaling,
                 is_downscale_or_identity_in_both_dimensions,
-                intermediate_scoped_write->surface());
+                intermediate_surface.get());
 
   if (request->has_blit_request()) {
-    BlendBitmapOverlays(intermediate_scoped_write->surface()->getCanvas(),
+    BlendBitmapOverlays(intermediate_surface->getCanvas(),
                         request->blit_request());
   }
 
-  auto intermediate_image =
-      intermediate_scoped_write->surface()->makeImageSnapshot();
+  intermediate_surface->flush();
+
+  auto intermediate_image = intermediate_surface->makeImageSnapshot();
   if (!intermediate_image) {
     DLOG(ERROR) << "failed to retrieve `intermediate_image`.";
     return;
@@ -1283,16 +1274,6 @@ void SkiaOutputSurfaceImplOnGpu::CopyOutputNV12(
       FailedSkiaFlush("CopyOutputNV12 plane_surfaces[i]->flush()");
       return;
     }
-  }
-
-  should_submit |= !end_semaphores.empty();
-
-  intermediate_representation->SetCleared();
-  if (!FlushSurface(intermediate_scoped_write->surface(), end_semaphores,
-                    intermediate_scoped_write->TakeEndState())) {
-    // TODO(penghuang): handle vulkan device lost.
-    FailedSkiaFlush("CopyOutputNV12 dest_surface->flush()");
-    return;
   }
 
   if (should_submit && !gr_context()->submit()) {
@@ -1651,6 +1632,10 @@ void SkiaOutputSurfaceImplOnGpu::SetGpuVSyncEnabled(bool enabled) {
   output_device_->SetGpuVSyncEnabled(enabled);
 }
 
+void SkiaOutputSurfaceImplOnGpu::SetVSyncDisplayID(int64_t display_id) {
+  output_device_->SetVSyncDisplayID(display_id);
+}
+
 void SkiaOutputSurfaceImplOnGpu::SetFrameRate(float frame_rate) {
   if (gl_surface_)
     gl_surface_->SetFrameRate(frame_rate);
@@ -1736,6 +1721,12 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForGL() {
       }
     }
 
+#if BUILDFLAG(IS_MAC)
+    if (features::UseGpuVsync()) {
+      presenter_->SetVSyncDisplayID(renderer_settings_.display_id);
+    }
+#endif
+
     if (MakeCurrent(/*need_framebuffer=*/true)) {
       if (presenter_) {
         DCHECK(presenter_->IsSurfaceless());
@@ -1748,7 +1739,12 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForGL() {
             shared_gpu_deps_->memory_tracker(),
             GetDidSwapBuffersCompleteCallback());
 #else   // !BUILDFLAG(IS_WIN)
-        NOTIMPLEMENTED();
+        DCHECK(presenter_->SupportsDCLayers());
+        output_device_ = std::make_unique<SkiaOutputDeviceDCompPresenter>(
+            shared_image_factory_.get(),
+            shared_image_representation_factory_.get(), context_state_.get(),
+            presenter_, feature_info_, shared_gpu_deps_->memory_tracker(),
+            GetDidSwapBuffersCompleteCallback());
 #endif  // BUILDFLAG(IS_WIN)
       } else {
         if (dependency_->NeedsSupportForExternalStencil()) {
@@ -1760,7 +1756,6 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForGL() {
 #if BUILDFLAG(IS_WIN)
           if (gl_surface_->SupportsDCLayers()) {
             output_device_ = std::make_unique<SkiaOutputDeviceDCompGLSurface>(
-                dependency_->GetMailboxManager(),
                 shared_image_representation_factory_.get(),
                 context_state_.get(), gl_surface_, feature_info_,
                 shared_gpu_deps_->memory_tracker(),
@@ -1910,8 +1905,8 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForDawn() {
 #elif BUILDFLAG(IS_WIN)
     std::unique_ptr<SkiaOutputDeviceDawn> output_device =
         std::make_unique<SkiaOutputDeviceDawn>(
-            dawn_context_provider_, dependency_->GetSurfaceHandle(),
-            gfx::SurfaceOrigin::kTopLeft, shared_gpu_deps_->memory_tracker(),
+            dawn_context_provider_, gfx::SurfaceOrigin::kTopLeft,
+            shared_gpu_deps_->memory_tracker(),
             GetDidSwapBuffersCompleteCallback());
     const gpu::SurfaceHandle child_window_handle =
         output_device->GetChildSurfaceHandle();

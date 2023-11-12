@@ -9,28 +9,36 @@
 
 #include "base/values.h"
 
-namespace policy {
+namespace policy::dlp_test_util {
 
-namespace dlp_test_util {
-// For testing purposes, the following functions are used for creating the value
-// object of DataLeakPreventionRulesList policy.
+// Data structure representing a DLP rule.
+class DlpRule {
+ public:
+  DlpRule(const std::string& name,
+          const std::string& description,
+          const std::string& id);
+  DlpRule();
+  ~DlpRule();
+  DlpRule(const DlpRule& other);
+  DlpRule& AddSrcUrl(const std::string& url);
+  DlpRule& AddDstUrl(const std::string& url);
+  DlpRule& AddDstComponent(const std::string& component);
+  DlpRule& AddRestriction(const std::string& type, const std::string& level);
 
-base::Value CreateSources(base::Value urls);
+  // Return a dictionary version of the rule that can be use to set up the
+  // DataLeakPreventionRulesList policy.
+  base::Value::Dict Create() const;
 
-base::Value CreateDestinations(base::Value urls, base::Value components);
+ private:
+  const std::string name;
+  const std::string description;
+  const std::string id;
+  std::vector<std::string> src_urls;
+  std::vector<std::string> dst_urls;
+  std::vector<std::string> dst_components;
+  std::vector<std::pair<std::string, std::string>> restrictions;
+};
 
-base::Value CreateRestrictionWithLevel(const std::string& restriction,
-                                       const std::string& level);
-
-base::Value CreateRule(const std::string& name,
-                       const std::string& desc,
-                       base::Value src_urls,
-                       absl::optional<base::Value> dst_urls,
-                       absl::optional<base::Value> dst_components,
-                       base::Value restrictions);
-
-}  // namespace dlp_test_util
-
-}  // namespace policy
+}  // namespace policy::dlp_test_util
 
 #endif  // CHROME_BROWSER_CHROMEOS_POLICY_DLP_DLP_RULES_MANAGER_TEST_UTILS_H_

@@ -3,7 +3,7 @@
 #import "ios/ui/settings/sync/vivaldi_sync_login_view_controller.h"
 
 #import "base/mac/foundation_util.h"
-#import "ios/chrome/browser/ui/settings/cells/passphrase_error_item.h"
+#import "ios/ui/table_view/cells/vivaldi_input_error_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_button_item.h"
 #import "ios/chrome/common/string_util.h"
@@ -13,7 +13,6 @@
 #import "ios/ui/table_view/cells/vivaldi_table_view_illustrated_item.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -35,7 +34,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 };
 
 @interface VivaldiSyncLoginViewController () <
-    UITextFieldDelegate,
     UITextViewDelegate>
 
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* usernameItem;
@@ -63,19 +61,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)viewDidLoad {
   [super viewDidLoad];
   [self loadModel];
-  self.title = l10n_util::GetNSString(IDS_PREFS_VIVALDI_SYNC);
+  self.title = l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_IN);
 }
 
-- (void)loginFailed {
-  if ([self hasErrorCell]) {
-    [self removeErrorCell];
-  }
-  // Insert cell at top of section
-  [self.tableViewModel insertItem:[self errorCellItemWithMessage:
-      l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_IN_FAILED)]
-      inSectionWithIdentifier:SectionIdentifierUsernamePassword
-      atIndex:0];
-  [self reloadSection:SectionIdentifierUsernamePassword];
+- (void)loginFailed:(NSString*)errorMessage {
+  [self showErrorCellWithMessage:errorMessage
+                         section:SectionIdentifierUsernamePassword
+                        itemType:ItemTypeError];
 }
 
 #pragma mark - TableViewModel
@@ -102,7 +94,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
         [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline],
     NSParagraphStyleAttributeName : paragraphStyle
   };
-  // TODO(tomas@vivaldi.com): Use URL for create account flow
+  // Using empty string since this is handled in the function
   NSDictionary* linkAttributes = @{
       NSLinkAttributeName : [NSURL URLWithString:@""],
   };
@@ -172,6 +164,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
   UITableViewCell* cell = [super tableView:tableView
                      cellForRowAtIndexPath:indexPath];
+  cell.selectionStyle = UITableViewCellSelectionStyleNone;
   ItemType itemType = static_cast<ItemType>(
       [self.tableViewModel itemTypeForIndexPath:indexPath]);
 
@@ -185,34 +178,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
           forControlEvents:UIControlEventTouchUpInside];
       break;
     }
-    case ItemTypeUsername: {
-      VivaldiTableViewTextEditCell* editCell =
-          base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
-      editCell.selectionStyle = UITableViewCellSelectionStyleNone;
-      editCell.textField.delegate = self;
-      break;
-    }
     case ItemTypePassword: {
       VivaldiTableViewTextEditCell* editCell =
           base::mac::ObjCCast<VivaldiTableViewTextEditCell>(cell);
       [editCell.identifyingIconButton addTarget:self
                                          action:@selector(togglePasswordMasking)
                                forControlEvents:UIControlEventTouchUpInside];
-      editCell.selectionStyle = UITableViewCellSelectionStyleNone;
       break;
     }
     case ItemTypeTitle: {
       VivaldiTableViewIllustratedCell* titleCell =
           base::mac::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
-      titleCell.selectionStyle = UITableViewCellSelectionStyleNone;
       titleCell.subtitleLabel.delegate = self;
       break;
     }
-    case ItemTypeHeader:
-      cell.selectionStyle = UITableViewCellSelectionStyleNone;
-      break;
-    case ItemTypeError:
-      cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    default:
       break;
   }
 
@@ -225,10 +205,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
     shouldInteractWithURL:(NSURL*)URL
                   inRange:(NSRange)characterRange
               interaction:(UITextItemInteraction)interaction {
-  if (URL) {
-    // TODO(tomas@vivaldi.com): Implement create account flow
-  }
-  // Returns NO as the app is handling the opening of the URL.
+  [self.delegate createAccountLinkPressed];
+
+  // Return NO, we don't want to try to open the URL
   return NO;
 }
 
@@ -237,6 +216,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)togglePasswordMasking {
   self.passwordItem.textFieldSecureTextEntry =
       !self.passwordItem.textFieldSecureTextEntry;
+  self.passwordItem.identifyingIcon =
+      self.passwordItem.textFieldSecureTextEntry ?
+        [UIImage imageNamed:kShowPasswordIcon] :
+        [UIImage imageNamed:kHidePasswordIcon];
   [self reconfigureCellsForItems:@[ self.passwordItem ]];
 }
 
@@ -249,62 +232,18 @@ typedef NS_ENUM(NSInteger, ItemType) {
     errorMessage = l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_PASSWORD_REQUIRED);
   }
 
+    [self removeErrorCell:SectionIdentifierUsernamePassword
+                 itemType:ItemTypeError];
   if (errorMessage) {
-    if ([self hasErrorCell]) {
-      [self removeErrorCell];
-    }
-    // Insert cell at top of section
-    [self.tableViewModel insertItem:[self errorCellItemWithMessage:errorMessage]
-        inSectionWithIdentifier:SectionIdentifierUsernamePassword
-        atIndex:0];
-    [self reloadSection:SectionIdentifierUsernamePassword];
+    [self showErrorCellWithMessage:errorMessage
+                           section:SectionIdentifierUsernamePassword
+                          itemType:ItemTypeError];
     return;
-  } else if ([self hasErrorCell]) {
-    [self removeErrorCell];
-    [self reloadSection:SectionIdentifierUsernamePassword];
   }
 
   [self.delegate logInButtonPressed:self.usernameItem.textFieldValue
                            password:self.passwordItem.textFieldValue
                        savePassword:YES];
-}
-
-- (NSInteger)indexOfItemWithType:(NSInteger)itemType {
-  NSIndexPath* indexPath = [self.tableViewModel indexPathForItemType:itemType
-      sectionIdentifier:SectionIdentifierUsernamePassword];
-  return indexPath.row;
-}
-
-- (BOOL)hasErrorCell {
-  return [self.tableViewModel hasItemForItemType:ItemTypeError
-      sectionIdentifier:SectionIdentifierUsernamePassword];
-}
-
-- (void)removeErrorCell {
-  TableViewModel* model = self.tableViewModel;
-  if ([self hasErrorCell]) {
-    NSIndexPath* path =
-        [model indexPathForItemType:ItemTypeError
-                  sectionIdentifier:SectionIdentifierUsernamePassword];
-    [model removeItemWithType:ItemTypeError
-        fromSectionWithIdentifier:SectionIdentifierUsernamePassword];
-    [self.tableView deleteRowsAtIndexPaths:@[ path ]
-                          withRowAnimation:UITableViewRowAnimationAutomatic];
-  }
-}
-
-- (void)reloadSection:(NSInteger)section {
-    NSUInteger index = [self.tableViewModel
-      sectionForSectionIdentifier:section];
-    [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:index]
-                withRowAnimation:UITableViewRowAnimationAutomatic];
-}
-
-- (TableViewItem*)errorCellItemWithMessage:(NSString*)errorMessage {
-  PassphraseErrorItem* item =
-      [[PassphraseErrorItem alloc] initWithType:ItemTypeError];
-  item.text = errorMessage;
-  return item;
 }
 
 @end

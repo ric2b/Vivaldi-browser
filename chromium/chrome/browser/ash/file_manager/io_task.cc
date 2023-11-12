@@ -6,13 +6,15 @@
 
 #include <vector>
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "storage/browser/file_system/file_system_url.h"
 
 namespace file_manager::io_task {
+
+void IOTask::Resume(ResumeParams) {}
 
 EntryStatus::EntryStatus(storage::FileSystemURL file_url,
                          absl::optional<base::File::Error> file_error)
@@ -27,6 +29,10 @@ ProgressStatus::~ProgressStatus() = default;
 
 ProgressStatus::ProgressStatus(ProgressStatus&& other) = default;
 ProgressStatus& ProgressStatus::operator=(ProgressStatus&& other) = default;
+
+bool ProgressStatus::IsPaused() const {
+  return state == State::kPaused;
+}
 
 bool ProgressStatus::IsCompleted() const {
   return state == State::kSuccess || state == State::kError ||

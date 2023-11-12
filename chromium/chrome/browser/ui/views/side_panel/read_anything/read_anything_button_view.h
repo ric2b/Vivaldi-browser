@@ -5,7 +5,9 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_READ_ANYTHING_READ_ANYTHING_BUTTON_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_READ_ANYTHING_READ_ANYTHING_BUTTON_VIEW_H_
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
+#include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/view.h"
@@ -19,6 +21,7 @@
 //
 class ReadAnythingButtonView : public views::View {
  public:
+  METADATA_HEADER(ReadAnythingButtonView);
   ReadAnythingButtonView(const views::ImageButton::PressedCallback callback,
                          const gfx::VectorIcon& icon,
                          int icon_size,

@@ -6,7 +6,7 @@
 
 #include <queue>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "dbus/exported_object.h"
@@ -115,6 +115,7 @@ class DEVICE_BLUETOOTH_EXPORT FlossAdminClient : public FlossDBusClient {
   std::queue<base::OnceClosure> initialized_callbacks_;
   bool client_registered_ = false;
 
+  void OnMethodsExported();
   void HandleCallbackRegistered(DBusResult<uint32_t> result);
 
   template <typename R, typename... Args>

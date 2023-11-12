@@ -563,7 +563,7 @@ const CGFloat kLocationLabelVerticalOffset = -1;
 }
 
 #pragma mark - VIVALDI
-#pragma mark - ActivityServicePositioner
+#pragma mark - SharingPositioner
 
 - (UIView*)sourceView {
   return self.trailingButton;

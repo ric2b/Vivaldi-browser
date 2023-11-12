@@ -7,13 +7,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/allocator/buildflags.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -23,6 +23,7 @@
 #include "base/strings/pattern.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -113,9 +114,7 @@
 #include "ui/display/screen.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-#include "base/allocator/partition_alloc_features.h"
-#include "base/allocator/partition_allocator/partition_alloc_config.h"
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(USE_STARSCAN)
 #include "base/allocator/partition_allocator/starscan/pcscan.h"
 #endif
 
@@ -311,6 +310,26 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, DidStopLoadingDetails) {
             load_observer.controller_);
 }
 
+// Regression test for https://crbug.com/1405036
+// Dumping the accessibility tree should not crash, even if it has not received
+// an ID through a renderer tree yet.
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       DumpAccessibilityTreeWithoutTreeID) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  LoadStopNotificationObserver load_observer(
+      &shell()->web_contents()->GetController());
+  EXPECT_TRUE(
+      NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
+  load_observer.Wait();
+  std::string expected = "-";
+
+  std::vector<ui::AXPropertyFilter> property_filters;
+  EXPECT_EQ(
+      shell()->web_contents()->DumpAccessibilityTree(false, property_filters),
+      expected);
+}
+
 // Test that DidStopLoading includes the correct URL in the details when a
 // pending entry is present.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -415,13 +434,13 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   // Let B finish and wait for another load stop.  A will still be loading due
   // to D.
   LoadFinishedWaiter load_waiter_b(web_contents, url_b);
-  delayer_b.WaitForNavigationFinished();
+  ASSERT_TRUE(delayer_b.WaitForNavigationFinished());
   load_waiter_b.Wait();
   EXPECT_TRUE(web_contents->IsLoading());
 
   // Let D finish.  We should get a load stop in the main frame.
   LoadFinishedWaiter load_waiter_d(web_contents, url_d);
-  delayer_d.WaitForNavigationFinished();
+  ASSERT_TRUE(delayer_d.WaitForNavigationFinished());
   load_waiter_d.Wait();
   EXPECT_TRUE(WaitForLoadStop(web_contents));
   EXPECT_FALSE(web_contents->IsLoading());
@@ -1465,7 +1484,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   // Have the cross-site navigation commit. The main RenderFrameHost should
   // still be loading after that.
-  cross_site_delayer.WaitForNavigationFinished();
+  ASSERT_TRUE(cross_site_delayer.WaitForNavigationFinished());
   EXPECT_TRUE(shell()->web_contents()->IsLoading());
 }
 
@@ -1739,8 +1758,11 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
   void EnterFullscreenModeForTab(
       RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override {
-    is_fullscreen_ = true;
-    options_ = options;
+    fullscreen_mode_ = WebContents::FromRenderFrameHost(requesting_frame)
+                               ->IsBeingVisiblyCaptured()
+                           ? FullscreenMode::kPseudoContent
+                           : FullscreenMode::kContent;
+    fullscreen_options_ = options;
 
     if (waiting_for_ == kFullscreenEnter) {
       waiting_for_ = kNothing;
@@ -1751,7 +1773,7 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
   void FullscreenStateChangedForTab(
       RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) override {
-    options_ = options;
+    fullscreen_options_ = options;
 
     if (waiting_for_ == kFullscreenOptions) {
       waiting_for_ = kNothing;
@@ -1760,8 +1782,8 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
   }
 
   void ExitFullscreenModeForTab(WebContents*) override {
-    is_fullscreen_ = false;
-    options_ = blink::mojom::FullscreenOptions();
+    fullscreen_mode_ = FullscreenMode::kWindowed;
+    fullscreen_options_ = blink::mojom::FullscreenOptions();
 
     if (waiting_for_ == kFullscreenExit) {
       waiting_for_ = kNothing;
@@ -1770,25 +1792,20 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
   }
 
   bool IsFullscreenForTabOrPending(const WebContents* web_contents) override {
-    return is_fullscreen_;
+    return fullscreen_mode_ == FullscreenMode::kContent ||
+           fullscreen_mode_ == FullscreenMode::kPseudoContent;
   }
 
-  bool IsFullscreenForTabOrPending(const WebContents* web_contents,
-                                   int64_t* display_id) override {
-    const bool fullscreen = IsFullscreenForTabOrPending(web_contents);
-    if (fullscreen && display_id) {
-      // Workaround for WebContents::GetNativeView not being const.
-      // TODO(crbug.com/1347558): Make WebContents::GetNativeView const.
-      DCHECK_EQ(web_contents_, web_contents);
-      *display_id = display::Screen::GetScreen()
-                        ->GetDisplayNearestView(web_contents_->GetNativeView())
-                        .id();
-    }
-    return fullscreen;
+  FullscreenState GetFullscreenState(
+      const WebContents* web_contents) const override {
+    FullscreenState state;
+    state.target_mode = fullscreen_mode_;
+    state.target_display_id = fullscreen_options_.display_id;
+    return state;
   }
 
   const blink::mojom::FullscreenOptions& fullscreen_options() {
-    return options_;
+    return fullscreen_options_;
   }
 
   void AddNewContents(WebContents* source,
@@ -1859,8 +1876,8 @@ class TestWCDelegateForDialogsAndFullscreen : public JavaScriptDialogManager,
 
   std::string last_message_;
 
-  bool is_fullscreen_ = false;
-  blink::mojom::FullscreenOptions options_;
+  FullscreenMode fullscreen_mode_ = FullscreenMode::kWindowed;
+  blink::mojom::FullscreenOptions fullscreen_options_;
 
   std::vector<std::unique_ptr<WebContents>> popups_;
 
@@ -2547,94 +2564,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, UserAgentOverride) {
             EvalJs(shell()->web_contents(), "document.body.textContent;"));
 }
 
-class WebContentsImplBrowserTestUserAgentOverrideSubstring
-    : public WebContentsImplBrowserTest {
- public:
-  void SetUp() override {
-    scoped_feature_list_.Reset();
-    scoped_feature_list_.InitAndEnableFeature(
-        blink::features::kUserAgentOverrideExperiment);
-    WebContentsImplBrowserTest::SetUp();
-  }
-};
-
-// Verify UserAgentOverride histograms
-IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTestUserAgentOverrideSubstring,
-                       UserAgentOverrideHistogram) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  const std::string kHeaderPath =
-      std::string("/echoheader?") + net::HttpRequestHeaders::kUserAgent;
-  const GURL kUrl(embedded_test_server()->GetURL(kHeaderPath));
-  EXPECT_TRUE(NavigateToURL(shell(), kUrl));
-
-  std::string original_ua = ShellContentBrowserClient::Get()->GetUserAgent();
-  std::string ua_no_substring = "foo";
-  std::string ua_prefix = "foo" + original_ua;
-  std::string ua_suffix = original_ua + "foo";
-  {
-    base::HistogramTester histogram;
-    shell()->web_contents()->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(ua_no_substring), false);
-    shell()
-        ->web_contents()
-        ->GetController()
-        .GetLastCommittedEntry()
-        ->SetIsOverridingUserAgent(true);
-    EXPECT_TRUE(NavigateToURL(shell(), kUrl));
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverriden, 1);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSubstring, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSuffix, 0);
-  }
-
-  {
-    base::HistogramTester histogram;
-    shell()->web_contents()->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(ua_prefix), false);
-    shell()
-        ->web_contents()
-        ->GetController()
-        .GetLastCommittedEntry()
-        ->SetIsOverridingUserAgent(true);
-    EXPECT_TRUE(NavigateToURL(shell(), kUrl));
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverriden, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSubstring, 1);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSuffix, 0);
-  }
-
-  {
-    base::HistogramTester histogram;
-    shell()->web_contents()->SetUserAgentOverride(
-        blink::UserAgentOverride::UserAgentOnly(ua_suffix), false);
-    shell()
-        ->web_contents()
-        ->GetController()
-        .GetLastCommittedEntry()
-        ->SetIsOverridingUserAgent(true);
-    EXPECT_TRUE(NavigateToURL(shell(), kUrl));
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverriden, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSubstring, 0);
-    histogram.ExpectBucketCount(
-        blink::UserAgentOverride::kUserAgentOverrideHistogram,
-        blink::UserAgentOverride::UserAgentOverrideSuffix, 1);
-  }
-}
-
 // Verifies the user-agent string may be changed in DidStartNavigation().
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        SetUserAgentOverrideFromDidStartNavigation) {
@@ -3062,6 +2991,31 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   EXPECT_FALSE(wc->IsFullscreen());
 }
 
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       PopupsFromJavaScriptDoNotEndFullscreenWithinTab) {
+  WebContentsImpl* wc = static_cast<WebContentsImpl*>(shell()->web_contents());
+  TestWCDelegateForDialogsAndFullscreen test_delegate(wc);
+
+  GURL url("about:blank");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  // capture
+  base::ScopedClosureRunner capture_closure = wc->IncrementCapturerCount(
+      gfx::Size(), /*stay_hidden=*/false, /*stay_awake=*/false);
+  EXPECT_TRUE(wc->IsBeingVisiblyCaptured());
+  // popup
+  wc->EnterFullscreenMode(wc->GetPrimaryMainFrame(), {});
+  EXPECT_TRUE(wc->IsFullscreen());
+  EXPECT_EQ(wc->GetDelegate()->GetFullscreenState(wc).target_mode,
+            FullscreenMode::kPseudoContent);
+  std::string script = "window.open('', '', 'width=200,height=100')";
+  test_delegate.WillWaitForNewContents();
+  EXPECT_TRUE(ExecJs(wc, script));
+  test_delegate.Wait();
+  EXPECT_TRUE(wc->IsFullscreen());
+  capture_closure.RunAndReset();
+}
+
 // Tests that if a popup is opened, a WebContents *up* the opener chain is
 // kicked out of fullscreen.
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
@@ -3463,8 +3417,10 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, TitleUpdateOnRestore) {
   std::unique_ptr<NavigationEntryImpl> restored_entry =
       NavigationEntryImpl::FromNavigationEntry(
           NavigationController::CreateNavigationEntry(
-              main_url, Referrer(), absl::nullopt, ui::PAGE_TRANSITION_RELOAD,
-              false, std::string(), controller.GetBrowserContext(),
+              main_url, Referrer(), /* initiator_origin= */ absl::nullopt,
+              /* initiator_base_url= */ absl::nullopt,
+              ui::PAGE_TRANSITION_RELOAD, false, std::string(),
+              controller.GetBrowserContext(),
               nullptr /* blob_url_loader_factory */));
   std::unique_ptr<NavigationEntryRestoreContextImpl> context =
       std::make_unique<NavigationEntryRestoreContextImpl>();
@@ -3723,11 +3679,53 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, FrozenAndUnfrozenIPC) {
 }
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SuppressedPopupWindowBrowserNavResumeLoad) {
+  // This test verifies a suppressed pop up that requires navigation from
+  // browser side works with a delegate that delays navigations of pop ups.
+  base::FilePath test_data_dir;
+  CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
+  base::FilePath simple_links_path =
+      test_data_dir.Append(GetTestDataFilePath())
+          .Append(FILE_PATH_LITERAL("simple_links.html"));
+  GURL url("file://" + simple_links_path.AsUTF8Unsafe());
+
+  shell()->set_delay_popup_contents_delegate_for_testing(true);
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  Shell* new_shell = nullptr;
+  WebContents* new_contents = nullptr;
+  {
+    ShellAddedObserver new_shell_observer;
+    bool success = false;
+    EXPECT_TRUE(ExecuteScriptAndExtractBool(
+        shell(),
+        "window.domAutomationController.send(clickLinkToSelfNoOpener());",
+        &success));
+    new_shell = new_shell_observer.GetShell();
+    new_contents = new_shell->web_contents();
+    // Delaying popup holds the initial load of |url|.
+    EXPECT_TRUE(WaitForLoadStop(new_contents));
+    EXPECT_TRUE(new_contents->GetController()
+                    .GetLastCommittedEntry()
+                    ->IsInitialEntry());
+    EXPECT_NE(url, new_contents->GetLastCommittedURL());
+  }
+
+  EXPECT_FALSE(new_contents->GetDelegate());
+  new_contents->SetDelegate(new_shell);
+  EXPECT_TRUE(
+      static_cast<WebContentsImpl*>(new_contents)->delayed_load_url_params_);
+  new_contents->ResumeLoadingCreatedWebContents();
+  EXPECT_TRUE(WaitForLoadStop(new_contents));
+  EXPECT_EQ(url, new_contents->GetLastCommittedURL());
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
                        PopupWindowBrowserNavResumeLoad) {
   // This test verifies a pop up that requires navigation from browser side
   // works with a delegate that delays navigations of pop ups.
-  // Create a file: scheme pop up from a file: scheme page, which requires
-  // requires an OpenURL IPC to the browser process.
+  // Create a file: scheme non-suppressed pop up from a file: scheme page will
+  // be blocked and wait for the renderer to signal.
   base::FilePath test_data_dir;
   CHECK(base::PathService::Get(base::DIR_SOURCE_ROOT, &test_data_dir));
   base::FilePath simple_links_path =
@@ -3758,6 +3756,11 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   EXPECT_FALSE(new_contents->GetDelegate());
   new_contents->SetDelegate(new_shell);
+  EXPECT_FALSE(
+      static_cast<WebContentsImpl*>(new_contents)->delayed_load_url_params_);
+  EXPECT_FALSE(
+      static_cast<WebContentsImpl*>(new_contents)->delayed_open_url_params_);
+  EXPECT_TRUE(static_cast<WebContentsImpl*>(new_contents)->is_resume_pending_);
   new_contents->ResumeLoadingCreatedWebContents();
   EXPECT_TRUE(WaitForLoadStop(new_contents));
   EXPECT_EQ(url, new_contents->GetLastCommittedURL());
@@ -5827,7 +5830,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsFencedFrameBrowserTest,
     test_recorder_.ExpectEntryMetric(entry, UkmEntry::kIsTopFrameName, false);
 }
 
-#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(USE_STARSCAN)
 
 namespace {
 
@@ -5866,7 +5869,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplStarScanBrowserTest,
   EXPECT_TRUE(partition_alloc::internal::PCScan::IsEnabled());
 
   // Wait for navigation to finish and check that PCScan is disabled.
-  navigation_manager.WaitForNavigationFinished();
+  EXPECT_TRUE(navigation_manager.WaitForNavigationFinished());
   EXPECT_FALSE(partition_alloc::internal::PCScan::IsEnabled());
 
   // Complete load and check that PCScan is enabled again.
@@ -5952,6 +5955,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplStarScanPrerenderBrowserTest,
   EXPECT_TRUE(partition_alloc::internal::PCScan::IsEnabled());
 }
 
-#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && defined(PA_ALLOW_PCSCAN)
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && BUILDFLAG(USE_STARSCAN)
 
 }  // namespace content

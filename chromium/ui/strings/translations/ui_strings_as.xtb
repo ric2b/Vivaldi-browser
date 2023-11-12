@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{১মাহ}one{#মাহ}other{#মাহ}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> এম.বি./ছেকেণ্ড</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{১ঘণ্টা আৰু }one{#ঘণ্টা আৰু }other{#ঘণ্টা আৰু }}</translation>
+<translation id="185013357618350178">&amp;বাছনি কৰক</translation>
 <translation id="1859234291848436338">লিখাৰ নির্দেশনা</translation>
 <translation id="1860796786778352021">জাননী বন্ধ কৰক</translation>
 <translation id="186476001994626254">ৱেব স্মাৰ্ট পে’ষ্ট সমল</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{১ ঘণ্টাত}one{# ঘণ্টাত}other{# ঘণ্টাত}}</translation>
 <translation id="2583543531130364912">আপোনাৰ টাচ্‌স্ক্ৰীন কেলিব্ৰেট কৰক</translation>
 <translation id="2586657967955657006">ক্লিপব'ৰ্ড</translation>
+<translation id="2653844658857826081">নতুন</translation>
 <translation id="2666092431469916601">শীর্ষ</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" />ৰ পৰা শ্বেয়াৰ কৰা হৈছে</translation>
 <translation id="271033894570825754">নতুন</translation>

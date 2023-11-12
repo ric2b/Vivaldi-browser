@@ -10,8 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/adapters.h"
+#include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -300,10 +300,6 @@ class RenderAccessibilityImplTest : public RenderViewTest {
     blink::WebRuntimeFeatures::EnableAccessibilityExposeHTMLElement(true);
 
     RenderViewTest::SetUp();
-    // TestBoundsFor*FixedNodeAfterScroll doesn't work with DeferredShaping,
-    // which triggers layout of shaping-deferred elements on scrollTo().
-    blink::WebRuntimeFeatures::EnableFeatureFromString("DeferredShaping",
-                                                       false);
 
     sink_ = &render_thread_->sink();
 
@@ -740,13 +736,15 @@ class MockPluginAccessibilityTreeSource : public content::PluginAXTreeSource {
   int32_t GetId(const ui::AXNode* node) const override {
     return root_node_->data().id;
   }
-  void GetChildren(
-      const ui::AXNode* node,
-      std::vector<const ui::AXNode*>* out_children) const override {
-    DCHECK(node);
-    *out_children = std::vector<const ui::AXNode*>(node->children().cbegin(),
-                                                   node->children().cend());
+  void CacheChildrenIfNeeded(const ui::AXNode*) override {}
+  size_t GetChildCount(const ui::AXNode* node) const override {
+    return node->children().size();
   }
+  const ui::AXNode* ChildAt(const ui::AXNode* node,
+                            size_t index) const override {
+    return node->children()[index];
+  }
+  void ClearChildCache(const ui::AXNode*) override {}
   ui::AXNode* GetParent(const ui::AXNode* node) const override {
     return nullptr;
   }

@@ -9,10 +9,12 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -69,6 +71,10 @@ const int kContextualSearchMaxSelection = 1000;
 const char kXssiEscape[] = ")]}'\n";
 const char kDiscourseContextHeaderName[] = "X-Additional-Discourse-Context";
 const char kDoPreventPreloadValue[] = "1";
+
+// A commandline switch to enable debugging information to be sent and returned.
+const char kContextualSearchDebugCommandlineSwitch[] =
+    "contextual-search-debug";
 
 // Populates and returns the discourse context.
 const net::HttpRequestHeaders GetDiscourseContext(
@@ -164,7 +170,7 @@ void ContextualSearchDelegateImpl::ResolveSearchTermFromContext(
     SearchTermResolutionCallback callback) {
   DCHECK(context);
   GURL request_url(BuildRequestUrl(context.get()));
-  DCHECK(request_url.is_valid());
+  DCHECK(request_url.is_valid()) << request_url.possibly_invalid_spec();
 
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = request_url;
@@ -228,6 +234,10 @@ void ContextualSearchDelegateImpl::OnUrlLoadComplete(
     std::unique_ptr<std::string> response_body) {
   if (!context)
     return;
+
+  // Network error codes are negative. See: src/net/base/net_error_list.h.
+  base::UmaHistogramSparse("Search.ContextualSearch.NetError",
+                           std::abs(url_loader_->NetError()));
 
   int response_code = ResolvedSearchTerm::kResponseCodeUninitialized;
   if (url_loader_->ResponseInfo() && url_loader_->ResponseInfo()->headers) {
@@ -316,8 +326,9 @@ std::string ContextualSearchDelegateImpl::BuildRequestUrl(
   // This is based on our current active feature.
   int contextual_cards_version =
       contextual_search::kContextualCardsTranslationsIntegration;
-  // Mixin the debug setting.
-  if (base::FeatureList::IsEnabled(kContextualSearchDebug)) {
+  // Mixin the debug setting if a commandline switch has been set.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          kContextualSearchDebugCommandlineSwitch)) {
     contextual_cards_version +=
         contextual_search::kContextualCardsServerDebugMixin;
   }

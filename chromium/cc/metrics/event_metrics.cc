@@ -18,16 +18,28 @@
 namespace cc {
 namespace {
 
+// Histogram bucketing for scroll event metrics.
+constexpr base::TimeDelta kScrollHistogramMin = base::Milliseconds(4);
+constexpr base::TimeDelta kScrollHistogramMax = base::Milliseconds(500);
+constexpr size_t kScrollHistogramBucketCount = 50;
+
 constexpr struct {
   EventMetrics::EventType metrics_event_type;
-  ui::EventType ui_event_type;
   const char* name;
+
+  ui::EventType ui_event_type;
   absl::optional<bool> scroll_is_inertial = absl::nullopt;
   absl::optional<ScrollUpdateEventMetrics::ScrollUpdateType>
       scroll_update_type = absl::nullopt;
+
+  absl::optional<EventMetrics::HistogramBucketing> histogram_bucketing =
+      absl::nullopt;
 } kInterestingEvents[] = {
-#define EVENT_TYPE(name, ui_type, ...) \
-  { EventMetrics::EventType::k##name, ui_type, #name, __VA_ARGS__ }
+#define EVENT_TYPE(type_name, ui_type, ...)                      \
+  {                                                              \
+    .metrics_event_type = EventMetrics::EventType::k##type_name, \
+    .name = #type_name, .ui_event_type = ui_type, __VA_ARGS__    \
+  }
     EVENT_TYPE(MousePressed, ui::ET_MOUSE_PRESSED),
     EVENT_TYPE(MouseReleased, ui::ET_MOUSE_RELEASED),
     EVENT_TYPE(MouseWheel, ui::ET_MOUSEWHEEL),
@@ -36,12 +48,29 @@ constexpr struct {
     EVENT_TYPE(TouchPressed, ui::ET_TOUCH_PRESSED),
     EVENT_TYPE(TouchReleased, ui::ET_TOUCH_RELEASED),
     EVENT_TYPE(TouchMoved, ui::ET_TOUCH_MOVED),
-    EVENT_TYPE(GestureScrollBegin, ui::ET_GESTURE_SCROLL_BEGIN, false),
+    EVENT_TYPE(GestureScrollBegin,
+               ui::ET_GESTURE_SCROLL_BEGIN,
+               .scroll_is_inertial = false,
+               .histogram_bucketing = {{.min = kScrollHistogramMin,
+                                        .max = kScrollHistogramMax,
+                                        .count = kScrollHistogramBucketCount,
+                                        .version_suffix = "2"}}),
     EVENT_TYPE(GestureScrollUpdate,
                ui::ET_GESTURE_SCROLL_UPDATE,
-               false,
-               ScrollUpdateEventMetrics::ScrollUpdateType::kContinued),
-    EVENT_TYPE(GestureScrollEnd, ui::ET_GESTURE_SCROLL_END, false),
+               .scroll_is_inertial = false,
+               .scroll_update_type =
+                   ScrollUpdateEventMetrics::ScrollUpdateType::kContinued,
+               .histogram_bucketing = {{.min = kScrollHistogramMin,
+                                        .max = kScrollHistogramMax,
+                                        .count = kScrollHistogramBucketCount,
+                                        .version_suffix = "2"}}),
+    EVENT_TYPE(GestureScrollEnd,
+               ui::ET_GESTURE_SCROLL_END,
+               .scroll_is_inertial = false,
+               .histogram_bucketing = {{.min = kScrollHistogramMin,
+                                        .max = kScrollHistogramMax,
+                                        .count = kScrollHistogramBucketCount,
+                                        .version_suffix = "2"}}),
     EVENT_TYPE(GestureDoubleTap, ui::ET_GESTURE_DOUBLE_TAP),
     EVENT_TYPE(GestureLongPress, ui::ET_GESTURE_LONG_PRESS),
     EVENT_TYPE(GestureLongTap, ui::ET_GESTURE_LONG_TAP),
@@ -53,16 +82,26 @@ constexpr struct {
     EVENT_TYPE(GestureTwoFingerTap, ui::ET_GESTURE_TWO_FINGER_TAP),
     EVENT_TYPE(FirstGestureScrollUpdate,
                ui::ET_GESTURE_SCROLL_UPDATE,
-               false,
-               ScrollUpdateEventMetrics::ScrollUpdateType::kStarted),
+               .scroll_is_inertial = false,
+               .scroll_update_type =
+                   ScrollUpdateEventMetrics::ScrollUpdateType::kStarted,
+               .histogram_bucketing = {{.min = kScrollHistogramMin,
+                                        .max = kScrollHistogramMax,
+                                        .count = kScrollHistogramBucketCount,
+                                        .version_suffix = "2"}}),
     EVENT_TYPE(MouseDragged, ui::ET_MOUSE_DRAGGED),
     EVENT_TYPE(GesturePinchBegin, ui::ET_GESTURE_PINCH_BEGIN),
     EVENT_TYPE(GesturePinchEnd, ui::ET_GESTURE_PINCH_END),
     EVENT_TYPE(GesturePinchUpdate, ui::ET_GESTURE_PINCH_UPDATE),
     EVENT_TYPE(InertialGestureScrollUpdate,
                ui::ET_GESTURE_SCROLL_UPDATE,
-               true,
-               ScrollUpdateEventMetrics::ScrollUpdateType::kContinued),
+               .scroll_is_inertial = true,
+               .scroll_update_type =
+                   ScrollUpdateEventMetrics::ScrollUpdateType::kContinued,
+               .histogram_bucketing = {{.min = kScrollHistogramMin,
+                                        .max = kScrollHistogramMax,
+                                        .count = kScrollHistogramBucketCount,
+                                        .version_suffix = "2"}}),
 #undef EVENT_TYPE
 };
 static_assert(std::size(kInterestingEvents) ==
@@ -288,6 +327,11 @@ const char* EventMetrics::GetTypeName(EventMetrics::EventType type) {
   return kInterestingEvents[static_cast<int>(type)].name;
 }
 
+const absl::optional<EventMetrics::HistogramBucketing>&
+EventMetrics::GetHistogramBucketing() const {
+  return kInterestingEvents[static_cast<int>(type_)].histogram_bucketing;
+}
+
 void EventMetrics::SetHighLatencyStage(const std::string& stage) {
   high_latency_stages_.push_back(stage);
 }
@@ -499,7 +543,8 @@ std::unique_ptr<ScrollUpdateEventMetrics> ScrollUpdateEventMetrics::Create(
     ScrollUpdateType scroll_update_type,
     float delta,
     base::TimeTicks timestamp,
-    base::TimeTicks arrived_in_browser_main_timestamp) {
+    base::TimeTicks arrived_in_browser_main_timestamp,
+    TraceId trace_id) {
   // TODO(crbug.com/1157090): We expect that `timestamp` is not null, but there
   // seems to be some tests that are emitting events with null timestamp. We
   // should investigate and try to fix those cases and add a `DCHECK` here to
@@ -507,9 +552,10 @@ std::unique_ptr<ScrollUpdateEventMetrics> ScrollUpdateEventMetrics::Create(
 
   DCHECK(IsGestureScrollUpdate(type));
 
-  std::unique_ptr<ScrollUpdateEventMetrics> metrics = CreateInternal(
-      type, input_type, is_inertial, scroll_update_type, delta, timestamp,
-      arrived_in_browser_main_timestamp, base::DefaultTickClock::GetInstance());
+  std::unique_ptr<ScrollUpdateEventMetrics> metrics =
+      CreateInternal(type, input_type, is_inertial, scroll_update_type, delta,
+                     timestamp, arrived_in_browser_main_timestamp,
+                     base::DefaultTickClock::GetInstance(), trace_id);
   if (!metrics)
     return nullptr;
 
@@ -525,9 +571,10 @@ ScrollUpdateEventMetrics::CreateForBrowser(ui::EventType type,
                                            bool is_inertial,
                                            ScrollUpdateType scroll_update_type,
                                            float delta,
-                                           base::TimeTicks timestamp) {
+                                           base::TimeTicks timestamp,
+                                           TraceId trace_id) {
   return Create(type, input_type, is_inertial, scroll_update_type, delta,
-                timestamp, base::TimeTicks());
+                timestamp, base::TimeTicks(), trace_id);
 }
 
 // static
@@ -543,9 +590,9 @@ ScrollUpdateEventMetrics::CreateForTesting(
     const base::TickClock* tick_clock) {
   DCHECK(!timestamp.is_null());
 
-  std::unique_ptr<ScrollUpdateEventMetrics> metrics =
-      CreateInternal(type, input_type, is_inertial, scroll_update_type, delta,
-                     timestamp, arrived_in_browser_main_timestamp, tick_clock);
+  std::unique_ptr<ScrollUpdateEventMetrics> metrics = CreateInternal(
+      type, input_type, is_inertial, scroll_update_type, delta, timestamp,
+      arrived_in_browser_main_timestamp, tick_clock, absl::nullopt);
   if (!metrics)
     return nullptr;
 
@@ -572,9 +619,10 @@ ScrollUpdateEventMetrics::CreateFromExisting(
   if (!existing)
     return nullptr;
 
-  std::unique_ptr<ScrollUpdateEventMetrics> metrics = CreateInternal(
-      type, input_type, is_inertial, scroll_update_type, delta,
-      base::TimeTicks(), base::TimeTicks(), existing->tick_clock_);
+  std::unique_ptr<ScrollUpdateEventMetrics> metrics =
+      CreateInternal(type, input_type, is_inertial, scroll_update_type, delta,
+                     base::TimeTicks(), base::TimeTicks(),
+                     existing->tick_clock_, absl::nullopt);
   if (!metrics)
     return nullptr;
 
@@ -595,14 +643,15 @@ ScrollUpdateEventMetrics::CreateInternal(
     float delta,
     base::TimeTicks timestamp,
     base::TimeTicks arrived_in_browser_main_timestamp,
-    const base::TickClock* tick_clock) {
+    const base::TickClock* tick_clock,
+    absl::optional<TraceId> trace_id) {
   absl::optional<EventType> interesting_type =
       ToInterestingEventType(type, is_inertial, scroll_update_type);
   if (!interesting_type)
     return nullptr;
   return base::WrapUnique(new ScrollUpdateEventMetrics(
       *interesting_type, ToScrollType(input_type), scroll_update_type, delta,
-      timestamp, arrived_in_browser_main_timestamp, tick_clock));
+      timestamp, arrived_in_browser_main_timestamp, tick_clock, trace_id));
 }
 
 ScrollUpdateEventMetrics::ScrollUpdateEventMetrics(
@@ -612,7 +661,8 @@ ScrollUpdateEventMetrics::ScrollUpdateEventMetrics(
     float delta,
     base::TimeTicks timestamp,
     base::TimeTicks arrived_in_browser_main_timestamp,
-    const base::TickClock* tick_clock)
+    const base::TickClock* tick_clock,
+    absl::optional<TraceId> trace_id)
     : ScrollEventMetrics(type,
                          scroll_type,
                          timestamp,
@@ -620,7 +670,8 @@ ScrollUpdateEventMetrics::ScrollUpdateEventMetrics(
                          tick_clock),
       delta_(delta),
       predicted_delta_(delta),
-      last_timestamp_(timestamp) {}
+      last_timestamp_(timestamp),
+      trace_id_(trace_id) {}
 
 ScrollUpdateEventMetrics::ScrollUpdateEventMetrics(
     const ScrollUpdateEventMetrics&) = default;
@@ -637,6 +688,7 @@ void ScrollUpdateEventMetrics::CoalesceWith(
   last_timestamp_ = newer_scroll_update.last_timestamp_;
   delta_ += newer_scroll_update.delta_;
   predicted_delta_ += newer_scroll_update.predicted_delta_;
+  coalesced_event_count_ += newer_scroll_update.coalesced_event_count_;
 }
 
 ScrollUpdateEventMetrics* ScrollUpdateEventMetrics::AsScrollUpdate() {

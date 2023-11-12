@@ -226,10 +226,11 @@ void WaylandScreen::AddOrUpdateDisplay(const WaylandOutput::Metrics& metrics) {
     color_spaces.SetOutputColorSpaceAndBufferFormat(
         gfx::ContentColorUsage::kWideColorGamut, false,
         gfx::ColorSpace::CreateDisplayP3D65(), image_format_no_alpha_.value());
-    // SRGB10Bit was designed to provide 5x relative brightness.
-    color_spaces.SetHDRMaxLuminanceRelative(5);
-    // sRGB is defined to have a luminance level of 80 nits.
-    color_spaces.SetSDRMaxLuminanceNits(80);
+    // While SRGB10bit is designed to have a relative luminance of 5x,
+    // Ash does not rely on this EOTF when finally composited. A value of 10x
+    // is consistent with what is used by Ash in display_util.cc
+    // CreateDisplayColorSpaces()
+    color_spaces.SetHDRMaxLuminanceRelative(10);
   }
 #endif
 
@@ -269,13 +270,18 @@ void WaylandScreen::AddOrUpdateDisplay(const WaylandOutput::Metrics& metrics) {
 #endif
 }
 
-uint32_t WaylandScreen::GetOutputIdForDisplayId(int64_t display_id) {
+WaylandOutput::Id WaylandScreen::GetOutputIdForDisplayId(int64_t display_id) {
   auto iter = std::find_if(
       display_id_map_.begin(), display_id_map_.end(),
       [display_id](auto pair) { return pair.second == display_id; });
   if (iter != display_id_map_.end())
     return iter->first;
   return 0;
+}
+
+WaylandOutput::Id WaylandScreen::GetOutputIdMatching(const gfx::Rect& bounds) {
+  int64_t display_id = GetDisplayMatching(bounds).id();
+  return GetOutputIdForDisplayId(display_id);
 }
 
 base::WeakPtr<WaylandScreen> WaylandScreen::GetWeakPtr() {

@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/debug/crash_logging.h"
+#include "base/functional/bind.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -520,7 +520,7 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
 
     // Skip the quota, event page, activity logging stuff if there
     // isn't an extension, e.g. if the function call was from WebUI.
-    function->RunWithValidation()->Execute();
+    function->RunWithValidation().Execute();
     return;
   }
 
@@ -562,7 +562,7 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
     }
 
     base::ElapsedTimer timer;
-    function->RunWithValidation()->Execute();
+    function->RunWithValidation().Execute();
     // TODO(devlin): Once we have a baseline metric for how long functions take,
     // we can create a handful of buckets and record the function name so that
     // we can find what the fastest/slowest are.
@@ -677,7 +677,7 @@ ExtensionFunctionDispatcher::CreateExtensionFunction(
     return nullptr;
   }
 
-  function->SetArgs(base::Value(params.arguments.Clone()));
+  function->SetArgs(params.arguments.Clone());
 
   const Feature::Context context_type = process_map.GetMostLikelyContextType(
       extension, requesting_process_id, rfh_url);

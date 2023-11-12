@@ -8,8 +8,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "base/types/pass_key.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -294,7 +294,7 @@ void AnimationSequenceBlock::TerminateBlock() {
             duration);
         break;
       default:
-        NOTREACHED();
+        NOTREACHED_NORETURN();
     }
     element->set_tween_type(pair.second.tween_type_);
     owner_->AddLayerAnimationElement(PassKey(), pair.first, start_, duration,

@@ -66,9 +66,9 @@
 #include "ash/public/cpp/ambient/ambient_metrics.h"
 #include "ash/utility/cropping_util.h"
 #include "ash/utility/lottie_util.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
@@ -569,7 +569,7 @@ void AmbientAnimationPhotoProvider::RecordDynamicAssetMetrics() {
   float match_percentage =
       num_photo_orientation_matches * 100.f / total_num_assets_with_size;
   ambient::RecordAmbientModePhotoOrientationMatch(
-      match_percentage, static_resources_->GetAmbientAnimationTheme());
+      match_percentage, static_resources_->GetAmbientTheme());
 }
 
 }  // namespace ash

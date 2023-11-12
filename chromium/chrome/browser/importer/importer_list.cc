@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
@@ -201,6 +201,11 @@ std::vector<importer::SourceProfile> DetectSourceProfilesWorker(
     viv_importer::DetectOperaProfiles(&profiles);
     DetectSafariProfiles(&profiles);
     chromiumImporter->DetectChromiumProfiles(&profiles);
+  } else if (vivaldi::IsChromeDefaultBrowser()) {
+    chromiumImporter->DetectChromiumProfiles(&profiles);
+    DetectFirefoxProfiles(locale, &profiles);
+    viv_importer::DetectOperaProfiles(&profiles);
+    DetectSafariProfiles(&profiles);
   } else {
     DetectSafariProfiles(&profiles);
     viv_importer::DetectOperaProfiles(&profiles);

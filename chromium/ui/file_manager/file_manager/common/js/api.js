@@ -85,11 +85,13 @@ export async function getSizeStats(volumeId) {
 /**
  * Wrap the chrome.fileManagerPrivate.getDriveQuotaMetadata function in an
  * async/await compatible style.
+ * @param {!Entry|FilesAppEntry} entry
  * @returns {!Promise<(
  * !chrome.fileManagerPrivate.DriveQuotaMetadata|undefined)>}
  */
-export async function getDriveQuotaMetadata() {
-  return promisify(chrome.fileManagerPrivate.getDriveQuotaMetadata);
+export async function getDriveQuotaMetadata(entry) {
+  return promisify(
+      chrome.fileManagerPrivate.getDriveQuotaMetadata, util.unwrapEntry(entry));
 }
 
 /**
@@ -254,6 +256,10 @@ export async function getEntry(directory, filename, isFile, options) {
  * @returns {!Promise<!number>}
  */
 export async function startIOTask(type, entries, params) {
+  if (params.destinationFolder) {
+    params.destinationFolder = /** @type {!DirectoryEntry} */ (
+        util.unwrapEntry(params.destinationFolder));
+  }
   return promisify(
       chrome.fileManagerPrivate.startIOTask, type,
       entries.map(e => util.unwrapEntry(e)), params);
@@ -281,10 +287,12 @@ export async function getMimeType(entry) {
 
 /**
  * @param {!Array<!Entry|!FilesAppEntry>} entries
+ * @param {!Array<string>} dlpSourceUrls
  * @return {!Promise<chrome.fileManagerPrivate.ResultingTasks>}
  */
-export async function getFileTasks(entries) {
-  return promisify(chrome.fileManagerPrivate.getFileTasks, entries);
+export async function getFileTasks(entries, dlpSourceUrls) {
+  return promisify(
+      chrome.fileManagerPrivate.getFileTasks, entries, dlpSourceUrls);
 }
 
 /**

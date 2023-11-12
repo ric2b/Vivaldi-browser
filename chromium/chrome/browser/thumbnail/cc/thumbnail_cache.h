@@ -11,11 +11,11 @@
 #include <map>
 #include <set>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/memory_pressure_listener.h"
-#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
@@ -33,6 +33,8 @@
 namespace base {
 class Time;
 }
+
+namespace thumbnail {
 
 typedef std::list<TabId> TabIdList;
 
@@ -56,7 +58,8 @@ class ThumbnailCache : ThumbnailDelegate {
 
   ~ThumbnailCache() override;
 
-  void SetUIResourceProvider(ui::UIResourceProvider* ui_resource_provider);
+  void SetUIResourceProvider(
+      base::WeakPtr<ui::UIResourceProvider> ui_resource_provider);
 
   void AddThumbnailCacheObserver(ThumbnailCacheObserver* observer);
   void RemoveThumbnailCacheObserver(ThumbnailCacheObserver* observer);
@@ -88,6 +91,8 @@ class ThumbnailCache : ThumbnailDelegate {
   static base::FilePath GetJpegFilePath(TabId tab_id);
 
  private:
+  friend class ThumbnailCacheTest;
+
   class ThumbnailMetaData {
    public:
     ThumbnailMetaData() = default;
@@ -102,6 +107,11 @@ class ThumbnailCache : ThumbnailDelegate {
 
   using ExpiringThumbnailCache = ScopedPtrExpiringCache<TabId, Thumbnail>;
   using ThumbnailMetaDataMap = std::map<TabId, ThumbnailMetaData>;
+
+  void ScheduleRecordCacheMetrics(base::TimeDelta mean_delay);
+  void RecordCacheMetrics();
+  static size_t ComputeCacheSize(ExpiringThumbnailCache& cache);
+  void PruneCache();
 
   void RemoveFromDisk(TabId tab_id);
   static void RemoveFromDiskTask(TabId tab_id);
@@ -194,11 +204,13 @@ class ThumbnailCache : ThumbnailDelegate {
   TabIdList visible_ids_;
   TabId primary_tab_id_ = -1;
 
-  raw_ptr<ui::UIResourceProvider, DanglingUntriaged> ui_resource_provider_;
+  base::WeakPtr<ui::UIResourceProvider> ui_resource_provider_;
   SEQUENCE_CHECKER(sequence_checker_);
 
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_;
   base::WeakPtrFactory<ThumbnailCache> weak_factory_{this};
 };
+
+}  // namespace thumbnail
 
 #endif  // CHROME_BROWSER_THUMBNAIL_CC_THUMBNAIL_CACHE_H_

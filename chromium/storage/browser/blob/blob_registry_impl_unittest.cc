@@ -11,10 +11,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
@@ -86,7 +86,7 @@ class BlobRegistryImplTest : public testing::Test {
           base::SequencedTaskRunner::GetCurrentDefault());
     }
     auto delegate = std::make_unique<MockBlobRegistryDelegate>();
-    delegate_ptr_ = delegate.get();
+    delegate_ptr_ = delegate->AsWeakPtr();
     registry_impl_->Bind(registry_.BindNewPipeAndPassReceiver(),
                          std::move(delegate));
 
@@ -110,6 +110,10 @@ class BlobRegistryImplTest : public testing::Test {
 
   void TearDown() override {
     mojo::SetDefaultProcessErrorHandler(base::NullCallback());
+
+    // Give pending tasks a chance to run since they may release Mojo bindings
+    // resources.
+    base::RunLoop().RunUntilIdle();
   }
 
   std::unique_ptr<BlobDataHandle> CreateBlobFromString(
@@ -195,7 +199,7 @@ class BlobRegistryImplTest : public testing::Test {
   BlobUrlRegistry url_registry_;
   std::unique_ptr<BlobRegistryImpl> registry_impl_;
   mojo::Remote<blink::mojom::BlobRegistry> registry_;
-  raw_ptr<MockBlobRegistryDelegate> delegate_ptr_;
+  base::WeakPtr<MockBlobRegistryDelegate> delegate_ptr_;
   scoped_refptr<base::SequencedTaskRunner> bytes_provider_runner_;
 
   size_t reply_request_count_ = 0;

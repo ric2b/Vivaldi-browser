@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "base/time/time.h"
+#include "base/trace_event/typed_macros.h"
 #include "build/build_config.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
@@ -485,17 +486,21 @@ WebGestureEvent CreateWebGestureEventFromGestureEventData(
 
 std::unique_ptr<blink::WebInputEvent> ScaleWebInputEvent(
     const blink::WebInputEvent& event,
-    float scale) {
-  return TranslateAndScaleWebInputEvent(event, gfx::Vector2dF(0, 0), scale);
+    float scale,
+    absl::optional<int64_t> trace_id) {
+  return TranslateAndScaleWebInputEvent(event, gfx::Vector2dF(0, 0), scale,
+                                        trace_id);
 }
 
 std::unique_ptr<blink::WebInputEvent> TranslateAndScaleWebInputEvent(
     const blink::WebInputEvent& event,
     const gfx::Vector2dF& delta,
-    float scale) {
+    float scale,
+    absl::optional<int64_t> trace_id) {
   std::unique_ptr<blink::WebInputEvent> scaled_event;
-  if (scale == 1.f && delta.IsZero())
+  if (scale == 1.f && delta.IsZero()) {
     return scaled_event;
+  }
   if (event.GetType() == blink::WebMouseEvent::Type::kMouseWheel) {
     blink::WebMouseWheelEvent* wheel_event = new blink::WebMouseWheelEvent;
     scaled_event.reset(wheel_event);
@@ -603,6 +608,23 @@ std::unique_ptr<blink::WebInputEvent> TranslateAndScaleWebInputEvent(
       // TODO(oshima): Find out if ContextMenu needs to be scaled.
       default:
         break;
+    }
+
+    if (gesture_event->GetType() ==
+            blink::WebInputEvent::Type::kGestureScrollUpdate &&
+        trace_id.has_value()) {
+      TRACE_EVENT("input", "TranslateAndScaleWebInputEvent",
+                  [trace_id_value = *trace_id,
+                   delta_x = gesture_event->data.scroll_update.delta_x,
+                   delta_y = gesture_event->data.scroll_update.delta_y](
+                      perfetto::EventContext& ctx) {
+                    auto* event =
+                        ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+                    auto* scroll_data = event->set_scroll_deltas();
+                    scroll_data->set_trace_id(trace_id_value);
+                    scroll_data->set_original_delta_x(delta_x);
+                    scroll_data->set_original_delta_y(delta_y);
+                  });
     }
   }
   return scaled_event;

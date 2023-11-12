@@ -4,7 +4,7 @@
 
 #include "extensions/browser/extension_service_worker_message_filter.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/singleton.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
@@ -83,7 +83,8 @@ void ExtensionServiceWorkerMessageFilter::EnsureShutdownNotifierFactoryBuilt() {
   ShutdownNotifierFactory::GetInstance();
 }
 
-ExtensionServiceWorkerMessageFilter::~ExtensionServiceWorkerMessageFilter() {}
+ExtensionServiceWorkerMessageFilter::~ExtensionServiceWorkerMessageFilter() =
+    default;
 
 void ExtensionServiceWorkerMessageFilter::OverrideThreadForMessage(
     const IPC::Message& message,

@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/strings/string_piece.h"
 #include "net/android/cert_verify_result_android.h"
 #include "net/base/ip_endpoint.h"
@@ -25,6 +25,10 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace net::android {
+
+// Get the list of user-added roots from Android.
+// |roots| is a list of DER-encoded user-added roots from Android.
+std::vector<std::string> GetUserAddedRoots();
 
 // |cert_chain| is DER encoded chain of certificates, with the server's own
 // certificate listed first.

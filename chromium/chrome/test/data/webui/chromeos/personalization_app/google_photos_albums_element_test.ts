@@ -8,7 +8,7 @@ import 'chrome://webui-test/mojo_webui_test_support.js';
 import {fetchGooglePhotosAlbums, getCountText, GooglePhotosAlbum, GooglePhotosAlbums, initializeGooglePhotosData, PersonalizationActionName, PersonalizationRouter, SetErrorAction, WallpaperGridItem} from 'chrome://personalization/js/personalization_app.js';
 import {assertDeepEquals, assertEquals, assertGT, assertNotEquals} from 'chrome://webui-test/chai_assert.js';
 import {waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
-import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+import {TestMock} from 'chrome://webui-test/test_mock.js';
 
 import {baseSetup, createSvgDataUrl, initElement, teardownElement} from './personalization_app_test_utils.js';
 import {TestPersonalizationStore} from './test_personalization_store.js';
@@ -56,6 +56,8 @@ suite('GooglePhotosAlbumsTest', function() {
         preview: {
           url: createSvgDataUrl('svg-0'),
         },
+        timestamp: {internalValue: BigInt(`13318040939308000`)},
+        isShared: false,
       },
       {
         id: '0ec40478-9712-42e1-b5bf-3e75870ca042',
@@ -64,6 +66,8 @@ suite('GooglePhotosAlbumsTest', function() {
         preview: {
           url: createSvgDataUrl('svg-1'),
         },
+        timestamp: {internalValue: BigInt(`13318040939307000`)},
+        isShared: false,
       },
       {
         id: '0a268a37-877a-4936-81d4-38cc84b0f596',
@@ -72,6 +76,8 @@ suite('GooglePhotosAlbumsTest', function() {
         preview: {
           url: createSvgDataUrl('svg-2'),
         },
+        timestamp: {internalValue: BigInt(`13318040939306000`)},
+        isShared: false,
       },
     ];
 
@@ -168,12 +174,15 @@ suite('GooglePhotosAlbumsTest', function() {
     // Prepare Google Photos data.
     const photosCount = 5;
     const albums: GooglePhotosAlbum[] = Array.from(
-        {length: photosCount}, (_, i) => ({
-                                 id: `id-${i}`,
-                                 title: `title-${i}`,
-                                 photoCount: 1,
-                                 preview: {url: createSvgDataUrl(`svg-${i}`)},
-                               }));
+        {length: photosCount},
+        (_, i) => ({
+          id: `id-${i}`,
+          title: `title-${i}`,
+          photoCount: 1,
+          preview: {url: createSvgDataUrl(`svg-${i}`)},
+          timestamp: {internalValue: BigInt(`${photosCount - i}`)},
+          isShared: false,
+        }));
 
     // Initialize |googlePhotosAlbumsElement|.
     googlePhotosAlbumsElement =
@@ -200,7 +209,7 @@ suite('GooglePhotosAlbumsTest', function() {
     });
 
     // Mock singleton |PersonalizationRouter|.
-    const router = TestBrowserProxy.fromClass(PersonalizationRouter);
+    const router = TestMock.fromClass(PersonalizationRouter);
     PersonalizationRouter.instance = () => router;
 
     // Mock |PersonalizationRouter.selectGooglePhotosAlbum()|.
@@ -254,6 +263,8 @@ suite('GooglePhotosAlbumsTest', function() {
             title: `title-${nextAlbumId}`,
             photoCount: 1,
             preview: {url: `url-${nextAlbumId++}`},
+            timestamp: {internalValue: BigInt(`${nextAlbumId}`)},
+            isShared: false,
           };
         }));
 
@@ -280,6 +291,8 @@ suite('GooglePhotosAlbumsTest', function() {
             title: `title-${nextAlbumId}`,
             photoCount: 1,
             preview: {url: `url-${nextAlbumId++}`},
+            timestamp: {internalValue: BigInt(`${nextAlbumId}`)},
+            isShared: false,
           };
         }));
 

@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/authenticated_connection.h"
 
 #include "base/base64.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/test/task_environment.h"
 #include "base/values.h"
@@ -30,6 +31,9 @@ const char kTestOrigin[] = "https://google.com";
 const char kCtapRequestType[] = "webauthn.get";
 
 const std::vector<uint8_t> kTestBytes = {0x00, 0x01, 0x02};
+const std::vector<uint8_t> kExpectedGetInfoRequest = {0x04};
+
+const char kNotifySourceOfUpdateMessageKey[] = "isForcedUpdateRequired";
 }  // namespace
 
 class AuthenticatedConnectionTest : public testing::Test {
@@ -73,7 +77,7 @@ TEST_F(AuthenticatedConnectionTest, RequestAccountTransferAssertion) {
   // Start the Quick Start account transfer flow by initially sending
   // BootstrapOptions.
   authenticated_connection_->RequestAccountTransferAssertion(
-      kChallengeBase64Url);
+      kChallengeBase64Url, base::DoNothing());
   std::vector<uint8_t> bootstrap_options_data =
       fake_nearby_connection_->GetWrittenData();
   std::string bootstrap_options_string(bootstrap_options_data.begin(),
@@ -95,7 +99,31 @@ TEST_F(AuthenticatedConnectionTest, RequestAccountTransferAssertion) {
   // Emulate a BootstrapConfigurations response.
   fake_nearby_connection_->AppendReadableData(kTestBytes);
 
-  // OnBootstrapOptionsResponse should trigger a write of FIDO GetAssertion
+  // OnBootstrapOptionsResponse should trigger a write of FIDO GetInfo request.
+  std::vector<uint8_t> fido_get_info_data =
+      fake_nearby_connection_->GetWrittenData();
+  std::string fido_get_info_string(fido_get_info_data.begin(),
+                                   fido_get_info_data.end());
+  absl::optional<base::Value> parsed_fido_get_info_json =
+      base::JSONReader::Read(fido_get_info_string);
+  ASSERT_TRUE(parsed_fido_get_info_json);
+  ASSERT_TRUE(parsed_fido_get_info_json->is_dict());
+  base::Value::Dict& parsed_fido_get_info_dict =
+      parsed_fido_get_info_json.value().GetDict();
+
+  // Verify that FIDO GetInfo request is written as expected
+  base::Value::Dict* get_info_payload =
+      parsed_fido_get_info_dict.FindDict("secondDeviceAuthPayload");
+  std::string get_info_message = *get_info_payload->FindString("fidoMessage");
+  absl::optional<std::vector<uint8_t>> get_info_command =
+      base::Base64Decode(get_info_message);
+  EXPECT_TRUE(get_info_command);
+  EXPECT_EQ(*get_info_command, kExpectedGetInfoRequest);
+
+  // Emulate a GetInfo response.
+  fake_nearby_connection_->AppendReadableData(kTestBytes);
+
+  // OnFidoGetInfoResponse should trigger a write of FIDO GetAssertion
   // request.
   std::vector<uint8_t> fido_assertion_request_data =
       fake_nearby_connection_->GetWrittenData();
@@ -109,17 +137,17 @@ TEST_F(AuthenticatedConnectionTest, RequestAccountTransferAssertion) {
       parsed_fido_assertion_request_json.value().GetDict();
 
   // Verify that FIDO GetAssertion request is written as expected.
-  base::Value::Dict* second_device_auth_payload =
+  base::Value::Dict* get_assertion_payload =
       parsed_fido_assertion_request_dict.FindDict("secondDeviceAuthPayload");
-  std::string fidoMessage =
-      *second_device_auth_payload->FindString("fidoMessage");
-  absl::optional<std::vector<uint8_t>> fidoCommand =
-      base::Base64Decode(fidoMessage);
-  EXPECT_TRUE(fidoCommand);
+  std::string get_assertion_message =
+      *get_assertion_payload->FindString("fidoMessage");
+  absl::optional<std::vector<uint8_t>> get_assertion_command =
+      base::Base64Decode(get_assertion_message);
+  EXPECT_TRUE(get_assertion_command);
   cbor::Value request = GenerateGetAssertionRequest();
   std::vector<uint8_t> cbor_encoded_request =
       CBOREncodeGetAssertionRequest(std::move(request));
-  EXPECT_EQ(*fidoCommand, cbor_encoded_request);
+  EXPECT_EQ(*get_assertion_command, cbor_encoded_request);
 }
 
 TEST_F(AuthenticatedConnectionTest, CreateFidoClientDataJson) {
@@ -171,6 +199,21 @@ TEST_F(AuthenticatedConnectionTest, CBOREncodeGetAssertionRequest) {
   const cbor::Value::MapValue& cbor_map = cbor->GetMap();
   // CBOR Index 0x01 stores the relying_party_id for the GetAssertionRequest.
   EXPECT_EQ(cbor_map.find(cbor::Value(0x01))->second.GetString(), "google.com");
+}
+
+TEST_F(AuthenticatedConnectionTest, NotifySourceOfUpdate) {
+  authenticated_connection_->NotifySourceOfUpdate();
+
+  std::vector<uint8_t> written_payload =
+      fake_nearby_connection_->GetWrittenData();
+  std::string written_payload_string(written_payload.begin(),
+                                     written_payload.end());
+  absl::optional<base::Value> parsed_json =
+      base::JSONReader::Read(written_payload_string);
+  ASSERT_TRUE(parsed_json);
+  ASSERT_TRUE(parsed_json->is_dict());
+  base::Value::Dict& parsed_json_dict = parsed_json.value().GetDict();
+  EXPECT_EQ(*parsed_json_dict.FindBool(kNotifySourceOfUpdateMessageKey), true);
 }
 
 }  // namespace ash::quick_start

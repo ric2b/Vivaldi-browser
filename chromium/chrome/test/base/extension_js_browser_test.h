@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "chrome/test/base/devtools_agent_coverage_observer.h"
 #include "chrome/test/base/javascript_browser_test.h"
 
@@ -23,6 +23,8 @@ class ExtensionJSBrowserTest : public JavaScriptBrowserTest {
   ~ExtensionJSBrowserTest() override;
 
  protected:
+  void SetUpOnMainThread() override;
+
   // Waits for an extension to load; returns immediately if already loaded.
   void WaitForExtension(const char* extension_id, base::OnceClosure load_cb);
 

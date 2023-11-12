@@ -9,13 +9,12 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -25,7 +24,6 @@
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "content/browser/browsing_data/browsing_data_filter_builder_impl.h"
@@ -42,6 +40,7 @@
 #include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "url/gurl.h"
@@ -171,7 +170,8 @@ bool BrowsingDataRemoverImpl::DoesOriginMatchMaskForTesting(
     embedder_matcher = embedder_delegate_->GetOriginTypeMatcher();
 
   return DoesStorageKeyMatchMask(origin_type_mask, std::move(embedder_matcher),
-                                 blink::StorageKey(origin), policy);
+                                 blink::StorageKey::CreateFirstParty(origin),
+                                 policy);
 }
 
 void BrowsingDataRemoverImpl::Remove(const base::Time& delete_begin,
@@ -215,6 +215,16 @@ void BrowsingDataRemoverImpl::RemoveWithFilterAndReply(
                  std::move(filter_builder), observer);
 }
 
+void BrowsingDataRemoverImpl::RemoveAllStorageBucketsAndReply(
+    const blink::StorageKey& storage_key,
+    base::OnceClosure callback) {
+  DCHECK(callback);
+  GetStoragePartition()->ClearDataForAllBuckets(
+      storage_key, base::BindPostTaskToCurrentDefault(base::BindOnce(
+                       &BrowsingDataRemoverImpl::DidRemoveStorageBuckets,
+                       GetWeakPtr(), std::move(callback))));
+}
+
 void BrowsingDataRemoverImpl::RemoveStorageBucketsAndReply(
     const blink::StorageKey& storage_key,
     const std::set<std::string>& storage_buckets,
@@ -222,8 +232,7 @@ void BrowsingDataRemoverImpl::RemoveStorageBucketsAndReply(
   DCHECK(callback);
   GetStoragePartition()->ClearDataForBuckets(
       storage_key, storage_buckets,
-      base::BindPostTask(
-          base::SequencedTaskRunnerHandle::Get(),
+      base::BindPostTaskToCurrentDefault(
           base::BindOnce(&BrowsingDataRemoverImpl::DidRemoveStorageBuckets,
                          GetWeakPtr(), std::move(callback))));
 }

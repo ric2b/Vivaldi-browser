@@ -41,11 +41,21 @@
 
 namespace blink {
 
+StyleRule* FindClosestParentStyleRuleOrNull(CSSRule* parent) {
+  if (parent == nullptr) {
+    return nullptr;
+  }
+  if (parent->type() == CSSRule::kStyleRule) {
+    return To<CSSStyleRule>(parent)->GetStyleRule();
+  }
+  return FindClosestParentStyleRuleOrNull(parent->parentRule());
+}
+
 StyleRuleBase* ParseRuleForInsert(const ExecutionContext* execution_context,
                                   const String& rule_string,
                                   unsigned index,
                                   size_t num_child_rules,
-                                  const CSSRule& parent_rule,
+                                  CSSRule& parent_rule,
                                   ExceptionState& exception_state) {
   if (index > num_child_rules) {
     exception_state.ThrowDOMException(
@@ -60,7 +70,8 @@ StyleRuleBase* ParseRuleForInsert(const ExecutionContext* execution_context,
       parent_rule.ParserContext(execution_context->GetSecureContextMode()),
       style_sheet);
   StyleRuleBase* new_rule = CSSParser::ParseRule(
-      context, style_sheet ? style_sheet->Contents() : nullptr, rule_string);
+      context, style_sheet ? style_sheet->Contents() : nullptr,
+      FindClosestParentStyleRuleOrNull(&parent_rule), rule_string);
   if (!new_rule) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
@@ -150,8 +161,9 @@ void CSSGroupingRule::deleteRule(unsigned index,
 
   group_rule_->WrapperRemoveRule(index);
 
-  if (child_rule_cssom_wrappers_[index])
+  if (child_rule_cssom_wrappers_[index]) {
     child_rule_cssom_wrappers_[index]->SetParentRule(nullptr);
+  }
   child_rule_cssom_wrappers_.EraseAt(index);
 }
 
@@ -264,8 +276,9 @@ unsigned CSSGroupingRule::length() const {
 }
 
 CSSRule* CSSGroupingRule::Item(unsigned index) const {
-  if (index >= length())
+  if (index >= length()) {
     return nullptr;
+  }
   DCHECK_EQ(child_rule_cssom_wrappers_.size(),
             group_rule_->ChildRules().size());
   Member<CSSRule>& rule = child_rule_cssom_wrappers_[index];
@@ -289,9 +302,10 @@ void CSSGroupingRule::Reattach(StyleRuleBase* rule) {
   DCHECK(rule);
   group_rule_ = static_cast<StyleRuleGroup*>(rule);
   for (unsigned i = 0; i < child_rule_cssom_wrappers_.size(); ++i) {
-    if (child_rule_cssom_wrappers_[i])
+    if (child_rule_cssom_wrappers_[i]) {
       child_rule_cssom_wrappers_[i]->Reattach(
           group_rule_->ChildRules()[i].Get());
+    }
   }
 }
 

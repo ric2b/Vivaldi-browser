@@ -8,7 +8,7 @@
 
 #include <algorithm>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,7 +19,7 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/selected_keyword_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_match_cell_view.h"
-#include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_popup_view_views.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_suggestion_button_row_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_text_view.h"
 #include "chrome/browser/ui/views/omnibox/remove_suggestion_bubble.h"
@@ -45,6 +45,7 @@
 #include "ui/color/color_id.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/button/image_button.h"
@@ -145,11 +146,10 @@ END_METADATA
 ////////////////////////////////////////////////////////////////////////////////
 // OmniboxResultView, public:
 
-OmniboxResultView::OmniboxResultView(
-    OmniboxPopupContentsView* popup_contents_view,
-    OmniboxEditModel* model,
-    size_t model_index)
-    : popup_contents_view_(popup_contents_view),
+OmniboxResultView::OmniboxResultView(OmniboxPopupViewViews* popup_view,
+                                     OmniboxEditModel* model,
+                                     size_t model_index)
+    : popup_view_(popup_view),
       model_(model),
       model_index_(model_index),
       // Using base::Unretained is correct here. 'this' outlives the callback.
@@ -202,13 +202,13 @@ OmniboxResultView::OmniboxResultView(
   auto* const focus_ring = views::FocusRing::Get(remove_suggestion_button_);
   focus_ring->SetHasFocusPredicate([&](View* view) {
     return view->GetVisible() && GetMatchSelected() &&
-           (popup_contents_view_->GetSelection().state ==
+           (popup_view_->GetSelection().state ==
             OmniboxPopupSelection::FOCUSED_BUTTON_REMOVE_SUGGESTION);
   });
   focus_ring->SetColorId(kColorOmniboxResultsFocusIndicator);
 
   button_row_ = AddChildView(std::make_unique<OmniboxSuggestionButtonRowView>(
-      popup_contents_view_, model_, model_index));
+      popup_view_, model_, model_index));
 
   // Quickly mouse-exiting through the suggestion button row sometimes leaves
   // the whole row highlighted. This fixes that. It doesn't seem necessary to
@@ -245,7 +245,7 @@ void OmniboxResultView::SetMatch(const AutocompleteMatch& match) {
   match_ = match.GetMatchWithContentsAndDescriptionPossiblySwapped();
 
   const int suggestion_indent =
-      popup_contents_view_->InExplicitExperimentalKeywordMode() ? 70 : 0;
+      popup_view_->InExplicitExperimentalKeywordMode() ? 70 : 0;
   suggestion_view_->SetProperty(views::kMarginsKey,
                                 gfx::Insets::TLBR(0, suggestion_indent, 0, 0));
 
@@ -276,12 +276,13 @@ void OmniboxResultView::SetMatch(const AutocompleteMatch& match) {
 }
 
 void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
-  const SkColor icon_color = GetColorProvider()->GetColor(
-      GetMatchSelected() ? kColorOmniboxResultsIconSelected
-                         : kColorOmniboxResultsIcon);
+  const ui::ColorId icon_color_id = GetMatchSelected()
+                                        ? kColorOmniboxResultsIconSelected
+                                        : kColorOmniboxResultsIcon;
   views::SetImageFromVectorIconWithColor(
       remove_suggestion_button_, vector_icons::kCloseRoundedIcon,
-      GetLayoutConstant(LOCATION_BAR_ICON_SIZE), icon_color,
+      GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
+      GetColorProvider()->GetColor(icon_color_id),
       /* omnibox buttons are never disabled */
       gfx::kPlaceholderColor);
 
@@ -303,10 +304,11 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
   //       SetMatch() once (rather than repeatedly, as happens here). There may
   //       be an optimization opportunity here.
   // TODO(dschuyler): determine whether to optimize the color changes.
-  suggestion_view_->icon()->SetImage(GetIcon().ToImageSkia());
-  keyword_view_->icon()->SetImage(gfx::CreateVectorIcon(
-      omnibox::kKeywordSearchIcon, GetLayoutConstant(LOCATION_BAR_ICON_SIZE),
-      icon_color));
+  suggestion_view_->SetIcon(*GetIcon().ToImageSkia());
+
+  keyword_view_->icon()->SetImage(ui::ImageModel::FromVectorIcon(
+      omnibox::kKeywordSearchIcon, icon_color_id,
+      GetLayoutConstant(LOCATION_BAR_ICON_SIZE)));
 
   // We must reapply colors for all the text fields here. If we don't, we can
   // break theme changes for ZeroSuggest. See https://crbug.com/1095205.
@@ -343,7 +345,7 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
   // The selection indicator indicates when the suggestion is focused. Do not
   // show the selection indicator if an auxiliary button is selected.
   selection_indicator_->SetVisible(selected &&
-                                   popup_contents_view_->GetSelection().state ==
+                                   popup_view_->GetSelection().state ==
                                        OmniboxPopupSelection::NORMAL);
 }
 
@@ -355,18 +357,18 @@ void OmniboxResultView::OnSelectionStateChanged() {
     // any cached values get updated prior to the selection change.
     EmitTextChangedAccessiblityEvent();
 
-    auto selection_state = popup_contents_view_->GetSelection().state;
+    auto selection_state = popup_view_->GetSelection().state;
 
     // The text is also accessible via text/value change events in the omnibox
     // but this selection event allows the screen reader to get more details
     // about the list and the user's position within it.
     // Limit which selection states fire the events, in order to avoid duplicate
-    // events. Specifically, OmniboxPopupContentsView::ProvideButtonFocusHint()
+    // events. Specifically, OmniboxPopupViewViews::ProvideButtonFocusHint()
     // already fires the correct events when the user tabs to an attached button
     // in the current row.
     if (selection_state == OmniboxPopupSelection::FOCUSED_BUTTON_HEADER ||
         selection_state == OmniboxPopupSelection::NORMAL) {
-      popup_contents_view_->FireAXEventsForNewActiveDescendant(this);
+      popup_view_->FireAXEventsForNewActiveDescendant(this);
     }
   }
   ApplyThemeAndRefreshIcons();
@@ -375,13 +377,13 @@ void OmniboxResultView::OnSelectionStateChanged() {
 
 bool OmniboxResultView::GetMatchSelected() const {
   // The header button being focused means the match itself is NOT focused.
-  OmniboxPopupSelection selection = popup_contents_view_->GetSelection();
+  OmniboxPopupSelection selection = popup_view_->GetSelection();
   return selection.line == model_index_ &&
          selection.state != OmniboxPopupSelection::FOCUSED_BUTTON_HEADER;
 }
 
 views::Button* OmniboxResultView::GetActiveAuxiliaryButtonForAccessibility() {
-  if (popup_contents_view_->GetSelection().state ==
+  if (popup_view_->GetSelection().state ==
       OmniboxPopupSelection::FOCUSED_BUTTON_REMOVE_SUGGESTION) {
     return remove_suggestion_button_;
   }
@@ -411,7 +413,7 @@ void OmniboxResultView::OnMatchIconUpdated() {
 }
 
 void OmniboxResultView::SetRichSuggestionImage(const gfx::ImageSkia& image) {
-  suggestion_view_->SetImage(image);
+  suggestion_view_->SetImage(image, match_);
 }
 
 void OmniboxResultView::ButtonPressed(OmniboxPopupSelection::LineState state,
@@ -425,7 +427,7 @@ void OmniboxResultView::ButtonPressed(OmniboxPopupSelection::LineState state,
 
 bool OmniboxResultView::OnMousePressed(const ui::MouseEvent& event) {
   if (event.IsOnlyLeftMouseButton()) {
-    popup_contents_view_->SetSelectedIndex(model_index_);
+    popup_view_->SetSelectedIndex(model_index_);
     // Inform the model that a new result is now selected via mouse press.
     model_->OnNavigationLikely(model_index_,
                                omnibox::mojom::NavigationPredictor::kMouseDown);
@@ -439,7 +441,7 @@ bool OmniboxResultView::OnMouseDragged(const ui::MouseEvent& event) {
     // set the state to be selected or hovered, depending on the mouse button.
     if (event.IsOnlyLeftMouseButton()) {
       if (!GetMatchSelected()) {
-        popup_contents_view_->SetSelectedIndex(model_index_);
+        popup_view_->SetSelectedIndex(model_index_);
       }
     } else {
       UpdateHoverState();
@@ -450,7 +452,7 @@ bool OmniboxResultView::OnMouseDragged(const ui::MouseEvent& event) {
   // When the drag leaves the bounds of this view, cancel the hover state and
   // pass control to the popup view.
   UpdateHoverState();
-  SetMouseAndGestureHandler(popup_contents_view_);
+  SetMouseAndGestureHandler(popup_view_);
   return false;
 }
 
@@ -460,8 +462,8 @@ void OmniboxResultView::OnMouseReleased(const ui::MouseEvent& event) {
         event.IsOnlyLeftMouseButton()
             ? WindowOpenDisposition::CURRENT_TAB
             : WindowOpenDisposition::NEW_BACKGROUND_TAB;
-    popup_contents_view_->OpenMatch(model_index_, disposition,
-                                    event.time_stamp());
+    model_->OpenMatch(match_, disposition, GURL(), u"", model_index_,
+                      event.time_stamp());
   }
 }
 
@@ -513,8 +515,9 @@ void OmniboxResultView::OnThemeChanged() {
 }
 
 void OmniboxResultView::EmitTextChangedAccessiblityEvent() {
-  if (!popup_contents_view_->IsOpen())
+  if (!popup_view_->IsOpen()) {
     return;
+  }
 
   // The omnibox results list reuses the same items, but the text displayed for
   // these items is updated as the value of omnibox changes. The displayed text
@@ -548,7 +551,7 @@ gfx::Image OmniboxResultView::GetIcon() const {
     vector_icon_color_id = GetMatchSelected() ? kColorOmniboxResultsIconSelected
                                               : kColorOmniboxResultsIcon;
   }
-  return popup_contents_view_->GetMatchIcon(
+  return popup_view_->GetMatchIcon(
       match_, GetColorProvider()->GetColor(vector_icon_color_id));
 }
 

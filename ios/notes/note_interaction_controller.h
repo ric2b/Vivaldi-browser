@@ -9,6 +9,7 @@
 class Browser;
 @protocol BrowserCommands;
 @protocol NoteInteractionControllerDelegate;
+@protocol SnackbarCommands;
 
 namespace vivaldi {
 class NoteNode;

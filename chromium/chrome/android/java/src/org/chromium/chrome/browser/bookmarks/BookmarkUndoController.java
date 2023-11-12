@@ -17,6 +17,11 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 
 import java.util.Locale;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+// End Vivaldi
+
 /**
  * Shows an undo bar when the user modifies bookmarks, allowing them to undo their changes.
  */
@@ -86,9 +91,10 @@ public class BookmarkUndoController extends BookmarkModelObserver implements
     public void destroy() {
         mDestroyChecker.checkNotDestroyed();
 
-        mDestroyChecker.destroy();
         mBookmarkModel.removeDeleteObserver(this);
         mSnackbarManager.dismissSnackbars(this);
+
+        mDestroyChecker.destroy();
     }
 
     @Override
@@ -145,6 +151,18 @@ public class BookmarkUndoController extends BookmarkModelObserver implements
             snackbar.setAction(mContext.getString(R.string.undo), null);
         }
 
+        if (ChromeApplicationImpl.isVivaldi() && mContext instanceof ChromeTabbedActivity) {
+            ChromeTabbedActivity activity = (ChromeTabbedActivity) mContext;
+            if (activity != null) {
+                if (activity.getBottomSheetController() != null &&
+                        activity.getBottomSheetController().isSheetOpen() &&
+                        activity.getBottomSheetSnackbarManager() != null) {
+                    activity.getBottomSheetSnackbarManager()
+                            .showSnackbar(snackbar.setDuration(SNACKBAR_DURATION_MS));
+                    return;
+                }
+            }
+        } // End Vivaldi
         mSnackbarManager.showSnackbar(snackbar.setDuration(SNACKBAR_DURATION_MS));
     }
 }

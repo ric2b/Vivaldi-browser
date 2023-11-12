@@ -19,6 +19,10 @@ import("//third_party/blink/renderer/config.gni")
 import("//third_party/blink/renderer/platform/platform_generated.gni")
 import("//v8/gni/v8.gni")
 
+if (is_ios) {
+  import("//build/config/ios/bundle_data_from_filelist.gni")
+}
+
 # Most targets in this file are private actions so use that as the default.
 visibility = [
   ":*",
@@ -271,6 +275,13 @@ source_set("platform_export") {
   ]
 }
 
+source_set("allow_discouraged_type") {
+  sources = [ "allow_discouraged_type.h" ]
+
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ "//third_party/blink/renderer/platform/*" ]
+}
+
 component("platform") {
   visibility = []  # Allow re-assignment of list.
   visibility = [
@@ -445,12 +456,13 @@ component("platform") {
     "bindings/script_wrappable.h",
     "bindings/source_location.cc",
     "bindings/source_location.h",
-    "bindings/string_resource.cc",
     "bindings/string_resource.h",
     "bindings/sync_iterator_base.cc",
     "bindings/sync_iterator_base.h",
     "bindings/thread_debugger.cc",
     "bindings/thread_debugger.h",
+    "bindings/to_blink_string.cc",
+    "bindings/to_blink_string.h",
     "bindings/to_v8.h",
     "bindings/trace_wrapper_v8_reference.h",
     "bindings/trace_wrapper_v8_string.cc",
@@ -519,8 +531,6 @@ component("platform") {
     "exported/video_capture/web_video_capture_impl_manager.cc",
     "exported/weak_wrapper_resource_load_info_notifier.cc",
     "exported/web_audio_bus.cc",
-    "exported/web_audio_device.cc",
-    "exported/web_back_forward_cache_loader_helper.cc",
     "exported/web_blob_info.cc",
     "exported/web_cache.cc",
     "exported/web_content_decryption_module.cc",
@@ -557,8 +567,6 @@ component("platform") {
     "exported/web_time_range.cc",
     "exported/web_url.cc",
     "exported/web_url_error.cc",
-    "exported/web_url_loader_client.cc",
-    "exported/web_url_loader_test_delegate.cc",
     "exported/web_url_request.cc",
     "exported/web_url_response.cc",
     "exported/web_video_frame_submitter.cc",
@@ -1141,7 +1149,7 @@ component("platform") {
     "graphics/video_frame_sink_bundle.h",
     "graphics/video_frame_submitter.cc",
     "graphics/video_frame_submitter.h",
-    "graphics/view_transition_shared_element_id.h",
+    "graphics/view_transition_element_id.h",
     "graphics/viz_util.cc",
     "graphics/viz_util.h",
     "graphics/web_graphics_context_3d_provider_util.cc",
@@ -1203,8 +1211,8 @@ component("platform") {
     "mediastream/aec_dump_agent_impl.h",
     "mediastream/audio_service_audio_processor_proxy.cc",
     "mediastream/audio_service_audio_processor_proxy.h",
-    "mediastream/media_constraints.cc",
-    "mediastream/media_constraints.h",
+    "mediastream/media_constraints_consts.cc",
+    "mediastream/media_constraints_consts.h",
     "mediastream/media_stream_audio_deliverer.h",
     "mediastream/media_stream_audio_level_calculator.cc",
     "mediastream/media_stream_audio_level_calculator.h",
@@ -1489,7 +1497,6 @@ component("platform") {
     "weborigin/scheme_registry.h",
     "weborigin/security_origin.cc",
     "weborigin/security_origin.h",
-    "weborigin/security_origin_hash.h",
     "weborigin/security_policy.cc",
     "weborigin/security_policy.h",
     "webrtc/convert_to_webrtc_video_frame_buffer.cc",
@@ -1609,6 +1616,10 @@ component("platform") {
     ]
   }
 
+  if (is_ios) {
+    sources += [ "fonts/ios/font_cache_ios.mm" ]
+  }
+
   if (is_linux || is_chromeos) {
     sources += [
       "fonts/linux/font_cache_linux.cc",
@@ -1653,6 +1664,7 @@ component("platform") {
   ]
 
   public_deps = [
+    ":allow_discouraged_type",
     ":blink_platform_public_deps",
     ":platform_export",
     "//gpu/command_buffer/client:raster_interface",
@@ -1793,8 +1805,8 @@ component("platform") {
       "text/hyphenation/hyphenator_aosp.cc",
       "text/hyphenation/hyphenator_aosp.h",
     ]
-  } else if (is_mac) {
-    sources += [ "text/mac/hyphenation_mac.cc" ]
+  } else if (is_apple) {
+    sources += [ "text/apple/hyphenation_apple.cc" ]
   } else {
     sources += [ "text/hyphenation/hyphenation_null.cc" ]
   }
@@ -1883,8 +1895,8 @@ static_library("test_support") {
     "testing/layer_tree_host_embedder.h",
     "testing/message_loop_for_mojo.h",
     "testing/mock_context_lifecycle_notifier.h",
-    "testing/noop_web_url_loader.cc",
-    "testing/noop_web_url_loader.h",
+    "testing/noop_url_loader.cc",
+    "testing/noop_url_loader.h",
     "testing/paint_property_test_helpers.h",
     "testing/paint_test_configurations.h",
     "testing/picture_matchers.cc",
@@ -1905,14 +1917,17 @@ static_library("test_support") {
     "testing/testing_platform_support_with_mock_scheduler.h",
     "testing/unit_test_helpers.cc",
     "testing/unit_test_helpers.h",
+    "testing/url_loader_mock.cc",
+    "testing/url_loader_mock.h",
+    "testing/url_loader_mock_factory.h",
+    "testing/url_loader_mock_factory_impl.cc",
+    "testing/url_loader_mock_factory_impl.h",
+    "testing/url_loader_test_delegate.cc",
+    "testing/url_loader_test_delegate.h",
     "testing/url_test_helpers.cc",
     "testing/url_test_helpers.h",
     "testing/video_frame_utils.cc",
     "testing/video_frame_utils.h",
-    "testing/weburl_loader_mock.cc",
-    "testing/weburl_loader_mock.h",
-    "testing/weburl_loader_mock_factory_impl.cc",
-    "testing/weburl_loader_mock_factory_impl.h",
     "webrtc/testing/mock_webrtc_video_frame_adapter_shared_resources.h",
   ]
 
@@ -1992,6 +2007,9 @@ test("blink_platform_unittests") {
       # Required to disable broken tests.
       "//testing/buildbot/filters:blink_platform_unittests",
     ]
+  }
+  if (is_ios) {
+    bundle_deps = [ ":blink_platform_unittests_bundle_data" ]
   }
 }
 
@@ -2149,7 +2167,6 @@ source_set("blink_platform_unittests_sources") {
     "mojo/string16_mojom_traits_test.cc",
     "p2p/filtering_network_manager_test.cc",
     "p2p/ipc_network_manager_test.cc",
-    "peerconnection/bridge_ice_controller_test.cc",
     "peerconnection/coalesced_tasks_test.cc",
     "peerconnection/linear_histogram_test.cc",
     "peerconnection/low_precision_timer_test.cc",
@@ -2304,11 +2321,41 @@ source_set("blink_platform_unittests_sources") {
     "//url/mojom:test_url_mojom_gurl_blink",
   ]
 
+  deps += [ ":bridge_ice_controller_tests" ]
+
   data_deps = [ ":blink_platform_unittests_data" ]
 
   defines = [ "INSIDE_BLINK" ]
   if (use_minikin_hyphenation) {
     defines += [ "USE_MINIKIN_HYPHENATION" ]
+  }
+}
+
+source_set("bridge_ice_controller_tests") {
+  visibility = []  # Allow re-assignment of list.
+  visibility = [ ":*" ]
+  testonly = true
+
+  sources = [
+    "peerconnection/bridge_ice_controller_test.cc",
+    "peerconnection/fake_connection_factory_test.cc",
+    "peerconnection/fake_connection_test_base.h",
+    "peerconnection/ice_proposal_test.cc",
+    "peerconnection/webrtc_connection_matchers.h",
+  ]
+
+  deps = [
+    ":test_support",
+    "//components/webrtc:thread_wrapper",
+    "//third_party/webrtc_overrides:ice_controller_test_utils",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+}
+
+if (is_ios) {
+  bundle_data_from_filelist("blink_platform_unittests_bundle_data") {
+    testonly = true
+    filelist_name = "blink_platform_unittests_bundle_data.filelist"
   }
 }
 
@@ -2601,6 +2648,15 @@ fuzzer_test("blink_http_parsers_fuzzer") {
     ":platform",
   ]
   dict = "network/HTTPParsersFuzzer.dict"
+}
+
+fuzzer_test("blink_storage_key_fuzzer") {
+  sources = [ "storage/blink_storage_key_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    "//third_party/blink/public/common",
+  ]
+  seed_corpus = "//third_party/blink/common/storage_key/storage_key_corpus"
 }
 
 # Fuzzer template for WTF::TextCodec.

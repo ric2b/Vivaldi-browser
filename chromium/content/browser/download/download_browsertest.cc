@@ -13,13 +13,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
@@ -55,6 +55,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
+#include "content/public/test/content_browser_test_content_browser_client.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/fenced_frame_test_util.h"
@@ -70,7 +71,6 @@
 #include "content/shell/browser/shell_download_manager_delegate.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/fake_network_url_loader_factory.h"
-#include "content/test/test_content_browser_client.h"
 #include "net/base/features.h"
 #include "net/base/filename_util.h"
 #include "net/dns/mock_host_resolver.h"
@@ -152,7 +152,8 @@ void ExpectRequestIsolationInfo(
 
 // Implementation of TestContentBrowserClient that overrides
 // AllowRenderingMhtmlOverHttp() and allows consumers to set a value.
-class DownloadTestContentBrowserClient : public TestContentBrowserClient {
+class DownloadTestContentBrowserClient
+    : public ContentBrowserTestContentBrowserClient {
  public:
   DownloadTestContentBrowserClient() {
 #if BUILDFLAG(IS_ANDROID)
@@ -1350,8 +1351,7 @@ class ParallelDownloadTest : public DownloadContentTest {
             parameters.size, std::string(), download::DownloadItem::INTERRUPTED,
             download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
             download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
-            base::Time(), false, parallel_slices,
-            download::DownloadItemRerouteInfo());
+            base::Time(), false, parallel_slices);
     ClearAutoResumptionCount(download);
     return download;
   }
@@ -1526,7 +1526,7 @@ class DownloadFencedFrameTest : public DownloadContentTest {
     TestNavigationManager navigation(shell()->web_contents(), url);
     EXPECT_EQ(url.spec(),
               EvalJs(rfh, JsReplace(kNavigateInFencedFrameScript, url)));
-    navigation.WaitForNavigationFinished();
+    EXPECT_TRUE(navigation.WaitForNavigationFinished());
 
     EXPECT_FALSE(target_node->current_frame_host()->IsErrorDocument());
     return target_node->current_frame_host();
@@ -3185,8 +3185,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_NoFile) {
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo());
+          std::vector<download::DownloadItem::ReceivedSlice>());
   ClearAutoResumptionCount(download);
 
   download->Resume(false);
@@ -3255,8 +3254,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_NoHash) {
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo());
+          std::vector<download::DownloadItem::ReceivedSlice>());
   ClearAutoResumptionCount(download);
 
   download->Resume(false);
@@ -3312,8 +3310,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo());
+          std::vector<download::DownloadItem::ReceivedSlice>());
   ClearAutoResumptionCount(download);
 
   download->Resume(false);
@@ -3376,8 +3373,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo());
+          std::vector<download::DownloadItem::ReceivedSlice>());
   ClearAutoResumptionCount(download);
 
   download->Resume(false);
@@ -3446,8 +3442,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_WrongHash) {
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo());
+          std::vector<download::DownloadItem::ReceivedSlice>());
   ClearAutoResumptionCount(download);
 
   download->Resume(false);
@@ -3525,8 +3520,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_ShortFile) {
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo());
+          std::vector<download::DownloadItem::ReceivedSlice>());
   ClearAutoResumptionCount(download);
 
   download->Resume(false);
@@ -3602,8 +3596,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ResumeRestoredDownload_LongFile) {
           download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
           download::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false,
           base::Time(), false,
-          std::vector<download::DownloadItem::ReceivedSlice>(),
-          download::DownloadItemRerouteInfo());
+          std::vector<download::DownloadItem::ReceivedSlice>());
   ClearAutoResumptionCount(download);
 
   download->Resume(false);
@@ -4204,8 +4197,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadAttributeNetworkError) {
   content::TestNavigationManager navigation_document(content, document_url);
   content::TestNavigationManager navigation_download(content, server_url);
   shell()->LoadURL(document_url);
-  navigation_document.WaitForNavigationFinished();
-  navigation_download.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_document.WaitForNavigationFinished());
+  ASSERT_TRUE(navigation_download.WaitForNavigationFinished());
 
   EXPECT_TRUE(navigation_document.was_successful());
   EXPECT_FALSE(navigation_download.was_successful());
@@ -4963,23 +4956,22 @@ class MhtmlDownloadTest : public DownloadContentTest {
   void SetUpOnMainThread() override {
     DownloadContentTest::SetUpOnMainThread();
 
+    browser_client_ = std::make_unique<DownloadTestContentBrowserClient>();
     // Force downloading the MHTML.
-    new_client_.set_allowed_rendering_mhtml_over_http(false);
+    browser_client_->set_allowed_rendering_mhtml_over_http(false);
     // Enable RegisterNonNetworkNavigationURLLoaderFactories for
     // test white list for non http shemes which should not trigger
     // download.
-    new_client_.enable_register_non_network_url_loader(true);
-    old_client_ = SetBrowserClientForTesting(&new_client_);
+    browser_client_->enable_register_non_network_url_loader(true);
   }
 
   void TearDownOnMainThread() override {
-    SetBrowserClientForTesting(old_client_);
+    browser_client_.reset();
     DownloadContentTest::TearDownOnMainThread();
   }
 
  private:
-  DownloadTestContentBrowserClient new_client_;
-  raw_ptr<ContentBrowserClient> old_client_;
+  std::unique_ptr<DownloadTestContentBrowserClient> browser_client_;
 };
 
 // Test allow list for non http schemes which should not trigger

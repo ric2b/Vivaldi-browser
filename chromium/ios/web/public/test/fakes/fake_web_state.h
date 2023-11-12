@@ -21,7 +21,6 @@
 #import "ios/web/public/permissions/permissions.h"
 #import "ios/web/public/web_state.h"
 #include "ios/web/public/web_state_observer.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
 class SessionCertificatePolicyCache;
@@ -62,8 +61,8 @@ class FakeWebState : public WebState {
   void Stop() override {}
   const NavigationManager* GetNavigationManager() const override;
   NavigationManager* GetNavigationManager() override;
-  const WebFramesManager* GetWebFramesManager() const override;
-  WebFramesManager* GetWebFramesManager() override;
+  const WebFramesManager* GetPageWorldWebFramesManager() const override;
+  WebFramesManager* GetPageWorldWebFramesManager() override;
   const SessionCertificatePolicyCache* GetSessionCertificatePolicyCache()
       const override;
   SessionCertificatePolicyCache* GetSessionCertificatePolicyCache() override;
@@ -80,15 +79,13 @@ class FakeWebState : public WebState {
   bool IsCrashed() const override;
   bool IsEvicted() const override;
   bool IsBeingDestroyed() const override;
+  bool IsWebPageInFullscreenMode() const override;
   const FaviconStatus& GetFaviconStatus() const final;
   void SetFaviconStatus(const FaviconStatus& favicon_status) final;
   int GetNavigationItemCount() const override;
   const GURL& GetVisibleURL() const override;
   const GURL& GetLastCommittedURL() const override;
   GURL GetCurrentURL(URLVerificationTrustLevel* trust_level) const override;
-  base::CallbackListSubscription AddScriptCommandCallback(
-      const ScriptCommandCallback& callback,
-      const std::string& command_prefix) override;
   CRWWebViewProxyType GetWebViewProxy() const override;
 
   void AddObserver(WebStateObserver* observer) override;
@@ -111,6 +108,11 @@ class FakeWebState : public WebState {
                            id<CRWWebViewDownloadDelegate> delegate,
                            void (^handler)(id<CRWWebViewDownload>)) override
       API_AVAILABLE(ios(14.5));
+  bool IsFindInteractionSupported() final;
+  bool IsFindInteractionEnabled() final;
+  void SetFindInteractionEnabled(bool enabled) final;
+  id<CRWFindInteraction> GetFindInteraction() final API_AVAILABLE(ios(16));
+  id GetActivityItem() API_AVAILABLE(ios(16.4)) final;
 
   void AddPolicyDecider(WebStatePolicyDecider* decider) override;
   void RemovePolicyDecider(WebStatePolicyDecider* decider) override;
@@ -143,6 +145,8 @@ class FakeWebState : public WebState {
   void SetIsEvicted(bool value);
   void SetWebViewProxy(CRWWebViewProxyType web_view_proxy);
   void SetCanTakeSnapshot(bool can_take_snapshot);
+  void SetFindInteraction(id<CRWFindInteraction> find_interaction)
+      API_AVAILABLE(ios(16));
 
   // Getters for test data.
   // Uses `policy_deciders` to determine whether the navigation corresponding to
@@ -159,9 +163,6 @@ class FakeWebState : public WebState {
       NSURLResponse* response,
       WebStatePolicyDecider::ResponseInfo response_info,
       WebStatePolicyDecider::PolicyDecisionCallback callback);
-  // Returns a copy of the last added callback, if one has been added.
-  absl::optional<ScriptCommandCallback> GetLastAddedCallback() const;
-  std::string GetLastCommandPrefix() const;
   NSData* GetLastLoadedData() const;
   bool IsClosed() const;
 
@@ -188,6 +189,7 @@ class FakeWebState : public WebState {
   bool has_opener_ = false;
   bool can_take_snapshot_ = false;
   bool is_closed_ = false;
+  bool is_find_interaction_enabled_ = false;
   base::Time last_active_time_ = base::Time::Now();
   base::Time creation_time_ = base::Time::Now();
   int navigation_item_count_ = 0;
@@ -202,11 +204,9 @@ class FakeWebState : public WebState {
   UIView* view_ = nil;
   CRWWebViewProxyType web_view_proxy_;
   NSData* last_loaded_data_ = nil;
-  base::RepeatingCallbackList<ScriptCommandCallbackSignature> callback_list_;
-  absl::optional<ScriptCommandCallback> last_added_callback_;
-  std::string last_command_prefix_;
   PermissionState camera_permission_state_ = PermissionStateNotAccessible;
   PermissionState microphone_permission_state_ = PermissionStateNotAccessible;
+  id<CRWFindInteraction> find_interaction_ API_AVAILABLE(ios(16));
 
   // A list of observers notified when page state changes. Weak references.
   base::ObserverList<WebStateObserver, true> observers_;

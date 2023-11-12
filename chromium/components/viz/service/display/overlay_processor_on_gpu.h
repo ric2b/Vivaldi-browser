@@ -34,8 +34,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorOnGpu {
  public:
 #if BUILDFLAG(IS_APPLE)
   using CandidateList = CALayerOverlayList;
-#elif BUILDFLAG(IS_WIN)
-  using CandidateList = DCLayerOverlayList;
 #else
   // Default.
   using CandidateList = OverlayCandidateList;

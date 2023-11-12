@@ -5,8 +5,9 @@
 #ifndef CONTENT_BROWSER_PRIVATE_AGGREGATION_PRIVATE_AGGREGATION_MANAGER_H_
 #define CONTENT_BROWSER_PRIVATE_AGGREGATION_PRIVATE_AGGREGATION_MANAGER_H_
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
+#include "content/common/content_export.h"
 #include "content/common/private_aggregation_host.mojom-forward.h"
 #include "content/public/browser/storage_partition.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -25,7 +26,7 @@ class BrowserContext;
 
 // Interface that mediates data flow between the Private Aggregation API
 // component and other APIs using it.
-class PrivateAggregationManager {
+class CONTENT_EXPORT PrivateAggregationManager {
  public:
   virtual ~PrivateAggregationManager() = default;
 

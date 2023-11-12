@@ -10,11 +10,11 @@
 #include <vector>
 
 #include "base/base_paths.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/memory_mapped_file.h"
+#include "base/functional/bind.h"
 #include "base/path_service.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
@@ -22,7 +22,6 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "base/win/pe_image.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "chrome/install_static/test/scoped_install_details.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -175,13 +174,8 @@ TEST_F(DelayloadsTest, DISABLED_ChromeDllLoadSanityTestImpl) {
   HMODULE chrome_module_handle = ::LoadLibrary(dll.value().c_str());
   ASSERT_TRUE(chrome_module_handle != nullptr);
 
-  // Loading chrome.dll should not load user32.dll on Win10.
-  // On Win7, chains of system dlls and lack of apisets result in it loading.
-  if (base::win::GetVersion() >= base::win::Version::WIN10) {
-    EXPECT_EQ(nullptr, ::GetModuleHandle(L"user32.dll"));
-  } else {
-    EXPECT_NE(nullptr, ::GetModuleHandle(L"user32.dll"));
-  }
+  // Loading chrome.dll should not load user32.dll on Windows.
+  EXPECT_EQ(nullptr, ::GetModuleHandle(L"user32.dll"));
 }
 
 TEST_F(DelayloadsTest, ChromeElfDllDelayloadsCheck) {
@@ -196,8 +190,10 @@ TEST_F(DelayloadsTest, ChromeElfDllDelayloadsCheck) {
       << "Ensure the delayloads_unittests "
          "target was built, instead of delayloads_unittests.exe";
 
+  // Allowlist of modules that do not delayload.
   static const char* const kValidFilePatterns[] = {
     "KERNEL32.dll",
+    "ntdll.dll",
 #if defined(ADDRESS_SANITIZER) && defined(COMPONENT_BUILD)
     "clang_rt.asan_dynamic-i386.dll",
 #endif
@@ -283,8 +279,10 @@ TEST_F(DelayloadsTest, ChromeExeDelayloadsCheck) {
       << "Ensure the delayloads_unittests "
          "target was built, instead of delayloads_unittests.exe";
 
+  // Allowlist of modules that do not delayload.
   static const char* const kValidFilePatterns[] = {
     "KERNEL32.dll",
+    "ntdll.dll",
     "chrome_elf.dll",
     // On 64 bit the Version API's like VerQueryValue come from VERSION.dll.
     // It depends on kernel32, advapi32 and api-ms-win-crt*.dll. This should

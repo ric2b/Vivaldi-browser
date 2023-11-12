@@ -529,4 +529,22 @@ bool EventDatabase::MigrateCalendarToVersion13() {
   return true;
 }
 
+// Updates to version 14.
+// VB-95275 re-sync certain events to update invalid reccurrence
+bool EventDatabase::MigrateCalendarToVersion14() {
+  if (!GetDB().Execute("UPDATE events "
+                       " SET etag = ''"
+                       "  WHERE etag != '' "
+                       "   AND rrule = '' "
+                       "   AND trash != 1;"))
+    return false;
+
+  if (!GetDB().Execute("UPDATE calendar "
+                       " SET ctag = '' "
+                       "  WHERE ctag != '';"))
+    return false;
+
+  return true;
+}
+
 }  // namespace calendar

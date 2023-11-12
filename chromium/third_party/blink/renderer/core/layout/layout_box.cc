@@ -612,7 +612,8 @@ void LayoutBox::StyleWillChange(StyleDifference diff,
     // The background of the root element or the body element could propagate up
     // to the canvas. Just dirty the entire canvas when our style changes
     // substantially.
-    if ((diff.NeedsPaintInvalidation() || diff.NeedsLayout()) && GetNode() &&
+    if ((diff.NeedsNormalPaintInvalidation() || diff.NeedsLayout()) &&
+        GetNode() &&
         (IsDocumentElement() || IsA<HTMLBodyElement>(*GetNode()))) {
       View()->SetShouldDoFullPaintInvalidation();
     }
@@ -827,8 +828,8 @@ void LayoutBox::StyleDidChange(StyleDifference diff,
   if (IsCustomItem())
     GetCustomLayoutChild()->styleMap()->UpdateStyle(GetDocument(), StyleRef());
 
-  if (diff.NeedsPaintInvalidation()) {
-    if (const AnchorScrollValue* old_anchor_scroll =
+  if (diff.NeedsNormalPaintInvalidation()) {
+    if (const AnchorSpecifierValue* old_anchor_scroll =
             old_style ? old_style->AnchorScroll() : nullptr;
         !base::ValuesEquivalent(StyleRef().AnchorScroll().Get(),
                                 old_anchor_scroll)) {
@@ -1034,8 +1035,7 @@ void LayoutBox::UpdateFromStyle() {
 
 void LayoutBox::LayoutSubtreeRoot() {
   NOT_DESTROYED();
-  if (RuntimeEnabledFeatures::LayoutNGEnabled() && !IsLayoutNGObject() &&
-      GetSingleCachedLayoutResult()) {
+  if (!IsLayoutNGObject() && GetSingleCachedLayoutResult()) {
     // If this object is laid out by the legacy engine, while its containing
     // block is laid out by NG, it means that we normally (when laying out
     // starting at the real root, i.e. LayoutView) enter layout of this object
@@ -1094,7 +1094,7 @@ DISABLE_CFI_PERF
 LayoutUnit LayoutBox::ClientWidth() const {
   NOT_DESTROYED();
   // We need to clamp negative values. This function may be called during layout
-  // before frame_rect_ gets the final proper value. Another reason: While
+  // before frame_size_ gets the final proper value. Another reason: While
   // border side values are currently limited to 2^20px (a recent change in the
   // code), if this limit is raised again in the future, we'd have ill effects
   // of saturated arithmetic otherwise.
@@ -1112,7 +1112,7 @@ DISABLE_CFI_PERF
 LayoutUnit LayoutBox::ClientHeight() const {
   NOT_DESTROYED();
   // We need to clamp negative values. This function can be called during layout
-  // before frame_rect_ gets the final proper value. The scrollbar may be wider
+  // before frame_size_ gets the final proper value. The scrollbar may be wider
   // than the padding box. Another reason: While border side values are
   // currently limited to 2^20px (a recent change in the code), if this limit is
   // raised again in the future, we'd have ill effects of saturated arithmetic
@@ -2891,10 +2891,16 @@ void LayoutBox::SizeChanged() {
 
 bool LayoutBox::IntersectsVisibleViewport() const {
   NOT_DESTROYED();
-  PhysicalRect rect = PhysicalVisualOverflowRect();
   LayoutView* layout_view = View();
-  while (layout_view->GetFrame()->OwnerLayoutObject())
-    layout_view = layout_view->GetFrame()->OwnerLayoutObject()->View();
+  while (auto* owner = layout_view->GetFrame()->OwnerLayoutObject()) {
+    layout_view = owner->View();
+  }
+  // If this is the outermost LayoutView then it will always intersect. (`rect`
+  // will be the viewport in that case.)
+  if (this == layout_view) {
+    return true;
+  }
+  PhysicalRect rect = PhysicalVisualOverflowRect();
   MapToVisualRectInAncestorSpace(layout_view, rect);
   return rect.Intersects(PhysicalRect(
       layout_view->GetFrameView()->GetScrollableArea()->VisibleContentRect()));
@@ -3400,6 +3406,7 @@ void LayoutBox::AppendLayoutResult(const NGLayoutResult* result) {
   // |layout_results_| is particularly critical when side effects are disabled.
   DCHECK(!NGDisableSideEffectsScope::IsDisabled());
   layout_results_.push_back(std::move(result));
+  InvalidateCachedGeometry();
   CheckDidAddFragment(*this, fragment);
 
   if (layout_results_.size() > 1)
@@ -3430,6 +3437,7 @@ void LayoutBox::ReplaceLayoutResult(const NGLayoutResult* result,
   // |layout_results_| is particularly critical when side effects are disabled.
   DCHECK(!NGDisableSideEffectsScope::IsDisabled());
   layout_results_[index] = std::move(result);
+  InvalidateCachedGeometry();
   CheckDidAddFragment(*this, fragment, index);
 
   if (got_new_fragment && !fragment.BreakToken()) {
@@ -3507,6 +3515,20 @@ void LayoutBox::ShrinkLayoutResults(wtf_size_t results_to_keep) {
   if (layout_results_.size() > 1)
     FragmentCountOrSizeDidChange();
   layout_results_.Shrink(results_to_keep);
+  InvalidateCachedGeometry();
+}
+
+void LayoutBox::InvalidateCachedGeometry() {
+  NOT_DESTROYED();
+  if (!RuntimeEnabledFeatures::LayoutNGNoCopyBackEnabled()) {
+    return;
+  }
+  SetHasValidCachedGeometry(false);
+  if (auto* block_flow = DynamicTo<LayoutBlockFlow>(this)) {
+    if (auto* flow_thread = block_flow->MultiColumnFlowThread()) {
+      flow_thread->SetHasValidCachedGeometry(false);
+    }
+  }
 }
 
 void LayoutBox::InvalidateItems(const NGLayoutResult& result) {
@@ -3518,10 +3540,11 @@ void LayoutBox::InvalidateItems(const NGLayoutResult& result) {
     return;
 #if DCHECK_IS_ON()
   // Column fragments are not really associated with a layout object.
-  if (IsLayoutFlowThread())
+  if (IsLayoutFlowThread()) {
     DCHECK(box_fragment.IsColumnBox());
-  else if (!IsShapingDeferred())
+  } else {
     DCHECK_EQ(this, box_fragment.GetLayoutObject());
+  }
 #endif
   ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
 }
@@ -5059,13 +5082,7 @@ LayoutUnit LayoutBox::ComputePercentageLogicalHeight(
   // then we must subtract the border and padding from the cell's
   // |available_height| (given by |OverrideLogicalHeight|) to arrive
   // at the child's computed height.
-  bool subtract_border_and_padding =
-      IsTable() ||
-      (!RuntimeEnabledFeatures::LayoutNGEnabled() && cb->IsTableCell() &&
-       !skipped_auto_height_containing_block &&
-       cb->HasOverrideLogicalHeight() &&
-       StyleRef().BoxSizing() == EBoxSizing::kContentBox);
-  if (subtract_border_and_padding) {
+  if (IsTable()) {
     result -= BorderAndPaddingLogicalHeight();
     return std::max(LayoutUnit(), result);
   }
@@ -5298,15 +5315,6 @@ LayoutUnit LayoutBox::ComputeReplacedLogicalHeightUsing(
         while (!IsA<LayoutView>(cb) &&
                (cb->StyleRef().LogicalHeight().IsAuto() ||
                 cb->StyleRef().LogicalHeight().IsPercentOrCalc())) {
-          if (!RuntimeEnabledFeatures::LayoutNGEnabled() && cb->IsTableCell()) {
-            // Don't let table cells squeeze percent-height replaced elements
-            // <http://bugs.webkit.org/show_bug.cgi?id=15359>
-            available_height =
-                std::max(available_height, IntrinsicLogicalHeight());
-            return ValueForLength(
-                logical_height,
-                available_height - BorderAndPaddingLogicalHeight());
-          }
           To<LayoutBlock>(cb)->AddPercentHeightDescendant(
               const_cast<LayoutBox*>(this));
           cb = cb->ContainingBlock();
@@ -5314,8 +5322,7 @@ LayoutUnit LayoutBox::ComputeReplacedLogicalHeightUsing(
       }
 
       return AdjustContentBoxLogicalHeightForBoxSizing(
-          (RuntimeEnabledFeatures::LayoutNGEnabled() &&
-           available_height == kIndefiniteSize)
+          available_height == kIndefiniteSize
               ? IntrinsicLogicalHeight()
               : ValueForLength(logical_height, available_height));
     }
@@ -5335,25 +5342,12 @@ LayoutUnit LayoutBox::ComputeReplacedLogicalHeightUsing(
 LayoutUnit LayoutBox::AvailableLogicalHeight(
     AvailableLogicalHeightType height_type) const {
   NOT_DESTROYED();
-  if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
-    // LayoutNG code is correct, Legacy code incorrectly ConstrainsMinMax
-    // when height is -1, and returns 0, not -1.
-    // The reason this code is NG-only is that this code causes performance
-    // regression for nested-percent-height-tables test case.
-    // This code gets executed 740 times in the test case.
-    // https://chromium-review.googlesource.com/c/chromium/src/+/1103289
-    LayoutUnit height =
-        AvailableLogicalHeightUsing(StyleRef().LogicalHeight(), height_type);
-    if (UNLIKELY(height == -1))
-      return height;
-    return ConstrainContentBoxLogicalHeightByMinMax(height, LayoutUnit(-1));
+  LayoutUnit height =
+      AvailableLogicalHeightUsing(StyleRef().LogicalHeight(), height_type);
+  if (UNLIKELY(height == -1)) {
+    return height;
   }
-  // http://www.w3.org/TR/CSS2/visudet.html#propdef-height - We are interested
-  // in the content height.
-  // FIXME: Should we pass intrinsicContentLogicalHeight() instead of -1 here?
-  return ConstrainContentBoxLogicalHeightByMinMax(
-      AvailableLogicalHeightUsing(StyleRef().LogicalHeight(), height_type),
-      LayoutUnit(-1));
+  return ConstrainContentBoxLogicalHeightByMinMax(height, LayoutUnit(-1));
 }
 
 LayoutUnit LayoutBox::AvailableLogicalHeightUsing(
@@ -7701,6 +7695,62 @@ LayoutUnit LayoutBox::OffsetLeft(const Element* parent) const {
 LayoutUnit LayoutBox::OffsetTop(const Element* parent) const {
   NOT_DESTROYED();
   return OffsetPoint(parent).top;
+}
+
+LayoutSize LayoutBox::Size() const {
+  NOT_DESTROYED();
+  if (RuntimeEnabledFeatures::LayoutNGNoCopyBackEnabled() &&
+      !HasValidCachedGeometry()) {
+    // const_cast in order to update the cached value.
+    const_cast<LayoutBox*>(this)->SetHasValidCachedGeometry(true);
+    const_cast<LayoutBox*>(this)->frame_size_ = ComputeSize();
+  }
+  return frame_size_;
+}
+
+LayoutSize LayoutBox::ComputeSize() const {
+  NOT_DESTROYED();
+  const auto& results = GetLayoutResults();
+  if (results.size() == 0) {
+    return LayoutSize();
+  }
+  const auto& first_fragment = results[0]->PhysicalFragment();
+  if (results.size() == 1u) {
+    return first_fragment.Size().ToLayoutSize();
+  }
+  WritingModeConverter converter(first_fragment.Style().GetWritingDirection());
+  const NGBlockBreakToken* previous_break_token = nullptr;
+  LogicalSize size;
+  for (const auto& result : results) {
+    const auto& physical_fragment =
+        To<NGPhysicalBoxFragment>(result->PhysicalFragment());
+    LogicalSize fragment_logical_size =
+        converter.ToLogical(physical_fragment.Size());
+    if (physical_fragment.IsFirstForNode()) {
+      // Inline-size will only be set at the first fragment. Subsequent
+      // fragments may have different inline-size (either because fragmentainer
+      // inline-size is variable, or e.g. because available inline-size is
+      // affected by floats). The legacy engine doesn't handle variable
+      // inline-size (since it doesn't really understand fragmentation).  This
+      // means that things like offsetWidth won't work correctly (since that's
+      // still being handled by the legacy engine), but at least layout,
+      // painting and hit-testing will be correct.
+      size = fragment_logical_size;
+    } else {
+      DCHECK(previous_break_token);
+      size.block_size = fragment_logical_size.block_size +
+                        previous_break_token->ConsumedBlockSizeForLegacy();
+    }
+    previous_break_token = physical_fragment.BreakToken();
+    // Continue in order to update logical height, unless this fragment is
+    // past the block-end of the generating node (happens with overflow) or
+    // is a repeated one.
+    if (!previous_break_token || previous_break_token->IsRepeated() ||
+        previous_break_token->IsAtBlockEnd()) {
+      break;
+    }
+  }
+  return converter.ToPhysical(size).ToLayoutSize();
 }
 
 LayoutBox* LayoutBox::LocationContainer() const {

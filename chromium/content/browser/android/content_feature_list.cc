@@ -5,6 +5,7 @@
 #include "base/android/jni_string.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
+#include "content/common/features.h"
 #include "content/public/android/content_jni_headers/ContentFeatureListImpl_jni.h"
 #include "content/public/common/content_features.h"
 #include "third_party/blink/public/common/features.h"
@@ -22,6 +23,8 @@ namespace {
 // this array may either refer to features defined in the header of this file or
 // in other locations in the code base (e.g. content_features.h).
 const base::Feature* const kFeaturesExposedToJava[] = {
+    &blink::features::kStylusPointerAdjustment,
+    &blink::features::kStylusRichGestures,
     &features::kAccessibilityPageZoom,
     &features::kAutoDisableAccessibility,
     &features::kAutoDisableAccessibilityV2,
@@ -31,12 +34,12 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kComputeAXMode,
     &features::kFedCm,
     &features::kOnDemandAccessibilityEvents,
+    &kOptimizeImmHideCalls,
     &features::kProcessSharingWithStrictSiteInstances,
     &features::kReduceGpuPriorityOnBackground,
     &features::kRequestDesktopSiteAdditions,
     &features::kRequestDesktopSiteExceptions,
     &features::kTouchDragAndContextMenu,
-    &features::kWebAuthConditionalUI,
     &features::kWebAuthnTouchToFillCredentialSelection,
     &features::kWebBluetoothNewPermissionsBackend,
     &features::kWebNfc,

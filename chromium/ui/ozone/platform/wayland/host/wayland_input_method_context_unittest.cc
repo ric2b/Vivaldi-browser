@@ -299,7 +299,8 @@ TEST_F(WaylandInputMethodContextTest, ActivateDeactivate) {
   });
 
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
-                                     ui::TEXT_INPUT_TYPE_TEXT);
+                                     ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TextInputClient::FOCUS_REASON_OTHER);
   connection_->Flush();
 
   PostToServerAndWait([id = surface_id_](wl::TestWaylandServerThread* server) {
@@ -334,7 +335,8 @@ TEST_F(WaylandInputMethodContextTest, ActivateDeactivate) {
   });
 
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_TEXT,
-                                     ui::TEXT_INPUT_TYPE_NONE);
+                                     ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TextInputClient::FOCUS_REASON_NONE);
   connection_->Flush();
 
   PostToServerAndWait([id = surface_id_](wl::TestWaylandServerThread* server) {
@@ -362,7 +364,8 @@ TEST_F(WaylandInputMethodContextTest, ActivateDeactivate) {
   });
 
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
-                                     ui::TEXT_INPUT_TYPE_TEXT);
+                                     ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TextInputClient::FOCUS_REASON_OTHER);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -374,7 +377,8 @@ TEST_F(WaylandInputMethodContextTest, ActivateDeactivate) {
   });
 
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_TEXT,
-                                     ui::TEXT_INPUT_TYPE_NONE);
+                                     ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TextInputClient::FOCUS_REASON_NONE);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -403,13 +407,18 @@ TEST_F(WaylandInputMethodContextTest, Reset) {
 }
 
 TEST_F(WaylandInputMethodContextTest, SetCursorLocation) {
-  constexpr gfx::Rect cursor_location(50, 0, 1, 1);
-  PostToServerAndWait([cursor_location](wl::TestWaylandServerThread* server) {
-    EXPECT_CALL(
-        *server->text_input_manager_v1()->text_input(),
-        SetCursorRect(cursor_location.x(), cursor_location.y(),
-                      cursor_location.width(), cursor_location.height()));
-  });
+  constexpr gfx::Rect cursor_location(50, 20, 1, 1);
+  constexpr gfx::Rect window_bounds(20, 10, 100, 100);
+  PostToServerAndWait(
+      [cursor_location, window_bounds](wl::TestWaylandServerThread* server) {
+        EXPECT_CALL(
+            *server->text_input_manager_v1()->text_input(),
+            SetCursorRect(cursor_location.x() - window_bounds.x(),
+                          cursor_location.y() - window_bounds.y(),
+                          cursor_location.width(), cursor_location.height()));
+      });
+  window_->SetBoundsInDIP(window_bounds);
+  connection_->window_manager()->SetKeyboardFocusedWindow(window_.get());
   input_method_context_->SetCursorLocation(cursor_location);
   connection_->Flush();
 }
@@ -431,6 +440,11 @@ TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForShortText) {
   });
 
   input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait(
@@ -447,6 +461,11 @@ TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForShortText) {
   EXPECT_EQ(
       input_method_context_delegate_->last_on_delete_surrounding_text_args(),
       (std::pair<size_t, size_t>(0, 0)));
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      std::u16string(40, u'あ'));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(20));
 }
 
 TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongText) {
@@ -468,6 +487,11 @@ TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongText) {
   });
 
   input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait(
@@ -484,6 +508,11 @@ TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongText) {
   EXPECT_EQ(
       input_method_context_delegate_->last_on_delete_surrounding_text_args(),
       (std::pair<size_t, size_t>(0, 0)));
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      std::u16string(4600, u'あ'));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(2800));
 }
 
 TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongTextInLeftEdge) {
@@ -505,6 +534,11 @@ TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongTextInLeftEdge) {
   });
 
   input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait(
@@ -521,6 +555,11 @@ TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongTextInLeftEdge) {
   EXPECT_EQ(
       input_method_context_delegate_->last_on_delete_surrounding_text_args(),
       (std::pair<size_t, size_t>(0, 0)));
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      std::u16string(4500, u'あ'));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(0));
 }
 
 TEST_F(WaylandInputMethodContextTest,
@@ -543,6 +582,11 @@ TEST_F(WaylandInputMethodContextTest,
   });
 
   input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait(
@@ -559,6 +603,11 @@ TEST_F(WaylandInputMethodContextTest,
   EXPECT_EQ(
       input_method_context_delegate_->last_on_delete_surrounding_text_args(),
       (std::pair<size_t, size_t>(0, 0)));
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      std::u16string(4500, u'あ'));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(4500));
 }
 
 TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongRange) {
@@ -574,6 +623,13 @@ TEST_F(WaylandInputMethodContextTest, SetSurroundingTextForLongRange) {
   });
 
   input_method_context_->SetSurroundingText(text, range);
+  // Predicted state in SurroundingTextTracker is reset when the range is longer
+  // than wayland message size maximum.
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(0));
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -600,6 +656,11 @@ TEST_F(WaylandInputMethodContextTest, DeleteSurroundingTextWithExtendedRange) {
   });
 
   input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -615,6 +676,146 @@ TEST_F(WaylandInputMethodContextTest, DeleteSurroundingTextWithExtendedRange) {
   EXPECT_EQ(
       input_method_context_delegate_->last_on_delete_surrounding_text_args(),
       (std::pair<size_t, size_t>(1, 1)));
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      std::u16string(38, u'あ'));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(19));
+}
+
+TEST_F(WaylandInputMethodContextTest, DeleteSurroundingTextInIncorrectOrder) {
+  // This test aims to check the scenario where OnDeleteSurroundingText event is
+  // not received in correct order due to the timing issue.
+
+  constexpr char16_t text[] = u"aあb";
+  const gfx::Range range(3);
+
+  input_method_context_->SetSurroundingText(text, range);
+  connection_->Flush();
+
+  // 1. Delete the second character 'b'.
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    auto* text_input = server->text_input_manager_v1()->text_input();
+    Mock::VerifyAndClearExpectations(text_input);
+
+    zwp_text_input_v1_send_delete_surrounding_text(text_input->resource(), 4,
+                                                   1);
+  });
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"aあ");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(2));
+
+  // 2. Delete the third character 'あ'.
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    auto* text_input = server->text_input_manager_v1()->text_input();
+    Mock::VerifyAndClearExpectations(text_input);
+
+    zwp_text_input_v1_send_delete_surrounding_text(text_input->resource(), 1,
+                                                   3);
+  });
+
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"a");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(1));
+
+  // 3. Set surrounding text for step 1. Ideally this thould be called before
+  // step 2, but the order could be different due to the timing issue.
+  input_method_context_->SetSurroundingText(u"aあ", gfx::Range(2));
+  connection_->Flush();
+
+  // Surrounding text tracker should predict "a" instead of "aあ" here as that
+  // is the correct state on server. On setting "aあ" as a surrounding text,
+  // surrounding text tracker looks up the expected state queue and consumes the
+  // state of "aあ" .
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"a");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(1));
+
+  // 4. Set surrounding text for step 2.
+  input_method_context_->SetSurroundingText(u"a", gfx::Range(1));
+  connection_->Flush();
+
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"a");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(1));
+}
+
+TEST_F(WaylandInputMethodContextTest,
+       DeleteSurroundingTextAndCommitInIncorrectOrder) {
+  // This test aims to check the scenario where SetSurroundingText event is
+  // received from application later than receiving delete/commit event from
+  // server.
+
+  // 1. Set CommitString as a initial state. Cursor is between "Commit" and
+  // "String".
+  input_method_context_->SetSurroundingText(u"CommitString", gfx::Range(6));
+  connection_->Flush();
+
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"CommitString");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(6));
+
+  // 2. Delete surrounding text for "Commit" received.
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    auto* text_input = server->text_input_manager_v1()->text_input();
+    Mock::VerifyAndClearExpectations(text_input);
+
+    zwp_text_input_v1_send_delete_surrounding_text(text_input->resource(), 0,
+                                                   6);
+  });
+
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"String");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(0));
+
+  // 3. Commit for "Updated" received.
+  PostToServerAndWait([](wl::TestWaylandServerThread* server) {
+    auto* text_input = server->text_input_manager_v1()->text_input();
+    Mock::VerifyAndClearExpectations(text_input);
+
+    zwp_text_input_v1_send_commit_string(
+        server->text_input_manager_v1()->text_input()->resource(),
+        server->GetNextSerial(), "Updated");
+  });
+
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"UpdatedString");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(7));
+
+  // 4. Set surrounding text for step 2. Ideally this should be sent before step
+  // 3.
+  input_method_context_->SetSurroundingText(u"String", gfx::Range(0));
+  connection_->Flush();
+
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"UpdatedString");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(7));
+
+  // 5. Set surrounding text for step 3.
+  input_method_context_->SetSurroundingText(u"UpdatedString", gfx::Range(7));
+  connection_->Flush();
+
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"UpdatedString");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(7));
 }
 
 TEST_F(WaylandInputMethodContextTest, SetContentType) {
@@ -668,6 +869,11 @@ TEST_F(WaylandInputMethodContextTest, OnPreeditChanged) {
         server->GetNextSerial(), "PreeditString", "");
   });
   EXPECT_TRUE(input_method_context_delegate_->was_on_preedit_changed_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"PreeditString");
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0, 13));
 }
 
 TEST_F(WaylandInputMethodContextTest, OnCommit) {
@@ -677,6 +883,15 @@ TEST_F(WaylandInputMethodContextTest, OnCommit) {
         server->GetNextSerial(), "CommitString");
   });
   EXPECT_TRUE(input_method_context_delegate_->was_on_commit_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u"CommitString");
+  // On commit string, selection is placed next to the last character unless the
+  // cursor position is specified by OnCursorPosition.
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            gfx::Range(12));
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0));
 }
 
 // TODO(1353668): WaylandInputMethodContext::OnCursorPosition sets
@@ -698,6 +913,11 @@ TEST_F(WaylandInputMethodContextTest, MAYBE(OnConfirmCompositionText)) {
                 SetSurroundingText("ab😀cあdef", gfx::Range(7, 10)));
   });
   input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -711,12 +931,20 @@ TEST_F(WaylandInputMethodContextTest, MAYBE(OnConfirmCompositionText)) {
 
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_confirm_composition_text_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  // Cursor position is set to `range` position explicitly by OnCursorPosition.
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0));
 }
 
 TEST_F(WaylandInputMethodContextTest,
        MAYBE(OnConfirmCompositionTextForLongRange)) {
-  const std::u16string original_text(5000, u'あ');
-  constexpr gfx::Range original_range(4000, 4500);
+  const std::u16string text(5000, u'あ');
+  constexpr gfx::Range range(4000, 4500);
 
   // Text longer than 4000 bytes is trimmed to meet the limitation.
   // Selection range is also adjusted by the trimmed text before sendin to Exo.
@@ -730,7 +958,12 @@ TEST_F(WaylandInputMethodContextTest,
     EXPECT_CALL(*server->text_input_manager_v1()->text_input(),
                 SetSurroundingText(kExpectedSentText, kExpectedSentRange));
   });
-  input_method_context_->SetSurroundingText(original_text, original_range);
+  input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait([kExpectedSentText, kExpectedSentRange](
@@ -747,6 +980,14 @@ TEST_F(WaylandInputMethodContextTest,
 
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_confirm_composition_text_called());
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  // Cursor position is set to `range` position explicitly by OnCursorPosition.
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(0));
 }
 
 TEST_F(WaylandInputMethodContextTest, OnSetPreeditRegion_Success) {
@@ -760,6 +1001,11 @@ TEST_F(WaylandInputMethodContextTest, OnSetPreeditRegion_Success) {
   });
 
   input_method_context_->SetSurroundingText(text, range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            range);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -774,6 +1020,8 @@ TEST_F(WaylandInputMethodContextTest, OnSetPreeditRegion_Success) {
 
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_set_preedit_region_called());
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            gfx::Range(2, 5));
 }
 
 TEST_F(WaylandInputMethodContextTest, OnSetPreeditRegion_NoSurroundingText) {
@@ -808,6 +1056,11 @@ TEST_F(WaylandInputMethodContextTest,
   });
 
   input_method_context_->SetSurroundingText(u16_text, u16_range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u16_text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            u16_range);
   connection_->Flush();
 
   PostToServerAndWait([u8_range](wl::TestWaylandServerThread* server) {
@@ -822,6 +1075,8 @@ TEST_F(WaylandInputMethodContextTest,
 
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_set_preedit_region_called());
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            u16_range);
 }
 
 TEST_F(WaylandInputMethodContextTest,
@@ -843,6 +1098,11 @@ TEST_F(WaylandInputMethodContextTest,
   });
 
   input_method_context_->SetSurroundingText(u16_text, u16_range);
+  EXPECT_EQ(
+      input_method_context_->predicted_state_for_testing().surrounding_text,
+      u16_text);
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().selection,
+            u16_range);
   connection_->Flush();
 
   PostToServerAndWait([u8_range](wl::TestWaylandServerThread* server) {
@@ -857,6 +1117,8 @@ TEST_F(WaylandInputMethodContextTest,
 
   EXPECT_TRUE(
       input_method_context_delegate_->was_on_set_preedit_region_called());
+  EXPECT_EQ(input_method_context_->predicted_state_for_testing().composition,
+            u16_range);
 }
 
 TEST_F(WaylandInputMethodContextTest, OnClearGrammarFragments) {
@@ -895,10 +1157,12 @@ TEST_F(WaylandInputMethodContextTest,
 
   input_method_context_->WillUpdateFocus(client1.get(), client2.get());
   input_method_context_->UpdateFocus(true, client1->GetTextInputType(),
-                                     client2->GetTextInputType());
+                                     client2->GetTextInputType(),
+                                     ui::TextInputClient::FOCUS_REASON_OTHER);
   input_method_context_->WillUpdateFocus(client2.get(), nullptr);
   input_method_context_->UpdateFocus(false, client2->GetTextInputType(),
-                                     ui::TEXT_INPUT_TYPE_NONE);
+                                     ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TextInputClient::FOCUS_REASON_NONE);
 
   // Clients should get further bounds updates.
   constexpr gfx::Rect kBounds(10, 20, 300, 400);
@@ -934,7 +1198,8 @@ TEST_F(WaylandInputMethodContextTest,
 
   input_method_context_->WillUpdateFocus(client.get(), nullptr);
   input_method_context_->UpdateFocus(false, client->GetTextInputType(),
-                                     ui::TEXT_INPUT_TYPE_NONE);
+                                     ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TextInputClient::FOCUS_REASON_NONE);
 
   const gfx::Rect kBounds(10, 20, 300, 400);
   EXPECT_CALL(*client, EnsureCaretNotInRect(kBounds));
@@ -1013,7 +1278,8 @@ TEST_F(WaylandInputMethodContextNoKeyboardTest, ActivateDeactivate) {
   });
 
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
-                                     ui::TEXT_INPUT_TYPE_TEXT);
+                                     ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TextInputClient::FOCUS_REASON_OTHER);
   connection_->Flush();
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
     auto* zwp_text_input = server->text_input_manager_v1()->text_input();
@@ -1024,7 +1290,8 @@ TEST_F(WaylandInputMethodContextNoKeyboardTest, ActivateDeactivate) {
   });
 
   input_method_context_->UpdateFocus(false, ui::TEXT_INPUT_TYPE_TEXT,
-                                     ui::TEXT_INPUT_TYPE_NONE);
+                                     ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TextInputClient::FOCUS_REASON_NONE);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {
@@ -1048,7 +1315,8 @@ TEST_F(WaylandInputMethodContextNoKeyboardTest, UpdateFocusBetweenTextFields) {
   });
 
   input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
-                                     ui::TEXT_INPUT_TYPE_TEXT);
+                                     ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TextInputClient::FOCUS_REASON_OTHER);
   connection_->Flush();
 
   PostToServerAndWait([id = surface_id](wl::TestWaylandServerThread* server) {
@@ -1064,7 +1332,8 @@ TEST_F(WaylandInputMethodContextNoKeyboardTest, UpdateFocusBetweenTextFields) {
   });
 
   input_method_context_->UpdateFocus(false, ui::TEXT_INPUT_TYPE_TEXT,
-                                     ui::TEXT_INPUT_TYPE_TEXT);
+                                     ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TextInputClient::FOCUS_REASON_OTHER);
   connection_->Flush();
 
   PostToServerAndWait([](wl::TestWaylandServerThread* server) {

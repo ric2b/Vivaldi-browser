@@ -18,6 +18,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -79,13 +80,16 @@ class FileSystemAccessFileHandleImplTest : public testing::Test {
       auto buf = base::MakeRefCounted<net::IOBufferWithSize>(4096);
       net::TestCompletionCallback callback;
       int rv = reader->Read(buf.get(), buf->size(), callback.callback());
-      if (rv == net::ERR_IO_PENDING)
+      if (rv == net::ERR_IO_PENDING) {
         rv = callback.WaitForResult();
+      }
       EXPECT_GE(rv, 0);
-      if (rv < 0)
+      if (rv < 0) {
         return "(read failure)";
-      if (rv == 0)
+      }
+      if (rv == 0) {
         return result;
+      }
       result.append(buf->data(), rv);
     }
   }
@@ -174,8 +178,9 @@ class FileSystemAccessFileHandleImplTest : public testing::Test {
                               : base::FilePath::FromUTF8Unsafe("test");
     test_file_url_ = file_system_context_->CreateCrackedFileSystemURL(
         test_src_storage_key_, type, test_file_path);
-    if (type == storage::kFileSystemTypeTemporary)
+    if (type == storage::kFileSystemTypeTemporary) {
       test_file_url_.SetBucket(CreateBucketForTesting());
+    }
 
     ASSERT_EQ(base::File::FILE_OK,
               storage::AsyncFileTestHelper::CreateFile(
@@ -299,6 +304,32 @@ TEST_F(FileSystemAccessFileHandleImplTest, CreateFileWriterOverLimitNotOK) {
   EXPECT_EQ(result->status,
             blink::mojom::FileSystemAccessStatus::kOperationFailed);
   EXPECT_FALSE(writer_remote.is_valid());
+}
+
+TEST_F(FileSystemAccessFileHandleImplTest,
+       CreateFileWriterWithExistingSwapFile) {
+  const FileSystemURL swap_url =
+      file_system_context_->CreateCrackedFileSystemURL(
+          test_src_storage_key_, storage::kFileSystemTypeTest,
+          base::FilePath::FromUTF8Unsafe("test.crswap"));
+
+  // Create pre-existing swap file.
+  ASSERT_EQ(base::File::FILE_OK, storage::AsyncFileTestHelper::CreateFile(
+                                     file_system_context_.get(), swap_url));
+
+  // Creating the writer still succeeds.
+  base::test::TestFuture<
+      blink::mojom::FileSystemAccessErrorPtr,
+      mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>>
+      future;
+  handle_->CreateFileWriter(
+      /*keep_existing_data=*/true,
+      /*auto_close=*/false, future.GetCallback());
+  blink::mojom::FileSystemAccessErrorPtr result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> writer_remote;
+  std::tie(result, writer_remote) = future.Take();
+  EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(writer_remote.is_valid());
 }
 
 TEST_F(FileSystemAccessFileHandleImplTest, Remove_NoWriteAccess) {
@@ -506,6 +537,107 @@ TEST_F(FileSystemAccessFileHandleImplTest, Move_HasDestWriteAccess) {
   EXPECT_FALSE(base::PathExists(file));
   EXPECT_TRUE(base::PathExists(renamed_file));
 }
+
+#if BUILDFLAG(IS_MAC)
+// Tests that swap file cloning (i.e. creating a swap file using underlying
+// platform support for copy-on-write files) behaves as expected. Swap file
+// cloning requires storage::kFileSystemTypeLocal.
+class FileSystemAccessFileHandleSwapFileCloningTest
+    : public FileSystemAccessFileHandleImplTest {
+ public:
+  FileSystemAccessFileHandleSwapFileCloningTest()
+      : scoped_feature_list_(features::kFileSystemAccessCowSwapFile) {}
+  void SetUp() override {
+    SetupHelper(storage::kFileSystemTypeLocal, /*is_incognito=*/false);
+  }
+
+ protected:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, BasicClone) {
+  base::test::TestFuture<
+      blink::mojom::FileSystemAccessErrorPtr,
+      mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>>
+      future;
+  handle_->CreateFileWriter(
+      /*keep_existing_data=*/true,
+      /*auto_close=*/false, future.GetCallback());
+  blink::mojom::FileSystemAccessErrorPtr result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> writer_remote;
+  std::tie(result, writer_remote) = future.Take();
+  EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(writer_remote.is_valid());
+  EXPECT_TRUE(handle_->get_did_attempt_swap_file_cloning_for_testing());
+  EXPECT_TRUE(handle_->get_did_create_cloned_swap_file_for_testing());
+}
+
+TEST_F(FileSystemAccessFileHandleSwapFileCloningTest,
+       IgnoringExistingDataDoesNotClone) {
+  base::test::TestFuture<
+      blink::mojom::FileSystemAccessErrorPtr,
+      mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>>
+      future;
+  handle_->CreateFileWriter(
+      /*keep_existing_data=*/false,
+      /*auto_close=*/false, future.GetCallback());
+  blink::mojom::FileSystemAccessErrorPtr result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> writer_remote;
+  std::tie(result, writer_remote) = future.Take();
+  EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(writer_remote.is_valid());
+  EXPECT_FALSE(handle_->get_did_attempt_swap_file_cloning_for_testing());
+  EXPECT_FALSE(handle_->get_did_create_cloned_swap_file_for_testing());
+}
+
+TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, HandleExistingSwapFile) {
+  const FileSystemURL swap_url =
+      file_system_context_->CreateCrackedFileSystemURL(
+          test_src_storage_key_, storage::kFileSystemTypeLocal,
+          dir_.GetPath().AppendASCII("test.crswap"));
+
+  // Create pre-existing swap file.
+  ASSERT_EQ(base::File::FILE_OK, storage::AsyncFileTestHelper::CreateFile(
+                                     file_system_context_.get(), swap_url));
+
+  // Creating the writer still succeeds, even though clonefile() will fail if
+  // the destination file already exists.
+  base::test::TestFuture<
+      blink::mojom::FileSystemAccessErrorPtr,
+      mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>>
+      future;
+  handle_->CreateFileWriter(
+      /*keep_existing_data=*/true,
+      /*auto_close=*/false, future.GetCallback());
+  blink::mojom::FileSystemAccessErrorPtr result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> writer_remote;
+  std::tie(result, writer_remote) = future.Take();
+  EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(writer_remote.is_valid());
+  EXPECT_TRUE(handle_->get_did_attempt_swap_file_cloning_for_testing());
+  EXPECT_TRUE(handle_->get_did_create_cloned_swap_file_for_testing());
+}
+
+TEST_F(FileSystemAccessFileHandleSwapFileCloningTest, HandleCloneFailure) {
+  handle_->set_swap_file_cloning_will_fail_for_testing();
+
+  // Creating the writer still succeeds, even if cloning fails.
+  base::test::TestFuture<
+      blink::mojom::FileSystemAccessErrorPtr,
+      mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>>
+      future;
+  handle_->CreateFileWriter(
+      /*keep_existing_data=*/true,
+      /*auto_close=*/false, future.GetCallback());
+  blink::mojom::FileSystemAccessErrorPtr result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> writer_remote;
+  std::tie(result, writer_remote) = future.Take();
+  EXPECT_EQ(result->status, blink::mojom::FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(writer_remote.is_valid());
+  EXPECT_TRUE(handle_->get_did_attempt_swap_file_cloning_for_testing());
+  EXPECT_FALSE(handle_->get_did_create_cloned_swap_file_for_testing());
+}
+#endif  // BUILDFLAG(IS_MAC)
 
 // Uses a mock permission context to ensure the correct permission grant for the
 // target file (and parent, for renames) is used, since moves retrieve the
@@ -868,6 +1000,36 @@ TEST_P(FileSystemAccessFileHandleImplMovePermissionsTest,
   }
 }
 
+TEST_P(FileSystemAccessFileHandleImplMovePermissionsTest, Rename_SameFile) {
+  auto [source, target] = CreateSourceAndMaybeTarget();
+
+  target = source;
+
+  auto parent_grant = allow_grant_;
+
+  // We want ExpectFileRenameSuccess(), but without most EXPECT_CALLs since we
+  // should exit early if we detect that the target is the source.
+  auto handle = GetHandleWithPermissions(source, /*read=*/true, /*write=*/true);
+
+  EXPECT_CALL(permission_context_,
+              GetReadPermissionGrant(
+                  test_src_storage_key_.origin(), dir_.GetPath(),
+                  FileSystemAccessPermissionContext::HandleType::kDirectory,
+                  FileSystemAccessPermissionContext::UserAction::kNone))
+      .WillOnce(testing::Return(parent_grant));
+  EXPECT_CALL(permission_context_,
+              GetWritePermissionGrant(
+                  test_src_storage_key_.origin(), dir_.GetPath(),
+                  FileSystemAccessPermissionContext::HandleType::kDirectory,
+                  FileSystemAccessPermissionContext::UserAction::kNone))
+      .WillOnce(testing::Return(parent_grant));
+
+  base::test::TestFuture<blink::mojom::FileSystemAccessErrorPtr> future;
+  handle->Rename(target.BaseName().AsUTF8Unsafe(), future.GetCallback());
+  EXPECT_EQ(future.Get()->status, blink::mojom::FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(base::PathExists(source));
+}
+
 TEST_P(FileSystemAccessFileHandleImplMovePermissionsTest,
        Move_HasTargetWriteAccess) {
   auto [source, target] = CreateSourceAndMaybeTarget();
@@ -912,6 +1074,29 @@ TEST_P(FileSystemAccessFileHandleImplMovePermissionsTest,
     ExpectFileMoveSuccess(
         /*parent=*/dir_.GetPath(), source, target, target_grant);
   }
+}
+
+TEST_P(FileSystemAccessFileHandleImplMovePermissionsTest, Move_SameFile) {
+  auto [source, target] = CreateSourceAndMaybeTarget();
+
+  target = source;
+
+  // We want ExpectFileMoveSuccess(), but without any EXPECT_CALLs since we
+  // should exit early if we detect that the target is the source.
+  auto dest_dir_handle =
+      GetDirectoryHandleWithPermissions(dir_.GetPath(), /*read=*/true,
+                                        /*write=*/true);
+  auto handle = GetHandleWithPermissions(source, /*read=*/true, /*write=*/true);
+
+  mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> dir_remote;
+  manager_->CreateTransferToken(*dest_dir_handle,
+                                dir_remote.InitWithNewPipeAndPassReceiver());
+
+  base::test::TestFuture<blink::mojom::FileSystemAccessErrorPtr> future;
+  handle->Move(std::move(dir_remote), target.BaseName().AsUTF8Unsafe(),
+               future.GetCallback());
+  EXPECT_EQ(future.Get()->status, blink::mojom::FileSystemAccessStatus::kOk);
+  EXPECT_TRUE(base::PathExists(source));
 }
 
 INSTANTIATE_TEST_SUITE_P(

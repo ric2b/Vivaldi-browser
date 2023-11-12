@@ -72,6 +72,15 @@ enum NavigationType {
   DIFFERENT_DOCUMENT,
 };
 
+// Used by the renderer to indicate a case where a standard navigation that
+// pushes a history entry must not be implicity converted to replace the current
+// history entry. Ignored if the current NavigationEntry is the initial entry,
+// which must always be replaced.
+enum ForceHistoryPush {
+  kYes,
+  kNo,
+};
+
 // Provided by the renderer ----------------------------------------------------
 //
 // This struct holds parameters sent by the renderer to the browser, that are
@@ -104,6 +113,12 @@ struct BeginNavigationParams {
 
   // Whether or not the navigation has been initiated by a link click.
   bool was_initiated_by_link_click = false;
+
+  // If true, override cases where a WebFrameLoadType::kStandard navigation
+  // is implicitly converted to a kReplaceCurrentItem navigation. Ignored if
+  // the current NavigationEntry is the initial entry, which must always be
+  // replaced.
+  ForceHistoryPush force_history_push = ForceHistoryPush.kNo;
 
   // See WebSearchableFormData for a description of these.
   url.mojom.Url searchable_form_url;
@@ -156,6 +171,11 @@ struct CommonNavigationParams {
   // which initiated the navigation. This parameter can be null for
   // browser-initiated navigations.
   url.mojom.Origin? initiator_origin;
+
+  // For navigations to about:blank and srcdoc frames, we require the base url
+  // of the frame initiating the navigation. As with `initiator_origin`, this
+  // parameter can be null.
+  url.mojom.Url? initiator_base_url;
 
   // The URL to send in the "Referer" header field. Can be empty if there is
   // no referrer.
@@ -242,6 +262,12 @@ struct CommonNavigationParams {
   // Indicates the request destination.
   network.mojom.RequestDestination request_destination =
       network.mojom.RequestDestination.kEmpty;
+
+  // Indicates whether the target document of this navigation should load with
+  // the `has_storage_access` bit set. When this is sent from the renderer to
+  // the browser, it is a suggestion that the browser will validate - and
+  // possibly override, during the navigation for the next document.
+  bool has_storage_access = false;
 };
 
 // Provided by the browser -----------------------------------------------------
@@ -290,6 +316,15 @@ struct CommitNavigationParams {
   // `storage_key`. The final storage key is computed by the document loader
   // taking into account the origin computed by the renderer.
   blink.mojom.StorageKey storage_key;
+
+  // The storage key here is the one the browser process believes the renderer
+  // should use when binding session storage. This may differ from `storage_key`
+  // as a deprecation trial can prevent the partitioning of session storage.
+  // The document loader should verify this storage key is (1) the same as
+  // `storage_key` or (2) a first-party storage key at `storage_key.origin`.
+  //
+  // TODO(crbug.com/1407150): Remove this when deprecation trial is complete.
+  blink.mojom.StorageKey session_storage_key;
 
   // Whether or not the user agent override string should be used.
   bool is_overriding_user_agent = false;
@@ -397,13 +432,6 @@ struct CommitNavigationParams {
   // Whether this navigation was browser initiated.
   bool is_browser_initiated = false;
 
-  // The physical URL of Web Bundle from which the document is loaded.
-  // Used as an additional identifier for MemoryCache.
-  url.mojom.Url web_bundle_physical_url;
-
-  // The claimed URL inside Web Bundle from which the document is loaded.
-  url.mojom.Url web_bundle_claimed_url;
-
   // UKM source id to be associated with the Document that will be installed
   // in the current frame. This could be an invalid id for empty Document. Only
   // Documents that will emit UKM events need valid ids.
@@ -469,13 +497,6 @@ struct CommitNavigationParams {
   // When URL is about:srcdoc, this carries the srcdoc attribute's value.
   string srcdoc_value;
 
-  // When URL is about:srcdoc, this carries the srcdoc's fallback baseurl value
-  // from the parent.
-  // TODO(wjmaclean): modify this to carry the base url value for about:blank as
-  // well. That will require some renaming.
-  // Note: this is currently only used when IsolateSandboxedIframes is enabled.
-  url.mojom.Url fallback_srcdoc_baseurl;
-
   // Whether the navigation should be treated as a "loadDataWithBaseURL"
   // navigation, where the "document URL" is set to the supplied base URL
   // instead of the data URL set in CommonNavigationParams' `url`. If this
@@ -519,7 +540,7 @@ struct CommitNavigationParams {
   // If any, the task ID of the initiator of the navigation. This is restricted
   // to same-document main-frame navigation initiated by the top-level document.
   // Used by SoftNavigationHeuristics to trace back the chain of events.
-  TaskAttributionId? soft_navigation_heuristic_task_id;
+  TaskAttributionId? soft_navigation_heuristics_task_id;
 
   // Maps the blink runtime-enabled features modified in the browser process to
   // their new enabled/disabled status:

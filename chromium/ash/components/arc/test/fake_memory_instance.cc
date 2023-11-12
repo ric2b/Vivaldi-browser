@@ -4,7 +4,7 @@
 
 #include "ash/components/arc/test/fake_memory_instance.h"
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 
 namespace arc {
 
@@ -15,4 +15,7 @@ void FakeMemoryInstance::DropCaches(DropCachesCallback callback) {
   std::move(callback).Run(drop_caches_result_);
 }
 
+void FakeMemoryInstance::ReclaimAll(ReclaimAllCallback callback) {
+  std::move(callback).Run(reclaimed_process_count_, unreclaimed_process_count_);
+}
 }  // namespace arc

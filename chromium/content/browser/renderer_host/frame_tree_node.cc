@@ -29,7 +29,7 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_package/subresource_web_bundle_navigation_info.h"
-#include "content/browser/web_package/web_bundle_navigation_info.h"
+#include "content/browser/webauth/authenticator_environment_impl.h"
 #include "content/common/navigation_params_utils.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/site_isolation_policy.h"
@@ -344,30 +344,46 @@ void FrameTreeNode::ResetForNavigation() {
 }
 
 RenderFrameHostImpl* FrameTreeNode::GetParentOrOuterDocument() {
-  return GetParentOrOuterDocumentHelper(/*escape_guest_view=*/false);
+  return GetParentOrOuterDocumentHelper(/*escape_guest_view=*/false,
+                                        /*include_prospective=*/true);
 }
 
 RenderFrameHostImpl* FrameTreeNode::GetParentOrOuterDocumentOrEmbedder() {
-  return GetParentOrOuterDocumentHelper(/*escape_guest_view=*/true);
+  return GetParentOrOuterDocumentHelper(/*escape_guest_view=*/true,
+                                        /*include_prospective=*/true);
 }
 
 RenderFrameHostImpl* FrameTreeNode::GetParentOrOuterDocumentHelper(
-    bool escape_guest_view) {
+    bool escape_guest_view,
+    bool include_prospective) {
   // Find the parent in the FrameTree (iframe).
-  if (parent_)
+  if (parent_) {
     return parent_;
+  }
 
   if (!escape_guest_view) {
     // If we are not a fenced frame root nor inside a portal then return early.
     // This code does not escape GuestViews.
-    if (!IsFencedFrameRoot() && !frame_tree_->delegate()->IsPortal())
+    if (!IsFencedFrameRoot() && !frame_tree_->delegate()->IsPortal()) {
       return nullptr;
+    }
   }
 
   // Find the parent in the outer embedder (GuestView, Portal, or Fenced Frame).
   FrameTreeNode* frame_in_embedder = render_manager()->GetOuterDelegateNode();
-  if (frame_in_embedder)
+  if (frame_in_embedder) {
     return frame_in_embedder->current_frame_host()->GetParent();
+  }
+
+  // Consider embedders which own our frame tree, but have not yet attached it
+  // to the outer frame tree.
+  if (include_prospective) {
+    RenderFrameHostImpl* prospective_outer_document =
+        frame_tree_->delegate()->GetProspectiveOuterDocument();
+    if (prospective_outer_document) {
+      return prospective_outer_document;
+    }
+  }
 
   // No parent found.
   return nullptr;
@@ -493,7 +509,7 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
 
 void FrameTreeNode::SetAttributes(
     blink::mojom::IframeAttributesPtr attributes) {
-  if (!credentialless() && attributes->credentialless) {
+  if (!Credentialless() && attributes->credentialless) {
     // Log this only when credentialless is changed to true.
     GetContentClient()->browser()->LogWebFeatureForCurrentPage(
         parent_, blink::mojom::WebFeature::kAnonymousIframe);
@@ -797,6 +813,12 @@ bool FrameTreeNode::UpdateUserActivationState(
   return update_result;
 }
 
+void FrameTreeNode::DidConsumeHistoryUserActivation() {
+  for (FrameTreeNode* node : frame_tree().Nodes()) {
+    node->current_frame_host()->ConsumeHistoryUserActivation();
+  }
+}
+
 void FrameTreeNode::PruneChildFrameNavigationEntries(
     NavigationEntryImpl* entry) {
   for (size_t i = 0; i < current_frame_host()->child_count(); ++i) {
@@ -856,26 +878,60 @@ bool FrameTreeNode::IsInFencedFrameTree() const {
 
 const absl::optional<FencedFrameProperties>&
 FrameTreeNode::GetFencedFrameProperties() {
-  if (!IsInFencedFrameTree()) {
-    // If we might be in a urn iframe, try to find the "urn iframe root"
-    // and if it exists, return the attached `FencedFrameProperties`.
-    if (blink::features::IsAllowURNsInIframeEnabled()) {
-      FrameTreeNode* node = this;
-      while (node->parent()) {
-        CHECK(node->parent()->frame_tree_node());
-        if (node->fenced_frame_properties_.has_value()) {
-          return node->fenced_frame_properties_;
-        }
-        node = node->parent()->frame_tree_node();
-      }
-    }
-    return fenced_frame_properties_;
+  return GetFencedFramePropertiesForEditing();
+}
+
+absl::optional<FencedFrameProperties>&
+FrameTreeNode::GetFencedFramePropertiesForEditing() {
+  if (IsInFencedFrameTree()) {
+    // Because we already confirmed we're in a fenced frame tree, we know
+    // there must be a fenced frame root with properties stored.
+    CHECK(frame_tree().root()->fenced_frame_properties_.has_value());
+    return frame_tree().root()->fenced_frame_properties_;
   }
 
-  // Because we already confirmed we're in a fenced frame tree, we know
-  // there must be a fenced frame root with properties stored.
-  CHECK(frame_tree().root()->fenced_frame_properties_.has_value());
-  return frame_tree().root()->fenced_frame_properties_;
+  // If we might be in a urn iframe, try to find the "urn iframe root",
+  // and, if it exists, return the attached `FencedFrameProperties`.
+  if (blink::features::IsAllowURNsInIframeEnabled()) {
+    FrameTreeNode* node = this;
+    while (node->parent()) {
+      CHECK(node->parent()->frame_tree_node());
+      if (node->fenced_frame_properties_.has_value()) {
+        return node->fenced_frame_properties_;
+      }
+      node = node->parent()->frame_tree_node();
+    }
+  }
+
+  return fenced_frame_properties_;
+}
+
+void FrameTreeNode::SetFencedFrameAutomaticBeaconReportEventData(
+    const std::string& event_data,
+    const std::vector<blink::FencedFrame::ReportingDestination>& destination) {
+  absl::optional<FencedFrameProperties>& properties =
+      GetFencedFramePropertiesForEditing();
+  // `properties` will exist for both fenced frames as well as iframes loaded
+  // with a urn:uuid. This allows URN iframes to call this function without
+  // getting bad-messaged.
+  if (!properties || !properties->fenced_frame_reporter_) {
+    mojo::ReportBadMessage(
+        "Automatic beacon data can only be set in fenced frames or iframes "
+        "loaded from a config with a fenced frame reporter.");
+    return;
+  }
+  // This metadata should only be present in the renderer in frames that are
+  // same-origin to the mapped url.
+  if (!properties->mapped_url_.has_value() ||
+      !current_origin().IsSameOriginWith(url::Origin::Create(
+          properties->mapped_url_->GetValueIgnoringVisibility()))) {
+    mojo::ReportBadMessage(
+        "Automatic beacon data can only be set from documents that are same-"
+        "origin to the mapped url from the fenced frame config.");
+    return;
+  }
+  properties->fenced_frame_reporter_->UpdateAutomaticBeaconData(event_data,
+                                                                destination);
 }
 
 size_t FrameTreeNode::GetFencedFrameDepth() {
@@ -995,6 +1051,15 @@ bool FrameTreeNode::AncestorOrSelfHasCSPEE() const {
   return csp_attribute() || (parent() && parent()->required_csp());
 }
 
+void FrameTreeNode::ResetAllNavigationsForFrameDetach() {
+  NavigationDiscardReason reason = NavigationDiscardReason::kWillRemoveFrame;
+  for (FrameTreeNode* frame : frame_tree().SubtreeNodes(this)) {
+    frame->ResetNavigationRequest(reason);
+    frame->current_frame_host()->ResetOwnedNavigationRequests(reason);
+    frame->GetRenderFrameHostManager().DiscardSpeculativeRFH(reason);
+  }
+}
+
 void FrameTreeNode::RestartNavigationAsCrossDocument(
     std::unique_ptr<NavigationRequest> navigation_request) {
   navigator().RestartNavigationAsCrossDocument(std::move(navigation_request));
@@ -1012,6 +1077,10 @@ RenderFrameHostManager& FrameTreeNode::GetRenderFrameHostManager() {
   return render_manager_;
 }
 
+FrameTreeNode* FrameTreeNode::GetOpener() const {
+  return opener_;
+}
+
 void FrameTreeNode::SetFocusedFrame(SiteInstanceGroup* source) {
   frame_tree_->delegate()->SetFocusedFrame(this, source);
 }
@@ -1027,6 +1096,7 @@ FrameTreeNode::CreateNavigationRequestForSynchronousRendererCommit(
     bool is_same_document,
     const GURL& url,
     const url::Origin& origin,
+    const absl::optional<GURL>& initiator_base_url,
     const net::IsolationInfo& isolation_info_for_subresources,
     blink::mojom::ReferrerPtr referrer,
     const ui::PageTransition& transition,
@@ -1037,16 +1107,15 @@ FrameTreeNode::CreateNavigationRequestForSynchronousRendererCommit(
     const std::vector<GURL>& redirects,
     const GURL& original_url,
     std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter,
-    std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info,
     std::unique_ptr<SubresourceWebBundleNavigationInfo>
         subresource_web_bundle_navigation_info,
     int http_response_code) {
   return NavigationRequest::CreateForSynchronousRendererCommit(
       this, render_frame_host, is_same_document, url, origin,
-      isolation_info_for_subresources, std::move(referrer), transition,
-      should_replace_current_entry, method, has_transient_activation,
-      is_overriding_user_agent, redirects, original_url,
-      std::move(coep_reporter), std::move(web_bundle_navigation_info),
+      initiator_base_url, isolation_info_for_subresources, std::move(referrer),
+      transition, should_replace_current_entry, method,
+      has_transient_activation, is_overriding_user_agent, redirects,
+      original_url, std::move(coep_reporter),
       std::move(subresource_web_bundle_navigation_info), http_response_code);
 }
 
@@ -1056,5 +1125,21 @@ void FrameTreeNode::CancelNavigation() {
   }
   ResetNavigationRequest(NavigationDiscardReason::kCancelled);
 }
+
+bool FrameTreeNode::Credentialless() const {
+  return attributes_->credentialless;
+}
+
+#if !BUILDFLAG(IS_ANDROID)
+void FrameTreeNode::GetVirtualAuthenticatorManager(
+    mojo::PendingReceiver<blink::test::mojom::VirtualAuthenticatorManager>
+        receiver) {
+  auto* environment_singleton = AuthenticatorEnvironmentImpl::GetInstance();
+  environment_singleton->EnableVirtualAuthenticatorFor(this,
+                                                       /*enable_ui=*/false);
+  environment_singleton->AddVirtualAuthenticatorReceiver(this,
+                                                         std::move(receiver));
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace content

@@ -1,0 +1,17 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("context_menu") {
+  sources = [
+    "vivaldi_context_menu_constants.h",
+    "vivaldi_context_menu_constants.mm",
+  ]
+
+  deps = ["resources"]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

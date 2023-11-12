@@ -21,7 +21,6 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/display/screen_base.h"
-#include "ui/display/test/scoped_screen_override.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -116,6 +115,28 @@ class WidgetBoundsChangeWaiter final : public views::WidgetObserver {
   const gfx::Rect initial_bounds_;
   base::RunLoop run_loop_;
 };
+
+// Ensure `left=0,top=0` popup window feature coordinates are respected.
+IN_PROC_BROWSER_TEST_P(PopupBrowserTest, OpenLeftAndTopZeroCoordinates) {
+  // Attempt to open a popup at (0,0). Its bounds should match the request, but
+  // be adjusted to meet minimum size and available display area constraints.
+  Browser* popup =
+      OpenPopup(browser(), "open('.', '', 'left=0,top=0,width=50,height=50')");
+  const gfx::Rect work_area = GetDisplayNearestBrowser(popup).work_area();
+  gfx::Rect expected(popup->window()->GetBounds().size());
+  expected.AdjustToFit(work_area);
+#if BUILDFLAG(IS_LINUX)
+  // TODO(crbug.com/1286870) Desktop Linux window bounds are inaccurate.
+  expected.Outset(50);
+  EXPECT_TRUE(expected.Contains(popup->window()->GetBounds()))
+      << " expected: " << expected.ToString()
+      << " popup: " << popup->window()->GetBounds().ToString()
+      << " work_area: " << work_area.ToString();
+#else
+  EXPECT_EQ(expected.ToString(), popup->window()->GetBounds().ToString())
+      << " work_area: " << work_area.ToString();
+#endif
+}
 
 // Ensure popups are opened in the available space of the opener's display.
 // TODO(crbug.com/1211516): Flaky.
@@ -249,6 +270,8 @@ IN_PROC_BROWSER_TEST_P(PopupBrowserTest, ResizeClampedToCurrentDisplay) {
 #endif
 // Tests that an about:blank popup can be moved across screens with permission.
 IN_PROC_BROWSER_TEST_P(PopupBrowserTest, MAYBE_AboutBlankCrossScreenPlacement) {
+  display::Screen* screen = display::Screen::GetScreen();
+  int actual_num_displays = screen->GetNumDisplays();
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
       .UpdateDisplay("100+100-801x802,901+100-802x802");
@@ -266,10 +289,9 @@ IN_PROC_BROWSER_TEST_P(PopupBrowserTest, MAYBE_AboutBlankCrossScreenPlacement) {
   test_screen.display_list().AddDisplay(
       {2, gfx::Rect(901, 100, 802, 802)},
       display::DisplayList::Type::NOT_PRIMARY);
-  display::test::ScopedScreenOverride screen_override(&test_screen);
+  display::Screen::SetScreenInstance(&test_screen);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-  display::Screen* screen = display::Screen::GetScreen();
-  ASSERT_EQ(2, screen->GetNumDisplays());
+  ASSERT_EQ(actual_num_displays + 1, screen->GetNumDisplays());
 
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL url(embedded_test_server()->GetURL("/empty.html"));
@@ -294,7 +316,7 @@ IN_PROC_BROWSER_TEST_P(PopupBrowserTest, MAYBE_AboutBlankCrossScreenPlacement) {
         }
       })();
     )";
-    EXPECT_EQ(2, EvalJs(opener, kGetScreensLength));
+    EXPECT_EQ(actual_num_displays + 1, EvalJs(opener, kGetScreensLength));
     // Do not auto-accept any other permission requests.
     permission_request_manager->set_auto_response_for_test(
         permissions::PermissionRequestManager::NONE);
@@ -327,6 +349,10 @@ IN_PROC_BROWSER_TEST_P(PopupBrowserTest, MAYBE_AboutBlankCrossScreenPlacement) {
   EXPECT_TRUE(new_popup_display.work_area().Contains(popup_bounds))
       << " work_area: " << new_popup_display.work_area().ToString()
       << " popup: " << popup_bounds.ToString();
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_MAC)
+  display::Screen::SetScreenInstance(nullptr);
+#endif  //  !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_MAC)
 }
 
 // Opens two popups with custom position and size, but one has noopener. They

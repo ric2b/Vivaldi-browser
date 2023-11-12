@@ -8,9 +8,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/task_traits.h"
@@ -76,6 +76,7 @@ void LogPrinterSetup(const chromeos::Printer& printer,
     case PrinterSetupResult::kBadUri:
     case PrinterSetupResult::kDbusNoReply:
     case PrinterSetupResult::kDbusTimeout:
+    case PrinterSetupResult::kManualSetupRequired:
       LOG(ERROR) << ResultCodeToMessage(result);
       break;
     case PrinterSetupResult::kInvalidPrinterUpdate:

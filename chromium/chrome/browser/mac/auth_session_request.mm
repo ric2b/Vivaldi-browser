@@ -266,6 +266,7 @@ Browser* AuthSessionRequest::CreateBrowser(
 
   Browser::CreateParams params(Browser::TYPE_POPUP, profile, true);
   params.omit_from_session_restore = true;
+  params.is_vivaldi = false;
   Browser* browser = Browser::Create(params);
   chrome::AddTabAt(browser, GURL("about:blank"), -1, true);
   browser->window()->Show();

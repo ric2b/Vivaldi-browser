@@ -12,10 +12,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/values_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -939,7 +939,7 @@ ExtensionFunction::ResponseAction FileSystemRetainEntryFunction::Run() {
 
     const storage::FileSystemURL url =
         file_system_context->CreateCrackedFileSystemURL(
-            blink::StorageKey(extension()->origin()),
+            blink::StorageKey::CreateFirstParty(extension()->origin()),
             storage::kFileSystemTypeIsolated,
             storage::IsolatedContext::GetInstance()
                 ->CreateVirtualRootPath(filesystem_id)

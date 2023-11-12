@@ -6,8 +6,8 @@
 
 #include <algorithm>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -159,24 +159,30 @@ AudioDeviceFactory::NewAudioCapturerSource(
 
 media::OutputDeviceInfo AudioDeviceFactory::GetOutputDeviceInfo(
     const blink::LocalFrameToken& frame_token,
-    const media::AudioSinkParameters& params) {
+    const std::string& device_id) {
   DCHECK(IsMainThread()) << __func__ << "() is called on a wrong thread.";
   constexpr base::TimeDelta kDeleteTimeout = base::Milliseconds(5000);
 
   if (!sink_cache_) {
+    auto create_sink_cb = [](AudioDeviceFactory* factory,
+                             const LocalFrameToken& frame_token,
+                             const std::string& device_id) {
+      return factory->NewAudioRendererSink(
+          blink::WebAudioDeviceSourceType::kNone, frame_token,
+          media::AudioSinkParameters(base::UnguessableToken(), device_id));
+    };
+
     // Do we actually need a separate thread pool just for deleting audio sinks?
     sink_cache_ = std::make_unique<AudioRendererSinkCache>(
         base::ThreadPool::CreateSequencedTaskRunner(
             {base::TaskPriority::BEST_EFFORT,
              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN,
              base::MayBlock()}),
-        base::BindRepeating(&AudioDeviceFactory::NewAudioRendererSink,
-                            base::Unretained(this),
-                            blink::WebAudioDeviceSourceType::kNone),
+        base::BindRepeating(std::move(create_sink_cb), base::Unretained(this)),
         kDeleteTimeout);
   }
-  return sink_cache_->GetSinkInfo(frame_token, params.session_id,
-                                  params.device_id);
+
+  return sink_cache_->GetSinkInfo(frame_token, device_id);
 }
 
 scoped_refptr<media::AudioRendererSink>

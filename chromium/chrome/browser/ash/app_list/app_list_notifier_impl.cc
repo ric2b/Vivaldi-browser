@@ -157,7 +157,7 @@ void AppListNotifierImpl::OnAppListVisibilityWillChange(bool shown,
   } else {
     search_session_in_progress_ = false;
     for (auto& observer : observers_) {
-      observer.OnSearchSessionEnded();
+      observer.OnSearchSessionEnded(query_);
     }
 
     DoStateTransition(Location::kList, State::kNone);
@@ -176,7 +176,7 @@ void AppListNotifierImpl::OnViewStateChanged(ash::AppListViewState state) {
   } else {
     search_session_in_progress_ = false;
     for (auto& observer : observers_) {
-      observer.OnSearchSessionEnded();
+      observer.OnSearchSessionEnded(query_);
     }
   }
 }
@@ -248,6 +248,17 @@ void AppListNotifierImpl::DoStateTransition(Location location,
   if (old_state == State::kShown &&
       (new_state == State::kNone || new_state == State::kLaunched)) {
     StopTimer(location);
+  }
+
+  // Notify of seen on kShown -> {kSeen} when there is one or more result for
+  // `location`.
+  if (old_state == State::kShown && new_state == State::kSeen) {
+    auto results = ResultsForLocation(location);
+    if (results.size() > 0) {
+      for (auto& observer : observers_) {
+        observer.OnSeen(location, results, query_);
+      }
+    }
   }
 
   // Notify of impression on kShown -> {kSeen, kIgnored, kLaunched}.

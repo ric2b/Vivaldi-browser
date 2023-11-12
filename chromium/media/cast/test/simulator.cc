@@ -42,8 +42,6 @@
 
 #include "base/at_exit.h"
 #include "base/base_paths.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/queue.h"
 #include "base/containers/span.h"
@@ -51,16 +49,19 @@
 #include "base/files/file_util.h"
 #include "base/files/memory_mapped_file.h"
 #include "base/files/scoped_file.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/numerics/checked_math.h"
 #include "base/path_service.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/simple_test_tick_clock.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -225,6 +226,14 @@ class EncodedVideoFrameTracker final : public RawEventSubscriber {
   base::queue<scoped_refptr<media::VideoFrame>> video_frames_;
 };
 
+// Safely creates a span for data backing a `frame` on specified `plane`.
+base::span<const uint8_t> MakeFrameSpan(const media::VideoFrame* frame,
+                                        size_t plane) {
+  base::CheckedNumeric<size_t> size = frame->stride(plane);
+  size *= frame->rows(plane);
+  return base::make_span(frame->data(plane), size.ValueOrDie());
+}
+
 // Appends a YUV frame in I420 format to the file located at |path|.
 void AppendYuvToFile(const base::FilePath& path,
                      scoped_refptr<media::VideoFrame> frame) {
@@ -233,18 +242,9 @@ void AppendYuvToFile(const base::FilePath& path,
   base::StringAppendF(&header, "FRAME W%d H%d\n", frame->coded_size().width(),
                       frame->coded_size().height());
   AppendToFile(path, header);
-  AppendToFile(path,
-               base::make_span(frame->data(media::VideoFrame::kYPlane),
-                               frame->stride(media::VideoFrame::kYPlane) *
-                                   frame->rows(media::VideoFrame::kYPlane)));
-  AppendToFile(path,
-               base::make_span(frame->data(media::VideoFrame::kUPlane),
-                               frame->stride(media::VideoFrame::kUPlane) *
-                                   frame->rows(media::VideoFrame::kUPlane)));
-  AppendToFile(path,
-               base::make_span(frame->data(media::VideoFrame::kVPlane),
-                               frame->stride(media::VideoFrame::kVPlane) *
-                                   frame->rows(media::VideoFrame::kVPlane)));
+  AppendToFile(path, MakeFrameSpan(frame.get(), media::VideoFrame::kYPlane));
+  AppendToFile(path, MakeFrameSpan(frame.get(), media::VideoFrame::kUPlane));
+  AppendToFile(path, MakeFrameSpan(frame.get(), media::VideoFrame::kVPlane));
 }
 
 // A container to save output of GotVideoFrame() for computation based
@@ -309,7 +309,8 @@ void RunSimulation(const base::FilePath& source_path,
   // Task runner.
   scoped_refptr<FakeSingleThreadTaskRunner> task_runner =
       new FakeSingleThreadTaskRunner(&testing_clock);
-  base::ThreadTaskRunnerHandle task_runner_handle(task_runner);
+  base::SingleThreadTaskRunner::CurrentDefaultHandle
+      task_runner_current_default_handle(task_runner);
 
   // CastEnvironments.
   test::SkewedTickClock sender_clock(&testing_clock);
@@ -691,9 +692,9 @@ int main(int argc, char** argv) {
   NetworkSimulationModel model =
       media::cast::LoadModel(cmd->GetSwitchValuePath(media::cast::kModelPath));
 
-  base::Value values(base::Value::Type::DICT);
-  values.SetBoolKey("sim", true);
-  values.SetStringKey("sim-id", sim_id);
+  base::Value::Dict values;
+  values.Set("sim", true);
+  values.Set("sim-id", sim_id);
 
   std::string extra_data;
   base::JSONWriter::Write(values, &extra_data);

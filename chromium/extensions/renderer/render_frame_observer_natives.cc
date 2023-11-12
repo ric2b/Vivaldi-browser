@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/single_thread_task_runner.h"
 #include "content/public/renderer/render_frame.h"
@@ -58,7 +58,7 @@ class LoadWatcher : public content::RenderFrameObserver {
 RenderFrameObserverNatives::RenderFrameObserverNatives(ScriptContext* context)
     : ObjectBackedNativeHandler(context) {}
 
-RenderFrameObserverNatives::~RenderFrameObserverNatives() {}
+RenderFrameObserverNatives::~RenderFrameObserverNatives() = default;
 
 void RenderFrameObserverNatives::AddRoutes() {
   RouteHandlerFunction(

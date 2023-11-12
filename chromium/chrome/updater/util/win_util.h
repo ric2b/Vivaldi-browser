@@ -13,10 +13,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/hash/hash.h"
 #include "base/process/process_iterator.h"
 #include "base/scoped_generic.h"
@@ -202,6 +203,12 @@ std::wstring GetRegistryKeyClientsUpdater();
 // subkey. The path does not include the registry root hive prefix.
 std::wstring GetRegistryKeyClientStateUpdater();
 
+// Set `name` in `root`\`key` to `value`.
+bool SetRegistryKey(HKEY root,
+                    const std::wstring& key,
+                    const std::wstring& name,
+                    const std::wstring& value);
+
 // Returns a value in the [0, 100] range or -1 if the progress could not
 // be computed.
 int GetDownloadProgress(int64_t downloaded_bytes, int64_t total_bytes);
@@ -338,15 +345,30 @@ bool IsShutdownEventSignaled(UpdaterScope scope);
 // processes exited cleanly.
 bool StopGoogleUpdateProcesses(UpdaterScope scope);
 
-// Quotes `input` if necessary so that it will be interpreted as a single
-// command-line parameter according to the rules for ::CommandLineToArgvW.
-//
-// Follows the encoding and quoting rules of `CommandLineToArgvW`/C++ `main`.
-// https://learn.microsoft.com/en-us/search/?terms=CommandLineToArgvW and
-// http://msdn.microsoft.com/en-us/library/17w5ykft.aspx.
-//
-// See examples in the `WinUtil.QuoteForCommandLineToArgvW*` unit tests.
-std::wstring QuoteForCommandLineToArgvW(const std::wstring& input);
+// Returns `true` if the argument is a guid.
+bool IsGuid(const std::wstring& s);
+
+// Runs `callback` for each run value in the registry that matches `prefix`.
+void ForEachRegistryRunValueWithPrefix(
+    const std::wstring& prefix,
+    base::RepeatingCallback<void(const std::wstring&)> callback);
+
+// Deletes the registry value at `root\\path`, and returns `true` on success or
+// if the path does not exist.
+[[nodiscard]] bool DeleteRegValue(HKEY root,
+                                  const std::wstring& path,
+                                  const std::wstring& value);
+
+// Runs `callback` for each system service that matches `service_name_prefix`
+// and `display_name_prefix`. `display_name_prefix` can be empty, in which case,
+// only `service_name_prefix` is used for the matching.
+void ForEachServiceWithPrefix(
+    const std::wstring& service_name_prefix,
+    const std::wstring& display_name_prefix,
+    base::RepeatingCallback<void(const std::wstring&)> callback);
+
+// Deletes `service_name` system service and returns `true` on success.
+[[nodiscard]] bool DeleteService(const std::wstring& service_name);
 
 }  // namespace updater
 

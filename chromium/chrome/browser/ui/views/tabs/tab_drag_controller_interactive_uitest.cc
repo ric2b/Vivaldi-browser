@@ -12,12 +12,12 @@
 #include <set>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/dcheck_is_on.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -511,7 +511,7 @@ class DetachToBrowserTabDragControllerTest
               ui_controls::LEFT, ui_controls::DOWN);
     }
 #if BUILDFLAG(IS_CHROMEOS)
-    return SendTouchEventsSync(ui_controls::PRESS, id, location);
+    return SendTouchEventsSync(ui_controls::kTouchPress, id, location);
 #else
     NOTREACHED();
     return false;
@@ -522,7 +522,7 @@ class DetachToBrowserTabDragControllerTest
     if (input_source() == INPUT_SOURCE_MOUSE)
       return ui_test_utils::SendMouseMoveSync(location);
 #if BUILDFLAG(IS_CHROMEOS)
-    return SendTouchEventsSync(ui_controls::MOVE, 0, location);
+    return SendTouchEventsSync(ui_controls::kTouchMove, 0, location);
 #else
     NOTREACHED();
     return false;
@@ -533,8 +533,8 @@ class DetachToBrowserTabDragControllerTest
     if (input_source() == INPUT_SOURCE_MOUSE)
       return ui_controls::SendMouseMove(location.x(), location.y());
 #if BUILDFLAG(IS_CHROMEOS)
-    return ui_controls::SendTouchEvents(ui_controls::MOVE, 0, location.x(),
-                                        location.y());
+    return ui_controls::SendTouchEvents(ui_controls::kTouchMove, 0,
+                                        location.x(), location.y());
 #else
     NOTREACHED();
     return false;
@@ -550,7 +550,8 @@ class DetachToBrowserTabDragControllerTest
 
 #if BUILDFLAG(IS_CHROMEOS)
     return ui_controls::SendTouchEventsNotifyWhenDone(
-        ui_controls::MOVE, 0, location.x(), location.y(), std::move(task));
+        ui_controls::kTouchMove, 0, location.x(), location.y(),
+        std::move(task));
 #else
     NOTREACHED();
     return false;
@@ -565,8 +566,10 @@ class DetachToBrowserTabDragControllerTest
                                                         ui_controls::UP);
     }
 #if BUILDFLAG(IS_CHROMEOS)
-    return async ? ui_controls::SendTouchEvents(ui_controls::RELEASE, id, 0, 0)
-                 : SendTouchEventsSync(ui_controls::RELEASE, id, gfx::Point());
+    return async ? ui_controls::SendTouchEvents(ui_controls::kTouchRelease, id,
+                                                0, 0)
+                 : SendTouchEventsSync(ui_controls::kTouchRelease, id,
+                                       gfx::Point());
 #else
     NOTREACHED();
     return false;
@@ -602,7 +605,7 @@ class DetachToBrowserTabDragControllerTest
     if (input_source() == INPUT_SOURCE_MOUSE)
       return ui_test_utils::SendMouseMoveSync(location);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    return SendTouchEventsSync(ui_controls::MOVE, 0, location);
+    return SendTouchEventsSync(ui_controls::kTouchMove, 0, location);
 #else
     NOTREACHED();
     return false;
@@ -3163,8 +3166,9 @@ void DragWindowAndVerifyOffset(DetachToBrowserTabDragControllerTest* test,
 
 }  // namespace
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC)
 // TODO(mukai): enable this test on Windows and Linux.
+// TODO(crbug.com/979013): flaky on Mac
 #define MAYBE_OffsetForDraggingTab DISABLED_OffsetForDraggingTab
 #else
 #define MAYBE_OffsetForDraggingTab OffsetForDraggingTab

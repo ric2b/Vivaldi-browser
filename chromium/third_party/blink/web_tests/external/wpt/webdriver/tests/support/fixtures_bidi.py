@@ -3,8 +3,35 @@ from typing import Any, Mapping
 
 import pytest
 import webdriver
-from webdriver.bidi.error import InvalidArgumentException, NoSuchFrameException
+from webdriver.bidi.error import (
+    InvalidArgumentException,
+    NoSuchFrameException,
+    NoSuchScriptException,
+)
 from webdriver.bidi.modules.script import ContextTarget
+
+
+@pytest.fixture
+async def add_preload_script(bidi_session):
+    preload_scripts_ids = []
+
+    async def add_preload_script(function_declaration, arguments=None, sandbox=None):
+        script = await bidi_session.script.add_preload_script(
+            function_declaration=function_declaration,
+            arguments=arguments,
+            sandbox=sandbox,
+        )
+        preload_scripts_ids.append(script)
+
+        return script
+
+    yield add_preload_script
+
+    for script in reversed(preload_scripts_ids):
+        try:
+            await bidi_session.script.remove_preload_script(script=script)
+        except (InvalidArgumentException, NoSuchScriptException):
+            pass
 
 
 @pytest.fixture
@@ -73,3 +100,43 @@ def current_time(bidi_session, top_context):
         return result["value"]
 
     return _
+
+
+@pytest.fixture
+def add_and_remove_iframe(bidi_session, inline):
+    """Create a frame, wait for load, and remove it.
+
+    Return the frame's context id, which allows to test for invalid
+    browsing context references.
+    """
+    async def closed_frame(context, url=inline("test-frame")):
+        initial_contexts = await bidi_session.browsing_context.get_tree(root=context["context"])
+        resp = await bidi_session.script.call_function(
+            function_declaration=
+            """(url) => {
+                const iframe = document.createElement("iframe");
+                // Once we're confident implementations support returning the iframe, just
+                // return that directly. For now generate a unique id to use as a handle.
+                const id = `testframe-${Math.random()}`;
+                iframe.id = id;
+                iframe.src = url;
+                document.documentElement.lastElementChild.append(iframe);
+                return new Promise(resolve => iframe.onload = () => resolve(id))
+            }""",
+            target={"context": context["context"]},
+            await_promise=True)
+        iframe_dom_id = resp["value"]
+
+        new_contexts = await bidi_session.browsing_context.get_tree(root=context["context"])
+        added_contexts = ({item["context"] for item in new_contexts[0]["children"]} -
+                          {item["context"] for item in initial_contexts[0]["children"]})
+        assert len(added_contexts) == 1
+        frame_id = added_contexts.pop()
+
+        await bidi_session.script.evaluate(
+            expression=f"document.getElementById('{iframe_dom_id}').remove()",
+            target={"context": context["context"]},
+            await_promise=False)
+
+        return frame_id
+    return closed_frame

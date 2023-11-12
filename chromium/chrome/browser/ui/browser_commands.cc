@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -36,6 +37,7 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/reading_list/reading_list_model_factory.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sessions/session_service.h"
@@ -45,6 +47,7 @@
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/accelerator_utils.h"
+#include "chrome/browser/ui/autofill/payments/iban_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/manage_migration_ui_controller.h"
 #include "chrome/browser/ui/autofill/payments/offer_notification_bubble_controller_impl.h"
 #include "chrome/browser/ui/autofill/payments/save_card_bubble_controller_impl.h"
@@ -71,7 +74,6 @@
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
-#include "chrome/browser/ui/read_later/reading_list_model_factory.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble.h"
 #include "chrome/browser/ui/sharing_hub/screenshot/screenshot_captured_bubble_controller.h"
@@ -111,6 +113,7 @@
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/google/core/common/google_util.h"
+#include "components/lens/buildflags.h"
 #include "components/media_router/browser/media_router_dialog_controller.h"  // nogncheck
 #include "components/media_router/browser/media_router_metrics.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
@@ -119,7 +122,6 @@
 #include "components/reading_list/core/reading_list_model.h"
 #include "components/reading_list/core/reading_list_pref_names.h"
 #include "components/services/app_service/public/cpp/app_launch_util.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sessions/core/live_tab_context.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -183,9 +185,10 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/apps/intent_helper/supported_links_infobar_delegate.h"
+#include "chromeos/ui/wm/features.h"
 #endif
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 #include "chrome/browser/lens/region_search/lens_region_search_controller.h"
 #include "chrome/browser/lens/region_search/lens_region_search_helper.h"
 #include "components/lens/lens_features.h"
@@ -496,9 +499,8 @@ void NewEmptyWindow(Profile* profile, bool should_trigger_session_restore) {
       off_the_record = false;
     }
   } else if (profile->IsGuestSession() ||
-             (browser_defaults::kAlwaysOpenIncognitoWindow &&
-              IncognitoModePrefs::ShouldLaunchIncognito(
-                  *base::CommandLine::ForCurrentProcess(), prefs))) {
+             IncognitoModePrefs::ShouldOpenSubsequentBrowsersInIncognito(
+                 *base::CommandLine::ForCurrentProcess(), prefs)) {
     off_the_record = true;
   }
 
@@ -564,12 +566,24 @@ bool CanGoBack(const Browser* browser) {
       .CanGoBack();
 }
 
+bool CanGoBack(content::WebContents* web_contents) {
+  return web_contents->GetController().CanGoBack();
+}
+
 void GoBack(Browser* browser, WindowOpenDisposition disposition) {
   base::RecordAction(UserMetricsAction("Back"));
 
   if (CanGoBack(browser)) {
     WebContents* new_tab = GetTabAndRevertIfNecessary(browser, disposition);
     new_tab->GetController().GoBack();
+  }
+}
+
+void GoBack(content::WebContents* web_contents) {
+  base::RecordAction(UserMetricsAction("Back"));
+
+  if (CanGoBack(web_contents)) {
+    web_contents->GetController().GoBack();
   }
 }
 
@@ -580,12 +594,23 @@ bool CanGoForward(const Browser* browser) {
       .CanGoForward();
 }
 
+bool CanGoForward(content::WebContents* web_contents) {
+  return web_contents->GetController().CanGoForward();
+}
+
 void GoForward(Browser* browser, WindowOpenDisposition disposition) {
   base::RecordAction(UserMetricsAction("Forward"));
   if (CanGoForward(browser)) {
     GetTabAndRevertIfNecessary(browser, disposition)
         ->GetController()
         .GoForward();
+  }
+}
+
+void GoForward(content::WebContents* web_contents) {
+  base::RecordAction(UserMetricsAction("Forward"));
+  if (CanGoForward(web_contents)) {
+    web_contents->GetController().GoForward();
   }
 }
 
@@ -610,7 +635,8 @@ void ReloadBypassingCache(Browser* browser, WindowOpenDisposition disposition) {
 }
 
 bool CanReload(const Browser* browser) {
-  return browser && !browser->is_type_devtools();
+  return browser && !browser->is_type_devtools() &&
+         !browser->is_type_picture_in_picture();
 }
 
 void Home(Browser* browser, WindowOpenDisposition disposition) {
@@ -888,7 +914,8 @@ void DuplicateTab(Browser* browser) {
 }
 
 bool CanDuplicateTab(const Browser* browser) {
-  return CanDuplicateTabAt(browser, browser->tab_strip_model()->active_index());
+  return !browser->is_type_picture_in_picture() &&
+         CanDuplicateTabAt(browser, browser->tab_strip_model()->active_index());
 }
 
 bool CanDuplicateKeyboardFocusedTab(const Browser* browser) {
@@ -1237,7 +1264,7 @@ bool MarkCurrentTabAsReadInReadLater(Browser* browser) {
       browser->tab_strip_model()->GetActiveWebContents();
   if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title))
     return false;
-  const ReadingListEntry* entry = model->GetEntryByURL(url);
+  scoped_refptr<const ReadingListEntry> entry = model->GetEntryByURL(url);
   // Mark current tab as read.
   if (entry && !entry->IsRead())
     model->SetReadStatusIfExists(url, true);
@@ -1252,7 +1279,7 @@ bool IsCurrentTabUnreadInReadLater(Browser* browser) {
       browser->tab_strip_model()->GetActiveWebContents();
   if (!model || !GetTabURLAndTitleToSave(web_contents, &url, &title))
     return false;
-  const ReadingListEntry* entry = model->GetEntryByURL(url);
+  scoped_refptr<const ReadingListEntry> entry = model->GetEntryByURL(url);
   return entry && !entry->IsRead();
 }
 
@@ -1271,6 +1298,14 @@ void SaveCreditCard(Browser* browser) {
       browser->tab_strip_model()->GetActiveWebContents();
   autofill::SaveCardBubbleControllerImpl* controller =
       autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents);
+  controller->ReshowBubble();
+}
+
+void SaveIBAN(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  autofill::IbanBubbleControllerImpl* controller =
+      autofill::IbanBubbleControllerImpl::FromWebContents(web_contents);
   controller->ReshowBubble();
 }
 
@@ -1873,6 +1908,13 @@ void PromptToNameWindow(Browser* browser) {
   chrome::ShowWindowNamePrompt(browser);
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+void ToggleMultitaskMenu(Browser* browser) {
+  DCHECK(chromeos::wm::features::IsWindowLayoutMenuEnabled());
+  browser->window()->ToggleMultitaskMenu();
+}
+#endif
+
 void ToggleCommander(Browser* browser) {
   commander::Commander::Get()->ToggleForBrowser(browser);
 }
@@ -1901,9 +1943,7 @@ bool ShouldInterceptChromeURLNavigationInIncognito(Browser* browser,
                  .Resolve(chrome::kClearBrowserDataSubPage);
 
   bool show_history_disclaimer_dialog =
-      url == GURL(chrome::kChromeUIHistoryURL) &&
-      base::FeatureList::IsEnabled(
-          features::kUpdateHistoryEntryPointsInIncognito);
+      url == GURL(chrome::kChromeUIHistoryURL);
 
   return show_clear_browsing_data_dialog || show_history_disclaimer_dialog;
 }
@@ -1914,8 +1954,6 @@ void ProcessInterceptedChromeURLNavigationInIncognito(Browser* browser,
                  .Resolve(chrome::kClearBrowserDataSubPage)) {
     ShowIncognitoClearBrowsingDataDialog(browser);
   } else if (url == GURL(chrome::kChromeUIHistoryURL)) {
-    DCHECK(base::FeatureList::IsEnabled(
-        features::kUpdateHistoryEntryPointsInIncognito));
     ShowIncognitoHistoryDisclaimerDialog(browser);
   } else {
     NOTREACHED();
@@ -1941,7 +1979,7 @@ void RunScreenAIVisualAnnotation(Browser* browser) {
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 void ExecLensRegionSearch(Browser* browser) {
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
   Profile* profile = browser->profile();
   TemplateURLService* service =
       TemplateURLServiceFactory::GetForProfile(profile);
@@ -1959,7 +1997,7 @@ void ExecLensRegionSearch(Browser* browser) {
     browser->SetUserData(lens::LensRegionSearchControllerData::kDataKey,
                          std::move(lens_region_search_controller_data));
   }
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 }
 
 }  // namespace chrome

@@ -10,7 +10,9 @@
 #include <mfmediaengine.h>
 #include <wrl.h>
 
-#include "base/callback.h"
+#include <memory>
+
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -66,9 +68,6 @@ class MEDIA_EXPORT MediaFoundationRenderer
 
   // Report `reason` to UMA.
   static void ReportErrorReason(ErrorReason reason);
-
-  // Whether MediaFoundationRenderer() is supported on the current device.
-  static bool IsSupported();
 
   MediaFoundationRenderer(scoped_refptr<base::SequencedTaskRunner> task_runner,
                           std::unique_ptr<MediaLog> media_log,
@@ -142,7 +141,7 @@ class MEDIA_EXPORT MediaFoundationRenderer
   HRESULT SetDCompModeInternal();
   HRESULT GetDCompSurfaceInternal(HANDLE* surface_handle);
   HRESULT SetSourceOnMediaEngine();
-  HRESULT UpdateVideoStream(const gfx::Rect& rect);
+  HRESULT UpdateVideoStream(const gfx::Size rect_size);
   HRESULT PauseInternal();
   HRESULT InitializeTexturePool(const gfx::Size& size);
   void OnVideoNaturalSizeChange();
@@ -186,6 +185,9 @@ class MEDIA_EXPORT MediaFoundationRenderer
   // This enables MFMediaEngine to use hardware acceleration for video decoding
   // and video processing.
   Microsoft::WRL::ComPtr<IMFDXGIDeviceManager> dxgi_device_manager_;
+
+  // Current cached rectangle size of video to be rendered.
+  gfx::Size current_video_rect_size_;
 
   // Current duration of the media.
   base::TimeDelta duration_;

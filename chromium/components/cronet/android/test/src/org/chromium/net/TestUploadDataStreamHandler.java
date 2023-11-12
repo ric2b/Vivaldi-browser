@@ -166,12 +166,10 @@ public final class TestUploadDataStreamHandler {
     private native void nativeReset(long nativePtr);
 
     @NativeClassQualifiedName("TestUploadDataStreamHandler")
-    private native void nativeCheckInitCallbackNotInvoked(
-            long nativePtr);
+    private native void nativeCheckInitCallbackNotInvoked(long nativePtr);
 
     @NativeClassQualifiedName("TestUploadDataStreamHandler")
-    private native void nativeCheckReadCallbackNotInvoked(
-            long nativePtr);
+    private native void nativeCheckReadCallbackNotInvoked(long nativePtr);
 
     @NativeClassQualifiedName("TestUploadDataStreamHandler")
     private native void nativeDestroy(long nativePtr);

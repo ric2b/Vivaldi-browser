@@ -8,12 +8,12 @@
 
 #include <memory>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/stringprintf.h"
@@ -769,7 +769,7 @@ TEST_F(NetExportFileWriterTest, StartWithNetworkContextActive) {
                                        TRAFFIC_ANNOTATION_FOR_TESTS);
   base::RunLoop run_loop, run_loop2;
   simple_loader->SetOnRedirectCallback(base::BindRepeating(
-      [](base::RepeatingClosure notify_log,
+      [](base::RepeatingClosure notify_log, const GURL& url_before_redirect,
          const net::RedirectInfo& redirect_info,
          const network::mojom::URLResponseHead& response_head,
          std::vector<std::string>* to_be_removed_headers) { notify_log.Run(); },

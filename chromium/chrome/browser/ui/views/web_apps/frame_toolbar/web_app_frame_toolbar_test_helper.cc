@@ -15,8 +15,8 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -43,7 +43,8 @@ web_app::AppId WebAppFrameToolbarTestHelper::InstallAndLaunchWebApp(
   web_app_info->scope = start_url.GetWithoutFilename();
   web_app_info->title = u"A minimal-ui app";
   web_app_info->display_mode = web_app::DisplayMode::kMinimalUi;
-  web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
+  web_app_info->user_display_mode =
+      web_app::mojom::UserDisplayMode::kStandalone;
 
   web_app::AppId app_id =
       web_app::test::InstallWebApp(browser->profile(), std::move(web_app_info));
@@ -58,7 +59,7 @@ web_app::AppId WebAppFrameToolbarTestHelper::InstallAndLaunchWebApp(
   frame_view_ = static_cast<BrowserNonClientFrameView*>(frame_view);
   root_view_ = browser_view_->GetWidget()->GetRootView();
 
-  web_app_frame_toolbar_ = frame_view_->web_app_frame_toolbar_for_testing();
+  web_app_frame_toolbar_ = browser_view_->web_app_frame_toolbar_for_testing();
   DCHECK(web_app_frame_toolbar_);
   DCHECK(web_app_frame_toolbar_->GetVisible());
   return app_id;
@@ -81,7 +82,7 @@ web_app::AppId WebAppFrameToolbarTestHelper::InstallAndLaunchCustomWebApp(
   frame_view_ = static_cast<BrowserNonClientFrameView*>(frame_view);
   root_view_ = browser_view_->GetWidget()->GetRootView();
 
-  web_app_frame_toolbar_ = frame_view_->web_app_frame_toolbar_for_testing();
+  web_app_frame_toolbar_ = browser_view_->web_app_frame_toolbar_for_testing();
   DCHECK(web_app_frame_toolbar_);
   DCHECK(web_app_frame_toolbar_->GetVisible());
   return app_id;
@@ -297,14 +298,18 @@ void WebAppFrameToolbarTestHelper::TestDraggableRegions() {
       browser_view()->GetWidget()->GetNativeView(), draggable_point));
 }
 
-Browser* WebAppFrameToolbarTestHelper::OpenPopup(
-    const std::string& target_url) {
-  std::string script = "window.open('" + target_url + "', '_blank', 'popup');";
-  content::ExecuteScriptAsync(
-      app_browser_->tab_strip_model()->GetActiveWebContents(), script);
-
+BrowserView* WebAppFrameToolbarTestHelper::OpenPopup(
+    const std::string& window_open_script) {
+  content::ExecuteScriptAsync(browser_view_->GetActiveWebContents(),
+                              window_open_script);
   Browser* popup = ui_test_utils::WaitForBrowserToOpen();
   EXPECT_NE(app_browser_, popup);
   EXPECT_TRUE(popup);
-  return popup;
+
+  BrowserView* popup_browser_view =
+      BrowserView::GetBrowserViewForBrowser(popup);
+  EXPECT_TRUE(content::WaitForRenderFrameReady(
+      popup_browser_view->GetActiveWebContents()->GetPrimaryMainFrame()));
+
+  return popup_browser_view;
 }

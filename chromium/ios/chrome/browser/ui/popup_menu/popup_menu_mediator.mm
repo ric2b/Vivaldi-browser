@@ -26,9 +26,10 @@
 #import "components/profile_metrics/browser_profile_type.h"
 #import "components/translate/core/browser/translate_manager.h"
 #import "components/translate/core/browser/translate_prefs.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/commerce/push_notification/push_notification_feature.h"
-#import "ios/chrome/browser/find_in_page/find_tab_helper.h"
+#import "ios/chrome/browser/find_in_page/abstract_find_tab_helper.h"
 #import "ios/chrome/browser/follow/follow_browser_agent.h"
 #import "ios/chrome/browser/follow/follow_menu_updater.h"
 #import "ios/chrome/browser/follow/follow_tab_helper.h"
@@ -44,8 +45,6 @@
 #import "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/translate/chrome_ios_translate_client.h"
-#import "ios/chrome/browser/ui/activity_services/canonical_url_retriever.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/reading_list_add_command.h"
@@ -54,7 +53,6 @@
 #import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/list_model/list_model.h"
-#import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_navigation_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_text_item.h"
 #import "ios/chrome/browser/ui/popup_menu/cells/popup_menu_tools_item.h"
@@ -91,9 +89,13 @@
 #import "ui/gfx/image/image.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
 #import "ios/notes/note_ui_constants.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+#import "ios/ui/toolbar/vivaldi_toolbar_constants.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -164,7 +166,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
   // Bridge to register for bookmark changes.
-  std::unique_ptr<bookmarks::BookmarkModelBridge> _bookmarkModelBridge;
+  std::unique_ptr<BookmarkModelBridge> _bookmarkModelBridge;
   // Bridge to get notified of the language detection event.
   std::unique_ptr<language::IOSLanguageDetectionTabHelperObserverBridge>
       _iOSLanguageDetectionTabHelperObserverBridge;
@@ -523,7 +525,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
   _bookmarkModelBridge.reset();
   if (bookmarkModel) {
     _bookmarkModelBridge =
-        std::make_unique<bookmarks::BookmarkModelBridge>(self, bookmarkModel);
+        std::make_unique<BookmarkModelBridge>(self, bookmarkModel);
   }
 
   if (self.webState && self.popupMenu) {
@@ -554,11 +556,23 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
         break;
       case PopupMenuTypeTabGrid:
         DCHECK(!UseSymbols());
+
+        if (IsVivaldiRunning()) {
+          [self createVivaldiTabGridMenuItems];
+        } else {
         [self createTabGridMenuItems];
+        } // End Vivaldi
+
         break;
       case PopupMenuTypeTabStripTabGrid:
         DCHECK(!UseSymbols());
+
+        if (IsVivaldiRunning()) {
+          [self createVivaldiTabGridMenuItems];
+        } else {
         [self createTabGridMenuItems];
+        } // End Vivaldi
+
         break;
       case PopupMenuTypeNewTab:
         DCHECK(!UseSymbols());
@@ -895,7 +909,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 - (BOOL)isFindInPageEnabled {
   if (!self.webState)
     return NO;
-  auto* helper = FindTabHelper::FromWebState(self.webState);
+  auto* helper = GetConcreteFindTabHelperFromWebState(self.webState);
   return (helper && helper->CurrentPageSupportsFindInPage() &&
           !helper->IsFindUIActive());
 }
@@ -952,11 +966,21 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
         IDS_IOS_TOOLS_MENU_SEARCH_COPIED_TEXT, PopupMenuActionSearchCopiedText,
         @"popup_menu_paste_and_go", kToolsMenuPasteAndGo);
   }
+
+  // Vivaldi: Use vivaldi copy icon.
+  copiedContentItem.image = [UIImage imageNamed:vMenuCopy];
+  // End Vivaldi
+
   if (copiedContentItem) {
     [items addObject:@[ copiedContentItem ]];
   }
 
+  if (IsVivaldiRunning()) {
+    [items addObject:[self vivaldiSearchMenuStaticItems]];
+  } else {
   [items addObject:[self searchMenuStaticItems]];
+  } // End Vivaldi
+
   self.items = items;
   [self.popupMenu setPopupMenuItems:self.items];
 }
@@ -981,6 +1005,12 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
         [[PopupMenuNavigationItem alloc] initWithType:kItemTypeEnumZero];
     if ([self shouldUseIncognitoNTPResourcesForURL:navigationItem
                                                        ->GetVirtualURL()]) {
+
+      if (IsVivaldiRunning()) {
+        item.title =
+            l10n_util::GetNSString(IDS_IOS_OPEN_IN_PRIVATE_ACTION_TITLE);
+        item.favicon = [UIImage imageNamed:vMenuPrivateTab];
+      } else {
       item.title = l10n_util::GetNSStringWithFixup(IDS_IOS_NEW_INCOGNITO_TAB);
       UIImage* image;
       if (UseSymbols()) {
@@ -996,6 +1026,8 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
         image = [UIImage imageNamed:@"incognito_badge"];
       }
       item.favicon = image;
+      } // End Vivaldi
+
     } else {
       item.title =
           base::SysUTF16ToNSString(navigationItem->GetTitleForDisplay());
@@ -1022,7 +1054,12 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
 // Creates the menu items for the search menu.
 - (void)createSearchMenuItems {
+
+  if (IsVivaldiRunning()) {
+    self.items = @[ [self vivaldiSearchMenuStaticItems] ];
+  } else {
   self.items = @[ [self searchMenuStaticItems] ];
+  } // End Vivaldi
 
   ClipboardRecentContent* clipboardRecentContent =
       ClipboardRecentContent::GetInstance();
@@ -1155,7 +1192,9 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TITLE,
       PopupMenuActionPriceNotifications, @"popup_menu_price_notifications",
       kToolsMenuPriceNotifications);
-  if (IsPriceNotificationsEnabled()) {
+  if (self.webState &&
+      IsPriceTrackingEnabled(ChromeBrowserState::FromBrowserState(
+          self.webState->GetBrowserState()))) {
     [actionsArray addObject:self.priceNotificationsItem];
   }
 
@@ -1303,8 +1342,7 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
       CreateTableViewItem(IDS_IOS_TOOLS_MENU_SETTINGS, PopupMenuActionSettings,
                           @"popup_menu_settings", kToolsMenuSettingsActionId);
 
-  if (self.isIncognito &&
-      base::FeatureList::IsEnabled(kUpdateHistoryEntryPointsInIncognito)) {
+  if (self.isIncognito) {
     return @[ bookmarks, self.readingListItem, downloadsFolder, settings ];
   }
 
@@ -1353,9 +1391,8 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 // Returns YES if incognito NTP title and image should be used for back/forward
 // item associated with `URL`.
 - (BOOL)shouldUseIncognitoNTPResourcesForURL:(const GURL&)URL {
-  return URL.DeprecatedGetOriginAsURL() == kChromeUINewTabURL &&
-         self.isIncognito &&
-         base::FeatureList::IsEnabled(kUpdateHistoryEntryPointsInIncognito);
+    return URL.DeprecatedGetOriginAsURL() == kChromeUINewTabURL &&
+           self.isIncognito;
 }
 
 // Searches the copied image. If `usingLens` is set, then the search will be
@@ -1379,6 +1416,63 @@ PopupMenuTextItem* CreateEnterpriseInfoItem(NSString* imageName,
 
     self.URLLoadingBrowserAgent->Load(params);
   }
+}
+
+#pragma mark - VIVALDI
+// Creates and returns the search menu items that are static (i.e. always in
+// the search menu).
+- (NSArray<TableViewItem<PopupMenuItem>*>*)vivaldiSearchMenuStaticItems {
+  PopupMenuToolsItem* QRCodeSearch = CreateTableViewItem(
+      IDS_IOS_TOOLS_MENU_QR_SCANNER, PopupMenuActionQRCodeSearch,
+      vMenuQRCode, kToolsMenuQRCodeSearch);
+
+  PopupMenuToolsItem* newSearch =
+      CreateTableViewItem(IDS_IOS_TOOLS_MENU_NEW_SEARCH, PopupMenuActionSearch,
+                          vToolbarSearchButtonIcon, kToolsMenuSearch);
+  // Disable the new search if the private mode is forced by enterprise
+  // policy.
+  newSearch.enabled = !IsIncognitoModeForced(self.prefService);
+
+  PopupMenuToolsItem* newPrivateSearch = CreateTableViewItem(
+      IDS_IOS_NEW_TAB_PRIVATE_SEARCH, PopupMenuActionIncognitoSearch,
+      vMenuPrivateTab, kToolsMenuIncognitoSearch);
+  // Disable the new private search if the private mode is disabled by
+  // enterprise policy.
+  newPrivateSearch.enabled = !IsIncognitoModeDisabled(self.prefService);
+
+  return @[ newSearch, newPrivateSearch, QRCodeSearch ];
+}
+
+- (NSArray<TableViewItem*>*)vivaldiItemsForNewTab {
+  // Open New Tab.
+  PopupMenuToolsItem* openNewTabItem =
+      CreateTableViewItem(IDS_IOS_TOOLS_MENU_NEW_TAB, PopupMenuActionOpenNewTab,
+                          vMenuNewTab, kToolsMenuNewTabId);
+
+  // Disable the new tab menu item if the private mode is forced by enterprise
+  // policy.
+  openNewTabItem.enabled = !IsIncognitoModeForced(self.prefService);
+
+  // Open New Private Tab.
+  self.openNewIncognitoTabItem = CreateTableViewItem(
+      IDS_IOS_NEW_TAB_PRIVATE_SEARCH, PopupMenuActionOpenNewIncognitoTab,
+      vMenuPrivateTab, kToolsMenuNewIncognitoTabId);
+
+  // Disable the new private tab menu item if the private mode is disabled
+  // by enterprise policy.
+  self.openNewIncognitoTabItem.enabled =
+      !IsIncognitoModeDisabled(self.prefService);
+
+  return @[ openNewTabItem, self.openNewIncognitoTabItem ];
+}
+
+// Creates the menu items for the tab grid menu.
+- (void)createVivaldiTabGridMenuItems {
+  PopupMenuToolsItem* closeTab =
+      CreateTableViewItem(IDS_IOS_TOOLS_MENU_CLOSE_TAB, PopupMenuActionCloseTab,
+                          vMenuClose, kToolsMenuCloseTabId);
+  closeTab.destructiveAction = YES;
+  self.items = @[ [self vivaldiItemsForNewTab], @[ closeTab ] ];
 }
 
 @end

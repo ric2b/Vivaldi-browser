@@ -133,8 +133,9 @@ class WindowPerformanceTest : public testing::Test {
 
   PerformanceEventTiming* CreatePerformanceEventTiming(
       const AtomicString& name) {
-    return PerformanceEventTiming::Create(name, 0.0, 0.0, 0.0, false, nullptr,
-                                          1);
+    return PerformanceEventTiming::Create(
+        name, 0.0, 0.0, 0.0, false, nullptr,
+        LocalDOMWindow::From(GetScriptState()));
   }
 
   LocalFrame* GetFrame() const { return &page_holder_->GetFrame(); }
@@ -309,7 +310,7 @@ TEST_F(WindowPerformanceTest, EnsureEntryListOrder) {
     performance_->mark(GetScriptState(), AtomicString::Number(i), nullptr,
                        exception_state);
   }
-  PerformanceEntryVector entries = performance_->getEntries(GetScriptState());
+  PerformanceEntryVector entries = performance_->getEntries();
   EXPECT_EQ(17U, entries.size());
   for (int i = 0; i < 8; i++) {
     EXPECT_EQ(AtomicString::Number(i), entries[i]->name());
@@ -436,7 +437,7 @@ TEST_F(WindowPerformanceTest, FirstInput) {
     }
     SimulateSwapPromise(GetTimeOrigin() + base::Milliseconds(3));
     PerformanceEntryVector firstInputs =
-        performance_->getEntriesByType(GetScriptState(), "first-input");
+        performance_->getEntriesByType("first-input");
     EXPECT_GE(1u, firstInputs.size());
     EXPECT_EQ(input.should_report, firstInputs.size() == 1u);
     ResetPerformance();
@@ -453,12 +454,9 @@ TEST_F(WindowPerformanceTest, FirstInputAfterIgnored) {
                          GetTimeOrigin() + base::Milliseconds(2), 4);
     SimulateSwapPromise(GetTimeOrigin() + base::Milliseconds(3));
   }
-  ASSERT_EQ(
-      1u,
-      performance_->getEntriesByType(GetScriptState(), "first-input").size());
+  ASSERT_EQ(1u, performance_->getEntriesByType("first-input").size());
   EXPECT_EQ("mousedown",
-            performance_->getEntriesByType(GetScriptState(), "first-input")[0]
-                ->name());
+            performance_->getEntriesByType("first-input")[0]->name());
 }
 
 // Test that pointerdown followed by pointerup works as a 'firstInput'.
@@ -470,20 +468,14 @@ TEST_F(WindowPerformanceTest, FirstPointerUp) {
   RegisterPointerEvent("pointerdown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(
-      0u,
-      performance_->getEntriesByType(GetScriptState(), "first-input").size());
+  EXPECT_EQ(0u, performance_->getEntriesByType("first-input").size());
   RegisterPointerEvent("pointerup", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(
-      1u,
-      performance_->getEntriesByType(GetScriptState(), "first-input").size());
+  EXPECT_EQ(1u, performance_->getEntriesByType("first-input").size());
   // The name of the entry should be "pointerdown".
   EXPECT_EQ(
-      1u, performance_
-              ->getEntriesByName(GetScriptState(), "pointerdown", "first-input")
-              .size());
+      1u, performance_->getEntriesByName("pointerdown", "first-input").size());
 }
 
 // When the pointerdown is optimized out, the mousedown works as a
@@ -496,14 +488,10 @@ TEST_F(WindowPerformanceTest, PointerdownOptimizedOut) {
   RegisterPointerEvent("mousedown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(
-      1u,
-      performance_->getEntriesByType(GetScriptState(), "first-input").size());
+  EXPECT_EQ(1u, performance_->getEntriesByType("first-input").size());
   // The name of the entry should be "pointerdown".
   EXPECT_EQ(1u,
-            performance_
-                ->getEntriesByName(GetScriptState(), "mousedown", "first-input")
-                .size());
+            performance_->getEntriesByName("mousedown", "first-input").size());
 }
 
 // Test that pointerdown followed by mousedown, pointerup works as a
@@ -516,26 +504,18 @@ TEST_F(WindowPerformanceTest, PointerdownOnDesktop) {
   RegisterPointerEvent("pointerdown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(
-      0u,
-      performance_->getEntriesByType(GetScriptState(), "first-input").size());
+  EXPECT_EQ(0u, performance_->getEntriesByType("first-input").size());
   RegisterPointerEvent("mousedown", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(
-      0u,
-      performance_->getEntriesByType(GetScriptState(), "first-input").size());
+  EXPECT_EQ(0u, performance_->getEntriesByType("first-input").size());
   RegisterPointerEvent("pointerup", start_time, processing_start,
                        processing_end, 4);
   SimulateSwapPromise(swap_time);
-  EXPECT_EQ(
-      1u,
-      performance_->getEntriesByType(GetScriptState(), "first-input").size());
+  EXPECT_EQ(1u, performance_->getEntriesByType("first-input").size());
   // The name of the entry should be "pointerdown".
   EXPECT_EQ(
-      1u, performance_
-              ->getEntriesByName(GetScriptState(), "pointerdown", "first-input")
-              .size());
+      1u, performance_->getEntriesByName("pointerdown", "first-input").size());
 }
 
 TEST_F(WindowPerformanceTest, OneKeyboardInteraction) {
@@ -791,6 +771,9 @@ TEST_F(WindowPerformanceTest, TapOrClick) {
 }
 
 TEST_F(WindowPerformanceTest, PageVisibilityChanged) {
+  // The page visibility gets changed.
+  PageVisibilityChanged(GetTimeStamp(18));
+
   // Pointerdown
   base::TimeTicks pointerdown_timestamp = GetTimeOrigin();
   base::TimeTicks processing_start_pointerdown = GetTimeStamp(1);
@@ -802,9 +785,6 @@ TEST_F(WindowPerformanceTest, PageVisibilityChanged) {
                        pointer_id);
   SimulateSwapPromise(swap_time_pointerdown);
 
-  // The page visibility gets changed.
-  PageVisibilityChanged(GetTimeStamp(18));
-
   // Pointerup
   base::TimeTicks pointerup_timestamp = GetTimeStamp(3);
   base::TimeTicks processing_start_pointerup = GetTimeStamp(5);
@@ -814,6 +794,7 @@ TEST_F(WindowPerformanceTest, PageVisibilityChanged) {
                        processing_start_pointerup, processing_end_pointerup,
                        pointer_id);
   SimulateSwapPromise(swap_time_pointerup);
+
   // Click
   base::TimeTicks click_timestamp = GetTimeStamp(13);
   base::TimeTicks processing_start_click = GetTimeStamp(15);
@@ -831,13 +812,16 @@ TEST_F(WindowPerformanceTest, PageVisibilityChanged) {
       ukm::builders::Responsiveness_UserInteraction::kEntryName);
   EXPECT_EQ(1u, entries.size());
   const ukm::mojom::UkmEntry* ukm_entry = entries[0];
-  // The event duration of pointerdown is 5ms. Because the page visibility was
-  // changed after the pointerup, click were created, the event durations of
-  // them are 3ms, 3ms. The maximum event duration is 5ms. The total event
-  // duration is 9ms.
+  // The event duration of pointerdown is 5ms, all the way to presentation.
+  // Because the page visibility was changed after pointerup & click were
+  // created, the event durations fall back to processingEnd.  That means
+  // they are become 3ms duration each. So the max duration is 5ms.
   GetUkmRecorder()->ExpectEntryMetric(
       ukm_entry,
       ukm::builders::Responsiveness_UserInteraction::kMaxEventDurationName, 5);
+  // Because there is overlap with pointerdown and pointerup, the
+  // the non overlapping event duration for pointerup is only 1ms (not 3ms),
+  // So the total non-overlapping total is 5 + 1 + 3 = 9ms.
   GetUkmRecorder()->ExpectEntryMetric(
       ukm_entry,
       ukm::builders::Responsiveness_UserInteraction::kTotalEventDurationName,
@@ -1593,8 +1577,8 @@ TEST_F(InteractionIdTest, MultiTouch) {
   EXPECT_EQ(ids[1], ids[2]);
   // After a wait, flush UKM logging mojo request.
   test::RunDelayedTasks(base::Seconds(1));
-  CheckUKMValues({{50, 60, UserInteractionType::kTapOrClick},
-                  {30, 50, UserInteractionType::kTapOrClick}});
+  CheckUKMValues({{30, 50, UserInteractionType::kTapOrClick},
+                  {50, 60, UserInteractionType::kTapOrClick}});
 }
 
 TEST_F(InteractionIdTest, ClickIncorrectPointerId) {

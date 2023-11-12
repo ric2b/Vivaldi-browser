@@ -6,7 +6,7 @@
 
 #include <stdint.h>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -144,7 +144,7 @@ class VdaVideoDecoderTest : public testing::TestWithParam<bool> {
 
   void Initialize() {
     EXPECT_CALL(*vda_, Initialize(_, client_.get())).WillOnce(Return(true));
-    EXPECT_CALL(*vda_, TryToSetupDecodeOnSeparateThread(_, _))
+    EXPECT_CALL(*vda_, TryToSetupDecodeOnSeparateSequence(_, _))
         .WillOnce(Return(GetParam()));
     EXPECT_CALL(init_cb_, Run(IsOkStatus()));
     InitializeWithConfig(VideoDecoderConfig(
@@ -426,7 +426,7 @@ TEST_P(VdaVideoDecoderTest, Decode_OutputAndDismiss) {
 TEST_P(VdaVideoDecoderTest, Decode_Output_MaintainsAspect) {
   // Initialize with a config that has a 2:1 pixel aspect ratio.
   EXPECT_CALL(*vda_, Initialize(_, client_.get())).WillOnce(Return(true));
-  EXPECT_CALL(*vda_, TryToSetupDecodeOnSeparateThread(_, _))
+  EXPECT_CALL(*vda_, TryToSetupDecodeOnSeparateSequence(_, _))
       .WillOnce(Return(GetParam()));
   InitializeWithConfig(VideoDecoderConfig(
       VideoCodec::kVP9, VP9PROFILE_PROFILE0,

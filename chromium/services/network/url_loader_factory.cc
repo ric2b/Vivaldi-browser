@@ -8,13 +8,17 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "mojo/public/cpp/bindings/message.h"
+#include "net/base/isolation_info.h"
 #include "net/cookies/cookie_constants.h"
+#include "net/cookies/cookie_setting_override.h"
 #include "net/url_request/url_request_context.h"
+#include "services/network/attribution/attribution_request_helper.h"
 #include "services/network/cookie_manager.h"
 #include "services/network/cookie_settings.h"
 #include "services/network/cors/cors_url_loader_factory.h"
@@ -79,6 +83,7 @@ URLLoaderFactory::URLLoaderFactory(
       header_client_(std::move(params_->header_client)),
       cors_url_loader_factory_(cors_url_loader_factory),
       cookie_observer_(std::move(params_->cookie_observer)),
+      trust_token_observer_(std::move(params_->trust_token_observer)),
       url_loader_network_service_observer_(
           std::move(params_->url_loader_network_observer)),
       devtools_observer_(std::move(params_->devtools_observer)) {
@@ -277,16 +282,25 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
         // NetworkContext::CookieManager outlives the URLLoaders associated with
         // the NetworkContext.
         base::BindRepeating(
-            [](NetworkContext* context) {
+            [](NetworkContext* context,
+               net::CookieSettingOverrides cookie_setting_overrides,
+               net::IsolationInfo isolation_info) {
               // Trust tokens will be blocked if the user has either disabled
-              // the Trust Token Privacy Sandbox setting, or if the user has
-              // disabled third party cookies.
-              return !(context->cookie_manager()
-                           ->cookie_settings()
-                           .are_third_party_cookies_blocked() ||
-                       context->are_trust_tokens_blocked());
+              // the anti-abuse content setting or blocked the top level site
+              // from storing data (i.e. the cookie content setting for that
+              // site is blocked).
+              GURL top_frame_origin = isolation_info.top_frame_origin()
+                                          .value_or(url::Origin())
+                                          .GetURL();
+              ContentSetting cookie_setting =
+                  context->cookie_manager()->cookie_settings().GetCookieSetting(
+                      top_frame_origin, top_frame_origin,
+                      cookie_setting_overrides, nullptr);
+              return !(context->are_trust_tokens_blocked() ||
+                       cookie_setting == CONTENT_SETTING_BLOCK);
             },
-            base::Unretained(context_)));
+            base::Unretained(context_), params_->cookie_setting_overrides,
+            params_->isolation_info));
   }
 
   mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer;
@@ -296,9 +310,13 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
         std::move(const_cast<mojo::PendingRemote<mojom::CookieAccessObserver>&>(
             resource_request.trusted_params->cookie_observer));
   }
-  // TODO(https://crbug.com/1378264): Currently Trust Token Access observer
-  // isn't hooked up through URLLoaderFactory.
   mojo::PendingRemote<mojom::TrustTokenAccessObserver> trust_token_observer;
+  if (resource_request.trusted_params &&
+      resource_request.trusted_params->trust_token_observer) {
+    trust_token_observer = std::move(
+        const_cast<mojo::PendingRemote<mojom::TrustTokenAccessObserver>&>(
+            resource_request.trusted_params->trust_token_observer));
+  }
   mojo::PendingRemote<mojom::URLLoaderNetworkServiceObserver>
       url_loader_network_observer;
   if (resource_request.trusted_params &&
@@ -332,6 +350,13 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
            ->cookie_settings()
            .are_third_party_cookies_blocked();
 
+  std::unique_ptr<AttributionRequestHelper> attribution_request_helper;
+  if (context_->network_service()) {
+    attribution_request_helper = AttributionRequestHelper::CreateIfNeeded(
+        resource_request.headers,
+        context_->network_service()->trust_token_key_commitments());
+  }
+
   auto loader = std::make_unique<URLLoader>(
       *this,
       base::BindOnce(&cors::CorsURLLoaderFactory::DestroyURLLoader,
@@ -344,7 +369,9 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
       std::move(cookie_observer), std::move(trust_token_observer),
       std::move(url_loader_network_observer), std::move(devtools_observer),
       std::move(accept_ch_frame_observer), third_party_cookies_enabled,
-      context_->cache_transparency_settings());
+      params_->cookie_setting_overrides,
+      context_->cache_transparency_settings(),
+      std::move(attribution_request_helper));
 
   if (context_->GetMemoryCache())
     loader->SetMemoryCache(context_->GetMemoryCache()->GetWeakPtr());
@@ -366,8 +393,9 @@ mojom::CookieAccessObserver* URLLoaderFactory::GetCookieAccessObserver() const {
 
 mojom::TrustTokenAccessObserver* URLLoaderFactory::GetTrustTokenAccessObserver()
     const {
-  // TODO(https://crbug.com/1378264): URLLoaderFactory support for the Trust
-  // Token Access Observer is currently unimplemented.
+  if (trust_token_observer_) {
+    return trust_token_observer_.get();
+  }
   return nullptr;
 }
 

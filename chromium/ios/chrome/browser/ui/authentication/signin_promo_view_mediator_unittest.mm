@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 
+#import "base/functional/callback_helpers.h"
 #import "base/run_loop.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -13,6 +14,7 @@
 #import "components/sync/test/mock_sync_service.h"
 #import "components/sync_preferences/pref_service_mock_factory.h"
 #import "components/sync_preferences/pref_service_syncable.h"
+#import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #import "ios/chrome/browser/prefs/browser_prefs.h"
@@ -23,6 +25,7 @@
 #import "ios/chrome/browser/signin/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
 #import "ios/chrome/browser/signin/fake_system_identity.h"
+#import "ios/chrome/browser/signin/fake_system_identity_manager.h"
 #import "ios/chrome/browser/sync/mock_sync_service_utils.h"
 #import "ios/chrome/browser/sync/sync_service_factory.h"
 #import "ios/chrome/browser/sync/sync_setup_service_factory.h"
@@ -34,7 +37,6 @@
 #import "ios/chrome/grit/ios_chromium_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
-#import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -56,6 +58,8 @@ using user_prefs::PrefRegistrySyncable;
 using web::WebTaskEnvironment;
 
 namespace {
+// The image name of the SigninPromoViewStyleCompactTitled view's icon.
+NSString* const kPromoViewImageName = @"ntp_feed_signin_promo_icon";
 
 class SigninPromoViewMediatorTest : public PlatformTest {
  protected:
@@ -81,8 +85,8 @@ class SigninPromoViewMediatorTest : public PlatformTest {
   void TearDown() override {
     // All callbacks should be triggered to make sure tests are working
     // correctly.
-    EXPECT_TRUE(ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-                    ->WaitForServiceCallbacksToComplete());
+
+    fake_system_identity_manager()->WaitForServiceCallbacksToComplete();
     if (mediator_) {
       [mediator_ disconnect];
       EXPECT_EQ(ios::SigninPromoViewState::Invalid,
@@ -137,8 +141,7 @@ class SigninPromoViewMediatorTest : public PlatformTest {
 
   // Creates the default identity and adds it into the ChromeIdentityService.
   void AddDefaultIdentity() {
-    ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-        ->AddIdentity(identity_);
+    fake_system_identity_manager()->AddIdentity(identity_);
   }
 
   PrefService* GetLocalState() { return scoped_testing_local_state_.Get(); }
@@ -182,7 +185,7 @@ class SigninPromoViewMediatorTest : public PlatformTest {
   void ExpectNoAccountsConfiguration(SigninPromoViewStyle style) {
     OCMExpect([signin_promo_view_ setMode:SigninPromoViewModeNoAccounts]);
     NSString* title = nil;
-    if (style != SigninPromoViewStyleStandard) {
+    if (style == SigninPromoViewStyleCompactTitled) {
       title = GetNSString(IDS_IOS_NTP_FEED_SIGNIN_PROMO_CONTINUE);
     } else {
       title = GetNSString(IDS_IOS_SYNC_PROMO_TURN_ON_SYNC);
@@ -199,6 +202,10 @@ class SigninPromoViewMediatorTest : public PlatformTest {
     OCMExpect([close_button_ setHidden:close_button_hidden_]);
     OCMExpect([title_label_ setHidden:(style == SigninPromoViewStyleStandard)]);
     OCMExpect([signin_promo_view_ setPromoViewStyle:style]);
+    if (style == SigninPromoViewStyleCompactTitled) {
+      OCMExpect([signin_promo_view_
+          setNonProfileImage:[UIImage imageNamed:kPromoViewImageName]]);
+    }
     [configurator configureSigninPromoView:signin_promo_view_ withStyle:style];
     EXPECT_EQ(nil, image_view_profile_image_);
   }
@@ -228,11 +235,15 @@ class SigninPromoViewMediatorTest : public PlatformTest {
             forState:UIControlStateNormal]);
         break;
       }
-      case SigninPromoViewStyleTitled:
-      case SigninPromoViewStyleTitledCompact: {
+      case SigninPromoViewStyleCompactTitled: {
         OCMExpect([primary_button_
             setTitle:GetNSString(IDS_IOS_NTP_FEED_SIGNIN_PROMO_CONTINUE)
             forState:UIControlStateNormal]);
+        break;
+      }
+      case SigninPromoViewStyleCompactHorizontal:
+      case SigninPromoViewStyleCompactVertical: {
+        // TODO(crbug.com/1412758): Test the new styles when implemented.
         break;
       }
     }
@@ -249,12 +260,21 @@ class SigninPromoViewMediatorTest : public PlatformTest {
     OCMExpect([signin_promo_view_ setPromoViewStyle:style]);
     [configurator configureSigninPromoView:signin_promo_view_ withStyle:style];
     switch (style) {
-      case SigninPromoViewStyleStandard:
+      case SigninPromoViewStyleStandard: {
         EXPECT_NE(nil, image_view_profile_image_);
         break;
-      case SigninPromoViewStyleTitled:
-      case SigninPromoViewStyleTitledCompact:
+      }
+      case SigninPromoViewStyleCompactTitled: {
+        OCMExpect([signin_promo_view_
+            setNonProfileImage:[UIImage imageNamed:kPromoViewImageName]]);
         EXPECT_EQ(nil, image_view_profile_image_);
+        break;
+      }
+      case SigninPromoViewStyleCompactHorizontal:
+      case SigninPromoViewStyleCompactVertical: {
+        // TODO(crbug.com/1412758): Test the new styles when implemented.
+        break;
+      }
     }
   }
 
@@ -294,10 +314,15 @@ class SigninPromoViewMediatorTest : public PlatformTest {
   void CheckForImageNotification(SigninPromoViewStyle style) {
     configurator_ = nil;
     ExpectConfiguratorNotification(NO /* identity changed */);
-    EXPECT_TRUE(ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-                    ->WaitForServiceCallbacksToComplete());
+
+    fake_system_identity_manager()->WaitForServiceCallbacksToComplete();
     // Check the configurator received by the consumer.
     CheckSigninWithAccountConfigurator(configurator_, style);
+  }
+
+  FakeSystemIdentityManager* fake_system_identity_manager() {
+    return FakeSystemIdentityManager::FromSystemIdentityManager(
+        GetApplicationContext()->GetSystemIdentityManager());
   }
 
   // Task environment.
@@ -368,23 +393,26 @@ TEST_F(SigninPromoViewMediatorTest, ConfigureSigninPromoViewWithColdAndWarm) {
 }
 
 // Tests the sign-in promo with and without account when the promo style is
-// titled.
+// compact horizontal.
 TEST_F(SigninPromoViewMediatorTest,
-       ConfigureTitledSigninPromoViewWithColdAndWarm) {
-  close_button_hidden_ = NO;
-  CreateMediator(signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO);
-  TestSigninPromoWithNoAccounts(SigninPromoViewStyleTitled);
-  TestSigninPromoWithAccount(SigninPromoViewStyleTitled);
+       ConfigureCompactHorizontalSigninPromoViewWithColdAndWarm) {
+  // TODO(crbug.com/1412758): Test the new styles when implemented.
 }
 
 // Tests the sign-in promo with and without account when the promo style is
-// titled compact.
+// compact vertical.
+TEST_F(SigninPromoViewMediatorTest,
+       ConfigureCompactVerticalSigninPromoViewWithColdAndWarm) {
+  // TODO(crbug.com/1412758): Test the new styles when implemented.
+}
+
+// Tests the sign-in promo without account when the promo style is titled
+// compact.
 TEST_F(SigninPromoViewMediatorTest,
        ConfigureCompactTitledSigninPromoViewWithColdAndWarm) {
   close_button_hidden_ = NO;
   CreateMediator(signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO);
-  TestSigninPromoWithNoAccounts(SigninPromoViewStyleTitledCompact);
-  TestSigninPromoWithAccount(SigninPromoViewStyleTitledCompact);
+  TestSigninPromoWithNoAccounts(SigninPromoViewStyleCompactTitled);
 }
 
 // Tests the scenario with the sign-in promo with accounts on the device, and
@@ -395,9 +423,17 @@ TEST_F(SigninPromoViewMediatorTest, ConfigureSigninPromoViewWithWarmAndCold) {
   // Expect to receive a new configuration from -[Consumer
   // configureSigninPromoWithConfigurator:identityChanged:].
   ExpectConfiguratorNotification(YES /* identity changed */);
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-      ->ForgetIdentity(identity_, nil);
+
+  // Forgetting an identity is an asynchronous operation, so we need to wait
+  // before the notification is sent.
+  {
+    base::RunLoop run_loop;
+    fake_system_identity_manager()->ForgetIdentity(
+        identity_, base::IgnoreArgs<NSError*>(run_loop.QuitClosure()));
+    run_loop.Run();
+  }
   identity_ = nil;
+
   // Check the received configurator.
   CheckNoAccountsConfigurator(configurator_, SigninPromoViewStyleStandard);
 }
@@ -469,8 +505,7 @@ TEST_F(SigninPromoViewMediatorTest,
   // Adds an identity while doing sign-in.
   AddDefaultIdentity();
   // No consumer notification should be expected.
-  EXPECT_TRUE(ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-                  ->WaitForServiceCallbacksToComplete());
+  fake_system_identity_manager()->WaitForServiceCallbacksToComplete();
   // Finishs the sign-in.
   OCMExpect([consumer_ signinDidFinish]);
   completion(YES);
@@ -501,10 +536,9 @@ TEST_F(SigninPromoViewMediatorTest,
   id<ChromeAccountManagerServiceObserver> accountManagerServiceObserver =
       (id<ChromeAccountManagerServiceObserver>)mediator_;
   // Simulates an identity update.
-  [accountManagerServiceObserver identityChanged:identity_];
+  [accountManagerServiceObserver identityUpdated:identity_];
   // Spins the run loop to wait for the profile image update.
-  EXPECT_TRUE(ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-                  ->WaitForServiceCallbacksToComplete());
+  fake_system_identity_manager()->WaitForServiceCallbacksToComplete();
   // Finishs the sign-in.
   OCMExpect([consumer_ signinDidFinish]);
   completion(YES);
@@ -531,15 +565,13 @@ TEST_F(SigninPromoViewMediatorTest,
 TEST_F(SigninPromoViewMediatorTest, SigninPromoWhileSignedIn) {
   AddDefaultIdentity();
   identity_ = [FakeSystemIdentity fakeIdentity2];
-  ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()->AddIdentity(
-      identity_);
+  fake_system_identity_manager()->AddIdentity(identity_);
   GetAuthenticationService()->SignIn(identity_);
   CreateMediator(signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS);
   ExpectConfiguratorNotification(NO /* identity changed */);
   [mediator_ signinPromoViewIsVisible];
   EXPECT_EQ(identity_, mediator_.identity);
-  EXPECT_TRUE(ios::FakeChromeIdentityService::GetInstanceFromChromeProvider()
-                  ->WaitForServiceCallbacksToComplete());
+  fake_system_identity_manager()->WaitForServiceCallbacksToComplete();
   CheckSyncPromoWithAccountConfigurator(configurator_,
                                         SigninPromoViewStyleStandard);
 }

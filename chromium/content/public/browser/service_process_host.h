@@ -10,8 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/callback.h"
 #include "base/observer_list_types.h"
 #include "base/process/process_handle.h"
 #include "base/strings/string_piece.h"
@@ -23,6 +23,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "sandbox/policy/mojom/sandbox.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "url/gurl.h"
 
 // TODO(crbug.com/1328879): Remove this when fixing the bug.
 #if BUILDFLAG(IS_CASTOS) || BUILDFLAG(IS_CAST_ANDROID)
@@ -81,6 +82,10 @@ class CONTENT_EXPORT ServiceProcessHost {
     Options& WithDisplayName(const std::u16string& name);
     Options& WithDisplayName(int resource_id);
 
+    // Specifies the site associated with the service process, only needed for
+    // per-site service processes.
+    Options& WithSite(const GURL& url);
+
     // Specifies additional flags to configure the launched process. See
     // ChildProcessHost for flag definitions.
     Options& WithChildFlags(int flags);
@@ -99,6 +104,7 @@ class CONTENT_EXPORT ServiceProcessHost {
     Options Pass();
 
     std::u16string display_name;
+    absl::optional<GURL> site;
     absl::optional<int> child_flags;
     std::vector<std::string> extra_switches;
     base::OnceCallback<void(const base::Process&)> process_callback;

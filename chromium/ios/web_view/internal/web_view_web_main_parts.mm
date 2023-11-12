@@ -13,6 +13,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/component_updater/installer_policies/safety_tips_component_installer.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#import "components/signin/public/base/signin_switches.h"
 #include "components/sync/base/features.h"
 #include "components/variations/variations_ids_provider.h"
 #include "ios/web/public/webui/web_ui_ios_controller_factory.h"
@@ -72,11 +73,11 @@ void WebViewWebMainParts::PreCreateThreads() {
       {
           autofill::features::kAutofillUpstream.name,
           password_manager::features::kEnablePasswordsAccountStorage.name,
-          syncer::kSyncTrustedVaultPassphraseRecovery.name,
       },
       ",");
   std::string disabled_features = base::JoinString(
       {
+          switches::kEnableFetchingAccountCapabilities.name,
       },
       ",");
   feature_list->InitializeFromCommandLine(

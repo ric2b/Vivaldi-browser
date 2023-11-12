@@ -2,9 +2,9 @@
 
 #import "ios/notes/note_home_shared_state.h"
 
-#include "base/check.h"
-#import "ios/notes/cells/note_table_cell_title_editing.h"
+#import "base/check.h"
 #import "ios/chrome/browser/ui/table_view/table_view_model.h"
+#import "ios/notes/cells/note_table_cell_title_editing.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

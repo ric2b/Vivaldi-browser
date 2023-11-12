@@ -25,6 +25,8 @@
 #include "ui/base/models/image_model.h"
 #include "url/origin.h"
 
+#include "app/vivaldi_apptools.h"
+
 using content::BrowserContext;
 using content::GlobalRenderFrameHostId;
 using content::OpenURLParams;
@@ -384,8 +386,11 @@ bool RenderViewContextMenuBase::IsCommandIdChecked(int id) const {
 
 void RenderViewContextMenuBase::ExecuteCommand(int id, int event_flags) {
   command_executed_ = true;
+  // NOTE(andre@vivaldi.com) : RecordUsedItem could cause a notreached in
+  // Vivaldi. VB-96322.
+  if (!vivaldi::IsVivaldiRunning()) {
   RecordUsedItem(id);
-
+  }
   // Notify all observers the command to be executed.
   for (auto& observer : observers_)
     observer.CommandWillBeExecuted(id);
@@ -453,7 +458,7 @@ void RenderViewContextMenuBase::OpenURL(const GURL& url,
                                         ui::PageTransition transition) {
   OpenURLWithExtraHeaders(url, referring_url, disposition, transition,
                           "" /* extra_headers */,
-                          false /* started_from_context_menu */);
+                          true /* started_from_context_menu */);
 }
 
 void RenderViewContextMenuBase::OpenURLWithExtraHeaders(
@@ -463,18 +468,35 @@ void RenderViewContextMenuBase::OpenURLWithExtraHeaders(
     ui::PageTransition transition,
     const std::string& extra_headers,
     bool started_from_context_menu) {
+  content::OpenURLParams open_url_params = GetOpenURLParamsWithExtraHeaders(
+      url, referring_url, disposition, transition, extra_headers,
+      started_from_context_menu);
+
+  source_web_contents_->OpenURL(open_url_params);
+}
+
+content::OpenURLParams
+RenderViewContextMenuBase::GetOpenURLParamsWithExtraHeaders(
+    const GURL& url,
+    const GURL& referring_url,
+    WindowOpenDisposition disposition,
+    ui::PageTransition transition,
+    const std::string& extra_headers,
+    bool started_from_context_menu) {
   // Do not send the referrer url to OTR windows. We still need the
   // |referring_url| to populate the |initiator_origin| below for browser UI.
   GURL referrer_url;
-  if (disposition != WindowOpenDisposition::OFF_THE_RECORD)
+  if (disposition != WindowOpenDisposition::OFF_THE_RECORD) {
     referrer_url = referring_url.GetAsReferrer();
+  }
 
   content::Referrer referrer = content::Referrer::SanitizeForRequest(
       url, content::Referrer(referrer_url, params_.referrer_policy));
 
   if (params_.link_url == url &&
-      disposition != WindowOpenDisposition::OFF_THE_RECORD)
+      disposition != WindowOpenDisposition::OFF_THE_RECORD) {
     params_.link_followed = url;
+  }
 
   OpenURLParams open_url_params(url, referrer, disposition, transition, false,
                                 started_from_context_menu);
@@ -497,9 +519,9 @@ void RenderViewContextMenuBase::OpenURLWithExtraHeaders(
   // correct Profile is used in incognito mode. See disposition new_window in
   // WebViewGuest::NewGuestWebViewCallback.
   open_url_params.source_site_instance =
-      GetRenderFrameHost() ? GetRenderFrameHost()->GetSiteInstance() : nullptr;
+    GetRenderFrameHost() ? GetRenderFrameHost()->GetSiteInstance() : nullptr;
 
-  source_web_contents_->OpenURL(open_url_params);
+  return open_url_params;
 }
 
 bool RenderViewContextMenuBase::IsCustomItemChecked(int id) const {

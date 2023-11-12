@@ -12,6 +12,7 @@
 
 namespace ui {
 class AXMode;
+struct AXTreeUpdate;
 }  // namespace ui
 
 namespace blink {
@@ -24,6 +25,8 @@ class BLINK_EXPORT WebAXContext {
  public:
   explicit WebAXContext(WebDocument document, const ui::AXMode& mode);
   ~WebAXContext();
+
+  bool HasActiveDocument() const;
 
   const ui::AXMode& GetAXMode() const;
 

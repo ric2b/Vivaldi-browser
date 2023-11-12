@@ -7,12 +7,12 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
@@ -36,11 +36,10 @@ void OnGetProperties(base::queue<std::string> service_path_queue,
                      base::flat_map<std::string, int> path_rssi_map,
                      WifiSignalStrengthRssiCallback cb,
                      const std::string& service_path,
-                     absl::optional<base::Value> properties,
+                     absl::optional<base::Value::Dict> properties,
                      absl::optional<std::string> error) {
-  if (!properties.has_value() || !properties->is_dict() ||
-      !properties->GetDict().FindDict(kWiFi) ||
-      !properties->GetDict().FindDict(kWiFi)->FindInt(kSignalStrengthRssi)) {
+  if (!properties.has_value() || !properties->FindDict(kWiFi) ||
+      !properties->FindDict(kWiFi)->FindInt(kSignalStrengthRssi)) {
     DVLOG(1) << "Fetching signal strength RSSI value of service "
              << service_path << " failed. ";
     if (error.has_value()) {
@@ -50,7 +49,7 @@ void OnGetProperties(base::queue<std::string> service_path_queue,
     DCHECK(!base::Contains(path_rssi_map, service_path));
 
     absl::optional<int> rssi =
-        properties->GetDict().FindDict(kWiFi)->FindInt(kSignalStrengthRssi);
+        properties->FindDict(kWiFi)->FindInt(kSignalStrengthRssi);
     path_rssi_map[service_path] = rssi.value();
   }
 

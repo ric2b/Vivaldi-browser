@@ -189,8 +189,8 @@ void FileSystemAccessSafeMoveHelper::ComputeHashForSourceFile(
     return;
   }
 
-  auto wrapped_callback = base::BindPostTask(
-      base::SequencedTaskRunner::GetCurrentDefault(), std::move(callback));
+  auto wrapped_callback =
+      base::BindPostTaskToCurrentDefault(std::move(callback));
   manager_->operation_runner().PostTaskWithThisObject(
       base::BindOnce(&HashCalculator::CreateAndStart,
                      base::WrapRefCounted(manager_->context()),
@@ -207,12 +207,6 @@ bool FileSystemAccessSafeMoveHelper::RequireAfterWriteChecks() const {
     return true;
   }
 
-  // TODO(https://crbug.com/1396116): Fix FileSystemURL comparison operators
-  // that use a StorageKey.
-  //
-  // This check is held together by a hack in `CreateFileSystemURLFromPath()` in
-  // the FSA manager which ensures all non-sandboxed FileSystemURLs have the
-  // same opaque origin.
   if (!source_url().IsInSameFileSystem(dest_url()))
     return true;
 

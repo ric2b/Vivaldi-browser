@@ -26,6 +26,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_RESOURCE_SCRIPT_RESOURCE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LOADER_RESOURCE_SCRIPT_RESOURCE_H_
 
+#include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-shared.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_cache_consumer.h"
@@ -87,19 +88,9 @@ class CORE_EXPORT ScriptResource final : public TextResource {
   void ResponseBodyReceived(
       ResponseBodyLoaderDrainableInterface& body_loader,
       scoped_refptr<base::SingleThreadTaskRunner> loader_task_runner) override;
-
-  class ScriptDecodedDataInfo final : public DecodedDataInfo {
-   public:
-    explicit ScriptDecodedDataInfo(
-        std::unique_ptr<ParkableStringImpl::SecureDigest> digest)
-        : digest_(std::move(digest)) {}
-
-    ResourceType GetType() const override { return ResourceType::kScript; }
-
-    std::unique_ptr<ParkableStringImpl::SecureDigest> digest_;
-  };
-  void DidReceiveDecodedData(const String& data,
-                             std::unique_ptr<DecodedDataInfo> info) override;
+  void DidReceiveDecodedData(
+      const String& data,
+      std::unique_ptr<ParkableStringImpl::SecureDigest> digest) override;
 
   void Trace(Visitor*) const override;
 
@@ -111,10 +102,6 @@ class CORE_EXPORT ScriptResource final : public TextResource {
   bool CodeCacheHashRequired() const override;
 
   const ParkableString& SourceText();
-
-  const ParkableString& RawSourceText();
-
-  bool IsWebSnapshot() const;
 
   // Get the resource's current text. This can return partial data, so should
   // not be used outside of the inspector.
@@ -247,8 +234,6 @@ class CORE_EXPORT ScriptResource final : public TextResource {
   void OnDataPipeReadable(MojoResult result,
                           const mojo::HandleSignalsState& state);
 
-  bool DataHasPrefix(const base::span<const char>& prefix) const;
-
   ParkableString source_text_;
 
   Member<ResourceScriptStreamer> streamer_;
@@ -266,13 +251,6 @@ template <>
 struct DowncastTraits<ScriptResource> {
   static bool AllowFrom(const Resource& resource) {
     return resource.GetType() == ResourceType::kScript;
-  }
-};
-
-template <>
-struct DowncastTraits<ScriptResource::ScriptDecodedDataInfo> {
-  static bool AllowFrom(const Resource::DecodedDataInfo& info) {
-    return info.GetType() == ResourceType::kScript;
   }
 };
 

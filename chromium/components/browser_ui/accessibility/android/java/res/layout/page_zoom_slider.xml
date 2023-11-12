@@ -11,7 +11,6 @@
     android:layout_height="wrap_content"
     android:elevation="@dimen/page_zoom_view_elevation"
     android:gravity="center"
-    android:maxWidth="@dimen/page_zoom_view_max_width"
     android:orientation="horizontal" >
 
     <org.chromium.ui.widget.ChromeImageButton
@@ -19,14 +18,14 @@
         android:layout_width="@dimen/min_touch_target_size"
         android:layout_height="@dimen/min_touch_target_size"
         android:src="@drawable/ic_remove"
-        android:background="?attr/selectableItemBackground"
+        android:background="@drawable/page_zoom_ripple"
         android:contentDescription="@string/page_zoom_decrease_zoom_button_text"
         android:tint="@color/default_icon_color_tint_list" />
 
     <SeekBar
         android:id="@+id/page_zoom_slider"
-        android:layout_width="0dp"
         android:layout_weight="1"
+        android:layout_width="0dp"
         android:layout_height="@dimen/min_touch_target_size"
         android:contentDescription="@string/page_zoom_label" />
 
@@ -35,7 +34,7 @@
         android:layout_width="@dimen/min_touch_target_size"
         android:layout_height="@dimen/min_touch_target_size"
         android:src="@drawable/ic_add"
-        android:background="?attr/selectableItemBackground"
+        android:background="@drawable/page_zoom_ripple"
         android:contentDescription="@string/page_zoom_increase_zoom_button_text"
         android:tint="@color/default_icon_color_tint_list" />
 

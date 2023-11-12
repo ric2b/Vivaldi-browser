@@ -7,7 +7,7 @@
 #include <map>
 #include <set>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -17,6 +17,12 @@
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/sync/driver/sync_service_utils.h"
 #include "components/unified_consent/pref_names.h"
+
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
+
 
 namespace unified_consent {
 
@@ -85,6 +91,10 @@ PrefBasedUrlKeyedDataCollectionConsentHelper::
 }
 
 bool PrefBasedUrlKeyedDataCollectionConsentHelper::IsEnabled() {
+
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   return pref_service_->GetBoolean(
       prefs::kUrlKeyedAnonymizedDataCollectionEnabled);
 }

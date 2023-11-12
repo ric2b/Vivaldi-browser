@@ -14,7 +14,7 @@
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/window_positioner.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/compositor/layer.h"
@@ -36,7 +36,7 @@ constexpr base::TimeDelta kMinimalAnimationTime = base::Milliseconds(1);
 class UserChangeActionDisabler {
  public:
   UserChangeActionDisabler() {
-    WindowPositioner::DisableAutoPositioning(true);
+    window_positioner::DisableAutoPositioning(true);
     Shell::Get()->mru_window_tracker()->SetIgnoreActivations(true);
   }
 
@@ -44,7 +44,7 @@ class UserChangeActionDisabler {
   UserChangeActionDisabler& operator=(const UserChangeActionDisabler&) = delete;
 
   ~UserChangeActionDisabler() {
-    WindowPositioner::DisableAutoPositioning(false);
+    window_positioner::DisableAutoPositioning(false);
     Shell::Get()->mru_window_tracker()->SetIgnoreActivations(false);
   }
 };

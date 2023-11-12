@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/notreached.h"
+#include "base/task/single_thread_task_runner.h"
 #include "components/power_scheduler/power_mode_voter.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -51,9 +52,10 @@ class PLATFORM_EXPORT BeginFrameProvider
       WTF::Vector<viz::ReturnedResource> resources) final {
     NOTIMPLEMENTED();
   }
-  void OnBeginFrame(
-      const viz::BeginFrameArgs&,
-      const WTF::HashMap<uint32_t, viz::FrameTimingDetails>&) final;
+  void OnBeginFrame(const viz::BeginFrameArgs&,
+                    const WTF::HashMap<uint32_t, viz::FrameTimingDetails>&,
+                    bool frame_ack,
+                    WTF::Vector<viz::ReturnedResource> resources) final;
   void OnBeginFramePausedChanged(bool paused) final {}
   void ReclaimResources(WTF::Vector<viz::ReturnedResource> resources) final {
     NOTIMPLEMENTED();

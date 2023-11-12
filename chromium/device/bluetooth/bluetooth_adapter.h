@@ -15,8 +15,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/containers/queue.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -497,6 +497,11 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   virtual void SetDiscoverable(bool discoverable,
                                base::OnceClosure callback,
                                ErrorCallback error_callback) = 0;
+
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+  // Gets the current discoverable time for the adapter radio.
+  virtual base::TimeDelta GetDiscoverableTimeout() const = 0;
+#endif
 
   // Indicates whether the adapter is currently discovering new devices.
   virtual bool IsDiscovering() const = 0;

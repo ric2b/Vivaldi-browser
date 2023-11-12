@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/strings/strcat.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/safe_browsing/core/browser/db/util.h"
 #include "crypto/sha2.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -52,14 +53,14 @@ bool TestV4Store::HasValidData() {
   return true;
 }
 
-void TestV4Store::MarkPrefixAsBad(HashPrefix prefix) {
+void TestV4Store::MarkPrefixAsBad(HashPrefixStr prefix) {
   auto& vec = mock_prefixes_[prefix.size()];
   vec.insert(std::upper_bound(vec.begin(), vec.end(), prefix), prefix);
   hash_prefix_map_->Clear();
   hash_prefix_map_->Append(prefix.size(), base::StrCat(vec));
 }
 
-void TestV4Store::SetPrefixes(std::vector<HashPrefix> prefixes,
+void TestV4Store::SetPrefixes(std::vector<HashPrefixStr> prefixes,
                               PrefixSize size) {
   std::sort(prefixes.begin(), prefixes.end());
   mock_prefixes_[size] = prefixes;
@@ -73,7 +74,7 @@ TestV4Database::TestV4Database(
     : V4Database(db_task_runner, std::move(store_map)) {}
 
 void TestV4Database::MarkPrefixAsBad(ListIdentifier list_id,
-                                     HashPrefix prefix) {
+                                     HashPrefixStr prefix) {
   V4Store* base_store = store_map_->at(list_id).get();
   TestV4Store* test_store = static_cast<TestV4Store*>(base_store);
   test_store->MarkPrefixAsBad(prefix);
@@ -111,7 +112,7 @@ TestV4DatabaseFactory::Create(
 }
 
 void TestV4DatabaseFactory::MarkPrefixAsBad(ListIdentifier list_id,
-                                            HashPrefix prefix) {
+                                            HashPrefixStr prefix) {
   v4_db_->MarkPrefixAsBad(list_id, prefix);
 }
 
@@ -140,6 +141,46 @@ TestV4GetHashProtocolManagerFactory::CreateProtocolManager(
       url_loader_factory, stores_to_check, config);
   pm_ = pm.get();
   return std::move(pm);
+}
+
+TestV4HashResponseInfo::KeyValue::KeyValue(const std::string key,
+                                           const std::string value)
+    : key(key), value(value) {}
+TestV4HashResponseInfo::KeyValue::KeyValue(const KeyValue& other) = default;
+TestV4HashResponseInfo::KeyValue::~KeyValue() = default;
+
+TestV4HashResponseInfo::TestV4HashResponseInfo(FullHashStr full_hash,
+                                               ListIdentifier list_id)
+    : full_hash(full_hash), list_id(list_id) {}
+TestV4HashResponseInfo::TestV4HashResponseInfo(
+    const TestV4HashResponseInfo& other) = default;
+TestV4HashResponseInfo::~TestV4HashResponseInfo() = default;
+
+std::string GetV4HashResponse(
+    std::vector<TestV4HashResponseInfo> response_infos) {
+  FindFullHashesResponse res;
+  res.mutable_negative_cache_duration()->set_seconds(600);
+  for (const TestV4HashResponseInfo& info : response_infos) {
+    ThreatMatch* m = res.add_matches();
+    m->set_platform_type(info.list_id.platform_type());
+    m->set_threat_entry_type(info.list_id.threat_entry_type());
+    m->set_threat_type(info.list_id.threat_type());
+    m->mutable_cache_duration()->set_seconds(300);
+    m->mutable_threat()->set_hash(info.full_hash);
+
+    for (const TestV4HashResponseInfo::KeyValue& key_value : info.key_values) {
+      ThreatEntryMetadata::MetadataEntry* e =
+          m->mutable_threat_entry_metadata()->add_entries();
+      e->set_key(key_value.key);
+      e->set_value(key_value.value);
+    }
+  }
+
+  // Serialize.
+  std::string res_data;
+  res.SerializeToString(&res_data);
+
+  return res_data;
 }
 
 FullHashInfo GetFullHashInfo(const GURL& url, const ListIdentifier& list_id) {

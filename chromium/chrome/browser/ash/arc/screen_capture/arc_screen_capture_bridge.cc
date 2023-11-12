@@ -10,8 +10,8 @@
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/shell.h"
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/memory/singleton.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -203,6 +203,11 @@ void ArcScreenCaptureBridge::OpenSession(
           std::move(notifier), found->second.display_name,
           found->second.desktop_id, size, found->second.enable_notification));
   std::move(callback).Run(std::move(screen_capture_session_remote));
+}
+
+// static
+void ArcScreenCaptureBridge::EnsureFactoryBuilt() {
+  ArcScreenCaptureBridgeFactory::GetInstance();
 }
 
 }  // namespace arc

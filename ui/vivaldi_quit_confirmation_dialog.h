@@ -4,7 +4,7 @@
 #define UI_QUIT_CONFIRMATION_DIALOG_H_
 
 #include <string>
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "ui/views/window/dialog_delegate.h"
 
 namespace views {

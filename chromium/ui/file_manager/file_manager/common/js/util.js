@@ -340,7 +340,7 @@ util.isSharedDriveEntry = entry => {
 
 /**
  * Extracts Shared Drive name from entry path.
- * @param {(!Entry|!FakeEntry)} entry Entry or a fake entry.
+ * @param {(!Entry|!FakeEntry|!FilesAppEntry)} entry Entry or a fake entry.
  * @return {string} The name of Shared Drive. Empty string if |entry| is not
  *     under Shared Drives.
  */
@@ -1097,6 +1097,14 @@ util.isFilesAppExperimental = () => {
 };
 
 /**
+ * Returns true if the conflict dialog is enabled.
+ * @return {boolean}
+ */
+util.isFilesConflictDialogEnabled = () => {
+  return loadTimeData.getBoolean('FILES_CONFLICT_DIALOG');
+};
+
+/**
  * Returns true if FuseBoxDebug flag is enabled.
  * @return {boolean}
  */
@@ -1133,20 +1141,16 @@ util.isMirrorSyncEnabled = () => {
 };
 
 /**
- * Returns true if filters in Recents view V2 is enabled.
- * @return {boolean}
- */
-util.isRecentsFilterV2Enabled = () => {
-  return loadTimeData.valueExists('FILTERS_IN_RECENTS_V2_ENABLED') &&
-      loadTimeData.getBoolean('FILTERS_IN_RECENTS_V2_ENABLED');
-};
-
-/**
  * Returns true if search v2 feature flag is enabled.
  * @return {boolean}
  */
 util.isSearchV2Enabled = () => {
   return loadTimeData.getBoolean('FILES_SEARCH_V2');
+};
+
+util.isGoogleOneOfferFilesBannerEligibleAndEnabled = () => {
+  return loadTimeData.getBoolean(
+      'ELIGIBLE_AND_ENABLED_GOOGLE_ONE_OFFER_FILES_BANNER');
 };
 
 /**
@@ -1173,6 +1177,24 @@ util.isTrashEnabled = () => {
 util.isInlineSyncStatusEnabled = () => {
   return loadTimeData.valueExists('INLINE_SYNC_STATUS') &&
       loadTimeData.getBoolean('INLINE_SYNC_STATUS');
+};
+
+/**
+ * Returns true if FilesDriveShortcuts flag is enabled.
+ * @return {boolean}
+ */
+util.isDriveShortcutsEnabled = () => {
+  return loadTimeData.isInitialized() &&
+      loadTimeData.valueExists('DRIVE_SHORTCUTS') &&
+      loadTimeData.getBoolean('DRIVE_SHORTCUTS');
+};
+
+/**
+ * Returns whether the DriveFsBulkPinning feature flag is enabled.
+ * @returns {boolean}
+ */
+util.isDriveFsBulkPinningEnabled = () => {
+  return loadTimeData.getBoolean('DRIVE_FS_BULK_PINNING');
 };
 
 /**
@@ -1343,9 +1365,9 @@ util.isArcUsbStorageUIEnabled = () => {
 };
 
 /** @return {boolean} */
-util.isArcVirtioBlkForDataEnabled = () => {
-  return loadTimeData.valueExists('ARC_ENABLE_VIRTIO_BLK_FOR_DATA') &&
-      loadTimeData.getBoolean('ARC_ENABLE_VIRTIO_BLK_FOR_DATA');
+util.isArcVmEnabled = () => {
+  return loadTimeData.valueExists('ARC_VM_ENABLED') &&
+      loadTimeData.getBoolean('ARC_VM_ENABLED');
 };
 
 /** @return {boolean} */
@@ -1435,11 +1457,6 @@ util.getFilesAppModalDialogInstance = () => {
   return /** @type {!HTMLDialogElement} */ (dialogElement);
 };
 
-util.isDriveDssPinEnabled = () => {
-  return loadTimeData.valueExists('DRIVE_DSS_PIN_ENABLED') &&
-      loadTimeData.getBoolean('DRIVE_DSS_PIN_ENABLED');
-};
-
 /**
  *
  * @param {!chrome.fileManagerPrivate.FileTaskDescriptor} left
@@ -1487,15 +1504,14 @@ util.getLocaleBasedWeekStart = () => {
 
 /**
  * Returns a boolean indicating whether the volume is a GuestOs volume. And
- * ANDROID_FILES type volume can also be a GuestOs volume if we are using
- * virtio-blk.
+ * ANDROID_FILES type volume can also be a GuestOs volume if ARCVM is enabled.
  * @param {VolumeManagerCommon.VolumeType} type
  * @return {boolean}
  */
 util.isGuestOs = type => {
   return type === VolumeManagerCommon.VolumeType.GUEST_OS ||
       (type === VolumeManagerCommon.VolumeType.ANDROID_FILES &&
-       util.isArcVirtioBlkForDataEnabled());
+       util.isArcVmEnabled());
 };
 
 /**
@@ -1511,5 +1527,16 @@ class UserCanceledError extends Error {}
  * @returns {boolean}
  */
 util.isNullOrUndefined = (value) => value === null || value === undefined;
+
+/**
+ * @param {?VolumeInfo} volumeInfo
+ * @return {boolean}
+ */
+util.isOneDrive = (volumeInfo) => {
+  if (volumeInfo?.providerId === 'ajdgmkbkgifbokednjgbmieaemeighkg') {
+    return true;
+  }
+  return false;
+};
 
 export {util, UserCanceledError};

@@ -61,17 +61,26 @@ BASE_DECLARE_FEATURE(kEnableFullscreenAPI);
 // should be used instead of directly checking this feature.
 BASE_DECLARE_FEATURE(kUseLoadSimulatedRequestForOfflinePage);
 
-// Feature flag that enable web page detected intents annotations.
-BASE_DECLARE_FEATURE(kEnableWebPageAnnotations);
-
 // Feature flag that enables getting more of the surrounding text when the user
 // long presses at a certain location.
 BASE_DECLARE_FEATURE(kLongPressSurroundingText);
+
+// Feature flag to enable Emails detection.
+BASE_DECLARE_FEATURE(kEnableEmails);
+
+// Feature flag to enable Phone Numbers detection.
+BASE_DECLARE_FEATURE(kEnablePhoneNumbers);
+
+// Feature flag to enable One tap experience for Maps.
+BASE_DECLARE_FEATURE(kOneTapForMaps);
 
 // When enabled, CRWWebViewScrollViewProxy's `scrollEnabled` state is not
 // restored if the new instance already has the same `scrollEnabled` state as
 // the old one.
 BASE_DECLARE_FEATURE(kScrollViewProxyScrollEnabledWorkaround);
+
+// Feature flag to prevent navigation without user interaction.
+BASE_DECLARE_FEATURE(kPreventNavigationWithoutUserInteraction);
 
 // When true, user control for camera and/or microphone access should be
 // enabled.

@@ -10,9 +10,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/memory/free_deleter.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -475,9 +475,17 @@ mojom::ResultCode PrintingContextWin::OnError() {
   if (abort_printing_) {
     result = mojom::ResultCode::kCanceled;
   } else {
-    result = logging::GetLastSystemErrorCode() == ERROR_ACCESS_DENIED
-                 ? mojom::ResultCode::kAccessDenied
-                 : mojom::ResultCode::kFailed;
+    switch (logging::GetLastSystemErrorCode()) {
+      case ERROR_ACCESS_DENIED:
+        result = mojom::ResultCode::kAccessDenied;
+        break;
+      case ERROR_CANCELLED:
+        result = mojom::ResultCode::kCanceled;
+        break;
+      default:
+        result = mojom::ResultCode::kFailed;
+        break;
+    }
   }
   ResetSettings();
   return result;

@@ -7,10 +7,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
@@ -22,6 +22,7 @@
 #include "chrome/browser/apps/app_service/app_icon/app_icon_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "chrome/grit/app_icon_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
@@ -34,14 +35,14 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_rep.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/grit/app_icon_resources.h"
-#include "ui/gfx/geometry/skia_conversions.h"
+#include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
 #endif
 
 namespace {
@@ -51,51 +52,6 @@ namespace {
 // Copy from Android code, all four sides of the ARC foreground and background
 // images are padded 25% of it's width and height.
 float kAndroidAdaptiveIconPaddingPercentage = 1.0f / 8.0f;
-
-using SizeToImageSkiaRep = std::map<int, gfx::ImageSkiaRep>;
-using ScaleToImageSkiaReps = std::map<float, SizeToImageSkiaRep>;
-using MaskImageSkiaReps = std::pair<SkBitmap, ScaleToImageSkiaReps>;
-
-MaskImageSkiaReps& GetMaskResourceIconCache() {
-  static base::NoDestructor<MaskImageSkiaReps> mask_cache;
-  return *mask_cache;
-}
-
-const SkBitmap& GetMaskBitmap() {
-  auto& mask_cache = GetMaskResourceIconCache();
-  if (mask_cache.first.empty()) {
-    // We haven't yet loaded the mask image from resources. Do so and store it
-    // in the cache.
-    mask_cache.first = *ui::ResourceBundle::GetSharedInstance()
-                            .GetImageNamed(IDR_ICON_MASK)
-                            .ToSkBitmap();
-  }
-  DCHECK(!mask_cache.first.empty());
-  return mask_cache.first;
-}
-
-// Returns the mask image corresponding to the given image |scale| and edge
-// pixel |size|. The mask must precisely match the properties of the image it
-// will be composited onto.
-const gfx::ImageSkiaRep& GetMaskAsImageSkiaRep(float scale,
-                                               int size_hint_in_dip) {
-  auto& mask_cache = GetMaskResourceIconCache();
-  const auto& scale_iter = mask_cache.second.find(scale);
-  if (scale_iter != mask_cache.second.end()) {
-    const auto& size_iter = scale_iter->second.find(size_hint_in_dip);
-    if (size_iter != scale_iter->second.end()) {
-      return size_iter->second;
-    }
-  }
-
-  auto& image_rep = mask_cache.second[scale][size_hint_in_dip];
-  image_rep = gfx::ImageSkiaRep(
-      skia::ImageOperations::Resize(GetMaskBitmap(),
-                                    skia::ImageOperations::RESIZE_LANCZOS3,
-                                    size_hint_in_dip, size_hint_in_dip),
-      scale);
-  return image_rep;
-}
 
 bool IsConsistentPixelSize(const gfx::ImageSkiaRep& rep,
                            const gfx::ImageSkia& image_skia) {
@@ -154,19 +110,51 @@ gfx::ImageSkia ExtractSubsetForArcImage(const gfx::ImageSkia& image_skia) {
   }
   return subset_image;
 }
+#endif
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+using SizeToImageSkiaRep = std::map<int, gfx::ImageSkiaRep>;
+using ScaleToImageSkiaReps = std::map<float, SizeToImageSkiaRep>;
+using MaskImageSkiaReps = std::pair<SkBitmap, ScaleToImageSkiaReps>;
 
-SkBitmap DecompressToSkBitmap(const unsigned char* data, size_t size) {
-  base::AssertLongCPUWorkAllowed();
-  SkBitmap decoded;
-  bool success = gfx::PNGCodec::Decode(data, size, &decoded);
-  LOG_IF(ERROR, !success) << "Failed to decode icon data as PNG";
-  return decoded;
+MaskImageSkiaReps& GetMaskResourceIconCache() {
+  static base::NoDestructor<MaskImageSkiaReps> mask_cache;
+  return *mask_cache;
 }
 
-gfx::ImageSkia SkBitmapToImageSkia(SkBitmap bitmap, float icon_scale) {
-  return gfx::ImageSkia::CreateFromBitmap(bitmap, icon_scale);
+const SkBitmap& GetMaskBitmap() {
+  auto& mask_cache = GetMaskResourceIconCache();
+  if (mask_cache.first.empty()) {
+    // We haven't yet loaded the mask image from resources. Do so and store it
+    // in the cache.
+    mask_cache.first = *ui::ResourceBundle::GetSharedInstance()
+                            .GetImageNamed(IDR_ICON_MASK)
+                            .ToSkBitmap();
+  }
+  DCHECK(!mask_cache.first.empty());
+  return mask_cache.first;
+}
+
+// Returns the mask image corresponding to the given image |scale| and edge
+// pixel |size|. The mask must precisely match the properties of the image it
+// will be composited onto.
+const gfx::ImageSkiaRep& GetMaskAsImageSkiaRep(float scale,
+                                               int size_hint_in_dip) {
+  auto& mask_cache = GetMaskResourceIconCache();
+  const auto& scale_iter = mask_cache.second.find(scale);
+  if (scale_iter != mask_cache.second.end()) {
+    const auto& size_iter = scale_iter->second.find(size_hint_in_dip);
+    if (size_iter != scale_iter->second.end()) {
+      return size_iter->second;
+    }
+  }
+
+  auto& image_rep = mask_cache.second[scale][size_hint_in_dip];
+  image_rep = gfx::ImageSkiaRep(
+      skia::ImageOperations::Resize(GetMaskBitmap(),
+                                    skia::ImageOperations::RESIZE_LANCZOS3,
+                                    size_hint_in_dip, size_hint_in_dip),
+      scale);
+  return image_rep;
 }
 
 // Calls |callback| with the compressed icon |data|.
@@ -187,6 +175,35 @@ void CompleteIconWithCompressed(apps::LoadIconCallback callback,
 
 namespace apps {
 
+std::map<std::pair<int, int>, gfx::ImageSkia>& GetResourceIconCache() {
+  static base::NoDestructor<std::map<std::pair<int, int>, gfx::ImageSkia>>
+      cache;
+  return *cache;
+}
+
+gfx::ImageSkia CreateResizedResourceImage(int icon_resource,
+                                          int32_t size_in_dip) {
+  // Get the ImageSkia for the resource `icon_resource`. The
+  // ui::ResourceBundle shared instance already caches ImageSkia's, but caches
+  // the unscaled versions. The `cache` here caches scaled versions, keyed by
+  // the pair (`icon_resource`, `size_in_dip`).
+  std::map<std::pair<int, int>, gfx::ImageSkia>& cache = GetResourceIconCache();
+  const auto cache_key = std::make_pair(icon_resource, size_in_dip);
+  const auto cache_iter = cache.find(cache_key);
+  if (cache_iter != cache.end()) {
+    return cache_iter->second;
+  }
+
+  gfx::ImageSkia* default_image =
+      ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(icon_resource);
+  CHECK(default_image);
+  gfx::ImageSkia image_skia = gfx::ImageSkiaOperations::CreateResizedImage(
+      *default_image, skia::ImageOperations::RESIZE_BEST,
+      gfx::Size(size_in_dip, size_in_dip));
+  cache.insert(std::make_pair(cache_key, image_skia));
+  return image_skia;
+}
+
 apps::ScaleToSize GetScaleToSize(const gfx::ImageSkia& image_skia) {
   apps::ScaleToSize scale_to_size;
   if (image_skia.image_reps().empty()) {
@@ -197,6 +214,18 @@ apps::ScaleToSize GetScaleToSize(const gfx::ImageSkia& image_skia) {
     }
   }
   return scale_to_size;
+}
+
+SkBitmap DecompressToSkBitmap(const unsigned char* data, size_t size) {
+  base::AssertLongCPUWorkAllowed();
+  SkBitmap decoded;
+  bool success = gfx::PNGCodec::Decode(data, size, &decoded);
+  LOG_IF(ERROR, !success) << "Failed to decode icon data as PNG";
+  return decoded;
+}
+
+gfx::ImageSkia SkBitmapToImageSkia(SkBitmap bitmap, float icon_scale) {
+  return gfx::ImageSkia::CreateFromBitmap(bitmap, icon_scale);
 }
 
 base::OnceCallback<void(std::vector<uint8_t> compressed_data)>
@@ -227,6 +256,26 @@ CompressedDataToImageSkiaCallback(
       std::move(callback), icon_scale);
 }
 
+void CompressedDataToSkBitmap(std::vector<uint8_t> compressed_data,
+                              base::OnceCallback<void(SkBitmap)> callback) {
+  if (compressed_data.empty()) {
+    std::move(callback).Run(SkBitmap());
+    return;
+  }
+
+  // DecompressToSkBitmap is a CPU intensive task that must not run on the
+  // UI thread, so post the processing over to the thread pool.
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+      base::BindOnce(
+          [](std::vector<uint8_t> compressed_data) {
+            return DecompressToSkBitmap(compressed_data.data(),
+                                        compressed_data.size());
+          },
+          std::move(compressed_data)),
+      std::move(callback));
+}
+
 std::vector<uint8_t> EncodeImageToPngBytes(const gfx::ImageSkia image,
                                            float rep_icon_scale) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
@@ -255,8 +304,6 @@ std::vector<uint8_t> EncodeImageToPngBytes(const gfx::ImageSkia image,
   return image_data;
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-
 gfx::ImageSkia LoadMaskImage(const ScaleToSize& scale_to_size) {
   gfx::ImageSkia mask_image;
   for (const auto& it : scale_to_size) {
@@ -276,6 +323,7 @@ gfx::ImageSkia ApplyBackgroundAndMask(const gfx::ImageSkia& image) {
       SK_ColorWHITE, image, LoadMaskImage(GetScaleToSize(image)));
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 gfx::ImageSkia CompositeImagesAndApplyMask(
     const gfx::ImageSkia& foreground_image,
     const gfx::ImageSkia& background_image) {
@@ -438,14 +486,26 @@ void ApplyIconEffects(IconEffects icon_effects,
   icon_loader->ApplyIconEffects(icon_effects, std::move(iv));
 }
 
-void ConvertUncompressedIconToCompressedIcon(IconValuePtr iv,
-                                             LoadIconCallback callback) {
+void ConvertUncompressedIconToCompressedIconWithScale(float rep_icon_scale,
+                                                      LoadIconCallback callback,
+                                                      IconValuePtr iv) {
+  if (!iv) {
+    std::move(callback).Run(std::make_unique<apps::IconValue>());
+    return;
+  }
+
   iv->uncompressed.MakeThreadSafe();
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&apps::EncodeImageToPngBytes, iv->uncompressed,
-                     /*rep_icon_scale=*/1.0f),
+                     /*rep_icon_scale=*/rep_icon_scale),
       base::BindOnce(&CompleteIconWithCompressed, std::move(callback)));
+}
+
+void ConvertUncompressedIconToCompressedIcon(IconValuePtr iv,
+                                             LoadIconCallback callback) {
+  ConvertUncompressedIconToCompressedIconWithScale(
+      /*rep_icon_scale=*/1.0f, std::move(callback), std::move(iv));
 }
 
 void LoadIconFromExtension(IconType icon_type,
@@ -491,7 +551,7 @@ void LoadIconFromWebApp(content::BrowserContext* context,
       web_app_provider->icon_manager(), Profile::FromBrowserContext(context));
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
 void GetWebAppCompressedIconData(content::BrowserContext* context,
                                  const std::string& web_app_id,
                                  int size_in_dip,
@@ -528,6 +588,46 @@ void GetChromeAppCompressedIconData(content::BrowserContext* context,
           extension_id),
       context, scale_factor);
 }
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+void GetArcAppCompressedIconData(content::BrowserContext* context,
+                                 const std::string& app_id,
+                                 int size_in_dip,
+                                 ui::ResourceScaleFactor scale_factor,
+                                 LoadIconCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(context);
+
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(context);
+  if (!prefs) {
+    std::move(callback).Run(std::make_unique<IconValue>());
+    return;
+  }
+
+  scoped_refptr<AppIconLoader> icon_loader =
+      base::MakeRefCounted<AppIconLoader>(
+          IconType::kCompressed, size_in_dip, /*is_placeholder_icon=*/false,
+          IconEffects::kNone, kInvalidIconResource, std::move(callback));
+  icon_loader->GetArcAppCompressedIconData(app_id, prefs, scale_factor);
+}
+
+void GetGuestOSAppCompressedIconData(content::BrowserContext* context,
+                                     const std::string& app_id,
+                                     int size_in_dip,
+                                     ui::ResourceScaleFactor scale_factor,
+                                     LoadIconCallback callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(context);
+
+  scoped_refptr<AppIconLoader> icon_loader =
+      base::MakeRefCounted<AppIconLoader>(
+          IconType::kCompressed, size_in_dip, /*is_placeholder_icon=*/false,
+          IconEffects::kNone, kInvalidIconResource, std::move(callback));
+  icon_loader->GetGuestOSAppCompressedIconData(
+      Profile::FromBrowserContext(context), app_id, scale_factor);
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void LoadIconFromFileWithFallback(

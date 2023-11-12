@@ -7,10 +7,9 @@
 #import <Foundation/Foundation.h>
 #import <stdint.h>
 
-#import "base/bind.h"
-#import "base/callback.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback.h"
 #import "base/strings/sys_string_conversions.h"
-#import "base/threading/sequenced_task_runner_handle.h"
 #import "ios/web/common/crw_content_view.h"
 #import "ios/web/js_messaging/web_frames_manager_impl.h"
 #import "ios/web/public/js_messaging/web_frame.h"
@@ -18,6 +17,7 @@
 #import "ios/web/public/session/crw_navigation_item_storage.h"
 #import "ios/web/public/session/crw_session_storage.h"
 #import "ios/web/public/session/serializable_user_data_manager.h"
+#import "ios/web/public/test/fakes/crw_fake_find_interaction.h"
 #import "ios/web/session/session_certificate_policy_cache_impl.h"
 #import "ios/web/web_state/policy_decision_state_tracker.h"
 #import "ui/gfx/image/image.h"
@@ -151,11 +151,11 @@ NavigationManager* FakeWebState::GetNavigationManager() {
   return navigation_manager_.get();
 }
 
-const WebFramesManager* FakeWebState::GetWebFramesManager() const {
+const WebFramesManager* FakeWebState::GetPageWorldWebFramesManager() const {
   return web_frames_manager_.get();
 }
 
-WebFramesManager* FakeWebState::GetWebFramesManager() {
+WebFramesManager* FakeWebState::GetPageWorldWebFramesManager() {
   return web_frames_manager_.get();
 }
 
@@ -250,14 +250,6 @@ GURL FakeWebState::GetCurrentURL(URLVerificationTrustLevel* trust_level) const {
   return url_;
 }
 
-base::CallbackListSubscription FakeWebState::AddScriptCommandCallback(
-    const ScriptCommandCallback& callback,
-    const std::string& command_prefix) {
-  last_added_callback_ = callback;
-  last_command_prefix_ = command_prefix;
-  return callback_list_.Add(callback);
-}
-
 void FakeWebState::SetLastActiveTime(base::Time time) {
   last_active_time_ = time;
 }
@@ -307,6 +299,10 @@ bool FakeWebState::IsEvicted() const {
 }
 
 bool FakeWebState::IsBeingDestroyed() const {
+  return false;
+}
+
+bool FakeWebState::IsWebPageInFullscreenMode() const {
   return false;
 }
 
@@ -432,15 +428,6 @@ void FakeWebState::ShouldAllowResponse(
       num_decisions_requested);
 }
 
-absl::optional<WebState::ScriptCommandCallback>
-FakeWebState::GetLastAddedCallback() const {
-  return last_added_callback_;
-}
-
-std::string FakeWebState::GetLastCommandPrefix() const {
-  return last_command_prefix_;
-}
-
 NSData* FakeWebState::GetLastLoadedData() const {
   return last_loaded_data_;
 }
@@ -467,6 +454,11 @@ void FakeWebState::SetTrustLevel(URLVerificationTrustLevel trust_level) {
 
 void FakeWebState::SetCanTakeSnapshot(bool can_take_snapshot) {
   can_take_snapshot_ = can_take_snapshot;
+}
+
+void FakeWebState::SetFindInteraction(id<CRWFindInteraction> find_interaction)
+    API_AVAILABLE(ios(16)) {
+  find_interaction_ = find_interaction;
 }
 
 CRWWebViewProxyType FakeWebState::GetWebViewProxy() const {
@@ -564,6 +556,27 @@ void FakeWebState::DownloadCurrentPage(
     NSString* destination_file,
     id<CRWWebViewDownloadDelegate> delegate,
     void (^handler)(id<CRWWebViewDownload>)) {}
+
+bool FakeWebState::IsFindInteractionSupported() {
+  return true;
+}
+
+bool FakeWebState::IsFindInteractionEnabled() {
+  return is_find_interaction_enabled_;
+}
+
+void FakeWebState::SetFindInteractionEnabled(bool enabled) {
+  is_find_interaction_enabled_ = enabled;
+}
+
+id<CRWFindInteraction> FakeWebState::GetFindInteraction()
+    API_AVAILABLE(ios(16)) {
+  return is_find_interaction_enabled_ ? find_interaction_ : nil;
+}
+
+id FakeWebState::GetActivityItem() API_AVAILABLE(ios(16.4)) {
+  return nil;
+}
 
 FakeWebStateWithPolicyCache::FakeWebStateWithPolicyCache(
     BrowserState* browser_state)

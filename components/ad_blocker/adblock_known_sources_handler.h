@@ -6,7 +6,7 @@
 #include <set>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/observer_list.h"
 #include "components/ad_blocker/adblock_metadata.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"

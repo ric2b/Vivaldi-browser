@@ -3,10 +3,13 @@
 // found in the LICENSE file.
 
 #include "components/commerce/core/subscriptions/subscriptions_manager.h"
+
 #include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/subscriptions/commerce_subscription.h"
+#include "components/commerce/core/subscriptions/subscriptions_observer.h"
 #include "components/commerce/core/subscriptions/subscriptions_server_proxy.h"
 #include "components/commerce/core/subscriptions/subscriptions_storage.h"
 #include "components/session_proto_db/session_proto_storage.h"
@@ -22,11 +25,11 @@ const int kDefaultTimeoutMs = 10000;
 const char kTimeoutParam[] = "subscriptions_request_timeout";
 constexpr base::FeatureParam<int> kTimeoutMs{&commerce::kShoppingList,
                                              kTimeoutParam, kDefaultTimeoutMs};
+}  // namespace
 
 const char kTrackResultHistogramName[] = "Commerce.Subscriptions.TrackResult";
 const char kUntrackResultHistogramName[] =
     "Commerce.Subscriptions.UntrackResult";
-}  // namespace
 
 SubscriptionsManager::SubscriptionsManager(
     signin::IdentityManager* identity_manager,
@@ -51,103 +54,109 @@ SubscriptionsManager::SubscriptionsManager(
     : server_proxy_(std::move(server_proxy)),
       storage_(std::move(storage)),
       account_checker_(account_checker),
+      observers_(base::ObserverListPolicy::EXISTING_ONLY),
       weak_ptr_factory_(this) {
-// Avoid duplicate server calls on android. Remove this after we integrate
-// android implementation to shopping service.
-#if !BUILDFLAG(IS_ANDROID)
+  // Populate the cache from local stoarge.
+  storage_->LoadAllSubscriptions(base::BindOnce(
+      [](base::WeakPtr<SubscriptionsManager> manager,
+         std::unique_ptr<std::vector<CommerceSubscription>> subscriptions) {
+        if (!manager) {
+          return;
+        }
+        for (auto& sub : *subscriptions) {
+          manager->subscriptions_cache_.insert(
+              GetStorageKeyForSubscription(sub));
+        }
+      },
+      weak_ptr_factory_.GetWeakPtr()));
+
   SyncSubscriptions();
   scoped_identity_manager_observation_.Observe(identity_manager);
-#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 SubscriptionsManager::~SubscriptionsManager() = default;
 
-SubscriptionsManager::Request::Request(SubscriptionType type,
-                                       AsyncOperation operation,
-                                       SubscriptionsRequestCallback callback)
-    : type(type), operation(operation), callback(std::move(callback)) {
-  CHECK(operation == AsyncOperation::kSync);
-}
-SubscriptionsManager::Request::Request(
-    SubscriptionType type,
-    AsyncOperation operation,
-    std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
-    SubscriptionsRequestCallback callback)
-    : type(type),
-      operation(operation),
-      subscriptions(std::move(subscriptions)),
-      callback(std::move(callback)) {
-  CHECK(operation == AsyncOperation::kSubscribe ||
-        operation == AsyncOperation::kUnsubscribe);
-}
+SubscriptionsManager::Request::Request(AsyncOperation operation,
+                                       base::OnceCallback<void()> callback)
+    : operation(operation), callback(std::move(callback)) {}
 SubscriptionsManager::Request::Request(Request&&) = default;
 SubscriptionsManager::Request::~Request() = default;
 
 void SubscriptionsManager::Subscribe(
     std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
     base::OnceCallback<void(bool)> callback) {
-  // If there is a coming subscribe request but the last sync with the server
-  // failed, we should re-try the sync, or this request will fail directly.
-  if (!last_sync_succeeded_ && !HasRequestRunning()) {
-    SyncSubscriptions();
-  }
-  SubscriptionType type = (*subscriptions)[0].type;
+  CHECK(subscriptions->size() > 0);
+
+  SyncIfNeeded();
+
   pending_requests_.emplace(
-      type, AsyncOperation::kSubscribe, std::move(subscriptions),
-      base::BindOnce(
-          [](base::WeakPtr<SubscriptionsManager> manager,
-             base::OnceCallback<void(bool)> callback,
-             SubscriptionsRequestStatus result) {
-            base::UmaHistogramEnumeration(kTrackResultHistogramName, result);
-            std::move(callback).Run(result ==
-                                    SubscriptionsRequestStatus::kSuccess);
-            manager->OnRequestCompletion();
-          },
-          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+      AsyncOperation::kSubscribe,
+      base::BindOnce(&SubscriptionsManager::HandleSubscribe,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(subscriptions),
+                     std::move(callback)));
   CheckAndProcessRequest();
 }
 
 void SubscriptionsManager::Unsubscribe(
     std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
     base::OnceCallback<void(bool)> callback) {
-  // If there is a coming unsubscribe request but the last sync with the server
-  // failed, we should re-try the sync, or this request will fail directly.
-  if (!last_sync_succeeded_ && !HasRequestRunning()) {
-    SyncSubscriptions();
-  }
-  SubscriptionType type = (*subscriptions)[0].type;
+  CHECK(subscriptions->size() > 0);
+
+  SyncIfNeeded();
+
   pending_requests_.emplace(
-      type, AsyncOperation::kUnsubscribe, std::move(subscriptions),
-      base::BindOnce(
-          [](base::WeakPtr<SubscriptionsManager> manager,
-             base::OnceCallback<void(bool)> callback,
-             SubscriptionsRequestStatus result) {
-            base::UmaHistogramEnumeration(kUntrackResultHistogramName, result);
-            std::move(callback).Run(result ==
-                                    SubscriptionsRequestStatus::kSuccess);
-            manager->OnRequestCompletion();
-          },
-          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+      AsyncOperation::kUnsubscribe,
+      base::BindOnce(&SubscriptionsManager::HandleUnsubscribe,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(subscriptions),
+                     std::move(callback)));
   CheckAndProcessRequest();
 }
 
 void SubscriptionsManager::SyncSubscriptions() {
-  last_sync_succeeded_ = false;
-  storage_->DeleteAll();
-  if (base::FeatureList::IsEnabled(commerce::kShoppingList) &&
-      account_checker_ && account_checker_->IsSignedIn() &&
-      account_checker_->IsAnonymizedUrlDataCollectionEnabled()) {
-    pending_requests_.emplace(
-        SubscriptionType::kPriceTrack, AsyncOperation::kSync,
-        base::BindOnce(
-            [](base::WeakPtr<SubscriptionsManager> manager,
-               SubscriptionsRequestStatus result) {
-              manager->last_sync_succeeded_ =
-                  result == SubscriptionsRequestStatus::kSuccess;
-              manager->OnRequestCompletion();
-            },
-            weak_ptr_factory_.GetWeakPtr()));
-  }
+  pending_requests_.emplace(AsyncOperation::kSync,
+                            base::BindOnce(&SubscriptionsManager::HandleSync,
+                                           weak_ptr_factory_.GetWeakPtr()));
+  CheckAndProcessRequest();
+}
+
+void SubscriptionsManager::IsSubscribed(
+    CommerceSubscription subscription,
+    base::OnceCallback<void(bool)> callback) {
+  SyncIfNeeded();
+
+  pending_requests_.emplace(
+      AsyncOperation::kLookupOne,
+      base::BindOnce(&SubscriptionsManager::HandleLookup,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(subscription),
+                     std::move(callback)));
+  CheckAndProcessRequest();
+}
+
+bool SubscriptionsManager::IsSubscribedFromCache(
+    const CommerceSubscription& subscription) {
+  return subscriptions_cache_.contains(
+      GetStorageKeyForSubscription(subscription));
+}
+
+void SubscriptionsManager::GetAllSubscriptions(
+    SubscriptionType type,
+    base::OnceCallback<void(std::vector<CommerceSubscription>)> callback) {
+  SyncIfNeeded();
+
+  pending_requests_.emplace(AsyncOperation::kGetAll,
+                            base::BindOnce(&SubscriptionsManager::HandleGetAll,
+                                           weak_ptr_factory_.GetWeakPtr(), type,
+                                           std::move(callback)));
+  CheckAndProcessRequest();
+}
+
+void SubscriptionsManager::CheckTimestampOnBookmarkChange(
+    int64_t bookmark_subscription_change_time) {
+  pending_requests_.emplace(
+      AsyncOperation::kCheckOnBookmarkChange,
+      base::BindOnce(
+          &SubscriptionsManager::HandleCheckTimestampOnBookmarkChange,
+          weak_ptr_factory_.GetWeakPtr(), bookmark_subscription_change_time));
   CheckAndProcessRequest();
 }
 
@@ -161,19 +170,13 @@ void SubscriptionsManager::CheckAndProcessRequest() {
   last_request_started_time_ = base::Time::Now();
   Request request = std::move(pending_requests_.front());
   pending_requests_.pop();
-  CHECK(request.type != SubscriptionType::kTypeUnspecified);
   last_request_operation_ = request.operation;
+  std::move(request.callback).Run();
+}
 
-  switch (request.operation) {
-    case AsyncOperation::kSync:
-      ProcessSyncRequest(std::move(request));
-      break;
-    case AsyncOperation::kSubscribe:
-      ProcessSubscribeRequest(std::move(request));
-      break;
-    case AsyncOperation::kUnsubscribe:
-      ProcessUnsubscribeRequest(std::move(request));
-      break;
+void SubscriptionsManager::SyncIfNeeded() {
+  if (!last_sync_succeeded_ && !HasRequestRunning()) {
+    SyncSubscriptions();
   }
 }
 
@@ -182,69 +185,164 @@ void SubscriptionsManager::OnRequestCompletion() {
   CheckAndProcessRequest();
 }
 
-void SubscriptionsManager::ProcessSyncRequest(Request request) {
-  GetRemoteSubscriptionsAndUpdateStorage(request.type,
-                                         std::move(request.callback));
+void SubscriptionsManager::UpdateSyncStates(bool sync_succeeded) {
+  last_sync_succeeded_ = sync_succeeded;
+  if (sync_succeeded) {
+    // Always use the Windows epoch to keep consistency with the timestamp in
+    // bookmark.
+    last_sync_time_ =
+        base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds();
+  }
 }
 
-void SubscriptionsManager::ProcessSubscribeRequest(Request request) {
+void SubscriptionsManager::HandleSync() {
+  if (account_checker_ && account_checker_->IsSignedIn() &&
+      account_checker_->IsAnonymizedUrlDataCollectionEnabled()) {
+    GetRemoteSubscriptionsAndUpdateStorage(
+        SubscriptionType::kPriceTrack,
+        base::BindOnce(&SubscriptionsManager::OnSyncStatusFetched,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
+}
+
+void SubscriptionsManager::OnSyncStatusFetched(
+    SubscriptionsRequestStatus result) {
+  UpdateSyncStates(result == SubscriptionsRequestStatus::kSuccess);
+  OnRequestCompletion();
+}
+
+void SubscriptionsManager::HandleSubscribe(
+    std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
+    base::OnceCallback<void(bool)> callback) {
+  SubscriptionType type = (*subscriptions)[0].type;
+  // Make a copy of subscriptions to notify observers later.
+  std::vector<CommerceSubscription> notified_subscriptions = *subscriptions;
+
+  SubscriptionsRequestCallback wrapped_callback =
+      base::BindOnce(&SubscriptionsManager::OnSubscribeStatusFetched,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(notified_subscriptions), std::move(callback));
+
   if (!last_sync_succeeded_) {
-    std::move(request.callback)
+    std::move(wrapped_callback)
         .Run(SubscriptionsRequestStatus::kLastSyncFailed);
     return;
   }
   storage_->GetUniqueNonExistingSubscriptions(
-      std::move(request.subscriptions),
+      std::move(subscriptions),
       base::BindOnce(
-          [](base::WeakPtr<SubscriptionsManager> manager, SubscriptionType type,
-             SubscriptionsRequestCallback callback,
-             std::unique_ptr<std::vector<CommerceSubscription>>
-                 unique_subscriptions) {
-            if (unique_subscriptions->size() == 0) {
-              base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-                  FROM_HERE,
-                  base::BindOnce(std::move(callback),
-                                 SubscriptionsRequestStatus::kSuccess));
-              return;
-            }
-            manager->server_proxy_->Create(
-                std::move(unique_subscriptions),
-                base::BindOnce(
-                    &SubscriptionsManager::HandleManageSubscriptionsResponse,
-                    manager, type, std::move(callback)));
-          },
-          weak_ptr_factory_.GetWeakPtr(), request.type,
-          std::move(request.callback)));
+          &SubscriptionsManager::OnIncomingSubscriptionsFilteredForSubscribe,
+          weak_ptr_factory_.GetWeakPtr(), type, std::move(wrapped_callback)));
 }
 
-void SubscriptionsManager::ProcessUnsubscribeRequest(Request request) {
+void SubscriptionsManager::OnSubscribeStatusFetched(
+    std::vector<CommerceSubscription> notified_subscriptions,
+    base::OnceCallback<void(bool)> callback,
+    SubscriptionsRequestStatus result) {
+  base::UmaHistogramEnumeration(kTrackResultHistogramName, result);
+  bool succeeded = result == SubscriptionsRequestStatus::kSuccess ||
+                   result == SubscriptionsRequestStatus::kNoOp;
+  if (succeeded) {
+    for (auto& sub : notified_subscriptions) {
+      subscriptions_cache_.insert(GetStorageKeyForSubscription(sub));
+    }
+  }
+  for (SubscriptionsObserver& observer : observers_) {
+    observer.OnSubscribe(notified_subscriptions, succeeded);
+  }
+  std::move(callback).Run(succeeded);
+  // We sync local cache with server only when the product is successfully added
+  // on server. The sync states should be updated after notifying all observers
+  // and running the callback so |last_sync_time_| is larger than external
+  // timestamp (e.g. in bookmarks).
+  if (result == SubscriptionsRequestStatus::kSuccess) {
+    UpdateSyncStates(true);
+  }
+  OnRequestCompletion();
+}
+
+void SubscriptionsManager::OnIncomingSubscriptionsFilteredForSubscribe(
+    SubscriptionType type,
+    SubscriptionsRequestCallback callback,
+    std::unique_ptr<std::vector<CommerceSubscription>> unique_subscriptions) {
+  if (unique_subscriptions->size() == 0) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), SubscriptionsRequestStatus::kNoOp));
+    return;
+  }
+  server_proxy_->Create(
+      std::move(unique_subscriptions),
+      base::BindOnce(&SubscriptionsManager::HandleManageSubscriptionsResponse,
+                     weak_ptr_factory_.GetWeakPtr(), type,
+                     std::move(callback)));
+}
+
+void SubscriptionsManager::HandleUnsubscribe(
+    std::unique_ptr<std::vector<CommerceSubscription>> subscriptions,
+    base::OnceCallback<void(bool)> callback) {
+  SubscriptionType type = (*subscriptions)[0].type;
+  // Make a copy of subscriptions to notify observers later.
+  std::vector<CommerceSubscription> notified_subscriptions = *subscriptions;
+
+  SubscriptionsRequestCallback wrapped_callback =
+      base::BindOnce(&SubscriptionsManager::OnUnsubscribeStatusFetched,
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(notified_subscriptions), std::move(callback));
+
   if (!last_sync_succeeded_) {
-    std::move(request.callback)
+    std::move(wrapped_callback)
         .Run(SubscriptionsRequestStatus::kLastSyncFailed);
     return;
   }
   storage_->GetUniqueExistingSubscriptions(
-      std::move(request.subscriptions),
+      std::move(subscriptions),
       base::BindOnce(
-          [](base::WeakPtr<SubscriptionsManager> manager, SubscriptionType type,
-             SubscriptionsRequestCallback callback,
-             std::unique_ptr<std::vector<CommerceSubscription>>
-                 unique_subscriptions) {
-            if (unique_subscriptions->size() == 0) {
-              base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-                  FROM_HERE,
-                  base::BindOnce(std::move(callback),
-                                 SubscriptionsRequestStatus::kSuccess));
-              return;
-            }
-            manager->server_proxy_->Delete(
-                std::move(unique_subscriptions),
-                base::BindOnce(
-                    &SubscriptionsManager::HandleManageSubscriptionsResponse,
-                    manager, type, std::move(callback)));
-          },
-          weak_ptr_factory_.GetWeakPtr(), request.type,
-          std::move(request.callback)));
+          &SubscriptionsManager::OnIncomingSubscriptionsFilteredForUnsubscribe,
+          weak_ptr_factory_.GetWeakPtr(), type, std::move(wrapped_callback)));
+}
+
+void SubscriptionsManager::OnUnsubscribeStatusFetched(
+    std::vector<CommerceSubscription> notified_subscriptions,
+    base::OnceCallback<void(bool)> callback,
+    SubscriptionsRequestStatus result) {
+  base::UmaHistogramEnumeration(kUntrackResultHistogramName, result);
+  bool succeeded = result == SubscriptionsRequestStatus::kSuccess ||
+                   result == SubscriptionsRequestStatus::kNoOp;
+  if (succeeded) {
+    for (auto& sub : notified_subscriptions) {
+      subscriptions_cache_.erase(GetStorageKeyForSubscription(sub));
+    }
+  }
+  for (SubscriptionsObserver& observer : observers_) {
+    observer.OnUnsubscribe(notified_subscriptions, succeeded);
+  }
+  std::move(callback).Run(succeeded);
+  // We sync local cache with server only when the product is successfully
+  // removed on server. The sync states should be updated after notifying all
+  // observers and running the callback so |last_sync_time_| is larger than
+  // external timestamp (e.g. in bookmarks).
+  if (result == SubscriptionsRequestStatus::kSuccess) {
+    UpdateSyncStates(true);
+  }
+  OnRequestCompletion();
+}
+
+void SubscriptionsManager::OnIncomingSubscriptionsFilteredForUnsubscribe(
+    SubscriptionType type,
+    SubscriptionsRequestCallback callback,
+    std::unique_ptr<std::vector<CommerceSubscription>> unique_subscriptions) {
+  if (unique_subscriptions->size() == 0) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), SubscriptionsRequestStatus::kNoOp));
+    return;
+  }
+  server_proxy_->Delete(
+      std::move(unique_subscriptions),
+      base::BindOnce(&SubscriptionsManager::HandleManageSubscriptionsResponse,
+                     weak_ptr_factory_.GetWeakPtr(), type,
+                     std::move(callback)));
 }
 
 void SubscriptionsManager::GetRemoteSubscriptionsAndUpdateStorage(
@@ -264,6 +362,14 @@ void SubscriptionsManager::HandleGetSubscriptionsResponse(
   if (status != SubscriptionsRequestStatus::kSuccess) {
     std::move(callback).Run(status);
   } else {
+    // TODO(b/268383748): This assumes we get the whole list of subscriptions
+    //                    every time. Once observation of subscriptions from
+    //                    other devices is available, we should switch to that.
+    subscriptions_cache_.clear();
+    for (auto& sub : *remote_subscriptions) {
+      subscriptions_cache_.insert(GetStorageKeyForSubscription(sub));
+    }
+
     storage_->UpdateStorage(type, std::move(callback),
                             std::move(remote_subscriptions));
   }
@@ -281,34 +387,55 @@ void SubscriptionsManager::HandleManageSubscriptionsResponse(
   }
 }
 
-void SubscriptionsManager::VerifyIfSubscriptionExists(
-    CommerceSubscription subscription,
-    bool should_exist) {
-  storage_->IsSubscribed(
-      std::move(subscription),
-      base::BindOnce(
-          &SubscriptionsManager::HandleCheckLocalSubscriptionResponse,
-          weak_ptr_factory_.GetWeakPtr(), should_exist));
-}
-
-void SubscriptionsManager::IsSubscribed(
+void SubscriptionsManager::HandleLookup(
     CommerceSubscription subscription,
     base::OnceCallback<void(bool)> callback) {
-  storage_->IsSubscribed(std::move(subscription), std::move(callback));
+  storage_->IsSubscribed(
+      std::move(subscription),
+      base::BindOnce(&SubscriptionsManager::OnLookupResult,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void SubscriptionsManager::HandleCheckLocalSubscriptionResponse(
-    bool should_exist,
+void SubscriptionsManager::OnLookupResult(
+    base::OnceCallback<void(bool)> callback,
     bool is_subscribed) {
-  // Don't sync if there is already a request running to avoid redundant server
-  // calls.
-  if (should_exist != is_subscribed && !HasRequestRunning()) {
-    SyncSubscriptions();
+  std::move(callback).Run(is_subscribed);
+  OnRequestCompletion();
+}
+
+void SubscriptionsManager::HandleGetAll(
+    SubscriptionType type,
+    base::OnceCallback<void(std::vector<CommerceSubscription>)> callback) {
+  storage_->LoadAllSubscriptionsForType(
+      type,
+      base::BindOnce(&SubscriptionsManager::OnGetAllResult,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void SubscriptionsManager::OnGetAllResult(
+    base::OnceCallback<void(std::vector<CommerceSubscription>)> callback,
+    std::unique_ptr<std::vector<CommerceSubscription>> subscriptions) {
+  std::move(callback).Run(std::move(*subscriptions));
+  OnRequestCompletion();
+}
+
+void SubscriptionsManager::HandleCheckTimestampOnBookmarkChange(
+    int64_t bookmark_subscription_change_time) {
+  // Do nothing if current local cache is newer than the bookmark change.
+  if (bookmark_subscription_change_time <= last_sync_time_) {
+    OnRequestCompletion();
+    return;
   }
+  GetRemoteSubscriptionsAndUpdateStorage(
+      SubscriptionType::kPriceTrack,
+      base::BindOnce(&SubscriptionsManager::OnSyncStatusFetched,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void SubscriptionsManager::OnPrimaryAccountChanged(
     const signin::PrimaryAccountChangeEvent& event_details) {
+  storage_->DeleteAll();
+  subscriptions_cache_.clear();
   SyncSubscriptions();
 }
 
@@ -332,8 +459,20 @@ bool SubscriptionsManager::HasRequestRunning() {
   return has_request_running_;
 }
 
+void SubscriptionsManager::AddObserver(SubscriptionsObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void SubscriptionsManager::RemoveObserver(SubscriptionsObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 bool SubscriptionsManager::GetLastSyncSucceededForTesting() {
   return last_sync_succeeded_;
+}
+
+int64_t SubscriptionsManager::GetLastSyncTimeForTesting() {
+  return last_sync_time_;
 }
 
 void SubscriptionsManager::SetHasRequestRunningForTesting(

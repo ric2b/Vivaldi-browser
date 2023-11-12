@@ -278,11 +278,11 @@ suite('Multidevice', function() {
             undefined,
             multideviceSubpage.shadowRoot.querySelector('#smartLockItem')
                 .subpageRoute);
-        const routeBefore = Router.getInstance().getCurrentRoute();
+        const routeBefore = Router.getInstance().currentRoute;
         multideviceSubpage.shadowRoot.querySelector('#smartLockItem')
             .shadowRoot.querySelector('.link-wrapper')
             .click();
-        assertEquals(Router.getInstance().getCurrentRoute(), routeBefore);
+        assertEquals(Router.getInstance().currentRoute, routeBefore);
 
         loadTimeData.overrideValues({'isSmartLockSignInRemoved': false});
       });
@@ -305,7 +305,8 @@ suite('Multidevice', function() {
   });
 
   test(
-      'AndroidMessages set up button calls browser proxy function', function() {
+      'AndroidMessages set up button calls browser proxy function',
+      async function() {
         setAndroidSmsPairingComplete(false);
         flush();
 
@@ -315,7 +316,7 @@ suite('Multidevice', function() {
 
         setUpButton.click();
 
-        return browserProxy.whenCalled('setUpAndroidSms');
+        await browserProxy.whenCalled('setUpAndroidSms');
       });
 
   test(

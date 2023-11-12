@@ -10,7 +10,6 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/file_manager/copy_or_move_io_task.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
-#include "chrome/browser/ash/file_manager/open_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "chrome/browser/ui/webui/ash/cloud_upload/cloud_upload_util.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -164,7 +163,7 @@ void DriveUploadHandler::OnEndUpload(GURL hosted_url,
   // Resolve notifications.
   if (notification_manager_) {
     if (hosted_url.is_valid()) {
-      notification_manager_->ShowUploadComplete();
+      notification_manager_->MarkUploadComplete();
     } else if (!error_message.empty()) {
       LOG(ERROR) << "Cloud upload: " << error_message;
       notification_manager_->ShowUploadError(error_message);
@@ -233,13 +232,12 @@ void DriveUploadHandler::OnIOTaskStatus(
             profile_, observed_relative_drive_path_);
       }
       return;
+    case file_manager::io_task::State::kPaused:
+      return;
     case file_manager::io_task::State::kSuccess:
       move_progress_ = 100;
       UpdateProgressNotification();
       DCHECK_EQ(status.outputs.size(), 1u);
-      file_manager::util::ShowItemInFolder(
-          profile_, status.outputs[0].url.path(),
-          base::BindOnce(&LogErrorOnShowItemInFolder));
       return;
     case file_manager::io_task::State::kCancelled:
       OnEndUpload(GURL(), "Move error: kCancelled");

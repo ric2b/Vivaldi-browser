@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/ui/settings/password/passwords_in_other_apps/passwords_in_other_apps_view_controller.h"
 
 #import "base/ios/ios_util.h"
-#import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/ui/elements/instruction_view.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_in_other_apps/constants.h"
 #import "ios/chrome/browser/ui/settings/password/passwords_in_other_apps/passwords_in_other_apps_view_controller_delegate.h"
@@ -26,6 +25,13 @@
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -40,11 +46,6 @@ CGFloat const kContentWidthMultiplier = 0.65;
 CGFloat const kBottomMargin = 10;
 CGFloat const kButtonHorizontalMargin = 4;
 CGFloat const kContentOptimalWidth = 327;
-
-BOOL IsPasswordManagerBrandingUpdateEnabled() {
-  return base::FeatureList::IsEnabled(
-      password_manager::features::kIOSEnablePasswordManagerBrandingUpdate);
-}
 }  // namespace
 
 @interface PasswordsInOtherAppsViewController ()
@@ -100,23 +101,30 @@ BOOL IsPasswordManagerBrandingUpdateEnabled() {
     _titleText =
         l10n_util::GetNSString(IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS);
     _actionString = l10n_util::GetNSString(IDS_IOS_OPEN_SETTINGS);
-    if (IsPasswordManagerBrandingUpdateEnabled()) {
-      UIUserInterfaceIdiom idiom =
-          [[UIDevice currentDevice] userInterfaceIdiom];
-      if (idiom == UIUserInterfaceIdiomPad) {
-        _subtitleText = l10n_util::GetNSString(
-            IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPAD);
-      } else {
-        _subtitleText = l10n_util::GetNSString(
-            IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPHONE);
-      }
 
-      _bannerName = @"settings_passwords_in_other_apps_banner";
+    if (IsVivaldiRunning()) {
+      UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
+       if (idiom == UIUserInterfaceIdiomPad) {
+         _subtitleText = l10n_util::GetNSString(
+             IDS_VIVALDI_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPAD);
+       } else {
+         _subtitleText = l10n_util::GetNSString(
+             IDS_VIVALDI_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPHONE);
+       }
+      _bannerName = @"vivaldi_passwords_autofill_banner";
     } else {
-      _subtitleText = l10n_util::GetNSString(
-          IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE);
-      _bannerName = @"legacy_settings_passwords_in_other_apps_banner";
-    }
+    UIUserInterfaceIdiom idiom = [[UIDevice currentDevice] userInterfaceIdiom];
+     if (idiom == UIUserInterfaceIdiomPad) {
+       _subtitleText = l10n_util::GetNSString(
+           IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPAD);
+     } else {
+       _subtitleText = l10n_util::GetNSString(
+           IDS_IOS_SETTINGS_PASSWORDS_IN_OTHER_APPS_SUBTITLE_IPHONE);
+     }
+
+    _bannerName = @"settings_passwords_in_other_apps_banner";
+    } // End Vivaldi
+
     self.bannerStyle = UIUserInterfaceStyleUnspecified;
   }
   return self;
@@ -444,8 +452,18 @@ BOOL IsPasswordManagerBrandingUpdateEnabled() {
 - (UIButton*)actionButton {
   if (!_actionButton) {
     _actionButton = [[HighlightButton alloc] initWithFrame:CGRectZero];
+
+    // TODO(crbug.com/1418068): Remove after minimum version required is >=
+    // iOS 15.
+#if __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+    _actionButton.configuration.contentInsets = NSDirectionalEdgeInsetsMake(
+        kButtonVerticalInsets, kButtonHorizontalMargin, kButtonVerticalInsets,
+        kButtonHorizontalMargin);
+#else
     _actionButton.contentEdgeInsets =
         UIEdgeInsetsMake(kButtonVerticalInsets, 0, kButtonVerticalInsets, 0);
+#endif  // __IPHONE_OS_VERSION_MIN_REQUIRED >= __IPHONE_15_0
+
     [_actionButton
         setBackgroundColor:[UIColor
                                colorNamed:kGroupedSecondaryBackgroundColor]];
@@ -464,8 +482,14 @@ BOOL IsPasswordManagerBrandingUpdateEnabled() {
     _actionButton.titleLabel.adjustsFontForContentSizeCategory = YES;
     _actionButton.accessibilityIdentifier =
         kPasswordsInOtherAppsActionAccessibilityIdentifier;
+
+    // TODO(crbug.com/1418068): Remove after minimum version required is >=
+    // iOS 15.
+#if __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_15_0
     _actionButton.titleEdgeInsets = UIEdgeInsetsMake(
         0, kButtonHorizontalMargin, 0, kButtonHorizontalMargin);
+#endif  // __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_15_0
+
     _actionButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [_actionButton addTarget:self
                       action:@selector(didTapActionButton)

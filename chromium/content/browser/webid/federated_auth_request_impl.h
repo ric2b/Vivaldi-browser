@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/queue.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "content/browser/webid/fedcm_metrics.h"
@@ -18,6 +18,7 @@
 #include "content/browser/webid/idp_network_request_manager.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/document_service.h"
+#include "content/public/browser/federated_identity_permission_context_delegate.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
@@ -26,7 +27,9 @@
 
 namespace content {
 
+class FederatedAuthUserInfoRequest;
 class FederatedIdentityApiPermissionContextDelegate;
+class FederatedIdentityAutoReauthnPermissionContextDelegate;
 class FederatedIdentityPermissionContextDelegate;
 class RenderFrameHost;
 
@@ -39,13 +42,16 @@ class RenderFrameHost;
 // Create() creates a self-managed instance of FederatedAuthRequestImpl and
 // binds it to the receiver.
 class CONTENT_EXPORT FederatedAuthRequestImpl
-    : public DocumentService<blink::mojom::FederatedAuthRequest> {
+    : public DocumentService<blink::mojom::FederatedAuthRequest>,
+      public FederatedIdentityPermissionContextDelegate::
+          IdpSigninStatusObserver {
  public:
   static void Create(RenderFrameHost*,
                      mojo::PendingReceiver<blink::mojom::FederatedAuthRequest>);
   static FederatedAuthRequestImpl& CreateForTesting(
       RenderFrameHost&,
       FederatedIdentityApiPermissionContextDelegate*,
+      FederatedIdentityAutoReauthnPermissionContextDelegate*,
       FederatedIdentityPermissionContextDelegate*,
       mojo::PendingReceiver<blink::mojom::FederatedAuthRequest>);
 
@@ -58,11 +64,19 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   void RequestToken(std::vector<blink::mojom::IdentityProviderGetParametersPtr>
                         idp_get_params_ptrs,
                     RequestTokenCallback) override;
+  void RequestUserInfo(blink::mojom::IdentityProviderConfigPtr provider,
+                       RequestUserInfoCallback) override;
   void CancelTokenRequest() override;
   void LogoutRps(std::vector<blink::mojom::LogoutRpsRequestPtr> logout_requests,
                  LogoutRpsCallback) override;
   void SetIdpSigninStatus(const url::Origin& origin,
                           blink::mojom::IdpSigninStatus status) override;
+  void RegisterIdP(const ::GURL& idp, RegisterIdPCallback) override;
+  void UnregisterIdP(const ::GURL& idp, UnregisterIdPCallback) override;
+
+  // FederatedIdentityPermissionContextDelegate::IdpSigninStatusObserver:
+  void OnIdpSigninStatusChanged(const url::Origin& idp_config_origin,
+                                bool idp_signin_status) override;
 
   void SetTokenRequestDelayForTests(base::TimeDelta delay);
   void SetNetworkManagerForTests(
@@ -74,45 +88,70 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   void OnRejectRequest();
 
   struct IdentityProviderGetInfo {
-    IdentityProviderGetInfo(blink::mojom::IdentityProviderConfig,
-                            bool prefer_auto_signin);
+    IdentityProviderGetInfo(blink::mojom::IdentityProviderConfigPtr,
+                            bool auto_reauthn,
+                            blink::mojom::RpContext rp_context);
     ~IdentityProviderGetInfo();
     IdentityProviderGetInfo(const IdentityProviderGetInfo&);
+    IdentityProviderGetInfo& operator=(const IdentityProviderGetInfo& other);
 
-    blink::mojom::IdentityProviderConfig provider;
-    bool prefer_auto_signin{false};
+    blink::mojom::IdentityProviderConfigPtr provider;
+    bool auto_reauthn{false};
+    blink::mojom::RpContext rp_context{blink::mojom::RpContext::kSignIn};
   };
 
   struct IdentityProviderInfo {
-    IdentityProviderInfo(blink::mojom::IdentityProviderConfig,
+    IdentityProviderInfo(const blink::mojom::IdentityProviderConfigPtr&,
                          IdpNetworkRequestManager::Endpoints,
                          IdentityProviderMetadata,
-                         bool prefer_auto_signin);
+                         bool auto_reauthn,
+                         blink::mojom::RpContext rp_context);
     ~IdentityProviderInfo();
     IdentityProviderInfo(const IdentityProviderInfo&);
 
-    blink::mojom::IdentityProviderConfig provider;
+    blink::mojom::IdentityProviderConfigPtr provider;
     IdpNetworkRequestManager::Endpoints endpoints;
     IdentityProviderMetadata metadata;
-    bool prefer_auto_signin{false};
+    bool auto_reauthn{false};
     bool has_failing_idp_signin_status{false};
+    blink::mojom::RpContext rp_context{blink::mojom::RpContext::kSignIn};
     absl::optional<IdentityProviderData> data;
   };
 
  private:
   friend class FederatedAuthRequestImplTest;
 
+  struct FetchData {
+    FetchData();
+    ~FetchData();
+
+    // Set of config URLs of IDPs that have yet to be processed.
+    std::set<GURL> pending_idps;
+
+    // Whether accounts endpoint fetch succeeded for at least one IdP.
+    bool did_succeed_for_at_least_one_idp{false};
+
+    // Whether the fetch was triggered by an IdP sign-in status update.
+    bool for_idp_signin{false};
+  };
+
   FederatedAuthRequestImpl(
       RenderFrameHost&,
       FederatedIdentityApiPermissionContextDelegate*,
+      FederatedIdentityAutoReauthnPermissionContextDelegate*,
       FederatedIdentityPermissionContextDelegate*,
       mojo::PendingReceiver<blink::mojom::FederatedAuthRequest>);
 
   bool HasPendingRequest() const;
 
+  // Fetch well-known, config, accounts and client metadata endpoints for
+  // passed-in IdPs. Uses parameters from `token_request_get_infos_`.
+  // `for_idp_signin` indicates whether the fetch is as a result of an IdP
+  // sign-in status update.
+  void FetchEndpointsForIdps(const std::set<GURL>& idp_config_urls,
+                             bool for_idp_signin);
+
   void OnAllConfigAndWellKnownFetched(
-      std::unique_ptr<FederatedProviderFetcher> provider_fetcher,
-      base::flat_map<GURL, IdentityProviderGetInfo> get_infos,
       std::vector<FederatedProviderFetcher::FetchResult> fetch_results);
   void OnClientMetadataResponseReceived(
       std::unique_ptr<IdentityProviderInfo> idp_info,
@@ -141,6 +180,7 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // failure UI if applicable.
   void HandleAccountsFetchFailure(
       std::unique_ptr<IdentityProviderInfo> idp_info,
+      absl::optional<bool> old_idp_signin_status,
       blink::mojom::FederatedAuthRequestResult result,
       absl::optional<content::FedCmRequestIdTokenStatus> token_status);
 
@@ -148,7 +188,8 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
       std::unique_ptr<IdentityProviderInfo> idp_info,
       IdpNetworkRequestManager::FetchStatus status,
       IdpNetworkRequestManager::AccountList accounts);
-  void OnAccountSelected(const GURL& idp_config_url,
+  void OnAccountSelected(bool auto_reauthn,
+                         const GURL& idp_config_url,
                          const std::string& account_id,
                          bool is_sign_in);
   void OnDismissFailureDialog(
@@ -158,10 +199,10 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
       IdentityRequestDialogController::DismissReason dismiss_reason);
   void OnDialogDismissed(
       IdentityRequestDialogController::DismissReason dismiss_reason);
-  void CompleteTokenRequest(const blink::mojom::IdentityProviderConfig& idp,
+  void CompleteTokenRequest(blink::mojom::IdentityProviderConfigPtr idp,
                             IdpNetworkRequestManager::FetchStatus status,
                             const std::string& token);
-  void OnTokenResponseReceived(const blink::mojom::IdentityProviderConfig& idp,
+  void OnTokenResponseReceived(blink::mojom::IdentityProviderConfigPtr idp,
                                IdpNetworkRequestManager::FetchStatus status,
                                const std::string& token);
   void DispatchOneLogout();
@@ -171,6 +212,9 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
       blink::mojom::FederatedAuthRequestResult result,
       absl::optional<content::FedCmRequestIdTokenStatus> token_status,
       bool should_delay_callback);
+
+  // Completes request. Displays a dialog if there is an error and the error is
+  // during a fetch triggered by an IdP sign-in status change.
   void CompleteRequest(
       blink::mojom::FederatedAuthRequestResult result,
       absl::optional<content::FedCmRequestIdTokenStatus> token_status,
@@ -178,6 +222,10 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
       const std::string& token,
       bool should_delay_callback);
   void CompleteLogoutRequest(blink::mojom::LogoutRpsStatus);
+  void CompleteUserInfoRequest(
+      RequestUserInfoCallback callback,
+      blink::mojom::RequestUserInfoStatus status,
+      absl::optional<std::vector<blink::mojom::IdentityUserInfoPtr>> user_info);
 
   // Notifies metrics endpoint that either the user did not select the IDP in
   // the prompt or that there was an error in fetching data for the IDP.
@@ -213,10 +261,16 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // reorders accounts so that those that are considered returning users are
   // before users that are not returning.
   void ComputeLoginStateAndReorderAccounts(
-      const blink::mojom::IdentityProviderConfig& idp,
+      const blink::mojom::IdentityProviderConfigPtr& idp,
       IdpNetworkRequestManager::AccountList& accounts);
 
   url::Origin GetEmbeddingOrigin() const;
+
+  // Returns true and the `IdentityProviderData` + `IdentityRequestAccount` for
+  // the only returning account. Returns false if there are multiple returning
+  // accounts or no returning account.
+  bool GetSingleReturningAccount(const IdentityProviderData** out_idp_data,
+                                 const IdentityRequestAccount** out_account);
 
   std::unique_ptr<IdpNetworkRequestManager> network_manager_;
   std::unique_ptr<IdentityRequestDialogController> request_dialog_controller_;
@@ -237,6 +291,8 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
 
   raw_ptr<FederatedIdentityApiPermissionContextDelegate>
       api_permission_delegate_ = nullptr;
+  raw_ptr<FederatedIdentityAutoReauthnPermissionContextDelegate>
+      auto_reauthn_permission_delegate_ = nullptr;
   raw_ptr<FederatedIdentityPermissionContextDelegate> permission_delegate_ =
       nullptr;
 
@@ -249,7 +305,24 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   base::TimeTicks token_response_time_;
   base::TimeDelta token_request_delay_;
   bool errors_logged_to_console_{false};
-  RequestTokenCallback auth_request_callback_;
+  // While there could be both token request and user info request when a user
+  // visits a site, it's worth noting that they must be from different render
+  // frames. e.g. one top frame rp.example and one iframe idp.example.
+  // Therefore,
+  // 1. if one of the requests exists, the other one shouldn't. e.g. if the
+  // iframe requests user info, it cannot request token at the same time.
+  // 2. the user info request should not set "HasPendingRequest" on the page
+  // (multiple per page). It's OK to have multiple concurrent user info requests
+  // since there's no browser UI involved. e.g. rp.example embeds
+  // iframe1.example and iframe2.example. Both iframes can request user info
+  // simultaneously.
+  RequestTokenCallback auth_request_token_callback_;
+
+  std::unique_ptr<FederatedProviderFetcher> provider_fetcher_;
+
+  // Only one user info request allowed at a time per frame. Can be done in
+  // parallel with token requests.
+  std::unique_ptr<FederatedAuthUserInfoRequest> user_info_request_;
 
   base::queue<blink::mojom::LogoutRpsRequestPtr> logout_requests_;
   LogoutRpsCallback logout_callback_;
@@ -257,8 +330,12 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // TODO(crbug.com/1361649): Refactor these member variables introduced through
   // the multi IDP prototype implementation to make them less confusing.
 
-  // Set of config URLs of IDPs that have yet to be processed.
-  std::set<GURL> pending_idps_;
+  // Parameters passed to RequestToken().
+  base::flat_map<GURL, IdentityProviderGetInfo> token_request_get_infos_;
+
+  // Data related to in-progress FetchEndpointsForIdps() fetch.
+  FetchData fetch_data_;
+
   // List of config URLs of IDPs in the same order as the providers specified in
   // the navigator.credentials.get call.
   std::vector<GURL> idp_order_;

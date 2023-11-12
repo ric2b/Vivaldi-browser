@@ -34,6 +34,14 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "app/vivaldi_version_info.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -149,10 +157,23 @@ const CGFloat kDefaultHeight = 70;
       [self openURL:GURL(kChromeUICreditsURL)];
       break;
     case ItemTypeLinksTerms:
+
+      if (IsVivaldiRunning()) {
+        [self openURL:GURL(l10n_util::GetStringUTF8(IDS_VIVALDI_IOS_TOS_URL))];
+      } else {
       [self openURL:GetUnifiedTermsOfServiceURL(false)];
+      } // End Vivaldi
+
       break;
     case ItemTypeLinksPrivacy:
+
+      if (IsVivaldiRunning()) {
+        [self openURL:GURL(
+            l10n_util::GetStringUTF8(IDS_VIVALDI_IOS_PRIVACY_URL))];
+      } else {
       [self openURL:GURL(l10n_util::GetStringUTF8(IDS_IOS_PRIVACY_POLICY_URL))];
+      } // End Vivaldi
+
       break;
     case ItemTypeVersion:
       // Version is a footer, it is not interactable.

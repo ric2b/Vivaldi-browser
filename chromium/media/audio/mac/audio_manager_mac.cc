@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/mac/mac_logging.h"
 #include "base/mac/mac_util.h"
 #include "base/mac/scoped_cftyperef.h"
@@ -19,7 +19,9 @@
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_observer.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_split.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task/bind_post_task.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "media/audio/audio_device_description.h"
@@ -31,7 +33,6 @@
 #include "media/audio/mac/scoped_audio_unit.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/audio_timestamp_helper.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/channel_layout.h"
 #include "media/base/limits.h"
 #include "media/base/mac/audio_latency_mac.h"
@@ -551,6 +552,86 @@ void AudioManagerMac::ShutdownOnAudioThread() {
   AudioManagerBase::ShutdownOnAudioThread();
 }
 
+std::vector<AudioObjectID> AudioManagerMac::GetAllAudioDeviceIDs() {
+  DCHECK(AudioManager::Get()->GetTaskRunner()->BelongsToCurrentThread());
+  return core_audio_mac::GetAllAudioDeviceIDs();
+}
+
+std::vector<AudioObjectID> AudioManagerMac::GetRelatedNonBluetoothDeviceIDs(
+    AudioObjectID device_id) {
+  DCHECK(AudioManager::Get()->GetTaskRunner()->BelongsToCurrentThread());
+  return core_audio_mac::GetRelatedDeviceIDs(device_id);
+}
+
+std::vector<AudioObjectID> AudioManagerMac::GetRelatedBluetoothDeviceIDs(
+    AudioObjectID device_id) {
+  DCHECK(AudioManager::Get()->GetTaskRunner()->BelongsToCurrentThread());
+  std::vector<AudioObjectID> result_ids;
+
+  // Get unique ID of input device which would be used to match with unique IDs
+  // of all other devices.
+  absl::optional<std::string> input_unique_id = GetDeviceUniqueID(device_id);
+  if (!input_unique_id) {
+    return result_ids;
+  }
+
+  // Get the base name from the unique ID by removing :input/:output from it.
+  // A bluetooth audio input device uniqueID is of the format
+  // "F3-A2-14-A9-1D-F8:input", while the corresponding output device uniqueID
+  // is of the format "F3-A2-14-A9-1D-F8:output".
+  std::vector<std::string> trimmed_input_vector =
+      SplitString(input_unique_id.value(), ":", base::TRIM_WHITESPACE,
+                  base::SPLIT_WANT_NONEMPTY);
+  if (trimmed_input_vector.empty()) {
+    return result_ids;
+  }
+  std::string& trimmed_input_unique_id = trimmed_input_vector[0];
+
+  // Iterate through all device IDs and match the unique IDs base to find the
+  // related devices.
+  for (const auto& id : GetAllAudioDeviceIDs()) {
+    absl::optional<std::string> unique_id = GetDeviceUniqueID(id);
+    if (!unique_id) {
+      continue;
+    }
+
+    std::vector<std::string> trimmed_vector =
+        SplitString(unique_id.value(), ":", base::TRIM_WHITESPACE,
+                    base::SPLIT_WANT_NONEMPTY);
+    if (trimmed_vector.empty()) {
+      continue;
+    }
+
+    std::string& trimmed_id = trimmed_vector[0];
+    if (trimmed_id == trimmed_input_unique_id) {
+      result_ids.push_back(id);
+    }
+  }
+  return result_ids;
+}
+
+std::vector<AudioObjectID> AudioManagerMac::GetRelatedDeviceIDs(
+    AudioObjectID device_id) {
+  DCHECK(AudioManager::Get()->GetTaskRunner()->BelongsToCurrentThread());
+  absl::optional<uint32_t> transport_type = GetDeviceTransportType(device_id);
+  if (transport_type && *transport_type == kAudioDeviceTransportTypeBluetooth) {
+    return GetRelatedBluetoothDeviceIDs(device_id);
+  }
+  return GetRelatedNonBluetoothDeviceIDs(device_id);
+}
+
+absl::optional<std::string> AudioManagerMac::GetDeviceUniqueID(
+    AudioObjectID device_id) {
+  DCHECK(AudioManager::Get()->GetTaskRunner()->BelongsToCurrentThread());
+  return core_audio_mac::GetDeviceUniqueID(device_id);
+}
+
+absl::optional<uint32_t> AudioManagerMac::GetDeviceTransportType(
+    AudioObjectID device_id) {
+  DCHECK(AudioManager::Get()->GetTaskRunner()->BelongsToCurrentThread());
+  return core_audio_mac::GetDeviceTransportType(device_id);
+}
+
 bool AudioManagerMac::HasAudioOutputDevices() {
   return HasAudioHardware(kAudioHardwarePropertyDefaultOutputDevice);
 }
@@ -654,8 +735,7 @@ AudioParameters AudioManagerMac::GetInputStreamParameters(
   // cancellation or mono with echo cancellation.
   if ((params.channel_layout() == CHANNEL_LAYOUT_MONO ||
        params.channel_layout() == CHANNEL_LAYOUT_STEREO) &&
-      core_audio_mac::GetDeviceTransportType(device) !=
-          kAudioDeviceTransportTypeAggregate) {
+      GetDeviceTransportType(device) != kAudioDeviceTransportTypeAggregate) {
     params.set_effects(params.effects() |
                        AudioParameters::EXPERIMENTAL_ECHO_CANCELLER);
   }
@@ -672,7 +752,7 @@ std::string AudioManagerMac::GetAssociatedOutputDeviceID(
     return std::string();
 
   std::vector<AudioObjectID> related_device_ids =
-      core_audio_mac::GetRelatedDeviceIDs(input_device_id);
+      GetRelatedDeviceIDs(input_device_id);
 
   // Defined as a set as device IDs might be duplicated in
   // GetRelatedDeviceIDs().
@@ -688,7 +768,7 @@ std::string AudioManagerMac::GetAssociatedOutputDeviceID(
   // to an endpoint, so we cannot randomly pick a device.
   if (related_output_device_ids.size() == 1) {
     absl::optional<std::string> related_unique_id =
-        core_audio_mac::GetDeviceUniqueID(*related_output_device_ids.begin());
+        GetDeviceUniqueID(*related_output_device_ids.begin());
     if (related_unique_id)
       return std::move(*related_unique_id);
   }
@@ -718,12 +798,12 @@ AudioOutputStream* AudioManagerMac::MakeLowLatencyOutputStream(
   // devices, the listener will never be initialized, and new valid devices
   // will never be detected.
   if (!output_device_listener_) {
-    // NOTE: Use BindToCurrentLoop() to ensure the callback is always PostTask'd
-    // even if OSX calls us on the right thread.  Some CoreAudio drivers will
-    // fire the callbacks during stream creation, leading to re-entrancy issues
-    // otherwise.  See http://crbug.com/349604
+    // NOTE: Use base::BindPostTaskToCurrentDefault() to ensure the callback is
+    // always PostTask'd even if OSX calls us on the right thread.  Some
+    // CoreAudio drivers will fire the callbacks during stream creation, leading
+    // to re-entrancy issues otherwise.  See http://crbug.com/349604
     output_device_listener_ = AudioDeviceListenerMac::Create(
-        BindToCurrentLoop(base::BindRepeating(
+        base::BindPostTaskToCurrentDefault(base::BindRepeating(
             &AudioManagerMac::HandleDeviceChanges, base::Unretained(this))),
         /*monitor_sample_rate_changes=*/
         base::FeatureList::IsEnabled(kMonitorOutputSampleRateChangesMac),
@@ -946,6 +1026,16 @@ bool AudioManagerMac::ShouldDeferStreamStart() const {
   DCHECK(GetTaskRunner()->BelongsToCurrentThread());
   return power_observer_->ShouldDeferStreamStart();
 }
+base::TimeDelta AudioManagerMac::GetDeferStreamStartTimeout() const {
+  if (ShouldDeferStreamStart()) {
+    return base::Seconds(AudioManagerMac::kStartDelayInSecsForPowerEvents);
+  }
+  return base::TimeDelta();
+}
+
+base::SingleThreadTaskRunner* AudioManagerMac::GetTaskRunner() const {
+  return AudioManagerBase::GetTaskRunner();
+}
 
 bool AudioManagerMac::IsOnBatteryPower() const {
   DCHECK(GetTaskRunner()->BelongsToCurrentThread());
@@ -1065,75 +1155,6 @@ bool AudioManagerMac::MaybeChangeBufferSize(AudioDeviceID device_id,
       << __FUNCTION__ << " IO buffer size changed to: " << buffer_size;
   // Store the currently used (after a change) I/O buffer frame size.
   return result == noErr;
-}
-
-// static
-base::TimeDelta AudioManagerMac::GetHardwareLatency(
-    AudioUnit audio_unit,
-    AudioDeviceID device_id,
-    AudioObjectPropertyScope scope,
-    int sample_rate) {
-  if (!audio_unit || device_id == kAudioObjectUnknown) {
-    DLOG(WARNING) << "Audio unit object is NULL or device ID is unknown";
-    return base::TimeDelta();
-  }
-
-  // Get audio unit latency.
-  Float64 audio_unit_latency_sec = 0.0;
-  UInt32 size = sizeof(audio_unit_latency_sec);
-  OSStatus result = AudioUnitGetProperty(audio_unit, kAudioUnitProperty_Latency,
-                                         kAudioUnitScope_Global, 0,
-                                         &audio_unit_latency_sec, &size);
-  OSSTATUS_DLOG_IF(WARNING, result != noErr, result)
-      << "Could not get audio unit latency";
-
-  // Get audio device latency.
-  AudioObjectPropertyAddress property_address = {
-      kAudioDevicePropertyLatency, scope, kAudioObjectPropertyElementMaster};
-  UInt32 device_latency_frames = 0;
-  size = sizeof(device_latency_frames);
-  result = AudioObjectGetPropertyData(device_id, &property_address, 0, nullptr,
-                                      &size, &device_latency_frames);
-  OSSTATUS_DLOG_IF(WARNING, result != noErr, result)
-      << "Could not get audio device latency.";
-
-  // Retrieve stream ids and take the stream latency from the first stream.
-  // There may be multiple streams with different latencies, but since we're
-  // likely using this delay information for a/v sync we must choose one of
-  // them; Apple recommends just taking the first entry.
-  //
-  // TODO(dalecurtis): Refactor all these "get data size" + "get data" calls
-  // into a common utility function that just returns a std::unique_ptr.
-  UInt32 stream_latency_frames = 0;
-  property_address.mSelector = kAudioDevicePropertyStreams;
-  result = AudioObjectGetPropertyDataSize(device_id, &property_address, 0,
-                                          nullptr, &size);
-  if (result == noErr && size >= sizeof(AudioStreamID)) {
-    std::unique_ptr<uint8_t[]> stream_id_storage(new uint8_t[size]);
-    AudioStreamID* stream_ids =
-        reinterpret_cast<AudioStreamID*>(stream_id_storage.get());
-    result = AudioObjectGetPropertyData(device_id, &property_address, 0,
-                                        nullptr, &size, stream_ids);
-    if (result == noErr) {
-      property_address.mSelector = kAudioStreamPropertyLatency;
-      size = sizeof(stream_latency_frames);
-      result =
-          AudioObjectGetPropertyData(stream_ids[0], &property_address, 0,
-                                     nullptr, &size, &stream_latency_frames);
-      OSSTATUS_DLOG_IF(WARNING, result != noErr, result)
-          << "Could not get stream latency for stream #0.";
-    } else {
-      OSSTATUS_DLOG(WARNING, result)
-          << "Could not get audio device stream ids.";
-    }
-  } else {
-    OSSTATUS_DLOG_IF(WARNING, result != noErr, result)
-        << "Could not get audio device stream ids size.";
-  }
-
-  return base::Seconds(audio_unit_latency_sec) +
-         AudioTimestampHelper::FramesToTime(
-             device_latency_frames + stream_latency_frames, sample_rate);
 }
 
 bool AudioManagerMac::DeviceSupportsAmbientNoiseReduction(

@@ -12,6 +12,9 @@ namespace blink {
 namespace {
 
 struct SameSizeAsNGInlineChildLayoutContext {
+  STACK_ALLOCATED();
+
+ public:
   NGFragmentItemsBuilder items_builder_;
   absl::optional<NGInlineLayoutStateStack> box_states_;
   void* pointers[3];
@@ -32,13 +35,11 @@ NGInlineChildLayoutContext::NGInlineChildLayoutContext(
     NGBoxFragmentBuilder* container_builder)
     : container_builder_(container_builder),
       items_builder_(node, container_builder->GetWritingDirection()) {
-  items_builder_.AddLogicalLineItemsPool(&logical_line_items_);
   container_builder->SetItemsBuilder(ItemsBuilder());
 }
 
 NGInlineChildLayoutContext::~NGInlineChildLayoutContext() {
   container_builder_->SetItemsBuilder(nullptr);
-  logical_line_items_.clear();
   propagated_float_break_tokens_.clear();
 }
 

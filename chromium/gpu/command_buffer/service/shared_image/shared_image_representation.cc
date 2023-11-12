@@ -18,12 +18,6 @@
 #include "third_party/skia/include/gpu/GrYUVABackendTextures.h"
 #include "ui/gl/gl_fence.h"
 
-#if BUILDFLAG(IS_WIN)
-#include <dcomp.h>
-#include <dxgi.h>
-#include <unknwn.h>
-#endif
-
 namespace gpu {
 
 SharedImageRepresentation::SharedImageRepresentation(
@@ -49,6 +43,14 @@ SharedImageRepresentation::~SharedImageRepresentation() {
     manager_->OnRepresentationDestroyed(backing_.ExtractAsDangling()->mailbox(),
                                         this);
   }
+}
+
+size_t SharedImageRepresentation::NumPlanesExpected() const {
+  if (format().PrefersExternalSampler()) {
+    return 1;
+  }
+
+  return static_cast<size_t>(format().NumberOfPlanes());
 }
 
 std::unique_ptr<GLTextureImageRepresentation::ScopedAccess>
@@ -77,10 +79,6 @@ GLTextureImageRepresentationBase::BeginScopedAccess(
 gpu::TextureBase* GLTextureImageRepresentationBase::GetTextureBase() {
   DCHECK(format().is_single_plane());
   return GetTextureBase(0);
-}
-
-bool GLTextureImageRepresentationBase::BeginAccess(GLenum mode) {
-  return true;
 }
 
 bool GLTextureImageRepresentationBase::SupportsMultipleConcurrentReadAccess() {
@@ -124,6 +122,11 @@ const scoped_refptr<gles2::TexturePassthrough>&
 GLTexturePassthroughImageRepresentation::GetTexturePassthrough() {
   DCHECK(format().is_single_plane());
   return GetTexturePassthrough(0);
+}
+
+bool GLTexturePassthroughImageRepresentation::
+    NeedsSuspendAccessForDXGIKeyedMutex() const {
+  return false;
 }
 
 bool SkiaImageRepresentation::SupportsMultipleConcurrentReadAccess() {
@@ -278,7 +281,8 @@ sk_sp<SkImage> SkiaImageRepresentation::ScopedReadAccess::CreateSkImage(
   if (format.is_single_plane() || format.PrefersExternalSampler()) {
     DCHECK_EQ(static_cast<int>(promise_image_textures_.size()), 1);
     auto alpha_type = representation()->alpha_type();
-    auto color_type = viz::ToClosestSkColorType(true, format);
+    auto color_type =
+        viz::ToClosestSkColorType(/*gpu_compositing=*/true, format);
     return SkImage::MakeFromTexture(
         context, promise_image_texture()->backendTexture(), surface_origin,
         color_type, alpha_type, sk_color_space, texture_release_proc,
@@ -307,6 +311,23 @@ sk_sp<SkImage> SkiaImageRepresentation::ScopedReadAccess::CreateSkImage(
                                          sk_color_space, texture_release_proc,
                                          release_context);
   }
+}
+
+sk_sp<SkImage> SkiaImageRepresentation::ScopedReadAccess::CreateSkImageForPlane(
+    int plane_index,
+    GrDirectContext* context) const {
+  auto format = representation()->format();
+  DCHECK(format.is_multi_plane());
+  DCHECK_EQ(static_cast<int>(promise_image_textures_.size()),
+            format.NumberOfPlanes());
+
+  auto surface_origin = representation()->surface_origin();
+  auto alpha_type = SkAlphaType::kOpaque_SkAlphaType;
+  auto color_type =
+      viz::ToClosestSkColorType(/*gpu_compositing=*/true, format, plane_index);
+  return SkImage::MakeFromTexture(
+      context, promise_image_texture(plane_index)->backendTexture(),
+      surface_origin, color_type, alpha_type, /*sk_color_space=*/nullptr);
 }
 
 std::unique_ptr<GrBackendSurfaceMutableState>
@@ -356,31 +377,12 @@ scoped_refptr<gfx::NativePixmap> OverlayImageRepresentation::GetNativePixmap() {
   return backing()->GetNativePixmap();
 }
 #elif BUILDFLAG(IS_WIN)
-scoped_refptr<gl::DCOMPSurfaceProxy>
-OverlayImageRepresentation::GetDCOMPSurfaceProxy() {
-  return nullptr;
-}
-
-OverlayImageRepresentation::DCompLayerContent::DCompLayerContent(
-    Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain)
-    : content_(std::move(swap_chain)) {}
-OverlayImageRepresentation::DCompLayerContent::DCompLayerContent(
-    Microsoft::WRL::ComPtr<IDCompositionSurface> dcomp_surface,
-    uint64_t surface_serial)
-    : content_(std::move(dcomp_surface)), surface_serial_(surface_serial) {}
-OverlayImageRepresentation::DCompLayerContent::DCompLayerContent(
-    const OverlayImageRepresentation::DCompLayerContent&) = default;
-OverlayImageRepresentation::DCompLayerContent&
-OverlayImageRepresentation::DCompLayerContent::operator=(
-    const OverlayImageRepresentation::DCompLayerContent&) = default;
-OverlayImageRepresentation::DCompLayerContent::~DCompLayerContent() = default;
-
-OverlayImageRepresentation::DCompLayerContent
-OverlayImageRepresentation::GetDCompLayerContent() const {
+absl::optional<gl::DCLayerOverlayImage>
+OverlayImageRepresentation::GetDCLayerOverlayImage() {
   NOTREACHED();
-  return DCompLayerContent(nullptr);
+  return absl::nullopt;
 }
-#elif BUILDFLAG(IS_MAC)
+#elif BUILDFLAG(IS_APPLE)
 gfx::ScopedIOSurface OverlayImageRepresentation::GetIOSurface() const {
   return gfx::ScopedIOSurface();
 }

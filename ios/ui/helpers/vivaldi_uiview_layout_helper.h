@@ -69,6 +69,9 @@
 
 /// Match the constraints of a given view
 - (void) matchToView:(UIView*)view;
+/// Match the constraints of a given view with provided padding.
+- (void) matchToView:(UIView*)view
+             padding:(UIEdgeInsets)padding;
 
 /// Set width for a view
 - (void) setWidthWithConstant:(CGFloat)constant;
@@ -87,6 +90,10 @@
 - (NSLayoutXAxisAnchor*)safeRightAnchor;
 /// Returns safe bottom anchor
 - (NSLayoutYAxisAnchor*)safeBottomAnchor;
+
+/// Returns iPad orientation calculating the frame.
+/// Required when UIDeviceOrientation returns invalid orientation.
+- (BOOL)isiPadOrientationPortrait;
 
 @end
 

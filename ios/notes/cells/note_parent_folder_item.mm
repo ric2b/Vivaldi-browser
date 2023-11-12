@@ -2,19 +2,17 @@
 
 #import "ios/notes/cells/note_parent_folder_item.h"
 
-#include "base/i18n/rtl.h"
-#include "base/mac/foundation_util.h"
-
+#import "base/i18n/rtl.h"
+#import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
-#include "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/note_ui_constants.h"
 #import "ios/notes/note_utils_ios.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

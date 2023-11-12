@@ -6,7 +6,7 @@
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -15,7 +15,9 @@
 namespace {
 // Padding for the stack view.
 // In order - Top, Left, Bottom, Right
-const UIEdgeInsets stackPadding = UIEdgeInsetsMake(12.f, 0.f, 12.f, 0.f);
+const UIEdgeInsets stackPadding = UIEdgeInsetsMake(12.f, 12.f, 12.f, 0.f);
+const CGSize imageViewSize = CGSizeMake(32, 32);
+const UIEdgeInsets imageViewPadding = UIEdgeInsetsMake(12.f, 0.f, 0.f, 0.f);
 } // End Namespace
 
 
@@ -34,7 +36,8 @@ const UIEdgeInsets stackPadding = UIEdgeInsetsMake(12.f, 0.f, 12.f, 0.f);
   [super configureCell:cell withStyler:styler];
   [cell configurWithItem:self.item
      userPreferredOption:self.userPreferredOption
-     globalDefaultOption:self.globalDefaultOption];
+     globalDefaultOption:self.globalDefaultOption
+       showDefaultMarker:self.showDefaultMarker];
 }
 
 @end
@@ -45,12 +48,15 @@ const UIEdgeInsets stackPadding = UIEdgeInsetsMake(12.f, 0.f, 12.f, 0.f);
 @property (weak, nonatomic) UILabel* titleLabel;
 // Description of the settings
 @property (weak, nonatomic) UILabel* subtitleLabel;
+// Imageview for the settings icon
+@property (weak, nonatomic) UIImageView* imageView;
 @end
 
 @implementation VivaldiATBSettingItemCell
 
 @synthesize titleLabel = _titleLabel;
 @synthesize subtitleLabel = _subtitleLabel;
+@synthesize imageView = _imageView;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithStyle:(UITableViewCellStyle)style
@@ -102,6 +108,20 @@ const UIEdgeInsets stackPadding = UIEdgeInsetsMake(12.f, 0.f, 12.f, 0.f);
   subtitleLabel.numberOfLines = 0;
   subtitleLabel.textAlignment = NSTextAlignmentLeft;
 
+  // Image view
+  UIImageView* imageView = [UIImageView new];
+  _imageView = imageView;
+  imageView.contentMode = UIViewContentModeScaleAspectFit;
+  imageView.backgroundColor = UIColor.clearColor;
+  [containerView addSubview:imageView];
+  [imageView anchorTop:nil
+               leading:containerView.leadingAnchor
+                bottom:nil
+              trailing:nil
+               padding:imageViewPadding
+                  size:imageViewSize];
+  [imageView centerYInSuperview];
+
   // Stack view for title and subtitle
   UIStackView* textStackView = [[UIStackView alloc] initWithArrangedSubviews:@[
     titleLabel, subtitleLabel
@@ -111,65 +131,103 @@ const UIEdgeInsets stackPadding = UIEdgeInsetsMake(12.f, 0.f, 12.f, 0.f);
   textStackView.axis = UILayoutConstraintAxisVertical;
 
   [containerView addSubview:textStackView];
-  [textStackView fillSuperviewWithPadding:stackPadding];
+  [textStackView anchorTop:containerView.topAnchor
+                   leading:imageView.trailingAnchor
+                    bottom:containerView.bottomAnchor
+                  trailing:containerView.trailingAnchor
+                   padding:stackPadding];
 }
 
 #pragma mark - SETTERS
 
 - (void)configurWithItem:(VivaldiATBItem*)item
-     userPreferredOption:(ATBSettingOption)userPreferred
-     globalDefaultOption:(ATBSettingOption)globalDefault {
+     userPreferredOption:(ATBSettingType)userPreferred
+     globalDefaultOption:(ATBSettingType)globalDefault
+       showDefaultMarker:(BOOL)showDefaultMarker {
 
   self.subtitleLabel.text = item.subtitle;
+
+  // Populate icons
+  switch (item.type) {
+    case ATBSettingNoBlocking:
+      _imageView.image = [UIImage imageNamed:vATBShieldNone];
+      break;
+    case ATBSettingBlockTrackers:
+      _imageView.image = [UIImage imageNamed:vATBShieldTrackers];
+      break;
+    case ATBSettingBlockTrackersAndAds:
+      _imageView.image = [UIImage imageNamed:vATBShieldTrackesAndAds];
+      break;
+    default: break;
+  }
+
+  // Show selection check
+  if (item.type == userPreferred) {
+    self.accessoryType = UITableViewCellAccessoryCheckmark;
+    _imageView.image =
+        [_imageView.image
+          imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } else {
+    self.accessoryType = UITableViewCellAccessoryNone;
+    _imageView.image =
+        [_imageView.image
+          imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+  }
 
   // Render title text. The global default item will have a '(Default)' marker
   // alongside the item title. And the item title will be bold if the item is
   // selected.
-  if (item.option == globalDefault) {
 
-    // Get the default marker string from string file
-    NSString* defaultMarker =
-      l10n_util::GetNSString(IDS_DEFAULT_LEVEL_LABEL);
-
-    // Combine the item title and default marker with an space in between.
-    NSString *combinedString =
-      [NSString stringWithFormat: @"%@%@%@", item.title, @" ", defaultMarker];
-
-    if (item.option == userPreferred) {
-      [self applyBoldStyleToRange:item.title fullString:combinedString];
-    } else {
-      self.titleLabel.text = combinedString;
-    }
-
-  } else {
-    if (item.option == userPreferred) {
-      [self applyBoldStyleToRange:item.title fullString:item.title];
-    } else {
-      self.titleLabel.text = item.title;
-    }
-  }
-
-  // Show selection check
-  if (item.option == userPreferred) {
-    self.accessoryType = UITableViewCellAccessoryCheckmark;
-  } else {
-    self.accessoryType = UITableViewCellAccessoryNone;
-  }
+  // Render title text. Rules: >>
+  // 1. User preferred item will always be bold regardless whether its default
+  // or not
+  // 2. Global settings will have a 'Default' markup alongside the title. That
+  // markup will always have regular font style.
+  // 3. 'Default' markup will not be visible alongside the title when the
+  // the options are rendered for global settings, such as main Ad and Tracker
+  // blocker settings page.
+  [self applyFontStyleToRange:item.title
+            showDefaultMarker:item.type == globalDefault &&
+                                  showDefaultMarker
+                     makeBold:item.type == userPreferred];
 }
 
 #pragma mark - PRIVATE
-- (void)applyBoldStyleToRange:(NSString*)title
-                   fullString:(NSString*)fullString {
-  // Create attributed string from the full string to make some part bold.
+/// 'Default' marker will always have regular font style.
+/// 'Title' may become bold or regular based on the selection state.
+- (void)applyFontStyleToRange:(NSString*)title
+            showDefaultMarker:(BOOL)showDefaultMarker
+                     makeBold:(BOOL)makeBold {
+  // Default marker
+  NSString* defaultMarker = l10n_util::GetNSString(IDS_DEFAULT_LEVEL_LABEL);
+
+  // Create full string from title and marker.
+  NSString *fullString = title;
+
+  if (showDefaultMarker) {
+    fullString =
+        [NSString stringWithFormat: @"%@%@%@", title, @" ", defaultMarker];
+  }
+
+  // Create attributed string from the full string.
   NSMutableAttributedString *attributedString =
     [[NSMutableAttributedString alloc] initWithString:fullString];
 
-  // Make the title part bold by getting the range of it
+  // Make the title part bold by getting the range of it.
   NSRange boldRange = [fullString rangeOfString:title];
   [attributedString
     addAttribute:NSFontAttributeName
-           value:[UIFont preferredFontForTextStyle:UIFontTextStyleHeadline]
+           value:makeBold ?
+               [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline] :
+               [UIFont preferredFontForTextStyle:UIFontTextStyleBody]
            range:boldRange];
+
+  // Not necessary but safe to make rest of the part regular style.
+  NSRange regularRange = [fullString rangeOfString:defaultMarker];
+  [attributedString
+    addAttribute:NSFontAttributeName
+           value:[UIFont preferredFontForTextStyle:UIFontTextStyleBody]
+           range:regularRange];
 
   [self.titleLabel setAttributedText: attributedString];
 }

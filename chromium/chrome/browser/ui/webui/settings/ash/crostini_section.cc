@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/webui/settings/ash/guest_os_handler.h"
 #include "chrome/browser/ui/webui/settings/ash/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
-#include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
@@ -253,12 +252,16 @@ CrostiniSection::~CrostiniSection() = default;
 void CrostiniSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"bruschettaPageLabel", IDS_SETTINGS_BRUSCHETTA_LABEL},
+      {"bruschettaEnable", IDS_SETTINGS_TURN_ON},
       {"bruschettaSharedUsbDevicesDescription",
        IDS_SETTINGS_BRUSCHETTA_SHARED_USB_DEVICES_DESCRIPTION},
       {"bruschettaSharedPathsInstructionsAdd",
        IDS_SETTINGS_BRUSCHETTA_SHARED_PATHS_INSTRUCTIONS_ADD},
       {"bruschettaSharedPathsRemoveFailureDialogMessage",
        IDS_SETTINGS_BRUSCHETTA_SHARED_PATHS_REMOVE_FAILURE_DIALOG_MESSAGE},
+      {"bruschettaSubtext", IDS_SETTINGS_BRUSCHETTA_SUBTEXT},
+      {"bruschettaRemove", IDS_SETTINGS_BRUSCHETTA_REMOVE},
+      {"bruschettaRemoveButton", IDS_SETTINGS_BRUSCHETTA_REMOVE_BUTTON},
       {"crostiniPageTitle", IDS_SETTINGS_CROSTINI_TITLE},
       {"crostiniPageLabel", IDS_SETTINGS_CROSTINI_LABEL},
       {"crostiniEnable", IDS_SETTINGS_TURN_ON},
@@ -433,13 +436,23 @@ void CrostiniSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "showCrostini",
       crostini::CrostiniFeatures::Get()->CouldBeAllowed(profile_));
+
   // Should we actually enable the button to install it?
   html_source->AddBoolean(
       "allowCrostini",
       crostini::CrostiniFeatures::Get()->IsAllowedNow(profile_));
-  // Should the Bruschetta subpage be enabled?
-  html_source->AddBoolean("enableBruschetta",
-                          bruschetta::BruschettaFeatures::Get()->IsEnabled());
+
+  // Should Bruschetta be displayed in the settings at all?
+  const bool bru_feature = bruschetta::BruschettaFeatures::Get()->IsEnabled();
+  const bool bru_config =
+      bruschetta::HasInstallableConfig(profile_, bruschetta::kBruschettaVmName);
+  if (bru_feature && !bru_config) {
+    LOG(WARNING) << "Bruschetta has no installable config.";
+  }
+  // TODO(b/266160969): After confirming that the Bruschetta policy is present
+  // for existing users, make showBruschetta check for both bru_feature &&
+  // bru_config.
+  html_source->AddBoolean("showBruschetta", bru_feature);
 
   html_source->AddString(
       "bruschettaSharedPathsInstructionsLocate",
@@ -507,7 +520,8 @@ void CrostiniSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 }
 
 void CrostiniSection::AddHandlers(content::WebUI* web_ui) {
-  if (crostini::CrostiniFeatures::Get()->CouldBeAllowed(profile_)) {
+  if (crostini::CrostiniFeatures::Get()->CouldBeAllowed(profile_) ||
+      bruschetta::BruschettaFeatures::Get()->IsEnabled()) {
     web_ui->AddMessageHandler(std::make_unique<GuestOsHandler>(profile_));
     web_ui->AddMessageHandler(std::make_unique<CrostiniHandler>(profile_));
   }
@@ -615,6 +629,7 @@ void CrostiniSection::RegisterHierarchy(HierarchyGenerator* generator) const {
                                      mojom::SearchResultIcon::kDeveloperTags,
                                      mojom::SearchResultDefaultRank::kMedium,
                                      mojom::kBruschettaDetailsSubpagePath);
+
   // USB preferences.
   generator->RegisterNestedSubpage(
       IDS_SETTINGS_GUEST_OS_SHARED_USB_DEVICES_LABEL,
@@ -667,19 +682,22 @@ void CrostiniSection::UpdateSearchTags() {
 
   updater.AddSearchTags(GetCrostiniOptedInSearchConcepts());
 
-  if (IsExportImportAllowed())
+  if (IsExportImportAllowed()) {
     updater.AddSearchTags(GetCrostiniExportImportSearchConcepts());
+  }
 
   if (IsAdbSideloadingAllowed() &&
       pref_service_->GetBoolean(arc::prefs::kArcEnabled)) {
     updater.AddSearchTags(GetCrostiniAdbSideloadingSearchConcepts());
   }
 
-  if (IsPortForwardingAllowed())
+  if (IsPortForwardingAllowed()) {
     updater.AddSearchTags(GetCrostiniPortForwardingSearchConcepts());
+  }
 
-  if (IsContainerUpgradeAllowed())
+  if (IsContainerUpgradeAllowed()) {
     updater.AddSearchTags(GetCrostiniContainerUpgradeSearchConcepts());
+  }
 
   updater.AddSearchTags(GetCrostiniDiskResizingSearchConcepts());
 

@@ -16,6 +16,7 @@ import("//ui/webui/webui_features.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/features.gni")
 import("//build/config/nacl/config.gni")
 import("//build/toolchain/kythe.gni")
 import("//components/nacl/features.gni")
@@ -39,14 +40,25 @@ declare_args() {
   # scrambling on all platforms.
   enable_mojom_message_id_scrambling = true
 
-  # Enables Closure compilation of generated JS lite bindings. In environments
-  # where compilation is supported, any mojom target "foo" will also have a
-  # corresponding "foo_js_library_for_compile" target generated.
-  enable_mojom_closure_compile = enable_js_type_check && optimize_webui
-
   # Enables generating javascript fuzzing-related code and the bindings for the
   # MojoLPM fuzzer targets. Off by default.
   enable_mojom_fuzzer = false
+
+  # Enables Closure compilation of generated JS lite bindings. In environments
+  # where compilation is supported, any mojom target "foo" will also have a
+  # corresponding "foo_js_library_for_compile" target generated.
+  if (is_chromeos_ash) {
+    enable_mojom_closure_compile = enable_js_type_check && optimize_webui
+  }
+}
+
+# Closure libraries are needed for mojom_closure_compile, and when
+# js_type_check is enabled on Ash.
+if (is_chromeos_ash) {
+  generate_mojom_closure_libraries =
+      enable_mojom_closure_compile || enable_js_type_check
+} else {
+  generate_mojom_closure_libraries = false
 }
 
 # NOTE: We would like to avoid scrambling message IDs where it doesn't add
@@ -108,6 +120,7 @@ mojom_generator_sources =
       "$mojom_generator_root/generators/mojom_js_generator.py",
       "$mojom_generator_root/generators/mojom_mojolpm_generator.py",
       "$mojom_generator_root/generators/mojom_ts_generator.py",
+      "$mojom_generator_root/generators/mojom_webui_js_bridge_generator.py",
       "$mojom_generator_script",
     ]
 
@@ -318,6 +331,16 @@ if (enable_scrambled_message_ids) {
 #
 #   use_typescript_sources (optional)
 #       Uses the Typescript generator to generate JavaScript bindings.
+#
+#   generate_legacy_js_bindings (optional)
+#       Generate js_data_deps target containing legacy JavaScript bindings files
+#       for Blink tests and other non-WebUI users when generating TypeScript
+#       bindings for WebUI. Ignored if use_typescript_sources is not set to
+#       true.
+#
+#   webui_js_bridge_config (optional)
+#       Prefer to use the `mojom_with_webui_js_bridge` target below instead
+#       of using this argument directly.
 #
 #   js_generate_struct_deserializers (optional)
 #       Generates JS deerialize methods for structs.
@@ -696,7 +719,13 @@ template("mojom") {
       enabled_features += [ "is_win" ]
     }
 
+    if (is_apple) {
+      enabled_features += [ "is_apple" ]
+    }
+
     action(parser_target_name) {
+      # allow_remote = true
+      # custom_processor = "mojom_parser"
       script = mojom_parser_script
       inputs = mojom_parser_sources + ply_sources + [ build_metadata_filename ]
       sources = sources_list
@@ -712,7 +741,11 @@ template("mojom") {
       foreach(source, sources_list) {
         filelist += [ rebase_path(source, root_build_dir) ]
       }
-      response_file_contents = filelist
+
+      # Workaround for https://github.com/ninja-build/ninja/issues/1966.
+      rsp_file = "$target_gen_dir/${target_name}.rsp"
+      write_file(rsp_file, filelist)
+      inputs += [ rsp_file ]
 
       args = [
         # Resolve relative input mojom paths against both the root src dir and
@@ -725,7 +758,7 @@ template("mojom") {
         "--output-root",
         rebase_path(root_gen_dir, root_build_dir),
 
-        "--mojom-file-list={{response_file_name}}",
+        "--mojom-file-list=" + rebase_path(rsp_file, root_build_dir),
 
         "--check-imports",
         rebase_path(build_metadata_filename, root_build_dir),
@@ -750,6 +783,9 @@ template("mojom") {
           "--add-module-metadata",
           "webui_module_path=${invoker.webui_module_path}",
         ]
+        if (defined(invoker.generate_legacy_js_bindings)) {
+          args += [ "legacy_js_only=${invoker.generate_legacy_js_bindings}" ]
+        }
       }
     }
   }
@@ -832,6 +868,7 @@ template("mojom") {
     }
 
     action(generator_cpp_message_ids_target_name) {
+      # allow_remote = true
       script = mojom_generator_script
       inputs = mojom_generator_sources + jinja2_sources
       sources = sources_list +
@@ -856,10 +893,13 @@ template("mojom") {
         outputs += [ "$root_gen_dir/$base_path-shared-message-ids.h" ]
       }
 
-      response_file_contents = filelist
+      # Workaround for https://github.com/ninja-build/ninja/issues/1966.
+      rsp_file = "$target_gen_dir/${target_name}.rsp"
+      write_file(rsp_file, filelist)
+      inputs += [ rsp_file ]
 
       args += [
-        "--filelist={{response_file_name}}",
+        "--filelist=" + rebase_path(rsp_file, root_build_dir),
         "--generate_non_variant_code",
         "--generate_message_ids",
         "-g",
@@ -876,6 +916,7 @@ template("mojom") {
     generator_shared_target_name = "${target_name}_shared__generator"
 
     action(generator_shared_target_name) {
+      # allow_remote = true
       visibility = [ ":*" ]
       script = mojom_generator_script
       inputs = mojom_generator_sources + jinja2_sources
@@ -909,10 +950,13 @@ template("mojom") {
         ]
       }
 
-      response_file_contents = filelist
+      # Workaround for https://github.com/ninja-build/ninja/issues/1966.
+      rsp_file = "$target_gen_dir/${target_name}.rsp"
+      write_file(rsp_file, filelist)
+      inputs += [ rsp_file ]
 
       args += [
-        "--filelist={{response_file_name}}",
+        "--filelist=" + rebase_path(rsp_file, root_build_dir),
         "--generate_non_variant_code",
         "-g",
         "c++",
@@ -1002,6 +1046,7 @@ template("mojom") {
         "${target_name}_mojolpm_proto_generator"
 
     action(generator_mojolpm_proto_target_name) {
+      # allow_remote = true
       script = mojom_generator_script
       inputs = mojom_generator_sources + jinja2_sources
       sources =
@@ -1041,10 +1086,13 @@ template("mojom") {
         outputs += [ "$target_gen_dir/$source_file.mojolpm.proto" ]
       }
 
-      response_file_contents = filelist
+      # Workaround for https://github.com/ninja-build/ninja/issues/1966.
+      rsp_file = "$target_gen_dir/${target_name}.rsp"
+      write_file(rsp_file, filelist)
+      inputs += [ rsp_file ]
 
       args += [
-        "--filelist={{response_file_name}}",
+        "--filelist=" + rebase_path(rsp_file, root_build_dir),
         "--generate_non_variant_code",
         "-g",
         "mojolpm",
@@ -1108,7 +1156,7 @@ template("mojom") {
     component_macro_suffix = ""
   }
   if ((!defined(invoker.disable_variants) || !invoker.disable_variants) &&
-      !is_ios) {
+      use_blink) {
     blink_variant = {
       variant = "blink"
       component_macro_suffix = "_BLINK"
@@ -1260,6 +1308,7 @@ template("mojom") {
 
       # TODO(crbug.com/1194274): Investigate nondeterminism in Py3 builds.
       action(generator_target_name) {
+        # allow_remote = true
         visibility = [ ":*" ]
         script = mojom_generator_script
         inputs = mojom_generator_sources + jinja2_sources
@@ -1308,10 +1357,12 @@ template("mojom") {
           }
         }
 
-        response_file_contents = filelist
-
+        # Workaround for https://github.com/ninja-build/ninja/issues/1966.
+        rsp_file = "$target_gen_dir/${target_name}.rsp"
+        write_file(rsp_file, filelist)
+        inputs += [ rsp_file ]
         args += [
-          "--filelist={{response_file_name}}",
+          "--filelist=" + rebase_path("$rsp_file", root_build_dir),
           "-g",
         ]
 
@@ -1373,75 +1424,6 @@ template("mojom") {
       }
     }
 
-    if (generate_fuzzing && !defined(variant)) {
-      # This block contains the C++ targets for the MojoLPM fuzzer, we need to
-      # do this here so that we can use the typemap configuration for the
-      # empty-variant Mojo target.
-
-      mojolpm_target_name = "${target_name}_mojolpm"
-      mojolpm_generator_target_name = "${target_name}__generator"
-      source_set(mojolpm_target_name) {
-        # There are still a few missing header dependencies between mojo targets
-        # with typemaps and the dependencies of their typemap headers. It would
-        # be good to enable include checking for these in the future though.
-        check_includes = false
-        testonly = true
-        if (defined(invoker.sources)) {
-          # Split the input into generated and non-generated source files. They
-          # need to be processed separately.
-          gen_dir_path_wildcard = get_path_info("//", "gen_dir") + "/*"
-          non_gen_sources =
-              filter_exclude(invoker.sources, [ gen_dir_path_wildcard ])
-          gen_sources =
-              filter_include(invoker.sources, [ gen_dir_path_wildcard ])
-          sources = process_file_template(
-                  non_gen_sources,
-                  [
-                    "{{source_gen_dir}}/{{source_file_part}}-mojolpm.cc",
-                    "{{source_gen_dir}}/{{source_file_part}}-mojolpm.h",
-                  ])
-          sources += process_file_template(
-                  gen_sources,
-                  [
-                    "{{source_dir}}/{{source_file_part}}-mojolpm.cc",
-                    "{{source_dir}}/{{source_file_part}}-mojolpm.h",
-                  ])
-          deps = []
-        } else {
-          sources = []
-          deps = []
-        }
-
-        public_deps = [
-          ":$generator_shared_target_name",
-
-          # NB: hardcoded dependency on the no-variant variant generator, since
-          # mojolpm only uses the no-variant type.
-          ":$mojolpm_generator_target_name",
-          ":$mojolpm_proto_target_name",
-          "//base",
-          "//mojo/public/tools/fuzzers:mojolpm",
-        ]
-
-        foreach(d, all_deps) {
-          # Resolve the name, so that a target //mojo/something becomes
-          # //mojo/something:something and we can append variant_suffix to
-          # get the cpp dependency name.
-          full_name = get_label_info("$d", "label_no_toolchain")
-          public_deps += [ "${full_name}_mojolpm" ]
-        }
-
-        foreach(config, cpp_typemap_configs) {
-          if (defined(config.traits_deps)) {
-            deps += config.traits_deps
-          }
-          if (defined(config.traits_public_deps)) {
-            public_deps += config.traits_public_deps
-          }
-        }
-      }
-    }
-
     # Write the typemapping configuration for this target out to a file to be
     # validated by a Python script. This helps catch mistakes that can't
     # be caught by logic in GN.
@@ -1470,6 +1452,7 @@ template("mojom") {
     _mojom_target_name = target_name
 
     action(_typemap_validator_target_name) {
+      # allow_remote = true
       script = "$mojom_generator_root/validate_typemap_config.py"
       inputs = [ _typemap_config_filename ]
       outputs = [ _typemap_stamp_filename ]
@@ -1481,6 +1464,7 @@ template("mojom") {
     }
 
     action(type_mappings_target_name) {
+      # allow_remote = true
       inputs =
           mojom_generator_sources + jinja2_sources + [ _typemap_stamp_filename ]
       outputs = [ type_mappings_path ]
@@ -1563,7 +1547,10 @@ template("mojom") {
       if (defined(output_name_override)) {
         output_name = output_name_override
       }
-      visibility = output_visibility + [ ":$output_target_name" ]
+      visibility = output_visibility + [
+                     ":$output_target_name",
+                     ":${target_name}_mojolpm",
+                   ]
       if (defined(invoker.testonly)) {
         testonly = invoker.testonly
       }
@@ -1653,6 +1640,75 @@ template("mojom") {
       if (defined(bindings_configuration.for_blink) &&
           bindings_configuration.for_blink) {
         public_deps += [ "//mojo/public/cpp/bindings:wtf_support" ]
+      }
+    }
+
+    if (generate_fuzzing && !defined(variant)) {
+      # This block contains the C++ targets for the MojoLPM fuzzer, we need to
+      # do this here so that we can use the typemap configuration for the
+      # empty-variant Mojo target.
+
+      mojolpm_target_name = "${target_name}_mojolpm"
+      mojolpm_generator_target_name = "${target_name}__generator"
+      source_set(mojolpm_target_name) {
+        # There are still a few missing header dependencies between mojo targets
+        # with typemaps and the dependencies of their typemap headers. It would
+        # be good to enable include checking for these in the future though.
+        check_includes = false
+        testonly = true
+        if (defined(invoker.sources)) {
+          # Split the input into generated and non-generated source files. They
+          # need to be processed separately.
+          gen_dir_path_wildcard = get_path_info("//", "gen_dir") + "/*"
+          non_gen_sources =
+              filter_exclude(invoker.sources, [ gen_dir_path_wildcard ])
+          gen_sources =
+              filter_include(invoker.sources, [ gen_dir_path_wildcard ])
+          sources = process_file_template(
+                  non_gen_sources,
+                  [
+                    "{{source_gen_dir}}/{{source_file_part}}-mojolpm.cc",
+                    "{{source_gen_dir}}/{{source_file_part}}-mojolpm.h",
+                  ])
+          sources += process_file_template(
+                  gen_sources,
+                  [
+                    "{{source_dir}}/{{source_file_part}}-mojolpm.cc",
+                    "{{source_dir}}/{{source_file_part}}-mojolpm.h",
+                  ])
+          deps = [ ":$output_target_name" ]
+        } else {
+          sources = []
+          deps = []
+        }
+
+        public_deps = [
+          ":$generator_shared_target_name",
+
+          # NB: hardcoded dependency on the no-variant variant generator, since
+          # mojolpm only uses the no-variant type.
+          ":$mojolpm_generator_target_name",
+          ":$mojolpm_proto_target_name",
+          "//base",
+          "//mojo/public/tools/fuzzers:mojolpm",
+        ]
+
+        foreach(d, all_deps) {
+          # Resolve the name, so that a target //mojo/something becomes
+          # //mojo/something:something and we can append variant_suffix to
+          # get the cpp dependency name.
+          full_name = get_label_info("$d", "label_no_toolchain")
+          public_deps += [ "${full_name}_mojolpm" ]
+        }
+
+        foreach(config, cpp_typemap_configs) {
+          if (defined(config.traits_deps)) {
+            deps += config.traits_deps
+          }
+          if (defined(config.traits_public_deps)) {
+            public_deps += config.traits_public_deps
+          }
+        }
       }
     }
 
@@ -1748,6 +1804,80 @@ template("mojom") {
     }
   }
 
+  if (defined(invoker.webui_js_bridge_config)) {
+    if (sources_list != []) {
+      bridge_config = invoker.webui_js_bridge_config
+
+      generator_webui_js_bridge_impl_target_name =
+          "${target_name}_webui_js_bridge_impl__generator"
+      action(generator_webui_js_bridge_impl_target_name) {
+        visibility = [ ":*" ]
+        script = mojom_generator_script
+        inputs = mojom_generator_sources + jinja2_sources
+        sources = sources_list
+
+        deps = [
+          ":$parser_target_name",
+          "//mojo/public/tools/bindings:precompile_templates",
+        ]
+
+        filelist = []
+        foreach(source, sources_list) {
+          filelist += [ rebase_path(source, root_build_dir) ]
+        }
+
+        outputs = []
+        foreach(base_path, output_file_base_paths) {
+          outputs += [
+            "$root_gen_dir/${base_path}-webui-js-bridge-impl.cc",
+            "$root_gen_dir/${base_path}-webui-js-bridge-impl.h",
+          ]
+        }
+
+        response_file_contents = filelist
+
+        args = common_generator_args + export_args
+        args += [
+          "--filelist={{response_file_name}}",
+          "-g",
+          "webui_js_bridge",
+        ]
+
+        rebased_webui_controller_header =
+            rebase_path(bridge_config.webui_controller_header, "//")
+
+        # Use a single string for the argument to avoid it being parsed as a
+        # filename by the mojom_bindings_generator.py argument parser.
+        config_arg =
+            "--webui_js_bridge_config=" + bridge_config.webui_controller + "=" +
+            rebased_webui_controller_header
+
+        args += [ config_arg ]
+      }
+
+      cpp_target_name = target_name
+      source_set("${target_name}_webui_js_bridge_impl") {
+        if (defined(invoker.testonly)) {
+          testonly = invoker.testonly
+        }
+
+        sources = []
+        foreach(base_path, output_file_base_paths) {
+          sources += [
+            "$root_gen_dir/${base_path}-webui-js-bridge-impl.cc",
+            "$root_gen_dir/${base_path}-webui-js-bridge-impl.h",
+          ]
+        }
+        deps = [
+          ":$cpp_target_name",
+          ":$generator_webui_js_bridge_impl_target_name",
+        ]
+
+        deps += bridge_config.webui_controller_deps
+      }
+    }
+  }
+
   use_typescript_for_target =
       defined(invoker.use_typescript_sources) &&
       invoker.use_typescript_sources && defined(invoker.webui_module_path)
@@ -1756,8 +1886,17 @@ template("mojom") {
     not_needed(invoker, [ "use_typescript_sources" ])
   }
 
-  if ((generate_fuzzing || !defined(invoker.cpp_only) || !invoker.cpp_only) &&
-      !use_typescript_for_target) {
+  generate_legacy_js = !use_typescript_for_target ||
+                       (defined(invoker.generate_legacy_js_bindings) &&
+                        invoker.generate_legacy_js_bindings)
+
+  # Targets needed by both TS and JS bindings targets. These are needed
+  # unconditionally for JS bindings targets, and are needed for TS bindings
+  # targets when generate_legacy_js_bindings is true. This option is provided
+  # since the legacy bindings are needed by Blink tests and non-Chromium users,
+  # which are not expected to migrate to modules or TypeScript.
+  if (generate_legacy_js &&
+      (generate_fuzzing || !defined(invoker.cpp_only) || !invoker.cpp_only)) {
     if (sources_list != []) {
       generator_js_target_name = "${target_name}_js__generator"
 
@@ -1786,7 +1925,8 @@ template("mojom") {
             "$root_gen_dir/$base_path-lite-for-compile.js",
           ]
 
-          if (defined(invoker.webui_module_path)) {
+          if (defined(invoker.webui_module_path) &&
+              !use_typescript_for_target) {
             outputs += [ "$root_gen_dir/mojom-webui/$base_path-webui.js" ]
           }
         }
@@ -1854,31 +1994,13 @@ template("mojom") {
         data_deps += [ "${full_name}_js_data_deps" ]
       }
     }
+  }
 
-    js_library_target_name = "${target_name}_js_library"
-    if (sources_list != []) {
-      js_library(js_library_target_name) {
-        extra_public_deps = [ ":$generator_js_target_name" ]
-        sources = []
-        foreach(base_path, output_file_base_paths) {
-          sources += [ "$root_gen_dir/${base_path}-lite.js" ]
-        }
-        externs_list = [
-          "${externs_path}/mojo_core.js",
-          "${externs_path}/pending.js",
-        ]
-
-        deps = []
-        foreach(d, all_deps) {
-          full_name = get_label_info(d, "label_no_toolchain")
-          deps += [ "${full_name}_js_library" ]
-        }
-      }
-    } else {
-      group(js_library_target_name) {
-      }
-    }
-
+  # js_library() closure compiler targets, primarily used on ChromeOS. Only
+  # generate these targets if the mojom target is not C++ only and is not using
+  # TypeScript.
+  if (generate_mojom_closure_libraries &&
+      (!defined(invoker.cpp_only) || !invoker.cpp_only) && generate_legacy_js) {
     js_library_for_compile_target_name = "${target_name}_js_library_for_compile"
     if (sources_list != []) {
       js_library(js_library_for_compile_target_name) {
@@ -1905,35 +2027,9 @@ template("mojom") {
       }
     }
 
-    js_modules_target_name = "${target_name}_js_modules"
-    if (sources_list != []) {
-      js_library(js_modules_target_name) {
-        extra_public_deps = [ ":$generator_js_target_name" ]
-        sources = []
-        foreach(base_path, output_file_base_paths) {
-          sources += [ "$root_gen_dir/${base_path}.m.js" ]
-        }
-        externs_list = [
-          "${externs_path}/mojo_core.js",
-          "${externs_path}/pending.js",
-        ]
-        if (defined(invoker.disallow_native_types) &&
-            invoker.disallow_native_types) {
-          deps = []
-        } else {
-          deps = [ "//mojo/public/js:bindings_uncompiled" ]
-        }
-        foreach(d, all_deps) {
-          full_name = get_label_info(d, "label_no_toolchain")
-          deps += [ "${full_name}_js_modules" ]
-        }
-      }
-    } else {
-      group(js_modules_target_name) {
-      }
-    }
-
-    if (defined(invoker.webui_module_path)) {
+    # WebUI specific closure targets, not needed by targets that are generating
+    # TypeScript WebUI bindings or by legacy-only targets.
+    if (defined(invoker.webui_module_path) && !use_typescript_for_target) {
       webui_js_target_name = "${target_name}_webui_js"
       if (sources_list != []) {
         js_library(webui_js_target_name) {
@@ -2025,26 +2121,6 @@ template("mojom") {
         # TODO(crbug.com/1007591): Support generate_fuzzing.
       }
     }
-
-    ts_target_name = target_name + "_ts"
-    group(ts_target_name) {
-      public_deps = []
-      if (sources_list != []) {
-        public_deps += [ ":$generator_ts_target_name" ]
-      }
-
-      foreach(d, all_deps) {
-        full_name = get_label_info(d, "label_no_toolchain")
-        public_deps += [ "${full_name}_js" ]
-      }
-    }
-
-    # Use |js_target_name| to track dependencies since TS targets may depend on
-    # either TS or JS targets.
-    js_target_name = target_name + "_js"
-    group(js_target_name) {
-      public_deps = [ ":$ts_target_name" ]
-    }
   }
 }
 
@@ -2065,5 +2141,55 @@ template("mojom_component") {
                            ])
     component_output_prefix = invoker.output_prefix
     component_macro_prefix = invoker.macro_prefix
+  }
+}
+
+# A helper for the mojom() template above for defining a WebUIJsBridge.
+# Supports all the same arguments as mojom() except for `sources` and adds
+# `source`, `webui_controller`, `webui_controller_header`, and
+# `webui_controller_deps` which are *required*. See below for more details.
+#
+# A WebUIJsBridge is a Mojo interface that contains binders for all interfaces
+# that can be bound from a WebUI's JavaScript. This taret
+# will generate a C++ implementation of the WebUIJsBridge interface
+# and a {target_name}_webui_js_bridge_impl target that can be depended
+# on.
+#
+# The following arguments are required:
+#  - `source`: The mojom file that defines the WebUIJsBridge interface. It's
+#    allowed to define other interfaces.
+#  - `webui_controller`: The name of the WebUIController associated with the
+#    WebUIJsBridge.
+#  - `webui_controller_header`: The header where the WebUIController
+#    is declared.
+#  - `webui_controller_deps`: The target containing the WebUIController.
+template("mojom_with_webui_js_bridge") {
+  assert(defined(invoker.source))
+  assert(defined(invoker.webui_controller),
+         "mojom_with_webui_js_bridge should have a " +
+             "`webui_controller` parameter e.g. `foo::FooUI`.")
+  assert(defined(invoker.webui_controller_header),
+         "mojom_with_webui_js_bridge should have a " +
+             "`webui_controller_header` parameter.")
+  assert(defined(invoker.webui_controller_deps),
+         "mojom_with_webui_js_bridge should have a " +
+             "`webui_controller_deps` parameter.")
+
+  mojom(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "source",
+                             "webui_controller",
+                             "webui_controller_header",
+                             "webui_controller_deps",
+                           ])
+    sources = [ invoker.source ]
+
+    webui_js_bridge_config = {
+      webui_controller = invoker.webui_controller
+      webui_controller_header = invoker.webui_controller_header
+      webui_controller_deps = invoker.webui_controller_deps
+    }
   }
 }

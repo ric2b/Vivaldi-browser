@@ -11,10 +11,11 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
+#include "base/time/time.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/sync/driver/trusted_vault_histograms.h"
 #include "components/sync/protocol/local_trusted_vault.pb.h"
@@ -53,6 +54,16 @@ class StandaloneTrustedVaultBackend
     Delegate& operator=(const Delegate&) = delete;
 
     virtual void NotifyRecoverabilityDegradedChanged() = 0;
+  };
+
+  enum class RefreshTokenErrorState {
+    // State can not be identified (e.g. refresh token is not loaded yet).
+    kUnknown,
+    // Refresh token is in persistent auth error state.
+    kPersistentAuthError,
+    // There are no persistent auth errors (note, that transient errors are
+    // still possible).
+    kNoPersistentAuthErrors,
   };
 
   // |connection| can be null, in this case functionality that involves
@@ -98,7 +109,7 @@ class StandaloneTrustedVaultBackend
 
   // Sets/resets |primary_account_|.
   void SetPrimaryAccount(const absl::optional<CoreAccountInfo>& primary_account,
-                         bool has_persistent_auth_error);
+                         RefreshTokenErrorState refresh_token_error_state);
 
   // Handles changes of accounts in cookie jar and removes keys for some
   // accounts:
@@ -138,6 +149,12 @@ class StandaloneTrustedVaultBackend
   bool HasPendingTrustedRecoveryMethodForTesting() const;
 
   bool AreConnectionRequestsThrottledForTesting();
+
+  // Specifies how long requests shouldn't be retried after encountering
+  // transient error. Note, that this doesn't affect requests related to
+  // degraded recoverability.
+  // Exposed for testing.
+  static constexpr base::TimeDelta kThrottlingDuration = base::Days(1);
 
  private:
   friend class base::RefCountedThreadSafe<StandaloneTrustedVaultBackend>;
@@ -179,8 +196,6 @@ class StandaloneTrustedVaultBackend
   void OnTrustedRecoveryMethodAdded(base::OnceClosure cb,
                                     TrustedVaultRegistrationStatus status);
 
-  void AbandonConnectionRequest();
-
   void FulfillOngoingFetchKeys(
       absl::optional<TrustedVaultDownloadKeysStatusForUMA> status_for_uma);
 
@@ -210,8 +225,9 @@ class StandaloneTrustedVaultBackend
   // Used for communication with trusted vault server. Can be null, in this case
   // functionality that involves interaction with vault service (such as device
   // registration, keys downloading, etc.) will be disabled.
-  // TODO(crbug.com/1113598): clean up logic around nullable |connection_|, once
-  // kFollowTrustedVaultKeyRotation feature flag is removed.
+  // TODO(crbug.com/1113598): |connection_| can be null if URL passed as
+  // kTrustedVaultServiceURL is not valid, consider making it non-nullable even
+  // in this case and clean up related logic.
   const std::unique_ptr<TrustedVaultConnection> connection_;
 
   sync_pb::LocalTrustedVault data_;
@@ -220,8 +236,9 @@ class StandaloneTrustedVaultBackend
   // vault server.
   absl::optional<CoreAccountInfo> primary_account_;
 
-  // Whether |primary_account_| has a persistent auth error.
-  bool has_persistent_auth_error_ = false;
+  // Error state of refresh token for |primary_account_|.
+  RefreshTokenErrorState refresh_token_error_state_ =
+      StandaloneTrustedVaultBackend::RefreshTokenErrorState::kUnknown;
 
   // If AddTrustedRecoveryMethod() gets invoked before SetPrimaryAccount(), the
   // execution gets deferred until SetPrimaryAccount() is invoked.
@@ -241,6 +258,8 @@ class StandaloneTrustedVaultBackend
   };
   absl::optional<PendingTrustedRecoveryMethod> pending_trusted_recovery_method_;
 
+  // TODO(crbug.com/1413179): introduce a struct for ongoing/deferred
+  // FetchKeys().
   // Used to plumb FetchKeys() result to the caller.
   FetchKeysCallback ongoing_fetch_keys_callback_;
 
@@ -248,7 +267,10 @@ class StandaloneTrustedVaultBackend
   absl::optional<std::string> ongoing_fetch_keys_gaia_id_;
 
   // Destroying this will cancel the ongoing request.
-  std::unique_ptr<TrustedVaultConnection::Request> ongoing_connection_request_;
+  std::unique_ptr<TrustedVaultConnection::Request>
+      ongoing_device_registration_request_;
+  std::unique_ptr<TrustedVaultConnection::Request>
+      ongoing_keys_downloading_request_;
   std::unique_ptr<TrustedVaultConnection::Request>
       ongoing_verify_registration_request_;
 

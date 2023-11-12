@@ -16,6 +16,7 @@
 <translation id="1128128132059598906">EAP-TTLS</translation>
 <translation id="1145018782460575098">Fereastra de actualizare a firmware-ului pentru dispozitivele externe este deschisă. <ph name="NUM_UPDATES" /> actualizări disponibile.</translation>
 <translation id="1145516343487477149">Găsește articole de ajutor și răspunsuri la întrebările frecvente despre Chromebookuri</translation>
+<translation id="1167755866710282443">Deschide meniul pentru a personaliza tastele. Trage meniul pentru a muta.</translation>
 <translation id="1175697296044146566">Acest <ph name="DEVICE_TYPE" /> este gestionat de <ph name="MANAGER" />.</translation>
 <translation id="1175951029573070619">Medie (<ph name="SIGNAL_STRENGTH" />)</translation>
 <translation id="1181037720776840403">Elimină</translation>
@@ -116,6 +117,7 @@
 <translation id="1908234395526491708">Erori de solicitare UDP</translation>
 <translation id="1947737735496445907">Printată</translation>
 <translation id="1951012854035635156">Asistent</translation>
+<translation id="1962550982027027473">Este necesar un APN prestabilit</translation>
 <translation id="1977994649430373166">Fotografie de profil Google</translation>
 <translation id="1979103255016296513">Ai depășit timpul limită pentru schimbarea parolei</translation>
 <translation id="1999615961760456652">Portal captiv</translation>
@@ -195,6 +197,7 @@
 <translation id="2713444072780614174">Alb</translation>
 <translation id="2717139507051041123">Activează modul de culoare închisă</translation>
 <translation id="2740531572673183784">OK</translation>
+<translation id="2744221223678373668">Comune</translation>
 <translation id="2751739896257479635">Autentificare EAP din a doua fază</translation>
 <translation id="2783010256799387990">REUȘIT</translation>
 <translation id="2789486458103222910">OK</translation>
@@ -235,6 +238,7 @@
 <translation id="3226405216343213872">Se caută scanere</translation>
 <translation id="3246869037381808805">Sarcinile de printare mai vechi de o zi vor fi eliminate</translation>
 <translation id="3268178239013324452">Nereușită – Ușă deschisă</translation>
+<translation id="3275506277319227640">Andochează pe <ph name="DIRECTION" /></translation>
 <translation id="3275729367986477355">Imagine avatar</translation>
 <translation id="3283504360622356314">{0,plural, =1{Editează fișierul}few{Editează fișierele}other{Editează fișierele}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
@@ -250,6 +254,7 @@
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" />%</translation>
 <translation id="3435738964857648380">Securitate</translation>
 <translation id="3435896845095436175">Activează</translation>
+<translation id="345256797477978759">Andochează fereastra în partea <ph name="DIRECTION" /> mai mare a ecranului</translation>
 <translation id="3456078764689556234">S-a printat pagina <ph name="PRINTED_PAGES" /> din <ph name="TOTAL_PAGES" />.</translation>
 <translation id="345898999683440380">Se scanează pagina <ph name="PAGE_NUM" />. Progres: <ph name="PERCENTAGE_VALUE" /> %.</translation>
 <translation id="3459509316159669723">Printare</translation>
@@ -269,12 +274,15 @@
 <translation id="3583278742022654445">Semnal slab. Apropie-te de sursa semnalului Wi-Fi.</translation>
 <translation id="3595596368722241419">Baterie încărcată</translation>
 <translation id="3600339377155080675">Oglindirea ecranului</translation>
+<translation id="3602290021589620013">Previzualizare</translation>
+<translation id="360282891121575443">Fotografiile din albumele comune pot fi actualizate de alți utilizatori. Schimbarea zilnică poate afișa imagini de fundal care nu se află în album.</translation>
 <translation id="3603829704940252505">Avatar</translation>
 <translation id="3604713164406837697">Schimbă imaginea de fundal</translation>
 <translation id="360565022852130722">Rețeaua Wi-Fi este securizată cu protocolul slab WEP 802.1x</translation>
 <translation id="3606583719724308068">Latență mare pe site-urile HTTPS</translation>
 <translation id="361575905210396100">Îți mulțumim pentru feedback</translation>
 <translation id="3632579075709132555">Activarea / dezactivarea ecranului de confidențialitate</translation>
+<translation id="3639846061339007994">sus</translation>
 <translation id="3651050199673793219">Selectează o unitate de temperatură</translation>
 <translation id="3689839747745352263">Testul <ph name="TEST_NAME" /></translation>
 <translation id="370665806235115550">Se încarcă…</translation>
@@ -292,6 +300,7 @@
 <translation id="385051799172605136">Înapoi</translation>
 <translation id="3858860766373142691">Nume</translation>
 <translation id="3862598938296403232">Descrierea este obligatorie</translation>
+<translation id="3865289341173661845">Conținutul de ajutor nu este disponibil.</translation>
 <translation id="3865414814144988605">Rezoluție</translation>
 <translation id="3866249974567520381">Descriere</translation>
 <translation id="387301095347517405">Numărul de cicluri complete de încărcare a bateriei</translation>
@@ -314,12 +323,15 @@
 <translation id="4044093238444069296">Nu se poate contacta gateway-ul</translation>
 <translation id="4046123991198612571">Melodia următoare</translation>
 <translation id="404928562651467259">AVERTISMENT</translation>
+<translation id="4054683689023980771">Se descarcă imaginea</translation>
 <translation id="4060260348856573701">APN nou</translation>
 <translation id="4093865285251893588">Imagine de profil</translation>
 <translation id="409427325554347132">Salvează detaliile testului</translation>
+<translation id="4095829376260267438">WPA2 / WPA3</translation>
 <translation id="4110686435123617899">Selectează albumul <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">Touchpad USB</translation>
 <translation id="4117637339509843559">Modul întunecat</translation>
+<translation id="4130035430755296270">Plasează cursorul pentru mai multe opțiuni de aspect</translation>
 <translation id="4131410914670010031">Alb-negru</translation>
 <translation id="4145784616224233563">Firewall HTTP</translation>
 <translation id="4147897805161313378">Google Foto</translation>
@@ -345,6 +357,7 @@
 <translation id="4311195029067684288">Maxim</translation>
 <translation id="4333390807948134856">A fost apăsată tasta <ph name="KEY_NAME" /></translation>
 <translation id="435692326371619097">Gestionează setările APN ale rețelei. APN-urile stabilesc o conexiune între o rețea de date mobile și internet. <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
+<translation id="4370033095251616914">Andochează pe partea mai mică</translation>
 <translation id="4378373042927530923">Nu a rulat</translation>
 <translation id="4378551569595875038">Se conectează</translation>
 <translation id="4382484599443659549">PDF</translation>
@@ -408,6 +421,7 @@
 <translation id="484790837831576105">(Android) Rezolvare DNS</translation>
 <translation id="4848429997038228357">RULEAZĂ</translation>
 <translation id="4854586501323951986">Ecran tactil încorporat</translation>
+<translation id="4855250849489639581">Glisează în jos pentru mai multe opțiuni de aspect</translation>
 <translation id="4861758251032006121">{ATTEMPTS_LEFT,plural, =1{<ph name="ERROR_MESSAGE" /> {0} încercare rămasă}few{<ph name="ERROR_MESSAGE" /> {0} încercări rămase}other{<ph name="ERROR_MESSAGE" /> {0} de încercări rămase}}</translation>
 <translation id="4873827928179867585">Algoritm de autentificare</translation>
 <translation id="4880328057631981605">Nume punct de acces</translation>
@@ -447,8 +461,6 @@
 <translation id="5168185087976003268">Buna funcționare a bateriei:</translation>
 <translation id="5170568018924773124">Afișează în dosar</translation>
 <translation id="5190187232518914472">Retrăiește amintirile preferate. Pentru a adăuga sau a edita albume, accesează <ph name="LINK_BEGIN" />Google Foto<ph name="LINK_END" />.</translation>
-<translation id="5212543919916444558">Nu găsesc conținut pe ecran în privința căruia te-aș putea ajuta.
-Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="5212593641110061691">Tabloid</translation>
 <translation id="5222676887888702881">Deconectează-te</translation>
 <translation id="522307662484862935">Nu include adresa de e-mail</translation>
@@ -513,6 +525,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="576835345334454681">Creșterea luminozității ecranului</translation>
 <translation id="57838592816432529">Dezactivează sunetul</translation>
 <translation id="5784136236926853061">Latență mare a solicitărilor HTTP</translation>
+<translation id="5826644637650799838">Despre lucrarea de artă</translation>
 <translation id="5832805196449965646">Adăugați un utilizator</translation>
 <translation id="583281660410589416">Necunoscut</translation>
 <translation id="5843706793424741864">Fahrenheit</translation>
@@ -621,6 +634,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="6657585470893396449">Parolă</translation>
 <translation id="6659594942844771486">Filă</translation>
 <translation id="6692996468359469499">Obține informații despre selecție</translation>
+<translation id="6698459586333070823">Albumele comune pot fi actualizate de alți utilizatori</translation>
 <translation id="6704062477274546131">Rezolvare DNS</translation>
 <translation id="6723839937902243910">Alimentare</translation>
 <translation id="6723847290197874913">Retroiluminarea tastaturii</translation>
@@ -635,6 +649,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="6791471867139427246">culoarea iluminării tastaturii</translation>
 <translation id="680983167891198932">Cheie</translation>
 <translation id="6816797338148849397">Sunt disponibile informații despre selecția ta. Folosește tasta săgeată în sus pentru a le accesa.</translation>
+<translation id="6838167112108853532">Nu se poate dezactiva sau elimina acest APN. Asigură-te că APN-urile atașate sunt dezactivate sau eliminate.</translation>
 <translation id="6853312040151791195">Rata de descărcare</translation>
 <translation id="6889786074662672253">Nu deconecta dispozitivul extern și nu închide computerul în timpul repornirii. Poți să minimizezi fereastra. Actualizarea poate să dureze câteva minute și este posibil ca dispozitivul extern să nu funcționeze în această perioadă.</translation>
 <translation id="6905724422583748843">Înapoi la <ph name="PAGE_NAME" /></translation>
@@ -665,9 +680,11 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="7155171745945906037">Fotografie existentă din camera foto sau din fișier</translation>
 <translation id="7162487448488904999">Galerie</translation>
 <translation id="7170236477717446850">Fotografie de profil</translation>
+<translation id="7171919371520438592">Andochează fereastra pe porțiunea <ph name="DIRECTION" /> mai mică a ecranului</translation>
 <translation id="7172721935181587524">O imagine</translation>
 <translation id="7177485034254901881">Acest <ph name="DEVICE_TYPE" /> este gestionat de <ph name="MANAGER" />. Administratorii pot să configureze dispozitivul de la distanță.</translation>
 <translation id="7180611975245234373">Actualizați</translation>
+<translation id="7180865173735832675">Personalizează</translation>
 <translation id="7212734716605298123">Actualizări de firmware pentru dispozitive externe</translation>
 <translation id="7216409898977639127">Furnizor de date mobile</translation>
 <translation id="725133483556299729">Selectează adresa de e-mail</translation>
@@ -700,6 +717,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="7497215489070763236">Certificat CA de server</translation>
 <translation id="7502658306369382406">Adresă IPv6</translation>
 <translation id="7515998400212163428">Android</translation>
+<translation id="7528507600602050979">Conținutul de ajutor nu este disponibil</translation>
 <translation id="7535791657097741517">Activează tema luminoasă</translation>
 <translation id="7550715992156305117">Rutine de diagnosticare</translation>
 <translation id="7551123448725492271">Dispozitivul este un dispozitiv audio.</translation>
@@ -717,6 +735,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="7690294790491645610">Confirmă noua parolă</translation>
 <translation id="7701040980221191251">Niciuna</translation>
 <translation id="7705524343798198388">VPN</translation>
+<translation id="7716280709122323042">WPA3</translation>
 <translation id="773153675489693198">Numărul de cicluri</translation>
 <translation id="7747039790905080783">Cheie predistribuită</translation>
 <translation id="7762130827864645708">Parola a fost schimbată. Folosește noua parolă de acum înainte.</translation>
@@ -724,6 +743,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="7769672763586021400">ID-ul modelului</translation>
 <translation id="7778717409420828014">Feedbackul tău ne ajută să îmbunătățim experiența Chromebookurilor și va fi examinat de echipa noastră. Din cauza numărului mare de rapoarte, nu vom putea să trimitem un răspuns.</translation>
 <translation id="7784116172884276937">Nu există servere DNS configurate</translation>
+<translation id="7791543448312431591">Adaugă</translation>
 <translation id="779591286616261875">Trimite un raport nou</translation>
 <translation id="7799817062559422778">Modul Luminos</translation>
 <translation id="780301667611848630">Nu, mulțumesc</translation>
@@ -736,6 +756,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Tip furnizor</translation>
 <translation id="7882501334836096755">Cheie publică</translation>
+<translation id="78957024357676568">stânga</translation>
 <translation id="7915220255123750251">Gestionează setările APN ale rețelei. APN-urile stabilesc o conexiune între o rețea de date mobile și internet.</translation>
 <translation id="7936303884198020182">Nu s-au găsit servere de nume</translation>
 <translation id="7942349550061667556">Roșu</translation>
@@ -764,9 +785,11 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="8183974620058026102">Atașează</translation>
 <translation id="8206859287963243715">Celular</translation>
 <translation id="8208861521865154048">Avantaje</translation>
+<translation id="8210733748736414123">jos</translation>
 <translation id="8226628635270268143">Alege fotografiile și albumele preferate</translation>
 <translation id="8227119283605456246">Atașează un fișier</translation>
 <translation id="8230672074305416752">Nu s-a putut da ping către gateway-ul de rețea prestabilit</translation>
+<translation id="8242426110754782860">Continuă</translation>
 <translation id="8246209727385807362">Operator necunoscut</translation>
 <translation id="827422111966801947">Indigo</translation>
 <translation id="8286154143153872371">Conectează-te la o rețea și reîncarcă pagina pentru a vedea imaginea de fundal.</translation>
@@ -780,6 +803,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="8352772353338965963">Adăugați un cont pentru conectarea multiplă. Conturile conectate pot fi accesate fără parolă, prin urmare, această funcție trebuie folosită numai cu conturile de încredere.</translation>
 <translation id="8364946094152050673">Serverele de nume sunt goale</translation>
 <translation id="8372477600026034341">Gazde suplimentare</translation>
+<translation id="8380114448424469341">Andochează fereastra pe jumătatea <ph name="DIRECTION" /> din ecran</translation>
 <translation id="8395584934117017006">Acest <ph name="DEVICE_TYPE" /> este gestionat de companie</translation>
 <translation id="8398927464629426868">Rata de încărcare sau de descărcare a dispozitivului</translation>
 <translation id="8410244574650205435">Detectat automat</translation>
@@ -799,6 +823,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="8503836310948963452">Mai sunt câteva minute…</translation>
 <translation id="8508640263392900755">Detalii APN</translation>
 <translation id="8528615187455571738">Crosvm</translation>
+<translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Operatorul poate solicita această opțiune ca să te conectezi la rețeaua respectivă. Contactează operatorul pentru detalii.</translation>
 <translation id="8576249514688522074">Neinițializată</translation>
 <translation id="8620617069779373398">Stare roaming</translation>
@@ -843,6 +868,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="8930622219860340959">Wireless</translation>
 <translation id="8936793075252196307">Adresa IP a clientului</translation>
 <translation id="894617464444543719">Dispozitivul este un telefon.</translation>
+<translation id="8957423540740801332">dreapta</translation>
 <translation id="8968751544471797276">Rata de încărcare</translation>
 <translation id="8970109610781093811">Rulați din nou</translation>
 <translation id="8983038754672563810">HSPA</translation>
@@ -870,6 +896,7 @@ Atinge microfonul și întreabă orice dorești.</translation>
 <translation id="9137526406337347448">Google Services</translation>
 <translation id="9138630967333032450">Shift din stânga</translation>
 <translation id="9149391708638971077">Rulează testul Memorie</translation>
+<translation id="9157515863513902090">Andochează pe latura mai mare</translation>
 <translation id="9173638680043580060">A rămas mai puțin de un minut</translation>
 <translation id="917720651393141712">Testează</translation>
 <translation id="9188992814426075118">Tastatura se poate potrivi automat cu imaginea de fundal</translation>

@@ -9,10 +9,12 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_future.h"
 #include "chrome/browser/apps/app_preload_service/device_info_manager.h"
 #include "chrome/browser/apps/app_preload_service/preload_app_definition.h"
 #include "chrome/browser/apps/app_preload_service/proto/app_provisioning.pb.h"
+#include "components/version_info/channel.h"
 #include "content/public/test/browser_task_environment.h"
 #include "net/http/http_request_headers.h"
 #include "services/network/public/cpp/resource_request.h"
@@ -23,6 +25,13 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+
+namespace {
+
+constexpr char kServerRoundTripHistogram[] =
+    "AppPreloadService.ServerRoundTripTimeForFirstLogin";
+
+}  // namespace
 
 namespace apps {
 
@@ -36,8 +45,8 @@ class AppPreloadServerConnectorTest : public testing::Test {
  protected:
   network::TestURLLoaderFactory url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> test_shared_loader_factory_;
-
   AppPreloadServerConnector server_connector_;
+  base::HistogramTester histograms_;
 
  private:
   content::BrowserTaskEnvironment task_environment_;
@@ -50,6 +59,7 @@ TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginRequest) {
   device_info.user_type = "unmanaged";
   device_info.version_info.ash_chrome = "10.10.10";
   device_info.version_info.platform = "12345.0.0";
+  device_info.version_info.channel = version_info::Channel::STABLE;
   device_info.locale = "en-US";
 
   std::string method;
@@ -84,6 +94,8 @@ TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginRequest) {
             apps::proto::AppProvisioningListAppsRequest::USERTYPE_UNMANAGED);
   EXPECT_EQ(request.chrome_os_version().ash_chrome(), "10.10.10");
   EXPECT_EQ(request.chrome_os_version().platform(), "12345.0.0");
+  EXPECT_EQ(request.chrome_os_version().channel(),
+            apps::proto::AppProvisioningListAppsRequest::CHANNEL_STABLE);
 }
 
 TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginSuccessfulResponse) {
@@ -103,6 +115,8 @@ TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginSuccessfulResponse) {
   EXPECT_TRUE(apps.has_value());
   EXPECT_EQ(apps->size(), 1u);
   EXPECT_EQ(apps.value()[0].GetName(), "Peanut Types");
+
+  histograms_.ExpectTotalCount(kServerRoundTripHistogram, 1);
 }
 
 TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginServerError) {
@@ -115,6 +129,8 @@ TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginServerError) {
   server_connector_.GetAppsForFirstLogin(
       DeviceInfo(), test_shared_loader_factory_, result.GetCallback());
   EXPECT_FALSE(result.Get().has_value());
+
+  histograms_.ExpectTotalCount(kServerRoundTripHistogram, 0);
 }
 
 TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginNetworkError) {
@@ -128,6 +144,8 @@ TEST_F(AppPreloadServerConnectorTest, GetAppsForFirstLoginNetworkError) {
   server_connector_.GetAppsForFirstLogin(
       DeviceInfo(), test_shared_loader_factory_, result.GetCallback());
   EXPECT_FALSE(result.Get().has_value());
+
+  histograms_.ExpectTotalCount(kServerRoundTripHistogram, 0);
 }
 
 }  // namespace apps

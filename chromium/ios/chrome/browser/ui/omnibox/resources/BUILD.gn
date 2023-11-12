@@ -13,33 +13,6 @@ imageset("omnibox_clear_icon") {
   ]
 }
 
-imageset("omnibox_completion_default_favicon") {
-  sources = [
-    "omnibox_completion_default_favicon.imageset/Contents.json",
-    "omnibox_completion_default_favicon.imageset/omnibox_completion_default_favicon.png",
-    "omnibox_completion_default_favicon.imageset/omnibox_completion_default_favicon@2x.png",
-    "omnibox_completion_default_favicon.imageset/omnibox_completion_default_favicon@3x.png",
-  ]
-}
-
-imageset("omnibox_completion_bookmark") {
-  sources = [
-    "omnibox_completion_bookmark.imageset/Contents.json",
-    "omnibox_completion_bookmark.imageset/omnibox_completion_bookmark.png",
-    "omnibox_completion_bookmark.imageset/omnibox_completion_bookmark@2x.png",
-    "omnibox_completion_bookmark.imageset/omnibox_completion_bookmark@3x.png",
-  ]
-}
-
-imageset("omnibox_completion_history") {
-  sources = [
-    "omnibox_completion_history.imageset/Contents.json",
-    "omnibox_completion_history.imageset/omnibox_completion_history.png",
-    "omnibox_completion_history.imageset/omnibox_completion_history@2x.png",
-    "omnibox_completion_history.imageset/omnibox_completion_history@3x.png",
-  ]
-}
-
 imageset("answer_calculator") {
   sources = [
     "answer_calculator.imageset/Contents.json",
@@ -79,13 +52,6 @@ imageset("answer_sunrise") {
     "answer_sunrise.imageset/answer_sunrise@3x.png",
   ]
 }
-imageset("answer_local_time") {
-  sources = [
-    "answer_local_time.imageset/Contents.json",
-    "answer_local_time.imageset/answer_local_time@2x.png",
-    "answer_local_time.imageset/answer_local_time@3x.png",
-  ]
-}
 
 imageset("answer_when_is") {
   sources = [
@@ -116,14 +82,6 @@ imageset("answer_translation") {
     "answer_translation.imageset/Contents.json",
     "answer_translation.imageset/answer_translation@2x.png",
     "answer_translation.imageset/answer_translation@3x.png",
-  ]
-}
-
-imageset("background_solid") {
-  sources = [
-    "background_solid.imageset/Contents.json",
-    "background_solid.imageset/background_solid@2x.png",
-    "background_solid.imageset/background_solid@3x.png",
   ]
 }
 

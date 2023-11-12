@@ -8,11 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
@@ -20,7 +20,7 @@
 #include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/single_thread_task_runner.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_path_override.h"
 #include "base/test/task_environment.h"
@@ -223,8 +223,8 @@ class ComponentInstallerTest : public testing::Test {
                 const UpdateScheduler::UserTask& user_task,
                 const UpdateScheduler::OnStopTaskCallback& on_stop);
 
-  const scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_ =
-      base::SingleThreadTaskRunner::GetCurrentDefault();
+  const scoped_refptr<base::SequencedTaskRunner> main_thread_task_runner_ =
+      base::SequencedTaskRunner::GetCurrentDefault();
   base::RunLoop runloop_;
 
   std::unique_ptr<TestingPrefServiceSimple> pref_ =

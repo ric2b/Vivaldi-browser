@@ -62,3 +62,7 @@ NSString* const kToolsMenuClearBrowsingData = @"kToolsMenuClearBrowsingData";
 NSString* const kToolsMenuShareChromeId = @"kToolsMenuShareChromeId";
 NSString* const kToolsMenuWhatsNewId = @"kToolsMenuWhatsNewId";
 NSString* const kToolsMenuPriceNotifications = @"kToolsMenuPriceNotifications";
+
+// Vivaldi
+NSString* const kToolsMenuAboutVivaldiId = @"kToolsMenuAboutVivaldiId";
+// End Vivaldi

@@ -96,26 +96,26 @@ bool TH_Codec::DecodeTextEntry(TH_Node::TextEntry& entry,
 }
 
 base::Value TH_Codec::Encode(NodeList& nodes) {
-  base::Value children = base::Value(base::Value::Type::LIST);
+  base::Value::List children;
   for (TH_Node* node : nodes) {
     base::Value child = EncodeNode(*node);
     children.Append(base::Value(std::move(child)));
   }
-  base::Value dict(base::Value::Type::DICTIONARY);
+  base::Value dict(base::Value::Type::DICT);
   dict.SetKey("format", base::Value("1"));
   dict.SetKey("children", base::Value(std::move(children)));
   return dict;
 }
 
 base::Value TH_Codec::EncodeNode(const TH_Node& node) {
-  base::Value src(base::Value::Type::DICTIONARY);
+  base::Value src(base::Value::Type::DICT);
   src.SetKey("code", base::Value(node.src().code));
   src.SetKey("text", base::Value(node.src().text));
-  base::Value translated(base::Value::Type::DICTIONARY);
+  base::Value translated(base::Value::Type::DICT);
   translated.SetKey("code", base::Value(node.translated().code));
   translated.SetKey("text", base::Value(node.translated().text));
 
-  base::Value dict(base::Value::Type::DICTIONARY);
+  base::Value dict(base::Value::Type::DICT);
   dict.SetKey("id", base::Value(node.id()));
   dict.SetKey("src", base::Value(std::move(src)));
   dict.SetKey("translated", base::Value(std::move(translated)));

@@ -7,6 +7,13 @@ module network.mojom;
 import "url/mojom/origin.mojom";
 import "mojo/public/mojom/base/time.mojom";
 
+// Supported Trust Token versions. A new item is added to this enum when a new
+// version is available. Version resolution will be carried based on the
+// version specified in TrustTokenParams.
+enum TrustTokenMajorVersion {
+  kPrivateStateTokenV1,
+};
+
 // TrustTokenProtocolVersion enumerates the versions of Trust Token that the
 // client knows about. Different versions represent different configuration
 // flows, data structure meanings, etc and may require clearing the database
@@ -119,9 +126,12 @@ enum TrustTokenSignRequestData {
 // operation.
 struct TrustTokenParams {
   // Required.
-  TrustTokenOperationType type;
+  TrustTokenMajorVersion version;
 
-  // Required exactly when "type" is "kRedemption"; specifies whether the
+  // Required.
+  TrustTokenOperationType operation;
+
+  // Required exactly when "operation" is "kRedemption"; specifies whether the
   // caller wishes to use a cached Redemption Record (RR) if available or
   // redeem a new token, evicting the RR currently stored.
   TrustTokenRefreshPolicy refresh_policy = kUseCached;
@@ -133,7 +143,7 @@ struct TrustTokenParams {
   // "custom_issuer" specifies what issuer to use for this operation if set.
   url.mojom.Origin? custom_issuer;
 
-  // The remaining members are used only when "type" is "kSigning": these
+  // The remaining members are used only when "operation" is "kSigning": these
   // parameters specify the manner in which the outgoing request should be
   // signed, including optionally specifying additional data to add in
   // browser-provided request headers (for instance, a timestamp or custom
@@ -208,6 +218,8 @@ struct TrustTokenVerificationKey {
 };
 
 struct TrustTokenKeyCommitmentResult {
+  TrustTokenMajorVersion version;
+
   // |protocol_version| is the Trust Token version that this key commitment is
   // for.
   TrustTokenProtocolVersion protocol_version;
@@ -296,10 +308,10 @@ struct FulfillTrustTokenIssuanceAnswer {
 };
 
 // TrustTokenOperationResult contains all the information required by
-// DevTools. Which fields are set depend on |type| and |status|.
+// DevTools. Which fields are set depend on |operation| and |status|.
 struct TrustTokenOperationResult {
   // Required.
-  TrustTokenOperationType type;
+  TrustTokenOperationType operation;
   TrustTokenOperationStatus status;
 
   // Shared among the different operation types.

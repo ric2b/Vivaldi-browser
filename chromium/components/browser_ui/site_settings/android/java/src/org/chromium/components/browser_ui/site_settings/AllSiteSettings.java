@@ -20,6 +20,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
@@ -27,13 +28,14 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.recyclerview.widget.RecyclerView;
-import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.build.annotations.UsedByReflection;
 import org.chromium.components.browser_ui.settings.ChromeBasePreference;
+import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SearchUtils;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
+import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.content_public.browser.BrowserContextHandle;
 
@@ -51,7 +53,8 @@ import java.util.Set;
  */
 @UsedByReflection("all_site_preferences.xml")
 public class AllSiteSettings extends SiteSettingsPreferenceFragment
-        implements PreferenceManager.OnPreferenceTreeClickListener, View.OnClickListener {
+        implements PreferenceManager.OnPreferenceTreeClickListener, View.OnClickListener,
+                   CustomDividerFragment {
     // The key to use to pass which category this preference should display,
     // should only be All Sites or Storage.
     public static final String EXTRA_CATEGORY = "category";
@@ -142,10 +145,13 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
         // Disable animations of preference changes.
         mListView.setItemAnimator(null);
 
-        // Remove dividers between preferences.
-        setDivider(null);
-
         return view;
+    }
+
+    @Override
+    public boolean hasDivider() {
+        // Remove dividers between preferences.
+        return false;
     }
 
     /**
@@ -195,6 +201,10 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
         TextView message = dialogView.findViewById(android.R.id.message);
         TextView signedOutText = dialogView.findViewById(R.id.signed_out_text);
         TextView offlineText = dialogView.findViewById(R.id.offline_text);
+        if (getSiteSettingsDelegate().isPrivacySandboxSettings4Enabled()) {
+            RelativeLayout adDataRow = dialogView.findViewById(R.id.ad_personalization);
+            adDataRow.setVisibility(View.VISIBLE);
+        }
         signedOutText.setText(R.string.webstorage_clear_data_dialog_sign_out_all_message);
         offlineText.setText(R.string.webstorage_clear_data_dialog_offline_message);
         String dialogFormattedText =
@@ -253,7 +263,7 @@ public class AllSiteSettings extends SiteSettingsPreferenceFragment
         if (getSiteSettingsDelegate().isHelpAndFeedbackEnabled()) {
             MenuItem help = menu.add(
                     Menu.NONE, R.id.menu_id_site_settings_help, Menu.NONE, R.string.menu_help);
-            help.setIcon(VectorDrawableCompat.create(
+            help.setIcon(TraceEventVectorDrawableCompat.create(
                     getResources(), R.drawable.ic_help_and_feedback, getContext().getTheme()));
         }
     }

@@ -19,7 +19,6 @@
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/sync/sync_error_browser_agent.h"
-#import "ios/chrome/browser/ui/activity_services/activity_params.h"
 #import "ios/chrome/browser/ui/browser_view/browser_coordinator+private.h"
 #import "ios/chrome/browser/ui/commands/activity_service_commands.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
@@ -32,17 +31,33 @@
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/ui/sharing/sharing_coordinator.h"
+#import "ios/chrome/browser/ui/sharing/sharing_params.h"
 #import "ios/chrome/browser/url_loading/url_loading_notifier_browser_agent.h"
 #import "ios/chrome/browser/web/web_navigation_browser_agent.h"
 #import "ios/chrome/browser/web/web_state_delegate_browser_agent.h"
 #import "ios/chrome/browser/web_state_list/tab_insertion_browser_agent.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
+#import "ios/web/public/test/fakes/fake_navigation_context.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
+
+#import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
+#import "ios/chrome/browser/sessions/test_session_service.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/tabs/tab_helper_util.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_coordinator.h"
+#import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
+#import "ios/chrome/browser/url_loading/url_loading_params.h"
+#import "ios/chrome/browser/web_state_list/web_state_opener.h"
+#import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
+#import "ios/web/public/web_state_observer.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -76,10 +91,14 @@ class BrowserCoordinatorTest : public PlatformTest {
     test_cbs_builder.AddTestingFactory(
         ios::BookmarkModelFactory::GetInstance(),
         ios::BookmarkModelFactory::GetDefaultFactory());
+    test_cbs_builder.AddTestingFactory(
+        AuthenticationServiceFactory::GetInstance(),
+        base::BindRepeating(AuthenticationServiceFactory::GetDefaultFactory()));
 
     chrome_browser_state_ = test_cbs_builder.Build();
     browser_ = std::make_unique<TestBrowser>(chrome_browser_state_.get());
     UrlLoadingNotifierBrowserAgent::CreateForBrowser(browser_.get());
+    UrlLoadingBrowserAgent::CreateForBrowser(browser_.get());
     SceneStateBrowserAgent::CreateForBrowser(browser_.get(), scene_state_);
     LensBrowserAgent::CreateForBrowser(browser_.get());
     WebNavigationBrowserAgent::CreateForBrowser(browser_.get());
@@ -87,6 +106,14 @@ class BrowserCoordinatorTest : public PlatformTest {
     WebStateDelegateBrowserAgent::CreateForBrowser(
         browser_.get(), TabInsertionBrowserAgent::FromBrowser(browser_.get()));
     SyncErrorBrowserAgent::CreateForBrowser(browser_.get());
+
+    AuthenticationServiceFactory::CreateAndInitializeForBrowserState(
+        chrome_browser_state_.get(),
+        std::make_unique<FakeAuthenticationServiceDelegate>());
+    SessionRestorationBrowserAgent::CreateForBrowser(
+        browser_.get(), [[TestSessionService alloc] init]);
+    SessionRestorationBrowserAgent::FromBrowser(browser_.get())
+        ->SetSessionID([[NSUUID UUID] UUIDString]);
 
     IncognitoReauthSceneAgent* reauthAgent = [[IncognitoReauthSceneAgent alloc]
         initWithReauthModule:[[ReauthenticationModule alloc] init]];
@@ -116,6 +143,44 @@ class BrowserCoordinatorTest : public PlatformTest {
                            browser:browser_.get()];
   }
 
+  // Creates and inserts a new WebState.
+  int InsertWebState() {
+    web::WebState::CreateParams params(chrome_browser_state_.get());
+    std::unique_ptr<web::WebState> web_state = web::WebState::Create(params);
+    AttachTabHelpers(web_state.get(), NO);
+
+    int insertion_index = browser_->GetWebStateList()->InsertWebState(
+        /*index=*/0, std::move(web_state), WebStateList::INSERT_ACTIVATE,
+        WebStateOpener());
+    browser_->GetWebStateList()->ActivateWebStateAt(insertion_index);
+
+    return insertion_index;
+  }
+
+  // Returns the active WebState.
+  web::WebState* GetActiveWebState() {
+    return browser_->GetWebStateList()->GetActiveWebState();
+  }
+
+  void OpenURL(const GURL& url) {
+    web::WebState* web_state = GetActiveWebState();
+
+    UrlLoadingBrowserAgent* urlLoadingBrowserAgent =
+        UrlLoadingBrowserAgent::FromBrowser(browser_.get());
+    UrlLoadParams urlLoadParams = UrlLoadParams::InCurrentTab(url);
+    urlLoadingBrowserAgent->Load(urlLoadParams);
+
+    // Force the WebStateObserver callbacks that simulate a page load.
+    web::WebStateObserver* ntpHelper =
+        (web::WebStateObserver*)NewTabPageTabHelper::FromWebState(web_state);
+    web::FakeNavigationContext context;
+    context.SetUrl(url);
+    context.SetIsSameDocument(false);
+    ntpHelper->DidStartNavigation(web_state, &context);
+    ntpHelper->PageLoaded(web_state, web::PageLoadCompletionStatus::SUCCESS);
+  }
+
+  IOSChromeScopedTestingLocalState local_state_;
   web::WebTaskEnvironment task_environment_;
   UIViewController* base_view_controller_;
   std::unique_ptr<TestChromeBrowserState> chrome_browser_state_;
@@ -196,7 +261,7 @@ TEST_F(BrowserCoordinatorTest, SharePage) {
 }
 
 // Tests that -shareChromeApp is instantiating the SharingCoordinator
-// with ActivityParams where scenario is ShareChrome, leaving fullscreen
+// with SharingParams where scenario is ShareChrome, leaving fullscreen
 // and starting the share coordinator.
 TEST_F(BrowserCoordinatorTest, ShareChromeApp) {
   FullscreenModel model;
@@ -211,8 +276,8 @@ TEST_F(BrowserCoordinatorTest, ShareChromeApp) {
   ASSERT_EQ(0.0, controller_ptr->GetProgress());
 
   id expectShareChromeScenarioArg =
-      [OCMArg checkWithBlock:^BOOL(ActivityParams* params) {
-        return params.scenario == ActivityScenario::ShareChrome;
+      [OCMArg checkWithBlock:^BOOL(SharingParams* params) {
+        return params.scenario == SharingScenario::ShareChrome;
       }];
 
   id classMock = OCMClassMock([SharingCoordinator class]);
@@ -237,4 +302,32 @@ TEST_F(BrowserCoordinatorTest, ShareChromeApp) {
 
   // Check that -start has been called.
   EXPECT_OCMOCK_VERIFY(classMock);
+}
+
+// Tests that BrowserCoordinator properly implements
+// the NewTabPageTabHelperDelegate protocol.
+TEST_F(BrowserCoordinatorTest, NewTabPageTabHelperDelegate) {
+  BrowserCoordinator* browser_coordinator = GetBrowserCoordinator();
+  [browser_coordinator start];
+
+  id mockNTPCoordinator = OCMPartialMock(browser_coordinator.NTPCoordinator);
+
+  // Insert the web_state into the Browser.
+  InsertWebState();
+
+  // Open an NTP to start the coordinator.
+  OpenURL(GURL("chrome://newtab/"));
+  EXPECT_OCMOCK_VERIFY(mockNTPCoordinator);
+
+  // Open a non-NTP page and expect a call to the NTP coordinator.
+  [[mockNTPCoordinator expect] didNavigateAwayFromNTP];
+  OpenURL(GURL("chrome://version/"));
+  EXPECT_OCMOCK_VERIFY(mockNTPCoordinator);
+
+  // Open another NTP and expect a navigation call.
+  [[mockNTPCoordinator expect] didNavigateToNTP];
+  OpenURL(GURL("chrome://newtab/"));
+  EXPECT_OCMOCK_VERIFY(mockNTPCoordinator);
+
+  [browser_coordinator stop];
 }

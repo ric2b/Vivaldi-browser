@@ -8,8 +8,9 @@
 #include <cstdint>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/compiler_specific.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_piece.h"
 #include "base/threading/thread_checker.h"
 #include "content/public/browser/document_service_internal.h"
@@ -124,7 +125,7 @@ class DocumentService : public Interface, public internal::DocumentServiceBase {
   //
   // Prefer over `mojo::ReportBadMessage()`, since using this method avoids the
   // need to run any pending reply callbacks with placeholder arguments.
-  void ReportBadMessageAndDeleteThis(base::StringPiece error) {
+  NOT_TAIL_CALLED void ReportBadMessageAndDeleteThis(base::StringPiece error) {
     receiver_.ReportBadMessage(error);
     delete this;
   }

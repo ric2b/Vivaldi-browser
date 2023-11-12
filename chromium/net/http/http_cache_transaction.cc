@@ -4,6 +4,8 @@
 
 #include "net/http/http_cache_transaction.h"
 
+#include "base/feature_list.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"  // For IS_POSIX
 
 #if BUILDFLAG(IS_POSIX)
@@ -17,12 +19,12 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/cxx17_backports.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -109,7 +111,7 @@ enum class RestrictedPrefetchReused {
 
 void RecordPervasivePayloadIndex(const char* histogram_name, int index) {
   if (index != -1) {
-    base::UmaHistogramExactLinear(histogram_name, index, 101);
+    base::UmaHistogramCustomCounts(histogram_name, index, 1, 323, 323);
   }
 }
 
@@ -691,14 +693,19 @@ bool HttpCache::Transaction::ResponseChecksumMatches(
   if (hex_result != request_->checksum) {
     DVLOG(2) << "Pervasive payload checksum mismatch for \"" << request_->url
              << "\": got " << hex_result << ", expected " << request_->checksum;
-    RecordPervasivePayloadIndex("Network.CacheTransparency.MismatchedChecksums",
-                                request_->pervasive_payloads_index_for_logging);
+    RecordPervasivePayloadIndex(
+        "Network.CacheTransparency2.MismatchedChecksums",
+        request_->pervasive_payloads_index_for_logging);
     return false;
   }
   RecordPervasivePayloadIndex(
-      "Network.CacheTransparency.SingleKeyedCacheIsUsed",
+      "Network.CacheTransparency2.SingleKeyedCacheIsUsed",
       request_->pervasive_payloads_index_for_logging);
   return true;
+}
+
+void HttpCache::Transaction::AddDiskCacheWriteTime(base::TimeDelta elapsed) {
+  total_disk_cache_write_time_ += elapsed;
 }
 
 //-----------------------------------------------------------------------------
@@ -1579,6 +1586,7 @@ int HttpCache::Transaction::DoCacheReadResponse() {
   read_buf_ = base::MakeRefCounted<IOBuffer>(io_buf_len_);
 
   net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_READ_INFO);
+  BeginDiskCacheAccessTimeCount();
   return entry_->GetEntry()->ReadData(kResponseInfoIndex, 0, read_buf_.get(),
                                       io_buf_len_, io_callback_);
 }
@@ -1591,9 +1599,11 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
                          "result", result, "io_buf_len", io_buf_len_);
   net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_READ_INFO,
                                     result);
+  EndDiskCacheAccessTimeCount(DiskCacheAccessType::kRead);
 
   // Record the time immediately before the cached response is parsed.
   read_headers_since_ = TimeTicks::Now();
+
   if (result != io_buf_len_ ||
       !HttpCache::ParseResponseInfo(read_buf_->data(), io_buf_len_, &response_,
                                     &truncated_)) {
@@ -1609,7 +1619,7 @@ int HttpCache::Transaction::DoCacheReadResponseComplete(int result) {
   }
 
   if (response_.single_keyed_cache_entry_unusable) {
-    RecordPervasivePayloadIndex("Network.CacheTransparency.MarkedUnusable",
+    RecordPervasivePayloadIndex("Network.CacheTransparency2.MarkedUnusable",
                                 request_->pervasive_payloads_index_for_logging);
 
     // We've read the single keyed entry and it turned out to be unusable. Let's
@@ -2268,6 +2278,7 @@ int HttpCache::Transaction::DoTruncateCachedData() {
   if (!entry_)
     return OK;
   net_log_.BeginEvent(NetLogEventType::HTTP_CACHE_WRITE_DATA);
+  BeginDiskCacheAccessTimeCount();
   // Truncate the stream.
   return entry_->GetEntry()->WriteData(kResponseContentIndex, /*offset=*/0,
                                        /*buf=*/nullptr, /*buf_len=*/0,
@@ -2279,6 +2290,7 @@ int HttpCache::Transaction::DoTruncateCachedDataComplete(int result) {
       "net", "HttpCacheTransaction::DoTruncateCachedDataComplete",
       TRACE_ID_LOCAL(trace_id_),
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT, "result", result);
+  EndDiskCacheAccessTimeCount(DiskCacheAccessType::kWrite);
   if (entry_) {
     net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_DATA,
                                       result);
@@ -2316,6 +2328,7 @@ int HttpCache::Transaction::DoHeadersPhaseCannotProceed(int result) {
 
   entry_ = nullptr;
   new_entry_ = nullptr;
+  last_disk_cache_access_start_time_ = TimeTicks();
 
   // TODO(https://crbug.com/1219402): This should probably clear `response_`,
   // too, once things are fixed so it's safe to do so.
@@ -2524,12 +2537,14 @@ int HttpCache::Transaction::DoCacheReadData() {
                                read_buf_len_, io_callback_);
   }
 
+  BeginDiskCacheAccessTimeCount();
   return entry_->GetEntry()->ReadData(kResponseContentIndex, read_offset_,
                                       read_buf_.get(), read_buf_len_,
                                       io_callback_);
 }
 
 int HttpCache::Transaction::DoCacheReadDataComplete(int result) {
+  EndDiskCacheAccessTimeCount(DiskCacheAccessType::kRead);
   if (entry_) {
     DCHECK(InWriters() || entry_->TransactionInReaders(this));
   }
@@ -2753,10 +2768,11 @@ bool HttpCache::Transaction::ShouldPassThrough() {
 
 int HttpCache::Transaction::BeginCacheRead() {
   // We don't support any combination of LOAD_ONLY_FROM_CACHE and byte ranges.
-  // TODO(jkarlin): Either handle this case or DCHECK.
+  // It's possible to trigger this from JavaScript using the Fetch API with
+  // `cache: 'only-if-cached'` so ideally we should support it.
+  // TODO(ricea): Correctly read from the cache in this case.
   if (response_.headers->response_code() == net::HTTP_PARTIAL_CONTENT ||
       partial_) {
-    NOTREACHED();
     TransitionToState(STATE_FINISH_HEADERS);
     return ERR_CACHE_MISS;
   }
@@ -3096,7 +3112,9 @@ ValidationType HttpCache::Transaction::RequiresValidation() {
   base::TimeDelta response_time_in_cache =
       cache_->clock_->Now() - response_.response_time;
 
-  if (!(effective_load_flags_ & LOAD_PREFETCH) &&
+  if (!base::FeatureList::IsEnabled(
+          features::kPrefetchFollowsNormalCacheSemantics) &&
+      !(effective_load_flags_ & LOAD_PREFETCH) &&
       (response_time_in_cache >= base::TimeDelta())) {
     bool reused_within_time_window =
         response_time_in_cache < base::Minutes(kPrefetchReuseMins);
@@ -3584,11 +3602,13 @@ int HttpCache::Transaction::WriteResponseInfoToEntry(
                         : 0);
   }
 
+  BeginDiskCacheAccessTimeCount();
   return entry_->disk_entry->WriteData(kResponseInfoIndex, 0, data.get(),
                                        io_buf_len_, io_callback_, true);
 }
 
 int HttpCache::Transaction::OnWriteResponseInfoToEntryComplete(int result) {
+  EndDiskCacheAccessTimeCount(DiskCacheAccessType::kWrite);
   if (!entry_)
     return OK;
   net_log_.EndEventWithNetErrorCode(NetLogEventType::HTTP_CACHE_WRITE_INFO,
@@ -3955,6 +3975,14 @@ void HttpCache::Transaction::RecordHistograms() {
   UMA_HISTOGRAM_TIMES("HttpCache.AccessToDone", total_time);
 
   bool did_send_request = !send_request_since_.is_null();
+
+  // TODO(ricea): Understand why this DCHECK is failing in the wild, fix it, and
+  // remove it. See https://crbug.com/1409150.
+  if (did_send_request) {
+    DCHECK_NE(cache_entry_status_, CacheEntryStatus::ENTRY_USED);
+  }
+  // This DCHECK() should not fire, because the one above should catch all the
+  // erroneous cases.
   DCHECK(
       (did_send_request &&
        (cache_entry_status_ == CacheEntryStatus::ENTRY_NOT_IN_CACHE ||
@@ -3973,7 +4001,6 @@ void HttpCache::Transaction::RecordHistograms() {
 
   base::TimeDelta before_send_time =
       send_request_since_ - first_cache_access_since_;
-  base::TimeDelta after_send_time = now - send_request_since_;
 
   UMA_HISTOGRAM_TIMES("HttpCache.AccessToDone.SentRequest", total_time);
   UMA_HISTOGRAM_TIMES("HttpCache.BeforeSend", before_send_time);
@@ -3984,27 +4011,37 @@ void HttpCache::Transaction::RecordHistograms() {
     case CacheEntryStatus::ENTRY_CANT_CONDITIONALIZE: {
       UMA_HISTOGRAM_TIMES("HttpCache.BeforeSend.CantConditionalize",
                           before_send_time);
-      UMA_HISTOGRAM_TIMES("HttpCache.AfterSend.CantConditionalize",
-                          after_send_time);
       break;
     }
     case CacheEntryStatus::ENTRY_NOT_IN_CACHE: {
       UMA_HISTOGRAM_TIMES("HttpCache.BeforeSend.NotCached", before_send_time);
-      UMA_HISTOGRAM_TIMES("HttpCache.AfterSend.NotCached", after_send_time);
       break;
     }
     case CacheEntryStatus::ENTRY_VALIDATED: {
       UMA_HISTOGRAM_TIMES("HttpCache.BeforeSend.Validated", before_send_time);
-      UMA_HISTOGRAM_TIMES("HttpCache.AfterSend.Validated", after_send_time);
       break;
     }
     case CacheEntryStatus::ENTRY_UPDATED: {
-      UMA_HISTOGRAM_TIMES("HttpCache.AfterSend.Updated", after_send_time);
       UMA_HISTOGRAM_TIMES("HttpCache.BeforeSend.Updated", before_send_time);
       break;
     }
     default:
-      NOTREACHED();
+      // STATUS_UNDEFINED and STATUS_OTHER are explicitly handled earlier in
+      // the function so shouldn't reach here. STATUS_MAX should never be set.
+      // Originally it was asserted that STATUS_USED couldn't happen here, but
+      // it turns out that it can. We don't have histograms for it, so just
+      // ignore it.
+      DCHECK_EQ(cache_entry_status_, CacheEntryStatus::ENTRY_USED);
+      break;
+  }
+
+  if (!total_disk_cache_read_time_.is_zero()) {
+    base::UmaHistogramTimes("HttpCache.TotalDiskCacheTimePerTransaction.Read",
+                            total_disk_cache_read_time_);
+  }
+  if (!total_disk_cache_write_time_.is_zero()) {
+    base::UmaHistogramTimes("HttpCache.TotalDiskCacheTimePerTransaction.Write",
+                            total_disk_cache_write_time_);
   }
 }
 
@@ -4164,6 +4201,34 @@ bool HttpCache::Transaction::FinishAndCheckChecksum() {
 
   DCHECK(use_single_keyed_cache_);
   return ResponseChecksumMatches(std::move(checksum_));
+}
+
+void HttpCache::Transaction::BeginDiskCacheAccessTimeCount() {
+  DCHECK(last_disk_cache_access_start_time_.is_null());
+  if (partial_) {
+    return;
+  }
+  last_disk_cache_access_start_time_ = TimeTicks::Now();
+}
+
+void HttpCache::Transaction::EndDiskCacheAccessTimeCount(
+    DiskCacheAccessType type) {
+  // We may call this function without actual disk cache access as a result of
+  // state change.
+  if (last_disk_cache_access_start_time_.is_null()) {
+    return;
+  }
+  base::TimeDelta elapsed =
+      TimeTicks::Now() - last_disk_cache_access_start_time_;
+  switch (type) {
+    case DiskCacheAccessType::kRead:
+      total_disk_cache_read_time_ += elapsed;
+      break;
+    case DiskCacheAccessType::kWrite:
+      total_disk_cache_write_time_ += elapsed;
+      break;
+  }
+  last_disk_cache_access_start_time_ = TimeTicks();
 }
 
 }  // namespace net

@@ -57,7 +57,8 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   void PrintLog() const override { RunCommand("print_log"); }
 
   void CopyLog() const override {
-    const absl::optional<base::FilePath> path = GetDataDirPath(updater_scope_);
+    const absl::optional<base::FilePath> path =
+        GetInstallDirectory(updater_scope_);
     ASSERT_TRUE(path);
     if (path)
       updater::test::CopyLog(*path);
@@ -92,6 +93,17 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     updater::test::ExpectSelfUpdateSequence(updater_scope_, test_server);
   }
 
+  void ExpectUpdateCheckSequence(
+      ScopedServer* test_server,
+      const std::string& app_id,
+      const std::string& install_data_index,
+      const base::Version& from_version,
+      const base::Version& to_version) const override {
+    updater::test::ExpectUpdateCheckSequence(updater_scope_, test_server,
+                                             app_id, install_data_index,
+                                             from_version, to_version);
+  }
+
   void ExpectUpdateSequence(ScopedServer* test_server,
                             const std::string& app_id,
                             const std::string& install_data_index,
@@ -102,16 +114,22 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                                         to_version);
   }
 
+  void ExpectInstallSequence(ScopedServer* test_server,
+                             const std::string& app_id,
+                             const std::string& install_data_index,
+                             const base::Version& from_version,
+                             const base::Version& to_version) const override {
+    updater::test::ExpectInstallSequence(updater_scope_, test_server, app_id,
+                                         install_data_index, from_version,
+                                         to_version);
+  }
+
   void ExpectVersionActive(const std::string& version) const override {
     RunCommand("expect_version_active", {Param("version", version)});
   }
 
   void ExpectVersionNotActive(const std::string& version) const override {
     RunCommand("expect_version_not_active", {Param("version", version)});
-  }
-
-  void ExpectActiveUpdater() const override {
-    RunCommand("expect_active_updater");
   }
 
   void ExpectActive(const std::string& app_id) const override {
@@ -180,9 +198,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
 
   void Update(const std::string& app_id,
-              const std::string& install_data_index) const override {
+              const std::string& install_data_index,
+              bool do_update_check_only) const override {
     RunCommand("update", {Param("app_id", app_id),
-                          Param("install_data_index", install_data_index)});
+                          Param("install_data_index", install_data_index),
+                          Param("do_update_check_only",
+                                do_update_check_only ? "true" : "false")});
   }
 
   void UpdateAll() const override { RunCommand("update_all", {}); }
@@ -250,6 +271,10 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
 
   void TearDownTestService() const override {
     updater::test::RunTestServiceCommand("teardown");
+  }
+
+  void RunHandoff(const std::string& app_id) const override {
+    RunCommand("run_handoff", {Param("app_id", app_id)});
   }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -364,7 +389,7 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     }
 
     int exit_code = -1;
-    ASSERT_TRUE(Run(updater_scope_, helper_command, &exit_code));
+    Run(updater_scope_, helper_command, &exit_code);
 
     // A failure here indicates that the integration test helper
     // process ran but the invocation of the test helper command was not

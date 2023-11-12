@@ -96,6 +96,14 @@ ui::AnimationThroughputReporter CreateAnimationReporter(
 void RecordCalendarKeyboardNavigation(
     const CalendarKeyboardNavigationSource key_source);
 
+void RecordEventListItemInUpNextLaunched(const ui::Event& event);
+
+void RecordUpNextEventCount(const int event_count);
+
+void RecordJoinButtonPressedFromEventListView(const ui::Event& event);
+
+void RecordJoinButtonPressedFromUpNextView(const ui::Event& event);
+
 }  // namespace calendar_metrics
 
 }  // namespace ash

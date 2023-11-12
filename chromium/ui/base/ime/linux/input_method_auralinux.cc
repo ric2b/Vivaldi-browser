@@ -5,8 +5,8 @@
 #include "ui/base/ime/linux/input_method_auralinux.h"
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
 #include "base/environment.h"
+#include "base/functional/bind.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/chromeos_buildflags.h"
@@ -256,9 +256,17 @@ ui::EventDispatchDetails InputMethodAuraLinux::DispatchImeFilteredKeyPressEvent(
   // - there's no composing text, and no updated.
   // If the condition meets, that means IME did not consume the key event
   // conceptually, so continue to dispatch KeyEvent without overwriting by 229.
-  ui::EventDispatchDetails details = NeedInsertChar(result_text_)
-                                         ? DispatchKeyEventPostIME(event)
-                                         : SendFakeProcessKeyEvent(event);
+  // But in some chinese IME framework such as fcitx + GTK,
+  // if the condition meets and last event is 13(VKEY_RETURN), that means IME
+  // consume the key event conceptually(want to insert the only one character).
+  // So in this condition, should to dispatch KeyEvent with overwriting by 229.
+  ui::EventDispatchDetails details;
+  if (event->key_code() == VKEY_RETURN)
+    details = SendFakeProcessKeyEvent(event);
+  else {
+    details = NeedInsertChar(result_text_) ? DispatchKeyEventPostIME(event)
+                                           : SendFakeProcessKeyEvent(event);
+  }
   if (details.dispatcher_destroyed)
     return details;
   // If the KEYDOWN is stopped propagation (e.g. triggered an accelerator),
@@ -341,7 +349,16 @@ void InputMethodAuraLinux::UpdateContextFocusState() {
 
   auto* client = GetTextInputClient();
   bool has_client = client != nullptr;
-  context_->UpdateFocus(has_client, old_text_input_type, text_input_type_);
+  TextInputClient::FocusReason reason;
+  if (client) {
+    reason = client->GetFocusReason();
+  } else {
+    reason = text_input_type_ == TEXT_INPUT_TYPE_NONE
+                 ? TextInputClient::FocusReason::FOCUS_REASON_NONE
+                 : TextInputClient::FocusReason::FOCUS_REASON_OTHER;
+  }
+  context_->UpdateFocus(has_client, old_text_input_type, text_input_type_,
+                        reason);
 
   TextInputMode mode = TEXT_INPUT_MODE_DEFAULT;
   int flags = TEXT_INPUT_FLAG_NONE;
@@ -624,7 +641,9 @@ bool InputMethodAuraLinux::NeedInsertChar(
 
 ui::EventDispatchDetails InputMethodAuraLinux::SendFakeProcessKeyEvent(
     ui::KeyEvent* event) const {
-  KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_PROCESSKEY, event->flags());
+  ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_PROCESSKEY, event->code(),
+                         event->flags(), ui::DomKey::PROCESS,
+                         event->time_stamp());
   ui::EventDispatchDetails details = DispatchKeyEventPostIME(&key_event);
   if (key_event.stopped_propagation())
     event->StopPropagation();

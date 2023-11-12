@@ -12,6 +12,13 @@ import("//build/toolchain/goma.gni")
 import("//build/toolchain/rbe.gni")
 
 declare_overrides() {
+  chrome_pgo_phase = 0
+  if (is_official_build && (is_win || is_mac ||
+              (is_linux && target_cpu == "x64") ||
+              (is_android && target_cpu == "arm64" && !is_vivaldi_automotive))) {
+    chrome_pgo_phase = 2
+  }
+
   if(!is_ios) {
     branding_path_component = "vivaldi"
     branding_path_product = "vivaldi"
@@ -48,7 +55,6 @@ declare_overrides() {
     if (is_official_build) {
       symbol_level = 1
     }
-    enable_js_type_check = false
   }
 
   if (is_android) {
@@ -56,6 +62,7 @@ declare_overrides() {
       symbol_level = 1
     }
     enable_gvr_services = false
+    webview_includes_weblayer = false
     enable_vr = false
     ffmpeg_branding = "Chrome"
     android_channel = "stable"
@@ -74,11 +81,6 @@ declare_overrides() {
 
   enable_precompiled_headers = !is_official_build && cc_wrapper == "" && !use_goma && !use_remoteexec
 
-  if (is_win) {
-    skip_archive_compression = is_component_build
-    use_large_pdbs = !is_component_build && !is_debug
-  }
-
   if (is_mac) {
     use_system_xcode = true
     #if (getenv("CHROME_HEADLESS") == "1") {
@@ -86,9 +88,8 @@ declare_overrides() {
     #}
   }
 
-  # Needed until we discover what is causing the unused argument during clcache
-  if (is_win && cc_wrapper != "") {
-    use_ghash = false
+  if (is_win) {
+    fast_archive_compression = is_component_build
   }
 
   if ((target_cpu == "arm" || target_cpu == "arm64") && !is_ios) {
@@ -109,10 +110,10 @@ declare_overrides() {
     ios_code_signing_identity = vivaldi_signing_id
     ios_code_signing_identity_description = ""
     is_component_build = false
+    # Needed until we understand chromium partition allocator better.
+    ios_partition_alloc_enabled = false
 
     ios_application_icons_target = "//vivaldi/ios/app/resources:vivaldi_icons"
     ios_launchscreen_assets_target = "//vivaldi/ios/app/resources:launchscreen_assets"
-
-    ios_chrome_links_with_lottie_framework=false
   }
 }

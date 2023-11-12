@@ -9,10 +9,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -124,66 +124,69 @@ TEST_P(MessagePumpLibeventTest, QuitOutsideOfRun) {
 
 class BaseWatcher : public MessagePumpLibevent::FdWatcher {
  public:
-  explicit BaseWatcher(MessagePumpLibevent::FdWatchController* controller)
-      : controller_(controller) {
-    DCHECK(controller_);
-  }
+  BaseWatcher() = default;
   ~BaseWatcher() override = default;
 
   // base:MessagePumpLibevent::FdWatcher interface
   void OnFileCanReadWithoutBlocking(int /* fd */) override { NOTREACHED(); }
 
   void OnFileCanWriteWithoutBlocking(int /* fd */) override { NOTREACHED(); }
-
- protected:
-  raw_ptr<MessagePumpLibevent::FdWatchController> controller_;
 };
 
 class DeleteWatcher : public BaseWatcher {
  public:
-  explicit DeleteWatcher(MessagePumpLibevent::FdWatchController* controller)
-      : BaseWatcher(controller) {}
+  explicit DeleteWatcher(
+      std::unique_ptr<MessagePumpLibevent::FdWatchController> controller)
+      : controller_(std::move(controller)) {}
 
   ~DeleteWatcher() override { DCHECK(!controller_); }
 
+  MessagePumpLibevent::FdWatchController* controller() {
+    return controller_.get();
+  }
+
   void OnFileCanWriteWithoutBlocking(int /* fd */) override {
     DCHECK(controller_);
-    delete controller_;
-    controller_ = nullptr;
+    controller_.reset();
   }
+
+ private:
+  std::unique_ptr<MessagePumpLibevent::FdWatchController> controller_;
 };
 
 TEST_P(MessagePumpLibeventTest, DeleteWatcher) {
+  DeleteWatcher delegate(
+      std::make_unique<MessagePumpLibevent::FdWatchController>(FROM_HERE));
   std::unique_ptr<MessagePumpLibevent> pump = CreateMessagePump();
-  MessagePumpLibevent::FdWatchController* watcher =
-      new MessagePumpLibevent::FdWatchController(FROM_HERE);
-  DeleteWatcher delegate(watcher);
   pump->WatchFileDescriptor(pipefds_[1], false,
-                            MessagePumpLibevent::WATCH_READ_WRITE, watcher,
-                            &delegate);
-  SimulateIOEvent(pump.get(), watcher);
+                            MessagePumpLibevent::WATCH_READ_WRITE,
+                            delegate.controller(), &delegate);
+  SimulateIOEvent(pump.get(), delegate.controller());
 }
 
 class StopWatcher : public BaseWatcher {
  public:
   explicit StopWatcher(MessagePumpLibevent::FdWatchController* controller)
-      : BaseWatcher(controller) {}
+      : controller_(controller) {}
 
   ~StopWatcher() override = default;
 
   void OnFileCanWriteWithoutBlocking(int /* fd */) override {
     controller_->StopWatchingFileDescriptor();
   }
+
+ private:
+  raw_ptr<MessagePumpLibevent::FdWatchController> controller_ = nullptr;
 };
 
 TEST_P(MessagePumpLibeventTest, StopWatcher) {
   std::unique_ptr<MessagePumpLibevent> pump = CreateMessagePump();
-  MessagePumpLibevent::FdWatchController watcher(FROM_HERE);
-  StopWatcher delegate(&watcher);
+  MessagePumpLibevent::FdWatchController controller(FROM_HERE);
+  StopWatcher delegate(&controller);
   pump->WatchFileDescriptor(pipefds_[1], false,
-                            MessagePumpLibevent::WATCH_READ_WRITE, &watcher,
+                            MessagePumpLibevent::WATCH_READ_WRITE, &controller,
                             &delegate);
-  SimulateIOEvent(pump.get(), &watcher);
+  SimulateIOEvent(pump.get(), &controller);
 }
 
 void QuitMessageLoopAndStart(OnceClosure quit_closure) {
@@ -211,12 +214,12 @@ class NestedPumpWatcher : public MessagePumpLibevent::FdWatcher {
 };
 
 TEST_P(MessagePumpLibeventTest, NestedPumpWatcher) {
-  std::unique_ptr<MessagePumpLibevent> pump = CreateMessagePump();
-  MessagePumpLibevent::FdWatchController watcher(FROM_HERE);
   NestedPumpWatcher delegate;
+  std::unique_ptr<MessagePumpLibevent> pump = CreateMessagePump();
+  MessagePumpLibevent::FdWatchController controller(FROM_HERE);
   pump->WatchFileDescriptor(pipefds_[1], false, MessagePumpLibevent::WATCH_READ,
-                            &watcher, &delegate);
-  SimulateIOEvent(pump.get(), &watcher);
+                            &controller, &delegate);
+  SimulateIOEvent(pump.get(), &controller);
 }
 
 void FatalClosure() {
@@ -225,9 +228,8 @@ void FatalClosure() {
 
 class QuitWatcher : public BaseWatcher {
  public:
-  QuitWatcher(MessagePumpLibevent::FdWatchController* controller,
-              base::OnceClosure quit_closure)
-      : BaseWatcher(controller), quit_closure_(std::move(quit_closure)) {}
+  QuitWatcher(base::OnceClosure quit_closure)
+      : quit_closure_(std::move(quit_closure)) {}
 
   void OnFileCanReadWithoutBlocking(int /* fd */) override {
     // Post a fatal closure to the MessageLoop before we quit it.
@@ -259,8 +261,8 @@ TEST_P(MessagePumpLibeventTest, QuitWatcher) {
   MessagePumpLibevent* pump = executor_pump.get();
   SingleThreadTaskExecutor executor(std::move(executor_pump));
   RunLoop run_loop;
+  QuitWatcher delegate(run_loop.QuitClosure());
   MessagePumpLibevent::FdWatchController controller(FROM_HERE);
-  QuitWatcher delegate(&controller, run_loop.QuitClosure());
   WaitableEvent event(WaitableEvent::ResetPolicy::AUTOMATIC,
                       WaitableEvent::InitialState::NOT_SIGNALED);
   std::unique_ptr<WaitableEventWatcher> watcher(new WaitableEventWatcher);

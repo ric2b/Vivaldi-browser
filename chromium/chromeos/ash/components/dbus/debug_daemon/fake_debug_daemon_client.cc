@@ -12,10 +12,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -154,6 +154,17 @@ void FakeDebugDaemonClient::StopPerf(
     chromeos::VoidDBusMethodCallback callback) {}
 
 void FakeDebugDaemonClient::GetFeedbackLogsV2(
+    const cryptohome::AccountIdentifier& id,
+    const std::vector<debugd::FeedbackLogType>& requested_logs,
+    GetLogsCallback callback) {
+  std::map<std::string, std::string> sample;
+  sample["Sample Log"] = "Your email address is abc@abc.com";
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(std::move(callback), /*succeeded=*/true, sample));
+}
+
+void FakeDebugDaemonClient::GetFeedbackLogsV3(
     const cryptohome::AccountIdentifier& id,
     const std::vector<debugd::FeedbackLogType>& requested_logs,
     GetLogsCallback callback) {

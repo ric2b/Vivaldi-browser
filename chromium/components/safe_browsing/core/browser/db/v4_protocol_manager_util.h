@@ -43,10 +43,10 @@ const PrefixSize kMinHashPrefixLength = 4;
 const PrefixSize kMaxHashPrefixLength = 32;
 
 // A hash prefix sent by the SafeBrowsing PVer4 service.
-using HashPrefix = std::string;
+using HashPrefixStr = std::string;
 
 // A full SHA256 hash.
-using FullHash = HashPrefix;
+using FullHashStr = HashPrefixStr;
 
 using ListUpdateRequest = FetchThreatListUpdatesRequest::ListUpdateRequest;
 using ListUpdateResponse = FetchThreatListUpdatesResponse::ListUpdateResponse;
@@ -90,6 +90,34 @@ std::string GetReportUrl(
     const std::string& method,
     const ExtendedReportingLevel* reporting_level = nullptr,
     const bool is_enhanced_protection = false);
+
+// For the SafeBrowsingLookoupMechanismExperiment, all 3 lookup mechanisms can
+// be run simultaneously. Since URL real-time checks and hash real-time checks
+// can fall back to hash database checks, their hash database cache must be
+// maintained separately to avoid one lookup benefitting from a different
+// lookup's caching, since that would incorrectly reflect performance results.
+// TODO(crbug.com/1410253): Delete enum once temporary experiment is complete.
+enum class MechanismExperimentHashDatabaseCache {
+  // Used only outside the context of the experiment. Specifies that the primary
+  // cache should be used for reads, and all three of the caches should be used
+  // for writes. The latter is true so that within the context of the
+  // experiment, URL real-time lookups don't have an advantage over the other
+  // two mechanisms for URLs that overlap with other V4 checks.
+  kNoExperiment = 0,
+  // Used only within the context of the experiment. Specifies that the primary
+  // cache should be used for cache reads and writes. It uses the primary cache
+  // because the experiment intercepts URL real-time lookups and conducts the
+  // two background lookups as well.
+  kUrlRealTimeOnly = 1,
+  // Used only within the context of the experiment. Specifies that one of the
+  // two background caches (the hash real-time lookup one) should be used for
+  // cache reads and writes.
+  kHashRealTimeOnly = 2,
+  // Used only within the context of the experiment. Specifies that one of the
+  // two background caches (the hash database lookup one) should be used for
+  // cache reads and writes.
+  kHashDatabaseOnly = 3
+};
 
 // Different types of threats that SafeBrowsing protects against. This is the
 // type that's returned to the clients of SafeBrowsing in Chromium.
@@ -265,9 +293,9 @@ using ParsedServerResponse = std::vector<std::unique_ptr<ListUpdateResponse>>;
 struct StoreAndHashPrefix {
  public:
   ListIdentifier list_id;
-  HashPrefix hash_prefix;
+  HashPrefixStr hash_prefix;
 
-  StoreAndHashPrefix(ListIdentifier list_id, const HashPrefix& hash_prefix);
+  StoreAndHashPrefix(ListIdentifier list_id, const HashPrefixStr& hash_prefix);
   ~StoreAndHashPrefix();
 
   bool operator==(const StoreAndHashPrefix& other) const;
@@ -348,9 +376,9 @@ class V4ProtocolManagerUtil {
   static void GeneratePatternsToCheck(const GURL& url,
                                       std::vector<std::string>* urls);
 
-  // Returns a FullHash for the basic host+path pattern for a given URL after
+  // Returns a FullHashStr for the basic host+path pattern for a given URL after
   // canonicalization. Not intended for general use.
-  static FullHash GetFullHash(const GURL& url);
+  static FullHashStr GetFullHash(const GURL& url);
 
   // Generates a Pver4 request URL and sets the appropriate header values.
   // |request_base64| is the serialized request protocol buffer encoded in
@@ -375,17 +403,17 @@ class V4ProtocolManagerUtil {
 
   // Generate the set of FullHashes to check for |url|.
   static void UrlToFullHashes(const GURL& url,
-                              std::vector<FullHash>* full_hashes);
+                              std::vector<FullHashStr>* full_hashes);
 
-  static bool FullHashToHashPrefix(const FullHash& full_hash,
+  static bool FullHashToHashPrefix(const FullHashStr& full_hash,
                                    PrefixSize prefix_size,
-                                   HashPrefix* hash_prefix);
+                                   HashPrefixStr* hash_prefix);
 
-  static bool FullHashToSmallestHashPrefix(const FullHash& full_hash,
-                                           HashPrefix* hash_prefix);
+  static bool FullHashToSmallestHashPrefix(const FullHashStr& full_hash,
+                                           HashPrefixStr* hash_prefix);
 
-  static bool FullHashMatchesHashPrefix(const FullHash& full_hash,
-                                        const HashPrefix& hash_prefix);
+  static bool FullHashMatchesHashPrefix(const FullHashStr& full_hash,
+                                        const HashPrefixStr& hash_prefix);
 
   static void SetClientInfoFromConfig(ClientInfo* client_info,
                                       const V4ProtocolConfig& config);
@@ -398,7 +426,7 @@ class V4ProtocolManagerUtil {
   // extra byte containing the value 128 at the end. This is done to match the
   // server implementation for calculating the hash prefix of an IP address.
   static bool IPAddressToEncodedIPV6Hash(const std::string& ip_address,
-                                         FullHash* hashed_encoded_ip);
+                                         FullHashStr* hashed_encoded_ip);
 
   // Stores the client state values for each of the lists in |store_state_map|
   // into |list_client_states|.

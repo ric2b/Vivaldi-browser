@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/modules/peerconnection/rtc_encoded_audio_underlying_sink.h"
 
 #include "base/memory/scoped_refptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/platform/scheduler/test/renderer_scheduler_test_support.h"
@@ -31,6 +32,7 @@
 using testing::_;
 using testing::NiceMock;
 using testing::Return;
+using testing::ReturnRef;
 
 namespace blink {
 
@@ -94,6 +96,8 @@ class RTCEncodedAudioUnderlyingSinkTest : public testing::Test {
           webrtc::TransformableFrameInterface::Direction::kSender) {
     auto mock_frame = std::make_unique<NiceMock<MockTransformableAudioFrame>>();
     ON_CALL(*mock_frame.get(), GetDirection).WillByDefault(Return(direction));
+    webrtc::RTPHeader header;
+    ON_CALL(*mock_frame.get(), GetHeader).WillByDefault(ReturnRef(header));
     std::unique_ptr<webrtc::TransformableAudioFrameInterface> audio_frame =
         base::WrapUnique(static_cast<webrtc::TransformableAudioFrameInterface*>(
             mock_frame.release()));

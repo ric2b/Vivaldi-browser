@@ -9,11 +9,11 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -1414,7 +1414,7 @@ TEST_F(FilePathWatcherTest, DirAttributesChanged) {
 
 #endif  // BUILDFLAG(IS_APPLE)
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 
 // Fail fast if trying to trivially watch a non-existent item.
 TEST_F(FilePathWatcherTest, TrivialNoDir) {
@@ -1486,7 +1486,7 @@ TEST_F(FilePathWatcherTest, TrivialDirMove) {
   ASSERT_TRUE(WaitForEvent());
 }
 
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_APPLE)
 
 }  // namespace
 

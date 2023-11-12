@@ -47,7 +47,7 @@ SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
     case ETC1:
       return kRGB_888x_SkColorType;
     case P010:
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       DLOG(ERROR) << "Sampling of P010 resources must be done per-plane.";
 #endif
       return kRGBA_1010102_SkColorType;
@@ -59,12 +59,12 @@ SkColorType ResourceFormatToClosestSkColorType(bool gpu_compositing,
     // YUV images are sampled as RGB.
     case YVU_420:
     case YUV_420_BIPLANAR:
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       DLOG(ERROR) << "Sampling of YUV_420 resources must be done per-plane.";
 #endif
       return kRGB_888x_SkColorType;
     case YUVA_420_TRIPLANAR:
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       DLOG(ERROR) << "Sampling of YUVA_420 resources must be done per-plane.";
 #endif
       return kRGBA_8888_SkColorType;
@@ -142,9 +142,10 @@ int BitsPerPixel(ResourceFormat format) {
     case BGRX_8888:
     case RGBA_1010102:
     case BGRA_1010102:
-    case P010:
     case RG16_EXT:
       return 32;
+    case P010:
+      return 24;
     case YUVA_420_TRIPLANAR:
       return 20;
     case RGBA_4444:
@@ -163,6 +164,40 @@ int BitsPerPixel(ResourceFormat format) {
       return 8;
     case ETC1:
       return 4;
+  }
+  NOTREACHED();
+  return 0;
+}
+
+int AlphaBits(ResourceFormat format) {
+  switch (format) {
+    case RGBA_F16:
+      return 16;
+    case BGRA_8888:
+    case RGBA_8888:
+    case YUVA_420_TRIPLANAR:
+    case ALPHA_8:
+      return 8;
+    case RGBA_4444:
+      return 4;
+    case RGBA_1010102:
+    case BGRA_1010102:
+      return 2;
+    case RGBX_8888:
+    case BGRX_8888:
+    case P010:
+    case RG16_EXT:
+    case RGB_565:
+    case LUMINANCE_F16:
+    case R16_EXT:
+    case BGR_565:
+    case RG_88:
+    case YVU_420:
+    case YUV_420_BIPLANAR:
+    case LUMINANCE_8:
+    case RED_8:
+    case ETC1:
+      return 0;
   }
   NOTREACHED();
   return 0;
@@ -252,6 +287,46 @@ unsigned int GLInternalFormat(ResourceFormat format) {
   }
 }
 
+bool HasEquivalentBufferFormat(SharedImageFormat format) {
+  if (format.is_single_plane()) {
+    return HasEquivalentBufferFormat(format.resource_format());
+  }
+
+  return format == MultiPlaneFormat::kYVU_420 ||
+         format == MultiPlaneFormat::kYUV_420_BIPLANAR ||
+         format == MultiPlaneFormat::kYUVA_420_TRIPLANAR ||
+         format == MultiPlaneFormat::kP010;
+}
+
+bool HasEquivalentBufferFormat(ResourceFormat format) {
+  switch (format) {
+    case BGRA_8888:
+    case RED_8:
+    case R16_EXT:
+    case RG16_EXT:
+    case RGBA_4444:
+    case RGBA_8888:
+    case RGBA_F16:
+    case BGR_565:
+    case RG_88:
+    case RGBX_8888:
+    case BGRX_8888:
+    case RGBA_1010102:
+    case BGRA_1010102:
+    case YVU_420:
+    case YUV_420_BIPLANAR:
+    case YUVA_420_TRIPLANAR:
+    case P010:
+      return true;
+    case ETC1:
+    case ALPHA_8:
+    case LUMINANCE_8:
+    case RGB_565:
+    case LUMINANCE_F16:
+      return false;
+  }
+}
+
 gfx::BufferFormat BufferFormat(ResourceFormat format) {
   switch (format) {
     case BGRA_8888:
@@ -338,7 +413,7 @@ unsigned int TextureStorageFormat(ResourceFormat format,
     case ETC1:
       return GL_ETC1_RGB8_OES;
     case P010:
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       DLOG(ERROR) << "Sampling of P010 resources must be done per-plane.";
 #endif
       return GL_RGB10_A2_EXT;
@@ -347,12 +422,12 @@ unsigned int TextureStorageFormat(ResourceFormat format,
       return GL_RGB10_A2_EXT;
     case YVU_420:
     case YUV_420_BIPLANAR:
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       DLOG(ERROR) << "Sampling of YUV_420 resources must be done per-plane.";
 #endif
       return GL_RGB8_OES;
     case YUVA_420_TRIPLANAR:
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       DLOG(ERROR) << "Sampling of YUVA_420 resources must be done per-plane.";
 #endif
       return GL_RGBA8_OES;
@@ -373,7 +448,7 @@ bool IsGpuMemoryBufferFormatSupported(ResourceFormat format) {
     // candidate.
     case RED_8:
 #endif
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
     case BGRX_8888:
     case RGBX_8888:
 #endif
@@ -392,7 +467,7 @@ bool IsGpuMemoryBufferFormatSupported(ResourceFormat format) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     case RED_8:
 #endif
-#if !BUILDFLAG(IS_MAC)
+#if !BUILDFLAG(IS_APPLE)
     case BGRX_8888:
     case RGBX_8888:
 #endif
@@ -493,18 +568,6 @@ bool GLSupportsFormat(ResourceFormat format) {
       return false;
     default:
       return true;
-  }
-}
-
-bool IsYuvFormat(ResourceFormat format) {
-  switch (format) {
-    case YVU_420:
-    case YUV_420_BIPLANAR:
-    case YUVA_420_TRIPLANAR:
-    case P010:
-      return true;
-    default:
-      return false;
   }
 }
 

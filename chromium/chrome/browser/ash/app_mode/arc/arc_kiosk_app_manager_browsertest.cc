@@ -80,7 +80,7 @@ class ArcKioskAppManagerTest : public InProcessBrowserTest {
   ArcKioskAppManagerTest() : settings_helper_(false) {}
   ArcKioskAppManagerTest(const ArcKioskAppManagerTest&) = delete;
   ArcKioskAppManagerTest& operator=(const ArcKioskAppManagerTest&) = delete;
-  ~ArcKioskAppManagerTest() override {}
+  ~ArcKioskAppManagerTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     arc::SetArcAvailableCommandLineForTesting(command_line);
@@ -126,7 +126,7 @@ class ArcKioskAppManagerTest : public InProcessBrowserTest {
   }
 
   void CleanApps() {
-    base::ListValue device_local_accounts;
+    base::Value device_local_accounts(base::Value::Type::LIST);
     owner_settings_service_->Set(kAccountsPrefDeviceLocalAccounts,
                                  device_local_accounts);
   }

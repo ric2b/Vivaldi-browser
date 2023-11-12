@@ -35,7 +35,6 @@ import org.mockito.MockitoAnnotations;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
@@ -149,7 +148,6 @@ public class TouchToFillIntegrationTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "crbug.com/1348345")
     public void testBackDismissesAndCallsCallback() {
         runOnUiThreadBlocking(() -> {
             mTouchToFill.showCredentials(
@@ -263,7 +261,8 @@ public class TouchToFillIntegrationTest {
     }
 
     private RecyclerView getCredentials() {
-        return mActivityTestRule.getActivity().findViewById(R.id.sheet_item_list);
+        return mActivityTestRule.getActivity().findViewById(
+                org.chromium.chrome.browser.touch_to_fill.common.R.id.sheet_item_list);
     }
 
     private TextView getManagePasswordsButton() {

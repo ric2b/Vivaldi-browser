@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "base/big_endian.h"
-#include "base/callback_helpers.h"
 #include "base/containers/span.h"
+#include "base/functional/callback_helpers.h"
 #include "base/hash/md5.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -97,8 +97,8 @@ void OnClaimInterface(mojo::Remote<device::mojom::UsbDevice> device,
 // interface.
 void OnDeviceOpen(mojo::Remote<device::mojom::UsbDevice> device,
                   GetDeviceIdCallback cb,
-                  device::mojom::UsbOpenDeviceError error) {
-  if (error != device::mojom::UsbOpenDeviceError::OK || !device) {
+                  device::mojom::UsbOpenDeviceResultPtr result) {
+  if (result->is_error() || !device) {
     return std::move(cb).Run({});
   }
 

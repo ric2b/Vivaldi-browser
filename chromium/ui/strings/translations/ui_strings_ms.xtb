@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 bulan}other{# bulan}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 jam dan }other{# jam dan }}</translation>
+<translation id="185013357618350178">&amp;Pilih</translation>
 <translation id="1859234291848436338">Arah Penulisan</translation>
 <translation id="1860796786778352021">Tutup Pemberitahuan</translation>
 <translation id="186476001994626254">Kandungan Tampal Pintar Web</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{dalam 1j}other{dalam #j}}</translation>
 <translation id="2583543531130364912">Tentukur skrin sentuh anda</translation>
 <translation id="2586657967955657006">Papan Keratan</translation>
+<translation id="2653844658857826081">BAHARU</translation>
 <translation id="2666092431469916601">Atas</translation>
 <translation id="2701330563083355633">Dikongsi daripada <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Baharu</translation>

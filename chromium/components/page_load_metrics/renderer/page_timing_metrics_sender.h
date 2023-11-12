@@ -52,7 +52,10 @@ class PageTimingMetricsSender {
   void DidObserveLoadingBehavior(blink::LoadingBehaviorFlag behavior);
   void DidObserveSubresourceLoad(
       uint32_t number_of_subresources_loaded,
-      uint32_t number_of_subresource_loads_handled_by_service_worker);
+      uint32_t number_of_subresource_loads_handled_by_service_worker,
+      bool pervasive_payload_requested,
+      int64_t pervasive_bytes_fetched,
+      int64_t total_bytes_fetched);
   void DidObserveNewFeatureUsage(const blink::UseCounterFeature& feature);
   void DidObserveSoftNavigation(uint32_t count);
   void DidObserveLayoutShift(double score, bool after_input_or_scroll);
@@ -73,6 +76,8 @@ class PageTimingMetricsSender {
       const gfx::Rect& main_frame_intersection_rect);
   void OnMainFrameViewportRectangleChanged(
       const gfx::Rect& main_frame_viewport_rect);
+  void OnMainFrameImageAdRectangleChanged(int element_id,
+                                          const gfx::Rect& image_ad_rect);
 
   void DidObserveInputDelay(base::TimeDelta input_delay);
   void DidObserveUserInteraction(base::TimeDelta max_event_duration,

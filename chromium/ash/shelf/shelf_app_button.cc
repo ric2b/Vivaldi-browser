@@ -17,8 +17,9 @@
 #include "ash/style/default_color_constants.h"
 #include "ash/style/default_colors.h"
 #include "ash/style/dot_indicator.h"
+#include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
@@ -342,7 +343,7 @@ ShelfAppButton::ShelfAppButton(ShelfView* shelf_view,
         const int ripple_size = host->shelf_view_->GetShelfItemRippleSize();
 
         return std::make_unique<views::SquareInkDropRipple>(
-            gfx::Size(ripple_size, ripple_size),
+            views::InkDrop::Get(host), gfx::Size(ripple_size, ripple_size),
             views::InkDrop::Get(host)->GetLargeCornerRadius(),
             small_ripple_area.size(),
             views::InkDrop::Get(host)->GetSmallCornerRadius(),
@@ -651,6 +652,10 @@ const char* ShelfAppButton::GetClassName() const {
 }
 
 bool ShelfAppButton::OnMousePressed(const ui::MouseEvent& event) {
+  // Clear any closing desks so that the user does not try to interact with an
+  // app that is open on a closing desk.
+  DesksController::Get()->MaybeCommitPendingDeskRemoval();
+
   // TODO: This call should probably live somewhere else (such as inside
   // |ShelfView.PointerPressedOnButton|.
   // No need to scale up the app for mouse right click since the app can't be

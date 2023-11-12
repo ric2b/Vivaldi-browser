@@ -11,7 +11,7 @@
 
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/task/thread_pool.h"
@@ -200,6 +200,11 @@ void ArcWallpaperService::NotifyWallpaperChangedAndReset(int32_t android_id) {
   // Invoke NotifyWallpaperChanged with -1 so that Android side regards the
   // wallpaper of |android_id_| is no longer used at Chrome side.
   NotifyWallpaperChanged(-1);
+}
+
+// static
+void ArcWallpaperService::EnsureFactoryBuilt() {
+  ArcWallpaperServiceFactory::GetInstance();
 }
 
 }  // namespace arc

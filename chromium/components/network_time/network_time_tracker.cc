@@ -9,9 +9,9 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/i18n/time_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -139,16 +139,16 @@ const uint32_t kTimeServerMaxSkewSeconds = 10;
 const char kTimeServiceURL[] = "http://clients2.google.com/time/1/current";
 
 // This is an ECDSA prime256v1 named-curve key.
-const int kKeyVersion = 6;
+const int kKeyVersion = 7;
 const uint8_t kKeyPubBytes[] = {
     0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x02,
     0x01, 0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07, 0x03,
-    0x42, 0x00, 0x04, 0x59, 0x65, 0x1F, 0x1D, 0x36, 0x33, 0x81, 0xE1, 0xB2,
-    0xD3, 0x78, 0x4B, 0xE1, 0x7B, 0x8D, 0x07, 0x33, 0x55, 0x4F, 0x0D, 0x67,
-    0x1C, 0x33, 0xD2, 0xFE, 0x78, 0x02, 0xB6, 0xD2, 0xDF, 0x2F, 0x45, 0x1F,
-    0x49, 0xBA, 0xD2, 0xE6, 0x67, 0x4E, 0x4D, 0xA9, 0x77, 0xB3, 0x34, 0x12,
-    0xEB, 0x6D, 0xC0, 0xDC, 0x86, 0xE7, 0xBE, 0xF7, 0x09, 0x56, 0x77, 0x2A,
-    0xF3, 0xE8, 0x4E, 0x96, 0xAB, 0xAB, 0x12};
+    0x42, 0x00, 0x04, 0x9F, 0xB4, 0x82, 0x7E, 0xAE, 0x02, 0xA2, 0xF2, 0x9C,
+    0x32, 0x8E, 0xF8, 0x00, 0xFC, 0x75, 0x45, 0xCF, 0x45, 0x36, 0x01, 0x71,
+    0x93, 0x57, 0x54, 0x1C, 0xA7, 0xC5, 0x09, 0xDA, 0xB1, 0xBC, 0x36, 0xB1,
+    0x44, 0x1C, 0x2E, 0x12, 0x58, 0x2F, 0xE2, 0x27, 0x40, 0x40, 0x42, 0xEE,
+    0x95, 0x7A, 0xAC, 0xE4, 0x33, 0xAC, 0xAA, 0x09, 0x6F, 0x5C, 0x0F, 0x94,
+    0xA7, 0xB4, 0xB5, 0xE2, 0x6B, 0xB6, 0xC4};
 
 // Number of samples to be used for the computation of clock drift.
 constexpr base::FeatureParam<NetworkTimeTracker::ClockDriftSamples>::Option
@@ -175,10 +175,6 @@ std::string GetServerProof(
                                            &proof)
              ? proof
              : std::string();
-}
-
-void RecordFetchValidHistogram(bool valid) {
-  LOCAL_HISTOGRAM_BOOLEAN("NetworkTimeTracker.UpdateTimeFetchValid", valid);
 }
 
 void UmaHistogramCustomTimesClockSkew(const char* name,
@@ -372,9 +368,6 @@ NetworkTimeTracker::NetworkTimeResult NetworkTimeTracker::GetNetworkTime(
   base::TimeDelta time_delta = clock_->Now() - time_at_last_measurement_;
   if (time_delta.InMilliseconds() < 0) {  // Has wall clock run backward?
     DVLOG(1) << "Discarding network time due to wall clock running backward";
-    LOCAL_HISTOGRAM_CUSTOM_TIMES("NetworkTimeTracker.WallClockRanBackwards",
-                                 time_delta.magnitude(), base::Seconds(1),
-                                 base::Days(7), 50);
     network_time_at_last_measurement_ = base::Time();
     return NETWORK_TIME_SYNC_LOST;
   }
@@ -385,19 +378,6 @@ NetworkTimeTracker::NetworkTimeResult NetworkTimeTracker::GetNetworkTime(
     // reset.
     DVLOG(1) << "Discarding network time due to clocks diverging";
 
-    // The below histograms do not use |kClockDivergenceSeconds| as the
-    // lower-bound, so that |kClockDivergenceSeconds| can be changed
-    // without causing the buckets to change and making data from
-    // old/new clients incompatible.
-    if (divergence.InMilliseconds() < 0) {
-      LOCAL_HISTOGRAM_CUSTOM_TIMES(
-          "NetworkTimeTracker.ClockDivergence.Negative", divergence.magnitude(),
-          base::Seconds(60), base::Days(7), 50);
-    } else {
-      LOCAL_HISTOGRAM_CUSTOM_TIMES(
-          "NetworkTimeTracker.ClockDivergence.Positive", divergence.magnitude(),
-          base::Seconds(60), base::Days(7), 50);
-    }
     network_time_at_last_measurement_ = base::Time();
     return NETWORK_TIME_SYNC_LOST;
   }
@@ -516,12 +496,6 @@ bool NetworkTimeTracker::UpdateTimeFromResponse(
   if (response_code != 200 || !response_body) {
     time_query_completed_ = true;
     DVLOG(1) << "fetch failed code=" << response_code;
-    // The error code is negated because net errors are negative, but
-    // the corresponding histogram enum is positive.
-    const int kPositiveError = -time_fetcher_->NetError();
-    DCHECK_LE(kPositiveError, 10000);
-    LOCAL_HISTOGRAM_COUNTS_10000("NetworkTimeTracker.UpdateTimeFetchFailed",
-                                 kPositiveError);
     return false;
   }
 
@@ -531,30 +505,24 @@ bool NetworkTimeTracker::UpdateTimeFromResponse(
   if (!query_signer_->ValidateResponse(
           response, GetServerProof(time_fetcher_->ResponseInfo()->headers))) {
     DVLOG(1) << "invalid signature";
-    RecordFetchValidHistogram(false);
     return false;
   }
   response.remove_prefix(5);  // Skips leading )]}'\n
   absl::optional<base::Value> value = base::JSONReader::Read(response);
   if (!value) {
     DVLOG(1) << "bad JSON";
-    RecordFetchValidHistogram(false);
     return false;
   }
   if (!value->is_dict()) {
     DVLOG(1) << "not a dictionary";
-    RecordFetchValidHistogram(false);
     return false;
   }
   absl::optional<double> current_time_millis =
       value->GetDict().FindDouble("current_time_millis");
   if (!current_time_millis) {
     DVLOG(1) << "no current_time_millis";
-    RecordFetchValidHistogram(false);
     return false;
   }
-
-  RecordFetchValidHistogram(true);
 
   // There is a "server_nonce" key here too, but it serves no purpose other than
   // to make the server's response unpredictable.
@@ -567,13 +535,7 @@ bool NetworkTimeTracker::UpdateTimeFromResponse(
   base::TimeDelta latency =
       time_fetcher_->ResponseInfo()->load_timing.receive_headers_start -
       time_fetcher_->ResponseInfo()->load_timing.send_end;
-  LOCAL_HISTOGRAM_TIMES("NetworkTimeTracker.TimeQueryLatency", latency);
 
-  if (!last_fetched_time_.is_null()) {
-    LOCAL_HISTOGRAM_CUSTOM_TIMES("NetworkTimeTracker.TimeBetweenFetches",
-                                 current_time - last_fetched_time_,
-                                 base::Hours(1), base::Days(7), 50);
-  }
   last_fetched_time_ = current_time;
 
   if (check_type == CheckTimeType::BACKGROUND) {

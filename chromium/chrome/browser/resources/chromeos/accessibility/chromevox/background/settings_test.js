@@ -3,14 +3,14 @@
 // found in the LICENSE file.
 
 // Include test fixture.
-GEN_INCLUDE(['../testing/chromevox_next_e2e_test_base.js']);
+GEN_INCLUDE(['../testing/chromevox_e2e_test_base.js']);
 
 GEN_INCLUDE(['../testing/mock_feedback.js', '../testing/fake_objects.js']);
 
 /**
  * Test fixture involving settings pages.
  */
-ChromeVoxSettingsPagesTest = class extends ChromeVoxNextE2ETest {
+ChromeVoxSettingsPagesTest = class extends ChromeVoxE2ETest {
   /** @override */
   testGenCppIncludes() {
     super.testGenCppIncludes();
@@ -34,6 +34,7 @@ ChromeVoxSettingsPagesTest = class extends ChromeVoxNextE2ETest {
     await super.setUpDeferred();
 
     // Alphabetical based on file path.
+    await importModule('ChromeVox', '/chromevox/background/chromevox.js');
     await importModule('TtsSettings', '/chromevox/common/tts_types.js');
   }
 };

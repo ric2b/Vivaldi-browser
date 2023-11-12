@@ -6,11 +6,16 @@
 
 #import "base/check.h"
 #import "components/image_fetcher/core/image_data_fetcher.h"
+#import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/commerce/shopping_service_factory.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
+#import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
+#import "ios/chrome/browser/ui/commands/bookmarks_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_price_tracking_mediator.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_table_view_controller.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
@@ -18,7 +23,10 @@
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller_constants.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
+#import "ios/chrome/grit/ios_chromium_strings.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -37,13 +45,22 @@
 
 @end
 
-@implementation PriceNotificationsViewCoordinator
+@implementation PriceNotificationsViewCoordinator {
+  // Coordinator for displaying alerts.
+  AlertCoordinator* _alertCoordinator;
+}
 
 #pragma mark - ChromeCoordinator
 
 - (void)start {
   self.tableViewController = [[PriceNotificationsTableViewController alloc]
       initWithStyle:ChromeTableViewStyle()];
+  PrefService* prefService = self.browser->GetBrowserState()->GetPrefs();
+  self.tableViewController.hasPreviouslyViewed =
+      prefService->GetBoolean(prefs::kPriceNotificationsHasBeenShown);
+  if (!self.tableViewController.hasPreviouslyViewed) {
+    prefService->SetBoolean(prefs::kPriceNotificationsHasBeenShown, true);
+  }
 
   commerce::ShoppingService* shoppingService =
       commerce::ShoppingServiceFactory::GetForBrowserState(
@@ -62,6 +79,14 @@
                  imageFetcher:std::move(imageFetcher)
                      webState:webState];
   self.mediator.consumer = self.tableViewController;
+  self.mediator.presenter = self;
+  self.mediator.handler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), PriceNotificationsCommands);
+  self.mediator.bookmarksHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), BookmarksCommands);
+  self.tableViewController.mutator = self.mediator;
+  self.tableViewController.snackbarCommandsHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), SnackbarCommands);
 
   // Add the "Done" button and hook it up to stop.
   UIBarButtonItem* dismissButton = [[UIBarButtonItem alloc]
@@ -110,6 +135,106 @@
   self.navigationController = nil;
 
   [super stop];
+}
+
+#pragma mark - PriceNotificationsAlertPresenter
+
+- (void)presentPushNotificationPermissionAlert {
+  NSString* settingURL = UIApplicationOpenSettingsURLString;
+  if (@available(iOS 15.4, *)) {
+    settingURL = UIApplicationOpenNotificationSettingsURLString;
+  }
+
+  NSString* alertTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_TITLE);
+  NSString* alertMessage = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_MESSAGE);
+  NSString* cancelTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_CANCEL);
+  NSString* settingsTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_REDIRECT);
+
+  [_alertCoordinator stop];
+  _alertCoordinator = [[AlertCoordinator alloc]
+      initWithBaseViewController:self.tableViewController
+                         browser:self.browser
+                           title:alertTitle
+                         message:alertMessage];
+  [_alertCoordinator addItemWithTitle:cancelTitle
+                               action:nil
+                                style:UIAlertActionStyleCancel];
+  [_alertCoordinator
+      addItemWithTitle:settingsTitle
+                action:^{
+                  [[UIApplication sharedApplication]
+                                openURL:[NSURL URLWithString:settingURL]
+                                options:{}
+                      completionHandler:nil];
+                }
+                 style:UIAlertActionStyleDefault];
+  [_alertCoordinator start];
+}
+
+- (void)presentStartPriceTrackingErrorAlertForItem:
+    (PriceNotificationsTableViewItem*)item {
+  __weak PriceNotificationsPriceTrackingMediator* weakMediator = self.mediator;
+  __weak PriceNotificationsTableViewController* weakController =
+      self.tableViewController;
+  NSString* alertTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_ERROR_ALERT_TITLE);
+  NSString* alertMessage = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_SUBSCRIBE_ERROR_ALERT_DESCRIPTION);
+  NSString* cancelTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_CANCEL);
+  NSString* tryAgainTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_ERROR_ALERT_REATTEMPT);
+
+  [_alertCoordinator stop];
+  _alertCoordinator = [[AlertCoordinator alloc]
+      initWithBaseViewController:self.tableViewController
+                         browser:self.browser
+                           title:alertTitle
+                         message:alertMessage];
+  [_alertCoordinator addItemWithTitle:cancelTitle
+                               action:^{
+                                 [weakController resetPriceTrackingItem:item];
+                               }
+                                style:UIAlertActionStyleCancel];
+  [_alertCoordinator addItemWithTitle:tryAgainTitle
+                               action:^{
+                                 [weakMediator trackItem:item];
+                               }
+                                style:UIAlertActionStyleDefault];
+  [_alertCoordinator start];
+}
+
+- (void)presentStopPriceTrackingErrorAlertForItem:
+    (PriceNotificationsTableViewItem*)item {
+  __weak PriceNotificationsPriceTrackingMediator* weakMediator = self.mediator;
+  NSString* alertTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_ERROR_ALERT_TITLE);
+  NSString* alertMessage = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_UNSUBSCRIBE_ERROR_ALERT_DESCRIPTION);
+  NSString* cancelTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_PERMISSION_REDIRECT_ALERT_CANCEL);
+  NSString* tryAgainTitle = l10n_util::GetNSString(
+      IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_ERROR_ALERT_REATTEMPT);
+
+  [_alertCoordinator stop];
+  _alertCoordinator = [[AlertCoordinator alloc]
+      initWithBaseViewController:self.tableViewController
+                         browser:self.browser
+                           title:alertTitle
+                         message:alertMessage];
+  [_alertCoordinator addItemWithTitle:cancelTitle
+                               action:nil
+                                style:UIAlertActionStyleCancel];
+  [_alertCoordinator addItemWithTitle:tryAgainTitle
+                               action:^{
+                                 [weakMediator stopTrackingItem:item];
+                               }
+                                style:UIAlertActionStyleDefault];
+  [_alertCoordinator start];
 }
 
 #pragma mark - Private

@@ -89,7 +89,7 @@ names, use the functions in histogram_functions.h instead of the macros.
 If you must use the histogram name in multiple places, use a compile-time
 constant of appropriate scope that can be referenced everywhere. Using inline
 strings in multiple places can lead to errors if you ever need to revise the
-name and you update one one location and forget another.
+name and you update one location and forget another.
 
 ### Efficiency
 
@@ -511,12 +511,19 @@ the values emitted to are correct. Finally, for count histograms, make sure
 that buckets capture enough precision for your needs over the range.
 
 Pro tip: You can filter the set of histograms shown on `chrome://histograms` by
-specifying a prefix. For example, `chrome://histograms/Extensions.Load` shows
-only histograms whose names match the pattern "Extensions.Load*".
+appending to the URL. For example, `chrome://histograms/UserActions` shows
+only histograms whose names contain "UserActions", such as
+"UMA.UserActionsCount".
 
 In addition to testing interactively, you can have unit tests examine the
 values emitted to histograms. See [histogram_tester.h](https://cs.chromium.org/chromium/src/base/test/metrics/histogram_tester.h)
 for details.
+
+See also `chrome://metrics-internals` ([docs](https://chromium.googlesource.com/chromium/src/+/master/components/metrics/debug/README.md))
+for more thorough manual testing if needed.
+
+By default, histograms in unit or browser tests will not be actually uploaded.
+In general, you can rely on the UMA infrastructure to upload the metrics correctly.
 
 ## Interpreting the Resulting Data
 
@@ -641,6 +648,23 @@ with the histogram. If there isn't a parallel DIR_METADATA file with such a
 component, but a parent directory has one, then the parent directory's component
 is used.
 
+### Improvement Direction
+For some histograms, an increase or a decrease in the reported values can be
+associated with either an improvement or a deterioration. For example, if you
+are tracking page load speed, then seeing your metrics tracking page load time
+in milliseconds getting gradually larger values, perhaps as the result of a
+Finch study, may signify worse performance; on the contrary, seeing a reduction
+in the page load speed may indicate an improvement. You can provide this
+information on the movement direction by adding a tag
+ `<improvement direction="LOWER_IS_BETTER"/>` within your `<histogram>`. The
+opposite is `<improvement direction="HIGHER_IS_BETTER"/>`.
+
+For other histograms where there may not be a movement direction that's clearly
+better, you can set `<improvement direction="NEITHER_IS_BETTER"/>`.
+
+This `<improvement>` tag is optional. You can also add/delete this tag or make a
+correction to its `direction` attribute any time.
+
 ### Cleaning Up Histogram Entries {#obsolete}
 
 If a histogram is no longer being emitted to, there are two options to clean up
@@ -682,8 +706,11 @@ entry in the histograms.xml file.
   * `<enum>` blocks from enums.xml that are no longer used.
   * Suffix entries in histogram_suffixes_list.xml.
 * Please remove these artifacts if you find them.
-  * **Exception**: please mark `<int value=...>` blocks as obsolete rather than
-    deleting them, if the surrounding `<enum>` block is not being deleted.
+  * **Exception**: please update the label of `<int value=... label=... />` with
+    the `(Obsolete) ` prefix, e.g.
+    `<int value="1" label="(Obsolete) Navigation failed. Removed in 2023/01."/>`
+    rather than deleting them, if the surrounding `<enum>` block is not being
+    deleted.
 * A histogram entry can be removed after an obsoletion message was added, but
   please check that at least a day has passed since the change landed. This
   ensures that the message will be recorded by internal tools.

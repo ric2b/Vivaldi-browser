@@ -12,11 +12,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/dcheck_is_on.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/number_formatting.h"
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
@@ -81,6 +82,10 @@
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/crosapi/mojom/drive_integration_service.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
+#endif
+
+#if DCHECK_IS_ON()
+#include "base/debug/stack_trace.h"
 #endif
 
 using content::RenderFrameHost;
@@ -763,7 +768,7 @@ void PrintPreviewHandler::HandleCancelPendingPrintRequest(
   WebContents* initiator = GetInitiator();
   if (initiator)
     ClearInitiatorDetails();
-  ShowPrintErrorDialog();
+  ShowPrintErrorDialogForGenericError();
 }
 
 void PrintPreviewHandler::HandleSaveAppState(const base::Value::List& args) {
@@ -928,7 +933,10 @@ void PrintPreviewHandler::SendInitialSettings(
   initial_settings.Set(kIsDriveMounted,
                        drive_service && drive_service->IsMounted());
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (drive_integration_service_) {
+  // The "Save to Google Drive" option is only allowed for the primary profile
+  // in the Lacros browser.
+  if (Profile::FromWebUI(web_ui())->IsMainProfile() &&
+      drive_integration_service_) {
     drive_integration_service_->GetMountPointPath(base::BindOnce(
         &PrintPreviewHandler::OnDrivePathReady, weak_factory_.GetWeakPtr(),
         std::move(initial_settings), callback_id));
@@ -1163,6 +1171,10 @@ void PrintPreviewHandler::BadMessageReceived() {
   bad_message::ReceivedBadMessage(
       GetInitiator()->GetPrimaryMainFrame()->GetProcess(),
       bad_message::BadMessageReason::PPH_EXTRA_PREVIEW_MESSAGE);
+#if DCHECK_IS_ON()
+  // TODO(crbug.com/1371776): Remove this once the bug is fixed.
+  base::debug::StackTrace().Print();
+#endif
 }
 
 void PrintPreviewHandler::FileSelectedForTesting(const base::FilePath& path,

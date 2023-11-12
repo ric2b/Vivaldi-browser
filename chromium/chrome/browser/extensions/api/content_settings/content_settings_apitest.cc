@@ -4,8 +4,8 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -41,6 +41,7 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/test_extension_registry_observer.h"
+#include "net/base/schemeful_site.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "content/public/browser/plugin_service.h"
@@ -49,7 +50,6 @@
 namespace extensions {
 
 using ContextType = ExtensionApiTest::ContextType;
-using QueryReason = content_settings::CookieSettings::QueryReason;
 
 class ExtensionContentSettingsApiTest : public ExtensionApiTest {
  public:
@@ -100,9 +100,9 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     // Check default content settings by using an unknown URL.
     GURL example_url("http://www.example.com");
     EXPECT_TRUE(cookie_settings->IsFullCookieAccessAllowed(
-        example_url, example_url, QueryReason::kSetting));
-    EXPECT_TRUE(cookie_settings->IsCookieSessionOnly(example_url,
-                                                     QueryReason::kSetting));
+        example_url, net::SiteForCookies::FromUrl(example_url),
+        url::Origin::Create(example_url), net::CookieSettingOverrides()));
+    EXPECT_TRUE(cookie_settings->IsCookieSessionOnly(example_url));
     EXPECT_EQ(CONTENT_SETTING_ALLOW,
               map->GetContentSetting(example_url, example_url,
                                      ContentSettingsType::IMAGES));
@@ -134,7 +134,8 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     // Check content settings for www.google.com
     GURL url("http://www.google.com");
     EXPECT_FALSE(cookie_settings->IsFullCookieAccessAllowed(
-        url, url, QueryReason::kSetting));
+        url, net::SiteForCookies::FromUrl(url), url::Origin::Create(url),
+        net::CookieSettingOverrides()));
     EXPECT_EQ(CONTENT_SETTING_ALLOW,
               map->GetContentSetting(url, url, ContentSettingsType::IMAGES));
     EXPECT_EQ(
@@ -170,9 +171,9 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
     // Check content settings for www.google.com
     GURL url("http://www.google.com");
     EXPECT_TRUE(cookie_settings->IsFullCookieAccessAllowed(
-        url, url, QueryReason::kSetting));
-    EXPECT_FALSE(
-        cookie_settings->IsCookieSessionOnly(url, QueryReason::kSetting));
+        url, net::SiteForCookies::FromUrl(url), url::Origin::Create(url),
+        net::CookieSettingOverrides()));
+    EXPECT_FALSE(cookie_settings->IsCookieSessionOnly(url));
     EXPECT_EQ(CONTENT_SETTING_ALLOW,
               map->GetContentSetting(url, url, ContentSettingsType::IMAGES));
     EXPECT_EQ(
@@ -209,9 +210,9 @@ class ExtensionContentSettingsApiTest : public ExtensionApiTest {
         CookieSettingsFactory::GetForProfile(profile_).get();
 
     content_settings.push_back(cookie_settings->IsFullCookieAccessAllowed(
-        url, url, QueryReason::kSetting));
-    content_settings.push_back(
-        cookie_settings->IsCookieSessionOnly(url, QueryReason::kSetting));
+        url, net::SiteForCookies::FromUrl(url), url::Origin::Create(url),
+        net::CookieSettingOverrides()));
+    content_settings.push_back(cookie_settings->IsCookieSessionOnly(url));
     content_settings.push_back(
         map->GetContentSetting(url, url, ContentSettingsType::IMAGES));
     content_settings.push_back(

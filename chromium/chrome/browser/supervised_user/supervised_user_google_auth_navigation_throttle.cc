@@ -4,7 +4,7 @@
 
 #include "chrome/browser/supervised_user/supervised_user_google_auth_navigation_throttle.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
@@ -150,11 +150,20 @@ SupervisedUserGoogleAuthNavigationThrottle::ShouldProceed() {
       return content::NavigationThrottle::DEFER;
     }
 
-    ReauthenticateChildAccount(
-        web_contents, account_info.email,
-        base::BindRepeating(&SupervisedUserGoogleAuthNavigationThrottle::
-                                OnReauthenticationFailed,
-                            weak_ptr_factory_.GetWeakPtr()));
+    if (skip_jni_call_for_testing_) {
+      // Returns callback without JNI call for testing. Resets
+      // has_shown_reauth_.
+      base::BindRepeating(
+          &SupervisedUserGoogleAuthNavigationThrottle::OnReauthenticationFailed,
+          weak_ptr_factory_.GetWeakPtr())
+          .Run();
+    } else {
+      ReauthenticateChildAccount(
+          web_contents, account_info.email,
+          base::BindRepeating(&SupervisedUserGoogleAuthNavigationThrottle::
+                                  OnReauthenticationFailed,
+                              weak_ptr_factory_.GetWeakPtr()));
+    }
   }
   return content::NavigationThrottle::DEFER;
 #else
@@ -167,6 +176,6 @@ SupervisedUserGoogleAuthNavigationThrottle::ShouldProceed() {
 }
 
 void SupervisedUserGoogleAuthNavigationThrottle::OnReauthenticationFailed() {
-  // Cancel the navifation if reauthentication failed.
+  // Cancel the navigation if reauthentication failed.
   CancelDeferredNavigation(content::NavigationThrottle::CANCEL_AND_IGNORE);
 }

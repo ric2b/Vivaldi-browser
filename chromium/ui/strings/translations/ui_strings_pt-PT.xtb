@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 mês}other{# meses}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 hora e  }other{# horas e  }}</translation>
+<translation id="185013357618350178">&amp;Selecionar</translation>
 <translation id="1859234291848436338">Direcção da escrita</translation>
 <translation id="1860796786778352021">Fechar notificação</translation>
 <translation id="186476001994626254">Conteúdo Web Smart Paste</translation>
@@ -40,7 +41,7 @@
 <translation id="2161656808144014275">Texto</translation>
 <translation id="2168039046890040389">Página para cima</translation>
 <translation id="2190355936436201913">(vazio)</translation>
-<translation id="2192232475740621500">Utilizar densidade baixa</translation>
+<translation id="2192232475740621500">Usar densidade baixa</translation>
 <translation id="2267918077332197517">Bloquear todas as notificações deste site</translation>
 <translation id="2283117145434822734">F6</translation>
 <translation id="2289052229480071835">Toque nos alvos de toque no ecrã.</translation>
@@ -50,7 +51,7 @@
 <translation id="2388990488038464401">Pretende ligar para este número a partir do seu telemóvel?</translation>
 <translation id="2435457462613246316">Mostrar palavra-passe</translation>
 <translation id="24452542372838207">Expandir notificação</translation>
-<translation id="2445449901874883781">Utilizar densidade elevada</translation>
+<translation id="2445449901874883781">Usar densidade elevada</translation>
 <translation id="2482878487686419369">Notificações</translation>
 <translation id="2497284189126895209">Todos os ficheiros</translation>
 <translation id="2515586267016047495">Alt</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{em 1 h}other{em # h}}</translation>
 <translation id="2583543531130364912">Calibrar o ecrã tátil</translation>
 <translation id="2586657967955657006">Área de transferência</translation>
+<translation id="2653844658857826081">NOVO</translation>
 <translation id="2666092431469916601">Parte superior</translation>
 <translation id="2701330563083355633">Partilhado a partir do <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Novo</translation>

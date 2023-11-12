@@ -7,9 +7,9 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/printing/cups_print_job.h"
@@ -83,7 +83,7 @@ void FakePrintJobControllerAsh::StartPrinting(
     const std::string& extension_id,
     std::unique_ptr<printing::PrintSettings> settings) {
   job_id_++;
-  job->SetSource(printing::PrintJob::Source::EXTENSION, extension_id);
+  job->SetSource(printing::PrintJob::Source::kExtension, extension_id);
 
   absl::optional<chromeos::Printer> printer =
       printers_manager_->GetPrinter(base::UTF16ToUTF8(settings->device_name()));
@@ -109,7 +109,7 @@ void FakePrintJobControllerAsh::StartPrinting(
   // Create a new CupsPrintJob.
   auto print_job = std::make_unique<ash::CupsPrintJob>(
       *printer, job_id_, base::UTF16ToUTF8(document->settings().title()),
-      /*total_page_number=*/1, printing::PrintJob::Source::EXTENSION,
+      /*total_page_number=*/1, printing::PrintJob::Source::kExtension,
       extension_id, ash::PrintSettingsToProto(document->settings()));
   print_job_manager_->CreatePrintJob(print_job.get());
   print_job_manager_->StartPrintJob(print_job.get());

@@ -6,11 +6,10 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/stringprintf.h"
@@ -945,7 +944,8 @@ IN_PROC_BROWSER_TEST_P(ClearSiteDataHandlerStorageBucketsBrowserTest,
                        StorageBucketsIntegrationTest) {
   GURL url = https_server()->GetURL("127.0.0.1", "/");
 
-  auto storage_key = blink::StorageKey(url::Origin::Create(url));
+  const auto storage_key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
 
   StorageBucketClearSiteDataTester tester(storage_partition());
   tester.CreateBucketForTesting(

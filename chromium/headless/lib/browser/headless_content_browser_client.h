@@ -70,6 +70,14 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
       net::ClientCertIdentityList client_certs,
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
   bool ShouldEnableStrictSiteIsolation() override;
+  bool IsSharedStorageAllowed(content::BrowserContext* browser_context,
+                              content::RenderFrameHost* rfh,
+                              const url::Origin& top_frame_origin,
+                              const url::Origin& accessing_origin) override;
+  bool IsSharedStorageSelectURLAllowed(
+      content::BrowserContext* browser_context,
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin) override;
 
   void ConfigureNetworkContextParams(
       content::BrowserContext* context,
@@ -101,10 +109,6 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
       mojo::PendingReceiver<blink::mojom::BadgeService> receiver);
 
   raw_ptr<HeadlessBrowserImpl> browser_;  // Not owned.
-
-  // We store the callback here because we may call it from the I/O thread.
-  HeadlessBrowser::Options::AppendCommandLineFlagsCallback
-      append_command_line_flags_callback_;
 
   std::unique_ptr<StubBadgeService> stub_badge_service_;
 };

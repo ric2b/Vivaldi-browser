@@ -6,8 +6,7 @@
 
 #include "third_party/blink/renderer/bindings/core/v8/v8_computed_effect_timing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_effect_timing.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_offset.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_offset_phase.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_range_offset.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_cssnumericvalue_double.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_cssnumericvalue_string_unrestricteddouble.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_double_string.h"
@@ -16,40 +15,9 @@
 
 namespace blink {
 
-String Timing::TimelineRangeNameToString(Timing::TimelineNamedPhase phase) {
-  switch (phase) {
-    case Timing::TimelineNamedPhase::kNone:
-      return "none";
-
-    case Timing::TimelineNamedPhase::kCover:
-      return "cover";
-
-    case Timing::TimelineNamedPhase::kContain:
-      return "contain";
-
-    case Timing::TimelineNamedPhase::kEnter:
-      return "enter";
-
-    case Timing::TimelineNamedPhase::kExit:
-      return "exit";
-  }
-}
-
-V8UnionDoubleOrTimelineOffset* Timing::Delay::ToV8UnionDoubleOrTimelineOffset()
-    const {
-  if (phase == Timing::TimelineNamedPhase::kNone) {
-    return MakeGarbageCollected<V8UnionDoubleOrTimelineOffset>(
-        AsTimeValue().InMillisecondsF());
-  } else {
-    TimelineOffset* timeline_offset = TimelineOffset::Create();
-    absl::optional<V8TimelineOffsetPhase> timeline_offset_phase =
-        V8TimelineOffsetPhase::Create(TimelineRangeNameToString(phase));
-    if (timeline_offset_phase)
-      timeline_offset->setPhase(timeline_offset_phase.value());
-    timeline_offset->setPercent(CSSUnitValues::percent(100 * relative_offset));
-
-    return MakeGarbageCollected<V8UnionDoubleOrTimelineOffset>(timeline_offset);
-  }
+Timing::V8Delay* Timing::Delay::ToV8Delay() const {
+  // TODO(crbug.com/1216527) support delay as percentage.
+  return MakeGarbageCollected<V8Delay>(AsTimeValue().InMillisecondsF());
 }
 
 String Timing::FillModeString(FillMode fill_mode) {
@@ -111,8 +79,8 @@ EffectTiming* Timing::ConvertToEffectTiming() const {
   EffectTiming* effect_timing = EffectTiming::Create();
 
   // Specified values used here so that inputs match outputs for JS API calls
-  effect_timing->setDelay(start_delay.ToV8UnionDoubleOrTimelineOffset());
-  effect_timing->setEndDelay(end_delay.ToV8UnionDoubleOrTimelineOffset());
+  effect_timing->setDelay(start_delay.ToV8Delay());
+  effect_timing->setEndDelay(end_delay.ToV8Delay());
   effect_timing->setFill(FillModeString(fill_mode));
   effect_timing->setIterationStart(iteration_start);
   effect_timing->setIterations(iteration_count);
@@ -183,8 +151,8 @@ ComputedEffectTiming* Timing::getComputedTiming(
 
   // TODO(crbug.com/1216527): Animation effect timing members start_delay and
   // end_delay should be CSSNumberish
-  computed_timing->setDelay(start_delay.ToV8UnionDoubleOrTimelineOffset());
-  computed_timing->setEndDelay(end_delay.ToV8UnionDoubleOrTimelineOffset());
+  computed_timing->setDelay(start_delay.ToV8Delay());
+  computed_timing->setEndDelay(end_delay.ToV8Delay());
   computed_timing->setFill(
       Timing::FillModeString(ResolvedFillMode(is_keyframe_effect)));
   computed_timing->setIterationStart(iteration_start);

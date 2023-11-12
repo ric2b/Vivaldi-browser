@@ -5,8 +5,8 @@
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
 
-#import "base/bind.h"
-#import "base/callback.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback.h"
 #import "base/run_loop.h"
 #import "base/test/ios/wait_util.h"
 #import "base/time/time.h"
@@ -74,7 +74,7 @@ class FindInPageJsTest : public WebTestWithWebState {
   std::set<WebFrameImpl*> all_web_frames() {
     std::set<WebFrameImpl*> frames;
     for (WebFrame* frame :
-         web_state()->GetWebFramesManager()->GetAllWebFrames()) {
+         web_state()->GetPageWorldWebFramesManager()->GetAllWebFrames()) {
       frames.insert(static_cast<WebFrameImpl*>(frame));
     }
     return frames;
@@ -82,7 +82,7 @@ class FindInPageJsTest : public WebTestWithWebState {
   // Returns main frame for `web_state_`.
   WebFrameInternal* main_web_frame() {
     WebFrame* main_frame =
-        web_state()->GetWebFramesManager()->GetMainWebFrame();
+        web_state()->GetPageWorldWebFramesManager()->GetMainWebFrame();
     return main_frame->GetWebFrameInternal();
   }
 

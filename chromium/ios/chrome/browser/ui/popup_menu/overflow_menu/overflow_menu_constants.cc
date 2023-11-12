@@ -4,9 +4,10 @@
 
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_constants.h"
 
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
-#include "base/notreached.h"
+#import "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
 
 namespace overflow_menu {
 // WARNING - PLEASE READ: Sadly, we cannot switch over strings in C++, so be
@@ -20,6 +21,8 @@ Destination DestinationForStringName(std::string destination) {
     return overflow_menu::Destination::ReadingList;
   } else if (destination == "overflow_menu::Destination::Passwords") {
     return overflow_menu::Destination::Passwords;
+  } else if (destination == "overflow_menu::Destination::PriceNotifications") {
+    return overflow_menu::Destination::PriceNotifications;
   } else if (destination == "overflow_menu::Destination::Downloads") {
     return overflow_menu::Destination::Downloads;
   } else if (destination == "overflow_menu::Destination::RecentTabs") {
@@ -30,6 +33,8 @@ Destination DestinationForStringName(std::string destination) {
     return overflow_menu::Destination::Settings;
   } else if (destination == "overflow_menu::Destination::WhatsNew") {
     return overflow_menu::Destination::WhatsNew;
+  } else if (destination == "overflow_menu::Destination::SpotlightDebugger") {
+    return overflow_menu::Destination::SpotlightDebugger;
   // Vivaldi
   } else if (destination == "overflow_menu::Destination::Notes") {
       return overflow_menu::Destination::Bookmarks;
@@ -42,16 +47,20 @@ Destination DestinationForStringName(std::string destination) {
   }
 }
 
+// WARNING - PLEASE READ: Sadly, we cannot switch over strings in C++, so be
+// very careful when updating this method to ensure all enums are accounted for.
 std::string StringNameForDestination(Destination destination) {
   switch (destination) {
     case overflow_menu::Destination::Bookmarks:
       return "overflow_menu::Destination::Bookmarks";
-     case overflow_menu::Destination::History:
+    case overflow_menu::Destination::History:
       return "overflow_menu::Destination::History";
     case overflow_menu::Destination::ReadingList:
       return "overflow_menu::Destination::ReadingList";
     case overflow_menu::Destination::Passwords:
       return "overflow_menu::Destination::Passwords";
+    case overflow_menu::Destination::PriceNotifications:
+      return "overflow_menu::Destination::PriceNotifications";
     case overflow_menu::Destination::Downloads:
       return "overflow_menu::Destination::Downloads";
     case overflow_menu::Destination::RecentTabs:
@@ -62,6 +71,9 @@ std::string StringNameForDestination(Destination destination) {
       return "overflow_menu::Destination::Settings";
     case overflow_menu::Destination::WhatsNew:
       return "overflow_menu::Destination::WhatsNew";
+    case overflow_menu::Destination::SpotlightDebugger:
+      return "overflow_menu::Destination::SpotlightDebugger";
+
     // Vivaldi
     case overflow_menu::Destination::Notes:
       return "overflow_menu::Destination::Notes";
@@ -69,6 +81,8 @@ std::string StringNameForDestination(Destination destination) {
   }
 }
 
+// WARNING - PLEASE READ: Sadly, we cannot switch over strings in C++, so be
+// very careful when updating this method to ensure all enums are accounted for.
 void RecordUmaActionForDestination(Destination destination) {
   switch (destination) {
     case Destination::Bookmarks:
@@ -82,6 +96,10 @@ void RecordUmaActionForDestination(Destination destination) {
       break;
     case Destination::Passwords:
       base::RecordAction(base::UserMetricsAction("MobileMenuPasswords"));
+      break;
+    case Destination::PriceNotifications:
+      base::RecordAction(
+          base::UserMetricsAction("MobileMenuPriceNotifications"));
       break;
     case Destination::Downloads:
       base::RecordAction(
@@ -99,6 +117,10 @@ void RecordUmaActionForDestination(Destination destination) {
     case Destination::WhatsNew:
       base::RecordAction(base::UserMetricsAction("MobileMenuWhatsNew"));
       break;
+    case overflow_menu::Destination::SpotlightDebugger:
+      // No need to log metrics for a debug-only feature.
+      break;
+
     // Vivaldi
     case Destination::Notes:
       break;

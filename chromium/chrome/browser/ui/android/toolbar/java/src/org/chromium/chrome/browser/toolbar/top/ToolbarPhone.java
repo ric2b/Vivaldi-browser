@@ -21,12 +21,12 @@ import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -45,7 +45,6 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.graphics.drawable.DrawableWrapperCompat;
 import androidx.core.widget.ImageViewCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.MathUtils;
 import org.chromium.base.TraceEvent;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
@@ -76,7 +75,6 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator.TransitionType;
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
-import org.chromium.chrome.browser.toolbar.top.ToolbarSnapshotState.ToolbarSnapshotDifference;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator.UrlExpansionObserver;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
@@ -147,7 +145,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
     static final int LOCATION_BAR_TRANSPARENT_BACKGROUND_ALPHA = 51;
 
-    private TabCountProvider mTabCountProvider;
+    private @Nullable TabCountProvider mTabCountProvider;
 
     protected LocationBarCoordinator mLocationBar;
 
@@ -254,7 +252,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
     /** Whether the toolbar has a pending request to call {@link triggerUrlFocusAnimation()}. */
     private boolean mPendingTriggerUrlFocusRequest;
-    private ToolbarSnapshotState mToolbarSnapshotState;
+    private PhoneCaptureStateToken mPhoneCaptureStateToken;
     private ButtonData mButtonData;
     /**
      * Whether the tab switcher is currently showing and controlled by the start surface. For
@@ -297,8 +295,8 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     private ChromeImageButton mForwardButton;
     private NavigationPopup mNavigationPopup;
     private HistoryDelegate mHistoryDelegate;
+    /** End Vivaldi **/
 
-    private boolean mOptimizationsEnabled;
     private boolean mDropdownListScrolled;
 
     // The following are some properties used during animation.  We use explicit property classes
@@ -466,11 +464,13 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
      */
     private int getToolbarDefaultColor() {
         if (mShouldShowModernizeVisualUpdate && mLocationBar.getPhoneCoordinator().hasFocus()) {
-            if (mDropdownListScrolled && !OmniboxFeatures.shouldShowActiveColorOnOmnibox()) {
-                return isIncognito()
-                        ? getContext().getColor(R.color.default_bg_color_dark_elev_2_baseline)
-                        : ChromeColors.getSurfaceColor(
-                                getContext(), R.dimen.toolbar_text_box_elevation);
+            if (mDropdownListScrolled) {
+                int colorRes = ChromeFeatureList.sBaselineGm3SurfaceColors.isEnabled()
+                        ? R.color.default_bg_color_dark_elev_2_gm3_baseline
+                        : R.color.default_bg_color_dark_elev_2_baseline;
+                return isIncognito() ? getContext().getColor(colorRes)
+                                     : ChromeColors.getSurfaceColor(
+                                             getContext(), R.dimen.toolbar_text_box_elevation);
             }
             return mLocationBar.getDropdownBackgroundColor(isIncognito());
         }
@@ -526,9 +526,6 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     @Override
     protected void onNativeLibraryReady() {
         super.onNativeLibraryReady();
-
-        mOptimizationsEnabled =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.TOOLBAR_PHONE_OPTIMIZATIONS);
 
         enableTabSwitchingResources();
         mHomeButton.setOnClickListener(this);
@@ -637,20 +634,9 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         if (!mDisableLocationBarRelayout) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-            boolean changed;
-            if (mOptimizationsEnabled) {
-                // Without optimizations, layoutLocationBar sometimes calls
-                // updateLocationBarLayoutForExpansionAnimation, followed always by a second call to
-                // updateLocationBarLayoutForExpansionAnimation. The location bar shouldn't change
-                // between these two calls, so we can optimize by removing the call that is made
-                // sometimes.
-                changed = layoutLocationBarWithoutAnimationExpansion(
-                        MeasureSpec.getSize(widthMeasureSpec));
-                updateUrlExpansionAnimation();
-            } else {
-                changed = layoutLocationBar(MeasureSpec.getSize(widthMeasureSpec));
-                if (!isInTabSwitcherMode()) updateUrlExpansionAnimation();
-            }
+            boolean changed = layoutLocationBarWithoutAnimationExpansion(
+                    MeasureSpec.getSize(widthMeasureSpec));
+            updateUrlExpansionAnimation();
             if (!changed) return;
         } else {
             updateUnfocusedLocationBarLayoutParams();
@@ -1048,8 +1034,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
                 Math.max(Math.max(mNtpSearchBoxScrollFraction, mStartSurfaceScrollFraction),
                         mUrlFocusChangeFraction);
         for (UrlExpansionObserver observer : mUrlExpansionObservers) {
-            observer.onUrlExpansionProgressChanged(
-                    mUrlExpansionFraction, mUrlFocusChangeInProgress);
+            observer.onUrlExpansionProgressChanged(mUrlExpansionFraction);
         }
         assert mUrlExpansionFraction >= 0;
         assert mUrlExpansionFraction <= 1;
@@ -1089,7 +1074,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
      */
     private void updateLocationBarLayoutForExpansionAnimation() {
         TraceEvent.begin("ToolbarPhone.updateLocationBarLayoutForExpansionAnimation");
-        if (mOptimizationsEnabled && isInTabSwitcherMode()) return;
+        if (isInTabSwitcherMode()) return;
 
         boolean isLocationBarShownInNTP = isLocationBarShownInNTP();
         FrameLayout.LayoutParams locationBarLayoutParams =
@@ -1668,9 +1653,9 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         } else if (isInTabSwitcherMode() || mIsShowingStartSurfaceTabSwitcher) {
             return CaptureReadinessResult.notReady(TopToolbarBlockCaptureReason.TAB_SWITCHER_MODE);
         } else {
-            ToolbarSnapshotState newSnapshotState = generateToolbarSnapshotState();
+            PhoneCaptureStateToken newSnapshotState = generateToolbarSnapshotState();
             @ToolbarSnapshotDifference
-            int snapshotDifference = newSnapshotState.getAnyDifference(mToolbarSnapshotState);
+            int snapshotDifference = newSnapshotState.getAnyDifference(mPhoneCaptureStateToken);
             if (snapshotDifference == ToolbarSnapshotDifference.NONE) {
                 return CaptureReadinessResult.notReady(TopToolbarBlockCaptureReason.SNAPSHOT_SAME);
             } else {
@@ -1684,15 +1669,15 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         if (forceTextureCapture) {
             // Only force a texture capture if the tint for the toolbar drawables is changing or
             // if the tab count has changed since the last texture capture.
-            if (mToolbarSnapshotState == null) {
-                mToolbarSnapshotState = generateToolbarSnapshotState();
+            if (mPhoneCaptureStateToken == null) {
+                mPhoneCaptureStateToken = generateToolbarSnapshotState();
             }
 
-            mForceTextureCapture = mToolbarSnapshotState.getTint() != getTint().getDefaultColor();
+            mForceTextureCapture = mPhoneCaptureStateToken.getTint() != getTint().getDefaultColor();
 
             if (mTabSwitcherAnimationTabStackDrawable != null && mToggleTabStackButton != null) {
                 mForceTextureCapture = mForceTextureCapture
-                        || mToolbarSnapshotState.getTabCount()
+                        || mPhoneCaptureStateToken.getTabCount()
                                 != mTabSwitcherAnimationTabStackDrawable.getTabCount();
             }
 
@@ -1703,7 +1688,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         return false;
     }
 
-    private ToolbarSnapshotState generateToolbarSnapshotState() {
+    private PhoneCaptureStateToken generateToolbarSnapshotState() {
         UrlBarData urlBarData;
         int securityIconResource;
         if (ToolbarFeatures.shouldSuppressCaptures()) {
@@ -1718,14 +1703,11 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
             securityIconResource = getToolbarDataProvider().getSecurityIconResource(false);
         }
 
-        String displayedUrlText = urlBarData.displayText.toString();
-        CharSequence prefixHint = mLocationBar.getOmniboxVisibleTextPrefixHint();
-        boolean isValidPrefixHint =
-                ToolbarSnapshotState.isValidVisibleTextPrefixHint(displayedUrlText, prefixHint);
-        return new ToolbarSnapshotState(getTint().getDefaultColor(),
-                mTabCountProvider.getTabCount(), mButtonData, mVisualState, displayedUrlText,
-                isValidPrefixHint ? prefixHint : null, securityIconResource,
-                ImageViewCompat.getImageTintList(mHomeButton),
+        VisibleUrlText visibleUrlText = new VisibleUrlText(
+                urlBarData.displayText, mLocationBar.getOmniboxVisibleTextPrefixHint());
+        return new PhoneCaptureStateToken(getTint().getDefaultColor(),
+                mTabCountProvider.getTabCount(), mButtonData, mVisualState, visibleUrlText,
+                securityIconResource, ImageViewCompat.getImageTintList(mHomeButton),
                 getMenuButtonCoordinator().isShowingUpdateBadge(),
                 getToolbarDataProvider().isPaintPreview(), getProgressBar().getProgress(),
                 mUnfocusedLocationBarLayoutWidth);
@@ -1768,11 +1750,11 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         // Note(david@vivaldi.com): Home button visibility will be handled in
         // onBottomToolbarVisibilityChanged().
         if (!BuildConfig.IS_VIVALDI)
-            if (hideHomeButton) {
-                removeHomeButton();
-            } else {
-                addHomeButton();
-            }
+        if (hideHomeButton) {
+            removeHomeButton();
+        } else {
+            addHomeButton();
+        }
 
         // Vivaldi
         mShieldButton.updateVisibility(urlHasFocus());
@@ -1790,7 +1772,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
     @Override
     public void onTintChanged(ColorStateList tint, @BrandedColorScheme int brandedColorScheme) {
-        ApiCompatibilityUtils.setImageTintList(mHomeButton, tint);
+        ImageViewCompat.setImageTintList(mHomeButton, tint);
 
         if (mToggleTabStackButton != null) {
             mToggleTabStackButton.setBrandedColorScheme(brandedColorScheme);
@@ -1804,10 +1786,10 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         }
 
         // Vivaldi
-        ApiCompatibilityUtils.setImageTintList(mHomeButton, tint);
-        ApiCompatibilityUtils.setImageTintList(mBackButton, tint);
-        ApiCompatibilityUtils.setImageTintList(mForwardButton, tint);
-        ApiCompatibilityUtils.setImageTintList(sPanelButton, tint);
+        ImageViewCompat.setImageTintList(mHomeButton, tint);
+        ImageViewCompat.setImageTintList(mBackButton, tint);
+        ImageViewCompat.setImageTintList(mForwardButton, tint);
+        ImageViewCompat.setImageTintList(sPanelButton, tint);
 
         // TODO(amaralp): Have the LocationBar listen to tint changes.
         if (mLocationBar != null) mLocationBar.updateVisualsForState();
@@ -1850,7 +1832,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
             // When texture mode is turned off, we know a capture has just been completed. Update
             // our snapshot so that we can suppress correctly on the next
             // #isReadyForTextureCapture() call.
-            mToolbarSnapshotState = generateToolbarSnapshotState();
+            mPhoneCaptureStateToken = generateToolbarSnapshotState();
         }
     }
 
@@ -1883,18 +1865,14 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     @Override
     public void setTabSwitcherMode(boolean inTabSwitcherMode, boolean showToolbar,
             boolean delayAnimation, MenuButtonCoordinator menuButtonCoordinator) {
-        setTabSwitcherMode(inTabSwitcherMode, showToolbar, delayAnimation, true);
-    }
-
-    /**
-     * See {@link #setTabSwitcherMode(boolean, boolean, boolean, MenuButtonCoordinator)}.
-     */
-    public void setTabSwitcherMode(boolean inTabSwitcherMode, boolean showToolbar,
-            boolean delayAnimation, boolean animate) {
         // This method is only used for grid tab switcher with the start surface disabled. When
         // start surface is enabled, omnibox state is updated in onStartSurfaceStateChanged(), which
         // is always called before setTabSwitcherMode(), so skip here.
-        if (getToolbarDataProvider().shouldShowLocationBarInOverviewMode()) return;
+        if (getToolbarDataProvider().shouldShowLocationBarInOverviewMode()) {
+            // Prevent pressing the tab switcher button until after transition finishes.
+            mToggleTabStackButton.setClickable(false);
+            return;
+        }
 
         // If setting tab switcher mode to true and the browser is already animating or in the tab
         // switcher skip.
@@ -1909,6 +1887,9 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
                 && (mTabSwitcherState == STATIC_TAB || mTabSwitcherState == EXITING_TAB_SWITCHER)) {
             return;
         }
+        // Prevent pressing the tab switcher button until after transition finishes.
+        mToggleTabStackButton.setClickable(false);
+
         mTabSwitcherState = inTabSwitcherMode ? ENTERING_TAB_SWITCHER : EXITING_TAB_SWITCHER;
 
         // The width of location bar depends on mTabSwitcherState so layout request is needed. See
@@ -1930,12 +1911,6 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
                 // so that the final translation position is correct (since onMeasure updates
                 // won't happen in tab switcher mode). crbug.com/518795.
                 layoutLocationBar(getMeasuredWidth());
-                if (!mOptimizationsEnabled) {
-                    // We're in tab switcher mode here. updateUrlExpansionAnimation doesn't need to
-                    // get called because we don't see the url bar, and that this gets called as
-                    // soon as we exit tab switcher mode.
-                    updateUrlExpansionAnimation();
-                }
             }
 
             updateViewsForTabSwitcherMode();
@@ -1944,7 +1919,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
         updateButtonsTranslationY();
 
-        if (DeviceClassManager.enableAccessibilityLayout(getContext()) || !animate) {
+        if (DeviceClassManager.enableAccessibilityLayout(getContext())) {
             finishAnimations();
         }
 
@@ -1957,16 +1932,14 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
      */
     private void updateTabSwitcherButtonRipple() {
         if (mToggleTabStackButton == null) return;
-        if (mTabSwitcherState == ENTERING_TAB_SWITCHER) {
-            mToggleTabStackButton.setBackgroundColor(
-                    getContext().getColor(android.R.color.transparent));
-        } else {
-            // TODO(https://crbug.com/912358): This appears to no longer work.
-            TypedValue outValue = new TypedValue();
-
-            // The linked style here will have to be changed if it is updated in the XML.
-            getContext().getTheme().resolveAttribute(R.style.ToolbarButton, outValue, true);
-            mToggleTabStackButton.setBackgroundResource(outValue.resourceId);
+        if (mTabSwitcherState == ENTERING_TAB_SWITCHER || mIsShowingStartSurfaceTabSwitcher) {
+            Drawable drawable = mToggleTabStackButton.getBackground();
+            // drawable may not be a RippleDrawable if IPH is showing. Ignore that scenario since
+            // it is rare.
+            if (drawable instanceof RippleDrawable) {
+                // Force the ripple to end so the transition looks correct.
+                ((RippleDrawable) drawable).jumpToCurrentState();
+            }
         }
     }
 
@@ -1978,10 +1951,11 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
                 shouldBeVisible, isShowingStartSurfaceHomepage, isShowingStartSurfaceTabSwitcher);
 
         mIsShowingStartSurfaceTabSwitcher = isShowingStartSurfaceTabSwitcher;
-        // Update visibilities of toolbar layout, progress bar and shadow.
+        // Update visibilities of toolbar layout, progress bar, shadow and ripple.
         setVisibility(shouldBeVisible ? VISIBLE : GONE);
         updateProgressBarVisibility();
         updateShadowVisibility();
+        updateTabSwitcherButtonRipple();
         // Url bar should be focusable. This will be set in UrlBar#onDraw but there's a delay which
         // may cause focus to fail, so set here too.
         mLocationBar.setUrlBarFocusable(true);
@@ -2008,6 +1982,12 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
         }
         if (mTabSwitcherState == ENTERING_TAB_SWITCHER) {
             mTabSwitcherState = TAB_SWITCHER;
+            mToggleTabStackButton.setClickable(false);
+        }
+        // Ensure clickable if in STATIC_TAB mode. This handles both when the state transitions
+        // are ignored in favor of onStartSurfaceStateChanged() and when normal transitions occur.
+        if (mTabSwitcherState == STATIC_TAB) {
+            mToggleTabStackButton.setClickable(true);
         }
 
         // The width of location bar depends on mTabSwitcherState so layout request is needed. See
@@ -2145,6 +2125,10 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
         // Vivaldi
         mShieldButton.updateVisibility(hasFocus);
+        // For Vivaldi, hide menu (V) button so it doesn't mix with the location bar buttons.
+        if (BuildConfig.IS_VIVALDI)
+            getMenuButtonCoordinator().setVisibility(!hasFocus);
+
         // For Vivaldi, hide menu (V) button so it doesn't mix with the location bar buttons.
         if (BuildConfig.IS_VIVALDI)
             getMenuButtonCoordinator().setVisibility(!hasFocus);
@@ -2846,14 +2830,13 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
     /**
      * Returns the toolbar's background color.
      */
-    @VisibleForTesting
-    public int getToolbarBackgroundColorForTesting(Activity activity) {
+    public int getToolbarBackgroundColor() {
         return mToolbarBackground.getColor();
     }
 
     @Override
     public void onSuggestionDropdownScroll() {
-        if (!mShouldShowModernizeVisualUpdate || OmniboxFeatures.shouldShowActiveColorOnOmnibox()) {
+        if (!mShouldShowModernizeVisualUpdate) {
             return;
         }
         mDropdownListScrolled = true;
@@ -2863,7 +2846,7 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
     @Override
     public void onSuggestionDropdownOverscrolledToTop() {
-        if (!mShouldShowModernizeVisualUpdate || OmniboxFeatures.shouldShowActiveColorOnOmnibox()) {
+        if (!mShouldShowModernizeVisualUpdate) {
             return;
         }
         mDropdownListScrolled = false;
@@ -2990,15 +2973,11 @@ public class ToolbarPhone extends ToolbarLayout implements OnClickListener, TabC
 
     @Override
     public void initialize(ToolbarDataProvider toolbarDataProvider,
-                              ToolbarTabController tabController,
-                              MenuButtonCoordinator menuButtonCoordinator,
-                              ObservableSupplier<Boolean> isProgressBarVisibleSupplier,
-                              HistoryDelegate historyDelegate,
-                              BooleanSupplier partnerHomepageEnabledSupplier,
-                              ToolbarTablet.OfflineDownloader offlineDownloader) {
-        super.initialize(toolbarDataProvider, tabController, menuButtonCoordinator,
-                isProgressBarVisibleSupplier, historyDelegate, partnerHomepageEnabledSupplier,
-                offlineDownloader);
+            ToolbarTabController tabController, MenuButtonCoordinator menuButtonCoordinator,
+            HistoryDelegate historyDelegate, BooleanSupplier partnerHomepageEnabledSupplier,
+            ToolbarTablet.OfflineDownloader offlineDownloader) {
+        super.initialize(toolbarDataProvider, tabController, menuButtonCoordinator, historyDelegate,
+                partnerHomepageEnabledSupplier, offlineDownloader);
         mHistoryDelegate = historyDelegate;
     }
 

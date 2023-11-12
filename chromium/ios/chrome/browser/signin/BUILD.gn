@@ -7,6 +7,10 @@ source_set("signin") {
   sources = [
     "about_signin_internals_factory.cc",
     "about_signin_internals_factory.h",
+    "account_capabilities_fetcher_factory_ios.h",
+    "account_capabilities_fetcher_factory_ios.mm",
+    "account_capabilities_fetcher_ios.h",
+    "account_capabilities_fetcher_ios.mm",
     "account_consistency_browser_agent.h",
     "account_consistency_browser_agent.mm",
     "account_consistency_service_factory.h",
@@ -56,7 +60,9 @@ source_set("signin") {
     "user_approved_account_list_manager.mm",
   ]
   deps = [
+    ":capabilities_types",
     ":system_identity",
+    ":system_identity_manager",
     "//base",
     "//components/browser_sync",
     "//components/content_settings/core/browser",
@@ -68,6 +74,7 @@ source_set("signin") {
     "//components/pref_registry",
     "//components/prefs",
     "//components/signin/core/browser",
+    "//components/signin/internal/identity_manager",
     "//components/signin/ios/browser",
     "//components/signin/ios/browser:active_state_manager",
     "//components/signin/public/identity_manager",
@@ -94,13 +101,13 @@ source_set("signin") {
     "//ios/chrome/common/ui/table_view:cells_constants",
     "//ios/chrome/common/ui/util:image_util",
     "//ios/net",
-    "//ios/public/provider/chrome/browser",
-    "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/signin:signin_error_api",
+    "//ios/public/provider/chrome/browser/signin:signin_identity_api",
     "//ios/public/provider/chrome/browser/signin:signin_resources_api",
     "//ios/web/common",
     "//ios/web/common:web_view_creation_util",
     "//net",
+    "//third_party/abseil-cpp:absl",
     "//url",
   ]
   public_deps = [
@@ -124,32 +131,16 @@ source_set("signin_util") {
     "//components/signin/public/identity_manager",
     "//ios/chrome/browser/application_context",
     "//ios/chrome/browser/prefs:pref_names",
-    "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/signin:signin_error_api",
-  ]
-}
-
-source_set("fetcher") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  sources = [
-    "account_capabilities_fetcher_ios.h",
-    "account_capabilities_fetcher_ios.mm",
-  ]
-  deps = [
-    ":capabilities_types",
-    ":system_identity",
-    "//base",
-    "//components/signin/internal/identity_manager",
-    "//components/signin/public/identity_manager",
-    "//ios/chrome/browser/browser_state",
-    "//ios/public/provider/chrome/browser/signin:signin",
-    "//third_party/abseil-cpp:absl",
   ]
 }
 
 source_set("capabilities_types") {
   configs += [ "//build/config/compiler:enable_arc" ]
-  sources = [ "capabilities_dict.h" ]
+  sources = [
+    "capabilities_dict.h",
+    "capabilities_types.h",
+  ]
   frameworks = [ "Foundation.framework" ]
 }
 
@@ -200,6 +191,7 @@ source_set("system_identity_manager") {
     "//third_party/abseil-cpp:absl",
   ]
   deps = [
+    ":capabilities_types",
     ":system_identity",
     "//components/signin/internal/identity_manager",
   ]
@@ -227,10 +219,12 @@ source_set("fake_system_identity_manager") {
   public_deps =
       [ "//ios/public/provider/chrome/browser/signin:signin_resources_api" ]
   deps = [
+    ":capabilities_types",
     ":fake_account_details_view_controller",
     ":fake_system_identity",
     ":system_identity",
     ":system_identity_manager",
+    ":test_constants",
     "//google_apis",
     "//ios/public/provider/chrome/browser/signin:signin_error_api",
   ]
@@ -239,10 +233,7 @@ source_set("fake_system_identity_manager") {
 
 source_set("fake_account_details_view_controller") {
   testonly = true
-  visibility = [
-    ":fake_system_identity_manager",
-    "//ios/public/provider/chrome/browser/signin:test_support",
-  ]
+  visibility = [ ":fake_system_identity_manager" ]
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "fake_account_details_view_controller.h",
@@ -303,6 +294,16 @@ source_set("trusted_vault_factory") {
   frameworks = [ "Foundation.framework" ]
 }
 
+source_set("test_constants") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "test_constants.h",
+    "test_constants.mm",
+  ]
+  frameworks = [ "Foundation.framework" ]
+}
+
 source_set("test_support") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
@@ -322,10 +323,6 @@ source_set("test_support") {
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/sync",
-    "//ios/public/provider/chrome/browser",
-    "//ios/public/provider/chrome/browser/signin",
-    "//ios/public/provider/chrome/browser/signin:constants",
-    "//ios/public/provider/chrome/browser/signin:test_support",
   ]
 }
 
@@ -362,9 +359,10 @@ source_set("unit_tests") {
   deps = [
     ":capabilities_types",
     ":fake_system_identity",
-    ":fetcher",
+    ":fake_system_identity_manager",
     ":signin",
     ":system_identity",
+    ":system_identity_manager",
     ":test_support",
     "//base",
     "//components/pref_registry",
@@ -396,9 +394,6 @@ source_set("unit_tests") {
     "//ios/chrome/browser/web_state_list",
     "//ios/chrome/test:test_support",
     "//ios/net",
-    "//ios/public/provider/chrome/browser",
-    "//ios/public/provider/chrome/browser/signin",
-    "//ios/public/provider/chrome/browser/signin:test_support",
     "//ios/web/common",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",

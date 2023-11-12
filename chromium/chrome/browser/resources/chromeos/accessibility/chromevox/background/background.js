@@ -2,25 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {AsyncUtil} from '../../common/async_util.js';
 import {AutomationPredicate} from '../../common/automation_predicate.js';
 import {AutomationUtil} from '../../common/automation_util.js';
 import {constants} from '../../common/constants.js';
 import {CursorRange} from '../../common/cursors/range.js';
+import {Flags} from '../../common/flags.js';
 import {InstanceChecker} from '../../common/instance_checker.js';
 import {LocalStorage} from '../../common/local_storage.js';
-import {AbstractEarcons} from '../common/abstract_earcons.js';
 import {NavBraille} from '../common/braille/nav_braille.js';
 import {ContentScriptBridge} from '../common/content_script_bridge.js';
 import {LocaleOutputHelper} from '../common/locale_output_helper.js';
 import {Msgs} from '../common/msgs.js';
 import {PanelCommand, PanelCommandType} from '../common/panel_command.js';
+import {PermissionChecker} from '../common/permission_checker.js';
+import {SettingsManager} from '../common/settings_manager.js';
 import {QueueMode, TtsSpeechProperties} from '../common/tts_types.js';
 import {JaPhoneticMap} from '../third_party/tamachiyomi/ja_phonetic_map.js';
 
+import {AbstractEarcons} from './abstract_earcons.js';
 import {AutoScrollHandler} from './auto_scroll_handler.js';
 import {BrailleBackground} from './braille/braille_background.js';
 import {BrailleCommandHandler} from './braille/braille_command_handler.js';
 import {ChromeVox} from './chromevox.js';
+import {ChromeVoxRange} from './chromevox_range.js';
 import {ChromeVoxState} from './chromevox_state.js';
 import {ChromeVoxBackground} from './classic_background.js';
 import {ClipboardHandler} from './clipboard_handler.js';
@@ -29,6 +34,7 @@ import {DesktopAutomationHandler} from './desktop_automation_handler.js';
 import {DesktopAutomationInterface} from './desktop_automation_interface.js';
 import {DownloadHandler} from './download_handler.js';
 import {Earcons} from './earcons.js';
+import {EventSource} from './event_source.js';
 import {FindHandler} from './find_handler.js';
 import {FocusAutomationHandler} from './focus_automation_handler.js';
 import {FocusBounds} from './focus_bounds.js';
@@ -37,6 +43,7 @@ import {BackgroundKeyboardHandler} from './keyboard_handler.js';
 import {LiveRegions} from './live_regions.js';
 import {EventStreamLogger} from './logging/event_stream_logger.js';
 import {LogStore} from './logging/log_store.js';
+import {LogUrlWatcher} from './logging/log_url_watcher.js';
 import {MathHandler} from './math_handler.js';
 import {MediaAutomationHandler} from './media_automation_handler.js';
 import {Output} from './output/output.js';
@@ -45,23 +52,21 @@ import {PageLoadSoundHandler} from './page_load_sound_handler.js';
 import {PanelBackground} from './panel/panel_background.js';
 import {ChromeVoxPrefs} from './prefs.js';
 import {RangeAutomationHandler} from './range_automation_handler.js';
+import {SmartStickyMode} from './smart_sticky_mode.js';
 import {TtsBackground} from './tts_background.js';
 
 /**
  * @fileoverview The entry point for all ChromeVox related code for the
  * background page.
  */
-
 const Dir = constants.Dir;
 const RoleType = chrome.automation.RoleType;
 const StateType = chrome.automation.StateType;
+
 /** ChromeVox background page. */
 export class Background extends ChromeVoxState {
   constructor() {
     super();
-
-    /** @private {CursorRange} */
-    this.currentRange_ = null;
 
     /** @private {!AbstractEarcons} */
     this.earcons_ = new Earcons();
@@ -72,9 +77,6 @@ export class Background extends ChromeVoxState {
     /** @private {CursorRange} */
     this.pageSel_ = null;
 
-    /** @private {CursorRange} */
-    this.previousRange_ = null;
-
     /** @private {boolean} */
     this.talkBackEnabled_ = false;
 
@@ -83,9 +85,6 @@ export class Background extends ChromeVoxState {
 
   /** @private */
   init_() {
-    chrome.accessibilityPrivate.onIntroduceChromeVox.addListener(
-        () => this.onIntroduceChromeVox_());
-
     // Export globals on ChromeVox.
     ChromeVox.braille = BrailleBackground.instance;
     // Read-only earcons.
@@ -99,55 +98,64 @@ export class Background extends ChromeVoxState {
         });
     chrome.accessibilityPrivate.onCustomSpokenFeedbackToggled.addListener(
         enabled => this.talkBackEnabled_ = enabled);
-    chrome.accessibilityPrivate.onIntroduceChromeVox.addListener(
-        () => this.onIntroduceChromeVox_());
     chrome.accessibilityPrivate.onShowChromeVoxTutorial.addListener(() => {
       (new PanelCommand(PanelCommandType.TUTORIAL)).send();
     });
   }
 
   static async init() {
-    // Initialize storage, braille, prefs, TTS, and legacy background page
-    // first.
+    // Pre-initialization.
+    await Flags.init();
     await LocalStorage.init();
+    await SettingsManager.init();
     BrailleBackground.init();
     ChromeVoxPrefs.init();
+    ChromeVoxRange.init();
     TtsBackground.init();
     ChromeVoxBackground.init();
 
     ChromeVoxState.instance = new Background();
 
+    // Standard initialization.
     AutoScrollHandler.init();
     BackgroundKeyboardHandler.init();
     BrailleCommandHandler.init();
     ClipboardHandler.init();
     CommandHandler.init();
     DownloadHandler.init();
-    EventStreamLogger.init();
+    EventSource.init();
     FindHandler.init();
-    FocusAutomationHandler.init();
     GestureCommandHandler.init();
     JaPhoneticData.init(JaPhoneticMap.MAP);
     LiveRegions.init();
     LocaleOutputHelper.init();
     LogStore.init();
-    MediaAutomationHandler.init();
-    PageLoadSoundHandler.init();
+    LogUrlWatcher.init();
     PanelBackground.init();
     RangeAutomationHandler.init();
+    SmartStickyMode.init();
 
+    // Async initialization.
     // Allow all async initializers to run simultaneously, but wait for them to
     // complete before continuing.
+    // The order that these are run in is not guaranteed.
     await Promise.all([
       DesktopAutomationHandler.init(),
+      EventStreamLogger.init(),
+      FocusAutomationHandler.init(),
+      MediaAutomationHandler.init(),
+      PageLoadSoundHandler.init(),
+      PermissionChecker.init(),
+      waitForIntroducePromise,
     ]);
     ChromeVoxState.resolveReadyPromise_();
+    ChromeVoxState.instance.onIntroduceChromeVox_();
   }
 
   /** @override */
   getCurrentRange() {
-    if (this.currentRange_ && this.currentRange_.isValid()) {
-      return this.currentRange_;
+    if (ChromeVoxRange.getCurrentRangeWithoutRecovery()?.isValid()) {
+      return ChromeVoxRange.getCurrentRangeWithoutRecovery();
     }
     return null;
   }
@@ -169,53 +177,16 @@ export class Background extends ChromeVoxState {
 
   /** @override */
   getCurrentRangeWithoutRecovery() {
-    return this.currentRange_;
+    return ChromeVoxRange.getCurrentRangeWithoutRecovery();
   }
 
   /**
    * @param {CursorRange} newRange The new range.
-   * @param {boolean=} opt_fromEditing
    * @override
    */
-  setCurrentRange(newRange, opt_fromEditing) {
-    // Clear anything that was frozen on the braille display whenever
-    // the user navigates.
-    ChromeVox.braille.thaw();
-
-    // There's nothing to be updated in this case.
-    if ((!newRange && !this.currentRange_) ||
-        (newRange && !newRange.isValid())) {
-      FocusBounds.set([]);
-      return;
-    }
-
-    this.previousRange_ = this.currentRange_;
-    this.currentRange_ = newRange;
-
-    ChromeVoxState.ready().then(ChromeVoxState.observers.forEach(
-        observer => observer.onCurrentRangeChanged(newRange, opt_fromEditing)));
-
-    if (!this.currentRange_) {
-      FocusBounds.set([]);
-      return;
-    }
-
-    const start = this.currentRange_.start.node;
-    start.makeVisible();
-    start.setAccessibilityFocus();
-
-    const root = AutomationUtil.getTopLevelRoot(start);
-    if (!root || root.role === RoleType.DESKTOP || root === start) {
-      return;
-    }
-
-    const position = {};
-    const loc = start.unclippedLocation;
-    position.x = loc.left + loc.width / 2;
-    position.y = loc.top + loc.height / 2;
-    let url = root.docUrl;
-    url = url.substring(0, url.indexOf('#')) || url;
-    ChromeVoxState.position[url] = position;
+  setCurrentRange(newRange) {
+    ChromeVoxRange.previous = ChromeVoxRange.getCurrentRangeWithoutRecovery();
+    ChromeVoxRange.instance.current_ = newRange;
   }
 
   /** @override */
@@ -238,10 +209,10 @@ export class Background extends ChromeVoxState {
    * @override
    */
   navigateToRange(range, opt_focus, opt_speechProps, opt_skipSettingSelection) {
-    opt_focus = opt_focus === undefined ? true : opt_focus;
-    opt_speechProps = opt_speechProps || new TtsSpeechProperties();
-    opt_skipSettingSelection = opt_skipSettingSelection || false;
-    const prevRange = this.currentRange_;
+    opt_focus = opt_focus ?? true;
+    opt_speechProps = opt_speechProps ?? new TtsSpeechProperties();
+    opt_skipSettingSelection = opt_skipSettingSelection ?? false;
+    const prevRange = ChromeVoxRange.getCurrentRangeWithoutRecovery();
 
     // Specialization for math output.
     let skipOutput = false;
@@ -254,13 +225,13 @@ export class Background extends ChromeVoxState {
       this.setFocusToRange_(range, prevRange);
     }
 
-    this.setCurrentRange(range);
+    ChromeVoxRange.set(range);
 
     const o = new Output();
     let selectedRange;
     let msg;
 
-    if (this.pageSel_ && this.pageSel_.isValid() && range.isValid()) {
+    if (this.pageSel_?.isValid() && range.isValid()) {
       // Suppress hints.
       o.withoutHints();
 
@@ -299,9 +270,7 @@ export class Background extends ChromeVoxState {
             dir === Dir.BACKWARD;
         this.pageSel_ = new CursorRange(
             this.pageSel_.start, wasBackwardSel ? range.start : range.end);
-        if (this.pageSel_) {
-          this.pageSel_.select();
-        }
+        this.pageSel_?.select();
       }
     } else if (!opt_skipSettingSelection) {
       // Ensure we don't select the editable when we first encounter it.
@@ -317,7 +286,7 @@ export class Background extends ChromeVoxState {
     }
 
     o.withRichSpeechAndBraille(
-         selectedRange || range, prevRange, OutputCustomEvent.NAVIGATE)
+         selectedRange ?? range, prevRange, OutputCustomEvent.NAVIGATE)
         .withInitialSpeechProperties(opt_speechProps);
 
     if (msg) {
@@ -342,19 +311,18 @@ export class Background extends ChromeVoxState {
       return;
     }
 
-    if (!this.currentRange_ || !this.currentRange_.isValid()) {
-      this.setCurrentRange(this.previousRange_);
+    if (!ChromeVoxRange.getCurrentRangeWithoutRecovery()?.isValid()) {
+      ChromeVoxRange.set(ChromeVoxRange.previous);
     }
   }
 
   /** @private */
   async setCurrentRangeToFocus_() {
-    const focus =
-        await new Promise(resolve => chrome.automation.getFocus(resolve));
+    const focus = await AsyncUtil.getFocus();
     if (focus) {
-      this.setCurrentRange(CursorRange.fromNode(focus));
+      ChromeVoxRange.set(CursorRange.fromNode(focus));
     } else {
-      this.setCurrentRange(null);
+      ChromeVoxRange.set(null);
     }
   }
 
@@ -437,27 +405,10 @@ export class Background extends ChromeVoxState {
         new TtsSpeechProperties({doNotInterrupt: true}));
     ChromeVox.braille.write(NavBraille.fromText(Msgs.getMsg('intro_brl')));
   }
-
-  /**
-   * Converts a list of globs, as used in the extension manifest, to a regular
-   * expression that matches if and only if any of the globs in the list
-   * matches.
-   * @param {!Array<string>} globs
-   * @return {!RegExp}
-   * @private
-   */
-  static globsToRegExp_(globs) {
-    return new RegExp(
-        '^(' +
-        globs
-            .map(
-                glob => glob.replace(/[.+^$(){}|[\]\\]/g, '\\$&')
-                            .replace(/\*/g, '.*')
-                            .replace(/\?/g, '.'))
-            .join('|') +
-        ')$');
-  }
 }
 
 InstanceChecker.closeExtraInstances();
+const waitForIntroducePromise = new Promise(
+    resolve =>
+        chrome.accessibilityPrivate.onIntroduceChromeVox.addListener(resolve));
 Background.init();

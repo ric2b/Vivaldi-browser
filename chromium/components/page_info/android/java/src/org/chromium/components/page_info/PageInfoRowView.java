@@ -18,8 +18,8 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
+import androidx.core.widget.ImageViewCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.widget.ChromeImageView;
 
@@ -32,6 +32,7 @@ public class PageInfoRowView extends FrameLayout {
         public boolean visible;
         public @DrawableRes int iconResId;
         public @ColorRes int iconTint;
+        public boolean iconNeedsTint = true;
         public CharSequence title;
         public CharSequence subtitle;
         public Runnable clickCallback;
@@ -67,11 +68,14 @@ public class PageInfoRowView extends FrameLayout {
             int p = ViewUtils.dpToPx(displayMetrics, 2);
             mIcon.setPadding(p, p, p, p);
         }
-        ApiCompatibilityUtils.setImageTintList(mIcon,
-                params.iconTint != 0
-                        ? ColorStateList.valueOf(getResources().getColor(params.iconTint))
-                        : AppCompatResources.getColorStateList(
-                                getContext(), R.color.default_icon_color_tint_list));
+
+        if (params.iconNeedsTint) {
+            ImageViewCompat.setImageTintList(mIcon,
+                    params.iconTint != 0
+                            ? ColorStateList.valueOf(getResources().getColor(params.iconTint))
+                            : AppCompatResources.getColorStateList(
+                                    getContext(), R.color.default_icon_color_tint_list));
+        }
 
         mTitle.setText(params.title);
         mTitle.setVisibility(params.title != null ? VISIBLE : GONE);

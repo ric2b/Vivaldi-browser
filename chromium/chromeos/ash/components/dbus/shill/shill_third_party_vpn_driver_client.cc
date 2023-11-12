@@ -10,8 +10,8 @@
 #include <map>
 #include <set>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/shill/fake_shill_third_party_vpn_driver_client.h"
@@ -60,7 +60,7 @@ class ShillThirdPartyVpnDriverClientImpl
       const std::string& object_path_value) override;
 
   void SetParameters(const std::string& object_path_value,
-                     const base::Value& parameters,
+                     const base::Value::Dict& parameters,
                      StringCallback callback,
                      ErrorCallback error_callback) override;
 
@@ -208,7 +208,7 @@ void ShillThirdPartyVpnDriverClientImpl::DeleteHelper(
 
 void ShillThirdPartyVpnDriverClientImpl::SetParameters(
     const std::string& object_path_value,
-    const base::Value& parameters,
+    const base::Value::Dict& parameters,
     StringCallback callback,
     ErrorCallback error_callback) {
   dbus::MethodCall method_call(shill::kFlimflamThirdPartyVpnInterface,
@@ -216,7 +216,7 @@ void ShillThirdPartyVpnDriverClientImpl::SetParameters(
   dbus::MessageWriter writer(&method_call);
   dbus::MessageWriter array_writer(nullptr);
   writer.OpenArray("{ss}", &array_writer);
-  for (auto it : parameters.DictItems()) {
+  for (auto it : parameters) {
     if (valid_keys_.find(it.first) == valid_keys_.end()) {
       LOG(WARNING) << "Unknown key " << it.first;
       continue;

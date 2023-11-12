@@ -111,23 +111,17 @@ ClassicScript* ClassicScript::CreateFromResource(
   // ... the URL from which the script was obtained, ...</spec>
   KURL base_url = resource->GetResponse().ResponseUrl();
 
-  ParkableString source;
-  if (resource->IsWebSnapshot()) {
-    source = resource->RawSourceText();
-  } else {
-    source = resource->SourceText();
-  }
   // We lose the encoding information from ScriptResource.
   // Not sure if that matters.
   return MakeGarbageCollected<ClassicScript>(
-      source, source_url, base_url, fetch_options,
+      resource->SourceText(), source_url, base_url, fetch_options,
       ScriptSourceLocationType::kExternalFile,
       resource->GetResponse().IsCorsSameOrigin()
           ? SanitizeScriptErrors::kDoNotSanitize
           : SanitizeScriptErrors::kSanitize,
       resource->CacheHandler(), TextPosition::MinimumPosition(), streamer,
       not_streamed_reason, cache_consumer,
-      SourceMapUrlFromResponse(resource->GetResponse()));
+      SourceMapUrlFromResponse(resource->GetResponse()), resource);
 }
 
 ClassicScript* ClassicScript::CreateUnspecifiedScript(
@@ -161,7 +155,8 @@ ClassicScript::ClassicScript(
     ScriptStreamer* streamer,
     ScriptStreamer::NotStreamingReason not_streaming_reason,
     ScriptCacheConsumer* cache_consumer,
-    const String& source_map_url)
+    const String& source_map_url,
+    ScriptResource* resource_keep_alive)
     : Script(fetch_options,
              SanitizeBaseUrl(base_url, sanitize_script_errors),
              source_url,
@@ -173,13 +168,15 @@ ClassicScript::ClassicScript(
       streamer_(streamer),
       not_streaming_reason_(not_streaming_reason),
       cache_consumer_(cache_consumer),
-      source_map_url_(source_map_url) {}
+      source_map_url_(source_map_url),
+      resource_keep_alive_(resource_keep_alive) {}
 
 void ClassicScript::Trace(Visitor* visitor) const {
   Script::Trace(visitor);
   visitor->Trace(cache_handler_);
   visitor->Trace(streamer_);
   visitor->Trace(cache_consumer_);
+  visitor->Trace(resource_keep_alive_);
 }
 
 v8::Local<v8::Data> ClassicScript::CreateHostDefinedOptions(

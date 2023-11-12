@@ -9,7 +9,7 @@
 
 #include "ash/shell.h"
 #include "base/barrier_callback.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
@@ -17,9 +17,7 @@
 #include "base/syslog_logging.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
-#include "chrome/browser/ash/policy/uploading/upload_job_impl.h"
 #include "components/policy/proto/device_management_backend.pb.h"
-#include "content/public/browser/browser_thread.h"
 #include "net/http/http_request_headers.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
@@ -50,9 +48,6 @@ const char* const kFileTypeHeaderName = "File-Type";
 // String constant signalling that the data segment contains screenshots.
 const char* const kFileTypeScreenshotFile = "screenshot_file";
 
-// String constant identifying the upload url field in the command payload.
-const char* const kUploadUrlFieldName = "fileUploadUrl";
-
 // Helper method to hide the |screen_index| and `std::make_pair` from the
 // |DeviceCommandScreenshotJob::Delegate|.
 void CallCollectAndUpload(
@@ -64,8 +59,9 @@ void CallCollectAndUpload(
 
 std::string CreatePayload(ResultCode result_code) {
   base::Value::Dict root_dict;
-  if (result_code != ResultCode::SUCCESS)
+  if (result_code != ResultCode::SUCCESS) {
     root_dict.Set(kResultFieldName, result_code);
+  }
 
   std::string payload;
   base::JSONWriter::Write(root_dict, &payload);
@@ -73,6 +69,10 @@ std::string CreatePayload(ResultCode result_code) {
 }
 
 }  // namespace
+
+// String constant identifying the upload url field in the command payload.
+constexpr char DeviceCommandScreenshotJob::kUploadUrlFieldName[] =
+    "fileUploadUrl";
 
 DeviceCommandScreenshotJob::DeviceCommandScreenshotJob(
     std::unique_ptr<Delegate> screenshot_delegate)
@@ -90,8 +90,8 @@ enterprise_management::RemoteCommand_Type DeviceCommandScreenshotJob::GetType()
 void DeviceCommandScreenshotJob::OnSuccess() {
   SYSLOG(INFO) << "Upload successful.";
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE,
-      base::BindOnce(std::move(succeeded_callback_), CreatePayload(SUCCESS)));
+      FROM_HERE, base::BindOnce(std::move(result_callback_),
+                                ResultType::kSuccess, CreatePayload(SUCCESS)));
 }
 
 void DeviceCommandScreenshotJob::OnFailure(UploadJob::ErrorCode error_code) {
@@ -108,18 +108,21 @@ void DeviceCommandScreenshotJob::OnFailure(UploadJob::ErrorCode error_code) {
   }
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
-      base::BindOnce(std::move(failed_callback_), CreatePayload(result_code)));
+      base::BindOnce(std::move(result_callback_), ResultType::kFailure,
+                     CreatePayload(result_code)));
 }
 
 bool DeviceCommandScreenshotJob::ParseCommandPayload(
     const std::string& command_payload) {
   absl::optional<base::Value> root(base::JSONReader::Read(command_payload));
-  if (!root || !root->is_dict())
+  if (!root || !root->is_dict()) {
     return false;
+  }
   const std::string* upload_url =
       root->GetDict().FindString(kUploadUrlFieldName);
-  if (!upload_url)
+  if (!upload_url) {
     return false;
+  }
   upload_url_ = GURL(*upload_url);
   return true;
 }
@@ -165,10 +168,8 @@ void DeviceCommandScreenshotJob::StartScreenshotUpload(
   upload_job_->Start();
 }
 
-void DeviceCommandScreenshotJob::RunImpl(CallbackWithResult succeeded_callback,
-                                         CallbackWithResult failed_callback) {
-  succeeded_callback_ = std::move(succeeded_callback);
-  failed_callback_ = std::move(failed_callback);
+void DeviceCommandScreenshotJob::RunImpl(CallbackWithResult result_callback) {
+  result_callback_ = std::move(result_callback);
 
   SYSLOG(INFO) << "Executing screenshot command.";
 
@@ -176,8 +177,9 @@ void DeviceCommandScreenshotJob::RunImpl(CallbackWithResult succeeded_callback,
   if (!screenshot_delegate_->IsScreenshotAllowed()) {
     SYSLOG(ERROR) << "Screenshots are not allowed.";
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(failed_callback_),
-                                  CreatePayload(FAILURE_USER_INPUT)));
+        FROM_HERE,
+        base::BindOnce(std::move(result_callback_), ResultType::kFailure,
+                       CreatePayload(FAILURE_USER_INPUT)));
   }
 
   aura::Window::Windows root_windows = ash::Shell::GetAllRootWindows();
@@ -186,8 +188,9 @@ void DeviceCommandScreenshotJob::RunImpl(CallbackWithResult succeeded_callback,
   if (!upload_url_.is_valid()) {
     SYSLOG(ERROR) << upload_url_ << " is not a valid URL.";
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(std::move(failed_callback_),
-                                  CreatePayload(FAILURE_INVALID_URL)));
+        FROM_HERE,
+        base::BindOnce(std::move(result_callback_), ResultType::kFailure,
+                       CreatePayload(FAILURE_INVALID_URL)));
     return;
   }
 
@@ -196,7 +199,7 @@ void DeviceCommandScreenshotJob::RunImpl(CallbackWithResult succeeded_callback,
     SYSLOG(ERROR) << "No attached screens.";
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE,
-        base::BindOnce(std::move(failed_callback_),
+        base::BindOnce(std::move(result_callback_), ResultType::kFailure,
                        CreatePayload(FAILURE_SCREENSHOT_ACQUISITION)));
     return;
   }

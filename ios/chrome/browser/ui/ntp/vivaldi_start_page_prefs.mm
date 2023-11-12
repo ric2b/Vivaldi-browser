@@ -2,9 +2,10 @@
 
 #import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
-#include "prefs/vivaldi_pref_names.h"
+#import "components/pref_registry/pref_registry_syncable.h"
+#import "components/prefs/pref_service.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "prefs/vivaldi_pref_names.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -16,7 +17,7 @@
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiSpeedDialSortingMode,
                                 SpeedDialSortingManual);
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageLayoutStyle,
-                                VivaldiStartPageLayoutStyleMedium);
+                                [VivaldiStartPagePrefs defaultLayout]);
 }
 
 #pragma mark - GETTERS
@@ -59,7 +60,7 @@
     case 3:
       return VivaldiStartPageLayoutStyleList;
     default:
-      return VivaldiStartPageLayoutStyleMedium;
+      return [VivaldiStartPagePrefs defaultLayout];
   }
 }
 
@@ -73,6 +74,16 @@
 + (void)setStartPageLayoutStyle:(const VivaldiStartPageLayoutStyle)style
                  inPrefServices:(PrefService*)prefService  {
   prefService->SetInteger(vivaldiprefs::kVivaldiStartPageLayoutStyle, style);
+}
+
+#pragma mark - PRIVATE
+
++ (VivaldiStartPageLayoutStyle)defaultLayout {
+  BOOL isTablet = [VivaldiGlobalHelpers isDeviceTablet];
+  VivaldiStartPageLayoutStyle defaultLayout =
+      isTablet ? VivaldiStartPageLayoutStyleMedium :
+      VivaldiStartPageLayoutStyleSmall;
+  return defaultLayout;
 }
 
 @end

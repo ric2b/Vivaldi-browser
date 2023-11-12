@@ -14,7 +14,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.Bundle;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
@@ -30,7 +29,6 @@ import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.app.video_tutorials.VideoTutorialShareHelper;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.ui.splashscreen.trustedwebactivity.TwaSplashController;
@@ -46,7 +44,6 @@ import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.translate.TranslateIntentHandler;
 import org.chromium.chrome.browser.util.AndroidTaskUtils;
-import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.components.browser_ui.media.MediaNotificationUma;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -153,9 +150,17 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
         boolean incognito =
                 mIntent.getBooleanExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false);
 
+        String url = null;
+        if (Intent.ACTION_SEND.equals(mIntent.getAction())) {
+            url = IntentHandler.getUrlFromShareIntent(mIntent);
+            if (url == null) return Action.FINISH_ACTIVITY;
+            mIntent.setData(Uri.parse(url));
+        } else {
+            url = IntentHandler.getUrlFromIntent(mIntent);
+        }
+
         // Check if a web search Intent is being handled.
         IntentHandler intentHandler = new IntentHandler(mActivity, this);
-        String url = IntentHandler.getUrlFromIntent(mIntent);
         if (url == null && tabId == Tab.INVALID_TAB_ID && !incognito
                 && intentHandler.handleWebSearchIntent(mIntent)) {
             return Action.FINISH_ACTIVITY;
@@ -412,23 +417,6 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
     @SuppressLint("InlinedApi")
     @SuppressWarnings("checkstyle:SystemExitCheck") // Allowed due to https://crbug.com/847921#c17.
     private @Action int dispatchToTabbedActivity() {
-        boolean isVrIntent = VrModuleProvider.getIntentDelegate().isVrIntent(mIntent);
-        if (isVrIntent) {
-            for (Activity activity : ApplicationStatus.getRunningActivities()) {
-                if (activity instanceof ChromeTabbedActivity) {
-                    if (VrModuleProvider.getDelegate().willChangeDensityInVr(
-                                ((ChromeActivity) activity).getWindowAndroid())) {
-                        // In the rare case that entering VR will trigger a density change (and
-                        // hence an Activity recreation), just return to Daydream home and kill the
-                        // process, as there's no good way to recreate without showing 2D UI
-                        // in-headset.
-                        mActivity.finish();
-                        System.exit(0);
-                    }
-                }
-            }
-        }
-
         maybePrefetchDnsInBackground();
 
         maybeAuthenticateFirstPartyTranslateIntent(mIntent);
@@ -484,10 +472,7 @@ public class LaunchIntentDispatcher implements IntentHandler.IntentHandlerDelega
 
         // This system call is often modified by OEMs and not actionable. http://crbug.com/619646.
         try {
-            Bundle options = isVrIntent
-                    ? VrModuleProvider.getIntentDelegate().getVrIntentOptions(mActivity)
-                    : null;
-            mActivity.startActivity(newIntent, options);
+            mActivity.startActivity(newIntent);
         } catch (SecurityException ex) {
             if (isContentScheme) {
                 Toast.makeText(mActivity,

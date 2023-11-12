@@ -68,8 +68,11 @@ class FakeTestView : public views::Textfield {
 
   // views::View:
   void OnEvent(ui::Event* event) override {
-    views::View::OnEvent(event);
-    SchedulePaint();
+    if (!do_nothing_in_event_handling_) {
+      views::View::OnEvent(event);
+      SchedulePaint();
+    }
+
     event->SetHandled();
   }
 
@@ -77,8 +80,13 @@ class FakeTestView : public views::Textfield {
 
   int GetReceivedKeyEvent() const { return received_key_event_; }
 
+  void set_do_nothing_in_event_handling(bool do_nothing) {
+    do_nothing_in_event_handling_ = do_nothing;
+  }
+
  protected:
   int received_key_event_ = 0;
+  bool do_nothing_in_event_handling_ = false;
 };
 
 class UiMetricsRecorderTest : public AshTestBase {
@@ -197,7 +205,7 @@ TEST_F(UiMetricsRecorderTest, Gestures) {
 TEST_F(UiMetricsRecorderTest, TargetDestroyedWithSyncIME) {
   // Setup.
   auto ime_engine = std::make_unique<TestIMEEngineHandler>();
-  ui::IMEBridge::Get()->SetCurrentEngineHandler(ime_engine.get());
+  IMEBridge::Get()->SetCurrentEngineHandler(ime_engine.get());
 
   std::unique_ptr<views::Widget> widget = CreateTestWindowWidget();
   FakeTestView* view =
@@ -215,7 +223,28 @@ TEST_F(UiMetricsRecorderTest, TargetDestroyedWithSyncIME) {
   EXPECT_EQ(destroyer.GetReceivedKeyEvent(), 1);
 
   // Teardown.
-  ui::IMEBridge::Get()->SetCurrentEngineHandler(nullptr);
+  IMEBridge::Get()->SetCurrentEngineHandler(nullptr);
+}
+
+// Verifies that event latency is not recorded if UI handling does not cause
+// screen updates.
+TEST_F(UiMetricsRecorderTest, NoScreenUpdateNoLatency) {
+  std::unique_ptr<views::Widget> widget = CreateTestWindowWidget();
+  FakeTestView* view =
+      widget->SetContentsView(std::make_unique<FakeTestView>());
+
+  base::HistogramTester histogram_tester;
+
+  // No screen update is created during event handling.
+  view->set_do_nothing_in_event_handling(/*do_nothing=*/true);
+  LeftClickOn(view);
+
+  // Force one frame out side event handling to ensure no latency is reported.
+  auto* compositor = widget->GetCompositor();
+  compositor->ScheduleFullRedraw();
+  EXPECT_TRUE(ui::WaitForNextFrameToBePresented(compositor));
+
+  histogram_tester.ExpectTotalCount("Ash.EventLatency.TotalLatency", 0);
 }
 
 }  // namespace

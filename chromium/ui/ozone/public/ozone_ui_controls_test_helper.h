@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "base/callback_forward.h"
 #include "base/component_export.h"
+#include "base/functional/callback_forward.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/native_widget_types.h"
@@ -23,17 +23,18 @@ class OzoneUIControlsTestHelper {
  public:
   virtual ~OzoneUIControlsTestHelper() = default;
 
+  // Returns true if the underlying platform supports screen coordinates;
+  virtual bool SupportsScreenCoordinates() const = 0;
+
   // Returns current button down mask.
   virtual unsigned ButtonDownMask() const = 0;
 
-  // Sends key press event and executes |closure| when done.
-  virtual void SendKeyPressEvent(gfx::AcceleratedWidget widget,
-                                 ui::KeyboardCode key,
-                                 bool control,
-                                 bool shift,
-                                 bool alt,
-                                 bool command,
-                                 base::OnceClosure closure) = 0;
+  // Sends key events and executes `closure` when done.
+  virtual void SendKeyEvents(gfx::AcceleratedWidget widget,
+                             ui::KeyboardCode key,
+                             int key_event_types,
+                             int accelerator_state,
+                             base::OnceClosure closure) = 0;
 
   // Sends mouse motion notify event and executes |closure| when done.
   virtual void SendMouseMotionNotifyEvent(gfx::AcceleratedWidget widget,

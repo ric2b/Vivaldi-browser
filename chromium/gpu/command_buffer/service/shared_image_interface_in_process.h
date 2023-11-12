@@ -28,7 +28,6 @@ class SyncPointManager;
 struct GpuPreferences;
 class GpuDriverBugWorkarounds;
 struct GpuFeatureInfo;
-class ImageFactory;
 struct SyncToken;
 
 // This is an implementation of the SharedImageInterface to be used on the viz
@@ -57,7 +56,6 @@ class GPU_GLES2_EXPORT SharedImageInterfaceInProcess
                                 const GpuFeatureInfo& gpu_feature_info,
                                 gpu::SharedContextState* context_state,
                                 SharedImageManager* shared_image_manager,
-                                ImageFactory* image_factory,
                                 bool is_for_display_compositor);
 
   SharedImageInterfaceInProcess(const SharedImageInterfaceInProcess&) = delete;
@@ -69,7 +67,7 @@ class GPU_GLES2_EXPORT SharedImageInterfaceInProcess
   // The |SharedImageInterface| keeps ownership of the image until
   // |DestroySharedImage| is called or the interface itself is destroyed (e.g.
   // the GPU channel is lost).
-  Mailbox CreateSharedImage(viz::ResourceFormat format,
+  Mailbox CreateSharedImage(viz::SharedImageFormat format,
                             const gfx::Size& size,
                             const gfx::ColorSpace& color_space,
                             GrSurfaceOrigin surface_origin,
@@ -81,7 +79,7 @@ class GPU_GLES2_EXPORT SharedImageInterfaceInProcess
   // which is used to populate the SharedImage.  |pixel_data| should have the
   // same format which would be passed to glTexImage2D to populate a similarly
   // specified texture.
-  Mailbox CreateSharedImage(viz::ResourceFormat format,
+  Mailbox CreateSharedImage(viz::SharedImageFormat format,
                             const gfx::Size& size,
                             const gfx::ColorSpace& color_space,
                             GrSurfaceOrigin surface_origin,
@@ -196,7 +194,7 @@ class GPU_GLES2_EXPORT SharedImageInterfaceInProcess
   bool MakeContextCurrent(bool needs_gl = false);
   bool LazyCreateSharedImageFactory();
   void CreateSharedImageOnGpuThread(const Mailbox& mailbox,
-                                    viz::ResourceFormat format,
+                                    viz::SharedImageFormat format,
                                     gpu::SurfaceHandle surface_handle,
                                     const gfx::Size& size,
                                     const gfx::ColorSpace& color_space,
@@ -205,7 +203,7 @@ class GPU_GLES2_EXPORT SharedImageInterfaceInProcess
                                     uint32_t usage,
                                     const SyncToken& sync_token);
   void CreateSharedImageWithDataOnGpuThread(const Mailbox& mailbox,
-                                            viz::ResourceFormat format,
+                                            viz::SharedImageFormat format,
                                             const gfx::Size& size,
                                             const gfx::ColorSpace& color_space,
                                             GrSurfaceOrigin surface_origin,

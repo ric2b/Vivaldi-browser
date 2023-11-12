@@ -13,11 +13,16 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_style.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
+#include "chrome/browser/ui/views/tabs/tab_group_style.h"
 #include "chrome/browser/ui/views/tabs/tab_group_underline.h"
 #include "chrome/browser/ui/views/tabs/tab_slot_controller.h"
 #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
@@ -35,14 +40,20 @@
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/ui_base_features.h"
+#include "ui/color/color_id.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/layout/fill_layout.h"
@@ -54,17 +65,14 @@
 
 namespace {
 
-constexpr int kEmptyChipSize = 14;
-
-int GetChipCornerRadius() {
-  return TabStyle::GetCornerRadius() - TabGroupUnderline::kStrokeThickness;
-}
+constexpr int kSyncIconPaddingFromLabel = 4;
 
 class TabGroupHighlightPathGenerator : public views::HighlightPathGenerator {
  public:
   TabGroupHighlightPathGenerator(const views::View* chip,
-                                 const views::View* title)
-      : chip_(chip), title_(title) {}
+                                 const views::View* title,
+                                 const TabGroupStyle& style)
+      : chip_(chip), title_(title), style_(style) {}
   TabGroupHighlightPathGenerator(const TabGroupHighlightPathGenerator&) =
       delete;
   TabGroupHighlightPathGenerator& operator=(
@@ -72,46 +80,57 @@ class TabGroupHighlightPathGenerator : public views::HighlightPathGenerator {
 
   // views::HighlightPathGenerator:
   SkPath GetHighlightPath(const views::View* view) override {
-    SkScalar corner_radius =
-        title_->GetVisible() ? GetChipCornerRadius() : kEmptyChipSize / 2;
-    return SkPath().addRoundRect(gfx::RectToSkRect(chip_->bounds()),
-                                 corner_radius, corner_radius);
+    return SkPath().addRoundRect(
+        gfx::RectToSkRect(chip_->bounds()),
+        style_->GetHighlightPathGeneratorCornerRadius(title_),
+        style_->GetHighlightPathGeneratorCornerRadius(title_));
   }
 
  private:
   const raw_ptr<const views::View, DanglingUntriaged> chip_;
   const raw_ptr<const views::View, DanglingUntriaged> title_;
+  const raw_ref<const TabGroupStyle> style_;
 };
 
 }  // namespace
 
-TabGroupHeader::TabGroupHeader(TabSlotController& tab_slot_controller,
-                               const tab_groups::TabGroupId& group)
+TabGroupHeader::TabGroupHeader(TabSlotController &tab_slot_controller,
+                               const tab_groups::TabGroupId &group,
+                               const TabGroupStyle &style)
     : tab_slot_controller_(tab_slot_controller),
-      editor_bubble_tracker_(tab_slot_controller) {
+      title_chip_(AddChildView(std::make_unique<views::View>())),
+      title_(title_chip_->AddChildView(std::make_unique<views::Label>())),
+      sync_icon_(
+          title_chip_->AddChildView(std::make_unique<views::ImageView>())),
+      saved_tab_group_service_(
+          tab_slot_controller_->GetBrowser()
+              ? SavedTabGroupServiceFactory::GetForProfile(
+                    tab_slot_controller_->GetBrowser()->profile())
+              : nullptr),
+      style_(style), editor_bubble_tracker_(tab_slot_controller) {
   set_group(group);
   set_context_menu_controller(this);
-
-  // The size and color of the chip are set in VisualsChanged().
-  title_chip_ = AddChildView(std::make_unique<views::View>());
 
   // Disable events processing (like tooltip handling)
   // for children of TabGroupHeader.
   title_chip_->SetCanProcessEventsWithinSubtree(false);
 
-  // The text and color of the title are set in VisualsChanged().
-  title_ = title_chip_->AddChildView(std::make_unique<views::Label>());
   title_->SetCollapseWhenHidden(true);
   title_->SetAutoColorReadabilityEnabled(false);
   title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_->SetElideBehavior(gfx::FADE_TAIL);
 
+  // TODO(crbug.com/1399944): Remove this code after typography is updated.
+  if (features::IsChromeRefresh2023()) {
+    title_->SetLineHeight(16);
+  }
+
   // Enable keyboard focus.
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   views::FocusRing::Install(this);
   views::HighlightPathGenerator::Install(
-      this,
-      std::make_unique<TabGroupHighlightPathGenerator>(title_chip_, title_));
+      this, std::make_unique<TabGroupHighlightPathGenerator>(title_chip_,
+                                                             title_, *style_));
   // The tab group gets painted with a solid color that may not contrast well
   // with the focus indicator, so draw an outline around the focus ring for it
   // to contrast with the solid color.
@@ -389,31 +408,48 @@ int TabGroupHeader::GetDesiredWidth() const {
   // The empty and non-empty chips have different sizes and corner radii, but
   // both should look nestled against the group stroke of the tab to the right.
   // This requires a +/- 2px adjustment to the width, which causes the tab to
-  // the right to be positioned in the right spot.
+  // the right to be positioned in the right spot. For ChromeRefresh23 the shape
+  // is going to be a rounded rect for both cases and they will have the same
+  // right adjust values.
   const std::u16string title =
       tab_slot_controller_->GetGroupTitle(group().value());
-  const int right_adjust = title.empty() ? 2 : -2;
+  const int right_adjust =
+      style_->GetTitleAdjustmentToTabGroupHeaderDesiredWidth(title);
 
   return overlap_margin + title_chip_->width() + right_adjust;
 }
 
 void TabGroupHeader::VisualsChanged() {
+  const tab_groups::TabGroupId tab_group_id = group().value();
   const std::u16string title =
-      tab_slot_controller_->GetGroupTitle(group().value());
+      tab_slot_controller_->GetGroupTitle(tab_group_id);
   const tab_groups::TabGroupColorId color_id =
-      tab_slot_controller_->GetGroupColorId(group().value());
+      tab_slot_controller_->GetGroupColorId(tab_group_id);
   const SkColor color = tab_slot_controller_->GetPaintedGroupColor(color_id);
 
   title_->SetText(title);
 
-  if (title.empty()) {
-    // If the title is empty, the chip is just a circle.
-    const int y = (GetLayoutConstant(TAB_HEIGHT) - kEmptyChipSize) / 2;
+  if (ShouldShowSyncIcon()) {
+    sync_icon_->SetImage(ui::ImageModel::FromVectorIcon(
+        kTabGroupsSyncIcon, color_utils::GetColorWithMaxContrast(color),
+        style_->GetSyncIconWidth()));
+  }
 
-    title_chip_->SetBounds(TabGroupUnderline::GetStrokeInset(), y,
-                           kEmptyChipSize, kEmptyChipSize);
-    title_chip_->SetBackground(
-        views::CreateRoundedRectBackground(color, kEmptyChipSize / 2));
+  sync_icon_->SetVisible(ShouldShowSyncIcon());
+
+  if (title.empty()) {
+    title_chip_->SetBoundsRect(style_->GetEmptyTitleChipBounds(this));
+    title_chip_->SetBackground(style_->GetEmptyTitleChipBackground(color));
+
+    if (ShouldShowSyncIcon()) {
+      // The `sync_icon` should be centered in the title chip.
+      gfx::Rect sync_icon_bounds = title_chip_->GetLocalBounds();
+      sync_icon_bounds.ClampToCenteredSize(
+          gfx::Size(style_->GetSyncIconWidth(), style_->GetSyncIconWidth()));
+      sync_icon_->SetBoundsRect(sync_icon_bounds);
+    } else {
+      sync_icon_->SetBounds(0, 0, 0, 0);
+    }
   } else {
     // If the title is set, the chip is a rounded rect that matches the active
     // tab shape, particularly the tab's corner radius.
@@ -421,29 +457,65 @@ void TabGroupHeader::VisualsChanged() {
 
     // Set the radius such that the chip nestles snugly against the tab corner
     // radius, taking into account the group underline stroke.
-    const int corner_radius = GetChipCornerRadius();
+    const int corner_radius = TabGroupStyle::GetChipCornerRadius();
 
-    // Clamp the width to a maximum of half the standard tab width (not counting
-    // overlap).
-    const int max_width =
-        (TabStyle::GetStandardWidth() - TabStyle::GetTabOverlap()) / 2;
-    const int text_width =
-        std::min(title_->GetPreferredSize().width(), max_width);
+    // TODO(crbug.com/1416895): The math of the layout in this function is done
+    // arithmetically and can be hard to understand. This should instead be done
+    // by a layout manager.
     const int text_height = title_->GetPreferredSize().height();
-    const int text_vertical_inset = 1;
-    const int text_horizontal_inset = corner_radius + text_vertical_inset;
 
-    const int y =
-        (GetLayoutConstant(TAB_HEIGHT) - text_height) / 2 - text_vertical_inset;
+    const gfx::Size sync_icon_size =
+        ShouldShowSyncIcon()
+            ? gfx::Size(style_->GetSyncIconWidth(), text_height)
+            : gfx::Size();
 
-    title_chip_->SetBounds(TabGroupUnderline::GetStrokeInset(), y,
-                           text_width + 2 * text_horizontal_inset,
-                           text_height + 2 * text_vertical_inset);
+    const int padding_between_label_sync_icon =
+        ShouldShowSyncIcon() ? kSyncIconPaddingFromLabel : 0;
+
+    // The max width of the content should be half the standard tab width (not
+    // counting overlap).
+    const int text_max_width =
+        (TabStyle::GetStandardWidth() - TabStyle::GetTabOverlap()) / 2 -
+        sync_icon_size.width() - padding_between_label_sync_icon;
+
+    const int text_width =
+        std::min(title_->GetPreferredSize().width(), text_max_width);
+
+    // width of the content including the text label, sync icon and the padding
+    // between them
+    const int content_width =
+        text_width + sync_icon_size.width() + padding_between_label_sync_icon;
+
+    // horizontal and vertical insets of the title chip.
+    const gfx::Insets title_chip_insets = style_->GetInsetsForHeaderChip();
+    const int title_chip_vertical_inset = title_chip_insets.top();
+    const int title_chip_horizontal_inset = title_chip_insets.left();
+
+    // Width of title chip should atleast be the width of an empty title chip.
+    const int title_chip_width =
+        std::max(style_->GetEmptyTitleChipBounds(this).width(),
+                 content_width + 2 * title_chip_horizontal_inset);
+
+    // The bounds and background for the `title_chip_` is set here.
+    const int title_chip_content_y_coord =
+        (GetLayoutConstant(TAB_HEIGHT) - text_height) / 2 -
+        title_chip_vertical_inset;
+    title_chip_->SetBounds(TabGroupUnderline::GetStrokeInset(),
+                           title_chip_content_y_coord, title_chip_width,
+                           text_height + 2 * title_chip_vertical_inset);
     title_chip_->SetBackground(
         views::CreateRoundedRectBackground(color, corner_radius));
 
-    title_->SetBounds(text_horizontal_inset, text_vertical_inset, text_width,
+    // Bounds and background of the `title_` and the `sync_icon` are set here.
+    // Cannot use `title_chip_horizontal_inset` as x coordinate in the case
+    // `title_chip_width` is the width of an empty title chip.
+    const int start_of_title = (title_chip_->width() - content_width) / 2;
+    title_->SetBounds(start_of_title, title_chip_vertical_inset, text_width,
                       text_height);
+    sync_icon_->SetBounds(
+        start_of_title + text_width + padding_between_label_sync_icon,
+        title_chip_vertical_inset, sync_icon_size.width(),
+        sync_icon_size.height());
   }
 
   if (views::FocusRing::Get(this))
@@ -463,11 +535,19 @@ void TabGroupHeader::VisualsChanged() {
 }
 
 int TabGroupHeader::GetCollapsedHeaderWidth() const {
-  const int empty_group_title_adjustment = title_->GetText().empty() ? 2 : -2;
+  const int title_adjustment =
+      style_->GetTitleAdjustmentToTabGroupHeaderDesiredWidth(title_->GetText());
   const int title_chip_width = GetTabSizeInfo().standard_width -
-                               2 * TabStyle::GetTabOverlap() -
-                               empty_group_title_adjustment;
+                               2 * TabStyle::GetTabOverlap() - title_adjustment;
   return title_chip_width + 2 * TabGroupUnderline::GetStrokeInset();
+}
+
+bool TabGroupHeader::ShouldShowSyncIcon() const {
+  const bool is_group_saved =
+      saved_tab_group_service_ && saved_tab_group_service_->model() &&
+      saved_tab_group_service_->model()->Contains(group().value());
+  return base::FeatureList::IsEnabled(features::kTabGroupsSave) &&
+         is_group_saved;
 }
 
 void TabGroupHeader::RemoveObserverFromWidget(views::Widget* widget) {

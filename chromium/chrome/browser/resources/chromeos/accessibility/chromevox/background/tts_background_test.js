@@ -14,15 +14,17 @@ ChromeVoxBackgroundTtsTest = class extends ChromeVoxE2ETest {
     await super.setUpDeferred();
 
     // Alphabetical based on file path.
+    await importModule('ChromeVox', '/chromevox/background/chromevox.js');
     await importModule(
         'CommandHandlerInterface',
         '/chromevox/background/command_handler_interface.js');
-    await importModule('PrimaryTts', '/chromevox/background/tts_background.js');
+    await importModule('PrimaryTts', '/chromevox/background/primary_tts.js');
+    await importModule(
+        'SettingsManager', '/chromevox/common/settings_manager.js');
     await importModule(
         ['QueueMode', 'TtsSpeechProperties'], '/chromevox/common/tts_types.js');
-    await importModule('LocalStorage', '/common/local_storage.js');
 
-    window.tts = new PrimaryTts();
+    globalThis.tts = new PrimaryTts();
   }
 
   expectUtteranceQueueIsLike(expectedObjects) {
@@ -118,7 +120,7 @@ TEST_F('ChromeVoxBackgroundTtsTest', 'UpdateVoice', function() {
     if (task.setup) {
       task.setup();
     }
-    tts.updateVoice_(task.testVoice, this.newCallback(function(actualVoice) {
+    tts.updateVoice(task.testVoice, this.newCallback(function(actualVoice) {
       assertEquals(task.expectedVoice, actualVoice);
       flushNextTask();
     }));
@@ -202,7 +204,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'AnnounceCapitalLetters', function() {
   assertEquals('A', preprocess('A'));
 
   // Only announce capital for solo capital letters.
-  LocalStorage.set('capitalStrategy', 'announceCapitals');
+  SettingsManager.set('capitalStrategy', 'announceCapitals');
   assertEquals('Cap A', preprocess('A'));
   assertEquals('Cap Z', preprocess('Z'));
   assertEquals('Cap Ａ', preprocess('Ａ'));
@@ -270,7 +272,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'NumberReadingStyle', function() {
   };
 
   // Check the default preference.
-  assertEquals('asWords', LocalStorage.get('numberReadingStyle'));
+  assertEquals('asWords', SettingsManager.get('numberReadingStyle'));
 
   tts.speak('100');
   assertEquals('100', lastSpokenTextString);
@@ -286,7 +288,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'NumberReadingStyle', function() {
   assertEquals(
       'An unanswered call lasts for ３０ seconds.', lastSpokenTextString);
 
-  LocalStorage.set('numberReadingStyle', 'asDigits');
+  SettingsManager.set('numberReadingStyle', 'asDigits');
   tts.speak('100');
   assertEquals('1 0 0', lastSpokenTextString);
 
@@ -430,10 +432,10 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'Phonetics', function() {
 AX_TEST_F('ChromeVoxBackgroundTtsTest', 'PitchChanges', function() {
   const preprocess = tts.preprocess.bind(tts);
   const props = {relativePitch: -0.3};
-  LocalStorage.set('usePitchChanges', 'true');
+  SettingsManager.set('usePitchChanges', true);
   preprocess('Hello world', props);
   assertTrue(props.hasOwnProperty('relativePitch'));
-  LocalStorage.set('usePitchChanges', 'false');
+  SettingsManager.set('usePitchChanges', false);
   preprocess('Hello world', props);
   assertFalse(props.hasOwnProperty('relativePitch'));
 });

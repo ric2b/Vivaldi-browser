@@ -92,7 +92,9 @@ _CONFIG = [
             'base::Nanoseconds',
             'base::OptionalFromPtr',
             'base::OptionalToPtr',
+            'base::Overloaded',
             'base::PassKey',
+            'base::PersistentHash',
             'base::PlatformThread',
             'base::PlatformThreadId',
             'base::RefCountedData',
@@ -149,7 +151,7 @@ _CONFIG = [
             'base::expected',
             'base::unexpected',
 
-            # //base/bind.h
+            # //base/functional/bind.h
             'base::IgnoreResult',
 
             # //base/bits.h
@@ -159,12 +161,12 @@ _CONFIG = [
             'base::ObserverList',
             'base::CheckedObserver',
 
-            # //base/callback_helpers.h.
+            # //base/functional/callback_helpers.h.
             'base::DoNothing',
             'base::SplitOnceCallback',
 
-            # //base/callback.h is allowed, but you need to use WTF::Bind or
-            # WTF::BindRepeating to create callbacks in Blink.
+            # //base/functional/callback.h is allowed, but you need to use
+            # WTF::Bind or WTF::BindRepeating to create callbacks in Blink.
             'base::BarrierClosure',
             'base::NullCallback',
             'base::OnceCallback',
@@ -476,6 +478,7 @@ _CONFIG = [
             "gfx::KeyframedColorAnimationCurve",
             "gfx::KeyframedFloatAnimationCurve",
             "gfx::KeyframedTransformAnimationCurve",
+            "gfx::LinearEasingPoint",
             "gfx::TransformKeyframe",
             "gfx::TransformOperations",
 
@@ -597,9 +600,6 @@ _CONFIG = [
             # nested in the blink namespace.
             'internal::.+',
 
-            # TODO(crbug.com/1296161): Remove this when the CHIPS OT ends.
-            "net::features::kPartitionedCookiesBypassOriginTrial",
-
             # TODO(https://crbug.com/1261328): Remove this once the Blob URL
             # partitioning killswitch is removed.
             "net::features::kSupportPartitionedBlobUrl",
@@ -649,10 +649,12 @@ _CONFIG = [
             # STL containers such as std::string and std::vector are discouraged
             # but still needed for interop with blink/common. Note that other
             # STL types such as std::unique_ptr are encouraged.
+            # Discouraged usages for data members are checked in clang plugin.
             'std::.+',
 
             # Similarly, GURL is allowed to interoperate with blink/common and
             # other common code shared between browser and renderer.
+            # Discouraged usages for data members are checked in clang plugin.
             'GURL',
 
             # UI Cursor
@@ -727,11 +729,7 @@ _CONFIG = [
         'disallowed': [
             ('base::Bind(|Once|Repeating)',
              'Use WTF::Bind or WTF::BindRepeating.'),
-            ('std::(deque|map|multimap|set|vector|unordered_set|unordered_map)',
-             'Use WTF containers like WTF::Deque, WTF::HashMap, WTF::HashSet or WTF::Vector instead of the banned std containers. '
-             'However, it is fine to use std containers at the boundary layer between Blink and Chromium. '
-             'If you are in this case, you can use --bypass-hooks option to avoid the presubmit check when uploading your CL.'
-             ),
+            'base::BindPostTaskToCurrentDefault',
             _DISALLOW_NON_BLINK_MOJOM,
         ],
         # These task runners are generally banned in blink to ensure
@@ -739,7 +737,7 @@ _CONFIG = [
         # //third_party/blink/renderer/platform/scheduler/TaskSchedulingInBlink.md
         # for more.
         'inclass_disallowed': [
-            'base::(SingleThread|Sequenced)TaskRunner::(GetCurrentDefault|CurrentDefaultHandle)',
+            'base::(SingleThread|Sequenced)TaskRunner::(GetCurrentDefault|CurrentDefaultHandle)'
         ],
     },
     {
@@ -1028,6 +1026,7 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/renderer/core/css/properties/css_parsing_utils.cc',
+            'third_party/blink/renderer/core/paint/box_border_painter.cc',
         ],
         'allowed': [
             'color_utils::GetContrastRatio',
@@ -1053,9 +1052,6 @@ _CONFIG = [
     {
         'paths': ['third_party/blink/renderer/core/inspector'],
         'allowed': [
-            # Devtools binary protocol uses std::vector<uint8_t> for serialized
-            # objects.
-            'std::vector',
             # [C]h[R]ome [D]ev[T]ools [P]rotocol implementation support library
             # (see third_party/inspector_protocol/crdtp).
             'crdtp::.+',
@@ -1153,7 +1149,7 @@ _CONFIG = [
         # The modules listed above need access to the following GL drawing and
         # display-related types.
         'allowed': [
-            'base::LRUCache',
+            'base::flat_map',
             'gl::GpuPreference',
             'gpu::SHARED_IMAGE_USAGE_.+',
             'gpu::gles2::GLES2Interface',
@@ -1173,6 +1169,7 @@ _CONFIG = [
             'viz::ReleaseCallback',
             'viz::ResourceFormat',
             'viz::ResourceFormatToClosestSkColorType',
+            'viz::ToClosestSkColorType',
             'viz::TransferableResource',
         ],
     },
@@ -1214,8 +1211,6 @@ _CONFIG = [
             # Required to initialize WebGraphicsContext3DVideoFramePool.
             'gpu::GpuMemoryBufferManager',
             'media::.+',
-            # Some media APIs require std::vector.
-            "std::vector",
         ]
     },
     {
@@ -1380,8 +1375,6 @@ _CONFIG = [
         ],
         'allowed': [
             'gin::.+',
-            # gin::NamedPropertyInterceptor uses std::vector.
-            'std::vector',
         ],
     },
     {
@@ -1501,17 +1494,6 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/modules/accessibility',
-        ],
-        # These are necessary because BlinkAXTreeSource inherits from
-        # ui::AXTreeSource, which has these in its interface.
-        'allowed': [
-            'std::vector',
-            'std::set',
-        ],
-    },
-    {
-        'paths': [
             'third_party/blink/renderer/modules/animationworklet/',
         ],
         'allowed': [
@@ -1541,9 +1523,6 @@ _CONFIG = [
 
             # //third_party/liburlpattern
             'liburlpattern::.+',
-
-            # The liburlpattern API requires using std::vector.
-            'std::vector',
 
             # Internal namespace used by url_pattern module.
             'url_pattern::.+',
@@ -1744,9 +1723,15 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/platform/graphics/view_transition_shared_element_id.h'
+            'third_party/blink/renderer/platform/graphics/view_transition_element_id.h'
         ],
         'allowed': ['cc::ViewTransitionElementId'],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/view_transition/view_transition_style_tracker.h'
+        ],
+        'allowed': ['viz::ViewTransitionElementResourceId'],
     },
     {
         'paths': [
@@ -1760,6 +1745,14 @@ _CONFIG = [
         ],
         'allowed': [
             'base::NoDestructor',
+        ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/loader/frame_loader.cc',
+        ],
+        'allowed': [
+            'base::flat_map',
         ]
     },
     {

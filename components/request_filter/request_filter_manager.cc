@@ -17,7 +17,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/common/child_process_host.h"
 #include "net/cookies/site_for_cookies.h"
 
 using content::BrowserThread;

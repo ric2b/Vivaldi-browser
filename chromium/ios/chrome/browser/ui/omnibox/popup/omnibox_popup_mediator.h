@@ -18,6 +18,7 @@
 #import "ios/chrome/browser/ui/omnibox/popup/popup_debug_info_consumer.h"
 #import "ui/base/window_open_disposition.h"
 
+@protocol ApplicationCommands;
 @protocol BrowserCommands;
 @class BrowserActionFactory;
 @class CarouselItem;
@@ -27,7 +28,6 @@ class FaviconLoader;
 @class OmniboxPedalAnnotator;
 @class OmniboxPopupMediator;
 @class OmniboxPopupPresenter;
-@class PopupModel;
 @protocol SnackbarCommands;
 class WebStateList;
 class AutocompleteController;
@@ -35,6 +35,10 @@ class AutocompleteController;
 namespace image_fetcher {
 class ImageDataFetcher;
 }  // namespace
+
+namespace feature_engagement {
+class Tracker;
+}
 
 class OmniboxPopupMediatorDelegate {
  public:
@@ -89,6 +93,7 @@ class OmniboxPopupMediatorDelegate {
 @property(nonatomic, weak) id<AutocompleteResultConsumer> consumer;
 /// Consumer for debug info.
 @property(nonatomic, weak) id<PopupDebugInfoConsumer> debugInfoConsumer;
+@property(nonatomic, weak) id<ApplicationCommands> applicationCommandsHandler;
 /// Scheduler to notify about events happening in this popup.
 @property(nonatomic, weak) DefaultBrowserPromoNonModalScheduler* promoScheduler;
 @property(nonatomic, assign, getter=isIncognito) BOOL incognito;
@@ -102,8 +107,6 @@ class OmniboxPopupMediatorDelegate {
 /// Whether the default search engine is Google impacts which icon is used in
 /// some cases
 @property(nonatomic, assign) BOOL defaultSearchEngineIsGoogle;
-/// The model for this mediator, if one exists.
-@property(nonatomic, weak) PopupModel* model;
 /// The annotator to create pedals for ths mediator.
 @property(nonatomic) OmniboxPedalAnnotator* pedalAnnotator;
 /// Flag that marks that incognito actions are available. Those can be disabled
@@ -124,7 +127,8 @@ class OmniboxPopupMediatorDelegate {
                         imageFetcher
                   faviconLoader:(FaviconLoader*)faviconLoader
          autocompleteController:(AutocompleteController*)autocompleteController
-                       delegate:(OmniboxPopupMediatorDelegate*)delegate;
+                       delegate:(OmniboxPopupMediatorDelegate*)delegate
+                        tracker:(feature_engagement::Tracker*)tracker;
 
 - (void)updateMatches:(const AutocompleteResult&)result;
 

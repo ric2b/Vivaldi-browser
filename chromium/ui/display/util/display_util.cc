@@ -234,7 +234,7 @@ gfx::ColorSpace ForcedColorProfileStringToColorSpace(const std::string& value) {
   if (value == "color-spin-gamma24") {
     // Run this color profile through an ICC profile. The resulting color space
     // is slightly different from the input color space, and removing the ICC
-    // profile would require rebaselineing many layout tests.
+    // profile would require rebaselining many layout tests.
     gfx::ColorSpace color_space(
         gfx::ColorSpace::PrimaryID::WIDE_GAMUT_COLOR_SPIN,
         gfx::ColorSpace::TransferID::GAMMA24);
@@ -321,5 +321,15 @@ gfx::DisplayColorSpaces CreateDisplayColorSpaces(
   return display_color_spaces;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+int ConnectorIndex8(int device_index, int display_index) {
+  DCHECK_LT(device_index, 16);
+  DCHECK_LT(display_index, 16);
+  return ((device_index << 4) + display_index) & 0xFF;
+}
+
+uint16_t ConnectorIndex16(uint8_t device_index, uint8_t display_index) {
+  return ((device_index << 8) + display_index) & 0xFFFF;
+}
 
 }  // namespace display

@@ -45,7 +45,6 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
 
     button->action = ButtonAction::BUTTON_ACTION_ACCEPT;
     button->prominent = true;
-    button->triggers_uac_prompt = delegate->OKButtonTriggersUACPrompt();
     button->text = base::UTF16ToUTF8(
         delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_OK));
     infobar.buttons.push_back(std::move(*button));
@@ -54,7 +53,6 @@ void ConfirmInfoBarWebProxy::PlatformSpecificShow(bool animate) {
     InfobarButton button[1] = {};
 
     button->action = ButtonAction::BUTTON_ACTION_CANCEL;
-    button->triggers_uac_prompt = delegate->OKButtonTriggersUACPrompt();
     button->text = base::UTF16ToUTF8(
         delegate->GetButtonLabel(ConfirmInfoBarDelegate::BUTTON_CANCEL));
 

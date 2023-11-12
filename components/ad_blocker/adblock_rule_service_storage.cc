@@ -395,7 +395,7 @@ base::Value::List SerializeSourcesList(
 base::Value SerializeStringSetToList(const std::set<std::string>& string_set) {
   base::Value list(base::Value::Type::LIST);
   for (const auto& item : string_set) {
-    list.Append(item);
+    list.GetList().Append(item);
   }
 
   return list;
@@ -448,15 +448,18 @@ base::Value::Dict SerializeRuleGroup(RuleService* service, RuleGroup group) {
           service->GetKnownSourcesHandler()->GetDeletedPresets(group)));
   rule_group.Set(kIndexChecksum, service->GetRulesIndexChecksum(group));
 
-  rule_group.Set(
-      kBlockedDomainsCountersKey,
-      SerializeCounters(service->GetBlockerUrlsReporter()
-                            ->GetBlockedDomains()[static_cast<size_t>(group)]));
+  if (service->GetBlockerUrlsReporter()) {
+    rule_group.Set(kBlockedDomainsCountersKey,
+                   SerializeCounters(
+                       service->GetBlockerUrlsReporter()
+                           ->GetBlockedDomains()[static_cast<size_t>(group)]));
 
-  rule_group.Set(kBlockedForOriginCountersKey,
-                 SerializeCounters(
-                     service->GetBlockerUrlsReporter()
-                         ->GetBlockedForOrigin()[static_cast<size_t>(group)]));
+    rule_group.Set(
+        kBlockedForOriginCountersKey,
+        SerializeCounters(
+            service->GetBlockerUrlsReporter()
+                ->GetBlockedForOrigin()[static_cast<size_t>(group)]));
+  }
 
   return rule_group;
 }
@@ -517,9 +520,11 @@ bool RuleServiceStorage::SerializeData(std::string* output) {
            SerializeRuleGroup(rule_service_, RuleGroup::kTrackingRules));
   root.Set(kAdBlockingRulesKey,
            SerializeRuleGroup(rule_service_, RuleGroup::kAdBlockingRules));
-  root.Set(kBlockedReportingStartKey,
-           base::TimeToValue(
-               rule_service_->GetBlockerUrlsReporter()->GetReportingStart()));
+  if (rule_service_->GetBlockerUrlsReporter()) {
+    root.Set(kBlockedReportingStartKey,
+             base::TimeToValue(
+                 rule_service_->GetBlockerUrlsReporter()->GetReportingStart()));
+  }
   root.Set(kVersionKey, kCurrentStorageVersion);
 
   JSONStringValueSerializer serializer(output);

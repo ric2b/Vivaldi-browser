@@ -6,12 +6,19 @@
 
 #include <memory>
 
+#include "ash/constants/ash_pref_names.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
+#include "ash/style/color_palette_controller.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
+#include "ash/test/ash_test_base.h"
+#include "base/run_loop.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/mock_callback.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_metrics.h"
+#include "chrome/browser/ash/web_applications/personalization_app/personalization_app_utils.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -19,6 +26,7 @@
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_web_ui.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -27,6 +35,19 @@ namespace ash::personalization_app {
 namespace {
 
 constexpr char kFakeTestEmail[] = "fakeemail@personalization";
+constexpr char kTestGaiaId[] = "1234567890";
+AccountId kAccountId =
+    AccountId::FromUserEmailGaiaId(kFakeTestEmail, kTestGaiaId);
+
+void AddAndLoginUser() {
+  ash::FakeChromeUserManager* user_manager =
+      static_cast<ash::FakeChromeUserManager*>(
+          user_manager::UserManager::Get());
+
+  user_manager->AddUser(kAccountId);
+  user_manager->LoginUser(kAccountId);
+  user_manager->SwitchActiveUser(kAccountId);
+}
 
 class TestThemeObserver
     : public ash::personalization_app::mojom::ThemeObserver {
@@ -43,6 +64,11 @@ class TestThemeObserver
     color_scheme_ = color_scheme;
   }
 
+  void OnSampleColorSchemesChanged(const std::vector<ash::SampleColorScheme>&
+                                       sample_color_schemes) override {
+    sample_color_schemes_ = sample_color_schemes;
+  }
+
   void OnStaticColorChanged(absl::optional<::SkColor> static_color) override {
     static_color_ = static_color;
   }
@@ -56,16 +82,18 @@ class TestThemeObserver
   }
 
   absl::optional<bool> is_dark_mode_enabled() {
-    if (!theme_observer_receiver_.is_bound())
+    if (!theme_observer_receiver_.is_bound()) {
       return absl::nullopt;
+    }
 
     theme_observer_receiver_.FlushForTesting();
     return dark_mode_enabled_;
   }
 
   bool is_color_mode_auto_schedule_enabled() {
-    if (theme_observer_receiver_.is_bound())
+    if (theme_observer_receiver_.is_bound()) {
       theme_observer_receiver_.FlushForTesting();
+    }
     return color_mode_auto_schedule_enabled_;
   }
 
@@ -77,8 +105,9 @@ class TestThemeObserver
   }
 
   absl::optional<SkColor> GetStaticColor() {
-    if (!theme_observer_receiver_.is_bound())
+    if (!theme_observer_receiver_.is_bound()) {
       return absl::nullopt;
+    }
     theme_observer_receiver_.FlushForTesting();
     return static_color_;
   }
@@ -91,6 +120,7 @@ class TestThemeObserver
   bool color_mode_auto_schedule_enabled_ = false;
   ash::ColorScheme color_scheme_ = ash::ColorScheme::kTonalSpot;
   absl::optional<::SkColor> static_color_ = absl::nullopt;
+  std::vector<ash::SampleColorScheme> sample_color_schemes_;
 };
 
 }  // namespace
@@ -151,14 +181,16 @@ class PersonalizationAppThemeProviderImplTest : public ChromeAshTestBase {
   }
 
   absl::optional<bool> is_dark_mode_enabled() {
-    if (theme_provider_remote_.is_bound())
+    if (theme_provider_remote_.is_bound()) {
       theme_provider_remote_.FlushForTesting();
+    }
     return test_theme_observer_.is_dark_mode_enabled();
   }
 
   bool is_color_mode_auto_schedule_enabled() {
-    if (theme_provider_remote_.is_bound())
+    if (theme_provider_remote_.is_bound()) {
       theme_provider_remote_.FlushForTesting();
+    }
     return test_theme_observer_.is_color_mode_auto_schedule_enabled();
   }
 
@@ -170,8 +202,9 @@ class PersonalizationAppThemeProviderImplTest : public ChromeAshTestBase {
   }
 
   absl::optional<SkColor> GetStaticColor() {
-    if (theme_provider_remote_.is_bound())
+    if (theme_provider_remote_.is_bound()) {
       theme_provider_remote_.FlushForTesting();
+    }
     return test_theme_observer_.GetStaticColor();
   }
 
@@ -241,6 +274,18 @@ class PersonalizationAppThemeProviderImplJellyTest
   PersonalizationAppThemeProviderImplJellyTest& operator=(
       const PersonalizationAppThemeProviderImplJellyTest&) = delete;
 
+  void SetUp() override {
+    PersonalizationAppThemeProviderImplTest::SetUp();
+    AddAndLoginUser();
+    GetSessionControllerClient()->AddUserSession(kAccountId, kFakeTestEmail);
+  }
+
+ protected:
+  PrefService* GetUserPrefService() {
+    return Shell::Get()->session_controller()->GetUserPrefServiceForUser(
+        kAccountId);
+  }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
@@ -249,23 +294,97 @@ TEST_F(PersonalizationAppThemeProviderImplJellyTest, SetStaticColor) {
   SetThemeObserver();
   theme_provider_remote()->FlushForTesting();
   SkColor color = SK_ColorMAGENTA;
-  EXPECT_NE(color, GetStaticColor());
-  EXPECT_NE(ash::ColorScheme::kStatic, GetColorScheme());
+  EXPECT_NE(color,
+            GetUserPrefService()->GetUint64(prefs::kDynamicColorSeedColor));
 
   theme_provider()->SetStaticColor(color);
 
+  EXPECT_EQ(color,
+            GetUserPrefService()->GetUint64(prefs::kDynamicColorSeedColor));
+}
+
+TEST_F(PersonalizationAppThemeProviderImplJellyTest,
+       ObserveStaticColorChanges) {
+  SetThemeObserver();
+  theme_provider_remote()->FlushForTesting();
+  SkColor color = SK_ColorMAGENTA;
+  EXPECT_NE(color,
+            GetUserPrefService()->GetUint64(prefs::kDynamicColorSeedColor));
+
+  // The static color is set via the UserPrefService in
+  // ColorPaletteController, and the pref listener is set via the
+  // ProfilePrefService in the ThemeProvider. In real life, these point to the
+  // same object, but not in this test. We have to set the pref in both places
+  // for the pref listener to work. Only the profile prefs will trigger the
+  // listener, and only the UserPrefService holds the information about which
+  // pref was updated.
+  theme_provider()->SetStaticColor(color);
+  profile()->GetPrefs()->SetUint64(prefs::kDynamicColorSeedColor, color);
+
   EXPECT_EQ(color, GetStaticColor());
-  EXPECT_EQ(ash::ColorScheme::kStatic, GetColorScheme());
 }
 
 TEST_F(PersonalizationAppThemeProviderImplJellyTest, SetColorScheme) {
   SetThemeObserver();
   theme_provider_remote()->FlushForTesting();
   auto color_scheme = ash::ColorScheme::kExpressive;
-  EXPECT_NE(color_scheme, GetColorScheme());
+  EXPECT_NE((int)color_scheme,
+            GetUserPrefService()->GetInteger(prefs::kDynamicColorColorScheme));
 
   theme_provider()->SetColorScheme(color_scheme);
 
+  EXPECT_EQ((int)color_scheme,
+            GetUserPrefService()->GetInteger(prefs::kDynamicColorColorScheme));
+}
+
+TEST_F(PersonalizationAppThemeProviderImplJellyTest,
+       ObserveColorSchemeChanges) {
+  SetThemeObserver();
+  theme_provider_remote()->FlushForTesting();
+  auto color_scheme = ash::ColorScheme::kExpressive;
+  EXPECT_NE((int)color_scheme,
+            GetUserPrefService()->GetInteger(prefs::kDynamicColorColorScheme));
+
+  // The color scheme is set via the UserPrefService in
+  // ColorPaletteController, and the pref listener is set via the
+  // ProfilePrefService in the ThemeProvider. In real life, these point to the
+  // same object, but not in this test. We have to set the pref in both places
+  // for the pref listener to work. Only the profile prefs will trigger the
+  // listener, and only the UserPrefService holds the information about which
+  // pref was updated.
+  theme_provider()->SetColorScheme(color_scheme);
+  profile()->GetPrefs()->SetInteger(prefs::kDynamicColorColorScheme,
+                                    (int)color_scheme);
+
   EXPECT_EQ(color_scheme, GetColorScheme());
 }
+
+TEST_F(PersonalizationAppThemeProviderImplJellyTest,
+       GenerateSampleColorSchemes) {
+  SetThemeObserver();
+  theme_provider_remote()->FlushForTesting();
+  ColorScheme color_scheme_buttons[] = {
+      ColorScheme::kTonalSpot,
+      ColorScheme::kNeutral,
+      ColorScheme::kVibrant,
+      ColorScheme::kExpressive,
+  };
+  std::vector<SampleColorScheme> samples;
+  for (auto scheme : color_scheme_buttons) {
+    samples.push_back({.scheme = scheme,
+                       .primary = SK_ColorRED,
+                       .secondary = SK_ColorGREEN,
+                       .tertiary = SK_ColorBLUE});
+  }
+  base::MockOnceCallback<void(const std::vector<ash::SampleColorScheme>&)>
+      generate_sample_color_schemes_callback;
+  base::RunLoop run_loop;
+  EXPECT_CALL(generate_sample_color_schemes_callback, Run(samples))
+      .WillOnce(base::test::RunClosure(run_loop.QuitClosure()));
+
+  theme_provider()->GenerateSampleColorSchemes(
+      generate_sample_color_schemes_callback.Get());
+  run_loop.Run();
+}
+
 }  // namespace ash::personalization_app

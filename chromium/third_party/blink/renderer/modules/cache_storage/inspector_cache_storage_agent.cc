@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -566,8 +567,8 @@ void InspectorCacheStorageAgent::requestCacheNames(
       callback->sendSuccess(std::make_unique<protocol::Array<ProtocolCache>>());
       return;
     }
-    storage_key =
-        WTF::String(StorageKey(sec_origin->ToUrlOrigin()).Serialize());
+    storage_key = WTF::String(
+        StorageKey::CreateFirstParty(sec_origin->ToUrlOrigin()).Serialize());
   }
 
   mojom::blink::CacheStorage* cache_storage = nullptr;

@@ -36,7 +36,7 @@
 #include <tuple>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/platform_thread.h"
@@ -96,7 +96,6 @@ class GpuVideoAcceleratorFactories;
 namespace network {
 namespace mojom {
 class URLLoaderFactory;
-class URLLoaderFactoryInterfaceBase;
 }
 class PendingSharedURLLoaderFactory;
 }
@@ -136,7 +135,6 @@ class WebResourceRequestSenderDelegate;
 class WebSandboxSupport;
 class WebSecurityOrigin;
 class WebThemeEngine;
-class WebURLLoaderFactory;
 class WebVideoCaptureImplManager;
 struct WebContentSecurityPolicyHeader;
 
@@ -214,7 +212,7 @@ class BLINK_PLATFORM_EXPORT Platform {
       const WebAudioSinkDescriptor& sink_descriptor,
       unsigned number_of_output_channels,
       const WebAudioLatencyHint& latency_hint,
-      WebAudioDevice::RenderCallback*) {
+      media::AudioRendererSink::RenderCallback*) {
     return nullptr;
   }
 
@@ -257,12 +255,6 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual bool IsLockedToSite() const { return false; }
 
   // Network -------------------------------------------------------------
-
-  // Returns a new WebURLLoaderFactory that wraps the given
-  // network::mojom::URLLoaderFactory.
-  virtual std::unique_ptr<WebURLLoaderFactory> WrapURLLoaderFactory(
-      CrossVariantMojoRemote<network::mojom::URLLoaderFactoryInterfaceBase>
-          url_loader_factory);
 
   // Returns the default User-Agent string, it can either full User-Agent string
   // or reduced User-Agent string based on policy setting.
@@ -626,11 +618,6 @@ class BLINK_PLATFORM_EXPORT Platform {
                                             uint16_t* udp_max_port,
                                             bool* allow_mdns_obfuscation) {}
 
-  virtual bool IsWebRtcHWH264DecodingEnabled(
-      webrtc::VideoCodecType video_coded_type) {
-    return true;
-  }
-
   virtual bool IsWebRtcHWEncodingEnabled() { return true; }
 
   virtual bool IsWebRtcHWDecodingEnabled() { return true; }
@@ -797,6 +784,12 @@ class BLINK_PLATFORM_EXPORT Platform {
   GetOsSupportForAttributionReporting() {
     return attribution_reporting::mojom::OsSupport::kDisabled;
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  // User Level Memory Pressure Signal Generator ------------------
+  virtual void SetPrivateMemoryFootprint(
+      uint64_t private_memory_footprint_bytes) {}
+#endif
 
  private:
   static void InitializeMainThreadCommon(

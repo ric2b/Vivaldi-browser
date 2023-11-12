@@ -32,8 +32,6 @@
 namespace ash {
 namespace input_method {
 
-using ui::TextInputMethod;
-
 bool CanRouteToNativeMojoEngine(const std::string& engine_id);
 
 class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
@@ -66,16 +64,13 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
   void OnBlur(const std::string& engine_id, int context_id) override;
   void OnKeyEvent(const std::string& engine_id,
                   const ui::KeyEvent& event,
-                  ui::TextInputMethod::KeyEventDoneCallback callback) override;
+                  TextInputMethod::KeyEventDoneCallback callback) override;
   void OnReset(const std::string& engine_id) override;
   void OnDeactivated(const std::string& engine_id) override;
-  void OnCompositionBoundsChanged(
-      const std::vector<gfx::Rect>& bounds) override;
   void OnCaretBoundsChanged(const gfx::Rect& caret_bounds) override;
   void OnSurroundingTextChanged(const std::string& engine_id,
                                 const std::u16string& text,
-                                int cursor_pos,
-                                int anchor_pos,
+                                gfx::Range selection_range,
                                 int offset_pos) override;
   void OnCandidateClicked(const std::string& component_id,
                           int candidate_id,
@@ -137,8 +132,7 @@ class NativeInputMethodEngineObserver : public InputMethodEngineObserver,
  private:
   struct SurroundingText {
     std::u16string text;
-    int cursor_pos = 0;
-    int anchor_pos = 0;
+    gfx::Range selection_range;
     int offset_pos = 0;
   };
 

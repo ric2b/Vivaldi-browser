@@ -134,7 +134,7 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // returns false for prerender page activation navigations, which should be
   // checked by IsPrerenderedPageActivation(). The return value remains
   // constant over the navigation lifetime.
-  virtual bool IsInPrerenderedMainFrame() = 0;
+  virtual bool IsInPrerenderedMainFrame() const = 0;
 
   // Prerender2:
   // Returns true if this navigation will activate a prerendered page. It is
@@ -484,6 +484,11 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // IsRendererInitiated() returns true.
   virtual const absl::optional<url::Origin>& GetInitiatorOrigin() = 0;
 
+  // Returns, for renderer-initiated about:blank and about:srcdoc navigations,
+  // the base url of the document that has initiated the navigation for this
+  // NavigationHandle. The same caveats apply here as for GetInitiatorOrigin().
+  virtual const absl::optional<GURL>& GetInitiatorBaseUrl() = 0;
+
   // Retrieves any DNS aliases for the requested URL. Includes all known
   // aliases, e.g. from A, AAAA, or HTTPS, not just from the address used for
   // the connection, in no particular order.
@@ -526,6 +531,20 @@ class CONTENT_EXPORT NavigationHandle : public base::SupportsUserData {
   // Suppress any errors during a navigation and behave as if the user cancelled
   // the navigation: no error page will commit.
   virtual void SetSilentlyIgnoreErrors() = 0;
+
+  // The sandbox flags inherited at the beginning of the navigation.
+  //
+  // This is the sandbox flags intersection of:
+  // - The parent document.
+  // - The iframe.sandbox attribute.
+  //
+  // Contrary to `SandboxFlagsToCommit()`, this can be called at the beginning
+  // of the navigation. However, this doesn't include the sandbox flags a
+  // document applies on itself, via the "Content-Security-Policy: sandbox"
+  // response header.
+  //
+  // See also: content/browser/renderer_host/sandbox_flags.md
+  virtual network::mojom::WebSandboxFlags SandboxFlagsInherited() = 0;
 
   // The sandbox flags of the new document created by this navigation. This
   // function can only be called for cross-document navigations after receiving

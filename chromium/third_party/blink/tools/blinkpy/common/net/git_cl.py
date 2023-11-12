@@ -10,7 +10,7 @@ manage changelists and try jobs associated with them.
 import collections
 import logging
 import re
-from typing import Literal, Mapping, NamedTuple
+from typing import Literal, Mapping, NamedTuple, Set
 
 from blinkpy.common.checkout.git import Git
 from blinkpy.common.net.results_fetcher import filter_latest_builds
@@ -32,7 +32,8 @@ class TryJobStatus(NamedTuple):
     """
     status: Literal['MISSING', 'TRIGGERED', 'SCHEDULED', 'STARTED',
                     'COMPLETED']
-    result: Literal[None, 'FAILURE', 'SUCCESS', 'CANCELED'] = None
+    result: Literal[None, 'FAILURE', 'INFRA_FAILURE', 'SUCCESS',
+                    'CANCELED'] = None
 
     @staticmethod
     def from_bb_status(bb_status: str) -> 'TryJobStatus':
@@ -42,11 +43,7 @@ class TryJobStatus(NamedTuple):
         if bb_status in ('SCHEDULED', 'STARTED'):
             return TryJobStatus(bb_status, None)
         else:
-            # Map result INFRA_FAILURE to FAILURE to avoid introducing a new
-            # result, and it amounts to the same thing anyway.
-            return TryJobStatus(
-                'COMPLETED',
-                'FAILURE' if bb_status == 'INFRA_FAILURE' else bb_status)
+            return TryJobStatus('COMPLETED', bb_status)
 
 
 BuildStatuses = Mapping[Build, TryJobStatus]
@@ -262,6 +259,14 @@ class GitCL(object):
             return None
         latest_builds = filter_latest_builds(try_results.keys())
         return {b: s for b, s in try_results.items() if b in latest_builds}
+
+    @staticmethod
+    def filter_infra_failed(build_statuses: BuildStatuses) -> Set[Build]:
+        return {
+            build
+            for build, status in build_statuses.items()
+            if status == TryJobStatus.from_bb_status('INFRA_FAILURE')
+        }
 
     def try_job_results(self,
                         issue_number=None,

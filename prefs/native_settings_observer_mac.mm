@@ -161,6 +161,8 @@ NativeSettingsObserverMac::NativeSettingsObserverMac(Profile* profile)
 NativeSettingsObserverMac::~NativeSettingsObserverMac() {
   CFNotificationCenterRemoveEveryObserver(
       CFNotificationCenterGetDistributedCenter(), this);
+  CFNotificationCenterRemoveEveryObserver(
+      CFNotificationCenterGetLocalCenter(), this);
 }
 
 }  // namespace vivaldi

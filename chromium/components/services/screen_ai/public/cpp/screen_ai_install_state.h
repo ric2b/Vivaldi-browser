@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/observer_list_types.h"
 
 class PrefService;
@@ -36,6 +36,11 @@ class ScreenAIInstallState {
   ~ScreenAIInstallState();
 
   static ScreenAIInstallState* GetInstance();
+
+  // Verifies that the library version is compatible with current Chromium
+  // version. Will be used to avoid accepting the library if a newer version is
+  // expected.
+  static bool VerifyLibraryVersion(const std::string& version);
 
   // Returns true if the component is required. If the component is needed,
   // removes the timer to delete the component from |local_state|.

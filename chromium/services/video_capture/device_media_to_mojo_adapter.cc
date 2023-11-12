@@ -4,13 +4,14 @@
 
 #include "services/video_capture/device_media_to_mojo_adapter.h"
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/scoped_async_trace.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "media/capture/video/video_capture_buffer_pool_util.h"
@@ -175,10 +176,10 @@ void DeviceMediaToMojoAdapter::StartInternal(
       base::BindRepeating(
           &CreateGpuJpegDecoder, jpeg_decoder_task_runner_,
           jpeg_decoder_factory_callback_,
-          media::BindToCurrentLoop(base::BindRepeating(
+          base::BindPostTaskToCurrentDefault(base::BindRepeating(
               &media::VideoFrameReceiver::OnFrameReadyInBuffer,
               video_frame_receiver)),
-          media::BindToCurrentLoop(base::BindRepeating(
+          base::BindPostTaskToCurrentDefault(base::BindRepeating(
               &media::VideoFrameReceiver::OnLog, video_frame_receiver))));
 #else   // BUILDFLAG(IS_CHROMEOS_ASH)
   auto device_client = std::make_unique<media::VideoCaptureDeviceClient>(
@@ -210,16 +211,16 @@ void DeviceMediaToMojoAdapter::Resume() {
 void DeviceMediaToMojoAdapter::GetPhotoState(GetPhotoStateCallback callback) {
   media::VideoCaptureDevice::GetPhotoStateCallback scoped_callback =
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          media::BindToCurrentLoop(std::move(callback)), nullptr);
+          base::BindPostTaskToCurrentDefault(std::move(callback)), nullptr);
   device_->GetPhotoState(std::move(scoped_callback));
 }
 
 void DeviceMediaToMojoAdapter::SetPhotoOptions(
     media::mojom::PhotoSettingsPtr settings,
     SetPhotoOptionsCallback callback) {
-  media::mojom::ImageCapture::SetOptionsCallback scoped_callback =
+  media::mojom::ImageCapture::SetPhotoOptionsCallback scoped_callback =
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          media::BindToCurrentLoop(std::move(callback)), false);
+          base::BindPostTaskToCurrentDefault(std::move(callback)), false);
   device_->SetPhotoOptions(std::move(settings), std::move(scoped_callback));
 }
 
@@ -227,9 +228,9 @@ void DeviceMediaToMojoAdapter::TakePhoto(TakePhotoCallback callback) {
   auto scoped_trace = ScopedCaptureTrace::CreateIfEnabled("TakePhoto");
   media::mojom::ImageCapture::TakePhotoCallback scoped_callback =
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          media::BindToCurrentLoop(base::BindOnce(&TakePhotoCallbackTrampoline,
-                                                  std::move(callback),
-                                                  std::move(scoped_trace))),
+          base::BindPostTaskToCurrentDefault(
+              base::BindOnce(&TakePhotoCallbackTrampoline, std::move(callback),
+                             std::move(scoped_trace))),
           nullptr);
   device_->TakePhoto(std::move(scoped_callback));
 }

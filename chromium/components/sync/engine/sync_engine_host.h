@@ -6,7 +6,6 @@
 #define COMPONENTS_SYNC_ENGINE_SYNC_ENGINE_HOST_H_
 
 #include "components/sync/base/model_type.h"
-#include "components/sync/engine/sync_encryption_handler.h"
 #include "components/sync/engine/sync_manager.h"
 #include "components/sync/protocol/sync_protocol_error.h"
 
@@ -49,10 +48,13 @@ class SyncEngineHost {
   virtual void OnMigrationNeededForTypes(ModelTypeSet types) = 0;
 
   // Called when the sync cycle returns there is an user actionable error.
-  virtual void OnActionableError(const SyncProtocolError& error) = 0;
+  virtual void OnActionableProtocolError(const SyncProtocolError& error) = 0;
 
   // Called when the set of backed off types is changed.
   virtual void OnBackedOffTypesChanged() = 0;
+
+  // Called when invalidations are enabled or disabled.
+  virtual void OnInvalidationStatusChanged() = 0;
 };
 
 }  // namespace syncer

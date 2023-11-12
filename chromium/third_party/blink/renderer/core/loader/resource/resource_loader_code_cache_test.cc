@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/task/single_thread_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/platform/web_back_forward_cache_loader_helper.h"
 #include "third_party/blink/renderer/core/loader/resource/script_resource.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
 #include "third_party/blink/renderer/platform/loader/fetch/cached_metadata.h"
@@ -15,7 +15,7 @@
 #include "third_party/blink/renderer/platform/scheduler/test/fake_task_runner.h"
 #include "third_party/blink/renderer/platform/testing/code_cache_loader_mock.h"
 #include "third_party/blink/renderer/platform/testing/mock_context_lifecycle_notifier.h"
-#include "third_party/blink/renderer/platform/testing/noop_web_url_loader.h"
+#include "third_party/blink/renderer/platform/testing/noop_url_loader.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
 
@@ -44,15 +44,14 @@ class ResourceLoaderCodeCacheTest : public testing::Test {
     explicit CodeCacheTestLoaderFactory(
         scoped_refptr<CodeCacheLoaderMock::Controller> controller)
         : controller_(std::move(controller)) {}
-    std::unique_ptr<WebURLLoader> CreateURLLoader(
+    std::unique_ptr<URLLoader> CreateURLLoader(
         const ResourceRequest& request,
         const ResourceLoaderOptions& options,
         scoped_refptr<base::SingleThreadTaskRunner> freezable_task_runner,
         scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner,
-        WebBackForwardCacheLoaderHelper back_forward_cache_loader_helper)
+        BackForwardCacheLoaderHelper* back_forward_cache_loader_helper)
         override {
-      return std::make_unique<NoopWebURLLoader>(
-          std::move(freezable_task_runner));
+      return std::make_unique<NoopURLLoader>(std::move(freezable_task_runner));
     }
     std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() override {
       return std::make_unique<CodeCacheLoaderMock>(controller_);
@@ -63,6 +62,9 @@ class ResourceLoaderCodeCacheTest : public testing::Test {
   };
 
   void CommonSetup(const char* url_string = nullptr) {
+#if DCHECK_IS_ON()
+    WTF::SetIsBeforeThreadCreatedForTest();  // Required for next operation:
+#endif
     SchemeRegistry::RegisterURLSchemeAsCodeCacheWithHashing(
         "codecachewithhashing");
 
@@ -104,12 +106,10 @@ class ResourceLoaderCodeCacheTest : public testing::Test {
     std::vector<uint8_t> serialized_data(kSerializedDataSize);
     *reinterpret_cast<uint32_t*>(&serialized_data[0]) = outer_type;
     if (source_text.has_value()) {
-      DigestValue hash;
-      CHECK(ComputeDigest(kHashAlgorithmSha256,
-                          static_cast<const char*>(source_text->Bytes()),
-                          source_text->CharactersSizeInBytes(), hash));
-      CHECK_EQ(hash.size(), kSha256Bytes);
-      memcpy(&serialized_data[kCachedMetadataTypeSize], hash.data(),
+      std::unique_ptr<ParkableStringImpl::SecureDigest> hash =
+          ParkableStringImpl::HashString(source_text->Impl());
+      CHECK_EQ(hash->size(), kSha256Bytes);
+      memcpy(&serialized_data[kCachedMetadataTypeSize], hash->data(),
              kSha256Bytes);
     }
     *reinterpret_cast<uint32_t*>(
@@ -262,6 +262,7 @@ TEST_F(ResourceLoaderCodeCacheTest, WebUICodeCacheHashCheckSuccess) {
   // Now the metadata can be accessed.
   scoped_refptr<CachedMetadata> cached_metadata =
       resource_->CacheHandler()->GetCachedMetadata(0);
+  EXPECT_TRUE(cached_metadata.get());
   EXPECT_EQ(cached_metadata->size(), cache_data.size());
   EXPECT_EQ(*(cached_metadata->Data() + 2), cache_data[2]);
 

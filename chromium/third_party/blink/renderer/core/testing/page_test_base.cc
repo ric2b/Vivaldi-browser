@@ -6,7 +6,7 @@
 
 #include <sstream>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/test/bind.h"
 #include "base/time/default_tick_clock.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -87,7 +87,7 @@ void PageTestBase::MockClipboardHostProvider::Install(
   interface_broker_ = &interface_broker;
   interface_broker_->SetBinderForTesting(
       blink::mojom::blink::ClipboardHost::Name_,
-      base::BindRepeating(
+      WTF::BindRepeating(
           &PageTestBase::MockClipboardHostProvider::BindClipboardHost,
           base::Unretained(this)));
 }
@@ -147,7 +147,8 @@ void PageTestBase::SetUp(gfx::Size size) {
 void PageTestBase::SetupPageWithClients(
     ChromeClient* chrome_client,
     LocalFrameClient* local_frame_client,
-    FrameSettingOverrideFunction setting_overrider) {
+    FrameSettingOverrideFunction setting_overrider,
+    gfx::Size size) {
   DCHECK(!dummy_page_holder_) << "Page should be set up only once";
   auto setter = base::BindLambdaForTesting([&](Settings& settings) {
     if (setting_overrider)
@@ -155,9 +156,9 @@ void PageTestBase::SetupPageWithClients(
     if (enable_compositing_)
       settings.SetAcceleratedCompositingEnabled(true);
   });
-  dummy_page_holder_ = std::make_unique<DummyPageHolder>(
-      gfx::Size(800, 600), chrome_client, local_frame_client, std::move(setter),
-      GetTickClock());
+  dummy_page_holder_ =
+      std::make_unique<DummyPageHolder>(size, chrome_client, local_frame_client,
+                                        std::move(setter), GetTickClock());
 
   // Use no-quirks (ake "strict") mode by default.
   GetDocument().SetCompatibilityMode(Document::kNoQuirksMode);
@@ -191,13 +192,18 @@ void PageTestBase::LoadAhem() {
 }
 
 void PageTestBase::LoadAhem(LocalFrame& frame) {
+  LoadFontFromFile(frame, test::CoreTestDataPath("Ahem.ttf"), "Ahem");
+}
+
+void PageTestBase::LoadFontFromFile(LocalFrame& frame,
+                                    String font_path,
+                                    const AtomicString& family_name) {
   Document& document = *frame.DomWindow()->document();
-  scoped_refptr<SharedBuffer> shared_buffer =
-      test::ReadFromFile(test::CoreTestDataPath("Ahem.ttf"));
+  scoped_refptr<SharedBuffer> shared_buffer = test::ReadFromFile(font_path);
   auto* buffer =
       MakeGarbageCollected<V8UnionArrayBufferOrArrayBufferViewOrString>(
           DOMArrayBuffer::Create(shared_buffer));
-  FontFace* ahem = FontFace::Create(frame.DomWindow(), "Ahem", buffer,
+  FontFace* ahem = FontFace::Create(frame.DomWindow(), family_name, buffer,
                                     FontFaceDescriptors::Create());
 
   ScriptState* script_state = ToScriptStateForMainWorld(&frame);
@@ -211,20 +217,10 @@ void PageTestBase::LoadNoto() {
 }
 
 void PageTestBase::LoadNoto(LocalFrame& frame) {
-  Document& document = *frame.DomWindow()->document();
-  scoped_refptr<SharedBuffer> shared_buffer =
-      test::ReadFromFile(blink::test::PlatformTestDataPath(
-          "third_party/Noto/NotoNaskhArabic-regular.woff2"));
-  auto* buffer =
-      MakeGarbageCollected<V8UnionArrayBufferOrArrayBufferViewOrString>(
-          DOMArrayBuffer::Create(shared_buffer));
-  FontFace* noto = FontFace::Create(frame.DomWindow(), "NotoArabic", buffer,
-                                    FontFaceDescriptors::Create());
-
-  ScriptState* script_state = ToScriptStateForMainWorld(&frame);
-  DummyExceptionStateForTesting exception_state;
-  FontFaceSetDocument::From(document)->addForBinding(script_state, noto,
-                                                     exception_state);
+  LoadFontFromFile(frame,
+                   blink::test::PlatformTestDataPath(
+                       "third_party/Noto/NotoNaskhArabic-regular.woff2"),
+                   "NotoArabic");
 }
 
 // Both sets the inner html and runs the document lifecycle.

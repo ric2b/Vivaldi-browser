@@ -80,6 +80,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
     private static final int OMNIBOX_HISTOGRAMS_MAX_SUGGESTIONS = 10;
 
     private final @NonNull Context mContext;
+    private final @NonNull AutocompleteControllerProvider mControllerProvider;
     private final @NonNull AutocompleteDelegate mDelegate;
     /* Vivaldi */ public final @NonNull UrlBarEditingTextStateProvider mUrlBarEditingTextProvider;
     private final @NonNull PropertyModel mListPropertyModel;
@@ -162,7 +163,9 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
     private long mLastActionUpTimestamp;
     private boolean mIgnoreOmniboxItemSelection = true;
 
-    public AutocompleteMediator(@NonNull Context context, @NonNull AutocompleteDelegate delegate,
+    public AutocompleteMediator(@NonNull Context context,
+            @NonNull AutocompleteControllerProvider controllerProvider,
+            @NonNull AutocompleteDelegate delegate,
             @NonNull UrlBarEditingTextStateProvider textProvider,
             @NonNull PropertyModel listPropertyModel, @NonNull Handler handler,
             @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier,
@@ -174,6 +177,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
             @NonNull BookmarkState bookmarkState, @NonNull JankTracker jankTracker,
             @NonNull OmniboxPedalDelegate omniboxPedalDelegate) {
         mContext = context;
+        mControllerProvider = controllerProvider;
         mDelegate = delegate;
         mUrlBarEditingTextProvider = textProvider;
         mListPropertyModel = listPropertyModel;
@@ -407,8 +411,7 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
             stopAutocomplete(true);
             mAutocomplete.removeOnSuggestionsReceivedListener(this);
         }
-        mAutocomplete = AutocompleteController.getForProfile(profile);
-
+        mAutocomplete = mControllerProvider.get(profile);
         mAutocomplete.addOnSuggestionsReceivedListener(this);
         mDropdownViewInfoListBuilder.setProfile(profile);
 
@@ -781,11 +784,6 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         mListPropertyModel.set(SuggestionListProperties.LIST_IS_FINAL, isFinal);
     }
 
-    @Override
-    public void setGroupCollapsedState(int groupId, boolean state) {
-        mDropdownViewInfoListManager.setGroupCollapsedState(groupId, state);
-    }
-
     /**
      * Load the url corresponding to the typed omnibox text.
      * @param eventTime The timestamp the load was triggered by the user.
@@ -944,9 +942,6 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView;
         mNewOmniboxEditSessionTimestamp = -1;
         assert mNativeInitialized
             : "startZeroSuggest should be scheduled using postAutocompleteRequest";
-
-        // Vivaldi
-        if (mDataProvider.hasTab() && mDataProvider.getTab().isNativePage()) return;
 
         if (mDelegate.isUrlBarFocused()
                 && (mDataProvider.hasTab() || mDataProvider.isInOverviewAndShowingOmnibox())) {

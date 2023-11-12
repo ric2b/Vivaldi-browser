@@ -9,6 +9,9 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
@@ -40,10 +43,6 @@
 #include "tools/v8_context_snapshot/buildflags.h"
 #include "v8/include/v8-initialization.h"
 #include "v8/include/v8-snapshot.h"
-
-#if BUILDFLAG(IS_WIN)
-#include "base/win/windows_version.h"
-#endif
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
 #if BUILDFLAG(IS_ANDROID)
@@ -283,9 +282,12 @@ void SetFlags(IsolateHolder::ScriptMode mode,
       "--no-enable-experimental-regexp-engine-on-excessive-backtracks");
   SetV8FlagsIfOverridden(features::kV8TurboFastApiCalls,
                          "--turbo-fast-api-calls", "--no-turbo-fast-api-calls");
+  SetV8FlagsIfOverridden(features::kV8MegaDomIC, "--mega-dom-ic",
+                         "--no-mega-dom-ic");
   SetV8FlagsIfOverridden(features::kV8Maglev, "--maglev", "--no-maglev");
   SetV8FlagsIfOverridden(features::kV8Sparkplug, "--sparkplug",
                          "--no-sparkplug");
+  SetV8FlagsIfOverridden(features::kV8Turbofan, "--turbofan", "--no-turbofan");
   SetV8FlagsIfOverridden(features::kV8ConcurrentSparkplug,
                          "--concurrent-sparkplug", "--no-concurrent-sparkplug");
   SetV8FlagsIfOverridden(features::kV8SparkplugNeedsShortBuiltinCalls,
@@ -314,18 +316,6 @@ void SetFlags(IsolateHolder::ScriptMode mode,
     }
   }
 
-  if (base::FeatureList::IsEnabled(features::kV8ScriptAblation)) {
-    if (int delay = features::kV8ScriptDelayMs.Get()) {
-      SetV8FlagsFormatted("--script-delay=%i", delay);
-    }
-    if (int delay = features::kV8ScriptDelayOnceMs.Get()) {
-      SetV8FlagsFormatted("--script-delay-once=%i", delay);
-    }
-    if (double fraction = features::kV8ScriptDelayFraction.Get()) {
-      SetV8FlagsFormatted("--script-delay-fraction=%f", fraction);
-    }
-  }
-
   // Make sure aliases of kV8SlowHistograms only enable the feature to
   // avoid contradicting settings between multiple finch experiments.
   bool any_slow_histograms_alias =
@@ -334,7 +324,7 @@ void SetFlags(IsolateHolder::ScriptMode mode,
       base::FeatureList::IsEnabled(features::kV8SlowHistogramsSparkplug) ||
       base::FeatureList::IsEnabled(
           features::kV8SlowHistogramsSparkplugAndroid) ||
-      base::FeatureList::IsEnabled(features::kV8SlowHistogramsScriptAblation);
+      base::FeatureList::IsEnabled(features::kV8SlowHistogramsNoTurbofan);
   if (any_slow_histograms_alias) {
     SetV8Flags("--slow-histograms");
   } else {
@@ -349,8 +339,17 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kJavaScriptChangeArrayByCopy,
                          "--harmony-change-array-by-copy",
                          "--no-harmony-change-array-by-copy");
-  SetV8FlagsIfOverridden(features::kJavaScriptRabGsab, "--harmony-rab-gsab",
-                         "--no-harmony-rab-gsab");
+  if (base::FeatureList::IsEnabled(features::kJavaScriptRabGsab)) {
+    SetV8Flags("--harmony-rab-gsab");
+  } else {
+    SetV8Flags("--no-harmony-rab-gsab");
+  }
+  SetV8FlagsIfOverridden(features::kJavaScriptStringIsWellFormed,
+                         "--harmony-string-is-well-formed",
+                         "--no-harmony-string-is-well-formed");
+  SetV8FlagsIfOverridden(features::kJavaScriptRegExpUnicodeSets,
+                         "--harmony-regexp-unicode-sets",
+                         "--no-harmony-regexp-unicode-sets");
 
   if (IsolateHolder::kStrictMode == mode) {
     SetV8Flags("--use_strict");
@@ -359,6 +358,12 @@ void SetFlags(IsolateHolder::ScriptMode mode,
   SetV8FlagsIfOverridden(features::kV8UseLibmTrigFunctions,
                          "--use-libm-trig-functions",
                          "--no-use-libm-trig-functions");
+
+  // WebAssembly features.
+
+  SetV8FlagsIfOverridden(features::kWebAssemblyTailCall,
+                         "--experimental-wasm-return-call",
+                         "--no-experimental-wasm-return-call");
 
   if (js_command_line_flags.empty())
     return;
@@ -448,22 +453,6 @@ void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
   const size_t min_pool_size = partition_alloc::internal::
       PartitionAddressSpace::ConfigurablePoolMinSize();
   size_t pool_size = max_pool_size;
-#if BUILDFLAG(IS_WIN)
-  // On Windows prior to 8.1 we allocate a smaller Pool since reserving
-  // virtual memory is expensive on these OSes.
-  if (base::win::GetVersion() < base::win::Version::WIN8_1) {
-    // The size chosen here should be synchronized with the size of the
-    // virtual memory reservation for the V8 sandbox on these platforms.
-    // Currently, that is 8GB, of which 4GB are used for V8's pointer
-    // compression region.
-    // TODO(saelo) give this constant a proper name and maybe move it
-    // somewhere else.
-    constexpr size_t kGB = 1ULL << 30;
-    pool_size = 4ULL * kGB;
-    DCHECK_LE(pool_size, max_pool_size);
-    DCHECK_GE(pool_size, min_pool_size);
-  }
-#endif
   // Try to reserve the maximum size of the pool at first, then keep halving
   // the size on failure until it succeeds.
   uintptr_t pool_base = 0;

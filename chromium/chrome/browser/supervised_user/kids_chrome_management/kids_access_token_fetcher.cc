@@ -7,7 +7,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/types/expected.h"
@@ -66,7 +65,7 @@ void KidsAccessTokenFetcher::OnAccessTokenFetchComplete(
 }
 
 const OAuth2AccessTokenManager::ScopeSet& KidsAccessTokenFetcher::Scopes() {
-  static auto nonce = NoDestructor<OAuth2AccessTokenManager::ScopeSet>(
-      {GaiaConstants::kKidFamilyReadonlyOAuth2Scope});
+  static auto nonce = NoDestructor<OAuth2AccessTokenManager::ScopeSet>{
+      {GaiaConstants::kKidFamilyReadonlyOAuth2Scope}};
   return *nonce;
 }

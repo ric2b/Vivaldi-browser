@@ -15,11 +15,11 @@
 #include "ash/public/cpp/app_menu_constants.h"
 #include "ash/public/cpp/multi_user_window_manager.h"
 #include "ash/public/cpp/shelf_types.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/containers/extend.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/scoped_observation.h"
 #include "base/strings/stringprintf.h"
@@ -72,15 +72,19 @@
 #include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "content/public/browser/clear_site_data_utils.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/ui_util.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_urls.h"
+#include "extensions/common/manifest_handlers/app_display_info.h"
+#include "extensions/common/manifest_handlers/file_handler_info.h"
 #include "extensions/common/manifest_handlers/options_page_info.h"
+#include "extensions/common/manifest_handlers/web_file_handlers_info.h"
+#include "net/base/url_util.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "ui/message_center/public/cpp/notification.h"
@@ -103,6 +107,60 @@ std::string GetLaunchId(extensions::AppWindow* app_window) {
   return launch_id;
 }
 
+std::string GetSourceFromAppListSource(ash::ShelfLaunchSource source) {
+  switch (source) {
+    case ash::LAUNCH_FROM_APP_LIST:
+      return std::string(extension_urls::kLaunchSourceAppList);
+    case ash::LAUNCH_FROM_APP_LIST_SEARCH:
+      return std::string(extension_urls::kLaunchSourceAppListSearch);
+    default:
+      return std::string();
+  }
+}
+
+ash::ShelfLaunchSource ConvertLaunchSource(apps::LaunchSource launch_source) {
+  switch (launch_source) {
+    case apps::LaunchSource::kUnknown:
+    case apps::LaunchSource::kFromParentalControls:
+      return ash::LAUNCH_FROM_UNKNOWN;
+    case apps::LaunchSource::kFromAppListGrid:
+    case apps::LaunchSource::kFromAppListGridContextMenu:
+      return ash::LAUNCH_FROM_APP_LIST;
+    case apps::LaunchSource::kFromAppListQuery:
+    case apps::LaunchSource::kFromAppListQueryContextMenu:
+    case apps::LaunchSource::kFromAppListRecommendation:
+      return ash::LAUNCH_FROM_APP_LIST_SEARCH;
+    case apps::LaunchSource::kFromShelf:
+      return ash::LAUNCH_FROM_SHELF;
+    case apps::LaunchSource::kFromFileManager:
+    case apps::LaunchSource::kFromLink:
+    case apps::LaunchSource::kFromOmnibox:
+    case apps::LaunchSource::kFromChromeInternal:
+    case apps::LaunchSource::kFromKeyboard:
+    case apps::LaunchSource::kFromOtherApp:
+    case apps::LaunchSource::kFromMenu:
+    case apps::LaunchSource::kFromInstalledNotification:
+    case apps::LaunchSource::kFromTest:
+    case apps::LaunchSource::kFromArc:
+    case apps::LaunchSource::kFromSharesheet:
+    case apps::LaunchSource::kFromReleaseNotesNotification:
+    case apps::LaunchSource::kFromFullRestore:
+    case apps::LaunchSource::kFromSmartTextContextMenu:
+    case apps::LaunchSource::kFromDiscoverTabNotification:
+    case apps::LaunchSource::kFromManagementApi:
+    case apps::LaunchSource::kFromKiosk:
+    case apps::LaunchSource::kFromCommandLine:
+    case apps::LaunchSource::kFromBackgroundMode:
+    case apps::LaunchSource::kFromNewTabPage:
+    case apps::LaunchSource::kFromIntentUrl:
+    case apps::LaunchSource::kFromOsLogin:
+    case apps::LaunchSource::kFromProtocolHandler:
+    case apps::LaunchSource::kFromUrlHandler:
+    case apps::LaunchSource::kFromLockScreen:
+    case apps::LaunchSource::kFromAppHomePage:
+      return ash::LAUNCH_FROM_UNKNOWN;
+  }
+}
 }  // namespace
 
 namespace apps {
@@ -235,7 +293,10 @@ void ExtensionAppsChromeOs::LaunchAppWithIntent(const std::string& app_id,
     return;
   }
   bool is_quickoffice = extension_misc::IsQuickOfficeExtension(extension->id());
-  if (extension->is_app() || is_quickoffice) {
+  bool supports_web_file_handlers =
+      extensions::WebFileHandlers::SupportsWebFileHandlers(
+          extension->manifest_version());
+  if (extension->is_app() || is_quickoffice || supports_web_file_handlers) {
     content::WebContents* web_contents = LaunchAppWithIntentImpl(
         app_id, event_flags, std::move(intent), launch_source,
         std::move(window_info), std::move(callback));
@@ -301,7 +362,7 @@ void ExtensionAppsChromeOs::GetMenuModel(
     AddCommandItem(ash::UNINSTALL, IDS_APP_LIST_UNINSTALL_ITEM, menu_items);
   }
 
-  if (extension->ShouldDisplayInAppLauncher()) {
+  if (extensions::AppDisplayInfo::ShouldDisplayInAppLauncher(*extension)) {
     AddCommandItem(ash::SHOW_APP_INFO, IDS_APP_CONTEXT_MENU_SHOW_INFO,
                    menu_items);
   }
@@ -651,12 +712,23 @@ bool ExtensionAppsChromeOs::IsBlocklisted(const std::string& app_id) {
   if (app_id == arc::kPlayStoreAppId)
     return true;
 
-  // If an extension runs in both ash and lacros, then don't publish it as that
-  // would conflict with lacros publishing it. This path is used for both
-  // extensions and extension apps.
-  return crosapi::browser_util::IsLacrosChromeAppsEnabled() &&
-         (extensions::ExtensionRunsInBothOSAndStandaloneBrowser(app_id) ||
-          extensions::ExtensionAppRunsInBothOSAndStandaloneBrowser(app_id));
+  // If lacros chrome apps is enabled, a small list of extension apps or
+  // extensions on ash extension keeplist is allowed to run in both ash and
+  // lacros, don't publish such app or extension if it is blocked for app
+  // service in ash.
+  if (crosapi::browser_util::IsLacrosChromeAppsEnabled()) {
+    if (extensions::ExtensionAppRunsInBothOSAndStandaloneBrowser(app_id) &&
+        extensions::ExtensionAppBlockListedForAppServiceInOS(app_id)) {
+      return true;
+    }
+
+    if (extensions::ExtensionRunsInBothOSAndStandaloneBrowser(app_id) &&
+        extensions::ExtensionBlockListedForAppServiceInOS(app_id)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void ExtensionAppsChromeOs::UpdateShowInFields(const std::string& app_id) {
@@ -664,12 +736,6 @@ void ExtensionAppsChromeOs::UpdateShowInFields(const std::string& app_id) {
   if (!extension) {
     return;
   }
-
-  apps::mojom::AppPtr mojom_app = apps::mojom::App::New();
-  mojom_app->app_type = mojom_app_type();
-  mojom_app->app_id = app_id;
-  SetShowInFields(mojom_app, extension);
-  PublisherBase::Publish(std::move(mojom_app), subscribers());
 
   auto app = std::make_unique<App>(app_type(), app_id);
   SetShowInFields(extension, *app);
@@ -707,6 +773,13 @@ bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
   if (app_type() == AppType::kExtension) {
     if (!extension->is_extension() || IsBlocklisted(extension->id())) {
       return false;
+    }
+
+    // Allow MV3 file handlers.
+    if (extensions::WebFileHandlers::SupportsWebFileHandlers(
+            extension->manifest_version()) &&
+        extensions::WebFileHandlers::HasFileHandlers(*extension)) {
+      return true;
     }
 
     // QuickOffice has file_handlers which we need to register.
@@ -758,6 +831,27 @@ bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
   return true;
 }
 
+AppLaunchParams ExtensionAppsChromeOs::ModifyAppLaunchParams(
+    const std::string& app_id,
+    LaunchSource launch_source,
+    AppLaunchParams params) {
+  ash::ShelfLaunchSource source = ConvertLaunchSource(launch_source);
+  if ((source == ash::LAUNCH_FROM_APP_LIST ||
+       source == ash::LAUNCH_FROM_APP_LIST_SEARCH) &&
+      app_id == extensions::kWebStoreAppId) {
+    // Get the corresponding source string.
+    std::string source_value = GetSourceFromAppListSource(source);
+
+    // Set an override URL to include the source.
+    const auto* extension = MaybeGetExtension(app_id);
+    DCHECK(extension);
+    GURL extension_url = extensions::AppLaunchInfo::GetFullLaunchURL(extension);
+    params.override_url = net::AppendQueryParameter(
+        extension_url, extension_urls::kWebstoreSourceField, source_value);
+  }
+  return params;
+}
+
 void ExtensionAppsChromeOs::SetShowInFields(
     const extensions::Extension* extension,
     App& app) {
@@ -770,24 +864,6 @@ void ExtensionAppsChromeOs::SetShowInFields(
   if (extension_misc::IsQuickOfficeExtension(extension->id()) ||
       extension->is_extension()) {
     app.handles_intents = true;
-  }
-}
-
-void ExtensionAppsChromeOs::SetShowInFields(
-    apps::mojom::AppPtr& app,
-    const extensions::Extension* extension) {
-  ExtensionAppsBase::SetShowInFields(app, extension);
-
-  // Explicitly mark QuickOffice as being able to handle intents even though it
-  // is otherwise hidden from the user.
-  if (extension_misc::IsQuickOfficeExtension(extension->id())) {
-    app->handles_intents = apps::mojom::OptionalBool::kTrue;
-  }
-
-  // Extensions are only published if they have file_browser_handlers, which
-  // means they need to handle intents.
-  if (extension->is_extension()) {
-    app->handles_intents = apps::mojom::OptionalBool::kTrue;
   }
 }
 
@@ -832,49 +908,6 @@ AppPtr ExtensionAppsChromeOs::CreateApp(const extensions::Extension* extension,
   return app;
 }
 
-apps::mojom::AppPtr ExtensionAppsChromeOs::Convert(
-    const extensions::Extension* extension,
-    apps::mojom::Readiness readiness) {
-  // When Lacros is enabled, extensions not on the ash keep list should not be
-  // published to the app service at all. Thus this method should not be called.
-  DCHECK(!(extension->is_platform_app() &&
-           crosapi::browser_util::IsLacrosChromeAppsEnabled() &&
-           !extensions::ExtensionAppRunsInOS(extension->id())));
-  const bool is_app_disabled = base::Contains(disabled_apps_, extension->id());
-
-  apps::mojom::AppPtr app = ConvertImpl(
-      extension,
-      is_app_disabled ? apps::mojom::Readiness::kDisabledByPolicy : readiness);
-  bool paused = paused_apps_.IsPaused(extension->id());
-  app->icon_key =
-      icon_key_factory().MakeIconKey(GetIconEffects(extension, paused));
-
-  app->has_badge = app_notifications_.HasNotification(extension->id())
-                       ? apps::mojom::OptionalBool::kTrue
-                       : apps::mojom::OptionalBool::kFalse;
-  app->paused = paused ? apps::mojom::OptionalBool::kTrue
-                       : apps::mojom::OptionalBool::kFalse;
-
-  if (is_app_disabled && is_disabled_apps_mode_hidden_) {
-    app->show_in_launcher = apps::mojom::OptionalBool::kFalse;
-    app->show_in_search = apps::mojom::OptionalBool::kFalse;
-    app->show_in_shelf = apps::mojom::OptionalBool::kFalse;
-    app->handles_intents = apps::mojom::OptionalBool::kFalse;
-  }
-
-  bool is_quickoffice = extension->is_extension() &&
-                        extension_misc::IsQuickOfficeExtension(extension->id());
-  if (extension->is_app() || is_quickoffice) {
-    base::Extend(app->intent_filters,
-                 apps_util::CreateChromeAppIntentFilters(extension));
-  } else if (extension->is_extension()) {
-    base::Extend(app->intent_filters,
-                 apps_util::CreateExtensionIntentFilters(extension));
-  }
-
-  return app;
-}
-
 IconEffects ExtensionAppsChromeOs::GetIconEffects(
     const extensions::Extension* extension,
     bool paused) {
@@ -914,13 +947,6 @@ void ExtensionAppsChromeOs::SetIconEffect(const std::string& app_id) {
   if (!extension) {
     return;
   }
-
-  apps::mojom::AppPtr mojom_app = apps::mojom::App::New();
-  mojom_app->app_type = mojom_app_type();
-  mojom_app->app_id = app_id;
-  mojom_app->icon_key = icon_key_factory().MakeIconKey(
-      GetIconEffects(extension, paused_apps_.IsPaused(app_id)));
-  PublisherBase::Publish(std::move(mojom_app), subscribers());
 
   auto app = std::make_unique<App>(app_type(), app_id);
   app->icon_key = std::move(*icon_key_factory().CreateIconKey(
@@ -1028,10 +1054,6 @@ void ExtensionAppsChromeOs::UpdateAppDisabledState(
     return;
   }
 
-  PublisherBase::Publish(
-      Convert(extension, is_disabled ? apps::mojom::Readiness::kDisabledByPolicy
-                                     : apps::mojom::Readiness::kReady),
-      subscribers());
   AppPublisher::Publish(CreateApp(extension, is_disabled
                                                  ? Readiness::kDisabledByPolicy
                                                  : Readiness::kReady));

@@ -85,6 +85,7 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     private final TabContentManager mTabContentManager;
     private PropertyModelChangeProcessor mModelChangeProcessor;
     private TabGridDialogCoordinator mTabGridDialogCoordinator;
+    private Supplier<TabGridDialogMediator.DialogController> mTabGridDialogControllerSupplier;
     private TabListCoordinator mTabStripCoordinator;
     private TabGroupUiMediator mMediator;
 
@@ -131,6 +132,16 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
         }
     }
 
+    private void initTabGridDialogCoordinator() {
+        assert mTabGridDialogControllerSupplier != null;
+        if (mTabGridDialogCoordinator != null) return;
+
+        mTabGridDialogCoordinator = new TabGridDialogCoordinator(mActivity, mTabModelSelector,
+                mTabContentManager, mTabCreatorManager, mActivity.findViewById(R.id.coordinator),
+                null, null, null, mShareDelegateSupplier, mScrimCoordinator,
+                mTabStripCoordinator.getTabGroupTitleEditor(), mRootView);
+    }
+
     /**
      * Handle any initialization that occurs once native has been loaded.
      */
@@ -145,11 +156,10 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
                         "Downloaded_Enabled");
             }
 
-            boolean actionOnAllRelatedTabs = TabUiFeatureUtilities.isConditionalTabStripEnabled();
             mTabStripCoordinator = new TabListCoordinator(TabListCoordinator.TabListMode.STRIP,
-                    mContext, mTabModelSelector, null, null, actionOnAllRelatedTabs, null, null,
+                    mContext, mTabModelSelector, null, null, false, null, null,
                     TabProperties.UiType.STRIP, null, null, mTabListContainerView, true,
-                    COMPONENT_NAME, mRootView, onModelTokenChange);
+                    COMPONENT_NAME, mRootView, onModelTokenChange, null);
             mTabStripCoordinator.initWithNative(mDynamicResourceLoaderSupplier.get());
 
             mModelChangeProcessor = PropertyModelChangeProcessor.create(mModel,
@@ -159,26 +169,31 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
 
             // TODO(crbug.com/972217): find a way to enable interactions between grid tab switcher
             //  and the dialog here.
-            TabGridDialogMediator.DialogController dialogController = null;
             if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled(activity)
                     && mScrimCoordinator != null) {
-                mTabGridDialogCoordinator = new TabGridDialogCoordinator(mActivity,
-                        mTabModelSelector, mTabContentManager, mTabCreatorManager,
-                        mActivity.findViewById(R.id.coordinator), null, null, null,
-                        mShareDelegateSupplier, mScrimCoordinator, mRootView);
-                mTabGridDialogCoordinator.initWithNative(mContext, mTabModelSelector,
-                        mTabContentManager, mTabStripCoordinator.getTabGroupTitleEditor());
-                dialogController = mTabGridDialogCoordinator.getDialogController();
+                mTabGridDialogControllerSupplier =
+                        new Supplier<TabGridDialogMediator.DialogController>() {
+                            @Override
+                            public TabGridDialogMediator.DialogController get() {
+                                initTabGridDialogCoordinator();
+                                return mTabGridDialogCoordinator.getDialogController();
+                            }
+
+                            @Override
+                            public boolean hasValue() {
+                                return mTabGridDialogCoordinator != null;
+                            }
+                        };
+            } else {
+                mTabGridDialogControllerSupplier = null;
             }
 
             mMediator = new TabGroupUiMediator(mActivity, visibilityController, this, mModel,
                     mTabModelSelector, mTabCreatorManager, mLayoutStateProviderSupplier,
-                    mIncognitoStateProvider, dialogController, mActivityLifecycleDispatcher,
-                    mSnackbarManager, mOmniboxFocusStateSupplier);
+                    mIncognitoStateProvider, mTabGridDialogControllerSupplier,
+                    mOmniboxFocusStateSupplier);
 
             TabGroupUtils.startObservingForCreationIPH();
-
-            if (TabUiFeatureUtilities.isConditionalTabStripEnabled()) return;
 
             // TODO(meiliang): Potential leak if the observer is added after restoreCompleted. Fix
             // it. Record the group count after all tabs are being restored. This only happen once
@@ -228,8 +243,8 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
      */
     @Override
     public void resetGridWithListOfTabs(List<Tab> tabs) {
-        if (mTabGridDialogCoordinator != null) {
-            mTabGridDialogCoordinator.resetWithListOfTabs(tabs);
+        if (mTabGridDialogControllerSupplier != null) {
+            mTabGridDialogControllerSupplier.get().resetWithListOfTabs(tabs);
         }
     }
 
@@ -242,8 +257,8 @@ public class TabGroupUiCoordinator implements TabGroupUiMediator.ResetHandler, T
     }
 
     @Override
-    public void handleBackPress() {
-        mMediator.handleBackPress();
+    public @BackPressResult int handleBackPress() {
+        return mMediator.handleBackPress();
     }
 
     @Override

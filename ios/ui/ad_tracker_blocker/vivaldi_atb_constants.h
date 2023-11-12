@@ -25,6 +25,12 @@ extern const CGFloat vStackSpacing;
 #pragma mark - ICONS
 // Image name for tracker blocker shield
 extern NSString* vATBShield;
+// Image name for no blocking shield
+extern NSString* vATBShieldNone;
+// Image name for trackers blocking shield
+extern NSString* vATBShieldTrackers;
+// Image name for trackers and ads blocking shield
+extern NSString* vATBShieldTrackesAndAds;
 // Image name for tracker blocker selection check
 extern NSString* vATBSettingsSelectionCheck;
 

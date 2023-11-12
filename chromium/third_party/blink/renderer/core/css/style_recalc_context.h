@@ -11,7 +11,9 @@
 namespace blink {
 
 class Element;
+class ComputedStyle;
 class HTMLSlotElement;
+class StyleScopeFrame;
 
 // StyleRecalcContext is an object that is passed on the stack during
 // the style recalc process.
@@ -56,6 +58,12 @@ class CORE_EXPORT StyleRecalcContext {
   // This is used to evaluate container queries in ElementRuleCollector.
   Element* container = nullptr;
 
+  StyleScopeFrame* style_scope_frame = nullptr;
+
+  // The style for the element at the start of the lifecycle update, or the
+  // :initial styles for the second pass when transitioning from display:none.
+  const ComputedStyle* old_style = nullptr;
+
   // If true, something about the parent's style (e.g., that it has
   // modifications to one or more non-independent inherited properties)
   // forces a full recalculation of this element's style, precluding
@@ -66,6 +74,11 @@ class CORE_EXPORT StyleRecalcContext {
   // SetAnimationStyleChange(false) directly. This is somewhat out of
   // legacy reasons.
   bool parent_forces_recalc = false;
+
+  // True when we're ensuring the style of an element. This can only happen
+  // when regular style can't reach the element (i.e. inside display:none, or
+  // outside the flat tree).
+  bool is_ensuring_style = false;
 };
 
 }  // namespace blink

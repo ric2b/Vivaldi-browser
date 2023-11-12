@@ -13,9 +13,6 @@
 namespace ash {
 namespace {
 
-using base::ListValue;
-using base::Value;
-
 constexpr base::StringPiece kStartOffsetKey = "startOffset";
 constexpr base::StringPiece kEndOffsetKey = "endOffset";
 constexpr base::StringPiece kTextKey = "text";
@@ -24,18 +21,20 @@ constexpr base::StringPiece kCaptionLanguage = "captionLanguage";
 constexpr base::StringPiece kCaptionsKey = "captions";
 constexpr base::StringPiece kKeyIdeasKey = "tableOfContent";
 constexpr base::StringPiece kOffset = "offset";
+constexpr base::StringPiece kRecognitionStatus = "recognitionStatus";
 
-base::Value HypothesisPartsToValue(
+base::Value::Dict HypothesisPartsToDict(
     const media::HypothesisParts& hypothesis_parts) {
-  base::Value text_value(base::Value::Type::LIST);
+  base::Value::List text_list;
   for (auto& part : hypothesis_parts.text)
-    text_value.Append(part);
+    text_list.Append(part);
 
-  base::Value hypothesis_part_value(base::Value::Type::DICTIONARY);
-  hypothesis_part_value.SetKey(kTextKey, std::move(text_value));
-  hypothesis_part_value.SetIntKey(
-      kOffset, hypothesis_parts.hypothesis_part_offset.InMilliseconds());
-  return hypothesis_part_value;
+  base::Value::Dict hypothesis_part_dict;
+  hypothesis_part_dict.Set(kTextKey, std::move(text_list));
+  hypothesis_part_dict.Set(
+      kOffset, static_cast<int>(
+                   hypothesis_parts.hypothesis_part_offset.InMilliseconds()));
+  return hypothesis_part_dict;
 }
 
 }  // namespace
@@ -67,7 +66,7 @@ ProjectorKeyIdea::~ProjectorKeyIdea() = default;
 //   "endOffset": INT
 //   "text": STRING
 base::Value ProjectorKeyIdea::ToJson() {
-  base::Value transcript(base::Value::Type::DICTIONARY);
+  base::Value transcript(base::Value::Type::DICT);
   transcript.SetIntKey(kStartOffsetKey, start_time_.InMilliseconds());
   transcript.SetIntKey(kEndOffsetKey, end_time_.InMilliseconds());
   transcript.SetStringKey(kTextKey, text_);
@@ -110,17 +109,18 @@ ProjectorTranscript::~ProjectorTranscript() = default;
 //   "hypothesisParts": DICT LIST
 //
 base::Value ProjectorTranscript::ToJson() {
-  base::Value transcript(base::Value::Type::DICTIONARY);
-  transcript.SetIntKey(kStartOffsetKey, start_time_.InMilliseconds());
-  transcript.SetIntKey(kEndOffsetKey, end_time_.InMilliseconds());
-  transcript.SetStringKey(kTextKey, text_);
+  base::Value::Dict transcript;
+  transcript.Set(kStartOffsetKey,
+                 static_cast<int>(start_time_.InMilliseconds()));
+  transcript.Set(kEndOffsetKey, static_cast<int>(end_time_.InMilliseconds()));
+  transcript.Set(kTextKey, text_);
 
-  base::Value hypothesis_parts_value(base::Value::Type::LIST);
+  base::Value::List hypothesis_parts_list;
   for (auto& hypothesis_part : hypothesis_parts_)
-    hypothesis_parts_value.Append(HypothesisPartsToValue(hypothesis_part));
+    hypothesis_parts_list.Append(HypothesisPartsToDict(hypothesis_part));
 
-  transcript.SetKey(kHypothesisPartsKey, std::move(hypothesis_parts_value));
-  return transcript;
+  transcript.Set(kHypothesisPartsKey, std::move(hypothesis_parts_list));
+  return base::Value(std::move(transcript));
 }
 
 ProjectorMetadata::ProjectorMetadata() = default;
@@ -138,6 +138,10 @@ void ProjectorMetadata::AddTranscript(
   }
   transcripts_.push_back(std::move(transcript));
   should_mark_key_idea_ = false;
+}
+
+void ProjectorMetadata::SetSpeechRecognitionStatus(RecognitionStatus status) {
+  speech_recognition_status_ = status;
 }
 
 void ProjectorMetadata::MarkKeyIdea() {
@@ -176,7 +180,8 @@ std::string ProjectorMetadata::Serialize() {
 //        "startOffset": 4400,
 //        "text": "Making a creation",
 //      },
-//    ]
+//    ],
+//    "recognitionStatus": 0,
 //  }
 //
 // Which is:
@@ -186,20 +191,23 @@ std::string ProjectorMetadata::Serialize() {
 //   "captions": LIST
 //   "captionLanguage": STRING
 //   "tableOfContent": LIST
+//   "recognitionStatus": INTEGER
 base::Value ProjectorMetadata::ToJson() {
-  base::Value metadata(base::Value::Type::DICTIONARY);
-  metadata.SetStringKey(kCaptionLanguage, caption_language_);
+  base::Value::Dict metadata;
+  metadata.Set(kCaptionLanguage, caption_language_);
 
-  base::Value captions_value(base::Value::Type::LIST);
+  base::Value::List captions_list;
   for (auto& transcript : transcripts_)
-    captions_value.Append(transcript->ToJson());
-  metadata.SetKey(kCaptionsKey, std::move(captions_value));
+    captions_list.Append(transcript->ToJson());
+  metadata.Set(kCaptionsKey, std::move(captions_list));
 
-  base::Value key_ideas_value(base::Value::Type::LIST);
+  base::Value::List key_ideas_list;
   for (auto& key_idea : key_ideas_)
-    key_ideas_value.Append(key_idea->ToJson());
-  metadata.SetKey(kKeyIdeasKey, std::move(key_ideas_value));
-  return metadata;
+    key_ideas_list.Append(key_idea->ToJson());
+  metadata.Set(kKeyIdeasKey, std::move(key_ideas_list));
+  metadata.Set(kRecognitionStatus,
+               static_cast<int>(speech_recognition_status_));
+  return base::Value(std::move(metadata));
 }
 
 }  // namespace ash

@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/media_switches.h"
 
@@ -115,7 +116,7 @@ void V4L2FrameRateControl::UpdateFrameRate() {
       TRACE_EVENT0("media,gpu", "V4L2 VIDIOC_S_PARM call failed");
     }
 
-    VLOG(1) << "Average framerate: " << frame_duration_avg.ToHz();
+    DVLOG(4) << "Average framerate: " << frame_duration_avg.ToHz();
   }
 }
 

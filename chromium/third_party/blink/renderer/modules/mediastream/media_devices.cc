@@ -21,6 +21,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/dictionary.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver_with_tracker.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_capture_handle_config.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_display_media_stream_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_stream_constraints.h"
@@ -41,7 +42,6 @@
 #include "third_party/blink/renderer/modules/mediastream/crop_target.h"
 #include "third_party/blink/renderer/modules/mediastream/identifiability_metrics.h"
 #include "third_party/blink/renderer/modules/mediastream/input_device_info.h"
-#include "third_party/blink/renderer/modules/mediastream/media_error_state.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/navigator_media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_client.h"
@@ -68,7 +68,7 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
  public:
   PromiseResolverCallbacks(
       UserMediaRequestType media_type,
-      ScriptPromiseResolver* resolver,
+      ScriptPromiseResolverWithTracker<UserMediaRequestResult>* resolver,
       base::OnceCallback<void(const String&, CaptureController*)>
           on_success_follow_up)
       : media_type_(media_type),
@@ -111,11 +111,12 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
 
   void OnError(ScriptWrappable* callback_this_value,
                const V8MediaStreamError* error,
-               CaptureController* capture_controller) override {
+               CaptureController* capture_controller,
+               UserMediaRequestResult result) override {
     if (capture_controller) {
       capture_controller->FinalizeFocusDecision();
     }
-    resolver_->Reject(error);
+    resolver_->Reject(error, result);
   }
 
   void Trace(Visitor* visitor) const override {
@@ -132,7 +133,7 @@ class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
 
   const UserMediaRequestType media_type_;
 
-  Member<ScriptPromiseResolver> resolver_;
+  Member<ScriptPromiseResolverWithTracker<UserMediaRequestResult>> resolver_;
   base::OnceCallback<void(const String&, CaptureController*)>
       on_success_follow_up_;
 };
@@ -268,20 +269,27 @@ MediaStreamConstraints* ToMediaStreamConstraints(
   MediaStreamConstraints* const constraints = MediaStreamConstraints::Create();
   if (source->hasAudio())
     constraints->setAudio(source->audio());
-  if (source->hasVideo())
+  if (source->hasVideo()) {
     constraints->setVideo(source->video());
-  if (source->hasPreferCurrentTab())
+  }
+  if (source->hasPreferCurrentTab()) {
     constraints->setPreferCurrentTab(source->preferCurrentTab());
-  if (source->hasAutoSelectAllScreens())
+  }
+  if (source->hasAutoSelectAllScreens()) {
     constraints->setAutoSelectAllScreens(source->autoSelectAllScreens());
-  if (source->hasController())
+  }
+  if (source->hasController()) {
     constraints->setController(source->controller());
-  if (source->hasSelfBrowserSurface())
+  }
+  if (source->hasSelfBrowserSurface()) {
     constraints->setSelfBrowserSurface(source->selfBrowserSurface());
-  if (source->hasSystemAudio())
+  }
+  if (source->hasSystemAudio()) {
     constraints->setSystemAudio(source->systemAudio());
-  if (source->hasSurfaceSwitching())
+  }
+  if (source->hasSurfaceSwitching()) {
     constraints->setSurfaceSwitching(source->surfaceSwitching());
+  }
   return constraints;
 }
 
@@ -343,6 +351,12 @@ ScriptPromise MediaDevices::getUserMedia(
     ScriptState* script_state,
     const UserMediaStreamConstraints* options,
     ExceptionState& exception_state) {
+  // This timeout of base::Seconds(8) is an initial value and based on the data
+  // in Media.MediaDevices.GetUserMedia.Latency, it should be iterated upon.
+  auto* resolver = MakeGarbageCollected<
+      ScriptPromiseResolverWithTracker<UserMediaRequestResult>>(
+      script_state, "Media.MediaDevices.GetUserMedia", base::Seconds(8));
+
   DCHECK(options);  // Guaranteed by the default value in the IDL.
   DCHECK(!exception_state.HadException());
 
@@ -350,28 +364,31 @@ ScriptPromise MediaDevices::getUserMedia(
       ToMediaStreamConstraints(options, exception_state);
   if (!constraints) {
     DCHECK(exception_state.HadException());
+    resolver->RecordResultAndLatency(
+        UserMediaRequestResult::kInvalidConstraints);
     return ScriptPromise();
   }
 
-  return SendUserMediaRequest(script_state, UserMediaRequestType::kUserMedia,
+  return SendUserMediaRequest(UserMediaRequestType::kUserMedia, resolver,
                               constraints, exception_state);
 }
 
 ScriptPromise MediaDevices::SendUserMediaRequest(
-    ScriptState* script_state,
     UserMediaRequestType media_type,
+    ScriptPromiseResolverWithTracker<UserMediaRequestResult>* resolver,
     const MediaStreamConstraints* options,
     ExceptionState& exception_state) {
   DCHECK(!exception_state.HadException());
 
+  ScriptState* script_state = resolver->GetScriptState();
   if (!script_state->ContextIsValid()) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
-                                      "No media device client available; "
-                                      "is this a detached window?");
+    resolver->RecordAndThrowDOMException(
+        exception_state, DOMExceptionCode::kNotSupportedError,
+        "No media device client available; "
+        "is this a detached window?",
+        UserMediaRequestResult::kContextDestroyed);
     return ScriptPromise();
   }
-
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
 
   base::OnceCallback<void(const String&, CaptureController*)>
       on_success_follow_up;
@@ -392,6 +409,8 @@ ScriptPromise MediaDevices::SendUserMediaRequest(
   }
 
   if (exception_state.HadException()) {
+    resolver->RecordResultAndLatency(
+        UserMediaRequestResult::kInvalidConstraints);
     return ScriptPromise();
   }
 #endif
@@ -408,31 +427,27 @@ ScriptPromise MediaDevices::SendUserMediaRequest(
     surface = IdentifiableSurface::FromTypeAndToken(
         surface_type, TokenFromConstraints(options));
   }
-  MediaErrorState error_state;
+  ScriptPromise promise = resolver->Promise();
   UserMediaRequest* request =
       UserMediaRequest::Create(window, user_media_client, media_type, options,
-                               callbacks, error_state, surface);
+                               callbacks, exception_state, surface);
   if (!request) {
-    DCHECK(error_state.HadException());
-    if (error_state.CanGenerateException()) {
-      error_state.RaiseException(exception_state);
-      return ScriptPromise();
-    }
-    ScriptPromise rejected_promise = resolver->Promise();
+    DCHECK(exception_state.HadException());
+    resolver->RecordResultAndLatency(
+        UserMediaRequestResult::kInvalidConstraints);
     RecordIdentifiabilityMetric(
         surface, GetExecutionContext(),
-        IdentifiabilityBenignStringToken(error_state.GetErrorMessage()));
-    resolver->Reject(error_state.CreateError());
-    return rejected_promise;
+        IdentifiabilityBenignStringToken(exception_state.Message()));
+    return ScriptPromise();
   }
 
   String error_message;
   if (!request->IsSecureContextUse(error_message)) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
-                                      error_message);
+    resolver->RecordAndThrowDOMException(
+        exception_state, DOMExceptionCode::kNotSupportedError, error_message,
+        UserMediaRequestResult::kInsecureContext);
     return ScriptPromise();
   }
-  auto promise = resolver->Promise();
   request->Start();
   return promise;
 }
@@ -441,17 +456,25 @@ ScriptPromise MediaDevices::getDisplayMediaSet(
     ScriptState* script_state,
     const DisplayMediaStreamOptions* options,
     ExceptionState& exception_state) {
+  // This timeout of base::Seconds(6) is an initial value and based on the data
+  // in Media.MediaDevices.GetDisplayMediaSet.Latency, it should be iterated
+  // upon.
+  auto* resolver = MakeGarbageCollected<
+      ScriptPromiseResolverWithTracker<UserMediaRequestResult>>(
+      script_state, "Media.MediaDevices.GetDisplayMediaSet", base::Seconds(6));
+
   ExecutionContext* const context = GetExecutionContext();
   if (!context) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kInvalidStateError,
-        "No media device client available; is this a detached window?");
+    resolver->RecordAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "No media device client available; is this a detached window?",
+        UserMediaRequestResult::kContextDestroyed);
     return ScriptPromise();
   }
 
-  return SendUserMediaRequest(
-      script_state, UserMediaRequestType::kDisplayMediaSet,
-      ToMediaStreamConstraints(options), exception_state);
+  return SendUserMediaRequest(UserMediaRequestType::kDisplayMediaSet, resolver,
+                              ToMediaStreamConstraints(options),
+                              exception_state);
 }
 
 ScriptPromise MediaDevices::getDisplayMedia(
@@ -459,18 +482,18 @@ ScriptPromise MediaDevices::getDisplayMedia(
     const DisplayMediaStreamOptions* options,
     ExceptionState& exception_state) {
   LocalDOMWindow* const window = DomWindow();
-  if (!window) {
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kInvalidStateError,
-        "No local DOM window; is this a detached window?");
-    return ScriptPromise();
-  }
+  // This timeout of base::Seconds(6) is an initial value and based on the data
+  // in Media.MediaDevices.GetDisplayMedia.Latency, it should be iterated upon.
+  auto* resolver = MakeGarbageCollected<
+      ScriptPromiseResolverWithTracker<UserMediaRequestResult>>(
+      script_state, "Media.MediaDevices.GetDisplayMedia", base::Seconds(6));
 
-  // Measure calls without transient activation as required by spec in
-  // https://github.com/w3c/mediacapture-screen-share/pull/106
-  if (!LocalFrame::HasTransientUserActivation(window->GetFrame())) {
-    UseCounter::Count(window,
-                      WebFeature::kGetDisplayMediaWithoutUserActivation);
+  if (!window) {
+    resolver->RecordAndThrowDOMException(
+        exception_state, DOMExceptionCode::kInvalidStateError,
+        "No local DOM window; is this a detached window?",
+        UserMediaRequestResult::kContextDestroyed);
+    return ScriptPromise();
   }
 
   const bool capture_allowed_by_permissions_policy = window->IsFeatureEnabled(
@@ -484,39 +507,58 @@ ScriptPromise MediaDevices::getDisplayMedia(
           : DisplayCapturePolicyResult::kDisallowed);
 
   if (!capture_allowed_by_permissions_policy) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
-                                      kFeaturePolicyBlocked);
+    resolver->RecordAndThrowDOMException(
+        exception_state, DOMExceptionCode::kNotAllowedError,
+        kFeaturePolicyBlocked, UserMediaRequestResult::kNotAllowedError);
     return ScriptPromise();
   }
 
+  if (!LocalFrame::HasTransientUserActivation(window->GetFrame())) {
+    UseCounter::Count(window,
+                      WebFeature::kGetDisplayMediaWithoutUserActivation);
+    if (RuntimeEnabledFeatures::
+            GetDisplayMediaRequiresUserActivationEnabled()) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kInvalidStateError,
+          "getDisplayMedia() requires transient activation (user gesture).");
+      return ScriptPromise();
+    }
+  }
+
   if (options->hasAutoSelectAllScreens() && options->autoSelectAllScreens()) {
-    exception_state.ThrowTypeError(
+    resolver->RecordAndThrowTypeError(
+        exception_state,
         "The autoSelectAllScreens property is not allowed for usage with "
-        "getDisplayMedia.");
+        "getDisplayMedia.",
+        UserMediaRequestResult::kInvalidConstraints);
     return ScriptPromise();
   }
 
   if (CaptureController* const capture_controller =
           options->getControllerOr(nullptr)) {
     if (capture_controller->IsBound()) {
-      exception_state.ThrowDOMException(
-          DOMExceptionCode::kInvalidStateError,
-          "setFocusBehavior() can only be called before getDisplayMedia() or "
-          "immediately after.");
+      resolver->RecordAndThrowDOMException(
+          exception_state, DOMExceptionCode::kInvalidStateError,
+          "setFocusBehavior() can only be called before getDisplayMedia() or"
+          "immediately after.",
+          UserMediaRequestResult::kInvalidStateError);
       return ScriptPromise();
     }
     capture_controller->SetIsBound(true);
   }
 
   MediaStreamConstraints* const constraints = ToMediaStreamConstraints(options);
-  if (base::FeatureList::IsEnabled(
-          blink::features::kNewGetDisplayMediaPickerOrder) &&
-      !options->hasSelfBrowserSurface() &&
+  if (!options->hasSelfBrowserSurface() &&
       (!options->hasPreferCurrentTab() || !options->preferCurrentTab())) {
     constraints->setSelfBrowserSurface("exclude");
   }
 
-  return SendUserMediaRequest(script_state, UserMediaRequestType::kDisplayMedia,
+  if (options->hasPreferCurrentTab() && options->preferCurrentTab()) {
+    UseCounter::Count(window,
+                      WebFeature::kGetDisplayMediaWithPreferCurrentTabTrue);
+  }
+
+  return SendUserMediaRequest(UserMediaRequestType::kDisplayMedia, resolver,
                               constraints, exception_state);
 }
 
@@ -688,8 +730,9 @@ void MediaDevices::RemovedEventListener(
     const RegisteredEventListener& registered_listener) {
   EventTargetWithInlineData::RemovedEventListener(event_type,
                                                   registered_listener);
-  if (!HasEventListeners())
+  if (!HasEventListeners()) {
     StopObserving();
+  }
 }
 
 bool MediaDevices::HasPendingActivity() const {
@@ -698,8 +741,9 @@ bool MediaDevices::HasPendingActivity() const {
 }
 
 void MediaDevices::ContextDestroyed() {
-  if (stopped_)
+  if (stopped_) {
     return;
+  }
 
   stopped_ = true;
   enumerate_device_requests_.clear();
@@ -710,17 +754,20 @@ void MediaDevices::OnDevicesChanged(
     const Vector<WebMediaDeviceInfo>& device_infos) {
   DCHECK(GetExecutionContext());
 
-  if (RuntimeEnabledFeatures::OnDeviceChangeEnabled())
+  if (RuntimeEnabledFeatures::OnDeviceChangeEnabled()) {
     ScheduleDispatchEvent(Event::Create(event_type_names::kDevicechange));
+  }
 
-  if (device_change_test_callback_)
+  if (device_change_test_callback_) {
     std::move(device_change_test_callback_).Run();
+  }
 }
 
 void MediaDevices::ScheduleDispatchEvent(Event* event) {
   scheduled_events_.push_back(event);
-  if (dispatch_scheduled_events_task_handle_.IsActive())
+  if (dispatch_scheduled_events_task_handle_.IsActive()) {
     return;
+  }
 
   auto* context = GetExecutionContext();
   DCHECK(context);
@@ -731,22 +778,26 @@ void MediaDevices::ScheduleDispatchEvent(Event* event) {
 }
 
 void MediaDevices::DispatchScheduledEvents() {
-  if (stopped_)
+  if (stopped_) {
     return;
+  }
   HeapVector<Member<Event>> events;
   events.swap(scheduled_events_);
 
-  for (const auto& event : events)
+  for (const auto& event : events) {
     DispatchEvent(*event);
+  }
 }
 
 void MediaDevices::StartObserving() {
-  if (receiver_.is_bound() || stopped_)
+  if (receiver_.is_bound() || stopped_) {
     return;
+  }
 
   LocalDOMWindow* window = To<LocalDOMWindow>(GetExecutionContext());
-  if (!window)
+  if (!window) {
     return;
+  }
 
   GetDispatcherHost(window->GetFrame())
       .AddMediaDevicesListener(true /* audio input */, true /* video input */,
@@ -757,8 +808,9 @@ void MediaDevices::StartObserving() {
 }
 
 void MediaDevices::StopObserving() {
-  if (!receiver_.is_bound())
+  if (!receiver_.is_bound()) {
     return;
+  }
   receiver_.reset();
 }
 
@@ -794,8 +846,9 @@ void MediaDevices::DevicesEnumerated(
         video_input_capabilities,
     Vector<mojom::blink::AudioInputDeviceCapabilitiesPtr>
         audio_input_capabilities) {
-  if (!enumerate_device_requests_.Contains(result_tracker))
+  if (!enumerate_device_requests_.Contains(result_tracker)) {
     return;
+  }
 
   const RequestMetadata request_metadata =
       enumerate_device_requests_.at(result_tracker);
@@ -865,8 +918,9 @@ void MediaDevices::DevicesEnumerated(
   // ScriptPromiseResolverWithTracker based latency monitoring reaches stable.
   RecordEnumerateDevicesLatency(request_metadata.start_time);
 
-  if (enumerate_devices_test_callback_)
+  if (enumerate_devices_test_callback_) {
     std::move(enumerate_devices_test_callback_).Run(media_devices);
+  }
 
   result_tracker->Resolve(media_devices);
 }
@@ -886,8 +940,9 @@ void MediaDevices::OnDispatcherHostConnectionError() {
   enumerate_device_requests_.clear();
   dispatcher_host_.reset();
 
-  if (connection_error_test_callback_)
+  if (connection_error_test_callback_) {
     std::move(connection_error_test_callback_).Run();
+  }
 }
 
 mojom::blink::MediaDevicesDispatcherHost& MediaDevices::GetDispatcherHost(
@@ -942,8 +997,9 @@ void MediaDevices::EnqueueMicrotaskToCloseFocusWindowOfOpportunity(
     const String& id,
     CaptureController* capture_controller) {
   ExecutionContext* const context = GetExecutionContext();
-  if (!context)
+  if (!context) {
     return;
+  }
 
   context->GetAgent()->event_loop()->EnqueueMicrotask(WTF::BindOnce(
       &MediaDevices::CloseFocusWindowOfOpportunity, WrapWeakPersistent(this),

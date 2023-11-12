@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -107,7 +107,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     std::vector<ui::LatencyInfo> latency_info;
     int64_t seq = -1;
     bool top_controls_visible_height_changed = false;
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
     gfx::CALayerResult ca_layer_error_code = gfx::kCALayerSuccess;
 #endif
     absl::optional<int64_t> choreographer_vsync_id;

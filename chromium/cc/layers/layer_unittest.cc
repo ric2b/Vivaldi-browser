@@ -9,8 +9,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_id_provider.h"
@@ -119,9 +119,9 @@ namespace cc {
 namespace {
 
 static auto kArbitrarySourceId1 =
-    base::UnguessableToken::Deserialize(0xdead, 0xbeef);
+    base::UnguessableToken::CreateForTesting(0xdead, 0xbeef);
 static auto kArbitrarySourceId2 =
-    base::UnguessableToken::Deserialize(0xdead, 0xbee0);
+    base::UnguessableToken::CreateForTesting(0xdead, 0xbee0);
 
 // http://google.github.io/googletest/gmock_for_dummies.html#using-mocks-in-tests
 // says that it is undefined behavior if we alternate between calls to
@@ -186,8 +186,8 @@ class LayerTest : public testing::Test {
                    &task_runner_provider_,
                    &task_graph_runner_) {
     timeline_impl_ =
-        AnimationTimeline::Create(AnimationIdProvider::NextTimelineId());
-    timeline_impl_->set_is_impl_only(true);
+        AnimationTimeline::Create(AnimationIdProvider::NextTimelineId(),
+                                  /* is_impl_only */ true);
     host_impl_.animation_host()->AddAnimationTimeline(timeline_impl_);
   }
 

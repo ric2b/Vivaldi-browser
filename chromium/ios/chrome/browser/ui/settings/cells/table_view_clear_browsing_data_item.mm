@@ -110,7 +110,7 @@ const CGFloat kImageHeight = 30;
     _detailTextLabel.numberOfLines = 0;
     _detailTextLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _detailTextLabel.font =
-        [UIFont preferredFontForTextStyle:kTableViewSublabelFontStyle];
+        [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
     _detailTextLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentView addSubview:_detailTextLabel];
 
@@ -119,7 +119,7 @@ const CGFloat kImageHeight = 30;
     _optionalTextLabel.textColor = [UIColor colorNamed:kTextSecondaryColor];
     _optionalTextLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _optionalTextLabel.font =
-        [UIFont preferredFontForTextStyle:kTableViewSublabelFontStyle];
+        [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
     _optionalTextLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentView addSubview:_optionalTextLabel];
 
@@ -293,6 +293,15 @@ const CGFloat kImageHeight = 30;
         stringWithFormat:@"%@.%@", value, self.optionalTextLabel.text];
   }
   return value;
+}
+
+- (UIAccessibilityTraits)accessibilityTraits {
+  UIAccessibilityTraits accessibilityTraits = super.accessibilityTraits;
+  accessibilityTraits |= UIAccessibilityTraitButton;
+  if (self.checked) {
+    accessibilityTraits |= UIAccessibilityTraitSelected;
+  }
+  return accessibilityTraits;
 }
 
 @end

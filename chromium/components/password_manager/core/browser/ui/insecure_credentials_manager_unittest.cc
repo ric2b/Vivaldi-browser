@@ -7,12 +7,14 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
+#include "components/password_manager/core/browser/affiliation/fake_affiliation_service.h"
 #include "components/password_manager/core/browser/affiliation/mock_affiliation_service.h"
 #include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -27,8 +29,8 @@ namespace password_manager {
 
 namespace {
 
-constexpr char kExampleCom[] = "https://example.com";
-constexpr char kExampleOrg[] = "https://example.org";
+constexpr char kExampleCom[] = "https://example.com/";
+constexpr char kExampleOrg[] = "https://example.org/";
 
 constexpr char16_t kUsername1[] = u"alice";
 constexpr char16_t kUsername2[] = u"bob";
@@ -37,13 +39,13 @@ constexpr char16_t kPassword1[] = u"fnlsr4@cm^mdls@fkspnsg3d";
 constexpr char16_t kPassword216[] =
     u"pmsFlsnoab4nsl#losb@skpfnsbkjb^klsnbs!cns";
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID)
 constexpr char16_t kWeakPassword1[] = u"123456";
 constexpr char16_t kWeakPassword216[] =
     u"abcdabcdabcdabcdabcdabcdabcdabcdabcdabcda";
 // Delay in milliseconds.
 constexpr int kDelay = 2;
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 using ::testing::ElementsAre;
 using ::testing::ElementsAreArray;
@@ -96,6 +98,7 @@ class InsecureCredentialsManagerTest : public ::testing::Test {
   TestPasswordStore& store() { return *store_; }
   SavedPasswordsPresenter& presenter() { return presenter_; }
   InsecureCredentialsManager& provider() { return provider_; }
+  MockAffiliationService& affiliation_service() { return affiliation_service_; }
 
   void RunUntilIdle() { task_env_.RunUntilIdle(); }
 
@@ -320,7 +323,7 @@ TEST_F(InsecureCredentialsManagerTest, JoinWithMultipleRepeatedPasswords) {
               ElementsAre(CredentialUIEntry(password1)));
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(InsecureCredentialsManagerTest, StartWeakCheckNotifiesOnCompletion) {
   base::MockOnceClosure closure;
   provider().StartWeakCheck(closure.Get());
@@ -535,7 +538,7 @@ TEST_F(InsecureCredentialsManagerTest, SingleCredentialIsWeakAndCompromised) {
   histogram_tester().ExpectUniqueSample(
       "PasswordManager.WeakCheck.PasswordScore", 0, 1);
 }
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 // Test verifies that saving LeakCheckCredential via provider adds expected
 // compromised credential.
@@ -886,8 +889,8 @@ TEST_F(InsecureCredentialsManagerTest, MuteWeakPasswordNoOp) {
   store().AddLogin(password);
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Weak passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Weak passwords are filtered on Android.
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -897,8 +900,8 @@ TEST_F(InsecureCredentialsManagerTest, MuteWeakPasswordNoOp) {
 
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Weak passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Weak passwords are filtered on Android.
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -921,8 +924,8 @@ TEST_F(InsecureCredentialsManagerTest, UnMuteWeakPasswordNoOp) {
   store().AddLogin(password);
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Weak passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Weak passwords are filtered on Android.
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -932,8 +935,8 @@ TEST_F(InsecureCredentialsManagerTest, UnMuteWeakPasswordNoOp) {
 
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Weak passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Weak passwords are filtered on Android.
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -958,8 +961,8 @@ TEST_F(InsecureCredentialsManagerTest, MuteReusedPasswordNoOp) {
   store().AddLogin(password);
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Reused passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Reused passwords are filtered on Android.
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -969,8 +972,8 @@ TEST_F(InsecureCredentialsManagerTest, MuteReusedPasswordNoOp) {
 
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Reused passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Reused passwords are filtered on Android.
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -993,8 +996,8 @@ TEST_F(InsecureCredentialsManagerTest, UnMuteReusedPasswordNoOp) {
   store().AddLogin(password);
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Reused passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Reused passwords are filtered on Android.
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   ASSERT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -1004,8 +1007,8 @@ TEST_F(InsecureCredentialsManagerTest, UnMuteReusedPasswordNoOp) {
 
   RunUntilIdle();
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
-  // Reused passwords are filtered on Android and iOS.
+#if BUILDFLAG(IS_ANDROID)
+  // Reused passwords are filtered on Android.
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
 #else
   EXPECT_THAT(provider().GetInsecureCredentialEntries(), SizeIs(1));
@@ -1038,10 +1041,14 @@ TEST_F(InsecureCredentialsManagerTest, UpdateCompromisedPassword) {
   EXPECT_TRUE(provider().GetInsecureCredentialEntries().empty());
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID)
 // Test verifies that editing a weak credential to another weak credential
 // continues to be treated weak.
 TEST_F(InsecureCredentialsManagerTest, UpdatedWeakPasswordBecomesStrong) {
+#if BUILDFLAG(IS_IOS)
+  base::test::ScopedFeatureList feature_list(
+      password_manager::features::kIOSPasswordCheckup);
+#endif
   PasswordForm password_form =
       MakeSavedPassword(kExampleCom, kUsername1, kWeakPassword1);
 
@@ -1065,6 +1072,10 @@ TEST_F(InsecureCredentialsManagerTest, UpdatedWeakPasswordBecomesStrong) {
 // Test verifies that editing a weak credential to another weak credential
 // continues to be treated weak.
 TEST_F(InsecureCredentialsManagerTest, UpdatedWeakPasswordRemainsWeak) {
+#if BUILDFLAG(IS_IOS)
+  base::test::ScopedFeatureList feature_list(
+      password_manager::features::kIOSPasswordCheckup);
+#endif
   PasswordForm password_form =
       MakeSavedPassword(kExampleCom, kUsername1, kWeakPassword1);
 
@@ -1128,6 +1139,80 @@ TEST_F(InsecureCredentialsManagerTest, GetInsecureCredentialEntries) {
                           CredentialUIEntry(password_forms[1])));
 }
 
+TEST_F(InsecureCredentialsManagerTest, GetInsecureCredentialsReused) {
+  PasswordForm form1 =
+      MakeSavedPassword(kExampleCom, kUsername1, kWeakPassword1);
+  PasswordForm form2 =
+      MakeSavedPassword(kExampleCom, kUsername2, kWeakPassword1);
+
+  store().AddLogin(form1);
+  store().AddLogin(form2);
+  RunUntilIdle();
+  provider().StartReuseCheck();
+  RunUntilIdle();
+
+  EXPECT_THAT(provider().GetInsecureCredentialEntries(),
+              ElementsAre(CredentialUIEntry(form1), CredentialUIEntry(form2)));
+}
+
+TEST_F(InsecureCredentialsManagerTest, UpdatingReusedPasswordFixesTheIssue) {
+#if BUILDFLAG(IS_IOS)
+  base::test::ScopedFeatureList scoped_feature_list(
+      password_manager::features::kIOSPasswordCheckup);
+#else
+  base::test::ScopedFeatureList scoped_feature_list(
+      password_manager::features::kPasswordManagerRedesign);
+#endif
+
+  PasswordForm form1 = MakeSavedPassword(kExampleCom, kUsername1, kPassword1);
+  PasswordForm form2 = MakeSavedPassword(kExampleCom, kUsername2, kPassword1);
+
+  store().AddLogin(form1);
+  store().AddLogin(form2);
+  RunUntilIdle();
+  provider().StartReuseCheck();
+  RunUntilIdle();
+
+  ASSERT_THAT(provider().GetInsecureCredentialEntries(),
+              ElementsAre(CredentialUIEntry(form1), CredentialUIEntry(form2)));
+
+  CredentialUIEntry updated_credential(form1);
+  updated_credential.password = kPassword216;
+  presenter().EditSavedCredentials(CredentialUIEntry(form1),
+                                   updated_credential);
+  RunUntilIdle();
+
+  EXPECT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
+}
+
+TEST_F(InsecureCredentialsManagerTest, ReuseCheckUsesAffiliationInfo) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kPasswordsGrouping);
+
+  // Setup two credentials with the same passwords that belong to two affiliated
+  // groups. Those should *not* be flagged for password reuse.
+  PasswordForm form1 = MakeSavedPassword(kExampleCom, kUsername1, kPassword1);
+  PasswordForm form2 = MakeSavedPassword(kExampleOrg, kUsername2, kPassword1);
+
+  // Setup affiliated groups.
+  std::vector<password_manager::GroupedFacets> grouped_facets(1);
+  Facet facet(FacetURI::FromPotentiallyInvalidSpec(form1.signon_realm));
+  grouped_facets[0].facets.push_back(facet);
+  facet.uri = FacetURI::FromPotentiallyInvalidSpec(form2.signon_realm);
+  grouped_facets[0].facets.push_back(facet);
+  EXPECT_CALL(affiliation_service(), GetAllGroups)
+      .WillRepeatedly(base::test::RunOnceCallback<0>(grouped_facets));
+
+  store().AddLogin(form1);
+  store().AddLogin(form2);
+  RunUntilIdle();
+  provider().StartReuseCheck();
+  RunUntilIdle();
+
+  EXPECT_THAT(provider().GetInsecureCredentialEntries(), IsEmpty());
+}
+
 #else
 
 TEST_F(InsecureCredentialsManagerTest, GetInsecureCredentialsFiltersWeak) {
@@ -1149,7 +1234,7 @@ TEST_F(InsecureCredentialsManagerTest, GetInsecureCredentialsFiltersWeak) {
               ElementsAre(CredentialUIEntry(password1)));
 }
 
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 TEST_F(InsecureCredentialsManagerTest,
        GetInsecureCredentialsFiltersDuplicates) {
@@ -1202,7 +1287,7 @@ class InsecureCredentialsManagerWithTwoStoresTest : public ::testing::Test {
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(false));
   scoped_refptr<TestPasswordStore> account_store_ =
       base::MakeRefCounted<TestPasswordStore>(IsAccountStore(true));
-  MockAffiliationService affiliation_service_;
+  FakeAffiliationService affiliation_service_;
   SavedPasswordsPresenter presenter_{&affiliation_service_, profile_store_,
                                      account_store_};
   InsecureCredentialsManager provider_{&presenter_, profile_store_,
@@ -1275,7 +1360,7 @@ TEST_F(InsecureCredentialsManagerWithTwoStoresTest, SaveCompromisedPassword) {
                     .password_issues.size());
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#if !BUILDFLAG(IS_ANDROID)
 TEST_F(InsecureCredentialsManagerWithTwoStoresTest,
        GetInsecureCredentialsWeak) {
   profile_store().AddLogin(
@@ -1295,6 +1380,6 @@ TEST_F(InsecureCredentialsManagerWithTwoStoresTest,
               ElementsAre(CredentialUIEntry(expected_form)));
 }
 
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+#endif  // !BUILDFLAG(IS_ANDROID)
 
 }  // namespace password_manager

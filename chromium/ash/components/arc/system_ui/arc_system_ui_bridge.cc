@@ -10,10 +10,9 @@
 #include "ash/components/arc/session/connection_holder.h"
 #include "ash/constants/ash_features.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
 namespace arc {
@@ -115,6 +114,11 @@ bool ArcSystemUIBridge::SendOverlayColor(uint32_t source_color,
     return false;
   system_ui_instance->SetOverlayColor(source_color, theme_style);
   return true;
+}
+
+// static
+void ArcSystemUIBridge::EnsureFactoryBuilt() {
+  ArcSystemUIBridgeFactory::GetInstance();
 }
 
 }  // namespace arc

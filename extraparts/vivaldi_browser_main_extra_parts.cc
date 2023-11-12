@@ -5,9 +5,9 @@
 #include <string>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/path_service.h"
 #include "base/vivaldi_switches.h"
 #include "browser/stats_reporter.h"
@@ -33,13 +33,17 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/api/content_settings/content_settings_helpers.h"
 #include "extensions/buildflags/buildflags.h"
+#include "media/base/media_switches.h"
 #include "ui/lazy_load_service_factory.h"
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_runtime_feature.h"
+#include "components/browser/vivaldi_brand_select.h"
+
 #include "components/datasource/vivaldi_image_store.h"
 #include "contact/contact_service_factory.h"
 #include "notes/notes_factory.h"
+#include "prefs/vivaldi_pref_names.h"
 #include "ui/webui/vivaldi_web_ui_controller_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -60,6 +64,7 @@
 #include "extensions/api/reading_list/reading_list_api.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/search_engines/search_engines_api.h"
+#include "extensions/api/sessions/vivaldi_sessions_api.h"
 #include "extensions/api/settings/settings_api.h"
 #include "extensions/api/sync/sync_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -135,6 +140,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::PageActionsAPI::GetFactoryInstance();
   extensions::ReadingListPrivateAPI::GetFactoryInstance();
   extensions::RuntimeAPI::Init();
+  extensions::SessionsPrivateAPI::GetFactoryInstance();
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance();
   extensions::VivaldiWindowsAPI::Init();
   extensions::ZoomAPI::GetFactoryInstance();
@@ -155,6 +161,9 @@ void VivaldiBrowserMainExtraParts::
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
   EnsureBrowserContextKeyedServiceFactoriesBuilt();
+
+  vivaldi::ClientHintsBrandRegisterProfilePrefs(
+      g_browser_process->local_state());
 }
 
 void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
@@ -219,6 +228,13 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
                                                      default_setting);
     }
   }
+#else
+  // Disable background media suspend
+  PrefService* prefs = profile->GetPrefs();
+  if (prefs->GetBoolean(vivaldiprefs::kBackgroundMediaPlaybackAllowed)) {
+    base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+    cmd_line.AppendSwitch(switches::kDisableBackgroundMediaSuspend);
+  }
 #endif  // IS_ANDROID
 
   vivaldi::StartGitIgnoreCheck();
@@ -234,6 +250,8 @@ void VivaldiBrowserMainExtraParts::PreMainMessageLoopRun() {
 }
 
 void VivaldiBrowserMainExtraParts::PostMainMessageLoopRun() {
+  vivaldi::ClientHintsBrandRegisterProfilePrefs(nullptr);
+
 #if !BUILDFLAG(IS_ANDROID)
   extensions::AutoUpdateAPI::Shutdown();
 #endif  // IS_ANDROID

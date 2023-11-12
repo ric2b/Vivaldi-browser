@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/functional/callback.h"
 #include "base/guid.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
@@ -118,13 +118,24 @@ void PrivateAggregationHost::SendHistogramReport(
              contribution_ptr) { return contribution_ptr.is_null(); }));
   DCHECK(!debug_mode_details.is_null());
 
-  if (contribution_ptrs.size() > kMaxNumberOfContributions) {
-    // TODO(crbug.com/1323324): Add histograms for monitoring failures here,
-    // possibly broken out by failure reason.
-    mojo::ReportBadMessage("Too many contributions");
+  if (base::ranges::any_of(
+          contribution_ptrs,
+          [](const mojom::AggregatableReportHistogramContributionPtr&
+                 contribution_ptr) { return contribution_ptr->value < 0; })) {
+    mojo::ReportBadMessage("Negative value encountered");
     RecordSendHistogramReportResultHistogram(
-        SendHistogramReportResult::kTooManyContributions);
+        SendHistogramReportResult::kNegativeValue);
     return;
+  }
+
+  // TODO(alexmt): Consider eliding contributions with values of zero as well as
+  // potentially merging contributions with the same bucket (although that
+  // should probably be done after budgeting).
+
+  bool too_many_contributions =
+      contribution_ptrs.size() > kMaxNumberOfContributions;
+  if (too_many_contributions) {
+    contribution_ptrs.resize(kMaxNumberOfContributions);
   }
 
   std::vector<mojom::AggregatableReportHistogramContribution> contributions;
@@ -176,8 +187,6 @@ void PrivateAggregationHost::SendHistogramReport(
                                         std::move(shared_info),
                                         std::move(reporting_path), debug_key);
   if (!report_request.has_value()) {
-    // TODO(crbug.com/1323324): Add histograms for monitoring failures here,
-    // possibly broken out by failure reason.
     mojo::ReportBadMessage("Invalid report request parameters");
     RecordSendHistogramReportResultHistogram(
         SendHistogramReportResult::kReportRequestCreationFailed);
@@ -194,7 +203,11 @@ void PrivateAggregationHost::SendHistogramReport(
 
   on_report_request_received_.Run(std::move(report_request.value()),
                                   std::move(budget_key.value()));
-  RecordSendHistogramReportResultHistogram(SendHistogramReportResult::kSuccess);
+
+  RecordSendHistogramReportResultHistogram(
+      too_many_contributions ? SendHistogramReportResult::
+                                   kSuccessButTruncatedDueToTooManyContributions
+                             : SendHistogramReportResult::kSuccess);
 }
 
 }  // namespace content

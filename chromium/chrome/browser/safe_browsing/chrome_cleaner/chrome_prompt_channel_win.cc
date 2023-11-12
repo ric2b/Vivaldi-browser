@@ -11,17 +11,18 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/unguessable_token.h"
 #include "base/win/win_util.h"
@@ -142,11 +143,10 @@ std::pair<ScopedHandle, ScopedHandle> CreateMessagePipe(
   return std::make_pair(std::move(server_handle), std::move(client_handle));
 }
 
-void AppendHandleToCommandLine(base::CommandLine* command_line,
+void AppendHandleToCommandLine(base::CommandLine& command_line,
                                const std::string& switch_string,
                                HANDLE handle) {
-  DCHECK(command_line);
-  command_line->AppendSwitchASCII(
+  command_line.AppendSwitchASCII(
       switch_string, base::NumberToString(base::win::HandleToUint32(handle)));
 }
 
@@ -349,7 +349,7 @@ ChromePromptChannel::~ChromePromptChannel() {
 }
 
 bool ChromePromptChannel::PrepareForCleaner(
-    base::CommandLine* command_line,
+    base::CommandLine& command_line,
     base::HandlesToInheritVector* handles_to_inherit) {
   // Requests flow from client to server.
   std::tie(request_read_handle_, request_write_handle_) =
@@ -366,7 +366,6 @@ bool ChromePromptChannel::PrepareForCleaner(
 
   // The Chrome Cleanup tool will write to the request pipe and read from the
   // response pipe.
-  DCHECK(command_line);
   DCHECK(handles_to_inherit);
   AppendHandleToCommandLine(command_line,
                             chrome_cleaner::kChromeWriteHandleSwitch,

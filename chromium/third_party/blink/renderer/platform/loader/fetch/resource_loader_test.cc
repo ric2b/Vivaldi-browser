@@ -7,34 +7,37 @@
 #include <string>
 #include <utility>
 
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/task_environment.h"
 #include "mojo/public/c/system/data_pipe.h"
-#include "net/base/features.h"
-#include "services/metrics/public/cpp/ukm_builders.h"
-#include "services/network/public/cpp/features.h"
+#include "net/http/http_response_headers.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink.h"
+#include "services/network/public/mojom/url_response_head.mojom.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
-#include "third_party/blink/public/platform/web_back_forward_cache_loader_helper.h"
-#include "third_party/blink/public/platform/web_url_loader.h"
-#include "third_party/blink/public/platform/web_url_loader_factory.h"
 #include "third_party/blink/public/platform/web_url_request_extra_data.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
+#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
+#include "third_party/blink/renderer/platform/loader/fetch/detachable_use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_load_scheduler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_response.h"
+#include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader.h"
+#include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader_factory.h"
 #include "third_party/blink/renderer/platform/loader/testing/bytes_consumer_test_reader.h"
 #include "third_party/blink/renderer/platform/loader/testing/mock_fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/testing/test_resource_fetcher_properties.h"
+#include "third_party/blink/renderer/platform/network/http_names.h"
 #include "third_party/blink/renderer/platform/testing/code_cache_loader_mock.h"
 #include "third_party/blink/renderer/platform/testing/mock_context_lifecycle_notifier.h"
-#include "third_party/blink/renderer/platform/testing/noop_web_url_loader.h"
-#include "third_party/blink/renderer/platform/testing/scoped_fake_ukm_recorder.h"
+#include "third_party/blink/renderer/platform/testing/noop_url_loader.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support_with_mock_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
@@ -52,6 +55,19 @@ const char kCnameAliasWasAdTaggedHistogram[] =
     "SubresourceFilter.CnameAlias.Renderer.WasAdTaggedBasedOnAlias";
 const char kCnameAliasWasBlockedHistogram[] =
     "SubresourceFilter.CnameAlias.Renderer.WasBlockedBasedOnAlias";
+
+namespace {
+
+using ::testing::_;
+
+class MockUseCounter : public GarbageCollected<MockUseCounter>,
+                       public UseCounter {
+ public:
+  MOCK_METHOD1(CountUse, void(mojom::WebFeature));
+  MOCK_METHOD1(CountDeprecation, void(mojom::WebFeature));
+};
+
+}  // namespace
 
 class ResourceLoaderTest : public testing::Test {
  public:
@@ -84,15 +100,14 @@ class ResourceLoaderTest : public testing::Test {
   const KURL bar_url_;
 
   class NoopLoaderFactory final : public ResourceFetcher::LoaderFactory {
-    std::unique_ptr<WebURLLoader> CreateURLLoader(
+    std::unique_ptr<URLLoader> CreateURLLoader(
         const ResourceRequest& request,
         const ResourceLoaderOptions& options,
         scoped_refptr<base::SingleThreadTaskRunner> freezable_task_runner,
         scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner,
-        WebBackForwardCacheLoaderHelper back_forward_cache_loader_helper)
+        BackForwardCacheLoaderHelper* back_forward_cache_loader_helper)
         override {
-      return std::make_unique<NoopWebURLLoader>(
-          std::move(freezable_task_runner));
+      return std::make_unique<NoopURLLoader>(std::move(freezable_task_runner));
     }
     std::unique_ptr<WebCodeCacheLoader> CreateCodeCacheLoader() override {
       return std::make_unique<CodeCacheLoaderMock>();
@@ -106,15 +121,21 @@ class ResourceLoaderTest : public testing::Test {
   ResourceFetcher* MakeResourceFetcher(
       TestResourceFetcherProperties* properties,
       FetchContext* context) {
-    return MakeGarbageCollected<ResourceFetcher>(ResourceFetcherInit(
+    ResourceFetcherInit init(
         properties->MakeDetachable(), context, CreateTaskRunner(),
         CreateTaskRunner(), MakeGarbageCollected<NoopLoaderFactory>(),
         MakeGarbageCollected<MockContextLifecycleNotifier>(),
-        nullptr /* back_forward_cache_loader_helper */));
+        /*back_forward_cache_loader_helper=*/nullptr);
+    use_counter_ = MakeGarbageCollected<testing::StrictMock<MockUseCounter>>();
+    init.use_counter = MakeGarbageCollected<DetachableUseCounter>(use_counter_);
+    return MakeGarbageCollected<ResourceFetcher>(std::move(init));
   }
+
+  MockUseCounter* UseCounter() const { return use_counter_; }
 
  private:
   base::test::SingleThreadTaskEnvironment task_environment_;
+  Persistent<MockUseCounter> use_counter_;
 };
 
 std::ostream& operator<<(std::ostream& o, const ResourceLoaderTest::From& f) {
@@ -447,6 +468,77 @@ TEST_F(ResourceLoaderTest, LoadDataURL_DefersAsyncAndStream) {
   // The body is not set to ResourceBuffer since the response body is requested
   // as a stream.
   EXPECT_FALSE(resource->ResourceBuffer());
+}
+
+namespace {
+
+bool WillFollowRedirect(ResourceLoader* loader, KURL new_url) {
+  auto response_head = network::mojom::URLResponseHead::New();
+  auto response =
+      WebURLResponse::Create(new_url, *response_head,
+                             /*report_security_info=*/true, /*request_id=*/1);
+  bool has_devtools_request_id = false;
+  std::vector<std::string> removed_headers;
+  return loader->WillFollowRedirect(
+      new_url, net::SiteForCookies(), /*new_referrer=*/String(),
+      network::mojom::ReferrerPolicy::kAlways, "GET", response,
+      has_devtools_request_id, &removed_headers,
+      /*insecure_scheme_was_upgraded=*/false);
+}
+
+}  // namespace
+
+TEST_F(ResourceLoaderTest, AuthorizationCrossOriginRedirect) {
+  auto* properties = MakeGarbageCollected<TestResourceFetcherProperties>();
+  FetchContext* context = MakeGarbageCollected<MockFetchContext>();
+  auto* fetcher = MakeResourceFetcher(properties, context);
+
+  KURL url("https://a.test/");
+  ResourceRequest request(url);
+  request.SetRequestContext(mojom::blink::RequestContextType::FETCH);
+  request.SetHttpHeaderField(net::HttpRequestHeaders::kAuthorization,
+                             "Basic foo");
+
+  FetchParameters params = FetchParameters::CreateForTest(std::move(request));
+  Resource* resource = RawResource::Fetch(params, fetcher, nullptr);
+  ResourceLoader* loader = resource->Loader();
+
+  // Redirect to the same origin. Expect no UseCounter call.
+  {
+    KURL new_url("https://a.test/foo");
+    ASSERT_TRUE(WillFollowRedirect(loader, new_url));
+    ::testing::Mock::VerifyAndClear(UseCounter());
+  }
+
+  // Redirect to a cross origin. Expect a single UseCounter call.
+  {
+    EXPECT_CALL(*UseCounter(),
+                CountUse(mojom::WebFeature::kAuthorizationCrossOrigin))
+        .Times(1);
+    KURL new_url("https://b.test");
+    ASSERT_TRUE(WillFollowRedirect(loader, new_url));
+    ::testing::Mock::VerifyAndClear(UseCounter());
+  }
+}
+
+TEST_F(ResourceLoaderTest, CrossOriginRedirect_NoAuthorization) {
+  auto* properties = MakeGarbageCollected<TestResourceFetcherProperties>();
+  FetchContext* context = MakeGarbageCollected<MockFetchContext>();
+  auto* fetcher = MakeResourceFetcher(properties, context);
+
+  KURL url("https://a.test/");
+  ResourceRequest request(url);
+  request.SetRequestContext(mojom::blink::RequestContextType::FETCH);
+
+  FetchParameters params = FetchParameters::CreateForTest(std::move(request));
+  Resource* resource = RawResource::Fetch(params, fetcher, nullptr);
+  ResourceLoader* loader = resource->Loader();
+
+  // Redirect to a cross origin without Authorization header. Expect no
+  // UseCounter call.
+  KURL new_url("https://b.test");
+  ASSERT_TRUE(WillFollowRedirect(loader, new_url));
+  ::testing::Mock::VerifyAndClear(UseCounter());
 }
 
 class ResourceLoaderIsolatedCodeCacheTest : public ResourceLoaderTest {
@@ -796,108 +888,6 @@ TEST_F(ResourceLoaderSubresourceFilterCnameAliasTest,
   CnameAliasMetricInfo info = {.has_aliases = false};
 
   ExpectHistogramsMatching(info);
-}
-
-class ResourceLoaderCacheTransparencyTest : public ResourceLoaderTest {
- public:
-  ResourceLoaderCacheTransparencyTest() = default;
-  ~ResourceLoaderCacheTransparencyTest() override = default;
-
-  void SetUp() override {
-    std::string pervasive_payloads_params =
-        "1,http://127.0.0.1:4353/pervasive.js,"
-        "2478392C652868C0AAF0316A28284610DBDACF02D66A00B39F3BA75D887F4829";
-    feature_list_.InitWithFeaturesAndParameters(
-        {{network::features::kPervasivePayloadsList,
-          {{"pervasive-payloads", pervasive_payloads_params}}},
-         {network::features::kCacheTransparency, {}},
-         {net::features::kSplitCacheByNetworkIsolationKey, {}}},
-        {/* disabled_features */});
-
-    ResourceLoaderTest::SetUp();
-  }
-
-  const ukm::TestUkmRecorder* GetUkmRecorder() {
-    return scoped_fake_ukm_recorder_.recorder();
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-  ScopedFakeUkmRecorder scoped_fake_ukm_recorder_;
-};
-
-TEST_F(ResourceLoaderCacheTransparencyTest, PervasivePayloadRequested) {
-  auto* properties = MakeGarbageCollected<TestResourceFetcherProperties>();
-  FetchContext* context = MakeGarbageCollected<MockFetchContext>();
-  auto* fetcher = MakeResourceFetcher(properties, context);
-
-  KURL url("http://127.0.0.1:4353/pervasive.js");
-  ResourceRequest request(url);
-  request.SetRequestContext(mojom::blink::RequestContextType::FETCH);
-
-  FetchParameters params = FetchParameters::CreateForTest(std::move(request));
-  Resource* resource = RawResource::Fetch(params, fetcher, nullptr);
-  ResourceLoader* loader = resource->Loader();
-
-  ResourceResponse response(url);
-  response.SetHttpStatusCode(200);
-
-  loader->DidReceiveResponse(WrappedResourceResponse(response));
-  loader->DidFinishLoading(base::TimeTicks(),
-                           /*encoded_data_length=*/0,
-                           /*encoded_body_length=*/0,
-                           /*decoded_body_length=*/0,
-                           /*should_report_corb_blocking=*/false,
-                           /*pervasive_payload_requested=*/true);
-
-  base::RunLoop().RunUntilIdle();
-
-  // Check UKM recording
-  auto entries = GetUkmRecorder()->GetEntriesByName(
-      ukm::builders::Network_CacheTransparency::kEntryName);
-  ASSERT_EQ(1u, entries.size());
-  const ukm::mojom::UkmEntry* entry = entries[0];
-  GetUkmRecorder()->ExpectEntryMetric(
-      entry,
-      ukm::builders::Network_CacheTransparency::kFoundPervasivePayloadName,
-      true);
-}
-
-TEST_F(ResourceLoaderCacheTransparencyTest, PervasivePayloadNotRequested) {
-  auto* properties = MakeGarbageCollected<TestResourceFetcherProperties>();
-  FetchContext* context = MakeGarbageCollected<MockFetchContext>();
-  auto* fetcher = MakeResourceFetcher(properties, context);
-
-  KURL url("http://127.0.0.1:4353/cacheable.js");
-  ResourceRequest request(url);
-  request.SetRequestContext(mojom::blink::RequestContextType::FETCH);
-
-  FetchParameters params = FetchParameters::CreateForTest(std::move(request));
-  Resource* resource = RawResource::Fetch(params, fetcher, nullptr);
-  ResourceLoader* loader = resource->Loader();
-
-  ResourceResponse response(url);
-  response.SetHttpStatusCode(200);
-
-  loader->DidReceiveResponse(WrappedResourceResponse(response));
-  loader->DidFinishLoading(base::TimeTicks(),
-                           /*encoded_data_length=*/0,
-                           /*encoded_body_length=*/0,
-                           /*decoded_body_length=*/0,
-                           /*should_report_corb_blocking=*/false,
-                           /*pervasive_payload_requested=*/false);
-
-  base::RunLoop().RunUntilIdle();
-
-  // Check UKM recording
-  auto entries = GetUkmRecorder()->GetEntriesByName(
-      ukm::builders::Network_CacheTransparency::kEntryName);
-  ASSERT_EQ(1u, entries.size());
-  const ukm::mojom::UkmEntry* entry = entries[0];
-  GetUkmRecorder()->ExpectEntryMetric(
-      entry,
-      ukm::builders::Network_CacheTransparency::kFoundPervasivePayloadName,
-      false);
 }
 
 }  // namespace blink

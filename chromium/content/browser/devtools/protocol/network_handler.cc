@@ -11,11 +11,11 @@
 
 #include "base/barrier_closure.h"
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/i18n/i18n_constants.h"
 #include "base/i18n/icu_string_conversions.h"
 #include "base/process/process_handle.h"
@@ -1560,8 +1560,9 @@ void NetworkHandler::SetCookie(const std::string& name,
   storage_partition_->GetCookieManagerForBrowserProcess()->SetCanonicalCookie(
       *cookie, net::cookie_util::SimulatedCookieSource(*cookie, "https"),
       options,
-      net::cookie_util::AdaptCookieAccessResultToBool(base::BindOnce(
-          &SetCookieCallback::sendSuccess, std::move(callback))));
+      base::BindOnce(net::cookie_util::IsCookieAccessResultInclude)
+          .Then(base::BindOnce(&SetCookieCallback::sendSuccess,
+                               std::move(callback))));
 }
 
 // static
@@ -2039,8 +2040,8 @@ Maybe<String> GetBlockedReasonFor(
 }
 
 String GetTrustTokenOperationType(
-    network::mojom::TrustTokenOperationType type) {
-  switch (type) {
+    network::mojom::TrustTokenOperationType operation) {
+  switch (operation) {
     case network::mojom::TrustTokenOperationType::kIssuance:
       return protocol::Network::TrustTokenOperationTypeEnum::Issuance;
     case network::mojom::TrustTokenOperationType::kRedemption:
@@ -2064,7 +2065,7 @@ std::unique_ptr<protocol::Network::TrustTokenParams> BuildTrustTokenParams(
     const network::mojom::TrustTokenParams& params) {
   auto protocol_params =
       protocol::Network::TrustTokenParams::Create()
-          .SetType(GetTrustTokenOperationType(params.type))
+          .SetOperation(GetTrustTokenOperationType(params.operation))
           .SetRefreshPolicy(GetTrustTokenRefreshPolicy(params.refresh_policy))
           .Build();
 
@@ -2158,6 +2159,7 @@ void NetworkHandler::NavigationRequestWillBeSent(
     request->SetUrlFragment(url_fragment);
 
   if (common_params.post_data) {
+    request->SetHasPostData(true);
     std::string post_data;
     auto data_entries =
         std::make_unique<protocol::Array<protocol::Network::PostDataEntry>>();
@@ -2166,7 +2168,6 @@ void NetworkHandler::NavigationRequestWillBeSent(
         request->SetPostData(post_data);
       if (data_entries->size())
         request->SetPostDataEntries(std::move(data_entries));
-      request->SetHasPostData(true);
     }
   }
   // TODO(caseq): report potentially blockable types
@@ -2944,16 +2945,27 @@ void NetworkHandler::OnResponseReceivedExtraInfo(
     const std::vector<network::mojom::HttpRawHeaderPairPtr>& response_headers,
     const absl::optional<std::string>& response_headers_text,
     network::mojom::IPAddressSpace resource_address_space,
-    int32_t http_status_code) {
+    int32_t http_status_code,
+    const absl::optional<net::CookiePartitionKey>& cookie_partition_key) {
   if (!enabled_)
     return;
+
+  Maybe<std::string> frontend_partition_key;
+  std::string serialized_key;
+  if (cookie_partition_key && net::CookiePartitionKey::Serialize(
+                                  cookie_partition_key, serialized_key)) {
+    frontend_partition_key = serialized_key;
+  }
 
   frontend_->ResponseReceivedExtraInfo(
       devtools_request_id, BuildProtocolBlockedSetCookies(response_cookie_list),
       GetRawHeaders(response_headers),
       BuildIpAddressSpace(resource_address_space), http_status_code,
       response_headers_text.has_value() ? response_headers_text.value()
-                                        : Maybe<String>());
+                                        : Maybe<String>(),
+      std::move(frontend_partition_key),
+      cookie_partition_key ? !cookie_partition_key->IsSerializeable()
+                           : Maybe<bool>());
 }
 
 void NetworkHandler::OnLoadNetworkResourceFinished(
@@ -3099,6 +3111,7 @@ void NetworkHandler::LoadNetworkResource(
         frame->BuildClientSecurityState(),
         /**coep_reporter=*/mojo::NullRemote(), frame->GetProcess(),
         network::mojom::TrustTokenRedemptionPolicy::kForbid,
+        frame->GetCookieSettingOverrides(),
         "NetworkHandler::LoadNetworkResource");
 
     auto factory = CreateNetworkFactoryForDevTools(
@@ -3198,7 +3211,7 @@ void NetworkHandler::OnTrustTokenOperationDone(
 
   frontend()->TrustTokenOperationDone(
       GetTrustTokenOperationStatus(result.status),
-      GetTrustTokenOperationType(result.type), devtools_request_id,
+      GetTrustTokenOperationType(result.operation), devtools_request_id,
       std::move(top_level_origin), std::move(issuer),
       result.issued_token_count);
 }

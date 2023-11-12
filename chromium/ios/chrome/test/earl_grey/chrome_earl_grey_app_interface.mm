@@ -22,6 +22,7 @@
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/prefs/pref_service.h"
 #import "components/search_engines/template_url_service.h"
+#import "components/sync/base/features.h"
 #import "components/sync/base/pref_names.h"
 #import "components/unified_consent/unified_consent_service.h"
 #import "components/variations/variations_associated_data.h"
@@ -68,7 +69,6 @@
 #import "ios/web/public/js_messaging/web_frame.h"
 #import "ios/web/public/js_messaging/web_frame_util.h"
 #import "ios/web/public/navigation/navigation_manager.h"
-#import "ios/web/public/test/earl_grey/js_test_util.h"
 #import "ios/web/public/test/element_selector.h"
 #import "ios/web/public/test/url_test_util.h"
 #import "ios/web/public/test/web_view_content_test_util.h"
@@ -192,16 +192,6 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (void)startLoadingURL:(NSString*)spec {
   chrome_test_util::LoadUrl(GURL(base::SysNSStringToUTF8(spec)));
-}
-
-+ (BOOL)waitForWindowIDInjectionIfNeeded {
-  web::WebState* webState = chrome_test_util::GetCurrentWebState();
-
-  if (webState->ContentIsHTML()) {
-    return web::WaitUntilWindowIdInjected(webState);
-  }
-
-  return YES;
 }
 
 + (bool)isLoading {
@@ -505,17 +495,6 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (BOOL)isLoadingInWindowWithNumber:(int)windowNumber {
   return chrome_test_util::IsLoadingInWindowWithNumber(windowNumber);
-}
-
-+ (BOOL)waitForWindowIDInjectionIfNeededInWindowWithNumber:(int)windowNumber {
-  web::WebState* webState =
-      chrome_test_util::GetCurrentWebStateForWindowWithNumber(windowNumber);
-
-  if (webState->ContentIsHTML()) {
-    return web::WaitUntilWindowIdInjected(webState);
-  }
-
-  return YES;
 }
 
 + (BOOL)webStateContainsText:(NSString*)text
@@ -907,6 +886,24 @@ NSString* SerializedValue(const base::Value* value) {
   return nil;
 }
 
++ (NSError*)waitForSyncTransportStateActiveWithTimeout:
+    (base::TimeDelta)timeout {
+  bool success = WaitUntilConditionOrTimeout(timeout, ^{
+    ChromeBrowserState* browser_state =
+        chrome_test_util::GetOriginalBrowserState();
+    DCHECK(browser_state);
+    syncer::SyncService* syncService =
+        SyncServiceFactory::GetForBrowserState(browser_state);
+    return syncService->GetTransportState() ==
+           syncer::SyncService::TransportState::ACTIVE;
+  });
+  if (!success) {
+    NSString* errorDescription = @"Sync feature must be active";
+    return testing::NSErrorWithLocalizedDescription(errorDescription);
+  }
+  return nil;
+}
+
 + (NSString*)syncCacheGUID {
   return base::SysUTF8ToNSString(chrome_test_util::GetSyncCacheGuid());
 }
@@ -970,6 +967,23 @@ NSString* SerializedValue(const base::Value* value) {
   return error;
 }
 
++ (NSError*)verifyHistoryOnSyncServerWithURLs:(NSArray<NSURL*>*)URLs {
+  std::multiset<GURL> multisetUrls;
+  for (NSURL* url in URLs) {
+    multisetUrls.insert(net::GURLWithNSURL(url));
+  }
+
+  NSError* __autoreleasing tempError = nil;
+  bool success =
+      chrome_test_util::VerifyHistoryOnSyncServer(multisetUrls, &tempError);
+  NSError* error = tempError;
+  if (!success && !error) {
+    error = testing::NSErrorWithLocalizedDescription(
+        @"Error occurred during verifying history URLs.");
+  }
+  return error;
+}
+
 + (void)addBookmarkWithSyncPassphrase:(NSString*)syncPassphrase {
   chrome_test_util::AddBookmarkWithSyncPassphrase(
       base::SysNSStringToUTF8(syncPassphrase));
@@ -1023,7 +1037,7 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (NSError*)verifyAccessibilityForCurrentScreen {
   NSError* error = nil;
-  bool success = chrome_test_util::VerifyAccessibilityForCurrentScreen(error);
+  BOOL success = chrome_test_util::VerifyAccessibilityForCurrentScreen(&error);
   if (!success || error) {
     NSString* errorDescription = [NSString
         stringWithFormat:@"Accessibility checks failed! Error: %@", error];
@@ -1069,6 +1083,10 @@ NSString* SerializedValue(const base::Value* value) {
   return base::FeatureList::IsEnabled(metrics::kDemographicMetricsReporting);
 }
 
++ (BOOL)isSyncHistoryDataTypeEnabled {
+  return base::FeatureList::IsEnabled(syncer::kSyncEnableHistoryDataType);
+}
+
 + (BOOL)appHasLaunchSwitch:(NSString*)launchSwitch {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       base::SysNSStringToUTF8(launchSwitch));
@@ -1096,14 +1114,6 @@ NSString* SerializedValue(const base::Value* value) {
 
 + (BOOL)isNewOverflowMenuEnabled {
   return IsNewOverflowMenuEnabled();
-}
-
-+ (BOOL)isNewOmniboxPopupEnabled {
-  return base::FeatureList::IsEnabled(kIOSOmniboxUpdatedPopupUI);
-}
-
-+ (BOOL)isExperimentalOmniboxEnabled {
-  return base::FeatureList::IsEnabled(kIOSNewOmniboxImplementation);
 }
 
 + (BOOL)isUseLensToSearchForImageEnabled {

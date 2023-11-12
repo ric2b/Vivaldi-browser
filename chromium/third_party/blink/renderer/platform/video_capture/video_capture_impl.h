@@ -8,8 +8,8 @@
 #include <stdint.h>
 #include <map>
 
-#include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/unsafe_shared_memory_pool.h"
 #include "base/memory/weak_ptr.h"
@@ -24,6 +24,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/media/video_capture.h"
+#include "third_party/blink/renderer/platform/allow_discouraged_type.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 
 namespace base {
@@ -176,12 +177,16 @@ class PLATFORM_EXPORT VideoCaptureImpl
     scoped_refptr<BufferContext> buffer_context_;
     scoped_refptr<media::VideoFrame> frame_;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
+#if BUILDFLAG(IS_CHROMEOS)
+    bool is_webgpu_compatible_ = false;
+#endif
   };
 
   // Contains information about a video capture client, including capture
   // parameters callbacks to the client.
   struct ClientInfo;
-  using ClientInfoMap = std::map<int, ClientInfo>;
+  using ClientInfoMap ALLOW_DISCOURAGED_TYPE("TODO(crbug.com/1404327)") =
+      std::map<int, ClientInfo>;
 
   using BufferFinishedCallback = base::OnceClosure;
 
@@ -266,7 +271,8 @@ class PLATFORM_EXPORT VideoCaptureImpl
       this};
 
   // Buffers available for sending to the client.
-  using ClientBufferMap = std::map<int32_t, scoped_refptr<BufferContext>>;
+  using ClientBufferMap ALLOW_DISCOURAGED_TYPE("TODO(crbug.com/1404327)") =
+      std::map<int32_t, scoped_refptr<BufferContext>>;
   ClientBufferMap client_buffers_;
 
   ClientInfoMap clients_;

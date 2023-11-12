@@ -30,7 +30,6 @@ constexpr char kUserActionSetDemoModeCountry[] = "set-demo-mode-country";
 std::string DemoPreferencesScreen::GetResultString(Result result) {
   switch (result) {
     case Result::COMPLETED:
-    case Result::COMPLETED_CONSOLIDATED_CONSENT:
       return "Completed";
     case Result::CANCELED:
       return "Canceled";
@@ -47,13 +46,6 @@ DemoPreferencesScreen::DemoPreferencesScreen(
 
 DemoPreferencesScreen::~DemoPreferencesScreen() = default;
 
-void DemoPreferencesScreen::SetDemoModeRetailerAndStoreIdInput(
-    const std::string& retailer_store_id_input) {
-  WizardController::default_controller()
-      ->demo_setup_controller()
-      ->set_retailer_store_id_input(retailer_store_id_input);
-}
-
 void DemoPreferencesScreen::ShowImpl() {
   if (view_)
     view_->Show();
@@ -64,19 +56,23 @@ void DemoPreferencesScreen::HideImpl() {}
 void DemoPreferencesScreen::OnUserAction(const base::Value::List& args) {
   const std::string& action_id = args[0].GetString();
   if (action_id == kUserActionContinue) {
-    CHECK_EQ(args.size(), 2u);
+    CHECK_EQ(args.size(), 3u);
     std::string country(
         g_browser_process->local_state()->GetString(prefs::kDemoModeCountry));
     if (country == DemoSession::kCountryNotSelectedId) {
       return;
     }
-    // Set retailer store input string regardless of pattern, let server decide
-    // what action take when it is invalid.
-    const std::string& retailer_store_id_input = args[1].GetString();
-    SetDemoModeRetailerAndStoreIdInput(retailer_store_id_input);
-    exit_callback_.Run(features::IsOobeConsolidatedConsentEnabled()
-                           ? Result::COMPLETED_CONSOLIDATED_CONSENT
-                           : Result::COMPLETED);
+
+    // Pass retailer_name and store_input to DemoSetupController to set as prefs
+    // once user has proceeded through setup
+    const std::string& retailer_name_input = args[1].GetString();
+    const std::string& store_number_input = args[2].GetString();
+    DemoSetupController* demo_setup_controller =
+        WizardController::default_controller()->demo_setup_controller();
+    demo_setup_controller->set_retailer_name(retailer_name_input);
+    demo_setup_controller->set_store_number(store_number_input);
+
+    exit_callback_.Run(Result::COMPLETED);
   } else if (action_id == kUserActionClose) {
     exit_callback_.Run(Result::CANCELED);
   } else if (action_id == kUserActionSetDemoModeCountry) {

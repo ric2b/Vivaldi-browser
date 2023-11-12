@@ -7,8 +7,8 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
 #include "base/debug/leak_annotations.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/single_thread_task_runner.h"
@@ -378,6 +378,36 @@ TEST(WeakPtrFactoryTest, ComparisonToNull) {
   WeakPtr<int> null_ptr;
   EXPECT_EQ(null_ptr, nullptr);
   EXPECT_EQ(nullptr, null_ptr);
+}
+
+struct ReallyBaseClass {};
+struct BaseClass : ReallyBaseClass {
+  virtual ~BaseClass() = default;
+  void VirtualMethod() {}
+};
+struct OtherBaseClass {
+  virtual ~OtherBaseClass() = default;
+  virtual void VirtualMethod() {}
+};
+struct WithWeak final : BaseClass, OtherBaseClass {
+  WeakPtrFactory<WithWeak> factory{this};
+};
+
+TEST(WeakPtrTest, ConversionOffsetsPointer) {
+  WithWeak with;
+  WeakPtr<WithWeak> ptr(with.factory.GetWeakPtr());
+  {
+    // Copy construction.
+    WeakPtr<OtherBaseClass> base_ptr(ptr);
+    EXPECT_EQ(static_cast<WithWeak*>(&*base_ptr), &with);
+  }
+  {
+    // Move construction.
+    WeakPtr<OtherBaseClass> base_ptr(std::move(ptr));
+    EXPECT_EQ(static_cast<WithWeak*>(&*base_ptr), &with);
+  }
+
+  // WeakPtr doesn't have conversion operators for assignment.
 }
 
 TEST(WeakPtrTest, InvalidateWeakPtrs) {

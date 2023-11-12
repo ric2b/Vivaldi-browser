@@ -25,6 +25,7 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefChangeRegistrar;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
+import org.chromium.chrome.browser.settings.ProfileDependentSetting;
 import org.chromium.chrome.browser.translate.TranslateBridge;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.FragmentSettingsLauncher;
@@ -42,7 +43,8 @@ import org.vivaldi.browser.common.VivaldiRelaunchUtils;
  * seamlessly find and manage their languages preferences across platforms.
  */
 public class LanguageSettings extends PreferenceFragmentCompat
-        implements SelectLanguageFragment.Launcher, FragmentSettingsLauncher {
+        implements SelectLanguageFragment.Launcher, FragmentSettingsLauncher,
+                   ProfileDependentSetting {
     // Return codes from launching Intents on preferences.
     private static final int REQUEST_CODE_ADD_ACCEPT_LANGUAGE = 1;
     private static final int REQUEST_CODE_CHANGE_APP_LANGUAGE = 2;
@@ -67,6 +69,7 @@ public class LanguageSettings extends PreferenceFragmentCompat
     private AppLanguagePreferenceDelegate mAppLanguageDelegate =
             new AppLanguagePreferenceDelegate();
     private PrefChangeRegistrar mPrefChangeRegistrar;
+    private Profile mProfile;
 
     // Vivaldi
     static boolean isRestartRequired;
@@ -89,6 +92,11 @@ public class LanguageSettings extends PreferenceFragmentCompat
         }
 
         LanguagesManager.recordImpression(LanguagesManager.LanguageSettingsPageType.PAGE_MAIN);
+    }
+
+    @Override
+    public void setProfile(Profile profile) {
+        mProfile = profile;
     }
 
     /**
@@ -394,7 +402,7 @@ public class LanguageSettings extends PreferenceFragmentCompat
     }
 
     @VisibleForTesting
-    static PrefService getPrefService() {
-        return UserPrefs.get(Profile.getLastUsedRegularProfile());
+    PrefService getPrefService() {
+        return UserPrefs.get(mProfile);
     }
 }

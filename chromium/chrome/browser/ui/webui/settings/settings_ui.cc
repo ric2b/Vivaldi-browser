@@ -22,6 +22,7 @@
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/signin_features.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/hats/hats_service_factory.h"
@@ -88,6 +89,7 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "crypto/crypto_buildflags.h"
 #include "printing/buildflags/buildflags.h"
+#include "services/network/public/cpp/features.h"
 #include "ui/base/interaction/element_identifier.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -181,7 +183,9 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                         "Settings.LoadCompletedTime.MD") {
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource* html_source =
-      content::WebUIDataSource::Create(chrome::kChromeUISettingsHost);
+      content::WebUIDataSource::CreateAndAdd(
+          web_ui->GetWebContents()->GetBrowserContext(),
+          chrome::kChromeUISettingsHost);
   html_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::WorkerSrc,
       "worker-src blob: chrome://resources 'self';");
@@ -279,9 +283,17 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                                                profile->GetPrefs()->GetBoolean(
                                                    prefs::kSigninAllowed));
 
+  html_source->AddBoolean(
+      "turnOffSyncAllowedForManagedProfiles",
+      base::FeatureList::IsEnabled(kDisallowManagedProfileSignout));
+
   html_source->AddBoolean("showImportPasswords",
                           base::FeatureList::IsEnabled(
                               password_manager::features::kPasswordImport));
+
+  html_source->AddBoolean("enablePasswordsImportM2",
+                          base::FeatureList::IsEnabled(
+                              password_manager::features::kPasswordsImportM2));
 
   html_source->AddBoolean(
       "enablePasswordViewPage",
@@ -298,10 +310,18 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       base::FeatureList::IsEnabled(password_manager::features::kSendPasswords));
 
   html_source->AddBoolean(
-      "changePriceEmailNotificationsEnabled",
-      base::FeatureList::IsEnabled(commerce::kShoppingList));
-  commerce::ShoppingServiceFactory::GetForBrowserContext(profile)
-      ->FetchPriceEmailPref();
+      "enableNewPasswordManagerPage",
+      base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordManagerRedesign));
+
+  commerce::ShoppingService* shopping_service =
+      commerce::ShoppingServiceFactory::GetForBrowserContext(profile);
+  html_source->AddBoolean("changePriceEmailNotificationsEnabled",
+                          shopping_service->IsShoppingListEligible());
+  if (shopping_service->IsShoppingListEligible()) {
+    commerce::ShoppingServiceFactory::GetForBrowserContext(profile)
+        ->FetchPriceEmailPref();
+  }
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   html_source->AddBoolean(
@@ -339,13 +359,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       !chrome::ShouldDisplayManagedUi(profile) && !profile->IsChild();
   html_source->AddBoolean("showPrivacyGuide", show_privacy_guide);
 
-  html_source->AddBoolean("privacyGuide2Enabled",
-                          show_privacy_guide && base::FeatureList::IsEnabled(
-                                                    features::kPrivacyGuide2));
-
   html_source->AddBoolean("esbSettingsImprovementsEnabled",
                           base::FeatureList::IsEnabled(
                               safe_browsing::kEsbIphBubbleAndCollapseSettings));
+
+  html_source->AddBoolean(
+      "enableEsbCollapse",
+      safe_browsing::kEsbIphBubbleAndCollapseSettingsEnableCollapse.Get());
 
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   html_source->AddBoolean(
@@ -422,9 +442,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 
   ManagedUIHandler::Initialize(web_ui, html_source);
 
-  content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
-                                html_source);
-
   content::URLDataSource::Add(
       profile, std::make_unique<FaviconSource>(
                    profile, chrome::FaviconUrlFormat::kFavicon2));
@@ -443,6 +460,10 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
     html_source->AddResourcePath(
         "privacySandbox", IDR_SETTINGS_PRIVACY_SANDBOX_PRIVACY_SANDBOX_HTML);
   }
+
+  html_source->AddBoolean(
+      "privateStateTokensEnabled",
+      base::FeatureList::IsEnabled(network::features::kPrivateStateTokens));
 
   html_source->AddBoolean("safetyCheckNotificationPermissionsEnabled",
                           base::FeatureList::IsEnabled(
@@ -571,7 +592,7 @@ void SettingsUI::CreateHelpBubbleHandler(
     mojo::PendingRemote<help_bubble::mojom::HelpBubbleClient> client,
     mojo::PendingReceiver<help_bubble::mojom::HelpBubbleHandler> handler) {
   help_bubble_handler_ = std::make_unique<user_education::HelpBubbleHandler>(
-      std::move(handler), std::move(client), web_ui()->GetWebContents(),
+      std::move(handler), std::move(client), this,
       std::vector<ui::ElementIdentifier>{kEnhancedProtectionSettingElementId});
 }
 

@@ -4,7 +4,7 @@
 
 #include "components/mirroring/service/rtp_stream.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
@@ -44,6 +44,11 @@ void VideoRtpStream::InsertVideoFrame(
   if (!video_frame->metadata().reference_time) {
     client_->OnError("Missing REFERENCE_TIME.");
     return;
+  }
+
+  // If the refresh timer isn't running when we receive a frame, restart it.
+  if (refresh_interval_.is_positive() && !refresh_timer_.IsRunning()) {
+    refresh_timer_.Reset();
   }
 
   base::TimeTicks reference_time = *video_frame->metadata().reference_time;
@@ -86,6 +91,13 @@ base::TimeDelta VideoRtpStream::GetTargetPlayoutDelay() const {
 }
 
 void VideoRtpStream::OnRefreshTimerFired() {
+  if (expecting_a_refresh_frame_) {
+    // This means we requested a refresh frame, but never received it. This may
+    // happen if the capturer is in a paused state. So, we should stop the
+    // timer. The timer will restart the next time Reset() is called.
+    refresh_timer_.Stop();
+    return;
+  }
   DVLOG(1) << "VideoRtpStream is requesting another refresh frame.";
   expecting_a_refresh_frame_ = true;
   client_->RequestRefreshFrame();

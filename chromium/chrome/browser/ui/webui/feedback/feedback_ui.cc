@@ -30,6 +30,7 @@ void AddStringResources(content::WebUIDataSource* source,
       {"attachFileLabel", IDS_FEEDBACK_ATTACH_FILE_LABEL},
       {"attachFileNote", IDS_FEEDBACK_ATTACH_FILE_NOTE},
       {"attachFileToBig", IDS_FEEDBACK_ATTACH_FILE_TO_BIG},
+      {"autofillMetadataInfo", IDS_FEEDBACK_INCLUDE_AUTOFILL_METADATA_CHECKBOX},
       {"bluetoothLogsInfo", IDS_FEEDBACK_BLUETOOTH_LOGS_CHECKBOX},
       {"bluetoothLogsMessage", IDS_FEEDBACK_BLUETOOTH_LOGS_MESSAGE},
       {"cancel", IDS_CANCEL},
@@ -68,9 +69,9 @@ void AddStringResources(content::WebUIDataSource* source,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-content::WebUIDataSource* CreateFeedbackHTMLSource(const Profile* profile) {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(chrome::kChromeUIFeedbackHost);
+void CreateAndAddFeedbackHTMLSource(Profile* profile) {
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      profile, chrome::kChromeUIFeedbackHost);
   source->AddResourcePaths(
       base::make_span(kFeedbackResources, kFeedbackResourcesSize));
   source->AddResourcePath("", IDR_FEEDBACK_HTML_DEFAULT_HTML);
@@ -82,13 +83,10 @@ content::WebUIDataSource* CreateFeedbackHTMLSource(const Profile* profile) {
   source->UseStringsJs();
 
   AddStringResources(source, profile);
-
-  return source;
 }
 
 FeedbackUI::FeedbackUI(content::WebUI* web_ui) : WebDialogUI(web_ui) {
-  Profile* profile = Profile::FromWebUI(web_ui);
-  content::WebUIDataSource::Add(profile, CreateFeedbackHTMLSource(profile));
+  CreateAndAddFeedbackHTMLSource(Profile::FromWebUI(web_ui));
 }
 
 FeedbackUI::~FeedbackUI() = default;

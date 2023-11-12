@@ -12,11 +12,6 @@ if (is_win || is_mac) {
   import("//vivaldi/installer/widevine.gni")
 }
 
-_pgo_suffix = ""
-if (chrome_pgo_phase > 0) {
-  _pgo_suffix = ".pgo"
-}
-
 if (!is_android && !is_mac && !is_ios) {
   update_target("//chrome:chrome_initial") {
     if (is_win) {
@@ -121,7 +116,7 @@ if (is_win) {
   }
 
   update_target("//chrome/installer/mini_installer:mini_installer") {
-    output_name = "Vivaldi.${vivaldi_version_full}${_platform_suffix}${_pgo_suffix}"
+    output_name = "Vivaldi.${vivaldi_version_full}${_platform_suffix}"
   }
 
   update_template_instance("//chrome:chrome_dll_version") {
@@ -149,7 +144,6 @@ if (is_win) {
 if (is_android) {
   update_template_instance("//chrome/android:chrome_public_apk") {
     apk_name = "Vivaldi.${vivaldi_version_full}"
-    enable_lint = true
     lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
     lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"
     lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"
@@ -158,7 +152,9 @@ if (is_android) {
 
   update_template_instance("//chrome/android:chrome_modern_public_bundle") {
     bundle_name = "Vivaldi.${vivaldi_version_full}"
-    enable_lint = true
+    if (!is_vivaldi_lynkco) {
+      enable_lint = true
+    }
     lint_baseline_file = "//chrome/android/expectations/lint-baseline.xml"
     lint_suppressions_file = "$root_gen_dir/vivaldi/android/merged_suppression.xml"
     lint_suppressions_dep = "//vivaldi/android:generate_merged_lint_suppression_file"

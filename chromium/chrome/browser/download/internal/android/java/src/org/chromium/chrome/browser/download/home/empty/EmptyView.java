@@ -33,9 +33,15 @@ class EmptyView {
         mEmptyContainer = mView.findViewById(R.id.empty_container);
         mEmptyView = (TextView) mView.findViewById(R.id.empty);
         mLoadingView = (LoadingView) mView.findViewById(R.id.loading);
-        if (BuildConfig.IS_VIVALDI)
+        if (BuildConfig.IS_VIVALDI) {
             mEmptyContainer.setBackgroundColor(
                     mEmptyView.getResources().getColor(R.color.vivaldi_transparent));
+            mEmptyView.setCompoundDrawablesWithIntrinsicBounds(null,
+                    mEmptyView.getResources().getDrawable(
+                            R.drawable.downloads_empty_state,
+                            context.getTheme()),
+                    null, null);
+        }
     }
 
     /** The Android {@link View} representing the empty view. */

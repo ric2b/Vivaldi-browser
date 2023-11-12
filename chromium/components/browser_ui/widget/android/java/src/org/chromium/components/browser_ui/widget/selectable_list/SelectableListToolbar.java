@@ -37,6 +37,8 @@ import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.ViewCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.NumberRollView;
 import org.chromium.components.browser_ui.widget.R;
@@ -104,7 +106,8 @@ public class SelectableListToolbar<E>
     protected boolean mIsSelectionEnabled;
     protected SelectionDelegate<E> mSelectionDelegate;
 
-    private boolean mIsSearching;
+    private final ObservableSupplierImpl<Boolean> mIsSearchingSupplier =
+            new ObservableSupplierImpl<>();
     private boolean mHasSearchView;
     private LinearLayout mSearchView;
     private EditText mSearchEditText;
@@ -150,6 +153,7 @@ public class SelectableListToolbar<E>
      */
     public SelectableListToolbar(Context context, AttributeSet attrs) {
         super(context, attrs);
+        mIsSearchingSupplier.set(false);
     }
 
     /**
@@ -254,7 +258,7 @@ public class SelectableListToolbar<E>
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 mClearTextButton.setVisibility(
                         TextUtils.isEmpty(s) ? View.INVISIBLE : View.VISIBLE);
-                if (mIsSearching) mSearchDelegate.onSearchTextChanged(s.toString());
+                if (isSearching()) mSearchDelegate.onSearchTextChanged(s.toString());
             }
 
             @Override
@@ -292,7 +296,7 @@ public class SelectableListToolbar<E>
 
         if (mIsSelectionEnabled) {
             showSelectionView(selectedItems, wasSelectionEnabled);
-        } else if (mIsSearching) {
+        } else if (isSearching()) {
             showSearchViewInternal();
         } else {
             showNormalView();
@@ -331,7 +335,7 @@ public class SelectableListToolbar<E>
      * valid toolbar action when not searching.
      */
     public void onNavigationBack() {
-        if (!mHasSearchView || !mIsSearching) return;
+        if (!mHasSearchView || !isSearching()) return;
 
         hideSearchView();
     }
@@ -390,7 +394,7 @@ public class SelectableListToolbar<E>
     public void showSearchView(boolean showKeyboard) {
         assert mHasSearchView;
 
-        mIsSearching = true;
+        mIsSearchingSupplier.set(true);
         mSelectionDelegate.clearSelection();
 
         showSearchViewInternal();
@@ -409,9 +413,9 @@ public class SelectableListToolbar<E>
     public void hideSearchView() {
         assert mHasSearchView;
 
-        if (!mIsSearching) return;
+        if (!isSearching()) return;
 
-        mIsSearching = false;
+        mIsSearchingSupplier.set(false);
         mSearchEditText.setText("");
         hideKeyboard();
         showNormalView();
@@ -451,7 +455,7 @@ public class SelectableListToolbar<E>
         if (mSelectionDelegate != null) mSelectionDelegate.clearSelection();
         }
 
-        if (mIsSearching) hideSearchView();
+        if (isSearching()) hideSearchView();
     }
 
     /**
@@ -475,11 +479,11 @@ public class SelectableListToolbar<E>
         int padding =
                 SelectableListLayout.getPaddingForDisplayStyle(newDisplayStyle, getResources());
         int paddingStartOffset = 0;
-        boolean isSearchViewShowing = mIsSearching && !mIsSelectionEnabled;
+        boolean isSearchViewShowing = isSearching() && !mIsSelectionEnabled;
         MarginLayoutParams params = (MarginLayoutParams) getLayoutParams();
 
         if (newDisplayStyle.horizontal == HorizontalDisplayStyle.WIDE
-                && !(mIsSearching || mIsSelectionEnabled
+                && !(isSearching() || mIsSelectionEnabled
                         || mNavigationButton != NAVIGATION_BUTTON_NONE)) {
             // The title in the wide display should be aligned with the texts of the list elements.
             paddingStartOffset = mWideDisplayStartOffsetPx;
@@ -515,7 +519,12 @@ public class SelectableListToolbar<E>
      *         dues to a selection.
      */
     public boolean isSearching() {
-        return mIsSearching;
+        assert mIsSearchingSupplier.get() != null : "Supplier is not correctly initialized.";
+        return mIsSearchingSupplier.get();
+    }
+
+    public ObservableSupplier<Boolean> isSearchingSupplier() {
+        return mIsSearchingSupplier;
     }
 
     SelectionDelegate<E> getSelectionDelegate() {
@@ -558,7 +567,7 @@ public class SelectableListToolbar<E>
 
         switchToNumberRollView(selectedItems, wasSelectionEnabled);
 
-        if (mIsSearching) hideKeyboard();
+        if (isSearching()) hideKeyboard();
 
         updateDisplayStyleIfNecessary();
     }
@@ -583,7 +592,7 @@ public class SelectableListToolbar<E>
         if (!mHasSearchView) return;
         MenuItem searchMenuItem = getMenu().findItem(mSearchMenuItemId);
         if (searchMenuItem != null) {
-            searchMenuItem.setVisible(mSearchEnabled && !mIsSelectionEnabled && !mIsSearching);
+            searchMenuItem.setVisible(mSearchEnabled && !mIsSelectionEnabled && !isSearching());
         }
     }
 

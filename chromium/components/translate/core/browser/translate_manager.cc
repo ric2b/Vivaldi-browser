@@ -9,8 +9,9 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/debug/dump_without_crashing.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram.h"
@@ -169,9 +170,9 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
   const TranslateTriggerDecision& decision = ComputePossibleOutcomes(
       translate_prefs.get(), page_language_code, target_lang);
 
-  MaybeShowOmniboxIcon(decision);
   bool ui_shown = MaterializeDecision(decision, translate_prefs.get(),
                                       page_language_code, target_lang);
+  MaybeShowOmniboxIcon(decision);
 
   NotifyTranslateInit(page_language_code, target_lang, decision, ui_shown);
 
@@ -340,8 +341,12 @@ void TranslateManager::TranslatePage(const std::string& original_source_lang,
                                      const std::string& target_lang,
                                      bool triggered_from_menu,
                                      TranslationType translation_type) {
-  if (!translate_driver_->HasCurrentPage()) {
-    NOTREACHED();
+  const GURL& page_url = translate_driver_->GetVisibleURL();
+  // TODO(crbug.com/1407479): This call should be changed to
+  // CHECK(translate_client_->IsTranslatableURL(page_url)) once it is verified
+  // that it is not reachable.
+  if (!translate_client_->IsTranslatableURL(page_url)) {
+    base::debug::DumpWithoutCrashing();
     return;
   }
 
@@ -1118,6 +1123,8 @@ void TranslateManager::MaybeShowOmniboxIcon(
     language_state_.SetTranslateEnabled(true);
     TranslateBrowserMetrics::ReportInitiationStatus(
         TranslateBrowserMetrics::INITIATION_STATUS_SHOW_ICON);
+    GetActiveTranslateMetricsLogger()->LogTriggerDecision(
+        TriggerDecision::kShowIcon);
   }
 }
 

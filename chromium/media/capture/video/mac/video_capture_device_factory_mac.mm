@@ -10,7 +10,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -97,8 +97,6 @@ media::VideoCaptureFormats GetDeviceSupportedFormats(
 // uniqueId. At the moment these are just Blackmagic devices.
 const char* kBlockedCamerasIdSignature[] = {"-01FDA82C8A9C"};
 
-int32_t get_device_descriptors_retry_count = 0;
-
 }  // anonymous namespace
 
 namespace media {
@@ -122,16 +120,6 @@ VideoCaptureDeviceFactoryMac::VideoCaptureDeviceFactoryMac() {
 }
 
 VideoCaptureDeviceFactoryMac::~VideoCaptureDeviceFactoryMac() {
-}
-
-// static
-void VideoCaptureDeviceFactoryMac::SetGetDevicesInfoRetryCount(int count) {
-  get_device_descriptors_retry_count = count;
-}
-
-// static
-int VideoCaptureDeviceFactoryMac::GetGetDevicesInfoRetryCount() {
-  return get_device_descriptors_retry_count;
 }
 
 VideoCaptureErrorOrDevice VideoCaptureDeviceFactoryMac::CreateDevice(

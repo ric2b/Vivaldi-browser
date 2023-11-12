@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/unguessable_token.h"
 #include "content/common/content_export.h"
 #include "net/http/http_response_headers.h"
@@ -58,7 +58,8 @@ class CONTENT_EXPORT AuctionDownloader {
  private:
   void OnBodyReceived(std::unique_ptr<std::string> body);
 
-  void OnRedirect(const net::RedirectInfo& redirect_info,
+  void OnRedirect(const GURL& url_before_redirect,
+                  const net::RedirectInfo& redirect_info,
                   const network::mojom::URLResponseHead& response_head,
                   std::vector<std::string>* removed_headers);
   void OnResponseStarted(const GURL& final_url,

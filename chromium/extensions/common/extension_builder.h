@@ -92,6 +92,11 @@ class ExtensionBuilder {
   ExtensionBuilder& AddPermission(const std::string& permission);
   ExtensionBuilder& AddPermissions(const std::vector<std::string>& permissions);
 
+  // Add one or more optional permissions to the extension.
+  ExtensionBuilder& AddOptionalPermission(const std::string& permission);
+  ExtensionBuilder& AddOptionalPermissions(
+      const std::vector<std::string>& permissions);
+
   // Sets an action type for the extension to have. By default, no action will
   // be set (though note that we synthesize a page action for most extensions).
   ExtensionBuilder& SetAction(ActionInfo::Type type);
@@ -154,10 +159,6 @@ class ExtensionBuilder {
   // Utility methods for use with custom manifest construction.
 
   // Assigns the extension's manifest to |manifest|.
-  ExtensionBuilder& SetManifest(
-      std::unique_ptr<base::DictionaryValue> manifest);
-
-  // Assigns the extension's manifest to |manifest|.
   ExtensionBuilder& SetManifest(base::Value::Dict manifest);
 
   //////////////////////////////////////////////////////////////////////////////
@@ -173,8 +174,6 @@ class ExtensionBuilder {
   // Merge another manifest into the current manifest, with new keys taking
   // precedence.
   ExtensionBuilder& MergeManifest(base::Value::Dict manifest);
-  ExtensionBuilder& MergeManifest(
-      std::unique_ptr<base::DictionaryValue> manifest);
 
   // Add flags to the extension. Default is no flags.
   ExtensionBuilder& AddFlags(int init_from_value_flags);

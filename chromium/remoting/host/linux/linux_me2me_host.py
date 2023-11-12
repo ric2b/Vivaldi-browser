@@ -30,6 +30,7 @@ import psutil
 import pwd
 import re
 import shlex
+import shutil
 import signal
 import socket
 import struct
@@ -157,6 +158,12 @@ COMMAND_NOT_EXECUTABLE_EXIT_CODE = 126
 # User runtime directory. This is where the wayland socket is created by the
 # wayland compositor/server for clients to connect to.
 RUNTIME_DIR_TEMPLATE = "/run/user/%s"
+
+# Binary name for `gnome-session`.
+GNOME_SESSION = "gnome-session"
+
+# Binary name for `gnome-session-quit`.
+GNOME_SESSION_QUIT = "gnome-session-quit"
 
 # Globals needed by the atexit cleanup() handler.
 g_desktop = None
@@ -761,7 +768,7 @@ class WaylandDesktop(Desktop):
   """Manage a single virtual wayland based desktop"""
 
   WL_SOCKET_CHECK_DELAY_SECONDS = 1
-  WL_SOCKET_CHECK_TIMEOUT_SECONDS = 30
+  WL_SOCKET_CHECK_TIMEOUT_SECONDS = 5
   WL_SERVER_REPLY_TIMEOUT_SECONDS = 1
   # We scan for the unused socket starting from number 1. If we are not able to
   # find anything between 1 and 100 then we error out since there could be a
@@ -813,7 +820,7 @@ class WaylandDesktop(Desktop):
       self.child_env["G_MESSAGES_DEBUG"] = "all"
       self.child_env["GDK_DEBUG"]  = "all"
       self.child_env["G_DEBUG"] = "fatal-criticals"
-      self.child_env["WAYLAND_DEBUG"] = 1
+      self.child_env["WAYLAND_DEBUG"] = "1"
 
   def _get_unused_wayland_socket(self):
     """
@@ -835,25 +842,14 @@ class WaylandDesktop(Desktop):
     return "wayland-%s" % socket_num
 
   @staticmethod
-  def _is_gnome_shell_present():
-    try:
-      subprocess.check_output(["gnome-shell", "--help"],
-                              stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as err:
-      logging.warning("Unable to find 'gnome-shell' on the host, "
-                      "returncode: %s, output: %s" % (err.returncode,
-                                                      err.output))
+  def _is_gnome_session_present():
+    if not shutil.which(GNOME_SESSION):
+      logging.warning("Unable to find '%s' on the host" % GNOME_SESSION)
       return False
     return True
 
-  def _gnome_shell_cmd(self):
-    gnome_shell_cmd = [
-      "gnome-shell", "--wayland", "--headless", "--wayland-display",
-      self._wayland_socket, "--replace"]
-    return gnome_shell_cmd
-
   def _launch_server(self, *args, **kwargs):
-    if not self._is_gnome_shell_present():
+    if not self._is_gnome_session_present():
       logging.error("Only GNOME based wayland hosts are supported currently. "
                     "If the host is a GNOME host, please ensure that "
                     "'gnome-shell' is installed on it")
@@ -863,10 +859,10 @@ class WaylandDesktop(Desktop):
     logging.info("Launching wayland server.")
     if self.ssh_auth_sockname:
       self.child_env["SSH_AUTH_SOCK"] = self.ssh_auth_sockname
-    self.server_proc = subprocess.Popen(self._gnome_shell_cmd(),
-                                         stdout=subprocess.PIPE,
-                                         stderr=subprocess.STDOUT,
-                                         env=self.child_env)
+    self.server_proc = subprocess.Popen([GNOME_SESSION],
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.STDOUT,
+                                        env=self.child_env)
 
     if not self.server_proc.pid:
       raise Exception("Could not start wayland session")
@@ -882,11 +878,15 @@ class WaylandDesktop(Desktop):
     """
     full_socket_path = os.path.join(self.runtime_dir, self._wayland_socket)
     start_time = time.time()
-    while not (os.path.exists(full_socket_path) and
-               time.time() - start_time < self.WL_SOCKET_CHECK_TIMEOUT_SECONDS):
+    while not os.path.exists(full_socket_path):
+      time_passed = time.time() - start_time
+      if time_passed >= self.WL_SOCKET_CHECK_TIMEOUT_SECONDS:
+        break
       logging.info("Wayland socket not yet present. Will wait for %s seconds "
-                   "for compositor to create it" %
-                   self.WL_SOCKET_CHECK_DELAY_SECONDS)
+                   "for compositor to create it (remaining wait time: %s "
+                   "seconds)" %
+                   (self.WL_SOCKET_CHECK_DELAY_SECONDS,
+                    int(self.WL_SOCKET_CHECK_TIMEOUT_SECONDS - time_passed)))
       time.sleep(self.WL_SOCKET_CHECK_DELAY_SECONDS)
     if not os.path.exists(full_socket_path):
       logging.error("Waited for wayland compositor to create wayland "
@@ -905,7 +905,7 @@ class WaylandDesktop(Desktop):
     """
     if not self._wait_for_wayland_compositor_running():
       logging.error("Aborting wayland session since compositor isn't running")
-      return
+      sys.exit(1)
     logging.info("Wayland compositor is running, restarting the portal "
                  "services now")
     try:
@@ -936,6 +936,39 @@ class WaylandDesktop(Desktop):
     return self._wait_for_wayland_compositor_running()
 
   def cleanup(self):
+    if self.host_proc is not None:
+      logging.info("Sending SIGTERM to host proc (pid=%s)", self.host_proc.pid)
+      try:
+        psutil_proc = psutil.Process(self.host_proc.pid)
+        psutil_proc.terminate()
+
+        # Use a short timeout, to avoid delaying service shutdown if the
+        # process refuses to die for some reason.
+        psutil_proc.wait(timeout=10)
+      except psutil.TimeoutExpired:
+        logging.error("Timed out - sending SIGKILL")
+        psutil_proc.kill()
+      except psutil.Error:
+        logging.error("Error terminating process")
+      self.host_proc = None
+
+    # We currently only support gnome-session (which is currently managed)
+    # by CRD itself.
+    logging.info("Executing %s" % GNOME_SESSION_QUIT)
+    if shutil.which(GNOME_SESSION_QUIT):
+      cleanup_proc = subprocess.Popen(
+        [GNOME_SESSION_QUIT, "--force", "--no-prompt"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=self.child_env)
+      stdout, stderr = cleanup_proc.communicate()
+      if stderr:
+        logging.error("Failed to execute %s:\n%s" %
+                      (GNOME_SESSION_QUIT, stderr))
+      self.session_proc = None
+    else:
+      logging.warning("No %s found on the system" % GNOME_SESSION_QUIT)
+
     super(WaylandDesktop, self).cleanup()
     if self._wayland_socket:
       full_socket_path = os.path.join(self.runtime_dir, self._wayland_socket)
@@ -1045,6 +1078,7 @@ class XDesktop(Desktop):
     # GTK can end up connecting to an active Wayland display instead of the
     # CRD X11 session.
     self.child_env["GDK_BACKEND"] = "x11"
+    self.child_env["XDG_SESSION_TYPE"] = "x11"
 
   def launch_session(self, *args, **kwargs):
     logging.info("Launching X server and X session.")
@@ -1209,19 +1243,35 @@ class XDesktop(Desktop):
     # non-fatal; the X server will continue to run with the dimensions from
     # the "-screen" option.
     if self.randr_add_sizes:
-      for width, height in self.sizes:
-        # This sets dot-clock, vtotal and htotal such that the computed
-        # refresh-rate will have a realistic value:
-        # 60Hz = dot-clock / (vtotal * htotal).
-        label = "%dx%d" % (width, height)
-        args = ["xrandr", "--newmode", label, "60", str(width), "0", "0",
-                "1000", str(height), "0", "0", "1000"]
-        subprocess.call(args, env=self.child_env, stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL)
-        output_name = "screen" if self.use_xvfb else "DUMMY0"
-        args = ["xrandr", "--addmode", output_name, label]
-        subprocess.call(args, env=self.child_env, stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL)
+      refresh_rates = ["60"]
+      try:
+        proc_num = subprocess.check_output("nproc", text=True)
+
+        # Keep the proc_num logic in sync with desktop_resizer_x11.cc
+        if (int(proc_num) > 16):
+          refresh_rates.append("120")
+      except (ValueError, OSError, subprocess.CalledProcessError) as e:
+        logging.error("Failed to retrieve processor count: " + str(e))
+
+      output_names = (
+          ["screen"]
+          if self.use_xvfb
+          else ["DUMMY0","DUMMY1","DUMMY2","DUMMY3"])
+
+      for output_name in output_names:
+        for refresh_rate in refresh_rates:
+          for width, height in self.sizes:
+            # This sets dot-clock, vtotal and htotal such that the computed
+            # refresh-rate will have a realistic value:
+            # refresh rate = dot-clock / (vtotal * htotal).
+            label = "%dx%d_%s" % (width, height, refresh_rate)
+            args = ["xrandr", "--newmode", label, refresh_rate, str(width), "0",
+                    "0", "1000", str(height), "0", "0", "1000"]
+            subprocess.call(args, env=self.child_env, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+            args = ["xrandr", "--addmode", output_name, label]
+            subprocess.call(args, env=self.child_env, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
 
     # Set the initial mode to the first size specified, otherwise the X server
     # would default to (max_width, max_height), which might not even be in the
@@ -1956,9 +2006,6 @@ Web Store: https://chrome.google.com/remotedesktop"""
                       type=int, nargs=2, default=False, action="store",
                       help=argparse.SUPPRESS)
   parser.add_argument(dest="args", nargs="*", help=argparse.SUPPRESS)
-  parser.add_argument("--is-wayland", dest="is_wayland",
-                      default=False, action="store_true",
-                      help="If true, starts wayland session on the host.")
   return parser
 
 
@@ -2177,7 +2224,12 @@ def main():
   if host.host_id:
     logging.info("Using host_id: " + host.host_id)
 
-  if options.is_wayland:
+  extra_start_host_args = []
+  if HOST_EXTRA_PARAMS_ENV_VAR in os.environ:
+      extra_start_host_args = \
+          re.split('\s+', os.environ[HOST_EXTRA_PARAMS_ENV_VAR].strip())
+  is_wayland = any([opt == '--enable-wayland' for opt in extra_start_host_args])
+  if is_wayland:
     desktop = WaylandDesktop(sizes)
   else:
     desktop = XDesktop(sizes)
@@ -2234,10 +2286,6 @@ def main():
           desktop.session_proc is None):
         desktop.launch_session(options.args, backoff_time)
       if desktop.host_proc is None:
-        extra_start_host_args = []
-        if HOST_EXTRA_PARAMS_ENV_VAR in os.environ:
-            extra_start_host_args = \
-                re.split('\s+', os.environ[HOST_EXTRA_PARAMS_ENV_VAR].strip())
         desktop.launch_host(host_config, extra_start_host_args, backoff_time)
 
     deadline = max(relaunch_times) if relaunch_times else 0

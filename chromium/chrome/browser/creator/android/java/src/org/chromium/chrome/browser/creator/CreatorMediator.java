@@ -21,17 +21,17 @@ import java.nio.charset.StandardCharsets;
 public class CreatorMediator {
     private Context mContext;
     private Creator mCreator;
-    private byte[] mWebFeedId;
-    private String mTitle;
-    private String mUrl;
     private PropertyModel mCreatorModel;
-    private boolean mFollowState;
+    private final CreatorSnackbarController mCreatorSnackbarController;
 
-    CreatorMediator(Context context, PropertyModel creatorModel) {
+    CreatorMediator(Context context, PropertyModel creatorModel,
+            CreatorSnackbarController creatorSnackbarController) {
         mContext = context;
         mCreatorModel = creatorModel;
-        mWebFeedId = mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY);
-        getCreator();
+        mCreatorSnackbarController = creatorSnackbarController;
+        if (mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY) != null) {
+            getCreator();
+        }
 
         // Set Follow OnClick Action
         mCreatorModel.set(CreatorProperties.ON_FOLLOW_CLICK_KEY, this::followClickHandler);
@@ -39,26 +39,31 @@ public class CreatorMediator {
     }
 
     private void followClickHandler() {
-        WebFeedBridge.followFromId(mWebFeedId,
+        WebFeedBridge.followFromId(mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY),
                 /*isDurable=*/false, WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU, (result) -> {
                     if (result.requestStatus == SUCCESS) {
                         mCreatorModel.set(CreatorProperties.IS_FOLLOWED_KEY, true);
                     }
+                    mCreatorSnackbarController.showSnackbarForFollow(
+                            result.requestStatus, mCreatorModel.get(CreatorProperties.TITLE_KEY));
                 });
     }
 
     private void followingClickHandler() {
-        WebFeedBridge.unfollow(mWebFeedId,
+        WebFeedBridge.unfollow(mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY),
                 /*isDurable=*/false, WebFeedBridge.CHANGE_REASON_WEB_PAGE_MENU, (result) -> {
                     if (result.requestStatus == SUCCESS) {
                         mCreatorModel.set(CreatorProperties.IS_FOLLOWED_KEY, false);
                     }
+                    mCreatorSnackbarController.showSnackbarForUnfollow(
+                            result.requestStatus, mCreatorModel.get(CreatorProperties.TITLE_KEY));
                 });
     }
 
     private void getCreator() {
-        CreatorApiBridge.getCreator(
-                new String(mWebFeedId, StandardCharsets.UTF_8), this::onGetCreator);
+        CreatorApiBridge.getCreator(new String(mCreatorModel.get(CreatorProperties.WEB_FEED_ID_KEY),
+                                            StandardCharsets.UTF_8),
+                this::onGetCreator);
     }
 
     private void onGetCreator(Creator creator) {

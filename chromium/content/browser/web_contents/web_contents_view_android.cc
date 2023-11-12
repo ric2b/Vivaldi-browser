@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "cc/layers/layer.h"
+#include "cc/slim/layer.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/android/content_ui_event_handler.h"
 #include "content/browser/android/drop_data_android.h"
@@ -120,7 +121,7 @@ WebContentsViewAndroid::WebContentsViewAndroid(
       delegate_(std::move(delegate)),
       view_(ui::ViewAndroid::LayoutType::NORMAL),
       synchronous_compositor_client_(nullptr) {
-  view_.SetLayer(cc::Layer::Create());
+  view_.SetLayer(cc::slim::Layer::Create());
   view_.set_event_handler(this);
 }
 
@@ -294,6 +295,9 @@ void WebContentsViewAndroid::FullscreenStateChanged(bool is_fullscreen) {
     select_popup_->HideMenu();
 }
 
+void WebContentsViewAndroid::UpdateWindowControlsOverlay(
+    const gfx::Rect& bounding_rect) {}
+
 void WebContentsViewAndroid::ShowContextMenu(RenderFrameHost& render_frame_host,
                                              const ContextMenuParams& params) {
   if (is_active_drag_ && drag_exceeded_movement_threshold_)
@@ -366,12 +370,13 @@ void WebContentsViewAndroid::StartDragging(
     bitmap = &dummy_bitmap;
   }
 
-  // TODO(crbug.com/1302094): The params `cursor_offset` and `drag_obj_rect`
-  // are unused.
+  // TODO(crbug.com/1405120): Consolidate cursor_offset and drag_obj_rect with
+  // drop_data.
 
   ScopedJavaLocalRef<jobject> jdrop_data = ToJavaDropData(drop_data);
-  if (!native_view->StartDragAndDrop(gfx::ConvertToJavaBitmap(*bitmap),
-                                     jdrop_data)) {
+  if (!native_view->StartDragAndDrop(
+          gfx::ConvertToJavaBitmap(*bitmap), jdrop_data, cursor_offset.x(),
+          cursor_offset.y(), drag_obj_rect.width(), drag_obj_rect.height())) {
     // Need to clear drag and drop state in blink.
     OnSystemDragEnded();
     return;

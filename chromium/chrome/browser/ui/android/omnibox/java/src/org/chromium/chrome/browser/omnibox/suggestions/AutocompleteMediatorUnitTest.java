@@ -4,12 +4,12 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions;
 
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyBoolean;
-import static org.mockito.Mockito.anyInt;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
@@ -89,8 +89,8 @@ public class AutocompleteMediatorUnitTest {
     private @Mock UrlBarEditingTextStateProvider mTextStateProvider;
     private @Mock SuggestionProcessor mMockProcessor;
     private @Mock HeaderProcessor mMockHeaderProcessor;
+    private @Mock AutocompleteControllerProvider mAutocompleteProvider;
     private @Mock AutocompleteController mAutocompleteController;
-    private @Mock AutocompleteController.Natives mAutocompleteControllerJniMock;
     private @Mock LocationBarDataProvider mLocationBarDataProvider;
     private @Mock ModalDialogManager mModalDialogManager;
     private @Mock Profile mProfile;
@@ -109,9 +109,9 @@ public class AutocompleteMediatorUnitTest {
 
     @Before
     public void setUp() {
-        mJniMocker.mock(AutocompleteControllerJni.TEST_HOOKS, mAutocompleteControllerJniMock);
         mJniMocker.mock(LargeIconBridgeJni.TEST_HOOKS, mLargeIconBridgeJniMock);
-        doReturn(mAutocompleteController).when(mAutocompleteControllerJniMock).getForProfile(any());
+
+        doReturn(mAutocompleteController).when(mAutocompleteProvider).get(any());
 
         // clang-format off
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -122,6 +122,7 @@ public class AutocompleteMediatorUnitTest {
             mTabWindowManagerSupplier = new ObservableSupplierImpl<>();
 
             mMediator = new AutocompleteMediator(ContextUtils.getApplicationContext(),
+                    mAutocompleteProvider,
                     mAutocompleteDelegate, mTextStateProvider, mListModel,
                     new Handler(), () -> mModalDialogManager, null, null,
                     mLocationBarDataProvider, tab -> {}, mTabWindowManagerSupplier, url -> false,

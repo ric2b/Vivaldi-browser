@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
+#include "components/optimization_guide/core/hints_processing_util.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/optimization_guide/core/optimization_metadata.h"
 #include "components/page_info/core/about_this_site_validation.h"
@@ -34,10 +35,12 @@ void RecordAboutThisSiteInteraction(AboutThisSiteInteraction interaction) {
 AboutThisSiteService::AboutThisSiteService(
     std::unique_ptr<Client> client,
     TemplateURLService* template_url_service,
-    bool allow_missing_description)
+    bool allow_missing_description,
+    bool allow_non_msbb_users)
     : client_(std::move(client)),
       template_url_service_(template_url_service),
-      allow_missing_description_(allow_missing_description) {}
+      allow_missing_description_(allow_missing_description),
+      allow_non_msbb_users_(allow_non_msbb_users) {}
 
 absl::optional<proto::SiteInfo> AboutThisSiteService::GetAboutThisSiteInfo(
     const GURL& url,
@@ -47,6 +50,33 @@ absl::optional<proto::SiteInfo> AboutThisSiteService::GetAboutThisSiteInfo(
         AboutThisSiteInteraction::kNotShownNonGoogleDSE);
 
     return absl::nullopt;
+  }
+
+  if (!optimization_guide::IsValidURLForURLKeyedHint(url)) {
+    RecordAboutThisSiteInteraction(
+        AboutThisSiteInteraction::kNotShownLocalHost);
+    return absl::nullopt;
+  }
+
+  if (!client_->IsOptimizationGuideAllowed() && !allow_non_msbb_users_) {
+    RecordAboutThisSiteInteraction(
+        AboutThisSiteInteraction::kNotShownOptimizationGuideNotAllowed);
+    return absl::nullopt;
+  }
+
+  if (!client_->IsOptimizationGuideAllowed() && allow_non_msbb_users_) {
+    RecordAboutThisSiteInteraction(AboutThisSiteInteraction::kShownWithoutMsbb);
+
+    GURL more_about_url = GURL("https://www.google.com/search");
+    more_about_url =
+        net::AppendQueryParameter(more_about_url, "q", "About " + url.spec());
+    more_about_url = net::AppendQueryParameter(more_about_url, "tbm", "ilp");
+    more_about_url = net::AppendQueryParameter(more_about_url, "ctx", "chrome");
+
+    proto::SiteInfo site_info;
+    proto::MoreAbout* more_about = site_info.mutable_more_about();
+    more_about->set_url(more_about_url.spec());
+    return site_info;
   }
 
   optimization_guide::OptimizationMetadata metadata;

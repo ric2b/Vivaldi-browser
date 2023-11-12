@@ -26,10 +26,10 @@ class StoragePartition;
 
 namespace protocol {
 
-class StorageHandler : public DevToolsDomainHandler,
-                       public Storage::Backend,
-                       private content::InterestGroupManagerImpl::
-                           InterestGroupObserverInterface {
+class StorageHandler
+    : public DevToolsDomainHandler,
+      public Storage::Backend,
+      private content::InterestGroupManagerImpl::InterestGroupObserver {
  public:
   explicit StorageHandler(bool client_is_trusted);
 
@@ -125,6 +125,9 @@ class StorageHandler : public DevToolsDomainHandler,
       const std::string& owner_origin_string,
       std::unique_ptr<ClearSharedStorageEntriesCallback> callback) override;
   Response SetSharedStorageTracking(bool enable) override;
+  void ResetSharedStorageBudget(
+      const std::string& owner_origin_string,
+      std::unique_ptr<ResetSharedStorageBudgetCallback> callback) override;
 
  private:
   // See definition for lifetime information.
@@ -141,11 +144,11 @@ class StorageHandler : public DevToolsDomainHandler,
   absl::variant<protocol::Response, storage::SharedStorageManager*>
   GetSharedStorageManager();
 
-  // content::InterestGroupManagerImpl::InterestGroupObserverInterface
+  // content::InterestGroupManagerImpl::InterestGroupObserver
   void OnInterestGroupAccessed(
       const base::Time& accessTime,
-      InterestGroupManagerImpl::InterestGroupObserverInterface::AccessType type,
-      const std::string& owner_origin,
+      InterestGroupManagerImpl::InterestGroupObserver::AccessType type,
+      const url::Origin& owner_origin,
       const std::string& name) override;
 
   void NotifySharedStorageAccessed(

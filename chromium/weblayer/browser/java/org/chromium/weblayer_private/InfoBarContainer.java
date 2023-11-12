@@ -99,11 +99,6 @@ public class InfoBarContainer implements KeyboardVisibilityListener, InfoBar.Con
                 setHidden(false);
             }
         }
-
-        @Override
-        public void didFinishNavigationNoop(NavigationHandle navigation) {
-            if (!navigation.isInPrimaryMainFrame()) return;
-        }
     };
 
     public void onTabAttachedToViewController() {
@@ -420,10 +415,17 @@ public class InfoBarContainer implements KeyboardVisibilityListener, InfoBar.Con
                 });
 
         mInfoBarContainerView.setHidden(mIsHidden);
-        setParentView(mTab.getBrowser().getViewController().getInfoBarContainerParentView());
+        BrowserViewController viewController =
+                mTab.getBrowser().getBrowserFragment().getPossiblyNullViewController();
+        if (viewController != null) {
+            setParentView(viewController.getInfoBarContainerParentView());
+        }
 
-        mTab.getBrowser().getWindowAndroid().getKeyboardDelegate().addKeyboardVisibilityListener(
-                this);
+        mTab.getBrowser()
+                .getBrowserFragment()
+                .getWindowAndroid()
+                .getKeyboardDelegate()
+                .addKeyboardVisibilityListener(this);
     }
 
     private void destroyContainerView() {
@@ -437,8 +439,11 @@ public class InfoBarContainer implements KeyboardVisibilityListener, InfoBar.Con
             mInfoBarContainerView = null;
         }
 
-        mTab.getBrowser().getWindowAndroid().getKeyboardDelegate().removeKeyboardVisibilityListener(
-                this);
+        mTab.getBrowser()
+                .getBrowserFragment()
+                .getWindowAndroid()
+                .getKeyboardDelegate()
+                .removeKeyboardVisibilityListener(this);
     }
 
     @Override

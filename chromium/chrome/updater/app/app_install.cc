@@ -7,16 +7,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/files/file_path.h"
-#include "base/i18n/icu_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -24,7 +21,6 @@
 #include "build/build_config.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants.h"
-#include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/service_proxy_factory.h"
@@ -168,7 +164,7 @@ void AppInstall::InstallCandidateDone(bool valid_version, int result) {
   }
 
   if (valid_version) {
-    WakeCandidateDone();
+    FetchPolicies();
     return;
   }
 
@@ -201,20 +197,13 @@ void AppInstall::WakeCandidate() {
   update_service_internal->Hello(base::BindOnce(
       [](scoped_refptr<UpdateServiceInternal> /*update_service_internal*/,
          scoped_refptr<AppInstall> app_install) {
-        app_install->WakeCandidateDone();
+        app_install->FetchPolicies();
       },
       update_service_internal, base::WrapRefCounted(this)));
 }
 
 void AppInstall::FetchPolicies() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-#if BUILDFLAG(IS_MAC)
-  // TODO(crbug.com/1297163) - encapsulate the reinitialization of the
-  // proxy server instance to avoid this special case.
-  update_service_ = CreateUpdateServiceProxy(
-      updater_scope(), external_constants_->OverinstallTimeout());
-#endif
 
   update_service_->FetchPolicies(base::BindOnce(
       [](scoped_refptr<AppInstall> app_install, int result) {
@@ -238,8 +227,7 @@ void AppInstall::RegisterUpdater() {
   update_service_->RegisterApp(
       request, base::BindOnce(
                    [](scoped_refptr<AppInstall> app_install, int result) {
-                     if (result != kRegistrationSuccess &&
-                         result != kRegistrationAlreadyRegistered) {
+                     if (result != kRegistrationSuccess) {
                        VLOG(2) << "Updater registration failed: " << result;
                        app_install->Shutdown(kErrorRegistrationFailed);
                        return;

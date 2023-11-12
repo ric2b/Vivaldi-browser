@@ -95,6 +95,9 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         mStartSurfaceSupplier = startSurfaceSupplier;
         mTabSwitcherSupplier = tabSwitcherSupplier;
 
+        // Note(david@vivaldi.com): The |StripLayoutHelperManager|s for Vivaldi are instantiated
+        // below.
+        if (!ChromeApplicationImpl.isVivaldi())
         mTabStripLayoutHelperManager = new StripLayoutHelperManager(host.getContext(), this,
                 mHost.getLayoutRenderHost(), () -> mLayerTitleCache, lifecycleDispatcher);
 
@@ -111,6 +114,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
         mJankTracker = jankTracker;
         mScrimCoordinator = scrimCoordinator;
         mCreateStartSurfaceCallable = delayedStartSurfaceCallable;
+        if (!ChromeApplicationImpl.isVivaldi())
         addObserver(mTabStripLayoutHelperManager.getTabSwitcherObserver());
 
         setNextLayout(null, true);
@@ -173,7 +177,7 @@ public class LayoutManagerChromeTablet extends LayoutManagerChrome {
                 && mTabSwitcherLayout == null
                 && TabUiFeatureUtilities.isTabletGridTabSwitcherEnabled(mHost.getContext())) {
             try {
-                if (!mStartSurfaceSupplier.hasValue()) {
+                if (!mStartSurfaceSupplier.hasValue() && !mTabSwitcherSupplier.hasValue()) {
                     final ViewGroup containerView = mCreateStartSurfaceCallable.call();
                     createOverviewLayout(mStartSurfaceSupplier.get(), mTabSwitcherSupplier.get(),
                             mJankTracker, mScrimCoordinator, containerView);

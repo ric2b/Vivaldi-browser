@@ -33,6 +33,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/system/sys_info.h"
+#include "build/build_config.h"
 #include "components/crash/core/common/crash_key.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -580,6 +581,14 @@ bool WasmInstanceOverride(const v8::FunctionCallbackInfo<v8::Value>& args) {
   return false;
 }
 
+bool WasmGCEnabledCallback(v8::Local<v8::Context> context) {
+  ExecutionContext* execution_context = ToExecutionContext(context);
+  if (!execution_context) {
+    return false;
+  }
+  return RuntimeEnabledFeatures::WebAssemblyGCEnabled(execution_context);
+}
+
 v8::MaybeLocal<v8::Promise> HostImportModuleDynamically(
     v8::Local<v8::Context> context,
     v8::Local<v8::Data> v8_host_defined_options,
@@ -686,6 +695,7 @@ void InitializeV8Common(v8::Isolate* isolate) {
   isolate->SetUseCounterCallback(&UseCounterCallback);
   isolate->SetWasmModuleCallback(WasmModuleOverride);
   isolate->SetWasmInstanceCallback(WasmInstanceOverride);
+  isolate->SetWasmGCEnabledCallback(WasmGCEnabledCallback);
   isolate->SetSharedArrayBufferConstructorEnabledCallback(
       SharedArrayBufferConstructorEnabledCallback);
   isolate->SetHostImportModuleDynamicallyCallback(HostImportModuleDynamically);
@@ -884,7 +894,15 @@ void V8Initializer::InitializeMainThread(
 // Stack size for workers is limited to 500KB because default stack size for
 // secondary threads is 512KB on Mac OS X. See GetDefaultThreadStackSize() in
 // base/threading/platform_thread_mac.mm for details.
+// For 32bit Windows, the stack region always starts with an odd number of
+// reserved pages, followed by two guard pages, followed by the committed
+// memory for the stack, and the worker stack size need to be reduced
+// (crbug.com/1412239).
+#if defined(ARCH_CPU_32_BITS) && BUILDFLAG(IS_WIN)
+static const int kWorkerMaxStackSize = 492 * 1024;
+#else
 static const int kWorkerMaxStackSize = 500 * 1024;
+#endif
 
 void V8Initializer::InitializeWorker(v8::Isolate* isolate) {
   InitializeV8Common(isolate);
@@ -902,6 +920,8 @@ void V8Initializer::InitializeWorker(v8::Isolate* isolate) {
   isolate->SetAllowWasmCodeGenerationCallback(
       WasmCodeGenerationCheckCallbackInMainThread);
   isolate->SetWasmAsyncResolvePromiseCallback(WasmAsyncResolvePromiseCallback);
+  isolate->SetHostCreateShadowRealmContextCallback(
+      OnCreateShadowRealmV8Context);
 }
 
 }  // namespace blink

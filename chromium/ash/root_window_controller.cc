@@ -78,11 +78,12 @@
 #include "ash/wm/work_area_insets.h"
 #include "ash/wm/workspace/workspace_layout_manager.h"
 #include "ash/wm/workspace_controller.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
@@ -713,8 +714,21 @@ void RootWindowController::CloseChildWindows() {
       else
         non_toplevel_windows.Add(child);
     }
-    while (!toplevel_windows.windows().empty())
+    while (!toplevel_windows.windows().empty()) {
+      aura::Window* toplevel_window = toplevel_windows.windows().back();
+      // Complete in progress animations before deleting the window. This is
+      // done as deleting the window implicitly cancels animations (as long
+      // as the toplevel_window is the layer owner), which may delete the
+      // window.
+      if (toplevel_window->layer()->owner() == toplevel_window) {
+        toplevel_window->layer()->CompleteAllAnimations();
+        if (toplevel_windows.windows().empty() ||
+            toplevel_windows.windows().back() != toplevel_window) {
+          continue;
+        }
+      }
       delete toplevel_windows.Pop();
+    }
   }
 
   // Reset layout manager so that it won't fire unnecessary layout evetns.
@@ -797,8 +811,7 @@ void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
   // that the launcher UI is fullscreen in tablet mode, so the whole root window
   // can be perceived by users to be part of the launcher.
   auto* const app_list_controller = Shell::Get()->app_list_controller();
-  if (features::IsLauncherAppSortEnabled() && tablet_mode &&
-      app_list_controller->IsVisible(display_id) &&
+  if (tablet_mode && app_list_controller->IsVisible(display_id) &&
       app_list_controller->GetCurrentAppListPage() ==
           AppListState::kStateApps) {
     ui::SimpleMenuModel* menu_model = root_window_menu_model_adapter_->model();
@@ -1300,15 +1313,13 @@ void RootWindowController::CreateContainers() {
   overlay_container->SetLayoutManager(
       std::make_unique<OverlayLayoutManager>(overlay_container));
 
-  if (features::IsAmbientModeEnabled()) {
-    aura::Window* ambient_container =
-        CreateContainer(kShellWindowId_AmbientModeContainer,
-                        "AmbientModeContainer", lock_screen_related_containers);
-    ::wm::SetChildWindowVisibilityChangesAnimated(ambient_container);
-    ambient_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
-    ambient_container->SetLayoutManager(
-        std::make_unique<FillLayoutManager>(ambient_container));
-  }
+  aura::Window* ambient_container =
+      CreateContainer(kShellWindowId_AmbientModeContainer,
+                      "AmbientModeContainer", lock_screen_related_containers);
+  ::wm::SetChildWindowVisibilityChangesAnimated(ambient_container);
+  ambient_container->SetProperty(::wm::kUsesScreenCoordinatesKey, true);
+  ambient_container->SetLayoutManager(
+      std::make_unique<FillLayoutManager>(ambient_container));
 
   aura::Window* mouse_cursor_container =
       CreateContainer(kShellWindowId_MouseCursorContainer,

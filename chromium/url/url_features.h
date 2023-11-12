@@ -14,6 +14,15 @@ COMPONENT_EXPORT(URL) BASE_DECLARE_FEATURE(kUseIDNA2008NonTransitional);
 
 // Returns true if Chrome is using IDNA 2008 in Non-Transitional mode.
 COMPONENT_EXPORT(URL) bool IsUsingIDNA2008NonTransitional();
+
+// Returns true if Chrome is recording IDNA 2008 related metrics.
+COMPONENT_EXPORT(URL) bool IsRecordingIDNA2008Metrics();
+
+// Returns true if Chrome is enforcing the 4 part check for IPv4 embedded IPv6
+// addresses.
+COMPONENT_EXPORT(URL)
+BASE_DECLARE_FEATURE(kStrictIPv4EmbeddedIPv6AddressParsing);
+
 }  // namespace url
 
 #endif  // URL_URL_FEATURES_H_

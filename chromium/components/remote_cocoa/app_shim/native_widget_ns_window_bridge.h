@@ -16,6 +16,7 @@
 #import "components/remote_cocoa/app_shim/mouse_capture_delegate.h"
 
 #include "components/remote_cocoa/app_shim/immersive_mode_controller.h"
+#include "components/remote_cocoa/app_shim/immersive_mode_tabbed_controller.h"
 #include "components/remote_cocoa/app_shim/native_widget_ns_window_fullscreen_controller.h"
 #include "components/remote_cocoa/app_shim/ns_view_ids.h"
 #include "components/remote_cocoa/app_shim/remote_cocoa_app_shim_export.h"
@@ -38,7 +39,6 @@
 @class ModalShowAnimationWithLayer;
 @class NativeWidgetMacNSWindow;
 @class ViewsNSWindowDelegate;
-@class WindowControlsOverlayNSView;
 
 namespace views {
 namespace test {
@@ -277,16 +277,10 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   void RedispatchKeyEvent(
       const std::vector<uint8_t>& native_event_data) override;
   void SetLocalEventMonitorEnabled(bool enable) override;
-  void CreateWindowControlsOverlayNSView(
-      const mojom::WindowControlsOverlayNSViewType overlay_type) override;
-  void UpdateWindowControlsOverlayNSView(
-      const gfx::Rect& bounds,
-      const mojom::WindowControlsOverlayNSViewType overlay_type) override;
-  void RemoveWindowControlsOverlayNSView(
-      const mojom::WindowControlsOverlayNSViewType overlay_type) override;
   void SetCursor(const ui::Cursor& cursor) override;
   void EnableImmersiveFullscreen(
       uint64_t fullscreen_overlay_widget_id,
+      uint64_t tab_widget_id,
       EnableImmersiveFullscreenCallback callback) override;
   void DisableImmersiveFullscreen() override;
   void UpdateToolbarVisibility(
@@ -306,7 +300,11 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   void UpdateWindowGeometry();
 
   // Move `child_windows_` to `target`.
-  void MoveChildrenTo(NativeWidgetNSWindowBridge* target);
+  // Optionally set `anchored_only` to true, which will only move children that
+  // are anchored to the target window. Currently only BubbleWidgets with a
+  // BubbleDialogDelegate are supported.
+  void MoveChildrenTo(NativeWidgetNSWindowBridge* target,
+                      bool anchored_only = false);
 
  private:
   friend class views::test::BridgedNativeWidgetTestApi;
@@ -370,14 +368,6 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
   ui::ModalType modal_type_ = ui::MODAL_TYPE_NONE;
   bool is_translucent_window_ = false;
   id key_down_event_monitor_ = nil;
-
-  // Intended for PWAs with window controls overlay display override. These two
-  // NSViews are added on top of the non client area to route events to the
-  // BridgedContentView instead of the RenderWidgetHostView.
-  base::scoped_nsobject<WindowControlsOverlayNSView>
-      caption_buttons_overlay_nsview_;
-  base::scoped_nsobject<WindowControlsOverlayNSView>
-      web_app_frame_toolbar_overlay_nsview_;
 
   raw_ptr<NativeWidgetNSWindowBridge> parent_ =
       nullptr;  // Weak. If non-null, owns this.
@@ -453,6 +443,11 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
 
   mojo::AssociatedReceiver<remote_cocoa::mojom::NativeWidgetNSWindow>
       bridge_mojo_receiver_{this};
+
+  // Keep track of ImmersiveFullscreenRevealLock() and
+  // ImmersiveFullscreenRevealUnlock() calls so locks can persist across
+  // immersive_mode_controller_ resets.
+  int immersive_fullscreen_reveal_lock_count_ = 0;
 
   ui::WeakPtrNSObjectFactory<NativeWidgetNSWindowBridge> ns_weak_factory_;
 };

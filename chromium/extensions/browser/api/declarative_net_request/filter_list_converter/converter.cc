@@ -5,6 +5,7 @@
 #include "extensions/browser/api/declarative_net_request/filter_list_converter/converter.h"
 
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -53,9 +54,7 @@ class ProtoToJSONRuleConverter {
 
  private:
   ProtoToJSONRuleConverter(const proto::UrlRule& rule, int rule_id)
-      : input_rule_(rule),
-        rule_id_(rule_id),
-        json_rule_(base::Value::Type::DICTIONARY) {}
+      : input_rule_(rule), rule_id_(rule_id), json_rule_(base::Value::Dict()) {}
 
   base::Value Convert(std::string* error) {
     CHECK(error);
@@ -262,8 +261,8 @@ class ProtoToJSONRuleConverter {
     return true;
   }
 
-  base::Value GetResourceTypeList(int element_mask) {
-    base::Value resource_types(base::Value::Type::LIST);
+  base::Value::List GetResourceTypeList(int element_mask) {
+    base::Value::List resource_types;
     for (int element_type = 1; element_type <= proto::ElementType_MAX;
          element_type <<= 1) {
       CHECK(proto::ElementType_IsValid(element_type));
@@ -375,14 +374,14 @@ class ProtoToJSONRuleConverter {
     if (element_mask == (proto::ELEMENT_TYPE_ALL & ~kMaskUnsupported))
       return true;
 
-    base::Value resource_types = GetResourceTypeList(element_mask);
+    base::Value::List resource_types = GetResourceTypeList(element_mask);
     if (is_allow_all_requests_rule_) {
       resource_types.Append(
           dnr_api::ToString(dnr_api::RESOURCE_TYPE_MAIN_FRAME));
     }
 
     CHECK(json_rule_.SetPath({kRuleConditionKey, kResourceTypesKey},
-                             std::move(resource_types)));
+                             base::Value(std::move(resource_types))));
     return true;
   }
 
@@ -468,7 +467,6 @@ class DNRJsonRuleOutputStream : public subresource_filter::RuleOutputStream {
                           filter_list_converter::WriteType type,
                           bool noisy)
       : rule_id_(kMinValidID),
-        output_rules_list_(base::Value::Type::LIST),
         output_path_(output_path),
         write_type_(type),
         noisy_(noisy) {}
@@ -508,7 +506,7 @@ class DNRJsonRuleOutputStream : public subresource_filter::RuleOutputStream {
     switch (write_type_) {
       case filter_list_converter::kExtension: {
         TestRulesetInfo info(kRulesetID, kJSONRulesFilename,
-                             output_rules_list_);
+                             output_rules_list_.Clone());
         WriteManifestAndRuleset(output_path_, info, {} /* hosts */);
         break;
       }
@@ -522,7 +520,7 @@ class DNRJsonRuleOutputStream : public subresource_filter::RuleOutputStream {
 
  private:
   int rule_id_ = kMinValidID;
-  base::Value output_rules_list_;
+  base::Value::List output_rules_list_;
   const base::FilePath output_path_;
   const filter_list_converter::WriteType write_type_;
   const bool noisy_;

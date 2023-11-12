@@ -69,6 +69,11 @@ bool ShouldForceFeedSigninPromo() {
       boolForKey:@"ForceFeedSigninPromo"];
 }
 
+bool ShouldIgnoreTileAblationConditions() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:@"IgnoreTileAblationConditions"];
+}
+
 void DidResetFirstFollowCount() {
   [[NSUserDefaults standardUserDefaults] setBool:NO forKey:@"ResetFirstFollow"];
 }
@@ -101,6 +106,11 @@ bool IsMemoryDebuggingEnabled() {
 bool IsOmniboxDebuggingEnabled() {
   return [[NSUserDefaults standardUserDefaults]
       boolForKey:@"EnableOmniboxDebugging"];
+}
+
+bool IsSpotlightDebuggingEnabled() {
+  return [[NSUserDefaults standardUserDefaults]
+      boolForKey:@"EnableSpotlightDebugging"];
 }
 
 bool IsStartupCrashEnabled() {

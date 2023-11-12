@@ -1,7 +1,7 @@
 // Copyright (c) 2016-2021 Vivaldi Technologies AS. All Rights Reserved.
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "prefs/vivaldi_pref_names.h"
 

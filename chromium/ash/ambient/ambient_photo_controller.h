@@ -19,10 +19,11 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/proto/photo_cache_entry.pb.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/timer/timer.h"
 #include "net/base/backoff_entry.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -274,6 +275,13 @@ class ASH_EXPORT AmbientPhotoController : public AmbientViewDelegateObserver {
   // Tracks the number of topics that have been prepared since the controller
   // last transitioned to the |kPreparingNextTopicSet| state.
   size_t num_topics_prepared_ = 0;
+
+  // This is purely for development purposes and does not contribute to the
+  // user-facing business logic. It validates that only one topic is prepared at
+  // a time. If multiple topics are prepared simultaneously, they may clobber
+  // variables like |cache_entry_|, |image_|, etc and result in unpredictable
+  // behavior.
+  bool is_actively_preparing_topic_ = false;
 
   base::ScopedObservation<AmbientViewDelegate, AmbientViewDelegateObserver>
       scoped_view_delegate_observation_{this};

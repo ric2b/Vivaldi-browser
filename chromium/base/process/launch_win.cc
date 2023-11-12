@@ -17,10 +17,9 @@
 #include <ios>
 #include <limits>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
-#include "base/debug/activity_tracker.h"
 #include "base/debug/stack_trace.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/process/environment_internal.h"
@@ -97,10 +96,6 @@ bool GetAppOutputInternal(CommandLine::StringPieceType cl,
   }
 
   win::ScopedProcessInformation proc_info(temp_process_info);
-  debug::GlobalActivityTracker* tracker = debug::GlobalActivityTracker::Get();
-  if (tracker)
-    tracker->RecordProcessLaunch(proc_info.process_id(),
-                                 CommandLine::StringType(cl));
 
   // Close our writing end of pipe now. Otherwise later read would not be able
   // to detect end of child's output.
@@ -131,8 +126,6 @@ bool GetAppOutputInternal(CommandLine::StringPieceType cl,
 
   TerminationStatus status =
       GetTerminationStatus(proc_info.process_handle(), exit_code);
-  debug::GlobalActivityTracker::RecordProcessExitIfEnabled(
-      proc_info.process_id(), *exit_code);
   return status != TERMINATION_STATUS_PROCESS_CRASHED &&
          status != TERMINATION_STATUS_ABNORMAL_TERMINATION;
 }
@@ -165,8 +158,6 @@ Process LaunchElevatedProcess(const CommandLine& cmdline,
     WaitForSingleObject(shex_info.hProcess, INFINITE);
   }
 
-  debug::GlobalActivityTracker::RecordProcessLaunchIfEnabled(
-      GetProcessId(shex_info.hProcess), file, arguments);
   return Process(shex_info.hProcess);
 }
 
@@ -349,15 +340,6 @@ Process LaunchProcess(const CommandLine::StringType& cmdline,
     startup_info->hStdError = options.stderr_handle;
   }
 
-  if (options.job_handle) {
-    // If this code is run under a debugger, the launched process is
-    // automatically associated with a job object created by the debugger.
-    // The CREATE_BREAKAWAY_FROM_JOB flag is used to prevent this on Windows
-    // releases that do not support nested jobs.
-    if (win::GetVersion() < win::Version::WIN8)
-      flags |= CREATE_BREAKAWAY_FROM_JOB;
-  }
-
   if (options.force_breakaway_from_job_)
     flags |= CREATE_BREAKAWAY_FROM_JOB;
 
@@ -445,8 +427,6 @@ Process LaunchProcess(const CommandLine::StringType& cmdline,
     WaitForSingleObject(process_info.process_handle(), INFINITE);
   }
 
-  debug::GlobalActivityTracker::RecordProcessLaunchIfEnabled(
-      process_info.process_id(), cmdline);
   return Process(process_info.TakeProcessHandle());
 }
 

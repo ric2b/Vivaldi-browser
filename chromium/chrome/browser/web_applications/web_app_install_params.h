@@ -9,13 +9,17 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
+#include "base/functional/callback.h"
+#include "build/chromeos_buildflags.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/webui/system_apps/public/system_web_app_type.h"
+#endif
 
 struct WebAppInstallInfo;
 
@@ -56,7 +60,7 @@ struct WebAppInstallParams {
   bool force_reinstall = false;
 
   // See `WebAppInstallTask::ApplyParamsToWebAppInstallInfo`
-  absl::optional<UserDisplayMode> user_display_mode = absl::nullopt;
+  absl::optional<mojom::UserDisplayMode> user_display_mode = absl::nullopt;
 
   // URL to be used as start_url if manifest is unavailable.
   GURL fallback_start_url;
@@ -97,12 +101,11 @@ struct WebAppInstallParams {
   std::vector<std::string> additional_search_terms;
 
   absl::optional<std::string> launch_query_params;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   absl::optional<ash::SystemWebAppType> system_app_type;
+#endif
 
   bool oem_installed = false;
-
-  // Set for SUB_APP API installs.
-  absl::optional<AppId> parent_app_id;
 
   // The install URL for the app. This does not always need to be
   // populated (especially for user installed or sync installed apps)

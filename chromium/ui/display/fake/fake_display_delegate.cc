@@ -7,8 +7,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/hash/hash.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
@@ -169,6 +169,12 @@ void FakeDisplayDelegate::Configure(
     configure_timer_.Start(FROM_HERE, kConfigureDisplayDelay, this,
                            &FakeDisplayDelegate::ConfigureDone);
   }
+}
+
+void FakeDisplayDelegate::SetHdcpKeyProp(int64_t display_id,
+                                         const std::string& key,
+                                         SetHdcpKeyPropCallback callback) {
+  std::move(callback).Run(false);
 }
 
 void FakeDisplayDelegate::GetHDCPState(const DisplaySnapshot& output,

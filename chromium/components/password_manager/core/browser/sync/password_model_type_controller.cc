@@ -9,6 +9,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/password_manager_features_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
@@ -116,6 +117,7 @@ void PasswordModelTypeController::Stop(syncer::ShutdownReason shutdown_reason,
 
 syncer::DataTypeController::PreconditionState
 PasswordModelTypeController::GetPreconditionState() const {
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   // If Sync-the-feature is enabled, then the user has opted in to that, and no
   // additional opt-in is required here.
   if (sync_service_->IsSyncFeatureEnabled() ||
@@ -127,6 +129,12 @@ PasswordModelTypeController::GetPreconditionState() const {
   return features_util::IsOptedInForAccountStorage(pref_service_, sync_service_)
              ? PreconditionState::kPreconditionsMet
              : PreconditionState::kMustStopAndClearData;
+#else
+  // On Android and iOS, there is no explicit opt-in - instead the user's choice
+  // is handled via Sync's selected types (see `UserSelectableType`). So nothing
+  // to check here.
+  return PreconditionState::kPreconditionsMet;
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 }
 
 bool PasswordModelTypeController::ShouldRunInTransportOnlyMode() const {
@@ -147,6 +155,7 @@ void PasswordModelTypeController::OnStateChanged(syncer::SyncService* sync) {
 void PasswordModelTypeController::OnAccountsInCookieUpdated(
     const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
     const GoogleServiceAuthError& error) {
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   // If the account information is stale, do nothing for now - wait until there
   // is fresh information.
   if (!accounts_in_cookie_jar_info.accounts_are_fresh) {
@@ -165,10 +174,13 @@ void PasswordModelTypeController::OnAccountsInCookieUpdated(
   // Keep any account-storage settings only for known accounts.
   features_util::KeepAccountStorageSettingsOnlyForUsers(pref_service_,
                                                         gaia_ids);
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 }
 
 void PasswordModelTypeController::OnAccountsCookieDeletedByUserAction() {
+#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
   features_util::ClearAccountStorageSettingsForAllUsers(pref_service_);
+#endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 }
 
 void PasswordModelTypeController::OnPrimaryAccountChanged(

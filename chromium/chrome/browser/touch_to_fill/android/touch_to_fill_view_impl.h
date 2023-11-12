@@ -6,13 +6,18 @@
 #define CHROME_BROWSER_TOUCH_TO_FILL_ANDROID_TOUCH_TO_FILL_VIEW_IMPL_H_
 
 #include "base/android/scoped_java_ref.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_view.h"
 
 namespace gfx {
 class Image;
 }
+
+namespace password_manager {
+class PasskeyCredential;
+class UiCredential;
+}  // namespace password_manager
 
 class TouchToFillController;
 
@@ -28,7 +33,7 @@ class TouchToFillViewImpl : public TouchToFillView {
       const GURL& url,
       IsOriginSecure is_origin_secure,
       base::span<const password_manager::UiCredential> credentials,
-      base::span<const TouchToFillWebAuthnCredential> webauthn_credentials,
+      base::span<const password_manager::PasskeyCredential> passkey_credentials,
       bool trigger_submission) override;
   void OnCredentialSelected(
       const password_manager::UiCredential& credential) override;

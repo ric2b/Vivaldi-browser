@@ -69,9 +69,7 @@ class ThemePrivateImportFunction : public ExtensionFunction {
   ~ThemePrivateImportFunction() override = default;
   ResponseAction Run() override;
 
-  void StartImport(base::FilePath archive_path,
-                   std::vector<uint8_t> archive_data);
-  void OnFileSelectionDone(base::FilePath theme_archive, bool cancelled);
+  void StartImport(std::vector<uint8_t> archive_data);
   void SendResult(std::string theme_id,
                   std::unique_ptr<vivaldi_theme_io::ImportError> error);
 };

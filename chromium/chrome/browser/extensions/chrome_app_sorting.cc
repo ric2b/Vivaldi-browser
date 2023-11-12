@@ -27,6 +27,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/manifest_handlers/app_display_info.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/extensions/default_app_order.h"
@@ -65,11 +66,11 @@ const char kPrefPageOrdinal[] = "page_ordinal";
 ////////////////////////////////////////////////////////////////////////////////
 // ChromeAppSorting::AppOrdinals
 
-ChromeAppSorting::AppOrdinals::AppOrdinals() {}
+ChromeAppSorting::AppOrdinals::AppOrdinals() = default;
 
 ChromeAppSorting::AppOrdinals::AppOrdinals(const AppOrdinals& other) = default;
 
-ChromeAppSorting::AppOrdinals::~AppOrdinals() {}
+ChromeAppSorting::AppOrdinals::~AppOrdinals() = default;
 
 ////////////////////////////////////////////////////////////////////////////////
 // ChromeAppSorting
@@ -77,8 +78,9 @@ ChromeAppSorting::AppOrdinals::~AppOrdinals() {}
 ChromeAppSorting::ChromeAppSorting(content::BrowserContext* browser_context)
     : browser_context_(browser_context),
       default_ordinals_created_(false) {
-  ExtensionIdList extensions;
-  ExtensionPrefs::Get(browser_context_)->GetExtensions(&extensions);
+  const ExtensionIdList extensions =
+      ExtensionPrefs::Get(browser_context_)->GetExtensions();
+  registry_observation_.Observe(ExtensionRegistry::Get(browser_context_));
   InitializePageOrdinalMap(extensions);
   MigrateAppIndex(extensions);
 }
@@ -743,6 +745,18 @@ size_t ChromeAppSorting::CountItemsVisibleOnNtp(
       result++;
   }
   return result;
+}
+
+void ChromeAppSorting::OnExtensionLoaded(
+    content::BrowserContext* browser_context,
+    const Extension* extension) {
+  if (!AppDisplayInfo::RequiresSortOrdinal(*extension)) {
+    return;
+  }
+
+  SetExtensionVisible(extension->id(),
+                      AppDisplayInfo::ShouldDisplayInNewTabPage(*extension));
+  EnsureValidOrdinals(extension->id(), syncer::StringOrdinal());
 }
 
 }  // namespace extensions

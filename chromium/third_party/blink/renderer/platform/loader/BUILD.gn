@@ -11,6 +11,11 @@ make_names("make_platform_loader_generated_fetch_initiator_type_names") {
   output_dir = "$blink_platform_output_dir/loader/fetch"
 }
 
+make_names("make_platform_loader_generated_delivery_type_names") {
+  in_files = [ "fetch/delivery_type_names.json5" ]
+  output_dir = "$blink_platform_output_dir/loader/fetch"
+}
+
 blink_platform_sources("loader") {
   sources = [
     "allowed_by_nosniff.cc",
@@ -96,8 +101,8 @@ blink_platform_sources("loader") {
     "fetch/resource_response.cc",
     "fetch/resource_response.h",
     "fetch/resource_status.h",
-    "fetch/resource_timing_info.cc",
-    "fetch/resource_timing_info.h",
+    "fetch/resource_timing_utils.cc",
+    "fetch/resource_timing_utils.h",
     "fetch/response_body_loader.cc",
     "fetch/response_body_loader.h",
     "fetch/response_body_loader_client.h",
@@ -130,20 +135,26 @@ blink_platform_sources("loader") {
     "fetch/url_loader/navigation_body_loader.h",
     "fetch/url_loader/request_conversion.cc",
     "fetch/url_loader/request_conversion.h",
+    "fetch/url_loader/resource_request_sender.cc",
+    "fetch/url_loader/resource_request_sender.h",
     "fetch/url_loader/sync_load_context.cc",
     "fetch/url_loader/sync_load_context.h",
     "fetch/url_loader/sync_load_response.cc",
     "fetch/url_loader/sync_load_response.h",
-    "fetch/url_loader/web_resource_request_sender.cc",
-    "fetch/url_loader/web_url_loader.cc",
-    "fetch/url_loader/web_url_loader_factory.cc",
+    "fetch/url_loader/url_loader.cc",
+    "fetch/url_loader/url_loader.h",
+    "fetch/url_loader/url_loader_client.cc",
+    "fetch/url_loader/url_loader_client.h",
+    "fetch/url_loader/url_loader_factory.cc",
+    "fetch/url_loader/url_loader_factory.h",
     "fetch/url_loader/worker_main_script_loader.cc",
     "fetch/url_loader/worker_main_script_loader.h",
     "fetch/url_loader/worker_main_script_loader_client.h",
     "fetch/worker_resource_timing_notifier.h",
     "frame_request_blocker.cc",
     "frame_request_blocker.h",
-    "internet_disconnected_web_url_loader.cc",
+    "internet_disconnected_url_loader.cc",
+    "internet_disconnected_url_loader.h",
     "link_header.cc",
     "link_header.h",
     "mixed_content.cc",
@@ -160,8 +171,11 @@ blink_platform_sources("loader") {
 
   sources += get_target_outputs(
           ":make_platform_loader_generated_fetch_initiator_type_names")
+  sources +=
+      get_target_outputs(":make_platform_loader_generated_delivery_type_names")
 
   deps = [
+    ":make_platform_loader_generated_delivery_type_names",
     ":make_platform_loader_generated_fetch_initiator_type_names",
     "//components/link_header_util",
     "//components/variations/net:net",
@@ -172,6 +186,7 @@ blink_platform_sources("loader") {
     "//third_party/blink/public/common:buildflags",
     "//third_party/blink/public/common:headers",
     "//third_party/blink/public/mojom:mojom_platform_blink",
+    "//third_party/blink/renderer/platform:allow_discouraged_type",
     "//third_party/blink/renderer/platform/blob:blob",
     "//third_party/blink/renderer/platform/instrumentation:instrumentation",
     "//third_party/blink/renderer/platform/network:network",
@@ -217,9 +232,9 @@ source_set("unit_tests") {
     "fetch/url_loader/cached_metadata_handler_test.cc",
     "fetch/url_loader/mojo_url_loader_client_unittest.cc",
     "fetch/url_loader/navigation_body_loader_unittest.cc",
+    "fetch/url_loader/resource_request_sender_unittest.cc",
     "fetch/url_loader/sync_load_context_unittest.cc",
-    "fetch/url_loader/web_resource_request_sender_unittest.cc",
-    "fetch/url_loader/web_url_loader_unittest.cc",
+    "fetch/url_loader/url_loader_unittest.cc",
     "fetch/url_loader/worker_main_script_loader_unittest.cc",
     "link_header_test.cc",
     "static_data_navigation_body_loader_test.cc",
@@ -233,7 +248,6 @@ source_set("unit_tests") {
     "//mojo/public/cpp/test_support:test_utils",
     "//net:test_support",
     "//net/traffic_annotation:test_support",
-    "//services/metrics/public/cpp:ukm_builders",
     "//services/network:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -265,8 +279,6 @@ source_set("test_support") {
     "testing/test_loader_factory.h",
     "testing/test_resource_fetcher_properties.cc",
     "testing/test_resource_fetcher_properties.h",
-    "testing/web_url_loader_factory_with_mock.cc",
-    "testing/web_url_loader_factory_with_mock.h",
   ]
 
   configs += [

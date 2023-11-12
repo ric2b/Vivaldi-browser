@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/guid.h"
 #include "base/i18n/break_iterator.h"
 #include "base/i18n/case_conversion.h"
@@ -21,6 +21,7 @@
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -64,23 +65,6 @@ AutocompleteMatch::Type GetTypeForShortcut(AutocompleteMatch::Type type) {
                  ? AutocompleteMatchType::SEARCH_HISTORY
                  : type;
   }
-}
-
-// Get either `description_for_shortcuts` if non-empty or fallback to
-// `description`.
-const std::u16string& GetDescription(const AutocompleteMatch& match) {
-  return match.description_for_shortcuts.empty()
-             ? match.description
-             : match.description_for_shortcuts;
-}
-
-// Get either `description_class_for_shortcuts` if non-empty or fallback to
-// `description_class`.
-const ACMatchClassifications& GetDescriptionClass(
-    const AutocompleteMatch& match) {
-  return match.description_class_for_shortcuts.empty()
-             ? match.description_class
-             : match.description_class_for_shortcuts;
 }
 
 // Expand the last word in `text` to a full word in `match_text`. E.g., if
@@ -181,6 +165,56 @@ std::u16string ExpandToFullWord(const std::u16string& text,
 }  // namespace
 
 // ShortcutsBackend -----------------------------------------------------------
+
+// static
+const std::u16string& ShortcutsBackend::GetDescription(
+    const AutocompleteMatch& match) {
+  return match.swap_contents_and_description ||
+                 match.description_for_shortcuts.empty()
+             ? match.description
+             : match.description_for_shortcuts;
+}
+
+// static
+const std::u16string& ShortcutsBackend::GetSwappedDescription(
+    const AutocompleteMatch& match) {
+  return match.swap_contents_and_description ? GetContents(match)
+                                             : GetDescription(match);
+}
+
+// static
+const ACMatchClassifications& ShortcutsBackend::GetDescriptionClass(
+    const AutocompleteMatch& match) {
+  return match.swap_contents_and_description ||
+                 match.description_class_for_shortcuts.empty()
+             ? match.description_class
+             : match.description_class_for_shortcuts;
+}
+
+// static
+const std::u16string& ShortcutsBackend::GetContents(
+    const AutocompleteMatch& match) {
+  return !match.swap_contents_and_description ||
+                 match.description_for_shortcuts.empty()
+             ? match.contents
+             : match.description_for_shortcuts;
+}
+
+// static
+const std::u16string& ShortcutsBackend::GetSwappedContents(
+    const AutocompleteMatch& match) {
+  return match.swap_contents_and_description ? match.description
+                                             : match.contents;
+}
+
+// static
+const ACMatchClassifications& ShortcutsBackend::GetContentsClass(
+    const AutocompleteMatch& match) {
+  return !match.swap_contents_and_description ||
+                 match.description_class_for_shortcuts.empty()
+             ? match.contents_class
+             : match.description_class_for_shortcuts;
+}
 
 ShortcutsBackend::ShortcutsBackend(
     TemplateURLService* template_url_service,
@@ -305,13 +339,10 @@ void ShortcutsBackend::AddOrUpdateShortcut(const std::u16string& text,
   // is usually also recognizable and helpful when there are whitespace or other
   // discrepancies between the title and host (e.g. 'Stack Overflow' and
   // 'stackoverflow.com').
-  const auto& match_text = match.swap_contents_and_description
-                               ? GetDescription(match)
-                               : match.contents;
   const auto expanded_text =
       OmniboxFieldTrial::IsShortcutExpandingEnabled()
           ? ExpandToFullWord(
-                text, match_text + u" " +
+                text, GetSwappedContents(match) + u" " +
                           base::UTF8ToUTF16(match.destination_url.host()))
           : text;
   AddShortcut(ShortcutsDatabase::Shortcut(
@@ -346,8 +377,8 @@ ShortcutsDatabase::Shortcut::MatchCore ShortcutsBackend::MatchToMatchCore(
 
   return ShortcutsDatabase::Shortcut::MatchCore(
       normalized_match->fill_into_edit, normalized_match->destination_url,
-      normalized_match->document_type, normalized_match->contents,
-      StripMatchMarkers(normalized_match->contents_class),
+      normalized_match->document_type, GetContents(*normalized_match),
+      StripMatchMarkers(GetContentsClass(*normalized_match)),
       GetDescription(*normalized_match),
       StripMatchMarkers(GetDescriptionClass(*normalized_match)),
       normalized_match->transition, match_type, normalized_match->keyword);

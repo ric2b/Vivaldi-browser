@@ -8,10 +8,10 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -42,13 +42,11 @@
 #include "chrome/browser/safe_browsing/user_interaction_observer.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/sync/sync_service_factory.h"
-#include "chrome/browser/touch_to_fill/touch_to_fill_webauthn_credential.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/passwords/password_generation_popup_controller_impl.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
-#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
@@ -56,6 +54,7 @@
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/logging/log_receiver.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
+#include "components/autofill/core/common/mojom/autofill_types.mojom-shared.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/back_forward_cache/back_forward_cache_disable.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
@@ -72,6 +71,7 @@
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/http_auth_manager_impl.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
+#include "components/password_manager/core/browser/passkey_credential.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
 #include "components/password_manager/core/browser/password_change_success_tracker.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -409,9 +409,6 @@ void ChromePasswordManagerClient::FocusedInputChanged(
   if (!content_driver->CanShowAutofillUi())
     return;
 
-  if (!PasswordAccessoryController::AllowedForWebContents(web_contents()))
-    return;
-
   if (web_contents()->GetFocusedFrame()) {
     bool manual_generation_available =
         password_manager_util::ManualPasswordGenerationEnabled(driver);
@@ -473,32 +470,17 @@ void ChromePasswordManagerClient::ShowPasswordManagerErrorMessage(
 void ChromePasswordManagerClient::ShowTouchToFill(
     PasswordManagerDriver* driver,
     autofill::mojom::SubmissionReadinessState submission_readiness) {
-  std::vector<TouchToFillWebAuthnCredential> webauthn_credentials;
   auto* webauthn_delegate = GetWebAuthnCredentialsDelegateForDriver(driver);
-  if (webauthn_delegate && webauthn_delegate->IsWebAuthnAutofillEnabled()) {
-    const absl::optional<std::vector<autofill::Suggestion>>& suggestions =
-        webauthn_delegate->GetWebAuthnSuggestions();
-    if (suggestions.has_value()) {
-      base::ranges::transform(*suggestions,
-                              std::back_inserter(webauthn_credentials),
-                              [](const auto& suggestion) {
-                                return TouchToFillWebAuthnCredential(
-                                    TouchToFillWebAuthnCredential::Username(
-                                        suggestion.main_text.value),
-                                    TouchToFillWebAuthnCredential::BackendId(
-                                        (suggestion.template GetPayload<
-                                             autofill::Suggestion::BackendId>())
-                                            .value()));
-                              });
-    }
+  std::vector<password_manager::PasskeyCredential> passkeys;
+  if (webauthn_delegate && webauthn_delegate->GetPasskeys().has_value()) {
+    passkeys = *webauthn_delegate->GetPasskeys();
   }
-
   GetOrCreateTouchToFillController()->Show(
       credential_cache_
           .GetCredentialStore(url::Origin::Create(
               driver->GetLastCommittedURL().DeprecatedGetOriginAsURL()))
           .GetCredentials(),
-      webauthn_credentials,
+      passkeys,
       std::make_unique<TouchToFillControllerAutofillDelegate>(
           this, GetBiometricAuthenticator(), driver->AsWeakPtr(),
           submission_readiness));
@@ -1135,27 +1117,26 @@ void ChromePasswordManagerClient::AutomaticGenerationAvailable(
               CPMD_BAD_ORIGIN_AUTOMATIC_GENERATION_STATUS_CHANGED))
     return;
 #if BUILDFLAG(IS_ANDROID)
-  if (PasswordGenerationController::AllowedForWebContents(web_contents())) {
-    PasswordManagerDriver* driver = driver_factory_->GetDriverForFrame(rfh);
-    // This method is called over Mojo via a RenderFrameHostReceiverSet; the
-    // current target frame must be live.
-    // TODO(crbug.com/1294378): Remove reference to nested frames once
-    // EnablePasswordManagerWithinFencedFrame is launched.
-    DCHECK(driver || rfh->IsNestedWithinFencedFrame());
-    if (!driver)
-      return;
-
-    PasswordGenerationController* generation_controller =
-        PasswordGenerationController::GetIfExisting(web_contents());
-    DCHECK(generation_controller);
-
-    gfx::RectF element_bounds_in_screen_space = TransformToRootCoordinates(
-        password_generation_driver_receivers_.GetCurrentTargetFrame(),
-        ui_data.bounds);
-
-    generation_controller->OnAutomaticGenerationAvailable(
-        driver, ui_data, element_bounds_in_screen_space);
+  PasswordManagerDriver* driver = driver_factory_->GetDriverForFrame(rfh);
+  // This method is called over Mojo via a RenderFrameHostReceiverSet; the
+  // current target frame must be live.
+  // TODO(crbug.com/1294378): Remove reference to nested frames once
+  // EnablePasswordManagerWithinFencedFrame is launched.
+  DCHECK(driver || rfh->IsNestedWithinFencedFrame());
+  if (!driver) {
+    return;
   }
+
+  PasswordGenerationController* generation_controller =
+      PasswordGenerationController::GetIfExisting(web_contents());
+  DCHECK(generation_controller);
+
+  gfx::RectF element_bounds_in_screen_space = TransformToRootCoordinates(
+      password_generation_driver_receivers_.GetCurrentTargetFrame(),
+      ui_data.bounds);
+
+  generation_controller->OnAutomaticGenerationAvailable(
+      driver, ui_data, element_bounds_in_screen_space);
 #else
   password_manager::ContentPasswordManagerDriver* driver =
       driver_factory_->GetDriverForFrame(rfh);
@@ -1180,6 +1161,9 @@ void ChromePasswordManagerClient::AutomaticGenerationAvailable(
       popup_controller_->GeneratedPasswordRejected();
     }
 
+    driver->SetSuggestionAvailability(
+        ui_data.generation_element_id,
+        autofill::mojom::AutofillState::kAutofillAvailable);
     return;
   }
 
@@ -1594,14 +1578,6 @@ bool ChromePasswordManagerClient::IsPasswordManagementEnabledForCurrentPage(
     const GURL& url) const {
   bool is_enabled = CanShowBubbleOnURL(url);
 
-  // The password manager is disabled while VR (virtual reality) is being used,
-  // as the use of conventional UI elements might harm the user experience in
-  // VR.
-  if (vr::VrTabHelper::IsUiSuppressedInVr(
-          web_contents(), vr::UiSuppressedElement::kPasswordManager)) {
-    is_enabled = false;
-  }
-
   // The password manager is disabled on Google Password Manager page.
   if (url.DeprecatedGetOriginAsURL() ==
       GURL(password_manager::kPasswordManagerAccountDashboardURL)) {
@@ -1701,6 +1677,12 @@ void ChromePasswordManagerClient::ShowPasswordGenerationPopup(
     popup_controller_->Show(
         PasswordGenerationPopupController::kOfferGeneration);
   }
+
+  driver->SetSuggestionAvailability(
+      ui_data.generation_element_id,
+      popup_controller_ && popup_controller_->IsVisible()
+          ? autofill::mojom::AutofillState::kAutofillAvailable
+          : autofill::mojom::AutofillState::kNoSuggestions);
 }
 
 gfx::RectF ChromePasswordManagerClient::TransformToRootCoordinates(

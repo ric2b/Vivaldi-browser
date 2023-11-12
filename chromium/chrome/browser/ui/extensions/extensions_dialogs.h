@@ -5,14 +5,16 @@
 #ifndef CHROME_BROWSER_UI_EXTENSIONS_EXTENSIONS_DIALOGS_H_
 #define CHROME_BROWSER_UI_EXTENSIONS_EXTENSIONS_DIALOGS_H_
 
+#include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/common/buildflags.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/gfx/native_widget_types.h"
 
 #if !BUILDFLAG(ENABLE_EXTENSIONS)
@@ -20,6 +22,7 @@
 #endif
 
 class Browser;
+class SettingsOverriddenDialogController;
 
 namespace content {
 class WebContents;
@@ -28,8 +31,6 @@ class WebContents;
 namespace gfx {
 class ImageSkia;
 }  // namespace gfx
-
-class SettingsOverriddenDialogController;
 
 namespace extensions {
 
@@ -88,6 +89,15 @@ void ShowExtensionInstallBlockedByParentDialog(
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
 #if BUILDFLAG(IS_CHROMEOS)
+
+// Shows a dialog requesting the user to grant the extension access to a file
+// system.
+void ShowRequestFileSystemDialog(
+    content::WebContents* web_contents,
+    const std::string& extension_name,
+    const std::string& volume_label,
+    bool writable,
+    base::OnceCallback<void(ui::DialogButton)> callback);
 
 // Shows the print job confirmation dialog bubble anchored to the toolbar icon
 // for the extension.

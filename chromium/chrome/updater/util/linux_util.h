@@ -7,16 +7,11 @@
 
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
-namespace base {
-class FilePath;
-}  // namespace base
-
 namespace updater {
-enum class UpdaterScope;
 
-// For user installations returns a path to the "~/.local" for the logged in
-// user. For system installations returns "/opt/".
-absl::optional<base::FilePath> GetApplicationDataDirectory(UpdaterScope scope);
+// Filename of the non side-by-side launcher. The file is a hardlink to the
+// qualified version of the updater.
+extern const char kLauncherName[];
 
 }  // namespace updater
 

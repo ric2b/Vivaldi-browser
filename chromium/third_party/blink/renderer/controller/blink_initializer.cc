@@ -35,6 +35,7 @@
 
 #include "base/allocator/partition_allocator/page_allocator.h"
 #include "base/command_line.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "third_party/blink/public/common/features.h"
@@ -54,8 +55,7 @@
 #include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/frame/display_cutout_client_impl.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
-#include "third_party/blink/renderer/core/html/parser/atomic_html_token.h"
-#include "third_party/blink/renderer/core/html/parser/literal_buffer.h"
+#include "third_party/blink/renderer/core/loader/loader_factory_for_frame.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/disk_data_allocator.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -71,6 +71,7 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "third_party/blink/renderer/controller/crash_memory_metrics_reporter_impl.h"
 #include "third_party/blink/renderer/controller/oom_intervention_impl.h"
+#include "third_party/blink/renderer/controller/private_memory_footprint_provider.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -103,18 +104,6 @@ class EndOfTaskRunner : public Thread::TaskObserver {
     V8Initializer::ReportRejectedPromisesOnMainThread();
   }
 };
-
-// See description of `g_literal_buffer_create_string_with_encoding` in
-// LiteralBuffer as to what this controls.
-BASE_FEATURE(kLiteralBufferCreateStringWithEncoding,
-             "LiteralBufferCreateStringWithEncoding",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// See description of `g_use_html_attribute_name_lookup` in AtomicHTMLToken as
-// to what this controls.
-BASE_FEATURE(kUseHtmlAttributeNameLookup,
-             "UseHtmlAttributeNameLookup",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 Thread::TaskObserver* g_end_of_task_runner = nullptr;
 
@@ -170,12 +159,6 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
 
   // Initialize performance manager.
   RendererResourceCoordinatorImpl::MaybeInitialize();
-
-  g_literal_buffer_create_string_with_encoding =
-      base::FeatureList::IsEnabled(kLiteralBufferCreateStringWithEncoding);
-
-  g_use_html_attribute_name_lookup =
-      base::FeatureList::IsEnabled(kUseHtmlAttributeNameLookup);
 }
 
 }  // namespace
@@ -205,6 +188,19 @@ void SetIsCrossOriginIsolated(bool value) {
 // Function defined in third_party/blink/public/web/blink.h.
 void SetIsIsolatedContext(bool value) {
   Agent::SetIsIsolatedContext(value);
+}
+
+// Function defined in third_party/blink/public/web/blink.h.
+void SetCorsExemptHeaderList(
+    const WebVector<WebString>& web_cors_exempt_header_list) {
+  Vector<String> cors_exempt_header_list(
+      base::checked_cast<wtf_size_t>(web_cors_exempt_header_list.size()));
+  std::transform(web_cors_exempt_header_list.begin(),
+                 web_cors_exempt_header_list.end(),
+                 cors_exempt_header_list.begin(),
+                 [](const WebString& h) { return WTF::String(h); });
+  LoaderFactoryForFrame::SetCorsExemptHeaderList(
+      std::move(cors_exempt_header_list));
 }
 
 void BlinkInitializer::RegisterInterfaces(mojo::BinderMap& binders) {
@@ -266,6 +262,12 @@ void BlinkInitializer::RegisterMemoryWatchers() {
   // Start reporting the highest private memory footprint after the first
   // navigation.
   HighestPmfReporter::Initialize(main_thread_task_runner);
+#endif
+
+#if BUILDFLAG(IS_ANDROID) && !defined(ARCH_CPU_64_BITS)
+  // Initialize PrivateMemoryFootprintProvider to start providing the value
+  // for the browser process.
+  PrivateMemoryFootprintProvider::Initialize(main_thread_task_runner);
 #endif
 }
 

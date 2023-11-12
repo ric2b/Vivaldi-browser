@@ -133,48 +133,17 @@ ExtensionFunction::ResponseAction ThemePrivateImportFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  if (params->options.data_blob) {
-    if (params->options.dialog_title || params->options.window_id) {
-      return RespondNow(
-          Error("File choice related options should not given if dataBlob is "
-                "specified"));
-    }
-    StartImport(base::FilePath(), std::move(*params->options.data_blob));
-  } else {
-    if (!params->options.dialog_title ||
-        params->options.dialog_title->empty() || !params->options.window_id) {
-      return RespondNow(
-          Error("Both dialogTitle and windowId must be specified"));
-    }
-
-    FileSelectionOptions options(*params->options.window_id);
-    options.SetTitle(*params->options.dialog_title);
-    options.AddExtension("zip");
-    std::move(options).RunDialog(
-        base::BindOnce(&ThemePrivateImportFunction::OnFileSelectionDone, this));
-  }
-
+  StartImport(std::move(params->options.data_blob));
   return RespondLater();
 }
 
 void ThemePrivateImportFunction::StartImport(
-    base::FilePath archive_path,
     std::vector<uint8_t> archive_data) {
   vivaldi_theme_io::Import(
       Profile::FromBrowserContext(browser_context())->GetWeakPtr(),
-      std::move(archive_path),
+      base::FilePath(),
       std::move(archive_data),
       base::BindOnce(&ThemePrivateImportFunction::SendResult, this));
-}
-
-void ThemePrivateImportFunction::OnFileSelectionDone(
-    base::FilePath theme_archive,
-    bool cancelled) {
-  if (theme_archive.empty()) {
-    SendResult(std::string(), nullptr);
-    return;
-  }
-  StartImport(std::move(theme_archive), std::vector<uint8_t>());
 }
 
 namespace {

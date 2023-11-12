@@ -8,8 +8,10 @@
 #include <memory>
 
 #include "ash/public/cpp/login_accelerators.h"
+#include "base/functional/callback_forward.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launcher.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
@@ -26,6 +28,7 @@ class LoginDisplayHost;
 class OobeUI;
 
 extern const char kKioskLaunchStateCrashKey[];
+extern const base::TimeDelta kDefaultKioskSplashScreenMinTime;
 
 // Kiosk launch state for crash key.
 enum class KioskLaunchState {
@@ -80,7 +83,8 @@ void SetKioskLaunchStateCrashKey(KioskLaunchState state);
 // NetworkUI state.
 class KioskLaunchController : public KioskProfileLoader::Delegate,
                               public AppLaunchSplashScreenView::Delegate,
-                              public KioskAppLauncher::Delegate {
+                              public KioskAppLauncher::NetworkDelegate,
+                              public KioskAppLauncher::Observer {
  public:
   class KioskProfileLoadFailedObserver : public base::CheckedObserver {
    public:
@@ -90,28 +94,37 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
 
   using ReturnBoolCallback = base::RepeatingCallback<bool()>;
 
+  // Factory class that constructs a `KioskAppLauncher`.
+  // The default implementation constructs the correct implementation of
+  // `KioskAppLauncher` based on the kiosk type associated with `KioskAppId`.
+  using KioskAppLauncherFactory =
+      base::RepeatingCallback<std::unique_ptr<KioskAppLauncher>(
+          Profile*,
+          const KioskAppId&,
+          KioskAppLauncher::NetworkDelegate*)>;
+
   explicit KioskLaunchController(OobeUI* oobe_ui);
+  KioskLaunchController(LoginDisplayHost* host,
+                        AppLaunchSplashScreenView* splash_screen,
+                        KioskAppLauncherFactory app_launcher_factory);
   KioskLaunchController(const KioskLaunchController&) = delete;
   KioskLaunchController& operator=(const KioskLaunchController&) = delete;
   ~KioskLaunchController() override;
 
   [[nodiscard]] static std::unique_ptr<base::AutoReset<bool>>
-  DisableWaitTimerAndLoginOperationsForTesting();
+  DisableLoginOperationsForTesting();
   [[nodiscard]] static std::unique_ptr<base::AutoReset<bool>>
   SkipSplashScreenWaitForTesting();
   [[nodiscard]] static std::unique_ptr<base::AutoReset<base::TimeDelta>>
   SetNetworkWaitForTesting(base::TimeDelta wait_time);
   [[nodiscard]] static std::unique_ptr<base::AutoReset<bool>>
   BlockAppLaunchForTesting();
+  [[nodiscard]] static base::AutoReset<bool> BlockExitOnFailureForTesting();
   static void SetNetworkTimeoutCallbackForTesting(base::OnceClosure* callback);
   static void SetCanConfigureNetworkCallbackForTesting(
       ReturnBoolCallback* callback);
   static void SetNeedOwnerAuthToConfigureNetworkCallbackForTesting(
       ReturnBoolCallback* callback);
-
-  static std::unique_ptr<KioskLaunchController> CreateForTesting(
-      AppLaunchSplashScreenView* view,
-      std::unique_ptr<KioskAppLauncher> app_launcher);
 
   bool waiting_for_network() const {
     return app_state_ == AppState::kInitNetwork;
@@ -150,23 +163,23 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
     kShowing          // Network configure UI is being shown.
   };
 
-  KioskLaunchController();
-
   void OnCancelAppLaunch();
   void OnNetworkConfigRequested();
+  void InitializeKeyboard();
+  void InitializeLauncher();
 
-  // AppLaunchSplashScreenView::Delegate:
+  // `AppLaunchSplashScreenView::Delegate`
   void OnConfigureNetwork() override;
   void OnDeletingSplashScreenView() override;
   void OnNetworkConfigFinished() override;
   void OnNetworkStateChanged(bool online) override;
-  KioskAppManagerBase::App GetAppData() override;
-  bool IsNetworkRequired() override;
 
-  // KioskAppLauncher::Delegate:
+  // `KioskAppLauncher::NetworkDelegate`
   void InitializeNetwork() override;
   bool IsNetworkReady() const override;
   bool IsShowingNetworkConfigScreen() const override;
+
+  // `KioskAppLauncher::Observer`
   void OnLaunchFailed(KioskAppLaunchError::Error error) override;
   void OnAppInstalling() override;
   void OnAppPrepared() override;
@@ -174,12 +187,13 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
   void OnAppDataUpdated() override;
   void OnAppWindowCreated() override;
 
-  // KioskProfileLoader::Delegate:
+  // `KioskProfileLoader::Delegate`
   void OnProfileLoaded(Profile* profile) override;
   void OnProfileLoadFailed(KioskAppLaunchError::Error error) override;
   void OnOldEncryptionDetected(
       std::unique_ptr<UserContext> user_context) override;
 
+  KioskAppManagerBase::App GetAppData();
   void OnOwnerSigninSuccess();
 
   // Whether the network could be configured during launching.
@@ -213,10 +227,15 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
   // Current state of network configure dialog.
   NetworkUIState network_ui_state_ = NetworkUIState::kNotShowing;
 
-  LoginDisplayHost* const host_;  // Not owned, destructed upon shutdown.
-  AppLaunchSplashScreenView* splash_screen_view_ = nullptr;  // Owned by OobeUI.
-  KioskAppId kiosk_app_id_;                                  // Current app.
-  Profile* profile_ = nullptr;                               // Not owned.
+  // Not owned, destructed upon shutdown.
+  raw_ptr<LoginDisplayHost> const host_;
+  // Owned by OobeUI.
+  raw_ptr<AppLaunchSplashScreenView> splash_screen_view_ = nullptr;
+  // Current app.
+  KioskAppId kiosk_app_id_;
+  // Not owned.
+  raw_ptr<Profile> profile_ = nullptr;
+  const KioskAppLauncherFactory app_launcher_factory_;
 
   // Whether app should be launched as soon as it is ready.
   bool launch_on_install_ = false;
@@ -249,6 +268,8 @@ class KioskLaunchController : public KioskProfileLoader::Delegate,
   base::ObserverList<KioskProfileLoadFailedObserver>
       profile_load_failed_observers_;
 
+  base::ScopedObservation<KioskAppLauncher, KioskAppLauncher::Observer>
+      app_launcher_observation_{this};
   base::WeakPtrFactory<KioskLaunchController> weak_ptr_factory_{this};
 };
 

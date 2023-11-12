@@ -5,11 +5,10 @@
 package org.chromium.chrome.browser.services.gcm;
 
 import android.content.Context;
-import android.os.Build;
 import android.os.Bundle;
+import android.os.PersistableBundle;
 
 import androidx.annotation.MainThread;
-import androidx.annotation.RequiresApi;
 
 import org.chromium.base.Log;
 import org.chromium.components.background_task_scheduler.BackgroundTask;
@@ -20,7 +19,6 @@ import org.chromium.components.gcm_driver.GCMMessage;
  * Processes jobs that have been scheduled for delivering GCM messages to the native GCM Driver,
  * processing for which may exceed the lifetime of the GcmListenerService.
  */
-@RequiresApi(Build.VERSION_CODES.N)
 public class GCMBackgroundTask implements BackgroundTask {
     private static final String TAG = "GCMBackgroundTask";
 
@@ -35,7 +33,17 @@ public class GCMBackgroundTask implements BackgroundTask {
     @Override
     public boolean onStartTask(
             Context context, TaskParameters taskParameters, TaskFinishedCallback callback) {
-        Bundle extras = taskParameters.getExtras();
+        PersistableBundle persistableExtras = taskParameters.getExtras();
+
+        // All types supported by PersistableBundle are part of BaseBundle (with the exception of
+        // full PersistableBundle entries themselves), which Bundle also extends, so it is always
+        // safe to put entries from a PersistableBundle into a Bundle. This conversion previously
+        // happened within the BackgroundTaskScheduler, but as part of deprecating support for
+        // earlier Android versions, there was no longer any need to hide PersistableBundle from the
+        // public API.
+        Bundle extras = new Bundle();
+        extras.putAll(persistableExtras);
+
         GCMMessage message = GCMMessage.createFromBundle(extras);
         if (message == null) {
             Log.e(TAG, "The received bundle containing message data could not be validated.");
@@ -56,11 +64,5 @@ public class GCMBackgroundTask implements BackgroundTask {
     public boolean onStopTask(Context context, TaskParameters taskParameters) {
         // The GCM Driver has no mechanism for aborting previously dispatched messages.
         return false;
-    }
-
-    @MainThread
-    @Override
-    public void reschedule(Context context) {
-        // Needs appropriate implementation.
     }
 }

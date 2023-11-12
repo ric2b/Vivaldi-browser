@@ -17,8 +17,13 @@
 
 namespace auction_worklet {
 
+namespace mojom {
+class AuctionSharedStorageHost;
+}  // namespace mojom
+
 class ForDebuggingOnlyBindings;
 class PrivateAggregationBindings;
+class SharedStorageBindings;
 class RegisterAdBeaconBindings;
 class ReportBindings;
 class SetBidBindings;
@@ -107,9 +112,17 @@ class CONTENT_EXPORT ContextRecycler {
     return for_debugging_only_bindings_.get();
   }
 
-  void AddPrivateAggregationBindings();
+  void AddPrivateAggregationBindings(
+      bool private_aggregation_permissions_policy_allowed);
   PrivateAggregationBindings* private_aggregation_bindings() {
     return private_aggregation_bindings_.get();
+  }
+
+  void AddSharedStorageBindings(
+      mojom::AuctionSharedStorageHost* shared_storage_host,
+      bool shared_storage_permissions_policy_allowed);
+  SharedStorageBindings* shared_storage_bindings() {
+    return shared_storage_bindings_.get();
   }
 
   void AddRegisterAdBeaconBindings();
@@ -161,6 +174,7 @@ class CONTENT_EXPORT ContextRecycler {
 
   std::unique_ptr<ForDebuggingOnlyBindings> for_debugging_only_bindings_;
   std::unique_ptr<PrivateAggregationBindings> private_aggregation_bindings_;
+  std::unique_ptr<SharedStorageBindings> shared_storage_bindings_;
   std::unique_ptr<RegisterAdBeaconBindings> register_ad_beacon_bindings_;
   std::unique_ptr<ReportBindings> report_bindings_;
   std::unique_ptr<SetBidBindings> set_bid_bindings_;

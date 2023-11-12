@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/base_export.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "base/task/sequenced_task_runner.h"
@@ -46,11 +46,11 @@ class BASE_EXPORT FilePathWatcher {
     // within the directory are watched.
     kRecursive,
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
     // Indicates that the watcher should watch the given path only (neither
     // ancestors nor descendants). The watch fails if the path does not exist.
     kTrivial,
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_APPLE)
   };
 
   // Flags are a generalization of |Type|. They are used in the new

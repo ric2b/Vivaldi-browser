@@ -17,11 +17,11 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/posix/eintr_wrapper.h"
@@ -524,7 +524,7 @@ TEST_F(ProcessSingletonPosixTest, CreateRespectsOldMacLock) {
 TEST_F(ProcessSingletonPosixTest, CreateReplacesOldMacLock) {
   std::unique_ptr<TestableProcessSingleton> process_singleton(
       CreateProcessSingleton());
-  EXPECT_EQ(0, base::WriteFile(lock_path_, "", 0));
+  EXPECT_TRUE(base::WriteFile(lock_path_, base::StringPiece()));
   EXPECT_TRUE(process_singleton->Create());
   VerifyFiles();
 }

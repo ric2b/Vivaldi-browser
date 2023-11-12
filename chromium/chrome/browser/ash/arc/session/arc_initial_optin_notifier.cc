@@ -9,20 +9,19 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/metrics/login_unlock_throughput_recorder.h"
 #include "ash/shell.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "chrome/browser/profiles/profile_keyed_service_factory.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace arc {
 
 namespace {
 
-class ArcInitialOptInNotifierFactory
-    : public BrowserContextKeyedServiceFactory {
+class ArcInitialOptInNotifierFactory : public ProfileKeyedServiceFactory {
  public:
   ArcInitialOptInNotifierFactory();
 
@@ -52,9 +51,7 @@ class ArcInitialOptInNotifierFactory
 };
 
 ArcInitialOptInNotifierFactory::ArcInitialOptInNotifierFactory()
-    : BrowserContextKeyedServiceFactory(
-          "ArcInitialOptInNotifierFactory",
-          BrowserContextDependencyManager::GetInstance()) {}
+    : ProfileKeyedServiceFactory("ArcInitialOptInNotifierFactory") {}
 
 }  // anonymous namespace
 
@@ -102,6 +99,11 @@ void ArcInitialOptInNotifier::OnArcOptInUserAction() {
           : nullptr;
   if (throughput_recorder)
     throughput_recorder->OnArcOptedIn();
+}
+
+// static
+void ArcInitialOptInNotifier::EnsureFactoryBuilt() {
+  ArcInitialOptInNotifierFactory::GetInstance();
 }
 
 }  // namespace arc

@@ -123,7 +123,7 @@ bool HandleOptions(FakeDisplaySnapshot::Builder* builder, StringPiece options) {
         builder->SetHasColorCorrectionMatrix(true);
         break;
       case 'a':
-        builder->SetIsAspectPerservingScaling(true);
+        builder->SetIsAspectPreservingScaling(true);
         break;
       case 'i':
         builder->SetType(DISPLAY_CONNECTION_TYPE_INTERNAL);
@@ -169,11 +169,12 @@ std::unique_ptr<FakeDisplaySnapshot> Builder::Build() {
       id_, port_display_id_, edid_display_id_, connector_index_, origin_,
       physical_size, type_, base_connector_id_, path_topology_,
       is_aspect_preserving_scaling_, has_overscan_, privacy_screen_state_,
-      has_color_correction_matrix_, color_correction_in_linear_space_, name_,
-      std::move(modes_), current_mode_, native_mode_, product_code_,
-      maximum_cursor_size_, color_space_, bits_per_channel_,
-      hdr_static_metadata_, variable_refresh_rate_state_,
-      vertical_display_range_limits_);
+      has_content_protection_key_, has_color_correction_matrix_,
+      color_correction_in_linear_space_, name_, std::move(modes_),
+      current_mode_, native_mode_, product_code_, maximum_cursor_size_,
+      color_space_, bits_per_channel_, hdr_static_metadata_,
+      variable_refresh_rate_state_, vertical_display_range_limits_,
+      DrmFormatsAndModifiers());
 }
 
 Builder& Builder::SetId(int64_t id) {
@@ -246,7 +247,7 @@ Builder& Builder::SetPathTopology(const std::vector<uint64_t>& path_topology) {
   return *this;
 }
 
-Builder& Builder::SetIsAspectPerservingScaling(bool val) {
+Builder& Builder::SetIsAspectPreservingScaling(bool val) {
   is_aspect_preserving_scaling_ = val;
   return *this;
 }
@@ -296,6 +297,11 @@ Builder& Builder::SetHighDPI() {
 
 Builder& Builder::SetPrivacyScreen(PrivacyScreenState state) {
   privacy_screen_state_ = state;
+  return *this;
+}
+
+Builder& Builder::SetHasContentProtectionKey(bool has_content_protection_key) {
+  has_content_protection_key_ = has_content_protection_key;
   return *this;
 }
 
@@ -366,6 +372,7 @@ FakeDisplaySnapshot::FakeDisplaySnapshot(
     bool is_aspect_preserving_scaling,
     bool has_overscan,
     PrivacyScreenState privacy_screen_state,
+    bool has_content_protection_key,
     bool has_color_correction_matrix,
     bool color_correction_in_linear_space,
     std::string display_name,
@@ -378,7 +385,8 @@ FakeDisplaySnapshot::FakeDisplaySnapshot(
     uint32_t bits_per_channel,
     const gfx::HDRStaticMetadata& hdr_static_metadata,
     VariableRefreshRateState variable_refresh_rate_state,
-    const absl::optional<gfx::Range>& vertical_display_range_limits)
+    const absl::optional<gfx::Range>& vertical_display_range_limits,
+    const DrmFormatsAndModifiers& drm_formats_and_modifiers)
     : DisplaySnapshot(display_id,
                       port_display_id,
                       edid_display_id,
@@ -391,6 +399,7 @@ FakeDisplaySnapshot::FakeDisplaySnapshot(
                       is_aspect_preserving_scaling,
                       has_overscan,
                       privacy_screen_state,
+                      has_content_protection_key,
                       has_color_correction_matrix,
                       color_correction_in_linear_space,
                       color_space,
@@ -407,7 +416,8 @@ FakeDisplaySnapshot::FakeDisplaySnapshot(
                       2018 /*year_of_manufacture */,
                       maximum_cursor_size,
                       variable_refresh_rate_state,
-                      vertical_display_range_limits) {}
+                      vertical_display_range_limits,
+                      drm_formats_and_modifiers) {}
 
 FakeDisplaySnapshot::~FakeDisplaySnapshot() {}
 

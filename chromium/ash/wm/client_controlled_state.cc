@@ -9,6 +9,7 @@
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
+#include "ash/wm/float/float_controller.h"
 #include "ash/wm/pip/pip_positioner.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/splitview/split_view_controller.h"
@@ -19,6 +20,7 @@
 #include "ash/wm/window_state_util.h"
 #include "ash/wm/wm_event.h"
 #include "chromeos/ui/base/window_state_type.h"
+#include "chromeos/ui/wm/window_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -82,15 +84,13 @@ void ClientControlledState::HandleTransitionEvents(WindowState* window_state,
     case WM_EVENT_MINIMIZE:
     case WM_EVENT_FULLSCREEN:
     case WM_EVENT_SNAP_PRIMARY:
-    case WM_EVENT_SNAP_SECONDARY: {
+    case WM_EVENT_SNAP_SECONDARY:
+    case WM_EVENT_FLOAT: {
       WindowStateType next_state =
           GetResolvedNextWindowStateType(window_state, event);
       UpdateWindowForTransitionEvents(window_state, next_state, event);
       break;
     }
-    case WM_EVENT_FLOAT:
-      // TODO(crbug.com/1346061): Implement this.
-      break;
     case WM_EVENT_RESTORE:
       UpdateWindowForTransitionEvents(
           window_state, window_state->GetRestoreWindowState(), event);
@@ -201,6 +201,12 @@ void ClientControlledState::HandleBoundsEvents(WindowState* window_state,
           case WindowState::BoundsChangeAnimationType::kCrossFade:
             window_state->SetBoundsDirectCrossFade(bounds);
             break;
+          case WindowState::BoundsChangeAnimationType::kCrossFadeFloat:
+            window_state->SetBoundsDirectCrossFade(bounds, true);
+            break;
+          case WindowState::BoundsChangeAnimationType::kCrossFadeUnfloat:
+            window_state->SetBoundsDirectCrossFade(bounds, false);
+            break;
           case WindowState::BoundsChangeAnimationType::kAnimate:
             window_state->SetBoundsDirectAnimated(
                 bounds, bounds_change_animation_duration_);
@@ -260,12 +266,26 @@ bool ClientControlledState::EnterNextState(WindowState* window_state,
   window_state->UpdateWindowPropertiesFromStateType();
   window_state->NotifyPreStateTypeChange(previous_state_type);
 
+  auto* const window = window_state->window();
   // Don't update the window if the window is detached from parent.
   // This can happen during dragging.
   // TODO(oshima): This was added for DOCKED windows. Investigate if
   // we still need this.
-  if (window_state->window()->parent())
+  if (window->parent()) {
     UpdateMinimizedState(window_state, previous_state_type);
+  }
+
+  auto* const float_controller = Shell::Get()->float_controller();
+  if (next_state_type == WindowStateType::kFloated) {
+    if (Shell::Get()->tablet_mode_controller()->InTabletMode()) {
+      float_controller->FloatForTablet(window, previous_state_type);
+    } else {
+      float_controller->FloatImpl(window);
+    }
+  }
+  if (previous_state_type == WindowStateType::kFloated) {
+    float_controller->UnfloatImpl(window);
+  }
 
   window_state->NotifyPostStateTypeChange(previous_state_type);
 
@@ -273,8 +293,7 @@ bool ClientControlledState::EnterNextState(WindowState* window_state,
       IsPinnedWindowStateType(previous_state_type)) {
     set_next_bounds_change_animation_type(
         WindowState::BoundsChangeAnimationType::kCrossFade);
-    Shell::Get()->screen_pinning_controller()->SetPinnedWindow(
-        window_state->window());
+    Shell::Get()->screen_pinning_controller()->SetPinnedWindow(window);
   }
   return true;
 }
@@ -321,15 +340,18 @@ void ClientControlledState::UpdateWindowForTransitionEvents(
           event_type == WM_EVENT_RESTORE;
       // TODO(b/246683799): Investigate why window_state->snap_ratio() can be
       // empty.
-      const float snap_ratio_to_restore =
-          event->IsSnapInfoAvailable()
-              ? WindowSnapWMEvent::GetFloatValueForSnapRatio(
-                    static_cast<const WindowSnapWMEvent*>(event)->snap_ratio())
-              : (is_restoring && window_state->snap_ratio().has_value()
-                     ? window_state->snap_ratio().value()
-                     : kDefaultSnapRatio);
+      // Use the saved `window_state->snap_ratio()` if restoring, otherwise use
+      // the event requested snap ratio, which has a default value.
+      float next_snap_ratio;
+      if (is_restoring) {
+        next_snap_ratio =
+            window_state->snap_ratio().value_or(chromeos::kDefaultSnapRatio);
+      } else {
+        DCHECK(event->IsSnapEvent());
+        next_snap_ratio = event->snap_ratio();
+      }
       gfx::Rect bounds = GetSnappedWindowBoundsInParent(window, next_state_type,
-                                                        snap_ratio_to_restore);
+                                                        next_snap_ratio);
       // We don't want Unminimize() to restore the pre-snapped state during the
       // transition. See crbug.com/1031313 for why we need this.
       // kRestoreShowStateKey property will be updated properly after the window
@@ -343,6 +365,22 @@ void ClientControlledState::UpdateWindowForTransitionEvents(
               << ", next_state=" << next_state_type;
 
       // Then ask delegate to set the desired bounds for the snap state.
+      delegate_->HandleBoundsRequest(window_state, next_state_type, bounds,
+                                     window_state->GetDisplay().id());
+    }
+  } else if (next_state_type == WindowStateType::kFloated) {
+    if (chromeos::wm::CanFloatWindow(window)) {
+      const gfx::Rect bounds =
+          Shell::Get()->tablet_mode_controller()->InTabletMode()
+              ? FloatController::GetPreferredFloatWindowTabletBounds(window)
+              : FloatController::GetPreferredFloatWindowClamshellBounds(window);
+
+      window_state->UpdateWindowPropertiesFromStateType();
+      VLOG(1) << "Processing State Transtion: event=" << event_type
+              << ", state=" << state_type_
+              << ", next_state=" << next_state_type;
+
+      // Then ask delegate to set the desired bounds for the float state.
       delegate_->HandleBoundsRequest(window_state, next_state_type, bounds,
                                      window_state->GetDisplay().id());
     }

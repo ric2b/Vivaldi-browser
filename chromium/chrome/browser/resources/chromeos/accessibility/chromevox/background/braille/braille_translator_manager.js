@@ -5,8 +5,8 @@
 /**
  * @fileoverview Keeps track of the current braille translators.
  */
-import {LocalStorage} from '../../../common/local_storage.js';
 import {BrailleTable} from '../../common/braille/braille_table.js';
+import {SettingsManager} from '../../common/settings_manager.js';
 
 import {ExpandingBrailleTranslator} from './expanding_braille_translator.js';
 import {LibLouis} from './liblouis.js';
@@ -24,7 +24,7 @@ export class BrailleTranslatorManager {
             chrome.extension.getURL(
                 'chromevox/background/braille/liblouis_wrapper.js'),
             chrome.extension.getURL('chromevox/background/braille/tables'),
-            this.loadLiblouis_.bind(this));
+            () => this.loadLiblouis_());
 
     /** @private {!Array<function()>} */
     this.changeListeners_ = [];
@@ -40,6 +40,18 @@ export class BrailleTranslatorManager {
     this.uncontractedTranslator_ = null;
     /** @private {?string} */
     this.uncontractedTableId_ = null;
+  }
+
+  static init() {
+    if (BrailleTranslatorManager.instance) {
+      throw new Error('\nCannot create two BrailleTranslatorManagers');
+    }
+    BrailleTranslatorManager.instance = new BrailleTranslatorManager();
+
+    SettingsManager.addListenerForKey(
+        'brailleTable',
+        brailleTable =>
+            BrailleTranslatorManager.instance.refresh(brailleTable));
   }
 
   /**
@@ -174,7 +186,7 @@ export class BrailleTranslatorManager {
         this.tables_ = tables;
 
         // Initial refresh; set options from user preferences.
-        this.refresh(LocalStorage.get('brailleTable'), undefined, r);
+        this.refresh(SettingsManager.getString('brailleTable'), undefined, r);
       });
     });
   }
@@ -210,3 +222,6 @@ export class BrailleTranslatorManager {
     await this.fetchTables_();
   }
 }
+
+/** @type {BrailleTranslatorManager} */
+BrailleTranslatorManager.instance;

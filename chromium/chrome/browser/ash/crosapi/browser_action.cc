@@ -82,7 +82,7 @@ class NewTabAction final : public BrowserAction {
   NewTabAction() : BrowserAction(true) {}
 
   void Perform(const VersionedBrowserService& service) override {
-    service.service->NewTabWithoutParameter(base::DoNothing());
+    service.service->NewTab(base::DoNothing());
   }
 };
 
@@ -95,7 +95,7 @@ class LaunchAction final : public BrowserAction {
     if (service.interface_version < mojom::BrowserService::kLaunchMinVersion) {
       LOG(WARNING)
           << "Lacros too old for Launch action - falling back to NewTab";
-      service.service->NewTabWithoutParameter(base::DoNothing());
+      service.service->NewTab(base::DoNothing());
       return;
     }
     service.service->Launch(target_display_id_, base::DoNothing());
@@ -168,19 +168,22 @@ class NewGuestWindowAction final : public BrowserAction {
 
 class HandleTabScrubbingAction final : public BrowserAction {
  public:
-  explicit HandleTabScrubbingAction(float x_offset)
-      : BrowserAction(false), x_offset_(x_offset) {}
+  HandleTabScrubbingAction(float x_offset, bool is_fling_scroll_event)
+      : BrowserAction(false),
+        x_offset_(x_offset),
+        is_fling_scroll_event_(is_fling_scroll_event) {}
 
   void Perform(const VersionedBrowserService& service) override {
     if (service.interface_version <
         crosapi::mojom::BrowserService::kHandleTabScrubbingMinVersion) {
       return;
     }
-    service.service->HandleTabScrubbing(x_offset_);
+    service.service->HandleTabScrubbing(x_offset_, is_fling_scroll_event_);
   }
 
  private:
   const float x_offset_;
+  const bool is_fling_scroll_event_;
 };
 
 class NewFullscreenWindowAction final : public BrowserAction {
@@ -259,24 +262,30 @@ ui::mojom::WindowShowState ConvertWindowShowState(ui::WindowShowState state) {
 
 class CreateBrowserWithRestoredDataAction final : public BrowserAction {
  public:
-  CreateBrowserWithRestoredDataAction(const std::vector<GURL>& urls,
-                                      const gfx::Rect& bounds,
-                                      ui::WindowShowState show_state,
-                                      int32_t active_tab_index,
-                                      base::StringPiece app_name,
-                                      int32_t restore_window_id)
+  CreateBrowserWithRestoredDataAction(
+      const std::vector<GURL>& urls,
+      const gfx::Rect& bounds,
+      const std::vector<tab_groups::TabGroupInfo>& tab_group_infos,
+      ui::WindowShowState show_state,
+      int32_t active_tab_index,
+      int32_t first_non_pinned_tab_index,
+      base::StringPiece app_name,
+      int32_t restore_window_id)
       : BrowserAction(true),
         urls_(urls),
         bounds_(bounds),
+        tab_group_infos_(tab_group_infos),
         show_state_(show_state),
         active_tab_index_(active_tab_index),
+        first_non_pinned_tab_index_(first_non_pinned_tab_index),
         app_name_(app_name),
         restore_window_id_(restore_window_id) {}
 
   void Perform(const VersionedBrowserService& service) override {
     crosapi::mojom::DeskTemplateStatePtr additional_state =
-        crosapi::mojom::DeskTemplateState::New(urls_, active_tab_index_,
-                                               app_name_, restore_window_id_);
+        crosapi::mojom::DeskTemplateState::New(
+            urls_, active_tab_index_, app_name_, restore_window_id_,
+            first_non_pinned_tab_index_, tab_group_infos_);
     crosapi::CrosapiManager::Get()
         ->crosapi_ash()
         ->desk_template_ash()
@@ -288,8 +297,10 @@ class CreateBrowserWithRestoredDataAction final : public BrowserAction {
  private:
   const std::vector<GURL> urls_;
   const gfx::Rect bounds_;
+  const std::vector<tab_groups::TabGroupInfo> tab_group_infos_;
   const ui::WindowShowState show_state_;
   const int32_t active_tab_index_;
+  const int32_t first_non_pinned_tab_index_;
   const std::string app_name_;
   const int32_t restore_window_id_;
 };
@@ -360,20 +371,25 @@ std::unique_ptr<BrowserAction> BrowserAction::RestoreTab() {
 
 // static
 std::unique_ptr<BrowserAction> BrowserAction::HandleTabScrubbing(
-    float x_offset) {
-  return std::make_unique<HandleTabScrubbingAction>(x_offset);
+    float x_offset,
+    bool is_fling_scroll_event) {
+  return std::make_unique<HandleTabScrubbingAction>(x_offset,
+                                                    is_fling_scroll_event);
 }
 
 // static
 std::unique_ptr<BrowserAction> BrowserAction::CreateBrowserWithRestoredData(
     const std::vector<GURL>& urls,
     const gfx::Rect& bounds,
+    const std::vector<tab_groups::TabGroupInfo>& tab_groups,
     ui::WindowShowState show_state,
     int32_t active_tab_index,
+    int32_t first_non_pinned_tab_index,
     base::StringPiece app_name,
     int32_t restore_window_id) {
   return std::make_unique<CreateBrowserWithRestoredDataAction>(
-      urls, bounds, show_state, active_tab_index, app_name, restore_window_id);
+      urls, bounds, tab_groups, show_state, active_tab_index,
+      first_non_pinned_tab_index, app_name, restore_window_id);
 }
 
 // No window will be opened in the following circumstances:

@@ -9,15 +9,16 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -929,7 +930,7 @@ void SkiaRenderer::SwapBuffers(SwapFrameData swap_frame_data) {
     output_frame.delegated_ink_metadata =
         delegated_ink_handler_->TakeMetadata();
   }
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   output_frame.ca_layer_error_code = swap_frame_data.ca_layer_error_code;
 #endif
 
@@ -1049,6 +1050,9 @@ void SkiaRenderer::BuffersPresented() {
 
 void SkiaRenderer::DidReceiveReleasedOverlays(
     const std::vector<gpu::Mailbox>& released_overlays) {
+  DisplayResourceProvider::ScopedBatchReturnResources returner(
+      resource_provider_.get(), /*allow_access_to_gpu_thread=*/true);
+
   // This method is only called on macOS and Ozone right now.
 #if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_OZONE)
   for (const auto& mailbox : released_overlays) {
@@ -2658,11 +2662,8 @@ void SkiaRenderer::ScheduleOverlays() {
   DCHECK(output_surface_->capabilities().supports_surfaceless);
 #endif
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
-  // CrOS and Android SurfaceControl use this code path. Android classic has
-  // switched over to OverlayProcessor.
-  // TODO(weiliangc): Remove this when CrOS and Android SurfaceControl switch
-  // to OverlayProcessor as well.
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
+  // CrOS, Android SurfaceControl, and Windows use this code path.
   for (auto& overlay : current_frame()->overlay_list) {
     if (overlay.is_root_render_pass) {
       continue;
@@ -2678,26 +2679,6 @@ void SkiaRenderer::ScheduleOverlays() {
 
     overlay.mailbox = lock.mailbox();
     DCHECK(!overlay.mailbox.IsZero());
-  }
-#elif BUILDFLAG(IS_WIN)
-  for (auto& dc_layer_overlay : current_frame()->overlay_list) {
-    for (size_t i = 0; i < DCLayerOverlay::kNumResources; ++i) {
-      ResourceId resource_id = dc_layer_overlay.resources[i];
-      if (resource_id == kInvalidResourceId)
-        break;
-
-      // Resources will be unlocked after the next SwapBuffers() is completed.
-      locks.emplace_back(resource_provider(), resource_id);
-      auto& lock = locks.back();
-
-      // Sync tokens ensure the texture to be overlaid is available before
-      // scheduling it for display.
-      if (lock.sync_token().HasData())
-        sync_tokens.push_back(lock.sync_token());
-
-      dc_layer_overlay.mailbox[i] = lock.mailbox();
-    }
-    DCHECK(!dc_layer_overlay.mailbox[0].IsZero());
   }
 #elif BUILDFLAG(IS_APPLE)
   for (CALayerOverlay& ca_layer_overlay : current_frame()->overlay_list) {
@@ -2763,12 +2744,12 @@ void SkiaRenderer::ScheduleOverlays() {
     overlay.mailbox = lock.mailbox();
     DCHECK(!overlay.mailbox.IsZero());
   }
-#else   // BUILDFLAG(IS_ANDROID)
+#else
   // For platforms that don't support overlays, the
   // current_frame()->overlay_list should be empty, and this code should not be
   // reached.
   NOTREACHED();
-#endif  // BUILDFLAG(IS_ANDROID)
+#endif
 
   DCHECK(!current_gpu_commands_completed_fence_->was_set());
   DCHECK(!current_release_fence_->was_set());
@@ -3120,7 +3101,10 @@ void SkiaRenderer::FinishDrawingQuadList() {
     DrawDelegatedInkTrail();
 
   current_canvas_ = nullptr;
-  EndPaint(/*failed=*/false);
+  // Non-root render passes that are scheduled as overlays will be painted in
+  // PrepareRenderPassOverlay().
+  bool is_overlay = buffer_queue_ && is_root_render_pass;
+  EndPaint(/*failed=*/false, is_overlay);
 
   // Defer flushing drawing task for root render pass, to avoid extra
   // MakeCurrent() call. It is expensive on GL.
@@ -3417,9 +3401,8 @@ void SkiaRenderer::PrepareRenderPassOverlay(
   // The |mask_filter_info| is in the device coordinate and with all transforms
   // (translation, scaling, rotation, etc), so remove them.
   if (!shared_quad_state->mask_filter_info.IsEmpty()) {
-    bool result = shared_quad_state->mask_filter_info.ApplyTransform(
+    shared_quad_state->mask_filter_info.ApplyTransform(
         *quad_to_target_transform_inverse);
-    DCHECK(result) << "shared_quad_state->mask_filter_info.Transform() failed.";
   }
 
   const auto& viewport_size = current_frame()->device_viewport_size;
@@ -3550,7 +3533,7 @@ void SkiaRenderer::PrepareRenderPassOverlay(
       if (!content_image) {
         DLOG(ERROR) << "MakePromiseSkImageFromRenderPass() in "
                        "PrepareRenderPassOverlay() failed.";
-        EndPaint(/*failed=*/true);
+        EndPaint(/*failed=*/true, /*is_overlay=*/true);
         return;
       }
 
@@ -3572,7 +3555,7 @@ void SkiaRenderer::PrepareRenderPassOverlay(
     }
 
     current_canvas_ = nullptr;
-    EndPaint(/*failed=*/false);
+    EndPaint(/*failed=*/false, /*is_overlay=*/true);
   }
 
 #if BUILDFLAG(IS_APPLE)
@@ -3609,7 +3592,7 @@ void SkiaRenderer::PrepareRenderPassOverlay(
 }
 #endif  // BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_OZONE)
 
-void SkiaRenderer::EndPaint(bool failed) {
+void SkiaRenderer::EndPaint(bool failed, bool is_overlay) {
   base::OnceClosure on_finished_callback;
   base::OnceCallback<void(gfx::GpuFenceHandle)> on_return_release_fence_cb;
   // If SkiaRenderer has not failed, prepare callbacks and pass them to
@@ -3641,8 +3624,6 @@ void SkiaRenderer::EndPaint(bool failed) {
       resource_provider()->SetReleaseFence(current_release_fence_.get());
     }
   }
-  bool is_overlay = buffer_queue_ && current_frame()->current_render_pass ==
-                                         current_frame()->root_render_pass;
   skia_output_surface_->EndPaint(std::move(on_finished_callback),
                                  std::move(on_return_release_fence_cb),
                                  is_overlay);

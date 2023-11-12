@@ -30,7 +30,6 @@ class VulkanContextProvider;
 
 namespace gpu {
 class GpuDriverBugWorkarounds;
-class ImageFactory;
 class MemoryTracker;
 class SharedContextState;
 class SharedImageBackingFactory;
@@ -38,8 +37,6 @@ class D3DImageBackingFactory;
 struct GpuFeatureInfo;
 struct GpuPreferences;
 
-// TODO(ericrk): Make this a very thin wrapper around SharedImageManager like
-// SharedImageRepresentationFactory.
 class GPU_GLES2_EXPORT SharedImageFactory {
  public:
   // All objects passed are expected to outlive this class.
@@ -48,7 +45,6 @@ class GPU_GLES2_EXPORT SharedImageFactory {
                      const GpuFeatureInfo& gpu_feature_info,
                      SharedContextState* context_state,
                      SharedImageManager* manager,
-                     ImageFactory* image_factory,
                      MemoryTracker* tracker,
                      bool is_for_display_compositor);
   ~SharedImageFactory();
@@ -78,7 +74,6 @@ class GPU_GLES2_EXPORT SharedImageFactory {
                          uint32_t usage,
                          gfx::GpuMemoryBufferHandle buffer_handle);
   bool CreateSharedImage(const Mailbox& mailbox,
-                         int client_id,
                          gfx::GpuMemoryBufferHandle handle,
                          gfx::BufferFormat format,
                          gfx::BufferPlane plane,
@@ -97,7 +92,7 @@ class GPU_GLES2_EXPORT SharedImageFactory {
 #if BUILDFLAG(IS_WIN)
   bool CreateSwapChain(const Mailbox& front_buffer_mailbox,
                        const Mailbox& back_buffer_mailbox,
-                       viz::ResourceFormat format,
+                       viz::SharedImageFormat format,
                        const gfx::Size& size,
                        const gfx::ColorSpace& color_space,
                        GrSurfaceOrigin surface_origin,

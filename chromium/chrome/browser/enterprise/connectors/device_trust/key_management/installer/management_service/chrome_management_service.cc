@@ -77,6 +77,19 @@ bool CheckBinaryPermissions() {
   return true;
 }
 
+int KeyRotationResultToExitCode(KeyRotationResult result) {
+  switch (result) {
+    case KeyRotationResult::kSucceeded:
+      return kSuccess;
+    case KeyRotationResult::kFailed:
+      return kFailure;
+    case KeyRotationResult::kInsufficientPermissions:
+      return kFailedInsufficientPermissions;
+    case KeyRotationResult::kFailedKeyConflict:
+      return kFailedKeyConflict;
+  }
+}
+
 }  // namespace
 
 ChromeManagementService::ChromeManagementService()
@@ -107,8 +120,9 @@ int ChromeManagementService::Run(const base::CommandLine* command_line,
         "Device trust key rotation failed. Command missing rotate key switch.");
   }
 
-  if (!std::move(permissions_callback_).Run())
-    return kFailure;
+  if (!std::move(permissions_callback_).Run()) {
+    return kFailedInsufficientPermissions;
+  }
 
   auto platform_channel_endpoint =
       mojo_helper_->GetEndpointFromCommandLine(*command_line);
@@ -168,10 +182,8 @@ int ChromeManagementService::StartRotation(
       KeyRotationManager::Create(std::make_unique<MojoKeyNetworkDelegate>(
           base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
               remote_url_loader_factory_.get())));
-  return RotateDeviceTrustKey(std::move(key_rotation_manager), *command_line,
-                              chrome::GetChannel())
-             ? kSuccess
-             : kFailure;
+  return KeyRotationResultToExitCode(RotateDeviceTrustKey(
+      std::move(key_rotation_manager), *command_line, chrome::GetChannel()));
 }
 
 }  // namespace enterprise_connectors

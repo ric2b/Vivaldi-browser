@@ -11,10 +11,11 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_theme.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_count_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_supporting.h"
 
-@protocol GridContextMenuProvider;
+@protocol TabContextMenuProvider;
 @protocol TabCollectionDragDropHandler;
 @protocol GridEmptyView;
 @protocol GridImageDataSource;
@@ -26,24 +27,9 @@
 @protocol ThumbStripCommands;
 @protocol SuggestedActionsDelegate;
 
-// Key of the UMA IOS.TabSwitcher.DragDropTabs histogram.
-extern const char kUmaDragDropTabs[];
-
-// Values of the UMA IOS.TabSwitcher.DragDropTabs histogram. These values are
-// persisted to logs. Entries should not be renumbered and numeric values should
-// never be reused.
-enum class DragDropTabs {
-  // A tab is dragged.
-  kDragBegin = 0,
-  // A tab is dropped at the same index position.
-  kDragEndAtSameIndex = 1,
-  // A tab is dropped at a new index position
-  kDragEndAtNewIndex = 2,
-  kMaxValue = kDragEndAtNewIndex
-};
-
 // Protocol used to relay relevant user interactions from a grid UI.
 @protocol GridViewControllerDelegate
+
 // Tells the delegate that the item with `itemID` was selected in
 // `gridViewController`.
 - (void)gridViewController:(GridViewController*)gridViewController
@@ -56,7 +42,7 @@ enum class DragDropTabs {
 // i.e., there was an intention to create a new item.
 - (void)didTapPlusSignInGridViewController:
     (GridViewController*)gridViewController;
-// Tells the delegate that the item at `sourceIndex` was moved to
+// Tells the delegate that the item with `itemID` was moved to
 // `destinationIndex`.
 - (void)gridViewController:(GridViewController*)gridViewController
          didMoveItemWithID:(NSString*)itemID
@@ -65,6 +51,9 @@ enum class DragDropTabs {
 // changed to `count`.
 - (void)gridViewController:(GridViewController*)gridViewController
         didChangeItemCount:(NSUInteger)count;
+// Tells the delegate that the item with `itemID` was removed.
+- (void)gridViewController:(GridViewController*)gridViewController
+       didRemoveItemWIthID:(NSString*)itemID;
 
 // Tells the delegate that the visibility of the last item of the grid changed.
 - (void)didChangeLastItemVisibilityInGridViewController:
@@ -79,7 +68,6 @@ enum class DragDropTabs {
 // dragging.
 - (void)gridViewControllerWillBeginDragging:
     (GridViewController*)gridViewController;
-
 // Tells the delegate that the grid view controller cells will begin dragging.
 - (void)gridViewControllerDragSessionWillBegin:
     (GridViewController*)gridViewController;
@@ -90,11 +78,24 @@ enum class DragDropTabs {
 - (void)gridViewControllerScrollViewDidScroll:
     (GridViewController*)gridViewController;
 
+// Tells the delegate that a drop animation will begin.
+- (void)gridViewControllerDropAnimationWillBegin:
+    (GridViewController*)gridViewController;
+// Tells the delegate that a drop animation did end.
+- (void)gridViewControllerDropAnimationDidEnd:
+    (GridViewController*)gridViewController;
+
+// Tells the delegate that the inactive tabs button was tapped in
+// `gridViewController`, i.e., there was an intention to show inactive tabs.
+- (void)didTapInactiveTabsButtonInGridViewController:
+    (GridViewController*)gridViewController;
+
 @end
 
 // A view controller that contains a grid of items.
-@interface GridViewController : UIViewController <LayoutSwitcher,
+@interface GridViewController : UIViewController <InactiveTabsCountConsumer,
                                                   IncognitoReauthConsumer,
+                                                  LayoutSwitcher,
                                                   TabCollectionConsumer,
                                                   ThumbStripSupporting>
 // The gridView is accessible to manage the content inset behavior.
@@ -103,6 +104,8 @@ enum class DragDropTabs {
 @property(nonatomic, strong) UIView<GridEmptyView>* emptyStateView;
 // Returns YES if the grid has no items.
 @property(nonatomic, readonly, getter=isGridEmpty) BOOL gridEmpty;
+// Currently visible items in the grid.
+@property(nonatomic, readonly) NSSet<NSString*>* visibleGridItems;
 // The visual look of the grid.
 @property(nonatomic, assign) GridTheme theme;
 // The current mode for the grid.
@@ -137,7 +140,7 @@ enum class DragDropTabs {
 // biometric authentication.
 @property(nonatomic, assign) BOOL contentNeedsAuthentication;
 // Provider of context menu configurations for the tabs in the grid.
-@property(nonatomic, weak) id<GridContextMenuProvider> menuProvider;
+@property(nonatomic, weak) id<TabContextMenuProvider> menuProvider;
 // Provider of shareable state for tabs in the grid.
 @property(nonatomic, weak) id<GridShareableItemsProvider>
     shareableItemsProvider;

@@ -9,8 +9,8 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -20,11 +20,13 @@
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/messages/android/messages_feature.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "components/version_info/android/channel_getter.h"
 #include "components/version_info/channel.h"
 #include "components/version_info/version_info.h"
 #include "components/webapps/browser/android/add_to_homescreen_coordinator.h"
 #include "components/webapps/browser/android/add_to_homescreen_params.h"
+#include "components/webapps/browser/android/ambient_badge_metrics.h"
 #include "components/webapps/browser/android/bottomsheet/pwa_bottom_sheet_controller.h"
 #include "components/webapps/browser/android/installable/installable_ambient_badge_infobar_delegate.h"
 #include "components/webapps/browser/android/shortcut_info.h"
@@ -48,6 +50,7 @@
 
 using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertJavaStringToUTF8;
+using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaParamRef;
 
@@ -89,6 +92,10 @@ int AppBannerManagerAndroid::GetPipelineStatusForTesting(JNIEnv* env) {
   return (int)state();
 }
 
+int AppBannerManagerAndroid::GetBadgeStatusForTesting(JNIEnv* env) {
+  return (int)badge_state_;
+}
+
 bool AppBannerManagerAndroid::OnAppDetailsRetrieved(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -125,6 +132,7 @@ void AppBannerManagerAndroid::RequestAppBanner(const GURL& validated_url) {
 }
 
 void AppBannerManagerAndroid::AddToHomescreenFromBadge() {
+  RecordAmbientBadgeClickEvent(!native_app_data_.is_null());
   ShowBannerUi(InstallableMetrics::GetInstallSource(
       web_contents(), InstallTrigger::AMBIENT_BADGE));
 
@@ -134,8 +142,16 @@ void AppBannerManagerAndroid::AddToHomescreenFromBadge() {
   ResetBindings();
 }
 
+bool AppBannerManagerAndroid::HasSufficientEngagementForAmbientBadge() {
+  double score = GetSiteEngagementService()->GetScore(validated_url_);
+  int min_engagement =
+      features::kAmbientBadgeSiteEngagement_MinEngagement.Get();
+  return score >= min_engagement;
+}
+
 void AppBannerManagerAndroid::BadgeDismissed() {
-  TrackDismissEvent(DISMISS_EVENT_AMBIENT_INFOBAR_DISMISSED);
+  RecordAmbientBadgeDismissEvent(!native_app_data_.is_null());
+  badge_state_ = AmbientBadgeState::DISMISSED;
 
   AppBannerSettingsHelper::RecordBannerEvent(
       web_contents(), validated_url_, GetAppIdentifier(),
@@ -181,6 +197,7 @@ void AppBannerManagerAndroid::PerformInstallableWebAppCheck() {
 }
 
 void AppBannerManagerAndroid::PerformWorkerCheckForAmbientBadge() {
+  badge_state_ = AmbientBadgeState::PENDING_WORKER;
   manager()->GetData(
       ParamsToPerformWorkerCheck(),
       base::BindOnce(
@@ -205,6 +222,7 @@ void AppBannerManagerAndroid::ResetCurrentPageData() {
   AppBannerManager::ResetCurrentPageData();
   native_app_data_.Reset();
   native_app_package_ = "";
+  badge_state_ = AmbientBadgeState::INACTIVE;
 }
 
 std::unique_ptr<AddToHomescreenParams>
@@ -545,10 +563,32 @@ void AppBannerManagerAndroid::MaybeShowAmbientBadge() {
     return;
   }
 
+  badge_state_ = AmbientBadgeState::ACTIVE;
+
   // Do not show the ambient badge if it was recently dismissed.
   if (AppBannerSettingsHelper::WasBannerRecentlyBlocked(
           web_contents(), validated_url_, GetAppIdentifier(),
           GetCurrentTime())) {
+    badge_state_ = AmbientBadgeState::BLOCKED;
+    return;
+  }
+
+  // if it's showing for web app (not native app), only show if the worker check
+  // already passed.
+  if (!native_app_data_ && features::SkipServiceWorkerForInstallPromotion() &&
+      !passed_worker_check_) {
+    badge_state_ = AmbientBadgeState::PENDING_WORKER;
+    return;
+  }
+
+  if (ShouldSuppressAmbientBadge()) {
+    badge_state_ = AmbientBadgeState::PENDING_ENGAGEMENT;
+    return;
+  }
+
+  if (base::FeatureList::IsEnabled(features::kAmbientBadgeSiteEngagement) &&
+      !HasSufficientEngagementForAmbientBadge()) {
+    badge_state_ = AmbientBadgeState::PENDING_ENGAGEMENT;
     return;
   }
 
@@ -563,11 +603,7 @@ void AppBannerManagerAndroid::MaybeShowAmbientBadge() {
   if (infobar_visible || message_controller_.IsMessageEnqueued())
     return;
 
-  // Only show if it's native app, or the worker check already passed.
-  if (!features::SkipServiceWorkerForInstallPromotion() ||
-      passed_worker_check_ || native_app_data_) {
-    ShowAmbientBadge();
-  }
+  ShowAmbientBadge();
 }
 
 void AppBannerManagerAndroid::HideAmbientBadge() {
@@ -588,14 +624,19 @@ void AppBannerManagerAndroid::HideAmbientBadge() {
 
 bool AppBannerManagerAndroid::IsSupportedNonWebAppPlatform(
     const std::u16string& platform) const {
-  // TODO(https://crbug.com/949430): Implement for Android apps.
-  return false;
+  return base::EqualsASCII(platform, kPlatformPlay);
 }
 
 bool AppBannerManagerAndroid::IsRelatedNonWebAppInstalled(
     const blink::Manifest::RelatedApplication& related_app) const {
-  // TODO(https://crbug.com/949430): Implement for Android apps.
-  return false;
+  if (!related_app.id || related_app.id->empty()) {
+    return false;
+  }
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  base::android::ScopedJavaLocalRef<jstring> java_id(
+      ConvertUTF16ToJavaString(env, related_app.id.value()));
+  return Java_AppBannerManager_isRelatedNonWebAppInstalled(env, java_id);
 }
 
 bool AppBannerManagerAndroid::IsWebAppConsideredInstalled() const {
@@ -608,7 +649,36 @@ bool AppBannerManagerAndroid::IsWebAppConsideredInstalled() const {
              web_contents(), manifest_url_, manifest_id_);
 }
 
+bool AppBannerManagerAndroid::ShouldSuppressAmbientBadge() {
+  if (!base::FeatureList::IsEnabled(
+          features::kAmbientBadgeSuppressFirstVisit)) {
+    return false;
+  }
+
+  content::WebContents* contents = web_contents();
+  absl::optional<base::Time> last_could_show_time =
+      AppBannerSettingsHelper::GetSingleBannerEvent(
+          contents, validated_url_, GetAppIdentifier(),
+          AppBannerSettingsHelper::APP_BANNER_EVENT_COULD_SHOW_AMBIENT_BADGE);
+
+  AppBannerSettingsHelper::RecordBannerEvent(
+      contents, validated_url_, GetAppIdentifier(),
+      AppBannerSettingsHelper::APP_BANNER_EVENT_COULD_SHOW_AMBIENT_BADGE,
+      GetCurrentTime());
+
+  if (!last_could_show_time || last_could_show_time->is_null()) {
+    return true;
+  }
+
+  base::TimeDelta period =
+      features::kAmbientBadgeSuppressFirstVisit_Period.Get();
+  return GetCurrentTime() - *last_could_show_time > period;
+}
+
 void AppBannerManagerAndroid::ShowAmbientBadge() {
+  RecordAmbientBadgeDisplayEvent(!native_app_data_.is_null());
+  badge_state_ = AmbientBadgeState::SHOWING;
+
   if (base::FeatureList::IsEnabled(features::kInstallableAmbientBadgeMessage) &&
       base::FeatureList::IsEnabled(
           messages::kMessagesForAndroidInfrastructure)) {

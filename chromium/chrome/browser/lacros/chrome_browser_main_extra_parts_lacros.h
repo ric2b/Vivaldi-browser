@@ -21,7 +21,6 @@ class DriveFsCache;
 class DownloadControllerClientLacros;
 class ForceInstalledTrackerLacros;
 class FullscreenControllerClientLacros;
-class LacrosButterBar;
 class LacrosExtensionAppsController;
 class LacrosExtensionAppsPublisher;
 class LacrosFileSystemProvider;
@@ -69,6 +68,7 @@ class ChromeBrowserMainExtraPartsLacros : public ChromeBrowserMainExtraParts {
   void PreProfileInit() override;
   void PostBrowserStart() override;
   void PostProfileInit(Profile* profile, bool is_initial_profile) override;
+  void PostMainMessageLoopRun() override;
 
   // Receiver and cache of arc icon info updates.
   std::unique_ptr<ArcIconCache> arc_icon_cache_;
@@ -148,9 +148,6 @@ class ChromeBrowserMainExtraPartsLacros : public ChromeBrowserMainExtraParts {
 
   // Receiver of field trial updates.
   std::unique_ptr<FieldTrialObserver> field_trial_observer_;
-
-  // Shows a butter bar on the first window.
-  std::unique_ptr<LacrosButterBar> butter_bar_;
 
   // Receives orientation lock data.
   std::unique_ptr<content::ScreenOrientationDelegate>

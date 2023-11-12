@@ -8,7 +8,7 @@
 #include <string>
 
 #include "ash/public/cpp/ash_public_export.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 
 class GURL;
 
@@ -110,6 +110,9 @@ class ASH_PUBLIC_EXPORT NewWindowDelegate {
 
   // Show the keyboard shortcut viewer.
   virtual void ShowKeyboardShortcutViewer() = 0;
+
+  // Show the shortcut customization app.
+  virtual void ShowShortcutCustomizationApp() = 0;
 
   // Shows the task manager window.
   virtual void ShowTaskManager() = 0;

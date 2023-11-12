@@ -6,10 +6,10 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "components/page_load_metrics/common/page_load_metrics.mojom.h"
@@ -88,7 +88,10 @@ void PageTimingMetricsSender::DidObserveLoadingBehavior(
 
 void PageTimingMetricsSender::DidObserveSubresourceLoad(
     uint32_t number_of_subresources_loaded,
-    uint32_t number_of_subresource_loads_handled_by_service_worker) {
+    uint32_t number_of_subresource_loads_handled_by_service_worker,
+    bool pervasive_payload_requested,
+    int64_t pervasive_bytes_fetched,
+    int64_t total_bytes_fetched) {
   if (!subresource_load_metrics_) {
     subresource_load_metrics_ = mojom::SubresourceLoadMetrics::New();
   }
@@ -96,7 +99,12 @@ void PageTimingMetricsSender::DidObserveSubresourceLoad(
           number_of_subresources_loaded &&
       subresource_load_metrics_
               ->number_of_subresource_loads_handled_by_service_worker ==
-          number_of_subresource_loads_handled_by_service_worker) {
+          number_of_subresource_loads_handled_by_service_worker &&
+      subresource_load_metrics_->pervasive_payload_requested ==
+          pervasive_payload_requested &&
+      subresource_load_metrics_->pervasive_bytes_fetched ==
+          pervasive_bytes_fetched &&
+      subresource_load_metrics_->total_bytes_fetched == total_bytes_fetched) {
     return;
   }
   subresource_load_metrics_->number_of_subresources_loaded =
@@ -104,6 +112,10 @@ void PageTimingMetricsSender::DidObserveSubresourceLoad(
   subresource_load_metrics_
       ->number_of_subresource_loads_handled_by_service_worker =
       number_of_subresource_loads_handled_by_service_worker;
+  subresource_load_metrics_->pervasive_payload_requested =
+      pervasive_payload_requested;
+  subresource_load_metrics_->total_bytes_fetched = total_bytes_fetched;
+  subresource_load_metrics_->pervasive_bytes_fetched = pervasive_bytes_fetched;
   EnsureSendTimer();
 }
 
@@ -226,6 +238,13 @@ void PageTimingMetricsSender::OnMainFrameViewportRectangleChanged(
   EnsureSendTimer();
 }
 
+void PageTimingMetricsSender::OnMainFrameImageAdRectangleChanged(
+    int element_id,
+    const gfx::Rect& image_ad_rect) {
+  metadata_->main_frame_image_ad_rects[element_id] = image_ad_rect;
+  EnsureSendTimer();
+}
+
 void PageTimingMetricsSender::UpdateResourceMetadata(
     int resource_id,
     bool reported_as_ad_resource,
@@ -336,6 +355,7 @@ void PageTimingMetricsSender::SendNow() {
   new_features_.clear();
   metadata_->main_frame_intersection_rect.reset();
   metadata_->main_frame_viewport_rect.reset();
+  metadata_->main_frame_image_ad_rects.clear();
   last_cpu_timing_->task_time = base::TimeDelta();
   modified_resources_.clear();
   render_data_.new_layout_shifts.clear();

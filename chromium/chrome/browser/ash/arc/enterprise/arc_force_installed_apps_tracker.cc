@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner.h"
@@ -256,8 +256,9 @@ void PolicyComplianceObserver::OnComplianceReportReceived(
     if (!reason || !settingName)
       continue;
     // Not compliant with ARC applications policy.
-    if (*settingName == ArcPolicyBridge::kApplications)
+    if (*settingName == policy_util::kArcPolicyKeyApplications) {
       return;
+    }
     // android_id is expected to be reset, but still not reset by clouddpc.
     if (*settingName == ArcPolicyBridge::kResetAndroidIdEnabled) {
       is_android_id_reset = false;

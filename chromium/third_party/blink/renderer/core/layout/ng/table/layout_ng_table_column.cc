@@ -26,7 +26,7 @@ void LayoutNGTableColumn::StyleDidChange(StyleDifference diff,
   NOT_DESTROYED();
   if (diff.HasDifference()) {
     if (LayoutNGTable* table = Table()) {
-      if (old_style && diff.NeedsPaintInvalidation()) {
+      if (old_style && diff.NeedsNormalPaintInvalidation()) {
         // Regenerate table borders if needed
         if (!old_style->BorderVisuallyEqual(StyleRef()))
           table->GridBordersChanged();
@@ -127,6 +127,12 @@ void LayoutNGTableColumn::UpdateFromElement() {
     if (LayoutNGTable* table = Table())
       table->GridBordersChanged();
   }
+}
+
+// TODO(crbug.com/1371882): Table columns should have physical fragments,
+// and this function should refer to the fragment sizes.
+LayoutSize LayoutNGTableColumn::Size() const {
+  return frame_size_;
 }
 
 }  // namespace blink

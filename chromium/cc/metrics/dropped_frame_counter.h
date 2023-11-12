@@ -11,8 +11,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/ring_buffer.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "cc/cc_export.h"
@@ -91,6 +91,7 @@ class CC_EXPORT DroppedFrameCounter {
   void AddDroppedFrame();
   void ReportFrames();
   void ReportFramesForUI();
+  void ReportFramesOnEveryFrameForUI();
 
   void OnBeginFrame(const viz::BeginFrameArgs& args, bool is_scroll_active);
   void OnEndFrame(const viz::BeginFrameArgs& args, const FrameInfo& frame_info);
@@ -162,7 +163,7 @@ class CC_EXPORT DroppedFrameCounter {
   }
 
   double sliding_window_current_percent_dropped() const {
-    return sliding_window_current_percent_dropped_;
+    return sliding_window_current_percent_dropped_.value_or(0);
   }
 
  private:
@@ -220,7 +221,7 @@ class CC_EXPORT DroppedFrameCounter {
   absl::optional<SortedFrameCallback> sorted_frame_callback_;
 
   bool report_for_ui_ = false;
-  double sliding_window_current_percent_dropped_ = 0.0;
+  absl::optional<double> sliding_window_current_percent_dropped_;
 
   // Sets to true on a newly dropped frame and stays true as long as the frames
   // that follow are dropped. Reset when a frame is presented. It is used to

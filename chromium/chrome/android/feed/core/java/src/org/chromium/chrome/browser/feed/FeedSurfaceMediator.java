@@ -54,6 +54,7 @@ import org.chromium.components.browser_ui.widget.listmenu.ListMenu;
 import org.chromium.components.browser_ui.widget.listmenu.ListMenuItemProperties;
 import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverLaunchResult;
 import org.chromium.components.prefs.PrefService;
+import org.chromium.components.search_engines.TemplateUrlService;
 import org.chromium.components.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
 import org.chromium.components.signin.identitymanager.IdentityManager;
 import org.chromium.components.signin.identitymanager.PrimaryAccountChangeEvent;
@@ -196,8 +197,10 @@ public class FeedSurfaceMediator
     private final FeedSurfaceCoordinator mCoordinator;
     private final Context mContext;
     private final @Nullable SnapScrollHelper mSnapScrollHelper;
+    private final Profile mProfile;
     private final PrefChangeRegistrar mPrefChangeRegistrar;
     private final SigninManager mSigninManager;
+    private final TemplateUrlService mTemplateUrlService;
     private final PropertyModel mSectionHeaderModel;
     private final FeedActionDelegate mActionDelegate;
     private final FeedOptionsCoordinator mOptionsCoordinator;
@@ -250,8 +253,9 @@ public class FeedSurfaceMediator
         mHasContentListener = coordinator;
         mContext = context;
         mSnapScrollHelper = snapScrollHelper;
-        mSigninManager = IdentityServicesProvider.get().getSigninManager(
-                Profile.getLastUsedRegularProfile());
+        mProfile = Profile.getLastUsedRegularProfile();
+        mSigninManager = IdentityServicesProvider.get().getSigninManager(mProfile);
+        mTemplateUrlService = TemplateUrlServiceFactory.getForProfile(mProfile);
         mActionDelegate = actionDelegate;
         mOptionsCoordinator = optionsCoordinator;
         mOptionsCoordinator.setOptionsListener(this);
@@ -332,7 +336,7 @@ public class FeedSurfaceMediator
         }
         if (!mSettingUpStreams) {
             logSwitchedFeeds(newStream);
-            bindStream(newStream, /*shouldScrollToTop=*/true);
+            bindStream(newStream);
             if (newStream.getStreamKind() == StreamKind.FOLLOWING) {
                 FeedFeatures.updateFollowingFeedSeen();
             }
@@ -343,7 +347,7 @@ public class FeedSurfaceMediator
     void destroy() {
         destroyPropertiesForStream();
         mPrefChangeRegistrar.destroy();
-        TemplateUrlServiceFactory.get().removeObserver(this);
+        mTemplateUrlService.removeObserver(this);
     }
 
     @VisibleForTesting
@@ -461,7 +465,7 @@ public class FeedSurfaceMediator
                 new FeedSurfaceHeaderSelectedCallback());
 
         mPrefChangeRegistrar.addObserver(Pref.ARTICLES_LIST_VISIBLE, this::updateSectionHeader);
-        TemplateUrlServiceFactory.get().addObserver(this);
+        mTemplateUrlService.addObserver(this);
 
         boolean suggestionsVisible = isSuggestionsVisible();
 
@@ -487,9 +491,8 @@ public class FeedSurfaceMediator
         mSettingUpStreams = false;
 
         if (mSectionHeaderModel.get(SectionHeaderListProperties.IS_SECTION_ENABLED_KEY)) {
-            bindStream(mTabToStreamMap.get(mSectionHeaderModel.get(
-                               SectionHeaderListProperties.CURRENT_TAB_INDEX_KEY)),
-                    /*shouldScrollToTop=*/false);
+            bindStream(mTabToStreamMap.get(
+                    mSectionHeaderModel.get(SectionHeaderListProperties.CURRENT_TAB_INDEX_KEY)));
         } else {
             unbindStream();
         }
@@ -625,7 +628,7 @@ public class FeedSurfaceMediator
      * different from new stream. Once bound, the stream can add/remove contents.
      */
     @VisibleForTesting
-    void bindStream(Stream stream, boolean shouldScrollToTop) {
+    void bindStream(Stream stream) {
         if (mCurrentStream == stream) return;
         if (mCurrentStream != null) {
             unbindStream(/* shouldPlaceSpacer = */ true);
@@ -639,17 +642,13 @@ public class FeedSurfaceMediator
         updateLayout(false);
         mCurrentStream.addOnContentChangedListener(mStreamContentChangedListener);
 
-        if (FeedFeatures.isAutoScrollToTopEnabled() && mRestoreScrollState == null) {
-            mRestoreScrollState = getScrollStateForAutoScrollToTop();
-        }
-
         FeedReliabilityLogger reliabilityLogger = mCoordinator.getReliabilityLogger();
         mCurrentStream.bind(mCoordinator.getRecyclerView(), mCoordinator.getContentManager(),
                 mRestoreScrollState, mCoordinator.getSurfaceScope(),
                 mCoordinator.getHybridListRenderer(),
                 reliabilityLogger != null ? reliabilityLogger.getLaunchLogger()
                                           : new FeedLaunchReliabilityLogger() {},
-                mHeaderCount, shouldScrollToTop);
+                mHeaderCount);
         mRestoreScrollState = null;
         mCoordinator.getHybridListRenderer().onSurfaceOpened();
     }
@@ -731,7 +730,7 @@ public class FeedSurfaceMediator
         Stream stream = mTabToStreamMap.get(
                 mSectionHeaderModel.get(SectionHeaderListProperties.CURRENT_TAB_INDEX_KEY));
         if (stream != null) {
-            bindStream(stream, /*shouldScrollToTop=*/false);
+            bindStream(stream);
         }
     }
 
@@ -795,7 +794,7 @@ public class FeedSurfaceMediator
         mStreamContentChangedListener = null;
 
         mPrefChangeRegistrar.removeObserver(Pref.ARTICLES_LIST_VISIBLE);
-        TemplateUrlServiceFactory.get().removeObserver(this);
+        mTemplateUrlService.removeObserver(this);
         mSigninManager.getIdentityManager().removeObserver(this);
 
         mSectionHeaderModel.get(SectionHeaderListProperties.SECTION_HEADERS_KEY).clear();
@@ -820,8 +819,7 @@ public class FeedSurfaceMediator
                     getTabIdForSection(StreamKind.FOR_YOU));
         }
 
-        boolean isGoogleSearchEngine =
-                TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle();
+        boolean isGoogleSearchEngine = mTemplateUrlService.isDefaultSearchEngineGoogle();
         // When Google is not the default search engine, we need to show the Logo.
         mSectionHeaderModel.set(SectionHeaderListProperties.IS_LOGO_KEY,
                 !isGoogleSearchEngine && isSignedIn && suggestionsVisible);
@@ -928,7 +926,7 @@ public class FeedSurfaceMediator
     private String getInterestFeedHeaderText(boolean isExpanded) {
         Resources res = mContext.getResources();
         final boolean isDefaultSearchEngineGoogle =
-                TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle();
+                mTemplateUrlService.isDefaultSearchEngineGoogle();
         final int sectionHeaderStringId;
 
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED)

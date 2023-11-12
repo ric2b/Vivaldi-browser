@@ -40,16 +40,6 @@ std::string SerializeSideSearchTabDataAsString(
   return side_search_tab_data.SerializeAsString();
 }
 
-void MaybeAddSideSearchTabRestoreData(
-    content::WebContents* web_contents,
-    std::map<std::string, std::string>& extra_data) {
-  SideSearchTabContentsHelper* helper =
-      SideSearchTabContentsHelper::FromWebContents(web_contents);
-  if (helper && helper->last_search_url().has_value())
-    extra_data[kSideSearchExtraDataKey] =
-        SerializeSideSearchTabDataAsString(helper);
-}
-
 absl::optional<std::pair<std::string, std::string>>
 MaybeGetSideSearchTabRestoreData(content::WebContents* web_contents) {
   SideSearchTabContentsHelper* helper =
@@ -111,11 +101,6 @@ bool IsSidePanelWebContents(content::WebContents* web_contents) {
   return !!SideSearchSideContentsHelper::FromWebContents(web_contents);
 }
 
-bool IsDSESupportEnabled(const Profile* profile) {
-  return base::FeatureList::IsEnabled(features::kSideSearchDSESupport) &&
-         IsSideSearchEnabled(profile);
-}
-
 bool IsEnabledForBrowser(const Browser* browser) {
   return IsSideSearchEnabled(browser->profile()) && browser->is_type_normal();
 }
@@ -129,21 +114,12 @@ bool IsSearchWebInSidePanelSupported(const Browser* browser) {
           ->GetDefaultSearchProvider();
   DCHECK(default_provider);
   return IsEnabledForBrowser(browser) &&
-         IsDSESupportEnabled(browser->profile()) &&
          default_provider->IsSideSearchSupported() &&
-         base::FeatureList::IsEnabled(features::kSearchWebInSidePanel) &&
-         base::FeatureList::IsEnabled(features::kUnifiedSidePanel);
+         base::FeatureList::IsEnabled(features::kSearchWebInSidePanel);
 }
-
-bool ShouldUseUnifiedSidePanel() {
-  return base::FeatureList::IsEnabled(features::kSideSearchDSESupport) &&
-         base::FeatureList::IsEnabled(features::kUnifiedSidePanel);
-}
-
 }  // namespace side_search
 
 bool IsSideSearchEnabled(const Profile* profile) {
   return !profile->IsOffTheRecord() &&
-         base::FeatureList::IsEnabled(features::kSideSearch) &&
          profile->GetPrefs()->GetBoolean(side_search_prefs::kSideSearchEnabled);
 }

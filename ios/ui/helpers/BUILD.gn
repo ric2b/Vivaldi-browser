@@ -1,0 +1,29 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+import("//build/config/ios/swift_source_set.gni")
+
+source_set("helpers") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "vivaldi_colors_helper.h",
+    "vivaldi_colors_helper.mm",
+    "vivaldi_uiview_layout_helper.h",
+    "vivaldi_uiview_layout_helper.mm",
+    "vivaldi_uiview_style_helper.h",
+    "vivaldi_uiview_style_helper.mm",
+    "vivaldi_global_helpers.h",
+    "vivaldi_global_helpers.mm",
+    "vivaldi_snapshot_store_helper.h",
+    "vivaldi_snapshot_store_helper.mm"
+  ]
+
+  deps = [
+   "//base",
+   "//url",
+  ]
+
+ frameworks = [
+  "ImageIO.framework",
+  "UIKit.framework",
+ ]
+}

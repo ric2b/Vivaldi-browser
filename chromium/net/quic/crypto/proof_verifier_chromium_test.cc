@@ -30,6 +30,7 @@
 #include "net/http/transport_security_state.h"
 #include "net/http/transport_security_state_test_util.h"
 #include "net/quic/crypto/proof_source_chromium.h"
+#include "net/quic/quic_context.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/ct_test_util.h"
 #include "net/test/test_data_directory.h"
@@ -134,7 +135,7 @@ const char kLogDescription[] = "somelog";
 // This test exercises code that does not depend on the QUIC version in use
 // but that still requires a version so we just use the first one.
 const quic::QuicTransportVersion kTestTransportVersion =
-    quic::AllSupportedVersions().front().transport_version;
+    AllSupportedQuicVersions().front().transport_version;
 
 }  // namespace
 
@@ -723,6 +724,8 @@ TEST_F(ProofVerifierChromiumTest, PKPReport) {
   EXPECT_EQ(report_uri, report_sender.latest_report_uri());
   EXPECT_EQ(network_anonymization_key,
             report_sender.latest_network_anonymization_key());
+
+  transport_security_state_.SetReportSender(nullptr);
 }
 
 // Test that when CT is required (in this case, by the delegate), the
@@ -775,6 +778,8 @@ TEST_F(ProofVerifierChromiumTest, CTIsRequired) {
   verify_details = static_cast<ProofVerifyDetailsChromium*>(details_.get());
   EXPECT_TRUE(verify_details->cert_verify_result.cert_status &
               CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
+
+  transport_security_state_.SetRequireCTDelegate(nullptr);
 }
 
 // Test that CT is considered even when PKP fails.
@@ -838,6 +843,8 @@ TEST_F(ProofVerifierChromiumTest, PKPAndCTBothTested) {
               CERT_STATUS_PINNED_KEY_MISSING);
   EXPECT_TRUE(verify_details->cert_verify_result.cert_status &
               CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
+
+  transport_security_state_.SetRequireCTDelegate(nullptr);
 }
 
 TEST_F(ProofVerifierChromiumTest, UnknownRootRejected) {

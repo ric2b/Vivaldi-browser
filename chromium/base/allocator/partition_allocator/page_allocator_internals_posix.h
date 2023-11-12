@@ -136,8 +136,18 @@ bool UseMapJit() {
   return base::mac::CFCast<CFBooleanRef>(jit_entitlement.get()) ==
          kCFBooleanTrue;
 }
-#endif  // BUILDFLAG(IS_MAC)
-
+#elif BUILDFLAG(IS_IOS)
+bool UseMapJit() {
+// Always enable MAP_JIT in simulator as it is supported unconditionally.
+#if TARGET_IPHONE_SIMULATOR
+  return true;
+#else
+  // TODO(https://crbug.com/1413818): Fill this out when the API it is
+  // available.
+  return false;
+#endif  // TARGET_IPHONE_SIMULATOR
+}
+#endif  // BUILDFLAG(IS_IOS)
 }  // namespace
 
 // |mmap| uses a nearby address if the hint address is blocked.
@@ -166,7 +176,7 @@ uintptr_t SystemAllocPagesInternal(uintptr_t hint,
   int access_flag = GetAccessFlags(accessibility);
   int map_flags = MAP_ANONYMOUS | MAP_PRIVATE;
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // On macOS 10.14 and higher, executables that are code signed with the
   // "runtime" option cannot execute writable memory by default. They can opt
   // into this capability by specifying the "com.apple.security.cs.allow-jit"
@@ -369,7 +379,6 @@ bool TryRecommitSystemPagesInternal(
 }
 
 void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
-#if !BUILDFLAG(IS_NACL)
   void* ptr = reinterpret_cast<void*>(address);
 #if BUILDFLAG(IS_APPLE)
   int ret = madvise(ptr, length, MADV_FREE_REUSABLE);
@@ -378,7 +387,7 @@ void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
     ret = madvise(ptr, length, MADV_DONTNEED);
   }
   PA_PCHECK(ret == 0);
-#else
+#else   // BUILDFLAG(IS_APPLE)
   // We have experimented with other flags, but with suboptimal results.
   //
   // MADV_FREE (Linux): Makes our memory measurements less predictable;
@@ -386,8 +395,7 @@ void DiscardSystemPagesInternal(uintptr_t address, size_t length) {
   //
   // Therefore, we just do the simple thing: MADV_DONTNEED.
   PA_PCHECK(0 == madvise(ptr, length, MADV_DONTNEED));
-#endif
-#endif  // !BUILDFLAG(IS_NACL)
+#endif  // BUILDFLAG(IS_APPLE)
 }
 
 }  // namespace partition_alloc::internal

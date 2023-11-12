@@ -96,6 +96,9 @@ const highlightBackgroundColor = "rgba(20,111,225,0.25)";
 const decorationStyles = 'border-bottom-width: 1px; ' +
     'border-bottom-style: dotted; ' +
     'background-color: transparent';
+const decorationStylesForPhoneAndEmail = 'border-bottom-width: 1px; ' +
+    'border-bottom-style: solid; ' +
+    'background-color: transparent';
 const decorationDefaultColor = 'blue';
 
 /**
@@ -116,11 +119,13 @@ let sections: Section[];
  * Extracts first `maxChars` text characters from the page. Once done it
  * send a 'annotations.extractedText' command with the 'text'.
  * @param maxChars - maximum number of characters to parse out.
+ * @param seqId - id of extracted text to pass back.
  */
-function extractText(maxChars: number): void {
+function extractText(maxChars: number, seqId: number): void {
   sendWebKitMessage('annotations', {
     command: 'annotations.extractedText',
     text: getPageText(maxChars),
+    seqId: seqId,
   });
 }
 
@@ -140,7 +145,7 @@ function decorateAnnotations(annotations: Annotation[]): void {
   // Last checks when bubbling up event.
   document.addEventListener('click', handleTopTap.bind(document));
 
-  removeOverlappingAnnotations(annotations);
+  annotations = removeOverlappingAnnotations(annotations);
 
   // Reparse page finding annotations and styling them.
   let annotationIndex = 0;
@@ -424,15 +429,15 @@ function highlightAnnotation(annotation: HTMLElement) {
  * Sorts and removes olverlappings annotations.
  * @param annotations - input annotations, cleaned in-place.
  */
-function removeOverlappingAnnotations(annotations: Annotation[]): void {
-  // Sort the annotations.
+function removeOverlappingAnnotations(annotations: Annotation[]): Annotation[] {
+  // Sort the annotations, in place.
   annotations.sort((a, b) => {
     return a.start - b.start;
   });
 
   // Remove overlaps (lower indexed annotation has priority).
   let previous: Annotation|undefined = undefined;
-  annotations.filter((annotation) => {
+  return annotations.filter((annotation) => {
     if (previous && previous.start < annotation.end &&
         previous.end > annotation.start) {
       return false;
@@ -470,8 +475,15 @@ function replaceNode(
     element.setAttribute('data-index', '' + replacement.index);
     element.setAttribute('data-data', replacement.data);
     element.setAttribute('data-annotation', replacement.annotationText);
+    element.setAttribute('role', 'link');
     element.innerText = replacement.text;
-    element.style.cssText = decorationStyles;
+
+    if (replacement.type == 'PHONE_NUMBER' || replacement.type == 'EMAIL') {
+      element.style.cssText = decorationStylesForPhoneAndEmail;
+    } else {
+      element.style.cssText = decorationStyles;
+    }
+
     element.style.borderBottomColor = textColor;
     element.addEventListener('click', handleTap.bind(element), true);
     parts.push(element);

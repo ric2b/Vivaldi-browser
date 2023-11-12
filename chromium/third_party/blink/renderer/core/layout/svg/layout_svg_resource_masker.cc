@@ -41,26 +41,20 @@ LayoutSVGResourceMasker::~LayoutSVGResourceMasker() = default;
 
 void LayoutSVGResourceMasker::RemoveAllClientsFromCache() {
   NOT_DESTROYED();
-  cached_paint_record_.reset();
+  cached_paint_record_ = absl::nullopt;
   MarkAllClientsForInvalidation(kPaintPropertiesInvalidation |
                                 kPaintInvalidation);
 }
 
-sk_sp<const PaintRecord> LayoutSVGResourceMasker::CreatePaintRecord(
+PaintRecord LayoutSVGResourceMasker::CreatePaintRecord(
     const AffineTransform& content_transformation,
     GraphicsContext& context) {
   NOT_DESTROYED();
   if (cached_paint_record_)
-    return cached_paint_record_;
+    return *cached_paint_record_;
 
   SubtreeContentTransformScope content_transform_scope(content_transformation);
   auto* builder = MakeGarbageCollected<PaintRecordBuilder>(context);
-
-  ColorFilter mask_content_filter =
-      StyleRef().ColorInterpolation() == EColorInterpolation::kLinearrgb
-          ? kColorFilterSRGBToLinearRGB
-          : kColorFilterNone;
-  builder->Context().SetColorFilter(mask_content_filter);
 
   for (const SVGElement& child_element :
        Traversal<SVGElement>::ChildrenOf(*GetElement())) {
@@ -74,7 +68,7 @@ sk_sp<const PaintRecord> LayoutSVGResourceMasker::CreatePaintRecord(
   }
 
   cached_paint_record_ = builder->EndRecording();
-  return cached_paint_record_;
+  return *cached_paint_record_;
 }
 
 SVGUnitTypes::SVGUnitType LayoutSVGResourceMasker::MaskUnits() const {

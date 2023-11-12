@@ -111,6 +111,24 @@ class PLATFORM_EXPORT Color {
            color_space == ColorSpace::kXYZD65;
   }
 
+  static bool HasRGBOrXYZComponents(ColorSpace color_space) {
+    return color_space == ColorSpace::kSRGB ||
+           color_space == ColorSpace::kSRGBLinear ||
+           color_space == ColorSpace::kDisplayP3 ||
+           color_space == ColorSpace::kA98RGB ||
+           color_space == ColorSpace::kProPhotoRGB ||
+           color_space == ColorSpace::kRec2020 ||
+           color_space == ColorSpace::kXYZD50 ||
+           color_space == ColorSpace::kXYZD65 ||
+           color_space == ColorSpace::kRGBLegacy;
+  }
+
+  static bool IsLightnessFirstComponent(ColorSpace color_space) {
+    return color_space == ColorSpace::kLab ||
+           color_space == ColorSpace::kOklab ||
+           color_space == ColorSpace::kLch || color_space == ColorSpace::kOklch;
+  }
+
   // The default constructor creates a transparent color.
   constexpr Color()
       : param0_is_none_(0),
@@ -152,6 +170,17 @@ class PLATFORM_EXPORT Color {
   // parameters will be clamped to the [0, 1] interval.
   static Color FromRGBAFloat(float r, float g, float b, float a);
 
+  // Create a color from a generic color space. Parameters that are none should
+  // be specified as absl::nullopt. The value for `alpha` will be clamped to the
+  // [0, 1] interval. For colorspaces with Luminance the first channel will be
+  // clamped to be non-negative. For colorspaces with chroma in param1 that
+  // parameter will also be clamped to be non-negative.
+  static Color FromColorSpace(ColorSpace space,
+                              absl::optional<float> param0,
+                              absl::optional<float> param1,
+                              absl::optional<float> param2,
+                              absl::optional<float> alpha);
+
   // Create a color using the hsl() syntax.
   static Color FromHSLA(absl::optional<float> h,
                         absl::optional<float> s,
@@ -163,42 +192,6 @@ class PLATFORM_EXPORT Color {
                         absl::optional<float> w,
                         absl::optional<float> b,
                         absl::optional<float> a);
-
-  // Create a color using the color() function. This includes both predefined
-  // color spaces and xyz spaces. Parameters that are none should be specified
-  // as absl::nullopt. The value for `alpha` will be clamped to the [0, 1]
-  // interval.
-  static Color FromColorFunction(ColorSpace space,
-                                 absl::optional<float> red_or_x,
-                                 absl::optional<float> green_or_y,
-                                 absl::optional<float> blue_or_z,
-                                 absl::optional<float> alpha);
-
-  // Create a color using the lab() and oklab() functions. Parameters that are
-  // none should be specified as absl::nullopt. The value for `L` will be
-  // clamped to be non-negative. The value for `alpha` will be clamped to the
-  // [0, 1] interval.
-  static Color FromLab(absl::optional<float> L,
-                       absl::optional<float> a,
-                       absl::optional<float> b,
-                       absl::optional<float> alpha);
-  static Color FromOklab(absl::optional<float> L,
-                         absl::optional<float> a,
-                         absl::optional<float> b,
-                         absl::optional<float> alpha);
-
-  // Create a color using the lch() and oklch() functions. Parameters that are
-  // none should be specified as absl::nullopt. The value for `L` and `chroma`
-  // will be clamped to be non-negative. The value for `alpha` will be clamped
-  // to the [0, 1] interval.
-  static Color FromLch(absl::optional<float> L,
-                       absl::optional<float> chroma,
-                       absl::optional<float> hue,
-                       absl::optional<float> alpha);
-  static Color FromOklch(absl::optional<float> L,
-                         absl::optional<float> chroma,
-                         absl::optional<float> hue,
-                         absl::optional<float> alpha);
 
   enum class ColorInterpolationSpace : uint8_t {
     // Linear in light intensity
@@ -307,6 +300,7 @@ class PLATFORM_EXPORT Color {
   // toSkColor4f.
   SkColor ToSkColorDeprecated() const;
 
+  Color Light() const;
   Color Dark() const;
 
   Color CombineWithAlpha(float other_alpha) const;
@@ -402,6 +396,13 @@ class PLATFORM_EXPORT Color {
                                 float percentage,
                                 HueInterpolationMethod hue_method);
 
+  // According the Spec https://www.w3.org/TR/css-color-4/#interpolation-missing
+  // we have to do a special treatment of when to carry forward the 'noneness'
+  // of a component, given if it's an 'analog component'.
+  static void CarryForwardAnalogousMissingComponents(
+      Color color,
+      ColorSpace prev_color_space);
+
   ColorSpace color_space_ = ColorSpace::kRGBLegacy;
 
   // Whether or not color parameters were specified as none (this only affects
@@ -425,17 +426,5 @@ PLATFORM_EXPORT Color ColorFromPremultipliedARGB(RGBA32);
 PLATFORM_EXPORT RGBA32 PremultipliedARGBFromColor(const Color&);
 
 }  // namespace blink
-
-namespace WTF {
-template <>
-struct DefaultHash<blink::Color> {
-  STATIC_ONLY(DefaultHash);
-  static unsigned GetHash(const blink::Color& key) { return key.GetHash(); }
-  static bool Equal(const blink::Color& a, const blink::Color& b) {
-    return a == b;
-  }
-  static const bool safe_to_compare_to_empty_or_deleted = true;
-};
-}  // namespace WTF
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_COLOR_H_

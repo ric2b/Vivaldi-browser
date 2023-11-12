@@ -14,6 +14,7 @@
 #include "chromeos/ui/frame/caption_buttons/snap_controller.h"
 #include "chromeos/ui/frame/frame_utils.h"
 #include "chromeos/ui/frame/multitask_menu/multitask_menu.h"
+#include "chromeos/ui/frame/multitask_menu/multitask_menu_nudge_controller.h"
 #include "chromeos/ui/wm/features.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
@@ -25,6 +26,7 @@
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "ui/views/animation/animation_delegate_views.h"
 #include "ui/views/animation/compositor_animation_runner.h"
 #include "ui/views/widget/widget.h"
 
@@ -44,9 +46,6 @@ const int kMaxOvershootY = 50;
 
 constexpr base::TimeDelta kPieAnimationPressDuration = base::Milliseconds(150);
 constexpr base::TimeDelta kPieAnimationHoverDuration = base::Milliseconds(500);
-
-// TODO(sammiequon): Update the color to match specs.
-constexpr SkColor kPieColor = SkColorSetA(SK_ColorGRAY, 128);
 
 // Returns true if a mouse drag while in "snap mode" at |location_in_screen|
 // would hover/press |button| or keep it hovered/pressed.
@@ -71,7 +70,6 @@ SnapDirection GetSnapDirection(const views::FrameCaptionButton* to_hover) {
       return GetSnapDirectionForWindow(window, /*left_top=*/true);
     case views::CAPTION_BUTTON_ICON_RIGHT_BOTTOM_SNAPPED:
       return GetSnapDirectionForWindow(window, /*left_top=*/false);
-    case views::CAPTION_BUTTON_ICON_FLOAT:
     case views::CAPTION_BUTTON_ICON_MAXIMIZE_RESTORE:
     case views::CAPTION_BUTTON_ICON_MINIMIZE:
     case views::CAPTION_BUTTON_ICON_CLOSE:
@@ -89,80 +87,80 @@ SnapDirection GetSnapDirection(const views::FrameCaptionButton* to_hover) {
 
 }  // namespace
 
-// This class controls animating a pie on a parent button which indicates when
+// This view controls animating a pie on a parent button which indicates when
 // long press or long hover will end.
-class FrameSizeButton::PieAnimation : public gfx::SlideAnimation,
-                                      public gfx::AnimationDelegate {
+class FrameSizeButton::PieAnimationView : public views::View,
+                                          public views::AnimationDelegateViews {
  public:
-  PieAnimation(base::TimeDelta duration,
-               base::OnceClosure on_animation_canceled,
-               base::OnceClosure on_animation_ended,
-               FrameSizeButton* button)
-      : gfx::SlideAnimation(this),
-        on_animation_canceled_(std::move(on_animation_canceled)),
-        on_animation_ended_(std::move(on_animation_ended)),
-        button_(button) {
+  explicit PieAnimationView(FrameSizeButton* button)
+      : views::AnimationDelegateViews(this), button_(button) {
+    SetCanProcessEventsWithinSubtree(false);
+    animation_.SetTweenType(gfx::Tween::LINEAR);
+  }
+  PieAnimationView(const PieAnimationView&) = delete;
+  PieAnimationView& operator=(const PieAnimationView&) = delete;
+  ~PieAnimationView() override = default;
+
+  void Start(base::TimeDelta duration, MultitaskMenuEntryType entry_type) {
+    entry_type_ = entry_type;
+
+    animation_.Reset(0.0);
     // `SlideAnimation` is unaffected by debug tools such as
     // "--ui-slow-animations" flag, so manually multiply the duration here.
-    SetSlideDuration(
+    animation_.SetSlideDuration(
         ui::ScopedAnimationDurationScaleMode::duration_multiplier() * duration);
-    SetTweenType(gfx::Tween::LINEAR);
-
-    // Use a runner synced with the compositor.
-    gfx::AnimationContainer* container = new gfx::AnimationContainer();
-    container->SetAnimationRunner(
-        std::make_unique<views::CompositorAnimationRunner>(
-            button_->GetWidget()));
-    SetContainer(container);
-
-    Show();
+    animation_.Show();
   }
 
-  PieAnimation(const PieAnimation&) = delete;
-  PieAnimation& operator=(const PieAnimation&) = delete;
+  void Stop() {
+    animation_.Reset(0.0);
+    SchedulePaint();
+  }
 
-  ~PieAnimation() override = default;
-
-  void Paint(gfx::Canvas* canvas) {
-    // Use the bounds of the inkdrop.
-    gfx::Rect bounds = button_->GetLocalBounds();
-    bounds.Inset(button_->GetInkdropInsets(bounds.size()));
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override {
+    const double animation_value = animation_.GetCurrentValue();
+    if (animation_value == 0.0) {
+      return;
+    }
 
     // The pie is a filled arc which starts at the top and sweeps around
     // clockwise.
     const SkScalar start_angle = -90.f;
-    const SkScalar sweep_angle = 360.f * GetCurrentValue();
+    const SkScalar sweep_angle = 360.f * animation_value;
 
     SkPath path;
+    const gfx::Rect bounds = GetLocalBounds();
     path.moveTo(bounds.CenterPoint().x(), bounds.CenterPoint().y());
     path.arcTo(gfx::RectToSkRect(bounds), start_angle, sweep_angle,
                /*forceMoveTo=*/false);
     path.close();
 
     cc::PaintFlags flags;
-    flags.setColor(kPieColor);
+    flags.setColor(
+        GetWidget()->GetColorProvider()->GetColor(ui::kColorSysStateHover));
     flags.setAntiAlias(true);
     flags.setStyle(cc::PaintFlags::kFill_Style);
     canvas->DrawPath(path, flags);
   }
 
-  // gfx::AnimationDelegate:
+  // views::AnimationDelegateViews:
   void AnimationEnded(const gfx::Animation* animation) override {
-    button_->SchedulePaint();
-    std::move(on_animation_ended_).Run();
+    SchedulePaint();
+    button_->ShowMultitaskMenu(entry_type_);
   }
 
   void AnimationProgressed(const gfx::Animation* animation) override {
-    button_->SchedulePaint();
-  }
-
-  void AnimationCanceled(const gfx::Animation* animation) override {
-    std::move(on_animation_canceled_).Run();
+    SchedulePaint();
   }
 
  private:
-  base::OnceClosure on_animation_canceled_;
-  base::OnceClosure on_animation_ended_;
+  gfx::SlideAnimation animation_{this};
+
+  // Tracks the entry type that triggered the latests pie animation. Used for
+  // recording metrics once the menu is shown.
+  MultitaskMenuEntryType entry_type_ =
+      MultitaskMenuEntryType::kFrameSizeButtonHover;
 
   // The button `this` is associated with. Unowned.
   raw_ptr<FrameSizeButton> button_;
@@ -222,26 +220,69 @@ FrameSizeButton::FrameSizeButton(PressedCallback callback,
       delegate_(delegate),
       set_buttons_to_snap_mode_delay_ms_(kSetButtonsToSnapModeDelayMs) {
   display_observer_.emplace(this);
+
+  if (chromeos::wm::features::IsWindowLayoutMenuEnabled()) {
+    pie_animation_view_ =
+        AddChildView(std::make_unique<PieAnimationView>(this));
+  }
 }
 
 FrameSizeButton::~FrameSizeButton() = default;
 
+bool FrameSizeButton::IsMultitaskMenuShown() const {
+  return multitask_menu_ && multitask_menu_->IsBubbleShown();
+}
+
 void FrameSizeButton::ShowMultitaskMenu(MultitaskMenuEntryType entry_type) {
   // Show Multitask Menu if float is enabled. Note here float flag is also used
   // to represent other relatable UI/UX changes.
-  if (chromeos::wm::features::IsFloatWindowEnabled()) {
+  if (chromeos::wm::features::IsWindowLayoutMenuEnabled()) {
     DCHECK(!chromeos::TabletState::Get()->InTabletMode());
     RecordMultitaskMenuEntryType(entry_type);
     // Owned by the bubble which contains this view. If there is an existing
     // bubble, it will be deactivated and then close and destroy itself.
-    auto* multitask_menu = new MultitaskMenu(/*anchor=*/this, GetWidget());
-    multitask_menu->ShowBubble();
+    multitask_menu_ = new MultitaskMenu(
+        /*anchor=*/this, GetWidget(),
+        base::BindOnce(&FrameSizeButton::OnMultitaskMenuClosed,
+                       weak_factory_.GetWeakPtr()));
+    multitask_menu_->multitask_menu_view()->feedback_button()->SetCallback(
+        feedback_callback_);
+    multitask_menu_->ShowBubble();
+    delegate_->GetMultitaskMenuNudgeController()->OnMenuOpened(
+        /*tablet_mode=*/false);
   }
+}
+
+void FrameSizeButton::ToggleMultitaskMenu() {
+  DCHECK(chromeos::wm::features::IsWindowLayoutMenuEnabled());
+  DCHECK(!chromeos::TabletState::Get()->InTabletMode());
+  if (!multitask_menu_) {
+    RecordMultitaskMenuEntryType(MultitaskMenuEntryType::kAccel);
+    multitask_menu_ = new MultitaskMenu(
+        /*anchor=*/this, GetWidget(),
+        base::BindOnce(&FrameSizeButton::OnMultitaskMenuClosed,
+                       weak_factory_.GetWeakPtr()));
+    multitask_menu_->multitask_menu_view()->feedback_button()->SetCallback(
+        feedback_callback_);
+    delegate_->GetMultitaskMenuNudgeController()->OnMenuOpened(
+        /*tablet_mode=*/false);
+  }
+  multitask_menu_->ToggleBubble();
+}
+
+void FrameSizeButton::OnMultitaskMenuClosed() {
+  multitask_menu_ = nullptr;
+}
+
+void FrameSizeButton::SetFeedbackButtonCallback(PressedCallback callback) {
+  // Callback cannot be set on the button here as the multitask menu has not
+  // been created yet, so store it for when it does get created.
+  feedback_callback_ = callback;
 }
 
 bool FrameSizeButton::OnMousePressed(const ui::MouseEvent& event) {
   // Note that this triggers `StateChanged()`, and we want the changes to
-  // `pie_animation_` below to come after `StateChanged()`.
+  // `pie_animation_view_` below to come after `StateChanged()`.
   views::FrameCaptionButton::OnMousePressed(event);
 
   if (IsTriggerableEvent(event)) {
@@ -329,28 +370,41 @@ void FrameSizeButton::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 void FrameSizeButton::StateChanged(views::Button::ButtonState old_state) {
-  if (!chromeos::wm::features::IsFloatWindowEnabled())
-    return;
+  views::FrameCaptionButton::StateChanged(old_state);
 
-  if (GetState() == views::Button::STATE_HOVERED && GetWidget()->IsActive()) {
+  if (!chromeos::wm::features::IsWindowLayoutMenuEnabled()) {
+    return;
+  }
+
+  // Pie animation will start on both active/inactive window.
+  if (GetState() == views::Button::STATE_HOVERED) {
     // On animation end we should show the multitask menu.
+    // Note that if the window is not active, after the pie animation this will
+    // activate the window.
     StartPieAnimation(kPieAnimationHoverDuration,
                       MultitaskMenuEntryType::kFrameSizeButtonHover);
   } else if (old_state == views::Button::STATE_HOVERED) {
-    pie_animation_.reset();
+    DCHECK(pie_animation_view_);
+    pie_animation_view_->Stop();
   }
 }
 
-void FrameSizeButton::PaintButtonContents(gfx::Canvas* canvas) {
-  if (pie_animation_)
-    pie_animation_->Paint(canvas);
+void FrameSizeButton::Layout() {
+  if (pie_animation_view_) {
+    // Use the bounds of the inkdrop.
+    gfx::Rect bounds = GetLocalBounds();
+    bounds.Inset(GetInkdropInsets(bounds.size()));
+    pie_animation_view_->SetBoundsRect(bounds);
+  }
 
-  views::FrameCaptionButton::PaintButtonContents(canvas);
+  views::FrameCaptionButton::Layout();
 }
 
 void FrameSizeButton::OnDisplayTabletStateChanged(display::TabletState state) {
   if (state == display::TabletState::kEnteringTabletMode) {
-    pie_animation_.reset();
+    if (pie_animation_view_) {
+      pie_animation_view_->Stop();
+    }
     set_buttons_to_snap_mode_timer_.Stop();
   }
 }
@@ -369,17 +423,13 @@ void FrameSizeButton::StartSetButtonsToSnapModeTimer(
 
 void FrameSizeButton::StartPieAnimation(base::TimeDelta duration,
                                         MultitaskMenuEntryType entry_type) {
-  if (!chromeos::wm::features::IsFloatWindowEnabled())
+  if (!chromeos::wm::features::IsWindowLayoutMenuEnabled() ||
+      chromeos::TabletState::Get()->InTabletMode()) {
     return;
+  }
 
-  base::OnceClosure cancel_animation = base::BindOnce(
-      &FrameSizeButton::DestroyPieAnimation, base::Unretained(this));
-  base::OnceClosure show_multitask_menu =
-      base::BindOnce(&FrameSizeButton::OnPieAnimationCompleted,
-                     base::Unretained(this), entry_type);
-  pie_animation_ =
-      std::make_unique<PieAnimation>(duration, std::move(cancel_animation),
-                                     std::move(show_multitask_menu), this);
+  DCHECK(pie_animation_view_);
+  pie_animation_view_->Start(duration, entry_type);
 }
 
 void FrameSizeButton::AnimateButtonsToSnapMode() {
@@ -489,19 +539,11 @@ void FrameSizeButton::CancelSnap() {
 void FrameSizeButton::SetButtonsToNormalMode(
     FrameSizeButtonDelegate::Animate animate) {
   in_snap_mode_ = false;
-  pie_animation_.reset();
+  if (pie_animation_view_) {
+    pie_animation_view_->Stop();
+  }
   set_buttons_to_snap_mode_timer_.Stop();
   delegate_->SetButtonsToNormal(animate);
-}
-
-void FrameSizeButton::OnPieAnimationCompleted(
-    MultitaskMenuEntryType entry_type) {
-  ShowMultitaskMenu(entry_type);
-  pie_animation_.reset();
-}
-
-void FrameSizeButton::DestroyPieAnimation() {
-  pie_animation_.reset();
 }
 
 BEGIN_METADATA(FrameSizeButton, views::FrameCaptionButton)

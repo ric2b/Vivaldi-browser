@@ -10,6 +10,7 @@
 #include "gpu/command_buffer/service/shared_image/gl_texture_image_backing_helper.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_backing.h"
 #include "gpu/gpu_gles2_export.h"
+#include "ui/gl/buildflags.h"
 #include "ui/gl/gl_fence.h"
 
 namespace gl {
@@ -39,14 +40,16 @@ struct IOSurfaceBackingEGLState : base::RefCounted<IOSurfaceBackingEGLState> {
         bool have_context) = 0;
   };
 
-  IOSurfaceBackingEGLState(Client* client,
-                           EGLDisplay egl_display,
-                           GLuint gl_target,
-                           scoped_refptr<gles2::TexturePassthrough> gl_texture);
+  IOSurfaceBackingEGLState(
+      Client* client,
+      EGLDisplay egl_display,
+      GLuint gl_target,
+      std::vector<scoped_refptr<gles2::TexturePassthrough>> gl_textures);
   GLenum GetGLTarget() const { return gl_target_; }
-  GLuint GetGLServiceId() const;
-  const scoped_refptr<gles2::TexturePassthrough>& GetGLTexture() const {
-    return gl_texture_;
+  GLuint GetGLServiceId(int plane_index) const;
+  const scoped_refptr<gles2::TexturePassthrough>& GetGLTexture(
+      int plane_index) const {
+    return gl_textures_[plane_index];
   }
   bool BeginAccess(bool readonly);
   void EndAccess(bool readonly);
@@ -68,10 +71,9 @@ struct IOSurfaceBackingEGLState : base::RefCounted<IOSurfaceBackingEGLState> {
   // The GL (not EGL) target to which this texture is to be bound.
   const GLuint gl_target_;
 
-  // The EGL, GLES, and Skia internals for this IOSurface.
-  std::unique_ptr<gl::ScopedEGLSurfaceIOSurface> egl_surface_;
-  scoped_refptr<gles2::TexturePassthrough> gl_texture_;
-  sk_sp<SkPromiseImageTexture> cached_promise_texture_;
+  // The EGL and GLES internals for this IOSurface.
+  std::vector<std::unique_ptr<gl::ScopedEGLSurfaceIOSurface>> egl_surfaces_;
+  std::vector<scoped_refptr<gles2::TexturePassthrough>> gl_textures_;
 
   // Set to true if the context is known to be lost.
   bool context_lost_ = false;
@@ -105,12 +107,13 @@ class GLTextureIOSurfaceRepresentation
 // Skia representation for both GLTextureImageBackingHelper.
 class SkiaIOSurfaceRepresentation : public SkiaImageRepresentation {
  public:
-  SkiaIOSurfaceRepresentation(SharedImageManager* manager,
-                              SharedImageBacking* backing,
-                              scoped_refptr<IOSurfaceBackingEGLState> egl_state,
-                              scoped_refptr<SharedContextState> context_state,
-                              sk_sp<SkPromiseImageTexture> promise_texture,
-                              MemoryTypeTracker* tracker);
+  SkiaIOSurfaceRepresentation(
+      SharedImageManager* manager,
+      SharedImageBacking* backing,
+      scoped_refptr<IOSurfaceBackingEGLState> egl_state,
+      scoped_refptr<SharedContextState> context_state,
+      std::vector<sk_sp<SkPromiseImageTexture>> promise_textures,
+      MemoryTypeTracker* tracker);
   ~SkiaIOSurfaceRepresentation() override;
 
   void SetBeginReadAccessCallback(
@@ -141,8 +144,8 @@ class SkiaIOSurfaceRepresentation : public SkiaImageRepresentation {
 
   scoped_refptr<IOSurfaceBackingEGLState> egl_state_;
   scoped_refptr<SharedContextState> context_state_;
-  sk_sp<SkPromiseImageTexture> promise_texture_;
-  sk_sp<SkSurface> write_surface_;
+  std::vector<sk_sp<SkPromiseImageTexture>> promise_textures_;
+  std::vector<sk_sp<SkSurface>> write_surfaces_;
 #if DCHECK_IS_ON()
   raw_ptr<gl::GLContext> context_ = nullptr;
 #endif
@@ -165,6 +168,35 @@ class OverlayIOSurfaceRepresentation : public OverlayImageRepresentation {
 
   gfx::ScopedIOSurface io_surface_;
 };
+
+#if BUILDFLAG(USE_DAWN)
+// Representation of a IOSurfaceImageBacking as a Dawn Texture.
+class DawnIOSurfaceRepresentation : public DawnImageRepresentation {
+ public:
+  DawnIOSurfaceRepresentation(SharedImageManager* manager,
+                              SharedImageBacking* backing,
+                              MemoryTypeTracker* tracker,
+                              WGPUDevice device,
+                              base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
+                              WGPUTextureFormat wgpu_format,
+                              std::vector<WGPUTextureFormat> view_formats);
+  ~DawnIOSurfaceRepresentation() override;
+
+  WGPUTexture BeginAccess(WGPUTextureUsage usage) final;
+  void EndAccess() final;
+
+ private:
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface_;
+  WGPUDevice device_;
+  WGPUTexture texture_ = nullptr;
+  WGPUTextureFormat wgpu_format_;
+  std::vector<WGPUTextureFormat> view_formats_;
+
+  // TODO(cwallez@chromium.org): Load procs only once when the factory is
+  // created and pass a pointer to them around?
+  DawnProcTable dawn_procs_;
+};
+#endif  // BUILDFLAG(USE_DAWN)
 
 // This class is only put into unique_ptrs and is never copied or assigned.
 class SharedEventAndSignalValue {
@@ -193,7 +225,6 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
  public:
   IOSurfaceImageBacking(gfx::ScopedIOSurface io_surface,
                         uint32_t io_surface_plane,
-                        gfx::BufferFormat io_surface_format,
                         gfx::GenericSharedMemoryId io_surface_id,
                         const Mailbox& mailbox,
                         viz::SharedImageFormat format,
@@ -209,7 +240,7 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
   IOSurfaceImageBacking& operator=(const IOSurfaceImageBacking& other) = delete;
   ~IOSurfaceImageBacking() override;
 
-  void InitializePixels(GLenum format, GLenum type, const uint8_t* data);
+  bool InitializePixels(base::span<const uint8_t> pixel_data);
 
   std::unique_ptr<gfx::GpuFence> GetLastWriteGpuFence();
   void SetReleaseFence(gfx::GpuFenceHandle release_fence);
@@ -219,10 +250,11 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
 
  private:
   // SharedImageBacking:
-  void OnMemoryDump(const std::string& dump_name,
-                    base::trace_event::MemoryAllocatorDumpGuid client_guid,
-                    base::trace_event::ProcessMemoryDump* pmd,
-                    uint64_t client_tracing_id) override;
+  base::trace_event::MemoryAllocatorDump* OnMemoryDump(
+      const std::string& dump_name,
+      base::trace_event::MemoryAllocatorDumpGuid client_guid,
+      base::trace_event::ProcessMemoryDump* pmd,
+      uint64_t client_tracing_id) override;
   SharedImageBackingType GetType() const override;
   gfx::Rect ClearedRect() const final;
   void SetClearedRect(const gfx::Rect& cleared_rect) final;
@@ -246,6 +278,7 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state) override;
   void SetPurgeable(bool purgeable) override;
+  bool IsPurgeable() const override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
 
   // IOSurfaceBackingEGLState::Client:
@@ -259,11 +292,14 @@ class GPU_GLES2_EXPORT IOSurfaceImageBacking
       IOSurfaceBackingEGLState* egl_state,
       bool have_context) override;
 
+  sk_sp<SkPromiseImageTexture> ProduceSkiaPromiseTextureMetal(
+      scoped_refptr<SharedContextState> context_state,
+      int plane_index);
+
   bool IsPassthrough() const { return true; }
 
   gfx::ScopedIOSurface io_surface_;
   const uint32_t io_surface_plane_;
-  const gfx::BufferFormat io_surface_format_;
   const gfx::GenericSharedMemoryId io_surface_id_;
 
   const GLenum gl_target_;

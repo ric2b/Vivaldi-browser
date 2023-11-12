@@ -84,7 +84,7 @@ ExtensionFunction::ResponseAction ReadingListPrivateRemoveFunction::Run() {
   DCHECK(model->IsUrlSupported(url));
   bool success = false;
   if (model->IsUrlSupported(url) && model->loaded()) {
-    const ReadingListEntry* entry = model->GetEntryByURL(url);
+    scoped_refptr<const ReadingListEntry> entry = model->GetEntryByURL(url);
     DCHECK(entry);
     success = entry != nullptr;
     if (entry) {
@@ -96,7 +96,7 @@ ExtensionFunction::ResponseAction ReadingListPrivateRemoveFunction::Run() {
 
 namespace {
 vivaldi::reading_list_private::ReadingListEntry GetEntryData(
-    const ReadingListEntry* entry) {
+    scoped_refptr<const ReadingListEntry> entry) {
   vivaldi::reading_list_private::ReadingListEntry entry_data;
 
   entry_data.title = entry->Title();
@@ -118,7 +118,7 @@ ExtensionFunction::ResponseAction ReadingListPrivateGetAllFunction::Run() {
   std::vector<vivaldi::reading_list_private::ReadingListEntry> entries;
 
   for (const auto& url : model->GetKeys()) {
-    const ReadingListEntry* entry = model->GetEntryByURL(url);
+    scoped_refptr<const ReadingListEntry> entry = model->GetEntryByURL(url);
     DCHECK(entry);
     entries.push_back(GetEntryData(entry));
   }

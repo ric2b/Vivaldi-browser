@@ -9,6 +9,7 @@
 #import "base/strings/string_util.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
+#import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/password_manager_test_utils.h"
 #import "components/password_manager/core/browser/test_password_store.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
@@ -46,18 +47,6 @@ using password_manager::PasswordForm;
 using password_manager::InsecureType;
 using password_manager::TestPasswordStore;
 
-// Sets test password store and returns pointer to it.
-scoped_refptr<TestPasswordStore> BuildTestPasswordStore(
-    ChromeBrowserState* _browserState) {
-  return base::WrapRefCounted(static_cast<password_manager::TestPasswordStore*>(
-      IOSChromePasswordStoreFactory::GetInstance()
-          ->SetTestingFactoryAndUse(
-              _browserState,
-              base::BindRepeating(&password_manager::BuildPasswordStore<
-                                  web::BrowserState, TestPasswordStore>))
-          .get()));
-}
-
 // Creates a saved password form.
 PasswordForm CreatePasswordForm() {
   PasswordForm form;
@@ -81,14 +70,14 @@ PasswordForm CreatePasswordForm() {
 // causes the update to occur.
 @property(nonatomic, assign) NSInteger numberOfCallToChangeOnDeviceEncryption;
 
-@property(nonatomic, assign) NSString* detailedText;
+@property(nonatomic, copy) NSString* detailedText;
 
 @end
 
 @implementation FakePasswordsConsumer
 
 - (void)setPasswordCheckUIState:(PasswordCheckUIState)state
-    unmutedCompromisedPasswordsCount:(NSInteger)count {
+         insecurePasswordsCount:(NSInteger)insecureCount {
 }
 
 - (void)setPasswords:(std::vector<password_manager::CredentialUIEntry>)passwords
@@ -132,10 +121,18 @@ class PasswordsMediatorTest : public BlockCleanupTest {
     builder.AddTestingFactory(
         SyncSetupServiceFactory::GetInstance(),
         base::BindRepeating(&SyncSetupServiceMock::CreateKeyedService));
+    builder.AddTestingFactory(
+        IOSChromePasswordStoreFactory::GetInstance(),
+        base::BindRepeating(
+            &password_manager::BuildPasswordStore<web::BrowserState,
+                                                  TestPasswordStore>));
     browser_state_ = builder.Build();
 
-    store_ = BuildTestPasswordStore(browser_state_.get());
-
+    store_ =
+        base::WrapRefCounted(static_cast<password_manager::TestPasswordStore*>(
+            IOSChromePasswordStoreFactory::GetForBrowserState(
+                browser_state_.get(), ServiceAccessType::EXPLICIT_ACCESS)
+                .get()));
     password_check_ = IOSChromePasswordCheckManagerFactory::GetForBrowserState(
         browser_state_.get());
 
@@ -208,23 +205,6 @@ TEST_F(PasswordsMediatorTest, NotifiesConsumerOnPasswordChange) {
 
   // Remove form from the store.
   store()->RemoveLogin(form);
-  RunUntilIdle();
-  EXPECT_THAT([consumer() passwords], testing::IsEmpty());
-}
-
-// Duplicates of a form should be removed as well.
-TEST_F(PasswordsMediatorTest, DeleteFormWithDuplicates) {
-  PasswordForm form = CreatePasswordForm();
-  PasswordForm duplicate = form;
-  duplicate.username_element = u"element";
-
-  store()->AddLogin(form);
-  store()->AddLogin(duplicate);
-  RunUntilIdle();
-  ASSERT_THAT([consumer() passwords],
-              testing::ElementsAre(password_manager::CredentialUIEntry(form)));
-
-  [mediator() deleteCredential:password_manager::CredentialUIEntry(form)];
   RunUntilIdle();
   EXPECT_THAT([consumer() passwords], testing::IsEmpty());
 }

@@ -6,8 +6,8 @@
 
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/stringprintf.h"
@@ -19,9 +19,9 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/test/app_registry_cache_waiter.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -202,16 +202,16 @@ void WebAppNavigationBrowserTest::SetUp() {
             std::move(response));
       }));
 
-  InProcessBrowserTest::SetUp();
+  WebAppControllerBrowserTest::SetUp();
 }
 
 void WebAppNavigationBrowserTest::SetUpInProcessBrowserTestFixture() {
-  InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+  WebAppControllerBrowserTest::SetUpInProcessBrowserTestFixture();
   cert_verifier_.SetUpInProcessBrowserTestFixture();
 }
 
 void WebAppNavigationBrowserTest::TearDownInProcessBrowserTestFixture() {
-  InProcessBrowserTest::TearDownInProcessBrowserTestFixture();
+  WebAppControllerBrowserTest::TearDownInProcessBrowserTestFixture();
   cert_verifier_.TearDownInProcessBrowserTestFixture();
 }
 
@@ -225,7 +225,7 @@ void WebAppNavigationBrowserTest::SetUpCommandLine(
 }
 
 void WebAppNavigationBrowserTest::SetUpOnMainThread() {
-  InProcessBrowserTest::SetUpOnMainThread();
+  WebAppControllerBrowserTest::SetUpOnMainThread();
   host_resolver()->AddRule("*", "127.0.0.1");
   // By default, all SSL cert checks are valid. Can be overridden in tests.
   cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
@@ -257,7 +257,7 @@ void WebAppNavigationBrowserTest::TearDownOnMainThread() {
   }
 #endif
 
-  InProcessBrowserTest::TearDownOnMainThread();
+  WebAppControllerBrowserTest::TearDownOnMainThread();
 }
 
 Profile* WebAppNavigationBrowserTest::profile() {
@@ -280,7 +280,8 @@ AppId WebAppNavigationBrowserTest::InstallTestWebApp(
   web_app_info->scope = https_server_.GetURL(app_host, app_scope);
   web_app_info->title = base::UTF8ToUTF16(GetAppName());
   web_app_info->description = u"Test description";
-  web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
+  web_app_info->user_display_mode =
+      web_app::mojom::UserDisplayMode::kStandalone;
 
   AppId app_id = test::InstallWebApp(profile(), std::move(web_app_info));
   DCHECK(!app_id.empty());
@@ -291,7 +292,7 @@ AppId WebAppNavigationBrowserTest::InstallTestWebApp(
 Browser* WebAppNavigationBrowserTest::OpenTestWebApp() {
   GURL app_url = https_server_.GetURL(GetAppUrlHost(), GetAppUrlPath());
   auto observer = GetTestNavigationObserver(app_url);
-  Browser* app_browser = LaunchWebAppBrowser(profile(), test_web_app_);
+  Browser* app_browser = LaunchWebAppBrowser(test_web_app_);
   observer->Wait();
 
   return app_browser;

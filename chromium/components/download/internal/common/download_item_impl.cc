@@ -27,9 +27,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
 #include "base/guid.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
@@ -57,12 +57,12 @@
 #include "components/download/public/common/download_ukm_helper.h"
 #include "components/download/public/common/download_url_parameters.h"
 #include "components/download/public/common/download_utils.h"
-#include "components/enterprise/common/download_item_reroute_info.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/referrer_policy.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -331,7 +331,6 @@ DownloadItemImpl::DownloadItemImpl(
     base::Time last_access_time,
     bool transient,
     const std::vector<DownloadItem::ReceivedSlice>& received_slices,
-    const DownloadItemRerouteInfo& reroute_info,
     int64_t range_request_from,
     int64_t range_request_to,
     std::unique_ptr<DownloadEntry> download_entry)
@@ -376,8 +375,7 @@ DownloadItemImpl::DownloadItemImpl(
       last_modified_time_(last_modified),
       etag_(etag),
       received_slices_(received_slices),
-      is_updating_observers_(false),
-      reroute_info_(reroute_info) {
+      is_updating_observers_(false) {
   delegate_->Attach();
   DCHECK(state_ == COMPLETE_INTERNAL || state_ == INTERRUPTED_INTERNAL ||
          state_ == CANCELLED_INTERNAL);
@@ -390,7 +388,7 @@ DownloadItemImpl::DownloadItemImpl(
     ukm_download_id_ = download_entry->ukm_download_id;
     bytes_wasted_ = download_entry->bytes_wasted;
   } else {
-    ukm_download_id_ = GetUniqueDownloadId();
+    ukm_download_id_ = ukm::NoURLSourceId();
   }
   Init(false /* not actively downloading */, TYPE_HISTORY_IMPORT);
 }
@@ -1013,17 +1011,6 @@ DownloadFile* DownloadItemImpl::GetDownloadFile() {
   return download_file_.get();
 }
 
-DownloadItemRenameHandler* DownloadItemImpl::GetRenameHandler() {
-  if (!rename_handler_) {
-    rename_handler_ = delegate_->GetRenameHandlerForDownload(this);
-  }
-  return rename_handler_.get();
-}
-
-const DownloadItemRerouteInfo& DownloadItemImpl::GetRerouteInfo() const {
-  return reroute_info_;
-}
-
 bool DownloadItemImpl::IsDangerous() const {
   return danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
          danger_type_ == DOWNLOAD_DANGER_TYPE_DANGEROUS_URL ||
@@ -1263,8 +1250,6 @@ std::string DownloadItemImpl::DebugString(bool verbose) const {
         "\"\n\t"
         " target_path = \"%" PRFilePath
         "\"\n\t"
-        " rereoute_info = '%s'"
-        "\""
         " referrer = \"%s\""
         " serialized_embedder_download_data = \"%s\"",
         GetTotalBytes(), GetReceivedBytes(),
@@ -1274,7 +1259,7 @@ std::string DownloadItemImpl::DebugString(bool verbose) const {
         GetLastModifiedTime().c_str(), GetETag().c_str(),
         download_file_ ? "true" : "false", url_list.c_str(),
         GetFullPath().value().c_str(), GetTargetFilePath().value().c_str(),
-        reroute_info_.DebugString().c_str(), GetReferrerUrl().spec().c_str(),
+        GetReferrerUrl().spec().c_str(),
         GetSerializedEmbedderDownloadData().c_str());
   } else {
     description += base::StringPrintf(" url = \"%s\"", url_list.c_str());
@@ -1538,7 +1523,7 @@ void DownloadItemImpl::Init(bool active,
         "download", "DownloadItemActive",
         TRACE_ID_WITH_SCOPE("DownloadItemActive", download_id_),
         "download_item", std::move(active_data));
-    ukm_download_id_ = GetUniqueDownloadId();
+    ukm_download_id_ = ukm::NoURLSourceId();
   } else {
     TRACE_EVENT_INSTANT1("download", "DownloadItemActive",
                          TRACE_EVENT_SCOPE_THREAD, "download_item",
@@ -1902,15 +1887,6 @@ void DownloadItemImpl::OnDownloadCompleting() {
       base::BindOnce(&DownloadItemImpl::OnDownloadRenamedToFinalName,
                      weak_ptr_factory_.GetWeakPtr());
 
-  // If an alternate rename handler is specified, use it instead.
-  if (!is_temporary_ && GetRenameHandler()) {
-    auto update_callback =
-        base::BindRepeating(&DownloadItemImpl::OnRenameHandlerUpdate,
-                            weak_ptr_factory_.GetWeakPtr());
-    GetRenameHandler()->Start(update_callback, std::move(rename_callback));
-    return;
-  }
-
 #if BUILDFLAG(IS_ANDROID)
   if (GetTargetFilePath().IsContentUri()) {
     GetDownloadTaskRunner()->PostTask(
@@ -1937,17 +1913,6 @@ void DownloadItemImpl::OnDownloadCompleting() {
                      delegate_->IsOffTheRecord() ? GURL() : GetURL(),
                      delegate_->IsOffTheRecord() ? GURL() : GetReferrerUrl(),
                      std::move(quarantine), std::move(rename_callback)));
-}
-
-void DownloadItemImpl::OnRenameHandlerUpdate(
-    const DownloadItemRenameProgressUpdate& update) {
-  TRACE_EVENT_INSTANT1("download", "DownloadItemRenameProgressUpdated",
-                       TRACE_EVENT_SCOPE_THREAD, "new_file_name",
-                       update.target_file_name);
-  DCHECK_EQ(state_, IN_PROGRESS_INTERNAL);
-  destination_info_.target_path = update.target_file_name;
-  reroute_info_ = update.reroute_info;
-  UpdateObservers();
 }
 
 void DownloadItemImpl::OnDownloadRenamedToFinalName(

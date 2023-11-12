@@ -12,10 +12,10 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -552,16 +552,16 @@ void BluetoothAdapterBlueZ::SetDiscoverable(bool discoverable,
                          std::move(error_callback)));
 }
 
-uint32_t BluetoothAdapterBlueZ::GetDiscoverableTimeout() const {
+base::TimeDelta BluetoothAdapterBlueZ::GetDiscoverableTimeout() const {
   if (!IsPresent())
-    return 0;
+    return base::Seconds(0);
 
   bluez::BluetoothAdapterClient::Properties* properties =
       bluez::BluezDBusManager::Get()
           ->GetBluetoothAdapterClient()
           ->GetProperties(object_path_);
 
-  return properties->discoverable_timeout.value();
+  return base::Seconds(properties->discoverable_timeout.value());
 }
 
 bool BluetoothAdapterBlueZ::IsDiscovering() const {

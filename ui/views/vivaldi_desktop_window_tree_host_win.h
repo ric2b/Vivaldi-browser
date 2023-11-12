@@ -17,12 +17,6 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #include "ui/views/widget/widget.h"
 
-#define DWMWA_WINDOW_CORNER_PREFERENCE DWORD(33)
-#define DWMWA_BORDER_COLOR DWORD(34)
-
-#define DWMWCP_DEFAULT DWORD(0)
-#define DWMWCP_ROUND DWORD(2)
-
 // Set as window borders, on Win11 and higher if accent-color is not enabled.
 #define VIVALDI_WINDOW_BORDER_DARK RGB(0x37, 0x37, 0x37)
 #define VIVALDI_WINDOW_BORDER_LIGHT RGB(0xAA, 0xAA, 0xAA)

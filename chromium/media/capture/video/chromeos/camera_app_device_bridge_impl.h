@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/memory/singleton.h"
+#include "base/task/single_thread_task_runner.h"
 #include "media/capture/capture_export.h"
 #include "media/capture/video/chromeos/camera_app_device_impl.h"
 #include "media/capture/video/chromeos/mojom/camera_app.mojom.h"
@@ -47,6 +48,8 @@ class CAPTURE_EXPORT CameraAppDeviceBridgeImpl
 
   void OnDeviceMojoDisconnected(const std::string& device_id);
 
+  void UpdateCameraInfo(const std::string& device_id);
+
   void InvalidateDevicePtrsOnDeviceIpcThread(const std::string& device_id,
                                              bool should_disable_new_ptrs,
                                              base::OnceClosure callback);
@@ -80,8 +83,6 @@ class CAPTURE_EXPORT CameraAppDeviceBridgeImpl
 
  private:
   friend struct base::DefaultSingletonTraits<CameraAppDeviceBridgeImpl>;
-
-  CameraAppDeviceImpl* GetOrCreateCameraAppDevice(const std::string& device_id);
 
   bool is_supported_;
 

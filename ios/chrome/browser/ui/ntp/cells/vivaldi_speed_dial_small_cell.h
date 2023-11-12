@@ -15,8 +15,10 @@
 - (instancetype)initWithFrame:(CGRect)rect;
 
 // SETTERS
-- (void)configureCellWith:(const VivaldiSpeedDialItem*)item;
-- (void)configureCellWithAttributes:(const FaviconAttributes*)attributes;
+- (void)configureCellWith:(const VivaldiSpeedDialItem*)item
+                 isTablet:(BOOL)isTablet;
+- (void)configureCellWithAttributes:(const FaviconAttributes*)attributes
+                               item:(VivaldiSpeedDialItem*)item;
 - (void)configurePreviewForDevice:(BOOL)isTablet;
 
 @end

@@ -32,28 +32,33 @@ static ResolvedUnderlinePosition ResolveUnderlinePosition(
   const FontBaseline baseline_type = baseline_type_override
                                          ? *baseline_type_override
                                          : style.GetFontBaseline();
+  const TextUnderlinePosition position = style.GetTextUnderlinePosition();
 
   // |auto| should resolve to |under| to avoid drawing through glyphs in
   // scripts where it would not be appropriate (e.g., ideographs.)
   // However, this has performance implications. For now, we only work with
   // vertical text.
   if (baseline_type != kCentralBaseline) {
-    if (style.TextUnderlinePosition() & kTextUnderlinePositionUnder)
+    if (EnumHasFlags(position, TextUnderlinePosition::kUnder)) {
       return ResolvedUnderlinePosition::kUnder;
-    if (style.TextUnderlinePosition() & kTextUnderlinePositionFromFont)
+    }
+    if (EnumHasFlags(position, TextUnderlinePosition::kFromFont)) {
       return ResolvedUnderlinePosition::kNearAlphabeticBaselineFromFont;
+    }
     return ResolvedUnderlinePosition::kNearAlphabeticBaselineAuto;
   }
   // Compute language-appropriate default underline position.
   // https://drafts.csswg.org/css-text-decor-3/#default-stylesheet
   UScriptCode script = style.GetFontDescription().GetScript();
   if (script == USCRIPT_KATAKANA_OR_HIRAGANA || script == USCRIPT_HANGUL) {
-    if (style.TextUnderlinePosition() & kTextUnderlinePositionLeft)
+    if (EnumHasFlags(position, TextUnderlinePosition::kLeft)) {
       return ResolvedUnderlinePosition::kUnder;
+    }
     return ResolvedUnderlinePosition::kOver;
   }
-  if (style.TextUnderlinePosition() & kTextUnderlinePositionRight)
+  if (EnumHasFlags(position, TextUnderlinePosition::kRight)) {
     return ResolvedUnderlinePosition::kOver;
+  }
   return ResolvedUnderlinePosition::kUnder;
 }
 
@@ -242,9 +247,9 @@ Path PrepareWavyStrokePath(const WavyParams& params) {
   return result;
 }
 
-sk_sp<cc::PaintRecord> PrepareWavyTileRecord(const WavyParams& params,
-                                             const Path& stroke_path,
-                                             const gfx::RectF& pattern_rect) {
+cc::PaintRecord PrepareWavyTileRecord(const WavyParams& params,
+                                      const Path& stroke_path,
+                                      const gfx::RectF& pattern_rect) {
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
   flags.setColor(params.color.Rgb());
@@ -439,7 +444,7 @@ void TextDecorationInfo::SetLineData(TextDecorationLine line,
     case ETextDecorationStyle::kDotted:
     case ETextDecorationStyle::kDashed:
       line_data_.stroke_path = PrepareDottedOrDashedStrokePath();
-      line_data_.wavy_tile_record.reset();
+      line_data_.wavy_tile_record = cc::PaintRecord();
       break;
     case ETextDecorationStyle::kWavy:
       line_data_.stroke_path.reset();
@@ -448,7 +453,7 @@ void TextDecorationInfo::SetLineData(TextDecorationLine line,
       break;
     default:
       line_data_.stroke_path.reset();
-      line_data_.wavy_tile_record.reset();
+      line_data_.wavy_tile_record = cc::PaintRecord();
   }
 }
 
@@ -628,11 +633,11 @@ float TextDecorationInfo::ComputeUnderlineThickness(
 
 void TextDecorationInfo::ComputeWavyLineData(
     gfx::RectF& pattern_rect,
-    sk_sp<cc::PaintRecord>& tile_record) const {
+    cc::PaintRecord& tile_record) const {
   struct WavyCache {
     WavyParams key;
     gfx::RectF pattern_rect;
-    sk_sp<cc::PaintRecord> tile_record;
+    cc::PaintRecord tile_record;
     DISALLOW_NEW();
   };
 
@@ -722,7 +727,7 @@ gfx::RectF TextDecorationInfo::WavyTileRect() const {
   return result;
 }
 
-sk_sp<cc::PaintRecord> TextDecorationInfo::WavyTileRecord() const {
+cc::PaintRecord TextDecorationInfo::WavyTileRecord() const {
   return line_data_.wavy_tile_record;
 }
 

@@ -122,8 +122,9 @@ void AffectedByPseudoTest::CheckAffectedByFlagsForHas(
         break;
     }
     DCHECK(flag_name);
-    if (iter.second == actual)
+    if (iter.second == actual) {
       continue;
+    }
 
     ADD_FAILURE() << "#" << element_id << " : " << flag_name << " should be "
                   << (iter.second ? "true" : "false") << " but "
@@ -5281,6 +5282,46 @@ TEST_F(AffectedByPseudoTest, AffectedByHasAfterRemoval6) {
       {{kAffectedBySubjectHas, false},
        {kAncestorsOrAncestorSiblingsAffectedByHas, true},
        {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+}
+
+TEST_F(AffectedByPseudoTest, AffectedByHasWithoutNth) {
+  SetHtmlInnerHTML(R"HTML(
+    <style>
+      #root:has(.foo) { background-color: green }
+      :nth-child(1000) * { background-color: red }
+    </style>
+    <div id="root">
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div id="foo"></div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  CheckAffectedByFlagsForHas(
+      "root",
+      {{kAffectedBySubjectHas, true},
+       {kAncestorsOrAncestorSiblingsAffectedByHas, true},
+       {kSiblingsAffectedByHasForSiblingDescendantRelationship, false}});
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  Element* foo = GetElementById("foo");
+  foo->setAttribute(html_names::kClassAttr, "foo");
+
+  UpdateAllLifecyclePhasesForTest();
+
+  ASSERT_EQ(GetStyleEngine().StyleForElementCount() - start_count, 1U);
 }
 
 }  // namespace blink

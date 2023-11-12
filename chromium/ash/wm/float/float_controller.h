@@ -57,10 +57,9 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   // Returns float window bounds in clamshell mode in root window coordinates.
   static gfx::Rect GetPreferredFloatWindowClamshellBounds(aura::Window* window);
 
-  // Gets the ideal float bounds of `floated_window` in tablet mode if it were
-  // to be floated, in root window coordinates.
-  gfx::Rect GetPreferredFloatWindowTabletBounds(
-      aura::Window* floated_window) const;
+  // Gets the ideal float bounds of `window` in tablet mode if it were to be
+  // floated, in root window coordinates.
+  static gfx::Rect GetPreferredFloatWindowTabletBounds(aura::Window* window);
 
   // Untucks `floated_window`. Does nothing if the window is already untucked.
   void MaybeUntuckFloatedWindowForTablet(aura::Window* floated_window);
@@ -68,24 +67,26 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   // Checks if `floated_window` is tucked.
   bool IsFloatedWindowTuckedForTablet(const aura::Window* floated_window) const;
 
+  // Returns true if `floated_window` is not tucked and magnetized to the
+  // bottom. Used by the shelf layout manager to determine what window to use
+  // for the drag window from shelf feature.
+  bool IsFloatedWindowAlignedWithShelf(aura::Window* floated_window) const;
+
   // Gets the tuck handle for a floated and tucked window.
   views::Widget* GetTuckHandleWidget(const aura::Window* floated_window) const;
 
-  // Called by the resizer when a drag is completed. Updates the bounds
-  // and magnetism of the `floated_window`.
-  void OnDragCompletedForTablet(aura::Window* floated_window,
-                                const gfx::PointF& last_location_in_parent);
+  // Called by the resizer when a drag is completed. Updates the bounds and
+  // magnetism of the `floated_window`.
+  void OnDragCompletedForTablet(aura::Window* floated_window);
 
   // TODO(shidi): Temporary passing `floated_window` here, will follow-up in
   // desk logic to use only `active_floated_window_`.
   // Called by the resizer when a drag is completed by a fling or swipe gesture
   // event. Updates the magnetism of the window and then tucks the window
-  // offscreen. If set, `left` and `up` are used to determine the direction
-  // of the fling or swipe gesture. If `left` is empty then there is no
-  // horizontal fling/swipe component.
+  // offscreen based on `velocity_x` and `velocity_y`.
   void OnFlingOrSwipeForTablet(aura::Window* floated_window,
-                               absl::optional<bool> left,
-                               bool up);
+                               float velocity_x,
+                               float velocity_y);
 
   // Returns the desk where floated window belongs to if window is floated and
   // registered under `floated_window_info_map_`, otherwise returns nullptr.
@@ -138,6 +139,7 @@ class ASH_EXPORT FloatController : public TabletModeObserver,
   class FloatedWindowInfo;
   friend class DefaultState;
   friend class TabletModeWindowState;
+  friend class ClientControlledState;
   friend class WindowFloatTest;
   FRIEND_TEST_ALL_PREFIXES(WindowFloatMetricsTest, FloatWindowCountPerSession);
   FRIEND_TEST_ALL_PREFIXES(WindowFloatMetricsTest,

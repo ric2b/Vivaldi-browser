@@ -121,7 +121,7 @@ jboolean VivaldiAccountManagerAndroid::SetPendingRegistration(
   }
   std::string encoded_password;
   base::Base64Encode(encrypted_password, &encoded_password);
-  base::Value pending_registration(base::Value::Type::DICTIONARY);
+  base::Value pending_registration(base::Value::Type::DICT);
 
   pending_registration.SetStringKey(
       kUsernameKey, base::android::ConvertJavaStringToUTF8(env, username));

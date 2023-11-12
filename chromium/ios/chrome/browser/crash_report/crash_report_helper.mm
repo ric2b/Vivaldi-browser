@@ -7,10 +7,10 @@
 #import <Foundation/Foundation.h>
 
 #import "base/auto_reset.h"
-#import "base/bind.h"
 #import "base/debug/crash_logging.h"
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
+#import "base/functional/bind.h"
 #import "base/location.h"
 #import "base/path_service.h"
 #import "base/strings/sys_string_conversions.h"
@@ -196,7 +196,7 @@ const NSString* kDocumentMimeType = @"application/pdf";
 
 @end
 
-namespace breakpad {
+namespace crash_report_helper {
 
 void MonitorURLsForPreloadWebState(web::WebState* web_state) {
   CrashReporterURLObserver::GetSharedInstance()->ObservePreloadWebState(
@@ -238,4 +238,4 @@ void SetPreviousSessionEvents(const std::vector<std::string>& events) {
       events);
 }
 
-}  // namespace breakpad
+}  // namespace crash_report_helper

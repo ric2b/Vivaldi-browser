@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
@@ -13,6 +13,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/net/storage_test_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/storage_access_api/storage_access_grant_permission_context.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/pref_names.h"
@@ -24,12 +25,10 @@
 #include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
-#include "components/network_session_configurator/common/network_switches.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_paths.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -62,17 +61,10 @@ constexpr char kRequestOutcomeHistogram[] = "API.StorageAccess.RequestOutcome";
 
 enum class TestType { kFrame, kWorker };
 
-std::string BoolToString(bool b) {
-  return b ? "true" : "false";
-}
-
 class StorageAccessAPIBaseBrowserTest : public InProcessBrowserTest {
  protected:
-  StorageAccessAPIBaseBrowserTest(bool permission_grants_unpartitioned_storage,
-                                  bool is_storage_partitioned)
+  explicit StorageAccessAPIBaseBrowserTest(bool is_storage_partitioned)
       : https_server_(net::EmbeddedTestServer::TYPE_HTTPS),
-        permission_grants_unpartitioned_storage_(
-            permission_grants_unpartitioned_storage),
         is_storage_partitioned_(is_storage_partitioned) {}
 
   void SetUp() override {
@@ -83,18 +75,14 @@ class StorageAccessAPIBaseBrowserTest : public InProcessBrowserTest {
 
   virtual std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() {
     std::vector<base::test::FeatureRefAndParams> enabled({
-        {net::features::kStorageAccessAPI,
+        {blink::features::kStorageAccessAPI,
          {
              {
-                 "storage-access-api-grants-unpartitioned-storage",
-                 BoolToString(permission_grants_unpartitioned_storage_),
-             },
-             {
-                 "storage_access_api_auto_grant_within_fps",
+                 blink::features::kStorageAccessAPIAutoGrantInFPS.name,
                  "false",
              },
              {
-                 "storage_access_api_auto_deny_outside_fps",
+                 blink::features::kStorageAccessAPIAutoDenyOutsideFPS.name,
                  "false",
              },
          }},
@@ -121,13 +109,6 @@ class StorageAccessAPIBaseBrowserTest : public InProcessBrowserTest {
     https_server_.ServeFilesFromDirectory(path);
     https_server_.AddDefaultHandlers(GetChromeTestDataDir());
     ASSERT_TRUE(https_server_.Start());
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    // TODO(fivedots): Remove this switch once Storage Foundation is enabled
-    // by default.
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "StorageFoundationAPI");
   }
 
   void SetCrossSiteCookieOnHost(const std::string& host) {
@@ -229,25 +210,18 @@ class StorageAccessAPIBaseBrowserTest : public InProcessBrowserTest {
 
   net::test_server::EmbeddedTestServer& https_server() { return https_server_; }
 
-  bool PermissionGrantsUnpartitionedStorage() const {
-    return permission_grants_unpartitioned_storage_;
-  }
   bool IsStoragePartitioned() const { return is_storage_partitioned_; }
 
  private:
   net::test_server::EmbeddedTestServer https_server_;
   base::test::ScopedFeatureList features_;
-  bool permission_grants_unpartitioned_storage_;
   bool is_storage_partitioned_;
 };
 
-class StorageAccessAPIBrowserTest
-    : public StorageAccessAPIBaseBrowserTest,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+class StorageAccessAPIBrowserTest : public StorageAccessAPIBaseBrowserTest,
+                                    public testing::WithParamInterface<bool> {
  public:
-  StorageAccessAPIBrowserTest()
-      : StorageAccessAPIBaseBrowserTest(std::get<0>(GetParam()),
-                                        std::get<1>(GetParam())) {}
+  StorageAccessAPIBrowserTest() : StorageAccessAPIBaseBrowserTest(GetParam()) {}
 };
 
 // Validate that if an iframe requests access that cookies become unblocked for
@@ -272,13 +246,16 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
 
   // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent:
+  // the cookie is not sent:
   NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(GetFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
+  // Only when the initiator is the frame that's been navigated can inherit
+  // per-frame storage access.
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   // Navigate iframe to c.test and verify that the cookie is not sent.
   NavigateFrameTo(kHostC, "/echoheader?cookie");
@@ -287,13 +264,19 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   // Navigate iframe to a cross-site frame with a frame, and navigate _that_
-  // frame to a cross-site page that echos the cookie header, and verify that
-  // the cookie is sent:
+  // frame to the same cross-site page that echos the cookie header, and verify
+  // that allowing storage access for the iframe does not enable cookie access
+  // from the nested iframe.
   NavigateFrameTo(kHostB, "/iframe.html");
   NavigateNestedFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetNestedFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
+  EXPECT_EQ(GetNestedFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "");
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
+  EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
+  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
+  EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "");
+
   // Navigate nested iframe to c.test and verify that the cookie is not
   // sent.
   NavigateNestedFrameTo(kHostC, "/echoheader?cookie");
@@ -303,15 +286,9 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
 
   // Navigate iframe to a cross-site frame with a frame, and navigate _that_
   // frame to a distinct cross-site page that echos the cookie header, and
-  // verify that the cookie is sent:
+  // verify that the cookie is not sent:
   NavigateFrameTo(kHostC, "/iframe.html");
   NavigateNestedFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetNestedFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
-  // Navigate nested iframe to c.test and verify that the cookie is not
-  // sent.
-  NavigateNestedFrameTo(kHostC, "/echoheader?cookie");
   EXPECT_EQ(GetNestedFrameContent(), "None");
   EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "");
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
@@ -381,13 +358,18 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
   // Block all cookies with a user setting for kHostB.
   CookieSettingsFactory::GetForProfile(browser()->profile())
       ->SetCookieSetting(GetURL(kHostB), ContentSetting::CONTENT_SETTING_BLOCK);
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
+
+  // This is the expected behavior when we've gotten the permission but user
+  // settings block cookie access.
+  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
   // the cookie is blocked:
   NavigateFrameTo(kHostB, "/echoheader?cookie");
   EXPECT_EQ(GetFrameContent(), "None");
   EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
+  // Only when the initiator is the frame that's been navigated can inherit
+  // per-frame storage access.
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   // Navigate iframe to a cross-site frame with a frame, and navigate _that_
@@ -422,22 +404,20 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
 
   NavigateToPageWithFrame(kHostA);
   NavigateFrameTo(kHostB, "/echoheader?cookie");
+  EXPECT_EQ(GetFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
 
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent:
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "thirdparty=1");
   EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "thirdparty=1");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   // Manually delete all our grants.
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   settings_map->ClearSettingsForOneType(ContentSettingsType::STORAGE_ACCESS);
+  // Verify cookie cannot be accessed.
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
 
   NavigateFrameTo(kHostB, "/echoheader?cookie");
   EXPECT_EQ(GetFrameContent(), "None");
@@ -489,9 +469,9 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest, SandboxTokenResolves) {
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
 }
 
-// Validates that expiry data is transferred over IPC to the Network Service.
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
-                       ThirdPartyGrantsExpireOverIPC) {
+// Validates that expired grants don't get reused.
+IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest, ThirdPartyGrantsExpiry) {
+  base::HistogramTester histogram_tester;
   SetBlockThirdPartyCookies(true);
 
   // Set a cookie on `kHostB` and `kHostC`.
@@ -510,7 +490,8 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
 
-  // Manually create a pre-expired grant and ensure it doesn't grant access.
+  // Manually create a pre-expired grant and ensure it doesn't grant access for
+  // HostB.
   base::Time expiration_time = base::Time::Now() - base::Minutes(5);
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
@@ -520,49 +501,35 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
       {expiration_time, content_settings::SessionModel::UserSession});
   settings_map->SetContentSettingDefaultScope(
       GetURL(kHostC), GetURL(kHostA), ContentSettingsType::STORAGE_ACCESS,
-      CONTENT_SETTING_ALLOW,
-      {expiration_time, content_settings::SessionModel::UserSession});
+      CONTENT_SETTING_ALLOW);
 
-  // Manually send our expired setting. This needs to be done manually because
-  // normally this expired value would be filtered out before sending and time
-  // cannot be properly mocked in a browser test.
-  ContentSettingsForOneType settings;
-  settings.push_back(ContentSettingPatternSource(
-      ContentSettingsPattern::FromURLNoWildcard(GetURL(kHostB)),
-      ContentSettingsPattern::FromURLNoWildcard(GetURL(kHostA)),
-      base::Value(CONTENT_SETTING_ALLOW), "preference",
-      /*incognito=*/false, {.expiration = expiration_time}));
-  settings.emplace_back(
-      ContentSettingsPattern::FromURLNoWildcard(GetURL(kHostC)),
-      ContentSettingsPattern::FromURLNoWildcard(GetURL(kHostA)),
-      base::Value(CONTENT_SETTING_ALLOW), "preference",
-      /*incognito=*/false);
+  // The iframe should request for new grant since the existing one is expired.
+  EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
+  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
-  browser()
-      ->profile()
-      ->GetDefaultStoragePartition()
-      ->GetCookieManagerForBrowserProcess()
-      ->SetStorageAccessGrantSettings(settings, base::DoNothing());
+  // Validate that only one permission was newly granted.
+  histogram_tester.ExpectTotalCount(kRequestOutcomeHistogram, 1);
+  EXPECT_THAT(
+      histogram_tester.GetBucketCount(kRequestOutcomeHistogram,
+                                      RequestOutcome::kGrantedByAllowance),
+      1);
 
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  // The nested iframe reuses the existing grant without requesting.
+  EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetNestedFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
+  EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "thirdparty=c");
+  // We don't get to record a sample for the "reuse" case, so that histogram
+  // still only has 1 sample in total.
+  histogram_tester.ExpectTotalCount(kRequestOutcomeHistogram, 1);
 
   NavigateFrameTo(kHostB, "/iframe.html");
   NavigateNestedFrameTo(kHostC, "/echoheader?cookie");
+  // Only when the initiator is the frame that's been navigated can inherit
+  // per-frame storage access.
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
-  EXPECT_EQ(GetNestedFrameContent(), "thirdparty=c");
-  EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "thirdparty=c");
-}
-
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
-                       RsaForOriginDisabledByDefault) {
-  NavigateToPageWithFrame(kHostA);
-  // Ensure that the proposed extension is not available unless explicitly
-  // enabled.
-  EXPECT_TRUE(EvalJs(GetPrimaryMainFrame(),
-                     "\"requestStorageAccessForOrigin\" in document === false")
-                  .ExtractBool());
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
+  EXPECT_EQ(GetNestedFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetNestedFrame()), "");
 }
 
 IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
@@ -582,21 +549,15 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
 
   // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent:
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
+  // the cookie is not sent due to per-frame storage access:
   NavigateToPageWithFrame(kHostASubdomain);
   NavigateFrameTo(kHostB, "/echoheader?cookie");
-  // Similar to the rsaFor equivalent, scoping may or may not allow access for
-  // the subdomain, depending on the setting.
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(GetFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 }
 
 IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
@@ -616,21 +577,23 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
 
   // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent:
+  // the cookie is not sent due to per-frame storage access:
   NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(GetFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
+  // Only when the initiator is the frame that's been navigated can inherit
+  // per-frame storage access.
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   NavigateToPageWithFrame(kHostA);
   NavigateFrameTo(kHostB, "/echoheader?cookie");
-  // Similar to the rsaFor equivalent, scoping may or may not allow access for
-  // the subdomain, depending on the setting.
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  // Verify that the cookie is not sent due to per-frame storage access:
+  EXPECT_EQ(GetFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 }
 
 IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
@@ -648,6 +611,7 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
 
   EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=a.test");
 
   // Regardless of the top-level site or origin scoping, the embedded origin
   // should be used.
@@ -659,15 +623,14 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIBrowserTest,
 
 INSTANTIATE_TEST_SUITE_P(/* no prefix */,
                          StorageAccessAPIBrowserTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
+                         testing::Bool());
 
 class StorageAccessAPIStorageBrowserTest
     : public StorageAccessAPIBaseBrowserTest,
-      public testing::WithParamInterface<std::tuple<TestType, bool, bool>> {
+      public testing::WithParamInterface<std::tuple<TestType, bool>> {
  public:
   StorageAccessAPIStorageBrowserTest()
-      : StorageAccessAPIBaseBrowserTest(std::get<1>(GetParam()),
-                                        std::get<2>(GetParam())) {}
+      : StorageAccessAPIBaseBrowserTest(std::get<1>(GetParam())) {}
 
   void ExpectStorage(content::RenderFrameHost* frame, bool expected) {
     switch (GetTestType()) {
@@ -692,9 +655,7 @@ class StorageAccessAPIStorageBrowserTest
     }
   }
 
-  bool DoesPermissionGrantStorage() const {
-    return IsStoragePartitioned() || PermissionGrantsUnpartitionedStorage();
-  }
+  bool DoesPermissionGrantStorage() const { return IsStoragePartitioned(); }
 
  private:
   TestType GetTestType() const { return std::get<0>(GetParam()); }
@@ -726,7 +687,7 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIStorageBrowserTest,
   NavigateToPageWithFrame(kHostA);
   NavigateFrameTo(kHostB, "/browsing_data/site_data.html");
   ExpectStorage(GetFrame(), DoesPermissionGrantStorage());
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 }
 
 IN_PROC_BROWSER_TEST_P(StorageAccessAPIStorageBrowserTest,
@@ -755,7 +716,7 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIStorageBrowserTest,
   NavigateFrameTo(kHostB, "/iframe.html");
   NavigateNestedFrameTo(kHostC, "/browsing_data/site_data.html");
   ExpectStorage(GetNestedFrame(), DoesPermissionGrantStorage());
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetNestedFrame()));
 }
 
 // Test third-party cookie blocking of features that allow to communicate
@@ -773,7 +734,7 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIStorageBrowserTest, MultiTabTest) {
   NavigateToNewTabWithFrame(kHostA);
   NavigateFrameTo(kHostB, "/browsing_data/site_data.html");
   storage::test::ExpectCrossTabInfoForFrame(GetFrame(), true);
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   SetBlockThirdPartyCookies(true);
 
@@ -791,453 +752,20 @@ IN_PROC_BROWSER_TEST_P(StorageAccessAPIStorageBrowserTest, MultiTabTest) {
   NavigateFrameTo(kHostB, "/browsing_data/site_data.html");
   storage::test::ExpectCrossTabInfoForFrame(GetFrame(),
                                             DoesPermissionGrantStorage());
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 }
 
 INSTANTIATE_TEST_SUITE_P(/*no prefix*/,
                          StorageAccessAPIStorageBrowserTest,
                          testing::Combine(testing::Values(TestType::kFrame,
                                                           TestType::kWorker),
-                                          testing::Bool(),
                                           testing::Bool()));
-
-class StorageAccessAPIForOriginBrowserTest
-    : public StorageAccessAPIBaseBrowserTest,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
- public:
-  StorageAccessAPIForOriginBrowserTest()
-      : StorageAccessAPIBaseBrowserTest(std::get<0>(GetParam()),
-                                        std::get<1>(GetParam())) {}
-
- protected:
-  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() override {
-    std::vector<base::test::FeatureRefAndParams> enabled =
-        StorageAccessAPIBaseBrowserTest::GetEnabledFeatures();
-    enabled.push_back(
-        {blink::features::kStorageAccessAPIForOriginExtension, {}});
-    return enabled;
-  }
-};
-
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIForOriginBrowserTest,
-                       SameOriginGrantedByDefault) {
-  SetBlockThirdPartyCookies(true);
-  base::HistogramTester histogram_tester;
-
-  NavigateToPageWithFrame(kHostA);
-
-  EXPECT_FALSE(storage::test::RequestStorageAccessForOrigin(
-      GetFrame(), "https://asdf.example"));
-  EXPECT_FALSE(
-      storage::test::RequestStorageAccessForOrigin(GetFrame(), "mattwashere"));
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostA).spec()));
-  EXPECT_FALSE(storage::test::RequestStorageAccessForOrigin(
-      GetFrame(), GetURL(kHostA).spec()));
-}
-
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIForOriginBrowserTest,
-                       TopLevelOpaqueOriginRejected) {
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
-                                           GURL("data:,Hello%2C%20World%21")));
-
-  EXPECT_FALSE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostA).spec()));
-}
-
-// Validate that if an iframe requests access that cookies become unblocked for
-// just that top-level/third-party combination.
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIForOriginBrowserTest,
-                       // TODO(crbug.com/1370096): Re-enable metric assertions.
-                       GrantGivesCrossSiteCookieAccess) {
-  SetBlockThirdPartyCookies(true);
-  base::HistogramTester histogram_tester;
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostB);
-
-  NavigateToPageWithFrame(kHostA);
-
-  // Allow all requests for kHostB to have cookie access from a.test.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostB).spec()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  // Repeated calls should also return true.
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostB).spec()));
-
-  // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent:
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Also validate that an additional site C was not granted access.
-  NavigateFrameTo(kHostC, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-}
-
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIForOriginBrowserTest,
-                       RequestStorageAccessForOriginTopLevelScoping) {
-  SetBlockThirdPartyCookies(true);
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostB);
-
-  NavigateToPageWithFrame(kHostA);
-
-  // Allow all requests for kHostB to have cookie access from a.test.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostB).spec()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent:
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  NavigateToPageWithFrame(kHostASubdomain);
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  // Storage access grants are scoped to the embedded origin on the top-level
-  // site. Accordingly, the access should be granted.
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-}
-
-IN_PROC_BROWSER_TEST_P(
-    StorageAccessAPIForOriginBrowserTest,
-    RequestStorageAccessForOriginTopLevelScopingWhenRequestedFromSubdomain) {
-  SetBlockThirdPartyCookies(true);
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostB);
-
-  NavigateToPageWithFrame(kHostASubdomain);
-
-  // Allow all requests for kHostB to have cookie access from a.test.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostB).spec()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent:
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  NavigateToPageWithFrame(kHostA);
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  // When top-level site scoping is enabled, the subdomain's grant counts for
-  // the less-specific domain; otherwise, it does not.
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-}
-
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIForOriginBrowserTest,
-                       RequestStorageAccessForOriginEmbeddedOriginScoping) {
-  SetBlockThirdPartyCookies(true);
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostB);
-
-  // Verify that the top-level scoping does not leak to the embedded URL, whose
-  // origin must be used.
-  NavigateToPageWithFrame(kHostB);
-
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostB).spec()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Regardless of the top-level site or origin scoping, the embedded origin
-  // should be used.
-  NavigateFrameTo(kHostASubdomain, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-}
-
-INSTANTIATE_TEST_SUITE_P(/* no prefix */,
-                         StorageAccessAPIForOriginBrowserTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
-
-// Tests to validate First-Party Set use with `requestStorageAccessForOrigin`.
-class StorageAccessAPIForOriginWithFirstPartySetsBrowserTest
-    : public StorageAccessAPIBaseBrowserTest,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
- public:
-  StorageAccessAPIForOriginWithFirstPartySetsBrowserTest()
-      : StorageAccessAPIBaseBrowserTest(false, false) {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    StorageAccessAPIBaseBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(
-        network::switches::kUseFirstPartySet,
-        base::StrCat({R"({"primary": "https://)", kHostA,
-                      R"(", "associatedSites": ["https://)", kHostC, R"("])",
-                      R"(, "serviceSites": ["https://)", kHostB, R"("]})"}));
-  }
-
- protected:
-  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() override {
-    return {{blink::features::kStorageAccessAPIForOriginExtension, {}},
-            {net::features::kStorageAccessAPI,
-             {
-                 {
-                     net::features::kStorageAccessAPIAutoGrantInFPS.name,
-                     "true",
-                 },
-                 {
-                     net::features::kStorageAccessAPIAutoDenyOutsideFPS.name,
-                     "true",
-                 },
-                 // Setting implicit grants to a non-zero number here
-                 // demonstrates that when the auto-deny param is enabled, the
-                 // implicit grants param doesn't matter, since the auto-deny
-                 // param takes precedence.
-                 {
-                     "storage-access-api-implicit-grant-limit",
-                     "5",
-                 },
-             }}};
-  }
-};
-
-IN_PROC_BROWSER_TEST_F(StorageAccessAPIForOriginWithFirstPartySetsBrowserTest,
-                       Permission_AutograntedWithinFirstPartySet) {
-  SetBlockThirdPartyCookies(true);
-  base::HistogramTester histogram_tester;
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostB);
-  SetCrossSiteCookieOnHost(kHostC);
-
-  NavigateToPageWithFrame(kHostA);
-
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  // The request comes from `kHostA`, which is in a First-Party Set with
-  // `khostB`. Note that `kHostB` would not be auto-granted access if it were
-  // the requestor, because it is a service domain.
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostB).spec()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is sent.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Also validate that an additional site C was not granted access.
-  NavigateFrameTo(kHostC, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  content::FetchHistogramsFromChildProcesses();
-
-  EXPECT_THAT(histogram_tester.GetBucketCount(
-                  kRequestOutcomeHistogram,
-                  0 /*RequestOutcome::kGrantedByFirstPartySet*/),
-              Gt(0));
-}
-
-IN_PROC_BROWSER_TEST_F(StorageAccessAPIForOriginWithFirstPartySetsBrowserTest,
-                       Permission_AutodeniedForServiceDomain) {
-  SetBlockThirdPartyCookies(true);
-  base::HistogramTester histogram_tester;
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostB);
-
-  NavigateToPageWithFrame(kHostB);
-
-  NavigateFrameTo(kHostA, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  // The promise should be rejected; `khostB` is a service domain.
-  EXPECT_FALSE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostA).spec()));
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Re-navigate iframe to a cross-site, cookie-reading endpoint, and verify
-  // that the cookie is not sent.
-  NavigateFrameTo(kHostA, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  content::FetchHistogramsFromChildProcesses();
-  EXPECT_THAT(histogram_tester.GetBucketCount(
-                  kRequestOutcomeHistogram,
-                  5 /*RequestOutcome::kDeniedByPrerequisites*/),
-              Gt(0));
-}
-
-IN_PROC_BROWSER_TEST_F(StorageAccessAPIForOriginWithFirstPartySetsBrowserTest,
-                       Permission_AutodeniedForServiceDomainInIframe) {
-  SetBlockThirdPartyCookies(true);
-  base::HistogramTester histogram_tester;
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostB);
-
-  NavigateToPageWithFrame(kHostA);
-
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  // `kHostB` cannot be granted access via `RequestStorageAccessForOrigin`,
-  // because the call is not from the top-level page and because `kHostB` is a
-  // service domain.
-  EXPECT_FALSE(storage::test::RequestStorageAccessForOrigin(
-      GetFrame(), GetURL(kHostA).spec()));
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is not sent.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // However, a regular `requestStorageAccess` call should be granted;
-  // requesting on behalf of another domain is what is not acceptable.
-  EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // When the frame subsequently navigates to an endpoint on kHostB,
-  // kHostB's cookies are sent, and the iframe retains storage
-  // access.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-}
-
-IN_PROC_BROWSER_TEST_F(StorageAccessAPIForOriginWithFirstPartySetsBrowserTest,
-                       Permission_AutodeniedOutsideFirstPartySet) {
-  SetBlockThirdPartyCookies(true);
-  base::HistogramTester histogram_tester;
-
-  // Set cross-site cookies on all hosts.
-  SetCrossSiteCookieOnHost(kHostA);
-  SetCrossSiteCookieOnHost(kHostD);
-
-  NavigateToPageWithFrame(kHostA);
-
-  NavigateFrameTo(kHostD, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-  // `kHostD` cannot be granted access via `RequestStorageAccessForOrigin` in
-  // this configuration, because the requesting site (`kHostA`) is not in the
-  // same First-Party Set as the requested site (`kHostD`).
-  EXPECT_FALSE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostD).spec()));
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // Navigate iframe to a cross-site, cookie-reading endpoint, and verify that
-  // the cookie is not sent.
-  NavigateFrameTo(kHostD, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "None");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
-  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  content::FetchHistogramsFromChildProcesses();
-  EXPECT_THAT(histogram_tester.GetBucketCount(
-                  kRequestOutcomeHistogram,
-                  3 /*RequestOutcome::kDeniedByFirstPartySet*/),
-              Gt(0));
-}
-
-// Tests to validate that, when the `requestStorageAccessForOrigin` extension is
-// explicitly disabled, or if the larger Storage Access API is disabled, it does
-// not leak onto the document object.
-class StorageAccessAPIForOriginExplicitlyDisabledBrowserTest
-    : public StorageAccessAPIBaseBrowserTest,
-      public testing::WithParamInterface<bool> {
- public:
-  StorageAccessAPIForOriginExplicitlyDisabledBrowserTest()
-      : StorageAccessAPIBaseBrowserTest(true, true),
-        enable_standard_storage_access_api_(GetParam()) {}
-
- protected:
-  std::vector<base::test::FeatureRef> GetDisabledFeatures() override {
-    // The test should validate that either flag alone disables the API.
-    // Note that enabling the extension and not the standard API means both are
-    // disabled.
-    if (enable_standard_storage_access_api_) {
-      return {blink::features::kStorageAccessAPIForOriginExtension};
-    }
-    return {net::features::kStorageAccessAPI};
-  }
-  std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() override {
-    // When the standard API is enabled, return the parent class's enabled
-    // feature list. Otherwise, enable only the extension; this should not take
-    // effect.
-    if (enable_standard_storage_access_api_) {
-      return StorageAccessAPIBaseBrowserTest::GetEnabledFeatures();
-    }
-    return {{blink::features::kStorageAccessAPIForOriginExtension, {}}};
-  }
-
- private:
-  bool enable_standard_storage_access_api_;
-};
-
-IN_PROC_BROWSER_TEST_P(StorageAccessAPIForOriginExplicitlyDisabledBrowserTest,
-                       RsaForOriginNotPresentOnDocumentWhenExplicitlyDisabled) {
-  NavigateToPageWithFrame(kHostA);
-  // Ensure that the proposed extension is not available unless explicitly
-  // enabled.
-  EXPECT_TRUE(EvalJs(GetPrimaryMainFrame(),
-                     "\"requestStorageAccessForOrigin\" in document === false")
-                  .ExtractBool());
-}
-
-INSTANTIATE_TEST_SUITE_P(
-    /* no prefix */,
-    StorageAccessAPIForOriginExplicitlyDisabledBrowserTest,
-    testing::Bool());
 
 class StorageAccessAPIWithFirstPartySetsBrowserTest
     : public StorageAccessAPIBaseBrowserTest {
  public:
   StorageAccessAPIWithFirstPartySetsBrowserTest()
-      : StorageAccessAPIBaseBrowserTest(false, false) {}
+      : StorageAccessAPIBaseBrowserTest(false) {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     StorageAccessAPIBaseBrowserTest::SetUpCommandLine(command_line);
@@ -1251,25 +779,11 @@ class StorageAccessAPIWithFirstPartySetsBrowserTest
  protected:
   std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() override {
     return {
-        {net::features::kStorageAccessAPI,
-         {
-             {
-                 net::features::kStorageAccessAPIAutoGrantInFPS.name,
-                 "true",
-             },
-             {
-                 net::features::kStorageAccessAPIAutoDenyOutsideFPS.name,
-                 "true",
-             },
-             // Setting implicit grants to a non-zero number here demonstrates
-             // that when the auto-deny param is enabled, the implicit grants
-             // param doesn't matter, since the auto-deny param takes
-             // precedence.
-             {
-                 "storage-access-api-implicit-grant-limit",
-                 "5",
-             },
-         }},
+        {blink::features::kStorageAccessAPI,
+         {{
+             blink::features::kStorageAccessAPIImplicitGrantLimit.name,
+             "0",
+         }}},
     };
   }
 };
@@ -1295,13 +809,15 @@ IN_PROC_BROWSER_TEST_F(StorageAccessAPIWithFirstPartySetsBrowserTest,
   EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
-  // When the frame subsequently navigates to an endpoint on kHostB,
-  // kHostB's cookies are sent, and the iframe retains storage
-  // access.
+  // When the frame subsequently navigates to an endpoint on kHostB, the frame
+  // obtained storage access is not carried over since this navigation is not
+  // made by the frame itself, so that kHostB's cookies are not sent:
   NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(), "cross-site=b.test");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
+  EXPECT_EQ(GetFrameContent(), "None");
+  EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "");
+  // Only when the initiator is the frame that's been navigated can inherit
+  // per-frame storage access.
+  EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   content::FetchHistogramsFromChildProcesses();
 
@@ -1379,24 +895,16 @@ class StorageAccessAPIWithFirstPartySetsAndImplicitGrantsBrowserTest
     : public StorageAccessAPIBaseBrowserTest {
  public:
   StorageAccessAPIWithFirstPartySetsAndImplicitGrantsBrowserTest()
-      : StorageAccessAPIBaseBrowserTest(false, false) {}
+      : StorageAccessAPIBaseBrowserTest(false) {}
 
  protected:
   std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() override {
     return {
-        {net::features::kStorageAccessAPI,
+        {blink::features::kStorageAccessAPI,
          {
              {
-                 net::features::kStorageAccessAPIAutoGrantInFPS.name,
-                 "true",
-             },
-             {
-                 net::features::kStorageAccessAPIAutoDenyOutsideFPS.name,
+                 blink::features::kStorageAccessAPIAutoDenyOutsideFPS.name,
                  "false",
-             },
-             {
-                 "storage-access-api-implicit-grant-limit",
-                 "5",
              },
          }},
     };
@@ -1446,15 +954,12 @@ class StorageAccessAPIWithCHIPSBrowserTest
  public:
   StorageAccessAPIWithCHIPSBrowserTest()
       : StorageAccessAPIBaseBrowserTest(
-            /*permission_grants_unpartitioned_storage=*/false,
             /*is_storage_partitioned=*/false) {}
 
   std::vector<base::test::FeatureRefAndParams> GetEnabledFeatures() override {
     std::vector<base::test::FeatureRefAndParams> enabled =
         StorageAccessAPIBaseBrowserTest::GetEnabledFeatures();
     enabled.push_back({net::features::kPartitionedCookies, {}});
-    enabled.push_back(
-        {blink::features::kStorageAccessAPIForOriginExtension, {}});
     return enabled;
   }
 };
@@ -1476,52 +981,21 @@ IN_PROC_BROWSER_TEST_F(StorageAccessAPIWithCHIPSBrowserTest,
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
 
   // kHostB can request storage access, and it is granted (by an implicit
-  // grant):
+  // grant), kHostB's unpartitioned and partitioned cookies are sent:
   EXPECT_TRUE(storage::test::RequestStorageAccessForFrame(GetFrame()));
   EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // When the frame subsequently navigates to an endpoint on kHostB, kHostB's
-  // unpartitioned and partitioned cookies are sent, and the iframe retains
-  // storage access.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(),
-            "cross-site=b.test; cross-site=b.test(partitioned)");
   EXPECT_EQ(ReadCookiesViaJS(GetFrame()),
             "cross-site=b.test; cross-site=b.test(partitioned)");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-}
 
-IN_PROC_BROWSER_TEST_F(StorageAccessAPIWithCHIPSBrowserTest,
-                       RequestStorageAccessForOrigin_CoexistsWithCHIPS) {
-  SetBlockThirdPartyCookies(true);
-
-  SetCrossSiteCookieOnHost(kHostB);
-  SetPartitionedCookieInContext(/*top_level_host=*/kHostA,
-                                /*embedded_host=*/kHostB);
-
-  NavigateToPageWithFrame(kHostA);
-
-  // kHostB starts without unpartitioned cookies:
+  // When the frame subsequently navigates to an endpoint on kHostB, the frame
+  // obtained storage access is not carried over since this navigation is not
+  // made by the frame itself, only kHostB's partitioned cookies are sent:
   NavigateFrameTo(kHostB, "/echoheader?cookie");
   EXPECT_EQ(GetFrameContent(), "cross-site=b.test(partitioned)");
   EXPECT_EQ(ReadCookiesViaJS(GetFrame()), "cross-site=b.test(partitioned)");
+  // Only when the initiator is the frame that's been navigated can inherit
+  // per-frame storage access.
   EXPECT_FALSE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // kHostA can request storage access on behalf of kHostB, and it is granted
-  // (by an implicit grant):
-  EXPECT_TRUE(storage::test::RequestStorageAccessForOrigin(
-      GetPrimaryMainFrame(), GetURL(kHostB).spec()));
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
-
-  // When the frame subsequently navigates to an endpoint on kHostB, kHostB's
-  // unpartitioned and partitioned cookies are sent, and the iframe retains
-  // storage access.
-  NavigateFrameTo(kHostB, "/echoheader?cookie");
-  EXPECT_EQ(GetFrameContent(),
-            "cross-site=b.test; cross-site=b.test(partitioned)");
-  EXPECT_EQ(ReadCookiesViaJS(GetFrame()),
-            "cross-site=b.test; cross-site=b.test(partitioned)");
-  EXPECT_TRUE(storage::test::HasStorageAccessForFrame(GetFrame()));
 }
 
 }  // namespace

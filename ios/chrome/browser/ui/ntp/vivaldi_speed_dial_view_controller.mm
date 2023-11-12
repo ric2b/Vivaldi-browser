@@ -17,8 +17,7 @@
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_home_mediator.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -170,10 +169,7 @@
 
 /// Device orientation change handler
 - (void)handleDeviceOrientationChange:(NSNotification*)note {
-  if (!self.hasValidOrientation)
-    return;
-  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]
-                                         isLandscape:!self.isDevicePortrait];
+  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]];
 }
 
 /// Refresh the UI when data source is updated.
@@ -218,13 +214,11 @@
   [self.speedDialContainerView configureWith:items
                                       parent:self.currentItem
                                faviconLoader:self.faviconLoader
-                                 layoutStyle:[self currentLayoutStyle]
-                           deviceOrientation:!self.isDevicePortrait];
+                                 layoutStyle:[self currentLayoutStyle]];
 }
 
 - (void)reloadLayout {
-  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]
-                                         isLandscape:!self.isDevicePortrait];
+  [self.speedDialContainerView reloadLayoutWithStyle:[self currentLayoutStyle]];
 }
 
 #pragma mark - VIVALDI_SPEED_DIAL_CONTAINER_VIEW_DELEGATE

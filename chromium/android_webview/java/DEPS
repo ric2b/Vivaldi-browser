@@ -1,5 +1,6 @@
 include_rules = [
   "+components/autofill/android/java",
+  "+components/digital_asset_links/android/java",
   "+components/embedder_support/android/java",
   "+components/embedder_support/android/metrics/java",
   "+components/navigation_interception/android/java",
@@ -7,6 +8,7 @@ include_rules = [
   "+components/safe_browsing/android/java",
   "+components/stylus_handwriting/android/java",
   "+components/component_updater/android/java",
+  "+components/zoom/android/java",
 
   "-content/public/android/java",
   "+content/public/android/java/src/org/chromium/content_public",

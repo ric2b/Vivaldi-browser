@@ -6,13 +6,12 @@
 #include <tuple>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/path_service.h"
 #include "base/test/test_switches.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/completion_event.h"
 #include "cc/paint/display_item_list.h"
@@ -23,6 +22,7 @@
 #include "cc/test/pixel_comparator.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/tiles/gpu_image_decode_cache.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "components/viz/service/gl/gpu_service_impl.h"
 #include "components/viz/test/buildflags.h"
 #include "components/viz/test/paths.h"
@@ -45,6 +45,7 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTextBlob.h"
 #include "third_party/skia/include/core/SkYUVAInfo.h"
+#include "third_party/skia/include/gpu/GpuTypes.h"
 #include "third_party/skia/include/gpu/GrDirectContext.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -178,7 +179,7 @@ class OopPixelTest : public testing::Test,
     uint32_t flags = gpu::SHARED_IMAGE_USAGE_RASTER |
                      gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
     gpu::Mailbox mailbox = sii->CreateSharedImage(
-        viz::ResourceFormat::RGBA_8888, gfx::Size(width, height),
+        viz::SinglePlaneFormat::kRGBA_8888, gfx::Size(width, height),
         options.target_color_params.color_space, kTopLeft_GrSurfaceOrigin,
         kPremul_SkAlphaType, flags, gpu::kNullSurfaceHandle);
     EXPECT_TRUE(mailbox.Verify());
@@ -244,7 +245,7 @@ class OopPixelTest : public testing::Test,
     SkBitmap result;
     result.allocPixels(image_info);
     ri->ReadbackImagePixels(mailbox, image_info, image_info.minRowBytes(), 0, 0,
-                            result.getPixels());
+                            /*plane_index=*/0, result.getPixels());
     return result;
   }
 
@@ -252,7 +253,7 @@ class OopPixelTest : public testing::Test,
       gpu::raster::RasterInterface* ri,
       gpu::SharedImageInterface* sii,
       const RasterOptions& options,
-      viz::ResourceFormat image_format,
+      viz::SharedImageFormat image_format,
       absl::optional<gfx::ColorSpace> color_space = absl::nullopt) {
     uint32_t flags = gpu::SHARED_IMAGE_USAGE_RASTER |
                      gpu::SHARED_IMAGE_USAGE_OOP_RASTERIZATION;
@@ -278,10 +279,10 @@ class OopPixelTest : public testing::Test,
   }
 
   // Verifies |actual| matches the expected PNG image.
-  void ExpectEquals(const SkBitmap& actual,
-                    const base::FilePath::StringType& ref_filename,
-                    const PixelComparator& comparator =
-                        ExactPixelComparator(/*discard_alpha=*/false)) {
+  void ExpectEquals(
+      const SkBitmap& actual,
+      const base::FilePath::StringType& ref_filename,
+      const PixelComparator& comparator = ExactPixelComparator()) {
     base::FilePath test_data_dir;
     ASSERT_TRUE(
         base::PathService::Get(viz::Paths::DIR_TEST_DATA, &test_data_dir));
@@ -296,10 +297,10 @@ class OopPixelTest : public testing::Test,
     }
   }
 
-  void ExpectEquals(SkBitmap actual,
-                    SkBitmap expected,
-                    const PixelComparator& comparator =
-                        ExactPixelComparator(/*discard_alpha=*/false)) {
+  void ExpectEquals(
+      SkBitmap actual,
+      SkBitmap expected,
+      const PixelComparator& comparator = ExactPixelComparator()) {
     EXPECT_TRUE(MatchesBitmap(actual, expected, comparator));
   }
 
@@ -407,13 +408,13 @@ TEST_F(OopPixelTest, DrawRecordPaintFilterTranslatedBounds) {
   // quarter of the output.
   PaintFlags internal_flags;
   internal_flags.setColor(SkColors::kGreen);
-  sk_sp<PaintOpBuffer> filter_buffer(new PaintOpBuffer);
-  filter_buffer->push<DrawRectOp>(
+  PaintOpBuffer filter_buffer;
+  filter_buffer.push<DrawRectOp>(
       SkRect::MakeLTRB(output_size.width() / 2.f, 0.f, output_size.width(),
                        output_size.height()),
       internal_flags);
   sk_sp<RecordPaintFilter> record_filter = sk_make_sp<RecordPaintFilter>(
-      filter_buffer,
+      filter_buffer.ReleaseAsRecord(),
       SkRect::MakeLTRB(output_size.width() / 2.f, output_size.height() / 2.f,
                        output_size.width(), output_size.height()));
 
@@ -423,7 +424,7 @@ TEST_F(OopPixelTest, DrawRecordPaintFilterTranslatedBounds) {
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
   display_item_list->push<DrawColorOp>(SkColors::kWhite, SkBlendMode::kSrc);
-  display_item_list->push<SaveLayerOp>(nullptr, &record_flags);
+  display_item_list->push<SaveLayerOp>(record_flags);
   display_item_list->push<RestoreOp>();
   display_item_list->EndPaintOfUnpaired(gfx::Rect(output_size));
   display_item_list->Finalize();
@@ -518,13 +519,13 @@ TEST_F(OopPixelTest, DrawRecordShaderWithImageScaled) {
   auto builder = PaintImageBuilder::WithDefault().set_image(image, 0).set_id(
       PaintImage::GetNextId());
   auto paint_image = builder.TakePaintImage();
-  auto paint_record = sk_make_sp<PaintOpBuffer>();
+  PaintOpBuffer paint_buffer;
   SkSamplingOptions sampling(
       PaintFlags::FilterQualityToSkSamplingOptions(kDefaultFilterQuality));
-  paint_record->push<DrawImageOp>(paint_image, 0.f, 0.f, sampling, nullptr);
+  paint_buffer.push<DrawImageOp>(paint_image, 0.f, 0.f, sampling, nullptr);
   auto paint_record_shader = PaintShader::MakePaintRecord(
-      paint_record, gfx::RectToSkRect(rect), SkTileMode::kRepeat,
-      SkTileMode::kRepeat, nullptr);
+      paint_buffer.ReleaseAsRecord(), gfx::RectToSkRect(rect),
+      SkTileMode::kRepeat, SkTileMode::kRepeat, nullptr);
 
   auto display_item_list = base::MakeRefCounted<DisplayItemList>();
   display_item_list->StartPaint();
@@ -541,8 +542,6 @@ TEST_F(OopPixelTest, DrawRecordShaderWithImageScaled) {
 }
 
 TEST_F(OopPixelTest, DrawRecordShaderTranslatedTileRect) {
-  auto paint_record = sk_make_sp<PaintOpBuffer>();
-
   // Arbitrary offsets.  The DrawRectOp inside the PaintShader draws
   // with this offset, but the tile rect also has this offset, so they
   // should cancel out, and it should be as if the DrawRectOp was at the
@@ -556,14 +555,15 @@ TEST_F(OopPixelTest, DrawRecordShaderTranslatedTileRect) {
   // below cuts off part of that, leaving two green i's.
   PaintFlags internal_flags;
   internal_flags.setColor(SkColors::kGreen);
-  sk_sp<PaintOpBuffer> shader_buffer(new PaintOpBuffer);
-  shader_buffer->push<DrawRectOp>(SkRect::MakeXYWH(x_offset, y_offset, 1, 2),
-                                  internal_flags);
+  PaintOpBuffer shader_buffer;
+  shader_buffer.push<DrawRectOp>(SkRect::MakeXYWH(x_offset, y_offset, 1, 2),
+                                 internal_flags);
 
   SkRect tile_rect = SkRect::MakeXYWH(x_offset, y_offset, 2, 3);
   sk_sp<PaintShader> paint_record_shader = PaintShader::MakePaintRecord(
-      shader_buffer, tile_rect, SkTileMode::kRepeat, SkTileMode::kRepeat,
-      nullptr, PaintShader::ScalingBehavior::kRasterAtScale);
+      shader_buffer.ReleaseAsRecord(), tile_rect, SkTileMode::kRepeat,
+      SkTileMode::kRepeat, nullptr,
+      PaintShader::ScalingBehavior::kRasterAtScale);
   // Force paint_flags to convert this to kFixedScale, so we can safely compare
   // pixels between direct and oop-r modes (since oop will convert to
   // kFixedScale no matter what.
@@ -612,9 +612,9 @@ TEST_F(OopPixelTest, DrawImageWithTargetColorSpace) {
 
 #if BUILDFLAG(IS_ANDROID)
   // Android has slight differences in color.
-  FuzzyPixelOffByOneComparator comparator(/*discard_alpha=*/false);
+  FuzzyPixelOffByOneComparator comparator;
 #else
-  ExactPixelComparator comparator(/*discard_alpha=*/false);
+  ExactPixelComparator comparator;
 #endif
 
   ExpectEquals(actual, FILE_PATH_LITERAL("oop_image_target_color_space.png"),
@@ -739,15 +739,12 @@ TEST_F(OopPixelTest, DrawImageWithSourceColorSpace) {
 
 #if BUILDFLAG(IS_ANDROID)
   // Android has slight differences in color.
-  FuzzyPixelComparator comparator(
-      /*discard_alpha=*/false,
-      /*error_pixels_percentage_limit=*/100.0f,
-      /*small_error_pixels_percentage_limit=*/0.0f,
-      /*avg_abs_error_limit=*/1.2f,
-      /*max_abs_error_limit=*/2,
-      /*small_error_threshold=*/0);
+  auto comparator = FuzzyPixelComparator()
+                        .SetErrorPixelsPercentageLimit(100.0f)
+                        .SetAvgAbsErrorLimit(1.2f)
+                        .SetAbsErrorLimit(2);
 #else
-  ExactPixelComparator comparator(/*discard_alpha=*/false);
+  ExactPixelComparator comparator;
 #endif
 
   ExpectEquals(actual,
@@ -784,9 +781,9 @@ TEST_F(OopPixelTest, DrawImageWithSourceAndTargetColorSpace) {
 
 #if BUILDFLAG(IS_ANDROID)
   // Android has slight differences in color.
-  FuzzyPixelOffByOneComparator comparator(/*discard_alpha=*/false);
+  FuzzyPixelOffByOneComparator comparator;
 #else
-  ExactPixelComparator comparator(/*discard_alpha=*/false);
+  ExactPixelComparator comparator;
 #endif
 
   ExpectEquals(actual, FILE_PATH_LITERAL("oop_draw_image_both_color_space.png"),
@@ -859,7 +856,7 @@ TEST_F(OopPixelTest, DrawMailboxBackedImage) {
   auto* ri = raster_context_provider_->RasterInterface();
   auto* sii = raster_context_provider_->SharedImageInterface();
   gpu::Mailbox src_mailbox = CreateMailboxSharedImage(
-      ri, sii, options, viz::ResourceFormat::RGBA_8888);
+      ri, sii, options, viz::SinglePlaneFormat::kRGBA_8888);
   ri->OrderingBarrierCHROMIUM();
 
   UploadPixels(ri, src_mailbox, expected_bitmap.info(), expected_bitmap);
@@ -1522,7 +1519,7 @@ TEST_F(OopPixelTest, DrawRectQueryMiddleOfDisplayList) {
 
   auto actual = Raster(display_item_list, options);
   ExpectEquals(actual, FILE_PATH_LITERAL("oop_draw_rect_query.png"),
-               FuzzyPixelOffByOneComparator(/*discard_alpha=*/false));
+               FuzzyPixelOffByOneComparator());
 }
 
 TEST_F(OopPixelTest, DrawRectColorSpace) {
@@ -1628,7 +1625,7 @@ class OopTextBlobPixelTest
       PaintFlags layer_flags;
       layer_flags.setImageFilter(std::move(filter));
       filter = nullptr;
-      display_item_list->push<SaveLayerOp>(nullptr, &layer_flags);
+      display_item_list->push<SaveLayerOp>(layer_flags);
     }
 
     PushDrawOp(display_item_list, std::move(filter));
@@ -1705,13 +1702,11 @@ class OopTextBlobPixelTest
       }
     }
 
-    FuzzyPixelComparator comparator(
-        /*discard_alpha=*/false,
-        /*error_pixels_percentage_limit=*/error_pixels_percentage,
-        /*small_error_pixels_percentage_limit=*/0.0f,
-        /*avg_abs_error_limit=*/avg_error,
-        /*max_abs_error_limit=*/max_abs_error,
-        /*small_error_threshold=*/0);
+    auto comparator =
+        FuzzyPixelComparator()
+            .SetErrorPixelsPercentageLimit(error_pixels_percentage)
+            .SetAvgAbsErrorLimit(avg_error)
+            .SetAbsErrorLimit(max_abs_error);
     ExpectEquals(actual, expected, comparator);
   }
 
@@ -1754,7 +1749,7 @@ class OopTextBlobPixelTest
         UseLcdText() ? skia::LegacyDisplayGlobals::GetSkSurfaceProps(0)
                      : SkSurfaceProps(0, kUnknown_SkPixelGeometry);
     auto surface = SkSurface::MakeRenderTarget(
-        context_state->gr_context(), SkBudgeted::kNo, image_info, 0,
+        context_state->gr_context(), skgpu::Budgeted::kNo, image_info, 0,
         kTopLeft_GrSurfaceOrigin, &surface_props);
 
     SkCanvas* canvas = surface->getCanvas();
@@ -1911,19 +1906,19 @@ class OopTextBlobPixelTest
     }
 
     // All remaining strategies add the DrawTextBlobOp to an inner paint record.
-    auto paint_record = sk_make_sp<PaintOpBuffer>();
-    paint_record->push<DrawTextBlobOp>(std::move(text_blob), 0.0f, kTextBlobY,
-                                       text_flags);
+    PaintOpBuffer paint_buffer;
+    paint_buffer.push<DrawTextBlobOp>(std::move(text_blob), 0.0f, kTextBlobY,
+                                      text_flags);
     if (strategy == TextBlobStrategy::kDrawRecord) {
-      display_list->push<DrawRecordOp>(std::move(paint_record));
+      display_list->push<DrawRecordOp>(paint_buffer.ReleaseAsRecord());
       return;
     }
 
     PaintFlags record_flags;
     if (strategy == TextBlobStrategy::kRecordShader) {
       auto paint_record_shader = PaintShader::MakePaintRecord(
-          paint_record, SkRect::MakeWH(25, 25), SkTileMode::kRepeat,
-          SkTileMode::kRepeat, nullptr,
+          paint_buffer.ReleaseAsRecord(), SkRect::MakeWH(25, 25),
+          SkTileMode::kRepeat, SkTileMode::kRepeat, nullptr,
           PaintShader::ScalingBehavior::kRasterAtScale);
       // Force paint_flags to convert this to kFixedScale, so we can safely
       // compare pixels between direct and oop-r modes (since oop will convert
@@ -1935,8 +1930,8 @@ class OopTextBlobPixelTest
     } else {
       DCHECK(strategy == TextBlobStrategy::kRecordFilter);
 
-      sk_sp<PaintFilter> paint_record_filter =
-          sk_make_sp<RecordPaintFilter>(paint_record, SkRect::MakeWH(100, 100));
+      sk_sp<PaintFilter> paint_record_filter = sk_make_sp<RecordPaintFilter>(
+          paint_buffer.ReleaseAsRecord(), SkRect::MakeWH(100, 100));
       // If there's an additional filter, we have to compose it with the
       // paint record filter.
       if (filter) {
@@ -2133,13 +2128,9 @@ TEST_F(OopPixelTest, DrawTextBlobPersistentShaderCache) {
 
   // Allow 1% of pixels to be off by 1 due to differences between software and
   // GPU canvas.
-  FuzzyPixelComparator comparator(
-      /*discard_alpha=*/false,
-      /*error_pixels_percentage_limit=*/1.0f,
-      /*small_error_pixels_percentage_limit=*/0.0f,
-      /*avg_abs_error_limit=*/1.0f,
-      /*max_abs_error_limit=*/1,
-      /*small_error_threshold=*/0);
+  auto comparator = FuzzyPixelComparator()
+                        .SetErrorPixelsPercentageLimit(1.0f)
+                        .SetAbsErrorLimit(1);
 
   ExpectEquals(actual, expected, comparator);
 
@@ -2156,7 +2147,7 @@ TEST_F(OopPixelTest, WritePixels) {
   auto* ri = raster_context_provider_->RasterInterface();
   auto* sii = raster_context_provider_->SharedImageInterface();
   gpu::Mailbox dest_mailbox = CreateMailboxSharedImage(
-      ri, sii, options, viz::ResourceFormat::RGBA_8888);
+      ri, sii, options, viz::SinglePlaneFormat::kRGBA_8888);
   std::vector<SkPMColor> expected_pixels(dest_size.width() * dest_size.height(),
                                          SkPreMultiplyARGB(255, 0, 0, 255));
   SkBitmap expected;
@@ -2173,7 +2164,7 @@ TEST_F(OopPixelTest, WritePixels) {
   ExpectEquals(actual, expected);
 }
 
-TEST_F(OopPixelTest, CopySubTexture) {
+TEST_F(OopPixelTest, CopySharedImage) {
   const gfx::Size size(16, 16);
   auto* ri = raster_context_provider_->RasterInterface();
   auto* sii = raster_context_provider_->SharedImageInterface();
@@ -2197,8 +2188,8 @@ TEST_F(OopPixelTest, CopySubTexture) {
   {
     RasterOptions options(size);
     options.target_color_params.color_space = source_color_space;
-    source_mailbox = CreateMailboxSharedImage(ri, sii, options,
-                                              viz::ResourceFormat::RGBA_8888);
+    source_mailbox = CreateMailboxSharedImage(
+        ri, sii, options, viz::SinglePlaneFormat::kRGBA_8888);
     ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
 
     ri->WritePixels(source_mailbox, 0, 0, GL_TEXTURE_2D,
@@ -2212,13 +2203,13 @@ TEST_F(OopPixelTest, CopySubTexture) {
     RasterOptions options(size);
     options.target_color_params.color_space = dest_color_space;
     dest_mailbox = CreateMailboxSharedImage(ri, sii, options,
-                                            viz::ResourceFormat::RGBA_8888);
+                                            viz::SinglePlaneFormat::kRGBA_8888);
     ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
 
-    ri->CopySubTexture(source_mailbox, dest_mailbox, GL_TEXTURE_2D, 0, 0, 0, 0,
-                       size.width(), size.height(),
-                       /*unpack_flip_y=*/GL_FALSE,
-                       /*unpack_premultiply_alpha=*/GL_FALSE);
+    ri->CopySharedImage(source_mailbox, dest_mailbox, GL_TEXTURE_2D, 0, 0, 0, 0,
+                        size.width(), size.height(),
+                        /*unpack_flip_y=*/GL_FALSE,
+                        /*unpack_premultiply_alpha=*/GL_FALSE);
   }
 
   // Read the data back as DisplayP3, from the Display P3 SharedImage.
@@ -2229,7 +2220,7 @@ TEST_F(OopPixelTest, CopySubTexture) {
 
     ri->ReadbackImagePixels(dest_mailbox, readback_bitmap.info(),
                             readback_bitmap.rowBytes(), 0, 0,
-                            readback_bitmap.getPixels());
+                            /*plane_index=*/0, readback_bitmap.getPixels());
   }
 
   // The pixel value should be unchanged, even though the source and dest are
@@ -2271,9 +2262,9 @@ TEST_P(OopYUVToRGBPixelTest, ConvertYUVToRGB) {
   auto* sii = raster_context_provider_->SharedImageInterface();
 
   gpu::Mailbox dest_mailbox = CreateMailboxSharedImage(
-      ri, sii, options, viz::ResourceFormat::RGBA_8888, dest_color_space);
+      ri, sii, options, viz::SinglePlaneFormat::kRGBA_8888, dest_color_space);
 
-  constexpr viz::ResourceFormat format = viz::ResourceFormat::RED_8;
+  constexpr viz::SharedImageFormat format = viz::SinglePlaneFormat::kR_8;
   gpu::Mailbox yuv_mailboxes[3]{
       CreateMailboxSharedImage(ri, sii, options, format),
       CreateMailboxSharedImage(ri, sii, uv_options, format),
@@ -2326,13 +2317,9 @@ TEST_P(OopYUVToRGBPixelTest, ConvertYUVToRGB) {
       options.resource_size, SkColor4f::FromColor(expected_color));
 
   // Allow slight rounding error on all pixels.
-  FuzzyPixelComparator comparator(
-      /*discard_alpha=*/false,
-      /*error_pixels_percentage_limit=*/100.0f,
-      /*small_error_pixels_percentage_limit=*/0.0f,
-      /*avg_abs_error_limit=*/2.f,
-      /*max_abs_error_limit=*/2.f,
-      /*small_error_threshold=*/0);
+  auto comparator = FuzzyPixelComparator()
+                        .SetErrorPixelsPercentageLimit(100.0f)
+                        .SetAbsErrorLimit(2);
   ExpectEquals(actual_bitmap, expected_bitmap, comparator);
 
   gpu::SyncToken sync_token;
@@ -2359,10 +2346,11 @@ TEST_F(OopPixelTest, ConvertNV12ToRGB) {
   auto* sii = raster_context_provider_->SharedImageInterface();
 
   gpu::Mailbox dest_mailbox = CreateMailboxSharedImage(
-      ri, sii, options, viz::ResourceFormat::RGBA_8888);
+      ri, sii, options, viz::SinglePlaneFormat::kRGBA_8888);
   gpu::Mailbox y_uv_mailboxes[2]{
-      CreateMailboxSharedImage(ri, sii, options, viz::ResourceFormat::RED_8),
-      CreateMailboxSharedImage(ri, sii, uv_options, viz::ResourceFormat::RG_88),
+      CreateMailboxSharedImage(ri, sii, options, viz::SinglePlaneFormat::kR_8),
+      CreateMailboxSharedImage(ri, sii, uv_options,
+                               viz::SinglePlaneFormat::kRG_88),
   };
 
   SkImageInfo y_info = SkImageInfo::Make(
@@ -2446,14 +2434,9 @@ class OopPathPixelTest : public OopPixelTest,
     display_item_list->Finalize();
 
     // Allow 8 pixels in 100x100 image to be different due to non-AA pixel
-    // rounding (hence 255 for error limit).
-    FuzzyPixelComparator comparator(
-        /*discard_alpha=*/false,
-        /*error_pixels_percentage_limit=*/0.08f,
-        /*small_error_pixels_percentage_limit=*/0.0f,
-        /*avg_abs_error_limit=*/255,
-        /*max_abs_error_limit=*/255,
-        /*small_error_threshold=*/0);
+    // rounding.
+    auto comparator =
+        FuzzyPixelComparator().SetErrorPixelsPercentageLimit(0.08f);
     auto actual = Raster(display_item_list, options);
     ExpectEquals(actual, FILE_PATH_LITERAL("oop_path.png"), comparator);
   }
@@ -2468,14 +2451,15 @@ TEST_F(OopPixelTest, RecordShaderExceedsMaxTextureSize) {
       raster_context_provider_->ContextCapabilities().max_texture_size;
   const SkRect rect = SkRect::MakeWH(max_texture_size + 10, 10);
 
-  auto shader_record = sk_make_sp<PaintRecord>();
-  shader_record->push<DrawColorOp>(SkColors::kWhite, SkBlendMode::kSrc);
+  PaintOpBuffer shader_buffer;
+  shader_buffer.push<DrawColorOp>(SkColors::kWhite, SkBlendMode::kSrc);
   PaintFlags flags;
   flags.setStyle(PaintFlags::kFill_Style);
   flags.setColor(SkColors::kGreen);
-  shader_record->push<DrawRectOp>(rect, flags);
-  auto shader = PaintShader::MakePaintRecord(
-      shader_record, rect, SkTileMode::kRepeat, SkTileMode::kRepeat, nullptr);
+  shader_buffer.push<DrawRectOp>(rect, flags);
+  auto shader = PaintShader::MakePaintRecord(shader_buffer.ReleaseAsRecord(),
+                                             rect, SkTileMode::kRepeat,
+                                             SkTileMode::kRepeat, nullptr);
 
   RasterOptions options;
   options.resource_size = gfx::Size(100, 100);

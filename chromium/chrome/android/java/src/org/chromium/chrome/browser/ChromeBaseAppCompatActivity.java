@@ -10,8 +10,6 @@ import android.app.ActivityManager.TaskDescription;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.content.res.Resources;
-import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.Bundle;
 
@@ -31,6 +29,7 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.base.ServiceTracingProxyProvider;
 import org.chromium.chrome.browser.base.SplitChromeApplication;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.language.GlobalAppLocaleController;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.night_mode.GlobalNightModeStateProviderHolder;
@@ -42,8 +41,20 @@ import org.chromium.ui.modaldialog.ModalDialogManagerHolder;
 import java.util.LinkedHashSet;
 
 // Vivaldi
+import android.app.Activity;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.Manifest;
 import android.text.TextUtils;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.ContextCompat;
+
+
+import org.chromium.base.Log;
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /**
@@ -59,6 +70,17 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
     private ServiceTracingProxyProvider mServiceTracingProxyProvider;
 
     private SharedPreferencesManager.Observer mPreferenceObserver;
+
+    // Vivaldi OEM
+    private static final String TAG = "OemLynkcoExt";
+    ActivityResultLauncher<Intent> mStartForResult =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        Log.d(TAG, "onActivityResult: " + result);
+                        if (result.getResultCode() == Activity.RESULT_CANCELED) {
+                            finishAffinity();
+                        }
+                    });
 
     @Override
     protected void attachBaseContext(Context newBase) {
@@ -117,6 +139,12 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
         GlobalAppLocaleController.getInstance().maybeOverrideContextConfig(this);
 
         setDefaultTaskDescription();
+
+        // Vivaldi OEM
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
+            requestAllPermissions();
+        }
+
     }
 
     @Override
@@ -255,6 +283,11 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
      */
     @CallSuper
     protected void applyThemeOverlays() {
+        if (ChromeFeatureList.sBaselineGm3SurfaceColors.isEnabled()) {
+            getTheme().applyStyle(R.style.SurfaceColorsThemeOverlay, /* force= */ true);
+            mThemeResIds.add(R.style.SurfaceColorsThemeOverlay);
+        }
+
         // Note(david@vivaldi.com): We set the theme here in order to support all Android versions.
         setTheme(R.style.ColorOverlay_ChromiumAndroid);
 
@@ -274,11 +307,8 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
      * Sets the default task description that will appear in the recents UI.
      */
     protected void setDefaultTaskDescription() {
-        final Resources res = getResources();
         final TaskDescription taskDescription =
-                new TaskDescription(res.getString(R.string.app_name),
-                        BitmapFactory.decodeResource(res, R.mipmap.app_icon),
-                        res.getColor(R.color.default_task_description_color));
+                new TaskDescription(null, null, getColor(R.color.default_task_description_color));
         setTaskDescription(taskDescription);
     }
 
@@ -314,5 +344,39 @@ public class ChromeBaseAppCompatActivity extends AppCompatActivity
             configuration.densityDpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
                     VivaldiPreferences.UI_SCALE_VALUE);
         }
+    }
+
+    // Vivaldi OEM
+    private void requestAllPermissions() {
+        if (checkIfAlreadyHavePermission()) {
+            startOnboarding();
+        } else {
+            requestPermissions( new String[]{Manifest.permission.INTERNET}, 101);
+        }
+    }
+
+    // Vivaldi OEM
+    @Override
+    public void onRequestPermissionsResult(int requestCode,
+                                           String[] permissions,
+                                           int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
+            if (grantResults[0] == PackageManager.PERMISSION_DENIED) {
+                startOnboarding();
+            }
+        }
+    }
+
+    // Vivaldi OEM
+    private boolean checkIfAlreadyHavePermission() {
+        int result = ContextCompat.checkSelfPermission(this, Manifest.permission.INTERNET);
+        return result == PackageManager.PERMISSION_GRANTED;
+    }
+
+    // Vivaldi OEM
+    private void startOnboarding() {
+        mStartForResult.launch(
+                OemLynkcoExtensions.getInstance().createOnBoardingActivityIntent(this));
     }
 }

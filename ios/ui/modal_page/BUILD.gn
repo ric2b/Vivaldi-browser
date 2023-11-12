@@ -1,0 +1,25 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_modal_page") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "modal_page_commands.h",
+    "modal_page_coordinator.h",
+    "modal_page_coordinator.mm",
+    "modal_page_view_controller.h",
+    "modal_page_view_controller.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/main:public",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/coordinators:chrome_coordinators",
+    "//ios/web/common:web_view_creation_util",
+    "//ui/base",
+  ]
+  frameworks = [ "UIKit.framework" ]
+}

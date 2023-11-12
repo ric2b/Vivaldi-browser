@@ -19,7 +19,6 @@
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
-#include "ui/gfx/linux/drm_util_linux.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_manager.h"
 #include "ui/ozone/platform/drm/gpu/drm_display.h"
@@ -29,6 +28,7 @@
 namespace ui {
 
 namespace {
+
 constexpr char kMultipleDisplayIdsCollisionDetected[] =
     "Display.MultipleDisplays.GenerateId.CollisionDetection";
 
@@ -148,7 +148,7 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
     // Receiving a signal that DRM state was updated. Need to reset the plane
     // manager's resource cache since IDs may have changed.
     drm->plane_manager()->ResetConnectorsCache(drm->GetResources());
-    auto display_infos = GetDisplayInfosAndUpdateCrtcs(drm->get_fd());
+    auto display_infos = GetDisplayInfosAndUpdateCrtcs(*drm);
     for (const auto& display_info : display_infos) {
       auto it = base::ranges::find_if(
           old_displays,
@@ -162,13 +162,20 @@ MovableDisplaySnapshots DrmGpuDisplayManager::GetDisplays() {
         current_drm_display = std::make_unique<DrmDisplay>(drm);
       }
 
+      // Create list of supported drm formats and modifiers
+      display::DrmFormatsAndModifiers drm_formats_and_modifiers;
+      for (uint32_t format : drm->plane_manager()->GetSupportedFormats()) {
+        std::vector<uint64_t> modifiers =
+            drm->plane_manager()->GetFormatModifiers(
+                display_info->crtc()->crtc_id, format);
+        drm_formats_and_modifiers.emplace(format, modifiers);
+      }
+
       // Create the new DisplaySnapshot and resolve display ID collisions.
       std::unique_ptr<display::DisplaySnapshot> current_display_snapshot =
-          CreateDisplaySnapshot(display_info.get(),
-                                current_drm_display->drm()->get_fd(),
-                                current_drm_display->drm()->device_path(),
-                                static_cast<uint8_t>(device_index),
-                                current_drm_display->origin());
+          CreateDisplaySnapshot(
+              *drm, display_info.get(), static_cast<uint8_t>(device_index),
+              current_drm_display->origin(), drm_formats_and_modifiers);
 
       const auto colliding_display_snapshot_iter = edid_id_collision_map.find(
           current_display_snapshot->edid_display_id());
@@ -305,7 +312,8 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
     scoped_refptr<DrmDevice> drm = display->drm();
     ScreenManager::ControllerConfigParams params(
         display->display_id(), drm, display->crtc(), display->connector(),
-        config.origin, std::move(mode_ptr), display->base_connector_id());
+        config.origin, std::move(mode_ptr), config.enable_vrr,
+        display->base_connector_id());
     controllers_to_configure.push_back(std::move(params));
   }
 
@@ -322,6 +330,17 @@ bool DrmGpuDisplayManager::ConfigureDisplays(
   }
 
   return config_success;
+}
+
+bool DrmGpuDisplayManager::SetHdcpKeyProp(int64_t display_id,
+                                          const std::string& key) {
+  DrmDisplay* display = FindDisplay(display_id);
+  if (!display) {
+    LOG(ERROR) << "SetHdcpKeyProp: There is no display with ID " << display_id;
+    return false;
+  }
+
+  return display->SetHdcpKeyProp(key);
 }
 
 bool DrmGpuDisplayManager::GetHDCPState(

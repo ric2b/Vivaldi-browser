@@ -2153,10 +2153,16 @@ bool content::IsNSRange(id value) {
     if (range.IsNull())
       return nil;
 
-    startObject = _owner->manager()->GetFromAXNode(range.anchor()->GetAnchor());
-    endObject = _owner->manager()->GetFromAXNode(range.focus()->GetAnchor());
-    startOffset = range.anchor()->text_offset();
-    endOffset = range.focus()->text_offset();
+    const AXPosition anchor = range.anchor()->AsTextPosition();
+    const AXPosition focus = range.focus()->AsTextPosition();
+    if (!anchor || !focus) {
+      return nil;
+    }
+
+    startObject = _owner->manager()->GetFromAXNode(anchor->GetAnchor());
+    endObject = _owner->manager()->GetFromAXNode(focus->GetAnchor());
+    startOffset = anchor->text_offset();
+    endOffset = focus->text_offset();
     DCHECK(startObject && endObject);
     DCHECK_GE(startOffset, 0);
     DCHECK_GE(endOffset, 0);
@@ -2667,7 +2673,12 @@ bool content::IsNSRange(id value) {
     }
   }
   if ([attribute
-          isEqualToString:NSAccessibilitySelectedTextMarkerRangeAttribute]) {
+          isEqualToString:NSAccessibilitySelectedTextMarkerRangeAttribute] &&
+      // Condition also on when this node is editable. VoiceOver as of Mac 13
+      // sets selections as users navigate on read only content. This has
+      // adverse side effects on VoiceOver's a11y focus causing loops in
+      // navigation.
+      _owner->HasState(ax::mojom::State::kEditable)) {
     AXRange range = AXTextMarkerRangeToAXRange(value);
     if (range.IsNull())
       return;

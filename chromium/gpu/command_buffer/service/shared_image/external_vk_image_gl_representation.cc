@@ -84,8 +84,7 @@ bool ExternalVkImageGLRepresentationShared::BeginAccess(GLenum mode) {
   }
 
   DCHECK(mode == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM ||
-         mode == GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM ||
-         mode == GL_SHARED_IMAGE_ACCESS_MODE_OVERLAY_CHROMIUM);
+         mode == GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
   const bool readonly =
       (mode != GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
 
@@ -118,8 +117,7 @@ void ExternalVkImageGLRepresentationShared::EndAccess() {
 
   DCHECK(current_access_mode_ == GL_SHARED_IMAGE_ACCESS_MODE_READ_CHROMIUM ||
          current_access_mode_ ==
-             GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM ||
-         current_access_mode_ == GL_SHARED_IMAGE_ACCESS_MODE_OVERLAY_CHROMIUM);
+             GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
   const bool readonly =
       (current_access_mode_ != GL_SHARED_IMAGE_ACCESS_MODE_READWRITE_CHROMIUM);
   current_access_mode_ = 0;
@@ -156,11 +154,10 @@ ExternalVkImageGLRepresentation::ExternalVkImageGLRepresentation(
     SharedImageManager* manager,
     SharedImageBacking* backing,
     MemoryTypeTracker* tracker,
-    gles2::Texture* texture,
-    GLuint texture_service_id)
+    gles2::Texture* texture)
     : GLTextureImageRepresentation(manager, backing, tracker),
       texture_(texture),
-      representation_shared_(backing, texture_service_id) {
+      representation_shared_(backing, texture_->service_id()) {
   DCHECK(texture_);
 }
 
@@ -179,23 +176,25 @@ void ExternalVkImageGLRepresentation::EndAccess() {
 }
 
 ExternalVkImageGLPassthroughRepresentation::
-    ExternalVkImageGLPassthroughRepresentation(SharedImageManager* manager,
-                                               SharedImageBacking* backing,
-                                               MemoryTypeTracker* tracker,
-                                               GLuint texture_service_id)
+    ExternalVkImageGLPassthroughRepresentation(
+        SharedImageManager* manager,
+        SharedImageBacking* backing,
+        MemoryTypeTracker* tracker,
+        scoped_refptr<gles2::TexturePassthrough> texture)
     : GLTexturePassthroughImageRepresentation(manager, backing, tracker),
-      representation_shared_(backing, texture_service_id) {
-  DCHECK(representation_shared_.backing_impl()->GetTexturePassthrough());
+      texture_(std::move(texture)),
+      representation_shared_(backing, texture_->service_id()) {
+  DCHECK(texture_);
 }
 
 ExternalVkImageGLPassthroughRepresentation::
-    ~ExternalVkImageGLPassthroughRepresentation() {}
+    ~ExternalVkImageGLPassthroughRepresentation() = default;
 
 const scoped_refptr<gles2::TexturePassthrough>&
 ExternalVkImageGLPassthroughRepresentation::GetTexturePassthrough(
     int plane_index) {
   DCHECK_EQ(plane_index, 0);
-  return representation_shared_.backing_impl()->GetTexturePassthrough();
+  return texture_;
 }
 
 bool ExternalVkImageGLPassthroughRepresentation::BeginAccess(GLenum mode) {

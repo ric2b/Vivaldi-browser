@@ -6,8 +6,8 @@
 #include <numeric>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_forward.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ref.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -132,16 +132,16 @@ class ScrollButton : public views::ImageButton {
   ScrollButton& operator=(const ScrollButton&) = delete;
   ~ScrollButton() override = default;
 
-  void AddLayerBeneathView(ui::Layer* layer) override {
+  void AddLayerToRegion(ui::Layer* layer, views::LayerRegion region) override {
     // This routes background layers to `ink_drop_container_` instead of `this`
     // to avoid painting effects underneath our background.
-    ink_drop_container_->AddLayerBeneathView(layer);
+    ink_drop_container_->AddLayerToRegion(layer, region);
   }
 
-  void RemoveLayerBeneathView(ui::Layer* layer) override {
+  void RemoveLayerFromRegions(ui::Layer* layer) override {
     // This routes background layers to `ink_drop_container_` instead of `this`
     // to avoid painting effects underneath our background.
-    ink_drop_container_->RemoveLayerBeneathView(layer);
+    ink_drop_container_->RemoveLayerFromRegions(layer);
   }
 
  private:

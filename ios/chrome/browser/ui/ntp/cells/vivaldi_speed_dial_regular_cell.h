@@ -19,7 +19,8 @@
 // SETTERS
 - (void)configureCellWith:(const VivaldiSpeedDialItem*)item
               layoutStyle:(VivaldiStartPageLayoutStyle)style;
-- (void)configureCellWithAttributes:(const FaviconAttributes*)attributes;
+- (void)configureCellWithAttributes:(const FaviconAttributes*)attributes
+                               item:(VivaldiSpeedDialItem*)item;
 - (void)configurePreview;
 
 @end

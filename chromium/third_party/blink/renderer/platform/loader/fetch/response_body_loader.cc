@@ -9,6 +9,7 @@
 
 #include "base/auto_reset.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/common/features.h"
@@ -415,11 +416,11 @@ void ResponseBodyLoader::DidReceiveData(base::span<const char> data) {
 
 void ResponseBodyLoader::DidReceiveDecodedData(
     const String& data,
-    std::unique_ptr<Resource::DecodedDataInfo> info) {
+    std::unique_ptr<ParkableStringImpl::SecureDigest> digest) {
   if (aborted_)
     return;
 
-  client_->DidReceiveDecodedData(data, std::move(info));
+  client_->DidReceiveDecodedData(data, std::move(digest));
 }
 
 void ResponseBodyLoader::DidFinishLoadingBody() {

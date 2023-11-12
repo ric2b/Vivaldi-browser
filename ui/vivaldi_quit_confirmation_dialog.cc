@@ -3,7 +3,7 @@
 #include "ui/vivaldi_quit_confirmation_dialog.h"
 
 #include "app/vivaldi_resources.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/grit/generated_resources.h"

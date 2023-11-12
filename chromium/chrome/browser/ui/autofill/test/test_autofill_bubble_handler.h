@@ -13,6 +13,8 @@
 
 namespace autofill {
 
+enum class IbanBubbleType;
+
 class TestAutofillBubble final : public AutofillBubbleBase {
   void Hide() override {}
 };
@@ -36,6 +38,10 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
       content::WebContents* web_contents,
       SaveCardBubbleController* controller,
       bool is_user_gesture) override;
+  AutofillBubbleBase* ShowIbanBubble(content::WebContents* web_contents,
+                                     IbanBubbleController* controller,
+                                     bool is_user_gesture,
+                                     IbanBubbleType bubble_type) override;
   AutofillBubbleBase* ShowLocalCardMigrationBubble(
       content::WebContents* web_contents,
       LocalCardMigrationBubbleController* controller,
@@ -72,6 +78,7 @@ class TestAutofillBubbleHandler : public AutofillBubbleHandler {
   std::unique_ptr<TestAutofillBubble> local_card_migration_bubble_view_;
   std::unique_ptr<TestAutofillBubble> offer_notification_bubble_view_;
   std::unique_ptr<TestAutofillBubble> save_card_bubble_view_;
+  std::unique_ptr<TestAutofillBubble> iban_bubble_view_;
   std::unique_ptr<TestSaveUPIBubble> save_upi_bubble_;
   std::unique_ptr<TestAutofillBubble> save_address_profile_bubble_view_;
   std::unique_ptr<TestAutofillBubble> update_address_profile_bubble_view_;

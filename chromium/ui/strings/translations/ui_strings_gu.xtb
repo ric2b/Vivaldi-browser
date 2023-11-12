@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 મહિનો}one{# મહિનો}other{# મહિના}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 કલાક અને }one{# કલાક અને }other{# કલાક અને }}</translation>
+<translation id="185013357618350178">&amp;Select</translation>
 <translation id="1859234291848436338">લેખનના દિશાનિર્દેશ</translation>
 <translation id="1860796786778352021">સૂચના બંધ છે</translation>
 <translation id="186476001994626254">વેબ સ્માર્ટ પેસ્ટ કન્ટેન્ટ</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{1ક. માં}one{#ક. માં}other{#ક. માં}}</translation>
 <translation id="2583543531130364912">તમારી ટચસ્ક્રીનને કેલિબ્રેટ કરો</translation>
 <translation id="2586657967955657006">ક્લિપબોર્ડ</translation>
+<translation id="2653844658857826081">નવું</translation>
 <translation id="2666092431469916601">ઉપર</translation>
 <translation id="2701330563083355633"><ph name="DEVICE_NAME" />માંથી શેર કર્યું</translation>
 <translation id="271033894570825754">નવું</translation>

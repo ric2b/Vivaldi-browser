@@ -11,6 +11,7 @@ import {BackgroundBridge} from '../common/background_bridge.js';
 import {BrailleTable} from '../common/braille/braille_table.js';
 import {Msgs} from '../common/msgs.js';
 import {PanelCommand, PanelCommandType} from '../common/panel_command.js';
+import {SettingsManager} from '../common/settings_manager.js';
 import {PunctuationEchoes, TtsSettings} from '../common/tts_types.js';
 
 import {BluetoothBrailleDisplayUI} from './bluetooth_braille_display_ui.js';
@@ -32,24 +33,20 @@ export class OptionsPage {
    */
   static async init() {
     await LocalStorage.init();
+    await SettingsManager.init();
     OptionsPage.populateVoicesSelect();
     BrailleTable.getAll(function(tables) {
       /** @type {!Array<BrailleTable.Table>} */
       OptionsPage.brailleTables = tables;
       OptionsPage.populateBrailleTablesSelect();
     });
-    chrome.storage.local.get({'brailleWordWrap': true}, function(items) {
-      $('brailleWordWrap').checked = items.brailleWordWrap;
-    });
 
-    chrome.storage.local.get({'virtualBrailleRows': 1}, function(items) {
-      $('virtual_braille_display_rows_input').value =
-          items['virtualBrailleRows'];
-    });
-    chrome.storage.local.get({'virtualBrailleColumns': 40}, function(items) {
-      $('virtual_braille_display_columns_input').value =
-          items['virtualBrailleColumns'];
-    });
+    $('brailleWordWrap').checked = SettingsManager.get('brailleWordWrap');
+    $('virtual_braille_display_rows_input').value =
+        SettingsManager.get('virtualBrailleRows');
+    $('virtual_braille_display_columns_input').value =
+        SettingsManager.get('virtualBrailleColumns');
+
     const changeToInterleave =
         Msgs.getMsg('options_change_current_display_style_interleave');
     const changeToSideBySide =
@@ -59,11 +56,12 @@ export class OptionsPage {
     const currentlyDisplayingSideBySide =
         Msgs.getMsg('options_current_display_style_side_by_side');
     $('changeDisplayStyle').textContent =
-        LocalStorage.get('brailleSideBySide') ? changeToInterleave :
-                                                changeToSideBySide;
+        SettingsManager.get('brailleSideBySide') ? changeToInterleave :
+                                                   changeToSideBySide;
     $('currentDisplayStyle').textContent =
-        LocalStorage.get('brailleSideBySide') ? currentlyDisplayingSideBySide :
-                                                currentlyDisplayingInterleave;
+        SettingsManager.get('brailleSideBySide') ?
+        currentlyDisplayingSideBySide :
+        currentlyDisplayingInterleave;
 
     const showEventStreamFilters =
         Msgs.getMsg('options_show_event_stream_filters');
@@ -71,34 +69,35 @@ export class OptionsPage {
         Msgs.getMsg('options_hide_event_stream_filters');
     $('toggleEventStreamFilters').textContent = showEventStreamFilters;
     OptionsPage.disableEventStreamFilterCheckBoxes(
-        LocalStorage.get('enableEventStreamLogging') === false);
+        !SettingsManager.getBoolean('enableEventStreamLogging'));
 
-    if (LocalStorage.get('audioStrategy')) {
+    if (SettingsManager.get('audioStrategy')) {
       for (let i = 0, opt; opt = $('audioStrategy').options[i]; i++) {
-        if (opt.id === LocalStorage.get('audioStrategy')) {
+        if (opt.id === SettingsManager.get('audioStrategy')) {
           opt.setAttribute('selected', '');
         }
       }
     }
-    if (LocalStorage.get('capitalStrategy')) {
+    if (SettingsManager.get('capitalStrategy')) {
       for (let i = 0, opt; opt = $('capitalStrategy').options[i]; ++i) {
-        if (opt.id === LocalStorage.get('capitalStrategy')) {
+        if (opt.id === SettingsManager.get('capitalStrategy')) {
           opt.setAttribute('selected', '');
         }
       }
     }
 
-    if (LocalStorage.get('numberReadingStyle')) {
+    if (SettingsManager.get('numberReadingStyle')) {
       for (let i = 0, opt; opt = $('numberReadingStyle').options[i]; ++i) {
-        if (opt.id === LocalStorage.get('numberReadingStyle')) {
+        if (opt.id === SettingsManager.get('numberReadingStyle')) {
           opt.setAttribute('selected', '');
         }
       }
     }
 
-    if (LocalStorage.get(TtsSettings.PUNCTUATION_ECHO)) {
+    if (SettingsManager.get(TtsSettings.PUNCTUATION_ECHO)) {
       const currentPunctuationEcho =
-          PunctuationEchoes[LocalStorage.get(TtsSettings.PUNCTUATION_ECHO)];
+          PunctuationEchoes[SettingsManager.getNumber(
+              TtsSettings.PUNCTUATION_ECHO)];
       for (let i = 0, opt; opt = $('punctuationEcho').options[i]; ++i) {
         if (opt.id === currentPunctuationEcho.name) {
           opt.setAttribute('selected', '');
@@ -151,12 +150,9 @@ export class OptionsPage {
     document.addEventListener('click', OptionsPage.eventListener, false);
     document.addEventListener('keydown', OptionsPage.eventListener, false);
 
-    window.addEventListener('storage', event => {
-      if (event.key === 'speakTextUnderMouse') {
-        chrome.accessibilityPrivate.enableMouseEvents(
-            event.newValue === String(true));
-      }
-    });
+    SettingsManager.addListenerForKey(
+        'speakTextUnderMouse',
+        enabled => chrome.accessibilityPrivate.enableMouseEvents(enabled));
 
     const clearVirtualDisplay = function() {
       const groups = [];
@@ -170,8 +166,8 @@ export class OptionsPage {
     };
 
     $('changeDisplayStyle').addEventListener('click', function(evt) {
-      LocalStorage.toggle('brailleSideBySide');
-      const sideBySide = LocalStorage.get('brailleSideBySide');
+      const sideBySide = SettingsManager.get('brailleSideBySide');
+      SettingsManager.set('brailleSideBySide', !sideBySide);
       $('changeDisplayStyle').textContent =
           sideBySide ? changeToInterleave : changeToSideBySide;
       $('currentDisplayStyle').textContent = sideBySide ?
@@ -202,13 +198,15 @@ export class OptionsPage {
         $('announceCapitals').selected = true;
         $('increasePitch').selected = false;
         $('increasePitch').disabled = true;
-        LocalStorage.set(
-            'capitalStrategyBackup', LocalStorage.get('capitalStrategy'));
+        SettingsManager.set(
+            'capitalStrategyBackup',
+            SettingsManager.getString('capitalStrategy'));
         BackgroundBridge.ChromeVoxPrefs.setPref(
             'capitalStrategy', 'announceCapitals');
       } else {
         $('increasePitch').disabled = false;
-        const capitalStrategyBackup = LocalStorage.get('capitalStrategyBackup');
+        const capitalStrategyBackup =
+            SettingsManager.getString('capitalStrategyBackup');
         if (capitalStrategyBackup) {
           // Restore original capitalStrategy setting.
           $('announceCapitals').selected =
@@ -294,7 +292,7 @@ export class OptionsPage {
     select.addEventListener('change', function(evt) {
       const selIndex = select.selectedIndex;
       const sel = select.options[selIndex];
-      chrome.storage.local.set({voiceName: sel.voiceName});
+      SettingsManager.set('voiceName', sel.voiceName);
     }, true);
   }
 
@@ -304,8 +302,8 @@ export class OptionsPage {
   static populateBrailleTablesSelect() {
     const tables = OptionsPage.brailleTables;
     const populateSelect = function(node, dots) {
-      const activeTable =
-          LocalStorage.get(node.id) || LocalStorage.get('brailleTable');
+      const activeTable = SettingsManager.get(node.id) ||
+          SettingsManager.getString('brailleTable');
       // Gather the display names and sort them according to locale.
       const items = [];
       for (let i = 0, table; table = tables[i]; i++) {
@@ -341,10 +339,8 @@ export class OptionsPage {
       return function(evt) {
         const selIndex = node.selectedIndex;
         const sel = node.options[selIndex];
-        LocalStorage.set('brailleTable', sel.id);
-        LocalStorage.set(node.id, sel.id);
-        BackgroundBridge.BrailleBackground.refreshBrailleTable(
-            LocalStorage.get('brailleTable'));
+        SettingsManager.set('brailleTable', sel.id);
+        SettingsManager.set(node.id, sel.id);
       };
     };
 
@@ -354,15 +350,16 @@ export class OptionsPage {
     const tableTypeButton = $('brailleTableType');
     const updateTableType = function(setFocus) {
       const currentTableType =
-          LocalStorage.get('brailleTableType') || 'brailleTable6';
+          SettingsManager.getString('brailleTableType') || 'brailleTable6';
       if (currentTableType === 'brailleTable6') {
         select6.parentElement.style.display = 'block';
         select8.parentElement.style.display = 'none';
         if (setFocus) {
           select6.focus();
         }
-        LocalStorage.set('brailleTable', LocalStorage.get('brailleTable6'));
-        LocalStorage.set('brailleTableType', 'brailleTable6');
+        SettingsManager.set(
+            'brailleTable', SettingsManager.getString('brailleTable6'));
+        SettingsManager.set('brailleTableType', 'brailleTable6');
         tableTypeButton.textContent =
             Msgs.getMsg('options_braille_table_type_6');
       } else {
@@ -371,19 +368,18 @@ export class OptionsPage {
         if (setFocus) {
           select8.focus();
         }
-        LocalStorage.set('brailleTable', LocalStorage.get('brailleTable8'));
-        LocalStorage.set('brailleTableType', 'brailleTable8');
+        SettingsManager.set(
+            'brailleTable', SettingsManager.getString('brailleTable8'));
+        SettingsManager.set('brailleTableType', 'brailleTable8');
         tableTypeButton.textContent =
             Msgs.getMsg('options_braille_table_type_8');
       }
-      BackgroundBridge.BrailleBackground.refreshBrailleTable(
-          LocalStorage.get('brailleTable'));
     };
     updateTableType(false);
 
     tableTypeButton.addEventListener('click', function(evt) {
-      const oldTableType = LocalStorage.get('brailleTableType');
-      LocalStorage.set(
+      const oldTableType = SettingsManager.getString('brailleTableType');
+      SettingsManager.set(
           'brailleTableType',
           oldTableType === 'brailleTable6' ? 'brailleTable8' : 'brailleTable6');
       updateTableType(true);
@@ -453,7 +449,7 @@ export class OptionsPage {
     setTimeout(function() {
       const target = event.target;
       if (target.id === 'brailleWordWrap') {
-        chrome.storage.local.set({brailleWordWrap: target.checked});
+        SettingsManager.set(target.id, target.checked);
       } else if (target.className.indexOf('logging') !== -1) {
         BackgroundBridge.ChromeVoxPrefs.setLoggingPrefs(
             target.name, target.checked);
@@ -497,32 +493,28 @@ export class OptionsPage {
 }
 
 /**
- * Adds event listeners to input boxes to update local storage values and
- * make sure that the input is a positive nonempty number between 1 and 99.
+ * Adds event listeners to input boxes to update settings values and make sure
+ * that the input is a positive nonempty number between 1 and 99.
  * @param {string} id Id of the input box.
- * @param {string} pref Preference key in LocalStorage to access and modify.
+ * @param {string} pref Preference key in SettingsManager to access and modify.
  */
 const handleNumericalInputPref = function(id, pref) {
   $(id).addEventListener('input', function(evt) {
     if ($(id).value === '') {
       return;
-    } else if (
-        parseInt($(id).value, 10) < 1 || parseInt($(id).value, 10) > 99) {
-      chrome.storage.local.get(pref, function(items) {
-        $(id).value = items[pref];
-      });
+    }
+
+    const numericalValue = parseInt($(id).value, 10);
+    if (numericalValue < 1 || numericalValue > 99) {
+      $(id).value = SettingsManager.get(pref);
     } else {
-      const items = {};
-      items[pref] = $(id).value;
-      chrome.storage.local.set(items);
+      SettingsManager.set(pref, numericalValue);
     }
   }, true);
 
   $(id).addEventListener('focusout', function(evt) {
     if ($(id).value === '') {
-      chrome.storage.local.get(pref, function(items) {
-        $(id).value = items[pref];
-      });
+      $(id).value = SettingsManager.get(pref);
     }
   }, true);
 };

@@ -7,7 +7,7 @@
 
 #include "ash/public/cpp/app_list/app_list_types.h"
 #include "ash/public/cpp/ash_public_export.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window.h"
 
@@ -58,12 +58,6 @@ class ASH_PUBLIC_EXPORT AppListController {
 
   // Dismisses the app list.
   virtual void DismissAppList() = 0;
-
-  // Returns bounds of a rectangle to show an AppInfo dialog.
-  using GetAppInfoDialogBoundsCallback =
-      base::OnceCallback<void(const gfx::Rect&)>;
-  virtual void GetAppInfoDialogBounds(
-      GetAppInfoDialogBoundsCallback callback) = 0;
 
   // Shows the app list.
   virtual void ShowAppList(AppListShowSource source) = 0;

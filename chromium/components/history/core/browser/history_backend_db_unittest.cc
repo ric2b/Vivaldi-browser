@@ -24,9 +24,9 @@
 #include <string>
 #include <unordered_set>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/i18n/case_conversion.h"
 #include "base/run_loop.h"
@@ -34,7 +34,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "components/enterprise/common/download_item_reroute_info.h"
 #include "components/history/core/browser/download_constants.h"
 #include "components/history/core/browser/download_row.h"
 #include "components/history/core/browser/history_constants.h"
@@ -1457,8 +1456,9 @@ TEST_F(HistoryBackendDBTest, CheckLastCompatibleVersion) {
       // Manually set last compatible version to one higher
       // than current version.
       sql::MetaTable meta;
-      meta.Init(&db, 1, 1);
-      meta.SetCompatibleVersionNumber(HistoryDatabase::GetCurrentVersion() + 1);
+      ASSERT_TRUE(meta.Init(&db, 1, 1));
+      ASSERT_TRUE(meta.SetCompatibleVersionNumber(
+          HistoryDatabase::GetCurrentVersion() + 1));
     }
   }
   // Try to create and init backend for non compatible db.
@@ -1476,7 +1476,7 @@ TEST_F(HistoryBackendDBTest, CheckLastCompatibleVersion) {
     ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
     {
       sql::MetaTable meta;
-      meta.Init(&db, 1, 1);
+      ASSERT_TRUE(meta.Init(&db, 1, 1));
       // Current browser version must be already higher than 28.
       ASSERT_LT(28, HistoryDatabase::GetCurrentVersion());
       // Expect that version in DB remains the same.
@@ -2347,6 +2347,7 @@ TEST_F(HistoryBackendDBTest,
     EXPECT_TRUE(visit_content_annotations.search_terms.empty());
   }
 }
+
 TEST_F(HistoryBackendDBTest, MigrateContentAnnotationsAddPageMetadataColumns) {
   ASSERT_NO_FATAL_FAILURE(CreateDBVersion(53));
 
@@ -2610,6 +2611,140 @@ TEST_F(HistoryBackendDBTest, MigrateVisitsAddIsKnownToSyncColumn) {
     sql::Database db;
     ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
     EXPECT_TRUE(db.DoesColumnExist("visits", "is_known_to_sync"));
+  }
+}
+
+TEST_F(HistoryBackendDBTest, MigrateClustersAddTriggerabilityCalculatedColumn) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(59));
+
+  int64_t cluster_id = 1;
+
+  // Open the old version of the DB and make sure the new columns don't exist
+  // yet.
+  {
+    sql::Database db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+    ASSERT_FALSE(db.DoesColumnExist("clusters", "triggerability_calculated"));
+
+    const char kInsertClustersStatement[] =
+        "INSERT INTO clusters"
+        "(cluster_id,should_show_on_prominent_ui_surfaces,label,raw_label)"
+        "VALUES(?,?,?,?)";
+
+    // Add a row to `clusters` table.
+    {
+      sql::Statement s(db.GetUniqueStatement(kInsertClustersStatement));
+      s.BindInt64(0, cluster_id);
+      s.BindBool(1, true);
+      s.BindString16(2, u"");
+      s.BindString16(3, u"");
+      ASSERT_TRUE(s.Run());
+    }
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // The version should have been updated.
+  ASSERT_GE(HistoryDatabase::GetCurrentVersion(), 60);
+
+  // Open the db manually again and make sure the new columns exist.
+  {
+    sql::Database db;
+    ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+    EXPECT_TRUE(db.DoesColumnExist("clusters", "triggerability_calculated"));
+  }
+
+  // Check contents.
+  Cluster cluster = db_->GetCluster(cluster_id);
+  EXPECT_TRUE(cluster.triggerability_calculated);
+}
+
+TEST_F(HistoryBackendDBTest,
+       MigrateClustersAutoincrementIdAndAddOriginatorColumns) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(60));
+
+  int64_t cluster_id = 1;
+
+  // Open the db for manual manipulation.
+  sql::Database db;
+  ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+  const char kInsertClustersStatement[] =
+      "INSERT INTO clusters"
+      "(cluster_id,should_show_on_prominent_ui_surfaces,label,raw_label,"
+      "triggerability_calculated)"
+      "VALUES(?,?,?,?,?)";
+
+  // Add a row to `clusters` table.
+  {
+    sql::Statement s(db.GetUniqueStatement(kInsertClustersStatement));
+    s.BindInt64(0, cluster_id);
+    s.BindBool(1, true);
+    s.BindString16(2, u"");
+    s.BindString16(3, u"");
+    s.BindBool(4, true);
+    ASSERT_TRUE(s.Run());
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // After the migration, the originator columns should return default values.
+  {
+    // Check contents.
+    Cluster cluster = db_->GetCluster(cluster_id);
+    EXPECT_EQ(cluster.originator_cache_guid, "");
+    EXPECT_EQ(cluster.originator_cluster_id, 0);
+  }
+}
+
+TEST_F(HistoryBackendDBTest, MigrateContentAnnotationsAddHasUrlKeyedImage) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(61));
+
+  const VisitID visit_id = 1;
+
+  // Open the db for manual manipulation.
+  sql::Database db;
+  ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+  const char kInsertContentAnnotationsStatement[] =
+      "INSERT INTO "
+      "content_annotations(visit_id,visibility_score,categories,"
+      "page_topics_model_version,annotation_flags,entities,related_searches,"
+      "search_normalized_url,search_terms,alternative_title,page_language,"
+      "password_state)"
+      "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)";
+
+  // Add an entry to "content_annotations" table.
+  {
+    sql::Statement s(db.GetUniqueStatement(kInsertContentAnnotationsStatement));
+    s.BindInt64(0, visit_id);
+    s.BindDouble(1, -1);
+    s.BindString(2, "");
+    s.BindInt64(3, -1);
+    s.BindInt64(4, 0);
+    s.BindString(5, "");
+    s.BindString(6, "");
+    s.BindString(7, "");
+    s.BindString16(8, u"");
+    s.BindString(9, "");
+    s.BindString(10, "");
+    s.BindInt(11, 0);
+    ASSERT_TRUE(s.Run());
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // The version should have been updated.
+  ASSERT_GE(HistoryDatabase::GetCurrentVersion(), 62);
+
+  // After the migration, has_url_keyed_image should be false.
+  {
+    VisitContentAnnotations visit_content_annotations;
+    db_->GetContentAnnotationsForVisit(visit_id, &visit_content_annotations);
+    EXPECT_FALSE(visit_content_annotations.has_url_keyed_image);
   }
 }
 

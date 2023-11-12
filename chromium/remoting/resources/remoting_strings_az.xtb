@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Uyğun gəlməyən protokol versiyası aşkarlanmışdı. Hər iki kompüterdə quraşdırılmış proqram təminatının ən son versiyasına malik olduğunuza əmin olun.</translation>
 <translation id="1008557486741366299">İndi yox</translation>
 <translation id="1201402288615127009">Növbəti</translation>
+<translation id="1296511125400541222">Copyright 2023 Chromium Müəllifləri. Bütün hüquqlar qorunur.</translation>
 <translation id="1297009705180977556"><ph name="HOSTNAME" /> hostuna qoşularkən xəta baş verdi</translation>
 <translation id="1450760146488584666">Tələb olunan obyekt yoxdur.</translation>
 <translation id="1480046233931937785">Kreditlər</translation>
@@ -36,7 +37,6 @@ Bu icazəni vermək üçün aşağıda "<ph name="BUTTON_NAME" />" düyməsinə 
 <translation id="2599300881200251572">Bu xidmət Chrome Kənar Desktop klientlərindən gələn bağlantılara icazə verir.</translation>
 <translation id="2647232381348739934">Chromoting Xidməti</translation>
 <translation id="2676780859508944670">İşləyir...</translation>
-<translation id="2692522824157224199">2022 Müəllif hüququ: Google LLC. Bütün hüquqlar qorunur.</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2758123043070977469">Doğrulama zamanı xəta baş verdi, yenidən daxil olun.</translation>
 <translation id="2803375539583399270">PİN daxil edin</translation>
@@ -73,7 +73,6 @@ Bu icazəni vermək üçün aşağıda "<ph name="BUTTON_NAME" />" düyməsinə 
 <translation id="4257751272692708833"><ph name="PRODUCT_NAME" /> Keçid Yönləndiricisi</translation>
 <translation id="4277736576214464567">Giriş kodu etibarsızdır. Yenidən cəhd edin.</translation>
 <translation id="4281844954008187215">Xidmət Şərtləri</translation>
-<translation id="4372650392690220936">2022 Müəllif hüququ: Chromium Müəllifləri. Bütün hüquqlar qorunur.</translation>
 <translation id="4405930547258349619">Kök Kitabxana</translation>
 <translation id="443560535555262820">Giriş Tərcihlərini Açın</translation>
 <translation id="4450893287417543264">Göstərilməsin</translation>
@@ -90,6 +89,7 @@ Bu icazəni vermək üçün aşağıda "<ph name="BUTTON_NAME" />" düyməsinə 
 <translation id="4808503597364150972"><ph name="HOSTNAME" /> üçün PIN kodunuzu daxil edin.</translation>
 <translation id="4812684235631257312">Host</translation>
 <translation id="4867841927763172006">PrtScn göndərin</translation>
+<translation id="4960795469833295568">2023 Müəllif hüququ: Google LLC. Bütün hüquqlar qorunur.</translation>
 <translation id="4974476491460646149"><ph name="HOSTNAME" /> bağlantısı bitdi</translation>
 <translation id="4985296110227979402">Uzaqdan giriş üçün ilk olaraq kompüterinizi quraşdırmalısınız</translation>
 <translation id="4987330545941822761">Chrome Remote Desktop keçidləri lokal olaraq açacaq brauzeri təyin edə bilmir. Aşağıdakı siyahıdan onu seçin.</translation>

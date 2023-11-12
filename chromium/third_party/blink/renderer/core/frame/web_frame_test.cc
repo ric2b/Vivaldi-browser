@@ -33,7 +33,7 @@
 #include <memory>
 #include <tuple>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -81,8 +81,6 @@
 #include "third_party/blink/public/platform/web_cache.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url.h"
-#include "third_party/blink/public/platform/web_url_loader_client.h"
-#include "third_party/blink/public/platform/web_url_loader_mock_factory.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/test/test_web_frame_content_dumper.h"
 #include "third_party/blink/public/web/web_console_message.h"
@@ -198,8 +196,9 @@
 #include "third_party/blink/renderer/platform/loader/fetch/raw_resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
-#include "third_party/blink/renderer/platform/loader/fetch/resource_timing_info.h"
+#include "third_party/blink/renderer/platform/loader/fetch/url_loader/url_loader_client.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/runtime_feature_state/runtime_feature_state_override_context.h"
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/testing/find_cc_layer.h"
@@ -207,6 +206,7 @@
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/testing_platform_support.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
+#include "third_party/blink/renderer/platform/testing/url_loader_mock_factory.h"
 #include "third_party/blink/renderer/platform/testing/url_test_helpers.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl_hash.h"
 #include "third_party/blink/renderer/platform/weborigin/scheme_registry.h"
@@ -295,7 +295,7 @@ void ExecuteScriptInMainWorld(
         mojom::blink::PromiseResultOption::kAwait,
     mojom::blink::UserActivationOption user_gesture =
         mojom::blink::UserActivationOption::kDoNotActivate) {
-  ExecuteScriptsInMainWorld(frame, base::make_span(&script_string, 1),
+  ExecuteScriptsInMainWorld(frame, base::make_span(&script_string, 1u),
                             std::move(callback), wait_for_promise,
                             user_gesture);
 }
@@ -558,8 +558,8 @@ class ScriptExecutionCallbackHelper final {
   bool DidComplete() const { return did_complete_; }
 
   WebScriptExecutionCallback Callback() {
-    return base::BindOnce(&ScriptExecutionCallbackHelper::Completed,
-                          base::Unretained(this));
+    return WTF::BindOnce(&ScriptExecutionCallbackHelper::Completed,
+                         WTF::Unretained(this));
   }
 
   // Returns true if any results (even if they were empty) were passed to the
@@ -1156,7 +1156,7 @@ TEST_F(WebFrameTest, FormWithNullFrame) {
       web_view_helper.LocalMainFrame()->GetDocument().Forms();
   web_view_helper.Reset();
 
-  EXPECT_EQ(forms.size(), 1U);
+  EXPECT_EQ(forms.size(), 1u);
 
   // This test passes if this doesn't crash.
   WebSearchableFormData searchable_data_form(forms[0]);
@@ -6438,8 +6438,10 @@ TEST_F(WebFrameTest, DISABLED_PositionForPointTest) {
   EXPECT_EQ(64, ComputeOffset(layout_object, 1000, 1000));
 }
 
-#if BUILDFLAG(IS_FUCHSIA)
+#if BUILDFLAG(IS_FUCHSIA) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
 // TODO(crbug.com/1090246): Fix these tests on Fuchsia and re-enable.
+// TODO(crbug.com/1317375): Build these tests on all platforms.
 #define MAYBE_SelectRangeStaysHorizontallyAlignedWhenMoved \
   DISABLED_SelectRangeStaysHorizontallyAlignedWhenMoved
 #define MAYBE_MoveCaretStaysHorizontallyAlignedWhenMoved \
@@ -6450,8 +6452,6 @@ TEST_F(WebFrameTest, DISABLED_PositionForPointTest) {
 #define MAYBE_MoveCaretStaysHorizontallyAlignedWhenMoved \
   MoveCaretStaysHorizontallyAlignedWhenMoved
 #endif
-// TODO(crbug.com/1317375): Build these tests on all platforms.
-#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
 TEST_F(WebFrameTest, MAYBE_SelectRangeStaysHorizontallyAlignedWhenMoved) {
   RegisterMockedHttpURLLoad("move_caret.html");
 
@@ -6534,7 +6534,6 @@ TEST_F(WebFrameTest, MAYBE_MoveCaretStaysHorizontallyAlignedWhenMoved) {
   EXPECT_EQ(start_rect, initial_start_rect);
   EXPECT_EQ(end_rect, initial_end_rect);
 }
-#endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
 
 class CompositedSelectionBoundsTest
     : public WebFrameTest,
@@ -7256,9 +7255,9 @@ class TestAccessInitialDocumentLocalFrameHost
   void Init(blink::AssociatedInterfaceProvider* provider) {
     provider->OverrideBinderForTesting(
         mojom::blink::LocalMainFrameHost::Name_,
-        base::BindRepeating(
+        WTF::BindRepeating(
             &TestAccessInitialDocumentLocalFrameHost::BindFrameHostReceiver,
-            base::Unretained(this)));
+            WTF::Unretained(this)));
   }
 
   // LocalMainFrameHost:
@@ -9606,7 +9605,9 @@ TEST_F(WebFrameSwapTest, AdHighlightEarlyApply) {
             SkColorSetARGB(128, 255, 0, 0));
 }
 
-TEST_F(WebFrameSwapTest, DoNotPropagateDisplayNonePropertyOnSwap) {
+// TODO(crbug.com/1314493): This test is flaky with the TimedHTMLParserBudget
+// feature enabled.
+TEST_F(WebFrameSwapTest, DISABLED_DoNotPropagateDisplayNonePropertyOnSwap) {
   WebFrameSwapTestClient* main_frame_client =
       static_cast<WebFrameSwapTestClient*>(MainFrame()->Client());
   EXPECT_FALSE(main_frame_client->DidPropagateDisplayNoneProperty());
@@ -10670,48 +10671,56 @@ TEST_P(WebFrameOverscrollTest,
 
   auto* widget = web_view_helper.GetMainFrameWidget();
   auto* layer_tree_host = web_view_helper.GetLayerTreeHost();
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   // Calculation of accumulatedRootOverscroll and unusedDelta on multiple
   // scrollUpdate.
   ScrollBegin(&web_view_helper, -300, -316);
   ScrollUpdate(&web_view_helper, -308, -316);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(8, 16),
                          gfx::Vector2dF(8, 16), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   ScrollUpdate(&web_view_helper, 0, -13);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(8, 29),
                          gfx::Vector2dF(0, 13), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   ScrollUpdate(&web_view_helper, -20, -13);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(28, 42),
                          gfx::Vector2dF(20, 13), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   // Overscroll is not reported.
   ScrollUpdate(&web_view_helper, 0, 1);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollUpdate(&web_view_helper, 1, 0);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   // Overscroll is reported.
   ScrollUpdate(&web_view_helper, 0, 1000);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(0, -701),
                          gfx::Vector2dF(0, -701), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   // Overscroll is not reported.
   ScrollEnd(&web_view_helper);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 }
 
@@ -10727,24 +10736,28 @@ TEST_P(WebFrameOverscrollTest,
 
   auto* widget = web_view_helper.GetMainFrameWidget();
   auto* layer_tree_host = web_view_helper.GetLayerTreeHost();
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 0, -316);
 
   // Scroll the Div to the end.
   ScrollUpdate(&web_view_helper, 0, -316);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollEnd(&web_view_helper);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 0, -100);
 
   // Now On Scrolling DIV, scroll is bubbled and root layer is over-scrolled.
   ScrollUpdate(&web_view_helper, 0, -100);
   ScrollUpdate(&web_view_helper, 0, -100);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(0, 100),
                          gfx::Vector2dF(0, 100), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
@@ -10781,23 +10794,27 @@ TEST_P(WebFrameOverscrollTest, RootLayerOverscrolledOnInnerDivOverScroll) {
 
   auto* widget = web_view_helper.GetMainFrameWidget();
   auto* layer_tree_host = web_view_helper.GetLayerTreeHost();
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 0, -316);
 
   // Scroll the Div to the end.
   ScrollUpdate(&web_view_helper, 0, -316);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollEnd(&web_view_helper);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 0, -150);
 
   // Now On Scrolling DIV, scroll is bubbled and root layer is over-scrolled.
   ScrollUpdate(&web_view_helper, 0, -150);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(0, 50),
                          gfx::Vector2dF(0, 50), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
@@ -10815,30 +10832,35 @@ TEST_P(WebFrameOverscrollTest, RootLayerOverscrolledOnInnerIFrameOverScroll) {
 
   auto* widget = web_view_helper.GetMainFrameWidget();
   auto* layer_tree_host = web_view_helper.GetLayerTreeHost();
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 0, -320);
   // Scroll the IFrame to the end.
   // This scroll will fully scroll the iframe but will be consumed before being
   // counted as overscroll.
   ScrollUpdate(&web_view_helper, 0, -320);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   // This scroll will again target the iframe but wont bubble further up. Make
   // sure that the unused scroll isn't handled as overscroll.
   ScrollUpdate(&web_view_helper, 0, -50);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollEnd(&web_view_helper);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 0, -150);
 
   // Now On Scrolling IFrame, scroll is bubbled and root layer is over-scrolled.
   ScrollUpdate(&web_view_helper, 0, -150);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(0, 50),
                          gfx::Vector2dF(0, 50), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
@@ -10858,38 +10880,44 @@ TEST_P(WebFrameOverscrollTest, ScaledPageRootLayerOverscrolled) {
 
   auto* widget = web_view_helper.GetMainFrameWidget();
   auto* layer_tree_host = web_view_helper.GetLayerTreeHost();
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   // Calculation of accumulatedRootOverscroll and unusedDelta on scaled page.
   // The point is (100, 100) because that is the position GenerateEvent uses.
   ScrollBegin(&web_view_helper, 0, 30);
   ScrollUpdate(&web_view_helper, 0, 30);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(0, -30),
                          gfx::Vector2dF(0, -30), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   ScrollUpdate(&web_view_helper, 0, 30);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(0, -60),
                          gfx::Vector2dF(0, -30), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   ScrollUpdate(&web_view_helper, 30, 30);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(-30, -90),
                          gfx::Vector2dF(-30, -30), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   ScrollUpdate(&web_view_helper, 30, 0);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(-60, -90),
                          gfx::Vector2dF(-30, 0), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   // Overscroll is not reported.
   ScrollEnd(&web_view_helper);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 }
 
@@ -10903,23 +10931,27 @@ TEST_P(WebFrameOverscrollTest, NoOverscrollForSmallvalues) {
 
   auto* widget = web_view_helper.GetMainFrameWidget();
   auto* layer_tree_host = web_view_helper.GetLayerTreeHost();
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 10, 10);
   ScrollUpdate(&web_view_helper, 10, 10);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(-10, -10),
                          gfx::Vector2dF(-10, -10), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   ScrollUpdate(&web_view_helper, 0, 0.10);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(-10, -10.10),
                          gfx::Vector2dF(0, -0.10), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
 
   ScrollUpdate(&web_view_helper, 0.10, 0);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(),
                          gfx::Vector2dF(-10.10, -10.10),
                          gfx::Vector2dF(-0.10, 0), gfx::Vector2dF(),
@@ -10928,31 +10960,38 @@ TEST_P(WebFrameOverscrollTest, NoOverscrollForSmallvalues) {
   // For residual values overscrollDelta should be reset and DidOverscroll
   // shouldn't be called.
   ScrollUpdate(&web_view_helper, 0, 0.09);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollUpdate(&web_view_helper, 0.09, 0.09);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollUpdate(&web_view_helper, 0.09, 0);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollUpdate(&web_view_helper, 0, -0.09);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollUpdate(&web_view_helper, -0.09, -0.09);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollUpdate(&web_view_helper, -0.09, 0);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 
   ScrollEnd(&web_view_helper);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
 }
 
@@ -10974,11 +11013,13 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: auto;'")));
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 100, 116);
   ScrollUpdate(&web_view_helper, 100, 100);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(-100, -100),
                          gfx::Vector2dF(-100, -100), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorAuto);
@@ -10988,10 +11029,12 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: contain;'")));
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollUpdate(&web_view_helper, 100, 100);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(-200, -200),
                          gfx::Vector2dF(-100, -100), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorContain);
@@ -11001,10 +11044,12 @@ TEST_P(WebFrameOverscrollTest, OverscrollBehaviorGoesToCompositor) {
   mainFrame->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: none;'")));
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollUpdate(&web_view_helper, 100, 100);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   ExpectOverscrollParams(widget->last_overscroll(), gfx::Vector2dF(-300, -300),
                          gfx::Vector2dF(-100, -100), gfx::Vector2dF(),
                          gfx::PointF(100, 100), kOverscrollBehaviorNone);
@@ -11041,11 +11086,13 @@ TEST_P(WebFrameOverscrollTest, SubframeOverscrollBehaviorPreventsChaining) {
   subframe->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: none;'")));
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollBegin(&web_view_helper, 100, 116);
   ScrollUpdate(&web_view_helper, 100, 100);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
             kOverscrollBehaviorAuto);
@@ -11053,10 +11100,12 @@ TEST_P(WebFrameOverscrollTest, SubframeOverscrollBehaviorPreventsChaining) {
   subframe->ExecuteScript(
       WebScriptSource(WebString("document.body.style="
                                 "'overscroll-behavior: contain;'")));
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
 
   ScrollUpdate(&web_view_helper, 100, 100);
-  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false);
+  layer_tree_host->CompositeForTest(base::TimeTicks::Now(), false,
+                                    base::OnceClosure());
   EXPECT_TRUE(widget->last_overscroll().is_null());
   EXPECT_EQ(web_view_helper.GetLayerTreeHost()->overscroll_behavior(),
             kOverscrollBehaviorAuto);
@@ -11169,13 +11218,12 @@ TEST_F(WebFrameTest, ImageDocumentLoadResponseEnd) {
   ImageResourceContent* image_content = img_document->CachedImage();
 
   EXPECT_TRUE(image_content);
-  EXPECT_NE(base::TimeTicks(), image_content->LoadResponseEnd());
+  EXPECT_NE(base::TimeTicks(), image_content->LoadEnd());
 
   DocumentLoader* loader = document->Loader();
 
   EXPECT_TRUE(loader);
-  EXPECT_EQ(loader->GetTiming().ResponseEnd(),
-            image_content->LoadResponseEnd());
+  EXPECT_EQ(loader->GetTiming().ResponseEnd(), image_content->LoadEnd());
 }
 
 TEST_F(WebFrameTest, CopyImageDocument) {
@@ -11849,7 +11897,9 @@ class TestResourcePriorityWebFrameClient
   HashMap<KURL, std::unique_ptr<ExpectedRequest>> expected_requests_;
 };
 
-TEST_F(WebFrameTest, ChangeResourcePriority) {
+// TODO(crbug.com/1314493): This test is flaky with the TimedHTMLParserBudget
+// feature enabled.
+TEST_F(WebFrameTest, DISABLED_ChangeResourcePriority) {
   TestResourcePriorityWebFrameClient client;
   RegisterMockedHttpURLLoad("promote_img_in_viewport_priority.html");
   RegisterMockedHttpURLLoad("image_slow.pl");
@@ -11914,16 +11964,16 @@ TEST_F(WebFrameTest, ScriptPriority) {
   client.VerifyAllRequests();
 }
 
-class MultipleDataChunkDelegate : public WebURLLoaderTestDelegate {
+class MultipleDataChunkDelegate : public URLLoaderTestDelegate {
  public:
   MultipleDataChunkDelegate() = default;
   ~MultipleDataChunkDelegate() override = default;
 
-  // WebURLLoaderTestDelegate:
-  void DidReceiveData(WebURLLoaderClient* original_client,
+  // URLLoaderTestDelegate:
+  void DidReceiveData(URLLoaderClient* original_client,
                       const char* data,
-                      int data_length) override {
-    EXPECT_GT(data_length, 16);
+                      size_t data_length) override {
+    EXPECT_GT(data_length, 16u);
     original_client->DidReceiveData(data, 16);
     // This didReceiveData call shouldn't crash due to a failed assertion.
     original_client->DidReceiveData(data + 16, data_length - 16);
@@ -12026,15 +12076,15 @@ TEST_F(WebFrameTest, ScrollBeforeLayoutDoesntCrash) {
   auto* widget = web_view_helper.GetMainFrameWidget();
   widget->DispatchThroughCcInputHandler(end_event);
   widget->DispatchThroughCcInputHandler(update_event);
-  web_view_helper.GetLayerTreeHost()->CompositeForTest(base::TimeTicks::Now(),
-                                                       false);
+  web_view_helper.GetLayerTreeHost()->CompositeForTest(
+      base::TimeTicks::Now(), false, base::OnceClosure());
 
   // Try a full Begin/Update/End cycle.
   widget->DispatchThroughCcInputHandler(begin_event);
   widget->DispatchThroughCcInputHandler(update_event);
   widget->DispatchThroughCcInputHandler(end_event);
-  web_view_helper.GetLayerTreeHost()->CompositeForTest(base::TimeTicks::Now(),
-                                                       false);
+  web_view_helper.GetLayerTreeHost()->CompositeForTest(
+      base::TimeTicks::Now(), false, base::OnceClosure());
 }
 
 TEST_F(WebFrameTest, MouseOverDifferntNodeClearsTooltip) {
@@ -13529,10 +13579,10 @@ struct TextRunDOMNodeIdInfo {
 // the (nested) paint ops, and populate |text_runs| with the number of glyphs
 // and the DOMNodeId of each text run.
 void RecursiveCollectTextRunDOMNodeIds(
-    sk_sp<const PaintRecord> paint_record,
+    const PaintRecord& paint_record,
     DOMNodeId dom_node_id,
     std::vector<TextRunDOMNodeIdInfo>* text_runs) {
-  for (const cc::PaintOp& op : *paint_record) {
+  for (const cc::PaintOp& op : paint_record) {
     if (op.GetType() == cc::PaintOpType::DrawRecord) {
       const auto& draw_record_op = static_cast<const cc::DrawRecordOp&>(op);
       RecursiveCollectTextRunDOMNodeIds(draw_record_op.record, dom_node_id,
@@ -13567,7 +13617,7 @@ std::vector<TextRunDOMNodeIdInfo> GetPrintedTextRunDOMNodeIds(
                               pages);
   frame->PrintEnd();
 
-  sk_sp<cc::PaintRecord> paint_record = recorder.finishRecordingAsPicture();
+  cc::PaintRecord paint_record = recorder.finishRecordingAsPicture();
   std::vector<TextRunDOMNodeIdInfo> text_runs;
   RecursiveCollectTextRunDOMNodeIds(paint_record, 0, &text_runs);
 
@@ -14434,6 +14484,46 @@ TEST_F(WebFrameSimTest, RenderBlockingPromotesResource) {
             script->GetResourceRequest().Priority());
 
   script_request.Complete();
+}
+
+// Verify that modified_runtime_features is correctly set in the
+// RuntimeFeatureStateOverrideContext when a navigation is committed.
+TEST_F(WebFrameSimTest, SetModifiedFeaturesInOverrideContext) {
+  frame_test_helpers::WebViewHelper web_view_helper;
+  web_view_helper.Initialize();
+
+  WebLocalFrameImpl* frame = web_view_helper.LocalMainFrame();
+
+  auto params = std::make_unique<WebNavigationParams>();
+  // The url isn't important, just pick something.
+  params->url = url_test_helpers::ToKURL("http://www.example.com");
+
+  // Create a modified features value map and give it a value that we can check.
+  auto modified_features =
+      base::flat_map<::blink::mojom::RuntimeFeatureState, bool>();
+  modified_features[blink::mojom::RuntimeFeatureState::kTestFeature] = true;
+  params->modified_runtime_features = modified_features;
+
+  // Commit the navigation
+  frame->CommitNavigation(std::move(params), nullptr);
+
+  // Get the override context and compare the override values map with the
+  // modified features map.
+  RuntimeFeatureStateOverrideContext* override_context =
+      frame->GetFrame()->DomWindow()->GetRuntimeFeatureStateOverrideContext();
+  EXPECT_EQ(override_context->GetOverrideValuesForTesting(), modified_features);
+
+  // Do the same thing for a value of "false"
+  params = std::make_unique<WebNavigationParams>();
+  params->url = url_test_helpers::ToKURL("http://www.example2.com");
+  modified_features =
+      base::flat_map<::blink::mojom::RuntimeFeatureState, bool>();
+  modified_features[blink::mojom::RuntimeFeatureState::kTestFeature] = false;
+  params->modified_runtime_features = modified_features;
+  frame->CommitNavigation(std::move(params), nullptr);
+  override_context =
+      frame->GetFrame()->DomWindow()->GetRuntimeFeatureStateOverrideContext();
+  EXPECT_EQ(override_context->GetOverrideValuesForTesting(), modified_features);
 }
 
 }  // namespace blink

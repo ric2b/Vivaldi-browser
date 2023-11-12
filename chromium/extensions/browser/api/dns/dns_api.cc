@@ -4,7 +4,7 @@
 
 #include "extensions/browser/api/dns/dns_api.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -25,7 +25,7 @@ namespace extensions {
 
 DnsResolveFunction::DnsResolveFunction() = default;
 
-DnsResolveFunction::~DnsResolveFunction() {}
+DnsResolveFunction::~DnsResolveFunction() = default;
 
 ExtensionFunction::ResponseAction DnsResolveFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);

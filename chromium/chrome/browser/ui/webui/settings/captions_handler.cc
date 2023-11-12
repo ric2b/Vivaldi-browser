@@ -4,11 +4,10 @@
 
 #include "chrome/browser/ui/webui/settings/captions_handler.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/live_caption/pref_names.h"
@@ -32,6 +31,8 @@ CaptionsHandler::CaptionsHandler(PrefService* prefs) : prefs_(prefs) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   soda_available_ =
       base::FeatureList::IsEnabled(ash::features::kOnDeviceSpeechRecognition);
+#elif BUILDFLAG(IS_CHROMEOS_LACROS)
+  soda_available_ = false;
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 

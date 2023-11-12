@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -46,11 +46,12 @@ const char kService2[] = "service2";
 void AddEventListener(
     const std::string& extension_id,
     const std::string& service_type,
+    content::RenderProcessHost* process,
     extensions::EventListenerMap::ListenerList* listener_list) {
   base::Value::Dict filter;
   filter.Set(kEventFilterServiceTypeKey, service_type);
   listener_list->push_back(EventListener::ForExtension(
-      kEventFilterServiceTypeKey, extension_id, nullptr, std::move(filter)));
+      kEventFilterServiceTypeKey, extension_id, process, std::move(filter)));
 }
 
 class NullDelegate : public EventListenerMap::Delegate {
@@ -128,18 +129,14 @@ class EventServiceListSizeMatcher
                 << e.event_args.size();
       return false;
     }
-    const base::ListValue* services = nullptr;
-    {
-      const base::Value& out = e.event_args[0];
-      services = static_cast<const base::ListValue*>(&out);
-    }
+    const base::Value::List* services = e.event_args[0].GetIfList();
     if (!services) {
-      *listener << "event's service list argument is not a ListValue";
+      *listener << "event's service list argument is not a Value::List";
       return false;
     }
-    *listener << "number of services is " << services->GetList().size();
+    *listener << "number of services is " << services->size();
     return static_cast<testing::Matcher<size_t>>(testing::Eq(expected_size_))
-        .MatchAndExplain(services->GetList().size(), listener);
+        .MatchAndExplain(services->size(), listener);
   }
 
   virtual void DescribeTo(::std::ostream* os) const {
@@ -282,12 +279,12 @@ TEST_F(MDnsAPIDiscoveryTest, ServiceListenersAddedAndRemoved) {
       .WillRepeatedly(ReturnRef(listeners));
 
   // Listener #1 added with kService1.
-  AddEventListener(kExtId, kService1, &listeners);
+  AddEventListener(kExtId, kService1, render_process_host(), &listeners);
   EXPECT_CALL(*dns_sd_registry(), RegisterDnsSdListener(kService1));
   mdns_api_->OnListenerAdded(listener_info);
 
   // Listener #2 added with kService2.
-  AddEventListener(kExtId, kService2, &listeners);
+  AddEventListener(kExtId, kService2, render_process_host(), &listeners);
   EXPECT_CALL(*dns_sd_registry(), RegisterDnsSdListener(kService2));
   mdns_api_->OnListenerAdded(listener_info);
 
@@ -295,7 +292,7 @@ TEST_F(MDnsAPIDiscoveryTest, ServiceListenersAddedAndRemoved) {
   mdns_api_->OnListenerAdded(listener_info);
 
   // Listener #3 added with kService2. Should trigger a refresh of kService2.
-  AddEventListener(kExtId, kService2, &listeners);
+  AddEventListener(kExtId, kService2, render_process_host(), &listeners);
   EXPECT_CALL(*dns_sd_registry(), Publish(kService2));
   mdns_api_->OnListenerAdded(listener_info);
 
@@ -318,7 +315,7 @@ TEST_F(MDnsAPIDiscoveryTest, ServiceListenersAddedAndRemoved) {
   mdns_api_->OnListenerAdded(listener_info);
 
   // Listener #4 added with kService1.
-  AddEventListener(kExtId, kService1, &listeners);
+  AddEventListener(kExtId, kService1, render_process_host(), &listeners);
   EXPECT_CALL(*dns_sd_registry(), RegisterDnsSdListener(kService1));
   mdns_api_->OnListenerAdded(listener_info);
 }

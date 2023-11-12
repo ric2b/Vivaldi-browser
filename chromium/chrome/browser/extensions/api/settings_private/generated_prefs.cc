@@ -4,7 +4,7 @@
 
 #include "chrome/browser/extensions/api/settings_private/generated_prefs.h"
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/generated_cookie_prefs.h"
@@ -13,6 +13,7 @@
 #include "chrome/browser/extensions/api/settings_private/prefs_util_enums.h"
 #include "chrome/browser/password_manager/generated_password_leak_detection_pref.h"
 #include "chrome/browser/safe_browsing/generated_safe_browsing_pref.h"
+#include "chrome/browser/ssl/generated_https_first_mode_pref.h"
 #include "chrome/common/extensions/api/settings_private.h"
 #include "components/content_settings/core/common/pref_names.h"
 
@@ -32,11 +33,11 @@ bool GeneratedPrefs::HasPref(const std::string& pref_name) {
   return FindPrefImpl(pref_name) != nullptr;
 }
 
-std::unique_ptr<api::settings_private::PrefObject> GeneratedPrefs::GetPref(
+absl::optional<api::settings_private::PrefObject> GeneratedPrefs::GetPref(
     const std::string& pref_name) {
   GeneratedPref* impl = FindPrefImpl(pref_name);
   if (!impl)
-    return nullptr;
+    return absl::nullopt;
 
   return impl->GetPrefObject();
 }
@@ -105,6 +106,8 @@ void GeneratedPrefs::CreatePrefs() {
       std::make_unique<safe_browsing::GeneratedSafeBrowsingPref>(profile_);
   prefs_[content_settings::kGeneratedNotificationPref] =
       std::make_unique<content_settings::GeneratedNotificationPref>(profile_);
+  prefs_[kGeneratedHttpsFirstModePref] =
+      std::make_unique<GeneratedHttpsFirstModePref>(profile_);
 }
 
 }  // namespace settings_private

@@ -20,6 +20,7 @@
 #include "chrome/browser/media/webrtc/same_origin_observer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/views/tab_sharing/tab_capture_contents_border_helper.h"
@@ -126,19 +127,19 @@ uint32_t TabSharingUIViews::next_capture_session_id_ = 0;
 std::unique_ptr<TabSharingUI> TabSharingUI::Create(
     GlobalRenderFrameHostId capturer,
     const content::DesktopMediaID& media_id,
-    std::u16string app_name,
+    const std::u16string& capturer_name,
     bool favicons_used_for_switch_to_tab_button,
     bool app_preferred_current_tab,
     TabSharingInfoBarDelegate::TabShareType capture_type) {
   return std::make_unique<TabSharingUIViews>(
-      capturer, media_id, app_name, favicons_used_for_switch_to_tab_button,
+      capturer, media_id, capturer_name, favicons_used_for_switch_to_tab_button,
       app_preferred_current_tab, capture_type);
 }
 
 TabSharingUIViews::TabSharingUIViews(
     GlobalRenderFrameHostId capturer,
     const content::DesktopMediaID& media_id,
-    std::u16string app_name,
+    const std::u16string& capturer_name,
     bool favicons_used_for_switch_to_tab_button,
     bool app_preferred_current_tab,
     TabSharingInfoBarDelegate::TabShareType capture_type)
@@ -150,7 +151,7 @@ TabSharingUIViews::TabSharingUIViews(
       capturer_restricted_to_same_origin_(
           CapturerRestrictedToSameOrigin(capturer)),
       shared_tab_media_id_(media_id),
-      app_name_(std::move(app_name)),
+      capturer_name_(std::move(capturer_name)),
       shared_tab_(WebContents::FromRenderFrameHost(RenderFrameHost::FromID(
           media_id.web_contents_id.render_process_id,
           media_id.web_contents_id.main_render_frame_id))),
@@ -376,6 +377,13 @@ void TabSharingUIViews::CreateInfobarForWebContents(WebContents* contents) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(contents);
 
+  // Don't show the info bar in a Picture in Picture window, since it doesn't
+  // typically fit anyway.
+  Browser* browser = chrome::FindBrowserWithWebContents(contents);
+  if (browser && browser->is_type_picture_in_picture()) {
+    return;
+  }
+
   auto infobars_entry = infobars_.find(contents);
   // Recreate the infobar if it already exists.
   if (infobars_entry != infobars_.end()) {
@@ -448,7 +456,7 @@ void TabSharingUIViews::CreateInfobarForWebContents(WebContents* contents) {
                 : TabSharingInfoBarDelegate::ButtonState::DISABLED;
 
   infobars_[contents] = TabSharingInfoBarDelegate::Create(
-      infobar_manager, shared_tab_name_, app_name_,
+      infobar_manager, shared_tab_name_, capturer_name_,
       shared_tab_ == contents /*shared_tab*/,
       share_this_tab_instead_button_state, focus_target, this, capture_type_,
       favicons_used_for_switch_to_tab_button_);

@@ -294,6 +294,13 @@ void ResourceLoadObserverForFrame::DidReceiveResponse(
     }
   }
 
+  // Count usage of Content-Disposition header in SVGUse resources.
+  if (resource->Options().initiator_info.name ==
+          fetch_initiator_type_names::kUse &&
+      request.Url().ProtocolIsInHTTPFamily() && response.IsAttachment()) {
+    CountUsage(WebFeature::kContentDispositionInSvgUse);
+  }
+
   if (resource->GetType() == ResourceType::kLinkPrefetch)
     LogLinkPrefetchMimeTypeHistogram(response.MimeType());
 
@@ -312,12 +319,6 @@ void ResourceLoadObserverForFrame::DidReceiveResponse(
         response, request.GetRequestContext(),
         MixedContentChecker::DecideCheckModeForPlugin(frame->GetSettings()),
         document_loader_->GetContentSecurityNotifier());
-  }
-
-  if (response.IsLegacyTLSVersion()) {
-    frame->Loader().ReportLegacyTLSVersion(
-        response.CurrentRequestUrl(), true /* is_subresource */,
-        resource->GetResourceRequest().IsAdResource());
   }
 
   frame->GetAttributionSrcLoader()->MaybeRegisterAttributionHeaders(

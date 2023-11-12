@@ -13,9 +13,9 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -50,12 +50,12 @@
 #include "chromeos/ash/components/dbus/dbus_thread_manager.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/ash/components/proximity_auth/screenlock_bridge.h"
-#include "chromeos/ash/components/proximity_auth/smart_lock_metrics_recorder.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
 #include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -224,8 +224,9 @@ class UserSelectionScreen::DircryptoMigrationChecker {
     // If the user may be enterprise-managed, don't display the banner, because
     // migration may be blocked by user policy (and user policy is not available
     // at this time yet).
-    if (!policy::BrowserPolicyConnector::IsNonEnterpriseUser(
-            account_id.GetUserEmail())) {
+    if (signin::AccountManagedStatusFinder::IsEnterpriseUserBasedOnEmail(
+            account_id.GetUserEmail()) ==
+        signin::AccountManagedStatusFinder::EmailEnterpriseStatus::kUnknown) {
       UpdateUI(account_id, false);
       return;
     }
@@ -523,15 +524,10 @@ UserAvatar UserSelectionScreen::BuildAshUserAvatarForUser(
     avatar.bytes.assign(avatar_data.begin(), avatar_data.end());
   };
 
-  // After the avatar cloud migration, remove the second if case.
   if (user.has_image_bytes()) {
     avatar.bytes.assign(
         user.image_bytes()->front(),
         user.image_bytes()->front() + user.image_bytes()->size());
-  } else if (user.HasDefaultImage()) {
-    int resource_id =
-        default_user_image::GetDefaultImageResourceId(user.image_index());
-    load_image_from_resource(resource_id);
   } else if (user.image_is_stub()) {
     load_image_from_resource(IDR_LOGIN_DEFAULT_USER);
   }
@@ -787,30 +783,6 @@ void UserSelectionScreen::EnableInput() {
 void UserSelectionScreen::Unlock(const AccountId& account_id) {
   DCHECK_EQ(GetScreenType(), LOCK_SCREEN);
   ScreenLocker::Hide();
-}
-
-void UserSelectionScreen::AttemptEasySignin(const AccountId& account_id,
-                                            const std::string& secret,
-                                            const std::string& key_label) {
-  DCHECK_EQ(GetScreenType(), SIGNIN_SCREEN);
-
-  const user_manager::User* const user =
-      user_manager::UserManager::Get()->FindUser(account_id);
-  DCHECK(user);
-  UserContext user_context(*user);
-  user_context.SetAuthFlow(UserContext::AUTH_FLOW_EASY_UNLOCK);
-  user_context.SetKey(Key(secret));
-  user_context.GetKey()->SetLabel(key_label);
-
-  // LoginDisplayHost does not exist in views-based lock screen.
-  if (LoginDisplayHost::default_host()) {
-    LoginDisplayHost::default_host()->GetLoginDisplay()->delegate()->Login(
-        user_context, SigninSpecifics());
-  } else {
-    SmartLockMetricsRecorder::RecordAuthResultSignInFailure(
-        SmartLockMetricsRecorder::SmartLockAuthResultFailureReason::
-            kLoginDisplayHostDoesNotExist);
-  }
 }
 
 void UserSelectionScreen::OnSessionStateChanged() {

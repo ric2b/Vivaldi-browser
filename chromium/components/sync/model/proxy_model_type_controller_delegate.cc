@@ -6,7 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/sync/base/bind_to_task_runner.h"
 #include "components/sync/engine/data_type_activation_response.h"
 #include "components/sync/model/data_type_activation_request.h"
@@ -51,6 +52,12 @@ void RecordMemoryUsageAndCountsHistogramsHelperOnModelThread(
     base::WeakPtr<ModelTypeControllerDelegate> delegate) {
   DCHECK(delegate);
   delegate->RecordMemoryUsageAndCountsHistograms();
+}
+
+void ClearMetadataWhileStoppedHelperOnModelThread(
+    base::WeakPtr<ModelTypeControllerDelegate> delegate) {
+  DCHECK(delegate);
+  delegate->ClearMetadataWhileStopped();
 }
 
 // Rurns some task on the destination task runner (backend sequence), first
@@ -108,6 +115,11 @@ void ProxyModelTypeControllerDelegate::RecordMemoryUsageAndCountsHistograms() {
   PostTask(
       FROM_HERE,
       base::BindOnce(&RecordMemoryUsageAndCountsHistogramsHelperOnModelThread));
+}
+
+void ProxyModelTypeControllerDelegate::ClearMetadataWhileStopped() {
+  PostTask(FROM_HERE,
+           base::BindOnce(&ClearMetadataWhileStoppedHelperOnModelThread));
 }
 
 void ProxyModelTypeControllerDelegate::PostTask(

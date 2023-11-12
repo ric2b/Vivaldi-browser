@@ -10,16 +10,17 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/media_controller.h"
-#include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/session/session_controller.h"
 #include "ash/public/cpp/system/toast_data.h"
 #include "ash/public/cpp/system/toast_manager.h"
 #include "ash/session/session_controller_impl.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "ash/strings/grit/ash_strings.h"
+#include "ash/system/privacy_hub/privacy_hub_notification_controller.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
@@ -262,16 +263,27 @@ std::string GetDeviceName(
 }
 
 // Small helper to make sure that `kCameraPrivacySwitchOnNotificationIdPrefix`
-// combined with `device_name` always produce the same identifier.
+// combined with `device_id` always produce the same identifier.
 std::string PrivacySwitchOnNotificationIdForDevice(
-    const std::string& device_name) {
-  return base::StrCat(
-      {kCameraPrivacySwitchOnNotificationIdPrefix, device_name});
+    const std::string& device_id) {
+  return base::StrCat({kCameraPrivacySwitchOnNotificationIdPrefix, device_id});
 }
 
 }  // namespace
 
-MediaClientImpl::MediaClientImpl() {
+MediaClientImpl::MediaClientImpl()
+    : notification_(
+          kCameraPrivacySwitchNotifierId,
+          IDS_CAMERA_PRIVACY_SWITCH_ON_NOTIFICATION_TITLE,
+          ash::PrivacyHubNotification::MessageIds{
+              IDS_CAMERA_PRIVACY_SWITCH_ON_NOTIFICATION_MESSAGE},
+          ash::PrivacyHubNotification::SensorSet{},
+          base::MakeRefCounted<ash::PrivacyHubNotificationClickDelegate>(
+              base::BindRepeating(
+                  ash::PrivacyHubNotificationController::OpenSupportUrl,
+                  ash::PrivacyHubNotificationController::Sensor::kCamera)),
+          ash::NotificationCatalogName::kCameraPrivacySwitch,
+          IDS_ASH_LEARN_MORE) {
   MediaCaptureDevicesDispatcher::GetInstance()->AddObserver(this);
   BrowserList::AddObserver(this);
 
@@ -301,6 +313,9 @@ MediaClientImpl::MediaClientImpl() {
     content::GetVideoCaptureService().ConnectToVideoSourceProvider(
         video_source_provider_remote_.BindNewPipeAndPassReceiver());
   }
+
+  notification_.builder().SetNotifierId(
+      notification_.builder().GetNotifierId());
 
   DCHECK(!g_media_client);
   g_media_client = this;
@@ -461,10 +476,10 @@ void MediaClientImpl::OnCameraSWPrivacySwitchStateChanged(
         weak_ptr_factory_.GetWeakPtr()));
   } else if (state == cros::mojom::CameraPrivacySwitchState::ON) {
     // The software switch is ON. Clear all hardware switch notifications.
-    for (const auto& notification_id : existing_notifications_) {
-      SystemNotificationHelper::GetInstance()->Close(notification_id);
+    for (auto it = devices_having_visible_notification_.begin();
+         it != devices_having_visible_notification_.end();) {
+      it = RemoveCameraOffNotificationForDevice(*it);
     }
-    existing_notifications_.clear();
   }
 }
 
@@ -525,8 +540,7 @@ void MediaClientImpl::OnCapabilityAccessUpdate(
   if (active_camera_client_count_ > 0) {
     ShowCameraOffNotification(device_id, device_name, /*resurface=*/false);
   } else {
-    RemoveCameraOffNotificationByID(
-        PrivacySwitchOnNotificationIdForDevice(device_name));
+    RemoveCameraOffNotificationForDevice(device_id);
   }
 }
 
@@ -674,8 +688,6 @@ void MediaClientImpl::ShowCameraOffNotification(const std::string& device_id,
   camera_switch_notification_shown_timestamp_ = base::TimeTicks::Now();
 
   const std::u16string device_name_u16 = base::UTF8ToUTF16(device_name);
-  const std::u16string message = l10n_util::GetStringFUTF16(
-      IDS_CAMERA_PRIVACY_SWITCH_ON_NOTIFICATION_MESSAGE, device_name_u16);
   // TODO(b/262380194) Show a message which includes the app name once we can
   // reliably determine which app is being used by what camera that has an
   // active privacy switch.
@@ -685,40 +697,31 @@ void MediaClientImpl::ShowCameraOffNotification(const std::string& device_id,
         app_name, std::make_pair(device_id, device_name));
   }
 
-  const std::string notification_id =
-      PrivacySwitchOnNotificationIdForDevice(device_name);
-
-  message_center::RichNotificationData rich_notification_data;
-  rich_notification_data.remove_on_click = true;
   if (resurface) {
-    RemoveCameraOffNotificationByID(notification_id);
-  } else {
-    rich_notification_data.priority =
-        message_center::NotificationPriority::LOW_PRIORITY;
+    RemoveCameraOffNotificationForDevice(device_id);
   }
 
-  message_center::Notification notification = ash::CreateSystemNotification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
-      l10n_util::GetStringFUTF16(
-          IDS_CAMERA_PRIVACY_SWITCH_ON_NOTIFICATION_TITLE, device_name_u16),
-      message, std::u16string(), GURL(),
-      message_center::NotifierId(
-          message_center::NotifierType::SYSTEM_COMPONENT,
-          kCameraPrivacySwitchNotifierId,
-          ash::NotificationCatalogName::kCameraPrivacySwitch),
-      rich_notification_data,
-      new message_center::HandleNotificationClickDelegate(
-          base::DoNothingAs<void()>()),
-      vector_icons::kSettingsIcon,
-      message_center::SystemNotificationWarningLevel::NORMAL);
-  SystemNotificationHelper::GetInstance()->Display(notification);
-  existing_notifications_.insert(notification_id);
+  SystemNotificationHelper::GetInstance()->Display(
+      notification_.builder()
+          .SetId(PrivacySwitchOnNotificationIdForDevice(device_id))
+          .SetTitleWithArgs(IDS_CAMERA_PRIVACY_SWITCH_ON_NOTIFICATION_TITLE,
+                            {device_name_u16})
+          .SetMessageWithArgs(IDS_CAMERA_PRIVACY_SWITCH_ON_NOTIFICATION_MESSAGE,
+                              {device_name_u16})
+          .Build());
+  devices_having_visible_notification_.insert(device_id);
 }
 
-void MediaClientImpl::RemoveCameraOffNotificationByID(
-    const std::string& notification_id) {
-  SystemNotificationHelper::GetInstance()->Close(notification_id);
-  existing_notifications_.erase(notification_id);
+base::flat_set<std::string>::iterator
+MediaClientImpl::RemoveCameraOffNotificationForDevice(
+    const std::string& device_id) {
+  auto it = devices_having_visible_notification_.find(device_id);
+  if (it != devices_having_visible_notification_.end()) {
+    SystemNotificationHelper::GetInstance()->Close(
+        PrivacySwitchOnNotificationIdForDevice(device_id));
+    return devices_having_visible_notification_.erase(it);
+  }
+  return it;
 }
 
 void MediaClientImpl::OnGetSourceInfosByCameraHWPrivacySwitchStateChanged(
@@ -808,8 +811,7 @@ void MediaClientImpl::OnGetSourceInfosByCameraHWPrivacySwitchStateChanged(
   }
 
   if (state == cros::mojom::CameraPrivacySwitchState::OFF) {
-    RemoveCameraOffNotificationByID(
-        PrivacySwitchOnNotificationIdForDevice(device_name));
+    RemoveCameraOffNotificationForDevice(device_id);
   }
 }
 
@@ -825,11 +827,20 @@ void MediaClientImpl::OnGetSourceInfosByActiveClientChanged(
       // As the device is being actively used by the client, display a
       // notification.
       ShowCameraOffNotification(device_id, device_name);
-    } else if (active_camera_client_count_ == 0) {
-      // Clear the notification for this device as no client is trying to use
-      // this camera anymore.
-      RemoveCameraOffNotificationByID(
-          PrivacySwitchOnNotificationIdForDevice(device_name));
+    } else if (!IsDeviceActive(device_id)) {
+      // No application is actively using this camera. Remove the notification
+      // for the device if exists.
+      RemoveCameraOffNotificationForDevice(device_id);
+    }
+  }
+
+  // Remove notifications for detached devices if any.
+  for (auto it = devices_having_visible_notification_.begin();
+       it != devices_having_visible_notification_.end();) {
+    if (IsDeviceActive(*it)) {
+      ++it;
+    } else {
+      it = RemoveCameraOffNotificationForDevice(*it);
     }
   }
 }

@@ -10,13 +10,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/cpu.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/rand_util.h"
 #include "base/strings/strcat.h"
@@ -24,10 +24,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -38,7 +40,6 @@
 #include "crypto/random.h"
 #include "media/audio/audio_input_device.h"
 #include "media/base/audio_capturer_source.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/cast/encoding/encoding_support.h"
 #include "media/cast/net/cast_transport.h"
 #include "media/cast/sender/audio_sender.h"
@@ -82,6 +83,10 @@ constexpr base::TimeDelta kOfferAnswerExchangeTimeout = base::Seconds(15);
 // Amount of time to wait before assuming the Cast Receiver does not support
 // querying for capabilities via GET_CAPABILITIES.
 constexpr base::TimeDelta kGetCapabilitiesTimeout = base::Seconds(30);
+
+// The maximum time that Session will wait for Remoter to start Remoting. If
+// timeout occurs, the session is terminated.
+constexpr base::TimeDelta kStartRemotePlaybackTimeOut = base::Seconds(5);
 
 // Used for OFFER/ANSWER message exchange. Some receivers will error out on
 // payloadType values other than the ones hard-coded here.
@@ -291,6 +296,21 @@ const std::string ToString(const media::VideoCaptureParams& params) {
       static_cast<int>(params.resolution_change_policy));
 }
 
+void RecordRemotePlaybackSessionLoadTime(
+    absl::optional<base::Time> start_time) {
+  if (!start_time) {
+    return;
+  }
+  base::TimeDelta time_delta = base::Time::Now() - start_time.value();
+  base::UmaHistogramTimes("MediaRouter.RemotePlayback.SessionLoadTime",
+                          time_delta);
+}
+
+void RecordRemotePlaybackSessionStartsBeforeTimeout(bool started) {
+  base::UmaHistogramBoolean(
+      "MediaRouter.RemotePlayback.SessionStartsBeforeTimeout", started);
+}
+
 }  // namespace
 
 class Session::AudioCapturingCallback final
@@ -360,10 +380,6 @@ Session::Session(
   mirror_settings_.SetResolutionConstraints(max_resolution.width(),
                                             max_resolution.height());
 
-  if (session_params_.refresh_interval) {
-    mirror_settings_.set_refresh_interval(*(session_params_.refresh_interval));
-  }
-
   resource_provider_->GetNetworkContext(
       network_context_.BindNewPipeAndPassReceiver());
 
@@ -415,7 +431,8 @@ Session::~Session() {
 }
 
 void Session::ReportError(SessionError error) {
-  UMA_HISTOGRAM_ENUMERATION("MediaRouter.MirroringService.SessionError", error);
+  base::UmaHistogramEnumeration("MediaRouter.MirroringService.SessionError",
+                                error);
   if (state_ == REMOTING) {
     media_remoter_->OnRemotingFailed();  // Try to fallback on mirroring.
     return;
@@ -438,6 +455,7 @@ void Session::LogErrorMessage(const std::string& message) {
     observer_->LogErrorMessage(message);
   }
 }
+
 void Session::StopStreaming() {
   DVLOG(2) << __func__ << " state=" << state_;
   if (!cast_environment_)
@@ -448,6 +466,7 @@ void Session::StopStreaming() {
     audio_input_device_ = nullptr;
   }
   audio_capturing_callback_.reset();
+  session_logger_.reset();
   audio_stream_.reset();
   video_stream_.reset();
   cast_transport_.reset();
@@ -705,6 +724,10 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
       std::make_unique<TransportClient>(this), std::move(udp_client),
       base::SingleThreadTaskRunner::GetCurrentDefault());
 
+  if (session_params_.enable_rtcp_reporting) {
+    session_logger_ = std::make_unique<SessionLogger>(cast_environment_);
+  }
+
   if (state_ == REMOTING) {
     DCHECK(media_remoter_);
     DCHECK(!audio_config ||
@@ -713,6 +736,11 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
            video_config->rtp_payload_type == RtpPayloadType::REMOTE_VIDEO);
     media_remoter_->StartRpcMessaging(cast_environment_, cast_transport_.get(),
                                       audio_config, video_config);
+    if (session_params_.is_remote_playback) {
+      RecordRemotePlaybackSessionLoadTime(remote_playback_start_time_);
+      RecordRemotePlaybackSessionStartsBeforeTimeout(true);
+      remote_playback_start_timer_.Stop();
+    }
   } else /* MIRRORING */ {
     if (has_audio) {
       auto audio_sender = std::make_unique<media::cast::AudioSender>(
@@ -727,7 +755,7 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
       // thread-hopped from the audio thread, and later thread-hopped again to
       // the encoding thread.
       audio_capturing_callback_ = std::make_unique<AudioCapturingCallback>(
-          media::BindToCurrentLoop(base::BindRepeating(
+          base::BindPostTaskToCurrentDefault(base::BindRepeating(
               &AudioRtpStream::InsertAudio, audio_stream_->AsWeakPtr())),
           base::BindOnce(&Session::ReportError, weak_factory_.GetWeakPtr(),
                          SessionError::AUDIO_CAPTURE_ERROR));
@@ -757,9 +785,15 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
                               weak_factory_.GetWeakPtr()),
           base::BindRepeating(&Session::ProcessFeedback,
                               weak_factory_.GetWeakPtr()));
+
       video_stream_ = std::make_unique<VideoRtpStream>(
           std::move(video_sender), weak_factory_.GetWeakPtr(),
           mirror_settings_.refresh_interval());
+      LogInfoMessage(base::StringPrintf(
+          "Created video stream with refresh interval of %d ms",
+          static_cast<int>(
+              mirror_settings_.refresh_interval().InMilliseconds())));
+
       if (!video_capture_client_) {
         mojo::PendingRemote<media::mojom::VideoCaptureHost> video_host;
         resource_provider_->GetVideoCaptureHost(
@@ -789,6 +823,12 @@ void Session::OnAnswer(const std::vector<FrameSenderConfig>& audio_configs,
   if (initially_starting_session) {
     if (session_params_.is_remote_playback) {
       InitMediaRemoter({});
+      video_capture_client_->Pause();
+      remote_playback_start_time_ = base::Time::Now();
+      remote_playback_start_timer_.Start(
+          FROM_HERE, kStartRemotePlaybackTimeOut,
+          base::BindOnce(&Session::OnRemotingStartTimeout,
+                         weak_factory_.GetWeakPtr()));
     } else if (ShouldQueryForRemotingCapabilities(
                    session_params_.receiver_model_name)) {
       QueryCapabilitiesForRemoting();
@@ -1080,6 +1120,14 @@ void Session::OnCapabilitiesResponse(const ReceiverResponse& response) {
   }
 
   InitMediaRemoter(response.capabilities().media_caps);
+}
+
+void Session::OnRemotingStartTimeout() {
+  if (state_ == REMOTING) {
+    return;
+  }
+  StopSession();
+  RecordRemotePlaybackSessionStartsBeforeTimeout(false);
 }
 
 }  // namespace mirroring

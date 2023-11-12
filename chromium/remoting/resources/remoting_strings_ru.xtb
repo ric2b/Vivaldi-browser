@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Обнаружена несовместимая версия протокола. Установите на оба компьютера последнюю версию ПО и повторите попытку.</translation>
 <translation id="1008557486741366299">Не сейчас</translation>
 <translation id="1201402288615127009">Далее</translation>
+<translation id="1296511125400541222">© The Chromium Authors, 2023. Все права защищены.</translation>
 <translation id="1297009705180977556">Не удалось подключиться к устройству "<ph name="HOSTNAME" />"</translation>
 <translation id="1450760146488584666">Запрошенный объект не существует.</translation>
 <translation id="1480046233931937785">Авторы</translation>
@@ -36,7 +37,6 @@
 <translation id="2599300881200251572">Данная служба обеспечивает входящие соединения от клиентов Удаленного рабочего стола Chrome.</translation>
 <translation id="2647232381348739934">Служба Пульта Chrome</translation>
 <translation id="2676780859508944670">В процессе...</translation>
-<translation id="2692522824157224199">© Google LLC, 2022. Все права защищены.</translation>
 <translation id="2699970397166997657">Пульт Chrome</translation>
 <translation id="2758123043070977469">Ошибка аутентификации. Войдите в аккаунт снова.</translation>
 <translation id="2803375539583399270">Введите PIN-код</translation>
@@ -73,7 +73,6 @@
 <translation id="4257751272692708833">Приложение сервиса "<ph name="PRODUCT_NAME" />" для переадресации URL</translation>
 <translation id="4277736576214464567">Код доступа недействителен. Повторите попытку.</translation>
 <translation id="4281844954008187215">Условия использования</translation>
-<translation id="4372650392690220936">© The Chromium Authors, 2022. Все права защищены.</translation>
 <translation id="4405930547258349619">Библиотека ядра</translation>
 <translation id="443560535555262820">Открыть настройки специальных возможностей</translation>
 <translation id="4450893287417543264">Больше не показывать</translation>
@@ -90,6 +89,7 @@
 <translation id="4808503597364150972">Введите PIN-код для хоста <ph name="HOSTNAME" />.</translation>
 <translation id="4812684235631257312">Хост</translation>
 <translation id="4867841927763172006">Послать PrtScn</translation>
+<translation id="4960795469833295568">© Google LLC, 2023. Все права защищены.</translation>
 <translation id="4974476491460646149">Подключение к устройству "<ph name="HOSTNAME" />" прервано</translation>
 <translation id="4985296110227979402">Сначала настройте удаленный доступ на компьютере.</translation>
 <translation id="4987330545941822761">Удаленному рабочему столу Chrome не удается найти браузер для открытия URL в локальном режиме. Выберите приложение в списке ниже.</translation>

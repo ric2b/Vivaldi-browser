@@ -9,11 +9,10 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -61,11 +60,6 @@ enum class CreationResult {
   kFailToCreateShortcut = 1,
   kMaxValue = kFailToCreateShortcut
 };
-
-WebAppShortcutManager::ShortcutCallback& GetShortcutUpdateCallbackForTesting() {
-  static base::NoDestructor<WebAppShortcutManager::ShortcutCallback> callback;
-  return *callback;
-}
 
 WebAppShortcutManager::UpdateShortcutsForAllAppsCallback&
 GetUpdateShortcutsForAllAppsCallback() {
@@ -167,11 +161,6 @@ void WebAppShortcutManager::GetAppExistingShortCutLocation(
 void WebAppShortcutManager::SetUpdateShortcutsForAllAppsCallback(
     UpdateShortcutsForAllAppsCallback callback) {
   GetUpdateShortcutsForAllAppsCallback() = std::move(callback);
-}
-
-void WebAppShortcutManager::SetShortcutUpdateCallbackForTesting(
-    base::OnceCallback<void(const ShortcutInfo*)> callback) {
-  GetShortcutUpdateCallbackForTesting() = std::move(callback);  // IN-TEST
 }
 
 bool WebAppShortcutManager::CanCreateShortcuts() const {
@@ -333,9 +322,6 @@ void WebAppShortcutManager::OnShortcutInfoRetrievedUpdateShortcuts(
     std::u16string old_name,
     ResultCallback update_finished_callback,
     std::unique_ptr<ShortcutInfo> shortcut_info) {
-  if (GetShortcutUpdateCallbackForTesting())
-    std::move(GetShortcutUpdateCallbackForTesting()).Run(shortcut_info.get());
-
   if (suppress_shortcuts_for_testing_ || !shortcut_info) {
     std::move(update_finished_callback).Run(Result::kOk);
     return;

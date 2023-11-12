@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/supports_user_data.h"
@@ -108,7 +108,7 @@ APIEventHandler::APIEventHandler(
     : listeners_changed_(listeners_changed),
       context_owner_id_getter_(context_owner_id_getter),
       exception_handler_(exception_handler) {}
-APIEventHandler::~APIEventHandler() {}
+APIEventHandler::~APIEventHandler() = default;
 
 void APIEventHandler::SetResponseValidator(
     std::unique_ptr<APIResponseValidator> validator) {

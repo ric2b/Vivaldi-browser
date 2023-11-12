@@ -8,21 +8,19 @@
 #include <string>
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_util.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/dm_auth.h"
-#include "components/policy/policy_export.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/google_api_keys.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
-#include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -117,7 +115,7 @@ const char
 base::Value
 ReportingJobConfigurationBase::BrowserDictionaryBuilder::BuildBrowserDictionary(
     bool include_device_info) {
-  base::Value browser_dictionary{base::Value::Type::DICTIONARY};
+  base::Value browser_dictionary{base::Value::Type::DICT};
 
   base::FilePath browser_id;
   if (base::PathService::Get(base::DIR_EXE, &browser_id)) {
@@ -175,6 +173,11 @@ std::string ReportingJobConfigurationBase::GetPayload() {
 
   std::string payload_string;
   base::JSONWriter::Write(payload_, &payload_string);
+
+  // Record UMA request payload size
+  base::UmaHistogramCounts1M("Browser.ERP.SingleRequestPayloadSize",
+                             payload_string.size());
+
   return payload_string;
 }
 
@@ -236,10 +239,11 @@ void ReportingJobConfigurationBase::OnURLLoadComplete(
       default:
         // Handle all unknown 5xx HTTP error codes as temporary and any other
         // unknown error as one that needs more time to recover.
-        if (response_code >= 500 && response_code <= 599)
+        if (response_code >= 500 && response_code <= 599) {
           status = DM_STATUS_TEMPORARY_UNAVAILABLE;
-        else
+        } else {
           status = DM_STATUS_HTTP_STATUS_ERROR;
+        }
         break;
     }
   }
@@ -272,32 +276,34 @@ GURL ReportingJobConfigurationBase::GetURL(int last_error) const {
 ReportingJobConfigurationBase::ReportingJobConfigurationBase(
     JobType type,
     scoped_refptr<network::SharedURLLoaderFactory> factory,
-    CloudPolicyClient* client,
+    DMAuth auth_data,
     const std::string& server_url,
-    bool include_device_info,
     UploadCompleteCallback callback)
     : JobConfigurationBase(type,
-                           DMAuth::FromDMToken(client->dm_token()),
+                           std::move(auth_data),
                            /*oauth_token=*/absl::nullopt,
                            factory),
       callback_(std::move(callback)),
-      server_url_(server_url) {
-  DCHECK(GetAuth().has_dm_token());
-  InitializePayload(client, include_device_info);
-}
+      server_url_(server_url) {}
 
 ReportingJobConfigurationBase::~ReportingJobConfigurationBase() = default;
 
+void ReportingJobConfigurationBase::InitializePayloadWithDeviceInfo(
+    const std::string& dm_token,
+    const std::string& client_id) {
+  payload_.Set(
+      DeviceDictionaryBuilder::kDeviceKey,
+      DeviceDictionaryBuilder::BuildDeviceDictionary(dm_token, client_id));
+  InitializePayload(/*include_device_info=*/true);
+}
+
+void ReportingJobConfigurationBase::InitializePayloadWithoutDeviceInfo() {
+  InitializePayload(/*include_device_info=*/false);
+}
+
 void ReportingJobConfigurationBase::InitializePayload(
-    CloudPolicyClient* client,
     bool include_device_info) {
   AddParameter("key", google_apis::GetAPIKey());
-
-  if (include_device_info) {
-    payload_.Set(DeviceDictionaryBuilder::kDeviceKey,
-                 DeviceDictionaryBuilder::BuildDeviceDictionary(
-                     client->dm_token(), client->client_id()));
-  }
   payload_.Set(
       BrowserDictionaryBuilder::kBrowserKey,
       BrowserDictionaryBuilder::BuildBrowserDictionary(include_device_info));

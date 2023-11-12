@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -11,6 +11,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "components/feed/core/common/pref_names.h"
+#include "components/feed/core/proto/v2/wire/feed_entry_point_source.pb.h"
 #include "components/feed/core/proto/v2/wire/feed_query.pb.h"
 #include "components/feed/core/proto/v2/wire/info_card.pb.h"
 #include "components/feed/core/shared_prefs/pref_names.h"
@@ -29,6 +30,7 @@
 #include "components/feed/core/v2/test/callback_receiver.h"
 #include "components/feed/core/v2/test/stream_builder.h"
 #include "components/feed/feed_feature_list.h"
+#include "feed_api_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -1095,19 +1097,6 @@ TEST_F(FeedApiTest, ShouldMakeFeedQueryRequestConsumesQuota) {
   }
 
   ASSERT_EQ(LoadStreamStatus::kCannotLoadFromNetworkThrottled, status);
-}
-
-TEST_F(FeedApiTest, SingleWebFeedShouldIgnoreQuota) {
-  LoadStreamStatus status = LoadStreamStatus::kNoStatus;
-  for (int i = 0; i < 50; i++) {
-    status =
-        stream_
-            ->ShouldMakeFeedQueryRequest(StreamType(StreamKind::kSingleWebFeed),
-                                         LoadType::kInitialLoad)
-            .load_stream_status;
-  }
-
-  ASSERT_EQ(LoadStreamStatus::kNoStatus, status);
 }
 
 TEST_F(FeedApiTest, LoadStreamFromStore) {
@@ -2670,6 +2659,20 @@ TEST_F(FeedApiTest, CreateAndCommitEphemeralChange) {
             surface.DescribeUpdates());
 }
 
+TEST_F(FeedApiTest, CreateAndCommitEphemeralChangeOnNoOperation) {
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestForYouSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+
+  EphemeralChangeId change_id =
+      stream_->CreateEphemeralChange(surface.GetStreamType(), {});
+  stream_->CommitEphemeralChange(surface.GetStreamType(), change_id);
+  WaitForIdleTaskQueue();
+
+  ASSERT_EQ("loading -> [user@foo] 2 slices -> 2 slices -> 2 slices",
+            surface.DescribeUpdates());
+}
+
 TEST_F(FeedApiTest, RejectEphemeralChange) {
   response_translator_.InjectResponse(MakeTypicalInitialModelState());
   TestForYouSurface surface(stream_.get());
@@ -2902,6 +2905,22 @@ TEST_F(FeedApiTest, ReportUserSettingsFromMetadataWaaOffDpOn) {
   CreateStream();
   histograms.ExpectUniqueSample("ContentSuggestions.Feed.UserSettingsOnStart",
                                 UserSettingsOnStart::kSignedInWaaOffDpOn, 1);
+}
+
+TEST_F(FeedStreamTestForAllStreamTypes, ManualRefreshWithoutSurfaceIsAborted) {
+  response_translator_.InjectResponse(MakeTypicalInitialModelState());
+  TestForYouSurface surface(stream_.get());
+  WaitForIdleTaskQueue();
+  surface.Detach();
+  WaitForIdleTaskQueue();
+  surface.Clear();
+
+  CallbackReceiver<bool> callback;
+  stream_->ManualRefresh(surface.GetStreamType(), callback.Bind());
+  WaitForIdleTaskQueue();
+  // Refresh fails, and surface is not updated.
+  EXPECT_EQ(absl::optional<bool>(false), callback.GetResult());
+  EXPECT_EQ("", surface.DescribeUpdates());
 }
 
 TEST_F(FeedStreamTestForAllStreamTypes, ManualRefreshInterestFeedSuccess) {
@@ -3451,7 +3470,10 @@ TEST_F(FeedApiTest, InfoCardTrackingActions) {
   // Chrome restart. This is used to test that info card tracking states are
   // sent in the initial page load when stream model is not loaded yet.
   response_translator_.InjectResponse(MakeTypicalRefreshModelState());
+  surface.Detach();
   CreateStream();
+  surface.Attach(stream_.get());
+  WaitForIdleTaskQueue();
   stream_->ManualRefresh(StreamType(StreamKind::kForYou), base::DoNothing());
   WaitForIdleTaskQueue();
 
@@ -3898,36 +3920,6 @@ TEST_F(FeedApiTest, FeedCloseRefresh_RequestType) {
             network_.query_request_sent->feed_request().feed_query().reason());
   EXPECT_TRUE(response_translator_.InjectedResponseConsumed());
 }
-TEST_F(FeedApiTest, SingleWebFeed_AttachMultiple) {
-  response_translator_.InjectResponse(MakeTypicalInitialModelState());
-  response_translator_.InjectResponse(MakeTypicalInitialModelState());
-
-  StreamType stream_type_A(StreamKind::kSingleWebFeed, "A");
-  StreamType stream_type_B(StreamKind::kSingleWebFeed, "B");
-
-  TestSingleWebFeedSurface single_web_feed_surface_a(stream_.get(), "A");
-  TestSingleWebFeedSurface single_web_feed_surface_b(stream_.get(), "B");
-
-  WaitForIdleTaskQueue();
-
-  ASSERT_EQ("loading -> [user@foo] 2 slices",
-            single_web_feed_surface_a.DescribeUpdates());
-  ASSERT_EQ("loading -> [user@foo] 2 slices",
-            single_web_feed_surface_b.DescribeUpdates());
-
-  ASSERT_EQ(stream_->GetModel(stream_type_A)->DumpStateForTesting(),
-            ModelStateFor(stream_type_A, store_.get()));
-  ASSERT_EQ(stream_->GetModel(stream_type_B)->DumpStateForTesting(),
-            ModelStateFor(stream_type_B, store_.get()));
-
-  single_web_feed_surface_b.Detach();
-
-  WaitForModelToAutoUnload();
-  WaitForIdleTaskQueue();
-
-  EXPECT_TRUE(stream_->GetModel(stream_type_A));
-  EXPECT_FALSE(stream_->GetModel(stream_type_B));
-}
 
 TEST_F(FeedApiTest, CheckDuplicatedContents) {
   Config config;
@@ -4071,81 +4063,37 @@ TEST_F(FeedApiTest, CheckDuplicatedContents) {
   }
 }
 
-TEST_F(FeedApiTest, SingleWebFeed_DelayedDeletion) {
-  response_translator_.InjectResponse(MakeTypicalInitialModelState());
-  StreamType stream_type(StreamKind::kSingleWebFeed, "A");
+TEST_F(FeedApiTest, GetRequestMetadataForSignedOutUser) {
+  TestForYouSurface surface(stream_.get());
+  account_info_ = {};
+  is_sync_on_ = false;
 
-  TestSingleWebFeedSurface single_web_feed_surface(stream_.get(), "A");
+  RequestMetadata metadata =
+      stream_->GetRequestMetadata(StreamType(StreamKind::kForYou), false);
 
-  WaitForIdleTaskQueue();
-
-  ASSERT_EQ("loading -> [user@foo] 2 slices",
-            single_web_feed_surface.DescribeUpdates());
-
-  ASSERT_EQ(stream_->GetModel(stream_type)->DumpStateForTesting(),
-            ModelStateFor(stream_type, store_.get()));
-
-  single_web_feed_surface.Detach();
-
-  WaitForModelToAutoUnload();
-  EXPECT_TRUE(stream_->GetStreamPresentForTest(stream_type));
-  task_environment_.FastForwardBy(base::Seconds(70));
-  WaitForIdleTaskQueue();
-
-  EXPECT_FALSE(stream_->GetModel(stream_type));
-  EXPECT_FALSE(stream_->GetStreamPresentForTest(stream_type));
-
-  ASSERT_EQ("{Failed to load model from store}",
-            ModelStateFor(stream_type, store_.get()));
-
-  EXPECT_FALSE(stream_->GetStreamPresentForTest(stream_type));
+  ASSERT_EQ(metadata.sign_in_status,
+            feedwire::ChromeSignInStatus::NOT_SIGNED_IN);
 }
 
-TEST_F(FeedApiTest, SingleWebFeed_DataRemovedOnStartup) {
-  response_translator_.InjectResponse(MakeTypicalInitialModelState());
-  StreamType stream_type(StreamKind::kSingleWebFeed, "A");
+TEST_F(FeedApiTest, GetRequestMetadataForSignedInButNotSyncedUser) {
+  TestForYouSurface surface(stream_.get());
+  is_sync_on_ = false;
 
-  TestSingleWebFeedSurface single_web_feed_feed_surface(stream_.get(), "A");
-  WaitForIdleTaskQueue();
+  RequestMetadata metadata =
+      stream_->GetRequestMetadata(StreamType(StreamKind::kForYou), false);
 
-  ASSERT_NE("{Failed to load model from store}",
-            ModelStateFor(stream_type, store_.get()));
-  // Creating a stream should init database.
-  CreateStream();
-  WaitForIdleTaskQueue();
-
-  ASSERT_EQ("{Failed to load model from store}",
-            ModelStateFor(stream_type, store_.get()));
+  ASSERT_EQ(metadata.sign_in_status,
+            feedwire::ChromeSignInStatus::SIGNED_IN_WITHOUT_SYNC);
 }
 
-TEST_F(FeedApiTest, SingleWebFeed_ReattachedSingleWebStreamFetches) {
-  response_translator_.InjectResponse(MakeTypicalInitialModelState());
-  StreamType stream_type(StreamKind::kSingleWebFeed, "A");
+TEST_F(FeedApiTest, GetRequestMetadataForSyncedUser) {
+  TestForYouSurface surface(stream_.get());
+  is_sync_on_ = true;
 
-  EXPECT_EQ(0, prefetch_image_call_count_);
+  RequestMetadata metadata =
+      stream_->GetRequestMetadata(StreamType(StreamKind::kForYou), false);
 
-  TestSingleWebFeedSurface single_web_feed_feed_surface(stream_.get(), "A");
-  WaitForIdleTaskQueue();
-
-  ASSERT_EQ(stream_->GetModel(stream_type)->DumpStateForTesting(),
-            ModelStateFor(stream_type, store_.get()));
-
-  EXPECT_EQ("loading -> [user@foo] 2 slices",
-            single_web_feed_feed_surface.DescribeUpdates());
-  single_web_feed_feed_surface.Detach();
-
-  WaitForModelToAutoUnload();
-  WaitForIdleTaskQueue();
-
-  EXPECT_FALSE(stream_->GetModel(stream_type));
-
-  task_environment_.FastForwardBy(base::Seconds(40));
-
-  single_web_feed_feed_surface.Attach(stream_.get());
-  WaitForIdleTaskQueue();
-  // verify no new fetches were required to populate reattach.
-  EXPECT_EQ("loading -> 2 slices",
-            single_web_feed_feed_surface.DescribeUpdates());
+  ASSERT_EQ(metadata.sign_in_status, feedwire::ChromeSignInStatus::SYNCED);
 }
 
 // Keep instantiations at the bottom.

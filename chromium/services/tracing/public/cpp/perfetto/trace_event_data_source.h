@@ -18,6 +18,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
 #include "base/sequence_checker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/thread_annotations.h"
 #include "base/threading/thread_local.h"
 #include "base/time/time.h"
@@ -30,14 +31,10 @@
 #include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_metadata.pbzero.h"
 #include "third_party/perfetto/protos/perfetto/trace/chrome/chrome_trace_event.pbzero.h"
 
-namespace base {
-
-namespace trace_event {
+namespace base::trace_event {
 class TraceEvent;
 struct TraceEventHandle;
-}  // namespace trace_event
-
-}  // namespace base
+}  // namespace base::trace_event
 
 namespace perfetto {
 class TraceWriter;
@@ -58,7 +55,7 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
   TraceEventMetadataSource& operator=(const TraceEventMetadataSource&) = delete;
 
   using JsonMetadataGeneratorFunction =
-      base::RepeatingCallback<absl::optional<base::Value>()>;
+      base::RepeatingCallback<absl::optional<base::Value::Dict>()>;
 
   using MetadataGeneratorFunction = base::RepeatingCallback<void(
       perfetto::protos::pbzero::ChromeMetadataPacket*,
@@ -115,7 +112,7 @@ class COMPONENT_EXPORT(TRACING_CPP) TraceEventMetadataSource
 
   void WriteMetadataPacket(perfetto::protos::pbzero::ChromeMetadataPacket*,
                            bool privacy_filtering_enabled);
-  absl::optional<base::Value> GenerateTraceConfigMetadataDict();
+  absl::optional<base::Value::Dict> GenerateTraceConfigMetadataDict();
 
   // All members are protected by |lock_|.
   // TODO(crbug.com/1138893): Change annotations to GUARDED_BY

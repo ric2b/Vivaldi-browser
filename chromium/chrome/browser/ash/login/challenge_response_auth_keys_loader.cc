@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/scoped_observation.h"
 #include "base/time/time.h"
@@ -57,8 +57,9 @@ base::flat_set<std::string> GetLoginScreenPolicyExtensionIds() {
   const PrefService::Preference* const pref =
       prefs->FindPreference(extensions::pref_names::kInstallForceList);
   if (!pref || !pref->IsManaged() ||
-      pref->GetType() != base::Value::Type::DICTIONARY)
+      pref->GetType() != base::Value::Type::DICT) {
     return {};
+  }
 
   base::flat_set<std::string> extension_ids;
   for (const auto item : pref->GetValue()->DictItems())
@@ -84,7 +85,7 @@ void LoadStoredChallengeResponseSpkiKeysForUser(
     const AccountId& account_id,
     std::vector<std::string>* spki_items,
     base::flat_set<std::string>* extension_ids) {
-  const base::Value known_user_value =
+  const base::Value::List known_user_value =
       user_manager::KnownUser(g_browser_process->local_state())
           .GetChallengeResponseKeys(account_id);
   std::vector<DeserializedChallengeResponseKey>

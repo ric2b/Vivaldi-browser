@@ -19,6 +19,7 @@ enum AxMode {
   HTML_METADATA = 1 << 5,
   LABEL_IMAGES = 1 << 6,
   PDF = 1 << 7,
+  PDF_OCR = 1 << 8,
 }
 
 interface Data {
@@ -37,7 +38,7 @@ type PageData = Data&{
   pid: number,
   processId: number,
   routingId: number,
-  url: string,
+  url?: string,
 
   // Used for GlobalStateName.
   // Note: Does 'metadata' actually exist? Does not appear anywhere in
@@ -453,6 +454,8 @@ function getNameForAccessibilityMode(mode: AxMode) {
       return 'Label images';
     case AxMode.PDF:
       return 'PDF';
+    case AxMode.PDF_OCR:
+      return 'PDF OCR';
   }
   return 'unknown';
 }

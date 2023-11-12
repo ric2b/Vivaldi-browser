@@ -38,24 +38,30 @@ void GaiaPasswordChangedScreenHandler::DeclareLocalizedValues(
   builder->Add("passwordChangedTryAgain", IDS_LOGIN_PASSWORD_CHANGED_TRY_AGAIN);
   builder->Add("dataLossWarningTitle",
                IDS_LOGIN_PASSWORD_CHANGED_DATA_LOSS_WARNING_TITLE);
-  builder->Add("dataLossWarningSubtitleP1",
-               IDS_LOGIN_PASSWORD_CHANGED_DATA_LOSS_WARNING_SUBTITLE_P1);
-  builder->Add("dataLossWarningSubtitleP2",
-               IDS_LOGIN_PASSWORD_CHANGED_DATA_LOSS_WARNING_SUBTITLE_P2);
+  builder->Add("dataLossWarningSubtitle",
+               IDS_LOGIN_PASSWORD_CHANGED_DATA_LOSS_WARNING_SUBTITLE);
   builder->Add("recoverLocalDataTitle",
                IDS_LOGIN_PASSWORD_CHANGED_RECOVER_DATA_TITLE);
   builder->Add("recoverLocalDataSubtitle",
                IDS_LOGIN_PASSWORD_CHANGED_RECOVER_DATA_SUBTITLE);
   builder->Add("continueAndDeleteDataButton",
                IDS_LOGIN_PASSWORD_CHANGED_CONTINUE_AND_DELETE_BUTTON);
-  builder->Add("continueWithoutLocalDataButton",
-               IDS_LOGIN_PASSWORD_CHANGED_CONTINUE_WITHOUT_LOCAL_DATA_BUTTON);
+  builder->Add("forgotOldPasswordButton",
+               IDS_LOGIN_PASSWORD_CHANGED_FORGOT_OLD_PASSWORD_BUTTON);
+
+  builder->Add("recoveryOptInTitle", IDS_LOGIN_PASSWORD_CHANGED_RECOVERY_TITLE);
+  builder->Add("recoveryOptInSubtitle",
+               IDS_LOGIN_PASSWORD_CHANGED_RECOVERY_SUBTITLE);
+  builder->Add("recoveryOptInNoButton",
+               IDS_LOGIN_PASSWORD_CHANGED_RECOVERY_NO_BUTTON);
+  builder->Add("recoveryOptInEnableButton",
+               IDS_LOGIN_PASSWORD_CHANGED_RECOVERY_ENABLE_BUTTON);
 }
 
 void GaiaPasswordChangedScreenHandler::GetAdditionalParameters(
     base::Value::Dict* dict) {
   dict->Set("isCryptohomeRecoveryUIFlowEnabled",
-            features::IsCryptohomeRecoveryFlowUIEnabled());
+            features::IsCryptohomeRecoveryEnabled());
   BaseScreenHandler::GetAdditionalParameters(dict);
 }
 
@@ -65,6 +71,21 @@ void GaiaPasswordChangedScreenHandler::Show(const std::string& email,
   data.Set("email", email);
   data.Set("showError", has_error);
   ShowInWebUI(std::move(data));
+}
+
+void GaiaPasswordChangedScreenHandler::Show(const std::string& email) {
+  base::Value::Dict data;
+  data.Set("email", email);
+  data.Set("showError", false);
+  ShowInWebUI(std::move(data));
+}
+
+void GaiaPasswordChangedScreenHandler::ShowWrongPasswordError() {
+  CallExternalAPI("showWrongPasswordError");
+}
+
+void GaiaPasswordChangedScreenHandler::SuggestRecovery() {
+  CallExternalAPI("suggestRecovery");
 }
 
 }  // namespace ash

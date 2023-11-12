@@ -12,17 +12,19 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/direct_from_seller_signals_requester.h"
+#include "content/services/auction_worklet/public/mojom/auction_shared_storage_host.mojom.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom-forward.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
 #include "content/services/auction_worklet/public/mojom/private_aggregation_request.mojom.h"
@@ -61,14 +63,18 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
       std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>;
 
   // Starts loading the worklet script on construction.
-  SellerWorklet(scoped_refptr<AuctionV8Helper> v8_helper,
-                bool pause_for_debugger_on_start,
-                mojo::PendingRemote<network::mojom::URLLoaderFactory>
-                    pending_url_loader_factory,
-                const GURL& decision_logic_url,
-                const absl::optional<GURL>& trusted_scoring_signals_url,
-                const url::Origin& top_window_origin,
-                absl::optional<uint16_t> experiment_group_id);
+  SellerWorklet(
+      scoped_refptr<AuctionV8Helper> v8_helper,
+      mojo::PendingRemote<mojom::AuctionSharedStorageHost>
+          shared_storage_host_remote,
+      bool pause_for_debugger_on_start,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>
+          pending_url_loader_factory,
+      const GURL& decision_logic_url,
+      const absl::optional<GURL>& trusted_scoring_signals_url,
+      const url::Origin& top_window_origin,
+      mojom::AuctionWorkletPermissionsPolicyStatePtr permissions_policy_state,
+      absl::optional<uint16_t> experiment_group_id);
 
   explicit SellerWorklet(const SellerWorklet&) = delete;
   SellerWorklet& operator=(const SellerWorklet&) = delete;
@@ -152,6 +158,13 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     absl::optional<base::TimeDelta> seller_timeout;
     uint64_t trace_id;
 
+    // Time where tracing for wait_score_ad_deps began.
+    base::TimeTicks trace_wait_deps_start;
+    // How long various inputs were waited for.
+    base::TimeDelta wait_code;
+    base::TimeDelta wait_trusted_signals;
+    base::TimeDelta wait_direct_from_seller_signals;
+
     mojo::Remote<auction_worklet::mojom::ScoreAdClient> score_ad_client;
 
     std::unique_ptr<TrustedSignalsRequestManager::Request>
@@ -199,6 +212,12 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     absl::optional<uint32_t> scoring_signals_data_version;
     uint64_t trace_id;
 
+    // Time where tracing for wait_report_result_deps began.
+    base::TimeTicks trace_wait_deps_start;
+    // How long various inputs were waited for.
+    base::TimeDelta wait_code;
+    base::TimeDelta wait_direct_from_seller_signals;
+
     // Set while loading is in progress.
     std::unique_ptr<DirectFromSellerSignalsRequester::Request>
         direct_from_seller_request_seller_signals;
@@ -242,13 +261,17 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
                                 PrivateAggregationRequests pa_requests,
                                 std::vector<std::string> errors)>;
 
-    V8State(scoped_refptr<AuctionV8Helper> v8_helper,
-            scoped_refptr<AuctionV8Helper::DebugId> debug_id,
-            const GURL& decision_logic_url,
-            const absl::optional<GURL>& trusted_scoring_signals_url,
-            const url::Origin& top_window_origin,
-            absl::optional<uint16_t> experiment_group_id,
-            base::WeakPtr<SellerWorklet> parent);
+    V8State(
+        scoped_refptr<AuctionV8Helper> v8_helper,
+        scoped_refptr<AuctionV8Helper::DebugId> debug_id,
+        mojo::PendingRemote<mojom::AuctionSharedStorageHost>
+            shared_storage_host_remote,
+        const GURL& decision_logic_url,
+        const absl::optional<GURL>& trusted_scoring_signals_url,
+        const url::Origin& top_window_origin,
+        mojom::AuctionWorkletPermissionsPolicyStatePtr permissions_policy_state,
+        absl::optional<uint16_t> experiment_group_id,
+        base::WeakPtr<SellerWorklet> parent);
 
     void SetWorkletScript(WorkletLoader::Result worklet_script);
 
@@ -298,7 +321,8 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     friend class base::DeleteHelper<V8State>;
     ~V8State();
 
-    void FinishInit();
+    void FinishInit(mojo::PendingRemote<mojom::AuctionSharedStorageHost>
+                        shared_storage_host_remote);
 
     // Calls `PostScoreAdCallbackToUserThread`, passing in a 0 score and null
     // for all other values. Used on errors, which cause us to drop win/loss
@@ -344,7 +368,10 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
     const GURL decision_logic_url_;
     const absl::optional<GURL> trusted_scoring_signals_url_;
     const url::Origin top_window_origin_;
+    mojom::AuctionWorkletPermissionsPolicyStatePtr permissions_policy_state_;
     const absl::optional<uint16_t> experiment_group_id_;
+
+    mojo::Remote<mojom::AuctionSharedStorageHost> shared_storage_host_remote_;
 
     SEQUENCE_CHECKER(v8_sequence_checker_);
   };
@@ -354,6 +381,7 @@ class CONTENT_EXPORT SellerWorklet : public mojom::SellerWorklet {
 
   void OnDownloadComplete(WorkletLoader::Result worklet_script,
                           absl::optional<std::string> error_msg);
+  void MaybeRecordCodeWait();
 
   // Called when trusted scoring signals have finished downloading, or when
   // there are no scoring signals to download. Starts running scoreAd() on the

@@ -15,6 +15,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_bound.h"
@@ -102,7 +103,7 @@ scoped_refptr<base::SequencedTaskRunner> GetPrintingTaskRunner() {
   return task_runner;
 }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
 void OnDidAskUserForSettings(
     std::unique_ptr<PrintingContext> context,
     mojom::PrintBackendService::AskUserForSettingsCallback callback,
@@ -115,7 +116,7 @@ void OnDidAskUserForSettings(
   std::move(callback).Run(mojom::PrintSettingsResult::NewSettings(
       *context->TakeAndResetSettings()));
 }
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
 
 std::unique_ptr<Metafile> CreateMetafile(mojom::MetafileDataType data_type) {
   switch (data_type) {
@@ -424,7 +425,7 @@ PrintBackendServiceImpl::PrintingContextDelegate::~PrintingContextDelegate() =
 
 gfx::NativeView
 PrintBackendServiceImpl::PrintingContextDelegate::GetParentView() {
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
   return parent_native_view_;
 #else
   NOTREACHED();
@@ -436,11 +437,15 @@ std::string PrintBackendServiceImpl::PrintingContextDelegate::GetAppLocale() {
   return locale_;
 }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
 void PrintBackendServiceImpl::PrintingContextDelegate::SetParentWindow(
     uint32_t parent_window_id) {
+#if BUILDFLAG(IS_WIN)
   parent_native_view_ = reinterpret_cast<gfx::NativeView>(
       base::win::Uint32ToHandle(parent_window_id));
+#else
+  NOTREACHED();
+#endif
 }
 #endif
 
@@ -561,24 +566,6 @@ void PrintBackendServiceImpl::FetchCapabilities(
   crash_keys_ = std::make_unique<crash_keys::ScopedPrinterInfo>(
       print_backend_->GetPrinterDriverInfo(printer_name));
 
-  PrinterSemanticCapsAndDefaults::Papers user_defined_papers;
-#if BUILDFLAG(IS_MAC)
-  {
-    // Blocking is needed here for when macOS reads paper sizes from file.
-    //
-    // Fetching capabilities in the browser process happens from the thread
-    // pool with the MayBlock() trait for macOS.  However this call can also
-    // run from a utility process's main thread where blocking is not
-    // implicitly allowed.  In order to preserve ordering, the utility process
-    // must process this synchronously by blocking.
-    //
-    // TODO(crbug.com/1163635):  Investigate whether utility process main
-    // thread should be allowed to block like in-process workers are.
-    base::ScopedAllowBlocking allow_blocking;
-    user_defined_papers = GetMacCustomPaperSizes();
-  }
-#endif
-
   PrinterBasicInfo printer_info;
   mojom::ResultCode result =
       print_backend_->GetPrinterBasicInfo(printer_name, &printer_info);
@@ -587,6 +574,7 @@ void PrintBackendServiceImpl::FetchCapabilities(
         mojom::PrinterCapsAndInfoResult::NewResultCode(result));
     return;
   }
+
   PrinterSemanticCapsAndDefaults caps;
   result =
       print_backend_->GetPrinterSemanticCapsAndDefaults(printer_name, &caps);
@@ -595,6 +583,7 @@ void PrintBackendServiceImpl::FetchCapabilities(
         mojom::PrinterCapsAndInfoResult::NewResultCode(result));
     return;
   }
+
 #if BUILDFLAG(IS_WIN)
   if (xml_parser_remote_.is_bound() &&
       base::FeatureList::IsEnabled(features::kReadPrinterCapabilitiesWithXps)) {
@@ -609,8 +598,26 @@ void PrintBackendServiceImpl::FetchCapabilities(
     MergeXpsCapabilities(std::move(xps_capabilities.value()), caps);
   }
 #endif  // BUILDFLAG(IS_WIN)
-  mojom::PrinterCapsAndInfoPtr caps_and_info = mojom::PrinterCapsAndInfo::New(
-      std::move(printer_info), std::move(user_defined_papers), std::move(caps));
+
+#if BUILDFLAG(IS_MAC)
+  {
+    // Blocking is needed here for when macOS reads paper sizes from file.
+    //
+    // Fetching capabilities in the browser process happens from the thread
+    // pool with the MayBlock() trait for macOS.  However this call can also
+    // run from a utility process's main thread where blocking is not
+    // implicitly allowed.  In order to preserve ordering, the utility process
+    // must process this synchronously by blocking.
+    //
+    // TODO(crbug.com/1163635):  Investigate whether utility process main
+    // thread should be allowed to block like in-process workers are.
+    base::ScopedAllowBlocking allow_blocking;
+    caps.user_defined_papers = GetMacCustomPaperSizes();
+  }
+#endif
+
+  mojom::PrinterCapsAndInfoPtr caps_and_info =
+      mojom::PrinterCapsAndInfo::New(std::move(printer_info), std::move(caps));
   std::move(callback).Run(
       mojom::PrinterCapsAndInfoResult::NewPrinterCapsAndInfo(
           std::move(caps_and_info)));
@@ -632,7 +639,7 @@ void PrintBackendServiceImpl::UseDefaultSettings(
       *context->TakeAndResetSettings()));
 }
 
-#if BUILDFLAG(IS_WIN)
+#if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
 void PrintBackendServiceImpl::AskUserForSettings(
     uint32_t parent_window_id,
     int max_pages,
@@ -659,7 +666,7 @@ void PrintBackendServiceImpl::AskUserForSettings(
       base::BindOnce(&OnDidAskUserForSettings, std::move(context),
                      std::move(callback)));
 }
-#endif  // BUILDFLAG(IS_WIN)
+#endif  // BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
 
 void PrintBackendServiceImpl::UpdatePrintSettings(
     base::Value::Dict job_settings,

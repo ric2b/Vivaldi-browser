@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -43,6 +43,7 @@ enum PrinterSetupResult {
   kIoError = 14,                // I/O error in CUPS
   kMemoryAllocationError = 15,  // Memory allocation error in Cups
   kBadUri = 16,                 // Printer's URI is incorrect
+  kManualSetupRequired = 17,    // Printer requires manual setup
   // Space left for additional errors
 
   // Specific DBus errors. This must stay in sync with the DbusLibraryError

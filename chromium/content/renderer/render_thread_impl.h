@@ -40,6 +40,7 @@
 #include "content/common/shared_storage_worklet_service.mojom.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/discardable_memory_utils.h"
+#include "content/renderer/media/codec_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/media_buildflags.h"
@@ -385,6 +386,11 @@ class CONTENT_EXPORT RenderThreadImpl
     run_loop_start_time_ = run_loop_start_time;
   }
 
+#if BUILDFLAG(IS_ANDROID)
+  // Provide private memory footprint for browser process.
+  void SetPrivateMemoryFootprint(uint64_t private_memory_footprint_bytes);
+#endif
+
  private:
   friend class RenderThreadImplBrowserTest;
   friend class AgentSchedulingGroup;
@@ -466,6 +472,11 @@ class CONTENT_EXPORT RenderThreadImpl
 
   void OnRendererInterfaceReceiver(
       mojo::PendingAssociatedReceiver<mojom::Renderer> receiver);
+
+  std::unique_ptr<CodecFactory> CreateMediaCodecFactory(
+      scoped_refptr<viz::ContextProviderCommandBuffer> context_provider,
+      bool enable_video_decode_accelerator,
+      bool enable_video_encode_accelerator);
 
   scoped_refptr<discardable_memory::ClientDiscardableSharedMemoryManager>
       discardable_memory_allocator_;

@@ -11,9 +11,9 @@
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -211,7 +211,7 @@ gpu::ContextResult InProcessCommandBuffer::Initialize(
         task_executor_->gpu_preferences(),
         context_group_->feature_info()->workarounds(),
         task_executor_->gpu_feature_info(), context_state_.get(),
-        task_executor_->shared_image_manager(), /*image_factory=*/nullptr,
+        task_executor_->shared_image_manager(),
         /*is_for_display_compositor=*/false);
   }
 
@@ -247,7 +247,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       task_executor_->mailbox_manager(), std::move(memory_tracker),
       task_executor_->shader_translator_cache(),
       task_executor_->framebuffer_completeness_cache(), feature_info,
-      params.attribs.bind_generates_resource, nullptr /* progress_reporter */,
+      params.attribs->bind_generates_resource, nullptr /* progress_reporter */,
       task_executor_->gpu_feature_info(), task_executor_->discardable_manager(),
       task_executor_->passthrough_discardable_manager(),
       task_executor_->shared_image_manager());
@@ -256,7 +256,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
   // Virtualize GpuPreference:::kLowPower contexts by default on OS X to prevent
   // performance regressions when enabling FCM. https://crbug.com/180463
   use_virtualized_gl_context_ |=
-      (params.attribs.gpu_preference == gl::GpuPreference::kLowPower);
+      (params.attribs->gpu_preference == gl::GpuPreference::kLowPower);
 #endif
 
   use_virtualized_gl_context_ |= task_executor_->ForceVirtualizedGLContexts();
@@ -304,7 +304,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
     gl_share_group_ = task_executor_->GetShareGroup();
   }
 
-  if (params.attribs.context_type == CONTEXT_TYPE_WEBGPU) {
+  if (params.attribs->context_type == CONTEXT_TYPE_WEBGPU) {
     if (!task_executor_->gpu_preferences().enable_webgpu) {
       DLOG(ERROR) << "ContextResult::kFatalFailure: WebGPU not enabled";
       return gpu::ContextResult::kFatalFailure;
@@ -323,8 +323,8 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
     }
     decoder_ = std::move(webgpu_decoder);
   } else {
-    if (params.attribs.enable_raster_interface &&
-        !params.attribs.enable_gles2_interface) {
+    if (params.attribs->enable_raster_interface &&
+        !params.attribs->enable_gles2_interface) {
       // RasterDecoder uses the shared context.
       use_virtualized_gl_context_ = false;
 
@@ -364,7 +364,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
       if (!real_context) {
         real_context = gl::init::CreateGLContext(
             gl_share_group_.get(), surface_.get(),
-            GenerateGLContextAttribs(params.attribs, context_group_.get()));
+            GenerateGLContextAttribs(*params.attribs, context_group_.get()));
         if (!real_context) {
           // TODO(piman): This might not be fatal, we could recurse into
           // CreateGLContext to get more info, tho it should be exceedingly
@@ -390,15 +390,15 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
         return ContextResult::kTransientFailure;
       }
 
-      decoder_.reset(gles2::GLES2Decoder::Create(
-          this, command_buffer_.get(), task_executor_->outputter(),
-          context_group_.get(), /*image_factory_for_nacl_swapchain=*/nullptr));
+      decoder_.reset(gles2::GLES2Decoder::Create(this, command_buffer_.get(),
+                                                 task_executor_->outputter(),
+                                                 context_group_.get()));
       if (use_virtualized_gl_context_) {
         context_ = base::MakeRefCounted<GLContextVirtual>(
             gl_share_group_.get(), real_context.get(), decoder_->AsWeakPtr());
         if (!context_->Initialize(surface_.get(),
                                   GenerateGLContextAttribs(
-                                      params.attribs, context_group_.get()))) {
+                                      *params.attribs, context_group_.get()))) {
           // TODO(piman): This might not be fatal, we could recurse into
           // CreateGLContext to get more info, tho it should be exceedingly
           // rare and may not be recoverable anyway.
@@ -429,7 +429,7 @@ gpu::ContextResult InProcessCommandBuffer::InitializeOnGpuThread(
 
   gles2::DisallowedFeatures disallowed_features;
   auto result = decoder_->Initialize(surface_, context_, /*offscreen=*/true,
-                                     disallowed_features, params.attribs);
+                                     disallowed_features, *params.attribs);
   if (result != gpu::ContextResult::kSuccess) {
     DestroyOnGpuThread();
     DLOG(ERROR) << "Failed to initialize decoder.";

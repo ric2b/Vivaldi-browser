@@ -273,6 +273,9 @@ int VivaldiDesktopWindowTreeHostWin::GetInitialShowState() const {
 }
 
 void VivaldiDesktopWindowTreeHostWin::HandleFrameChanged() {
+  if (!window_) {
+    return;
+  }
   window_->OnNativeWindowChanged();
   DesktopWindowTreeHostWin::HandleFrameChanged();
 }
@@ -371,7 +374,8 @@ void VivaldiDesktopWindowTreeHostWin::UpdateWorkspace() {
 }
 
 bool VivaldiDesktopWindowTreeHostWin::ShouldUseNativeFrame() const {
-  return ui::win::IsAeroGlassEnabled();
+  BOOL is_enabled;
+  return SUCCEEDED(DwmIsCompositionEnabled(&is_enabled)) && is_enabled;
 }
 
 views::FrameMode VivaldiDesktopWindowTreeHostWin::GetFrameMode() const {
@@ -396,6 +400,10 @@ void VivaldiDesktopWindowTreeHostWin::OnAccentColorUpdated() {
 void VivaldiDesktopWindowTreeHostWin::UpdateWindowBorderColor(
     bool is_inactive,
     bool check_global_accent /*false*/) {
+  if (!window_) {
+    // |window_| might go away on window close.
+    return;
+  }
   // NOTE(andre@vivaldi.com) : The accent_color_inactive_ member is only set in
   // the AccentColorObserver when the border accent is set. Use this as a flag.
   if (check_global_accent &&

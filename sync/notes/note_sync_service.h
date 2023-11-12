@@ -8,10 +8,11 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "sync/notes/note_model_type_processor.h"
 
 namespace syncer {
 class ModelTypeControllerDelegate;
@@ -56,7 +57,7 @@ class NoteSyncService : public KeyedService {
  private:
   // NoteModelTypeProcessor handles communications between sync engine and
   // NotesModel.
-  std::unique_ptr<NoteModelTypeProcessor> note_model_type_processor_;
+  NoteModelTypeProcessor note_model_type_processor_;
 };
 
 }  // namespace sync_notes

@@ -6,25 +6,26 @@
     <output filename="grit/vivaldi_native_strings.h" type="rc_header">
       <emit emit_type='prepend'></emit>
     </output>
-    <output filename="vivaldi_native_strings_af.pak" type="data_package" lang="af" />
-    <output filename="vivaldi_native_strings_am.pak" type="data_package" lang="am" />
-    <output filename="vivaldi_native_strings_ar.pak" type="data_package" lang="ar" />
-    <output filename="vivaldi_native_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
-    <output filename="vivaldi_native_strings_az.pak" type="data_package" lang="az" />
-    <output filename="vivaldi_native_strings_be.pak" type="data_package" lang="be" />
-    <output filename="vivaldi_native_strings_bg.pak" type="data_package" lang="bg" />
-    <output filename="vivaldi_native_strings_bn.pak" type="data_package" lang="bn" />
-    <output filename="vivaldi_native_strings_ca.pak" type="data_package" lang="ca" />
-    <output filename="vivaldi_native_strings_cs.pak" type="data_package" lang="cs" />
-    <output filename="vivaldi_native_strings_da.pak" type="data_package" lang="da" />
-    <output filename="vivaldi_native_strings_de.pak" type="data_package" lang="de" />
-    <output filename="vivaldi_native_strings_de-CH.pak" type="data_package" lang="de-CH" />
-    <output filename="vivaldi_native_strings_el.pak" type="data_package" lang="el" />
-    <output filename="vivaldi_native_strings_en-GB.pak" type="data_package" lang="en-GB" />
-    <output filename="vivaldi_native_strings_en-US.pak" type="data_package" lang="en" />
-    <output filename="vivaldi_native_strings_en-XA.pak" type="data_package" lang="en-XA" />
-    <output filename="vivaldi_native_strings_eo.pak" type="data_package" lang="eo" />
     <output filename="vivaldi_native_strings_es.pak" type="data_package" lang="es" />
+    <output filename="vivaldi_native_strings_eo.pak" type="data_package" lang="eo" />
+    <output filename="vivaldi_native_strings_en-XA.pak" type="data_package" lang="en-XA" />
+    <output filename="vivaldi_native_strings_en-US.pak" type="data_package" lang="en" />
+    <output filename="vivaldi_native_strings_en-GB.pak" type="data_package" lang="en-GB" />
+    <output filename="vivaldi_native_strings_el.pak" type="data_package" lang="el" />
+    <output filename="vivaldi_native_strings_de-CH.pak" type="data_package" lang="de-CH" />
+    <output filename="vivaldi_native_strings_de.pak" type="data_package" lang="de" />
+    <output filename="vivaldi_native_strings_da.pak" type="data_package" lang="da" />
+    <output filename="vivaldi_native_strings_cs.pak" type="data_package" lang="cs" />
+    <output filename="vivaldi_native_strings_ca.pak" type="data_package" lang="ca" />
+    <output filename="vivaldi_native_strings_ca-valencia.pak" type="data_package" lang="ca@valencia" />
+    <output filename="vivaldi_native_strings_bn.pak" type="data_package" lang="bn" />
+    <output filename="vivaldi_native_strings_bg.pak" type="data_package" lang="bg" />
+    <output filename="vivaldi_native_strings_be.pak" type="data_package" lang="be" />
+    <output filename="vivaldi_native_strings_az.pak" type="data_package" lang="az" />
+    <output filename="vivaldi_native_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
+    <output filename="vivaldi_native_strings_ar.pak" type="data_package" lang="ar" />
+    <output filename="vivaldi_native_strings_am.pak" type="data_package" lang="am" />
+    <output filename="vivaldi_native_strings_af.pak" type="data_package" lang="af" />
     <if expr="is_ios">
       <!-- iOS uses es-MX for es-419 -->
       <output filename="vivaldi_native_strings_es-MX.pak" type="data_package" lang="es-419" />
@@ -123,6 +124,7 @@
     <file path="strings/vivaldi_native_strings_bg.xtb" lang="bg" />
     <file path="strings/vivaldi_native_strings_bn.xtb" lang="bn" />
     <file path="strings/vivaldi_native_strings_ca.xtb" lang="ca" />
+    <file path="strings/vivaldi_native_strings_ca-valencia.xtb" lang="ca@valencia" />
     <file path="strings/vivaldi_native_strings_cs.xtb" lang="cs" />
     <file path="strings/vivaldi_native_strings_da.xtb" lang="da" />
     <file path="strings/vivaldi_native_strings_de.xtb" lang="de" />

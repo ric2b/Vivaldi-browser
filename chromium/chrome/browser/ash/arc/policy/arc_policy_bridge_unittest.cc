@@ -13,12 +13,13 @@
 #include "ash/components/arc/enterprise/arc_data_snapshotd_manager.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_session_runner.h"
+#include "ash/components/arc/test/arc_util_test_support.h"
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_arc_session.h"
 #include "ash/components/arc/test/fake_policy_instance.h"
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -33,7 +34,6 @@
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/policy/developer_tools_policy_handler.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -49,6 +49,7 @@
 #include "components/policy/core/common/remote_commands/remote_commands_queue.h"
 #include "components/policy/policy_constants.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "content/public/test/browser_task_environment.h"
@@ -115,12 +116,12 @@ constexpr char kTestUserEmail[] = "user@gmail.com";
 constexpr char kChromeAppId[] = "chromeappid";
 constexpr char kAndroidAppId[] = "android.app.id";
 
-void AddKeyPermissionForAppId(base::Value* key_permissions,
+void AddKeyPermissionForAppId(base::Value::Dict& key_permissions,
                               const std::string& app_id,
                               bool allowed) {
-  base::Value cert_key_permission(base::Value::Type::DICTIONARY);
-  cert_key_permission.SetKey("allowCorporateKeyUsage", base::Value(allowed));
-  key_permissions->SetKey(app_id, std::move(cert_key_permission));
+  base::Value::Dict cert_key_permission;
+  cert_key_permission.Set("allowCorporateKeyUsage", base::Value(allowed));
+  key_permissions.Set(app_id, std::move(cert_key_permission));
 }
 
 MATCHER_P(ValueEquals, expected, "value matches") {
@@ -199,9 +200,11 @@ class ArcPolicyBridgeTestBase {
   ArcPolicyBridgeTestBase& operator=(const ArcPolicyBridgeTestBase&) = delete;
 
   void DoSetUp(bool is_affiliated) {
+    SetArcAvailableCommandLineForTesting(
+        base::CommandLine::ForCurrentProcess());
+
     // Set up fake StatisticsProvider.
-    chromeos::system::StatisticsProvider::SetTestProvider(
-        &statistics_provider_);
+    ash::system::StatisticsProvider::SetTestProvider(&statistics_provider_);
 
     // Set up ArcBridgeService.
     bridge_service_ = std::make_unique<ArcBridgeService>();
@@ -239,6 +242,14 @@ class ArcPolicyBridgeTestBase {
 
     cert_store_service_ = GetCertStoreService();
 
+    // Init ArcSessionManager for testing.
+    ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
+    arc_session_manager_ =
+        CreateTestArcSessionManager(std::make_unique<ArcSessionRunner>(
+            base::BindRepeating(FakeArcSession::Create)));
+    arc_session_manager()->SetProfile(profile());
+    arc_session_manager()->Initialize();
+
     // TODO(hidehiko): Use Singleton instance tied to BrowserContext.
     policy_bridge_ = std::make_unique<ArcPolicyBridge>(
         profile_, bridge_service_.get(), &policy_service_);
@@ -255,6 +266,10 @@ class ArcPolicyBridgeTestBase {
     bridge_service_->policy()->CloseInstance(policy_instance_.get());
     policy_instance_.reset();
     policy_bridge_->RemoveObserver(&observer_);
+    policy_bridge_.reset();
+    arc_session_manager()->Shutdown();
+    arc_session_manager_.reset();
+    ash::ConciergeClient::Shutdown();
     testing_profile_manager_.reset();
   }
 
@@ -325,7 +340,10 @@ class ArcPolicyBridgeTestBase {
   TestingProfile* profile() { return profile_; }
   ArcBridgeService* bridge_service() { return bridge_service_.get(); }
   CertStoreService* cert_store_service() { return cert_store_service_; }
-  chromeos::system::FakeStatisticsProvider statistics_provider_;
+  ash::system::FakeStatisticsProvider statistics_provider_;
+  ArcSessionManager* arc_session_manager() {
+    return arc_session_manager_.get();
+  }
 
  private:
   content::BrowserTaskEnvironment task_environment_;
@@ -337,6 +355,7 @@ class ArcPolicyBridgeTestBase {
   std::unique_ptr<ArcBridgeService> bridge_service_;
   CertStoreService* cert_store_service_;  // Not owned.
 
+  std::unique_ptr<ArcSessionManager> arc_session_manager_;
   std::unique_ptr<ArcPolicyBridge> policy_bridge_;
   std::string instance_guid_;
   MockArcPolicyBridgeObserver observer_;
@@ -513,12 +532,12 @@ TEST_F(ArcPolicyBridgeTest, ExternalStorageDisabledTest) {
 }
 
 TEST_F(ArcPolicyBridgeTest, WallpaperImageSetTest) {
-  base::DictionaryValue dict;
-  dict.SetStringKey("url", "https://example.com/wallpaper.jpg");
-  dict.SetStringKey("hash", "somehash");
+  base::Value::Dict dict;
+  dict.Set("url", "https://example.com/wallpaper.jpg");
+  dict.Set("hash", "somehash");
   policy_map().Set(policy::key::kWallpaperImage, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   dict.Clone(), nullptr);
+                   base::Value(std::move(dict)).Clone(), nullptr);
   GetPoliciesAndVerifyResult("{\"apkCacheEnabled\":true,\"guid\":\"" +
                              instance_guid() + "\"," +
                              kMountPhysicalMediaDisabledPolicySetting + "," +
@@ -526,12 +545,12 @@ TEST_F(ArcPolicyBridgeTest, WallpaperImageSetTest) {
 }
 
 TEST_F(ArcPolicyBridgeTest, WallpaperImageSet_NotCompletePolicyTest) {
-  base::DictionaryValue dict;
-  dict.SetString("url", "https://example.com/wallpaper.jpg");
+  base::Value::Dict dict;
+  dict.Set("url", "https://example.com/wallpaper.jpg");
   // "hash" attribute is missing, so the policy shouldn't be set
   policy_map().Set(policy::key::kWallpaperImage, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   dict.Clone(), nullptr);
+                   base::Value(std::move(dict)).Clone(), nullptr);
   GetPoliciesAndVerifyResult("{\"apkCacheEnabled\":true,\"guid\":\"" +
                              instance_guid() + "\"," +
                              kMountPhysicalMediaDisabledPolicySetting + "}");
@@ -787,14 +806,9 @@ TEST_F(ArcPolicyBridgeTest, DisableAppsInSnapshot) {
   constexpr char kFalse[] = "false";
   constexpr char kTrue[] = "true";
 
-  ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
-
   auto upstart_client = std::make_unique<ash::FakeUpstartClient>();
   arc::prefs::RegisterLocalStatePrefs(
       profile()->GetTestingPrefService()->registry());
-  auto arc_session_manager =
-      CreateTestArcSessionManager(std::make_unique<ArcSessionRunner>(
-          base::BindRepeating(FakeArcSession::Create)));
 
   auto manager = std::make_unique<arc::data_snapshotd::ArcDataSnapshotdManager>(
       profile()->GetTestingPrefService(),
@@ -822,8 +836,6 @@ TEST_F(ArcPolicyBridgeTest, DisableAppsInSnapshot) {
 
   manager.reset();
   upstart_client.reset();
-  arc_session_manager.reset();
-  ash::ConciergeClient::Shutdown();
 }
 
 TEST_P(ArcPolicyBridgeAffiliatedTest, ApkCacheEnabledTest) {
@@ -897,13 +909,13 @@ TEST_F(ArcPolicyBridgeCertStoreTest, KeyPermissionsBasicTest) {
   // One certificate is required to be installed.
   cert_store_service()->set_required_cert_names_for_testing({kFakeCertName});
 
-  base::Value key_permissions(base::Value::Type::DICTIONARY);
-  AddKeyPermissionForAppId(&key_permissions, kAndroidAppId, true /* allowed */);
-  AddKeyPermissionForAppId(&key_permissions, kChromeAppId, true /* allowed */);
+  base::Value::Dict key_permissions;
+  AddKeyPermissionForAppId(key_permissions, kAndroidAppId, true /* allowed */);
+  AddKeyPermissionForAppId(key_permissions, kChromeAppId, true /* allowed */);
 
   policy_map().Set(policy::key::kKeyPermissions, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   std::move(key_permissions),
+                   base::Value(std::move(key_permissions)),
                    /* external_data_fetcher */ nullptr);
   GetPoliciesAndVerifyResult(base::StrCat(
       {"{\"apkCacheEnabled\":true,",
@@ -918,17 +930,16 @@ TEST_F(ArcPolicyBridgeCertStoreTest, KeyPermissionsBasicTest) {
 // Tests that if cert store service is non-null, corporate usage key exists and
 // not to any ARC apps, ChoosePrivateKeyRules policy is not set.
 TEST_F(ArcPolicyBridgeCertStoreTest, KeyPermissionsEmptyTest) {
-  base::Value key_permissions(base::Value::Type::DICTIONARY);
-  AddKeyPermissionForAppId(&key_permissions, kAndroidAppId,
-                           false /* allowed */);
-  AddKeyPermissionForAppId(&key_permissions, kChromeAppId, true /* allowed */);
+  base::Value::Dict key_permissions;
+  AddKeyPermissionForAppId(key_permissions, kAndroidAppId, false /* allowed */);
+  AddKeyPermissionForAppId(key_permissions, kChromeAppId, true /* allowed */);
 
   // One certificate is required to be installed.
   cert_store_service()->set_required_cert_names_for_testing({kFakeCertName});
 
   policy_map().Set(policy::key::kKeyPermissions, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   std::move(key_permissions),
+                   base::Value(std::move(key_permissions)),
                    /* external_data_fetcher */ nullptr);
   GetPoliciesAndVerifyResult(base::StrCat(
       {"{\"apkCacheEnabled\":true,\"guid\":\"", instance_guid(), "\",",
@@ -940,15 +951,15 @@ TEST_F(ArcPolicyBridgeCertStoreTest, KeyPermissionsEmptyTest) {
 // exist, but in theory are available to ARC apps, ChoosePrivateKeyRules policy
 // is not set.
 TEST_F(ArcPolicyBridgeCertStoreTest, KeyPermissionsNoCertsTest) {
-  base::Value key_permissions(base::Value::Type::DICTIONARY);
-  AddKeyPermissionForAppId(&key_permissions, kAndroidAppId, true /* allowed */);
-  AddKeyPermissionForAppId(&key_permissions, kChromeAppId, true /* allowed */);
+  base::Value::Dict key_permissions;
+  AddKeyPermissionForAppId(key_permissions, kAndroidAppId, true /* allowed */);
+  AddKeyPermissionForAppId(key_permissions, kChromeAppId, true /* allowed */);
 
   cert_store_service()->set_required_cert_names_for_testing({});
 
   policy_map().Set(policy::key::kKeyPermissions, policy::POLICY_LEVEL_MANDATORY,
                    policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
-                   std::move(key_permissions),
+                   base::Value(std::move(key_permissions)),
                    /* external_data_fetcher */ nullptr);
   GetPoliciesAndVerifyResult(
       base::StrCat({"{\"apkCacheEnabled\":true,\"guid\":\"", instance_guid(),

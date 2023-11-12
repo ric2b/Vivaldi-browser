@@ -62,13 +62,6 @@ def get_parts(config):
                 identifier_requirement=False,
                 entitlements='app-entitlements.plist',
                 verify_options=verify_options),
-        'privileged-helper':
-            CodeSignedProduct(
-                '{.app_product}.app/Contents/Library/LaunchServices/{}.UpdaterPrivilegedHelper'
-                .format(config, uncustomized_bundle_id),
-                '{}.UpdaterPrivilegedHelper'.format(uncustomized_bundle_id),
-                options=CodeSignOptions.FULL_HARDENED_RUNTIME_OPTIONS,
-                verify_options=verify_options),
         'framework':
             CodeSignedProduct(
                 # The framework is a dylib, so options= flags are meaningless.
@@ -156,6 +149,15 @@ def get_parts(config):
                 options=limited_app_hardened_runtime_options,
                 verify_options=verify_options),
     }
+
+    if config.enable_updater():
+        parts['privileged-helper'] = CodeSignedProduct(
+            ('{.app_product}.app/Contents/Library/LaunchServices/' +
+             '{}.UpdaterPrivilegedHelper').format(config,
+                                                  uncustomized_bundle_id),
+            '{}.UpdaterPrivilegedHelper'.format(uncustomized_bundle_id),
+            options=CodeSignOptions.FULL_HARDENED_RUNTIME_OPTIONS,
+            verify_options=verify_options)
 
     dylibs = [
         'libEGL.dylib',
@@ -252,15 +254,14 @@ def sign_chrome(paths, config, sign_framework=False):
                          _PROVISIONPROFILE_DEST))
 
     # Sign the privileged helper.
-    #signing.sign_part(paths, config, parts['privileged-helper'])
+    if 'privileged-helper' in parts:
+        signing.sign_part(paths, config, parts['privileged-helper'])
 
     # Sign the outer app bundle.
     signing.sign_part(paths, config, parts['app'])
 
     # Verify all the parts.
-    for name, part in parts.items():
-        if name in ['privileged-helper']:
-            continue
+    for part in parts.values():
         signing.verify_part(paths, part)
 
     # Display the code signature.

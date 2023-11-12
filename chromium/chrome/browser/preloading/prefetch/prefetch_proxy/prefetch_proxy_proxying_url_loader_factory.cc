@@ -5,8 +5,8 @@
 #include "chrome/browser/preloading/prefetch/prefetch_proxy/prefetch_proxy_proxying_url_loader_factory.h"
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
@@ -522,13 +522,6 @@ void PrefetchProxyProxyingURLLoaderFactory::
         const GURL& url,
         network::mojom::URLResponseHeadPtr head,
         const network::URLLoaderCompletionStatus& status) {
-  base::UmaHistogramSparse("PrefetchProxy.Prefetch.Subresources.NetError",
-                           std::abs(status.error_code));
-  if (head && head->headers) {
-    base::UmaHistogramSparse("PrefetchProxy.Prefetch.Subresources.RespCode",
-                             head->headers->response_code());
-  }
-
   metrics_observer_->OnResourceFetchComplete(url, std::move(head), status);
 }
 
@@ -536,8 +529,6 @@ void PrefetchProxyProxyingURLLoaderFactory::RecordSubresourceMetricsAfterClick(
     const GURL& url,
     network::mojom::URLResponseHeadPtr head,
     const network::URLLoaderCompletionStatus& status) {
-  UMA_HISTOGRAM_BOOLEAN("PrefetchProxy.AfterClick.Subresources.UsedCache",
-                        status.exists_in_cache);
   metrics_observer_->OnResourceUsedFromCache(url);
 }
 

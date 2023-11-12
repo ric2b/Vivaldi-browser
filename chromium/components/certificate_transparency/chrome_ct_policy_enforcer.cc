@@ -10,9 +10,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
@@ -92,10 +92,10 @@ base::Value NetLogCertComplianceCheckResultParams(
     net::X509Certificate* cert,
     bool build_timely,
     CTPolicyCompliance compliance) {
-  base::Value dict(base::Value::Type::DICTIONARY);
+  base::Value dict(base::Value::Type::DICT);
   // TODO(mattm): This double-wrapping of the certificate list is weird. Remove
   // this (probably requires updates to netlog-viewer).
-  base::Value certificate_dict(base::Value::Type::DICTIONARY);
+  base::Value certificate_dict(base::Value::Type::DICT);
   certificate_dict.SetKey("certificates", net::NetLogX509CertificateList(cert));
   dict.SetKey("certificate", std::move(certificate_dict));
   dict.SetBoolKey("build_timely", build_timely);

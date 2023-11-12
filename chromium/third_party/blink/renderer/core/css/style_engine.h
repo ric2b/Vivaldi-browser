@@ -81,6 +81,7 @@ class CSSValue;
 class Document;
 class DocumentStyleSheetCollection;
 class ElementRuleCollector;
+class Font;
 class FontSelector;
 class HTMLBodyElement;
 class HTMLSelectElement;
@@ -96,7 +97,6 @@ class StyleResolver;
 class StyleResolverStats;
 class StyleRuleFontFace;
 class StyleRuleFontPaletteValues;
-class FontFeatureValuesStorage;
 class StyleRuleKeyframes;
 class StyleRuleUsageTracker;
 class StyleSheet;
@@ -228,12 +228,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void AdoptedStyleSheetRemoved(TreeScope& tree_scope, CSSStyleSheet* sheet);
 
   void WatchedSelectorsChanged();
+  void DocumentRulesSelectorsChanged();
   void InitialStyleChanged();
   void ColorSchemeChanged();
   void SetOwnerColorScheme(mojom::blink::ColorScheme);
   mojom::blink::ColorScheme GetOwnerColorScheme() const {
     return owner_color_scheme_;
   }
+  mojom::blink::PreferredColorScheme ResolveColorSchemeForEmbedding(
+      const ComputedStyle* embedder_style) const;
   void ViewportStyleSettingChanged();
 
   void InjectSheet(const StyleSheetKey&,
@@ -245,6 +248,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   RuleSet* WatchedSelectorsRuleSet() {
     DCHECK(global_rule_set_);
     return global_rule_set_->WatchedSelectorsRuleSet();
+  }
+  RuleSet* DocumentRulesSelectorsRuleSet() {
+    DCHECK(global_rule_set_);
+    return global_rule_set_->DocumentRulesSelectorsRuleSet();
   }
 
   // Helper class for making sure RuleSets that are ensured when collecting
@@ -307,10 +314,24 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void IncrementSkippedContainerRecalc() { ++skipped_container_recalc_; }
   void DecrementSkippedContainerRecalc() { --skipped_container_recalc_; }
 
-  bool UsesRemUnits() const { return uses_rem_units_; }
-  void SetUsesRemUnit(bool uses_rem_units) { uses_rem_units_ = uses_rem_units; }
-  bool UpdateRemUnits(const ComputedStyle* old_root_style,
-                      const ComputedStyle* new_root_style);
+  bool UsesLineHeightUnits() const { return uses_line_height_units_; }
+  void SetUsesLineHeightUnits(bool uses_line_height_units) {
+    uses_line_height_units_ = uses_line_height_units;
+  }
+
+  bool UsesGlyphRelativeUnits() const { return uses_glyph_relative_units_; }
+  void SetUsesGlyphRelativeUnits(bool uses_glyph_relative_units) {
+    uses_glyph_relative_units_ = uses_glyph_relative_units;
+  }
+
+  bool UsesRootFontRelativeUnits() const {
+    return uses_root_font_relative_units_;
+  }
+  void SetUsesRootFontRelativeUnits(bool uses_root_font_relative_units) {
+    uses_root_font_relative_units_ = uses_root_font_relative_units;
+  }
+  bool UpdateRootFontRelativeUnits(const ComputedStyle* old_root_style,
+                                   const ComputedStyle* new_root_style);
 
   void ResetCSSFeatureFlags(const RuleFeatureSet&);
 
@@ -325,8 +346,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   void SetRuleUsageTracker(StyleRuleUsageTracker*);
 
-  void ComputeFont(Element& element,
-                   ComputedStyle* font_style,
+  Font ComputeFont(Element& element,
+                   const ComputedStyle& font_style,
                    const CSSPropertyValueSet& font_properties);
 
   PendingInvalidations& GetPendingNodeInvalidations() {
@@ -449,10 +470,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                               Element& removed_element,
                                               Element& after_element);
   void ScheduleNthPseudoInvalidations(ContainerNode&);
-  void ScheduleInvalidationsForRuleSets(TreeScope&,
-                                        const HeapHashSet<Member<RuleSet>>&,
-                                        InvalidationScope =
-                                            kInvalidateCurrentScope);
+  void ScheduleInvalidationsForRuleSets(
+      TreeScope&,
+      const HeapHashSet<Member<RuleSet>>&,
+      InvalidationScope = kInvalidateCurrentScope);
   void ScheduleCustomElementInvalidations(HashSet<AtomicString> tag_names);
   void ScheduleInvalidationsForHasPseudoAffectedByInsertion(
       Element* parent,
@@ -529,9 +550,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
       AtomicString palette_name,
       AtomicString font_family);
 
-  const FontFeatureValuesStorage* FontFeatureValuesForFamily(
-      AtomicString font_family);
-
   CounterStyleMap* GetUserCounterStyleMap() { return user_counter_style_map_; }
   const CounterStyle& FindCounterStyleAcrossScopes(const AtomicString&,
                                                    const TreeScope*) const;
@@ -577,8 +595,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   Element* GetContainerForContainerStyleRecalc() const {
     // The To<Element>() should not fail because the style_recalc_root_ is set
     // to the container element when doing a container query style recalc.
-    if (InContainerQueryStyleRecalc())
+    if (InContainerQueryStyleRecalc()) {
       return To<Element>(style_recalc_root_.GetRootNode());
+    }
     return nullptr;
   }
   void ChangeRenderingForHTMLSelect(HTMLSelectElement& select);
@@ -593,8 +612,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
            "MarkForLayoutTreeChangesAfterLayout when LayoutObjects are "
            "detached";
 #endif  // DCHECK_IS_ON()
-    if (in_detach_scope_)
+    if (in_detach_scope_) {
       parent_for_detached_subtree_ = parent;
+    }
   }
 
   void SetPageColorSchemes(const CSSValue* color_scheme);
@@ -615,11 +635,14 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     return view_transition_names_;
   }
 
-  StyleFetchedImage* CacheStyleImage(FetchParameters& params,
-                                     OriginClean origin_clean,
-                                     bool is_ad_related) {
+  StyleFetchedImage* CacheStyleImage(
+      FetchParameters& params,
+      OriginClean origin_clean,
+      bool is_ad_related,
+      const float override_image_resolution = 0.0f) {
     return style_image_cache_.CacheStyleImage(GetDocument(), params,
-                                              origin_clean, is_ad_related);
+                                              origin_clean, is_ad_related,
+                                              override_image_resolution);
   }
 
   void AddCachedFillOrClipPathURIValue(const AtomicString& string,
@@ -724,8 +747,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void UpdateActiveStyleSheets();
   void UpdateGlobalRuleSet() {
     DCHECK(!NeedsActiveStyleSheetUpdate());
-    if (global_rule_set_)
+    if (global_rule_set_) {
       global_rule_set_->Update(GetDocument());
+    }
   }
   const MediaQueryEvaluator& EnsureMediaQueryEvaluator();
   void UpdateStyleSheetList(TreeScope&);
@@ -743,8 +767,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                   const ActiveStyleSheetVector&,
                                   bool is_user_style);
   void AddFontPaletteValuesRulesFromSheets(
-      const ActiveStyleSheetVector& sheets);
-  void AddFontFeatureValuesRulesFromSheets(
       const ActiveStyleSheetVector& sheets);
 
   // Returns true if any @font-face rules are added.
@@ -835,7 +857,9 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   String preferred_stylesheet_set_name_;
 
-  bool uses_rem_units_{false};
+  bool uses_root_font_relative_units_{false};
+  bool uses_glyph_relative_units_{false};
+  bool uses_line_height_units_{false};
   // True if we have performed style recalc for at least one element that
   // depends on container queries.
   bool style_affected_by_layout_{false};
@@ -925,18 +949,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                   Member<StyleRuleFontPaletteValues>>;
   FontPaletteValuesRuleMap font_palette_values_rule_map_;
 
-  // Multiple entries are created pointing to the same
-  // StyleRuleFontFeatureValues for each mentioned family name in the
-  // comma-separated list of font families in the @font-feature-values at-rule
-  // prelude.
-  // TODO(https://crbug.com/716567): Needs ability to store multiple entries per
-  // family https://drafts.csswg.org/css-fonts-4/#font-feature-values-syntax: If
-  // multiple @font-feature-values rules are defined for a given family, the
-  // resulting values definitions are the union of the definitions contained
-  // within these rules.
-  using FontFeatureValuesRuleMap = HashMap<String, FontFeatureValuesStorage>;
-  FontFeatureValuesRuleMap font_feature_values_storage_map_;
-
   Member<CounterStyleMap> user_counter_style_map_;
 
   Member<CascadeLayerMap> user_cascade_layer_map_;
@@ -1011,11 +1023,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 // Helper function for checking if we need to handle legacy fragmentation cases
 // for container queries.
 inline bool HasFullNGFragmentationSupport() {
-  return RuntimeEnabledFeatures::LayoutNGPrintingEnabled() &&
-         RuntimeEnabledFeatures::LayoutNGFlexFragmentationEnabled() &&
-         RuntimeEnabledFeatures::LayoutNGGridFragmentationEnabled() &&
-         RuntimeEnabledFeatures::LayoutNGTableFragmentationEnabled();
+  return RuntimeEnabledFeatures::LayoutNGPrintingEnabled();
 }
+
+void PossiblyScheduleNthPseudoInvalidations(Node& node);
 
 }  // namespace blink
 

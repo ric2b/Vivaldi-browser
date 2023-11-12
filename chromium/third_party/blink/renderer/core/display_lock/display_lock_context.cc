@@ -69,7 +69,7 @@ DisplayLockContext::DisplayLockContext(Element* element)
   DetermineIfSubtreeHasFocus();
   DetermineIfSubtreeHasSelection();
   DetermineIfSubtreeHasTopLayerElement();
-  DetermineIfInSharedElementTransitionChain();
+  DetermineIfDescendantIsViewTransitionElement();
 }
 
 void DisplayLockContext::SetRequestedState(EContentVisibility state,
@@ -144,11 +144,16 @@ void DisplayLockContext::SetRequestedState(EContentVisibility state,
       element_.Get());
 }
 
-void DisplayLockContext::AdjustElementStyle(ComputedStyle* style) const {
+scoped_refptr<const ComputedStyle> DisplayLockContext::AdjustElementStyle(
+    const ComputedStyle* style) const {
   if (IsAlwaysVisible())
-    return;
-  if (IsLocked())
-    style->SetSkipsContents();
+    return style;
+  if (IsLocked()) {
+    ComputedStyleBuilder builder(*style);
+    builder.SetSkipsContents();
+    return builder.TakeStyle();
+  }
+  return style;
 }
 
 void DisplayLockContext::RequestLock(uint16_t activation_mask) {
@@ -882,7 +887,7 @@ void DisplayLockContext::DidMoveToNewDocument(Document& old_document) {
   DetermineIfSubtreeHasFocus();
   DetermineIfSubtreeHasSelection();
   DetermineIfSubtreeHasTopLayerElement();
-  DetermineIfInSharedElementTransitionChain();
+  DetermineIfDescendantIsViewTransitionElement();
 }
 
 void DisplayLockContext::WillStartLifecycleUpdate(const LocalFrameView& view) {
@@ -1157,53 +1162,22 @@ void DisplayLockContext::DetermineIfSubtreeHasTopLayerElement() {
   }
 }
 
-void DisplayLockContext::DetermineIfInSharedElementTransitionChain() {
-  ResetAndDetermineIfAncestorIsSharedElement();
-  if (ConnectedToView())
-    document_->GetDisplayLockDocumentState().UpdateSharedElementAncestorLocks();
-}
-
-void DisplayLockContext::ResetInSharedElementTransitionChain() {
-  SetRenderAffectingState(RenderAffectingState::kSharedElementTransitionChain,
-                          false);
-}
-
-void DisplayLockContext::SetInSharedElementTransitionChain() {
-  SetRenderAffectingState(RenderAffectingState::kSharedElementTransitionChain,
-                          true);
-}
-
-bool DisplayLockContext::IsInSharedElementAncestorChain() const {
-  return render_affecting_state_[static_cast<int>(
-      RenderAffectingState::kSharedElementTransitionChain)];
-}
-
-void DisplayLockContext::ResetAndDetermineIfAncestorIsSharedElement() {
-  ResetInSharedElementTransitionChain();
-  if (!ConnectedToView())
-    return;
-
-  auto* transition = ViewTransitionUtils::GetActiveTransition(*document_);
-  if (!transition)
-    return;
-
-  bool has_shared_element_ancestor = false;
-  for (auto* candidate = element_.Get(); candidate;
-       candidate = FlatTreeTraversal::ParentElement(*candidate)) {
-    // We don't care about document element as the ancestor, since it's common
-    // to have one and it will be clipped by viewport anyway.
-    if (candidate->IsDocumentElement())
-      continue;
-
-    if (auto* layout_object = candidate->GetLayoutObject();
-        layout_object &&
-        transition->IsRepresentedViaPseudoElements(*layout_object)) {
-      has_shared_element_ancestor = true;
-      break;
-    }
+void DisplayLockContext::DetermineIfDescendantIsViewTransitionElement() {
+  ResetDescendantIsViewTransitionElement();
+  if (ConnectedToView()) {
+    document_->GetDisplayLockDocumentState()
+        .UpdateViewTransitionElementAncestorLocks();
   }
-  SetRenderAffectingState(RenderAffectingState::kSharedElementTransitionChain,
-                          has_shared_element_ancestor);
+}
+
+void DisplayLockContext::ResetDescendantIsViewTransitionElement() {
+  SetRenderAffectingState(
+      RenderAffectingState::kDescendantIsViewTransitionElement, false);
+}
+
+void DisplayLockContext::SetDescendantIsViewTransitionElement() {
+  SetRenderAffectingState(
+      RenderAffectingState::kDescendantIsViewTransitionElement, true);
 }
 
 void DisplayLockContext::ClearHasTopLayerElement() {
@@ -1326,7 +1300,7 @@ void DisplayLockContext::NotifyRenderAffectingStateChanged() {
         !state(RenderAffectingState::kAutoStateUnlockedUntilLifecycle) &&
         !state(RenderAffectingState::kAutoUnlockedForPrint) &&
         !state(RenderAffectingState::kSubtreeHasTopLayerElement) &&
-        !state(RenderAffectingState::kSharedElementTransitionChain)));
+        !state(RenderAffectingState::kDescendantIsViewTransitionElement)));
 
   if (should_be_locked && !IsLocked())
     Lock();
@@ -1360,8 +1334,8 @@ const char* DisplayLockContext::RenderAffectingStateName(int state) const {
       return "AutoUnlockedForPrint";
     case RenderAffectingState::kSubtreeHasTopLayerElement:
       return "SubtreeHasTopLayerElement";
-    case RenderAffectingState::kSharedElementTransitionChain:
-      return "SharedElementTransitionChain";
+    case RenderAffectingState::kDescendantIsViewTransitionElement:
+      return "DescendantIsViewTransitionElement";
     case RenderAffectingState::kNumRenderAffectingStates:
       break;
   }

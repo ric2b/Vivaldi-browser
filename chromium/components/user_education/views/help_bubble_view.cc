@@ -10,7 +10,7 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_number_conversions.h"
@@ -18,7 +18,6 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/user_education/common/help_bubble_params.h"
 #include "components/user_education/views/help_bubble_delegate.h"
-#include "components/user_education/views/help_bubble_factory_views.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -40,6 +39,7 @@
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/background.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
@@ -68,6 +68,8 @@ namespace user_education {
 
 namespace {
 
+// Minimum width of the bubble.
+constexpr int kBubbleMinWidthDip = 200;
 // Maximum width of the bubble. Longer strings will cause wrapping.
 constexpr int kBubbleMaxWidthDip = 340;
 
@@ -146,7 +148,7 @@ class MdIPHBubbleButton : public views::MdTextButton {
             : delegate_->GetHelpBubbleButtonBorderColorId());
     SetBackground(CreateBackgroundFromPainter(
         views::Painter::CreateRoundRectWith1PxBorderPainter(
-            background_color, stroke_color, GetCornerRadius())));
+            background_color, stroke_color, GetCornerRadiusValue())));
   }
 
   void OnThemeChanged() override {
@@ -290,17 +292,18 @@ DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(HelpBubbleView,
 // outline in dark mode on Mac. Use our own shadow instead. The shadow type is
 // the same for all other platforms.
 HelpBubbleView::HelpBubbleView(const HelpBubbleDelegate* delegate,
-                               views::View* anchor_view,
-                               HelpBubbleParams params,
-                               absl::optional<gfx::Rect> anchor_rect)
-    : BubbleDialogDelegateView(anchor_view,
+                               const internal::HelpBubbleAnchorParams& anchor,
+                               HelpBubbleParams params)
+    : BubbleDialogDelegateView(anchor.view,
                                TranslateArrow(params.arrow),
                                views::BubbleBorder::STANDARD_SHADOW),
-      delegate_(delegate),
-      force_anchor_rect_(anchor_rect) {
+      delegate_(delegate) {
+  if (anchor.rect.has_value()) {
+    SetForceAnchorRect(anchor.rect.value());
+  }
   // The anchor for promo bubbles should not highlight.
   set_highlight_button_when_shown(false);
-  DCHECK(anchor_view)
+  DCHECK(anchor.view)
       << "A bubble that closes on blur must be initially focused.";
   UseCompactMargins();
 
@@ -322,7 +325,7 @@ HelpBubbleView::HelpBubbleView(const HelpBubbleDelegate* delegate,
 
   // Since we don't have any controls for the user to interact with (we're just
   // an information bubble), override our role to kAlert.
-  SetAccessibleRole(ax::mojom::Role::kAlert);
+  SetAccessibleWindowRole(ax::mojom::Role::kAlert);
 
   // Layout structure:
   //
@@ -615,13 +618,13 @@ HelpBubbleView::HelpBubbleView(const HelpBubbleDelegate* delegate,
   frame_view->SetCornerRadius(
       views::LayoutProvider::Get()->GetCornerRadiusMetric(
           views::Emphasis::kHigh));
-  frame_view->SetDisplayVisibleArrow(!force_anchor_rect_.has_value() &&
+  frame_view->SetDisplayVisibleArrow(anchor.show_arrow &&
                                      params.arrow != HelpBubbleArrow::kNone);
   SizeToContents();
 
   widget->ShowInactive();
   auto* const anchor_bubble =
-      anchor_view->GetWidget()->widget_delegate()->AsBubbleDialogDelegate();
+      anchor.view->GetWidget()->widget_delegate()->AsBubbleDialogDelegate();
   if (anchor_bubble)
     anchor_pin_ = anchor_bubble->PreventCloseOnDeactivate();
   MaybeStartAutoCloseTimer();
@@ -700,11 +703,36 @@ gfx::Size HelpBubbleView::CalculatePreferredSize() const {
     return gfx::Size(kBubbleMaxWidthDip, GetHeightForWidth(kBubbleMaxWidthDip));
   }
 
+  if (layout_manager_preferred_size.width() < kBubbleMinWidthDip) {
+    return gfx::Size(kBubbleMinWidthDip,
+                     layout_manager_preferred_size.height());
+  }
+
   return layout_manager_preferred_size;
 }
 
 gfx::Rect HelpBubbleView::GetAnchorRect() const {
-  return force_anchor_rect_.value_or(BubbleDialogDelegateView::GetAnchorRect());
+  gfx::Rect default_anchor_rect = BubbleDialogDelegateView::GetAnchorRect();
+  if (!local_anchor_bounds_) {
+    return default_anchor_rect;
+  }
+
+  // Ensure that we are not trying to clamp the anchor bounds to a completely
+  // empty bounds.
+  gfx::Size size = default_anchor_rect.size();
+  size.SetToMax({1, 1});
+
+  // Clamp the local bounds to the size of the anchor view.
+  const int left = std::clamp(local_anchor_bounds_->x(), 0, size.width() - 1);
+  const int right = std::clamp(local_anchor_bounds_->right(), 1, size.width());
+  const int top = std::clamp(local_anchor_bounds_->y(), 0, size.height() - 1);
+  const int bottom =
+      std::clamp(local_anchor_bounds_->bottom(), 1, size.height());
+  gfx::Rect result(left, top, right - left, bottom - top);
+
+  // Translate back to screen coordinates.
+  result.Offset(default_anchor_rect.OffsetFromOrigin());
+  return result;
 }
 
 // static
@@ -736,6 +764,12 @@ views::LabelButton* HelpBubbleView::GetDefaultButtonForTesting() const {
 views::LabelButton* HelpBubbleView::GetNonDefaultButtonForTesting(
     int index) const {
   return non_default_buttons_[index];
+}
+
+void HelpBubbleView::SetForceAnchorRect(gfx::Rect force_anchor_rect) {
+  force_anchor_rect.Offset(
+      -views::BubbleDialogDelegateView::GetAnchorRect().OffsetFromOrigin());
+  local_anchor_bounds_ = force_anchor_rect;
 }
 
 BEGIN_METADATA(HelpBubbleView, views::BubbleDialogDelegateView)

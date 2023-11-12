@@ -3,8 +3,8 @@
 #ifndef SYNC_VIVALDI_SYNC_UI_HELPER_H_
 #define SYNC_VIVALDI_SYNC_UI_HELPER_H_
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/sync_service_observer.h"

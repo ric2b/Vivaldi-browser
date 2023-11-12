@@ -179,15 +179,17 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <string>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 
 #include "absl/base/config.h"
 #include "absl/base/internal/endian.h"
-#include "absl/base/internal/prefetch.h"
+#include "absl/base/internal/raw_logging.h"
 #include "absl/base/optimization.h"
 #include "absl/base/port.h"
+#include "absl/base/prefetch.h"
 #include "absl/container/internal/common.h"
 #include "absl/container/internal/compressed_tuple.h"
 #include "absl/container/internal/container_memory.h"
@@ -218,6 +220,29 @@
 namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
+
+#ifdef ABSL_SWISSTABLE_ENABLE_GENERATIONS
+#error ABSL_SWISSTABLE_ENABLE_GENERATIONS cannot be directly set
+#elif defined(ABSL_HAVE_ADDRESS_SANITIZER) || \
+    defined(ABSL_HAVE_MEMORY_SANITIZER)
+// When compiled in sanitizer mode, we add generation integers to the backing
+// array and iterators. In the backing array, we store the generation between
+// the control bytes and the slots. When iterators are dereferenced, we assert
+// that the container has not been mutated in a way that could cause iterator
+// invalidation since the iterator was initialized.
+#define ABSL_SWISSTABLE_ENABLE_GENERATIONS
+#endif
+
+// We use uint8_t so we don't need to worry about padding.
+using GenerationType = uint8_t;
+
+#ifdef ABSL_SWISSTABLE_ENABLE_GENERATIONS
+constexpr bool SwisstableGenerationsEnabled() { return true; }
+constexpr size_t NumGenerationBytes() { return sizeof(GenerationType); }
+#else
+constexpr bool SwisstableGenerationsEnabled() { return false; }
+constexpr size_t NumGenerationBytes() { return 0; }
+#endif
 
 template <typename AllocType>
 void SwapAlloc(AllocType& lhs, AllocType& rhs,
@@ -451,13 +476,19 @@ static_assert(ctrl_t::kDeleted == static_cast<ctrl_t>(-2),
               "ctrl_t::kDeleted must be -2 to make the implementation of "
               "ConvertSpecialToEmptyAndFullToDeleted efficient");
 
-ABSL_DLL extern const ctrl_t kEmptyGroup[16];
+ABSL_DLL extern const ctrl_t kEmptyGroup[17];
 
 // Returns a pointer to a control byte group that can be used by empty tables.
 inline ctrl_t* EmptyGroup() {
   // Const must be cast away here; no uses of this function will actually write
   // to it, because it is only used for empty tables.
   return const_cast<ctrl_t*>(kEmptyGroup);
+}
+
+// Returns a pointer to the generation byte at the end of the empty group, if it
+// exists.
+inline GenerationType* EmptyGeneration() {
+  return reinterpret_cast<GenerationType*>(EmptyGroup() + 16);
 }
 
 // Mixes a randomly generated per-process seed with `hash` and `ctrl` to
@@ -629,14 +660,16 @@ struct GroupAArch64Impl {
   }
 
   uint32_t CountLeadingEmptyOrDeleted() const {
-    uint64_t mask = vget_lane_u64(vreinterpret_u64_u8(ctrl), 0);
-    // ctrl | ~(ctrl >> 7) will have the lowest bit set to zero for kEmpty and
-    // kDeleted. We lower all other bits and count number of trailing zeros.
+    uint64_t mask =
+        vget_lane_u64(vreinterpret_u64_u8(vcle_s8(
+                          vdup_n_s8(static_cast<int8_t>(ctrl_t::kSentinel)),
+                          vreinterpret_s8_u8(ctrl))),
+                      0);
+    // Similar to MaskEmptyorDeleted() but we invert the logic to invert the
+    // produced bitfield. We then count number of trailing zeros.
     // Clang and GCC optimize countr_zero to rbit+clz without any check for 0,
     // so we should be fine.
-    constexpr uint64_t bits = 0x0101010101010101ULL;
-    return static_cast<uint32_t>(countr_zero((mask | ~(mask >> 7)) & bits) >>
-                                 3);
+    return static_cast<uint32_t>(countr_zero(mask)) >> 3;
   }
 
   void ConvertSpecialToEmptyAndFullToDeleted(ctrl_t* dst) const {
@@ -717,13 +750,141 @@ using Group = GroupAArch64Impl;
 using Group = GroupPortableImpl;
 #endif
 
+// When there is an insertion with no reserved growth, we rehash with
+// probability `min(1, RehashProbabilityConstant() / capacity())`. Using a
+// constant divided by capacity ensures that inserting N elements is still O(N)
+// in the average case. Using the constant 16 means that we expect to rehash ~8
+// times more often than when generations are disabled. We are adding expected
+// rehash_probability * #insertions/capacity_growth = 16/capacity * ((7/8 -
+// 7/16) * capacity)/capacity_growth = ~7 extra rehashes per capacity growth.
+inline size_t RehashProbabilityConstant() { return 16; }
+
+class CommonFieldsGenerationInfoEnabled {
+  // A sentinel value for reserved_growth_ indicating that we just ran out of
+  // reserved growth on the last insertion. When reserve is called and then
+  // insertions take place, reserved_growth_'s state machine is N, ..., 1,
+  // kReservedGrowthJustRanOut, 0.
+  static constexpr size_t kReservedGrowthJustRanOut =
+      (std::numeric_limits<size_t>::max)();
+
+ public:
+  CommonFieldsGenerationInfoEnabled() = default;
+  CommonFieldsGenerationInfoEnabled(CommonFieldsGenerationInfoEnabled&& that)
+      : reserved_growth_(that.reserved_growth_), generation_(that.generation_) {
+    that.reserved_growth_ = 0;
+    that.generation_ = EmptyGeneration();
+  }
+  CommonFieldsGenerationInfoEnabled& operator=(
+      CommonFieldsGenerationInfoEnabled&&) = default;
+
+  // Whether we should rehash on insert in order to detect bugs of using invalid
+  // references. We rehash on the first insertion after reserved_growth_ reaches
+  // 0 after a call to reserve. We also do a rehash with low probability
+  // whenever reserved_growth_ is zero.
+  bool should_rehash_for_bug_detection_on_insert(const ctrl_t* ctrl,
+                                                 size_t capacity) const;
+  void maybe_increment_generation_on_insert() {
+    if (reserved_growth_ == kReservedGrowthJustRanOut) reserved_growth_ = 0;
+
+    if (reserved_growth_ > 0) {
+      if (--reserved_growth_ == 0) reserved_growth_ = kReservedGrowthJustRanOut;
+    } else {
+      ++*generation_;
+    }
+  }
+  void reset_reserved_growth(size_t reservation, size_t size) {
+    reserved_growth_ = reservation - size;
+  }
+  size_t reserved_growth() const { return reserved_growth_; }
+  void set_reserved_growth(size_t r) { reserved_growth_ = r; }
+  GenerationType generation() const { return *generation_; }
+  void set_generation(GenerationType g) { *generation_ = g; }
+  GenerationType* generation_ptr() const { return generation_; }
+  void set_generation_ptr(GenerationType* g) { generation_ = g; }
+
+ private:
+  // The number of insertions remaining that are guaranteed to not rehash due to
+  // a prior call to reserve. Note: we store reserved growth rather than
+  // reservation size because calls to erase() decrease size_ but don't decrease
+  // reserved growth.
+  size_t reserved_growth_ = 0;
+  // Pointer to the generation counter, which is used to validate iterators and
+  // is stored in the backing array between the control bytes and the slots.
+  // Note that we can't store the generation inside the container itself and
+  // keep a pointer to the container in the iterators because iterators must
+  // remain valid when the container is moved.
+  // Note: we could derive this pointer from the control pointer, but it makes
+  // the code more complicated, and there's a benefit in having the sizes of
+  // raw_hash_set in sanitizer mode and non-sanitizer mode a bit more different,
+  // which is that tests are less likely to rely on the size remaining the same.
+  // TODO(b/254649633): Currently, we can't detect when end iterators from
+  // different empty tables are compared. If we allocate generations separately
+  // from control bytes, then we could do so. Another option would be to have N
+  // empty generations and use a random one for empty hashtables.
+  GenerationType* generation_ = EmptyGeneration();
+};
+
+class CommonFieldsGenerationInfoDisabled {
+ public:
+  CommonFieldsGenerationInfoDisabled() = default;
+  CommonFieldsGenerationInfoDisabled(CommonFieldsGenerationInfoDisabled&&) =
+      default;
+  CommonFieldsGenerationInfoDisabled& operator=(
+      CommonFieldsGenerationInfoDisabled&&) = default;
+
+  bool should_rehash_for_bug_detection_on_insert(const ctrl_t*, size_t) const {
+    return false;
+  }
+  void maybe_increment_generation_on_insert() {}
+  void reset_reserved_growth(size_t, size_t) {}
+  size_t reserved_growth() const { return 0; }
+  void set_reserved_growth(size_t) {}
+  GenerationType generation() const { return 0; }
+  void set_generation(GenerationType) {}
+  GenerationType* generation_ptr() const { return nullptr; }
+  void set_generation_ptr(GenerationType*) {}
+};
+
+class HashSetIteratorGenerationInfoEnabled {
+ public:
+  HashSetIteratorGenerationInfoEnabled() = default;
+  explicit HashSetIteratorGenerationInfoEnabled(
+      const GenerationType* generation_ptr)
+      : generation_ptr_(generation_ptr), generation_(*generation_ptr) {}
+
+  GenerationType generation() const { return generation_; }
+  void reset_generation() { generation_ = *generation_ptr_; }
+  const GenerationType* generation_ptr() const { return generation_ptr_; }
+  void set_generation_ptr(const GenerationType* ptr) { generation_ptr_ = ptr; }
+
+ private:
+  const GenerationType* generation_ptr_ = EmptyGeneration();
+  GenerationType generation_ = *generation_ptr_;
+};
+
+class HashSetIteratorGenerationInfoDisabled {
+ public:
+  HashSetIteratorGenerationInfoDisabled() = default;
+  explicit HashSetIteratorGenerationInfoDisabled(const GenerationType*) {}
+
+  GenerationType generation() const { return 0; }
+  void reset_generation() {}
+  const GenerationType* generation_ptr() const { return nullptr; }
+  void set_generation_ptr(const GenerationType*) {}
+};
+
+#ifdef ABSL_SWISSTABLE_ENABLE_GENERATIONS
+using CommonFieldsGenerationInfo = CommonFieldsGenerationInfoEnabled;
+using HashSetIteratorGenerationInfo = HashSetIteratorGenerationInfoEnabled;
+#else
+using CommonFieldsGenerationInfo = CommonFieldsGenerationInfoDisabled;
+using HashSetIteratorGenerationInfo = HashSetIteratorGenerationInfoDisabled;
+#endif
+
 // CommonFields hold the fields in raw_hash_set that do not depend
 // on template parameters. This allows us to conveniently pass all
 // of this state to helper functions as a single argument.
-//
-// We make HashtablezInfoHandle a base class to take advantage of
-// the empty base-class optimization when sampling is turned off.
-class CommonFields : public HashtablezInfoHandle {
+class CommonFields : public CommonFieldsGenerationInfo {
  public:
   CommonFields() = default;
 
@@ -733,25 +894,38 @@ class CommonFields : public HashtablezInfoHandle {
 
   // Movable
   CommonFields(CommonFields&& that)
-      : HashtablezInfoHandle(
-            std::move(static_cast<HashtablezInfoHandle&&>(that))),
+      : CommonFieldsGenerationInfo(
+            std::move(static_cast<CommonFieldsGenerationInfo&&>(that))),
         // Explicitly copying fields into "this" and then resetting "that"
         // fields generates less code then calling absl::exchange per field.
         control_(that.control_),
         slots_(that.slots_),
         size_(that.size_),
         capacity_(that.capacity_),
-        growth_left_(that.growth_left_) {
+        compressed_tuple_(that.growth_left(), std::move(that.infoz())) {
     that.control_ = EmptyGroup();
     that.slots_ = nullptr;
     that.size_ = 0;
     that.capacity_ = 0;
-    that.growth_left_ = 0;
+    that.growth_left() = 0;
   }
   CommonFields& operator=(CommonFields&&) = default;
 
-  HashtablezInfoHandle& infoz() { return *this; }
-  const HashtablezInfoHandle& infoz() const { return *this; }
+  // The number of slots we can still fill without needing to rehash.
+  size_t& growth_left() { return compressed_tuple_.template get<0>(); }
+
+  HashtablezInfoHandle& infoz() { return compressed_tuple_.template get<1>(); }
+  const HashtablezInfoHandle& infoz() const {
+    return compressed_tuple_.template get<1>();
+  }
+
+  bool should_rehash_for_bug_detection_on_insert() const {
+    return CommonFieldsGenerationInfo::
+        should_rehash_for_bug_detection_on_insert(control_, capacity_);
+  }
+  void reset_reserved_growth(size_t reservation) {
+    CommonFieldsGenerationInfo::reset_reserved_growth(reservation, size_);
+  }
 
   // TODO(b/259599413): Investigate removing some of these fields:
   // - control/slots can be derived from each other
@@ -773,8 +947,10 @@ class CommonFields : public HashtablezInfoHandle {
   // The total number of available slots.
   size_t capacity_ = 0;
 
-  // The number of slots we can still fill without needing to rehash.
-  size_t growth_left_ = 0;
+  // Bundle together growth_left and HashtablezInfoHandle to ensure EBO for
+  // HashtablezInfoHandle when sampling is turned off.
+  absl::container_internal::CompressedTuple<size_t, HashtablezInfoHandle>
+      compressed_tuple_{0u, HashtablezInfoHandle{}};
 };
 
 // Returns he number of "cloned control bytes".
@@ -791,6 +967,12 @@ class raw_hash_set;
 //
 // A valid capacity is a non-zero integer `2^m - 1`.
 inline bool IsValidCapacity(size_t n) { return ((n + 1) & n) == 0 && n > 0; }
+
+// Returns the next valid capacity after `n`.
+inline size_t NextCapacity(size_t n) {
+  assert(IsValidCapacity(n) || n == 0);
+  return n * 2 + 1;
+}
 
 // Applies the following mapping to every byte in the control array:
 //   * kDeleted -> kEmpty
@@ -857,23 +1039,76 @@ size_t SelectBucketCountForIterRange(InputIter first, InputIter last,
   return 0;
 }
 
-#define ABSL_INTERNAL_ASSERT_IS_FULL(ctrl, operation)                         \
-  do {                                                                        \
-    ABSL_HARDENING_ASSERT(                                                    \
-        (ctrl != nullptr) && operation                                        \
-        " called on invalid iterator. The iterator might be an end() "        \
-        "iterator or may have been default constructed.");                    \
-    ABSL_HARDENING_ASSERT(                                                    \
-        (IsFull(*ctrl)) && operation                                          \
-        " called on invalid iterator. The element might have been erased or " \
-        "the table might have rehashed.");                                    \
-  } while (0)
+constexpr bool SwisstableDebugEnabled() {
+#if defined(ABSL_SWISSTABLE_ENABLE_GENERATIONS) || \
+    ABSL_OPTION_HARDENED == 1 || !defined(NDEBUG)
+  return true;
+#else
+  return false;
+#endif
+}
+
+inline void AssertIsFull(const ctrl_t* ctrl, GenerationType generation,
+                         const GenerationType* generation_ptr,
+                         const char* operation) {
+  if (!SwisstableDebugEnabled()) return;
+  if (ctrl == nullptr) {
+    ABSL_INTERNAL_LOG(FATAL,
+                      std::string(operation) + " called on end() iterator.");
+  }
+  if (ctrl == EmptyGroup()) {
+    ABSL_INTERNAL_LOG(FATAL, std::string(operation) +
+                                 " called on default-constructed iterator.");
+  }
+  if (SwisstableGenerationsEnabled()) {
+    if (generation != *generation_ptr) {
+      ABSL_INTERNAL_LOG(FATAL,
+                        std::string(operation) +
+                            " called on invalid iterator. The table could have "
+                            "rehashed since this iterator was initialized.");
+    }
+    if (!IsFull(*ctrl)) {
+      ABSL_INTERNAL_LOG(
+          FATAL,
+          std::string(operation) +
+              " called on invalid iterator. The element was likely erased.");
+    }
+  } else {
+    if (!IsFull(*ctrl)) {
+      ABSL_INTERNAL_LOG(
+          FATAL,
+          std::string(operation) +
+              " called on invalid iterator. The element might have been erased "
+              "or the table might have rehashed. Consider running with "
+              "--config=asan to diagnose rehashing issues.");
+    }
+  }
+}
 
 // Note that for comparisons, null/end iterators are valid.
-inline void AssertIsValidForComparison(const ctrl_t* ctrl) {
-  ABSL_HARDENING_ASSERT((ctrl == nullptr || IsFull(*ctrl)) &&
-                        "Invalid iterator comparison. The element might have "
-                        "been erased or the table might have rehashed.");
+inline void AssertIsValidForComparison(const ctrl_t* ctrl,
+                                       GenerationType generation,
+                                       const GenerationType* generation_ptr) {
+  if (!SwisstableDebugEnabled()) return;
+  const bool ctrl_is_valid_for_comparison =
+      ctrl == nullptr || ctrl == EmptyGroup() || IsFull(*ctrl);
+  if (SwisstableGenerationsEnabled()) {
+    if (generation != *generation_ptr) {
+      ABSL_INTERNAL_LOG(FATAL,
+                        "Invalid iterator comparison. The table could have "
+                        "rehashed since this iterator was initialized.");
+    }
+    if (!ctrl_is_valid_for_comparison) {
+      ABSL_INTERNAL_LOG(
+          FATAL, "Invalid iterator comparison. The element was likely erased.");
+    }
+  } else {
+    ABSL_HARDENING_ASSERT(
+        ctrl_is_valid_for_comparison &&
+        "Invalid iterator comparison. The element might have been erased or "
+        "the table might have rehashed. Consider running with --config=asan to "
+        "diagnose rehashing issues.");
+  }
 }
 
 // If the two iterators come from the same container, then their pointers will
@@ -900,11 +1135,47 @@ inline bool AreItersFromSameContainer(const ctrl_t* ctrl_a,
 // as long as we don't read them (when ctrl is null).
 inline void AssertSameContainer(const ctrl_t* ctrl_a, const ctrl_t* ctrl_b,
                                 const void* const& slot_a,
-                                const void* const& slot_b) {
-  ABSL_HARDENING_ASSERT(
-      AreItersFromSameContainer(ctrl_a, ctrl_b, slot_a, slot_b) &&
-      "Invalid iterator comparison. The iterators may be from different "
-      "containers or the container might have rehashed.");
+                                const void* const& slot_b,
+                                const GenerationType* generation_ptr_a,
+                                const GenerationType* generation_ptr_b) {
+  if (!SwisstableDebugEnabled()) return;
+  const bool a_is_default = ctrl_a == EmptyGroup();
+  const bool b_is_default = ctrl_b == EmptyGroup();
+  if (a_is_default != b_is_default) {
+    ABSL_INTERNAL_LOG(
+        FATAL,
+        "Invalid iterator comparison. Comparing default-constructed iterator "
+        "with non-default-constructed iterator.");
+  }
+  if (a_is_default && b_is_default) return;
+
+  if (SwisstableGenerationsEnabled()) {
+    if (generation_ptr_a == generation_ptr_b) return;
+    const bool a_is_empty = generation_ptr_a == EmptyGeneration();
+    const bool b_is_empty = generation_ptr_b == EmptyGeneration();
+    if (a_is_empty != b_is_empty) {
+      ABSL_INTERNAL_LOG(FATAL,
+                        "Invalid iterator comparison. Comparing iterator from "
+                        "a non-empty hashtable with an iterator from an empty "
+                        "hashtable.");
+    }
+    const bool a_is_end = ctrl_a == nullptr;
+    const bool b_is_end = ctrl_b == nullptr;
+    if (a_is_end || b_is_end) {
+      ABSL_INTERNAL_LOG(FATAL,
+                        "Invalid iterator comparison. Comparing iterator with "
+                        "an end() iterator from a different hashtable.");
+    }
+    ABSL_INTERNAL_LOG(FATAL,
+                      "Invalid iterator comparison. Comparing non-end() "
+                      "iterators from different hashtables.");
+  } else {
+    ABSL_HARDENING_ASSERT(
+        AreItersFromSameContainer(ctrl_a, ctrl_b, slot_a, slot_b) &&
+        "Invalid iterator comparison. The iterators may be from different "
+        "containers or the container might have rehashed. Consider running "
+        "with --config=asan to diagnose rehashing issues.");
+  }
 }
 
 struct FindInfo {
@@ -927,10 +1198,12 @@ struct FindInfo {
 inline bool is_small(size_t capacity) { return capacity < Group::kWidth - 1; }
 
 // Begins a probing operation on `common.control`, using `hash`.
-inline probe_seq<Group::kWidth> probe(const CommonFields& common, size_t hash) {
-  const ctrl_t* ctrl = common.control_;
-  const size_t capacity = common.capacity_;
+inline probe_seq<Group::kWidth> probe(const ctrl_t* ctrl, const size_t capacity,
+                                      size_t hash) {
   return probe_seq<Group::kWidth>(H1(hash, ctrl), capacity);
+}
+inline probe_seq<Group::kWidth> probe(const CommonFields& common, size_t hash) {
+  return probe(common.control_, common.capacity_, hash);
 }
 
 // Probes an array of control bits using a probe sequence derived from `hash`,
@@ -974,7 +1247,7 @@ extern template FindInfo find_first_non_full(const CommonFields&, size_t);
 FindInfo find_first_non_full_outofline(const CommonFields&, size_t);
 
 inline void ResetGrowthLeft(CommonFields& common) {
-  common.growth_left_ = CapacityToGrowth(common.capacity_) - common.size_;
+  common.growth_left() = CapacityToGrowth(common.capacity_) - common.size_;
 }
 
 // Sets `ctrl` to `{kEmpty, kSentinel, ..., kEmpty}`, marking the entire
@@ -1017,11 +1290,20 @@ inline void SetCtrl(const CommonFields& common, size_t i, h2_t h,
 }
 
 // Given the capacity of a table, computes the offset (from the start of the
+// backing allocation) of the generation counter (if it exists).
+inline size_t GenerationOffset(size_t capacity) {
+  assert(IsValidCapacity(capacity));
+  const size_t num_control_bytes = capacity + 1 + NumClonedBytes();
+  return num_control_bytes;
+}
+
+// Given the capacity of a table, computes the offset (from the start of the
 // backing allocation) at which the slots begin.
 inline size_t SlotOffset(size_t capacity, size_t slot_align) {
   assert(IsValidCapacity(capacity));
   const size_t num_control_bytes = capacity + 1 + NumClonedBytes();
-  return (num_control_bytes + slot_align - 1) & (~slot_align + 1);
+  return (num_control_bytes + NumGenerationBytes() + slot_align - 1) &
+         (~slot_align + 1);
 }
 
 // Given the capacity of a table, computes the total size of the backing
@@ -1046,6 +1328,10 @@ ABSL_ATTRIBUTE_NOINLINE void InitializeSlots(CommonFields& c, Alloc alloc) {
   const size_t cap = c.capacity_;
   char* mem = static_cast<char*>(
       Allocate<AlignOfSlot>(&alloc, AllocSize(cap, SizeOfSlot, AlignOfSlot)));
+  const GenerationType old_generation = c.generation();
+  c.set_generation_ptr(
+      reinterpret_cast<GenerationType*>(mem + GenerationOffset(cap)));
+  c.set_generation(old_generation + 1);
   c.control_ = reinterpret_cast<ctrl_t*>(mem);
   c.slots_ = mem + SlotOffset(cap, AlignOfSlot);
   ResetCtrl(c, SizeOfSlot);
@@ -1211,7 +1497,7 @@ class raw_hash_set {
   static_assert(std::is_same<const_pointer, const value_type*>::value,
                 "Allocators with custom pointer types are not supported");
 
-  class iterator {
+  class iterator : private HashSetIteratorGenerationInfo {
     friend class raw_hash_set;
 
    public:
@@ -1227,19 +1513,19 @@ class raw_hash_set {
 
     // PRECONDITION: not an end() iterator.
     reference operator*() const {
-      ABSL_INTERNAL_ASSERT_IS_FULL(ctrl_, "operator*()");
+      AssertIsFull(ctrl_, generation(), generation_ptr(), "operator*()");
       return PolicyTraits::element(slot_);
     }
 
     // PRECONDITION: not an end() iterator.
     pointer operator->() const {
-      ABSL_INTERNAL_ASSERT_IS_FULL(ctrl_, "operator->");
+      AssertIsFull(ctrl_, generation(), generation_ptr(), "operator->");
       return &operator*();
     }
 
     // PRECONDITION: not an end() iterator.
     iterator& operator++() {
-      ABSL_INTERNAL_ASSERT_IS_FULL(ctrl_, "operator++");
+      AssertIsFull(ctrl_, generation(), generation_ptr(), "operator++");
       ++ctrl_;
       ++slot_;
       skip_empty_or_deleted();
@@ -1253,9 +1539,10 @@ class raw_hash_set {
     }
 
     friend bool operator==(const iterator& a, const iterator& b) {
-      AssertSameContainer(a.ctrl_, b.ctrl_, a.slot_, b.slot_);
-      AssertIsValidForComparison(a.ctrl_);
-      AssertIsValidForComparison(b.ctrl_);
+      AssertIsValidForComparison(a.ctrl_, a.generation(), a.generation_ptr());
+      AssertIsValidForComparison(b.ctrl_, b.generation(), b.generation_ptr());
+      AssertSameContainer(a.ctrl_, b.ctrl_, a.slot_, b.slot_,
+                          a.generation_ptr(), b.generation_ptr());
       return a.ctrl_ == b.ctrl_;
     }
     friend bool operator!=(const iterator& a, const iterator& b) {
@@ -1263,11 +1550,18 @@ class raw_hash_set {
     }
 
    private:
-    iterator(ctrl_t* ctrl, slot_type* slot) : ctrl_(ctrl), slot_(slot) {
+    iterator(ctrl_t* ctrl, slot_type* slot,
+             const GenerationType* generation_ptr)
+        : HashSetIteratorGenerationInfo(generation_ptr),
+          ctrl_(ctrl),
+          slot_(slot) {
       // This assumption helps the compiler know that any non-end iterator is
       // not equal to any end iterator.
       ABSL_ASSUME(ctrl != nullptr);
     }
+    // For end() iterators.
+    explicit iterator(const GenerationType* generation_ptr)
+        : HashSetIteratorGenerationInfo(generation_ptr), ctrl_(nullptr) {}
 
     // Fixes up `ctrl_` to point to a full by advancing it and `slot_` until
     // they reach one.
@@ -1282,7 +1576,9 @@ class raw_hash_set {
       if (ABSL_PREDICT_FALSE(*ctrl_ == ctrl_t::kSentinel)) ctrl_ = nullptr;
     }
 
-    ctrl_t* ctrl_ = nullptr;
+    // We use EmptyGroup() for default-constructed iterators so that they can
+    // be distinguished from end iterators, which have nullptr ctrl_.
+    ctrl_t* ctrl_ = EmptyGroup();
     // To avoid uninitialized member warnings, put slot_ in an anonymous union.
     // The member is not initialized on singleton and end iterators.
     union {
@@ -1321,8 +1617,10 @@ class raw_hash_set {
     }
 
    private:
-    const_iterator(const ctrl_t* ctrl, const slot_type* slot)
-        : inner_(const_cast<ctrl_t*>(ctrl), const_cast<slot_type*>(slot)) {}
+    const_iterator(const ctrl_t* ctrl, const slot_type* slot,
+                   const GenerationType* gen)
+        : inner_(const_cast<ctrl_t*>(ctrl), const_cast<slot_type*>(slot), gen) {
+    }
 
     iterator inner_;
   };
@@ -1453,6 +1751,7 @@ class raw_hash_set {
       auto target = find_first_non_full_outofline(common(), hash);
       SetCtrl(common(), target.offset, H2(hash), sizeof(slot_type));
       emplace_at(target.offset, v);
+      common().maybe_increment_generation_on_insert();
       infoz().RecordInsert(hash, target.probe_length);
     }
     common().size_ = that.size();
@@ -1521,12 +1820,12 @@ class raw_hash_set {
     it.skip_empty_or_deleted();
     return it;
   }
-  iterator end() { return {}; }
+  iterator end() { return iterator(common().generation_ptr()); }
 
   const_iterator begin() const {
     return const_cast<raw_hash_set*>(this)->begin();
   }
-  const_iterator end() const { return {}; }
+  const_iterator end() const { return iterator(common().generation_ptr()); }
   const_iterator cbegin() const { return begin(); }
   const_iterator cend() const { return end(); }
 
@@ -1551,6 +1850,7 @@ class raw_hash_set {
       ClearBackingArray(common(), GetPolicyFunctions(),
                         /*reuse=*/cap < 128);
     }
+    common().set_reserved_growth(0);
   }
 
   inline void destroy_slots() {
@@ -1791,7 +2091,7 @@ class raw_hash_set {
   // This overload is necessary because otherwise erase<K>(const K&) would be
   // a better match if non-const iterator is passed as an argument.
   void erase(iterator it) {
-    ABSL_INTERNAL_ASSERT_IS_FULL(it.ctrl_, "erase()");
+    AssertIsFull(it.ctrl_, it.generation(), it.generation_ptr(), "erase()");
     PolicyTraits::destroy(&alloc_ref(), it.slot_);
     erase_meta_only(it);
   }
@@ -1825,7 +2125,8 @@ class raw_hash_set {
   }
 
   node_type extract(const_iterator position) {
-    ABSL_INTERNAL_ASSERT_IS_FULL(position.inner_.ctrl_, "extract()");
+    AssertIsFull(position.inner_.ctrl_, position.inner_.generation(),
+                 position.inner_.generation_ptr(), "extract()");
     auto node =
         CommonAccess::Transfer<node_type>(alloc_ref(), position.inner_.slot_);
     erase_meta_only(position);
@@ -1882,6 +2183,7 @@ class raw_hash_set {
       // and have potentially sampled the hashtable.
       infoz().RecordReservation(n);
     }
+    common().reset_reserved_growth(n);
   }
 
   // Extension API: support for heterogeneous keys.
@@ -1907,12 +2209,12 @@ class raw_hash_set {
   void prefetch(const key_arg<K>& key) const {
     (void)key;
     // Avoid probing if we won't be able to prefetch the addresses received.
-#ifdef ABSL_INTERNAL_HAVE_PREFETCH
+#ifdef ABSL_HAVE_PREFETCH
     prefetch_heap_block();
     auto seq = probe(common(), hash_ref()(key));
-    base_internal::PrefetchT0(control() + seq.offset());
-    base_internal::PrefetchT0(slot_array() + seq.offset());
-#endif  // ABSL_INTERNAL_HAVE_PREFETCH
+    PrefetchToLocalCache(control() + seq.offset());
+    PrefetchToLocalCache(slot_array() + seq.offset());
+#endif  // ABSL_HAVE_PREFETCH
   }
 
   // The API of find() has two extensions.
@@ -2193,7 +2495,7 @@ class raw_hash_set {
       drop_deletes_without_resize();
     } else {
       // Otherwise grow the container.
-      resize(cap * 2 + 1);
+      resize(NextCapacity(cap));
     }
   }
 
@@ -2257,8 +2559,16 @@ class raw_hash_set {
   //
   // REQUIRES: At least one non-full slot available.
   size_t prepare_insert(size_t hash) ABSL_ATTRIBUTE_NOINLINE {
+    const bool rehash_for_bug_detection =
+        common().should_rehash_for_bug_detection_on_insert();
+    if (rehash_for_bug_detection) {
+      // Move to a different heap allocation in order to detect bugs.
+      const size_t cap = capacity();
+      resize(growth_left() > 0 ? cap : NextCapacity(cap));
+    }
     auto target = find_first_non_full(common(), hash);
-    if (ABSL_PREDICT_FALSE(growth_left() == 0 &&
+    if (!rehash_for_bug_detection &&
+        ABSL_PREDICT_FALSE(growth_left() == 0 &&
                            !IsDeleted(control()[target.offset]))) {
       rehash_and_grow_if_necessary();
       target = find_first_non_full(common(), hash);
@@ -2266,6 +2576,7 @@ class raw_hash_set {
     ++common().size_;
     growth_left() -= IsEmpty(control()[target.offset]);
     SetCtrl(common(), target.offset, H2(hash), sizeof(slot_type));
+    common().maybe_increment_generation_on_insert();
     infoz().RecordInsert(hash, target.probe_length);
     return target.offset;
   }
@@ -2288,9 +2599,11 @@ class raw_hash_set {
            "constructed value does not match the lookup key");
   }
 
-  iterator iterator_at(size_t i) { return {control() + i, slot_array() + i}; }
+  iterator iterator_at(size_t i) {
+    return {control() + i, slot_array() + i, common().generation_ptr()};
+  }
   const_iterator iterator_at(size_t i) const {
-    return {control() + i, slot_array() + i};
+    return {control() + i, slot_array() + i, common().generation_ptr()};
   }
 
  private:
@@ -2306,12 +2619,16 @@ class raw_hash_set {
   // side-effect.
   //
   // See `CapacityToGrowth()`.
-  size_t& growth_left() { return common().growth_left_; }
+  size_t& growth_left() { return common().growth_left(); }
 
-  // Prefetch the heap-allocated memory region to resolve potential TLB misses.
-  // This is intended to overlap with execution of calculating the hash for a
-  // key.
-  void prefetch_heap_block() const { base_internal::PrefetchT2(control()); }
+  // Prefetch the heap-allocated memory region to resolve potential TLB and
+  // cache misses. This is intended to overlap with execution of calculating the
+  // hash for a key.
+  void prefetch_heap_block() const {
+#if ABSL_HAVE_BUILTIN(__builtin_prefetch) || defined(__GNUC__)
+    __builtin_prefetch(control(), 0, 1);
+#endif
+  }
 
   CommonFields& common() { return settings_.template get<0>(); }
   const CommonFields& common() const { return settings_.template get<0>(); }
@@ -2458,6 +2775,6 @@ struct HashtableDebugAccess<Set, absl::void_t<typename Set::raw_hash_set>> {
 ABSL_NAMESPACE_END
 }  // namespace absl
 
-#undef ABSL_INTERNAL_ASSERT_IS_FULL
+#undef ABSL_SWISSTABLE_ENABLE_GENERATIONS
 
 #endif  // ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_

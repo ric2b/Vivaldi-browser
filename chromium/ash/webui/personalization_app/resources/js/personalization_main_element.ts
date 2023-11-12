@@ -7,12 +7,10 @@
  * the personalization hub.
  */
 
-import '../css/cros_button_style.css.js';
+import './ambient/ambient_preview_large_element.js';
 
-import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
-
+import {isAmbientModeAllowed, isDarkLightModeEnabled, isPersonalizationJellyEnabled, isRgbKeyboardSupported} from './load_time_booleans.js';
 import {getTemplate} from './personalization_main_element.html.js';
-import {isAmbientModeAllowed, Paths, PersonalizationRouter} from './personalization_router_element.js';
 import {WithPersonalizationStore} from './personalization_store.js';
 
 export class PersonalizationMain extends WithPersonalizationStore {
@@ -27,31 +25,25 @@ export class PersonalizationMain extends WithPersonalizationStore {
   static get properties() {
     return {
       path: String,
-      clickable_: {
+      isDarkLightModeEnabled_: {
         type: Boolean,
-        value: true,
+        value() {
+          return isDarkLightModeEnabled();
+        },
       },
-      isAmbientModeManaged_: {
+      shouldShowAmbientPreview_: {
         type: Boolean,
-        value: loadTimeData.getBoolean('isAmbientModeManaged'),
+        value() {
+          return isAmbientModeAllowed() || isPersonalizationJellyEnabled();
+        },
+      },
+      isRgbKeyboardSupported_: {
+        type: Boolean,
+        value() {
+          return isRgbKeyboardSupported();
+        },
       },
     };
-  }
-
-  private isDarkLightModeEnabled_(): boolean {
-    return loadTimeData.getBoolean('isDarkLightModeEnabled');
-  }
-
-  private isAmbientModeAllowed_(): boolean {
-    return isAmbientModeAllowed();
-  }
-
-  private isRgbKeyboardSupported_(): boolean {
-    return loadTimeData.getBoolean('isRgbKeyboardSupported');
-  }
-
-  private onClickAmbientSubpageLink_() {
-    PersonalizationRouter.instance().goToRoute(Paths.AMBIENT);
   }
 }
 

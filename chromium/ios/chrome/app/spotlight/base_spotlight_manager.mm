@@ -4,14 +4,14 @@
 
 #import "ios/chrome/app/spotlight/base_spotlight_manager.h"
 
-#import <MobileCoreServices/MobileCoreServices.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #import <memory>
 #import <set>
 #import <string>
 
-#import "base/bind.h"
 #import "base/containers/contains.h"
+#import "base/functional/bind.h"
 #import "base/hash/md5.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/cancelable_task_tracker.h"
@@ -20,6 +20,7 @@
 #import "components/favicon/core/large_icon_service.h"
 #import "components/favicon_base/fallback_icon_style.h"
 #import "components/favicon_base/favicon_types.h"
+#import "ios/chrome/app/spotlight/spotlight_logger.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "net/base/mac/url_conversions.h"
 #import "skia/ext/skia_utils_ios.h"
@@ -181,8 +182,7 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string,
                                 : indexedURL.spec();
 
   CSSearchableItemAttributeSet* attributeSet =
-      [[CSSearchableItemAttributeSet alloc]
-          initWithItemContentType:(NSString*)kUTTypeURL];
+      [[CSSearchableItemAttributeSet alloc] initWithContentType:UTTypeURL];
   [attributeSet setTitle:defaultTitle];
   [attributeSet setDisplayName:defaultTitle];
   [attributeSet setURL:nsURL];
@@ -282,6 +282,7 @@ UIImage* GetFallbackImageWithStringAndColor(NSString* string,
     [[CSSearchableIndex defaultSearchableIndex]
         indexSearchableItems:spotlightItems
            completionHandler:nil];
+    [[SpotlightLogger sharedLogger] logIndexedItems:spotlightItems];
   }
 }
 

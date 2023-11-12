@@ -7,22 +7,19 @@ package org.chromium.chrome.browser.omnibox.suggestions.pedal;
 import android.content.Context;
 import android.view.KeyEvent;
 import android.view.View;
-import android.view.ViewGroup.LayoutParams;
-import android.view.ViewGroup.MarginLayoutParams;
-import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.LayoutRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Px;
 import androidx.annotation.VisibleForTesting;
-import androidx.core.view.MarginLayoutParamsCompat;
 
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.omnibox.suggestions.base.SimpleVerticalLayoutView;
 import org.chromium.components.browser_ui.widget.chips.ChipView;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -33,7 +30,7 @@ import java.util.List;
  */
 public class PedalSuggestionView<T extends View> extends SimpleVerticalLayoutView {
     private final @NonNull BaseSuggestionView<T> mBaseSuggestionView;
-    private final @NonNull PedalView mPedal;
+    private final @NonNull List<PedalView> mPedalList;
 
     /**
      * Constructs a new suggestion view and inflates supplied layout as the contents view.
@@ -46,44 +43,25 @@ public class PedalSuggestionView<T extends View> extends SimpleVerticalLayoutVie
         mBaseSuggestionView = new BaseSuggestionView<T>(context, layoutId);
         addView(mBaseSuggestionView);
 
-        mPedal = new PedalView(getContext());
+        mPedalList = new ArrayList<>();
+        PedalView pedal = new PedalView(getContext());
         final @Px int pedalSuggestionSizePx = context.getResources().getDimensionPixelSize(
                 R.dimen.omnibox_pedal_suggestion_pedal_height);
         final @Px int pedalStartPaddingPx =
                 getResources().getDimensionPixelSize(R.dimen.omnibox_suggestion_icon_area_size);
-        mPedal.setPaddingRelative(pedalStartPaddingPx, 0, 0, 0);
-        mPedal.getChipView().setMinimumHeight(pedalSuggestionSizePx);
-        addView(mPedal);
-
-        final @Px int pedalBottomPaddingPx = getResources().getDimensionPixelSize(
-                R.dimen.omnibox_suggestion_semicompact_padding);
-        setPaddingRelative(0, 0, 0, pedalBottomPaddingPx);
+        pedal.setPaddingRelative(pedalStartPaddingPx, 0, 0, 0);
+        pedal.getChipView().setMinimumHeight(pedalSuggestionSizePx);
+        addView(pedal);
+        mPedalList.add(pedal);
     }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        return mPedal.onKeyDown(keyCode, event) || super.onKeyDown(keyCode, event);
-    }
-
-    @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        updatePedalLayoutMargin();
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-    }
-
-    private void updatePedalLayoutMargin() {
-        List<ImageView> buttons = mBaseSuggestionView.getActionButtons();
-        int actionButtonsWidth = 0;
-        if (buttons != null) {
-            for (ImageView button : buttons) {
-                actionButtonsWidth += button.getMeasuredWidth();
-            }
+        // TODO(crbug/1411871): implement proper keyboard navigation for actions.
+        if (mPedalList.size() > 0) {
+            return mPedalList.get(0).onKeyDown(keyCode, event) || super.onKeyDown(keyCode, event);
         }
-
-        MarginLayoutParams layoutParams =
-                new MarginLayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-        MarginLayoutParamsCompat.setMarginEnd(layoutParams, actionButtonsWidth);
-        mPedal.setLayoutParams(layoutParams);
+        return false;
     }
 
     /** @return base suggestion view. */
@@ -95,17 +73,17 @@ public class PedalSuggestionView<T extends View> extends SimpleVerticalLayoutVie
     /** @return The Primary TextView in the pedal view. */
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public TextView getPedalTextView() {
-        return mPedal.getPedalTextView();
+        return mPedalList.get(0).getPedalTextView();
     }
 
     /** @return The {@link ChipView} in this view. */
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public ChipView getPedalChipView() {
-        return mPedal.getChipView();
+        return mPedalList.get(0).getChipView();
     }
 
     /** @return The {@link PedalView} in this view. */
     PedalView getPedalView() {
-        return mPedal;
+        return mPedalList.get(0);
     }
 }

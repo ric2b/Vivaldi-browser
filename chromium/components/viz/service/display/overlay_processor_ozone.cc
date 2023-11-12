@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/timer/elapsed_timer.h"
@@ -98,6 +98,11 @@ bool AllowColorSpaceCombination(
   // should be consistent with the overlay path.
   if (!source_color_space.IsValid())
     return true;
+
+  // TODO(b/249215983): Disable promotion of HDR content to overlay until
+  // decoding to monitor colorspace is supported.
+  if (source_color_space.IsHDR())
+    return false;
 
   // Since https://crrev.com/c/2336347, we force BT.601/narrow for the
   // COLOR_ENCODING and COLOR_RANGE DRM/KMS properties. On the other hand, the

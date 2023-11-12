@@ -12,12 +12,13 @@
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/url_formatter/url_fixer.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_start_page_prefs.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
@@ -31,7 +32,7 @@ using bookmarks::ManagedBookmarkService;
 
 @interface VivaldiSpeedDialHomeMediator ()<BookmarkModelBridgeObserver> {
   // Bridge to register for bookmark changes.
-  std::unique_ptr<bookmarks::BookmarkModelBridge> _model_bridge;
+  std::unique_ptr<BookmarkModelBridge> _model_bridge;
 }
 
 // The browser state for this mediator.
@@ -42,6 +43,8 @@ using bookmarks::ManagedBookmarkService;
 @property(nonatomic,strong) NSMutableArray* speedDialFolders;
 // Bool to keep track the initial loading of the speed dial folders.
 @property(nonatomic,assign) BOOL isFirstLoad;
+// Bool to keep track of extensive changes.
+@property(nonatomic,assign) BOOL runningExtensiveChanges;
 @end
 
 @implementation VivaldiSpeedDialHomeMediator
@@ -50,6 +53,7 @@ using bookmarks::ManagedBookmarkService;
 @synthesize consumer = _consumer;
 @synthesize speedDialFolders = _speedDialFolders;
 @synthesize isFirstLoad = _isFirstLoad;
+@synthesize runningExtensiveChanges = _runningExtensiveChanges;
 
 #pragma mark - INITIALIZERS
 - (instancetype)initWithBrowserState:(ChromeBrowserState*)browserState
@@ -57,7 +61,7 @@ using bookmarks::ManagedBookmarkService;
   if ((self = [super init])) {
     _browserState = browserState;
     _bookmarkModel = bookmarkModel;
-    _model_bridge.reset(new bookmarks::BookmarkModelBridge(self,
+    _model_bridge.reset(new BookmarkModelBridge(self,
                                                            _bookmarkModel));
 
     [self setUpStartPageLayoutChangeListener];
@@ -174,7 +178,6 @@ using bookmarks::ManagedBookmarkService;
 
   bookmarkList.push_back(self.bookmarkModel->mobile_node());
   bookmarkList.push_back(self.bookmarkModel->bookmark_bar_node());
-  bookmarkList.push_back(self.bookmarkModel->other_node());
 
   // Push all top folders in stack and give them depth of 0.
   for (std::vector<const BookmarkNode*>::reverse_iterator it =
@@ -235,7 +238,6 @@ using bookmarks::ManagedBookmarkService;
 
   bookmarkList.push_back(self.bookmarkModel->mobile_node());
   bookmarkList.push_back(self.bookmarkModel->bookmark_bar_node());
-  bookmarkList.push_back(self.bookmarkModel->other_node());
 
   // Push all top folders in stack and give them depth of 0.
   for (std::vector<const BookmarkNode*>::reverse_iterator it =
@@ -310,29 +312,12 @@ using bookmarks::ManagedBookmarkService;
 /// Returns sorted result from two provided NSString keys.
 - (NSComparisonResult)compare:(NSString*)first
                        second:(NSString*)second {
-  NSComparisonResult result = NSOrderedSame;
-  if ([first length] && [second length]) {
-    result = [first caseInsensitiveCompare:second];
-  } else if ([first length]) {
-    result = NSOrderedAscending;
-  } else if ([second length]) {
-    result = NSOrderedDescending;
-  }
-
-  if (result == NSOrderedSame) {
-    if ([first length] && [second length]) {
-      result = [first caseInsensitiveCompare:second];
-    } else if ([first length]) {
-      result = NSOrderedAscending;
-    } else if ([second length]) {
-      result = NSOrderedDescending;
-    }
-  }
-  return result;
+  return [VivaldiGlobalHelpers compare:first
+                                second:second];
 }
 
 - (void)refreshContents {
-  if (self.isFirstLoad)
+  if (self.isFirstLoad || self.runningExtensiveChanges)
     return;
   [self.consumer refreshContents];
 }
@@ -367,15 +352,17 @@ using bookmarks::ManagedBookmarkService;
 }
 
 - (void)bookmarkMetaInfoChanged:(const bookmarks::BookmarkNode*)bookmarkNode {
-  [self refreshContents];
+  if (bookmarkNode->is_folder() && (GetSpeeddial(bookmarkNode))) {
+    [self refreshContents];
+  }
 }
 
 - (void)extensiveBookmarkChangesBeginning {
-  // No op when sync started. We would be interested to refresh the UI when
-  // bookmark changes ended.
+  _runningExtensiveChanges = YES;
 }
 
 - (void)extensiveBookmarkChangesEnded {
+  _runningExtensiveChanges = NO;
   [self refreshContents];
 }
 

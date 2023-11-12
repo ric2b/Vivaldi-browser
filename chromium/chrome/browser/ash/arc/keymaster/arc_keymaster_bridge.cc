@@ -9,11 +9,10 @@
 
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/process/process_handle.h"
-#include "chrome/services/keymaster/public/mojom/cert_store.mojom.h"
 #include "chromeos/ash/components/dbus/arc/arc_keymaster_client.h"
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -72,7 +71,7 @@ ArcKeymasterBridge::~ArcKeymasterBridge() {
 void ArcKeymasterBridge::UpdatePlaceholderKeys(
     std::vector<keymaster::mojom::ChromeOsKeyPtr> keys,
     UpdatePlaceholderKeysCallback callback) {
-  if (cert_store_bridge_->is_proxy_bound()) {
+  if (cert_store_bridge_->IsProxyBound()) {
     cert_store_bridge_->UpdatePlaceholderKeysInKeymaster(std::move(keys),
                                                          std::move(callback));
   } else {
@@ -115,7 +114,6 @@ void ArcKeymasterBridge::GetServerAfterBootstrap(GetServerCallback callback,
 void ArcKeymasterBridge::OnBootstrapMojoConnection(
     BootstrapMojoConnectionCallback callback,
     bool result) {
-  cert_store_bridge_->OnBootstrapMojoConnection(result);
   if (result) {
     DVLOG(1) << "Success bootstrapping Mojo in arc-keymasterd.";
   } else {
@@ -161,6 +159,11 @@ void ArcKeymasterBridge::BootstrapMojoConnection(
       channel.TakeRemoteEndpoint().TakePlatformHandle().TakeFD(),
       base::BindOnce(&ArcKeymasterBridge::OnBootstrapMojoConnection,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+// static
+void ArcKeymasterBridge::EnsureFactoryBuilt() {
+  ArcKeymasterBridgeFactory::GetInstance();
 }
 
 }  // namespace arc

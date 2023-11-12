@@ -17,11 +17,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -196,7 +196,7 @@ void CalendarBackend::CreateCalendarEvents(
   for (size_t i = 0; i < count; i++) {
     EventRow ev = events[i];
 
-    CreateCalendarEvent(ev, event_result);
+    CreateCalendarEvent(ev, false, event_result);
 
     if (event_result->success) {
       success_counter++;
@@ -207,12 +207,12 @@ void CalendarBackend::CreateCalendarEvents(
 
   result->number_success = success_counter;
   result->number_failed = failed_counter;
-  EventRow ev;
-  NotifyEventCreated(ev);
+  NotifyCalendarChanged();
 }
 
 void CalendarBackend::CreateCalendarEvent(
     EventRow ev,
+    bool notify,
     std::shared_ptr<EventResultCB> result) {
   if (!db_->DoesCalendarIdExist(ev.calendar_id)) {
     result->success = false;
@@ -259,7 +259,9 @@ void CalendarBackend::CreateCalendarEvent(
     result->success = true;
     EventResult res = FillEvent(id);
     result->event = res;
-    NotifyCalendarChanged();
+    if (notify) {
+      NotifyCalendarChanged();
+    }
   } else {
     result->success = false;
   }

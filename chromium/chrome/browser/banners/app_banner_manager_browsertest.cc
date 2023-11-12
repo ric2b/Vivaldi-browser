@@ -8,9 +8,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
@@ -741,8 +741,8 @@ class AppBannerManagerBrowserTestWithChromeBFCache
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kIgnoreCertificateErrors);
 
-    EnableFeatureAndSetParams(::features::kBackForwardCache,
-                              "TimeToLiveInBackForwardCacheInSeconds", "3600");
+    EnableFeatureAndSetParams(::features::kBackForwardCacheTimeToLiveControl,
+                              "time_to_live_seconds", "3600");
     // Navigating quickly between cached pages can fail flakily with:
     // CanStorePageNow: <URL> : No: blocklisted features: outstanding network
     // request (others)

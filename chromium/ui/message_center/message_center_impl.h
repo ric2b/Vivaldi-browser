@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
@@ -49,6 +49,9 @@ class MessageCenterImpl : public MessageCenter,
   void RemoveNotificationBlocker(NotificationBlocker* blocker) override;
   void SetVisibility(Visibility visible) override;
   bool IsMessageCenterVisible() const override;
+  ExpandState GetNotificationExpandState(const std::string& id) override;
+  void SetNotificationExpandState(const std::string& id,
+                                  const ExpandState state) override;
   void SetHasMessageCenterView(bool has_message_center_view) override;
   bool HasMessageCenterView() const override;
   size_t NotificationCount() const override;
@@ -63,6 +66,8 @@ class MessageCenterImpl : public MessageCenter,
       const std::string& app_id) override;
   NotificationList::Notifications GetNotifications() override;
   const NotificationList::Notifications& GetVisibleNotifications() override;
+  NotificationList::Notifications GetVisibleNotificationsWithoutBlocker(
+      const NotificationBlocker* blocker) const override;
   NotificationList::PopupNotifications GetPopupNotifications() override;
   NotificationList::PopupNotifications GetPopupNotificationsWithoutBlocker(
       const NotificationBlocker& blocker) const override;

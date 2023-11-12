@@ -5,7 +5,7 @@
 #include "ash/components/arc/net/always_on_vpn_manager.h"
 
 #include "ash/components/arc/arc_prefs.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
@@ -23,13 +23,13 @@ const base::Value kVpnPackageValue(kVpnPackage);
 void OnGetProperties(bool* success_out,
                      std::string* package_name_out,
                      base::OnceClosure callback,
-                     absl::optional<base::Value> result) {
+                     absl::optional<base::Value::Dict> result) {
   *success_out = result.has_value();
   if (result) {
-    const base::Value* value = result->FindKeyOfType(
-        shill::kAlwaysOnVpnPackageProperty, base::Value::Type::STRING);
+    const std::string* value =
+        result->FindString(shill::kAlwaysOnVpnPackageProperty);
     if (value != nullptr)
-      *package_name_out = value->GetString();
+      *package_name_out = *value;
   }
   std::move(callback).Run();
 }

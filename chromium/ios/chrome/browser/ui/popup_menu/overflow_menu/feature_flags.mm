@@ -6,6 +6,11 @@
 
 #import "components/password_manager/core/common/password_manager_features.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -18,6 +23,10 @@ BASE_FEATURE(kSmartSortingNewOverflowMenu,
              "kSmartSortingNewOverflowMenu",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kSmartSortingPriceTrackingDestination,
+             "kSmartSortingPriceTrackingDestination",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kNewOverflowMenuShareChromeAction,
              "kNewOverflowMenuShareChromeAction",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -27,6 +36,11 @@ BASE_FEATURE(kNewOverflowMenuAlternateIPH,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsNewOverflowMenuEnabled() {
+
+  // Vivaldi: We will present the new overflow menu always.
+  if (vivaldi::IsVivaldiRunning())
+    return true; // End Vivaldi
+
   if (@available(iOS 15, *)) {
     return base::FeatureList::IsEnabled(kNewOverflowMenu);
   }
@@ -35,18 +49,19 @@ bool IsNewOverflowMenuEnabled() {
   return false;
 }
 
-bool IsPasswordManagerBrandingUpdateEnabled() {
-  if (IsNewOverflowMenuEnabled()) {
-    return base::FeatureList::IsEnabled(
-        password_manager::features::kIOSEnablePasswordManagerBrandingUpdate);
-  }
-
-  return false;
-}
-
 bool IsSmartSortingNewOverflowMenuEnabled() {
+
+  // Vivaldi: We won't need this as we have fixed items.
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   return IsNewOverflowMenuEnabled() &&
          base::FeatureList::IsEnabled(kSmartSortingNewOverflowMenu);
+}
+
+bool IsSmartSortingPriceTrackingDestinationEnabled() {
+  return IsSmartSortingNewOverflowMenuEnabled() &&
+         base::FeatureList::IsEnabled(kSmartSortingPriceTrackingDestination);
 }
 
 bool IsNewOverflowMenuShareChromeActionEnabled() {

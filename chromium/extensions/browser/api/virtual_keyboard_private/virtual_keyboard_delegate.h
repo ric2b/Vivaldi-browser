@@ -8,9 +8,8 @@
 #include <set>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/values.h"
-#include "content/public/browser/browser_thread.h"
 #include "extensions/common/api/virtual_keyboard.h"
 #include "extensions/common/api/virtual_keyboard_private.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -20,7 +19,7 @@ namespace extensions {
 
 class VirtualKeyboardDelegate {
  public:
-  virtual ~VirtualKeyboardDelegate() {}
+  virtual ~VirtualKeyboardDelegate() = default;
 
   using OnKeyboardSettingsCallback =
       base::OnceCallback<void(absl::optional<base::Value::Dict> settings)>;

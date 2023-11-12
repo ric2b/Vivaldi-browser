@@ -13,8 +13,8 @@
 #include <set>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
@@ -461,17 +461,17 @@ void ExtensionDevToolsClientHost::DispatchProtocolMessage(
     LOG(ERROR) << "Tried to send invalid message to extension: " << message_str;
     return;
   }
-  base::Value dictionary = std::move(result.value());
+  base::Value::Dict& dictionary = result->GetDict();
 
-  absl::optional<int> id = dictionary.FindIntKey("id");
+  absl::optional<int> id = dictionary.FindInt("id");
   if (!id) {
-    std::string* method_name = dictionary.FindStringKey("method");
+    std::string* method_name = dictionary.FindString("method");
     if (!method_name)
       return;
 
     OnEvent::Params params;
-    if (base::Value* params_value = dictionary.FindDictKey("params")) {
-      params.additional_properties = std::move(params_value->GetDict());
+    if (base::Value::Dict* params_value = dictionary.FindDict("params")) {
+      params.additional_properties = std::move(*params_value);
     }
 
     auto args(OnEvent::Create(debuggee_, *method_name, params));
@@ -485,7 +485,7 @@ void ExtensionDevToolsClientHost::DispatchProtocolMessage(
     if (it == pending_requests_.end())
       return;
 
-    it->second->SendResponseBody(std::move(dictionary));
+    it->second->SendResponseBody(base::Value(std::move(dictionary)));
     pending_requests_.erase(it);
   }
 }
@@ -740,7 +740,7 @@ ExtensionFunction::ResponseAction DebuggerSendCommandFunction::Run() {
 }
 
 void DebuggerSendCommandFunction::SendResponseBody(base::Value response) {
-  if (base::Value* error_body = response.FindKey("error")) {
+  if (base::Value* error_body = response.GetDict().Find("error")) {
     std::string error;
     base::JSONWriter::Write(*error_body, &error);
     Respond(Error(std::move(error)));

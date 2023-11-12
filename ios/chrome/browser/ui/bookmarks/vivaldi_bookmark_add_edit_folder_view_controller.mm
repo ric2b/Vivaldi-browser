@@ -4,19 +4,20 @@
 
 #import <UIKit/UIKit.h>
 
+
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/bookmarks/browser/titled_url_index.h"
 #import "components/bookmarks/managed/managed_bookmark_service.h"
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
-#import "components/url_formatter/url_fixer.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_folder_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_ui_constants.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
+#import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_view_controller_presentation_delegate.h"
+#import "ios/chrome/browser/ui/bookmarks/folder_chooser/bookmarks_folder_chooser_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/undo_manager_wrapper.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_parent_folder_view.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
@@ -25,7 +26,6 @@
 #import "ios/ui/custom_views/vivaldi_text_field_view.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util.h"
-#import "url/gurl.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using bookmarks::BookmarkNode;
@@ -49,13 +49,13 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
 
 @interface VivaldiBookmarkAddEditFolderViewController ()
                         <VivaldiBookmarkParentFolderViewDelegate,
-                        BookmarkFolderViewControllerDelegate> {}
+        BookmarksFolderChooserViewControllerPresentationDelegate> {}
 // Textview for speed dial/bookmark folder name
 @property(nonatomic,weak) VivaldiTextFieldView* folderNameTextView;
 // A view for holding the parent folder components
 @property(nonatomic,weak) VivaldiBookmarkParentFolderView* parentFolderView;
 // View controller for folder selection.
-@property(nonatomic, strong) BookmarkFolderViewController* folderViewController;
+@property(nonatomic, strong) BookmarksFolderChooserViewController* folderViewController;
 // The bookmark model used.
 @property(nonatomic, assign) bookmarks::BookmarkModel* bookmarks;
 // The Browser in which bookmarks are presented
@@ -370,8 +370,8 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
   if (self.editingItem.bookmarkNode)
     editedNodes.insert(self.editingItem.bookmarkNode);
 
-  BookmarkFolderViewController* folderViewController =
-      [[BookmarkFolderViewController alloc]
+  BookmarksFolderChooserViewController* folderViewController =
+      [[BookmarksFolderChooserViewController alloc]
           initWithBookmarkModel:self.bookmarks
                allowsNewFolders:NO
                     editedNodes:editedNodes
@@ -386,10 +386,16 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
 }
 
 
-#pragma mark - BOOKMARK_FOLDER_VIEWCONTROLLER_DELEGATE
+#pragma mark - BookmarksFolderChooserViewControllerPresentationDelegate
 
-- (void)folderPicker:(BookmarkFolderViewController*)folderPicker
-    didFinishWithFolder:(const BookmarkNode*)folder {
+- (void)showBookmarksFolderEditor {
+  // No op.
+}
+
+- (void)bookmarksFolderChooserViewController:
+            (BookmarksFolderChooserViewController*)viewController
+                         didFinishWithFolder:
+  (const bookmarks::BookmarkNode*)folder {
   self.folderItem.bookmarkNode = folder;
   [self updateFolderState];
   [self.navigationController popViewControllerAnimated:YES];
@@ -397,14 +403,15 @@ UIEdgeInsets parentFolderViewPadding = UIEdgeInsetsMake(24, 24, 12, 18);
   self.folderViewController = nil;
 }
 
-- (void)folderPickerDidCancel:(BookmarkFolderViewController*)folderPicker {
+- (void)bookmarksFolderChooserViewControllerDidCancel:
+  (BookmarksFolderChooserViewController*)viewController {
   self.folderViewController.delegate = nil;
   self.folderViewController = nil;
 }
 
-- (void)folderPickerDidDismiss:(BookmarkFolderViewController*)folderPicker {
-  self.folderViewController.delegate = nil;
-  self.folderViewController = nil;
+- (void)bookmarksFolderChooserViewControllerDidDismiss:
+    (BookmarksFolderChooserViewController*)viewController {
+  [self bookmarksFolderChooserViewControllerDidCancel:viewController];
 }
 
 @end

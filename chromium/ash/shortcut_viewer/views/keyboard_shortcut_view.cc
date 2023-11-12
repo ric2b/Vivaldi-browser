@@ -27,11 +27,12 @@
 #include "ash/shortcut_viewer/views/ksv_search_box_view.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/i18n/string_search.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -209,7 +210,8 @@ bool ShouldExcludeItem(const ash::KeyboardShortcutItem& item) {
     case IDS_KSV_DESCRIPTION_PRIVACY_SCREEN_TOGGLE:
       return !ash::Shell::Get()->privacy_screen_controller()->IsSupported();
     case IDS_KSV_DESCRIPTION_FLOAT:
-      return !chromeos::wm::features::IsFloatWindowEnabled();
+    case IDS_KSV_DESCRIPTION_TOGGLE_MULTITASK_MENU:
+      return !chromeos::wm::features::IsWindowLayoutMenuEnabled();
   }
 
   return false;

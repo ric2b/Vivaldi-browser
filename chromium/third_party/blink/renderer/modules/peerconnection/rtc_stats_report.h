@@ -23,7 +23,7 @@ Vector<webrtc::NonStandardGroupId> GetExposedGroupIds(
 
 // https://w3c.github.io/webrtc-pc/#rtcstatsreport-object
 class RTCStatsReport final : public ScriptWrappable,
-                             public MaplikeReadAPIs<RTCStatsReport> {
+                             public Maplike<RTCStatsReport> {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -41,7 +41,13 @@ class RTCStatsReport final : public ScriptWrappable,
                    ExceptionState&) override;
 
  private:
+  bool GetMapEntryIdl(ScriptState*,
+                      const String& key,
+                      ScriptValue&,
+                      ExceptionState&);
+
   std::unique_ptr<RTCStatsReportPlatform> report_;
+  const bool use_web_idl_;
 };
 
 }  // namespace blink

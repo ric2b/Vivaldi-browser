@@ -4,19 +4,30 @@
 
 #include "chrome/browser/ash/login/oobe_quick_start/target_device_bootstrap_controller.h"
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/authenticated_connection.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/incoming_connection.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/target_device_connection_broker_factory.h"
 #include "components/qr_code_generator/qr_code_generator.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
 namespace ash::quick_start {
 
 namespace {
+
+// Passing "--quick-start-phone-instance-id" on the command line will implement
+// the Unified Setup UI enhancements with the ID provided in the switch. This is
+// for testing only and in the future this ID will be received during the Gaia
+// credentials exchange.
+// TODO(b/234655072): Delete this and get ID from the |bootstrap_controller_|
+// Gaia credentials exchange instead.
+constexpr char kQuickStartPhoneInstanceIDSwitch[] =
+    "quick-start-phone-instance-id";
 
 TargetDeviceBootstrapController::QRCodePixelData GenerateQRCode(
     std::vector<uint8_t> blob) {
@@ -33,9 +44,11 @@ TargetDeviceBootstrapController::QRCodePixelData GenerateQRCode(
 
 }  // namespace
 
-TargetDeviceBootstrapController::TargetDeviceBootstrapController() {
-  connection_broker_ = TargetDeviceConnectionBrokerFactory::Create();
-}
+TargetDeviceBootstrapController::TargetDeviceBootstrapController(
+    base::WeakPtr<NearbyConnectionsManager> nearby_connections_manager)
+    : connection_broker_(TargetDeviceConnectionBrokerFactory::Create(
+          nearby_connections_manager,
+          /*session_id=*/absl::nullopt)) {}
 
 TargetDeviceBootstrapController::~TargetDeviceBootstrapController() = default;
 
@@ -53,6 +66,17 @@ void TargetDeviceBootstrapController::RemoveObserver(Observer* obs) {
 void TargetDeviceBootstrapController::GetFeatureSupportStatusAsync(
     TargetDeviceConnectionBroker::FeatureSupportStatusCallback callback) {
   connection_broker_->GetFeatureSupportStatusAsync(std::move(callback));
+}
+
+std::string TargetDeviceBootstrapController::GetPhoneInstanceId() {
+  // TODO(b/234655072): Delete kQuickStartPhoneInstanceIDSwitch and get the ID
+  // from the Gaia credentials exchange instead.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(kQuickStartPhoneInstanceIDSwitch)) {
+    return command_line->GetSwitchValueASCII(kQuickStartPhoneInstanceIDSwitch);
+  }
+
+  return "";
 }
 
 base::WeakPtr<TargetDeviceBootstrapController>

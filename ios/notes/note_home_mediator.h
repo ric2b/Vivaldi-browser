@@ -5,8 +5,8 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/memory/raw_ptr.h"
-#include "base/strings/utf_offset_string_conversions.h"
+#import "base/memory/raw_ptr.h"
+#import "base/strings/utf_offset_string_conversions.h"
 
 class ChromeBrowserState;
 @protocol NoteHomeConsumer;

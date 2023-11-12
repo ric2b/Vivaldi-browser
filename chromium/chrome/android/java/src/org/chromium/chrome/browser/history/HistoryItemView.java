@@ -15,15 +15,16 @@ import android.widget.ImageView.ScaleType;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.view.ViewCompat;
+import androidx.core.widget.ImageViewCompat;
 import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
+import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.browser_ui.widget.RoundedIconGenerator;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListUtils;
@@ -74,7 +75,7 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
         mRemoveButton = mEndButtonView;
         mRemoveButton.setImageResource(R.drawable.btn_delete_24dp);
         mRemoveButton.setContentDescription(getContext().getString((R.string.remove)));
-        ApiCompatibilityUtils.setImageTintList(mRemoveButton,
+        ImageViewCompat.setImageTintList(mRemoveButton,
                 AppCompatResources.getColorStateList(
                         getContext(), R.color.default_icon_color_secondary_tint_list));
         mRemoveButton.setOnClickListener(v -> remove());
@@ -104,9 +105,9 @@ public class HistoryItemView extends SelectableItemView<HistoryItem> {
 
         if (item.wasBlockedVisit()) {
             if (mBlockedVisitDrawable == null) {
-                mBlockedVisitDrawable = VectorDrawableCompat.create(
-                        getContext().getResources(), R.drawable.ic_block_red,
-                        getContext().getTheme());
+                mBlockedVisitDrawable =
+                        TraceEventVectorDrawableCompat.create(getContext().getResources(),
+                                R.drawable.ic_block_red, getContext().getTheme());
             }
             setStartIconDrawable(mBlockedVisitDrawable);
             mTitleView.setTextColor(getContext().getColor(R.color.default_red));

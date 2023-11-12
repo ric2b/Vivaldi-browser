@@ -110,7 +110,13 @@
         "name": "exit",
         "description": "Close all browsers and exit the application.",
         "type": "function",
-        "parameters": []
+        "parameters": [
+          {
+            "type": "boolean",
+            "name": "prompt",
+            "description": "Show exit confirmation when true."
+          }
+        ]
       },
       {
         "name": "restart",

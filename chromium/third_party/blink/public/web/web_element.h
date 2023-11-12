@@ -81,9 +81,6 @@ class BLINK_EXPORT WebElement : public WebNode {
   void SetAttribute(const WebString& name, const WebString& value);
   WebString TextContent() const;
   WebString InnerHTML() const;
-  WebString AttributeLocalName(unsigned index) const;
-  WebString AttributeValue(unsigned index) const;
-  unsigned AttributeCount() const;
 
   // Returns all <label> elements associated to this element.
   WebVector<WebLabelElement> Labels() const;
@@ -135,10 +132,6 @@ class BLINK_EXPORT WebElement : public WebNode {
   // strings directly to WebElement and enable public component usage through
   // /public/web interfaces.
   WebString GetComputedValue(const WebString& property_name);
-
-  // TODO(crbug.com/1286950) Remove this once a decision is made on deprecation
-  // of the <param> URL functionality.
-  void UseCountParamUrlUsageIfNeeded(bool is_pdf) const;
 
 #if INSIDE_BLINK
   WebElement(Element*);

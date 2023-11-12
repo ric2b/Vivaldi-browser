@@ -123,7 +123,15 @@ namespace ash {
   /* Color for icon of the blocked bluetooth device */ \
   E_CPONLY(kColorAshIconColorBlocked)\
   /* Color for icon in title of app streaming bubble */ \
-  E_CPONLY(kColorAshEcheIconColorStreaming)
+  E_CPONLY(kColorAshEcheIconColorStreaming) \
+  /* Color for text of the holding space view with multi select enabled */ \
+  E_CPONLY(kColorAshMultiSelectTextColor) \
+  /* Color for checkmark icon in holding space */ \
+  E_CPONLY(kColorAshCheckmarkIconColor) \
+  /* Color for drag image overflow badge text in holding space */ \
+  E_CPONLY(kColorAshDragImageOverflowBadgeTextColor) \
+  /* Color for feature tile small circle */ \
+  E_CPONLY(kColorAshTileSmallCircle)
 
 #include "ui/color/color_id_macros.inc"
 

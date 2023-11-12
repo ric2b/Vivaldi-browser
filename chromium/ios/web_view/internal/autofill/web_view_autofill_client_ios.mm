@@ -4,11 +4,12 @@
 
 #import "ios/web_view/internal/autofill/web_view_autofill_client_ios.h"
 
-#include <utility>
+#import <utility>
+#import <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "components/autofill/core/browser/form_data_importer.h"
@@ -99,6 +100,25 @@ WebViewAutofillClientIOS::~WebViewAutofillClientIOS() {
   HideAutofillPopup(PopupHidingReason::kTabGone);
 }
 
+bool WebViewAutofillClientIOS::IsOffTheRecord() {
+  return web_state_->GetBrowserState()->IsOffTheRecord();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+WebViewAutofillClientIOS::GetURLLoaderFactory() {
+  return base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+      web_state_->GetBrowserState()->GetURLLoaderFactory());
+}
+
+AutofillDownloadManager* WebViewAutofillClientIOS::GetDownloadManager() {
+  if (!download_manager_) {
+    // Lazy initialization to avoid virtual function calls in the constructor.
+    download_manager_ = std::make_unique<AutofillDownloadManager>(
+        this, GetChannel(), GetLogManager());
+  }
+  return download_manager_.get();
+}
+
 PersonalDataManager* WebViewAutofillClientIOS::GetPersonalDataManager() {
   return personal_data_manager_;
 }
@@ -108,9 +128,9 @@ WebViewAutofillClientIOS::GetAutocompleteHistoryManager() {
   return autocomplete_history_manager_;
 }
 
-CreditCardCVCAuthenticator* WebViewAutofillClientIOS::GetCVCAuthenticator() {
+CreditCardCvcAuthenticator* WebViewAutofillClientIOS::GetCvcAuthenticator() {
   if (!cvc_authenticator_) {
-    cvc_authenticator_ = std::make_unique<CreditCardCVCAuthenticator>(this);
+    cvc_authenticator_ = std::make_unique<CreditCardCvcAuthenticator>(this);
   }
   return cvc_authenticator_.get();
 }
@@ -180,8 +200,7 @@ translate::TranslateDriver* WebViewAutofillClientIOS::GetTranslateDriver() {
   return nullptr;
 }
 
-void WebViewAutofillClientIOS::ShowAutofillSettings(
-    bool show_credit_card_settings) {
+void WebViewAutofillClientIOS::ShowAutofillSettings(PopupType popup_type) {
   NOTREACHED();
 }
 
@@ -261,20 +280,17 @@ bool WebViewAutofillClientIOS::IsFastCheckoutSupported() {
   return false;
 }
 
-bool WebViewAutofillClientIOS::IsFastCheckoutTriggerForm(
+bool WebViewAutofillClientIOS::TryToShowFastCheckout(
     const FormData& form,
-    const FormFieldData& field) {
+    const FormFieldData& field,
+    base::WeakPtr<AutofillManager> autofill_manager) {
   return false;
 }
 
-bool WebViewAutofillClientIOS::ShowFastCheckout(
-    base::WeakPtr<FastCheckoutDelegate> delegate) {
-  NOTREACHED();
-  return false;
-}
+void WebViewAutofillClientIOS::HideFastCheckout(bool allow_further_runs) {}
 
-void WebViewAutofillClientIOS::HideFastCheckout() {
-  NOTREACHED();
+bool WebViewAutofillClientIOS::IsShowingFastCheckoutUI() {
+  return false;
 }
 
 bool WebViewAutofillClientIOS::IsTouchToFillCreditCardSupported() {
@@ -283,7 +299,7 @@ bool WebViewAutofillClientIOS::IsTouchToFillCreditCardSupported() {
 
 bool WebViewAutofillClientIOS::ShowTouchToFillCreditCard(
     base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard* const> cards_to_suggest) {
+    base::span<const autofill::CreditCard> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -304,10 +320,9 @@ void WebViewAutofillClientIOS::UpdateAutofillPopupDataListValues(
   // No op. ios/web_view does not support display datalist.
 }
 
-base::span<const Suggestion> WebViewAutofillClientIOS::GetPopupSuggestions()
-    const {
+std::vector<Suggestion> WebViewAutofillClientIOS::GetPopupSuggestions() const {
   NOTIMPLEMENTED();
-  return base::span<const Suggestion>();
+  return {};
 }
 
 void WebViewAutofillClientIOS::PinPopupView() {
@@ -355,14 +370,6 @@ void WebViewAutofillClientIOS::DidFillOrPreviewField(
 
 bool WebViewAutofillClientIOS::IsContextSecure() const {
   return IsContextSecureForWebState(web_state_);
-}
-
-bool WebViewAutofillClientIOS::ShouldShowSigninPromo() {
-  return false;
-}
-
-bool WebViewAutofillClientIOS::AreServerCardsSupported() const {
-  return true;
 }
 
 void WebViewAutofillClientIOS::ExecuteCommand(int id) {

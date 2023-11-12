@@ -24,6 +24,7 @@
 #include "chrome/browser/ui/search/ntp_user_data_logger.h"
 #include "chrome/browser/ui/webui/new_tab_page/new_tab_page.mojom.h"
 #include "chrome/common/search/ntp_logging_events.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/search_provider_logos/logo_common.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -90,7 +91,8 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
                           const std::string& attribution_2,
                           const GURL& attribution_url,
                           const GURL& image_url,
-                          const GURL& thumbnail_url) override;
+                          const GURL& thumbnail_ur,
+                          const std::string& collection_id) override;
   void SetDailyRefreshCollectionId(const std::string& collection_id) override;
   void SetNoBackgroundImage() override;
   void RevertBackgroundChanges() override;
@@ -120,7 +122,10 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   void UpdateModulesFreVisibility() override;
   void LogModulesFreOptInStatus(
       new_tab_page::mojom::OptInStatus opt_in_status) override;
-  void ShowCustomizeChromeSidePanel() override;
+  void SetCustomizeChromeSidePanelVisible(
+      bool visible,
+      new_tab_page::mojom::CustomizeChromeSection section) override;
+  void IncrementCustomizeChromeButtonOpenCount() override;
   void OnAppRendered(double time) override;
   void OnOneGoogleBarRendered(double time) override;
   void OnPromoRendered(double time,
@@ -209,6 +214,7 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   std::unordered_map<const network::SimpleURLLoader*,
                      std::unique_ptr<network::SimpleURLLoader>>
       loader_map_;
+  PrefChangeRegistrar pref_change_registrar_;
   raw_ptr<PromoService> promo_service_;
   base::ScopedObservation<ui::NativeTheme, ui::NativeThemeObserver>
       native_theme_observation_{this};

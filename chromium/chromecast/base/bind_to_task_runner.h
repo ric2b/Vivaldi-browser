@@ -8,7 +8,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -39,16 +39,14 @@ template <typename T>
 base::OnceCallback<T> BindToCurrentSequence(
     base::OnceCallback<T> callback,
     const base::Location& location = FROM_HERE) {
-  return base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                            std::move(callback), location);
+  return base::BindPostTaskToCurrentDefault(std::move(callback), location);
 }
 
 template <typename T>
 base::RepeatingCallback<T> BindToCurrentSequence(
     base::RepeatingCallback<T> callback,
     const base::Location& location = FROM_HERE) {
-  return base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                            std::move(callback), location);
+  return base::BindPostTaskToCurrentDefault(std::move(callback), location);
 }
 
 }  // namespace chromecast

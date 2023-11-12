@@ -13,6 +13,10 @@
 #include "components/variations/hashing.h"
 #include "components/variations/synthetic_trial_registry.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace metrics {
 namespace {
 
@@ -27,6 +31,10 @@ bool IsMetricsReportingEnabledForOfficialBuild(PrefService* pref_service) {
 // static
 bool MetricsServiceAccessor::IsMetricsReportingEnabled(
     PrefService* pref_service) {
+
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   if (IsMetricsReportingForceEnabled()) {
     LOG(WARNING) << "Metrics Reporting is force enabled, data will be sent to "
                     "servers. Should not be used for tests.";

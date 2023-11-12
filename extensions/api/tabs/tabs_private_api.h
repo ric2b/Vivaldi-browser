@@ -51,6 +51,8 @@ class TabMutingHandler;
 
 bool IsTabMuted(const content::WebContents* web_contents);
 bool IsTabInAWorkspace(const content::WebContents* web_contents);
+bool IsTabInAWorkspace(const std::string& viv_extdata);
+absl::optional<double> GetTabWorkspaceId(const std::string& viv_extdata);
 
 class TabsPrivateAPI : public BrowserContextKeyedAPI {
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
@@ -118,8 +120,7 @@ class VivaldiPrivateTabObserver
                      const GURL& validated_url) override;
   void WebContentsDidDetach() override;
   void WebContentsDidAttach() override;
-  void BeforeUnloadFired(bool proceed,
-                         const base::TimeTicks& proceed_time) override;
+  void BeforeUnloadFired(bool proceed) override;
   void NavigationEntryCommitted(
       const content::LoadCommittedDetails& load_details) override;
   void CaptureStarted() override;
@@ -161,6 +162,8 @@ class VivaldiPrivateTabObserver
   // ZoomObserver implementation.
   void OnZoomChanged(
       const zoom::ZoomController::ZoomChangedEventData& data) override;
+  void OnZoomControllerDestroyed(
+    zoom::ZoomController* zoom_controller) override;
 
   void SetZoomLevelForTab(double new_level, double old_level);
 

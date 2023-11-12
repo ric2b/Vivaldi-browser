@@ -54,16 +54,16 @@ class CORE_EXPORT PseudoElement : public Element {
   const AtomicString& view_transition_name() const {
     return view_transition_name_;
   }
-  scoped_refptr<ComputedStyle> CustomStyleForLayoutObject(
+  scoped_refptr<const ComputedStyle> CustomStyleForLayoutObject(
       const StyleRecalcContext&) override;
   void AttachLayoutTree(AttachContext&) override;
-  bool LayoutObjectIsNeeded(const ComputedStyle&) const override;
+  bool LayoutObjectIsNeeded(const DisplayStyle&) const override;
   bool CanGeneratePseudoElement(PseudoId) const override;
 
   bool CanStartSelection() const override { return false; }
   bool CanContainRangeEndPoint() const override { return false; }
   PseudoId GetPseudoId() const override { return pseudo_id_; }
-  scoped_refptr<ComputedStyle> LayoutStyleForDisplayContents(
+  scoped_refptr<const ComputedStyle> LayoutStyleForDisplayContents(
       const ComputedStyle&);
 
   static AtomicString PseudoElementNameForEvents(Element*);

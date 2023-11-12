@@ -7,14 +7,14 @@
 #include "ash/constants/app_types.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
-#include "ash/wm/multitask_menu_nudge_controller.h"
+#include "ash/wm/multi_display/multi_display_metrics_controller.h"
 #include "ash/wm/resize_shadow.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state_observer.h"
 #include "ash/wm/window_util.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
@@ -661,6 +661,8 @@ bool ToplevelWindowEventHandler::PrepareForDrag(
     return false;
   window_resizer_ = std::make_unique<ScopedWindowResizer>(
       this, std::move(resizer), grab_capture);
+  Shell::Get()->multi_display_metrics_controller()->OnWindowMovedOrResized(
+      window);
   return true;
 }
 
@@ -745,11 +747,6 @@ void ToplevelWindowEventHandler::HandleDrag(aura::Window* target,
       &location_in_parent);
   window_resizer_->resizer()->Drag(location_in_parent, event->flags());
   event->StopPropagation();
-
-  // Dragging may change the window that has capture, invalidating
-  // `window_resizer_`.
-  if (window_resizer_ && window_resizer_->IsResize())
-    Shell::Get()->multitask_menu_nudge_controller()->MaybeShowNudge(target);
 }
 
 void ToplevelWindowEventHandler::HandleMouseMoved(aura::Window* target,

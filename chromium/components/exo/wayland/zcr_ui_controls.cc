@@ -8,21 +8,96 @@
 #include <ui-controls-unstable-v1-server-protocol.h>
 #include <wayland-server-core.h>
 
+#include "ash/shell.h"
+#include "base/logging.h"
 #include "base/notreached.h"
+#include "base/test/bind.h"
 #include "components/exo/wayland/server.h"
+#include "components/exo/wayland/server_util.h"
+#include "ui/aura/env.h"
+#include "ui/aura/env_input_state_controller.h"
+#include "ui/base/test/ui_controls.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/events/keycodes/keyboard_code_conversion.h"
 
 namespace exo::wayland {
 
+struct UiControls::UiControlsState {
+  UiControlsState() = default;
+  UiControlsState(const UiControlsState&) = delete;
+  UiControlsState& operator=(const UiControlsState&) = delete;
+
+  // Keeps track of the IDs of pending requests for that we still need to emit
+  // request_processed events. This is per wl_resource so that we can drop
+  // pending requests for a resource when the resource is destroyed.
+  std::map<wl_resource*, std::set<uint32_t>> pending_request_ids_;
+};
+
 namespace {
 
+using UiControlsState = UiControls::UiControlsState;
+
 constexpr uint32_t kUiControlsVersion = 1;
+
+base::OnceClosure UpdateStateAndBindEmitProcessed(struct wl_resource* resource,
+                                                  uint32_t id) {
+  auto* state = GetUserDataAs<UiControlsState>(resource);
+  auto pending_request_ids =
+      state->pending_request_ids_.try_emplace(resource).first->second;
+  pending_request_ids.insert(id);
+
+  return base::BindLambdaForTesting([=]() {
+    // Ensure |resource| hasn't been destroyed in the meantime.
+    if (base::Contains(state->pending_request_ids_, resource)) {
+      zcr_ui_controls_v1_send_request_processed(resource, id);
+      state->pending_request_ids_[resource].erase(id);
+    }
+  });
+}
+
+// Ensures that a crashed test doesn't leave behind pressed mouse buttons or
+// touch points.
+void ResetPointerAndTouch(UiControlsState* state) {
+  auto* env = aura::Env::GetInstance();
+  int button_flags = env->mouse_button_flags();
+  if (button_flags & ui::EF_LEFT_MOUSE_BUTTON) {
+    ui_controls::SendMouseEvents(ui_controls::LEFT,
+                                 ui_controls::MouseButtonState::UP);
+  }
+  if (button_flags & ui::EF_MIDDLE_MOUSE_BUTTON) {
+    ui_controls::SendMouseEvents(ui_controls::MIDDLE,
+                                 ui_controls::MouseButtonState::UP);
+  }
+  if (button_flags & ui::EF_RIGHT_MOUSE_BUTTON) {
+    ui_controls::SendMouseEvents(ui_controls::RIGHT,
+                                 ui_controls::MouseButtonState::UP);
+  }
+
+  uint32_t touch_ids_down = env->env_controller()->touch_ids_down();
+  for (uint32_t touch_id = 0; touch_id < 32; ++touch_id) {
+    if (touch_ids_down & (1 << touch_id)) {
+      ui_controls::SendTouchEvents(ui_controls::TouchType::kTouchRelease,
+                                   touch_id, 0, 0);
+    }
+  }
+}
 
 void ui_controls_send_key_press(struct wl_client* client,
                                 struct wl_resource* resource,
                                 uint32_t key,
                                 uint32_t pressed_modifiers,
                                 uint32_t id) {
-  NOTIMPLEMENTED();
+  auto emit_processed = UpdateStateAndBindEmitProcessed(resource, id);
+  auto* window = ash::Shell::GetPrimaryRootWindow();
+  auto dom_code = ui::KeycodeConverter::EvdevCodeToDomCode(key);
+  auto key_code = ui::DomCodeToUsLayoutNonLocatedKeyboardCode(dom_code);
+  bool control = (pressed_modifiers & ZCR_UI_CONTROLS_V1_MODIFIER_CONTROL) != 0;
+  bool shift = (pressed_modifiers & ZCR_UI_CONTROLS_V1_MODIFIER_SHIFT) != 0;
+  bool alt = (pressed_modifiers & ZCR_UI_CONTROLS_V1_MODIFIER_ALT) != 0;
+  ui_controls::SendKeyPressNotifyWhenDone(window, key_code, control, shift, alt,
+                                          /*command=*/false,
+                                          std::move(emit_processed));
 }
 
 void ui_controls_send_mouse_move(struct wl_client* client,
@@ -31,7 +106,15 @@ void ui_controls_send_mouse_move(struct wl_client* client,
                                  int32_t y,
                                  struct wl_resource* surface,
                                  uint32_t id) {
-  NOTIMPLEMENTED();
+  if (surface) {
+    LOG(WARNING)
+        << "The `surface` parameter for ui_controls.send_mouse_move should be "
+           "NULL on LaCrOS, but it isn't. Why aren't we using screen "
+           "coordinates?";
+  }
+
+  auto emit_processed = UpdateStateAndBindEmitProcessed(resource, id);
+  ui_controls::SendMouseMoveNotifyWhenDone(x, y, std::move(emit_processed));
 }
 
 void ui_controls_send_mouse_button(struct wl_client* client,
@@ -40,7 +123,10 @@ void ui_controls_send_mouse_button(struct wl_client* client,
                                    uint32_t button_state,
                                    uint32_t pressed_modifiers,
                                    uint32_t id) {
-  NOTIMPLEMENTED();
+  auto emit_processed = UpdateStateAndBindEmitProcessed(resource, id);
+  ui_controls::SendMouseEventsNotifyWhenDone(
+      static_cast<ui_controls::MouseButton>(button), button_state,
+      std::move(emit_processed), pressed_modifiers);
 }
 
 void ui_controls_send_touch(struct wl_client* client,
@@ -51,7 +137,15 @@ void ui_controls_send_touch(struct wl_client* client,
                             int32_t y,
                             struct wl_resource* surface,
                             uint32_t id) {
-  NOTIMPLEMENTED();
+  if (surface) {
+    LOG(WARNING)
+        << "The `surface` parameter for ui_controls.send_touch should be NULL "
+           "on LaCrOS, but it isn't. Why aren't we using screen coordinates?";
+  }
+
+  auto emit_processed = UpdateStateAndBindEmitProcessed(resource, id);
+  ui_controls::SendTouchEventsNotifyWhenDone(action, touch_id, x, y,
+                                             std::move(emit_processed));
 }
 
 void ui_controls_set_toplevel_bounds(struct wl_client* client,
@@ -61,6 +155,8 @@ void ui_controls_set_toplevel_bounds(struct wl_client* client,
                                      int32_t y,
                                      uint32_t width,
                                      uint32_t height) {
+  // Exo supports aura_shell, which already has an equivalent request. This
+  // request only needs to be implemented by Weston.
   NOTIMPLEMENTED();
 }
 
@@ -68,6 +164,12 @@ const struct zcr_ui_controls_v1_interface ui_controls_implementation = {
     ui_controls_send_key_press, ui_controls_send_mouse_move,
     ui_controls_send_mouse_button, ui_controls_send_touch,
     ui_controls_set_toplevel_bounds};
+
+void destroy_ui_controls_resource(struct wl_resource* resource) {
+  auto* state = GetUserDataAs<UiControlsState>(resource);
+  state->pending_request_ids_.erase(resource);
+  ResetPointerAndTouch(state);
+}
 
 void bind_ui_controls(wl_client* client,
                       void* data,
@@ -77,14 +179,15 @@ void bind_ui_controls(wl_client* client,
       wl_resource_create(client, &zcr_ui_controls_v1_interface, version, id);
 
   wl_resource_set_implementation(resource, &ui_controls_implementation, data,
-                                 nullptr);
+                                 destroy_ui_controls_resource);
 }
 
 }  // namespace
 
-UiControls::UiControls(Server* server) {
+UiControls::UiControls(Server* server)
+    : state_(std::make_unique<UiControlsState>()) {
   wl_global_create(server->GetWaylandDisplay(), &zcr_ui_controls_v1_interface,
-                   kUiControlsVersion, nullptr, bind_ui_controls);
+                   kUiControlsVersion, state_.get(), bind_ui_controls);
 }
 
 UiControls::~UiControls() = default;

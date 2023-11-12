@@ -142,8 +142,7 @@ bool ShouldToggleAssistant(const ui::Accelerator& accelerator) {
   // shortcut stops working.  So we only check the key on these branded
   // devices.
   return !(accelerator.IsCmdDown() && accelerator.key_code() == ui::VKEY_A &&
-           chromeos::IsGoogleBrandedDevice() &&
-           ui::DeviceKeyboardHasAssistantKey());
+           IsGoogleBrandedDevice() && ui::DeviceKeyboardHasAssistantKey());
 }
 
 void HandleSwitchToLastUsedIme(const ui::Accelerator& accelerator) {
@@ -277,8 +276,17 @@ bool AcceleratorControllerImpl::TestApi::TriggerTabletModeVolumeAdjustTimer() {
 
 void AcceleratorControllerImpl::TestApi::RegisterAccelerators(
     base::span<const AcceleratorData> accelerators) {
+  // Initializing accelerators will register them.
   controller_->accelerator_configuration()->Initialize(accelerators);
-  controller_->RegisterAccelerators(accelerators);
+  // If customization is not available, register the accelerators manually.
+  if (!::features::IsShortcutCustomizationEnabled()) {
+    controller_->RegisterAccelerators(accelerators);
+  }
+}
+
+void AcceleratorControllerImpl::TestApi::ObserveAcceleratorUpdates() {
+  DCHECK(::features::IsShortcutCustomizationEnabled());
+  controller_->accelerator_configuration()->AddObserver(controller_);
 }
 
 bool AcceleratorControllerImpl::TestApi::IsActionForAcceleratorEnabled(
@@ -333,6 +341,10 @@ AcceleratorControllerImpl::AcceleratorControllerImpl(
 
   Init();
 
+  if (::features::IsShortcutCustomizationEnabled()) {
+    accelerator_configuration_->AddObserver(this);
+  }
+
   // Let AcceleratorHistory be a PreTargetHandler on aura::Env to ensure that it
   // receives KeyEvents and MouseEvents. In some cases Shell PreTargetHandlers
   // will handle Events before AcceleratorHistory gets to see them. This
@@ -346,6 +358,9 @@ AcceleratorControllerImpl::~AcceleratorControllerImpl() {
   // deconstructed before |InputMethodManager|
   if (::features::IsImprovedKeyboardShortcutsEnabled()) {
     InputMethodManager::Get()->RemoveObserver(this);
+  }
+  if (::features::IsShortcutCustomizationEnabled()) {
+    accelerator_configuration_->RemoveObserver(this);
   }
   aura::Env::GetInstance()->RemovePreTargetHandler(accelerator_history_.get());
 }
@@ -363,6 +378,15 @@ void AcceleratorControllerImpl::InputMethodChanged(InputMethodManager* manager,
       manager->ArePositionalShortcutsUsedByCurrentInputMethod();
   accelerator_configuration_->SetUsePositionalLookup(use_positional_lookup);
   accelerator_manager_->SetUsePositionalLookup(use_positional_lookup);
+}
+
+void AcceleratorControllerImpl::OnAcceleratorsUpdated() {
+  DCHECK(::features::IsShortcutCustomizationEnabled());
+
+  // Accelerators have been updated, unregister all accelerators and re-register
+  // them.
+  UnregisterAll(this);
+  RegisterAccelerators(accelerator_configuration_->GetAllAccelerators());
 }
 
 void AcceleratorControllerImpl::Register(
@@ -667,14 +691,20 @@ bool AcceleratorControllerImpl::CanPerformAction(
       return accelerators::CanToggleDictation();
     case TOGGLE_DOCKED_MAGNIFIER:
       return true;
+    case TOGGLE_FLOATING:
+      return accelerators::CanToggleFloatingWindow();
     case TOGGLE_FULLSCREEN_MAGNIFIER:
       return true;
+    case TOGGLE_GAME_DASHBOARD:
+      return accelerators::CanToggleGameDashboard();
     case TOGGLE_MESSAGE_CENTER_BUBBLE:
       return true;
     case TOGGLE_MIRROR_MODE:
       return true;
     case TOGGLE_OVERVIEW:
       return accelerators::CanToggleOverview();
+    case TOGGLE_MULTITASK_MENU:
+      return accelerators::CanToggleMultitaskMenu();
     case TOUCH_HUD_CLEAR:
     case TOUCH_HUD_MODE_CHANGE:
       return accelerators::CanActivateTouchHud();
@@ -697,8 +727,6 @@ bool AcceleratorControllerImpl::CanPerformAction(
       return accelerators::CanToggleProjectorMarker();
     case TOGGLE_RESIZE_LOCK_MENU:
       return accelerators::CanToggleResizeLockMenu();
-    case TOGGLE_FLOATING:
-      return debug::CanToggleFloatingWindow();
     case DEBUG_TUCK_FLOATED_WINDOW_LEFT:
     case DEBUG_TUCK_FLOATED_WINDOW_RIGHT:
       return debug::CanTuckFloatedWindow();
@@ -1114,7 +1142,11 @@ void AcceleratorControllerImpl::PerformAction(
       accelerators::ToggleProjectorMarker();
       break;
     case SHOW_SHORTCUT_VIEWER:
-      accelerators::ShowKeyboardShortcutViewer();
+      if (features::ShouldOnlyShowNewShortcutApp()) {
+        accelerators::ShowShortcutCustomizationApp();
+      } else {
+        accelerators::ShowKeyboardShortcutViewer();
+      }
       break;
     case SHOW_STYLUS_TOOLS:
       base::RecordAction(UserMetricsAction("Accel_Show_Stylus_Tools"));
@@ -1217,6 +1249,9 @@ void AcceleratorControllerImpl::PerformAction(
           UserMetricsAction("Accel_Toggle_Fullscreen_Magnifier"));
       accelerators::ToggleFullscreenMagnifier();
       break;
+    case TOGGLE_GAME_DASHBOARD:
+      accelerators::ToggleGameDashboard();
+      break;
     case TOGGLE_HIGH_CONTRAST:
       base::RecordAction(UserMetricsAction("Accel_Toggle_High_Contrast"));
       accelerators::ToggleHighContrast();
@@ -1233,6 +1268,9 @@ void AcceleratorControllerImpl::PerformAction(
       base::RecordAction(UserMetricsAction("Accel_Toggle_Mirror_Mode"));
       accelerators::ToggleMirrorMode();
       break;
+    case TOGGLE_MULTITASK_MENU:
+      accelerators::ToggleMultitaskMenu();
+      return;
     case TOGGLE_OVERVIEW:
       base::RecordAction(base::UserMetricsAction("Accel_Overview_F5"));
       accelerators::ToggleOverview();

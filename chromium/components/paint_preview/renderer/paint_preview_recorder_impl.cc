@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -123,11 +123,9 @@ void SerializeFileRecording(sk_sp<const SkPicture> skp,
       FROM_HERE,
       {base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::WithBaseSyncPrimitives()},
-      BindOnce(
-          &RecordToFileOnThreadPool, skp, std::move(skp_file),
-          std::move(tracker), max_capture_size, std::move(out),
-          base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                             std::move(callback))));
+      BindOnce(&RecordToFileOnThreadPool, skp, std::move(skp_file),
+               std::move(tracker), max_capture_size, std::move(out),
+               base::BindPostTaskToCurrentDefault(std::move(callback))));
 }
 
 // Handles memory buffer persistence storage.
@@ -153,7 +151,7 @@ void SerializeMemoryBufferRecording(
 
 // Finishes the recording process by converting the `recording` to an SkPicture.
 // Serialization is then delegated based on the type of `persistence`.
-void FinishRecordingOnUIThread(sk_sp<const cc::PaintRecord> recording,
+void FinishRecordingOnUIThread(cc::PaintRecord recording,
                                const gfx::Rect& bounds,
                                std::unique_ptr<PaintPreviewTracker> tracker,
                                RecordingPersistence persistence,
@@ -338,7 +336,7 @@ void PaintPreviewRecorderImpl::CapturePaintPreviewInternal(
   cc::PaintRecorder recorder;
   cc::PaintCanvas* canvas = recorder.beginRecording();
   canvas->save();
-  canvas->concat(SkMatrix::Translate(-bounds.x(), -bounds.y()));
+  canvas->translate(-bounds.x(), -bounds.y());
   canvas->SetPaintPreviewTracker(tracker.get());
 
   // Use time ticks manually rather than a histogram macro so as to;

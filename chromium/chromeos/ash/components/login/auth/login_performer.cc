@@ -4,13 +4,12 @@
 
 #include "chromeos/ash/components/login/auth/login_performer.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
 #include "chromeos/ash/components/login/auth/auth_metrics_recorder.h"
 #include "chromeos/ash/components/login/auth/public/auth_failure.h"
@@ -64,10 +63,8 @@ void LoginPerformer::OnAuthSuccess(const UserContext& user_context) {
       user_context.GetAccountId());
   metrics_recorder_->OnIsUserNew(is_known_user);
   bool is_login_offline =
-      user_context.GetAuthFlow() == UserContext::AUTH_FLOW_OFFLINE ||
-      user_context.GetAuthFlow() == UserContext::AUTH_FLOW_EASY_UNLOCK;
+      user_context.GetAuthFlow() == UserContext::AUTH_FLOW_OFFLINE;
   metrics_recorder_->OnIsLoginOffline(is_login_offline);
-
   VLOG(1) << "LoginSuccess hash: " << user_context.GetUserIDHash();
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&LoginPerformer::NotifyAuthSuccess,
@@ -76,21 +73,34 @@ void LoginPerformer::OnAuthSuccess(const UserContext& user_context) {
 
 void LoginPerformer::OnOffTheRecordAuthSuccess() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  metrics_recorder_->OnGuestLoignSuccess();
-
+  metrics_recorder_->OnGuestLoginSuccess();
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&LoginPerformer::NotifyOffTheRecordAuthSuccess,
                                 weak_factory_.GetWeakPtr()));
 }
 
-void LoginPerformer::OnPasswordChangeDetected(const UserContext& user_context) {
+void LoginPerformer::OnPasswordChangeDetectedLegacy(
+    const UserContext& user_context) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   password_changed_ = true;
   password_changed_callback_count_++;
 
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&LoginPerformer::NotifyPasswordChangeDetected,
-                                weak_factory_.GetWeakPtr(), user_context));
+      FROM_HERE,
+      base::BindOnce(&LoginPerformer::NotifyPasswordChangeDetectedLegacy,
+                     weak_factory_.GetWeakPtr(), user_context));
+}
+
+void LoginPerformer::OnPasswordChangeDetected(
+    std::unique_ptr<UserContext> user_context) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  password_changed_ = true;
+  DCHECK(user_context);
+
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&LoginPerformer::NotifyPasswordChangeDetected,
+                     weak_factory_.GetWeakPtr(), std::move(user_context)));
 }
 
 void LoginPerformer::OnOldEncryptionDetected(
@@ -135,9 +145,6 @@ void LoginPerformer::DoPerformLogin(const UserContext& user_context,
                                   weak_factory_.GetWeakPtr()));
     return;
   }
-
-  if (user_context.GetAuthFlow() == UserContext::AUTH_FLOW_EASY_UNLOCK)
-    SetupEasyUnlockUserFlow(user_context.GetAccountId());
 
   switch (auth_mode_) {
     case AuthorizationMode::kExternal: {
@@ -244,12 +251,20 @@ void LoginPerformer::NotifyOffTheRecordAuthSuccess() {
   delegate_->OnOffTheRecordAuthSuccess();
 }
 
-void LoginPerformer::NotifyPasswordChangeDetected(
+void LoginPerformer::NotifyPasswordChangeDetectedLegacy(
     const UserContext& user_context) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(delegate_);
   user_context_ = user_context;
-  delegate_->OnPasswordChangeDetected(user_context);
+  delegate_->OnPasswordChangeDetectedLegacy(user_context);
+}
+
+void LoginPerformer::NotifyPasswordChangeDetected(
+    std::unique_ptr<UserContext> user_context) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(delegate_);
+  DCHECK(user_context);
+  delegate_->OnPasswordChangeDetected(std::move(user_context));
 }
 
 void LoginPerformer::NotifyOldEncryptionDetected(

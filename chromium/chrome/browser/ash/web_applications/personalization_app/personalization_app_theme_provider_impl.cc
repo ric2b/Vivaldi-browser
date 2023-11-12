@@ -7,13 +7,25 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/schedule_enums.h"
+#include "ash/shell.h"
 #include "ash/style/color_palette_controller.h"
+#include "ash/style/color_util.h"
 #include "ash/system/scheduled_feature/scheduled_feature.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_metrics.h"
+#include "chrome/browser/ash/web_applications/personalization_app/personalization_app_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 
 namespace ash::personalization_app {
+
+// This array represents the order, number, and types of color schemes
+// represented by the color scheme buttons in the app.
+const std::array<ColorScheme, 4> kColorSchemeButtons{
+    ColorScheme::kTonalSpot,
+    ColorScheme::kNeutral,
+    ColorScheme::kVibrant,
+    ColorScheme::kExpressive,
+};
 
 PersonalizationAppThemeProviderImpl::PersonalizationAppThemeProviderImpl(
     content::WebUI* web_ui)
@@ -40,8 +52,9 @@ void PersonalizationAppThemeProviderImpl::SetThemeObserver(
   // May already be bound if user refreshes page.
   theme_observer_remote_.reset();
   theme_observer_remote_.Bind(std::move(observer));
-  if (!color_mode_observer_.IsObserving())
+  if (!color_mode_observer_.IsObserving()) {
     color_mode_observer_.Observe(ash::DarkLightModeControllerImpl::Get());
+  }
   // Call it once to get the current color mode.
   OnColorModeChanged(
       ash::DarkLightModeControllerImpl::Get()->IsDarkModeEnabled());
@@ -57,9 +70,27 @@ void PersonalizationAppThemeProviderImpl::SetThemeObserver(
   // Call once to get the initial status.
   NotifyColorModeAutoScheduleChanged();
   if (ash::features::IsJellyEnabled()) {
-    // TODO(b/261505637): Observe changes to the color prefs.
-    OnStaticColorChanged(color_palette_controller_->static_color());
-    OnColorSchemeChanged(color_palette_controller_->color_scheme());
+    OnStaticColorChanged();
+    OnColorSchemeChanged();
+    if (!pref_change_registrar_.IsObserved(
+            ash::prefs::kDynamicColorColorScheme)) {
+      pref_change_registrar_.Add(
+          ash::prefs::kDynamicColorColorScheme,
+          base::BindRepeating(
+              &PersonalizationAppThemeProviderImpl::OnColorSchemeChanged,
+              base::Unretained(this)));
+    }
+    if (!pref_change_registrar_.IsObserved(
+            ash::prefs::kDynamicColorSeedColor)) {
+      pref_change_registrar_.Add(
+          ash::prefs::kDynamicColorSeedColor,
+          base::BindRepeating(
+              &PersonalizationAppThemeProviderImpl::OnStaticColorChanged,
+              base::Unretained(this)));
+    }
+    ui::ColorProviderSourceObserver::Observe(
+        ash::ColorUtil::GetColorProviderSourceForWindow(
+            ash::Shell::GetPrimaryRootWindow()));
   }
 }
 
@@ -77,8 +108,9 @@ void PersonalizationAppThemeProviderImpl::SetColorModeAutoScheduleEnabled(
     bool enabled) {
   PrefService* pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
-  if (enabled)
+  if (enabled) {
     LogPersonalizationTheme(ColorMode::kAuto);
+  }
   const ScheduleType schedule_type =
       enabled ? ScheduleType::kSunsetToSunrise : ScheduleType::kNone;
   pref_service->SetInteger(ash::prefs::kDarkModeScheduleType,
@@ -102,16 +134,22 @@ void PersonalizationAppThemeProviderImpl::OnColorModeChanged(
   theme_observer_remote_->OnColorModeChanged(dark_mode_enabled);
 }
 
-void PersonalizationAppThemeProviderImpl::OnColorSchemeChanged(
-    ColorScheme color_scheme) {
+void PersonalizationAppThemeProviderImpl::OnColorSchemeChanged() {
   DCHECK(theme_observer_remote_.is_bound());
-  theme_observer_remote_->OnColorSchemeChanged(color_scheme);
+  theme_observer_remote_->OnColorSchemeChanged(
+      color_palette_controller_->GetColorScheme(GetAccountId(profile_)));
 }
 
-void PersonalizationAppThemeProviderImpl::OnStaticColorChanged(
-    absl::optional<SkColor> color) {
+void PersonalizationAppThemeProviderImpl::OnStaticColorChanged() {
   DCHECK(theme_observer_remote_.is_bound());
-  theme_observer_remote_->OnStaticColorChanged(color);
+  theme_observer_remote_->OnStaticColorChanged(
+      color_palette_controller_->GetStaticColor(GetAccountId(profile_)));
+}
+
+void PersonalizationAppThemeProviderImpl::OnSampleColorSchemesChanged(
+    const std::vector<ash::SampleColorScheme>& sampleColorSchemes) {
+  DCHECK(theme_observer_remote_.is_bound());
+  theme_observer_remote_->OnSampleColorSchemesChanged(sampleColorSchemes);
 }
 
 bool PersonalizationAppThemeProviderImpl::IsColorModeAutoScheduleEnabled() {
@@ -135,7 +173,8 @@ void PersonalizationAppThemeProviderImpl::GetColorScheme(
         "Cannot call GetColorScheme without Jelly enabled.");
     return;
   }
-  std::move(callback).Run(color_palette_controller_->color_scheme());
+  std::move(callback).Run(
+      color_palette_controller_->GetColorScheme(GetAccountId(profile_)));
 }
 
 void PersonalizationAppThemeProviderImpl::SetColorScheme(
@@ -145,8 +184,8 @@ void PersonalizationAppThemeProviderImpl::SetColorScheme(
         "Cannot call SetColorScheme without Jelly enabled.");
     return;
   }
-  color_palette_controller_->SetColorScheme(color_scheme, base::DoNothing());
-  OnColorSchemeChanged(color_scheme);
+  color_palette_controller_->SetColorScheme(
+      color_scheme, GetAccountId(profile_), base::DoNothing());
 }
 
 void PersonalizationAppThemeProviderImpl::GetStaticColor(
@@ -156,7 +195,8 @@ void PersonalizationAppThemeProviderImpl::GetStaticColor(
         "Cannot call GetStaticColor without Jelly enabled.");
     return;
   }
-  std::move(callback).Run(color_palette_controller_->static_color());
+  std::move(callback).Run(
+      color_palette_controller_->GetStaticColor(GetAccountId(profile_)));
 }
 
 void PersonalizationAppThemeProviderImpl::SetStaticColor(SkColor static_color) {
@@ -165,10 +205,20 @@ void PersonalizationAppThemeProviderImpl::SetStaticColor(SkColor static_color) {
         "Cannot call SetStaticColor without Jelly enabled.");
     return;
   }
-  color_palette_controller_->SetStaticColor(static_color, base::DoNothing());
-  // TODO(b/261505637): Remove and use pref listeners once the prefs are
-  // available.
-  OnStaticColorChanged(static_color);
-  OnColorSchemeChanged(color_palette_controller_->color_scheme());
+  AccountId account_id = GetAccountId(profile_);
+  color_palette_controller_->SetStaticColor(static_color, account_id,
+                                            base::DoNothing());
+}
+
+void PersonalizationAppThemeProviderImpl::GenerateSampleColorSchemes(
+    GenerateSampleColorSchemesCallback callback) {
+  color_palette_controller_->GenerateSampleColorSchemes(kColorSchemeButtons,
+                                                        std::move(callback));
+}
+
+void PersonalizationAppThemeProviderImpl::OnColorProviderChanged() {
+  GenerateSampleColorSchemes(base::BindOnce(
+      &PersonalizationAppThemeProviderImpl::OnSampleColorSchemesChanged,
+      weak_factory_.GetWeakPtr()));
 }
 }  // namespace ash::personalization_app

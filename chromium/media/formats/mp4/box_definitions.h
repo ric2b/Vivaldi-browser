@@ -261,7 +261,16 @@ struct MEDIA_EXPORT VPCodecConfigurationRecord : Box {
 struct MEDIA_EXPORT AV1CodecConfigurationRecord : Box {
   DECLARE_BOX_METHODS(AV1CodecConfigurationRecord);
 
-  VideoCodecProfile profile;
+  // Parses AV1CodecConfigurationRecord data encoded in |data|.
+  // Note: This method is intended to parse data outside the MP4StreamParser
+  //       context and therefore the box header is not expected to be present
+  //       in |data|
+  bool Parse(const uint8_t* data, int data_size);
+
+  VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
+
+ private:
+  bool ParseInternal(BufferReader* reader, MediaLog* media_log);
 };
 #endif
 
@@ -341,6 +350,10 @@ struct MEDIA_EXPORT VideoSampleEntry : Box {
   bool IsFormatValid() const;
 
   scoped_refptr<BitstreamConverter> frame_bitstream_converter;
+
+  // Static method for testing.
+  static VideoColorSpace ConvertColorParameterInformationToColorSpace(
+      const ColorParameterInformation& info);
 };
 
 struct MEDIA_EXPORT ElementaryStreamDescriptor : Box {

@@ -32,7 +32,7 @@ constexpr int kNameFirstDifferentPredictionsValueAgreesWithNeither = 23;
 constexpr int kEmailAddressDifferentPredictionsValueAgreesWithNew = 58;
 constexpr int kNameFullSamePredictionValueAgrees = 43;
 constexpr int kSearchTermDifferentPredictionsValueAgreesWithNew = 586;
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_HEADERS)
+#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
 constexpr int kNameFullDifferentPredictionsValueAgreesWithOld = 45;
 constexpr int kEmailAddressDifferentPredictionsValueAgreesWithOld = 57;
 constexpr int kSearchTermSamePredictionValueDisagrees = 584;
@@ -96,7 +96,7 @@ TEST(AutofillShadowPredictionComparisonTest, ComparisonContainsAllTypes) {
   // If this test fails after adding a type, update
   // `AutofillPredictionsComparisonResult` in tools/metrics/histograms/enums.xml
   // and set `last_known_type` to the last entry in the enum.
-  constexpr ServerFieldType last_known_type = NUMERIC_QUANTITY;
+  constexpr ServerFieldType last_known_type = ONE_TIME_CODE;
   int max_comparison =
       GetShadowPrediction(last_known_type, NAME_FIRST, {NAME_LAST});
 
@@ -110,7 +110,8 @@ TEST(AutofillShadowPredictionComparisonTest, ComparisonContainsAllTypes) {
 }
 
 class AutofillShadowPredictionMetricsTest
-    : public autofill::metrics::AutofillMetricsBaseTest {
+    : public autofill::metrics::AutofillMetricsBaseTest,
+      public testing::Test {
  public:
   AutofillShadowPredictionMetricsTest() {
     scoped_feature_list_.InitWithFeaturesAndParameters(
@@ -121,6 +122,10 @@ class AutofillShadowPredictionMetricsTest
   }
 
   ~AutofillShadowPredictionMetricsTest() override = default;
+
+  void SetUp() override { SetUpHelper(); }
+
+  void TearDown() override { TearDownHelper(); }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -145,7 +150,7 @@ TEST_F(AutofillShadowPredictionMetricsTest,
   autofill_manager().OnFormSubmitted(form, /*known_success=*/false,
                                      SubmissionSource::FORM_SUBMISSION);
 
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_HEADERS)
+#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
   histogram_tester.ExpectBucketCount(
       "Autofill.ShadowPredictions.ExperimentalToDefault", kNoPrediction, 2);
   histogram_tester.ExpectBucketCount(
@@ -160,7 +165,7 @@ TEST_F(AutofillShadowPredictionMetricsTest,
 #endif
 }
 
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_HEADERS)
+#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
 // Test that Autofill.ShadowPredictions.* describes the differences between the
 // predictions and the submitted values.
 TEST_F(AutofillShadowPredictionMetricsTest,
@@ -214,7 +219,7 @@ TEST_F(AutofillShadowPredictionMetricsTest,
 // Test that Autofill.ShadowPredictions.DefaultHeuristicToDefaultServer compares
 // heuristics to server predictions.
 TEST_F(AutofillShadowPredictionMetricsTest, CompareHeuristicsAndServer) {
-#if BUILDFLAG(USE_INTERNAL_AUTOFILL_HEADERS)
+#if BUILDFLAG(USE_INTERNAL_AUTOFILL_PATTERNS)
   constexpr PatternSource source = PatternSource::kDefault;
 #else
   constexpr PatternSource source = PatternSource::kLegacy;

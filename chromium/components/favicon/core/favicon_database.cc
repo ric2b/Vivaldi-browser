@@ -11,10 +11,10 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/bits.h"
 #include "base/debug/alias.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
@@ -1217,9 +1217,9 @@ bool FaviconDatabase::UpgradeToVersion7() {
   if (!success)
     return false;
 
-  meta_table_.SetVersionNumber(7);
-  meta_table_.SetCompatibleVersionNumber(std::min(7, kCompatibleVersionNumber));
-  return true;
+  return meta_table_.SetVersionNumber(7) &&
+         meta_table_.SetCompatibleVersionNumber(
+             std::min(7, kCompatibleVersionNumber));
 }
 
 bool FaviconDatabase::UpgradeToVersion8() {
@@ -1229,9 +1229,9 @@ bool FaviconDatabase::UpgradeToVersion8() {
   if (!db_.Execute(kFaviconBitmapsAddLastRequestedSql))
     return false;
 
-  meta_table_.SetVersionNumber(8);
-  meta_table_.SetCompatibleVersionNumber(std::min(8, kCompatibleVersionNumber));
-  return true;
+  return meta_table_.SetVersionNumber(8) &&
+         meta_table_.SetCompatibleVersionNumber(
+             std::min(8, kCompatibleVersionNumber));
 }
 
 bool FaviconDatabase::IsFaviconDBStructureIncorrect() {

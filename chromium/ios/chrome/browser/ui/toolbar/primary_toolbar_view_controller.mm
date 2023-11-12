@@ -29,8 +29,10 @@
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_utils.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/dynamic_type_util.h"
+#import "ios/chrome/browser/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/ui/util/util_swift.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
 
 // Vivaldi
@@ -176,6 +178,8 @@ using vivaldi::IsVivaldiRunning;
 
   self.view =
       [[PrimaryToolbarView alloc] initWithButtonFactory:self.buttonFactory];
+  [self.layoutGuideCenter referenceView:self.view
+                              underName:kPrimaryToolbarGuide];
 
   // This method cannot be called from the init as the topSafeAnchor can only be
   // set to topLayoutGuide after the view creation on iOS 10.
@@ -268,7 +272,7 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
-#pragma mark - ActivityServicePositioner
+#pragma mark - SharingPositioner
 
 - (UIView*)sourceView {
   return self.view.shareButton;
@@ -301,29 +305,14 @@ using vivaldi::IsVivaldiRunning;
 
   self.view.collapsedToolbarButton.hidden = progress > 0.05;
 
-  // When this method is called when the toolbar is expanded, prevent the
-  // color from changing, if necessary.
-  BOOL isToolbarExpanded = self.view.expandedConstraints.firstObject.active;
-  if (IsOmniboxActionsVisualTreatment2() && isToolbarExpanded) {
-
-    if (IsVivaldiRunning()) {
-      self.view.locationBarContainer.backgroundColor = UIColor.clearColor;
-    } else {
+  if (IsVivaldiRunning()) {
     self.view.locationBarContainer.backgroundColor =
-        self.buttonFactory.toolbarConfiguration
-            .focusedLocationBarBackgroundColor;
-    } // End Vivaldi
-
+      self.view.locationBarContainer.backgroundColor = UIColor.clearColor;
   } else {
-
-    if (IsVivaldiRunning()) {
-      self.view.locationBarContainer.backgroundColor = UIColor.clearColor;
-    } else {
-    self.view.locationBarContainer.backgroundColor =
-        [self.buttonFactory.toolbarConfiguration
-            locationBarBackgroundColorWithVisibility:alphaValue];
-    } // End Vivaldi
-  }
+  self.view.locationBarContainer.backgroundColor =
+      [self.buttonFactory.toolbarConfiguration
+          locationBarBackgroundColorWithVisibility:alphaValue];
+  } // End Vivaldi
 }
 
 - (void)updateForFullscreenEnabled:(BOOL)enabled {
@@ -349,14 +338,6 @@ using vivaldi::IsVivaldiRunning;
   [NSLayoutConstraint activateConstraints:self.view.expandedConstraints];
   [self.view layoutIfNeeded];
 
-  if (IsOmniboxActionsVisualTreatment2()) {
-    self.view.backgroundColor =
-        self.buttonFactory.toolbarConfiguration.focusedBackgroundColor;
-    self.view.locationBarContainer.backgroundColor =
-        self.buttonFactory.toolbarConfiguration
-            .focusedLocationBarBackgroundColor;
-  }
-
   if (IsVivaldiRunning()) {
     self.view.locationBarContainer.backgroundColor = UIColor.clearColor;
   } // End Vivaldi
@@ -372,14 +353,6 @@ using vivaldi::IsVivaldiRunning;
     [NSLayoutConstraint activateConstraints:self.view.contractedConstraints];
   }
   [self.view layoutIfNeeded];
-
-  if (IsOmniboxActionsVisualTreatment2()) {
-    self.view.backgroundColor =
-        self.buttonFactory.toolbarConfiguration.backgroundColor;
-    self.view.locationBarContainer.backgroundColor =
-        [self.buttonFactory.toolbarConfiguration
-            locationBarBackgroundColorWithVisibility:1.0];
-  }
 
   if (IsVivaldiRunning()) {
     self.view.locationBarContainer.backgroundColor = UIColor.clearColor;

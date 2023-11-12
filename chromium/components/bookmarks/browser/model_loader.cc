@@ -4,9 +4,9 @@
 
 #include "components/bookmarks/browser/model_loader.h"
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
@@ -22,7 +22,6 @@
 #include "components/bookmarks/common/url_load_stats.h"
 
 #include "app/vivaldi_apptools.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "components/bookmarks/vivaldi_partners.h"
 
 namespace bookmarks {
@@ -52,16 +51,18 @@ void LoadBookmarks(const base::FilePath& path,
     // all bookmarks if some titles have invalid utf.
     JSONFileValueDeserializer deserializer(
         path, base::JSON_REPLACE_INVALID_CHARACTERS);
-    std::unique_ptr<base::Value> root =
+    std::unique_ptr<base::Value> root_value =
         deserializer.Deserialize(nullptr, nullptr);
 
-    if (root) {
+    if (!root_value) {
+      // The bookmark file exists but was not deserialized.
+    } else if (const auto* root_dict = root_value->GetIfDict()) {
       // Building the index can take a while, so we do it on the background
       // thread.
       int64_t max_node_id = 0;
       std::string sync_metadata_str;
       BookmarkCodec codec;
-      codec.Decode(*root, details->bb_node(), details->other_folder_node(),
+      codec.Decode(*root_dict, details->bb_node(), details->other_folder_node(),
                    details->mobile_folder_node(),
                    details->trash_folder_node(),
                    &max_node_id,
@@ -121,8 +122,8 @@ scoped_refptr<ModelLoader> ModelLoader::Create(
 
   if (vivaldi::IsVivaldiRunning()) {
     model_loader->backend_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&vivaldi_partners::LoadOnWorkerThread,
-                                  base::ThreadTaskRunnerHandle::Get()));
+      FROM_HERE, base::BindOnce(&vivaldi_partners::LoadOnWorkerThread,
+        base::SingleThreadTaskRunner::GetCurrentDefault()));
   }
 
   model_loader->backend_task_runner_->PostTaskAndReplyWithResult(

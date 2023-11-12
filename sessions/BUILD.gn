@@ -1,0 +1,41 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
+static_library("sessions") {
+  sources = []
+  if (!is_android) {
+    sources += [
+      "index_codec.cc",
+      "index_codec.h",
+      "index_model.cc",
+      "index_model.h",
+      "index_node.cc",
+      "index_node.h",
+      "index_service_factory.cc",
+      "index_service_factory.h",
+      "index_storage.cc",
+      "index_storage.h",
+    ]
+  }
+  deps = [
+    "//base:base",
+    "//base:i18n",
+    "//chrome/common:constants",
+    "//components/keyed_service/core:core",
+    "//components/keyed_service/content:content",
+    "//content/public/browser",
+    "//skia",
+    "//third_party/icu",
+    "//ui/base:base",
+    "//url:url",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+    "//vivaldi/prefs",
+  ]
+  public_deps = [
+    "//components/sync/protocol",
+  ]
+}

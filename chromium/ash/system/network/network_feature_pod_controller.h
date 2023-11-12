@@ -9,9 +9,11 @@
 
 #include "ash/constants/quick_settings_catalogs.h"
 #include "ash/system/network/network_feature_pod_button.h"
+#include "ash/system/network/network_feature_tile.h"
 #include "ash/system/network/network_icon_animation_observer.h"
 #include "ash/system/network/tray_network_state_observer.h"
 #include "ash/system/unified/feature_pod_controller_base.h"
+#include "base/memory/weak_ptr.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 
 namespace ash {
@@ -26,6 +28,7 @@ class ASH_EXPORT NetworkFeaturePodController
     : public network_icon::AnimationObserver,
       public FeaturePodControllerBase,
       public NetworkFeaturePodButton::Delegate,
+      public NetworkFeatureTile::Delegate,
       public TrayNetworkStateObserver {
  public:
   explicit NetworkFeaturePodController(
@@ -37,6 +40,7 @@ class ASH_EXPORT NetworkFeaturePodController
 
   // FeaturePodControllerBase:
   FeaturePodButton* CreateButton() override;
+  std::unique_ptr<FeatureTile> CreateTile(bool compact = false) override;
   QsFeatureCatalogName GetCatalogName() override;
   void OnIconPressed() override;
   void OnLabelPressed() override;
@@ -48,6 +52,9 @@ class ASH_EXPORT NetworkFeaturePodController
   // NetworkFeaturePodButton::Delegate:
   void OnFeaturePodButtonThemeChanged() override;
 
+  // NetworkFeatureTile::Delegate:
+  void OnFeatureTileThemeChanged() override;
+
   // TrayNetworkStateObserver:
   void ActiveNetworkStateChanged() override;
 
@@ -58,11 +65,18 @@ class ASH_EXPORT NetworkFeaturePodController
       const chromeos::network_config::mojom::NetworkStateProperties* network)
       const;
 
+  // Purges network icon cache and updates the button state.
+  void PropagateThemeChanged();
+
   // Updates |button_| state to reflect the current state of networks.
   void UpdateButtonStateIfExists();
 
+  // Owned by the views hierarchy.
   FeaturePodButton* button_ = nullptr;
+  FeatureTile* tile_ = nullptr;
   UnifiedSystemTrayController* tray_controller_;
+
+  base::WeakPtrFactory<NetworkFeaturePodController> weak_ptr_factory_{this};
 };
 
 }  // namespace ash

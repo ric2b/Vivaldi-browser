@@ -6,11 +6,11 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
@@ -39,10 +39,10 @@
 #include "content/common/url_schemes.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_host.h"
 #include "content/public/browser/hid_delegate.h"
 #include "content/public/browser/usb_delegate.h"
 #include "content/public/browser/web_ui_url_loader_factory.h"
-#include "content/public/common/child_process_host.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
@@ -318,12 +318,12 @@ void EmbeddedWorkerInstance::Start(
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
         coep_reporter_for_subresources;
 
-    network::mojom::ClientSecurityStatePtr client_security_state;
-    const network::CrossOriginEmbedderPolicy* coep = nullptr;
-    if (owner_version_->client_security_state()) {
-      client_security_state = owner_version_->client_security_state()->Clone();
-      coep = &client_security_state->cross_origin_embedder_policy;
-    }
+    network::mojom::ClientSecurityStatePtr client_security_state =
+        owner_version_->BuildClientSecurityState();
+    const network::CrossOriginEmbedderPolicy* coep =
+        client_security_state
+            ? &client_security_state->cross_origin_embedder_policy
+            : nullptr;
 
     if (coep) {
       mojo::PendingRemote<blink::mojom::ReportingObserver>
@@ -583,11 +583,9 @@ void EmbeddedWorkerInstance::SendStartWorker(
   instance_host_receiver_.Bind(
       params->instance_host.InitWithNewEndpointAndPassReceiver());
 
-  content_settings_ =
-      base::SequenceBound<ServiceWorkerContentSettingsProxyImpl>(
-          GetUIThreadTaskRunner({}), params->script_url,
-          scoped_refptr<ServiceWorkerContextWrapper>(context_->wrapper()),
-          params->content_settings_proxy.InitWithNewPipeAndPassReceiver());
+  content_settings_ = std::make_unique<ServiceWorkerContentSettingsProxyImpl>(
+      params->script_url, base::WrapRefCounted(context_->wrapper()),
+      params->content_settings_proxy.InitWithNewPipeAndPassReceiver());
 
   const bool is_script_streaming = !params->installed_scripts_info.is_null();
   inflight_start_info_->start_worker_sent_time = base::TimeTicks::Now();
@@ -911,8 +909,14 @@ EmbeddedWorkerInstance::CreateFactoryBundle(
     // To be safe, ignore schemes that aren't allowed to register service
     // workers. We assume that importScripts and fetch() should fail on such
     // schemes.
-    if (!base::Contains(GetServiceWorkerSchemes(), scheme))
+    // data: URLs are allowed here, because importScripts() and fetch() to data:
+    // URLs are anyway successful, and in order to allow Extension's WebRequest
+    // redirects to data: URLs in ServiceWorkerGlobalScope
+    // (https://crbug.com/1334249).
+    if (scheme != url::kDataScheme &&
+        !base::Contains(GetServiceWorkerSchemes(), scheme)) {
       continue;
+    }
 
     factory_bundle->pending_scheme_specific_factories().emplace(
         scheme, std::move(pending_remote));

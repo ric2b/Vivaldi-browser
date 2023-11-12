@@ -9,13 +9,9 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
-#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -53,6 +49,7 @@
 using testing::_;
 using testing::AllOf;
 using testing::AnyNumber;
+using testing::AtLeast;
 using testing::ByMove;
 using testing::Eq;
 using testing::Not;
@@ -255,19 +252,6 @@ class SyncServiceImplTest : public ::testing::Test {
   std::map<ModelType, FakeDataTypeController*> controller_map_;
 };
 
-class SyncServiceImplTestWithSyncInvalidationsServiceCreated
-    : public SyncServiceImplTest {
- public:
-  SyncServiceImplTestWithSyncInvalidationsServiceCreated() {
-    override_features_.InitAndEnableFeature(kSyncSendInterestedDataTypes);
-  }
-
-  ~SyncServiceImplTestWithSyncInvalidationsServiceCreated() override = default;
-
- private:
-  base::test::ScopedFeatureList override_features_;
-};
-
 // Verify that the server URLs are sane.
 TEST_F(SyncServiceImplTest, InitialState) {
   CreateService(SyncServiceImpl::MANUAL_START);
@@ -361,8 +345,7 @@ TEST_F(SyncServiceImplTest, SetupInProgress) {
 
 // Verify that disable by enterprise policy works.
 TEST_F(SyncServiceImplTest, DisabledByPolicyBeforeInit) {
-  prefs()->SetManagedPref(prefs::kSyncManaged,
-                          std::make_unique<base::Value>(true));
+  prefs()->SetManagedPref(prefs::kSyncManaged, base::Value(true));
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START);
   InitializeForNthSync();
@@ -377,8 +360,7 @@ TEST_F(SyncServiceImplTest, DisabledByPolicyBeforeInit) {
 }
 
 TEST_F(SyncServiceImplTest, DisabledByPolicyBeforeInitThenPolicyRemoved) {
-  prefs()->SetManagedPref(prefs::kSyncManaged,
-                          std::make_unique<base::Value>(true));
+  prefs()->SetManagedPref(prefs::kSyncManaged, base::Value(true));
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START);
   InitializeForNthSync();
@@ -393,8 +375,7 @@ TEST_F(SyncServiceImplTest, DisabledByPolicyBeforeInitThenPolicyRemoved) {
 
   // Remove the policy. Sync-the-feature is still disabled, sync-the-transport
   // can run.
-  prefs()->SetManagedPref(prefs::kSyncManaged,
-                          std::make_unique<base::Value>(false));
+  prefs()->SetManagedPref(prefs::kSyncManaged, base::Value(false));
   EXPECT_EQ(
       SyncService::DisableReasonSet(SyncService::DISABLE_REASON_USER_CHOICE),
       service()->GetDisableReasons());
@@ -424,8 +405,7 @@ TEST_F(SyncServiceImplTest, DisabledByPolicyAfterInit) {
   ASSERT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
 
-  prefs()->SetManagedPref(prefs::kSyncManaged,
-                          std::make_unique<base::Value>(true));
+  prefs()->SetManagedPref(prefs::kSyncManaged, base::Value(true));
 
   // Sync was disabled due to the policy, setting SyncRequested to false and
   // causing DISABLE_REASON_USER_CHOICE.
@@ -538,7 +518,7 @@ TEST_F(SyncServiceImplTest, SignOutDisablesSyncTransportAndSyncFeature) {
       identity_manager()->GetPrimaryAccountMutator();
   DCHECK(account_mutator) << "Account mutator should only be null on ChromeOS.";
   account_mutator->ClearPrimaryAccount(
-      signin_metrics::SIGNOUT_TEST,
+      signin_metrics::ProfileSignout::kTest,
       signin_metrics::SignoutDelete::kIgnoreMetric);
   // Wait for SyncServiceImpl to be notified.
   base::RunLoop().RunUntilIdle();
@@ -566,7 +546,7 @@ TEST_F(SyncServiceImplTest,
       identity_manager()->GetPrimaryAccountMutator();
   DCHECK(account_mutator) << "Account mutator should only be null on ChromeOS.";
   account_mutator->ClearPrimaryAccount(
-      signin_metrics::SIGNOUT_TEST,
+      signin_metrics::ProfileSignout::kTest,
       signin_metrics::SignoutDelete::kIgnoreMetric);
   // Wait for SyncServiceImpl to be notified.
   base::RunLoop().RunUntilIdle();
@@ -753,7 +733,7 @@ TEST_F(SyncServiceImplTest, SignOutRevokeAccessToken) {
   DCHECK(account_mutator);
 
   account_mutator->ClearPrimaryAccount(
-      signin_metrics::SIGNOUT_TEST,
+      signin_metrics::ProfileSignout::kTest,
       signin_metrics::SignoutDelete::kIgnoreMetric);
   EXPECT_TRUE(service()->GetAccessTokenForTest().empty());
 }
@@ -958,7 +938,7 @@ TEST_F(SyncServiceImplTest, ResetSyncData) {
 
   SyncProtocolError client_cmd;
   client_cmd.action = RESET_LOCAL_SYNC_DATA;
-  service()->OnActionableError(client_cmd);
+  service()->OnActionableProtocolError(client_cmd);
 }
 
 // Test that when SyncServiceImpl receives actionable error
@@ -978,7 +958,7 @@ TEST_F(SyncServiceImplTest, DisableSyncOnClient) {
 
   SyncProtocolError client_cmd;
   client_cmd.action = DISABLE_SYNC_ON_CLIENT;
-  service()->OnActionableError(client_cmd);
+  service()->OnActionableProtocolError(client_cmd);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Ash does not support signout.
@@ -1008,7 +988,7 @@ TEST_F(SyncServiceImplTest, DisableSyncOnClient) {
   EXPECT_TRUE(service()->GetLastSyncedTimeForDebugging().is_null());
 #endif
 
-  EXPECT_EQ(1, get_controller(BOOKMARKS)->model()->clear_metadata_call_count());
+  EXPECT_GT(get_controller(BOOKMARKS)->model()->clear_metadata_call_count(), 0);
 
   EXPECT_FALSE(service()->IsSyncFeatureEnabled());
   EXPECT_FALSE(service()->IsSyncFeatureActive());
@@ -1035,7 +1015,7 @@ TEST_F(SyncServiceImplTest,
   client_cmd.error_type = NOT_MY_BIRTHDAY;
 
   base::HistogramTester histogram_tester;
-  service()->OnActionableError(client_cmd);
+  service()->OnActionableProtocolError(client_cmd);
 
   ASSERT_FALSE(service()->IsSyncFeatureEnabled());
 
@@ -1066,7 +1046,7 @@ TEST_F(SyncServiceImplTest,
   client_cmd.error_type = ENCRYPTION_OBSOLETE;
 
   base::HistogramTester histogram_tester;
-  service()->OnActionableError(client_cmd);
+  service()->OnActionableProtocolError(client_cmd);
 
   ASSERT_FALSE(service()->IsSyncFeatureEnabled());
 
@@ -1078,16 +1058,14 @@ TEST_F(SyncServiceImplTest,
 
 // Verify a that local sync mode isn't impacted by sync being disabled.
 TEST_F(SyncServiceImplTest, LocalBackendUnimpactedByPolicy) {
-  prefs()->SetManagedPref(prefs::kSyncManaged,
-                          std::make_unique<base::Value>(false));
+  prefs()->SetManagedPref(prefs::kSyncManaged, base::Value(false));
   CreateServiceWithLocalSyncBackend();
   InitializeForNthSync();
   EXPECT_EQ(SyncService::DisableReasonSet(), service()->GetDisableReasons());
   EXPECT_EQ(SyncService::TransportState::ACTIVE,
             service()->GetTransportState());
 
-  prefs()->SetManagedPref(prefs::kSyncManaged,
-                          std::make_unique<base::Value>(true));
+  prefs()->SetManagedPref(prefs::kSyncManaged, base::Value(true));
 
   EXPECT_EQ(SyncService::DisableReasonSet(), service()->GetDisableReasons());
   EXPECT_EQ(SyncService::TransportState::ACTIVE,
@@ -1096,8 +1074,7 @@ TEST_F(SyncServiceImplTest, LocalBackendUnimpactedByPolicy) {
   // Note: If standalone transport is enabled, then setting kSyncManaged to
   // false will immediately start up the engine. Otherwise, the RequestStart
   // call below will trigger it.
-  prefs()->SetManagedPref(prefs::kSyncManaged,
-                          std::make_unique<base::Value>(false));
+  prefs()->SetManagedPref(prefs::kSyncManaged, base::Value(false));
 
   service()->GetUserSettings()->SetSyncRequested(true);
   EXPECT_EQ(SyncService::DisableReasonSet(), service()->GetDisableReasons());
@@ -1152,8 +1129,7 @@ TEST_F(SyncServiceImplTest, ShouldProvideDisableReasonsAfterShutdown) {
   EXPECT_FALSE(service()->GetDisableReasons().Empty());
 }
 
-TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
-       ShouldSendDataTypesToSyncInvalidationsService) {
+TEST_F(SyncServiceImplTest, ShouldSendDataTypesToSyncInvalidationsService) {
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START,
                 /*registered_types_and_transport_mode_support=*/
@@ -1168,8 +1144,7 @@ TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
   EXPECT_TRUE(engine()->started_handling_invalidations());
 }
 
-TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
-       ShouldEnableAndDisableInvalidationsForSessions) {
+TEST_F(SyncServiceImplTest, ShouldEnableAndDisableInvalidationsForSessions) {
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START,
                 {{SESSIONS, false}, {TYPED_URLS, false}});
@@ -1183,8 +1158,7 @@ TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
   service()->SetInvalidationsForSessionsEnabled(false);
 }
 
-TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
-       ShouldNotSubscribeToProxyTypes) {
+TEST_F(SyncServiceImplTest, ShouldNotSubscribeToProxyTypes) {
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START,
                 /*registered_types_and_transport_mode_support=*/
@@ -1201,22 +1175,26 @@ TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
   InitializeForNthSync();
 }
 
-TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
+TEST_F(SyncServiceImplTest,
        ShouldActivateSyncInvalidationsServiceWhenSyncIsInitialized) {
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START);
-  EXPECT_CALL(*sync_invalidations_service(), StartListening());
+
+  // Invalidations may start listening twice. The first one during
+  // initialization, the second once everything is configured.
+  EXPECT_CALL(*sync_invalidations_service(), StartListening())
+      .Times(AtLeast(1));
   InitializeForFirstSync();
 }
 
-TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
+TEST_F(SyncServiceImplTest,
        ShouldNotStartListeningInvalidationsWhenLocalSyncEnabled) {
   CreateServiceWithLocalSyncBackend();
   EXPECT_CALL(*sync_invalidations_service(), StartListening()).Times(0);
   InitializeForFirstSync();
 }
 
-TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
+TEST_F(SyncServiceImplTest,
        ShouldNotStopListeningPermanentlyOnShutdownBrowserAndKeepData) {
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START);
@@ -1226,13 +1204,50 @@ TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
   ShutdownAndDeleteService();
 }
 
-TEST_F(SyncServiceImplTestWithSyncInvalidationsServiceCreated,
+TEST_F(SyncServiceImplTest,
        ShouldStopListeningPermanentlyOnDisableSyncAndClearData) {
   SignIn();
   CreateService(SyncServiceImpl::MANUAL_START);
   InitializeForFirstSync();
   EXPECT_CALL(*sync_invalidations_service(), StopListeningPermanently());
   service()->StopAndClear();
+}
+
+TEST_F(SyncServiceImplTest, ShouldCallStopUponResetEngineIfAlreadyShutDown) {
+  base::test::ScopedFeatureList feature_list(
+      syncer::kSyncAllowClearingMetadataWhenDataTypeIsStopped);
+
+  // The intention here is to stop sync without clearing metadata by getting to
+  // a sync paused state by simulating a credential rejection error.
+
+  // Sign in and enable sync.
+  SignIn();
+  CreateService(SyncServiceImpl::MANUAL_START);
+  InitializeForNthSync();
+  ASSERT_EQ(SyncService::TransportState::ACTIVE,
+            service()->GetTransportState());
+
+  // At this point, the real SyncEngine would try to connect to the server, fail
+  // (because it has no access token), and eventually call
+  // OnConnectionStatusChange(CONNECTION_AUTH_ERROR). Since our fake SyncEngine
+  // doesn't do any of this, call that explicitly here.
+  service()->OnConnectionStatusChange(CONNECTION_AUTH_ERROR);
+
+  base::RunLoop().RunUntilIdle();
+
+  // Simulate the credentials getting locally rejected by the client by setting
+  // the refresh token to a special invalid value.
+  identity_test_env()->SetInvalidRefreshTokenForPrimaryAccount();
+
+  // The Sync engine should have been shut down.
+  ASSERT_FALSE(service()->IsEngineInitialized());
+  ASSERT_EQ(SyncService::TransportState::PAUSED,
+            service()->GetTransportState());
+
+  EXPECT_EQ(0, get_controller(BOOKMARKS)->model()->clear_metadata_call_count());
+  // Clearing metadata should work even if the engine is not running.
+  service()->StopAndClear();
+  EXPECT_EQ(1, get_controller(BOOKMARKS)->model()->clear_metadata_call_count());
 }
 
 }  // namespace

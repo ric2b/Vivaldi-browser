@@ -13,7 +13,6 @@
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state_manager.h"
 #import "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper_delegate.h"
-#import "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/url/chrome_url_constants.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
@@ -47,9 +46,6 @@ class NewTabPageTabHelperTest : public PlatformTest {
     test_cbs_builder.AddTestingFactory(
         ios::TemplateURLServiceFactory::GetInstance(),
         ios::TemplateURLServiceFactory::GetDefaultFactory());
-    test_cbs_builder.AddTestingFactory(
-        IOSChromeContentSuggestionsServiceFactory::GetInstance(),
-        IOSChromeContentSuggestionsServiceFactory::GetDefaultFactory());
     test_cbs_builder.AddTestingFactory(
         IOSChromeLargeIconServiceFactory::GetInstance(),
         IOSChromeLargeIconServiceFactory::GetDefaultFactory());
@@ -122,29 +118,34 @@ TEST_F(NewTabPageTabHelperTest, TestToggleToAndFromNTP) {
   CreateTabHelper();
   EXPECT_FALSE(tab_helper()->IsActive());
 
-  GURL url(kChromeUINewTabURL);
+  GURL url(kChromeUIAboutNewTabURL);
   fake_web_state_.SetCurrentURL(url);
   web::FakeNavigationContext context;
   context.SetUrl(url);
   fake_navigation_manager_->SetLastCommittedItem(pending_item_.get());
-  fake_web_state_.OnNavigationFinished(&context);
+  fake_web_state_.OnPageLoaded(web::PageLoadCompletionStatus::SUCCESS);
   EXPECT_TRUE(tab_helper()->IsActive());
 
   GURL not_ntp_url(kTestURL);
-  fake_web_state_.SetCurrentURL(not_ntp_url);
   context.SetUrl(not_ntp_url);
   pending_item_->SetURL(not_ntp_url);
+  fake_navigation_manager_->SetPendingItem(pending_item_.get());
   fake_web_state_.OnNavigationStarted(&context);
   EXPECT_FALSE(tab_helper()->IsActive());
+  fake_web_state_.SetCurrentURL(not_ntp_url);
   fake_navigation_manager_->SetLastCommittedItem(pending_item_.get());
-  fake_web_state_.OnNavigationFinished(&context);
+  fake_web_state_.OnPageLoaded(web::PageLoadCompletionStatus::SUCCESS);
   EXPECT_FALSE(tab_helper()->IsActive());
 
-  context.SetUrl(url);
   pending_item_->SetURL(url);
+  context.SetUrl(url);
+  fake_navigation_manager_->SetPendingItem(pending_item_.get());
+  fake_web_state_.OnNavigationStarted(&context);
+  EXPECT_NSEQ(l10n_util::GetNSString(IDS_NEW_TAB_TITLE),
+              base::SysUTF16ToNSString(pending_item_->GetTitle()));
   fake_web_state_.SetCurrentURL(url);
   fake_navigation_manager_->SetLastCommittedItem(pending_item_.get());
-  fake_web_state_.OnNavigationFinished(&context);
+  fake_web_state_.OnPageLoaded(web::PageLoadCompletionStatus::SUCCESS);
   EXPECT_TRUE(tab_helper()->IsActive());
 
   context.SetUrl(not_ntp_url);
@@ -160,7 +161,7 @@ TEST_F(NewTabPageTabHelperTest, TestToggleToAndFromNTP) {
 // Tests double navigations from an NTP and non-NTP page at the same time.
 TEST_F(NewTabPageTabHelperTest, TestMismatchedPendingItem) {
   // Test an NTP url with a mismatched pending item.
-  GURL url(kChromeUINewTabURL);
+  GURL url(kChromeUIAboutNewTabURL);
   GURL not_ntp_url(kTestURL);
   fake_web_state_.SetCurrentURL(url);
   pending_item_->SetURL(not_ntp_url);
@@ -176,6 +177,5 @@ TEST_F(NewTabPageTabHelperTest, TestMismatchedPendingItem) {
   fake_web_state_.SetCurrentURL(not_ntp_url);
   fake_navigation_manager_->SetLastCommittedItem(pending_item_.get());
   fake_web_state_.OnNavigationFinished(&context);
-  EXPECT_FALSE(tab_helper()->IsActive());
   EXPECT_EQ(GURL(kTestURL), pending_item_->GetVirtualURL());
 }

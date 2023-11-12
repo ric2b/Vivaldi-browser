@@ -33,7 +33,7 @@ WORKER_TEST_GLOB_FILE = os.path.join(gpu_path_util.CHROMIUM_SRC_DIR,
 TEST_RUNS_BETWEEN_CLEANUP = 1000
 WEBSOCKET_PORT_TIMEOUT_SECONDS = 10
 WEBSOCKET_SETUP_TIMEOUT_SECONDS = 5
-DEFAULT_TEST_TIMEOUT = 10
+DEFAULT_TEST_TIMEOUT = 30
 SLOW_MULTIPLIER = 5
 ASAN_MULTIPLIER = 4
 BACKEND_VALIDATION_MULTIPLIER = 6
@@ -144,7 +144,11 @@ class WebGpuCtsIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     return True
 
   def _GetSerialGlobs(self) -> Set[str]:
-    return set()
+    return {
+        # crbug.com/1406799. Large test.
+        # Run serially to avoid impact on other tests.
+        '*:api,operation,rendering,basic:large_draw:*',
+    }
 
   def _GetSerialTests(self) -> Set[str]:
     return set()

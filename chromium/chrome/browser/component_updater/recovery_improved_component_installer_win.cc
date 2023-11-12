@@ -11,10 +11,10 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process.h"
 #include "base/strings/utf_string_conversions.h"
@@ -87,6 +87,10 @@ class RecoveryComponentActionHandlerWin
     : public RecoveryComponentActionHandler {
  public:
   RecoveryComponentActionHandlerWin() = default;
+  RecoveryComponentActionHandlerWin(const RecoveryComponentActionHandlerWin&) =
+      delete;
+  RecoveryComponentActionHandlerWin& operator=(
+      const RecoveryComponentActionHandlerWin&) = delete;
 
  private:
   ~RecoveryComponentActionHandlerWin() override = default;
@@ -100,11 +104,6 @@ class RecoveryComponentActionHandlerWin
   // the elevator service consists of several Windows COM IPC calls, a
   // certain type of task runner is necessary to initialize a COM apartment.
   void RunElevatedInSTA(Callback callback);
-
-  RecoveryComponentActionHandlerWin(const RecoveryComponentActionHandlerWin&) =
-      delete;
-  RecoveryComponentActionHandlerWin& operator=(
-      const RecoveryComponentActionHandlerWin&) = delete;
 };
 
 base::CommandLine RecoveryComponentActionHandlerWin::MakeCommandLine(

@@ -9,11 +9,14 @@
 
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsobject.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/policy/mac/managed_preference_policy_manager_impl.h"
 #include "chrome/updater/policy/manager.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
 
@@ -27,7 +30,6 @@ class ManagedPreferencePolicyManager : public PolicyManagerInterface {
       delete;
   ManagedPreferencePolicyManager& operator=(
       const ManagedPreferencePolicyManager&) = delete;
-  ~ManagedPreferencePolicyManager() override;
 
   // Overrides for PolicyManagerInterface.
   std::string source() const override;
@@ -54,8 +56,10 @@ class ManagedPreferencePolicyManager : public PolicyManagerInterface {
   absl::optional<std::string> GetTargetChannel(
       const std::string& app_id) const override;
   absl::optional<std::vector<std::string>> GetForceInstallApps() const override;
+  absl::optional<std::vector<std::string>> GetAppsWithPolicy() const override;
 
  private:
+  ~ManagedPreferencePolicyManager() override;
   base::scoped_nsobject<CRUManagedPreferencePolicyManager> impl_;
 };
 
@@ -178,6 +182,21 @@ ManagedPreferencePolicyManager::GetForceInstallApps() const {
   return absl::nullopt;
 }
 
+absl::optional<std::vector<std::string>>
+ManagedPreferencePolicyManager::GetAppsWithPolicy() const {
+  NSArray<NSString*>* apps_with_policy = [impl_ appsWithPolicy];
+  if (!apps_with_policy) {
+    return absl::nullopt;
+  }
+
+  std::vector<std::string> app_ids;
+  for (NSString* app in apps_with_policy) {
+    app_ids.push_back(base::SysNSStringToUTF8(app));
+  }
+
+  return app_ids;
+}
+
 NSDictionary* ReadManagedPreferencePolicyDictionary() {
   base::ScopedCFTypeRef<CFPropertyListRef> policies(CFPreferencesCopyAppValue(
       (__bridge CFStringRef)kManagedPreferencesUpdatePolicies,
@@ -197,9 +216,9 @@ NSDictionary* ReadManagedPreferencePolicyDictionary() {
   return reinterpret_cast<NSDictionary*>(CFBridgingRelease(policies.release()));
 }
 
-std::unique_ptr<PolicyManagerInterface> CreateManagedPreferencePolicyManager() {
+scoped_refptr<PolicyManagerInterface> CreateManagedPreferencePolicyManager() {
   NSDictionary* policyDict = ReadManagedPreferencePolicyDictionary();
-  return std::make_unique<ManagedPreferencePolicyManager>(policyDict);
+  return base::MakeRefCounted<ManagedPreferencePolicyManager>(policyDict);
 }
 
 }  // namespace updater

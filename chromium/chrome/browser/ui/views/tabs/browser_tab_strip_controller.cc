@@ -9,10 +9,10 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -450,12 +450,13 @@ int BrowserTabStripController::HasAvailableDragActions() const {
   return model_->delegate()->GetDragActions();
 }
 
-void BrowserTabStripController::OnDropIndexUpdate(int index,
-                                                  bool drop_before) {
+void BrowserTabStripController::OnDropIndexUpdate(
+    const absl::optional<int> index,
+    const bool drop_before) {
   // Perform a delayed tab transition if hovering directly over a tab.
   // Otherwise, cancel the pending one.
-  if (index != -1 && !drop_before) {
-    hover_tab_selector_.StartTabTransition(index);
+  if (index.has_value() && !drop_before) {
+    hover_tab_selector_.StartTabTransition(index.value());
   } else {
     hover_tab_selector_.CancelTabTransition();
   }

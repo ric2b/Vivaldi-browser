@@ -12,7 +12,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -21,7 +21,7 @@
 namespace IPC {
 class Channel;
 class Message;
-}  // IPC
+}  // namespace IPC
 
 namespace mojo {
 class IsolatedConnection;
@@ -50,7 +50,7 @@ class FakeSecurityKeyIpcServer : public SecurityKeyIpcServer,
   ~FakeSecurityKeyIpcServer() override;
 
   // SecurityKeyIpcServer interface.
-  bool CreateChannel(const mojo::NamedPlatformChannel::ServerName& server_name,
+  bool CreateChannel(ChannelEndpoint endpoint,
                      base::TimeDelta request_timeout) override;
   bool SendResponse(const std::string& message_data) override;
 

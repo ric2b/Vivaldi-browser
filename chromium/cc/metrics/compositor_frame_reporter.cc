@@ -5,8 +5,10 @@
 #include "cc/metrics/compositor_frame_reporter.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "base/cpu_reduction_experiment.h"
@@ -16,6 +18,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "base/trace_event/common/trace_event_common.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_id_helper.h"
 #include "base/trace_event/typed_macros.h"
@@ -24,6 +27,7 @@
 #include "cc/metrics/dropped_frame_counter.h"
 #include "cc/metrics/event_latency_tracing_recorder.h"
 #include "cc/metrics/event_latency_tracker.h"
+#include "cc/metrics/event_metrics.h"
 #include "cc/metrics/frame_sequence_tracker.h"
 #include "cc/metrics/latency_ukm_reporter.h"
 #include "services/tracing/public/cpp/perfetto/macros.h"
@@ -146,9 +150,11 @@ std::string GetCompositorLatencyHistogramName(
 // Helper function to record UMA histogram for an EventLatency metric. There
 // should be a 1:1 mapping between `name` and `index` to allow the use of
 // `STATIC_HISTOGRAM_POINTER_GROUP()` to cache histogram objects.
-void ReportEventLatencyMetric(const std::string& name,
-                              int index,
-                              base::TimeDelta latency) {
+void ReportEventLatencyMetric(
+    const std::string& name,
+    int index,
+    base::TimeDelta latency,
+    const absl::optional<EventMetrics::HistogramBucketing>& bucketing) {
   STATIC_HISTOGRAM_POINTER_GROUP(
       name, index, kMaxEventLatencyHistogramIndex,
       AddTimeMicrosecondsGranularity(latency),
@@ -156,6 +162,15 @@ void ReportEventLatencyMetric(const std::string& name,
           name, kEventLatencyHistogramMin, kEventLatencyHistogramMax,
           kEventLatencyHistogramBucketCount,
           base::HistogramBase::kUmaTargetedHistogramFlag));
+  if (bucketing) {
+    std::string versioned_name = name + bucketing->version_suffix;
+    STATIC_HISTOGRAM_POINTER_GROUP(
+        versioned_name, index, kMaxEventLatencyHistogramIndex,
+        AddTimeMicrosecondsGranularity(latency),
+        base::Histogram::FactoryMicrosecondsTimeGet(
+            versioned_name, bucketing->min, bucketing->max, bucketing->count,
+            base::HistogramBase::kUmaTargetedHistogramFlag));
+  }
 }
 
 constexpr char kTraceCategory[] =
@@ -197,6 +212,41 @@ double DetermineHighestContribution(
     high_latency_stages = {stage_name};
   }
   return highest_contribution_change;
+}
+
+void TraceScrollJankMetrics(const EventMetrics::List& events_metrics,
+                            int32_t fling_input_count,
+                            int32_t normal_input_count,
+                            perfetto::EventContext& ctx) {
+  auto* track_event = ctx.event<perfetto::protos::pbzero::ChromeTrackEvent>();
+  auto* scroll_data = track_event->set_scroll_deltas();
+  float delta = 0;
+  float predicted_delta = 0;
+
+  for (const auto& event : events_metrics) {
+    auto type = event->type();
+    if (UNLIKELY(type != EventMetrics::EventType::kGestureScrollUpdate &&
+                 type != EventMetrics::EventType::kFirstGestureScrollUpdate &&
+                 type !=
+                     EventMetrics::EventType::kInertialGestureScrollUpdate)) {
+      continue;
+    }
+    auto* scroll_update_event = event->AsScrollUpdate();
+    if (scroll_update_event->trace_id().has_value()) {
+      scroll_data->add_trace_ids_in_gpu_frame(
+          scroll_update_event->trace_id()->value());
+      scroll_data->add_segregated_original_deltas_in_gpu_frame_y(
+          scroll_update_event->delta());
+      scroll_data->add_segregated_predicted_deltas_in_gpu_frame_y(
+          scroll_update_event->predicted_delta());
+    }
+    delta += scroll_update_event->delta();
+    predicted_delta += scroll_update_event->predicted_delta();
+  }
+  scroll_data->set_event_count_in_gpu_frame(fling_input_count +
+                                            normal_input_count);
+  scroll_data->set_original_delta_in_gpu_frame_y(delta);
+  scroll_data->set_predicted_delta_in_gpu_frame_y(predicted_delta);
 }
 
 }  // namespace
@@ -278,45 +328,60 @@ CompositorFrameReporter::ProcessedVizBreakdown::Iterator::Iterator(
     bool skip_swap_start_to_swap_end)
     : owner_(owner), skip_swap_start_to_swap_end_(skip_swap_start_to_swap_end) {
   DCHECK(owner_);
+  SkipBreakdownsIfNecessary();
 }
 
 CompositorFrameReporter::ProcessedVizBreakdown::Iterator::~Iterator() = default;
 
 bool CompositorFrameReporter::ProcessedVizBreakdown::Iterator::IsValid() const {
-  return index_ < std::size(owner_->list_) && owner_->list_[index_];
+  return index_ < std::size(owner_->list_);
 }
 
 void CompositorFrameReporter::ProcessedVizBreakdown::Iterator::Advance() {
-  DCHECK(IsValid());
+  DCHECK(HasValue());
   index_++;
-  if (static_cast<VizBreakdown>(index_) == VizBreakdown::kSwapStartToSwapEnd &&
-      skip_swap_start_to_swap_end_) {
-    index_++;
-  }
+  SkipBreakdownsIfNecessary();
 }
 
 VizBreakdown
 CompositorFrameReporter::ProcessedVizBreakdown::Iterator::GetBreakdown() const {
-  DCHECK(IsValid());
+  DCHECK(HasValue());
   return static_cast<VizBreakdown>(index_);
 }
 
 base::TimeTicks
 CompositorFrameReporter::ProcessedVizBreakdown::Iterator::GetStartTime() const {
-  DCHECK(IsValid());
+  DCHECK(HasValue());
   return owner_->list_[index_]->first;
 }
 
 base::TimeTicks
 CompositorFrameReporter::ProcessedVizBreakdown::Iterator::GetEndTime() const {
-  DCHECK(IsValid());
+  DCHECK(HasValue());
   return owner_->list_[index_]->second;
 }
 
 base::TimeDelta
 CompositorFrameReporter::ProcessedVizBreakdown::Iterator::GetDuration() const {
-  DCHECK(IsValid());
+  DCHECK(HasValue());
   return owner_->list_[index_]->second - owner_->list_[index_]->first;
+}
+
+bool CompositorFrameReporter::ProcessedVizBreakdown::Iterator::HasValue()
+    const {
+  DCHECK(IsValid());
+  return owner_->list_[index_].has_value();
+}
+
+void CompositorFrameReporter::ProcessedVizBreakdown::Iterator::
+    SkipBreakdownsIfNecessary() {
+  while (IsValid() &&
+         (!HasValue() ||
+          (GetBreakdown() ==
+               CompositorFrameReporter::VizBreakdown::kSwapStartToSwapEnd &&
+           skip_swap_start_to_swap_end_))) {
+    index_++;
+  }
 }
 
 // CompositorFrameReporter::ProcessedVizBreakdown ==============================
@@ -790,8 +855,10 @@ void CompositorFrameReporter::TerminateReporter() {
     ReportCompositorLatencyMetrics();
 
     // Only report event latency metrics if the frame was presented.
-    if (TestReportType(FrameReportType::kNonDroppedFrame))
+    if (TestReportType(FrameReportType::kNonDroppedFrame)) {
       ReportEventLatencyMetrics();
+      ReportScrollJankMetrics();
+    }
   }
 
   if (TestReportType(FrameReportType::kDroppedFrame)) {
@@ -1059,7 +1126,8 @@ void CompositorFrameReporter::ReportEventLatencyMetrics() const {
         const std::string event_total_latency_histogram_name = base::JoinString(
             {histogram_base_name, total_latency_stage_name}, ".");
         ReportEventLatencyMetric(event_total_latency_histogram_name,
-                                 event_histogram_index, total_latency);
+                                 event_histogram_index, total_latency,
+                                 event_metrics->GetHistogramBucketing());
       }
 
       // For scroll and pinch events, report metrics for each device type
@@ -1081,7 +1149,8 @@ void CompositorFrameReporter::ReportEventLatencyMetrics() const {
                               total_latency_stage_name},
                              ".");
         ReportEventLatencyMetric(gesture_total_latency_histogram_name,
-                                 gesture_histogram_index, total_latency);
+                                 gesture_histogram_index, total_latency,
+                                 event_metrics->GetHistogramBucketing());
       }
 
       // Finally, report total latency up to presentation for all event types in
@@ -1282,6 +1351,45 @@ void CompositorFrameReporter::ReportCompositorLatencyTraceEvents(
   }
 
   TRACE_EVENT_END(kTraceCategory, trace_track, frame_termination_time_);
+}
+
+void CompositorFrameReporter::ReportScrollJankMetrics() const {
+  int32_t fling_input_count = 0;
+  int32_t normal_input_count = 0;
+  for (const auto& event : events_metrics_) {
+    switch (event->type()) {
+      case EventMetrics::EventType::kGestureScrollUpdate:
+      case EventMetrics::EventType::kFirstGestureScrollUpdate:
+        normal_input_count += event->AsScrollUpdate()->coalesced_event_count();
+        break;
+      case EventMetrics::EventType::kInertialGestureScrollUpdate:
+        fling_input_count += event->AsScrollUpdate()->coalesced_event_count();
+        break;
+      default:
+        continue;
+    }
+  }
+
+  TRACE_EVENT("input", "PresentedFrameInformation",
+              [events_metrics = std::cref(events_metrics_), fling_input_count,
+               normal_input_count](perfetto::EventContext& ctx) {
+                TraceScrollJankMetrics(events_metrics, fling_input_count,
+                                       normal_input_count, ctx);
+              });
+  // Counting number of inputs per frame for flings and normal input has
+  // to be separate as the rate of input generation is different for each
+  // of them, normal input is screen generated, and flings are GPU vsync
+  // generated.
+  if (fling_input_count > 0) {
+    UMA_HISTOGRAM_COUNTS(
+        "Event.InputEventCoalescing.ScrollUpdate.FlingUpdatesPerFrame",
+        fling_input_count);
+  }
+  if (normal_input_count > 0) {
+    UMA_HISTOGRAM_COUNTS(
+        "Event.InputEventCoalescing.ScrollUpdate.GestureUpdatesPerFrame",
+        normal_input_count);
+  }
 }
 
 void CompositorFrameReporter::ReportEventLatencyTraceEvents() const {

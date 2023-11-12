@@ -7,11 +7,14 @@
 #include <memory>
 
 #include "base/memory/raw_ptr.h"
+#include "base/strings/strcat.h"
 #include "base/task/thread_pool.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/types/optional_util.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/ash/policy/dlp/dlp_files_controller.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_histogram_helper.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_policy_event.pb.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_reporting_manager.h"
@@ -26,6 +29,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
+#include "extensions/common/constants.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -161,7 +165,8 @@ TEST_F(DataTransferDlpControllerTest, NullSrc) {
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
-  dlp_controller_.DropIfAllowed(nullptr, nullptr, callback.Get());
+  auto drag_data = ui::OSExchangeData();
+  dlp_controller_.DropIfAllowed(&drag_data, nullptr, callback.Get());
 
   histogram_tester_.ExpectUniqueSample(
       GetDlpHistogramPrefix() + dlp::kClipboardReadBlockedUMA, false, 1);
@@ -247,7 +252,7 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_WarnDst) {
   EXPECT_EQ(events_.size(), 1u);
   EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                               "", "", DlpRulesManager::Restriction::kClipboard,
-                              DlpRulesManager::Level::kWarn)));
+                              "", "", DlpRulesManager::Level::kWarn)));
 }
 
 TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_ProceedDst) {
@@ -275,7 +280,7 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_ProceedDst) {
   EXPECT_EQ(events_.size(), 1u);
   EXPECT_THAT(events_[0],
               IsDlpPolicyEvent(CreateDlpPolicyWarningProceededEvent(
-                  "", "", DlpRulesManager::Restriction::kClipboard)));
+                  "", "", DlpRulesManager::Restriction::kClipboard, "", "")));
 }
 
 TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_CancelDst) {
@@ -303,12 +308,87 @@ TEST_F(DataTransferDlpControllerTest, PasteIfAllowed_CancelDst) {
   EXPECT_TRUE(events_.empty());
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+
+class MockFilesController : public policy::DlpFilesController {
+ public:
+  explicit MockFilesController(const policy::DlpRulesManager& rules_manager)
+      : DlpFilesController(rules_manager) {}
+  ~MockFilesController() override = default;
+
+  MOCK_METHOD(void,
+              CheckIfDropAllowed,
+              (const std::vector<ui::FileInfo>& dropped_files,
+               const ui::DataTransferEndpoint* data_dst,
+               CheckIfDlpAllowedCallback result_callback),
+              (override));
+};
+
+TEST_F(DataTransferDlpControllerTest, DropFile_Blocked) {
+  auto drag_data = ui::OSExchangeData();
+  drag_data.SetFilename(base::FilePath("file1.txt"));
+  drag_data.SetSource(std::make_unique<ui::DataTransferEndpoint>(
+      GURL(base::StrCat({extensions::kExtensionScheme, "://",
+                         extension_misc::kFilesManagerAppId}))));
+  ui::DataTransferEndpoint data_dst((GURL(kExample1Url)));
+
+  MockFilesController files_controller(rules_manager_);
+  std::vector<ui::FileInfo> file_names;
+  ASSERT_TRUE(drag_data.GetFilenames(&file_names));
+
+  EXPECT_CALL(rules_manager_, GetDlpFilesController)
+      .WillOnce(testing::Return(&files_controller));
+  EXPECT_CALL(files_controller,
+              CheckIfDropAllowed(file_names, &data_dst,
+                                 base::test::IsNotNullCallback()))
+      .WillOnce(base::test::RunOnceCallback<2>(false));
+  EXPECT_CALL(dlp_controller_, NotifyBlockedDrop);
+
+  ::testing::StrictMock<base::MockOnceClosure> drop_callback;
+  dlp_controller_.DropIfAllowed(&drag_data, &data_dst, drop_callback.Get());
+
+  histogram_tester_.ExpectUniqueSample(
+      GetDlpHistogramPrefix() + dlp::kDragDropBlockedUMA, true, 1);
+}
+
+TEST_F(DataTransferDlpControllerTest, DropFile_Allowed) {
+  auto drag_data = ui::OSExchangeData();
+  drag_data.SetFilename(base::FilePath("file1.txt"));
+  drag_data.SetSource(std::make_unique<ui::DataTransferEndpoint>(
+      GURL(base::StrCat({extensions::kExtensionScheme, "://",
+                         extension_misc::kFilesManagerAppId}))));
+  ui::DataTransferEndpoint data_dst((GURL(kExample1Url)));
+
+  MockFilesController files_controller(rules_manager_);
+  std::vector<ui::FileInfo> file_names;
+  ASSERT_TRUE(drag_data.GetFilenames(&file_names));
+
+  EXPECT_CALL(rules_manager_, GetDlpFilesController)
+      .WillOnce(testing::Return(&files_controller));
+  EXPECT_CALL(rules_manager_, IsRestrictedDestination)
+      .WillOnce(testing::Return(DlpRulesManager::Level::kAllow));
+  EXPECT_CALL(files_controller,
+              CheckIfDropAllowed(file_names, &data_dst,
+                                 base::test::IsNotNullCallback()))
+      .WillOnce(base::test::RunOnceCallback<2>(true));
+
+  ::testing::StrictMock<base::MockOnceClosure> drop_callback;
+  EXPECT_CALL(drop_callback, Run);
+  dlp_controller_.DropIfAllowed(&drag_data, &data_dst, drop_callback.Get());
+
+  histogram_tester_.ExpectUniqueSample(
+      GetDlpHistogramPrefix() + dlp::kDragDropBlockedUMA, false, 1);
+}
+
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
 // Create a version of the test class for parameterized testing.
 class DlpControllerTest : public DataTransferDlpControllerTest {
  protected:
   void SetUp() override {
     DataTransferDlpControllerTest::SetUp();
     data_src_ = ui::DataTransferEndpoint((GURL(kExample1Url)));
+    drag_data_.SetSource(std::make_unique<ui::DataTransferEndpoint>(data_src_));
     absl::optional<ui::EndpointType> endpoint_type;
     std::tie(endpoint_type, do_notify_) = GetParam();
     data_dst_ = CreateEndpoint(base::OptionalToPtr(endpoint_type), do_notify_);
@@ -318,6 +398,7 @@ class DlpControllerTest : public DataTransferDlpControllerTest {
   ui::DataTransferEndpoint data_src_{ui::EndpointType::kDefault};
   bool do_notify_;
   absl::optional<ui::DataTransferEndpoint> data_dst_;
+  ui::OSExchangeData drag_data_;
   raw_ptr<ui::DataTransferEndpoint> dst_ptr_;
 };
 
@@ -348,7 +429,7 @@ TEST_P(DlpControllerTest, Allow) {
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
-  dlp_controller_.DropIfAllowed(&data_src_, dst_ptr_, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   histogram_tester_.ExpectUniqueSample(
@@ -360,8 +441,9 @@ TEST_P(DlpControllerTest, Allow) {
 TEST_P(DlpControllerTest, Block_IsClipboardReadAllowed) {
   EXPECT_CALL(rules_manager_, IsRestrictedDestination)
       .WillOnce(testing::Return(DlpRulesManager::Level::kBlock));
-  if (do_notify_ || !dst_ptr_)
+  if (do_notify_ || !dst_ptr_) {
     EXPECT_CALL(dlp_controller_, NotifyBlockedPaste);
+  }
 
   EXPECT_EQ(false, dlp_controller_.IsClipboardReadAllowed(&data_src_, dst_ptr_,
                                                           absl::nullopt));
@@ -371,7 +453,7 @@ TEST_P(DlpControllerTest, Block_IsClipboardReadAllowed) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(events_[0],
                 IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                    "", "", DlpRulesManager::Restriction::kClipboard,
+                    "", "", DlpRulesManager::Restriction::kClipboard, "", "",
                     DlpRulesManager::Level::kBlock)));
   } else {
     EXPECT_TRUE(events_.empty());
@@ -387,13 +469,13 @@ TEST_P(DlpControllerTest, Block_DropIfAllowed) {
   EXPECT_CALL(dlp_controller_, NotifyBlockedDrop);
   ::testing::StrictMock<base::MockOnceClosure> callback;
 
-  dlp_controller_.DropIfAllowed(&data_src_, dst_ptr_, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   EXPECT_EQ(events_.size(), 1u);
   EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                               "", "", DlpRulesManager::Restriction::kClipboard,
-                              DlpRulesManager::Level::kBlock)));
+                              "", "", DlpRulesManager::Level::kBlock)));
 
   histogram_tester_.ExpectUniqueSample(
       GetDlpHistogramPrefix() + dlp::kDragDropBlockedUMA, true, 1);
@@ -411,7 +493,7 @@ TEST_P(DlpControllerTest, Report_IsClipboardReadAllowed) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(events_[0],
                 IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                    "", "", DlpRulesManager::Restriction::kClipboard,
+                    "", "", DlpRulesManager::Restriction::kClipboard, "", "",
                     DlpRulesManager::Level::kReport)));
   } else {
     EXPECT_TRUE(events_.empty());
@@ -424,13 +506,13 @@ TEST_P(DlpControllerTest, Report_DropIfAllowed) {
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
-  dlp_controller_.DropIfAllowed(&data_src_, dst_ptr_, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   EXPECT_EQ(events_.size(), 1u);
   EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                               "", "", DlpRulesManager::Restriction::kClipboard,
-                              DlpRulesManager::Level::kReport)));
+                              "", "", DlpRulesManager::Level::kReport)));
 }
 
 TEST_P(DlpControllerTest, Warn_IsClipboardReadAllowed) {
@@ -442,8 +524,9 @@ TEST_P(DlpControllerTest, Warn_IsClipboardReadAllowed) {
   EXPECT_CALL(dlp_controller_, ShouldCancelOnWarn)
       .WillRepeatedly(testing::Return(false));
   bool show_warning = dst_ptr_ ? (do_notify_ && !dst_ptr_->IsUrlType()) : true;
-  if (show_warning)
+  if (show_warning) {
     EXPECT_CALL(dlp_controller_, WarnOnPaste);
+  }
 
   EXPECT_EQ(!show_warning, dlp_controller_.IsClipboardReadAllowed(
                                &data_src_, dst_ptr_, absl::nullopt));
@@ -451,7 +534,7 @@ TEST_P(DlpControllerTest, Warn_IsClipboardReadAllowed) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(events_[0],
                 IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                    "", "", DlpRulesManager::Restriction::kClipboard,
+                    "", "", DlpRulesManager::Restriction::kClipboard, "", "",
                     DlpRulesManager::Level::kWarn)));
   }
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
@@ -495,7 +578,7 @@ TEST_P(DlpControllerTest, Warn_DropIfAllowed) {
 
   ::testing::StrictMock<base::MockOnceClosure> callback;
 
-  dlp_controller_.DropIfAllowed(&data_src_, dst_ptr_, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, dst_ptr_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   histogram_tester_.ExpectUniqueSample(
@@ -509,12 +592,14 @@ class DlpControllerVMsTest : public DataTransferDlpControllerTest {
   void SetUp() override {
     DataTransferDlpControllerTest::SetUp();
     data_src_ = ui::DataTransferEndpoint((GURL(kExample1Url)));
+    drag_data_.SetSource(std::make_unique<ui::DataTransferEndpoint>(data_src_));
     std::tie(endpoint_type_, do_notify_) = GetParam();
     ASSERT_TRUE(endpoint_type_.has_value());
     data_dst_ = ui::DataTransferEndpoint(endpoint_type_.value(), do_notify_);
   }
 
   ui::DataTransferEndpoint data_src_{ui::EndpointType::kDefault};
+  ui::OSExchangeData drag_data_;
   absl::optional<ui::EndpointType> endpoint_type_;
   bool do_notify_;
   ui::DataTransferEndpoint data_dst_{ui::EndpointType::kDefault};
@@ -548,7 +633,7 @@ TEST_P(DlpControllerVMsTest, Allow) {
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
-  dlp_controller_.DropIfAllowed(&data_src, &data_dst, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, &data_dst, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   histogram_tester_.ExpectUniqueSample(
@@ -560,8 +645,9 @@ TEST_P(DlpControllerVMsTest, Allow) {
 TEST_P(DlpControllerVMsTest, Block_IsClipboardReadAllowed) {
   EXPECT_CALL(rules_manager_, IsRestrictedComponent)
       .WillOnce(testing::Return(DlpRulesManager::Level::kBlock));
-  if (do_notify_)
+  if (do_notify_) {
     EXPECT_CALL(dlp_controller_, NotifyBlockedPaste);
+  }
 
   EXPECT_EQ(false, dlp_controller_.IsClipboardReadAllowed(
                        &data_src_, &data_dst_, absl::nullopt));
@@ -571,8 +657,8 @@ TEST_P(DlpControllerVMsTest, Block_IsClipboardReadAllowed) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                                 "", GetComponent(endpoint_type_.value()),
-                                DlpRulesManager::Restriction::kClipboard,
-                                DlpRulesManager::Level::kBlock)));
+                                DlpRulesManager::Restriction::kClipboard, "",
+                                "", DlpRulesManager::Level::kBlock)));
   } else {
     EXPECT_TRUE(events_.empty());
   }
@@ -587,13 +673,13 @@ TEST_P(DlpControllerVMsTest, Block_DropIfAllowed) {
   EXPECT_CALL(dlp_controller_, NotifyBlockedDrop);
   ::testing::StrictMock<base::MockOnceClosure> callback;
 
-  dlp_controller_.DropIfAllowed(&data_src_, &data_dst_, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, &data_dst_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   ASSERT_EQ(events_.size(), 1u);
   EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                               "", GetComponent(endpoint_type_.value()),
-                              DlpRulesManager::Restriction::kClipboard,
+                              DlpRulesManager::Restriction::kClipboard, "", "",
                               DlpRulesManager::Level::kBlock)));
 
   histogram_tester_.ExpectUniqueSample(
@@ -612,8 +698,8 @@ TEST_P(DlpControllerVMsTest, Report_IsClipboardReadAllowed) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                                 "", GetComponent(endpoint_type_.value()),
-                                DlpRulesManager::Restriction::kClipboard,
-                                DlpRulesManager::Level::kReport)));
+                                DlpRulesManager::Restriction::kClipboard, "",
+                                "", DlpRulesManager::Level::kReport)));
   } else {
     EXPECT_TRUE(events_.empty());
   }
@@ -625,13 +711,13 @@ TEST_P(DlpControllerVMsTest, Report_DropIfAllowed) {
   ::testing::StrictMock<base::MockOnceClosure> callback;
   EXPECT_CALL(callback, Run());
 
-  dlp_controller_.DropIfAllowed(&data_src_, &data_dst_, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, &data_dst_, callback.Get());
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
 
   ASSERT_EQ(events_.size(), 1u);
   EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                               "", GetComponent(endpoint_type_.value()),
-                              DlpRulesManager::Restriction::kClipboard,
+                              DlpRulesManager::Restriction::kClipboard, "", "",
                               DlpRulesManager::Level::kReport)));
 }
 
@@ -644,8 +730,9 @@ TEST_P(DlpControllerVMsTest, Warn_IsClipboardReadAllowed) {
   // IsClipboardReadAllowed
   EXPECT_CALL(rules_manager_, IsRestrictedComponent)
       .WillOnce(testing::Return(DlpRulesManager::Level::kWarn));
-  if (do_notify)
+  if (do_notify) {
     EXPECT_CALL(dlp_controller_, WarnOnPaste);
+  }
 
   EXPECT_EQ(true, dlp_controller_.IsClipboardReadAllowed(&data_src, &data_dst,
                                                          absl::nullopt));
@@ -653,8 +740,8 @@ TEST_P(DlpControllerVMsTest, Warn_IsClipboardReadAllowed) {
     EXPECT_EQ(events_.size(), 1u);
     EXPECT_THAT(events_[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
                                 "", GetComponent(endpoint_type.value()),
-                                DlpRulesManager::Restriction::kClipboard,
-                                DlpRulesManager::Level::kWarn)));
+                                DlpRulesManager::Restriction::kClipboard, "",
+                                "", DlpRulesManager::Level::kWarn)));
   }
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
   histogram_tester_.ExpectUniqueSample(
@@ -667,7 +754,7 @@ TEST_P(DlpControllerVMsTest, Warn_DropIfAllowed) {
   EXPECT_CALL(dlp_controller_, WarnOnDrop);
   ::testing::StrictMock<base::MockOnceClosure> callback;
 
-  dlp_controller_.DropIfAllowed(&data_src_, &data_dst_, callback.Get());
+  dlp_controller_.DropIfAllowed(&drag_data_, &data_dst_, callback.Get());
 
   testing::Mock::VerifyAndClearExpectations(&dlp_controller_);
   histogram_tester_.ExpectUniqueSample(

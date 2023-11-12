@@ -23,6 +23,7 @@ fn test() {
                     epoch: Some(Epoch::Major(1)),
                     crate_type: "rlib".to_string(),
                     crate_root: "crate/src/lib.rs".to_string(),
+                    no_std: false,
                     edition: "2021".to_string(),
                     cargo_pkg_version: "1.2.3".to_string(),
                     cargo_pkg_authors: Some("Somebody <somebody@foo.org>".to_string()),
@@ -43,6 +44,7 @@ fn test() {
                         Condition::Always,
                         "//third_party/rust/bindgen:lib".to_string(),
                     )],
+                    aliased_deps: vec![],
                     features: vec!["std".to_string()],
                     build_root: Some("crate/build.rs".to_string()),
                     build_script_outputs: vec!["binding.rs".to_string()],
@@ -53,7 +55,7 @@ fn test() {
     };
     expect_eq_diff(
         format!("{}", build_file.display()),
-        r#"# Copyright 2022 The Chromium Authors
+        r#"# Copyright 2023 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -108,6 +110,7 @@ variables = []
                         epoch: Some(Epoch::Major(1)),
                         crate_type: "rlib".to_string(),
                         crate_root: "crate/src/lib.rs".to_string(),
+                        no_std: false,
                         edition: "2021".to_string(),
                         cargo_pkg_version: "1.2.3".to_string(),
                         cargo_pkg_authors: None,
@@ -117,6 +120,7 @@ variables = []
                         // dev_deps should *not* show up in the output currently.
                         dev_deps: vec![],
                         build_deps: vec![],
+                        aliased_deps: vec![],
                         features: vec![],
                         build_root: None,
                         build_script_outputs: vec![],
@@ -135,7 +139,7 @@ variables = []
     };
     expect_eq_diff(
         format!("{}", build_file.display()),
-        r#"# Copyright 2022 The Chromium Authors
+        r#"# Copyright 2023 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -169,7 +173,7 @@ testonly = true
 "#,
     );
 
-    // A lib rule with conditional deps.
+    // A lib rule with conditional deps and aliases.
     let build_file = BuildFile {
         rules: vec![(
             "lib".to_string(),
@@ -180,6 +184,7 @@ testonly = true
                     epoch: Some(Epoch::Major(1)),
                     crate_type: "rlib".to_string(),
                     crate_root: "crate/src/lib.rs".to_string(),
+                    no_std: false,
                     edition: "2021".to_string(),
                     cargo_pkg_version: "1.2.3".to_string(),
                     cargo_pkg_authors: None,
@@ -212,6 +217,10 @@ testonly = true
                         Condition::Always,
                         "//third_party/rust/bindgen:lib".to_string(),
                     )],
+                    aliased_deps: vec![
+                        ("renamed1".to_string(), "//third_party/rust/dep1:lib__rlib".to_string()),
+                        ("renamed2".to_string(), "//third_party/rust/dep2:lib__rlib".to_string()),
+                    ],
                     features: vec!["std".to_string()],
                     build_root: Some("crate/build.rs".to_string()),
                     build_script_outputs: vec!["binding.rs".to_string()],
@@ -222,7 +231,7 @@ testonly = true
     };
     expect_eq_diff(
         format!("{}", build_file.display()),
-        r#"# Copyright 2022 The Chromium Authors
+        r#"# Copyright 2023 The Chromium Authors
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
@@ -261,6 +270,10 @@ deps += [
 build_deps = [
 "//third_party/rust/bindgen:lib",
 ]
+aliased_deps = {
+renamed1 = "//third_party/rust/dep1:lib__rlib"
+renamed2 = "//third_party/rust/dep2:lib__rlib"
+}
 features = [
 "std",
 ]

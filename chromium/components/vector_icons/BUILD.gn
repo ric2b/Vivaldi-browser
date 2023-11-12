@@ -24,6 +24,7 @@ aggregate_vector_icons("components_vector_icons") {
     "business.icon",
     "call.icon",
     "call_end.icon",
+    "cancel.icon",
     "caret_down.icon",
     "caret_up.icon",
     "celebration.icon",
@@ -37,6 +38,7 @@ aggregate_vector_icons("components_vector_icons") {
     "content_paste.icon",
     "content_paste_off.icon",
     "cookie.icon",
+    "dangerous.icon",
     "description.icon",
     "devices.icon",
     "devices_off.icon",
@@ -99,6 +101,7 @@ aggregate_vector_icons("components_vector_icons") {
     "pause.icon",
     "photo.icon",
     "play_arrow.icon",
+    "privacy_sandbox.icon",
     "protected_content.icon",
     "protocol_handler.icon",
     "qr_code.icon",
@@ -152,6 +155,7 @@ aggregate_vector_icons("components_vector_icons") {
       "google_chrome/google_sites.icon",
       "google_chrome/google_slides.icon",
       "google_chrome/google_super_g.icon",
+      "google_chrome/page_insights.icon",
     ]
   }
 }

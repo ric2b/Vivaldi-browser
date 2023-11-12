@@ -10,8 +10,8 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
-#include "chrome/browser/supervised_user/kids_chrome_management/kidschromemanagement_messages.pb.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
@@ -167,7 +167,10 @@ TEST_F(KidsExternalFetcherTest, HandlesServerError) {
       net::HTTP_BAD_REQUEST);
   EXPECT_FALSE(receiver.GetResult().has_value());
   EXPECT_EQ(receiver.GetResult().error().state(),
-            KidsExternalFetcherStatus::State::HTTP_ERROR);
+            KidsExternalFetcherStatus::State::NET_OR_HTTP_ERROR);
+  EXPECT_EQ(receiver.GetResult().error().net_or_http_error_code(),
+            KidsExternalFetcherStatus::NetOrHttpErrorType(
+                net::ERR_HTTP_RESPONSE_CODE_FAILURE));
 }
 
 }  // namespace

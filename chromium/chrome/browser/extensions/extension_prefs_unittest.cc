@@ -521,15 +521,14 @@ class ExtensionPrefsDelayedInstallInfo : public ExtensionPrefsTest {
     SetIdleInfo(id2_, 2);
     VerifyIdleInfo(id1_, 1);
     VerifyIdleInfo(id2_, 2);
-    std::unique_ptr<ExtensionPrefs::ExtensionsInfo> info(
-        prefs()->GetAllDelayedInstallInfo());
-    EXPECT_EQ(2u, info->size());
-    EXPECT_TRUE(HasInfoForId(info.get(), id1_));
-    EXPECT_TRUE(HasInfoForId(info.get(), id2_));
+    ExtensionPrefs::ExtensionsInfo info = prefs()->GetAllDelayedInstallInfo();
+    EXPECT_EQ(2u, info.size());
+    EXPECT_TRUE(HasInfoForId(&info, id1_));
+    EXPECT_TRUE(HasInfoForId(&info, id2_));
     prefs()->RemoveDelayedInstallInfo(id1_);
     prefs()->RemoveDelayedInstallInfo(id2_);
     info = prefs()->GetAllDelayedInstallInfo();
-    EXPECT_TRUE(info->empty());
+    EXPECT_TRUE(info.empty());
 
     // Try getting/removing info for an id that used to have info set.
     EXPECT_FALSE(prefs()->GetDelayedInstallInfo(id1_));
@@ -553,12 +552,11 @@ class ExtensionPrefsDelayedInstallInfo : public ExtensionPrefsTest {
 
   void Verify() override {
     // Make sure the info for the 3 extensions we expect is present.
-    std::unique_ptr<ExtensionPrefs::ExtensionsInfo> info(
-        prefs()->GetAllDelayedInstallInfo());
-    EXPECT_EQ(3u, info->size());
-    EXPECT_TRUE(HasInfoForId(info.get(), id1_));
-    EXPECT_TRUE(HasInfoForId(info.get(), id2_));
-    EXPECT_TRUE(HasInfoForId(info.get(), id4_));
+    ExtensionPrefs::ExtensionsInfo info = prefs()->GetAllDelayedInstallInfo();
+    EXPECT_EQ(3u, info.size());
+    EXPECT_TRUE(HasInfoForId(&info, id1_));
+    EXPECT_TRUE(HasInfoForId(&info, id2_));
+    EXPECT_TRUE(HasInfoForId(&info, id4_));
     VerifyIdleInfo(id1_, 1);
     VerifyIdleInfo(id2_, 2);
     VerifyIdleInfo(id4_, 4);
@@ -1085,9 +1083,10 @@ class ExtensionPrefsObsoletePrefRemoval : public ExtensionPrefsTest {
     EXPECT_EQ(kTestValue, str_value);
 
     // TODO(crbug.com/1015619): Remove 2023-05. kPrefStringForIdMapping.
-    auto dictionary = std::make_unique<base::DictionaryValue>();
-    prefs()->UpdateExtensionPref(extension_->id(), kPrefStringForIdMapping,
-                                 std::move(dictionary));
+    base::Value::Dict dictionary;
+    prefs()->UpdateExtensionPref(
+        extension_->id(), kPrefStringForIdMapping,
+        std::make_unique<base::Value>(std::move(dictionary)));
     EXPECT_TRUE(
         prefs()->ReadPrefAsDict(extension_->id(), kPrefStringForIdMapping));
 

@@ -6,10 +6,10 @@
 
 #include <memory>
 
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
@@ -334,66 +334,7 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   EXPECT_EQ(base::FeatureList::IsEnabled(net::features::kUseDnsHttpsSvcbAlpn),
             params->use_dns_https_svcb_alpn);
 
-  EXPECT_FALSE(config->skip_logging);
-}
-
-TEST(URLRequestContextConfigTest, SetSupportedQuicVersion) {
-  // Note that this test covers the legacy mechanism which relies on
-  // QuicVersionToString. We should now be using ALPNs instead.
-  base::test::TaskEnvironment task_environment_(
-      base::test::TaskEnvironment::MainThreadType::IO);
-
-  quic::ParsedQuicVersion version =
-      quic::AllSupportedVersionsWithQuicCrypto().front();
-  std::string experimental_options =
-      "{\"QUIC\":{\"quic_version\":\"" +
-      quic::QuicVersionToString(version.transport_version) +
-      "\",\"obsolete_versions_allowed2\":true}}";
-
-  std::unique_ptr<URLRequestContextConfig> config =
-      URLRequestContextConfig::CreateURLRequestContextConfig(
-          // Enable QUIC.
-          true,
-          // QUIC User Agent ID.
-          "Default QUIC User Agent ID",
-          // Enable SPDY.
-          true,
-          // Enable Brotli.
-          false,
-          // Type of http cache.
-          URLRequestContextConfig::HttpCacheType::DISK,
-          // Max size of http cache in bytes.
-          1024000,
-          // Disable caching for HTTP responses. Other information may be stored
-          // in the cache.
-          false,
-          // Storage path for http cache and cookie storage.
-          "/data/data/org.chromium.net/app_cronet_test/test_storage",
-          // Accept-Language request header field.
-          "foreign-language",
-          // User-Agent request header field.
-          "fake agent",
-          // JSON encoded experimental options.
-          experimental_options,
-          // MockCertVerifier to use for testing purposes.
-          std::unique_ptr<net::CertVerifier>(),
-          // Enable network quality estimator.
-          false,
-          // Enable Public Key Pinning bypass for local trust anchors.
-          true,
-          // Optional network thread priority.
-          absl::optional<double>());
-
-  net::URLRequestContextBuilder builder;
-  config->ConfigureURLRequestContextBuilder(&builder);
-  // Set a ProxyConfigService to avoid DCHECK failure when building.
-  builder.set_proxy_config_service(
-      std::make_unique<net::ProxyConfigServiceFixed>(
-          net::ProxyConfigWithAnnotation::CreateDirect()));
-  std::unique_ptr<net::URLRequestContext> context(builder.Build());
-  const net::QuicParams* quic_params = context->quic_context()->params();
-  EXPECT_EQ(quic_params->supported_versions.size(), 1u);
-  EXPECT_EQ(quic_params->supported_versions[0], version);
+  EXPECT_FALSE(config->enable_telemetry);
 }
 
 TEST(URLRequestContextConfigTest, SetSupportedQuicVersionByAlpn) {
@@ -554,62 +495,6 @@ TEST(URLRequestContextConfigTest, SetObsoleteQuicVersion) {
   const net::QuicParams* quic_params = context->quic_context()->params();
   EXPECT_EQ(quic_params->supported_versions,
             net::DefaultSupportedQuicVersions());
-}
-
-TEST(URLRequestContextConfigTest, SetObsoleteQuicVersionWhenAllowed) {
-  // This test configures cronet with an obsolete QUIC version and explicitly
-  // allows it, then validates that cronet uses that version.
-  base::test::TaskEnvironment task_environment_(
-      base::test::TaskEnvironment::MainThreadType::IO);
-
-  std::unique_ptr<URLRequestContextConfig> config =
-      URLRequestContextConfig::CreateURLRequestContextConfig(
-          // Enable QUIC.
-          true,
-          // QUIC User Agent ID.
-          "Default QUIC User Agent ID",
-          // Enable SPDY.
-          true,
-          // Enable Brotli.
-          false,
-          // Type of http cache.
-          URLRequestContextConfig::HttpCacheType::DISK,
-          // Max size of http cache in bytes.
-          1024000,
-          // Disable caching for HTTP responses. Other information may be stored
-          // in the cache.
-          false,
-          // Storage path for http cache and cookie storage.
-          "/data/data/org.chromium.net/app_cronet_test/test_storage",
-          // Accept-Language request header field.
-          "foreign-language",
-          // User-Agent request header field.
-          "fake agent",
-          // JSON encoded experimental options.
-          std::string("{\"QUIC\":{\"quic_version\":\"") +
-              quic::ParsedQuicVersionToString(
-                  net::ObsoleteQuicVersions().back()) +
-              "\",\"obsolete_versions_allowed2\":true}}",
-          // MockCertVerifier to use for testing purposes.
-          std::unique_ptr<net::CertVerifier>(),
-          // Enable network quality estimator.
-          false,
-          // Enable Public Key Pinning bypass for local trust anchors.
-          true,
-          // Optional network thread priority.
-          absl::optional<double>());
-
-  net::URLRequestContextBuilder builder;
-  config->ConfigureURLRequestContextBuilder(&builder);
-  // Set a ProxyConfigService to avoid DCHECK failure when building.
-  builder.set_proxy_config_service(
-      std::make_unique<net::ProxyConfigServiceFixed>(
-          net::ProxyConfigWithAnnotation::CreateDirect()));
-  std::unique_ptr<net::URLRequestContext> context(builder.Build());
-  const net::QuicParams* quic_params = context->quic_context()->params();
-  quic::ParsedQuicVersionVector supported_versions = {
-      net::ObsoleteQuicVersions().back()};
-  EXPECT_EQ(quic_params->supported_versions, supported_versions);
 }
 
 TEST(URLRequestContextConfigTest, SetQuicServerMigrationOptions) {
@@ -1842,7 +1727,7 @@ TEST(URLRequestContextConfigTest, SkipLogging) {
           // User-Agent request header field.
           "fake agent",
           // JSON encoded experimental options.
-          "{\"skip_logging\":true}",
+          "{\"enable_telemetry\":true}",
           // MockCertVerifier to use for testing purposes.
           std::unique_ptr<net::CertVerifier>(),
           // Enable network quality estimator.
@@ -1853,8 +1738,9 @@ TEST(URLRequestContextConfigTest, SkipLogging) {
           absl::optional<double>());
   net::URLRequestContextBuilder builder;
   config->ConfigureURLRequestContextBuilder(&builder);
-  EXPECT_TRUE(config->effective_experimental_options.contains("skip_logging"));
-  EXPECT_TRUE(config->skip_logging);
+  EXPECT_TRUE(
+      config->effective_experimental_options.contains("enable_telemetry"));
+  EXPECT_TRUE(config->enable_telemetry);
 }
 
 TEST(URLRequestContextConfigTest, WrongSkipLoggingValue) {
@@ -1885,7 +1771,7 @@ TEST(URLRequestContextConfigTest, WrongSkipLoggingValue) {
           // User-Agent request header field.
           "fake agent",
           // JSON encoded experimental options.
-          "{\"skip_logging\":10}",
+          "{\"enable_telemetry\":10}",
           // MockCertVerifier to use for testing purposes.
           std::unique_ptr<net::CertVerifier>(),
           // Enable network quality estimator.
@@ -1897,7 +1783,9 @@ TEST(URLRequestContextConfigTest, WrongSkipLoggingValue) {
 
   net::URLRequestContextBuilder builder;
   config->ConfigureURLRequestContextBuilder(&builder);
-  EXPECT_FALSE(config->effective_experimental_options.contains("skip_logging"));
+  EXPECT_FALSE(
+      config->effective_experimental_options.contains("enable_telemetry"));
+  EXPECT_FALSE(config->enable_telemetry);
 }
 
 // See stale_host_resolver_unittest.cc for test of StaleDNS options.

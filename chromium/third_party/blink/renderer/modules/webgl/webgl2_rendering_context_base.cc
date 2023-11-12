@@ -546,7 +546,7 @@ void WebGL2RenderingContextBase::framebufferTextureLayer(GLenum target,
   }
   framebuffer_binding->SetAttachmentForBoundFramebuffer(
       target, attachment, textarget, texture, level, layer, 0);
-  ApplyStencilTest();
+  ApplyDepthAndStencilTest();
 }
 
 ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(
@@ -1087,7 +1087,7 @@ void WebGL2RenderingContextBase::renderbufferStorageMultisample(
   }
   RenderbufferStorageImpl(target, samples, internalformat, width, height,
                           function_name);
-  ApplyStencilTest();
+  ApplyDepthAndStencilTest();
 }
 
 void WebGL2RenderingContextBase::ResetUnpackParameters() {
@@ -5399,6 +5399,28 @@ ScriptValue WebGL2RenderingContextBase::getParameter(ScriptState* script_state,
                         "invalid parameter name, "
                         "WEBGL_provoking_vertex not enabled");
       return ScriptValue::CreateNull(script_state->GetIsolate());
+    case GL_MAX_CLIP_DISTANCES_ANGLE:
+    case GL_MAX_CULL_DISTANCES_ANGLE:
+    case GL_MAX_COMBINED_CLIP_AND_CULL_DISTANCES_ANGLE:
+    case GL_CLIP_DISTANCE0_ANGLE:
+    case GL_CLIP_DISTANCE1_ANGLE:
+    case GL_CLIP_DISTANCE2_ANGLE:
+    case GL_CLIP_DISTANCE3_ANGLE:
+    case GL_CLIP_DISTANCE4_ANGLE:
+    case GL_CLIP_DISTANCE5_ANGLE:
+    case GL_CLIP_DISTANCE6_ANGLE:
+    case GL_CLIP_DISTANCE7_ANGLE:
+      if (ExtensionEnabled(kWebGLClipCullDistanceName)) {
+        if (pname >= GL_CLIP_DISTANCE0_ANGLE &&
+            pname <= GL_CLIP_DISTANCE7_ANGLE) {
+          return GetBooleanParameter(script_state, pname);
+        }
+        return GetUnsignedIntParameter(script_state, pname);
+      }
+      SynthesizeGLError(GL_INVALID_ENUM, "getParameter",
+                        "invalid parameter name, "
+                        "WEBGL_clip_cull_distance not enabled");
+      return ScriptValue::CreateNull(script_state->GetIsolate());
 
     default:
       return WebGLRenderingContextBase::getParameter(script_state, pname);
@@ -5417,6 +5439,21 @@ ScriptValue WebGL2RenderingContextBase::GetInt64Parameter(
 bool WebGL2RenderingContextBase::ValidateCapability(const char* function_name,
                                                     GLenum cap) {
   switch (cap) {
+    case GL_CLIP_DISTANCE0_ANGLE:
+    case GL_CLIP_DISTANCE1_ANGLE:
+    case GL_CLIP_DISTANCE2_ANGLE:
+    case GL_CLIP_DISTANCE3_ANGLE:
+    case GL_CLIP_DISTANCE4_ANGLE:
+    case GL_CLIP_DISTANCE5_ANGLE:
+    case GL_CLIP_DISTANCE6_ANGLE:
+    case GL_CLIP_DISTANCE7_ANGLE:
+      if (ExtensionEnabled(kWebGLClipCullDistanceName)) {
+        return true;
+      }
+      SynthesizeGLError(
+          GL_INVALID_ENUM, function_name,
+          "invalid capability, WEBGL_clip_cull_distance not enabled");
+      return false;
     case GL_RASTERIZER_DISCARD:
       return true;
     default:
@@ -5894,9 +5931,9 @@ ScriptValue WebGL2RenderingContextBase::getFramebufferAttachmentParameter(
       return WebGLAny(script_state, GL_RENDERBUFFER);
     case GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME:
       return WebGLAny(script_state, attachment_object);
+    case GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL:
     case GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE:
     case GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER:
-    case GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL:
       if (!attachment_object->IsTexture())
         break;
       [[fallthrough]];
@@ -5915,7 +5952,7 @@ ScriptValue WebGL2RenderingContextBase::getFramebufferAttachmentParameter(
       if (attachment == GL_DEPTH_STENCIL_ATTACHMENT) {
         SynthesizeGLError(
             GL_INVALID_OPERATION, kFunctionName,
-            "COMPONENT_TYPE can't be queried for DEPTH_STENCIL_ATTACHMENT");
+            "component type cannot be queried for DEPTH_STENCIL_ATTACHMENT");
         return ScriptValue::CreateNull(script_state->GetIsolate());
       }
       [[fallthrough]];

@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/scoped_feature_list.h"
 #include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -78,7 +79,7 @@ class ResponseBodyLoaderTest : public testing::Test {
     }
     void DidReceiveDecodedData(
         const String& data,
-        std::unique_ptr<Resource::DecodedDataInfo> info) override {}
+        std::unique_ptr<ParkableStringImpl::SecureDigest> digest) override {}
     void DidFinishLoadingBody() override {
       DCHECK(!finished_);
       DCHECK(!failed_);
@@ -443,8 +444,8 @@ TEST_F(ResponseBodyLoaderTest, DrainAsDataPipe) {
   ASSERT_TRUE(client);
   EXPECT_TRUE(body_loader->IsDrained());
 
-  client_for_draining->DidReceiveData(base::make_span("xyz", 3));
-  client_for_draining->DidReceiveData(base::make_span("abc", 3));
+  client_for_draining->DidReceiveData(base::make_span("xyz", 3u));
+  client_for_draining->DidReceiveData(base::make_span("abc", 3u));
 
   EXPECT_FALSE(client->LoadingIsFinished());
   EXPECT_FALSE(client->LoadingIsFailed());
@@ -716,8 +717,8 @@ TEST_F(ResponseBodyLoaderTest, DrainAsDataPipeAndReportError) {
   ASSERT_TRUE(client);
   EXPECT_TRUE(body_loader->IsDrained());
 
-  client_for_draining->DidReceiveData(base::make_span("xyz", 3));
-  client_for_draining->DidReceiveData(base::make_span("abc", 3));
+  client_for_draining->DidReceiveData(base::make_span("xyz", 3u));
+  client_for_draining->DidReceiveData(base::make_span("abc", 3u));
 
   EXPECT_FALSE(client->LoadingIsFinished());
   EXPECT_FALSE(client->LoadingIsFailed());

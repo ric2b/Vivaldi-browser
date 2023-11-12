@@ -31,6 +31,7 @@ namespace blink {
 
 class Document;
 class Length;
+class TreeScope;
 
 class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
  public:
@@ -131,6 +132,9 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsShadowValue() const { return class_type_ == kShadowClass; }
   bool IsStringValue() const { return class_type_ == kStringClass; }
   bool IsURIValue() const { return class_type_ == kURIClass; }
+  bool IsLinearTimingFunctionValue() const {
+    return class_type_ == kLinearTimingFunctionClass;
+  }
   bool IsCubicBezierTimingFunctionValue() const {
     return class_type_ == kCubicBezierTimingFunctionClass;
   }
@@ -195,6 +199,16 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool operator==(const CSSValue&) const;
   bool operator!=(const CSSValue& o) const { return !(*this == o); }
 
+  // Returns the same CSS value, but populated with the given tree scope for
+  // tree-scoped names and references.
+  const CSSValue& EnsureScopedValue(const TreeScope* tree_scope) const {
+    if (!needs_tree_scope_population_) {
+      return *this;
+    }
+    return PopulateWithTreeScope(tree_scope);
+  }
+  bool IsScopedValue() const { return !needs_tree_scope_population_; }
+
   void TraceAfterDispatch(blink::Visitor* visitor) const {}
   void Trace(Visitor*) const;
 
@@ -237,6 +251,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kConicGradientClass,
 
     // Timing function classes.
+    kLinearTimingFunctionClass,
     kCubicBezierTimingFunctionClass,
     kStepsTimingFunctionClass,
 
@@ -290,7 +305,12 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
 
   ClassType GetClassType() const { return static_cast<ClassType>(class_type_); }
 
-  explicit CSSValue(ClassType class_type) : class_type_(class_type) {}
+  const CSSValue& PopulateWithTreeScope(const TreeScope*) const;
+
+  explicit CSSValue(ClassType class_type)
+      : allows_negative_percentage_reference_(false),
+        needs_tree_scope_population_(false),
+        class_type_(class_type) {}
 
   // NOTE: This class is non-virtual for memory and performance reasons.
   // Don't go making it virtual again unless you know exactly what you're doing!
@@ -310,7 +330,15 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   uint8_t value_list_separator_ = kSpaceSeparator;
 
   // CSSMathFunctionValue:
-  bool allows_negative_percentage_reference_ = false;
+  uint8_t allows_negative_percentage_reference_ : 1;  // NOLINT
+
+  // Any CSS value that defines/references a global name should be tree-scoped.
+  // However, to allow sharing StyleSheetContents, we don't directly populate
+  // CSS values with tree scope in parsed results, but wait until resolving an
+  // element's style.
+  // The flag is true if the value contains such references but hasn't been
+  // populated with a tree scope.
+  uint8_t needs_tree_scope_population_ : 1;  // NOLINT
 
  private:
   const uint8_t class_type_;  // ClassType

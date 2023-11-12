@@ -105,6 +105,17 @@ bool SVGLength::operator==(const SVGLength& other) const {
   return unit_mode_ == other.unit_mode_ && value_ == other.value_;
 }
 
+Length SVGLength::ConvertToLength(
+    const SVGLengthConversionData& conversion_data) const {
+  return value_->ConvertToLength(conversion_data);
+}
+
+float SVGLength::Value(const SVGLengthConversionData& conversion_data,
+                       float dimension) const {
+  return FloatValueForLength(value_->ConvertToLength(conversion_data),
+                             dimension);
+}
+
 float SVGLength::Value(const SVGLengthContext& context) const {
   if (IsCalculated() || HasContainerRelativeUnits())
     return context.ResolveValue(AsCSSPrimitiveValue(), UnitMode());
@@ -162,32 +173,6 @@ static bool IsSupportedCalculationCategory(CalculationCategory category) {
     default:
       return false;
   }
-}
-
-void SVGLength::SetUnitType(CSSPrimitiveValue::UnitType type) {
-  DCHECK(IsSupportedCSSUnitType(type));
-  value_ = CSSNumericLiteralValue::Create(value_->GetFloatValue(), type);
-}
-
-float SVGLength::ValueAsPercentage() const {
-  // LengthTypePercentage is represented with 100% = 100.0. Good for accuracy
-  // but could eventually be changed.
-  if (value_->IsPercentage()) {
-    // Note: This division is a source of floating point inaccuracy.
-    return value_->GetFloatValue() / 100;
-  }
-
-  return value_->GetFloatValue();
-}
-
-float SVGLength::ScaleByPercentage(float input) const {
-  float result = input * value_->GetFloatValue();
-  if (value_->IsPercentage()) {
-    // Delaying division by 100 as long as possible since it introduces floating
-    // point errors.
-    result = result / 100;
-  }
-  return result;
 }
 
 namespace {

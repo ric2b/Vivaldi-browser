@@ -2,81 +2,54 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {classMap, css, customElement, html, property, PropertyValues, XfBase} from './xf_base.js';
+import {util} from '../common/js/util.js';
+import {constants} from '../foreground/js/constants.js';
+
+import {classMap, css, customElement, html, property, PropertyValues, styleMap, svg, XfBase} from './xf_base.js';
 
 @customElement('xf-icon')
 export class XfIcon extends XfBase {
-  /** The icon size, can be "small" or "large" (from `XfIcon.size`). */
+  /**
+   * The icon size, can be "extra-small", "small" or "large" (from
+   * `XfIcon.size`).
+   */
   @property({type: String, reflect: true}) size: string = XfIcon.sizes.SMALL;
 
   /**
    * The icon type, different type will render different SVG file
-   * (from `XfIcon.types`).
+   * (from `constants.ICON_TYPES`).
    */
   @property({type: String, reflect: true}) type = '';
 
+  /**
+   * Some icon data are directly passed from outside in base64 format. If
+   * `iconSet` is provided, `type` will be ignored.
+   */
+  @property({attribute: false})
+  iconSet: chrome.fileManagerPrivate.IconSet|null = null;
+
   static get sizes() {
     return {
+      EXTRA_SMALL: 'extra_small',
       SMALL: 'small',
       LARGE: 'large',
     } as const;
   }
 
-  static get types() {
+  static get multiColor() {
     return {
-      ANDROID_FILES: 'android_files',
-      ARCHIVE: 'archive',
-      AUDIO: 'audio',
-      BRUSCHETTA: 'bruschetta',
-      CAMERA_FOLDER: 'camera_folder',
-      COMPUTER: 'computer',
-      COMPUTERS_GRAND_ROOT: 'computers_grand_root',
-      CROSTINI: 'crostini',
-      DOWNLOADS: 'downloads',
-      DRIVE_OFFLINE: 'drive_offline',
-      DRIVE_RECENT: 'drive_recent',
-      DRIVE_SHARED_WITH_ME: 'drive_shared_with_me',
-      DRIVE: 'drive',
-      EXCEL: 'excel',
-      EXTERNAL_MEDIA: 'external_media',
-      FOLDER: 'folder',
-      GENERIC: 'generic',
-      GOOGLE_DOC: 'gdoc',
-      GOOGLE_DRAW: 'gdraw',
-      GOOGLE_FORM: 'gform',
-      GOOGLE_LINK: 'glink',
-      GOOGLE_MAP: 'gmap',
-      GOOGLE_SHEET: 'gsheet',
-      GOOGLE_SITE: 'gsite',
-      GOOGLE_SLIDES: 'gslides',
-      GOOGLE_TABLE: 'gtable',
-      IMAGE: 'image',
-      MTP: 'mtp',
-      MY_FILES: 'my_files',
-      OPTICAL: 'optical',
-      PDF: 'pdf',
-      PLUGIN_VM: 'plugin_vm',
-      POWERPOINT: 'ppt',
-      RAW: 'raw',
-      RECENT: 'recent',
-      REMOVABLE: 'removable',
-      SCRIPT: 'script',
-      SD_CARD: 'sd',
-      SERVICE_DRIVE: 'service_drive',
-      SHARED_DRIVE: 'shared_drive',
-      SHARED_DRIVES_GRAND_ROOT: 'shared_drives_grand_root',
-      SHARED_FOLDER: 'shared_folder',
-      SHORTCUT: 'shortcut',
-      SITES: 'sites',
-      SMB: 'smb',
-      TEAM_DRIVE: 'team_drive',
-      THUMBNAIL_GENERIC: 'thumbnail_generic',
-      TINI: 'tini',
-      TRASH: 'trash',
-      UNKNOWN_REMOVABLE: 'unknown_removable',
-      USB: 'usb',
-      VIDEO: 'video',
-      WORD: 'word',
+      [constants.ICON_TYPES.OFFLINE]:
+          svg`<use xlink:href="foreground/images/files/ui/offline.svg#offline"></use>`,
+      [constants.ICON_TYPES.CLOUD_DONE]:
+          svg`<use xlink:href="foreground/images/files/ui/cloud_done.svg#cloud_done"></use>`,
+      [constants.ICON_TYPES.CLOUD_ERROR]:
+          svg`<use xlink:href="foreground/images/files/ui/cloud_error.svg#cloud_error"></use>`,
+      [constants.ICON_TYPES.CLOUD_OFFLINE]:
+          svg`<use xlink:href="foreground/images/files/ui/cloud_offline.svg#cloud_offline"></use>`,
+      [constants.ICON_TYPES.CLOUD_SYNC]:
+          svg`<use xlink:href="foreground/images/files/ui/cloud_sync.svg#cloud_sync"></use>`,
+      [constants.ICON_TYPES.CLOUD]:
+          svg`<use xlink:href="foreground/images/files/ui/cloud.svg#cloud"></use>`,
     };
   }
 
@@ -85,10 +58,27 @@ export class XfIcon extends XfBase {
   }
 
   override render() {
+    if (Object.keys(XfIcon.multiColor).includes(this.type)) {
+      return html`
+        <span class="multi-color keep-color">
+          <svg>
+            ${XfIcon.multiColor[this.type]}
+          </svg>
+        </span>`;
+    }
+
+    if (this.iconSet) {
+      const backgroundImageStyle = {
+        'background-image': util.iconSetToCSSBackgroundImageValue(this.iconSet),
+      };
+      return html`<span class="keep-color" style=${
+          styleMap(backgroundImageStyle)}></span>`;
+    }
+
     const shouldKeepColor = [
-      XfIcon.types.EXCEL,
-      XfIcon.types.POWERPOINT,
-      XfIcon.types.WORD,
+      constants.ICON_TYPES.EXCEL,
+      constants.ICON_TYPES.POWERPOINT,
+      constants.ICON_TYPES.WORD,
     ].includes(this.type);
     const spanClass = {'keep-color': shouldKeepColor};
 
@@ -104,14 +94,18 @@ export class XfIcon extends XfBase {
   }
 
   private validateTypeProperty_(type: string) {
+    if (this.iconSet) {
+      // Ignore checking "type" if iconSet is provided.
+      return;
+    }
     if (!type) {
       console.warn('Empty type will result in an square being rendered.');
       return;
     }
-    const validTypes = Object.values(XfIcon.types);
+    const validTypes = Object.values(constants.ICON_TYPES);
     if (!validTypes.find((t) => t === type)) {
-      console.warn(
-          `Type ${type} is not a valid icon type, please check XfIcon.types.`);
+      console.warn(`Type ${
+          type} is not a valid icon type, please check constants.ICON_TYPES.`);
     }
   }
 }
@@ -136,6 +130,17 @@ function getCSS() {
     span.keep-color {
       background-position: center center;
       background-repeat: no-repeat;
+    }
+
+    span.multi-color {
+      display: flex;
+      align-items: stretch;
+      justify-content: stretch;
+    }
+
+    :host([size="extra_small"]) span {
+      height: 16px;
+      width: 16px;
     }
 
     :host([size="small"]) span {
@@ -180,7 +185,7 @@ function getCSS() {
       -webkit-mask-image: url(../foreground/images/volumes/linux_files.svg);
     }
 
-    :host([type="camera_folder"]) span {
+    :host([type="camera-folder"]) span {
       -webkit-mask-image: url(../foreground/images/volumes/camera.svg);
     }
 
@@ -328,6 +333,10 @@ function getCSS() {
 
     :host([type="thumbnail_generic"]) span {
       -webkit-mask-image: url(../foreground/images/files/ui/filetype_placeholder_generic.svg);
+    }
+
+    :host([type="offline"]) span {
+      -webkit-mask-image: url(../foreground/images/files/ui/offline.svg);
     }
 
     :host([type="tini"]) span {

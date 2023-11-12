@@ -9,13 +9,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <set>
 #include <utility>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
@@ -23,6 +24,8 @@
 #include "base/task/single_thread_task_runner.h"
 #include "chromeos/ash/components/audio/audio_device.h"
 #include "chromeos/ash/components/audio/audio_devices_pref_handler_stub.h"
+#include "chromeos/ash/components/dbus/audio/cras_audio_client.h"
+#include "chromeos/ash/components/dbus/audio/fake_cras_audio_client.h"
 #include "chromeos/ash/components/dbus/audio/floss_media_client.h"
 #include "device/bluetooth/floss/floss_features.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -102,6 +105,8 @@ void CrasAudioHandler::AudioObserver::OnActiveInputNodeChanged() {}
 void CrasAudioHandler::AudioObserver::OnOutputChannelRemixingChanged(
     bool /* mono_on */) {}
 
+void CrasAudioHandler::AudioObserver::OnNoiseCancellationStateChanged() {}
+
 void CrasAudioHandler::AudioObserver::OnHotwordTriggered(
     uint64_t /* tv_sec */,
     uint64_t /* tv_nsec */) {}
@@ -120,6 +125,8 @@ void CrasAudioHandler::AudioObserver::OnOutputStopped() {}
 void CrasAudioHandler::AudioObserver::OnSurveyTriggered(
     const AudioSurveyData& /*survey_specific_data */) {}
 
+void CrasAudioHandler::AudioObserver::OnSpeakOnMuteDetected() {}
+
 // static
 void CrasAudioHandler::Initialize(
     mojo::PendingRemote<media_session::mojom::MediaControllerManager>
@@ -131,9 +138,8 @@ void CrasAudioHandler::Initialize(
 
 // static
 void CrasAudioHandler::InitializeForTesting() {
-  // Make sure CrasAudioClient has been initialized.
-  if (!CrasAudioClient::Get())
-    CrasAudioClient::InitializeFake();
+  CHECK(CrasAudioClient::Get()) << "CrasAudioClient must be initialized.";
+
   // Make sure FlossMediaClient has been initialized.
   // TODO(b/228608730): Remove this after Floss bypasses CRAS to receive media
   // information directly from the provider.
@@ -472,6 +478,15 @@ bool CrasAudioHandler::GetPrimaryActiveOutputDevice(AudioDevice* device) const {
   return true;
 }
 
+bool CrasAudioHandler::GetPrimaryActiveInputDevice(AudioDevice* device) const {
+  const AudioDevice* active_device = GetDeviceFromId(active_input_node_id_);
+  if (!active_device || !device) {
+    return false;
+  }
+  *device = *active_device;
+  return true;
+}
+
 const AudioDevice* CrasAudioHandler::GetDeviceByType(AudioDeviceType type) {
   for (const auto& item : audio_devices_) {
     const AudioDevice& device = item.second;
@@ -490,6 +505,24 @@ void CrasAudioHandler::GetDefaultOutputBufferSize(int32_t* buffer_size) const {
   *buffer_size = default_output_buffer_size_;
 }
 
+bool CrasAudioHandler::IsNoiseCancellationSupportedForDevice(
+    uint64_t device_id) {
+  if (!noise_cancellation_supported()) {
+    return false;
+  }
+
+  const AudioDevice* device = GetDeviceFromId(device_id);
+  if (!device) {
+    return false;
+  }
+
+  if (!device->is_input) {
+    return false;
+  }
+
+  return device->audio_effect & cras::EFFECT_TYPE_NOISE_CANCELLATION;
+}
+
 bool CrasAudioHandler::GetNoiseCancellationState() const {
   return audio_pref_handler_->GetNoiseCancellationState();
 }
@@ -506,17 +539,20 @@ void CrasAudioHandler::RefreshNoiseCancellationState() {
     return;
   }
 
-  SetNoiseCancellationState(
+  // Refresh should only update the state in CRAS and leave the preference
+  // as-is.
+  CrasAudioClient::Get()->SetNoiseCancellationEnabled(
       GetNoiseCancellationState() &&
       (internal_mic->audio_effect & cras::EFFECT_TYPE_NOISE_CANCELLATION));
 }
 
-void CrasAudioHandler::SetNoiseCancellationState(bool state) {
-  CrasAudioClient::Get()->SetNoiseCancellationEnabled(state);
-}
+void CrasAudioHandler::SetNoiseCancellationState(bool noise_cancellation_on) {
+  CrasAudioClient::Get()->SetNoiseCancellationEnabled(noise_cancellation_on);
+  audio_pref_handler_->SetNoiseCancellationState(noise_cancellation_on);
 
-void CrasAudioHandler::SetNoiseCancellationPrefState(bool state) {
-  audio_pref_handler_->SetNoiseCancellationState(state);
+  for (auto& observer : observers_) {
+    observer.OnNoiseCancellationStateChanged();
+  }
 }
 
 void CrasAudioHandler::RequestNoiseCancellationSupported(
@@ -537,6 +573,10 @@ void CrasAudioHandler::HandleGetNoiseCancellationSupported(
   }
 
   std::move(callback).Run();
+}
+
+void CrasAudioHandler::SetNoiseCancellationSupportedForTesting(bool supported) {
+  noise_cancellation_supported_ = supported;
 }
 
 void CrasAudioHandler::SetKeyboardMicActive(bool active) {
@@ -817,10 +857,27 @@ void CrasAudioHandler::SetOutputMuteLockedBySecurityCurtain(bool mute_on) {
 }
 
 void CrasAudioHandler::AdjustOutputVolumeToAudibleLevel() {
-  if (output_volume_ <= kMuteThresholdPercent) {
-    // Avoid the situation when sound has been unmuted, but the volume
-    // is set to a very low value, so user still can't hear any sound.
-    SetOutputVolumePercent(kDefaultUnmuteVolumePercent);
+  if (features::IsAudioPeripheralVolumeGranularityEnabled()) {
+    if (output_volume_ <= kMuteThresholdPercent) {
+      for (const auto& item : audio_devices_) {
+        int unmute_volume = kDefaultUnmuteVolumePercent;
+        const AudioDevice& device = item.second;
+        if (!device.is_input && device.active) {
+          if (device.type == AudioDeviceType::kUsb) {
+            int32_t number_of_volume_steps = device.number_of_volume_steps;
+            DCHECK(number_of_volume_steps > 0);
+            unmute_volume = 100 / number_of_volume_steps;
+          }
+          SetOutputNodeVolumePercent(device.id, unmute_volume);
+        }
+      }
+    } else {
+      if (output_volume_ <= kMuteThresholdPercent) {
+        // Avoid the situation when sound has been unmuted, but the volume
+        // is set to a very low value, so user still can't hear any sound.
+        SetOutputVolumePercent(kDefaultUnmuteVolumePercent);
+      }
+    }
   }
 }
 
@@ -1010,11 +1067,7 @@ void CrasAudioHandler::NodesChanged() {
 
 void CrasAudioHandler::OutputNodeVolumeChanged(uint64_t node_id, int volume) {
   const AudioDevice* device = this->GetDeviceFromId(node_id);
-
-  // If this is not an active output node, ignore this event. Because when this
-  // node set to active, it will be applied with the volume value stored in
-  // preference.
-  if (!device || !device->active || device->is_input) {
+  if (!device || device->is_input) {
     LOG(ERROR) << "Unexpexted OutputNodeVolumeChanged received on node: 0x"
                << std::hex << node_id;
     return;
@@ -1025,7 +1078,9 @@ void CrasAudioHandler::OutputNodeVolumeChanged(uint64_t node_id, int volume) {
   // set the volume, i.e., volume could be set from non-chrome source, like
   // Bluetooth headset, etc. Assume all active output devices share a single
   // volume.
-  output_volume_ = volume;
+  if (device->active) {
+    output_volume_ = volume;
+  }
   audio_pref_handler_->SetVolumeGainValue(*device, volume);
 
   if (initializing_audio_state_) {
@@ -1049,6 +1104,26 @@ void CrasAudioHandler::OutputNodeVolumeChanged(uint64_t node_id, int volume) {
 
   for (auto& observer : observers_)
     observer.OnOutputNodeVolumeChanged(node_id, volume);
+}
+
+void CrasAudioHandler::InputNodeGainChanged(uint64_t node_id, int gain) {
+  const AudioDevice* device = this->GetDeviceFromId(node_id);
+
+  if (!device || !device->is_input) {
+    LOG(ERROR) << "Unexpexted InputNodeGainChanged received on node: 0x"
+               << std::hex << node_id;
+    return;
+  }
+
+  if (device->active) {
+    input_gain_ = gain;
+  }
+
+  audio_pref_handler_->SetVolumeGainValue(*device, gain);
+
+  for (auto& observer : observers_) {
+    observer.OnInputNodeGainChanged(node_id, gain);
+  }
 }
 
 void CrasAudioHandler::ActiveOutputNodeChanged(uint64_t node_id) {
@@ -1103,6 +1178,12 @@ void CrasAudioHandler::SurveyTriggered(
     const base::flat_map<std::string, std::string>& survey_specific_data) {
   for (auto& observer : observers_)
     observer.OnSurveyTriggered(survey_specific_data);
+}
+
+void CrasAudioHandler::SpeakOnMuteDetected() {
+  for (auto& observer : observers_) {
+    observer.OnSpeakOnMuteDetected();
+  }
 }
 
 void CrasAudioHandler::ResendBluetoothBattery() {
@@ -1284,6 +1365,10 @@ void CrasAudioHandler::InitializeAudioAfterCrasServiceAvailable(
   input_muted_by_microphone_mute_switch_ = IsMicrophoneMuteSwitchOn();
   if (input_muted_by_microphone_mute_switch_)
     SetInputMute(true, InputMuteChangeMethod::kPhysicalShutter);
+
+  // Sets speak-on-mute detection enabled based on feature flag.
+  CrasAudioClient::Get()->SetSpeakOnMuteDetection(
+      features::IsSpeakOnMuteEnabled());
 }
 
 void CrasAudioHandler::ApplyAudioPolicy() {
@@ -1359,15 +1444,11 @@ void CrasAudioHandler::SetInputNodeGainPercent(uint64_t node_id,
 
   // NOTE: We do not sanitize input gain values since the range is completely
   // dependent on the device.
-  if (active_input_node_id_ == node_id)
-    input_gain_ = gain_percent;
 
   audio_pref_handler_->SetVolumeGainValue(*device, gain_percent);
 
   if (device->active) {
     SetInputNodeGain(node_id, gain_percent);
-    for (auto& observer : observers_)
-      observer.OnInputNodeGainChanged(node_id, gain_percent);
   }
 }
 
@@ -1963,7 +2044,7 @@ void CrasAudioHandler::HandleGetNumActiveOutputStreams(
     return;
   }
 
-  DCHECK(*new_output_streams_count >= 0);
+  DCHECK_GE(*new_output_streams_count, 0);
   if (*new_output_streams_count > 0 && num_active_output_streams_ == 0) {
     for (auto& observer : observers_)
       observer.OnOutputStarted();
@@ -2175,6 +2256,8 @@ CrasAudioHandler::ClientType CrasAudioHandler::ConvertClientTypeStringToEnum(
     return ClientType::ARC;
   } else if (client_type_str == "CRAS_CLIENT_TYPE_BOREALIS") {
     return ClientType::VM_BOREALIS;
+  } else if (client_type_str == "CRAS_CLIENT_TYPE_LACROS") {
+    return ClientType::LACROS;
   } else {
     return ClientType::UNKNOWN;
   }
@@ -2188,8 +2271,10 @@ void CrasAudioHandler::HandleGetNumberOfInputStreamsWithPermission(
   }
   number_of_input_streams_with_permission_.clear();
   for (const auto& it : *num_input_streams) {
-    number_of_input_streams_with_permission_[ConvertClientTypeStringToEnum(
-        it.first)] = it.second;
+    CrasAudioHandler::ClientType type = ConvertClientTypeStringToEnum(it.first);
+    if (type != ClientType::UNKNOWN) {
+      number_of_input_streams_with_permission_[type] = it.second;
+    }
   }
 }
 
@@ -2311,6 +2396,12 @@ void CrasAudioHandler::HandleGetSystemAgcSupported(
 }
 
 ScopedCrasAudioHandlerForTesting::ScopedCrasAudioHandlerForTesting() {
+  CHECK(!CrasAudioClient::Get())
+      << "ScopedCrasAudioHandlerForTesting expects that there is no "
+         "CrasAudioClient running at its constructor.";
+
+  fake_cras_audio_client_ = std::make_unique<FakeCrasAudioClient>();
+
   CrasAudioHandler::InitializeForTesting();
 }
 

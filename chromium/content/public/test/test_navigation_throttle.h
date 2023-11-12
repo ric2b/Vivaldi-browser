@@ -5,7 +5,7 @@
 #ifndef CONTENT_PUBLIC_TEST_TEST_NAVIGATION_THROTTLE_H_
 #define CONTENT_PUBLIC_TEST_TEST_NAVIGATION_THROTTLE_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "content/public/browser/navigation_throttle.h"
 
@@ -25,6 +25,7 @@ class TestNavigationThrottle : public NavigationThrottle {
     WILL_REDIRECT_REQUEST,
     WILL_FAIL_REQUEST,
     WILL_PROCESS_RESPONSE,
+    WILL_COMMIT_WITHOUT_URL_LOADER,
     NUM_THROTTLE_METHODS
   };
 
@@ -45,6 +46,7 @@ class TestNavigationThrottle : public NavigationThrottle {
   NavigationThrottle::ThrottleCheckResult WillRedirectRequest() override;
   NavigationThrottle::ThrottleCheckResult WillFailRequest() override;
   NavigationThrottle::ThrottleCheckResult WillProcessResponse() override;
+  NavigationThrottle::ThrottleCheckResult WillCommitWithoutUrlLoader() override;
   const char* GetNameForLogging() override;
 
   // Return how often the indicated |method| was called.

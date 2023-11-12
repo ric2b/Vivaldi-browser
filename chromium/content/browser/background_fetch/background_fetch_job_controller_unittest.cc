@@ -12,8 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -524,7 +524,7 @@ TEST_F(BackgroundFetchJobControllerTest, ServiceWorkerRegistrationDeleted) {
                               std::move(controller));
   scheduler()->OnRegistrationDeleted(
       kExampleServiceWorkerRegistrationId, kFunnyCatUrl,
-      blink::StorageKey(url::Origin::Create(kFunnyCatUrl)));
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(kFunnyCatUrl)));
 
   base::RunLoop().RunUntilIdle();
 

@@ -7,9 +7,9 @@
 
 #include <stdint.h>
 
-#include "base/callback.h"
 #include "base/component_export.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "storage/browser/quota/quota_device_info_helper.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -82,11 +82,6 @@ void GetNominalDynamicSettings(const base::FilePath& partition_path,
                                OptionalQuotaSettingsCallback callback);
 
 COMPONENT_EXPORT(STORAGE_BROWSER)
-
-// Returns settings with a poolsize of zero and no per StorageKey quota.
-inline QuotaSettings GetNoQuotaSettings() {
-  return QuotaSettings();
-}
 
 // Returns settings that provide given `per_storage_key_quota` and a total
 // poolsize of five times that.

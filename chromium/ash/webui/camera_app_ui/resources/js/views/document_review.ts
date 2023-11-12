@@ -60,7 +60,7 @@ export enum Mode {
 }
 
 /**
- * View controller for reviewing multi-page document scanning.
+ * View controller for reviewing document scanning.
  */
 export class DocumentReview extends View {
   /**
@@ -103,7 +103,7 @@ export class DocumentReview extends View {
   private readonly modes: {
     [Mode.FIX]: DocumentFixMode,
     [Mode.PREVIEW]: DocumentPreviewMode,
-  }
+  };
 
   /**
    * The promise of current page updating process. Null if no pages are being
@@ -563,7 +563,8 @@ export class DocumentReview extends View {
     if (isRotationUpdated) {
       fixType |= DocScanFixType.ROTATION;
     }
-    return sendDocScanResultEvent(action, fixType, this.fixCount);
+    return sendDocScanResultEvent(
+        action, fixType, this.fixCount, this.pages.length);
   }
 
   private updateDeleteButtonLabels() {

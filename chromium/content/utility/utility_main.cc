@@ -2,9 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/bind.h"
+#include "base/allocator/partition_alloc_support.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
+#include "base/functional/bind.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/run_loop.h"
@@ -16,7 +17,6 @@
 #include "components/services/screen_ai/buildflags/buildflags.h"
 #include "content/child/child_process.h"
 #include "content/common/content_switches_internal.h"
-#include "content/common/partition_alloc_support.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
@@ -107,6 +107,18 @@ bool ShouldUseAmdGpuPolicy(sandbox::mojom::Sandbox sandbox_type) {
 }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
+void SetUtilityThreadName(const std::string utility_sub_type) {
+  // Typical utility sub-types are audio.mojom.AudioService or
+  // proxy_resolver.mojom.ProxyResolverFactory. Using the full sub-type as part
+  // of the thread name is too verbose so we take the text in front of the first
+  // period and use that as a prefix. This give us thread names like
+  // audio.CrUtilityMain and proxy_resolver.CrUtilityMain. If there is no period
+  // then the entire utility_sub_type string will be put in front.
+  auto first_period = utility_sub_type.find('.');
+  base::PlatformThread::SetName(
+      (utility_sub_type.substr(0, first_period) + ".CrUtilityMain").c_str());
+}
+
 }  // namespace
 
 // Mainline routine for running as the utility process.
@@ -148,11 +160,11 @@ int UtilityMain(MainFunctionParams parameters) {
 
   // The main task executor of the utility process.
   base::SingleThreadTaskExecutor main_thread_task_executor(message_pump_type);
-  base::PlatformThread::SetName("CrUtilityMain");
+  const std::string utility_sub_type =
+      parameters.command_line->GetSwitchValueASCII(switches::kUtilitySubType);
+  SetUtilityThreadName(utility_sub_type);
 
   if (parameters.command_line->HasSwitch(switches::kUtilityStartupDialog)) {
-    const std::string utility_sub_type =
-        parameters.command_line->GetSwitchValueASCII(switches::kUtilitySubType);
     auto dialog_match = parameters.command_line->GetSwitchValueASCII(
         switches::kUtilityStartupDialog);
     if (dialog_match.empty() || dialog_match == utility_sub_type) {
@@ -234,14 +246,12 @@ int UtilityMain(MainFunctionParams parameters) {
   utility_process.set_main_thread(
       new UtilityThreadImpl(run_loop.QuitClosure()));
 
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC)
-  // Startup tracing is usually enabled earlier, but if we forked from a zygote,
-  // we can only enable it after mojo IPC support is brought up initialized by
-  // UtilityThreadImpl, because the mojo broker has to create the tracing SMB on
-  // our behalf due to the zygote sandbox.
-  if (parameters.zygote_child)
+  // Mojo IPC support is brought up by UtilityThreadImpl, so startup tracing
+  // is enabled here if it needs to start after mojo init (normally so the mojo
+  // broker can bypass the sandbox to allocate startup tracing's SMB).
+  if (parameters.needs_startup_tracing_after_mojo_init) {
     tracing::EnableStartupTracingIfNeeded();
-#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC)
+  }
 
   // Both utility process and service utility process would come
   // here, but the later is launched without connection to service manager, so
@@ -288,6 +298,13 @@ int UtilityMain(MainFunctionParams parameters) {
     base::win::EnableHighDPISupport();
   }
 
+  // The FileUtilService supports archive inspection, which uses unrar for
+  // inspecting rar archives. Unrar depends on user32.dll for handling
+  // upper/lowercase.
+  if (sandbox_type == sandbox::mojom::Sandbox::kFileUtil) {
+    base::win::PinUser32();
+  }
+
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   platform_media_init::InitForUtilityProcess(*parameters.command_line);
 #endif
@@ -307,7 +324,7 @@ int UtilityMain(MainFunctionParams parameters) {
   }
 #endif
 
-  internal::PartitionAllocSupport::Get()->ReconfigureAfterTaskRunnerInit(
+  base::allocator::PartitionAllocSupport::Get()->ReconfigureAfterTaskRunnerInit(
       switches::kUtilityProcess);
 
   run_loop.Run();

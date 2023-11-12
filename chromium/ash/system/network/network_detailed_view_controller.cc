@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/bluetooth_config_service.h"
 #include "ash/public/cpp/system_tray_client.h"
 #include "ash/session/session_controller_impl.h"
@@ -38,7 +37,6 @@ using ::chromeos::network_config::NetworkTypeMatchesType;
 using ::chromeos::network_config::mojom::ActivationStateType;
 using ::chromeos::network_config::mojom::CellularStateProperties;
 using ::chromeos::network_config::mojom::ConnectionStateType;
-using ::chromeos::network_config::mojom::DeviceStateProperties;
 using ::chromeos::network_config::mojom::DeviceStateType;
 using ::chromeos::network_config::mojom::NetworkStateProperties;
 using ::chromeos::network_config::mojom::NetworkStatePropertiesPtr;
@@ -127,8 +125,6 @@ NetworkDetailedViewController::NetworkDetailedViewController(
     : model_(Shell::Get()->system_tray_model()->network_state_model()),
       detailed_view_delegate_(
           std::make_unique<DetailedViewDelegate>(tray_controller)) {
-  DCHECK(ash::features::IsQuickSettingsNetworkRevampEnabled());
-
   GetBluetoothConfigService(
       remote_cros_bluetooth_config_.BindNewPipeAndPassReceiver());
   remote_cros_bluetooth_config_->ObserveSystemProperties(
@@ -174,18 +170,17 @@ void NetworkDetailedViewController::OnNetworkListItemSelected(
       return;
     }
 
-    // If the captive portal UI flag is enabled, the user is logged in, the
-    // network is connected, and the network is in a portal or proxy state, the
-    // user is shown the portal signin. We do not show portal sign in for user
-    // not logged in because it is the only way for the user to get to the
-    // network details page.
-    if (features::IsCaptivePortalUI2022Enabled() &&
-        Shell::Get()->session_controller()->login_status() !=
+    // If user is logged in, the network is connected, and the network is in a
+    // portal or proxy state, the user is shown the portal signin. We do not
+    // show portal sign in for user not logged in because it is the only way for
+    // the user to get to the network details page.
+    if (Shell::Get()->session_controller()->login_status() !=
             LoginStatus::NOT_LOGGED_IN &&
         chromeos::network_config::StateIsConnected(network->connection_state) &&
         IsNetworkBehindPortalOrProxy(network->portal_state)) {
       RecordNetworkRowClickedAction(NetworkRowClickedAction::kOpenPortalSignin);
-      NetworkConnect::Get()->ShowPortalSignin(network->guid);
+      NetworkConnect::Get()->ShowPortalSignin(
+          network->guid, NetworkConnect::Source::kQuickSettings);
       return;
     }
 

@@ -6,8 +6,8 @@
 
 #import <MaterialComponents/MaterialSnackbar.h>
 
-#import "base/callback_helpers.h"
 #import "base/feature_list.h"
+#import "base/functional/callback_helpers.h"
 #import "base/i18n/message_formatter.h"
 #import "base/ios/ios_util.h"
 #import "base/logging.h"
@@ -20,6 +20,8 @@
 #import "components/breadcrumbs/core/breadcrumb_manager_keyed_service.h"
 #import "components/breadcrumbs/core/breadcrumb_persistent_storage_manager.h"
 #import "components/breadcrumbs/core/features.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/tracker.h"
 #import "components/infobars/core/infobar_manager.h"
 #import "components/prefs/pref_service.h"
 #import "components/previous_session_info/previous_session_info.h"
@@ -50,6 +52,7 @@
 #import "ios/chrome/browser/crash_report/crash_report_helper.h"
 #import "ios/chrome/browser/crash_report/crash_restore_helper.h"
 #import "ios/chrome/browser/default_browser/promo_source.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/first_run/first_run.h"
 #import "ios/chrome/browser/geolocation/geolocation_logger.h"
 #import "ios/chrome/browser/infobars/infobar_manager_impl.h"
@@ -69,12 +72,15 @@
 #import "ios/chrome/browser/promos_manager/features.h"
 #import "ios/chrome/browser/screenshot/screenshot_delegate.h"
 #import "ios/chrome/browser/sessions/session_saving_scene_agent.h"
+#import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
+#import "ios/chrome/browser/signin/capabilities_types.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/constants.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
+#import "ios/chrome/browser/signin/system_identity_manager.h"
 #import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/ui/app_store_rating/app_store_rating_scene_agent.h"
 #import "ios/chrome/browser/ui/app_store_rating/features.h"
@@ -95,6 +101,7 @@
 #import "ios/chrome/browser/ui/commands/qr_scanner_commands.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
+#import "ios/chrome/browser/ui/credential_provider_promo/credential_provider_promo_scene_agent.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #import "ios/chrome/browser/ui/first_run/orientation_limiting_navigation_controller.h"
@@ -142,8 +149,6 @@
 #import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 #import "ios/chrome/grit/ios_strings.h"
-#import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 #import "ios/public/provider/chrome/browser/ui_utils/ui_utils_api.h"
 #import "ios/public/provider/chrome/browser/user_feedback/user_feedback_data.h"
 #import "ios/web/public/navigation/navigation_item.h"
@@ -176,26 +181,6 @@ BASE_FEATURE(kForceNewTabForIntentSearch,
 // animation. It's used to temporarily disable mutally exclusive chrome
 // commands that trigger a view controller presentation.
 const int64_t kExpectedTransitionDurationInNanoSeconds = 0.2 * NSEC_PER_SEC;
-
-// Possible results of snapshotting at the moment the user enters the tab
-// switcher. These values are persisted to logs. Entries should not be
-// renumbered and numeric values should never be reused.
-enum class EnterTabSwitcherSnapshotResult {
-  // Page was loading at the time of the snapshot request, and the snapshot
-  // failed.
-  kPageLoadingAndSnapshotFailed = 0,
-  // Page was loading at the time of the snapshot request, and the snapshot
-  // succeeded.
-  kPageLoadingAndSnapshotSucceeded = 1,
-  // Page was not loading at the time of the snapshot request, and the snapshot
-  // failed.
-  kPageNotLoadingAndSnapshotFailed = 2,
-  // Page was not loading at the time of the snapshot request, and the snapshot
-  // succeeded.
-  kPageNotLoadingAndSnapshotSucceeded = 3,
-  // kMaxValue should share the value of the highest enumerator.
-  kMaxValue = kPageNotLoadingAndSnapshotSucceeded,
-};
 
 // Used to update the current BVC mode if a new tab is added while the tab
 // switcher view is being dismissed.  This is different than ApplicationMode in
@@ -407,6 +392,7 @@ void InjectNTP(Browser* browser) {
          applicationCommandEndpoint:self
         browsingDataCommandEndpoint:self.browsingDataCommandsHandler
                      regularBrowser:self.mainInterface.browser
+                    inactiveBrowser:self.mainInterface.inactiveBrowser
                    incognitoBrowser:self.incognitoInterface.browser];
     tabGridCoordinator.delegate = self;
     _mainCoordinator = tabGridCoordinator;
@@ -445,6 +431,7 @@ void InjectNTP(Browser* browser) {
     DefaultBrowserSceneAgent* sceneAgent =
         [DefaultBrowserSceneAgent agentFromScene:self.sceneState];
     [sceneAgent.nonModalScheduler logUserEnteredAppViaFirstPartyScheme];
+    [self notifyFETAppOpenedViaFirstParty];
   }
 }
 
@@ -812,26 +799,27 @@ void InjectNTP(Browser* browser) {
       accountManagerService->GetDefaultIdentity();
   DCHECK(defaultIdentity);
 
-  __weak SceneController* weakSelf = self;
-  ios::ChromeIdentityService* identityService =
-      ios::GetChromeBrowserProvider().GetChromeIdentityService();
+  using CapabilityResult = SystemIdentityManager::CapabilityResult;
+  SystemIdentityManager* system_identity_manager =
+      GetApplicationContext()->GetSystemIdentityManager();
 
   // Asynchronously checks whether the default identity can display extended
   // sync promos and displays the sign-in promo if possible.
+  __weak SceneController* weakSelf = self;
   base::Time fetch_start = base::Time::Now();
-  identityService->CanOfferExtendedSyncPromos(
-      defaultIdentity, ^(ios::ChromeIdentityCapabilityResult result) {
-        base::TimeDelta fetch_delay = (base::Time::Now() - fetch_start);
+  system_identity_manager->CanOfferExtendedSyncPromos(
+      defaultIdentity, base::BindOnce(^(CapabilityResult result) {
+        base::TimeDelta fetch_duration = (base::Time::Now() - fetch_start);
         base::UmaHistogramTimes(
             "Signin.AccountCapabilities.GetFromSystemLibraryDuration."
             "SigninUpgradePromo",
-            fetch_delay);
-        if (fetch_delay > signin::GetWaitThresholdForCapabilities() ||
-            result != ios::ChromeIdentityCapabilityResult::kTrue) {
+            fetch_duration);
+        if (fetch_duration > signin::GetWaitThresholdForCapabilities() ||
+            result != CapabilityResult::kTrue) {
           return;
         }
         [weakSelf presentSigninUpgradePromo];
-      });
+      }));
 }
 
 - (void)initializeUI {
@@ -896,6 +884,14 @@ void InjectNTP(Browser* browser) {
 
   // Create and start the BVC.
   [self.browserViewWrangler createMainCoordinatorAndInterface];
+
+  // Create the inactive browser. Should be called after the main browser is
+  // created (in -createMainBrowser) and restored (in
+  // -createMainCoordinatorAndInterface). Even if the feature is disabled, we
+  // always create the inactive browser to restore any element that have been
+  // saved in the past. To avoid any tab disappearance from user perspective, we
+  // move all tabs accordingly.
+  [self.browserViewWrangler createInactiveBrowser];
 
   id<ApplicationCommands> applicationCommandsHandler =
       HandlerForProtocol(mainCommandDispatcher, ApplicationCommands);
@@ -986,6 +982,15 @@ void InjectNTP(Browser* browser) {
                      initWithPromosManager:GetApplicationContext()
                                                ->GetPromosManager()]];
   }
+
+  // Do not gate by feature flag so it can run for enabled -> disabled
+  // scenarios.
+  [self.sceneState
+      addAgent:[[CredentialProviderPromoSceneAgent alloc]
+                   initWithPromosManager:GetApplicationContext()
+                                             ->GetPromosManager()
+                             prefService:self.sceneState.appState
+                                             .mainBrowserState->GetPrefs()]];
 }
 
 // Determines the mode (normal or incognito) the initial UI should be in.
@@ -1106,6 +1111,20 @@ void InjectNTP(Browser* browser) {
   [self maybeShowDefaultBrowserPromo:self.mainInterface.browser];
 }
 
+// Notifies the Feature Engagement Tracker that an eligibility criterion has
+// been met for the default browser blue dot promo.
+- (void)notifyFETAppOpenedViaFirstParty {
+  ChromeBrowserState* browserState = self.sceneState.appState.mainBrowserState;
+  if (!browserState || browserState->IsOffTheRecord()) {
+    return;
+  }
+
+  if (HasRecentFirstPartyIntentLaunchesAndRecordsCurrentLaunch()) {
+    feature_engagement::TrackerFactory::GetForBrowserState(browserState)
+        ->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
+  }
+}
+
 // `YES` if Chrome is not the default browser, the app did not crash recently,
 // the user never saw the promo UI and is in the correct experiment groups.
 - (BOOL)potentiallyInterestedUser {
@@ -1141,6 +1160,14 @@ void InjectNTP(Browser* browser) {
     // which is after the browser startup and the browser UI is initialized.
     return;
   }
+
+  // Don't show the default browser promo if the user is in the default browser
+  // blue dot experiment.
+  // TODO(crbug.com/1410229) clean-up experiment code when fully launched.
+  if (!AreDefaultBrowserPromosEnabled()) {
+    return;
+  }
+
   // Show the Default Browser promo UI if the user's past behavior fits
   // the categorization of potentially interested users or if the user is
   // signed in. Do not show if it is determined that Chrome is already the
@@ -1482,27 +1509,8 @@ void InjectNTP(Browser* browser) {
   web::WebState* currentWebState =
       self.currentInterface.browser->GetWebStateList()->GetActiveWebState();
   if (currentWebState) {
-    BOOL loading = currentWebState->IsLoading();
     SnapshotTabHelper::FromWebState(currentWebState)
-        ->UpdateSnapshotWithCallback(^(UIImage* snapshot) {
-          EnterTabSwitcherSnapshotResult snapshotResult;
-          if (loading && !snapshot) {
-            snapshotResult =
-                EnterTabSwitcherSnapshotResult::kPageLoadingAndSnapshotFailed;
-          } else if (loading && snapshot) {
-            snapshotResult = EnterTabSwitcherSnapshotResult::
-                kPageLoadingAndSnapshotSucceeded;
-          } else if (!loading && !snapshot) {
-            snapshotResult = EnterTabSwitcherSnapshotResult::
-                kPageNotLoadingAndSnapshotFailed;
-          } else {
-            DCHECK(!loading && snapshot);
-            snapshotResult = EnterTabSwitcherSnapshotResult::
-                kPageNotLoadingAndSnapshotSucceeded;
-          }
-          UMA_HISTOGRAM_ENUMERATION("IOS.EnterTabSwitcherSnapshotResult",
-                                    snapshotResult);
-        });
+        ->UpdateSnapshotWithCallback(nil);
   }
   [self.mainCoordinator prepareToShowTabGrid];
 }
@@ -2568,9 +2576,17 @@ void InjectNTP(Browser* browser) {
   // they are not visible.
   ios::provider::HideModalViewStack();
 
+  // Exit fullscreen mode for web page when we re-enter app through external
+  // intents.
+  web::WebState* webState =
+      self.mainInterface.browser->GetWebStateList()->GetActiveWebState();
+  if (webState && webState->IsWebPageInFullscreenMode()) {
+    webState->CloseMediaPresentations();
+  }
+
   // ChromeIdentityService is responsible for the dialogs displayed by the
   // services it wraps.
-  ios::GetChromeBrowserProvider().GetChromeIdentityService()->DismissDialogs();
+  GetApplicationContext()->GetSystemIdentityManager()->DismissDialogs();
 
   // MailtoHandlerService is responsible for the dialogs displayed by the
   // services it wraps.
@@ -3009,7 +3025,9 @@ void InjectNTP(Browser* browser) {
   AuthenticationService* authenticationService =
       AuthenticationServiceFactory::GetForBrowserState(
           self.sceneState.appState.mainBrowserState);
-  switch (authenticationService->GetServiceStatus()) {
+  AuthenticationService::ServiceStatus statusService =
+      authenticationService->GetServiceStatus();
+  switch (statusService) {
     case AuthenticationService::ServiceStatus::SigninDisabledByPolicy: {
       if (completion) {
         completion(/*success=*/NO);
@@ -3028,7 +3046,7 @@ void InjectNTP(Browser* browser) {
     }
     case AuthenticationService::ServiceStatus::SigninDisabledByInternal:
     case AuthenticationService::ServiceStatus::SigninDisabledByUser: {
-      NOTREACHED();
+      NOTREACHED() << "Status service: " << static_cast<int>(statusService);
       break;
     }
   }
@@ -3221,8 +3239,8 @@ void InjectNTP(Browser* browser) {
     URLOpenerParams* options =
         [[URLOpenerParams alloc] initWithUIOpenURLContext:context];
     NSSet* URLContextSet = [NSSet setWithObject:context];
-    if (!ios::GetChromeBrowserProvider()
-             .GetChromeIdentityService()
+    if (!GetApplicationContext()
+             ->GetSystemIdentityManager()
              ->HandleSessionOpenURLContexts(self.sceneState.scene,
                                             URLContextSet)) {
       [URLsToOpen addObject:options];
@@ -3328,6 +3346,8 @@ void InjectNTP(Browser* browser) {
   ChromeBrowserState* mainBrowserState =
       self.sceneState.appState.mainBrowserState;
   DCHECK(mainBrowserState->HasOffTheRecordChromeBrowserState());
+  ChromeBrowserState* otrBrowserState =
+      mainBrowserState->GetOffTheRecordChromeBrowserState();
 
   NSMutableArray<SceneController*>* sceneControllers =
       [[NSMutableArray alloc] init];
@@ -3345,14 +3365,19 @@ void InjectNTP(Browser* browser) {
     [sceneController willDestroyIncognitoBrowserState];
   }
 
-  // Record off-the-record metrics before detroying the BrowserState.
-  if (mainBrowserState->HasOffTheRecordChromeBrowserState()) {
-    ChromeBrowserState* otrBrowserState =
-        mainBrowserState->GetOffTheRecordChromeBrowserState();
+  // Delete all the remaining sessions. This is asynchronous, but will happen
+  // after all pending saves, if any, have completed. There is a risk of a
+  // race-condition with loading them, but as -incognitoBrowserStateCreated
+  // does not load the session, the only risk is if the application were to
+  // crash before the deletion could complete (in which case the user may
+  // see the previous state of the app before closing the last incognito tab).
+  [[SessionServiceIOS sharedService]
+      deleteAllSessionFilesInDirectory:otrBrowserState->GetStatePath()
+                            completion:base::DoNothing()];
 
-    SessionMetrics::FromBrowserState(otrBrowserState)
-        ->RecordAndClearSessionMetrics(MetricsToRecordFlags::kNoMetrics);
-  }
+  // Record off-the-record metrics before detroying the BrowserState.
+  SessionMetrics::FromBrowserState(otrBrowserState)
+      ->RecordAndClearSessionMetrics(MetricsToRecordFlags::kNoMetrics);
 
   // Destroy and recreate the off-the-record BrowserState.
   mainBrowserState->DestroyOffTheRecordChromeBrowserState();

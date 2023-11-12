@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
@@ -17,11 +17,6 @@
 #include "chromeos/ash/services/device_sync/proto/cryptauth_api.pb.h"
 #include "chromeos/ash/services/device_sync/public/cpp/device_sync_client.h"
 #include "chromeos/ash/services/multidevice_setup/public/cpp/multidevice_setup_client.h"
-#include "components/prefs/pref_change_registrar.h"
-
-namespace base {
-class ListValue;
-}  // namespace base
 
 namespace proximity_auth {
 class ProximityAuthProfilePrefManager;
@@ -74,22 +69,14 @@ class EasyUnlockServiceRegular
   void UseLoadedRemoteDevices(
       const multidevice::RemoteDeviceRefList& remote_devices);
 
-  // Persists Smart Lock host and local device to prefs, and then informs
-  // the base class to potentially update Smart Lock host and local device
-  // stored in the TPM.
+  // Persists Smart Lock host and local device to prefs.
   void SetStoredRemoteDevices(const base::Value::List& devices);
 
   // EasyUnlockService implementation:
   proximity_auth::ProximityAuthPrefManager* GetProximityAuthPrefManager()
       override;
-  EasyUnlockService::Type GetType() const override;
   AccountId GetAccountId() const override;
   const base::Value::List* GetRemoteDevices() const override;
-  std::string GetChallenge() const override;
-  std::string GetWrappedSecret() const override;
-  void RecordEasySignInOutcome(const AccountId& account_id,
-                               bool success) const override;
-  void RecordPasswordLoginEvent(const AccountId& account_id) const override;
   void InitializeInternal() override;
   void ShutdownInternal() override;
   bool IsAllowedInternal() const override;
@@ -170,9 +157,6 @@ class EasyUnlockServiceRegular
   // the Chromebook is unlocked, we can show the subsequent 'pairing applied'
   // notification.
   bool shown_pairing_changed_notification_ = false;
-
-  // Listens to pref changes.
-  PrefChangeRegistrar registrar_;
 
   base::WeakPtrFactory<EasyUnlockServiceRegular> weak_ptr_factory_{this};
 };

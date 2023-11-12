@@ -39,7 +39,7 @@ class MockPersonalizationAppAmbientProvider
   MOCK_METHOD(void, SetAmbientModeEnabled, (bool enabled), (override));
   MOCK_METHOD(void,
               SetAnimationTheme,
-              (ash::AmbientAnimationTheme animation_theme),
+              (ash::AmbientTheme animation_theme),
               (override));
   MOCK_METHOD(void,
               SetTopicSource,
@@ -107,6 +107,10 @@ class MockPersonalizationAppThemeProvider
               (bool enabled),
               (override));
   MOCK_METHOD(void,
+              GenerateSampleColorSchemes,
+              (GenerateSampleColorSchemesCallback callback),
+              (override));
+  MOCK_METHOD(void,
               GetColorScheme,
               (GetColorSchemeCallback callback),
               (override));
@@ -150,6 +154,11 @@ class MockPersonalizationAppWallpaperProvider
               (override));
   MOCK_METHOD(void,
               FetchGooglePhotosAlbums,
+              (const absl::optional<std::string>& resume_token,
+               FetchGooglePhotosAlbumsCallback callback),
+              (override));
+  MOCK_METHOD(void,
+              FetchGooglePhotosSharedAlbums,
               (const absl::optional<std::string>& resume_token,
                FetchGooglePhotosAlbumsCallback callback),
               (override));

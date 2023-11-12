@@ -23,10 +23,10 @@
 #include "base/barrier_closure.h"
 #include "base/base64.h"
 #include "base/base_paths.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/guid.h"
 #include "base/hash/sha1.h"
 #include "base/path_service.h"
@@ -112,8 +112,11 @@ void AmbientPhotoController::Init(
   retries_to_read_from_cache_ = kMaxNumberOfCachedImages;
   backup_retries_to_read_from_cache_ = GetBackupPhotoUrls().size();
   num_topics_prepared_ = 0;
+  is_actively_preparing_topic_ = false;
   ambient_topic_queue_ = std::make_unique<AmbientTopicQueue>(
-      /*topic_fetch_limit=*/kMaxNumberOfCachedImages,
+      /*topic_fetch_limit=*/ambient_backend_model_.photo_config().IsEmpty()
+          ? 0
+          : kMaxNumberOfCachedImages,
       /*topic_fetch_size=*/kTopicsBatchSize, kTopicFetchInterval,
       ambient_backend_model_.photo_config().should_split_topics,
       std::move(topic_queue_delegate),
@@ -165,24 +168,25 @@ void AmbientPhotoController::OnMarkerHit(AmbientPhotoConfig::Marker marker) {
   }
 
   DVLOG(3) << "UI event " << marker << " triggering topic refresh";
-  if (state_ == State::kInactive) {
-    LOG(DFATAL) << "Received unexpected UI marker " << marker
-                << " while inactive";
-    return;
-  }
-
-  bool is_still_preparing_topics = state_ != State::kWaitingForNextMarker;
-  state_ = State::kPreparingNextTopicSet;
-  num_topics_prepared_ = 0;
-  if (is_still_preparing_topics) {
-    // The controller is still in the middle of preparing a topic from the
-    // previous set (i.e. waiting on a callback or timer to fire). Resetting
-    // |num_topics_prepared_| to 0 above is enough, and the topic currently
-    // being prepared will count towards the next set.
-    DVLOG(4) << "Did not finished preparing current topic set in time. "
-                "Starting new set...";
-  } else {
-    StartPreparingNextTopic();
+  switch (state_) {
+    case State::kInactive:
+      LOG(DFATAL) << "Received unexpected UI marker " << marker
+                  << " while inactive";
+      break;
+    case State::kPreparingNextTopicSet:
+      // The controller is still in the middle of preparing a topic from the
+      // previous set (i.e. waiting on a callback or timer to fire). Resetting
+      // |num_topics_prepared_| to 0 is enough, and the topic currently being
+      // prepared will count towards the next set.
+      DVLOG(4) << "Did not finished preparing current topic set in time. "
+                  "Starting new set...";
+      num_topics_prepared_ = 0;
+      break;
+    case State::kWaitingForNextMarker:
+      state_ = State::kPreparingNextTopicSet;
+      num_topics_prepared_ = 0;
+      StartPreparingNextTopic();
+      break;
   }
 }
 
@@ -299,6 +303,7 @@ void AmbientPhotoController::TryReadPhotoFromCache() {
   if (retries_to_read_from_cache_ == 0) {
     if (backup_retries_to_read_from_cache_ == 0) {
       LOG(WARNING) << "Failed to read from cache";
+      is_actively_preparing_topic_ = false;
       ambient_backend_model_.AddImageFailure();
       // Do not refresh image if image loading has failed repeatedly, or there
       // are no more topics to retry. Note |ambient_topic_queue_| may be null
@@ -452,6 +457,8 @@ void AmbientPhotoController::OnPhotoDecoded(bool from_downloading,
 void AmbientPhotoController::OnAllPhotoDecoded(bool from_downloading,
                                                const std::string& hash) {
   DVLOG(3) << __func__;
+  DCHECK_EQ(state_, State::kPreparingNextTopicSet);
+  DCHECK(is_actively_preparing_topic_);
   if (image_.isNull()) {
     LOG(WARNING) << "Image decoding failed";
     if (from_downloading)
@@ -466,6 +473,7 @@ void AmbientPhotoController::OnAllPhotoDecoded(bool from_downloading,
     return;
   }
 
+  is_actively_preparing_topic_ = false;
   retries_to_read_from_cache_ = kMaxNumberOfCachedImages;
   backup_retries_to_read_from_cache_ = GetBackupPhotoUrls().size();
 
@@ -483,28 +491,27 @@ void AmbientPhotoController::OnAllPhotoDecoded(bool from_downloading,
 
   ResetImageData();
 
-  if (state_ != State::kPreparingNextTopicSet) {
-    LOG(ERROR) << "Topic prepared when controller should be idle in state "
-               << state_;
-    return;
-  }
-
-  // AddNextImage() can call out to observers, who can synchronously interact
-  // with the controller within their observer notification methods. So the
-  // internal |state_| should be updated before calling AddNextImage() so that
-  // it is consistent with the model.
   size_t target_num_topics_to_prepare =
       ambient_backend_model_.ImagesReady()
           ? ambient_backend_model_.photo_config().topic_set_size
           : ambient_backend_model_.photo_config().GetNumDecodedTopicsToBuffer();
+  // AddNextImage() can call out to observers, who can synchronously interact
+  // with the controller again within their observer notification methods. So
+  // the internal |state_| and |num_topics_prepared_| should be updated and
+  // captured in local variables before calling AddNextImage(). This ensures
+  // that the behavior and state of the controller is consistent with the model.
   ++num_topics_prepared_;
-  if (num_topics_prepared_ >= target_num_topics_to_prepare)
+  bool more_topics_required =
+      num_topics_prepared_ < target_num_topics_to_prepare;
+  if (!more_topics_required) {
     state_ = State::kWaitingForNextMarker;
+  }
 
   ambient_backend_model_.AddNextImage(std::move(detailed_photo));
 
-  if (state_ == State::kPreparingNextTopicSet)
+  if (more_topics_required) {
     StartPreparingNextTopic();
+  }
 }
 
 void AmbientPhotoController::FetchTopicsForTesting() {
@@ -512,6 +519,7 @@ void AmbientPhotoController::FetchTopicsForTesting() {
 }
 
 void AmbientPhotoController::FetchImageForTesting() {
+  is_actively_preparing_topic_ = true;
   if (!ambient_topic_queue_->IsEmpty()) {
     ReadPhotoFromTopicQueue();
   } else {
@@ -525,6 +533,17 @@ void AmbientPhotoController::FetchBackupImagesForTesting() {
 
 void AmbientPhotoController::StartPreparingNextTopic() {
   DCHECK_EQ(state_, State::kPreparingNextTopicSet);
+  if (ambient_backend_model_.photo_config().IsEmpty()) {
+    DVLOG(1) << "No photos should be written to model";
+    // This may not be necessary because a config like this probably doesn't
+    // have any photo refresh markers anyways. However, it's more technically
+    // correct to be in this state instead of |kPreparingNextTopicSet|.
+    state_ = State::kWaitingForNextMarker;
+    return;
+  }
+  DCHECK(!is_actively_preparing_topic_)
+      << "Preparing multiple topics simultaneously is not currently supported";
+  is_actively_preparing_topic_ = true;
   ambient_topic_queue_->WaitForTopicsAvailable(
       base::BindOnce(&AmbientPhotoController::OnTopicsAvailableInQueue,
                      weak_factory_.GetWeakPtr()));

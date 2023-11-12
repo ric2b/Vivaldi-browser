@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/observer_list.h"
 #include "base/run_loop.h"
@@ -415,10 +415,11 @@ void TestServiceWorkerContext::StartServiceWorker(int64_t version_id,
   GURL scope_url;
   for (auto& observer : observer_list_) {
     observer.OnVersionStartedRunning(
-        version_id, content::ServiceWorkerRunningInfo(
-                        worker_url, scope_url,
-                        blink::StorageKey(url::Origin::Create(scope_url)),
-                        worker_process_id, blink::ServiceWorkerToken()));
+        version_id,
+        content::ServiceWorkerRunningInfo(
+            worker_url, scope_url,
+            blink::StorageKey::CreateFirstParty(url::Origin::Create(scope_url)),
+            worker_process_id, blink::ServiceWorkerToken()));
   }
 }
 
@@ -535,8 +536,8 @@ int TestProcessNodeSource::CreateProcessNode() {
   int render_process_id = GenerateNextId();
 
   // Create the process node and insert it into the map.
-  auto process_node = PerformanceManagerImpl::CreateProcessNode(
-      content::PROCESS_TYPE_RENDERER, RenderProcessHostProxy());
+  auto process_node =
+      PerformanceManagerImpl::CreateProcessNode(RenderProcessHostProxy());
   bool inserted =
       process_node_map_.insert({render_process_id, std::move(process_node)})
           .second;

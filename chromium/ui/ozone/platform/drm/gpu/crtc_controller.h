@@ -42,6 +42,7 @@ class CrtcController {
   uint32_t connector() const { return connector_; }
   const scoped_refptr<DrmDevice>& drm() const { return drm_; }
   bool is_enabled() const { return state_.properties.active.value; }
+  bool vrr_enabled() const { return state_.properties.vrr_enabled.value; }
 
   bool AssignOverlayPlanes(HardwareDisplayPlaneList* plane_list,
                            const DrmOverlayPlaneList& planes,
@@ -53,7 +54,7 @@ class CrtcController {
   // one way or another or maybe compressed. Except for generic
   // modifiers such as DRM_FORMAT_MOD_NONE (linear), the modifier
   // values are 64 bit values that we don't understand at this
-  // level. We pass the modifers to gbm_bo_create_with_modifiers() and
+  // level. We pass the modifiers to gbm_bo_create_with_modifiers() and
   // gbm will pick a modifier as it allocates the bo.
   std::vector<uint64_t> GetFormatModifiers(uint32_t fourcc_format);
 

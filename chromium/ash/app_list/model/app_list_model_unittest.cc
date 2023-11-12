@@ -16,7 +16,6 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_config_provider.h"
-#include "ash/public/cpp/app_list/app_list_switches.h"
 #include "base/command_line.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -289,7 +288,7 @@ TEST_F(AppListModelFolderTest, NonSharedConfigIconGeneration) {
   FolderImage* regular_config_image =
       folder->GetFolderImageForTesting(AppListConfigType::kRegular);
   ASSERT_TRUE(regular_config_image);
-  EXPECT_EQ(regular_config->folder_unclipped_icon_size(),
+  EXPECT_EQ(regular_config->unclipped_icon_size(),
             regular_config_image->icon().size());
 
   // Verify that the folder is observing the app list item.
@@ -311,7 +310,7 @@ TEST_F(AppListModelFolderTest, NonSharedConfigIconGeneration) {
   FolderImage* dense_config_image =
       folder->GetFolderImageForTesting(AppListConfigType::kDense);
   ASSERT_TRUE(dense_config_image);
-  EXPECT_EQ(dense_config->folder_unclipped_icon_size(),
+  EXPECT_EQ(dense_config->unclipped_icon_size(),
             dense_config_image->icon().size());
 
   // Verify that the folder is observing the app list item.

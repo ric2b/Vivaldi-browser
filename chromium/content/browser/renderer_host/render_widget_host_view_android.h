@@ -13,15 +13,16 @@
 #include <memory>
 
 #include "base/android/jni_android.h"
-#include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/containers/queue.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/time/time.h"
+#include "cc/mojom/render_frame_metadata.mojom-shared.h"
 #include "cc/trees/render_frame_metadata.h"
 #include "components/viz/common/quads/selection.h"
 #include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
@@ -140,12 +141,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void EnsureSurfaceSynchronizedForWebTest() override;
   uint32_t GetCaptureSequenceNumber() const override;
   int GetMouseWheelMinimumGranularity() const override;
-  void UpdateCursor(const WebCursor& cursor) override;
+  void UpdateCursor(const ui::Cursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
   void FocusedNodeChanged(bool is_editable_node,
                           const gfx::Rect& node_bounds_in_screen) override;
   bool RequestStartStylusWriting() override;
-  void SetHoverActionStylusWritable(bool stylus_writable) override;
+  void NotifyHoverActionStylusWritable(bool stylus_writable) override;
   void OnEditElementFocusedForStylusWriting(
       const gfx::Rect& focused_edit_bounds,
       const gfx::Rect& caret_bounds) override;
@@ -179,8 +180,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void ClearFallbackSurfaceForCommitPending() override;
   void ResetFallbackToFirstNavigationSurface() override;
   bool RequestRepaintForTesting() override;
-  void SetIsInVR(bool is_in_vr) override;
-  bool IsInVR() const override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
   bool CanSynchronizeVisualProperties() override;
@@ -286,7 +285,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   }
   void SetGestureListenerManager(GestureListenerManager* manager);
 
-  void UpdateReportAllRootScrolls();
+  // See
+  // `RenderFrameMetadataProviderImpl::UpdateRootScrollOffsetUpdateFrequency()`.
+  void UpdateRootScrollOffsetUpdateFrequency();
 
   base::WeakPtr<RenderWidgetHostViewAndroid> GetWeakPtrAndroid();
 
@@ -408,10 +409,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void NotifyHostAndDelegateOnWasShown(
       blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
       final;
-  void RequestPresentationTimeFromHostOrDelegate(
+  void RequestSuccessfulPresentationTimeFromHostOrDelegate(
       blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request)
       final;
-  void CancelPresentationTimeRequestForHostAndDelegate() final;
+  void CancelSuccessfulPresentationTimeRequestForHostAndDelegate() final;
   void EnterFullscreenMode(
       const blink::mojom::FullscreenOptions& options) override;
   void ExitFullscreenMode() override;
@@ -456,7 +457,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
     // Reviews the states of `pending_screen_state_` to handle rotations,
     // fullscreen, and Picture-in-Picture mode.
-    bool HandleScreenStateChanges(const cc::DeadlinePolicy& deadline_policy);
+    bool HandleScreenStateChanges(const cc::DeadlinePolicy& deadline_policy,
+                                  bool force_fullscreen_sync = false);
 
     // Clears flags used to throttle SurfaceSync.
     void Unthrottle();
@@ -472,7 +474,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
     raw_ptr<RenderWidgetHostViewAndroid> rwhva_;
   };
 
-  bool ShouldReportAllRootScrolls();
+  cc::mojom::RootScrollOffsetUpdateFrequency RootScrollOffsetUpdateFrequency();
 
   MouseWheelPhaseHandler* GetMouseWheelPhaseHandler() override;
 
@@ -555,10 +557,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool is_window_activity_started_;
 
   PageVisibilityState page_visibility_ = PageVisibilityState::kHidden;
-
-  // Used to customize behavior for virtual reality mode, such as the
-  // appearance of overscroll glow and the keyboard.
-  bool is_in_vr_;
 
   // Specifies whether touch selection handles are hidden due to stylus.
   bool handles_hidden_by_stylus_ = false;
@@ -679,8 +677,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   SurfaceIdChangedCallbackList surface_id_changed_callbacks_;
 
   base::android::ScopedJavaGlobalRef<jobject> obj_;
-
-  bool is_surface_sync_throttling_ = false;
 
   ScreenStateChangeHandler screen_state_change_handler_;
 

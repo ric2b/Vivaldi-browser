@@ -1,22 +1,23 @@
 // Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
 #import "ios/panel/panel_view_controller.h"
-#include <stdint.h>
+
+#import <stdint.h>
 
 #import "base/strings/utf_string_conversions.h"
 #import "ios/chrome/browser/ui/history/history_coordinator.h"
 #import "ios/chrome/browser/ui/history/history_table_view_controller.h"
 #import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
-#import "ios/chrome/browser/ui/table_view/table_view_presentation_controller.h"
-#import "ios/chrome/browser/ui/table_view/table_view_presentation_controller_delegate.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/note_home_view_controller.h"
 #import "ios/panel/panel_constants.h"
-#import "ui/base/l10n/l10n_util.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/vivaldi_overflow_menu/vivaldi_oveflow_menu_constants.h"
 #import "ui/base/l10n/l10n_util_mac.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using l10n_util::GetNSString;
 
@@ -29,6 +30,7 @@ using l10n_util::GetNSString;
     NoteNavigationController* noteNavigationController;
     UINavigationController* historyController;
     UINavigationController* bookmarkController;
+    UINavigationController* readinglistController;
     UIView* pageSwitcherBackgroundView;
     NSLayoutConstraint* positionConstraint;
 }
@@ -102,9 +104,10 @@ using l10n_util::GetNSString;
   // Create and add segmentedControl
   segmentedControl = [[UISegmentedControl alloc]
                       initWithItems:@[
-                l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_BOOKMARKS),
-                l10n_util::GetNSString(IDS_VIVALDI_TOOLS_MENU_NOTES),
-                l10n_util::GetNSString(IDS_IOS_TOOLS_MENU_HISTORY)]];
+                [UIImage imageNamed:vOverflowBookmarks],
+                [UIImage imageNamed:vOverflowReadingList],
+                [UIImage imageNamed:vOverflowHistory],
+                [UIImage imageNamed:vOverflowNotes]]];
   [segmentedControl addTarget:self action:@selector(segmentTapped:)
                  forControlEvents:UIControlEventValueChanged];
   self.segmentControl = segmentedControl;
@@ -120,9 +123,9 @@ using l10n_util::GetNSString;
                   multiplier:1.0
                   constant:0];
   [segmentedControl.topAnchor constraintEqualToAnchor:
-    topView.topAnchor constant:panel_padding].active = YES;
+    topView.topAnchor constant:panel_top_padding].active = YES;
   [segmentedControl.leadingAnchor constraintEqualToAnchor:
-    self.view.leadingAnchor constant:panel_padding].active = YES;
+    self.view.safeLeftAnchor constant:panel_horizontal_padding].active = YES;
   [topView addConstraint:centerHorizontallyConstraint];
   [self setIndexForControl:BookmarksPage];
 }
@@ -132,9 +135,11 @@ using l10n_util::GetNSString;
  */
 - (void)setupControllers:(NoteNavigationController*)nvc
   withBookmarkController:(UINavigationController*)bvc
+  andReadinglistController:(UINavigationController*)rvc
     andHistoryController:(UINavigationController*)hc {
     noteNavigationController = nvc;
     bookmarkController = bvc;
+    readinglistController = rvc;
     historyController = hc;
     nvc.navigationBar.prefersLargeTitles = NO;
     bvc.navigationBar.prefersLargeTitles = NO;
@@ -146,6 +151,9 @@ using l10n_util::GetNSString;
     switch (index) {
       case PanelPage::BookmarksPage:
           uv = bookmarkController;
+            break;
+      case PanelPage::ReadinglistPage:
+          uv = readinglistController;
             break;
       case PanelPage::NotesPage:
           uv = noteNavigationController;
@@ -162,7 +170,7 @@ using l10n_util::GetNSString;
 
 - (void)segmentTapped:(UISegmentedControl*)sender {
     if (!sender || sender.selectedSegmentIndex < 0
-        || sender.selectedSegmentIndex > 2)
+        || sender.selectedSegmentIndex > 3)
         return;
     UINavigationController* navController = nil;
     navController = self.pageController.viewControllers.firstObject;
@@ -187,6 +195,7 @@ using l10n_util::GetNSString;
     [self.pageController removeFromParentViewController];
     self.pageController = nil;
     bookmarkController = nil;
+    readinglistController = nil;
     noteNavigationController = nil;
     historyController = nil;
 }

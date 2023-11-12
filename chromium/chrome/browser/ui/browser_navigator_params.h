@@ -14,11 +14,11 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
+#include "content/public/browser/child_process_host.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
-#include "content/public/common/child_process_host.h"
 #include "content/public/common/referrer.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -26,6 +26,7 @@
 #include "third_party/blink/public/common/navigation/impression.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/navigation/was_activated_option.mojom.h"
+#include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
@@ -112,6 +113,10 @@ struct NavigateParams {
 
   // The origin of the initiator of the navigation.
   absl::optional<url::Origin> initiator_origin;
+
+  // The base url of the initiator of the navigation. This is only set if the
+  // url is about:blank or about:srcdoc.
+  absl::optional<GURL> initiator_base_url;
 
   // The frame name to be used for the main frame.
   std::string frame_name;
@@ -201,12 +206,8 @@ struct NavigateParams {
   // If non-empty, the new tab is an app tab.
   std::string app_id;
 
-  // If non-empty, specifies the desired initial position and size of the
-  // window if |disposition| == NEW_POPUP.
-  // TODO(beng): Figure out if this can be used to create Browser windows
-  //             for other callsites that use set_override_bounds, or
-  //             remove this comment.
-  gfx::Rect window_bounds;
+  // Specifies the desired window features if `disposition` is NEW_POPUP.
+  blink::mojom::WindowFeatures window_features;
 
   // Determines if and how the target window should be made visible at the end
   // of the call to Navigate().

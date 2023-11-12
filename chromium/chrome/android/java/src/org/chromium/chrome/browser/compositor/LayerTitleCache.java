@@ -19,6 +19,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabFavicon;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.TabManagementFieldTrial;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.DefaultFaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper.FaviconImageCallback;
@@ -151,9 +152,25 @@ public class LayerTitleCache {
             title.register();
         }
 
+        // Boolean determines if a tab is selected.
+        boolean isSelectedTab = false;
+
+        if (TabManagementFieldTrial.isTabStripDetachedEnabled()) {
+            if (mTabModelSelector == null) {
+                return titleString;
+            }
+
+            // Get currently selected tab id.
+            int selectedTabId = mTabModelSelector.getCurrentTabId();
+
+            // Determine if the current tab is the selected tab.
+            isSelectedTab = tabId == selectedTabId;
+        }
+
         // Note(david@vivaldi.com): Apply current density to the image.
         originalFavicon.setDensity(mContext.getResources().getDisplayMetrics().densityDpi);
-        title.set(titleBitmapFactory.getTitleBitmap(mContext, titleString),
+
+        title.set(titleBitmapFactory.getTitleBitmap(mContext, titleString, isSelectedTab),
                 titleBitmapFactory.getFaviconBitmap(originalFavicon), fetchFaviconFromHistory);
 
         if (mNativeLayerTitleCache != 0) {

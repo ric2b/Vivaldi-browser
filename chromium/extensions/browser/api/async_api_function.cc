@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_system.h"
@@ -19,7 +19,7 @@ namespace extensions {
 AsyncApiFunction::AsyncApiFunction()
     : work_task_runner_(content::GetIOThreadTaskRunner({})) {}
 
-AsyncApiFunction::~AsyncApiFunction() {}
+AsyncApiFunction::~AsyncApiFunction() = default;
 
 bool AsyncApiFunction::RunAsync() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -94,20 +94,19 @@ void AsyncApiFunction::RespondOnUIThread() {
 }
 
 void AsyncApiFunction::SendResponse(bool success) {
-  ResponseValue response;
   base::Value::List arguments;
   if (results_) {
     arguments = std::move(*results_);
     results_.reset();
   }
   if (success) {
-    response = ArgumentList(std::move(arguments));
+    ExtensionFunction::Respond(ArgumentList(std::move(arguments)));
   } else if (results_) {
-    response = ErrorWithArguments(std::move(arguments), error_);
+    ExtensionFunction::Respond(
+        ErrorWithArguments(std::move(arguments), error_));
   } else {
-    response = Error(error_);
+    ExtensionFunction::Respond(Error(error_));
   }
-  ExtensionFunction::Respond(std::move(response));
 }
 
 }  // namespace extensions

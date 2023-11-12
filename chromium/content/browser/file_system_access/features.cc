@@ -5,6 +5,7 @@
 #include "content/browser/file_system_access/features.h"
 
 #include "base/feature_list.h"
+#include "build/build_config.h"
 
 namespace content::features {
 
@@ -24,6 +25,13 @@ BASE_FEATURE(kFileSystemAccessDragAndDropCheckBlocklist,
 BASE_FEATURE(kFileSystemAccessDoNotOverwriteOnMove,
              "FileSystemAccessDoNotOverwriteOnMove",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// TODO(crbug.com/1140805): Remove this flag eventually.
+// When enabled, move() supports moving local files (i.e. that do not live in
+// the OPFS).
+BASE_FEATURE(kFileSystemAccessMoveLocalFiles,
+             "FileSystemAccessMoveLocalFiles",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // TODO(crbug.com/1114923): Remove this flag eventually.
 // When enabled, the remove() method is enabled. Otherwise, throws a
@@ -52,5 +60,15 @@ BASE_FEATURE(kFileSystemAccessRenameWithoutParentAccessRequiresUserActivation,
 BASE_FEATURE(kFileSystemAccessSkipAfterWriteChecksIfUnchangingExtension,
              "FileSystemAccessSkipAfterWriteChecksIfUnchangingExtension",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/1413443): Remove this flag eventually.
+// When enabled, createWritable({ keepExistingData:true }) will create a swap
+// file using APFS's built-in support for copy-on-write files instead of copying
+// over the file's contents manually.
+BASE_FEATURE(kFileSystemAccessCowSwapFile,
+             "FileSystemAccessCowSwapFile",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace content::features

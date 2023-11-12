@@ -13,9 +13,9 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -115,7 +115,7 @@ AutomationInternalCustomBindings::AutomationInternalCustomBindings(
   }
 }
 
-AutomationInternalCustomBindings::~AutomationInternalCustomBindings() {}
+AutomationInternalCustomBindings::~AutomationInternalCustomBindings() = default;
 
 void AutomationInternalCustomBindings::OnMessageReceived(
     const IPC::Message& message) {
@@ -177,8 +177,10 @@ void AutomationInternalCustomBindings::StartCachingAccessibilityTrees() {
 }
 
 void AutomationInternalCustomBindings::StopCachingAccessibilityTrees() {
-  message_filter_->Detach();
-  message_filter_.reset();
+  if (message_filter_) {
+    message_filter_->Detach();
+    message_filter_.reset();
+  }
 }
 
 //

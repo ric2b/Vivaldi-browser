@@ -238,7 +238,7 @@ TEST_F(ProfileSelectionsTest, NoProfiles) {
 // `kSystemProfileSelectionDefaultNone` experiment.
 class ProfileSelectionsTestWithParams
     : public ProfileSelectionsTest,
-      public ::testing::WithParamInterface<std::tuple<bool, bool, bool, bool>> {
+      public ::testing::WithParamInterface<std::tuple<bool, bool, bool>> {
  public:
   void SetUp() override {
     ProfileSelectionsTest::SetUp();
@@ -247,15 +247,11 @@ class ProfileSelectionsTestWithParams
     // `ProfileSelectionsTestWithParams` constructor, once the System and Guest
     // Profiles can be created with the experiment activated.
     bool activate_system_experiment = std::get<2>(GetParam());
-    bool activate_guest_experiment = std::get<3>(GetParam());
     std::vector<base::test::FeatureRef> enabled_features;
     std::vector<base::test::FeatureRef> disabled_features;
     activate_system_experiment
         ? enabled_features.push_back(kSystemProfileSelectionDefaultNone)
         : disabled_features.push_back(kSystemProfileSelectionDefaultNone);
-    activate_guest_experiment
-        ? enabled_features.push_back(kGuestProfileSelectionDefaultNone)
-        : disabled_features.push_back(kGuestProfileSelectionDefaultNone);
     feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
@@ -264,13 +260,38 @@ class ProfileSelectionsTestWithParams
     return base::FeatureList::IsEnabled(kSystemProfileSelectionDefaultNone);
   }
 
-  bool IsGuestExperimentActive() const {
-    return base::FeatureList::IsEnabled(kGuestProfileSelectionDefaultNone);
-  }
-
  private:
   base::test::ScopedFeatureList feature_list_;
 };
+
+TEST_P(ProfileSelectionsTestWithParams, BuildDefault_WithDefaultValues) {
+  ProfileSelections selections = ProfileSelections::BuildDefault();
+
+  TestProfileSelection(selections, regular_profile(), regular_profile());
+  TestProfileSelection(selections, incognito_profile(), nullptr);
+
+  TestProfileSelection(selections, guest_profile(), guest_profile());
+  TestProfileSelection(selections, guest_profile_otr(), nullptr);
+
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
+  bool system_experiment = IsSystemExperimentActive();
+  TestProfileSelection(selections, system_profile(),
+                       system_experiment ? nullptr : system_profile());
+  TestProfileSelection(selections, system_profile_otr(), nullptr);
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  TestProfileSelection(selections, signin_profile(), signin_profile());
+  TestProfileSelection(selections, signin_profile_otr(), nullptr);
+
+  TestProfileSelection(selections, lockscreen_profile(), lockscreen_profile());
+  TestProfileSelection(selections, lockscreen_profile_otr(), nullptr);
+
+  TestProfileSelection(selections, lockscreenapp_profile(),
+                       lockscreenapp_profile());
+  TestProfileSelection(selections, lockscreenapp_profile_otr(), nullptr);
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+}
 
 TEST_P(ProfileSelectionsTestWithParams, BuildDefault) {
   bool force_guest = std::get<0>(GetParam());
@@ -282,10 +303,8 @@ TEST_P(ProfileSelectionsTestWithParams, BuildDefault) {
   TestProfileSelection(selections, regular_profile(), regular_profile());
   TestProfileSelection(selections, incognito_profile(), nullptr);
 
-  bool guest_experiment = IsGuestExperimentActive();
-  TestProfileSelection(
-      selections, guest_profile(),
-      force_guest || !guest_experiment ? guest_profile() : nullptr);
+  TestProfileSelection(selections, guest_profile(),
+                       force_guest ? guest_profile() : nullptr);
   TestProfileSelection(selections, guest_profile_otr(), nullptr);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
@@ -319,13 +338,10 @@ TEST_P(ProfileSelectionsTestWithParams, BuildRedirectedInIncognito) {
   TestProfileSelection(selections, regular_profile(), regular_profile());
   TestProfileSelection(selections, incognito_profile(), regular_profile());
 
-  bool guest_experiment = IsGuestExperimentActive();
-  TestProfileSelection(
-      selections, guest_profile(),
-      force_guest || !guest_experiment ? guest_profile() : nullptr);
-  TestProfileSelection(
-      selections, guest_profile_otr(),
-      force_guest || !guest_experiment ? guest_profile() : nullptr);
+  TestProfileSelection(selections, guest_profile(),
+                       force_guest ? guest_profile() : nullptr);
+  TestProfileSelection(selections, guest_profile_otr(),
+                       force_guest ? guest_profile() : nullptr);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
   bool system_experiment = IsSystemExperimentActive();
@@ -362,13 +378,10 @@ TEST_P(ProfileSelectionsTestWithParams, BuildForRegularAndIncognito) {
   TestProfileSelection(selections, regular_profile(), regular_profile());
   TestProfileSelection(selections, incognito_profile(), incognito_profile());
 
-  bool guest_experiment = IsGuestExperimentActive();
-  TestProfileSelection(
-      selections, guest_profile(),
-      force_guest || !guest_experiment ? guest_profile() : nullptr);
-  TestProfileSelection(
-      selections, guest_profile_otr(),
-      force_guest || !guest_experiment ? guest_profile_otr() : nullptr);
+  TestProfileSelection(selections, guest_profile(),
+                       force_guest ? guest_profile() : nullptr);
+  TestProfileSelection(selections, guest_profile_otr(),
+                       force_guest ? guest_profile_otr() : nullptr);
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_ANDROID)
   bool system_experiment = IsSystemExperimentActive();
@@ -398,6 +411,5 @@ TEST_P(ProfileSelectionsTestWithParams, BuildForRegularAndIncognito) {
 INSTANTIATE_TEST_SUITE_P(ExperimentalBuilders,
                          ProfileSelectionsTestWithParams,
                          ::testing::Combine(::testing::Bool(),
-                                            ::testing::Bool(),
                                             ::testing::Bool(),
                                             ::testing::Bool()));

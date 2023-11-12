@@ -65,8 +65,13 @@ bool AwTracingDelegate::IsAllowedToBeginBackgroundScenario(
     return false;
   }
 
-  // TODO(crbug.com/1290887): check the trace limit per week (to be implemented
-  // later)
+  // Check the trace limit both when starting and ending a scenario
+  // because there is no point starting a trace that can't be uploaded.
+  if (state.DidRecentlyUploadForScenario(config)) {
+    tracing::RecordDisallowedMetric(
+        tracing::TracingFinalizationDisallowedReason::kTraceUploadedRecently);
+    return false;
+  }
 
   state.NotifyTracingStarted();
   return true;
@@ -85,17 +90,22 @@ bool AwTracingDelegate::IsAllowedToEndBackgroundScenario(
       tracing::BackgroundTracingStateManager::GetInstance();
   state.NotifyFinalizationStarted();
 
-  // TODO(crbug.com/1290887): check the trace limit per week (to be implemented
-  // later)
+  // Check the trace limit both when starting and ending a scenario
+  // because there is no point starting a trace that can't be uploaded.
+  if (state.DidRecentlyUploadForScenario(config)) {
+    tracing::RecordDisallowedMetric(
+        tracing::TracingFinalizationDisallowedReason::kTraceUploadedRecently);
+    return false;
+  }
 
   state.OnScenarioUploaded(config.scenario_name());
   return true;
 }
 
-absl::optional<base::Value> AwTracingDelegate::GenerateMetadataDict() {
+absl::optional<base::Value::Dict> AwTracingDelegate::GenerateMetadataDict() {
   base::Value::Dict metadata_dict;
   metadata_dict.Set("revision", version_info::GetLastChange());
-  return base::Value(std::move(metadata_dict));
+  return metadata_dict;
 }
 
 }  // namespace android_webview

@@ -8,9 +8,9 @@
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_coordinator.h"
 #import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
 
-@protocol ActivityServicePositioner;
+@protocol SharingPositioner;
 @protocol OmniboxPopupPresenterDelegate;
-@protocol ToolbarCoordinatorDelegate;
+@protocol OmniboxFocusDelegate;
 @class ViewRevealingVerticalPanHandler;
 @protocol ViewRevealingAnimatee;
 
@@ -21,7 +21,7 @@
 
 // Delegate for this coordinator.
 // TODO(crbug.com/799446): Change this.
-@property(nonatomic, weak) id<ToolbarCoordinatorDelegate> delegate;
+@property(nonatomic, weak) id<OmniboxFocusDelegate> delegate;
 
 // Defines where the omnibox popup will be positioned.
 @property(nonatomic, weak) id<OmniboxPopupPresenterDelegate>
@@ -32,7 +32,7 @@
 @property(nonatomic, weak, readonly) id<ViewRevealingAnimatee> animatee;
 
 // Positioner for activity services attached to the toolbar
-- (id<ActivityServicePositioner>)activityServicePositioner;
+- (id<SharingPositioner>)SharingPositioner;
 
 // Shows the animation when transitioning to a prerendered page.
 - (void)showPrerenderingAnimation;

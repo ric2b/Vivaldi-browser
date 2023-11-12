@@ -6,15 +6,16 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/types/pass_key.h"
 #include "base/values.h"
 #include "net/base/auth.h"
 #include "net/base/io_buffer.h"
@@ -285,7 +286,7 @@ base::Value URLRequest::GetStateAsValue() const {
   dict.Set("url", original_url().possibly_invalid_spec());
 
   if (url_chain_.size() > 1) {
-    base::Value list(base::Value::Type::LIST);
+    base::Value::List list;
     for (const GURL& url : url_chain_) {
       list.Append(url.possibly_invalid_spec());
     }
@@ -574,7 +575,8 @@ void URLRequest::Start() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-URLRequest::URLRequest(const GURL& url,
+URLRequest::URLRequest(base::PassKey<URLRequestContext> pass_key,
+                       const GURL& url,
                        RequestPriority priority,
                        Delegate* delegate,
                        const URLRequestContext* context,
@@ -1029,6 +1031,10 @@ void URLRequest::SetPriority(RequestPriority priority) {
     job_->SetPriority(priority_);
 }
 
+void URLRequest::SetPriorityIncremental(bool priority_incremental) {
+  priority_incremental_ = priority_incremental;
+}
+
 void URLRequest::NotifyAuthRequired(
     std::unique_ptr<AuthChallengeInfo> auth_info) {
   DCHECK_EQ(OK, status_);
@@ -1182,22 +1188,15 @@ IsolationInfo URLRequest::CreateIsolationInfoFromNetworkAnonymizationKey(
       network_anonymization_key.GetTopFrameSite()->site_as_origin_;
 
   absl::optional<url::Origin> frame_origin;
-  if (NetworkAnonymizationKey::IsFrameSiteEnabled() &&
-      network_anonymization_key.GetFrameSite().has_value()) {
-    // If frame site is set on the network anonymization key, use it to set the
-    // frame origin on the isolation info.
-    frame_origin = network_anonymization_key.GetFrameSite()->site_as_origin_;
-  } else if (NetworkAnonymizationKey::IsCrossSiteFlagSchemeEnabled() &&
-             network_anonymization_key.GetIsCrossSite().value()) {
-    // If frame site is not set on the network anonymization key but we know
-    // that it is cross site to the top level site, create an empty origin to
-    // use as the frame origin for the isolation info. This should be cross site
-    // with the top level origin.
+  if (NetworkAnonymizationKey::IsCrossSiteFlagSchemeEnabled() &&
+      network_anonymization_key.GetIsCrossSite().value()) {
+    // If we know that the origin is cross site to the top level site, create an
+    // empty origin to use as the frame origin for the isolation info. This
+    // should be cross site with the top level origin.
     frame_origin = url::Origin();
   } else {
-    // If frame sit is not set on the network anonymization key and we don't
-    // know that it's cross site to the top level site, use the top frame site
-    // to set the frame origin.
+    // If we don't know that it's cross site to the top level site, use the top
+    // frame site to set the frame origin.
     frame_origin = top_frame_origin;
   }
 

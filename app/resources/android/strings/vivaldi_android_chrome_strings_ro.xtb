@@ -9,13 +9,13 @@
 <translation id="1910514478706885609">Deschide într-o grupă nouă de file</translation>
 <translation id="2038563949887743358">Activează cererea pentru versiunea desktop</translation>
 <translation id="2139186145475833000">Adaugă la ecranul de pornire</translation>
-<translation id="2306442503286132111">Marcajul a fost salvat în dosarul <ph name="FOLDER_NAME" /></translation>
+<translation id="2306442503286132111">Semnul de carte a fost salvat în dosarul <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aspect</translation>
 <translation id="2501278716633472235">La pagina precedentă</translation>
 <translation id="2633278372998075009">File private</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
-          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcaj}
-          other {<ph name="BOOKMARKS_COUNT_MANY" /> marcaje}}</translation>
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> semn de carte}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> semne de carte}}</translation>
 <translation id="3076631378407175873">Drepturi de autor <ph name="YEAR" /> Vivaldi Technologies AS. Toate drepturile rezervate.</translation>
 <translation id="3234355010754616171">Filă privată nouă</translation>
 <translation id="3377025655491224618">Filă privată</translation>
@@ -46,19 +46,19 @@ Atingeți pentru a căuta este o funcție care este disponibilă numai atunci c�
 
 Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru a rafina căutarea, glisați panoul până la capăt și atingeți caseta de căutare.</translation>
 <translation id="572328651809341494">File recente</translation>
-<translation id="6150320133806434356">Marcajul a fost salvat</translation>
+<translation id="6150320133806434356">Semnul de carte a fost salvat</translation>
 <translation id="6336451774241870485">Filă privată nouă</translation>
 <translation id="6585139692466700358">Oferă traducerea paginilor în alte limbi folosind seviciul de traducere Vivaldi</translation>
 <translation id="6593061639179217415">Versiune pentru desktop</translation>
 <translation id="6610147964972079463">Închide filele private</translation>
 <translation id="7029995644714925509">Când un site web solicită să preîncarce în mod privat link-uri pe pagina sa, Vivaldi criptează și preîncarcă pagini prin serverele Google fără cookie-uri. Acest lucru vă ascunde identitatea de pe site-ul web preîncărcat.</translation>
 <translation id="706339621163631076">Politica privind confidențialitatea browserului</translation>
-<translation id="732145680195464316">Marcajul a fost salvat în <ph name="PRODUCT_NAME" /></translation>
+<translation id="732145680195464316">Semnul de carte a fost salvat în <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">Despre Vivaldi</translation>
 <translation id="7465104139234185284">Închide toate filele private</translation>
 <translation id="804786196054284061">Acordul de licență pentru utilizator</translation>
 <translation id="85991616550051997">La pagina de pornire</translation>
-<translation id="8820817407110198400">Marcaje</translation>
+<translation id="8820817407110198400">Semne de carte</translation>
 <translation id="9063523880881406963">Dezactivează cererea pentru versiunea desktop</translation>
 <translation id="9080642952018487277">Intră în modul privat</translation>
 </translationbundle>

@@ -68,7 +68,7 @@ IN_PROC_BROWSER_TEST_F(ChromeOsWebAppExperimentsBrowserTest,
                        OutOfScopeBarRemoval) {
   // Check that the out of scope banner doesn't show after navigating to the
   // different scope in the web app window.
-  Browser* app_browser = LaunchWebAppBrowser(profile(), app_id_);
+  Browser* app_browser = LaunchWebAppBrowser(app_id_);
   NavigateToURLAndWait(app_browser, extended_scope_page_);
   EXPECT_FALSE(app_browser->app_controller()->ShouldShowCustomTabBar());
 }
@@ -98,7 +98,7 @@ IN_PROC_BROWSER_TEST_F(ChromeOsWebAppExperimentsBrowserTest,
                        FallbackPageThemeColor) {
   // Pages in the extended scope should have a fallback page theme color applied
   // when their URL contains certain substrings.
-  Browser* app_browser = LaunchWebAppBrowser(profile(), app_id_);
+  Browser* app_browser = LaunchWebAppBrowser(app_id_);
   NavigateToURLAndWait(app_browser,
                        extended_scope_.Resolve("app2.html?file%2cdocx"));
   SCOPED_TRACE(
@@ -112,29 +112,5 @@ IN_PROC_BROWSER_TEST_F(ChromeOsWebAppExperimentsBrowserTest,
 }
 
 #endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
-
-IN_PROC_BROWSER_TEST_F(ChromeOsWebAppExperimentsBrowserTest,
-                       OverrideLoadingForNonEmptyPreviousUrl) {
-  EXPECT_FALSE(ChromeOsWebAppExperiments::ShouldOverrideUrlLoading(
-      extended_scope_page_, extended_scope_.Resolve("app3.html")));
-}
-
-IN_PROC_BROWSER_TEST_F(ChromeOsWebAppExperimentsBrowserTest,
-                       OverrideLoadingForInvalidUrl) {
-  EXPECT_FALSE(
-      ChromeOsWebAppExperiments::ShouldOverrideUrlLoading(GURL(), GURL("a")));
-}
-
-IN_PROC_BROWSER_TEST_F(ChromeOsWebAppExperimentsBrowserTest,
-                       OverrideLoadingForOutOfScopeUrl) {
-  EXPECT_FALSE(ChromeOsWebAppExperiments::ShouldOverrideUrlLoading(
-      GURL(), GURL("https://google.com")));
-}
-
-IN_PROC_BROWSER_TEST_F(ChromeOsWebAppExperimentsBrowserTest,
-                       OverrideLoadingForExtendedScopeUrl) {
-  EXPECT_TRUE(ChromeOsWebAppExperiments::ShouldOverrideUrlLoading(
-      GURL(), extended_scope_page_));
-}
 
 }  // namespace web_app

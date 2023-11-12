@@ -11,10 +11,10 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
@@ -73,6 +73,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
+#include "content/public/test/content_browser_test_content_browser_client.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/mock_client_hints_controller_delegate.h"
@@ -80,9 +81,7 @@
 #include "content/public/test/url_loader_interceptor.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
-#include "content/shell/browser/shell_content_browser_client.h"
 #include "content/test/content_browser_test_utils_internal.h"
-#include "content/test/test_content_browser_client.h"
 #include "media/media_buildflags.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cert/cert_status_flags.h"
@@ -444,7 +443,8 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
     blink::ServiceWorkerStatusCode status;
     base::RunLoop loop;
     wrapper()->FindReadyRegistrationForClientUrl(
-        document_url, blink::StorageKey(url::Origin::Create(document_url)),
+        document_url,
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(document_url)),
         base::BindLambdaForTesting(
             [&](blink::ServiceWorkerStatusCode find_status,
                 scoped_refptr<ServiceWorkerRegistration> registration) {
@@ -464,10 +464,9 @@ class ServiceWorkerBrowserTest : public ContentBrowserTest {
       content::GetShellUserAgentMetadata()};
 };
 
-class MockContentBrowserClient : public TestContentBrowserClient {
+class MockContentBrowserClient : public ContentBrowserTestContentBrowserClient {
  public:
-  MockContentBrowserClient()
-      : TestContentBrowserClient(), data_saver_enabled_(false) {}
+  MockContentBrowserClient() : data_saver_enabled_(false) {}
 
   ~MockContentBrowserClient() override = default;
 
@@ -600,15 +599,14 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, FetchPageWithSaveData) {
   const char kWorkerUrl[] = "/service_worker/add_save_data_to_title.js";
   MockContentBrowserClient content_browser_client;
   content_browser_client.set_data_saver_enabled(true);
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&content_browser_client);
   shell()->web_contents()->OnWebPreferencesChanged();
   WorkerStateObserver observer(wrapper(), ServiceWorkerVersion::ACTIVATED);
   blink::mojom::ServiceWorkerRegistrationOptions options(
       embedded_test_server()->GetURL(kPageUrl),
       blink::mojom::ScriptType::kClassic,
       blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
   public_context()->RegisterServiceWorker(
       embedded_test_server()->GetURL(kWorkerUrl), key, options,
       base::BindOnce(&ExpectRegisterResultAndRun,
@@ -620,7 +618,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, FetchPageWithSaveData) {
   EXPECT_TRUE(NavigateToURL(shell(), embedded_test_server()->GetURL(kPageUrl)));
   EXPECT_EQ(title1, title_watcher1.WaitAndGetTitle());
 
-  SetBrowserClientForTesting(old_client);
   shell()->Close();
 
   base::RunLoop run_loop;
@@ -646,15 +643,14 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, CrossOriginFetchWithSaveData) {
 
   MockContentBrowserClient content_browser_client;
   content_browser_client.set_data_saver_enabled(true);
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&content_browser_client);
   shell()->web_contents()->OnWebPreferencesChanged();
   WorkerStateObserver observer(wrapper(), ServiceWorkerVersion::ACTIVATED);
   blink::mojom::ServiceWorkerRegistrationOptions options(
       embedded_test_server()->GetURL(kPageUrl),
       blink::mojom::ScriptType::kClassic,
       blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
   public_context()->RegisterServiceWorker(
       embedded_test_server()->GetURL(kWorkerUrl), key, options,
       base::BindOnce(&ExpectRegisterResultAndRun,
@@ -671,7 +667,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, CrossOriginFetchWithSaveData) {
                        .c_str()))));
   EXPECT_EQ(title, title_watcher.WaitAndGetTitle());
 
-  SetBrowserClientForTesting(old_client);
   shell()->Close();
 
   base::RunLoop run_loop;
@@ -688,8 +683,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
   const char kWorkerUrl[] = "/service_worker/fetch_event_pass_through.js";
   MockContentBrowserClient content_browser_client;
   content_browser_client.set_data_saver_enabled(true);
-  ContentBrowserClient* old_client =
-      SetBrowserClientForTesting(&content_browser_client);
   shell()->web_contents()->OnWebPreferencesChanged();
   WorkerStateObserver observer(wrapper(), ServiceWorkerVersion::ACTIVATED);
 
@@ -701,7 +694,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
       embedded_test_server()->GetURL(kPageUrl),
       blink::mojom::ScriptType::kClassic,
       blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
   public_context()->RegisterServiceWorker(
       embedded_test_server()->GetURL(kWorkerUrl), key, options,
       base::BindOnce(&ExpectRegisterResultAndRun,
@@ -711,7 +705,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
   NavigateToURLBlockUntilNavigationsComplete(
       shell(), embedded_test_server()->GetURL(kPageUrl), 1);
 
-  SetBrowserClientForTesting(old_client);
   shell()->Close();
 
   base::RunLoop run_loop;
@@ -731,7 +724,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Reload) {
       embedded_test_server()->GetURL(kPageUrl),
       blink::mojom::ScriptType::kClassic,
       blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
   public_context()->RegisterServiceWorker(
       embedded_test_server()->GetURL(kWorkerUrl), key, options,
       base::BindOnce(&ExpectRegisterResultAndRun,
@@ -776,7 +770,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, IdleTimerWithDevTools) {
   blink::mojom::ServiceWorkerRegistrationOptions options(
       scope, blink::mojom::ScriptType::kClassic,
       blink::mojom::ServiceWorkerUpdateViaCache::kNone);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
   public_context()->RegisterServiceWorker(
       worker_url, key, options,
       base::BindOnce(&ExpectRegisterResultAndRun,
@@ -855,7 +850,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
     blink::mojom::ServiceWorkerRegistrationOptions options(
         https_server.GetURL(kPageUrl), blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         https_server.GetURL(kWorkerUrl), key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -884,7 +880,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
     // Update the service worker.
     WorkerStateObserver observer(wrapper(), ServiceWorkerVersion::ACTIVATED);
     GURL url = https_server.GetURL(kPageUrl);
-    blink::StorageKey key(url::Origin::Create(url));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
     wrapper()->UpdateRegistration(url, key);
     observer.Wait();
 
@@ -902,7 +899,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
 
   base::RunLoop run_loop;
   GURL url = https_server.GetURL(kPageUrl);
-  blink::StorageKey key(url::Origin::Create(url));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
   public_context()->UnregisterServiceWorker(
       url, key,
       base::BindOnce(&ExpectUnregisterResultAndRun, true,
@@ -920,7 +918,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
       embedded_test_server()->GetURL(kPageUrl),
       blink::mojom::ScriptType::kClassic,
       blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
   public_context()->RegisterServiceWorker(
       embedded_test_server()->GetURL(kWorkerUrl), key, options,
       base::BindOnce(&ExpectRegisterResultAndRun,
@@ -998,7 +997,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, StartWorkerWhileInstalling) {
       embedded_test_server()->GetURL(kWorkerUrl),
       blink::mojom::ScriptType::kClassic,
       blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-  blink::StorageKey key(url::Origin::Create(options.scope));
+  const blink::StorageKey key =
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
   public_context()->RegisterServiceWorker(
       embedded_test_server()->GetURL(kWorkerUrl), key, options,
       base::BindOnce(&ExpectRegisterResultAndRun,
@@ -1008,7 +1008,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, StartWorkerWhileInstalling) {
   base::RunLoop run_loop;
   GURL full_url = embedded_test_server()->GetURL(kWorkerUrl);
   wrapper()->StartActiveServiceWorker(
-      full_url, blink::StorageKey(url::Origin::Create(full_url)),
+      full_url,
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(full_url)),
       base::BindLambdaForTesting([&](blink::ServiceWorkerStatusCode status) {
         EXPECT_EQ(status, blink::ServiceWorkerStatusCode::kErrorNotFound);
         run_loop.Quit();
@@ -1120,7 +1121,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest,
   // Set a non-existent resource to the version.
   std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources;
   resources.push_back(storage::mojom::ServiceWorkerResourceRecord::New(
-      123456789, version->script_url(), 100));
+      123456789, version->script_url(), 100, /*sha256_checksum=*/""));
   version->script_cache_map()->resource_map_.clear();
   version->script_cache_map()->SetResources(resources);
 
@@ -1399,7 +1400,8 @@ class ServiceWorkerNavigationPreloadTest : public ServiceWorkerBrowserTest {
     blink::mojom::ServiceWorkerRegistrationOptions options(
         scope, blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         worker_url, key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -2190,7 +2192,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Registration) {
   {
     base::RunLoop run_loop;
     GURL url = embedded_test_server()->GetURL("/");
-    blink::StorageKey key(url::Origin::Create(url));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
     public_context()->UnregisterServiceWorker(
         embedded_test_server()->GetURL("/"), key,
         base::BindOnce(&ExpectUnregisterResultAndRun, false,
@@ -2205,7 +2208,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Registration) {
         embedded_test_server()->GetURL(kScope),
         blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         embedded_test_server()->GetURL("/does/not/exist"), key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -2222,7 +2226,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Registration) {
         embedded_test_server()->GetURL(kScope),
         blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         embedded_test_server()->GetURL(kWorkerUrl), key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -2240,7 +2245,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Registration) {
         embedded_test_server()->GetURL(kScope),
         blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         embedded_test_server()->GetURL(kWorkerUrl), key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -2257,7 +2263,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Registration) {
   {
     base::RunLoop run_loop;
     GURL url = embedded_test_server()->GetURL(kScope);
-    blink::StorageKey key(url::Origin::Create(url));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
     public_context()->UnregisterServiceWorker(
         url, key,
         base::BindOnce(&ExpectUnregisterResultAndRun, true,
@@ -2274,6 +2281,276 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBrowserTest, Registration) {
             blink::ServiceWorkerStatusCode::kErrorNotFound);
 }
 
+enum class ServiceWorkerScriptImportType { kImportScripts, kStaticImport };
+
+struct ServiceWorkerScriptChecksumInfo {
+  GURL script_url;
+  std::string sha256_checksum;
+  std::string updated_sha256_checksum;
+};
+
+class ServiceWorkerSha256ScriptChecksumBrowserTest
+    : public ServiceWorkerBrowserTest,
+      public testing::WithParamInterface<
+          std::tuple<ServiceWorkerScriptImportType, bool, bool>> {
+ public:
+  void SetUpOnMainThread() override {
+    ServiceWorkerBrowserTest::SetUpOnMainThread();
+    // Set a custom request handler for Sha256ScriptChecksum test.
+    embedded_test_server()->RegisterRequestHandler(
+        base::BindRepeating(&ServiceWorkerSha256ScriptChecksumBrowserTest::
+                                HandleRequestForSha256ScriptChecksumTest,
+                            base::Unretained(this)));
+  }
+
+  ServiceWorkerScriptChecksumInfo GetMainScript() {
+    switch (ScriptImportType()) {
+      case ServiceWorkerScriptImportType::kImportScripts:
+        return ServiceWorkerScriptChecksumInfo{
+            /*script_url=*/embedded_test_server()->GetURL(
+                "/service_worker/import-scripts.js"),
+            /*sha256_checksum=*/
+            "959CEA1003BF6A06F745F232016C305D1916F90F3266D2BBA708904BB2008A4E",
+            /*updated_sha256_checksum=*/
+            "2AF06211016CC22679C87ADAEDB463CC5FCEA22FC045D30529A9246C52CB1647"};
+      case ServiceWorkerScriptImportType::kStaticImport:
+        return ServiceWorkerScriptChecksumInfo{
+            /*script_url=*/embedded_test_server()->GetURL(
+                "/service_worker/static-import.js"),
+            /*sha256_checksum=*/
+            "8CB1783CB9FB030FA8DB2F3C6B59728146F8AEF6CBF1754DB5CA1B48B482ACF6",
+            /*updated_sha256_checksum=*/
+            "FDEB1854E767FFCDC5F07BCBCAAEB4A6C36F136A9EAB9DC71E087FECA76AE267"};
+    }
+  }
+
+  ServiceWorkerScriptChecksumInfo GetImportedScript() {
+    switch (ScriptImportType()) {
+      case ServiceWorkerScriptImportType::kImportScripts:
+        return ServiceWorkerScriptChecksumInfo{
+            /*script_url=*/embedded_test_server()->GetURL(
+                "/service_worker/imported-by-import-scripts.js"),
+            /*sha256_checksum=*/
+            "4DE6400BEABB272D7FB0180E59F997808056978FEF5CD5B1A74D6ED83B43136C",
+            /*updated_sha256_checksum=*/
+            "F1630A5236D9DF2243943398C209CE00A0FB75360AEF463E798742B7F73FA17B"};
+      case ServiceWorkerScriptImportType::kStaticImport:
+        return ServiceWorkerScriptChecksumInfo{
+            /*script_url=*/embedded_test_server()->GetURL(
+                "/service_worker/imported-by-static-import.js"),
+            /*sha256_checksum=*/
+            "CD6B3DE93DD4BB48243940705156EB3938A737BE494C59F1904EF19D06A06AC3",
+            /*updated_sha256_checksum=*/
+            "87488A632AA5065D1AB196EDE8681090BB4F9F8727075E6FE464F7ED63E2561B"};
+    }
+  }
+
+  std::string GetExpectedAggregatedSha256ScriptChecksum(
+      bool before_script_update) {
+    switch (ScriptImportType()) {
+      case ServiceWorkerScriptImportType::kImportScripts:
+        if (before_script_update) {
+          return "B80961F1D38367CA45F57571740EA2ED4C0972BFEF1CF3A01A2B3BD93CED6"
+                 "C98";
+        }
+        if (IsMainScriptChanged() && IsImportedScriptChanged()) {
+          return "8555E49C806BD38482D2A7FDC85735D6AE5C371BBE5A7260193F85499A393"
+                 "064";
+        } else if (IsMainScriptChanged() && !IsImportedScriptChanged()) {
+          return "0B406A99B993938713E07AAE4AF9C2C3BB8837819C4D972097C6291C19355"
+                 "B44";
+        } else if (!IsMainScriptChanged() && IsImportedScriptChanged()) {
+          return "03DCAF85CA3E2B73158B9C43FAC7086BAA6AE9B83B503E389F4323660F58D"
+                 "D09";
+        }
+        NOTREACHED();
+        return "";
+      case ServiceWorkerScriptImportType::kStaticImport:
+        if (before_script_update) {
+          return "0ACE52F5894454C80C36A4C6D49F0B33DC177A69AE79F785C008FE63BDECB"
+                 "385";
+        }
+        if (IsMainScriptChanged() && IsImportedScriptChanged()) {
+          return "A929D91AD2BEBCE571ECDE1E5C2289A06F4C603A9BB8CD04720A8120012BE"
+                 "331";
+        } else if (IsMainScriptChanged() && !IsImportedScriptChanged()) {
+          return "D58555C45E466DD977C8D9F24D633D629DBE35BE79A0B5BBF3BA5D3D50D48"
+                 "BD3";
+        } else if (!IsMainScriptChanged() && IsImportedScriptChanged()) {
+          return "3E6C3E5F3C40F87B69D1913FD7201760BD3C8824026837D4BFB4828811F60"
+                 "3D7";
+        }
+        NOTREACHED();
+        return "";
+    }
+  }
+
+  ServiceWorkerScriptImportType ScriptImportType() {
+    return std::get<0>(GetParam());
+  }
+  bool IsMainScriptChanged() { return std::get<1>(GetParam()); }
+  bool IsImportedScriptChanged() { return std::get<2>(GetParam()); }
+
+ private:
+  std::unique_ptr<net::test_server::HttpResponse>
+  HandleRequestForSha256ScriptChecksumTest(
+      const net::test_server::HttpRequest& request) {
+    const GURL absolute_url =
+        embedded_test_server()->GetURL(request.relative_url);
+
+    std::string updated_content;
+
+    if (absolute_url == GetMainScript().script_url) {
+      switch (ScriptImportType()) {
+        case ServiceWorkerScriptImportType::kImportScripts:
+          updated_content = "importScripts('imported-by-import-scripts.js');";
+          break;
+        case ServiceWorkerScriptImportType::kStaticImport:
+          updated_content =
+              "import * as module from './imported-by-static-import.js';";
+          break;
+      }
+      // Add a counter to the response content that is different every request
+      // to the script so that a service worker will detect it as a script
+      // update, and for the check if the sha256 checksum is updated or not.
+      // Increment the counter only when we should update the script.
+      updated_content +=
+          " var counter = " +
+          base::NumberToString(request_counter_for_main_script_) + ";";
+      if (IsMainScriptChanged()) {
+        request_counter_for_main_script_++;
+      }
+    }
+    if (absolute_url == GetImportedScript().script_url) {
+      switch (ScriptImportType()) {
+        case ServiceWorkerScriptImportType::kImportScripts:
+          updated_content = "var imported_by_import_scripts;";
+          break;
+        case ServiceWorkerScriptImportType::kStaticImport:
+          updated_content = "var imported_by_static_import;";
+          break;
+      }
+      updated_content +=
+          "var counter = " +
+          base::NumberToString(request_counter_for_imported_script_) + ";";
+      if (IsImportedScriptChanged()) {
+        request_counter_for_imported_script_++;
+      }
+    }
+
+    if (updated_content.empty()) {
+      return nullptr;
+    }
+
+    auto http_response =
+        std::make_unique<net::test_server::BasicHttpResponse>();
+    http_response->set_code(net::HTTP_OK);
+    http_response->set_content(updated_content);
+    http_response->set_content_type("text/javascript");
+    http_response->AddCustomHeader("Service-Worker-Allowed", "/");
+
+    return http_response;
+  }
+
+  int64_t request_counter_for_main_script_ = 0;
+  int64_t request_counter_for_imported_script_ = 0;
+};
+
+IN_PROC_BROWSER_TEST_P(ServiceWorkerSha256ScriptChecksumBrowserTest,
+                       Sha256ScriptChecksum) {
+  StartServerAndNavigateToSetup();
+
+  const ServiceWorkerScriptChecksumInfo main_script = GetMainScript();
+  const ServiceWorkerScriptChecksumInfo imported_script = GetImportedScript();
+
+  // Start the ServiceWorker.
+  WorkerRunningStatusObserver observer1(public_context());
+  const GURL create_service_worker_url(embedded_test_server()->GetURL(
+      "/service_worker/create_service_worker.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), create_service_worker_url));
+
+  std::string js_script;
+  switch (ScriptImportType()) {
+    case ServiceWorkerScriptImportType::kImportScripts:
+      js_script = "register('" + main_script.script_url.spec() + "')";
+      break;
+    case ServiceWorkerScriptImportType::kStaticImport:
+      js_script =
+          "register('" + main_script.script_url.spec() + "', null, 'module')";
+      break;
+  }
+  EXPECT_EQ("DONE",
+            EvalJs(shell()->web_contents()->GetPrimaryMainFrame(), js_script));
+
+  observer1.WaitUntilRunning();
+  scoped_refptr<ServiceWorkerVersion> version =
+      wrapper()->GetLiveVersion(observer1.version_id());
+  EXPECT_EQ(version->script_url(), main_script.script_url);
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
+
+  // Validate checksums for each script, and ServiceWorkerVersion's one.
+  std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources =
+      version->script_cache_map()->GetResources();
+  std::set<std::string> expected_checksums{main_script.sha256_checksum,
+                                           imported_script.sha256_checksum};
+  EXPECT_EQ(expected_checksums.size(), resources.size());
+  for (auto& resource : resources) {
+    EXPECT_TRUE(expected_checksums.find(resource->sha256_checksum.value()) !=
+                expected_checksums.end());
+  }
+  EXPECT_EQ(
+      GetExpectedAggregatedSha256ScriptChecksum(/*before_script_update=*/true),
+      version->sha256_script_checksum());
+
+  // Update the ServiceWorker. This test is only needed for the when either main
+  // or imported script has changes.
+  if (!IsMainScriptChanged() && !IsImportedScriptChanged()) {
+    return;
+  }
+
+  ReloadBlockUntilNavigationsComplete(shell(), 1);
+  EXPECT_EQ("DONE",
+            EvalJs(shell()->web_contents()->GetPrimaryMainFrame(), js_script));
+  WorkerRunningStatusObserver observer2(public_context());
+  const GURL scope(embedded_test_server()->GetURL("/service_worker"));
+  wrapper()->SkipWaitingWorker(
+      scope, blink::StorageKey::CreateFirstParty(url::Origin::Create(scope)));
+  observer2.WaitUntilRunning();
+
+  scoped_refptr<ServiceWorkerVersion> updated_version =
+      wrapper()->GetLiveVersion(observer2.version_id());
+  EXPECT_EQ(updated_version->script_url(), main_script.script_url);
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, updated_version->running_status());
+
+  // Validate updated checksums for each script, and ServiceWorkerVersion's one.
+  std::vector<storage::mojom::ServiceWorkerResourceRecordPtr>
+      updated_resources = updated_version->script_cache_map()->GetResources();
+
+  std::set<std::string> updated_expected_checksums{
+      IsMainScriptChanged() ? main_script.updated_sha256_checksum
+                            : main_script.sha256_checksum,
+      IsImportedScriptChanged() ? imported_script.updated_sha256_checksum
+                                : imported_script.sha256_checksum};
+  EXPECT_EQ(updated_expected_checksums.size(), updated_resources.size());
+  for (auto& resource : updated_resources) {
+    EXPECT_TRUE(
+        updated_expected_checksums.find(resource->sha256_checksum.value()) !=
+        updated_expected_checksums.end());
+  }
+  EXPECT_EQ(
+      GetExpectedAggregatedSha256ScriptChecksum(/*before_script_update=*/false),
+      updated_version->sha256_script_checksum());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ServiceWorkerSha256ScriptChecksumBrowserTest,
+    testing::Combine(
+        testing::Values(ServiceWorkerScriptImportType::kImportScripts,
+                        ServiceWorkerScriptImportType::kStaticImport),
+        testing::Bool(),
+        testing::Bool()));
+
 class CacheStorageSideDataSizeChecker
     : public base::RefCounted<CacheStorageSideDataSizeChecker> {
  public:
@@ -2286,7 +2563,7 @@ class CacheStorageSideDataSizeChecker
     cache_storage_control->AddReceiver(
         cross_origin_embedder_policy, mojo::NullRemote(),
         storage::BucketLocator::ForDefaultBucket(
-            blink::StorageKey(url::Origin::Create(origin))),
+            blink::StorageKey::CreateFirstParty(url::Origin::Create(origin))),
         storage::mojom::CacheStorageOwner::kCacheAPI,
         cache_storage_remote.InitWithNewPipeAndPassReceiver());
 
@@ -2406,7 +2683,8 @@ class ServiceWorkerV8CodeCacheForCacheStorageTest
         embedded_test_server()->GetURL(kPageUrl),
         blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         embedded_test_server()->GetURL(GetWorkerURL()), key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -2756,7 +3034,8 @@ class ServiceWorkerDisableWebSecurityTest : public ServiceWorkerBrowserTest {
     blink::mojom::ServiceWorkerRegistrationOptions options(
         cross_origin_server_.GetURL(scope), blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         cross_origin_server_.GetURL(script), key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -2844,7 +3123,8 @@ class HeaderInjectingThrottle : public blink::URLLoaderThrottle {
   }
 };
 
-class ThrottlingContentBrowserClient : public TestContentBrowserClient {
+class ThrottlingContentBrowserClient
+    : public ContentBrowserTestContentBrowserClient {
  public:
   ThrottlingContentBrowserClient() = default;
 
@@ -2907,8 +3187,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerURLLoaderThrottleTest,
                        FetchEventForNavigationHasThrottledRequest) {
   // Add a throttle which injects a header.
   ThrottlingContentBrowserClient content_browser_client;
-  auto* old_content_browser_client =
-      SetBrowserClientForTesting(&content_browser_client);
 
   // Register the service worker.
   RegisterServiceWorker("/service_worker/echo_request_headers.js");
@@ -2936,8 +3214,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerURLLoaderThrottleTest,
 
   // Injected headers are present.
   EXPECT_TRUE(CheckHeader(*dict, "x-injected", "injected value"));
-
-  SetBrowserClientForTesting(old_content_browser_client);
 }
 
 // Test that redirects by throttles occur before service worker interception.
@@ -2945,8 +3221,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerURLLoaderThrottleTest,
                        RedirectOccursBeforeFetchEvent) {
   // Add a throttle which performs a redirect.
   ThrottlingContentBrowserClient content_browser_client;
-  auto* old_content_browser_client =
-      SetBrowserClientForTesting(&content_browser_client);
 
   // Register the service worker.
   RegisterServiceWorker("/service_worker/fetch_event_pass_through.js");
@@ -2980,8 +3254,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerURLLoaderThrottleTest,
   list.Append(redirect_url.spec());
   EXPECT_EQ(base::Value(std::move(list)),
             EvalJs(shell()->web_contents()->GetPrimaryMainFrame(), script));
-
-  SetBrowserClientForTesting(old_content_browser_client);
 }
 
 // Test that the headers injected by throttles during navigation are
@@ -2991,8 +3263,6 @@ IN_PROC_BROWSER_TEST_F(
     NavigationHasThrottledRequestHeadersAfterNetworkFallback) {
   // Add a throttle which injects a header.
   ThrottlingContentBrowserClient content_browser_client;
-  auto* old_content_browser_client =
-      SetBrowserClientForTesting(&content_browser_client);
 
   // Register the service worker. Use "/" scope so the "/echoheader" default
   // handler of EmbeddedTestServer is in-scope.
@@ -3012,8 +3282,6 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_EQ("injected value",
             EvalJs(shell()->web_contents()->GetPrimaryMainFrame(),
                    "document.body.textContent"));
-
-  SetBrowserClientForTesting(old_content_browser_client);
 }
 
 // Test that the headers injected by throttles during navigation are
@@ -3022,8 +3290,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerURLLoaderThrottleTest,
                        NavigationPreloadHasThrottledRequestHeaders) {
   // Add a throttle which injects a header.
   ThrottlingContentBrowserClient content_browser_client;
-  auto* old_content_browser_client =
-      SetBrowserClientForTesting(&content_browser_client);
 
   // Register the service worker. Use "/" scope so the "/echoheader" default
   // handler of EmbeddedTestServer is in-scope.
@@ -3043,8 +3309,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerURLLoaderThrottleTest,
   EXPECT_EQ("true\ninjected value",
             EvalJs(shell()->web_contents()->GetPrimaryMainFrame(),
                    "document.body.textContent"));
-
-  SetBrowserClientForTesting(old_content_browser_client);
 }
 
 // Test fixture to support validating throttling from within an installing
@@ -3068,7 +3332,8 @@ class ServiceWorkerThrottlingTest : public ServiceWorkerBrowserTest {
         embedded_test_server()->GetURL(scope),
         blink::mojom::ScriptType::kClassic,
         blink::mojom::ServiceWorkerUpdateViaCache::kImports);
-    blink::StorageKey key(url::Origin::Create(options.scope));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(options.scope));
     public_context()->RegisterServiceWorker(
         embedded_test_server()->GetURL(script_url), key, options,
         base::BindOnce(&ExpectRegisterResultAndRun,
@@ -3512,9 +3777,10 @@ class ServiceWorkerBackForwardCacheAndKeepActiveFreezingBrowserTest
  protected:
   ServiceWorkerBackForwardCacheAndKeepActiveFreezingBrowserTest() {
     feature_list_.InitWithFeaturesAndParameters(
-        {{{features::kBackForwardCache,
-           {{"TimeToLiveInBackForwardCacheInSeconds", "3600"},
-            {"process_binding_strength", "NORMAL"}}}}},
+        {{features::kBackForwardCache,
+          {{"process_binding_strength", "NORMAL"}}},
+         {features::kBackForwardCacheTimeToLiveControl,
+          {{"time_to_live_seconds", "3600"}}}},
         {features::kBackForwardCacheMemoryControls});
   }
 
@@ -3843,7 +4109,8 @@ IN_PROC_BROWSER_TEST_F(
   {
     base::RunLoop loop;
     GURL url = embedded_test_server()->GetURL("/");
-    blink::StorageKey key(url::Origin::Create(url));
+    const blink::StorageKey key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
     public_context()->UnregisterServiceWorker(
         url, key,
         base::BindOnce(&ExpectUnregisterResultAndRun, true,
@@ -4031,7 +4298,8 @@ class ServiceWorkerBrowserTestWithStoragePartitioning
 
     // Check root document setup. The StorageKey at the root should be the same
     // regardless of if `kThirdPartyStoragePartitioning` is enabled.
-    auto root_storage_key = blink::StorageKey(url::Origin::Create(main_url));
+    auto root_storage_key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(main_url));
     EXPECT_EQ(root_storage_key, root_rfh->storage_key());
 
     if (ThirdPartyStoragePartitioningEnabled()) {
@@ -4039,16 +4307,15 @@ class ServiceWorkerBrowserTestWithStoragePartitioning
       // each have a different storage key when no host permissions are set.
       EXPECT_THAT(GetClientURLsForStorageKey(root_storage_key),
                   testing::UnorderedElementsAre(main_url, main_worker_url));
+      EXPECT_THAT(GetClientURLsForStorageKey(blink::StorageKey::Create(
+                      url::Origin::Create(child_url),
+                      net::SchemefulSite(root_rfh->GetLastCommittedOrigin()),
+                      blink::mojom::AncestorChainBit::kCrossSite)),
+                  testing::UnorderedElementsAre(child_url));
       EXPECT_THAT(
-          GetClientURLsForStorageKey(blink::StorageKey::CreateWithOptionalNonce(
-              url::Origin::Create(child_url),
-              net::SchemefulSite(root_rfh->GetLastCommittedOrigin()), nullptr,
-              blink::mojom::AncestorChainBit::kCrossSite)),
-          testing::UnorderedElementsAre(child_url));
-      EXPECT_THAT(
-          GetClientURLsForStorageKey(blink::StorageKey::CreateWithOptionalNonce(
+          GetClientURLsForStorageKey(blink::StorageKey::Create(
               url::Origin::Create(grandchild_url),
-              net::SchemefulSite(root_rfh->GetLastCommittedOrigin()), nullptr,
+              net::SchemefulSite(root_rfh->GetLastCommittedOrigin()),
               blink::mojom::AncestorChainBit::kCrossSite)),
           testing::UnorderedElementsAre(grandchild_url, grandchild_worker_url));
     } else {
@@ -4058,9 +4325,10 @@ class ServiceWorkerBrowserTestWithStoragePartitioning
           GetClientURLsForStorageKey(root_storage_key),
           testing::UnorderedElementsAre(main_url, main_worker_url,
                                         grandchild_url, grandchild_worker_url));
-      EXPECT_THAT(GetClientURLsForStorageKey(
-                      blink::StorageKey(url::Origin::Create(child_url))),
-                  testing::UnorderedElementsAre(child_url));
+      EXPECT_THAT(
+          GetClientURLsForStorageKey(blink::StorageKey::CreateFirstParty(
+              url::Origin::Create(child_url))),
+          testing::UnorderedElementsAre(child_url));
     }
 
     // Give host permissions for b.com (child_rfh) to a.com (root_rfh).
@@ -4090,18 +4358,17 @@ class ServiceWorkerBrowserTestWithStoragePartitioning
       // With storage partitioning enabled, the child frame should now have a
       // top level StorageKey because it is the direct child of the root
       // document and the root has host permissions to it.
-      EXPECT_THAT(
-          GetClientURLsForStorageKey(blink::StorageKey::CreateWithOptionalNonce(
-              url::Origin::Create(child_url),
-              net::SchemefulSite(url::Origin::Create(child_url)), nullptr,
-              blink::mojom::AncestorChainBit::kSameSite)),
-          testing::UnorderedElementsAre(child_url));
+      EXPECT_THAT(GetClientURLsForStorageKey(blink::StorageKey::Create(
+                      url::Origin::Create(child_url),
+                      net::SchemefulSite(url::Origin::Create(child_url)),
+                      blink::mojom::AncestorChainBit::kSameSite)),
+                  testing::UnorderedElementsAre(child_url));
       // Similarly the grandchild document should now use the child document's
       // origin as the top level site.
       EXPECT_THAT(
-          GetClientURLsForStorageKey(blink::StorageKey::CreateWithOptionalNonce(
+          GetClientURLsForStorageKey(blink::StorageKey::Create(
               url::Origin::Create(grandchild_url),
-              net::SchemefulSite(url::Origin::Create(child_url)), nullptr,
+              net::SchemefulSite(url::Origin::Create(child_url)),
               blink::mojom::AncestorChainBit::kCrossSite)),
           testing::UnorderedElementsAre(grandchild_url, grandchild_worker_url));
     } else {
@@ -4112,9 +4379,10 @@ class ServiceWorkerBrowserTestWithStoragePartitioning
           GetClientURLsForStorageKey(root_storage_key),
           testing::UnorderedElementsAre(main_url, main_worker_url,
                                         grandchild_url, grandchild_worker_url));
-      EXPECT_THAT(GetClientURLsForStorageKey(
-                      blink::StorageKey(url::Origin::Create(child_url))),
-                  testing::UnorderedElementsAre(child_url));
+      EXPECT_THAT(
+          GetClientURLsForStorageKey(blink::StorageKey::CreateFirstParty(
+              url::Origin::Create(child_url))),
+          testing::UnorderedElementsAre(child_url));
     }
   }
 
@@ -4258,36 +4526,20 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerSpeculativeStartupBrowserTest,
       static_cast<int>(blink::ServiceWorkerStatusCode::kOk), 1);
 }
 
-enum class ServiceWorkerBypassFetchHandlerBypassedOriginType {
-  kBypassed,
-  kNotBypassed
-};
-
 class ServiceWorkerBypassFetchHandlerTest
     : public ServiceWorkerBrowserTest,
-      public testing::WithParamInterface<
-          std::tuple<ServiceWorkerBypassFetchHandlerBypassedOriginType, bool>> {
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
  public:
   ServiceWorkerBypassFetchHandlerTest() {
     feature_list_.InitWithFeaturesAndParameters(
         {{features::kServiceWorkerBypassFetchHandler,
-          {{"origins_to_bypass", "https://a.test"},
+          {{"script_checksum_to_bypass",
+            ShouldUseValidChecksum() ? kValidChecksum : kInvalidChecksum},
            {"strategy",
             ShouldUseAllowListStrategy() ? "allowlist" : "optin"}}}},
         {});
   }
   ~ServiceWorkerBypassFetchHandlerTest() override = default;
-
-  void SetUpOnMainThread() override {
-    SetServiceWorkerContextWrapper();
-    host_resolver()->AddRule("*", "127.0.0.1");
-    https_server_.ServeFilesFromSourceDirectory(GetTestDataFilePath());
-    https_server_.SetSSLConfig(net::EmbeddedTestServer::CERT_TEST_NAMES);
-    net::test_server::RegisterDefaultHandlers(&https_server_);
-    ASSERT_TRUE(https_server()->Start());
-  }
-
-  net::EmbeddedTestServer* https_server() { return &https_server_; }
 
   WebContents* web_contents() const { return shell()->web_contents(); }
 
@@ -4296,41 +4548,28 @@ class ServiceWorkerBypassFetchHandlerTest
   }
 
  protected:
-  ServiceWorkerBypassFetchHandlerBypassedOriginType GetBypassedOriginType() {
-    return std::get<0>(GetParam());
-  }
+  bool ShouldUseValidChecksum() { return std::get<0>(GetParam()); }
   bool ShouldUseAllowListStrategy() { return std::get<1>(GetParam()); }
 
  private:
   base::test::ScopedFeatureList feature_list_;
-  net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
+  std::string kValidChecksum =
+      "B437DA0A66F805F079E1F371F2BFAEF4A35BB9AEEA0A85827B954B05F6D63C6C";
+  std::string kInvalidChecksum = "";
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    ServiceWorkerBypassFetchHandlerTest,
-    testing::Combine(
-        testing::Values(
-            ServiceWorkerBypassFetchHandlerBypassedOriginType::kBypassed,
-            ServiceWorkerBypassFetchHandlerBypassedOriginType::kNotBypassed),
-        testing::Bool()));
+INSTANTIATE_TEST_SUITE_P(All,
+                         ServiceWorkerBypassFetchHandlerTest,
+                         testing::Combine(testing::Bool(), testing::Bool()));
 
 IN_PROC_BROWSER_TEST_P(ServiceWorkerBypassFetchHandlerTest, UrlInAllowList) {
-  std::string origin;
-  switch (GetBypassedOriginType()) {
-    case ServiceWorkerBypassFetchHandlerBypassedOriginType::kBypassed:
-      origin = "a.test";
-      break;
-    case ServiceWorkerBypassFetchHandlerBypassedOriginType::kNotBypassed:
-      origin = "b.test";
-      break;
-  }
+  StartServerAndNavigateToSetup();
 
-  const GURL create_service_worker_url(https_server()->GetURL(
-      origin, "/service_worker/create_service_worker.html"));
-  const GURL out_scope_url(https_server()->GetURL(origin, "/empty.html"));
+  const GURL create_service_worker_url(embedded_test_server()->GetURL(
+      "/service_worker/create_service_worker.html"));
+  const GURL out_scope_url(embedded_test_server()->GetURL("/empty.html"));
   const GURL in_scope_url(
-      https_server()->GetURL(origin, "/service_worker/empty.html"));
+      embedded_test_server()->GetURL("/service_worker/empty.html"));
 
   // Register a service worker.
   WorkerRunningStatusObserver observer1(public_context());
@@ -4370,17 +4609,14 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerBypassFetchHandlerTest, UrlInAllowList) {
   EXPECT_TRUE(NavigateToURL(shell(), in_scope_url));
 
   if (ShouldUseAllowListStrategy()) {
-    switch (GetBypassedOriginType()) {
-      case ServiceWorkerBypassFetchHandlerBypassedOriginType::kBypassed:
-        // If bypassing is allowed, the service worker was bypassed and the
-        // navigation request shouldn't be handled by the fetch handler.
-        EXPECT_EQ(0, EvalJs(GetPrimaryMainFrame(), script));
-        break;
-      case ServiceWorkerBypassFetchHandlerBypassedOriginType::kNotBypassed:
-        // If bypassing is not allowed, the navigation request should be handled
-        // by the fetch handler.
-        EXPECT_EQ(1, EvalJs(GetPrimaryMainFrame(), script));
-        break;
+    if (ShouldUseValidChecksum()) {
+      // If bypassing is allowed, the service worker was bypassed and the
+      // navigation request shouldn't be handled by the fetch handler.
+      EXPECT_EQ(0, EvalJs(GetPrimaryMainFrame(), script));
+    } else {
+      // If bypassing is not allowed, the navigation request should be handled
+      // by the fetch handler.
+      EXPECT_EQ(1, EvalJs(GetPrimaryMainFrame(), script));
     }
   } else {
     // If the allowlist isn't used, the service worker was bypassed and the
@@ -4518,19 +4754,35 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBypassFetchHandlerOriginTrialTest,
   run_loop.Run();
 }
 
+enum class SkipEmptyFetchHandlerEnum {
+  kDisabled,
+  kEnabled,
+  kEnabledAndStartWorker,
+};
+
 class ServiceWorkerSkipEmptyFetchHandlerBrowserTest
     : public ServiceWorkerBrowserTest,
-      public testing::WithParamInterface<bool> {
+      public testing::WithParamInterface<SkipEmptyFetchHandlerEnum> {
  public:
   ServiceWorkerSkipEmptyFetchHandlerBrowserTest() {
-    if (is_feature_enabled()) {
-      scoped_feature_list_.InitWithFeaturesAndParameters(
-          {{features::kServiceWorkerSkipIgnorableFetchHandler,
-            {{"SkipEmptyFetchHandler", "true"}}}},
-          {});
-    } else {
-      scoped_feature_list_.InitWithFeaturesAndParameters(
-          {}, {{features::kServiceWorkerSkipIgnorableFetchHandler}});
+    switch (GetParam()) {
+      case SkipEmptyFetchHandlerEnum::kEnabled:
+        scoped_feature_list_.InitWithFeaturesAndParameters(
+            {{features::kServiceWorkerSkipIgnorableFetchHandler,
+              {{"SkipEmptyFetchHandler", "true"}}}},
+            {});
+        break;
+      case SkipEmptyFetchHandlerEnum::kEnabledAndStartWorker:
+        scoped_feature_list_.InitWithFeaturesAndParameters(
+            {{features::kServiceWorkerSkipIgnorableFetchHandler,
+              {{"SkipEmptyFetchHandler", "true"},
+               {"StartServiceWorkerForEmptyFetchHandler", "true"}}}},
+            {});
+        break;
+      case SkipEmptyFetchHandlerEnum::kDisabled:
+        scoped_feature_list_.InitWithFeaturesAndParameters(
+            {}, {{features::kServiceWorkerSkipIgnorableFetchHandler}});
+        break;
     }
   }
   ~ServiceWorkerSkipEmptyFetchHandlerBrowserTest() override = default;
@@ -4540,8 +4792,6 @@ class ServiceWorkerSkipEmptyFetchHandlerBrowserTest
   RenderFrameHost* GetPrimaryMainFrame() {
     return web_contents()->GetPrimaryMainFrame();
   }
-
-  bool is_feature_enabled() { return GetParam(); }
 
  protected:
   void SetUpOnMainThread() override {
@@ -4553,9 +4803,12 @@ class ServiceWorkerSkipEmptyFetchHandlerBrowserTest
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-INSTANTIATE_TEST_SUITE_P(All,
-                         ServiceWorkerSkipEmptyFetchHandlerBrowserTest,
-                         testing::Bool());
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ServiceWorkerSkipEmptyFetchHandlerBrowserTest,
+    ::testing::Values(SkipEmptyFetchHandlerEnum::kDisabled,
+                      SkipEmptyFetchHandlerEnum::kEnabled,
+                      SkipEmptyFetchHandlerEnum::kEnabledAndStartWorker));
 
 IN_PROC_BROWSER_TEST_P(ServiceWorkerSkipEmptyFetchHandlerBrowserTest,
                        HasNotSkippedMetrics) {
@@ -4630,23 +4883,38 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerSkipEmptyFetchHandlerBrowserTest,
   EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
 
   // Conduct a main resource load.
+  WorkerRunningStatusObserver observer2(public_context());
   EXPECT_TRUE(NavigateToURL(shell(), in_scope_url));
-  if (is_feature_enabled()) {
-    // If the feature is enabled, navigation request doesn't start the service
-    // worker if the fetch handler is skipped.
-    EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
-    tester.ExpectUniqueSample(
-        "ServiceWorker.FetchHandler.SkipReason",
-        ServiceWorkerControlleeRequestHandler::FetchHandlerSkipReason::
-            kSkippedForEmptyFetchHandler,
-        1);
-
-  } else {
-    EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
-    tester.ExpectUniqueSample("ServiceWorker.FetchHandler.SkipReason",
-                              ServiceWorkerControlleeRequestHandler::
-                                  FetchHandlerSkipReason::kNotSkipped,
-                              1);
+  switch (GetParam()) {
+    case SkipEmptyFetchHandlerEnum::kEnabled:
+      // In this case, navigation request doesn't start the service
+      // worker if the fetch handler is skipped.
+      EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
+      tester.ExpectUniqueSample(
+          "ServiceWorker.FetchHandler.SkipReason",
+          ServiceWorkerControlleeRequestHandler::FetchHandlerSkipReason::
+              kSkippedForEmptyFetchHandler,
+          1);
+      break;
+    case SkipEmptyFetchHandlerEnum::kEnabledAndStartWorker:
+      // In this case, the service worker is started while the fetch handler is
+      // skipped.
+      observer2.WaitUntilRunning();
+      EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
+      tester.ExpectUniqueSample(
+          "ServiceWorker.FetchHandler.SkipReason",
+          ServiceWorkerControlleeRequestHandler::FetchHandlerSkipReason::
+              kSkippedForEmptyFetchHandler,
+          1);
+      break;
+    case SkipEmptyFetchHandlerEnum::kDisabled:
+      observer2.WaitUntilRunning();
+      EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
+      tester.ExpectUniqueSample("ServiceWorker.FetchHandler.SkipReason",
+                                ServiceWorkerControlleeRequestHandler::
+                                    FetchHandlerSkipReason::kNotSkipped,
+                                1);
+      break;
   }
   tester.ExpectUniqueSample(
       "ServiceWorker.FetchHandler."

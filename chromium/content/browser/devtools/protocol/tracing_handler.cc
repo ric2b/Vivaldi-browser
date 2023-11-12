@@ -12,8 +12,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/numerics/safe_conversions.h"
@@ -57,8 +57,7 @@
 #include "content/browser/renderer_host/compositor_impl_android.h"
 #endif
 
-namespace content {
-namespace protocol {
+namespace content::protocol {
 
 namespace {
 
@@ -93,20 +92,23 @@ std::string ConvertFromCamelCase(const std::string& in_str, char separator) {
 }
 
 base::Value ConvertDictKeyStyle(const base::Value& value) {
-  if (value.is_dict()) {
-    base::Value out(base::Value::Type::DICTIONARY);
-    for (auto kv : value.DictItems()) {
-      out.SetKey(ConvertFromCamelCase(kv.first, '_'),
-                 ConvertDictKeyStyle(kv.second));
+  const base::Value::Dict* dict = value.GetIfDict();
+  if (dict) {
+    base::Value::Dict out;
+    for (auto kv : *dict) {
+      out.Set(ConvertFromCamelCase(kv.first, '_'),
+              ConvertDictKeyStyle(kv.second));
     }
-    return out;
+    return base::Value(std::move(out));
   }
 
-  if (value.is_list()) {
-    base::Value out(base::Value::Type::LIST);
-    for (const auto& v : value.GetList())
+  const base::Value::List* list = value.GetIfList();
+  if (list) {
+    base::Value::List out;
+    for (const auto& v : *list) {
       out.Append(ConvertDictKeyStyle(v));
-    return out;
+    }
+    return base::Value(std::move(out));
   }
 
   return value.Clone();
@@ -1184,15 +1186,17 @@ bool TracingHandler::IsStartupTracingActive() {
 base::trace_event::TraceConfig TracingHandler::GetTraceConfigFromDevToolsConfig(
     const base::Value& devtools_config) {
   base::Value config = ConvertDictKeyStyle(devtools_config);
-  if (std::string* mode = config.FindStringPath(kRecordModeParam))
-    config.SetStringPath(kRecordModeParam, ConvertFromCamelCase(*mode, '-'));
-  if (absl::optional<double> buffer_size =
-          config.FindDoublePath(kTraceBufferSizeInKb)) {
-    config.SetIntKey(kTraceBufferSizeInKb,
-                     base::saturated_cast<size_t>(buffer_size.value()));
+  base::Value::Dict& config_dict = config.GetDict();
+  if (std::string* mode = config_dict.FindString(kRecordModeParam)) {
+    config_dict.Set(kRecordModeParam, ConvertFromCamelCase(*mode, '-'));
   }
-  return base::trace_event::TraceConfig(config);
+  if (absl::optional<double> buffer_size =
+          config_dict.FindDouble(kTraceBufferSizeInKb)) {
+    config_dict.Set(
+        kTraceBufferSizeInKb,
+        static_cast<int>(base::saturated_cast<size_t>(buffer_size.value())));
+  }
+  return base::trace_event::TraceConfig(config_dict);
 }
 
-}  // namespace protocol
-}  // namespace content
+}  // namespace content::protocol

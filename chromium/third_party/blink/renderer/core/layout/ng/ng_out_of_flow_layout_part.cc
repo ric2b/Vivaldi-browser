@@ -7,7 +7,7 @@
 #include <math.h>
 
 #include "third_party/blink/renderer/core/layout/anchor_scroll_data.h"
-#include "third_party/blink/renderer/core/layout/deferred_shaping.h"
+#include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_flexible_box.h"
@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/clear_collection_scope.h"
 
 namespace blink {
@@ -502,6 +503,34 @@ NGOutOfFlowLayoutPart::GetContainingBlockInfo(
         container_builder_->GridLayoutData(), container_builder_->Borders(),
         {container_builder_->InlineSize(),
          container_builder_->FragmentBlockSize()});
+  }
+
+  // The ::view-transition element is special in that its containing block is
+  // the "snapshot root" rect, rather than a viewport or parent box:
+  // https://drafts.csswg.org/css-view-transitions-1/#selectordef-view-transition.
+  DCHECK(candidate.box);
+  if (ViewTransitionUtils::IsViewTransitionRoot(*candidate.box)) {
+    DCHECK(container_object->IsLayoutView());
+    const ViewTransition* transition =
+        ViewTransitionUtils::GetActiveTransition(candidate.box->GetDocument());
+    DCHECK(transition);
+
+    PhysicalRect physical_snapshot_root_in_frame(
+        PhysicalOffset(transition->GetFrameToSnapshotRootOffset()),
+        PhysicalSize(transition->GetSnapshotRootSize()));
+
+    WritingDirectionMode writing_direction =
+        ConstraintSpace().GetWritingDirection();
+    LogicalSize outer_size = container_builder_->Size();
+    WritingModeConverter converter(writing_direction, outer_size);
+
+    NGOutOfFlowLayoutPart::ContainingBlockInfo containing_block_for_snapshot;
+    containing_block_for_snapshot.rect =
+        converter.ToLogical(physical_snapshot_root_in_frame);
+
+    containing_block_for_snapshot.writing_direction = writing_direction;
+
+    return containing_block_for_snapshot;
   }
 
   return node_style.GetPosition() == EPosition::kAbsolute
@@ -1760,16 +1789,16 @@ NGOutOfFlowLayoutPart::TryCalculateOffset(
         node_info.node.GetLayoutBox()->Container();
     DCHECK(css_containing_block);
     anchor_evaluator_storage.emplace(
-        *anchor_queries, implicit_anchor, *css_containing_block,
-        container_converter, candidate_writing_direction,
+        *anchor_queries, candidate_style.AnchorDefault(), implicit_anchor,
+        *css_containing_block, container_converter, candidate_writing_direction,
         container_converter.ToPhysical(node_info.container_info.rect).offset,
         node_info.node.IsInTopLayer());
   } else if (const NGLogicalAnchorQuery* anchor_query =
                  container_builder_->AnchorQuery()) {
     // Otherwise the |container_builder_| is the containing block.
     anchor_evaluator_storage.emplace(
-        *anchor_query, implicit_anchor, container_converter,
-        candidate_writing_direction,
+        *anchor_query, candidate_style.AnchorDefault(), implicit_anchor,
+        container_converter, candidate_writing_direction,
         container_converter.ToPhysical(node_info.container_info.rect).offset,
         node_info.node.IsInTopLayer());
   } else {
@@ -1872,40 +1901,23 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::Layout(
     const NGConstraintSpace* fragmentainer_constraint_space,
     bool is_last_fragmentainer_so_far) {
   const NodeInfo& node_info = oof_node_to_layout.node_info;
-  const WritingDirectionMode candidate_writing_direction =
-      node_info.node.Style().GetWritingDirection();
-  LogicalSize container_content_size_in_candidate_writing_mode =
-      node_info.container_physical_content_size.ConvertToLogical(
-          candidate_writing_direction.GetWritingMode());
   const OffsetInfo& offset_info = oof_node_to_layout.offset_info;
-  LogicalOffset offset = offset_info.offset;
 
-  // Reset the |layout_result| computed earlier to allow fragmentation in the
-  // next layout pass, if needed.
-  const NGLayoutResult* layout_result = !fragmentainer_constraint_space
-                                            ? offset_info.initial_layout_result
-                                            : nullptr;
+  const NGLayoutResult* layout_result = offset_info.initial_layout_result;
+  // Reset the layout result computed earlier to allow fragmentation in the next
+  // layout pass, if needed. Also do this if we're inside repeatable content, as
+  // the pre-computed layout result is unusable then.
+  if (fragmentainer_constraint_space ||
+      ConstraintSpace().IsInsideRepeatableContent()) {
+    layout_result = nullptr;
+  }
 
   // Skip this step if we produced a fragment that can be reused when
   // estimating the block-size.
   if (!layout_result) {
-    bool should_use_fixed_block_size = offset_info.block_estimate.has_value();
-
-    // In some cases we will need the fragment size in order to calculate the
-    // offset. We may have to lay out to get the fragment size. For block
-    // fragmentation, we *need* to know the block-offset before layout. In other
-    // words, in that case, we may have to lay out, calculate the offset, and
-    // then lay out again at the correct block-offset.
-    if (fragmentainer_constraint_space && offset_info.initial_layout_result)
-      should_use_fixed_block_size = false;
-
-    layout_result = GenerateFragment(
-        oof_node_to_layout, container_content_size_in_candidate_writing_mode,
-        offset_info.block_estimate, offset_info.node_dimensions,
-        offset.block_offset, oof_node_to_layout.break_token,
-        fragmentainer_constraint_space, should_use_fixed_block_size,
-        node_info.requires_content_before_breaking,
-        is_last_fragmentainer_so_far);
+    layout_result =
+        GenerateFragment(oof_node_to_layout, fragmentainer_constraint_space,
+                         is_last_fragmentainer_so_far);
   }
 
   if (layout_result->Status() != NGLayoutResult::kSuccess) {
@@ -1925,11 +1937,11 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::Layout(
            ->IsDisplayFlexibleOrGridBox()) {
     node_info.node.GetLayoutBox()->SetMargin(
         offset_info.node_dimensions.margins.ConvertToPhysical(
-            candidate_writing_direction));
+            node_info.node.Style().GetWritingDirection()));
   }
 
   layout_result->GetMutableForOutOfFlow().SetOutOfFlowPositionedOffset(
-      offset,
+      offset_info.offset,
       allow_first_tier_oof_cache_ && !offset_info.disable_first_tier_cache);
 
   return layout_result;
@@ -1961,24 +1973,21 @@ bool NGOutOfFlowLayoutPart::IsContainingBlockForCandidate(
 // 2. To compute final fragment, when block size is known from the absolute
 //    position calculation.
 const NGLayoutResult* NGOutOfFlowLayoutPart::GenerateFragment(
-    // TODO(mstensho): Reduce the number of arguments. Now that we pass
-    // NodeToLayout, many of the others are redundant.
     const NodeToLayout& oof_node_to_layout,
-    const LogicalSize& container_content_size_in_candidate_writing_mode,
-    const absl::optional<LayoutUnit>& block_estimate,
-    const NGLogicalOutOfFlowDimensions& node_dimensions,
-    const LayoutUnit block_offset,
-    const NGBlockBreakToken* break_token,
     const NGConstraintSpace* fragmentainer_constraint_space,
-    bool should_use_fixed_block_size,
-    bool requires_content_before_breaking,
     bool is_last_fragmentainer_so_far) {
   const NodeInfo& node_info = oof_node_to_layout.node_info;
+  const OffsetInfo& offset_info = oof_node_to_layout.offset_info;
+  const NGBlockBreakToken* break_token = oof_node_to_layout.break_token;
   const NGBlockNode& node = node_info.node;
   const auto& style = node.Style();
+  const LayoutUnit block_offset = offset_info.offset.block_offset;
+  LogicalSize container_content_size_in_candidate_writing_mode =
+      node_info.container_physical_content_size.ConvertToLogical(
+          style.GetWritingDirection().GetWritingMode());
 
-  LayoutUnit inline_size = node_dimensions.size.inline_size;
-  LayoutUnit block_size = block_estimate.value_or(
+  LayoutUnit inline_size = offset_info.node_dimensions.size.inline_size;
+  LayoutUnit block_size = offset_info.block_estimate.value_or(
       container_content_size_in_candidate_writing_mode.block_size);
   LogicalSize logical_size(inline_size, block_size);
   // Convert from logical size in the writing mode of the child to the logical
@@ -1997,8 +2006,17 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::GenerateFragment(
   builder.SetPercentageResolutionSize(
       container_content_size_in_candidate_writing_mode);
   builder.SetIsFixedInlineSize(true);
-  if (should_use_fixed_block_size)
+
+  // In some cases we will need the fragment size in order to calculate the
+  // offset. We may have to lay out to get the fragment size. For block
+  // fragmentation, we *need* to know the block-offset before layout. In other
+  // words, in that case, we may have to lay out, calculate the offset, and then
+  // lay out again at the correct block-offset.
+  if (offset_info.block_estimate.has_value() &&
+      (!fragmentainer_constraint_space || !offset_info.initial_layout_result)) {
     builder.SetIsFixedBlockSize(true);
+  }
+
   if (fragmentainer_constraint_space) {
     if (container_builder_->Node().IsPaginatedRoot() &&
         style.GetPosition() == EPosition::kFixed &&
@@ -2014,7 +2032,7 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::GenerateFragment(
     } else {
       SetupSpaceBuilderForFragmentation(
           *fragmentainer_constraint_space, node, block_offset, &builder,
-          /* is_new_fc */ true, requires_content_before_breaking);
+          /* is_new_fc */ true, node_info.requires_content_before_breaking);
 
       // Out-of-flow positioned elements whose containing block is inside
       // clipped overflow shouldn't generate any additional fragmentainers. Just
@@ -2039,7 +2057,6 @@ const NGLayoutResult* NGOutOfFlowLayoutPart::GenerateFragment(
         ConstraintSpace(), node, block_offset, &builder, /* is_new_fc */ true,
         /* requires_content_before_breaking */ false);
   }
-  DeferredShapingMinimumTopScope minimum_top_scope(node, block_offset);
   NGConstraintSpace space = builder.ToConstraintSpace();
 
   if (is_repeatable)

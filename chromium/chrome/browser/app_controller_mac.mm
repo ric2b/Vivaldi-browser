@@ -13,10 +13,10 @@
 #include <vector>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -187,6 +187,11 @@ Browser* ActivateBrowser(Profile* profile) {
       profile->IsGuestSession()
           ? profile->GetPrimaryOTRProfile(/*create_if_needed=*/true)
           : profile);
+
+  if (browser) {
+    browser = browser->GetBrowserForOpeningWebUi();
+  }
+
   if (browser)
     browser->window()->Activate();
   return browser;
@@ -451,17 +456,14 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
         app_controller_(app_controller) {
     DCHECK(profile_manager_);
     DCHECK(app_controller_);
-    // Listen to ProfileObserver and ProfileManagerObserver, if either one of
-    // kDestroyProfileOnBrowserClose or kUpdateHistoryEntryPointsInIncognito
-    // are enabled.
-    if (ObserveRegularProfiles() || ObserveOTRProfiles()) {
-      profile_manager_observer_.Observe(profile_manager_.get());
-      for (Profile* profile : profile_manager_->GetLoadedProfiles()) {
-        profile_observers_.AddObservation(profile);
-        Profile* otr_profile =
-            profile->GetPrimaryOTRProfile(/*create_if_needed=*/false);
-        if (otr_profile && ObserveOTRProfiles())
-          profile_observers_.AddObservation(otr_profile);
+    // Listen to ProfileObserver and ProfileManagerObserver.
+    profile_manager_observer_.Observe(profile_manager_.get());
+    for (Profile* profile : profile_manager_->GetLoadedProfiles()) {
+      profile_observers_.AddObservation(profile);
+      Profile* otr_profile =
+          profile->GetPrimaryOTRProfile(/*create_if_needed=*/false);
+      if (otr_profile) {
+        profile_observers_.AddObservation(otr_profile);
       }
     }
     storage_observer_.Observe(&profile_manager_->GetProfileAttributesStorage());
@@ -490,8 +492,6 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
 
   // ProfileManager::Observer implementation:
   void OnProfileAdded(Profile* profile) override {
-    if (!ObserveRegularProfiles() && !ObserveOTRProfiles())
-      return;
     profile_observers_.AddObservation(profile);
   }
 
@@ -499,9 +499,8 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
   void OnProfileWillBeDestroyed(Profile* profile) override {
     profile_observers_.RemoveObservation(profile);
 
-    bool is_profile_observed = profile->IsOffTheRecord()
-                                   ? ObserveOTRProfiles()
-                                   : ObserveRegularProfiles();
+    bool is_profile_observed =
+        profile->IsOffTheRecord() || ObserveRegularProfiles();
 
     // If the profile is not observed, then no need to call rest.
     if (!is_profile_observed)
@@ -512,21 +511,12 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer,
   }
 
   void OnOffTheRecordProfileCreated(Profile* off_the_record) override {
-    // If off_the_record profiles are not observed, then do not add observer.
-    if (!ObserveOTRProfiles()) {
-      return;
-    }
     profile_observers_.AddObservation(off_the_record);
   }
 
   static bool ObserveRegularProfiles() {
     return base::FeatureList::IsEnabled(
         features::kDestroyProfileOnBrowserClose);
-  }
-
-  static bool ObserveOTRProfiles() {
-    return base::FeatureList::IsEnabled(
-        features::kUpdateHistoryEntryPointsInIncognito);
   }
 
   base::ScopedMultiSourceObservation<Profile, ProfileObserver>
@@ -830,12 +820,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
   }
 
   Profile* profile = browser->profile();
-  // If kUpdateHistoryEntryPointsInIncognito is not enabled, always pass
-  // original profile.
-  if (!base::FeatureList::IsEnabled(
-          features::kUpdateHistoryEntryPointsInIncognito)) {
-    profile = profile->GetOriginalProfile();
-  }
+
   [self setLastProfile:profile];
   _lastActiveColorProvider = browser->window()->GetColorProvider();
 }
@@ -1565,7 +1550,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
       }
       [[fallthrough]];  // To create new window.
     case IDC_NEW_WINDOW:
-      CreateBrowser(profile);
+      CreateBrowser(profile->GetOriginalProfile());
       break;
     case IDC_FOCUS_LOCATION:
       chrome::ExecuteCommand(ActivateOrCreateBrowser(profile),
@@ -1623,7 +1608,7 @@ class AppControllerNativeThemeObserver : public ui::NativeThemeObserver {
       break;
     case IDC_MANAGE_EXTENSIONS:
       if (Browser* browser = ActivateBrowser(profile))
-        chrome::ShowExtensions(browser, std::string());
+        chrome::ShowExtensions(browser);
       else
         chrome::OpenExtensionsWindow(profile);
       break;
@@ -2457,6 +2442,7 @@ void OpenUrlsInBrowserWithProfile(const std::vector<GURL>& urls,
   } else if (!browser) {
     // if no browser window exists then create one with no tabs to be filled in.
     browser = Browser::Create(Browser::CreateParams(profile, true));
+    browser->window()->Show();
   }
 
   // Various methods to open URLs that we get in a native fashion. We use

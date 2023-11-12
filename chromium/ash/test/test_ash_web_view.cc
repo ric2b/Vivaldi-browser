@@ -4,7 +4,7 @@
 
 #include "ash/test/test_ash_web_view.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
 #include "ui/views/view.h"
 
@@ -34,6 +34,7 @@ bool TestAshWebView::GoBack() {
 }
 
 void TestAshWebView::Navigate(const GURL& url) {
+  current_url_ = url;
   // Simulate navigation by notifying |observers_| of the expected event that
   // would normally signal navigation completion. We do this asynchronously to
   // more accurately simulate real-world conditions.

@@ -43,6 +43,9 @@ class ChromeTableViewControllerTest : public BlockCleanupTest {
   // Returns the number of items in `section`.
   int NumberOfItemsInSection(int section);
 
+  // Indicates whether the collection view has an item at `item` in `section`.
+  bool HasTableViewItem(int section, int item);
+
   // Returns the collection view item at `item` in `section`.
   id GetTableViewItem(int section, int item);
 
@@ -81,10 +84,6 @@ class ChromeTableViewControllerTest : public BlockCleanupTest {
                                       NSString* expected_detail_text,
                                       int section,
                                       int item);
-
-  // Verifies that the URL cell at `item` in `section` has the URL as the title
-  // which matches `expected_title` when the title property is not set.
-  void CheckURLCellEmptyTitle(NSString* expected_title, int section, int item);
 
   // Verifies that the URL cell at `item` in `section` has a title and
   // detailText properties which match strings for `expected_title` and

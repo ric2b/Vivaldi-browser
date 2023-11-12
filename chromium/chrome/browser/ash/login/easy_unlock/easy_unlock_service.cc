@@ -9,9 +9,9 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/smartlock_state.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -22,7 +22,6 @@
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/login/easy_unlock/chrome_proximity_auth_client.h"
-#include "chrome/browser/ash/login/easy_unlock/easy_unlock_key_manager.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_service_factory.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_tpm_key_manager.h"
 #include "chrome/browser/ash/login/easy_unlock/easy_unlock_tpm_key_manager_factory.h"
@@ -60,15 +59,6 @@ namespace {
 
 PrefService* GetLocalState() {
   return g_browser_process ? g_browser_process->local_state() : nullptr;
-}
-
-void RecordAuthResultFailure(
-    EasyUnlockAuthAttempt::Type auth_attempt_type,
-    SmartLockMetricsRecorder::SmartLockAuthResultFailureReason failure_reason) {
-  if (auth_attempt_type == EasyUnlockAuthAttempt::TYPE_UNLOCK)
-    SmartLockMetricsRecorder::RecordAuthResultUnlockFailure(failure_reason);
-  else if (auth_attempt_type == EasyUnlockAuthAttempt::TYPE_SIGNIN)
-    SmartLockMetricsRecorder::RecordAuthResultSignInFailure(failure_reason);
 }
 
 void SetAuthTypeIfChanged(
@@ -171,8 +161,12 @@ void EasyUnlockService::ResetLocalStateForUser(const AccountId& account_id) {
   if (!local_state)
     return;
 
-  ScopedDictPrefUpdate update(local_state, prefs::kEasyUnlockHardlockState);
-  update->Remove(account_id.GetUserEmail());
+  for (const std::string& pref :
+       std::vector<std::string>{prefs::kEasyUnlockHardlockState,
+                                prefs::kEasyUnlockLocalStateUserPrefs}) {
+    ScopedDictPrefUpdate update(local_state, pref);
+    update->Remove(account_id.GetUserEmail());
+  }
 
   EasyUnlockTpmKeyManager::ResetLocalStateForUser(account_id);
 }
@@ -347,10 +341,7 @@ void EasyUnlockService::OnUserEnteredPassword() {
 }
 
 bool EasyUnlockService::AttemptAuth(const AccountId& account_id) {
-  const EasyUnlockAuthAttempt::Type auth_attempt_type =
-      GetType() == TYPE_REGULAR ? EasyUnlockAuthAttempt::TYPE_UNLOCK
-                                : EasyUnlockAuthAttempt::TYPE_SIGNIN;
-  PA_LOG(VERBOSE) << "User began auth attempt (unlock or sign in attempt).";
+  PA_LOG(VERBOSE) << "User began unlock auth attempt.";
 
   if (auth_attempt_) {
     PA_LOG(VERBOSE) << "Already attempting auth, skipping this request.";
@@ -359,16 +350,14 @@ bool EasyUnlockService::AttemptAuth(const AccountId& account_id) {
 
   if (!GetAccountId().is_valid()) {
     PA_LOG(ERROR) << "Empty user account. Auth attempt failed.";
-    RecordAuthResultFailure(
-        auth_attempt_type,
+    SmartLockMetricsRecorder::RecordAuthResultUnlockFailure(
         SmartLockMetricsRecorder::SmartLockAuthResultFailureReason::
             kEmptyUserAccount);
     return false;
   }
 
   if (GetAccountId() != account_id) {
-    RecordAuthResultFailure(
-        auth_attempt_type,
+    SmartLockMetricsRecorder::RecordAuthResultUnlockFailure(
         SmartLockMetricsRecorder::SmartLockAuthResultFailureReason::
             kInvalidAccoundId);
 
@@ -377,11 +366,9 @@ bool EasyUnlockService::AttemptAuth(const AccountId& account_id) {
     return false;
   }
 
-  auth_attempt_ =
-      std::make_unique<EasyUnlockAuthAttempt>(account_id, auth_attempt_type);
+  auth_attempt_ = std::make_unique<EasyUnlockAuthAttempt>(account_id);
   if (!auth_attempt_->Start()) {
-    RecordAuthResultFailure(
-        auth_attempt_type,
+    SmartLockMetricsRecorder::RecordAuthResultUnlockFailure(
         SmartLockMetricsRecorder::SmartLockAuthResultFailureReason::
             kAuthAttemptCannotStart);
     auth_attempt_.reset();
@@ -424,36 +411,6 @@ void EasyUnlockService::FinalizeUnlock(bool success) {
   }
 }
 
-void EasyUnlockService::FinalizeSignin(const std::string& key) {
-  if (!auth_attempt_)
-    return;
-
-  std::string wrapped_secret = GetWrappedSecret();
-  if (!wrapped_secret.empty())
-    auth_attempt_->FinalizeSignin(GetAccountId(), wrapped_secret, key);
-
-  // If successful, allow |auth_attempt_| to continue until
-  // UpdateSmartLockState() is called (indicating sign in).
-
-  // Processing empty key is equivalent to auth cancellation. In this case the
-  // signin request will not actually be processed by login stack, so the lock
-  // screen state should be set from here.
-  bool success = !key.empty();
-
-  if (success) {
-    set_will_authenticate_using_easy_unlock(true);
-  } else {
-    auth_attempt_.reset();
-    if (!base::FeatureList::IsEnabled(features::kSmartLockUIRevamp)) {
-      HandleAuthFailure(GetAccountId());
-    }
-  }
-
-  if (base::FeatureList::IsEnabled(features::kSmartLockUIRevamp)) {
-    NotifySmartLockAuthResult(success);
-  }
-}
-
 void EasyUnlockService::HandleAuthFailure(const AccountId& account_id) {
   if (base::FeatureList::IsEnabled(features::kSmartLockUIRevamp)) {
     NotifySmartLockAuthResult(/*success=*/false);
@@ -468,45 +425,6 @@ void EasyUnlockService::HandleAuthFailure(const AccountId& account_id) {
 
   smartlock_state_handler_->SetHardlockState(
       SmartLockStateHandler::LOGIN_FAILED);
-}
-
-void EasyUnlockService::CheckCryptohomeKeysAndMaybeHardlock() {
-  const AccountId& account_id = GetAccountId();
-  if (!account_id.is_valid() || !IsChromeOSLoginEnabled())
-    return;
-
-  const base::Value::List* device_list = GetRemoteDevices();
-  std::set<std::string> paired_devices;
-  if (device_list) {
-    EasyUnlockDeviceKeyDataList parsed_paired;
-    EasyUnlockKeyManager::RemoteDeviceRefListToDeviceDataList(*device_list,
-                                                              &parsed_paired);
-    for (const auto& device_key_data : parsed_paired)
-      paired_devices.insert(device_key_data.psk);
-  }
-  if (paired_devices.empty()) {
-    SetHardlockState(SmartLockStateHandler::NO_PAIRING);
-    return;
-  }
-
-  // No need to compare if a change is already recorded.
-  if (GetHardlockState() == SmartLockStateHandler::PAIRING_CHANGED ||
-      GetHardlockState() == SmartLockStateHandler::PAIRING_ADDED) {
-    return;
-  }
-
-  EasyUnlockKeyManager* key_manager =
-      UserSessionManager::GetInstance()->GetEasyUnlockKeyManager();
-  DCHECK(key_manager);
-
-  const user_manager::User* const user =
-      user_manager::UserManager::Get()->FindUser(account_id);
-  DCHECK(user);
-  key_manager->GetDeviceDataList(
-      UserContext(*user),
-      base::BindOnce(&EasyUnlockService::OnCryptohomeKeysFetchedForChecking,
-                     weak_ptr_factory_.GetWeakPtr(), account_id,
-                     paired_devices));
 }
 
 void EasyUnlockService::Shutdown() {
@@ -785,40 +703,12 @@ void EasyUnlockService::SetProximityAuthDevices(
     PA_LOG(VERBOSE) << "Creating ProximityAuthSystem.";
     proximity_auth_system_ =
         std::make_unique<proximity_auth::ProximityAuthSystem>(
-            GetType() == TYPE_SIGNIN
-                ? proximity_auth::ProximityAuthSystem::SIGN_IN
-                : proximity_auth::ProximityAuthSystem::SESSION_LOCK,
             proximity_auth_client(), secure_channel_client_);
   }
 
   proximity_auth_system_->SetRemoteDevicesForUser(account_id, remote_devices,
                                                   local_device);
   proximity_auth_system_->Start();
-}
-
-void EasyUnlockService::OnCryptohomeKeysFetchedForChecking(
-    const AccountId& account_id,
-    const std::set<std::string> paired_devices,
-    bool success,
-    const EasyUnlockDeviceKeyDataList& key_data_list) {
-  DCHECK(account_id.is_valid() && !paired_devices.empty());
-
-  if (!success) {
-    SetHardlockStateForUser(account_id, SmartLockStateHandler::NO_PAIRING);
-    return;
-  }
-
-  std::set<std::string> devices_in_cryptohome;
-  for (const auto& device_key_data : key_data_list)
-    devices_in_cryptohome.insert(device_key_data.psk);
-
-  if (paired_devices != devices_in_cryptohome ||
-      GetHardlockState() == SmartLockStateHandler::NO_PAIRING) {
-    SetHardlockStateForUser(account_id,
-                            devices_in_cryptohome.empty()
-                                ? SmartLockStateHandler::PAIRING_ADDED
-                                : SmartLockStateHandler::PAIRING_CHANGED);
-  }
 }
 
 void EasyUnlockService::PrepareForSuspend() {
@@ -842,7 +732,7 @@ void EasyUnlockService::OnSuspendDone() {
 }
 
 void EasyUnlockService::EnsureTpmKeyPresentIfNeeded() {
-  if (tpm_key_checked_ || GetType() != TYPE_REGULAR || GetAccountId().empty() ||
+  if (tpm_key_checked_ || GetAccountId().empty() ||
       GetHardlockState() == SmartLockStateHandler::NO_PAIRING) {
     return;
   }

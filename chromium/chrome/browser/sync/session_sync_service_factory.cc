@@ -38,11 +38,6 @@
 namespace {
 
 bool ShouldSyncURLImpl(const GURL& url) {
-  if (url == chrome::kChromeUIHistoryURL) {
-    // Allow the chrome history page, home for "Tabs from other devices", so
-    // it can trigger starting up the sync engine.
-    return true;
-  }
   return url.is_valid() && !content::HasWebUIScheme(url) &&
          !url.SchemeIs(chrome::kChromeNativeScheme) && !url.SchemeIsFile() &&
 #if !BUILDFLAG(IS_ANDROID)

@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -18,6 +18,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/color/chrome_color_mixer.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -747,7 +748,7 @@ ToolbarButton::HighlightColorAnimation::GetBackgroundColor() const {
   if (highlight_color_) {
     bg_color = color_utils::AlphaBlend(*highlight_color_,
                                        color_provider->GetColor(kColorToolbar),
-                                       kToolbarInkDropHighlightVisibleOpacity);
+                                       kToolbarInkDropHighlightVisibleAlpha);
   }
   return FadeWithAnimation(bg_color, highlight_color_animation_);
 }

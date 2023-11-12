@@ -7,12 +7,12 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -27,9 +27,9 @@
 #include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/device/tcp_device_provider.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
@@ -358,8 +358,7 @@ class DevToolsWindowBeforeUnloadObserver
   void Wait();
  private:
   // Invoked when the beforeunload handler fires.
-  void BeforeUnloadFired(bool proceed,
-                         const base::TimeTicks& proceed_time) override;
+  void BeforeUnloadFired(bool proceed) override;
 
   bool m_fired;
   scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
@@ -379,9 +378,7 @@ void DevToolsWindowBeforeUnloadObserver::Wait() {
   message_loop_runner_->Run();
 }
 
-void DevToolsWindowBeforeUnloadObserver::BeforeUnloadFired(
-    bool proceed,
-    const base::TimeTicks& proceed_time) {
+void DevToolsWindowBeforeUnloadObserver::BeforeUnloadFired(bool proceed) {
   m_fired = true;
   if (message_loop_runner_.get())
     message_loop_runner_->Quit();
@@ -673,6 +670,21 @@ class DevToolsExtensionTest : public DevToolsTest {
   std::vector<std::unique_ptr<extensions::TestExtensionDir>>
       test_extension_dirs_;
   const base::FilePath test_extensions_dir_;
+};
+
+class DevToolsExtensionChromeUrlTest : public DevToolsExtensionTest {
+ public:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    DevToolsExtensionTest::SetUpCommandLine(command_line);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    // These tests use chrome:// URLs and are written on the assumption devtools
+    // are always available, so guarantee that assumption holds. Tests that
+    // check if devtools can be disabled should use a test fixture without the
+    // kForceDevToolsAvailable switch set.
+    command_line->AppendSwitch(ash::switches::kForceDevToolsAvailable);
+#endif
+  }
 };
 
 class DevToolsExperimentalExtensionTest : public DevToolsExtensionTest {
@@ -999,7 +1011,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
 }
 
 // Tests that chrome.devtools extension is correctly exposed.
-IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest, TestExtensionOnNewTab) {
+IN_PROC_BROWSER_TEST_F(DevToolsExtensionChromeUrlTest, TestExtensionOnNewTab) {
   // Install the dynamically-generated devtools extension.
   const Extension* devtools_extension = LoadExtensionForTest(
       "Devtools Extension", "panel_devtools_page.html", "");
@@ -1115,7 +1127,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
 
   ASSERT_TRUE(content::ExecuteScript(web_frame_rfh, about_blank_javascript));
 
-  web_about_blank_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(web_about_blank_manager.WaitForNavigationFinished());
   // After navigation, the frame may change.
   web_frame_rfh = ChildFrameAt(panel_frame_rfh, 2);
 
@@ -1137,7 +1149,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
 
   ASSERT_TRUE(content::ExecuteScript(web_frame_rfh, renavigation_javascript));
 
-  renavigation_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(renavigation_manager.WaitForNavigationFinished());
 
   // The old RFH is no longer valid after the renavigation, so we must get the
   // new one.
@@ -1176,7 +1188,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   // This is a bit of a hack to switch to the sidebar pane in the elements panel
   // that the Iframe has been added to.
   SwitchToPanel(window_, "iframe_pane");
-  web_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(web_manager.WaitForNavigationFinished());
 
   std::vector<RenderFrameHost*> rfhs =
       CollectAllRenderFrameHosts(main_web_contents());
@@ -1321,7 +1333,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   content::TestNavigationManager non_devtools_manager(
       main_web_contents(), non_dt_extension_test_url);
   SwitchToExtensionPanel(window_, devtools_extension, "iframe_panel");
-  non_devtools_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(non_devtools_manager.WaitForNavigationFinished());
 
   std::vector<RenderFrameHost*> rfhs =
       CollectAllRenderFrameHosts(main_web_contents());
@@ -1393,7 +1405,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest,
   content::TestNavigationManager extension_b_manager(main_web_contents(),
                                                      extension_b_page_url);
   SwitchToExtensionPanel(window_, devtools_a_extension, "iframe_panel");
-  extension_b_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(extension_b_manager.WaitForNavigationFinished());
 
   std::vector<RenderFrameHost*> rfhs =
       CollectAllRenderFrameHosts(main_web_contents());
@@ -1474,7 +1486,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionTest, DevToolsExtensionInItself) {
   content::TestNavigationManager test_page_manager(main_web_contents(),
                                                    extension_test_url);
   SwitchToExtensionPanel(window_, extension, "iframe_panel");
-  test_page_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(test_page_manager.WaitForNavigationFinished());
 
   std::vector<RenderFrameHost*> rfhs =
       CollectAllRenderFrameHosts(main_web_contents());
@@ -1536,7 +1548,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsTest, MAYBE_DevtoolsInDevTools) {
 
   content::TestNavigationManager manager(main_web_contents(), devtools_url);
   ASSERT_TRUE(content::ExecuteScript(main_devtools_rfh, javascript));
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
 
   std::vector<RenderFrameHost*> rfhs =
       CollectAllRenderFrameHosts(main_web_contents());
@@ -2255,6 +2267,7 @@ class RemoteDebuggingTest : public extensions::ExtensionApiTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     extensions::ExtensionApiTest::SetUpCommandLine(command_line);
     command_line->AppendSwitchASCII(switches::kRemoteDebuggingPort, "9222");
+    command_line->AppendSwitchASCII(switches::kRemoteAllowOrigins, "*");
 
     // Override the extension root path.
     base::PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir_);
@@ -2584,11 +2597,11 @@ IN_PROC_BROWSER_TEST_F(DevToolsTest,
                                   "  window.abc = 239;\n"
                                   "  console.log(abc);\n"
                                   "</script>");
-  test_factory.AddFactoryOverride(GURL("chrome://dummyurl").host(),
+  test_factory.AddFactoryOverride(GURL("https://a.com/dummyurl").host(),
                                   &mock_provider);
 
   ASSERT_TRUE(
-      ui_test_utils::NavigateToURL(browser(), GURL("chrome://dummyurl")));
+      ui_test_utils::NavigateToURL(browser(), GURL("https://a.com/dummyurl")));
   DevToolsWindow* window =
       DevToolsWindowTesting::OpenDevToolsWindowSync(GetInspectedTab(), true);
   chrome::DuplicateTab(browser());
@@ -2745,8 +2758,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsTest, InspectElement) {
   tab->GetController().LoadURL(url, content::Referrer(),
                                ui::PAGE_TRANSITION_LINK, std::string());
 
-  navigation_manager.WaitForNavigationFinished();
-  navigation_manager_iframe.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
+  ASSERT_TRUE(navigation_manager_iframe.WaitForNavigationFinished());
   EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   std::vector<RenderFrameHost*> frames =
@@ -2754,6 +2767,39 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsTest, InspectElement) {
   ASSERT_EQ(2u, frames.size());
   ASSERT_NE(frames[0]->GetProcess(), frames[1]->GetProcess());
   RenderFrameHost* frame_host = frames[0]->GetParent() ? frames[0] : frames[1];
+
+  DevToolsWindowCreationObserver observer;
+  DevToolsWindow::InspectElement(frame_host, 100, 100);
+  observer.WaitForLoad();
+  DevToolsWindow* window = observer.devtools_window();
+
+  DispatchOnTestSuite(window, "testInspectedElementIs", "INSPECTED-DIV");
+  DevToolsWindowTesting::CloseDevToolsWindowSync(window);
+}
+
+class DevToolsTabTargetTest : public DevToolsTest {
+  base::test::ScopedFeatureList scoped_feature_list_{
+      ::features::kDevToolsTabTarget};
+};
+
+IN_PROC_BROWSER_TEST_F(DevToolsTabTargetTest, InspectElement) {
+  GURL url(
+      embedded_test_server()->GetURL("a.com", "/devtools/oopif_frame.html"));
+
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::TestNavigationManager navigation_manager(tab, url);
+
+  tab->GetController().LoadURL(url, content::Referrer(),
+                               ui::PAGE_TRANSITION_LINK, std::string());
+
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
+  EXPECT_TRUE(content::WaitForLoadStop(tab));
+
+  std::vector<RenderFrameHost*> frames =
+      CollectAllRenderFrameHosts(GetInspectedTab());
+  ASSERT_EQ(1u, frames.size());
+  RenderFrameHost* frame_host = frames[0];
 
   DevToolsWindowCreationObserver observer;
   DevToolsWindow::InspectElement(frame_host, 100, 100);
@@ -2898,8 +2944,8 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsTest,
   tab->GetController().LoadURL(url, content::Referrer(),
                                ui::PAGE_TRANSITION_LINK, std::string());
 
-  navigation_manager.WaitForNavigationFinished();
-  navigation_manager_iframe.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
+  ASSERT_TRUE(navigation_manager_iframe.WaitForNavigationFinished());
   EXPECT_TRUE(content::WaitForLoadStop(tab));
 
   for (auto* frame : CollectAllRenderFrameHosts(GetInspectedTab())) {
@@ -3176,9 +3222,10 @@ IN_PROC_BROWSER_TEST_F(DevToolsSyncTest, GetSyncInformation) {
       })();
     )"));
   ASSERT_TRUE(result.value.is_dict());
-  EXPECT_TRUE(*result.value.FindBoolKey("isSyncActive"));
-  EXPECT_TRUE(*result.value.FindBoolKey("arePreferencesSynced"));
-  EXPECT_EQ(*result.value.FindStringKey("accountEmail"), "user@gmail.com");
+  EXPECT_TRUE(*result.value.GetDict().FindBool("isSyncActive"));
+  EXPECT_TRUE(*result.value.GetDict().FindBool("arePreferencesSynced"));
+  EXPECT_EQ(*result.value.GetDict().FindString("accountEmail"),
+            "user@gmail.com");
 }
 
 // Regression test for https://crbug.com/1270184.

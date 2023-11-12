@@ -71,9 +71,17 @@ class AutofillSuggestionGenerator {
       bool& with_offer,
       autofill_metrics::CardMetadataLoggingContext& metadata_logging_context);
 
+  // Returns the local and server cards ordered by the Autofill ranking. The
+  // cards which are expired and disused aren't included if
+  // |suppress_disused_cards| is true.
+  static std::vector<CreditCard*> GetOrderedCardsToSuggest(
+      // PersonalDataManager* personal_data,
+      AutofillClient* autofill_client,
+      bool suppress_disused_cards);
+
   // Generates suggestions for all available IBANs.
   static std::vector<Suggestion> GetSuggestionsForIBANs(
-      const std::vector<IBAN*>& ibans);
+      const std::vector<const IBAN*>& ibans);
 
   // Converts the vector of promo code offers that is passed in to a vector of
   // suggestions that can be displayed to the user for a promo code field.
@@ -168,11 +176,6 @@ class AutofillSuggestionGenerator {
   void SetCardArtURL(Suggestion& suggestion,
                      const CreditCard& credit_card,
                      bool virtual_card_option) const;
-
-  // Return the CardMetadataLoggingContext based on the credit cards
-  // to be shown in the suggestion.
-  autofill_metrics::CardMetadataLoggingContext GetMetadataLoggingContext(
-      const std::vector<CreditCard*>& cards_to_suggest) const;
 
   // Maps suggestion backend ID to and from an internal ID identifying it. Two
   // of these intermediate internal IDs are packed by MakeFrontendID to make the

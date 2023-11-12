@@ -4,12 +4,11 @@
 
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -26,6 +25,7 @@
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/common/pref_names.h"
@@ -45,12 +45,15 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/feed/feed_feature_list.h"
+#include "components/lens/buildflags.h"
 #include "components/lens/lens_features.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/translate/core/browser/language_state.h"
+#include "components/translate/core/browser/translate_manager.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -92,14 +95,17 @@ static content::ContextMenuParams CreateParams(int contexts) {
   rv.page_url = GURL("http://test.page/");
 
   static constexpr char16_t selected_text[] = u"sel";
-  if (contexts & MenuItem::SELECTION)
+  if (contexts & MenuItem::SELECTION) {
     rv.selection_text = selected_text;
+  }
 
-  if (contexts & MenuItem::LINK)
+  if (contexts & MenuItem::LINK) {
     rv.link_url = GURL("http://test.link/");
+  }
 
-  if (contexts & MenuItem::EDITABLE)
+  if (contexts & MenuItem::EDITABLE) {
     rv.is_editable = true;
+  }
 
   if (contexts & MenuItem::IMAGE) {
     rv.src_url = GURL("http://test.image/");
@@ -116,8 +122,9 @@ static content::ContextMenuParams CreateParams(int contexts) {
     rv.media_type = blink::mojom::ContextMenuDataMediaType::kAudio;
   }
 
-  if (contexts & MenuItem::FRAME)
+  if (contexts & MenuItem::FRAME) {
     rv.frame_url = GURL("http://test.frame/");
+  }
 
   return rv;
 }
@@ -284,8 +291,8 @@ TEST_F(RenderViewContextMenuTest, TargetCheckedForAudio) {
 }
 
 TEST_F(RenderViewContextMenuTest, MatchWhenLinkedImageMatchesTarget) {
-  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE |
-                                                   MenuItem::LINK);
+  content::ContextMenuParams params =
+      CreateParams(MenuItem::IMAGE | MenuItem::LINK);
 
   MenuItem::ContextList contexts;
   contexts.Add(MenuItem::LINK);
@@ -297,8 +304,8 @@ TEST_F(RenderViewContextMenuTest, MatchWhenLinkedImageMatchesTarget) {
 }
 
 TEST_F(RenderViewContextMenuTest, MatchWhenLinkedImageMatchesSource) {
-  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE |
-                                                   MenuItem::LINK);
+  content::ContextMenuParams params =
+      CreateParams(MenuItem::IMAGE | MenuItem::LINK);
 
   MenuItem::ContextList contexts;
   contexts.Add(MenuItem::LINK);
@@ -310,8 +317,8 @@ TEST_F(RenderViewContextMenuTest, MatchWhenLinkedImageMatchesSource) {
 }
 
 TEST_F(RenderViewContextMenuTest, NoMatchWhenLinkedImageMatchesNeither) {
-  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE |
-                                                   MenuItem::LINK);
+  content::ContextMenuParams params =
+      CreateParams(MenuItem::IMAGE | MenuItem::LINK);
 
   MenuItem::ContextList contexts;
   contexts.Add(MenuItem::LINK);
@@ -345,8 +352,7 @@ TEST_F(RenderViewContextMenuTest, TargetIgnoredForEditable) {
 }
 
 TEST_F(RenderViewContextMenuTest, TargetIgnoredForSelection) {
-  content::ContextMenuParams params =
-      CreateParams(MenuItem::SELECTION);
+  content::ContextMenuParams params = CreateParams(MenuItem::SELECTION);
 
   MenuItem::ContextList contexts;
   contexts.Add(MenuItem::SELECTION);
@@ -357,8 +363,8 @@ TEST_F(RenderViewContextMenuTest, TargetIgnoredForSelection) {
 }
 
 TEST_F(RenderViewContextMenuTest, TargetIgnoredForSelectionOnLink) {
-  content::ContextMenuParams params = CreateParams(
-      MenuItem::SELECTION | MenuItem::LINK);
+  content::ContextMenuParams params =
+      CreateParams(MenuItem::SELECTION | MenuItem::LINK);
 
   MenuItem::ContextList contexts;
   contexts.Add(MenuItem::SELECTION);
@@ -370,8 +376,8 @@ TEST_F(RenderViewContextMenuTest, TargetIgnoredForSelectionOnLink) {
 }
 
 TEST_F(RenderViewContextMenuTest, TargetIgnoredForSelectionOnImage) {
-  content::ContextMenuParams params = CreateParams(
-      MenuItem::SELECTION | MenuItem::IMAGE);
+  content::ContextMenuParams params =
+      CreateParams(MenuItem::SELECTION | MenuItem::IMAGE);
 
   MenuItem::ContextList contexts;
   contexts.Add(MenuItem::SELECTION);
@@ -423,9 +429,9 @@ TEST_F(RenderViewContextMenuExtensionsTest,
                   &MenuManagerFactory::BuildServiceInstanceForTesting))));
 
   const Extension* extension1 = environment().MakeExtension(
-      base::DictionaryValue(), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      base::Value::Dict(), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   const Extension* extension2 = environment().MakeExtension(
-      base::DictionaryValue(), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+      base::Value::Dict(), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 
   // Create two items in two extensions with same title.
   ASSERT_TRUE(
@@ -441,8 +447,9 @@ TEST_F(RenderViewContextMenuExtensionsTest,
   std::u16string expected_title = u"Added by an extension";
   int num_items_found = 0;
   for (size_t i = 0; i < model.GetItemCount(); ++i) {
-    if (expected_title == model.GetLabelAt(i))
+    if (expected_title == model.GetLabelAt(i)) {
       ++num_items_found;
+    }
   }
 
   // Expect both items to be found.
@@ -506,13 +513,18 @@ class RenderViewContextMenuPrefsTest : public ChromeRenderViewHostTestHarness {
     menu->AppendImageItems();
   }
 
-  void SetUserSelectedDefaultSearchProvider(const std::string& base_url,
-                                            bool supports_image_search) {
+  void SetUserSelectedDefaultSearchProvider(
+      const std::string& base_url,
+      bool supports_image_search,
+      bool supports_image_translate = true) {
     TemplateURLData data;
     data.SetShortName(u"t");
     data.SetURL(base_url + "?q={searchTerms}");
     if (supports_image_search) {
       data.image_url = base_url;
+    }
+    if (supports_image_translate) {
+      data.image_translate_url = base_url;
     }
     TemplateURL* template_url =
         template_url_service_->Add(std::make_unique<TemplateURL>(data));
@@ -582,22 +594,16 @@ class RenderViewContextMenuDlpPrefsTest
       const RenderViewContextMenuDlpPrefsTest&) = delete;
 
   void SetDlpClipboardRestriction() {
-    base::Value rules(base::Value::Type::LIST);
-    base::Value src_urls(base::Value::Type::LIST);
-    src_urls.Append(PAGE_URL);
+    policy::dlp_test_util::DlpRule rule("Rule #1", "Block", "testid1");
+    rule.AddSrcUrl(PAGE_URL)
+        .AddDstUrl(RESTRICTED_URL)
+        .AddRestriction(policy::dlp::kClipboardRestriction,
+                        policy::dlp::kBlockLevel);
 
-    base::Value dst_urls(base::Value::Type::LIST);
-    dst_urls.Append(RESTRICTED_URL);
-
-    base::Value restrictions(base::Value::Type::LIST);
-    restrictions.Append(policy::dlp_test_util::CreateRestrictionWithLevel(
-        policy::dlp::kClipboardRestriction, policy::dlp::kBlockLevel));
-
-    rules.Append(policy::dlp_test_util::CreateRule(
-        "Rule #1", "Block", std::move(src_urls), std::move(dst_urls),
-        /*dst_components=*/base::Value(base::Value::Type::LIST),
-        std::move(restrictions)));
-    local_state()->Set(policy::policy_prefs::kDlpRulesList, std::move(rules));
+    base::Value::List rules;
+    rules.Append(rule.Create());
+    local_state()->SetList(policy::policy_prefs::kDlpRulesList,
+                           std::move(rules));
   }
 
   static constexpr char PAGE_URL[] = "http://www.foo.com/";
@@ -775,8 +781,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
 
 // Make sure the checking custom command id that is not enabled will not
 // cause DCHECK failure.
-TEST_F(RenderViewContextMenuPrefsTest,
-       IsCustomCommandIdEnabled) {
+TEST_F(RenderViewContextMenuPrefsTest, IsCustomCommandIdEnabled) {
   std::unique_ptr<TestRenderViewContextMenu> menu(CreateContextMenu());
 
   EXPECT_FALSE(menu->IsCommandIdEnabled(IDC_CONTENT_CONTEXT_CUSTOM_FIRST));
@@ -1091,7 +1096,9 @@ TEST_P(RenderViewContestMenuAutofillTest, ShowAutofillOptions) {
 // Verify that the Lens Image Search menu item is disabled on non-image content
 TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchNonImage) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
@@ -1102,12 +1109,34 @@ TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchNonImage) {
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
+}
+
+// Verify that the Lens Image Search menu item is disabled when there is the
+// Browser is NULL (b/266624865).
+TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchNoBrowser) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  menu.SetBrowser(nullptr);
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
 }
 
 // Verify that the Lens Image Search menu item is enabled on image content
 TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchEnabled) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
@@ -1119,13 +1148,17 @@ TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchEnabled) {
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
 }
 
 // Verify that the Lens Image Search menu item is enabled for Progressive Web
 // Apps
 TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchForProgressiveWebApp) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
@@ -1137,13 +1170,17 @@ TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchForProgressiveWebApp) {
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
 }
 
 // Verify that the Lens Image Search menu item is enabled for third-party
 // default search engines that support image search.
 TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchEnabledFor3pDse) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
   SetUserSelectedDefaultSearchProvider("https://www.bing.com",
                                        /*supports_image_search=*/true);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
@@ -1155,13 +1192,17 @@ TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchEnabledFor3pDse) {
 
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
 }
 
 // Verify that the Lens Image Search menu item is disabled for third-part
 // default search engines that do not support image search.
 TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchDisabledFor3pDse) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(lens::features::kLensStandalone);
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
   SetUserSelectedDefaultSearchProvider("https://www.yahoo.com",
                                        /*supports_image_search=*/false);
   content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
@@ -1173,9 +1214,104 @@ TEST_F(RenderViewContextMenuPrefsTest, LensImageSearchDisabledFor3pDse) {
 
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
   EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
 }
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Verify that the Translate image menu item is enabled on image content when
+// the page is translated
+TEST_F(RenderViewContextMenuPrefsTest, LensTranslateImageEnabled) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
+  SetUserSelectedDefaultSearchProvider("https://www.google.com",
+                                       /*supports_image_search=*/true,
+                                       /*supports_image_translate=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  ChromeTranslateClient::CreateForWebContents(web_contents());
+  translate::LanguageState* language_state =
+      ChromeTranslateClient::FromWebContents(web_contents())
+          ->GetTranslateManager()
+          ->GetLanguageState();
+  language_state->SetSourceLanguage("zh-CN");
+  language_state->SetCurrentLanguage("fr");
+  language_state->SetTranslateEnabled(true);
+  menu.SetBrowser(GetBrowser());
+  menu.Init();
+
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
+}
+
+// Verify that the Translate image menu item is enabled for third-party
+// default search engines that support image translate.
+TEST_F(RenderViewContextMenuPrefsTest, LensTranslateImageEnabledFor3pDse) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
+  SetUserSelectedDefaultSearchProvider("https://www.bing.com",
+                                       /*supports_image_search=*/true,
+                                       /*supports_image_translate=*/true);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  ChromeTranslateClient::CreateForWebContents(web_contents());
+  translate::LanguageState* language_state =
+      ChromeTranslateClient::FromWebContents(web_contents())
+          ->GetTranslateManager()
+          ->GetLanguageState();
+  language_state->SetSourceLanguage("zh-CN");
+  language_state->SetCurrentLanguage("fr");
+  language_state->SetTranslateEnabled(true);
+  menu.SetBrowser(GetBrowser());
+  menu.Init();
+
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
+}
+
+// Verify that the Translate image menu item is disabled for third-party
+// default search engines that do not support image translate.
+TEST_F(RenderViewContextMenuPrefsTest, LensTranslateImageDisabledFor3pDse) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures(
+      {lens::features::kLensStandalone, lens::features::kEnableImageTranslate},
+      {});
+  SetUserSelectedDefaultSearchProvider("https://www.bing.com",
+                                       /*supports_image_search=*/true,
+                                       /*supports_image_translate=*/false);
+  content::ContextMenuParams params = CreateParams(MenuItem::IMAGE);
+  params.has_image_contents = true;
+  TestRenderViewContextMenu menu(*web_contents()->GetPrimaryMainFrame(),
+                                 params);
+  ChromeTranslateClient::CreateForWebContents(web_contents());
+  translate::LanguageState* language_state =
+      ChromeTranslateClient::FromWebContents(web_contents())
+          ->GetTranslateManager()
+          ->GetLanguageState();
+  language_state->SetSourceLanguage("zh-CN");
+  language_state->SetCurrentLanguage("fr");
+  language_state->SetTranslateEnabled(true);
+  menu.SetBrowser(GetBrowser());
+  menu.Init();
+
+  EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHWEBFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_SEARCHLENSFORIMAGE));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHWEB));
+  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_TRANSLATEIMAGEWITHLENS));
+}
+
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 // Verify that the Lens Region Search menu item is displayed when the feature
 // is enabled.
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearch) {
@@ -1192,31 +1328,9 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearch) {
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
 }
 
-TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchPdfDisabled) {
-  base::test::ScopedFeatureList features;
-  features.InitWithFeatures({lens::features::kLensStandalone},
-                            {lens::features::kEnableRegionSearchOnPdfViewer});
-  SetUserSelectedDefaultSearchProvider("https://www.google.com",
-                                       /*supports_image_search=*/true);
-  content::RenderFrameHost* render_frame_host =
-      web_contents()->GetPrimaryMainFrame();
-  OverrideLastCommittedOrigin(
-      render_frame_host,
-      url::Origin::Create(
-          GURL("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai")));
-  content::ContextMenuParams params = CreateParams(MenuItem::PAGE);
-  TestRenderViewContextMenu menu(*render_frame_host, params);
-  menu.SetBrowser(GetBrowser());
-  menu.Init();
-
-  EXPECT_FALSE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
-}
-
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchPdfEnabled) {
   base::test::ScopedFeatureList features;
-  features.InitWithFeatures({lens::features::kLensStandalone,
-                             lens::features::kEnableRegionSearchOnPdfViewer},
-                            {});
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::RenderFrameHost* render_frame_host =
@@ -1274,9 +1388,7 @@ TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchDisabledOnImage) {
 // browser.
 TEST_F(RenderViewContextMenuPrefsTest, LensRegionSearchPdfDisabledNoBrowser) {
   base::test::ScopedFeatureList features;
-  features.InitWithFeatures({lens::features::kLensStandalone,
-                             lens::features::kEnableRegionSearchOnPdfViewer},
-                            {});
+  features.InitAndEnableFeature(lens::features::kLensStandalone);
   SetUserSelectedDefaultSearchProvider("https://www.google.com",
                                        /*supports_image_search=*/true);
   content::RenderFrameHost* render_frame_host =
@@ -1387,7 +1499,7 @@ TEST_F(RenderViewContextMenuPrefsTest,
   EXPECT_TRUE(menu.IsItemPresent(IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH));
 }
 
-#endif
+#endif  // BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 
 // Test FormatUrlForClipboard behavior
 // -------------------------------------------

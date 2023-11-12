@@ -3,8 +3,8 @@
 #ifndef COMPONENTS_LIGHTS_RAZER_CHROMA_PLATFORM_DRIVER_WIN_H_
 #define COMPONENTS_LIGHTS_RAZER_CHROMA_PLATFORM_DRIVER_WIN_H_
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/threading/thread.h"

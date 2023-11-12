@@ -95,7 +95,7 @@ class DeviceChooserExtensionBrowserTest
       // queries the underlying model and not GetVisible(), as that relies on an
       // animation running, which is not reliable in unit tests on Mac.
       return extensions_container()->IsActionVisibleOnToolbar(
-          action->view_controller());
+          action->view_controller()->GetId());
 #else
       return action->GetVisible();
 #endif
@@ -133,7 +133,7 @@ class DeviceChooserExtensionBrowserTest
   }
 
  private:
-  raw_ptr<const extensions::Extension> extension_ = nullptr;
+  raw_ptr<const extensions::Extension, DanglingUntriaged> extension_ = nullptr;
 };
 
 IN_PROC_BROWSER_TEST_P(DeviceChooserExtensionBrowserTest,

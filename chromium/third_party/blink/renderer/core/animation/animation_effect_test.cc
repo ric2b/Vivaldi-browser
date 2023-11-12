@@ -34,50 +34,17 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_computed_effect_timing.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_optional_effect_timing.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_offset.h"
-#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_offset_phase.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_timeline_range_offset.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_cssnumericvalue_string_unrestricteddouble.h"
 #include "third_party/blink/renderer/core/animation/animation_effect_owner.h"
+#include "third_party/blink/renderer/core/animation/timing.h"
 #include "third_party/blink/renderer/core/css/cssom/css_unit_values.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
 
-V8UnionDoubleOrTimelineOffset* CreateTimelineOffsetDelay(String phase,
-                                                         double percent) {
-  TimelineOffset* timeline_offset = TimelineOffset::Create();
-  absl::optional<V8TimelineOffsetPhase> timeline_offset_phase =
-      V8TimelineOffsetPhase::Create(phase);
-  timeline_offset->setPhase(timeline_offset_phase.value());
-  timeline_offset->setPercent(CSSUnitValues::percent(percent));
-  return MakeGarbageCollected<V8UnionDoubleOrTimelineOffset>(timeline_offset);
-}
-
-V8UnionDoubleOrTimelineOffset* CreateTimeDelay(double delay_in_ms) {
-  return MakeGarbageCollected<V8UnionDoubleOrTimelineOffset>(delay_in_ms);
-}
-
-bool TimelineOffsetEquals(const V8UnionDoubleOrTimelineOffset* delay,
-                          String expected_phase,
-                          double expected_percent) {
-  if (!delay->IsTimelineOffset())
-    return false;
-
-  TimelineOffset* timeline_offset = delay->GetAsTimelineOffset();
-  if (!timeline_offset->hasPhase() || !timeline_offset->hasPercent())
-    return false;
-
-  TimelineOffset* reference =
-      CreateTimelineOffsetDelay(expected_phase, expected_percent)
-          ->GetAsTimelineOffset();
-
-  if (timeline_offset->phase().AsEnum() != reference->phase().AsEnum())
-    return false;
-
-  double percent = timeline_offset->percent()
-                       ->to(CSSPrimitiveValue::UnitType::kPercentage)
-                       ->value();
-  return std::abs(percent - expected_percent) < 1e-6;
+Timing::V8Delay* CreateTimeDelay(double delay_in_ms) {
+  return MakeGarbageCollected<Timing::V8Delay>(delay_in_ms);
 }
 
 class MockAnimationEffectOwner
@@ -801,20 +768,9 @@ TEST(AnimationAnimationEffectTest, UpdateTiming) {
   effect->updateTiming(effect_timing);
   EXPECT_EQ(2, effect->getTiming()->delay()->GetAsDouble());
   effect_timing = OptionalEffectTiming::Create();
-  effect_timing->setDelay(CreateTimelineOffsetDelay("enter", 0));
-  effect->updateTiming(effect_timing);
-  EXPECT_TRUE(TimelineOffsetEquals(effect->getTiming()->delay(), "enter", 0));
-  EXPECT_EQ(0, effect->getTiming()->endDelay()->GetAsDouble());
-  effect_timing = OptionalEffectTiming::Create();
   effect_timing->setEndDelay(CreateTimeDelay(0.5));
   effect->updateTiming(effect_timing);
   EXPECT_EQ(0.5, effect->getTiming()->endDelay()->GetAsDouble());
-  effect_timing = OptionalEffectTiming::Create();
-  effect_timing->setEndDelay(CreateTimelineOffsetDelay("exit", 50));
-  effect->updateTiming(effect_timing);
-  EXPECT_TRUE(
-      TimelineOffsetEquals(effect->getTiming()->endDelay(), "exit", 50));
-  EXPECT_EQ("auto", effect->getTiming()->fill());
   effect_timing = OptionalEffectTiming::Create();
   effect_timing->setFill("backwards");
   effect->updateTiming(effect_timing);

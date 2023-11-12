@@ -16,8 +16,8 @@
 #include <CoreVideo/CVPixelBuffer.h>
 #include <CoreVideo/CoreVideo.h>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/mac/mac_logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/sys_byteorder.h"

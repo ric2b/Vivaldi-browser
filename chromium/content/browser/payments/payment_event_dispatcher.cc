@@ -4,9 +4,9 @@
 
 #include "content/browser/payments/payment_event_dispatcher.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "content/browser/payments/payment_app_provider_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/public/common/content_features.h"
@@ -57,7 +57,7 @@ void OnResponseForPaymentRequest(
     std::stringstream response_type;
     response_type << response->response_type;
     dev_tools->LogBackgroundServiceEvent(
-        registration_id, blink::StorageKey(sw_origin),
+        registration_id, blink::StorageKey::CreateFirstParty(sw_origin),
         DevToolsBackgroundService::kPaymentHandler, "Payment response",
         /*instance_id=*/payment_request_id,
         {{"Method Name", response->method_name},
@@ -82,7 +82,7 @@ void OnResponseForCanMakePayment(
         {"Type", response_type.str()},
         {"Can Make Payment", response->can_make_payment ? "true" : "false"}};
     dev_tools->LogBackgroundServiceEvent(
-        registration_id, blink::StorageKey(sw_origin),
+        registration_id, blink::StorageKey::CreateFirstParty(sw_origin),
         DevToolsBackgroundService::kPaymentHandler, "Can make payment response",
         /*instance_id=*/payment_request_id, data);
   }
@@ -99,7 +99,7 @@ void OnResponseForAbortPayment(
     bool payment_aborted) {
   if (dev_tools) {
     dev_tools->LogBackgroundServiceEvent(
-        registration_id, blink::StorageKey(sw_origin),
+        registration_id, blink::StorageKey::CreateFirstParty(sw_origin),
         DevToolsBackgroundService::kPaymentHandler, "Abort payment response",
         /*instance_id=*/payment_request_id,
         {{"Payment Aborted", payment_aborted ? "true" : "false"}});

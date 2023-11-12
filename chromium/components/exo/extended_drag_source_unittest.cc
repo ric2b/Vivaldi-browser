@@ -16,6 +16,7 @@
 #include "ash/wm/toplevel_window_event_handler.h"
 #include "ash/wm/window_state.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/gmock_callback_support.h"
 #include "chromeos/ui/base/window_properties.h"
@@ -763,7 +764,8 @@ TEST_F(ExtendedDragSourceTest, DragToAnotherDisplay) {
   gfx::Rect drop_bounds;
   auto configure_callback = base::BindLambdaForTesting(
       [&](const gfx::Rect& bounds, chromeos::WindowStateType state_type,
-          bool resizing, bool activated, const gfx::Vector2d& origin_offset) {
+          bool resizing, bool activated, const gfx::Vector2d& origin_offset,
+          float raster_scale) {
         drop_bounds = bounds;
         return ++serial;
       });

@@ -48,6 +48,8 @@ class COMPONENT_EXPORT(OZONE) FlatlandWindow : public PlatformWindow,
   FlatlandWindow(const FlatlandWindow&) = delete;
   FlatlandWindow& operator=(const FlatlandWindow&) = delete;
 
+  void ResetSurfaceContent();
+
   // Embeds the Flatland identified by |token| into the scene graph.
   void AttachSurfaceContent(fuchsia::ui::views::ViewportCreationToken token);
 
@@ -111,6 +113,7 @@ class COMPONENT_EXPORT(OZONE) FlatlandWindow : public PlatformWindow,
 
   void UpdateSize();
 
+  void OnFlatlandError(fuchsia::ui::composition::FlatlandError error);
   void OnViewControllerDisconnected(zx_status_t status);
 
   FlatlandWindowManager* const manager_;
@@ -136,6 +139,8 @@ class COMPONENT_EXPORT(OZONE) FlatlandWindow : public PlatformWindow,
 
   fuchsia::ui::composition::TransformId root_transform_id_;
   fuchsia::ui::composition::TransformId surface_transform_id_;
+  fuchsia::ui::composition::TransformId shield_transform_id_;
+
   fuchsia::ui::composition::ContentId surface_content_id_;
 
   // Pending Viewport creation callback waiting on |logical_size_|.

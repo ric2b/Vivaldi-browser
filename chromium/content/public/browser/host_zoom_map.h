@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/callback_list.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "url/gurl.h"
@@ -186,6 +186,13 @@ class HostZoomMap {
 
   virtual void SetDefaultZoomLevelPrefCallback(
       DefaultZoomChangedCallback callback) = 0;
+
+  // TODO(crbug.com/1424904): Make an Android-specific impl of host_zoom_map, or
+  //                          combine method with GetZoomLevelForHostAndScheme.
+  virtual double GetZoomLevelForHostAndScheme(
+      const std::string& scheme,
+      const std::string& host,
+      bool is_overriding_user_agent) = 0;
 #endif
 
  protected:

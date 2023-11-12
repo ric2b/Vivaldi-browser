@@ -4,23 +4,27 @@
 
 package org.chromium.components.browser_ui.site_settings;
 
+import android.app.Activity;
 import android.app.Dialog;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
 
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AlertDialog;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 
+import org.chromium.base.Callback;
+import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 
 /**
  * Shows the permissions and other settings for a group of websites.
  */
-public class GroupedWebsitesSettings
-        extends SiteSettingsPreferenceFragment implements Preference.OnPreferenceClickListener {
+public class GroupedWebsitesSettings extends SiteSettingsPreferenceFragment
+        implements Preference.OnPreferenceClickListener, CustomDividerFragment {
     public static final String EXTRA_GROUP = "org.chromium.chrome.preferences.site_group";
 
     // Preference keys, see grouped_websites_preferences.xml.
@@ -45,7 +49,11 @@ public class GroupedWebsitesSettings
     public void onActivityCreated(Bundle savedInstanceState) {
         init();
         super.onActivityCreated(savedInstanceState);
-        setDivider(null);
+    }
+
+    @Override
+    public boolean hasDivider() {
+        return false;
     }
 
     private void init() {
@@ -97,6 +105,10 @@ public class GroupedWebsitesSettings
         signedOutText.setText(R.string.webstorage_clear_data_dialog_sign_out_message);
         TextView offlineText = dialogView.findViewById(R.id.offline_text);
         offlineText.setText(R.string.webstorage_clear_data_dialog_offline_message);
+        if (getSiteSettingsDelegate().isPrivacySandboxSettings4Enabled()) {
+            TextView adPersonalizationText = dialogView.findViewById(R.id.ad_personalization_text);
+            adPersonalizationText.setVisibility(View.VISIBLE);
+        }
         mConfirmationDialog =
                 new AlertDialog.Builder(getContext(), R.style.ThemeOverlay_BrowserUI_AlertDialog)
                         .setView(dialogView)
@@ -109,8 +121,50 @@ public class GroupedWebsitesSettings
         return true;
     }
 
-    private void resetGroup() {
-        // TODO(crbug.com/1342991): Implement the deletion and UI logic for handling it.
+    @Override
+    public void onDisplayPreferenceDialog(Preference preference) {
+        if (preference instanceof ClearWebsiteStorage) {
+            // If the activity is getting destroyed or saved, it is not allowed to modify fragments.
+            if (getFragmentManager().isStateSaved()) {
+                return;
+            }
+            Callback<Boolean> onDialogClosed = (Boolean confirmed) -> {
+                if (confirmed) {
+                    SiteDataCleaner.clearData(getSiteSettingsDelegate().getBrowserContextHandle(),
+                            mSiteGroup, mDataClearedCallback);
+                }
+            };
+            ClearWebsiteStorageDialog dialogFragment =
+                    ClearWebsiteStorageDialog.newInstance(preference, onDialogClosed,
+                            getSiteSettingsDelegate().isPrivacySandboxSettings4Enabled(),
+                            /*isGroup=*/true);
+            dialogFragment.setTargetFragment(this, 0);
+            dialogFragment.show(getFragmentManager(), ClearWebsiteStorageDialog.TAG);
+        } else {
+            super.onDisplayPreferenceDialog(preference);
+        }
+    }
+
+    private final Runnable mDataClearedCallback = () -> {
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing()) {
+            return;
+        }
+        // TODO(crbug.com/1342991): This always navigates the user back to the "All sites" page
+        // regardless of whether there are any non-resettable permissions left in the sites within
+        // the group. Consider calculating those and refreshing the screen in place for a slightly
+        // smoother user experience. However, due to the complexity involved in refreshing the
+        // already fetched data and a very marginal benefit, it may not be worth it.
+        getActivity().finish();
+    };
+
+    @VisibleForTesting
+    public void resetGroup() {
+        if (getActivity() == null) return;
+        SiteDataCleaner.resetPermissions(
+                getSiteSettingsDelegate().getBrowserContextHandle(), mSiteGroup);
+        SiteDataCleaner.clearData(getSiteSettingsDelegate().getBrowserContextHandle(), mSiteGroup,
+                mDataClearedCallback);
     }
 
     private void setUpClearDataPreference() {
@@ -120,8 +174,10 @@ public class GroupedWebsitesSettings
         if (storage > 0 || cookies > 0) {
             preference.setTitle(SiteSettingsUtil.generateStorageUsageText(
                     preference.getContext(), storage, cookies));
-            // TODO(crbug.com/1342991): Get clearingApps information from underlying sites.
-            preference.setDataForDisplay(mSiteGroup.getDomainAndRegistry(), /*clearingApps=*/false);
+            preference.setDataForDisplay(mSiteGroup.getDomainAndRegistry(),
+                    mSiteGroup.hasInstalledApp(
+                            getSiteSettingsDelegate().getOriginsWithInstalledApp()),
+                    /*isGroup=*/true);
             if (mSiteGroup.isCookieDeletionDisabled(
                         getSiteSettingsDelegate().getBrowserContextHandle())) {
                 preference.setEnabled(false);

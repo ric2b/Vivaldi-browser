@@ -4,6 +4,7 @@
 
 #include "media/mojo/services/media_foundation_mojo_media_client.h"
 
+#include "base/task/single_thread_task_runner.h"
 #include "media/base/win/mf_helpers.h"
 #include "media/cdm/win/media_foundation_cdm_factory.h"
 #include "media/mojo/services/media_foundation_renderer_wrapper.h"
@@ -24,7 +25,7 @@ MediaFoundationMojoMediaClient::~MediaFoundationMojoMediaClient() {
 
 std::unique_ptr<AudioDecoder>
 MediaFoundationMojoMediaClient::CreateAudioDecoder(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    scoped_refptr<base::SequencedTaskRunner> task_runner) {
 #if BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)
   return std::make_unique<MediaFoundationAudioDecoder>(task_runner);
 #else   // BUILDFLAG(ENABLE_PLATFORM_DTS_AUDIO)

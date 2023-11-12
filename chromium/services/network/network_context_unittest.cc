@@ -12,8 +12,6 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
@@ -21,6 +19,8 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
@@ -40,8 +40,8 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
+#include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
@@ -74,6 +74,7 @@
 #include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_options.h"
+#include "net/cookies/cookie_setting_override.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_store_test_callbacks.h"
 #include "net/cookies/cookie_util.h"
@@ -126,6 +127,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/network_service_buildflags.h"
 #include "services/network/public/cpp/resolve_host_client_base.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
 #include "services/network/public/mojom/net_log.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -1446,7 +1448,8 @@ TEST_F(NetworkContextTest, HostResolutionFailure) {
       std::make_unique<net::MockHostResolver>();
   resolver->rules()->AddSimulatedTimeoutFailure("*");
   context_builder->set_host_resolver(std::move(resolver));
-  auto url_request_context = context_builder->Build();
+  std::unique_ptr<net::URLRequestContext> url_request_context =
+      context_builder->Build();
 
   network_context_remote_.reset();
   std::unique_ptr<NetworkContext> network_context =
@@ -1497,7 +1500,8 @@ TEST_F(NetworkContextTest, P2PHostResolution) {
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->set_host_resolver(
       std::make_unique<net::MockCachingHostResolver>());
-  auto url_request_context = context_builder->Build();
+  std::unique_ptr<net::URLRequestContext> url_request_context =
+      context_builder->Build();
   auto& host_resolver = *static_cast<net::MockCachingHostResolver*>(
       url_request_context->host_resolver());
   host_resolver.rules()->AddRule(kHostname, ip_address.ToString());
@@ -1570,7 +1574,8 @@ TEST_F(NetworkContextTest, P2PHostResolutionWithFamily) {
       std::make_unique<net::MockHostResolver>();
   auto& host_resolver = *resolver.get();
   context_builder->set_host_resolver(std::move(resolver));
-  auto url_request_context = context_builder->Build();
+  std::unique_ptr<net::URLRequestContext> url_request_context =
+      context_builder->Build();
 
   network_context_remote_.reset();
   std::unique_ptr<NetworkContext> network_context =
@@ -3244,6 +3249,106 @@ TEST_F(NetworkContextTest, CreateUDPSocket) {
   }
 }
 
+TEST_F(NetworkContextTest, CreateRestrictedUDPSocket) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateNetworkContextParamsForTesting());
+
+  // Create a server socket to listen for incoming datagrams.
+  test::UDPSocketListenerImpl socket_listener;
+  mojo::Receiver<mojom::UDPSocketListener> socket_listener_receiver(
+      &socket_listener);
+
+  mojo::Remote<mojom::RestrictedUDPSocket> server_socket;
+  net::IPEndPoint server_addr(GetLocalHostWithAnyPort());
+  {
+    base::test::TestFuture<int32_t, const absl::optional<net::IPEndPoint>&>
+        create_future;
+    network_context->CreateRestrictedUDPSocket(
+        server_addr, mojom::RestrictedUDPSocketMode::BOUND,
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
+        /*options=*/nullptr, server_socket.BindNewPipeAndPassReceiver(),
+        socket_listener_receiver.BindNewPipeAndPassRemote(),
+        create_future.GetCallback());
+    ASSERT_EQ(create_future.Get<0>(), net::OK);
+    server_addr = *create_future.Get<1>();
+  }
+
+  // Create a client socket to send datagrams.
+  test::UDPSocketListenerImpl client_listener;
+  mojo::Receiver<mojom::UDPSocketListener> client_listener_receiver(
+      &client_listener);
+
+  mojo::Remote<mojom::RestrictedUDPSocket> client_socket;
+  net::IPEndPoint client_addr(GetLocalHostWithAnyPort());
+  {
+    base::test::TestFuture<int32_t, const absl::optional<net::IPEndPoint>&>
+        create_future;
+    network_context->CreateRestrictedUDPSocket(
+        server_addr, mojom::RestrictedUDPSocketMode::CONNECTED,
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS),
+        /*options=*/nullptr, client_socket.BindNewPipeAndPassReceiver(),
+        client_listener_receiver.BindNewPipeAndPassRemote(),
+        create_future.GetCallback());
+    ASSERT_EQ(create_future.Get<0>(), net::OK);
+    client_addr = *create_future.Get<1>();
+  }
+
+  // This test assumes that the loopback interface doesn't drop UDP packets for
+  // a small number of packets.
+  const size_t kDatagramCount = 6;
+  const size_t kDatagramSize = 255;
+  server_socket->ReceiveMore(kDatagramCount);
+
+  for (size_t i = 0; i < kDatagramCount; ++i) {
+    std::vector<uint8_t> test_msg(
+        CreateTestMessage(static_cast<uint8_t>(i), kDatagramSize));
+    {
+      base::test::TestFuture<int32_t> send_future;
+      client_socket->Send(test_msg, send_future.GetCallback());
+      ASSERT_EQ(send_future.Get(), net::OK);
+    }
+  }
+
+  socket_listener.WaitForReceivedResults(kDatagramCount);
+  EXPECT_EQ(kDatagramCount, socket_listener.results().size());
+
+  int i = 0;
+  for (const auto& result : socket_listener.results()) {
+    EXPECT_EQ(net::OK, result.net_error);
+    EXPECT_EQ(result.src_addr, client_addr);
+    EXPECT_EQ(CreateTestMessage(static_cast<uint8_t>(i), kDatagramSize),
+              result.data.value());
+    i++;
+  }
+
+  // And now the other way round.
+  client_socket->ReceiveMore(kDatagramCount);
+
+  for (size_t j = 0; j < kDatagramCount; ++j) {
+    std::vector<uint8_t> test_msg(
+        CreateTestMessage(static_cast<uint8_t>(j), kDatagramSize));
+    {
+      base::test::TestFuture<int32_t> send_future;
+      server_socket->SendTo(test_msg,
+                            net::HostPortPair::FromIPEndPoint(client_addr),
+                            send_future.GetCallback());
+      ASSERT_EQ(send_future.Get(), net::OK);
+    }
+  }
+
+  client_listener.WaitForReceivedResults(kDatagramCount);
+  EXPECT_EQ(kDatagramCount, client_listener.results().size());
+
+  int j = 0;
+  for (const auto& result : client_listener.results()) {
+    EXPECT_EQ(net::OK, result.net_error);
+    EXPECT_FALSE(result.src_addr);
+    EXPECT_EQ(CreateTestMessage(static_cast<uint8_t>(j), kDatagramSize),
+              result.data.value());
+    j++;
+  }
+}
+
 TEST_F(NetworkContextTest, CreateNetLogExporter) {
   // Basic flow around start/stop.
   std::unique_ptr<NetworkContext> network_context =
@@ -4173,7 +4278,13 @@ TEST_F(NetworkContextTest, ActivateDohProbes_NotPrimaryContext) {
 }
 
 TEST_F(NetworkContextTest, PrivacyModeDisabledByDefault) {
+  const GURL kURL("http://foo.com");
   const GURL kOtherURL("http://other.com");
+  std::unique_ptr<net::URLRequestContext> request_context =
+      CreateTestURLRequestContextBuilder()->Build();
+  std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+      kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
@@ -4181,58 +4292,71 @@ TEST_F(NetworkContextTest, PrivacyModeDisabledByDefault) {
   EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
             network_context->url_request_context()
                 ->network_delegate()
-                ->ForcePrivacyMode(GURL("http://foo.com"),
-                                   net::SiteForCookies::FromUrl(kOtherURL),
-                                   url::Origin::Create(kOtherURL),
-                                   net::SamePartyContext::Type::kCrossParty));
+                ->ForcePrivacyMode(*request));
 }
 
 TEST_F(NetworkContextTest, PrivacyModeEnabledIfCookiesBlocked) {
   const GURL kURL("http://foo.com");
   const GURL kOtherURL("http://other.com");
+  std::unique_ptr<net::URLRequestContext> request_context =
+      CreateTestURLRequestContextBuilder()->Build();
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
 
   SetContentSetting(kURL, kOtherURL, CONTENT_SETTING_BLOCK,
                     network_context.get());
-  EXPECT_EQ(
-      net::NetworkDelegate::PrivacySetting::kStateDisallowed,
-      network_context->url_request_context()
-          ->network_delegate()
-          ->ForcePrivacyMode(kURL, net::SiteForCookies::FromUrl(kOtherURL),
-                             url::Origin::Create(kOtherURL),
-                             net::SamePartyContext::Type::kCrossParty));
-  EXPECT_EQ(
-      net::NetworkDelegate::PrivacySetting::kStateAllowed,
-      network_context->url_request_context()
-          ->network_delegate()
-          ->ForcePrivacyMode(kOtherURL, net::SiteForCookies::FromUrl(kURL),
-                             url::Origin::Create(kURL),
-                             net::SamePartyContext::Type::kCrossParty));
+
+  {
+    std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+        kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+        TRAFFIC_ANNOTATION_FOR_TESTS);
+    request->set_site_for_cookies(net::SiteForCookies::FromUrl(kOtherURL));
+    EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateDisallowed,
+              network_context->url_request_context()
+                  ->network_delegate()
+                  ->ForcePrivacyMode(*request));
+  }
+
+  {
+    std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+        kOtherURL, net::DEFAULT_PRIORITY,
+        /*delegate=*/nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
+    request->set_site_for_cookies(net::SiteForCookies::FromUrl(kURL));
+    EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
+              network_context->url_request_context()
+                  ->network_delegate()
+                  ->ForcePrivacyMode(*request));
+  }
 }
 
 TEST_F(NetworkContextTest, PrivacyModeDisabledIfCookiesAllowed) {
   const GURL kURL("http://foo.com");
   const GURL kOtherURL("http://other.com");
+  std::unique_ptr<net::URLRequestContext> request_context =
+      CreateTestURLRequestContextBuilder()->Build();
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
 
   SetContentSetting(kURL, kOtherURL, CONTENT_SETTING_ALLOW,
                     network_context.get());
-  EXPECT_EQ(
-      net::NetworkDelegate::PrivacySetting::kStateAllowed,
-      network_context->url_request_context()
-          ->network_delegate()
-          ->ForcePrivacyMode(kURL, net::SiteForCookies::FromUrl(kOtherURL),
-                             url::Origin::Create(kOtherURL),
-                             net::SamePartyContext::Type::kCrossParty));
+
+  std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+      kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->set_site_for_cookies(net::SiteForCookies::FromUrl(kOtherURL));
+  EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
+            network_context->url_request_context()
+                ->network_delegate()
+                ->ForcePrivacyMode(*request));
 }
 
 TEST_F(NetworkContextTest, PrivacyModeDisabledIfCookiesSettingForOtherURL) {
   const GURL kURL("http://foo.com");
   const GURL kOtherURL("http://other.com");
+  std::unique_ptr<net::URLRequestContext> request_context =
+      CreateTestURLRequestContextBuilder()->Build();
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
@@ -4240,20 +4364,22 @@ TEST_F(NetworkContextTest, PrivacyModeDisabledIfCookiesSettingForOtherURL) {
   // URLs are switched so setting should not apply.
   SetContentSetting(kOtherURL, kURL, CONTENT_SETTING_BLOCK,
                     network_context.get());
-  EXPECT_EQ(
-      net::NetworkDelegate::PrivacySetting::kStateAllowed,
-      network_context->url_request_context()
-          ->network_delegate()
-          ->ForcePrivacyMode(kURL, net::SiteForCookies::FromUrl(kOtherURL),
-                             url::Origin::Create(kOtherURL),
-                             net::SamePartyContext::Type::kCrossParty));
+
+  std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+      kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->set_site_for_cookies(net::SiteForCookies::FromUrl(kOtherURL));
+  EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
+            network_context->url_request_context()
+                ->network_delegate()
+                ->ForcePrivacyMode(*request));
 }
 
 TEST_F(NetworkContextTest, PrivacyModeEnabledIfThirdPartyCookiesBlocked) {
   const GURL kURL("http://foo.com");
-  const url::Origin kOrigin = url::Origin::Create(kURL);
   const GURL kOtherURL("http://other.com");
-  const url::Origin kOtherOrigin = url::Origin::Create(kOtherURL);
+  std::unique_ptr<net::URLRequestContext> request_context =
+      CreateTestURLRequestContextBuilder()->Build();
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
@@ -4261,33 +4387,54 @@ TEST_F(NetworkContextTest, PrivacyModeEnabledIfThirdPartyCookiesBlocked) {
       network_context->url_request_context()->network_delegate();
 
   network_context->cookie_manager()->BlockThirdPartyCookies(true);
-  EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kPartitionedStateAllowedOnly,
-            delegate->ForcePrivacyMode(
-                kURL, net::SiteForCookies::FromUrl(kOtherURL), kOtherOrigin,
-                net::SamePartyContext::Type::kCrossParty));
-  EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
-            delegate->ForcePrivacyMode(
-                kURL, net::SiteForCookies::FromUrl(kURL), kOrigin,
-                net::SamePartyContext::Type::kSameParty));
+
+  {
+    std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+        kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+        TRAFFIC_ANNOTATION_FOR_TESTS);
+    request->set_site_for_cookies(net::SiteForCookies::FromUrl(kOtherURL));
+    EXPECT_EQ(
+        net::NetworkDelegate::PrivacySetting::kPartitionedStateAllowedOnly,
+        delegate->ForcePrivacyMode(*request));
+  }
+
+  {
+    std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+        kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+        TRAFFIC_ANNOTATION_FOR_TESTS);
+    request->set_site_for_cookies(net::SiteForCookies::FromUrl(kURL));
+    EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
+              delegate->ForcePrivacyMode(*request));
+  }
 
   network_context->cookie_manager()->BlockThirdPartyCookies(false);
-  EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
-            delegate->ForcePrivacyMode(
-                kURL, net::SiteForCookies::FromUrl(kOtherURL), kOtherOrigin,
-                net::SamePartyContext::Type::kCrossParty));
-  EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
-            delegate->ForcePrivacyMode(
-                kURL, net::SiteForCookies::FromUrl(kURL), kOrigin,
-                net::SamePartyContext::Type::kSameParty));
+  {
+    std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+        kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+        TRAFFIC_ANNOTATION_FOR_TESTS);
+    request->set_site_for_cookies(net::SiteForCookies::FromUrl(kOtherURL));
+    EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
+              delegate->ForcePrivacyMode(*request));
+  }
+
+  {
+    std::unique_ptr<net::URLRequest> request = request_context->CreateRequest(
+        kURL, net::DEFAULT_PRIORITY, /*delegate=*/nullptr,
+        TRAFFIC_ANNOTATION_FOR_TESTS);
+    request->set_site_for_cookies(net::SiteForCookies::FromUrl(kURL));
+    EXPECT_EQ(net::NetworkDelegate::PrivacySetting::kStateAllowed,
+              delegate->ForcePrivacyMode(*request));
+  }
 }
 
 TEST_F(NetworkContextTest, CanSetCookieFalseIfCookiesBlocked) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
-  auto context = CreateTestURLRequestContextBuilder()->Build();
-  std::unique_ptr<net::URLRequest> request =
-      context->CreateRequest(GURL("http://foo.com"), net::DEFAULT_PRIORITY,
-                             nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
+  std::unique_ptr<net::URLRequestContext> context =
+      CreateTestURLRequestContextBuilder()->Build();
+  std::unique_ptr<net::URLRequest> request = context->CreateRequest(
+      GURL("http://foo.com"), net::DEFAULT_PRIORITY,
+      /*delegate=*/nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
   auto cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
       "TestCookie", "1", "www.test.com", "/", base::Time(), base::Time(),
       base::Time(), base::Time(), false, false, net::CookieSameSite::LAX_MODE,
@@ -4304,10 +4451,11 @@ TEST_F(NetworkContextTest, CanSetCookieFalseIfCookiesBlocked) {
 TEST_F(NetworkContextTest, CanSetCookieTrueIfCookiesAllowed) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
-  auto context = CreateTestURLRequestContextBuilder()->Build();
-  std::unique_ptr<net::URLRequest> request =
-      context->CreateRequest(GURL("http://foo.com"), net::DEFAULT_PRIORITY,
-                             nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
+  std::unique_ptr<net::URLRequestContext> context =
+      CreateTestURLRequestContextBuilder()->Build();
+  std::unique_ptr<net::URLRequest> request = context->CreateRequest(
+      GURL("http://foo.com"), net::DEFAULT_PRIORITY,
+      /*delegate=*/nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
   auto cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
       "TestCookie", "1", "www.test.com", "/", base::Time(), base::Time(),
       base::Time(), base::Time(), false, false, net::CookieSameSite::LAX_MODE,
@@ -4319,18 +4467,50 @@ TEST_F(NetworkContextTest, CanSetCookieTrueIfCookiesAllowed) {
           *request, *cookie, nullptr));
 }
 
+TEST_F(NetworkContextTest, CanSetCookieTrueIfBlockThirdPartyCookiesOverridden) {
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateNetworkContextParamsForTesting());
+  std::unique_ptr<net::URLRequestContext> context =
+      CreateTestURLRequestContextBuilder()->Build();
+  std::unique_ptr<net::URLRequest> request = context->CreateRequest(
+      GURL("http://foo.com"), net::DEFAULT_PRIORITY,
+      /*delegate=*/nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
+  request->set_site_for_cookies(
+      net::SiteForCookies::FromUrl(GURL("http://bar.com")));
+  auto cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
+      "ThirdPartyCookie", "1", "www.foo.com", "/", base::Time(), base::Time(),
+      base::Time(), base::Time(), false, false, net::CookieSameSite::LAX_MODE,
+      net::COOKIE_PRIORITY_LOW, false);
+
+  network_context->cookie_manager()->BlockThirdPartyCookies(true);
+  EXPECT_FALSE(
+      network_context->url_request_context()->network_delegate()->CanSetCookie(
+          *request, *cookie, nullptr));
+
+  // Now the cookie should be allowed if the request includes the override that
+  // the user is forcing 3PCs.
+  request->cookie_setting_overrides().Clear();
+  request->cookie_setting_overrides().Put(
+      net::CookieSettingOverride::kForceThirdPartyByUser);
+  EXPECT_TRUE(
+      network_context->url_request_context()->network_delegate()->CanSetCookie(
+          *request, *cookie, nullptr));
+}
+
 TEST_F(NetworkContextTest,
        AnnotateAndMoveUserBlockedCookies_FalseIfCookiesBlocked) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
-  auto context = CreateTestURLRequestContextBuilder()->Build();
-  std::unique_ptr<net::URLRequest> request =
-      context->CreateRequest(GURL("http://foo.com"), net::DEFAULT_PRIORITY,
-                             nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
+  std::unique_ptr<net::URLRequestContext> context =
+      CreateTestURLRequestContextBuilder()->Build();
+  std::unique_ptr<net::URLRequest> request = context->CreateRequest(
+      GURL("http://foo.com"), net::DEFAULT_PRIORITY,
+      /*delegate=*/nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
 
   net::CookieAccessResultList included;
   net::CookieAccessResultList excluded;
 
+  // Cookies are allowed, so call returns true.
   EXPECT_TRUE(network_context->url_request_context()
                   ->network_delegate()
                   ->AnnotateAndMoveUserBlockedCookies(
@@ -4341,6 +4521,8 @@ TEST_F(NetworkContextTest,
                           /*frame_entry=*/nullptr,
                           /*top_frame_entry=*/nullptr),
                       included, excluded));
+
+  // Cookies are blocked, so call returns false.
   SetDefaultContentSetting(CONTENT_SETTING_BLOCK, network_context.get());
   EXPECT_FALSE(network_context->url_request_context()
                    ->network_delegate()
@@ -4352,16 +4534,47 @@ TEST_F(NetworkContextTest,
                            /*frame_entry=*/nullptr,
                            /*top_frame_entry=*/nullptr),
                        included, excluded));
+
+  // Even with override, third party cookies blocked by content setting.
+  request->cookie_setting_overrides().Clear();
+  request->cookie_setting_overrides().Put(
+      net::CookieSettingOverride::kForceThirdPartyByUser);
+  EXPECT_FALSE(network_context->url_request_context()
+                   ->network_delegate()
+                   ->AnnotateAndMoveUserBlockedCookies(
+                       *request,
+                       net::FirstPartySetMetadata(
+                           net::SamePartyContext(
+                               net::SamePartyContext::Type::kCrossParty),
+                           /*frame_entry=*/nullptr,
+                           /*top_frame_entry=*/nullptr),
+                       included, excluded));
+
+  // Set blocking third party cookies instead of content setting.
+  // Now override should apply.
+  SetDefaultContentSetting(CONTENT_SETTING_ALLOW, network_context.get());
+  network_context->cookie_manager()->BlockThirdPartyCookies(true);
+  EXPECT_TRUE(network_context->url_request_context()
+                  ->network_delegate()
+                  ->AnnotateAndMoveUserBlockedCookies(
+                      *request,
+                      net::FirstPartySetMetadata(
+                          net::SamePartyContext(
+                              net::SamePartyContext::Type::kCrossParty),
+                          /*frame_entry=*/nullptr,
+                          /*top_frame_entry=*/nullptr),
+                      included, excluded));
 }
 
 TEST_F(NetworkContextTest,
        AnnotateAndMoveUserBlockedCookies_TrueIfCookiesAllowed) {
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(CreateNetworkContextParamsForTesting());
-  auto context = CreateTestURLRequestContextBuilder()->Build();
-  std::unique_ptr<net::URLRequest> request =
-      context->CreateRequest(GURL("http://foo.com"), net::DEFAULT_PRIORITY,
-                             nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
+  std::unique_ptr<net::URLRequestContext> context =
+      CreateTestURLRequestContextBuilder()->Build();
+  std::unique_ptr<net::URLRequest> request = context->CreateRequest(
+      GURL("http://foo.com"), net::DEFAULT_PRIORITY,
+      /*delegate=*/nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
   net::CookieAccessResultList included;
   net::CookieAccessResultList excluded;
 
@@ -4878,7 +5091,8 @@ TEST_F(NetworkContextTest, TrustedParams_DisableSecureDns) {
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->set_host_resolver(std::make_unique<net::MockHostResolver>());
-  auto url_request_context = context_builder->Build();
+  std::unique_ptr<net::URLRequestContext> url_request_context =
+      context_builder->Build();
   auto& resolver = *static_cast<net::MockHostResolver*>(
       url_request_context->host_resolver());
   resolver.rules()->AddRule("example.test", test_server.GetIPLiteralString());
@@ -4934,7 +5148,8 @@ TEST_F(NetworkContextTest, FactoryParams_DisableSecureDns) {
 
   auto context_builder = CreateTestURLRequestContextBuilder();
   context_builder->set_host_resolver(std::make_unique<net::MockHostResolver>());
-  auto url_request_context = context_builder->Build();
+  std::unique_ptr<net::URLRequestContext> url_request_context =
+      context_builder->Build();
   auto& resolver = *static_cast<net::MockHostResolver*>(
       url_request_context->host_resolver());
   resolver.rules()->AddRule("example.test", test_server.GetIPLiteralString());
@@ -7072,7 +7287,9 @@ TEST_F(NetworkContextExpectBadMessageTest,
   ResourceRequest my_request;
   my_request.trust_token_params =
       OptionalTrustTokenParams(mojom::TrustTokenParams::New());
-  my_request.trust_token_params->type =
+  my_request.trust_token_params->version =
+      mojom::TrustTokenMajorVersion::kPrivateStateTokenV1;
+  my_request.trust_token_params->operation =
       mojom::TrustTokenOperationType::kRedemption;
 
   auto factory_params = mojom::URLLoaderFactoryParams::New();
@@ -7102,7 +7319,7 @@ TEST_F(NetworkContextExpectBadMessageTest,
   ResourceRequest my_request;
   my_request.trust_token_params =
       OptionalTrustTokenParams(mojom::TrustTokenParams::New());
-  my_request.trust_token_params->type =
+  my_request.trust_token_params->operation =
       mojom::TrustTokenOperationType::kSigning;
 
   auto factory_params = mojom::URLLoaderFactoryParams::New();
@@ -7142,7 +7359,7 @@ TEST_F(NetworkContextTest,
 }
 
 TEST_F(NetworkContextTest,
-       RejectsTrustTokenBearingRequestWhenThirdPartyCookiesAreDisabled) {
+       RejectsTrustTokenBearingRequestWhenTrustTokensAreBlocked) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(features::kPrivateStateTokens);
 
@@ -7156,7 +7373,38 @@ TEST_F(NetworkContextTest,
           [&run_loop](TrustTokenStore* unused) { run_loop.Quit(); }));
   run_loop.Run();
 
-  network_context->cookie_manager()->BlockThirdPartyCookies(true);
+  network_context->SetBlockTrustTokens(true);
+
+  ResourceRequest my_request;
+  my_request.trust_token_params =
+      OptionalTrustTokenParams(mojom::TrustTokenParams::New());
+
+  std::unique_ptr<TestURLLoaderClient> client = FetchRequest(
+      my_request, network_context.get(), mojom::kURLLoadOptionNone,
+      mojom::kBrowserProcessId, mojom::URLLoaderFactoryParams::New());
+  EXPECT_EQ(client->completion_status().error_code,
+            net::ERR_TRUST_TOKEN_OPERATION_FAILED);
+  EXPECT_EQ(client->completion_status().trust_token_operation_status,
+            mojom::TrustTokenOperationStatus::kUnauthorized);
+}
+
+TEST_F(NetworkContextTest,
+       RejectsTrustTokenBearingRequestWhenStorageIsBlocked) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(features::kPrivateStateTokens);
+
+  std::unique_ptr<NetworkContext> network_context =
+      CreateContextWithParams(CreateNetworkContextParamsForTesting());
+
+  // Allow the store time to initialize asynchronously.
+  base::RunLoop run_loop;
+  network_context->trust_token_store()->ExecuteOrEnqueue(
+      base::BindLambdaForTesting(
+          [&run_loop](TrustTokenStore* unused) { run_loop.Quit(); }));
+  run_loop.Run();
+
+  network_context->SetBlockTrustTokens(false);
+  SetDefaultContentSetting(CONTENT_SETTING_BLOCK, network_context.get());
 
   ResourceRequest my_request;
   my_request.trust_token_params =

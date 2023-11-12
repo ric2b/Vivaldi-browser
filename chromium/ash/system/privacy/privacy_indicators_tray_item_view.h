@@ -9,6 +9,7 @@
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/system/tray/tray_item_view.h"
 #include "base/containers/flat_set.h"
+#include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "ui/compositor/throughput_tracker.h"
 
@@ -72,6 +73,9 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView,
       const PrivacyIndicatorsTrayItemView&) = delete;
 
   ~PrivacyIndicatorsTrayItemView() override;
+
+  views::ImageView* camera_icon() { return camera_icon_; }
+  views::ImageView* microphone_icon() { return microphone_icon_; }
 
   // Update the view according to the state of camara/microphone access.
   void Update(const std::string& app_id,
@@ -139,6 +143,9 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView,
   // Record the type of privacy indicators that are showing.
   void RecordPrivacyIndicatorsType();
 
+  // Record repeated shows metric when the timer is stop.
+  void RecordRepeatedShows();
+
   views::BoxLayout* layout_manager_ = nullptr;
 
   // Owned by the views hierarchy.
@@ -168,6 +175,10 @@ class ASH_EXPORT PrivacyIndicatorsTrayItemView : public TrayItemView,
 
   // Used to record metrics of the number of shows per session.
   int count_visible_per_session_ = 0;
+
+  // Used to record metrics of repeated shows per 100 ms.
+  int count_repeated_shows_ = 0;
+  base::DelayTimer repeated_shows_timer_;
 
   // Measure animation smoothness metrics for all the animations.
   absl::optional<ui::ThroughputTracker> throughput_tracker_;

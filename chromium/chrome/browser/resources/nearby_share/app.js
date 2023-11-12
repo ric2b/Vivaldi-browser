@@ -9,11 +9,12 @@ import './nearby_confirmation_page.js';
 import './nearby_discovery_page.js';
 import 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 
+import {ConfirmationManagerInterface, PayloadPreview, ShareTarget, TransferUpdateListenerPendingReceiver} from '/mojo/nearby_share.mojom-webui.js';
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
-import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getTemplate} from './app.html.js';
-import {NearbyShareSettingsBehavior, NearbyShareSettingsBehaviorInterface} from './shared/nearby_share_settings_behavior.js';
+import {NearbyShareSettingsMixin} from './shared/nearby_share_settings_mixin.js';
 import {CloseReason} from './shared/types.js';
 
 /**
@@ -21,6 +22,20 @@ import {CloseReason} from './shared/types.js';
  * Share flow. It is used as a standalone dialog via chrome://nearby and as part
  * of the ChromeOS share sheet.
  */
+
+/**
+ * TODO: Remove this manual type declaration once this file is converted to TS.
+ *
+ * The reason a page was closed. Keep in sync with NearbyShareDialogUI.
+ * @enum {number}
+ */
+const CloseReasonType = {
+  UNKNOWN: 0,
+  TRANSFER_STARTED: 1,
+  TRANSFER_SUCCEEDED: 2,
+  CANCELLED: 3,
+  REJECTED: 4,
+};
 
 /** @enum {string} */
 const Page = {
@@ -34,10 +49,9 @@ const Page = {
 /**
  * @constructor
  * @extends {PolymerElement}
- * @implements {NearbyShareSettingsBehaviorInterface}
+ * @implements {NearbyShareSettingsMixinInterface}
  */
-const NearbyShareAppElementBase =
-    mixinBehaviors([NearbyShareSettingsBehavior], PolymerElement);
+const NearbyShareAppElementBase = NearbyShareSettingsMixin(PolymerElement);
 
 /** @polymer */
 export class NearbyShareAppElement extends NearbyShareAppElementBase {
@@ -60,7 +74,7 @@ export class NearbyShareAppElement extends NearbyShareAppElementBase {
       /**
        * Set by the nearby-discovery-page component when switching to the
        * nearby-confirmation-page.
-       * @private {?nearbyShare.mojom.ConfirmationManagerInterface}
+       * @private {?ConfirmationManagerInterface}
        */
       confirmationManager_: {
         type: Object,
@@ -70,7 +84,7 @@ export class NearbyShareAppElement extends NearbyShareAppElementBase {
       /**
        * Set by the nearby-discovery-page component when switching to the
        * nearby-confirmation-page.
-       * @private {?nearbyShare.mojom.TransferUpdateListenerPendingReceiver}
+       * @private {?TransferUpdateListenerPendingReceiver}
        */
       transferUpdateListener_: {
         type: Object,
@@ -80,7 +94,7 @@ export class NearbyShareAppElement extends NearbyShareAppElementBase {
       /**
        * The currently selected share target set by the nearby-discovery-page
        * component when the user selects a device.
-       * @private {?nearbyShare.mojom.ShareTarget}
+       * @private {?ShareTarget}
        */
       selectedShareTarget_: {
         type: Object,
@@ -90,7 +104,7 @@ export class NearbyShareAppElement extends NearbyShareAppElementBase {
       /**
        * Preview info of attachment to be sent, set by the
        * nearby-discovery-page.
-       * @private {?nearbyShare.mojom.PayloadPreview}
+       * @private {?PayloadPreview}
        */
       payloadPreview_: {
         type: Object,
@@ -110,7 +124,7 @@ export class NearbyShareAppElement extends NearbyShareAppElementBase {
     this.addEventListener(
         'close',
         e => this.onClose_(
-            /** @type {!CustomEvent<!{reason: CloseReason}>} */ (e)));
+            /** @type {!CustomEvent<!{reason: CloseReasonType}>} */ (e)));
     this.addEventListener('onboarding-complete', this.onOnboardingComplete_);
   }
 
@@ -182,7 +196,7 @@ export class NearbyShareAppElement extends NearbyShareAppElementBase {
 
   /**
    * Handler for the close event.
-   * @param {!CustomEvent<!{reason: CloseReason}>} event
+   * @param {!CustomEvent<!{reason: CloseReasonType}>} event
    * @private
    */
   onClose_(event) {

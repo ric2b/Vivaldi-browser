@@ -43,11 +43,11 @@ const char kBadStateCSSClass[] = "in_bad_state";
 // 'stat_status'.
 class StatBase {
  public:
-  base::Value ToValue() const {
-    base::Value result(base::Value::Type::DICTIONARY);
-    result.SetKey("stat_name", base::Value(key_));
-    result.SetKey("stat_value", value_.Clone());
-    result.SetKey("stat_status", base::Value(status_));
+  base::Value::Dict ToValue() const {
+    base::Value::Dict result;
+    result.Set("stat_name", base::Value(key_));
+    result.Set("stat_value", value_.Clone());
+    result.Set("stat_status", base::Value(status_));
     return result;
   }
 
@@ -92,14 +92,14 @@ class Section {
     return AddStat(key, std::string(kUninitialized));
   }
 
-  base::Value ToValue() const {
-    base::Value result(base::Value::Type::DICTIONARY);
-    result.SetKey("title", base::Value(title_));
-    base::Value stats(base::Value::Type::LIST);
+  base::Value::Dict ToValue() const {
+    base::Value::Dict result;
+    result.Set("title", base::Value(title_));
+    base::Value::List stats;
     for (const std::unique_ptr<StatBase>& stat : stats_)
       stats.Append(stat->ToValue());
-    result.SetKey("data", std::move(stats));
-    result.SetKey("is_sensitive", base::Value(is_sensitive_));
+    result.Set("data", std::move(stats));
+    result.Set("is_sensitive", base::Value(is_sensitive_));
     return result;
   }
 
@@ -132,8 +132,8 @@ class SectionList {
 
   // If |include_sensitive_data| is true, returns all added sections. Otherwise,
   // omits those added with |is_sensitive| set to true.
-  base::Value ToValue(IncludeSensitiveData include_sensitive_data) const {
-    base::Value result(base::Value::Type::LIST);
+  base::Value::List ToValue(IncludeSensitiveData include_sensitive_data) const {
+    base::Value::List result;
     for (const std::unique_ptr<Section>& section : sections_) {
       if (include_sensitive_data || !section->is_sensitive()) {
         result.Append(section->ToValue());
@@ -180,6 +180,33 @@ std::string GetTransportStateString(syncer::SyncService::TransportState state) {
     case syncer::SyncService::TransportState::ACTIVE:
       return "Active";
   }
+  NOTREACHED();
+  return std::string();
+}
+
+std::string GetUserActionableErrorString(
+    SyncService::UserActionableError state) {
+  switch (state) {
+    case SyncService::UserActionableError::kNone:
+      return "None";
+    case SyncService::UserActionableError::kSignInNeedsUpdate:
+      return "Sign-in needs update";
+    case SyncService::UserActionableError::kNeedsPassphrase:
+      return "Needs passphrase";
+    case SyncService::UserActionableError::kNeedsTrustedVaultKeyForPasswords:
+      return "Needs trusted vault key for passwords";
+    case SyncService::UserActionableError::kNeedsTrustedVaultKeyForEverything:
+      return "Needs trusted vault key for everything";
+    case SyncService::UserActionableError::
+        kTrustedVaultRecoverabilityDegradedForPasswords:
+      return "Trusted vault recoverability degraded for passwords";
+    case SyncService::UserActionableError::
+        kTrustedVaultRecoverabilityDegradedForEverything:
+      return "Trusted vault recoverability degraded for everything";
+    case SyncService::UserActionableError::kGenericUnrecoverableError:
+      return "Generic unrecoverable error";
+  }
+
   NOTREACHED();
   return std::string();
 }
@@ -283,6 +310,8 @@ base::Value::Dict ConstructAboutInformation(
       section_list.AddSection("Summary", /*is_sensitive=*/false);
   Stat<std::string>* transport_state =
       section_summary->AddStringStat("Transport State");
+  Stat<std::string>* error_state =
+      section_summary->AddStringStat("User Actionable Error");
   Stat<std::string>* disable_reasons =
       section_summary->AddStringStat("Disable Reasons");
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -410,12 +439,18 @@ base::Value::Dict ConstructAboutInformation(
 
   if (!service) {
     transport_state->Set("Sync service does not exist");
+    error_state->Set("Sync service does not exist");
     about_info.Set(kDetailsKey, section_list.ToValue(include_sensitive_data));
     return about_info;
   }
 
   // Summary.
   transport_state->Set(GetTransportStateString(service->GetTransportState()));
+  const SyncService::UserActionableError user_actionable_error =
+      service->GetUserActionableError();
+  error_state->Set(GetUserActionableErrorString(user_actionable_error),
+                   /*is_good=*/user_actionable_error ==
+                       SyncService::UserActionableError::kNone);
   disable_reasons->Set(GetDisableReasonsString(service->GetDisableReasons()));
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   os_feature_state->Set("Enforced Enabled");

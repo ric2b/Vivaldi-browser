@@ -9,10 +9,19 @@ import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_LIGHT;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+
+import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_POSITION_DEFAULT;
+import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_POSITION_END;
+import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_POSITION_START;
+import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_SLIDE_IN_DEFAULT;
+import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_BOTTOM;
+import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE;
 
 import android.app.Activity;
 import android.app.PendingIntent;
@@ -303,6 +312,89 @@ public class CustomTabIntentDataProviderTest {
     }
 
     @Test
+    public void testActivityBreakPoint_Default() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Break points do not match", 840, dataProvider.getActivityBreakPoint());
+    }
+
+    @Test
+    public void testActivityBreakPoint_Custom() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_BREAKPOINT_DP, 300);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Break points do not match", 300, dataProvider.getActivityBreakPoint());
+    }
+
+    @Test
+    public void testActivityBreakPoint_Negative() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_BREAKPOINT_DP, -500);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Break points do not match", 840, dataProvider.getActivityBreakPoint());
+    }
+
+    @Test
+    public void testInitialActivityHeight_1stParty() {
+        var intent = new Intent().putExtra(CustomTabsIntent.EXTRA_INITIAL_ACTIVITY_HEIGHT_PX, 50);
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.isFirstParty(any())).thenReturn(true);
+        CustomTabsConnection.setInstanceForTesting(connection);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(50, dataProvider.getInitialActivityHeight());
+    }
+
+    @Test
+    public void testInitialActivityWidth_1Pdisabled() {
+        ChromeFeatureList.sCctResizableSideSheet.setForTesting(false);
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_WIDTH_PX, 50);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Width should be 0", 0, dataProvider.getInitialActivityWidth());
+    }
+
+    @Test
+    public void testInitialActivityWidth_3Penabled_notdenied() {
+        ChromeFeatureList.sCctResizableSideSheet.setForTesting(true);
+        ChromeFeatureList.sCctResizableSideSheetForThirdParties.setForTesting(true);
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_WIDTH_PX, 50);
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.pixar.woody");
+        CustomTabsConnection.setInstanceForTesting(connection);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Width should be 50", 50, dataProvider.getInitialActivityWidth());
+    }
+
+    @Test
+    public void testInitialActivityWidth_3Penabled_denied() {
+        ChromeFeatureList.sCctResizableSideSheet.setForTesting(true);
+        ChromeFeatureList.sCctResizableSideSheetForThirdParties.setForTesting(true);
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_WIDTH_PX, 50);
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.getClientPackageNameForSession(any())).thenReturn("com.dc.joker");
+        CustomTabsConnection.setInstanceForTesting(connection);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        CustomTabIntentDataProvider.DENYLIST_ENTRIES.setForTesting(
+                "com.dc.joker|com.marvel.thanos");
+        assertEquals("Width should be 0", 0, dataProvider.getInitialActivityWidth());
+    }
+
+    @Test
+    public void testInitialActivityWidth_3Pdisabled() {
+        ChromeFeatureList.sCctResizableSideSheet.setForTesting(true);
+        ChromeFeatureList.sCctResizableSideSheetForThirdParties.setForTesting(false);
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_INITIAL_ACTIVITY_WIDTH_PX, 50);
+        CustomTabsConnection connection = Mockito.mock(CustomTabsConnection.class);
+        when(connection.isFirstParty(any())).thenReturn(true);
+        CustomTabsConnection.setInstanceForTesting(connection);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Width should be 50", 50, dataProvider.getInitialActivityWidth());
+    }
+
+    @Test
     public void partialCustomTabHeightResizeBehavior_Default() {
         Intent intent = new Intent().putExtra(
                 CustomTabIntentDataProvider.EXTRA_ACTIVITY_HEIGHT_RESIZE_BEHAVIOR,
@@ -339,6 +431,73 @@ public class CustomTabIntentDataProviderTest {
 
         assertTrue("The fixed height resize behavior should return true",
                 dataProvider.isPartialCustomTabFixedHeight());
+    }
+
+    @Test
+    public void sideSheetSlideInBehavior() {
+        // No extra
+        var dataProvider =
+                new CustomTabIntentDataProvider(new Intent(), mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..SLIDE_IN_FROM_SIDE for the default slide-in behavior",
+                ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE, dataProvider.getSideSheetSlideInBehavior());
+
+        // Default
+        Intent intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_SLIDE_IN_BEHAVIOR,
+                ACTIVITY_SIDE_SHEET_SLIDE_IN_DEFAULT);
+        dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..SLIDE_IN_FROM_SIDE", ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE,
+                dataProvider.getSideSheetSlideInBehavior());
+
+        // Bottom
+        intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_SLIDE_IN_BEHAVIOR,
+                ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_BOTTOM);
+        dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..SLIDE_IN_FROM_BOTTOM",
+                ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_BOTTOM,
+                dataProvider.getSideSheetSlideInBehavior());
+
+        // Side
+        intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_SLIDE_IN_BEHAVIOR,
+                ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE);
+        dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..SLIDE_IN_FROM_SIDE", ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE,
+                dataProvider.getSideSheetSlideInBehavior());
+    }
+
+    @Test
+    public void sideSheetPosition() {
+        // No extra
+        var dataProvider =
+                new CustomTabIntentDataProvider(new Intent(), mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..POSITION_END for the default side sheet position",
+                ACTIVITY_SIDE_SHEET_POSITION_END, dataProvider.getSideSheetPosition());
+
+        // Default
+        Intent intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_POSITION,
+                ACTIVITY_SIDE_SHEET_POSITION_DEFAULT);
+        dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..POSITION_END for the default side sheet position",
+                ACTIVITY_SIDE_SHEET_POSITION_END, dataProvider.getSideSheetPosition());
+
+        // Start
+        intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_POSITION,
+                ACTIVITY_SIDE_SHEET_POSITION_START);
+        dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..POSITION_START", ACTIVITY_SIDE_SHEET_POSITION_START,
+                dataProvider.getSideSheetPosition());
+
+        // End
+        intent = new Intent().putExtra(
+                CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_POSITION,
+                ACTIVITY_SIDE_SHEET_POSITION_END);
+        dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Should return ..POSITION_END", ACTIVITY_SIDE_SHEET_POSITION_END,
+                dataProvider.getSideSheetPosition());
     }
 
     @Test
@@ -394,7 +553,7 @@ public class CustomTabIntentDataProviderTest {
         CustomTabIntentDataProvider dataProvider =
                 new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
 
-        Assert.assertNull(dataProvider.getClientPackageName());
+        assertNull(dataProvider.getClientPackageName());
     }
 
     @Test
@@ -532,6 +691,78 @@ public class CustomTabIntentDataProviderTest {
 
         assertEquals("fr", provider.getTranslateLanguage());
         assertFalse(provider.shouldAutoTranslate());
+    }
+
+    @Test
+    public void getSecondaryToolbarSwipeUpPendingIntent() {
+        Intent intent = new Intent();
+        var pendingIntent = mock(PendingIntent.class);
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_SECONDARY_TOOLBAR_SWIPE_UP_ACTION, pendingIntent);
+        var provider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(pendingIntent, provider.getSecondaryToolbarSwipeUpPendingIntent());
+    }
+
+    @Test
+    @DisableFeatures({ChromeFeatureList.CCT_BOTTOM_BAR_SWIPE_UP_GESTURE})
+    public void getSecondaryToolbarSwipeUpPendingIntent_featureDisabled() {
+        Intent intent = new Intent();
+        var pendingIntent = mock(PendingIntent.class);
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_SECONDARY_TOOLBAR_SWIPE_UP_ACTION, pendingIntent);
+        var provider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertNull(provider.getSecondaryToolbarSwipeUpPendingIntent());
+    }
+
+    @Test
+    public void testActivityDecorationType_Default() {
+        // Decoration not set
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Decoration types do not match",
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DEFAULT,
+                dataProvider.getActivitySideSheetDecorationType());
+
+        // Decoration set higher than max
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_DECORATION_TYPE,
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_MAX + 1);
+        var dataProvider2 = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Decoration types do not match",
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DEFAULT,
+                dataProvider2.getActivitySideSheetDecorationType());
+    }
+
+    @Test
+    public void testActivityDecorationType_Shadow() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_DECORATION_TYPE,
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Decoration types do not match",
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW,
+                dataProvider.getActivitySideSheetDecorationType());
+    }
+
+    @Test
+    public void testActivityDecorationType_DividerLine() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_DECORATION_TYPE,
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DIVIDER);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Decoration types do not match",
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DIVIDER,
+                dataProvider.getActivitySideSheetDecorationType());
+    }
+
+    @Test
+    public void testActivityDecorationType_None() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_ACTIVITY_SIDE_SHEET_DECORATION_TYPE,
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_NONE);
+        var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals("Decoration types do not match",
+                CustomTabIntentDataProvider.ACTIVITY_SIDE_SHEET_DECORATION_TYPE_NONE,
+                dataProvider.getActivitySideSheetDecorationType());
     }
 
     private Bundle createActionButtonInToolbarBundle() {

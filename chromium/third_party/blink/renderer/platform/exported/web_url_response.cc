@@ -38,6 +38,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "services/network/public/cpp/trigger_attestation.h"
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/load_timing_info.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -133,7 +134,6 @@ WebURLResponse WebURLResponse::Create(
   response.SetExpectedContentLength(head.content_length);
   response.SetHasMajorCertificateErrors(
       net::IsCertStatusError(head.cert_status));
-  response.SetIsLegacyTLSVersion(head.is_legacy_tls_version);
   response.SetHasRangeRequested(head.has_range_requested);
   response.SetTimingAllowPassed(head.timing_allow_passed);
   response.SetWasCached(!head.load_timing.request_start_time.is_null() &&
@@ -179,7 +179,8 @@ WebURLResponse WebURLResponse::Create(
       head.did_service_worker_navigation_preload);
   response.SetIsValidated(head.is_validated);
   response.SetEncodedDataLength(head.encoded_data_length);
-  response.SetEncodedBodyLength(head.encoded_body_length);
+  response.SetEncodedBodyLength(
+      head.encoded_body_length ? head.encoded_body_length->value : 0);
   response.SetWasAlpnNegotiated(head.was_alpn_negotiated);
   response.SetAlpnNegotiatedProtocol(
       WebString::FromUTF8(head.alpn_negotiated_protocol));
@@ -198,6 +199,7 @@ WebURLResponse WebURLResponse::Create(
   response.SetWasCookieInRequest(head.was_cookie_in_request);
   response.SetRecursivePrefetchToken(head.recursive_prefetch_token);
   response.SetWebBundleURL(KURL(head.web_bundle_url));
+  response.SetTriggerAttestation(head.trigger_attestation);
 
   SetSecurityStyleAndDetails(GURL(KURL(url)), head, &response,
                              report_security_info);
@@ -329,11 +331,19 @@ void WebURLResponse::SetLoadTiming(
   timing->SetSendEnd(mojo_timing.send_end);
   timing->SetReceiveHeadersStart(mojo_timing.receive_headers_start);
   timing->SetReceiveHeadersEnd(mojo_timing.receive_headers_end);
+  timing->SetReceiveNonInformationalHeaderStart(
+      mojo_timing.receive_non_informational_headers_start);
+  timing->SetReceiveEarlyHintsStart(mojo_timing.first_early_hints_time);
   timing->SetSslStart(mojo_timing.connect_timing.ssl_start);
   timing->SetSslEnd(mojo_timing.connect_timing.ssl_end);
   timing->SetPushStart(mojo_timing.push_start);
   timing->SetPushEnd(mojo_timing.push_end);
   resource_response_->SetResourceLoadTiming(std::move(timing));
+}
+
+void WebURLResponse::SetTriggerAttestation(
+    const absl::optional<network::TriggerAttestation>& trigger_attestation) {
+  resource_response_->SetTriggerAttestation(trigger_attestation);
 }
 
 base::Time WebURLResponse::ResponseTime() const {
@@ -431,10 +441,6 @@ void WebURLResponse::VisitHttpHeaderFields(
 
 void WebURLResponse::SetHasMajorCertificateErrors(bool value) {
   resource_response_->SetHasMajorCertificateErrors(value);
-}
-
-void WebURLResponse::SetIsLegacyTLSVersion(bool value) {
-  resource_response_->SetIsLegacyTLSVersion(value);
 }
 
 void WebURLResponse::SetHasRangeRequested(bool value) {
@@ -591,7 +597,7 @@ int64_t WebURLResponse::EncodedBodyLength() const {
   return resource_response_->EncodedBodyLength();
 }
 
-void WebURLResponse::SetEncodedBodyLength(int64_t length) {
+void WebURLResponse::SetEncodedBodyLength(uint64_t length) {
   resource_response_->SetEncodedBodyLength(length);
 }
 

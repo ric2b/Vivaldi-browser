@@ -8,7 +8,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -17,6 +17,7 @@
 #include "extensions/browser/api/alarms/alarms_api_constants.h"
 #include "extensions/common/api/alarms.h"
 #include "extensions/common/error_utils.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 
 namespace extensions {
 
@@ -88,7 +89,7 @@ AlarmsCreateFunction::AlarmsCreateFunction()
 AlarmsCreateFunction::AlarmsCreateFunction(base::Clock* clock)
     : clock_(clock) {}
 
-AlarmsCreateFunction::~AlarmsCreateFunction() {}
+AlarmsCreateFunction::~AlarmsCreateFunction() = default;
 
 ExtensionFunction::ResponseAction AlarmsCreateFunction::Run() {
   std::unique_ptr<alarms::Create::Params> params(

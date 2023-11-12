@@ -10,14 +10,13 @@
 #include "apps/test/app_window_waiter.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
-#include "base/callback_forward.h"
 #include "base/command_line.h"
+#include "base/functional/callback_forward.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "base/values.h"
-#include "chrome/browser/ash/app_mode/kiosk_app_data.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
 #include "chrome/browser/ash/login/startup_utils.h"
@@ -33,7 +32,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/ash/login/error_screen_handler.h"
-#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom-forward.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/common/extension.h"
 #include "extensions/components/native_app_window/native_app_window_views.h"
@@ -101,22 +100,6 @@ Browser* OpenA11ySettingsBrowser(AppSessionAsh* app_session) {
 KioskBaseTest::KioskBaseTest()
     : settings_helper_(false), fake_cws_(new FakeCWS) {
   set_exit_when_last_browser_closes(false);
-
-  // This test does not operate any real App, so App data does not exist.
-  // Depending on timing, the asynchronous check for app data may or may not
-  // complete before test checks pass. And if the check does complete, it will
-  // mark app status KioskAppData::Status::kError, and exclude it from the
-  // list of populated apps.
-  //
-  // Then, any Update UI event (asynchronous) (like
-  // LoginDisplayHostCommon::OnStartSignInScreenCommon() will invoke
-  // SendKioskApps() and destroy test configuration.
-  //
-  // We default to ignore test data, as most of test cases use app ids only,
-  // So individual checks should revert it to default when needed.
-  //
-  // TODO(https://crbug.com/937244): Remove this.
-  KioskAppData::SetIgnoreKioskAppDataLoadFailuresForTesting(true);
 }
 
 KioskBaseTest::~KioskBaseTest() = default;
@@ -141,24 +124,22 @@ int KioskBaseTest::WaitForWidthChange(content::DOMMessageQueue* message_queue,
   std::string message;
   while (message_queue->WaitForMessage(&message)) {
     absl::optional<base::Value> message_value = base::JSONReader::Read(message);
-
-    if (!message_value.has_value() || !message_value.value().is_dict())
+    if (!message_value || !message_value->is_dict()) {
       continue;
+    }
 
-    const std::string* name = message_value.value().FindStringKey("name");
-    if (!name || *name != kSizeChangedMessage)
+    const base::Value::Dict& message_dict = message_value->GetDict();
+    const std::string* name = message_dict.FindString("name");
+    if (!name || *name != kSizeChangedMessage) {
       continue;
+    }
 
-    const base::Value* data = message_value->FindKey("data");
-
-    if (!data || !data->is_int())
+    const absl::optional<int> data = message_dict.FindInt("data");
+    if (!data || data == current_width) {
       continue;
+    }
 
-    const int new_width = data->GetInt();
-    if (new_width == current_width)
-      continue;
-
-    return new_width;
+    return data.value();
   }
 
   ADD_FAILURE() << "Message wait failed " << kSizeChangedMessage;
@@ -207,18 +188,15 @@ void KioskBaseTest::TearDownOnMainThread() {
   KioskLaunchController::SetNetworkTimeoutCallbackForTesting(nullptr);
 
   OobeBaseTest::TearDownOnMainThread();
-
-  // Clean up while main thread still runs.
-  // See http://crbug.com/176659.
-  KioskAppManager::Get()->CleanUp();
 }
 
 void KioskBaseTest::SetUpCommandLine(base::CommandLine* command_line) {
   OobeBaseTest::SetUpCommandLine(command_line);
   fake_cws_->Init(embedded_test_server());
 
-  if (use_consumer_kiosk_mode_)
+  if (use_consumer_kiosk_mode_) {
     command_line->AppendSwitch(switches::kEnableConsumerKiosk);
+  }
 }
 
 bool KioskBaseTest::LaunchApp(const std::string& app_id) {
@@ -235,8 +213,9 @@ void KioskBaseTest::ReloadKioskApps() {
 }
 
 void KioskBaseTest::SetupTestAppUpdateCheck() {
-  if (test_app_version().empty())
+  if (test_app_version().empty()) {
     return;
+  }
 
   fake_cws_->SetUpdateCrx(test_app_id(), test_crx_file(), test_app_version());
 }
@@ -321,13 +300,15 @@ void KioskBaseTest::WaitForAppLaunchWithOptions(bool check_launch_data,
   OobeWindowVisibilityWaiter(false /*target_visibility*/).Wait();
 
   // Terminate the app.
-  if (terminate_app)
+  if (terminate_app) {
     window->GetBaseWindow()->Close();
+  }
 
   // Wait until the app terminates if it is still running.
   if (!keep_app_open &&
-      !app_window_registry->GetAppWindowsForApp(test_app_id_).empty())
+      !app_window_registry->GetAppWindowsForApp(test_app_id_).empty()) {
     RunUntilBrowserProcessQuits();
+  }
 
   // Check that the app had been informed that it is running in a kiosk
   // session.
@@ -342,8 +323,9 @@ void KioskBaseTest::WaitForAppLaunchSuccess() {
 }
 
 void KioskBaseTest::WaitForAppLaunchNetworkTimeout() {
-  if (GetKioskLaunchController()->network_wait_timedout())
+  if (GetKioskLaunchController()->network_wait_timedout()) {
     return;
+  }
 
   base::RunLoop loop;
   base::OnceClosure callback =

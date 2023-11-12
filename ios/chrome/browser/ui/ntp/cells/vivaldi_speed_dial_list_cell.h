@@ -16,7 +16,8 @@
 
 // SETTERS
 - (void)configureCellWith:(const VivaldiSpeedDialItem*)item;
-- (void)configureCellWithAttributes:(const FaviconAttributes*)attributes;
+- (void)configureCellWithAttributes:(const FaviconAttributes*)attributes
+                               item:(VivaldiSpeedDialItem*)item;
 - (void)configurePreview;
 
 @end

@@ -25,14 +25,14 @@
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/location_bar/location_bar_coordinator.h"
-#import "ios/chrome/browser/ui/ntp/ntp_util.h"
+#import "ios/chrome/browser/ui/main/layout_guide_util.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_util.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/ui/orchestrator/omnibox_focus_orchestrator.h"
 #import "ios/chrome/browser/ui/toolbar/adaptive_toolbar_coordinator+subclassing.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_mediator.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/primary_toolbar_view_controller_delegate.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/components/webui/web_ui_url_constants.h"
@@ -113,6 +113,8 @@ using vivaldi::IsVivaldiRunning;
   self.viewController.popupMenuCommandsHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), PopupMenuCommands);
   self.viewController.delegate = self;
+  self.viewController.layoutGuideCenter =
+      LayoutGuideCenterForBrowser(self.browser);
 
   self.orchestrator = [[OmniboxFocusOrchestrator alloc] init];
   self.orchestrator.toolbarAnimatee = self.viewController;
@@ -152,12 +154,12 @@ using vivaldi::IsVivaldiRunning;
 
 #pragma mark - Public
 
-- (id<ActivityServicePositioner>)activityServicePositioner {
+- (id<SharingPositioner>)SharingPositioner {
 
   // Vivaldi: We will return location bar here since share button is within
   // location bar for us.
   if (IsVivaldiRunning())
-      return [self.locationBarCoordinator activityServicePositioner];
+      return [self.locationBarCoordinator vivaldiPositioner];
   // End Vivaldi
 
   return self.viewController;

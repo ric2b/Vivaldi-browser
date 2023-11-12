@@ -13,7 +13,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/privacy/privacy_indicators_controller.h"
 #include "ash/system/tray/system_tray_notifier.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/color/color_id.h"
@@ -47,6 +47,14 @@ ScreenSecurityController::~ScreenSecurityController() {
 
 void ScreenSecurityController::CreateNotification(const std::u16string& message,
                                                   bool is_capture) {
+  if (features::IsVideoConferenceEnabled()) {
+    // Don't send screen share notifications, because the VideoConferenceTray
+    // serves as the notifier for screen share. As for screen capture, continue
+    // to show these notifications for now, although they may end up in the
+    // `VideoConferenceTray` as well. See b/269486186 for details.
+    DCHECK(is_capture);
+  }
+
   message_center::RichNotificationData data;
   data.buttons.push_back(message_center::ButtonInfo(l10n_util::GetStringUTF16(
       is_capture ? IDS_ASH_STATUS_TRAY_SCREEN_CAPTURE_STOP
@@ -81,19 +89,12 @@ void ScreenSecurityController::CreateNotification(const std::u16string& message,
               },
               weak_ptr_factory_.GetWeakPtr(), is_capture));
 
-  // If the feature is enabled, the screen share notification should have the
-  // style of privacy indicators notification.
-  bool have_privacy_indicators_style =
-      features::IsPrivacyIndicatorsEnabled() && !is_capture;
-
-  auto* screen_share_notifier_id = features::IsPrivacyIndicatorsEnabled()
-                                       ? kPrivacyIndicatorsNotifierId
-                                       : kNotifierScreenShare;
-
-  auto screen_share_catalog_name =
+  // If the feature is enabled, the notification should have the style of
+  // privacy indicators notification.
+  auto* notifier_id =
       features::IsPrivacyIndicatorsEnabled()
-          ? NotificationCatalogName::kPrivacyIndicators
-          : NotificationCatalogName::kScreenSecurity;
+          ? kPrivacyIndicatorsNotifierId
+          : (is_capture ? kNotifierScreenCapture : kNotifierScreenShare);
 
   std::unique_ptr<Notification> notification = CreateSystemNotificationPtr(
       message_center::NOTIFICATION_TYPE_SIMPLE,
@@ -101,18 +102,18 @@ void ScreenSecurityController::CreateNotification(const std::u16string& message,
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SCREEN_SHARE_TITLE),
       message, std::u16string() /* display_source */, GURL(),
       message_center::NotifierId(
-          message_center::NotifierType::SYSTEM_COMPONENT,
-          is_capture ? kNotifierScreenCapture : screen_share_notifier_id,
-          is_capture ? NotificationCatalogName::kScreenSecurity
-                     : screen_share_catalog_name),
+          message_center::NotifierType::SYSTEM_COMPONENT, notifier_id,
+          features::IsPrivacyIndicatorsEnabled()
+              ? NotificationCatalogName::kPrivacyIndicators
+              : NotificationCatalogName::kScreenSecurity),
       data, std::move(delegate),
-      have_privacy_indicators_style ? kPrivacyIndicatorsScreenShareIcon
-                                    : kNotificationScreenshareIcon,
+      features::IsPrivacyIndicatorsEnabled() ? kPrivacyIndicatorsScreenShareIcon
+                                             : kNotificationScreenshareIcon,
       message_center::SystemNotificationWarningLevel::NORMAL);
 
   notification->set_pinned(true);
 
-  if (have_privacy_indicators_style) {
+  if (features::IsPrivacyIndicatorsEnabled()) {
     notification->set_accent_color_id(ui::kColorAshPrivacyIndicatorsBackground);
     notification->set_parent_vector_small_image(kPrivacyIndicatorsIcon);
   }
@@ -122,6 +123,10 @@ void ScreenSecurityController::CreateNotification(const std::u16string& message,
 }
 
 void ScreenSecurityController::StopAllSessions(bool is_capture) {
+  if (features::IsVideoConferenceEnabled() && !is_capture) {
+    return;
+  }
+
   message_center::MessageCenter::Get()->RemoveNotification(
       is_capture ? kScreenCaptureNotificationId : kScreenShareNotificationId,
       false /* by_user */);
@@ -169,6 +174,14 @@ void ScreenSecurityController::OnScreenCaptureStop() {
 void ScreenSecurityController::OnScreenShareStart(
     base::OnceClosure stop_callback,
     const std::u16string& helper_name) {
+  // Don't send screen share notifications, because the VideoConferenceTray
+  // serves as the notifier for screen share. As for screen capture, continue to
+  // show these notifications for now, although they may end up in the
+  // `VideoConferenceTray` as well. See b/269486186 for details.
+  if (features::IsVideoConferenceEnabled()) {
+    return;
+  }
+
   share_stop_callbacks_.emplace_back(std::move(stop_callback));
 
   std::u16string help_label_text;
@@ -187,6 +200,9 @@ void ScreenSecurityController::OnScreenShareStart(
 }
 
 void ScreenSecurityController::OnScreenShareStop() {
+  if (features::IsVideoConferenceEnabled()) {
+    return;
+  }
   StopAllSessions(false /* is_capture */);
 
   if (features::IsPrivacyIndicatorsEnabled())

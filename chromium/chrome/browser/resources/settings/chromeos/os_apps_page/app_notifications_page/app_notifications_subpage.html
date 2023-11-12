@@ -1,11 +1,7 @@
 <style include="cr-shared-style settings-shared iron-flex">
-  #appNotificationsList {
-    margin-top: 24px;
-  }
 </style>
 <settings-toggle-button
     id="doNotDisturbToggle"
-    class="hr"
     label="$i18n{doNotDisturbToggleTitle}"
     sub-label="$i18n{doNotDisturbToggleDescription}"
     pref="[[virtualDndPref_]]"
@@ -33,6 +29,6 @@
 <div class="cr-row" id="browserSettings">
   <localized-link class="secondary"
       localized-string="$i18n{appNotificationsLinkToBrowserSettingsDescription}"
-      link-url="$i18n{appNotificationsBrowserSettingsURL}">
+      on-link-clicked="onBrowserSettingsLinkClicked_">
   </localized-link>
 </div>

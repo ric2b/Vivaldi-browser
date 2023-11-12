@@ -23,19 +23,13 @@
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/gfx/image/image.h"
+#include "ui/resources/grit/ui_resources.h"
 
 using content::DropData;
 using features::kMacWebContentsOcclusion;
 using remote_cocoa::mojom::DraggingInfo;
 using remote_cocoa::mojom::SelectionDirection;
-
-namespace {
-// Time to delay clearing the pasteboard for after a drag ends. This is
-// required because Safari requests data from multiple processes, and clearing
-// the pasteboard after the first access results in unreliable drag operations
-// (http://crbug.com/1227001).
-const int64_t kPasteboardClearDelay = 0.5 * NSEC_PER_SEC;
-}
 
 namespace remote_cocoa {
 
@@ -252,73 +246,86 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
 - (void)startDragWithDropData:(const DropData&)dropData
             dragOperationMask:(NSDragOperation)operationMask
                         image:(NSImage*)image
-                       offset:(NSPoint)offset {
+                       offset:(NSPoint)offset
+                 isPrivileged:(BOOL)isPrivileged {
   if (!_host)
     return;
 
-  NSPasteboard* pasteboard =
-      [NSPasteboard pasteboardWithName:NSPasteboardNameDrag];
-  [pasteboard clearContents];
+  NSPoint mouseLocation = [self.window mouseLocationOutsideOfEventStream];
+  NSEvent* dragEvent = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDragged
+                                          location:mouseLocation
+                                     modifierFlags:0
+                                         timestamp:NSApp.currentEvent.timestamp
+                                      windowNumber:self.window.windowNumber
+                                           context:nil
+                                       eventNumber:0
+                                        clickCount:1
+                                          pressure:1.0];
 
   _dragSource.reset([[WebDragSource alloc] initWithHost:_host
-                                                   view:self
-                                               dropData:&dropData
-                                                  image:image
-                                                 offset:offset
-                                             pasteboard:pasteboard
-                                      dragOperationMask:operationMask]);
-  [_dragSource startDrag];
+                                               dropData:dropData
+                                           isPrivileged:isPrivileged]);
+  NSDraggingItem* draggingItem = [[[NSDraggingItem alloc]
+      initWithPasteboardWriter:_dragSource] autorelease];
+
+  if (!image) {
+    image = content::GetContentClient()
+                ->GetNativeImageNamed(IDR_DEFAULT_FAVICON)
+                .ToNSImage();
+  }
+
+  // The frame given to -[NSDraggingItem setDraggingFrame:contents:] will be
+  // interpreted as being in the coordinate system of this view, so convert it
+  // from the coordinate system of the window.
+  mouseLocation = [self convertPoint:mouseLocation fromView:nil];
+  NSRect imageRect = NSMakeRect(mouseLocation.x, mouseLocation.y,
+                                image.size.width, image.size.height);
+  imageRect.origin.x -= offset.x;
+  // Deal with Cocoa's flipped coordinate system.
+  imageRect.origin.y -= image.size.height - offset.y;
+  [draggingItem setDraggingFrame:imageRect contents:image];
+
+  _dragOperation = operationMask;
+
+  // Run the drag operation.
+  [self beginDraggingSessionWithItems:@[ draggingItem ]
+                                event:dragEvent
+                               source:self];
 }
 
 // NSDraggingSource methods
 
-- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal {
-  if (_dragSource)
-    return [_dragSource draggingSourceOperationMaskForLocal:isLocal];
-  // No web drag source - this is the case for dragging a file from the
-  // downloads manager. Default to copy operation. Note: It is desirable to
-  // allow the user to either move or copy, but this requires additional
-  // plumbing to update the download item's path once its moved.
-  return NSDragOperationCopy;
+- (NSDragOperation)draggingSession:(NSDraggingSession*)session
+    sourceOperationMaskForDraggingContext:(NSDraggingContext)context {
+  return _dragOperation;
 }
 
 // Called when a drag initiated in our view ends.
-- (void)draggedImage:(NSImage*)anImage
-             endedAt:(NSPoint)screenPoint
-           operation:(NSDragOperation)operation {
-  [_dragSource
-      endDragAt:screenPoint
-      operation:ui::DragDropTypes::NSDragOperationToDragOperation(operation)];
+- (void)draggingSession:(NSDraggingSession*)session
+           endedAtPoint:(NSPoint)screenPoint
+              operation:(NSDragOperation)operation {
+  if (!_host) {
+    return;
+  }
 
-  WebDragSource* currentDragSource = _dragSource.get();
+  NSPoint localPoint = NSZeroPoint;
+  if (self.window) {
+    NSPoint basePoint =
+        ui::ConvertPointFromScreenToWindow(self.window, screenPoint);
+    localPoint = [self convertPoint:basePoint fromView:nil];
+  }
 
-  dispatch_after(
-      dispatch_time(DISPATCH_TIME_NOW, (int64_t)kPasteboardClearDelay),
-      dispatch_get_main_queue(), ^{
-        if (_dragSource.get() == currentDragSource) {
-          // Clear the drag pasteboard. Even though this is called in dealloc,
-          // we need an explicit call because NSPasteboard can retain the drag
-          // source.
-          [_dragSource clearPasteboard];
-          _dragSource.reset();
-        }
-      });
-}
+  // Flip the two points as per Cocoa's coordinate system.
+  NSRect viewFrame = self.frame;
+  NSRect screenFrame = self.window.screen.frame;
+  _host->EndDrag(
+      operation,
+      gfx::PointF(localPoint.x, viewFrame.size.height - localPoint.y),
+      gfx::PointF(screenPoint.x, screenFrame.size.height - screenPoint.y));
 
-// Called when a drag initiated in our view moves.
-- (void)draggedImage:(NSImage*)draggedImage movedTo:(NSPoint)screenPoint {
-}
-
-// Called when a file drag is dropped and the promised files need to be written.
-- (NSArray*)namesOfPromisedFilesDroppedAtDestination:(NSURL*)dropDest {
-  if (![dropDest isFileURL])
-    return nil;
-
-  NSString* fileName = [_dragSource dragPromisedFileTo:[dropDest path]];
-  if (!fileName)
-    return nil;
-
-  return @[ fileName ];
+  // The drag is complete. Disconnect the drag source.
+  [_dragSource webContentsIsGone];
+  _dragSource.reset();
 }
 
 // NSDraggingDestination methods
@@ -328,9 +335,8 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
     return NSDragOperationNone;
 
   // Fill out a DropData from pasteboard.
-  DropData dropData;
-  content::PopulateDropDataFromPasteboard(&dropData,
-                                          [sender draggingPasteboard]);
+  DropData dropData =
+      content::PopulateDropDataFromPasteboard(sender.draggingPasteboard);
 
   // Work around screen shot drag-drop permission bugs.
   // https://crbug.com/1148078
@@ -377,8 +383,9 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
 }
 
 - (void)setHost:(remote_cocoa::mojom::WebContentsNSViewHost*)host {
-  if (!host)
-    [_dragSource clearHostAndWebContentsView];
+  if (!host) {
+    [_dragSource webContentsIsGone];
+  }
   _host = host;
 }
 
@@ -641,6 +648,28 @@ STATIC_ASSERT_ENUM(NSDragOperationMove, ui::DragDropTypes::DRAG_MOVE);
 // ViewsHostable protocol implementation.
 - (ui::ViewsHostableView*)viewsHostableView {
   return _viewsHostableView;
+}
+
+- (void)updateWindowControlsOverlay:(const gfx::Rect&)boundingRect {
+  _windowControlsOverlayRect = boundingRect;
+}
+
+- (NSView*)hitTest:(NSPoint)point {
+  if (!_windowControlsOverlayRect.IsEmpty()) {
+    // _windowControlsOverlayRect represents the area at the top of the web
+    // contents that is available for the web. As such, if the y coordinate
+    // falls within this rect, but the x coordinate doesn't we want to route
+    // events to the BridgedContentView (our superview) instead.
+    gfx::Point p = gfx::Point(point);
+    p.set_y(NSHeight(self.bounds) - p.y());
+    if (p.y() >= _windowControlsOverlayRect.y() &&
+        p.y() < _windowControlsOverlayRect.bottom() &&
+        (p.x() < _windowControlsOverlayRect.x() ||
+         p.x() >= _windowControlsOverlayRect.right())) {
+      return self.superview;
+    }
+  }
+  return [super hitTest:point];
 }
 
 @end

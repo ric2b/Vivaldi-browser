@@ -20,6 +20,10 @@ import {CustomMarginsOrientation, Margins, MarginsSetting, MarginsType} from './
 import {ScalingType} from './scaling.js';
 import {Size} from './size.js';
 
+// <if expr="is_chromeos">
+import {PrinterStatusReason} from './printer_status_cros.js';
+// </if>
+
 /**
  * |key| is the field in the serialized settings state that corresponds to the
  * setting, or an empty string if the setting should not be saved in the
@@ -172,9 +176,13 @@ export type PrintTicket = Ticket&{
   pageHeight: number,
   pageWidth: number,
   // <if expr="is_chromeos">
+  printerManuallySelected: boolean,
   printToGoogleDrive: boolean,
   // </if>
   showSystemDialog: boolean,
+  // <if expr="is_chromeos">
+  printerStatusReason?: PrinterStatusReason,
+  // </if>
 };
 
 /**
@@ -1567,6 +1575,7 @@ export class PrintPreviewModelElement extends PolymerElement {
       // <if expr="is_chromeos">
       printToGoogleDrive:
           destination.id === GooglePromotedDestinationId.SAVE_TO_DRIVE_CROS,
+      printerManuallySelected: destination.printerManuallySelected,
       // </if>
     };
 
@@ -1591,6 +1600,8 @@ export class PrintPreviewModelElement extends PolymerElement {
     }
     if (destination.origin === DestinationOrigin.CROS) {
       ticket['advancedSettings'] = this.getSettingValue('vendorItems');
+      ticket['printerStatusReason'] =
+          destination.printerStatusReason || PrinterStatusReason.UNKNOWN_REASON;
     }
     // </if>
 

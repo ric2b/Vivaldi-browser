@@ -16,6 +16,7 @@
 <translation id="1128128132059598906">EAP-TTLS</translation>
 <translation id="1145018782460575098">A janela de atualização de firmware para dispositivos externos está aberta. <ph name="NUM_UPDATES" /> atualizações disponíveis.</translation>
 <translation id="1145516343487477149">Encontre artigos de ajuda e respostas a perguntas comuns sobre Chromebooks</translation>
+<translation id="1167755866710282443">Abra o menu para personalizar as teclas. Arraste o menu para mover.</translation>
 <translation id="1175697296044146566">Este <ph name="DEVICE_TYPE" /> é gerenciado por <ph name="MANAGER" />.</translation>
 <translation id="1175951029573070619">Médio (<ph name="SIGNAL_STRENGTH" />)</translation>
 <translation id="1181037720776840403">Remover</translation>
@@ -116,6 +117,7 @@
 <translation id="1908234395526491708">Falhas de solicitações UDP</translation>
 <translation id="1947737735496445907">Impresso</translation>
 <translation id="1951012854035635156">Assistente</translation>
+<translation id="1962550982027027473">Um APN padrão é obrigatório</translation>
 <translation id="1977994649430373166">Foto do perfil do Google</translation>
 <translation id="1979103255016296513">O prazo para a alteração de senha foi ultrapassado</translation>
 <translation id="1999615961760456652">Portal cativo</translation>
@@ -195,6 +197,7 @@
 <translation id="2713444072780614174">Branco</translation>
 <translation id="2717139507051041123">Ativar o modo de cor escuro</translation>
 <translation id="2740531572673183784">Ok</translation>
+<translation id="2744221223678373668">Compartilhadas</translation>
 <translation id="2751739896257479635">Autenticação EAP Fase 2</translation>
 <translation id="2783010256799387990">APROVADO</translation>
 <translation id="2789486458103222910">Ok</translation>
@@ -235,6 +238,7 @@
 <translation id="3226405216343213872">Procurando scanners</translation>
 <translation id="3246869037381808805">Trabalhos de impressão enviados há mais de 1 dia serão removidos</translation>
 <translation id="3268178239013324452">Falha - Porta aberta</translation>
+<translation id="3275506277319227640">Fixar na <ph name="DIRECTION" /></translation>
 <translation id="3275729367986477355">Imagem do avatar</translation>
 <translation id="3283504360622356314">{0,plural, =1{Editar arquivo}one{Editar arquivo}other{Editar arquivos}}</translation>
 <translation id="3286515922899063534"><ph name="CURRENT" /> GHz</translation>
@@ -250,6 +254,7 @@
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" />%</translation>
 <translation id="3435738964857648380">Segurança</translation>
 <translation id="3435896845095436175">Ativar</translation>
+<translation id="345256797477978759">Janela de fixação na parte maior da tela (<ph name="DIRECTION" />)</translation>
 <translation id="3456078764689556234"><ph name="PRINTED_PAGES" /> página impressa de <ph name="TOTAL_PAGES" />.</translation>
 <translation id="345898999683440380">Digitalizando página <ph name="PAGE_NUM" />. <ph name="PERCENTAGE_VALUE" />% concluído.</translation>
 <translation id="3459509316159669723">Imprimir</translation>
@@ -269,12 +274,15 @@
 <translation id="3583278742022654445">Intensidade do sinal fraca. Tente se aproximar da fonte do sinal Wi-Fi.</translation>
 <translation id="3595596368722241419">Bateria carregada</translation>
 <translation id="3600339377155080675">Espelhar tela</translation>
+<translation id="3602290021589620013">Visualizar</translation>
+<translation id="360282891121575443">Fotos em álbuns compartilhados podem ser atualizadas por outros usuários. Mudanças diárias podem mostrar planos de fundo que não estejam no álbum.</translation>
 <translation id="3603829704940252505">Avatar</translation>
 <translation id="3604713164406837697">Mudar plano de fundo</translation>
 <translation id="360565022852130722">A rede Wi-Fi é protegida pelo protocolo fraco WEP 802.1x</translation>
 <translation id="3606583719724308068">Alta latência em sites HTTPS</translation>
 <translation id="361575905210396100">Agradecemos seu feedback</translation>
 <translation id="3632579075709132555">Alternar Tela de privacidade</translation>
+<translation id="3639846061339007994">parte de cima</translation>
 <translation id="3651050199673793219">Selecione uma unidade de temperatura</translation>
 <translation id="3689839747745352263">Teste de <ph name="TEST_NAME" /></translation>
 <translation id="370665806235115550">Carregando...</translation>
@@ -292,6 +300,7 @@
 <translation id="385051799172605136">Voltar</translation>
 <translation id="3858860766373142691">Nome</translation>
 <translation id="3862598938296403232">A descrição é obrigatória</translation>
+<translation id="3865289341173661845">O conteúdo de ajuda não está disponível.</translation>
 <translation id="3865414814144988605">Resolução</translation>
 <translation id="3866249974567520381">Descrição</translation>
 <translation id="387301095347517405">O número de vezes que a bateria passou por um ciclo completo de carregamento</translation>
@@ -314,12 +323,15 @@
 <translation id="4044093238444069296">Não foi possível entrar em contato com o gateway</translation>
 <translation id="4046123991198612571">Próxima faixa</translation>
 <translation id="404928562651467259">AVISO</translation>
+<translation id="4054683689023980771">Fazendo o download da imagem</translation>
 <translation id="4060260348856573701">Novo APN</translation>
 <translation id="4093865285251893588">Imagem do perfil</translation>
 <translation id="409427325554347132">Salvar detalhes do teste</translation>
+<translation id="4095829376260267438">WPA2WPA3</translation>
 <translation id="4110686435123617899">Selecionar álbum <ph name="TITLE" /> <ph name="DESC" /></translation>
 <translation id="4111761024568264522">Touchpad USB</translation>
 <translation id="4117637339509843559">Modo escuro</translation>
+<translation id="4130035430755296270">Passe o cursor para ver mais opções de layout</translation>
 <translation id="4131410914670010031">Preto e branco</translation>
 <translation id="4145784616224233563">Firewall HTTP</translation>
 <translation id="4147897805161313378">Google Fotos</translation>
@@ -345,6 +357,7 @@
 <translation id="4311195029067684288">Inteira</translation>
 <translation id="4333390807948134856">A tecla <ph name="KEY_NAME" /> está sendo pressionada</translation>
 <translation id="435692326371619097">Gerenciar configurações do APN de rede. Os APNs estabelecem uma conexão entre a rede celular e a Internet. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
+<translation id="4370033095251616914">Fixar no lado menor</translation>
 <translation id="4378373042927530923">Não executada</translation>
 <translation id="4378551569595875038">Conectando...</translation>
 <translation id="4382484599443659549">PDF</translation>
@@ -408,6 +421,7 @@
 <translation id="484790837831576105">(Android) Resolução de DNS</translation>
 <translation id="4848429997038228357">EM EXECUÇÃO</translation>
 <translation id="4854586501323951986">Tela touchscreen integrada</translation>
+<translation id="4855250849489639581">Deslize para baixo para conferir mais opções de layout</translation>
 <translation id="4861758251032006121">{ATTEMPTS_LEFT,plural, =1{<ph name="ERROR_MESSAGE" /> {0} tentativa restante}one{<ph name="ERROR_MESSAGE" /> {0} tentativa restante}other{<ph name="ERROR_MESSAGE" /> {0} tentativas restantes}}</translation>
 <translation id="4873827928179867585">Algoritmo de autenticação</translation>
 <translation id="4880328057631981605">Nome do ponto de acesso</translation>
@@ -447,8 +461,6 @@
 <translation id="5168185087976003268">Integridade da bateria</translation>
 <translation id="5170568018924773124">Mostrar na pasta</translation>
 <translation id="5190187232518914472">Reviva suas lembranças favoritas. Para adicionar ou editar álbuns, acesse o <ph name="LINK_BEGIN" />Google Fotos<ph name="LINK_END" />.</translation>
-<translation id="5212543919916444558">Não foi possível encontrar na sua tela nada com o que eu possa ajudar.
-Tente tocar no microfone para me pedir algo.</translation>
 <translation id="5212593641110061691">Tabloide</translation>
 <translation id="5222676887888702881">Sair</translation>
 <translation id="522307662484862935">Não incluir endereço de e-mail</translation>
@@ -513,6 +525,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="576835345334454681">Aumentar o brilho da tela</translation>
 <translation id="57838592816432529">Desativar som</translation>
 <translation id="5784136236926853061">A latência do HTTP está alta</translation>
+<translation id="5826644637650799838">Sobre a arte</translation>
 <translation id="5832805196449965646">Adicionar pessoa</translation>
 <translation id="583281660410589416">Desconhecido</translation>
 <translation id="5843706793424741864">Fahrenheit</translation>
@@ -621,6 +634,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="6657585470893396449">Senha</translation>
 <translation id="6659594942844771486">Guia</translation>
 <translation id="6692996468359469499">Veja informações relacionadas à sua seleção</translation>
+<translation id="6698459586333070823">Álbuns compartilhados podem ser atualizados por outros usuários</translation>
 <translation id="6704062477274546131">Resolução de DNS</translation>
 <translation id="6723839937902243910">Energia</translation>
 <translation id="6723847290197874913">Luz de fundo do teclado</translation>
@@ -635,6 +649,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="6791471867139427246">cor da luz do teclado</translation>
 <translation id="680983167891198932">Chave</translation>
 <translation id="6816797338148849397">Informações relacionadas à sua seleção disponíveis. Use a tecla de seta para cima para acessar.</translation>
+<translation id="6838167112108853532">Não é possível desativar ou remover este APN. Desative ou remova os APNs em anexo.</translation>
 <translation id="6853312040151791195">Taxa de descarregamento</translation>
 <translation id="6889786074662672253">Durante a reinicialização deste dispositivo externo, não o desconecte nem desligue o computador. Você pode minimizar esta janela. Isso pode levar alguns minutos, e o dispositivo externo pode não funcionar nesse período.</translation>
 <translation id="6905724422583748843">Voltar para <ph name="PAGE_NAME" /></translation>
@@ -665,9 +680,11 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="7155171745945906037">Foto existente na câmera ou em arquivo</translation>
 <translation id="7162487448488904999">Galeria</translation>
 <translation id="7170236477717446850">Foto do perfil</translation>
+<translation id="7171919371520438592">Fixar janela na parte menor <ph name="DIRECTION" /> da tela</translation>
 <translation id="7172721935181587524">1 imagem</translation>
 <translation id="7177485034254901881">Este <ph name="DEVICE_TYPE" /> é gerenciado por <ph name="MANAGER" />. Os administradores podem configurar o dispositivo remotamente.</translation>
 <translation id="7180611975245234373">Atualizar</translation>
+<translation id="7180865173735832675">Personalizar</translation>
 <translation id="7212734716605298123">Atualizações de firmware para dispositivos externos</translation>
 <translation id="7216409898977639127">Operadora de celular</translation>
 <translation id="725133483556299729">Selecione um e-mail</translation>
@@ -700,6 +717,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="7497215489070763236">Certificado de CA do servidor</translation>
 <translation id="7502658306369382406">Endereço IPv6</translation>
 <translation id="7515998400212163428">Android</translation>
+<translation id="7528507600602050979">O conteúdo de ajuda não está disponível</translation>
 <translation id="7535791657097741517">Ativar o tema claro</translation>
 <translation id="7550715992156305117">Rotinas de diagnóstico</translation>
 <translation id="7551123448725492271">Este é um dispositivo de áudio.</translation>
@@ -717,6 +735,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="7690294790491645610">Confirmar nova senha</translation>
 <translation id="7701040980221191251">Nenhuma</translation>
 <translation id="7705524343798198388">VPN</translation>
+<translation id="7716280709122323042">WPA3</translation>
 <translation id="773153675489693198">Contagem de ciclos</translation>
 <translation id="7747039790905080783">Chave pré-compartilhada</translation>
 <translation id="7762130827864645708">Senha modificada. De agora em diante, use a nova senha.</translation>
@@ -724,6 +743,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="7769672763586021400">Código do modelo</translation>
 <translation id="7778717409420828014">Seu feedback nos ajuda a melhorar a experiência no Chromebook e vai ser analisado pela nossa equipe. Devido ao grande número de avisos que recebemos, não conseguimos enviar uma resposta.</translation>
 <translation id="7784116172884276937">Nenhum servidor DNS está configurado</translation>
+<translation id="7791543448312431591">Adicionar</translation>
 <translation id="779591286616261875">Enviar nova denúncia</translation>
 <translation id="7799817062559422778">Modo claro</translation>
 <translation id="780301667611848630">Não</translation>
@@ -736,6 +756,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="7881066108824108340">DNS</translation>
 <translation id="7882358943899516840">Tipo de provedor</translation>
 <translation id="7882501334836096755">Chave pública</translation>
+<translation id="78957024357676568">para a esquerda</translation>
 <translation id="7915220255123750251">Gerenciar configurações do APN de rede. Os APNs estabelecem uma conexão entre a rede celular e a Internet.</translation>
 <translation id="7936303884198020182">Nenhum servidor de nomes encontrado</translation>
 <translation id="7942349550061667556">Vermelho</translation>
@@ -764,9 +785,11 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="8183974620058026102">Anexar</translation>
 <translation id="8206859287963243715">Celular</translation>
 <translation id="8208861521865154048">Benefícios</translation>
+<translation id="8210733748736414123">parte de baixo</translation>
 <translation id="8226628635270268143">Escolher seus álbuns e fotos favoritos</translation>
 <translation id="8227119283605456246">Anexar arquivo</translation>
 <translation id="8230672074305416752">Falha no ping do gateway de rede padrão</translation>
+<translation id="8242426110754782860">Continuar</translation>
 <translation id="8246209727385807362">Operadora desconhecida</translation>
 <translation id="827422111966801947">Índigo</translation>
 <translation id="8286154143153872371">Conecte-se a uma rede e atualize a página para ver o plano de fundo.</translation>
@@ -780,6 +803,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="8352772353338965963">Adicione uma conta de login múltiplo. Todas as contas conectadas podem ser acessadas sem uma senha; portanto esse recurso só deve ser usado com contas confiáveis.</translation>
 <translation id="8364946094152050673">Servidores de nomes vazios</translation>
 <translation id="8372477600026034341">Hosts extras</translation>
+<translation id="8380114448424469341">Fixar janela na metade <ph name="DIRECTION" /> da tela</translation>
 <translation id="8395584934117017006">Este <ph name="DEVICE_TYPE" /> é gerenciado por uma empresa</translation>
 <translation id="8398927464629426868">A velocidade em que o dispositivo carrega ou descarrega atualmente</translation>
 <translation id="8410244574650205435">Detectado automaticamente</translation>
@@ -799,6 +823,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="8503836310948963452">Só mais alguns minutos…</translation>
 <translation id="8508640263392900755">Detalhes do APN</translation>
 <translation id="8528615187455571738">Crosvm</translation>
+<translation id="8557447961879934694">WPA2</translation>
 <translation id="8575298406870537639">Pode ser necessário ativar esta opção para se conectar à rede da sua operadora. Entre em contato com a operadora para mais informações.</translation>
 <translation id="8576249514688522074">Não inicializado</translation>
 <translation id="8620617069779373398">Status do roaming</translation>
@@ -843,6 +868,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="8930622219860340959">Rede sem fio</translation>
 <translation id="8936793075252196307">Endereço IP do cliente</translation>
 <translation id="894617464444543719">Este dispositivo é um smartphone.</translation>
+<translation id="8957423540740801332">para a direita</translation>
 <translation id="8968751544471797276">Taxa de carregamento</translation>
 <translation id="8970109610781093811">Executar novamente</translation>
 <translation id="8983038754672563810">HSPA</translation>
@@ -870,6 +896,7 @@ Tente tocar no microfone para me pedir algo.</translation>
 <translation id="9137526406337347448">Serviços do Google</translation>
 <translation id="9138630967333032450">Shift da esquerda</translation>
 <translation id="9149391708638971077">Executar teste de memória</translation>
+<translation id="9157515863513902090">Fixar no lado maior</translation>
 <translation id="9173638680043580060">Menos de um minuto restante</translation>
 <translation id="917720651393141712">Testar</translation>
 <translation id="9188992814426075118">É possível combinar o teclado automaticamente com o plano de fundo</translation>

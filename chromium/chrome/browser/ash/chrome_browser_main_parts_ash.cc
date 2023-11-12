@@ -24,11 +24,11 @@
 #include "ash/system/pcie_peripheral/pcie_peripheral_notification_controller.h"
 #include "ash/system/usb_peripheral/usb_peripheral_notification_controller.h"
 #include "ash/webui/camera_app_ui/document_scanner_installer.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/linux_util.h"
 #include "base/logging.h"
@@ -37,6 +37,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/system/sys_info.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -53,6 +54,7 @@
 #include "chrome/browser/ash/arc/enterprise/arc_data_snapshotd_delegate.h"
 #include "chrome/browser/ash/arc/session/arc_service_launcher.h"
 #include "chrome/browser/ash/audio/audio_survey_handler.h"
+#include "chrome/browser/ash/bluetooth/hats_bluetooth_revamp_trigger_impl.h"
 #include "chrome/browser/ash/boot_times_recorder.h"
 #include "chrome/browser/ash/camera/camera_general_survey_handler.h"
 #include "chrome/browser/ash/crosapi/browser_data_back_migrator.h"
@@ -155,6 +157,7 @@
 #include "chrome/browser/ash/system/user_removal_manager.h"
 #include "chrome/browser/ash/system_token_cert_db_initializer.h"
 #include "chrome/browser/ash/usb/cros_usb_detector.h"
+#include "chrome/browser/ash/video_conference/video_conference_app_service_client.h"
 #include "chrome/browser/ash/wilco_dtc_supportd/wilco_dtc_supportd_manager.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_ash.h"
@@ -881,8 +884,10 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
   // on ChromeKeyboardControllerClient.
   chrome_keyboard_controller_client_ = ChromeKeyboardControllerClient::Create();
 
-  // ProfileHelper has to be initialized after UserManager instance is created.
-  ProfileHelper::Get()->Initialize();
+  // Instantiate ProfileHelper as some following code depending on this
+  // behavior.
+  // TODO(crbug.com/1325210): Switch to explicit initialization.
+  ProfileHelper::Get();
   signin_profile_handler_ = std::make_unique<SigninProfileHandler>();
 
   // If kLoginUser is passed this indicates that user has already
@@ -937,6 +942,7 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
                      chromeos::version_loader::VERSION_FULL),
       base::BindOnce(&ChromeOSVersionCallback));
 
+  kiosk_app_manager_ = std::make_unique<KioskAppManager>();
   arc_kiosk_app_manager_ = std::make_unique<ArcKioskAppManager>();
   web_kiosk_app_manager_ = std::make_unique<WebKioskAppManager>();
 
@@ -999,6 +1005,12 @@ void ChromeBrowserMainPartsAsh::PreProfileInit() {
       std::make_unique<crosapi::LacrosAvailabilityPolicyObserver>();
   lacros_data_backward_migration_mode_policy_observer_ = std::make_unique<
       crosapi::LacrosDataBackwardMigrationModePolicyObserver>();
+
+  // Only creates VideoConferenceAppServiceClient if VcControlsUi is enabled.
+  if (features::IsVideoConferenceEnabled()) {
+    vc_app_service_client_ =
+        std::make_unique<VideoConferenceAppServiceClient>();
+  }
 
   chromeos::machine_learning::ServiceConnection::GetInstance()->Initialize();
 
@@ -1171,6 +1183,12 @@ void ChromeBrowserMainPartsAsh::PostProfileInit(Profile* profile,
     bluetooth_pref_state_observer_ =
         std::make_unique<BluetoothPrefStateObserver>();
 
+    if (base::FeatureList::IsEnabled(
+            ::features::kHappinessTrackingSystemBluetoothRevamp)) {
+      hats_bluetooth_revamp_trigger_ =
+          std::make_unique<ash::HatsBluetoothRevampTriggerImpl>();
+    }
+
     // Initialize the NetworkHealth aggregator.
     network_health::NetworkHealthManager::GetInstance();
 
@@ -1179,26 +1197,7 @@ void ChromeBrowserMainPartsAsh::PostProfileInit(Profile* profile,
         std::make_unique<cros_healthd::internal::DataCollector>();
 
     // Create the service connection to CrosHealthd platform service instance.
-    auto* cros_healthd = cros_healthd::ServiceConnection::GetInstance();
-
-    // Pass a callback to the CrosHealthd service connection that binds a
-    // pending remote to service.
-    cros_healthd->SetBindNetworkHealthServiceCallback(base::BindRepeating([] {
-      return network_health::NetworkHealthManager::GetInstance()
-          ->GetHealthRemoteAndBindReceiver();
-    }));
-
-    // Pass a callback to the CrosHealthd service connection that binds a
-    // pending remote to the interface.
-    cros_healthd->SetBindNetworkDiagnosticsRoutinesCallback(
-        base::BindRepeating([] {
-          return network_health::NetworkHealthManager::GetInstance()
-              ->GetDiagnosticsRemoteAndBindReceiver();
-        }));
-
-    // Sets up the connection of healthd data collector to cros_healthd.
-    cros_healthd->SendChromiumDataCollector(
-        cros_healthd_data_collector_->BindNewPipeAndPassRemote());
+    cros_healthd::ServiceConnection::GetInstance();
 
     if (features::IsTrafficCountersEnabled()) {
       // Initialize the TrafficCountersHandler instance.
@@ -1344,9 +1343,7 @@ void ChromeBrowserMainPartsAsh::PostBrowserStart() {
                  base::BindOnce(&AshUsbDetector::ConnectToDeviceManager,
                                 base::Unretained(ash_usb_detector_.get())));
 
-  if (features::IsFirmwareUpdaterAppEnabled()) {
-    fwupd_download_client_ = std::make_unique<FwupdDownloadClientImpl>();
-  }
+  fwupd_download_client_ = std::make_unique<FwupdDownloadClientImpl>();
 
   // The local_state pref may not be available at this stage of Chrome's
   // lifecycle, default to false for now. The actual state will be set in a
@@ -1390,7 +1387,7 @@ void ChromeBrowserMainPartsAsh::PostBrowserStart() {
 
   multi_capture_notification_ = std::make_unique<MultiCaptureNotification>();
 
-  if (features::IsVcControlsUiEnabled()) {
+  if (features::IsVideoConferenceEnabled()) {
     video_conference_manager_client_ =
         std::make_unique<video_conference::VideoConferenceManagerClientImpl>();
   }
@@ -1404,6 +1401,8 @@ void ChromeBrowserMainPartsAsh::PostBrowserStart() {
 // shutdown calls and test |pre_profile_init_called_| if necessary. See
 // crbug.com/702403 for details.
 void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
+  video_conference_manager_client_.reset();
+
   // Do this early to keep logging from taking time during shutdown.
   if (memory_pressure_detail_ != nullptr) {
     memory_pressure_detail_->Stop();
@@ -1530,7 +1529,7 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
   g_browser_process->platform_part()->ShutdownAutomaticRebootManager();
 
   // Clean up dependency on CrosSettings and stop pending data fetches.
-  KioskAppManager::Shutdown();
+  kiosk_app_manager_.reset();
 
   // Make sure that there is no pending URLRequests.
   if (pre_profile_init_called_)
@@ -1578,6 +1577,14 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
 
   multi_capture_notification_.reset();
 
+  // vc_app_service_client_ has to be destructed before PostMainMessageLoopRun.
+  vc_app_service_client_.reset();
+
+  // Has a dependency on Profile, so it needs to be destroyed before Profile
+  // gets destroyed during ProfileManager destruction, which happens inside
+  // PostMainMessageLoop below.
+  web_kiosk_app_manager_.reset();
+
   // NOTE: Closes ash and destroys `Shell`.
   ChromeBrowserMainPartsLinux::PostMainMessageLoopRun();
 
@@ -1588,7 +1595,6 @@ void ChromeBrowserMainPartsAsh::PostMainMessageLoopRun() {
 
   // Destroy classes that may have ash observers or dependencies.
   arc_kiosk_app_manager_.reset();
-  web_kiosk_app_manager_.reset();
   chrome_keyboard_controller_client_.reset();
 
   // All ARC related modules should have been shut down by this point, so
@@ -1684,6 +1690,11 @@ void ChromeBrowserMainPartsAsh::StartDeviceActivityController() {
     return;
   }
 
+  // Create a repeating callback to check the time delta that elapsed since the
+  // oobe completed file was written.
+  base::RepeatingCallback<base::TimeDelta()> check_oobe_completed_callback =
+      base::BindRepeating(&StartupUtils::GetTimeSinceOobeFlagFileCreation);
+
   // CrosSettingsProvider::TRUSTED: device policies are loaded and trusted.
   device_activity_controller_ =
       std::make_unique<device_activity::DeviceActivityController>(
@@ -1700,7 +1711,8 @@ void ChromeBrowserMainPartsAsh::StartDeviceActivityController() {
           g_browser_process->local_state(),
           g_browser_process->system_network_context_manager()
               ->GetSharedURLLoaderFactory(),
-          first_run::GetFirstRunSentinelCreationTime());
+          first_run::GetFirstRunSentinelCreationTime(),
+          std::move(check_oobe_completed_callback));
 #endif
 }
 

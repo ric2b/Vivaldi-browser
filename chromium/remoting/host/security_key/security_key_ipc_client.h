@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "ipc/ipc_listener.h"
@@ -21,7 +21,7 @@
 namespace IPC {
 class Channel;
 class Message;
-}  // IPC
+}  // namespace IPC
 
 namespace remoting {
 
@@ -68,6 +68,7 @@ class SecurityKeyIpcClient : public IPC::Listener {
   // Allows tests to override the IPC channel.
   void SetIpcChannelHandleForTest(
       const mojo::NamedPlatformChannel::ServerName& server_name);
+  void SetIpcChannelPipeForTest(mojo::ScopedMessagePipeHandle pipe);
 
   // Allows tests to override the expected session ID.
   void SetExpectedIpcServerSessionIdForTest(uint32_t expected_session_id);
@@ -90,6 +91,10 @@ class SecurityKeyIpcClient : public IPC::Listener {
 
   // Name of the initial IPC channel used to retrieve connection info.
   mojo::NamedPlatformChannel::ServerName named_channel_handle_;
+
+  // A message pipe to use for the IPC channel in tests; this is used in lieu of
+  // any named server connection.
+  mojo::ScopedMessagePipeHandle test_ipc_channel_pipe_;
 
   // A handle for the IPC channel used for exchanging security key messages.
   mojo::PlatformChannelEndpoint channel_handle_;

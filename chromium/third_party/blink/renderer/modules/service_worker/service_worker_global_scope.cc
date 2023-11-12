@@ -33,8 +33,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
@@ -689,6 +689,14 @@ bool ServiceWorkerGlobalScope::AddEventListenerInternal(
     AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kJavaScript,
         mojom::ConsoleMessageLevel::kWarning, message));
+    // Count the update of fetch handlers after the initial evaluation.
+    if (event_type == event_type_names::kFetch) {
+      UseCounter::Count(
+          this,
+          WebFeature::kServiceWorkerFetchHandlerUpdateAfterInitialization);
+    }
+    UseCounter::Count(this,
+                      WebFeature::kServiceWorkerAddHandlerAfterInitialization);
   }
   return WorkerGlobalScope::AddEventListenerInternal(event_type, listener,
                                                      options);
@@ -2632,7 +2640,29 @@ ServiceWorkerGlobalScope::FetchHandlerType() {
       return mojom::blink::ServiceWorkerFetchHandlerType::kNotSkippable;
     }
   }
+  AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+      mojom::blink::ConsoleMessageSource::kJavaScript,
+      mojom::blink::ConsoleMessageLevel::kWarning,
+      "Fetch event handler is recognized as no-op. "
+      "No-op fetch handler may bring overhead during navigation. "
+      "Consider removing the handler if possible."));
   return mojom::blink::ServiceWorkerFetchHandlerType::kEmptyFetchHandler;
+}
+
+bool ServiceWorkerGlobalScope::SetAttributeEventListener(
+    const AtomicString& event_type,
+    EventListener* listener) {
+  // Count the modification of fetch handlers after the initial evaluation.
+  if (did_evaluate_script_) {
+    if (event_type == event_type_names::kFetch) {
+      UseCounter::Count(
+          this,
+          WebFeature::kServiceWorkerFetchHandlerModifiedAfterInitialization);
+    }
+    UseCounter::Count(
+        this, WebFeature::kServiceWorkerSetAttributeHandlerAfterInitialization);
+  }
+  return WorkerGlobalScope::SetAttributeEventListener(event_type, listener);
 }
 
 }  // namespace blink

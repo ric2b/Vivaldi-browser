@@ -6,18 +6,18 @@
 
 #include <math.h>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
 #include "media/capabilities/bucket_utility.h"
@@ -559,8 +559,10 @@ void WebrtcVideoPerfHistory::GetWebrtcVideoStatsDB(GetCB get_db_cb) {
     return;
   }
 
-  // DB is already initialized. BindToCurrentLoop to avoid reentrancy.
-  std::move(BindToCurrentLoop(std::move(get_db_cb))).Run(db_.get());
+  // DB is already initialized. base::BindPostTaskToCurrentDefault to avoid
+  // reentrancy.
+  std::move(base::BindPostTaskToCurrentDefault(std::move(get_db_cb)))
+      .Run(db_.get());
 }
 
 // static

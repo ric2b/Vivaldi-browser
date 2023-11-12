@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/time_formatting.h"
 #include "base/json/json_writer.h"
 #include "base/memory/raw_ptr.h"
@@ -22,6 +22,7 @@
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_util.h"
@@ -1457,6 +1458,7 @@ TEST(PeopleHandlerGuestModeTest, GetStoredAccountsList) {
   EXPECT_TRUE(accounts.empty());
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(PeopleHandlerTest, TurnOffSync) {
   // Simulate a user who previously turned on sync.
   identity_test_env()->MakePrimaryAccountAvailable("user@gmail.com",
@@ -1469,6 +1471,7 @@ TEST_F(PeopleHandlerTest, TurnOffSync) {
   base::Value::Dict status = ExpectSyncStatusChanged();
   ExpectHasBoolKey(status, "signedIn", false);
 }
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 TEST_F(PeopleHandlerTest, GetStoredAccountsList) {
   // Chrome OS sets an unconsented primary account on login.
@@ -1520,6 +1523,10 @@ class PeopleHandlerSignoutTest : public BrowserWithTestWindowTest {
     web_ui_.set_web_contents(web_contents());
   }
 
+  SigninClient* GetSigninSlient(Profile* profile) {
+    return ChromeSigninClientFactory::GetForProfile(profile);
+  }
+
  private:
   TestingProfile::TestingFactories GetTestingFactories() override {
     return IdentityTestEnvironmentProfileAdaptor::
@@ -1550,8 +1557,8 @@ TEST_F(PeopleHandlerSignoutTest, RevokeSyncNotAllowed) {
   auto account_1 = identity_test_env()->MakePrimaryAccountAvailable(
       "a@gmail.com", ConsentLevel::kSync);
   EXPECT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSync));
-  signin_util::UserSignoutSetting::GetForProfile(profile())
-      ->SetRevokeSyncConsentAllowed(false);
+  GetSigninSlient(profile())->set_is_clear_primary_account_allowed_for_testing(
+      SigninClient::SignoutDecision::REVOKE_SYNC_DISALLOWED);
 
   CreatePeopleHandler();
   base::Value::List args;
@@ -1568,8 +1575,8 @@ TEST_F(PeopleHandlerSignoutTest, SignoutNotAllowedSyncOff) {
   auto account_1 = identity_test_env()->MakePrimaryAccountAvailable(
       "a@gmail.com", ConsentLevel::kSignin);
   EXPECT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSignin));
-  signin_util::UserSignoutSetting::GetForProfile(profile())
-      ->SetClearPrimaryAccountAllowed(false);
+  GetSigninSlient(profile())->set_is_clear_primary_account_allowed_for_testing(
+      SigninClient::SignoutDecision::CLEAR_PRIMARY_ACCOUNT_DISALLOWED);
 
   CreatePeopleHandler();
 
@@ -1590,9 +1597,9 @@ TEST_F(PeopleHandlerSignoutTest, SignoutNotAllowedSyncOn) {
   auto account_2 = identity_test_env()->MakeAccountAvailable("b@gmail.com");
   EXPECT_TRUE(identity_manager()->HasPrimaryAccount(ConsentLevel::kSync));
   EXPECT_EQ(2U, identity_manager()->GetAccountsWithRefreshTokens().size());
-  signin_util::UserSignoutSetting::GetForProfile(profile())
-      ->SetClearPrimaryAccountAllowed(false);
-  EXPECT_TRUE(signin_util::UserSignoutSetting::GetForProfile(profile())
+  GetSigninSlient(profile())->set_is_clear_primary_account_allowed_for_testing(
+      SigninClient::SignoutDecision::CLEAR_PRIMARY_ACCOUNT_DISALLOWED);
+  EXPECT_TRUE(ChromeSigninClientFactory::GetForProfile(profile())
                   ->IsRevokeSyncConsentAllowed());
 
   CreatePeopleHandler();

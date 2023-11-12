@@ -7,11 +7,11 @@
 #include <unordered_set>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/string_compare.h"
 #include "base/logging.h"
@@ -32,13 +32,13 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/account_id/account_id.h"
-#include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/profile_metrics/state.h"
 #include "components/signin/public/base/persistent_repeating_timer.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/identity_manager/account_managed_status_finder.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
@@ -233,8 +233,10 @@ profile_metrics::UnconsentedPrimaryAccountType GetUnconsentedPrimaryAccountType(
   // TODO(crbug.com/1060113): Replace this check by
   // !entry->GetHostedDomain().has_value() in M84 (once the attributes storage
   // gets reasonably well populated).
-  if (policy::BrowserPolicyConnector::IsNonEnterpriseUser(
-          base::UTF16ToUTF8(entry->GetUserName()))) {
+  if (signin::AccountManagedStatusFinder::IsEnterpriseUserBasedOnEmail(
+          base::UTF16ToUTF8(entry->GetUserName())) ==
+      signin::AccountManagedStatusFinder::EmailEnterpriseStatus::
+          kKnownNonEnterprise) {
     return profile_metrics::UnconsentedPrimaryAccountType::kConsumer;
   }
   // TODO(crbug.com/1060113): Figure out how to distinguish EDU accounts from
@@ -270,11 +272,12 @@ ProfileAttributesStorage::ProfileAttributesStorage(
   ScopedDictPrefUpdate update(prefs_, prefs::kProfileAttributes);
   base::Value::Dict& attributes = update.Get();
   for (auto kv : attributes) {
-    base::Value& info = kv.second;
-    std::string* name = info.FindStringKey(ProfileAttributesEntry::kNameKey);
+    DCHECK(kv.second.is_dict());
+    base::Value::Dict& info = kv.second.GetDict();
+    std::string* name = info.FindString(ProfileAttributesEntry::kNameKey);
 
     absl::optional<bool> using_default_name =
-        info.FindBoolKey(ProfileAttributesEntry::kIsUsingDefaultNameKey);
+        info.FindBool(ProfileAttributesEntry::kIsUsingDefaultNameKey);
     if (!using_default_name.has_value()) {
       // If the preference hasn't been set, and the name is default, assume
       // that the user hasn't done this on purpose.
@@ -283,15 +286,15 @@ ProfileAttributesStorage::ProfileAttributesStorage(
       using_default_name = IsDefaultProfileName(
           name ? base::UTF8ToUTF16(*name) : std::u16string(),
           /*include_check_for_legacy_profile_name=*/true);
-      info.SetBoolKey(ProfileAttributesEntry::kIsUsingDefaultNameKey,
-                      using_default_name.value());
+      info.Set(ProfileAttributesEntry::kIsUsingDefaultNameKey,
+               using_default_name.value());
     }
 
     // For profiles that don't have the "using default avatar" state set yet,
     // assume it's the same as the "using default name" state.
-    if (!info.FindBoolKey(ProfileAttributesEntry::kIsUsingDefaultAvatarKey)) {
-      info.SetBoolKey(ProfileAttributesEntry::kIsUsingDefaultAvatarKey,
-                      using_default_name.value());
+    if (!info.FindBool(ProfileAttributesEntry::kIsUsingDefaultAvatarKey)) {
+      info.Set(ProfileAttributesEntry::kIsUsingDefaultAvatarKey,
+               using_default_name.value());
     }
 
     // `info` may become invalid after this call.
@@ -346,7 +349,7 @@ void ProfileAttributesStorage::AddProfile(ProfileAttributesInitParams params) {
   ScopedDictPrefUpdate update(prefs_, prefs::kProfileAttributes);
   base::Value::Dict& attributes = update.Get();
 
-  base::Value info(base::Value::Type::DICTIONARY);
+  base::Value info(base::Value::Type::DICT);
   info.SetStringKey(ProfileAttributesEntry::kNameKey, params.profile_name);
   info.SetStringKey(ProfileAttributesEntry::kGAIAIdKey, params.gaia_id);
   info.SetStringKey(ProfileAttributesEntry::kUserNameKey, params.user_name);

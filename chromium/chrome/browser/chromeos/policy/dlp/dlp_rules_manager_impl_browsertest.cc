@@ -58,24 +58,16 @@ class DlpRulesPolicyTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(DlpRulesPolicyTest, ParsePolicyPref) {
   InitializeRulesManager();
 
-  {
+  {  // Do not remove the brackets, policy update is triggered on
+     // ScopedListPrefUpdate destructor.
     ScopedListPrefUpdate update(g_browser_process->local_state(),
                                 policy_prefs::kDlpRulesList);
 
-    base::Value rules(base::Value::Type::LIST);
+    dlp_test_util::DlpRule rule("rule #1", "Block", "testid1");
+    rule.AddSrcUrl(kUrlStr1).AddRestriction(dlp::kScreenshotRestriction,
+                                            dlp::kBlockLevel);
 
-    base::Value src_urls(base::Value::Type::LIST);
-    src_urls.Append(kUrlStr1);
-
-    base::Value restrictions(base::Value::Type::LIST);
-    restrictions.Append(dlp_test_util::CreateRestrictionWithLevel(
-        dlp::kScreenshotRestriction, dlp::kBlockLevel));
-
-    update->Append(dlp_test_util::CreateRule(
-        "rule #1", "Block", std::move(src_urls),
-        /*dst_urls=*/base::Value(base::Value::Type::LIST),
-        /*dst_components=*/base::Value(base::Value::Type::LIST),
-        std::move(restrictions)));
+    update->Append(rule.Create());
   }
 
   EXPECT_EQ(DlpRulesManager::Level::kBlock,

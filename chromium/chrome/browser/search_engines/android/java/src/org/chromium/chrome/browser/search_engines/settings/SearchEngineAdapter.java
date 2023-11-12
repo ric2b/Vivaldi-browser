@@ -424,6 +424,7 @@ public class SearchEngineAdapter extends BaseAdapter
             if (templateUrl.getURL().contains("{google:baseURL}"))
                 url.setText("google.com");
         }
+
         return view;
     }
 

@@ -136,13 +136,15 @@ class CastActivityManager : public CastActivityManagerBase,
 
  private:
   friend class CastActivityManagerTest;
-  FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest,
+  FRIEND_TEST_ALL_PREFIXES(CastActivityManagerWithTerminatingTest,
                            LaunchSessionTerminatesExistingSessionOnSink);
   FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest,
                            LaunchSessionTerminatesExistingSessionFromTab);
   FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest,
                            LaunchSessionTerminatesPendingLaunchFromTab);
   FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest, SendMediaRequestToReceiver);
+  FRIEND_TEST_ALL_PREFIXES(CastActivityManagerTest,
+                           StartSessionAndRemoveExistingSessionOnSink);
 
   using ActivityMap =
       base::flat_map<MediaRoute::Id, std::unique_ptr<CastActivity>>;
@@ -293,6 +295,19 @@ class CastActivityManager : public CastActivityManagerBase,
 
   void TerminateAllLocalMirroringActivities();
 
+  void HandleMissingSinkOnJoin(
+      mojom::MediaRouteProvider::JoinRouteCallback callback,
+      const std::string& sink_id,
+      const std::string& source_id,
+      const std::string& session_id);
+  void HandleMissingSessionIdOnJoin(
+      mojom::MediaRouteProvider::JoinRouteCallback callback);
+  void HandleMissingSessionOnJoin(
+      mojom::MediaRouteProvider::JoinRouteCallback callback,
+      const std::string& sink_id,
+      const std::string& source_id,
+      const std::string& session_id);
+
   static CastActivityFactoryForTest* cast_activity_factory_for_test_;
 
   // This map contains all activities--both presentation activities and
@@ -314,8 +329,14 @@ class CastActivityManager : public CastActivityManagerBase,
   // Information for a session that will be launched once |this| is notified
   // that the existing session on the receiver has been removed. We only store
   // one pending launch at a time so that we don't accumulate orphaned pending
-  // launches over time.
+  // launches over time. Used only when the feature
+  // `kStartCastSessionWithoutTerminating` is disabled.
   absl::optional<DoLaunchSessionParams> pending_launch_;
+
+  // Used only when the feature `kStartCastSessionWithoutTerminating` is
+  // enabled.
+  absl::optional<std::pair<MediaSink::Id, MediaRoute::Id>>
+      pending_activity_removal_;
 
   // The following raw pointer fields are assumed to outlive |this|.
   const raw_ptr<MediaSinkServiceBase> media_sink_service_;

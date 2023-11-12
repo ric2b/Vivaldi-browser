@@ -13,9 +13,9 @@
 #include "ash/public/cpp/assistant/assistant_state.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/system_sounds_delegate.h"
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "cc/input/touch_action.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -37,8 +37,9 @@
 #include "chrome/browser/ui/ash/back_gesture_contextual_nudge_delegate.h"
 #include "chrome/browser/ui/ash/capture_mode/chrome_capture_mode_delegate.h"
 #include "chrome/browser/ui/ash/chrome_accessibility_delegate.h"
-#include "chrome/browser/ui/ash/desks/chrome_desks_templates_delegate.h"
+#include "chrome/browser/ui/ash/desks/chrome_saved_desk_delegate.h"
 #include "chrome/browser/ui/ash/glanceables/chrome_glanceables_delegate.h"
+#include "chrome/browser/ui/ash/global_media_controls/media_notification_provider_impl.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/ash/system_sounds_delegate_impl.h"
@@ -48,6 +49,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/views/chrome_browser_main_extra_parts_views.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -102,6 +104,16 @@ content::WebContents* GetActiveWebContentsForNativeBrowserWindow(
   return tab_strip_model ? tab_strip_model->GetActiveWebContents() : nullptr;
 }
 
+chrome::FeedbackSource ToChromeFeedbackSource(
+    ash::ShellDelegate::FeedbackSource source) {
+  switch (source) {
+    case ash::ShellDelegate::FeedbackSource::kBentoBar:
+      return chrome::FeedbackSource::kFeedbackSourceBentoBar;
+    case ash::ShellDelegate::FeedbackSource::kWindowLayoutMenu:
+      return chrome::FeedbackSource::kFeedbackSourceWindowLayoutMenu;
+  }
+}
+
 }  // namespace
 
 ChromeShellDelegate::ChromeShellDelegate() = default;
@@ -135,15 +147,21 @@ ChromeShellDelegate::CreateBackGestureContextualNudgeDelegate(
   return std::make_unique<BackGestureContextualNudgeDelegate>(controller);
 }
 
+std::unique_ptr<ash::MediaNotificationProvider>
+ChromeShellDelegate::CreateMediaNotificationProvider() {
+  return std::make_unique<ash::MediaNotificationProviderImpl>(
+      GetMediaSessionService());
+}
+
 std::unique_ptr<ash::NearbyShareDelegate>
 ChromeShellDelegate::CreateNearbyShareDelegate(
     ash::NearbyShareController* controller) const {
   return std::make_unique<NearbyShareDelegateImpl>(controller);
 }
 
-std::unique_ptr<ash::DesksTemplatesDelegate>
-ChromeShellDelegate::CreateDesksTemplatesDelegate() const {
-  return std::make_unique<ChromeDesksTemplatesDelegate>();
+std::unique_ptr<ash::SavedDeskDelegate>
+ChromeShellDelegate::CreateSavedDeskDelegate() const {
+  return std::make_unique<ChromeSavedDeskDelegate>();
 }
 
 std::unique_ptr<ash::SystemSoundsDelegate>
@@ -324,10 +342,12 @@ base::FilePath ChromeShellDelegate::GetPrimaryUserDownloadsFolder() const {
   return base::FilePath();
 }
 
-void ChromeShellDelegate::OpenFeedbackPageForPersistentDesksBar() {
+void ChromeShellDelegate::OpenFeedbackDialog(
+    ShellDelegate::FeedbackSource source,
+    const std::string& description_template) {
   chrome::OpenFeedbackDialog(/*browser=*/nullptr,
-                             chrome::kFeedbackSourceBentoBar,
-                             /*description_template=*/"#BentoBar\n\n");
+                             ToChromeFeedbackSource(source),
+                             description_template);
 }
 
 // static

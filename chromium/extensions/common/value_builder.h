@@ -8,20 +8,10 @@
 //
 // The pattern is to write:
 //
-//  base::Value::T result(FooBuilder()
-//                   .Set(args)
-//                   .Set(args)
-//                   .BuildT());
-//
-// The BuildT() method invalidates its builder, and returns ownership of the
-// built value.
-//
-// The DEPRECATED pattern previously used was:
-//
-//  std::unique_ptr<BuiltType> result(FooBuilder()
-//                               .Set(args)
-//                               .Set(args)
-//                               .Build());
+//  base::Value::[Dict|List] result([Dictionary|List]Builder()
+//      .Set(args)
+//      .Set(args)
+//      .Build());
 //
 // The Build() method invalidates its builder, and returns ownership of the
 // built value.
@@ -45,7 +35,6 @@ namespace extensions {
 class DictionaryBuilder {
  public:
   DictionaryBuilder();
-  explicit DictionaryBuilder(const base::DictionaryValue& init);
   explicit DictionaryBuilder(const base::Value::Dict& init);
 
   DictionaryBuilder(const DictionaryBuilder&) = delete;
@@ -53,15 +42,11 @@ class DictionaryBuilder {
 
   ~DictionaryBuilder();
 
-  // Can only be called once, after which it's invalid to use the builder.
-  base::Value::Dict BuildDict() {
-    base::Value::Dict result = std::move(*dict_).TakeDict();
-    dict_.reset();
+  base::Value::Dict Build() {
+    base::Value::Dict result = std::move(dict_);
+    dict_ = base::Value::Dict();
     return result;
   }
-
-  // DEPRECATED version of BuildDict().
-  std::unique_ptr<base::DictionaryValue> Build() { return std::move(dict_); }
 
   // Immediately serializes the current state to JSON. Can be called as many
   // times as you like.
@@ -69,23 +54,12 @@ class DictionaryBuilder {
 
   template <typename T>
   DictionaryBuilder& Set(base::StringPiece key, T in_value) {
-    dict_->GetDict().Set(key, std::move(in_value));
-    return *this;
-  }
-
-  // NOTE(devlin): This overload is really just for passing
-  // std::unique_ptr<base::[SomeTypeOf]Value>, but the argument resolution
-  // would require us to define a template specialization for each of the value
-  // types. Just define this; it will fail to compile if <T> is anything but
-  // a base::Value (or one of its subclasses).
-  template <typename T>
-  DictionaryBuilder& Set(base::StringPiece key, std::unique_ptr<T> in_value) {
-    dict_->SetKey(key, std::move(*in_value));
+    dict_.Set(key, std::move(in_value));
     return *this;
   }
 
  private:
-  std::unique_ptr<base::DictionaryValue> dict_;
+  base::Value::Dict dict_;
 };
 
 class ListBuilder {
@@ -97,16 +71,10 @@ class ListBuilder {
 
   ~ListBuilder();
 
-  // Can only be called once, after which it's invalid to use the builder.
-  base::Value::List BuildList() {
+  base::Value::List Build() {
     base::Value::List result = std::move(list_);
     list_ = base::Value::List();
     return result;
-  }
-
-  // DEPRECATED version of BuildList().
-  std::unique_ptr<base::Value> Build() {
-    return std::make_unique<base::Value>(BuildList());
   }
 
   template <typename T>
@@ -121,13 +89,6 @@ class ListBuilder {
   ListBuilder& Append(InputIt first, InputIt last) {
     for (; first != last; ++first)
       list_.Append(*first);
-    return *this;
-  }
-
-  // See note on DictionaryBuilder::Set().
-  template <typename T>
-  ListBuilder& Append(std::unique_ptr<T> in_value) {
-    list_.Append(std::move(*in_value));
     return *this;
   }
 

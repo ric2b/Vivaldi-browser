@@ -1599,10 +1599,12 @@ INSTANTIATE_TEST_SUITE_P(
     CreditCardTest,
     GetCardNetworkTestBatch2,
     testing::Values(
-        // The relevant sample numbers from
+        // The relevant numbers are sampled from
         // https://www.bincodes.com/bank-creditcard-generator/ and
         // https://www.ebanx.com/business/en/developers/integrations/testing/credit-card-test-numbers
-        GetCardNetworkTestCase{"5067001446391275", kEloCard, true},
+        // It's then modified to fit the correct pattern based on the Elo regex,
+        // sourced from the Elo documentation.
+        GetCardNetworkTestCase{"5067071446391278", kEloCard, true},
         GetCardNetworkTestCase{"6362970000457013", kEloCard, true},
 
         // These sample numbers were created by taking the expected card prefix,
@@ -1610,7 +1612,7 @@ INSTANTIATE_TEST_SUITE_P(
         // so that the full number passes a Luhn check.
         GetCardNetworkTestCase{"4312741111111112", kEloCard, true},
         GetCardNetworkTestCase{"4514161111111119", kEloCard, true},
-        GetCardNetworkTestCase{"5090111111111113", kEloCard, true},
+        GetCardNetworkTestCase{"5090141111111110", kEloCard, true},
         GetCardNetworkTestCase{"6277801111111112", kEloCard, true},
         GetCardNetworkTestCase{"2205111111111112", kTroyCard, true},
         GetCardNetworkTestCase{"9792111111111116", kTroyCard, true},
@@ -1685,8 +1687,8 @@ INSTANTIATE_TEST_SUITE_P(
         GetCardNetworkTestCase{"4", kVisaCard, false},
         GetCardNetworkTestCase{"431274", kEloCard, false},
         GetCardNetworkTestCase{"451416", kEloCard, false},
-        GetCardNetworkTestCase{"5067", kEloCard, false},
-        GetCardNetworkTestCase{"5090", kEloCard, false},
+        GetCardNetworkTestCase{"506707", kEloCard, false},
+        GetCardNetworkTestCase{"509014", kEloCard, false},
         GetCardNetworkTestCase{"51", kMasterCard, false},
         GetCardNetworkTestCase{"52", kMasterCard, false},
         GetCardNetworkTestCase{"53", kMasterCard, false},
@@ -1786,31 +1788,131 @@ INSTANTIATE_TEST_SUITE_P(
         // length.
         GetCardNetworkTestCase{"7000700070007000", kGenericCard, true}));
 
+class GetCardNetworkTestBatch5
+    : public testing::TestWithParam<GetCardNetworkTestCase> {};
+
+TEST_P(GetCardNetworkTestBatch5, GetCardNetwork) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      features::kAutofillUseEloRegexForBinMatching);
+
+  auto test_case = GetParam();
+  std::u16string card_number = ASCIIToUTF16(test_case.card_number);
+  SCOPED_TRACE(card_number);
+  EXPECT_EQ(test_case.issuer_network, CreditCard::GetCardNetwork(card_number));
+  EXPECT_EQ(test_case.is_valid, IsValidCreditCardNumber(card_number));
+}
+
+// These are the cards that would be wrongly displayed as Discover before Elo
+// regex pattern was introduced to match the Elo BIN.
+INSTANTIATE_TEST_SUITE_P(
+    CreditCardTest,
+    GetCardNetworkTestBatch5,
+    testing::Values(GetCardNetworkTestCase{"6500311446391271", kEloCard, true},
+                    GetCardNetworkTestCase{"6500401446391270", kEloCard, true},
+                    GetCardNetworkTestCase{"6500691446391276", kEloCard, true},
+                    GetCardNetworkTestCase{"6500701446391273", kEloCard, true},
+                    GetCardNetworkTestCase{"6504061446391278", kEloCard, true},
+                    GetCardNetworkTestCase{"6504101446391272", kEloCard, true},
+                    GetCardNetworkTestCase{"6504221446391278", kEloCard, true},
+                    GetCardNetworkTestCase{"6504301446391278", kEloCard, true},
+                    GetCardNetworkTestCase{"6505804463912719", kEloCard, true},
+                    GetCardNetworkTestCase{"6504901446391275", kEloCard, true},
+                    GetCardNetworkTestCase{"6505001446391273", kEloCard, true},
+                    GetCardNetworkTestCase{"6505101446391271", kEloCard, true},
+                    GetCardNetworkTestCase{"6505201446391279", kEloCard, true},
+                    GetCardNetworkTestCase{"6505301446391277", kEloCard, true},
+                    GetCardNetworkTestCase{"6505521446391270", kEloCard, true},
+                    GetCardNetworkTestCase{"6505601446391270", kEloCard, true},
+                    GetCardNetworkTestCase{"6505701446391278", kEloCard, true},
+                    GetCardNetworkTestCase{"6505801446391276", kEloCard, true},
+                    GetCardNetworkTestCase{"6505901446391274", kEloCard, true},
+                    GetCardNetworkTestCase{"6516521446391277", kEloCard, true},
+                    GetCardNetworkTestCase{"6516601446391277", kEloCard, true},
+                    GetCardNetworkTestCase{"6516701446391275", kEloCard, true},
+                    GetCardNetworkTestCase{"6516881446391275", kEloCard, true},
+                    GetCardNetworkTestCase{"6550001446391277", kEloCard, true},
+                    GetCardNetworkTestCase{"6550121446391273", kEloCard, true},
+                    GetCardNetworkTestCase{"6550261446391277", kEloCard, true},
+                    GetCardNetworkTestCase{"6550361446391275", kEloCard, true},
+                    GetCardNetworkTestCase{"6550511446391275", kEloCard,
+                                           true}));
+
+class GetCardNetworkTestBatch6
+    : public testing::TestWithParam<GetCardNetworkTestCase> {};
+
+TEST_P(GetCardNetworkTestBatch6, GetCardNetwork) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(
+      features::kAutofillUseEloRegexForBinMatching);
+
+  auto test_case = GetParam();
+  std::u16string card_number = ASCIIToUTF16(test_case.card_number);
+  SCOPED_TRACE(card_number);
+  EXPECT_EQ(test_case.issuer_network, CreditCard::GetCardNetwork(card_number));
+  EXPECT_EQ(test_case.is_valid, IsValidCreditCardNumber(card_number));
+}
+
+// These are the cards that would be wrongly displayed as Discover if the flag
+// to use regex for Elo is disabled.
+INSTANTIATE_TEST_SUITE_P(
+    CreditCardTest,
+    GetCardNetworkTestBatch6,
+    testing::Values(
+        GetCardNetworkTestCase{"6500311446391271", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6500401446391270", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6500691446391276", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6500701446391273", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6504061446391278", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6504101446391272", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6504221446391278", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6504301446391278", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505804463912719", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6504901446391275", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505001446391273", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505101446391271", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505201446391279", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505301446391277", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505521446391270", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505601446391270", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505701446391278", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505801446391276", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6505901446391274", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6516521446391277", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6516601446391277", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6516701446391275", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6516881446391275", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6550001446391277", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6550121446391273", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6550261446391277", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6550361446391275", kDiscoverCard, true},
+        GetCardNetworkTestCase{"6550511446391275", kDiscoverCard, true}));
+
 TEST(CreditCardTest, LastFourDigits) {
   CreditCard card(base::GenerateGUID(), "https://www.example.com/");
   ASSERT_EQ(std::u16string(), card.LastFourDigits());
   ASSERT_EQ(internal::GetObfuscatedStringForCardDigits(
                 std::u16string(), /*obfuscation_length=*/4),
-            card.ObfuscatedLastFourDigits());
+            card.ObfuscatedNumberWithVisibleLastFourDigits());
 
   test::SetCreditCardInfo(&card, "Baby Face Nelson", "5212341234123489", "01",
                           "2010", "1");
   ASSERT_EQ(u"3489", card.LastFourDigits());
   ASSERT_EQ(internal::GetObfuscatedStringForCardDigits(
                 u"3489", /*obfuscation_length=*/4),
-            card.ObfuscatedLastFourDigits());
+            card.ObfuscatedNumberWithVisibleLastFourDigits());
 
   card.SetRawInfo(CREDIT_CARD_NUMBER, u"3489");
   ASSERT_EQ(u"3489", card.LastFourDigits());
   ASSERT_EQ(internal::GetObfuscatedStringForCardDigits(
                 u"3489", /*obfuscation_length=*/4),
-            card.ObfuscatedLastFourDigits());
+            card.ObfuscatedNumberWithVisibleLastFourDigits());
 
   card.SetRawInfo(CREDIT_CARD_NUMBER, u"489");
   ASSERT_EQ(u"489", card.LastFourDigits());
   ASSERT_EQ(internal::GetObfuscatedStringForCardDigits(
                 u"489", /*obfuscation_length=*/4),
-            card.ObfuscatedLastFourDigits());
+            card.ObfuscatedNumberWithVisibleLastFourDigits());
 }
 
 TEST(CreditCardTest, FullDigitsForDisplay) {
@@ -1825,9 +1927,18 @@ TEST(CreditCardTest, FullDigitsForDisplay) {
   card.SetRawInfo(CREDIT_CARD_NUMBER, u"5212-3412-3412-3489");
   ASSERT_EQ(u"5212 3412 3412 3489", card.FullDigitsForDisplay());
 
-  // 15-digit card number stays the same.
+  // 15-digit Amex card number adds spacing.
   card.SetRawInfo(CREDIT_CARD_NUMBER, u"378282246310005");
-  ASSERT_EQ(u"378282246310005", card.FullDigitsForDisplay());
+  ASSERT_EQ(u"3782 822463 10005", card.FullDigitsForDisplay());
+
+  // 16-digit card number that begins with Amex digits should have normal
+  // spacing.
+  card.SetRawInfo(CREDIT_CARD_NUMBER, u"3782822463100052");
+  ASSERT_EQ(u"3782 8224 6310 0052", card.FullDigitsForDisplay());
+
+  // 15-digit non-Amex card number stays the same.
+  card.SetRawInfo(CREDIT_CARD_NUMBER, u"998282246310005");
+  ASSERT_EQ(u"998282246310005", card.FullDigitsForDisplay());
 
   // 19-digit card number stays the same.
   card.SetRawInfo(CREDIT_CARD_NUMBER, u"4532261615476013542");
@@ -1984,10 +2095,11 @@ class VirtualCardRankingTest
     : public testing::TestWithParam<VirtualCardRankingTestCase> {};
 
 TEST_P(VirtualCardRankingTest, HasGreaterRankingThan) {
-  // Enable kAutofillEnableRankingFormula so that it uses new formula instead of
-  // frecency.
-  base::test::ScopedFeatureList feature_list_;
-  feature_list_.InitAndEnableFeature(features::kAutofillEnableRankingFormula);
+  // Enable kAutofillEnableRankingFormulaCreditCards so that it uses new formula
+  // instead of frecency.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      features::kAutofillEnableRankingFormulaCreditCards);
 
   auto test_case = GetParam();
 
@@ -1996,8 +2108,10 @@ TEST_P(VirtualCardRankingTest, HasGreaterRankingThan) {
   model_a.set_use_count(test_case.use_count_a);
   model_a.set_use_date(test_case.use_date_a);
 
-  TestAutofillDataModel model_b(test_case.guid_b, test_case.use_count_b,
-                                test_case.use_date_b);
+  CreditCard model_b = test::GetCreditCard();
+  model_b.set_guid(test_case.guid_b);
+  model_b.set_use_count(test_case.use_count_b);
+  model_b.set_use_date(test_case.use_date_b);
 
   EXPECT_EQ(test_case.expectation == GREATER,
             model_a.HasGreaterRankingThan(&model_b, current_time));

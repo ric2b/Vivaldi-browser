@@ -6,9 +6,15 @@
 
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "net/cookies/cookie_setting_override.h"
+#include "net/cookies/site_for_cookies.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace signin {
+
+// TODO(crbug.com/1386190): Consider whether the following checks should
+// take in CookieSettingOverrides rather than default to none.
 
 bool SettingsAllowSigninCookies(
     const content_settings::CookieSettings* cookie_settings) {
@@ -16,11 +22,11 @@ bool SettingsAllowSigninCookies(
   GURL google_url = GaiaUrls::GetInstance()->google_url();
   return cookie_settings &&
          cookie_settings->IsFullCookieAccessAllowed(
-             gaia_url, gaia_url,
-             content_settings::CookieSettings::QueryReason::kCookies) &&
+             gaia_url, net::SiteForCookies::FromUrl(gaia_url),
+             url::Origin::Create(gaia_url), net::CookieSettingOverrides()) &&
          cookie_settings->IsFullCookieAccessAllowed(
-             google_url, google_url,
-             content_settings::CookieSettings::QueryReason::kCookies);
+             google_url, net::SiteForCookies::FromUrl(google_url),
+             url::Origin::Create(google_url), net::CookieSettingOverrides());
 }
 
 bool SettingsDeleteSigninCookiesOnExit(

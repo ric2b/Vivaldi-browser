@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/color/native_chrome_color_mixer.h"
 
-#include "base/bind.h"
 #include "base/callback_list.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/themes/browser_theme_pack.h"
@@ -14,7 +14,6 @@
 #include "chrome/browser/win/titlebar_config.h"
 #include "chrome/grit/theme_resources.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "ui/base/win/shell.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_mixer.h"
 #include "ui/color/color_provider.h"
@@ -29,11 +28,7 @@
 
 namespace {
 
-SkColor GetDefaultInactiveFrameColor() {
-  return base::win::GetVersion() < base::win::Version::WIN10
-             ? SkColorSetRGB(0xEB, 0xEB, 0xEB)
-             : SK_ColorWHITE;
-}
+const SkColor kDefaultInactiveFrameColor = SK_ColorWHITE;
 
 // This class encapsulates much of the same logic from ThemeHelperWin pertaining
 // to the calculation of frame colors on Windows 8, 10 and up. Once the
@@ -121,7 +116,7 @@ void FrameColorHelper::AddNativeChromeColors(
     } else if (dwm_inactive_frame_color_) {
       mixer[ui::kColorFrameInactive] = {dwm_inactive_frame_color_.value()};
     } else if (!ShouldCustomDrawSystemTitlebar()) {
-      mixer[ui::kColorFrameInactive] = {GetDefaultInactiveFrameColor()};
+      mixer[ui::kColorFrameInactive] = {kDefaultInactiveFrameColor};
     } else if (dwm_frame_color_) {
       mixer[ui::kColorFrameInactive] =
           ui::HSLShift({dwm_frame_color_.value()},
@@ -163,11 +158,8 @@ bool FrameColorHelper::HasCustomImage(
 
 bool FrameColorHelper::DwmColorsAllowed(
     const ui::ColorProviderManager::Key& key) const {
-  const bool use_native_frame_if_enabled =
-      (ShouldCustomDrawSystemTitlebar() ||
-       !HasCustomImage(IDR_THEME_FRAME, key)) &&
-      (base::win::GetVersion() >= base::win::Version::WIN8);
-  return use_native_frame_if_enabled && ui::win::IsAeroGlassEnabled();
+  return ShouldCustomDrawSystemTitlebar() ||
+         !HasCustomImage(IDR_THEME_FRAME, key);
 }
 
 color_utils::HSL FrameColorHelper::GetTint(
@@ -192,14 +184,10 @@ void FrameColorHelper::FetchAccentColors() {
   const auto* accent_color_observer = ui::AccentColorObserver::Get();
   dwm_accent_border_color_ =
       accent_color_observer->accent_border_color().value_or(
-          GetDefaultInactiveFrameColor());
+          kDefaultInactiveFrameColor);
 
-  if (base::win::GetVersion() < base::win::Version::WIN10) {
-    dwm_frame_color_ = dwm_accent_border_color_;
-  } else {
-    dwm_frame_color_ = accent_color_observer->accent_color();
-    dwm_inactive_frame_color_ = accent_color_observer->accent_color_inactive();
-  }
+  dwm_frame_color_ = accent_color_observer->accent_color();
+  dwm_inactive_frame_color_ = accent_color_observer->accent_color_inactive();
 }
 
 ui::ColorTransform GetCaptionForegroundColor(

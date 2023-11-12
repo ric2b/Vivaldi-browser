@@ -12,6 +12,7 @@
 #include "ash/glanceables/glanceables_controller.h"
 #include "ash/glanceables/signout_screenshot_handler.h"
 #include "ash/metrics/user_metrics_recorder.h"
+#include "ash/public/cpp/session/scoped_screen_lock_blocker.h"
 #include "ash/public/cpp/session/session_activation_observer.h"
 #include "ash/public/cpp/session/session_controller_client.h"
 #include "ash/public/cpp/session/session_observer.h"
@@ -26,20 +27,40 @@
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_util.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
 #include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_type.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/message_center/message_center.h"
 
 using session_manager::SessionState;
 
 namespace ash {
+
+class SessionControllerImpl::ScopedScreenLockBlockerImpl
+    : public ScopedScreenLockBlocker {
+ public:
+  explicit ScopedScreenLockBlockerImpl(
+      base::WeakPtr<SessionControllerImpl> session_controller)
+      : session_controller_(session_controller) {
+    DCHECK(session_controller_);
+  }
+
+  ~ScopedScreenLockBlockerImpl() override {
+    if (session_controller_) {
+      session_controller_->RemoveScopedScreenLockBlocker();
+    }
+  }
+
+ private:
+  base::WeakPtr<SessionControllerImpl> session_controller_;
+};
 
 SessionControllerImpl::SessionControllerImpl()
     : fullscreen_controller_(std::make_unique<FullscreenController>(this)) {
@@ -71,7 +92,8 @@ bool SessionControllerImpl::IsActiveUserSessionStarted() const {
 }
 
 bool SessionControllerImpl::CanLockScreen() const {
-  return IsActiveUserSessionStarted() && can_lock_;
+  return scoped_screen_lock_blocker_count_ == 0 &&
+         IsActiveUserSessionStarted() && can_lock_;
 }
 
 bool SessionControllerImpl::ShouldLockScreenAutomatically() const {
@@ -117,10 +139,7 @@ bool SessionControllerImpl::ShouldEnableSettings() const {
 }
 
 bool SessionControllerImpl::ShouldShowNotificationTray() const {
-  if (!IsActiveUserSessionStarted() || IsInSecondaryLoginScreen())
-    return false;
-
-  return true;
+  return IsActiveUserSessionStarted() && !IsInSecondaryLoginScreen();
 }
 
 const SessionControllerImpl::UserSessions&
@@ -197,6 +216,11 @@ bool SessionControllerImpl::IsUserFirstLogin() const {
 
 bool SessionControllerImpl::IsEnterpriseManaged() const {
   return client_ && client_->IsEnterpriseManaged();
+}
+
+absl::optional<int> SessionControllerImpl::GetExistingUsersCount() const {
+  return client_ ? absl::optional<int>(client_->GetExistingUsersCount())
+                 : absl::nullopt;
 }
 
 bool SessionControllerImpl::ShouldDisplayManagedUI() const {
@@ -295,6 +319,14 @@ PrefService* SessionControllerImpl::GetActivePrefService() const {
   if (last_active_user_prefs_)
     return last_active_user_prefs_;
   return GetSigninScreenPrefService();
+}
+
+std::unique_ptr<ScopedScreenLockBlocker>
+SessionControllerImpl::GetScopedScreenLockBlocker() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  ++scoped_screen_lock_blocker_count_;
+  return std::make_unique<SessionControllerImpl::ScopedScreenLockBlockerImpl>(
+      weak_ptr_factory_.GetWeakPtr());
 }
 
 void SessionControllerImpl::AddObserver(SessionObserver* observer) {
@@ -690,6 +722,12 @@ void SessionControllerImpl::EnsureActiveWindowAfterUnblockingUserSession() {
       Shell::Get()->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
   if (!mru_list.empty())
     mru_list.front()->Focus();
+}
+
+void SessionControllerImpl::RemoveScopedScreenLockBlocker() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_GT(scoped_screen_lock_blocker_count_, 0);
+  --scoped_screen_lock_blocker_count_;
 }
 
 }  // namespace ash

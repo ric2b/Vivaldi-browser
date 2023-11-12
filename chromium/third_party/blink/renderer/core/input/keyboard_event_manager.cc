@@ -20,16 +20,12 @@
 #include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
-#include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
-#include "third_party/blink/renderer/core/html/closewatcher/close_watcher.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
-#include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input/event_handling_util.h"
 #include "third_party/blink/renderer/core/input/input_device_capabilities.h"
 #include "third_party/blink/renderer/core/input/scroll_manager.h"
-#include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/focusgroup_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -53,6 +49,18 @@ namespace blink {
 namespace {
 
 const int kVKeyProcessKey = 229;
+
+bool IsPageUpOrDownKeyEvent(int key_code, WebInputEvent::Modifiers modifiers) {
+  if (modifiers & WebInputEvent::kAltKey) {
+    // Alt-Up/Down should behave like PageUp/Down on Mac. (Note that Alt-keys
+    // on other platforms are suppressed due to isSystemKey being set.)
+    return key_code == VKEY_UP || key_code == VKEY_DOWN;
+  } else if (key_code == VKEY_PRIOR || key_code == VKEY_NEXT) {
+    return modifiers == WebInputEvent::kNoModifiers;
+  }
+
+  return false;
+}
 
 bool MapKeyCodeForScroll(int key_code,
                          WebInputEvent::Modifiers modifiers,
@@ -482,7 +490,8 @@ void KeyboardEventManager::DefaultArrowEventHandler(
   }
 
   if (IsSpatialNavigationEnabled(frame_) &&
-      !frame_->GetDocument()->InDesignMode()) {
+      !frame_->GetDocument()->InDesignMode() &&
+      !IsPageUpOrDownKeyEvent(event->keyCode(), event->GetModifiers())) {
     if (page->GetSpatialNavigationController().HandleArrowKeyboardEvent(
             event)) {
       event->SetDefaultHandled();

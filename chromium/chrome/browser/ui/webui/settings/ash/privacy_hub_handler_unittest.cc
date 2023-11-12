@@ -4,12 +4,14 @@
 
 #include "chrome/browser/ui/webui/settings/ash/privacy_hub_handler.h"
 
+#include "ash/constants/ash_features.h"
 #include "base/containers/adapters.h"
-#include "base/task/sequenced_task_runner.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "chrome/browser/ash/privacy_hub/privacy_hub_hats_trigger.h"
+#include "chrome/common/chrome_features.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "content/public/test/test_web_ui.h"
-#include "media/capture/video/chromeos/mojom/cros_camera_service.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ash::settings {
@@ -19,9 +21,9 @@ class TestPrivacyHubHandler : public PrivacyHubHandler {
  public:
   using content::WebUIMessageHandler::set_web_ui;
 
-  using PrivacyHubHandler::HandleInitialAvailabilityOfMicrophoneForSimpleUsage;
-  using PrivacyHubHandler::HandleInitialCameraSwitchState;
   using PrivacyHubHandler::HandleInitialMicrophoneSwitchState;
+  using PrivacyHubHandler::HandlePrivacyPageClosed;
+  using PrivacyHubHandler::HandlePrivacyPageOpened;
 };
 
 using cps = cros::mojom::CameraPrivacySwitchState;
@@ -51,6 +53,8 @@ class PrivacyHubHandlerTest : public testing::Test {
             testing::UnitTest::GetInstance()->current_test_info()->name()) {
     privacy_hub_handler_.set_web_ui(&web_ui_);
     privacy_hub_handler_.AllowJavascriptForTesting();
+
+    feature_list_.InitAndEnableFeature(ash::features::kCrosPrivacyHub);
   }
 
   [[nodiscard]] base::Value GetLastWebUIListenerData(
@@ -97,6 +101,8 @@ class PrivacyHubHandlerTest : public testing::Test {
                   << "' with a valid arg";
     return base::Value();
   }
+
+  base::test::ScopedFeatureList feature_list_;
 };
 
 class PrivacyHubHandlerMicrophoneTest
@@ -117,43 +123,20 @@ class PrivacyHubHandlerMicrophoneTest
   }
 };
 
-class PrivacyHubHandlerCameraTest : public PrivacyHubHandlerTest,
-                                    public testing::WithParamInterface<cps> {
+class PrivacyHubHandlerHatsTest : public PrivacyHubHandlerTest {
  public:
-  void ExpectValueMatchesEnumParam(const base::Value& value) const {
-    if (GetParam() == cps::UNKNOWN) {
-      EXPECT_TRUE(value.is_none());
-    } else {
-      ExpectValueMatchesBoolParam(GetParam() == cps::ON, value);
-    }
+  PrivacyHubHandlerHatsTest() {
+    feature_list_.InitAndEnableFeature(
+        ::features::kHappinessTrackingPrivacyHubBaseline);
   }
+
+  bool IsTimerStarted() {
+    return PrivacyHubHatsTrigger::Get().GetTimerForTesting().IsRunning();
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
 };
-
-TEST_P(PrivacyHubHandlerCameraTest, CameraHardwareToggleChanged) {
-  privacy_hub_handler_.CameraHardwareToggleChanged(GetParam());
-
-  const base::Value data =
-      GetLastWebUIListenerData("camera-hardware-toggle-changed");
-
-  ExpectValueMatchesEnumParam(data);
-}
-
-INSTANTIATE_TEST_SUITE_P(HardwareSwitchStates,
-                         PrivacyHubHandlerCameraTest,
-                         testing::Values(cps::ON, cps::OFF, cps::UNKNOWN),
-                         testing::PrintToStringParamName());
-
-TEST_F(PrivacyHubHandlerCameraTest, HandleInitialCameraSwitchState) {
-  base::Value::List args;
-  args.Append(this_test_name_);
-
-  privacy_hub_handler_.HandleInitialCameraSwitchState(args);
-
-  const base::Value data = GetLastWebUIResponse(this_test_name_);
-
-  // The initial state is always UNKNOWN which is communicated as NONE
-  EXPECT_TRUE(data.is_none());
-}
 
 TEST_P(PrivacyHubHandlerMicrophoneTest,
        MicrophoneHardwarePrivacySwitchChanged) {
@@ -178,50 +161,32 @@ TEST_P(PrivacyHubHandlerMicrophoneTest, HandleInitialMicrophoneSwitchState) {
   ExpectValueMatchesBoolParam(data);
 }
 
-TEST_F(PrivacyHubHandlerMicrophoneTest,
-       HandleInitialAvailabilityOfSimpleMicrophone) {
-  base::Value::List args;
-  args.Append(this_test_name_);
-
-  privacy_hub_handler_.HandleInitialAvailabilityOfMicrophoneForSimpleUsage(
-      args);
-
-  const base::Value data = GetLastWebUIResponse(this_test_name_);
-  EXPECT_FALSE(data.is_none());
-}
-
-TEST_P(PrivacyHubHandlerMicrophoneTest, AvailabilityOfMicrophoneChanged) {
-  privacy_hub_handler_.AvailabilityOfMicrophoneChanged(GetParam());
-
-  const base::Value data = GetLastWebUIListenerData(
-      "availability-of-microphone-for-simple-usage-changed");
-
-  ExpectValueMatchesBoolParam(data);
-}
-
 INSTANTIATE_TEST_SUITE_P(HardwareSwitchStates,
                          PrivacyHubHandlerMicrophoneTest,
                          testing::Values(true, false),
                          testing::PrintToStringParamName());
 
+TEST_F(PrivacyHubHandlerHatsTest, OnlyTriggerHatsIfPageWasVisited) {
+  const base::Value::List args;
+
+  EXPECT_FALSE(IsTimerStarted());
+
+  // We trigger the HaTS survey on the leave event but the user hasn't visited
+  // the page yet.
+  privacy_hub_handler_.HandlePrivacyPageClosed(args);
+  EXPECT_FALSE(IsTimerStarted());
+
+  // User goes to the page.
+  privacy_hub_handler_.HandlePrivacyPageOpened(args);
+  EXPECT_FALSE(IsTimerStarted());
+
+  // And leaves it again, now the survey should be triggered.
+  privacy_hub_handler_.HandlePrivacyPageClosed(args);
+  EXPECT_TRUE(IsTimerStarted());
+}
+
 #if DCHECK_IS_ON()
 using PrivacyHubHandlerDeathTest = PrivacyHubHandlerTest;
-
-TEST_F(PrivacyHubHandlerDeathTest, HandleInitialCameraSwitchStateNoCallbackId) {
-  base::Value::List args;
-
-  EXPECT_DEATH(privacy_hub_handler_.HandleInitialCameraSwitchState(args),
-               ".*Callback ID is required.*");
-}
-
-TEST_F(PrivacyHubHandlerDeathTest, HandleInitialCameraSwitchStateWithArgs) {
-  base::Value::List args;
-  args.Append(this_test_name_);
-  args.Append(base::Value());
-
-  EXPECT_DEATH(privacy_hub_handler_.HandleInitialCameraSwitchState(args),
-               ".*Did not expect arguments.*");
-}
 
 TEST_F(PrivacyHubHandlerDeathTest,
        HandleInitialMicrophoneSwitchStateNoCallbackId) {
@@ -240,27 +205,33 @@ TEST_F(PrivacyHubHandlerDeathTest, HandleInitialMicrophoneSwitchStateWithArgs) {
                ".*Did not expect arguments.*");
 }
 
-TEST_F(PrivacyHubHandlerDeathTest,
-       HandleInitialAvailabilityOfMicrophoneForSimpleUsageNoCallbackId) {
-  base::Value::List args;
-
-  EXPECT_DEATH(
-      privacy_hub_handler_.HandleInitialAvailabilityOfMicrophoneForSimpleUsage(
-          args),
-      ".*Callback ID is required.*");
-}
-
-TEST_F(PrivacyHubHandlerDeathTest,
-       HandleInitialAvailabilityOfMicrophoneForSimpleUsageWithArgs) {
+TEST_F(PrivacyHubHandlerDeathTest, HandlePrivacyPageOpened) {
   base::Value::List args;
   args.Append(this_test_name_);
-  args.Append(base::Value());
 
-  EXPECT_DEATH(
-      privacy_hub_handler_.HandleInitialAvailabilityOfMicrophoneForSimpleUsage(
-          args),
-      ".*Did not expect arguments.*");
+  EXPECT_DEATH(privacy_hub_handler_.HandlePrivacyPageOpened(args), ".*empty.*");
 }
+
+TEST_F(PrivacyHubHandlerDeathTest, HandlePrivacyPageClosed) {
+  base::Value::List args;
+  args.Append(this_test_name_);
+
+  EXPECT_DEATH(privacy_hub_handler_.HandlePrivacyPageClosed(args), ".*empty.*");
+}
+
+TEST_F(PrivacyHubHandlerDeathTest, OnlyTriggerHatsIfFeatureIsEnabled) {
+  const base::Value::List args;
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(
+      ::features::kHappinessTrackingPrivacyHubBaseline);
+
+  // User goes to the page.
+  EXPECT_DEATH(privacy_hub_handler_.HandlePrivacyPageOpened(args),
+               "base::FeatureList::IsEnabled");
+  EXPECT_DEATH(privacy_hub_handler_.HandlePrivacyPageClosed(args),
+               "base::FeatureList::IsEnabled");
+}
+
 #endif
 
 }  // namespace ash::settings

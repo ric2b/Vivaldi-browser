@@ -412,7 +412,7 @@ PageSpecificContentSettings::PageSpecificContentSettings(content::Page& page,
       delegate_(delegate),
       map_(delegate_->GetSettingsMap()),
       allowed_local_shared_objects_(
-          GetWebContents()->GetBrowserContext(),
+          GetWebContents()->GetPrimaryMainFrame()->GetStoragePartition(),
 #if !BUILDFLAG(IS_ANDROID)
           // TODO(crbug.com/1404234): Remove the async local storage pathway
           // completely when the new dialog has launched.
@@ -423,14 +423,15 @@ PageSpecificContentSettings::PageSpecificContentSettings(content::Page& page,
 #endif
           delegate_->GetAdditionalFileSystemTypes(),
           delegate_->GetIsDeletionDisabledCallback()),
-      blocked_local_shared_objects_(GetWebContents()->GetBrowserContext(),
-                                    /*ignore_empty_localstorage=*/false,
-                                    delegate_->GetAdditionalFileSystemTypes(),
-                                    delegate_->GetIsDeletionDisabledCallback()),
-      allowed_browsing_data_model_(
-          BrowsingDataModel::BuildEmpty(GetWebContents()->GetBrowserContext())),
-      blocked_browsing_data_model_(
-          BrowsingDataModel::BuildEmpty(GetWebContents()->GetBrowserContext())),
+      blocked_local_shared_objects_(
+          GetWebContents()->GetPrimaryMainFrame()->GetStoragePartition(),
+          /*ignore_empty_localstorage=*/false,
+          delegate_->GetAdditionalFileSystemTypes(),
+          delegate_->GetIsDeletionDisabledCallback()),
+      allowed_browsing_data_model_(BrowsingDataModel::BuildEmpty(
+          GetWebContents()->GetPrimaryMainFrame()->GetStoragePartition())),
+      blocked_browsing_data_model_(BrowsingDataModel::BuildEmpty(
+          GetWebContents()->GetPrimaryMainFrame()->GetStoragePartition())),
       microphone_camera_state_(MICROPHONE_CAMERA_NOT_ACCESSED) {
   observation_.Observe(map_.get());
   if (page.GetMainDocument().GetLifecycleState() ==
@@ -543,7 +544,7 @@ void PageSpecificContentSettings::SharedWorkerAccessed(
 // static
 void PageSpecificContentSettings::InterestGroupJoined(
     content::RenderFrameHost* rfh,
-    const url::Origin api_origin,
+    const url::Origin& api_origin,
     bool blocked_by_policy) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   PageSpecificContentSettings* settings = GetForFrame(rfh);
@@ -554,7 +555,7 @@ void PageSpecificContentSettings::InterestGroupJoined(
 // static
 void PageSpecificContentSettings::TopicAccessed(
     content::RenderFrameHost* rfh,
-    const url::Origin api_origin,
+    const url::Origin& api_origin,
     bool blocked_by_policy,
     privacy_sandbox::CanonicalTopic topic) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -717,20 +718,23 @@ void AddToContainer(browsing_data::LocalSharedObjectsContainer& container,
     case StorageType::LOCAL_STORAGE:
       // TODO(https://crbug.com/1199077): Pass the real StorageKey into this
       // function directly.
-      container.local_storages()->Add(blink::StorageKey(origin));
+      container.local_storages()->Add(
+          blink::StorageKey::CreateFirstParty(origin));
       return;
     case StorageType::SESSION_STORAGE:
       // TODO(https://crbug.com/1199077): Pass the real StorageKey into this
       // function directly.
-      container.session_storages()->Add(blink::StorageKey(origin));
+      container.session_storages()->Add(
+          blink::StorageKey::CreateFirstParty(origin));
       return;
     case StorageType::INDEXED_DB:
       // TODO(https://crbug.com/1199077): Pass the real StorageKey into this
       // function directly.
-      container.indexed_dbs()->Add(blink::StorageKey(origin));
+      container.indexed_dbs()->Add(blink::StorageKey::CreateFirstParty(origin));
       return;
     case StorageType::CACHE:
-      container.cache_storages()->Add(origin);
+      container.cache_storages()->Add(
+          blink::StorageKey::CreateFirstParty(origin));
       return;
     case StorageType::FILE_SYSTEM:
       container.file_systems()->Add(origin);
@@ -835,7 +839,7 @@ void PageSpecificContentSettings::OnSharedWorkerAccessed(
 }
 
 void PageSpecificContentSettings::OnInterestGroupJoined(
-    const url::Origin api_origin,
+    const url::Origin& api_origin,
     bool blocked_by_policy) {
   if (blocked_by_policy) {
     blocked_interest_group_api_.push_back(api_origin);
@@ -850,7 +854,7 @@ void PageSpecificContentSettings::OnInterestGroupJoined(
 }
 
 void PageSpecificContentSettings::OnTopicAccessed(
-    const url::Origin api_origin,
+    const url::Origin& api_origin,
     bool blocked_by_policy,
     privacy_sandbox::CanonicalTopic topic) {
   // TODO(crbug.com/1286276): Add URL and Topic to local_shared_objects?
@@ -860,7 +864,7 @@ void PageSpecificContentSettings::OnTopicAccessed(
 }
 
 void PageSpecificContentSettings::OnTrustTokenAccessed(
-    const url::Origin api_origin,
+    const url::Origin& api_origin,
     bool blocked) {
   // TODO(crbug.com/1378703): Call this method.
   // The size isn't relevant here and won't be displayed in the UI.
@@ -1126,12 +1130,18 @@ bool PageSpecificContentSettings::HasAccessedTopics() const {
 std::vector<privacy_sandbox::CanonicalTopic>
 PageSpecificContentSettings::GetAccessedTopics() const {
   if (accessed_topics_.empty() &&
-      privacy_sandbox::kPrivacySandboxSettings3ShowSampleDataForTesting.Get() &&
+      (privacy_sandbox::kPrivacySandboxSettings3ShowSampleDataForTesting
+           .Get() ||
+       privacy_sandbox::kPrivacySandboxSettings4ShowSampleDataForTesting
+           .Get()) &&
       page().GetMainDocument().GetLastCommittedURL().host() == "example.com") {
     // TODO(crbug.com/1286276): Remove sample topic when API is ready.
     return {privacy_sandbox::CanonicalTopic(
-        browsing_topics::Topic(1),
-        privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY)};
+                browsing_topics::Topic(3),
+                privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY),
+            privacy_sandbox::CanonicalTopic(
+                browsing_topics::Topic(4),
+                privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY)};
   }
   return {accessed_topics_.begin(), accessed_topics_.end()};
 }

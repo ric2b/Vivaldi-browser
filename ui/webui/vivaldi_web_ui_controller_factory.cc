@@ -44,8 +44,10 @@ WebUIFactoryFunction GetVivaldiWebUIFactoryFunction(WebUI* web_ui,
   if (!url.SchemeIs(content::kChromeUIScheme))
     return NULL;
 
+#if !defined(OEM_MERCEDES_BUILD)
   if (url.host() == vivaldi::kVivaldiGameHost)
     return &NewVivaldiWebUI<GameUI>;
+#endif
 
   return NULL;
 }

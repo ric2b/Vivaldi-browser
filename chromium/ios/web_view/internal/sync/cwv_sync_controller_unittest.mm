@@ -7,9 +7,9 @@
 #include <memory>
 #include <set>
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -130,18 +130,6 @@ TEST_F(CWVSyncControllerTest, StopSyncAndClearIdentity) {
   EXPECT_FALSE(sync_controller.currentIdentity);
 }
 
-TEST_F(CWVSyncControllerTest, Syncing) {
-  CWVSyncController* sync_controller = [[CWVSyncController alloc]
-      initWithSyncService:&sync_service_
-          identityManager:identity_test_environment_.identity_manager()
-              prefService:&pref_service_];
-  sync_service_.SetTransportState(
-      syncer::SyncService::TransportState::DISABLED);
-  EXPECT_FALSE(sync_controller.syncing);
-  sync_service_.SetTransportState(syncer::SyncService::TransportState::ACTIVE);
-  EXPECT_TRUE(sync_controller.syncing);
-}
-
 TEST_F(CWVSyncControllerTest, PassphraseNeeded) {
   CWVSyncController* sync_controller = [[CWVSyncController alloc]
       initWithSyncService:&sync_service_
@@ -195,30 +183,6 @@ TEST_F(CWVSyncControllerTest, DelegateDidStartAndStopSync) {
   sync_service_.FireStateChanged();
   sync_service_.SetTransportState(
       syncer::SyncService::TransportState::DISABLED);
-  sync_service_.FireStateChanged();
-
-  [delegate verify];
-}
-
-TEST_F(CWVSyncControllerTest, DelegateDidFailWithError) {
-  CWVSyncController* sync_controller = [[CWVSyncController alloc]
-      initWithSyncService:&sync_service_
-          identityManager:identity_test_environment_.identity_manager()
-              prefService:&pref_service_];
-
-  id delegate = OCMStrictProtocolMock(@protocol(CWVSyncControllerDelegate));
-  [delegate setExpectationOrderMatters:YES];
-  sync_controller.delegate = delegate;
-
-  OCMExpect([delegate
-        syncController:sync_controller
-      didFailWithError:[OCMArg checkWithBlock:^BOOL(NSError* error) {
-        return error.code == CWVSyncErrorConnectionFailed &&
-               error.domain == CWVSyncErrorDomain &&
-               [error.userInfo[CWVSyncErrorIsTransientKey] boolValue];
-      }]]);
-  OCMExpect([delegate syncControllerDidUpdateState:sync_controller]);
-  sync_service_.SetTransientAuthError();
   sync_service_.FireStateChanged();
 
   [delegate verify];

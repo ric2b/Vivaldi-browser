@@ -32,8 +32,9 @@ class TestObjectPermissionContext : public ObjectPermissionContextBase {
   ~TestObjectPermissionContext() override = default;
 
   bool IsValidObject(const base::Value& object) override {
-    return object.DictSize() == 2 && object.FindKey(kRequiredKey1) &&
-           object.FindKey(kRequiredKey2);
+    const base::Value::Dict& dict = object.GetDict();
+    return dict.size() == 2 && dict.Find(kRequiredKey1) &&
+           dict.Find(kRequiredKey2);
   }
 
   std::u16string GetObjectDisplayName(const base::Value& object) override {
@@ -41,7 +42,7 @@ class TestObjectPermissionContext : public ObjectPermissionContextBase {
   }
 
   std::string GetKeyForObject(const base::Value& object) override {
-    return *object.FindStringKey(kRequiredKey1);
+    return *object.GetDict().FindString(kRequiredKey1);
   }
 };
 
@@ -54,13 +55,13 @@ class ObjectPermissionContextBaseTest : public testing::Test {
         url2_("https://chromium.org"),
         origin1_(url::Origin::Create(url1_)),
         origin2_(url::Origin::Create(url2_)),
-        object1_(base::Value::Type::DICTIONARY),
-        object2_(base::Value::Type::DICTIONARY),
+        object1_(base::Value::Type::DICT),
+        object2_(base::Value::Type::DICT),
         context_(browser_context()) {
-    object1_.SetStringKey(kRequiredKey1, "value1");
-    object1_.SetStringKey(kRequiredKey2, "value2");
-    object2_.SetStringKey(kRequiredKey1, "value3");
-    object2_.SetStringKey(kRequiredKey2, "value4");
+    object1_.GetDict().Set(kRequiredKey1, "value1");
+    object1_.GetDict().Set(kRequiredKey2, "value2");
+    object2_.GetDict().Set(kRequiredKey1, "value3");
+    object2_.GetDict().Set(kRequiredKey2, "value4");
   }
 
   ~ObjectPermissionContextBaseTest() override = default;
@@ -174,6 +175,20 @@ TEST_F(ObjectPermissionContextBaseTest,
   objects = context_.GetGrantedObjects(origin1_);
   EXPECT_EQ(1u, objects.size());
   EXPECT_EQ(object2_, objects[0]->value);
+}
+
+TEST_F(ObjectPermissionContextBaseTest, GetOriginsWithGrants) {
+  MockPermissionObserver mock_observer;
+  context_.AddObserver(&mock_observer);
+
+  EXPECT_CALL(mock_observer, OnObjectPermissionChanged(_, _)).Times(2);
+  context_.GrantObjectPermission(origin1_, object1_.Clone());
+  context_.GrantObjectPermission(origin2_, object2_.Clone());
+
+  auto origins_with_grants = context_.GetOriginsWithGrants();
+  EXPECT_EQ(2u, origins_with_grants.size());
+  EXPECT_EQ(origin2_, origins_with_grants[0]);
+  EXPECT_EQ(origin1_, origins_with_grants[1]);
 }
 
 TEST_F(ObjectPermissionContextBaseTest, GetAllGrantedObjects) {

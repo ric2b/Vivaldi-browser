@@ -2,30 +2,27 @@
 
 #import "ios/notes/note_folder_view_controller.h"
 
-#include <memory>
-#include <vector>
+#import <memory>
+#import <vector>
 
-#include "base/check.h"
-#include "base/notreached.h"
-#include "base/strings/sys_string_conversions.h"
-#import "ios/notes/note_folder_editor_view_controller.h"
-#import "ios/notes/note_model_bridge_observer.h"
-#import "ios/notes/note_ui_constants.h"
-#import "ios/notes/note_utils_ios.h"
-#import "ios/notes/note_model_bridge_observer.h"
+#import "base/check.h"
+#import "base/notreached.h"
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "notes/notes_model.h"
-#import "notes/note_node.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/notes/cells/note_folder_item.h"
-
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
-
+#import "ios/notes/note_folder_editor_view_controller.h"
+#import "ios/notes/note_model_bridge_observer.h"
+#import "ios/notes/note_model_bridge_observer.h"
+#import "ios/notes/note_ui_constants.h"
+#import "ios/notes/note_utils_ios.h"
+#import "notes/note_node.h"
+#import "notes/notes_model.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

@@ -23,6 +23,10 @@
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_consumer.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -158,9 +162,9 @@
     // without completed the FRE. And the user starts Chrome again.
     // See crbug.com/1312449.
     // TODO(crbug.com/1314012): Need test for this case.
-    self.authenticationService->SignOut(signin_metrics::ABORT_SIGNIN,
-                                        /*force_clear_browsing_data=*/false,
-                                        startSignInCompletion);
+    self.authenticationService->SignOut(
+        signin_metrics::ProfileSignout::kAbortSignin,
+        /*force_clear_browsing_data=*/false, startSignInCompletion);
     return;
   }
   startSignInCompletion();
@@ -186,9 +190,9 @@
       completion();
     }
   };
-  self.authenticationService->SignOut(signin_metrics::ABORT_SIGNIN,
-                                      /*force_clear_browsing_data=*/false,
-                                      signOutCompletion);
+  self.authenticationService->SignOut(
+      signin_metrics::ProfileSignout::kAbortSignin,
+      /*force_clear_browsing_data=*/false, signOutCompletion);
 }
 
 - (void)userAttemptedToSignin {
@@ -210,8 +214,15 @@
         signIn ? first_run::kWelcomeAndSigninScreenCompletionWithSignIn
                : first_run::kWelcomeAndSigninScreenCompletionWithoutSignIn;
     self.localPrefService->SetBoolean(prefs::kEulaAccepted, true);
+
+    if (vivaldi::IsVivaldiRunning()) {
+      self.localPrefService->SetBoolean(metrics::prefs::kMetricsReportingEnabled,
+                                        false);
+    } else {
     self.localPrefService->SetBoolean(metrics::prefs::kMetricsReportingEnabled,
                                       self.UMAReportingUserChoice);
+    } // End Vivaldi
+
     self.localPrefService->CommitPendingWrite();
     base::UmaHistogramEnumeration("FirstRun.Stage", firstRunStage);
     RecordFirstRunSignInMetrics(self.identityManager, self.attemptStatus,
@@ -315,7 +326,7 @@
   }
 }
 
-- (void)identityChanged:(id<SystemIdentity>)identity {
+- (void)identityUpdated:(id<SystemIdentity>)identity {
   if ([self.selectedIdentity isEqual:identity]) {
     [self updateConsumerIdentity];
   }

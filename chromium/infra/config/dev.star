@@ -9,7 +9,7 @@
 load("//lib/branches.star", "branches")
 
 lucicfg.check_version(
-    min = "1.33.7",
+    min = "1.38.1",
     message = "Update depot_tools",
 )
 
@@ -37,9 +37,10 @@ lucicfg.emit(
     data = io.read_file("luci-analysis-dev.cfg"),
 )
 
-lucicfg.emit(
-    dest = "luci/chops-weetbix-dev.cfg",
-    data = io.read_file("chops-weetbix-dev.cfg"),
-)
+# TODO(b/270163072): Re-emit after staging is fixed.
+# lucicfg.emit(
+#     dest = "luci/chops-weetbix-dev.cfg",
+#     data = io.read_file("chops-weetbix-dev.cfg"),
+# )
 
 branches.exec("//dev/dev.star")

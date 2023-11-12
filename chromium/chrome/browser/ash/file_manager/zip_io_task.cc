@@ -8,12 +8,12 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/check_op.h"
 #include "base/files/file.h"
 #include "base/files/file_error_or.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
@@ -210,9 +210,8 @@ void ZipIOTask::ZipItems(
   zip_file_creator_->SetProgressCallback(base::BindOnce(
       &ZipIOTask::OnZipProgress, weak_ptr_factory_.GetWeakPtr()));
   zip_file_creator_->SetCompletionCallback(
-      BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                   base::BindOnce(&ZipIOTask::OnZipComplete,
-                                  weak_ptr_factory_.GetWeakPtr())));
+      BindPostTaskToCurrentDefault(base::BindOnce(
+          &ZipIOTask::OnZipComplete, weak_ptr_factory_.GetWeakPtr())));
   zip_file_creator_->Start(LaunchFileUtilService());
 }
 

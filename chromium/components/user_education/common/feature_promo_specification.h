@@ -8,8 +8,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/feature_list.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "components/user_education/common/help_bubble_params.h"
 #include "components/user_education/common/tutorial_identifier.h"
@@ -60,7 +60,7 @@ class FeaturePromoSpecification {
   // bubble.
   enum class PromoType {
     // Uninitialized/invalid specification.
-    kUnspecifiied,
+    kUnspecified,
     // A toast-style promo.
     kToast,
     // A snooze-style promo.
@@ -238,7 +238,7 @@ class FeaturePromoSpecification {
   raw_ptr<const base::Feature> feature_ = nullptr;
 
   // The type of promo. A promo with type kUnspecified is not valid.
-  PromoType promo_type_ = PromoType::kUnspecifiied;
+  PromoType promo_type_ = PromoType::kUnspecified;
 
   // The element identifier of the element to attach the promo to.
   ui::ElementIdentifier anchor_element_id_;

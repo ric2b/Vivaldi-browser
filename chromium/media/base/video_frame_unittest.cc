@@ -9,9 +9,9 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/strings/stringprintf.h"
@@ -476,8 +476,10 @@ TEST(VideoFrame, WrapExternalGpuMemoryBuffer) {
           coded_size, gfx::BufferFormat::YUV_420_BIPLANAR, modifier);
   gfx::GpuMemoryBuffer* gmb_raw_ptr = gmb.get();
   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes] = {
-      gpu::MailboxHolder(gpu::Mailbox::Generate(), gpu::SyncToken(), 5),
-      gpu::MailboxHolder(gpu::Mailbox::Generate(), gpu::SyncToken(), 10)};
+      gpu::MailboxHolder(gpu::Mailbox::GenerateForSharedImage(),
+                         gpu::SyncToken(), 5),
+      gpu::MailboxHolder(gpu::Mailbox::GenerateForSharedImage(),
+                         gpu::SyncToken(), 10)};
   auto frame = VideoFrame::WrapExternalGpuMemoryBuffer(
       visible_rect, coded_size, std::move(gmb), mailbox_holders,
       base::DoNothing(), timestamp);
@@ -576,8 +578,8 @@ TEST(VideoFrame, TextureNoLongerNeededCallbackIsCalled) {
                                    gpu::CommandBufferId::FromUnsafeValue(1), 1);
 
   {
-    gpu::MailboxHolder holders[VideoFrame::kMaxPlanes] = {
-        gpu::MailboxHolder(gpu::Mailbox::Generate(), gpu::SyncToken(), 5)};
+    gpu::MailboxHolder holders[VideoFrame::kMaxPlanes] = {gpu::MailboxHolder(
+        gpu::Mailbox::GenerateForSharedImage(), gpu::SyncToken(), 5)};
     scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
         PIXEL_FORMAT_ARGB, holders,
         base::BindOnce(&TextureCallback, &called_sync_token),
@@ -772,6 +774,46 @@ TEST(VideoFrame, AllocationSize_OddSize) {
         continue;
     }
   }
+}
+
+TEST(VideoFrame, WrapExternalDataWithInvalidLayout) {
+  auto coded_size = gfx::Size(320, 180);
+
+  std::vector<int32_t> strides = {384, 192, 192};
+  std::vector<size_t> offsets = {0, 200, 300};
+  std::vector<size_t> sizes = {200, 100, 100};
+  std::vector<ColorPlaneLayout> planes(strides.size());
+  for (size_t i = 0; i < strides.size(); i++) {
+    planes[i].stride = strides[i];
+    planes[i].offset = offsets[i];
+    planes[i].size = sizes[i];
+  }
+
+  auto layout =
+      VideoFrameLayout::CreateWithPlanes(PIXEL_FORMAT_I420, coded_size, planes);
+  ASSERT_TRUE(layout.has_value());
+
+  // Validate single plane size exceeds data size.
+  uint8_t data = 0;
+  auto frame = VideoFrame::WrapExternalDataWithLayout(
+      *layout, gfx::Rect(coded_size), coded_size, &data, sizeof(data),
+      base::TimeDelta());
+  ASSERT_FALSE(frame);
+
+  // Validate sum of planes exceeds data size.
+  frame = VideoFrame::WrapExternalDataWithLayout(
+      *layout, gfx::Rect(coded_size), coded_size, &data, sizes[0] + sizes[1],
+      base::TimeDelta());
+  ASSERT_FALSE(frame);
+
+  // Validate offset exceeds plane size.
+  planes[0].offset = 201;
+  layout =
+      VideoFrameLayout::CreateWithPlanes(PIXEL_FORMAT_I420, coded_size, planes);
+  frame = VideoFrame::WrapExternalDataWithLayout(*layout, gfx::Rect(coded_size),
+                                                 coded_size, &data, sizes[0],
+                                                 base::TimeDelta());
+  ASSERT_FALSE(frame);
 }
 
 TEST(VideoFrameMetadata, MergeMetadata) {

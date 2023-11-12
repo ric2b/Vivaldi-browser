@@ -5,7 +5,8 @@
 #ifndef CHROME_BROWSER_UI_WEB_APPLICATIONS_TEST_WEB_APP_BROWSERTEST_UTIL_H_
 #define CHROME_BROWSER_UI_WEB_APPLICATIONS_TEST_WEB_APP_BROWSERTEST_UTIL_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
+#include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
@@ -37,10 +38,6 @@ struct ExternalInstallOptions;
 class WebAppInstallManager;
 
 // For InstallWebAppFromInfo see web_app_install_test_utils.h
-
-// Reads an icon file (.ico/.png/.icns) and returns the color at the
-// top left color.
-SkColor GetIconTopLeftColor(const base::FilePath& shortcut_path);
 
 // Navigates to |app_url| and installs app without any installability checks.
 // Always selects to open app in its own window.
@@ -127,8 +124,10 @@ class BrowserWaiter : public BrowserListObserver {
   explicit BrowserWaiter(Browser* filter = nullptr);
   ~BrowserWaiter() override;
 
-  Browser* AwaitAdded();
-  Browser* AwaitRemoved();
+  Browser* AwaitAdded(
+      const base::Location& location = base::Location::Current());
+  Browser* AwaitRemoved(
+      const base::Location& location = base::Location::Current());
 
   // BrowserListObserver:
   void OnBrowserAdded(Browser* browser) override;
@@ -141,17 +140,14 @@ class BrowserWaiter : public BrowserListObserver {
   raw_ptr<Browser, DanglingUntriaged> added_browser_ = nullptr;
 
   base::RunLoop removed_run_loop_;
-  // TODO(crbug.com/1298696): browser_tests breaks with MTECheckedPtr
-  // enabled. Triage.
-  raw_ptr<Browser, DanglingUntriagedDegradeToNoOpWhenMTE> removed_browser_ =
-      nullptr;
+  raw_ptr<Browser, DanglingUntriaged> removed_browser_ = nullptr;
 };
 
 class UpdateAwaiter : public WebAppInstallManagerObserver {
  public:
   explicit UpdateAwaiter(WebAppInstallManager& install_manager);
   ~UpdateAwaiter() override;
-  void AwaitUpdate();
+  void AwaitUpdate(const base::Location& location = base::Location::Current());
 
   // WebAppInstallManagerObserver:
   void OnWebAppManifestUpdated(const AppId& app_id,

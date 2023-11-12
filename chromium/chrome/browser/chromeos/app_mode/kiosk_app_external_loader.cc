@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/app_mode/chrome_kiosk_external_loader_broker.h"
 
@@ -18,9 +18,10 @@ KioskAppExternalLoader::KioskAppExternalLoader(AppClass app_class)
     : app_class_(app_class) {}
 
 KioskAppExternalLoader::~KioskAppExternalLoader() {
-  if (state_ != State::kInitial)
+  if (state_ != State::kInitial) {
     SetPrefsChangedHandler(
         ChromeKioskExternalLoaderBroker::InstallDataChangeCallback());
+  }
 }
 
 void KioskAppExternalLoader::StartLoading() {

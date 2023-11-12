@@ -13,9 +13,9 @@
 #include <vector>
 
 #include "ash/components/arc/net/always_on_vpn_manager.h"
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
@@ -57,7 +57,6 @@ class AuthStatusConsumer;
 class OnboardingUserActivityCounter;
 class StubAuthenticatorBuilder;
 class TokenHandleFetcher;
-class EasyUnlockKeyManager;
 class EasyUnlockNotificationController;
 class EolNotification;
 class InputEventsBlocker;
@@ -264,9 +263,6 @@ class UserSessionManager
   bool RestartToApplyPerSessionFlagsIfNeed(Profile* profile,
                                            bool early_restart);
 
-  // Returns true if Easy unlock keys needs to be updated.
-  bool NeedsToUpdateEasyUnlockKeys() const;
-
   void AddSessionStateObserver(ash::UserSessionStateObserver* observer);
   void RemoveSessionStateObserver(ash::UserSessionStateObserver* observer);
 
@@ -283,12 +279,6 @@ class UserSessionManager
   // and show the message accordingly.
   void CheckEolInfo(Profile* profile);
 
-  // Note this could return NULL if not enabled.
-  EasyUnlockKeyManager* GetEasyUnlockKeyManager();
-
-  // Update Easy unlock cryptohome keys for given user context.
-  void UpdateEasyUnlockKeys(const UserContext& user_context);
-
   // Removes a profile from the per-user input methods states map.
   void RemoveProfileForTesting(Profile* profile);
 
@@ -296,8 +286,6 @@ class UserSessionManager
   bool has_auth_cookies() const { return has_auth_cookies_; }
 
   const base::Time& ui_shown_time() const { return ui_shown_time_; }
-
-  void WaitForEasyUnlockKeyOpsFinished(base::OnceClosure callback);
 
   void Shutdown();
 
@@ -473,9 +461,6 @@ class UserSessionManager
   // Notifies observers that user pending sessions restore has finished.
   void NotifyPendingUserSessionsRestoreFinished();
 
-  // Callback invoked when Easy unlock key operations are finished.
-  void OnEasyUnlockKeyOpsFinished(const AccountId& account_id, bool success);
-
   // Callback invoked when child policy is ready and the session for child user
   // can be started.
   void OnChildPolicyReady(
@@ -528,8 +513,6 @@ class UserSessionManager
   // Sets the function which is used to request a chrome restart.
   void SetAttemptRestartClosureInTests(
       const base::RepeatingClosure& attempt_restart_closure);
-
-  void NotifyEasyUnlockKeyOpsFinished();
 
   bool IsFullRestoreEnabled(Profile* profile);
 
@@ -608,10 +591,6 @@ class UserSessionManager
   base::flat_map<CommandLineSwitchesType, std::vector<std::string>>
       command_line_switches_;
 
-  // Manages Easy unlock cryptohome keys.
-  std::unique_ptr<EasyUnlockKeyManager> easy_unlock_key_manager_;
-  bool running_easy_unlock_key_ops_;
-
   // Whether should fetch token handles, tests may override this value.
   bool should_obtain_handles_;
 
@@ -630,10 +609,6 @@ class UserSessionManager
   base::Time ui_shown_time_;
 
   scoped_refptr<HatsNotificationController> hats_notification_controller_;
-
-  bool easy_unlock_key_ops_finished_ = true;
-
-  std::vector<base::OnceClosure> easy_unlock_key_ops_finished_callbacks_;
 
   // Mapped to `chrome::AttemptRestart`, except in tests.
   base::RepeatingClosure attempt_restart_closure_;

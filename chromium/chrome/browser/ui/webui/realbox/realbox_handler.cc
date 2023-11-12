@@ -6,8 +6,8 @@
 
 #include "base/base64.h"
 #include "base/base64url.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -62,65 +62,85 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/base/window_open_disposition_utils.h"
 #include "ui/gfx/vector_icon_types.h"
-#include "ui/resources/grit/webui_generated_resources.h"
+#include "ui/resources/grit/webui_resources.h"
 
 namespace {
 
-constexpr char kSearchIconResourceName[] = "search.svg";
-
-constexpr char kAnswerCurrencyIconResourceName[] = "realbox/icons/currency.svg";
-constexpr char kAnswerDefaultIconResourceName[] = "realbox/icons/default.svg";
+constexpr char kAnswerCurrencyIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/currency.svg";
+constexpr char kAnswerDefaultIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/default.svg";
 constexpr char kAnswerDictionaryIconResourceName[] =
-    "realbox/icons/definition.svg";
-constexpr char kAnswerFinanceIconResourceName[] = "realbox/icons/finance.svg";
-constexpr char kAnswerSunriseIconResourceName[] = "realbox/icons/sunrise.svg";
+    "//resources/cr_components/omnibox/icons/definition.svg";
+constexpr char kAnswerFinanceIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/finance.svg";
+constexpr char kAnswerSunriseIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/sunrise.svg";
 constexpr char kAnswerTranslationIconResourceName[] =
-    "realbox/icons/translation.svg";
-constexpr char kAnswerWhenIsIconResourceName[] = "realbox/icons/when_is.svg";
+    "//resources/cr_components/omnibox/icons/translation.svg";
+constexpr char kAnswerWhenIsIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/when_is.svg";
 constexpr char kBookmarkIconResourceName[] =
-    "chrome://resources/images/icon_bookmark.svg";
-constexpr char kCalculatorIconResourceName[] = "realbox/icons/calculator.svg";
+    "//resources/images/icon_bookmark.svg";
+constexpr char kCalculatorIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/calculator.svg";
 constexpr char kChromeProductIconResourceName[] =
-    "realbox/icons/chrome_product.svg";
-constexpr char kClockIconResourceName[] =
-    "chrome://resources/images/icon_clock.svg";
-constexpr char kDinoIconResourceName[] = "realbox/icons/dino.svg";
-constexpr char kDriveDocsIconResourceName[] = "realbox/icons/drive_docs.svg";
+    "//resources/cr_components/omnibox/icons/chrome_product.svg";
+constexpr char kClockIconResourceName[] = "//resources/images/icon_clock.svg";
+constexpr char kDinoIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/dino.svg";
+constexpr char kDriveDocsIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/drive_docs.svg";
 constexpr char kDriveFolderIconResourceName[] =
-    "realbox/icons/drive_folder.svg";
-constexpr char kDriveFormIconResourceName[] = "realbox/icons/drive_form.svg";
-constexpr char kDriveImageIconResourceName[] = "realbox/icons/drive_image.svg";
-constexpr char kDriveLogoIconResourceName[] = "icons/drive_logo.svg";
-constexpr char kDrivePdfIconResourceName[] = "realbox/icons/drive_pdf.svg";
+    "//resources/cr_components/omnibox/icons/drive_folder.svg";
+constexpr char kDriveFormIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/drive_form.svg";
+constexpr char kDriveImageIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/drive_image.svg";
+constexpr char kDriveLogoIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/drive_logo.svg";
+constexpr char kDrivePdfIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/drive_pdf.svg";
 constexpr char kDriveSheetsIconResourceName[] =
-    "realbox/icons/drive_sheets.svg";
+    "//resources/cr_components/omnibox/icons/drive_sheets.svg";
 constexpr char kDriveSlidesIconResourceName[] =
-    "realbox/icons/drive_slides.svg";
-constexpr char kDriveVideoIconResourceName[] = "realbox/icons/drive_video.svg";
+    "//resources/cr_components/omnibox/icons/drive_slides.svg";
+constexpr char kDriveVideoIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/drive_video.svg";
 constexpr char kExtensionAppIconResourceName[] =
-    "realbox/icons/extension_app.svg";
-constexpr char kGoogleGIconResourceName[] = "realbox/icons/google_g.svg";
+    "//resources/cr_components/omnibox/icons/extension_app.svg";
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-constexpr char kGoogleCalendarIconResourceName[] = "realbox/icons/calendar.svg";
-constexpr char kGoogleGTransparentIconResourceName[] =
-    "realbox/icons/google_g_transparent.svg";
-constexpr char kGoogleKeepNoteIconResourceName[] = "realbox/icons/note.svg";
-constexpr char kGoogleSitesIconResourceName[] = "realbox/icons/sites.svg";
+constexpr char kGoogleCalendarIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/calendar.svg";
+constexpr char kGoogleGIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/google_g.svg";
+constexpr char kGoogleKeepNoteIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/note.svg";
+constexpr char kGoogleSitesIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/sites.svg";
 #endif
-constexpr char kIncognitoIconResourceName[] = "realbox/icons/incognito.svg";
-constexpr char kJourneysIconResourceName[] = "realbox/icons/journeys.svg";
-constexpr char kPageIconResourceName[] = "realbox/icons/page.svg";
-constexpr char kPedalsIconResourceName[] =
-    "chrome://theme/current-channel-logo";
-constexpr char kTabIconResourceName[] = "realbox/icons/tab.svg";
-constexpr char kTrendingUpIconResourceName[] = "realbox/icons/trending_up.svg";
+constexpr char kIncognitoIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/incognito.svg";
+constexpr char kJourneysIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/journeys.svg";
+constexpr char kPageIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/page.svg";
+constexpr char kPedalsIconResourceName[] = "//theme/current-channel-logo";
+constexpr char kSearchIconResourceName[] = "//resources/images/icon_search.svg";
+constexpr char kTabIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/tab.svg";
+constexpr char kTrendingUpIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/trending_up.svg";
 
 #if BUILDFLAG(IS_MAC)
-constexpr char kMacShareIconResourceName[] = "realbox/icons/mac_share.svg";
+constexpr char kMacShareIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/mac_share.svg";
 #elif BUILDFLAG(IS_WIN)
-constexpr char kWinShareIconResourceName[] = "realbox/icons/win_share.svg";
+constexpr char kWinShareIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/win_share.svg";
 #else
-constexpr char kShareIconResourceName[] = "realbox/icons/share.svg";
+constexpr char kShareIconResourceName[] =
+    "//resources/cr_components/omnibox/icons/share.svg";
 #endif
 
 base::flat_map<int32_t, omnibox::mojom::SuggestionGroupPtr>
@@ -133,6 +153,8 @@ CreateSuggestionGroupsMap(
     omnibox::mojom::SuggestionGroupPtr suggestion_group =
         omnibox::mojom::SuggestionGroup::New();
     suggestion_group->header = base::UTF8ToUTF16(pair.second.header_text());
+    suggestion_group->side_type =
+        static_cast<omnibox::mojom::SideType>(pair.second.side_type());
     suggestion_group->hidden =
         result.IsSuggestionGroupHidden(prefs, pair.first);
     suggestion_group->show_group_a11y_label = l10n_util::GetStringFUTF16(
@@ -179,8 +201,9 @@ std::u16string GetAdditionalA11yMessage(const AutocompleteMatch& match,
           base::FeatureList::IsEnabled(omnibox::kNtpRealboxPedals)) {
         return l10n_util::GetStringUTF16(IDS_ACC_TAB_SWITCH_SUFFIX);
       }
-      if (match.action) {
-        return match.action->GetLabelStrings().accessibility_suffix;
+      const OmniboxAction* action = match.GetPrimaryAction();
+      if (action) {
+        return action->GetLabelStrings().accessibility_suffix;
       }
       if (match.SupportsDeletion()) {
         return l10n_util::GetStringUTF16(IDS_ACC_REMOVE_SUGGESTION_SUFFIX);
@@ -262,15 +285,16 @@ std::vector<omnibox::mojom::AutocompleteMatchPtr> CreateAutocompleteMatches(
 
     // Omit actions that takeover the whole match, because the C++ handler
     // remaps the navigation to execute the action. (Doesn't happen in the JS.)
-    if (match.action && !match.action->TakesOverMatch() &&
+    const OmniboxAction* action = match.GetPrimaryAction();
+    if (action && !action->TakesOverMatch() &&
         base::FeatureList::IsEnabled(omnibox::kNtpRealboxPedals)) {
       const OmniboxAction::LabelStrings& label_strings =
-          match.action->GetLabelStrings();
+          action->GetLabelStrings();
       mojom_match->action = omnibox::mojom::Action::New(
           label_strings.accessibility_hint, label_strings.hint,
           label_strings.suggestion_contents,
           RealboxHandler::PedalVectorIconToResourceName(
-              match.action->GetVectorIcon()));
+              action->GetVectorIcon()));
     }
     mojom_match->a11y_label = AutocompleteMatchType::ToAccessibilityLabel(
         match, match.contents, line, 0,
@@ -332,41 +356,50 @@ std::string GetBase64UrlVariations(Profile* profile) {
 // static
 void RealboxHandler::SetupWebUIDataSource(content::WebUIDataSource* source,
                                           Profile* profile) {
-  static constexpr webui::ResourcePath kImages[] = {
-      {kSearchIconResourceName, IDR_WEBUI_IMAGES_ICON_SEARCH_SVG}};
-  source->AddResourcePaths(kImages);
+  RealboxHandler::SetupDropdownWebUIDataSource(source, profile);
 
   static constexpr webui::LocalizedString kStrings[] = {
-      {"searchBoxHint", IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MD},
+      {"searchBoxHint", IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MD}};
+  source->AddLocalizedStrings(kStrings);
+
+  source->AddBoolean(
+      "realboxMatchSearchboxTheme",
+      base::FeatureList::IsEnabled(ntp_features::kRealboxMatchSearchboxTheme));
+
+  source->AddString(
+      "realboxDefaultIcon",
+      base::FeatureList::IsEnabled(ntp_features::kRealboxUseGoogleGIcon)
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+          ? kGoogleGIconResourceName
+#else
+          ? kSearchIconResourceName
+#endif
+          : kSearchIconResourceName);
+
+  source->AddBoolean(
+      "realboxLensSearch",
+      base::FeatureList::IsEnabled(ntp_features::kNtpRealboxLensSearch) &&
+          profile->GetPrefs()->GetBoolean(prefs::kLensDesktopNTPSearchEnabled));
+  source->AddString("realboxLensVariations", GetBase64UrlVariations(profile));
+}
+
+// static
+void RealboxHandler::SetupDropdownWebUIDataSource(
+    content::WebUIDataSource* source,
+    Profile* profile) {
+  static constexpr webui::LocalizedString kStrings[] = {
       {"realboxSeparator", IDS_AUTOCOMPLETE_MATCH_DESCRIPTION_SEPARATOR},
       {"removeSuggestion", IDS_OMNIBOX_REMOVE_SUGGESTION},
       {"hideSuggestions", IDS_TOOLTIP_HEADER_HIDE_SUGGESTIONS_BUTTON},
       {"showSuggestions", IDS_TOOLTIP_HEADER_SHOW_SUGGESTIONS_BUTTON}};
   source->AddLocalizedStrings(kStrings);
 
-  source->AddBoolean(
-      "realboxMatchOmniboxTheme",
-      base::FeatureList::IsEnabled(ntp_features::kRealboxMatchOmniboxTheme));
-
-  source->AddBoolean(
-      "realboxMatchSearchboxTheme",
-      base::FeatureList::IsEnabled(ntp_features::kRealboxMatchSearchboxTheme));
-
   source->AddBoolean("roundCorners", base::FeatureList::IsEnabled(
                                          ntp_features::kRealboxRoundedCorners));
 
-  source->AddString(
-      "realboxDefaultIcon",
-      base::FeatureList::IsEnabled(ntp_features::kRealboxUseGoogleGIcon)
-          ? kGoogleGIconResourceName
-          : kSearchIconResourceName);
-  source->AddString("realboxHint", l10n_util::GetStringUTF8(
-                                       IDS_GOOGLE_SEARCH_BOX_EMPTY_HINT_MD));
   source->AddBoolean(
-      "realboxLensSearch",
-      base::FeatureList::IsEnabled(ntp_features::kNtpRealboxLensSearch) &&
-          profile->GetPrefs()->GetBoolean(prefs::kLensDesktopNTPSearchEnabled));
-  source->AddString("realboxLensVariations", GetBase64UrlVariations(profile));
+      "showSecondarySide",
+      base::FeatureList::IsEnabled(omnibox::kKeepSecondaryZeroSuggest));
 }
 
 // static
@@ -469,7 +502,7 @@ std::string RealboxHandler::PedalVectorIconToResourceName(
     return kGoogleSitesIconResourceName;
   }
   if (icon.name == vector_icons::kGoogleSuperGIcon.name) {
-    return kGoogleGTransparentIconResourceName;
+    return kGoogleGIconResourceName;
   }
 #endif
   if (icon.name == omnibox::kIncognitoIcon.name) {
@@ -509,7 +542,7 @@ RealboxHandler::RealboxHandler(
       metrics_reporter_(metrics_reporter),
       page_handler_(this, std::move(pending_page_handler)) {
   controller_emitter_observation_.Observe(
-      OmniboxControllerEmitter::GetForBrowserContext(profile_));
+      AutocompleteControllerEmitter::GetForBrowserContext(profile_));
 }
 
 RealboxHandler::~RealboxHandler() = default;
@@ -526,8 +559,8 @@ void RealboxHandler::QueryAutocomplete(const std::u16string& input,
         std::make_unique<ChromeAutocompleteProviderClient>(profile_),
         AutocompleteClassifier::DefaultOmniboxProviders());
 
-    OmniboxControllerEmitter* emitter =
-        OmniboxControllerEmitter::GetForBrowserContext(profile_);
+    AutocompleteControllerEmitter* emitter =
+        AutocompleteControllerEmitter::GetForBrowserContext(profile_);
     if (emitter) {
       autocomplete_controller_->AddObserver(emitter);
     }
@@ -581,12 +614,15 @@ void RealboxHandler::OpenAutocompleteMatch(
     bool ctrl_key,
     bool meta_key,
     bool shift_key) {
-  if (autocomplete_controller_->result().size() <= line) {
+  if (!autocomplete_controller_ ||
+      autocomplete_controller_->result().size() <= line) {
     return;
   }
 
   AutocompleteMatch match(autocomplete_controller_->result().match_at(line));
-  if (match.action && match.action->TakesOverMatch()) {
+  // If an action takes over the whole match, it will be the primary action.
+  const OmniboxAction* action = match.GetPrimaryAction();
+  if (action && action->TakesOverMatch()) {
     return ExecuteAction(line, base::TimeTicks::Now(), mouse_button, alt_key,
                          ctrl_key, meta_key, shift_key);
   }
@@ -685,7 +721,8 @@ void RealboxHandler::OpenAutocompleteMatch(
           : std::u16string::npos,
       /*elapsed_time_since_last_change_to_default_match=*/
       elapsed_time_since_last_change_to_default_match,
-      /*result=*/autocomplete_controller_->result(), match.destination_url);
+      /*result=*/autocomplete_controller_->result(), match.destination_url,
+      /*is_incognito=*/profile_->IsOffTheRecord());
   autocomplete_controller_->AddProviderAndTriggeringLogs(&log);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);
@@ -705,8 +742,10 @@ void RealboxHandler::OpenAutocompleteMatch(
 void RealboxHandler::OnNavigationLikely(
     uint8_t line,
     omnibox::mojom::NavigationPredictor navigation_predictor) {
-  if (line >= autocomplete_controller_->result().size())
+  if (!autocomplete_controller_ ||
+      autocomplete_controller_->result().size() <= line) {
     return;
+  }
   if (auto* search_prefetch_service =
           SearchPrefetchServiceFactory::GetForProfile(profile_)) {
     AutocompleteMatch match(autocomplete_controller_->result().match_at(line));
@@ -731,7 +770,8 @@ void RealboxHandler::OpenURL(const GURL& destination_url,
 }
 
 void RealboxHandler::DeleteAutocompleteMatch(uint8_t line) {
-  if (autocomplete_controller_->result().size() <= line ||
+  if (!autocomplete_controller_ ||
+      autocomplete_controller_->result().size() <= line ||
       !autocomplete_controller_->result().match_at(line).SupportsDeletion()) {
     return;
   }
@@ -775,20 +815,22 @@ void RealboxHandler::ExecuteAction(uint8_t line,
     return;
   }
 
-  const auto& match = autocomplete_controller_->result().match_at(line);
-  if (match.action) {
+  const AutocompleteMatch& match =
+      autocomplete_controller_->result().match_at(line);
+  const OmniboxAction* action = match.GetPrimaryAction();
+  if (action) {
     WindowOpenDisposition disposition = ui::DispositionFromClick(
         /*middle_button=*/mouse_button == 1, alt_key, ctrl_key, meta_key,
         shift_key);
     // TODO(tommycli): Add recording of action shown in the realbox when the
     // user uses the realbox to go somewhere OTHER than executing an action.
-    match.action->RecordActionShown(line, /*executed=*/true);
+    action->RecordActionShown(line, /*executed=*/true);
     OmniboxAction::ExecutionContext context(
         *(autocomplete_controller_->autocomplete_provider_client()),
         base::BindOnce(&RealboxHandler::OpenURL,
                        weak_ptr_factory_.GetWeakPtr()),
         match_selection_timestamp, disposition);
-    match.action->Execute(context);
+    action->Execute(context);
   } else if (match.has_tab_match.value_or(false)) {
     WindowOpenDisposition disposition = WindowOpenDisposition::SWITCH_TO_TAB;
     ui::PageTransition transition = ui::PageTransitionFromInt(
@@ -801,16 +843,22 @@ void RealboxHandler::ExecuteAction(uint8_t line,
 
 void RealboxHandler::OnResultChanged(AutocompleteController* controller,
                                      bool default_match_changed) {
-  // Ignore updates if the controller does not belong to the realbox.
-  if (!autocomplete_controller_ ||
-      autocomplete_controller_.get() != controller) {
-    return;
-  }
-
   if (metrics_reporter_ && !metrics_reporter_->HasLocalMark("ResultChanged")) {
     metrics_reporter_->Mark("ResultChanged");
   }
 
+  // Update the omnibox if the controller does not belong to the realbox.
+  if (controller != autocomplete_controller_.get()) {
+    if (base::FeatureList::IsEnabled(omnibox::kWebUIOmniboxPopup)) {
+      page_->OmniboxAutocompleteResultChanged(CreateAutocompleteResult(
+          controller->input().text(), controller->result(),
+          BookmarkModelFactory::GetForBrowserContext(profile_),
+          profile_->GetPrefs()));
+    }
+    return;
+  }
+
+  // Update the realbox only if the controller belongs to the realbox.
   page_->AutocompleteResultChanged(CreateAutocompleteResult(
       autocomplete_controller_->input().text(),
       autocomplete_controller_->result(),
@@ -824,4 +872,8 @@ void RealboxHandler::OnResultChanged(AutocompleteController* controller,
           web_contents_, autocomplete_controller_->result());
     }
   }
+}
+
+void RealboxHandler::SelectMatchAtLine(size_t old_line, size_t new_line) {
+  page_->SelectMatchAtLine(new_line);
 }

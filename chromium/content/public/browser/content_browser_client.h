@@ -13,9 +13,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
@@ -252,6 +252,10 @@ class TtsEnvironmentAndroid;
 class TtsControllerDelegate;
 #endif
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+class SmartCardDelegate;
+#endif
+
 // Embedder API (or SPI) for participating in browser logic, to be implemented
 // by the client of the content browser. See ChromeContentBrowserClient for the
 // principal implementation. The methods are assumed to be called on the UI
@@ -394,11 +398,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldLockProcessToSite(BrowserContext* browser_context,
                                        const GURL& effective_url);
 
-  // Returns a boolean indicating whether the WebUI |scheme| requires its
-  // process to be locked to the WebUI origin.
-  // Note: This method can be called from multiple threads. It is not safe to
-  // assume it runs only on the UI thread.
-  virtual bool DoesWebUISchemeRequireProcessLock(base::StringPiece scheme);
+  // Returns a boolean indicating whether the WebUI |url| requires its process
+  // to be locked to the WebUI origin. Note: This method can be called from
+  // multiple threads. It is not safe to assume it runs only on the UI thread.
+  //
+  // TODO(crbug.com/566091): Remove this exception once most visited tiles can
+  // load in OOPIFs on the NTP.  Ideally, all WebUI urls should load in locked
+  // processes.
+  virtual bool DoesWebUIUrlRequireProcessLock(const GURL& url);
 
   // Returns true if everything embedded inside a document with given scheme
   // should be treated as first-party content. |scheme| will be in canonical
@@ -517,9 +524,8 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Temporary hack to determine whether to skip OOPIFs on the new tab page.
   // TODO(creis): Remove when https://crbug.com/566091 is fixed.
-  virtual bool ShouldStayInParentProcessForNTP(
-      const GURL& url,
-      SiteInstance* parent_site_instance);
+  virtual bool ShouldStayInParentProcessForNTP(const GURL& url,
+                                               const GURL& parent_site_url);
 
   // Returns whether a new view for a given |site_url| can be launched in a
   // given |process_host|.
@@ -628,13 +634,10 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns true if the given URL needs be loaded with the "isolated
   // application" isolation level. COOP/COEP headers must also be properly set
-  // in order to enable the application isolation level. `origin_matches_flag`
-  // specifies whether the URL's origin is allowed to use application isolation
-  // according to the content-level `kIsolatedAppOrigins` switch.
+  // in order to enable the application isolation level.
   virtual bool ShouldUrlUseApplicationIsolationLevel(
       BrowserContext* browser_context,
-      const GURL& url,
-      bool origin_matches_flag);
+      const GURL& url);
 
   // Allows the embedder to enable access to Isolated Context Web APIs for the
   // given |lock_url| -- the URL to which the renderer process is locked.
@@ -872,6 +875,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool IsAttributionReportingOperationAllowed(
       content::BrowserContext* browser_context,
       AttributionReportingOperation operation,
+      content::RenderFrameHost* rfh,
       const url::Origin* source_origin,
       const url::Origin* destination_origin,
       const url::Origin* reporting_origin);
@@ -884,6 +888,13 @@ class CONTENT_EXPORT ContentBrowserClient {
                                       content::RenderFrameHost* rfh,
                                       const url::Origin& top_frame_origin,
                                       const url::Origin& accessing_origin);
+
+  // Allows the embedder to control if Shared Storage API `selectURL()` can
+  // happen in a given context.
+  virtual bool IsSharedStorageSelectURLAllowed(
+      content::BrowserContext* browser_context,
+      const url::Origin& top_frame_origin,
+      const url::Origin& accessing_origin);
 
   // Allows the embedder to control if Private Aggregation API operations can
   // happen in a given context.
@@ -1069,11 +1080,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns the default filename used in downloads when we have no idea what
   // else we should do with the file.
   virtual std::string GetDefaultDownloadName();
-
-  // Returns the path to the font lookup table cache directory in which - on
-  // Windows 7 & 8 - we cache font name meta information to perform @font-face {
-  // src: local() } lookups.
-  virtual base::FilePath GetFontLookupTableCacheDir();
 
   // Returns the path to the browser shader disk cache root.
   virtual base::FilePath GetShaderDiskCacheDirectory();
@@ -1337,6 +1343,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns true if (and only if) CreateAudioManager() is implemented and
   // returns a non-null value.
   virtual bool OverridesAudioManager();
+
+  // Returns true if the system audio echo cancellation shall be enforced.
+  virtual bool EnforceSystemAudioEchoCancellation();
 
   // Populates |mappings| with all files that need to be mapped before launching
   // a child process.
@@ -1854,6 +1863,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // API.
   virtual FontAccessDelegate* GetFontAccessDelegate();
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+  // Allows the embedder to provide an implementation of the Web Smart Card API.
+  virtual SmartCardDelegate* GetSmartCardDelegate(
+      BrowserContext* browser_context);
+#endif
+
   // Attempt to open the Payment Handler window inside its corresponding
   // PaymentRequest UI surface. Returns true if the ContentBrowserClient
   // implementation supports this operation (desktop Chrome) or false otherwise.
@@ -2004,6 +2019,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns true if the network service should be sandboxed. false otherwise.
   // This is called on the UI thread.
   virtual bool ShouldSandboxNetworkService();
+
+  // Returns true if system DNS resolution should be run outside of the network
+  // service.
+  virtual bool ShouldRunOutOfProcessSystemDnsResolution();
 
   // Browser-side API to log blink UseCounters for events that don't occur in
   // the renderer.
@@ -2358,6 +2377,20 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Called when optionally blockable insecure content is displayed on a secure
   // page (resulting in mixed content).
   virtual void OnDisplayInsecureContent(WebContents* web_contents) {}
+
+#if BUILDFLAG(IS_MAC)
+  // Gets the path for an embedder-specific helper child process. The
+  // |child_flags| is a value greater than
+  // ChildProcessHost::CHILD_EMBEDDER_FIRST. The |helpers_path| is the location
+  // of the known //content Mac helpers in the framework bundle.
+  virtual base::FilePath GetChildProcessPath(
+      int child_flags,
+      const base::FilePath& helpers_path);
+#endif  // BUILDFLAG(IS_MAC)
+
+  // Checks if Isolated Web Apps are enabled, e.g. by feature flag
+  // or in any other way.
+  virtual bool AreIsolatedWebAppsEnabled(BrowserContext* browser_context);
 };
 
 }  // namespace content

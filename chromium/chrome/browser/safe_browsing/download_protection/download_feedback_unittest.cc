@@ -7,12 +7,13 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/safe_browsing/download_protection/two_phase_uploader.h"
@@ -111,9 +112,7 @@ class DownloadFeedbackTest : public testing::Test {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     upload_file_path_ = temp_dir_.GetPath().AppendASCII("test file");
     upload_file_data_ = "data";
-    ASSERT_EQ(static_cast<int>(upload_file_data_.size()),
-              base::WriteFile(upload_file_path_, upload_file_data_.data(),
-                              upload_file_data_.size()));
+    ASSERT_TRUE(base::WriteFile(upload_file_path_, upload_file_data_));
     TwoPhaseUploader::RegisterFactory(&two_phase_uploader_factory_);
   }
 

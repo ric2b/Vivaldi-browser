@@ -10,8 +10,8 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/layout_ng_text.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node_data.h"
 #include "third_party/blink/renderer/core/layout/ng/layout_ng_ruby_run.h"
-#include "third_party/blink/renderer/core/layout/ng/ng_layout_test.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
+#include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 
 namespace blink {
 
@@ -25,11 +25,11 @@ namespace blink {
   EXPECT_EQ(start, (item).StartOffset());          \
   EXPECT_EQ(end, (item).EndOffset());
 
-class NGInlineItemsBuilderTest : public NGLayoutTest {
+class NGInlineItemsBuilderTest : public RenderingTest {
  protected:
   void SetUp() override {
-    NGLayoutTest::SetUp();
-    style_ = GetDocument().GetStyleResolver().CreateComputedStyle();
+    RenderingTest::SetUp();
+    style_ = &GetDocument().GetStyleResolver().InitialStyle();
     block_flow_ = LayoutBlockFlow::CreateAnonymous(&GetDocument(), style_,
                                                    LegacyLayout::kAuto);
     items_ = MakeGarbageCollected<HeapVector<NGInlineItem>>();
@@ -41,7 +41,7 @@ class NGInlineItemsBuilderTest : public NGLayoutTest {
   void TearDown() override {
     for (LayoutObject* anonymous_object : *anonymous_objects_)
       anonymous_object->Destroy();
-    NGLayoutTest::TearDown();
+    RenderingTest::TearDown();
   }
 
   LayoutBlockFlow* GetLayoutBlockFlow() const { return block_flow_; }
@@ -191,7 +191,7 @@ class NGInlineItemsBuilderTest : public NGLayoutTest {
   Persistent<LayoutBlockFlow> block_flow_;
   Persistent<HeapVector<NGInlineItem>> items_;
   String text_;
-  scoped_refptr<ComputedStyle> style_;
+  scoped_refptr<const ComputedStyle> style_;
   Persistent<HeapVector<Member<LayoutObject>>> anonymous_objects_;
 };
 
@@ -204,7 +204,6 @@ TEST_F(NGInlineItemsBuilderTest, CollapseSpaces) {
   String collapsed("text text text text");
   TestWhitespaceValue(collapsed, input, EWhiteSpace::kNormal);
   TestWhitespaceValue(collapsed, input, EWhiteSpace::kNowrap);
-  TestWhitespaceValue(collapsed, input, EWhiteSpace::kWebkitNowrap);
   TestWhitespaceValue(collapsed, input, EWhiteSpace::kPreLine);
   TestWhitespaceValue(input, input, EWhiteSpace::kPre);
   TestWhitespaceValue(input, input, EWhiteSpace::kPreWrap);
@@ -215,7 +214,6 @@ TEST_F(NGInlineItemsBuilderTest, CollapseTabs) {
   String collapsed("text text text text");
   TestWhitespaceValue(collapsed, input, EWhiteSpace::kNormal);
   TestWhitespaceValue(collapsed, input, EWhiteSpace::kNowrap);
-  TestWhitespaceValue(collapsed, input, EWhiteSpace::kWebkitNowrap);
   TestWhitespaceValue(collapsed, input, EWhiteSpace::kPreLine);
   TestWhitespaceValue(input, input, EWhiteSpace::kPre);
   TestWhitespaceValue(input, input, EWhiteSpace::kPreWrap);
@@ -426,8 +424,8 @@ TEST_F(NGInlineItemsBuilderTest, IgnorablePre) {
 TEST_F(NGInlineItemsBuilderTest, Empty) {
   HeapVector<NGInlineItem> items;
   NGInlineItemsBuilder builder(GetLayoutBlockFlow(), &items);
-  scoped_refptr<ComputedStyle> block_style(
-      GetDocument().GetStyleResolver().CreateComputedStyle());
+  scoped_refptr<const ComputedStyle> block_style =
+      &GetDocument().GetStyleResolver().InitialStyle();
   builder.EnterBlock(block_style.get());
   builder.ExitBlock();
 
@@ -470,7 +468,7 @@ TEST_F(NGInlineItemsBuilderTest, BidiBlockOverride) {
   HeapVector<NGInlineItem> items;
   NGInlineItemsBuilder builder(GetLayoutBlockFlow(), &items);
   ComputedStyleBuilder block_style_builder(
-      *GetDocument().GetStyleResolver().CreateComputedStyle());
+      GetDocument().GetStyleResolver().InitialStyle());
   block_style_builder.SetUnicodeBidi(UnicodeBidi::kBidiOverride);
   block_style_builder.SetDirection(TextDirection::kRtl);
   scoped_refptr<const ComputedStyle> block_style =

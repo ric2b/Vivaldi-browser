@@ -16,6 +16,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/feature_engagement/test/scoped_iph_feature_list.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_base.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -341,10 +342,7 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   // If no browser is created in BrowserMain(), then |browser_| will remain
   // nullptr unless SelectFirstBrowser() is called after the creation of the
   // first browser instance at a later time.
-  //
-  // TODO(crbug.com/1298696): browser_tests breaks with MTECheckedPtr
-  // enabled. Triage.
-  raw_ptr<Browser, DanglingUntriagedDegradeToNoOpWhenMTE> browser_ = nullptr;
+  raw_ptr<Browser, DanglingUntriaged> browser_ = nullptr;
 
   // Used to run the process until the BrowserProcess signals the test to quit.
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -364,6 +362,16 @@ class InProcessBrowserTest : public content::BrowserTestBase {
   base::ScopedTempDir default_download_dir_;
 
   base::test::ScopedFeatureList scoped_feature_list_;
+
+  // In-product help can conflict with tests' expected window activation and
+  // focus. This disables all IPH by default.
+  //
+  // This was previously done by disabling all IPH features, but that destroyed
+  // all field trials that included an IPH because overriding any feature
+  // touched by a field trial disables the field trial (see crbug.com/1381669).
+  //
+  // Individual tests can re-enable IPH using another ScopedIphFeatureList.
+  feature_engagement::test::ScopedIphFeatureList block_all_iph_feature_list_;
 
 #if BUILDFLAG(IS_MAC)
   raw_ptr<base::mac::ScopedNSAutoreleasePool, DanglingUntriaged>

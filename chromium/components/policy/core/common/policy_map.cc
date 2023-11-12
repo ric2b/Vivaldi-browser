@@ -6,10 +6,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
-#include "base/logging.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,6 +18,7 @@
 #include "build/chromeos_buildflags.h"
 #include "components/policy/core/common/cloud/affiliation.h"
 #include "components/policy/core/common/policy_details.h"
+#include "components/policy/core/common/policy_logger.h"
 #include "components/policy/core/common/policy_merger.h"
 #include "components/policy/policy_constants.h"
 #include "components/strings/grit/components_strings.h"
@@ -107,6 +107,12 @@ PolicyPriorityBrowser GetPriority(
   }
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
+
+// Helper function used in the invocation of `PolicyMap::CloneIf` from
+// `PolicyMap::Clone`.
+bool AllowAllPolicies(PolicyMap::const_reference unused) {
+  return true;
+}
 
 }  // namespace
 
@@ -232,6 +238,10 @@ void PolicyMap::Entry::ClearConflicts() {
   conflicts.clear();
   ClearMessage(MessageType::kInfo, IDS_POLICY_CONFLICT_SAME_VALUE);
   ClearMessage(MessageType::kWarning, IDS_POLICY_CONFLICT_DIFF_VALUE);
+}
+
+bool PolicyMap::Entry::HasConflicts() {
+  return !conflicts.empty();
 }
 
 bool PolicyMap::Entry::HasMessage(MessageType type) const {
@@ -416,24 +426,22 @@ PolicyMap::iterator PolicyMap::EraseIt(const_iterator it) {
   return map_.erase(it);
 }
 
-void PolicyMap::EraseMatching(
-    const base::RepeatingCallback<bool(const const_iterator)>& filter) {
-  FilterErase(filter, true);
-}
-
-void PolicyMap::EraseNonmatching(
-    const base::RepeatingCallback<bool(const const_iterator)>& filter) {
-  FilterErase(filter, false);
-}
-
 void PolicyMap::Swap(PolicyMap* other) {
   map_.swap(other->map_);
 }
 
 PolicyMap PolicyMap::Clone() const {
+  return CloneIf(base::BindRepeating(&AllowAllPolicies));
+}
+
+PolicyMap PolicyMap::CloneIf(
+    const base::RepeatingCallback<bool(const_reference)>& filter) const {
   PolicyMap clone;
-  for (const auto& it : map_)
-    clone.Set(it.first, it.second.DeepCopy());
+  for (const_reference it : map_) {
+    if (filter.Run(it)) {
+      clone.Set(it.first, it.second.DeepCopy());
+    }
+  }
 
   clone.cloud_policy_overrides_platform_policy_ =
       cloud_policy_overrides_platform_policy_;
@@ -547,7 +555,8 @@ void PolicyMap::LoadFrom(const base::Value::Dict& policies,
                          PolicySource source) {
   for (auto it : policies) {
     if (IsPolicyExternal(it.first)) {
-      LOG(WARNING) << "Ignoring external policy: " << it.first;
+      LOG_POLICY(WARNING, POLICY_PROCESSING)
+          << "Ignoring external policy: " << it.first;
       continue;
     }
     Set(it.first, level, scope, source, it.second.Clone(), nullptr);
@@ -587,23 +596,9 @@ void PolicyMap::Clear() {
 }
 
 // static
-bool PolicyMap::MapEntryEquals(const PolicyMap::PolicyMapType::value_type& a,
-                               const PolicyMap::PolicyMapType::value_type& b) {
+bool PolicyMap::MapEntryEquals(const_reference a, const_reference b) {
   bool equals = a.first == b.first && a.second.Equals(b.second);
   return equals;
-}
-
-void PolicyMap::FilterErase(
-    const base::RepeatingCallback<bool(const const_iterator)>& filter,
-    bool deletion_value) {
-  auto iter(map_.begin());
-  while (iter != map_.end()) {
-    if (filter.Run(iter) == deletion_value) {
-      map_.erase(iter++);
-    } else {
-      ++iter;
-    }
-  }
 }
 
 bool PolicyMap::EntryHasHigherPriority(const PolicyMap::Entry& lhs,

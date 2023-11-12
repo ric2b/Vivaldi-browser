@@ -16,21 +16,24 @@ found in the LICENSE file.
             android:title="@string/settings"
             android:visible="false"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/vivaldiIconTint" />
+            app:iconTint="@color/vivaldi_icon_fg"
+            />
         <item
             android:id="@+id/search_menu_id"
             android:icon="@drawable/ic_search"
             android:title="@string/search"
             android:visible="false"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/vivaldiIconTint" />
+            app:iconTint="@color/vivaldi_icon_fg"
+            />
         <!-- Vivaldi -->
         <item
             android:id="@+id/close_menu_id"
             android:icon="@drawable/vivaldi_close_mobile_24dp"
             android:title="@string/close"
             app:showAsAction="ifRoom"
-            app:iconTint="?attr/vivaldiIconTint" />
+            app:iconTint="@color/vivaldi_icon_fg"
+            />
     </group>
      <group
         android:id="@+id/selection_mode_menu_group"

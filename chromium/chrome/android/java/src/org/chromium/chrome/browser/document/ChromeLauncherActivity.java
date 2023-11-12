@@ -10,8 +10,9 @@ import android.os.Bundle;
 import com.google.android.material.color.DynamicColors;
 
 import org.chromium.base.TraceEvent;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
-import org.chromium.chrome.browser.vr.VrModuleProvider;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 
 // Vivaldi
 import org.chromium.chrome.R;
@@ -30,12 +31,6 @@ public class ChromeLauncherActivity extends Activity {
         // TODO(https://crbug.com/1225066): Figure out a scalable way to apply overlays to
         // activities like this.
         applyThemeOverlays();
-
-        if (VrModuleProvider.getIntentDelegate().isVrIntent(getIntent())) {
-            // We need to turn VR mode on as early as possible in the intent handling flow to
-            // avoid brightness flickering when handling VR intents.
-            VrModuleProvider.getDelegate().setVrModeEnabled(this, true);
-        }
 
         @LaunchIntentDispatcher.Action
         int dispatchAction = LaunchIntentDispatcher.dispatch(this, getIntent());
@@ -61,6 +56,9 @@ public class ChromeLauncherActivity extends Activity {
 
         // The effect of this activity's theme is currently limited to CCTs, so we should only apply
         // dynamic colors when we enable them everywhere.
+        if (ChromeFeatureList.sBaselineGm3SurfaceColors.isEnabled()) {
+            getTheme().applyStyle(R.style.SurfaceColorsThemeOverlay, /* force= */ true);
+        }
         DynamicColors.applyToActivityIfAvailable(this);
     }
 }

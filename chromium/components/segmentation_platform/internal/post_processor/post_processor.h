@@ -8,8 +8,10 @@
 #include <string>
 #include <vector>
 
+#include "base/time/time.h"
 #include "components/segmentation_platform/public/proto/output_config.pb.h"
 #include "components/segmentation_platform/public/proto/prediction_result.pb.h"
+#include "components/segmentation_platform/public/result.h"
 
 namespace segmentation_platform {
 
@@ -29,6 +31,16 @@ class PostProcessor {
   // ordered `output_labels` based on the classifier given by the client in the
   // OutputConfig.
   std::vector<std::string> GetClassifierResults(
+      const proto::PredictionResult& prediction_result);
+
+  // Calls GetClassifieResults toget post processed result from model execution
+  // and wrap them as ClassificationResult.
+  ClassificationResult GetPostProcessedClassificationResult(
+      const proto::PredictionResult& prediction_result,
+      PredictionStatus status);
+
+  // Get TTL for the top label in the prediction result for the client.
+  base::TimeDelta GetTTLForPredictedResult(
       const proto::PredictionResult& prediction_result);
 
  private:

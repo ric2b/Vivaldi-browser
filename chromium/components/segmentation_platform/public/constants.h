@@ -73,6 +73,10 @@ const char kIntentionalUserUmaName[] = "IntentionalUser";
 const char kResumeHeavyUserKey[] = "resume_heavy_user";
 const char kResumeHeavyUserUmaName[] = "ResumeHeavyUser";
 
+// Key for user segment that is likely switched from Chrome on other devices.
+const char kDeviceSwitcherKey[] = "device_switcher";
+const char kDeviceSwitcherUmaName[] = "DeviceSwitcher";
+
 // The key provide a list of segment IDs, separated by commas, whose ML model
 // execution results are allowed to be uploaded through UKM.
 const char kSegmentIdsAllowedForReportingKey[] =
@@ -105,6 +109,12 @@ std::string SegmentIdToHistogramVariant(proto::SegmentId segment_id);
 std::string GetSubsegmentKey(const std::string& segmentation_key);
 
 // TODO(shaktisahu): Move these to a nicer location.
+
+// Labels for adaptive toolbar model.
+const char kAdaptiveToolbarModelLabelNewTab[] = "newtab";
+const char kAdaptiveToolbarModelLabelShare[] = "share";
+const char kAdaptiveToolbarModelLabelVoice[] = "voice";
+
 // Labels for contextual page actions model.
 const char kContextualPageActionModelLabelPriceTracking[] = "price_tracking";
 const char kContextualPageActionModelLabelReaderMode[] = "reader_mode";

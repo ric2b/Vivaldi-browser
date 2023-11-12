@@ -136,7 +136,7 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     // Translate scroll view coordinates into page-relative ones.
     blink::AffineTransform transform;
     transform.Translate(visible_content_rect.x(), visible_content_rect.y());
-    canvas.concat(blink::AffineTransformToSkMatrix(transform));
+    canvas.concat(blink::AffineTransformToSkM44(transform));
 
     // Prepare PaintChunksToCcLayer called deep under EndRecording
     // to ignore clipping to the visible area.

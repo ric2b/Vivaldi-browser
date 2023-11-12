@@ -462,6 +462,32 @@ com_sta_task_runner->PostTask(FROM_HERE, base::BindOnce(&TaskAUsingCOMSTA));
 com_sta_task_runner->PostTask(FROM_HERE, base::BindOnce(&TaskBUsingCOMSTA));
 ```
 
+## Memory ordering guarantees for posted Tasks
+
+This task system guarantees that all the memory effects of sequential execution
+before posting a task are _visible_ to the task when it starts running. More
+formally, a call to `PostTask()` and the execution of the posted task are in the
+[happens-before
+relationship](https://preshing.com/20130702/the-happens-before-relation/) with
+each other. This is true for all variants of posting a task in `::base`,
+including `PostTaskAndReply()`. Similarly the happens-before relationship is
+present for tasks running in a sequence as part of the same SequencedTaskRunner.
+
+This guarantee is important to know about because Chrome tasks commonly access
+memory beyond the immediate data copied into the `base::OnceCallback`, and this
+happens-before relationship allows to avoid additional synchronization within
+the tasks themselves. As a very specific example, consider a callback that binds
+a pointer to memory which was just initialized in the thread posting the task.
+
+A more constrained model is also worth noting. Execution can be split into tasks
+running on different task runners, where each task _exclusively_ accesses
+certain objects in memory without explicit synchronization. Posting another task
+transfers this 'ownership' (of the objects) to the next task. With this the
+notion of object ownership can often be extended to the level of task runners,
+which provides useful invariants to reason about. This model allows to avoid
+race conditions while also avoiding locks and atomic operations. Because of its
+simplicity this model is commonly used in Chrome.
+
 ## Annotating Tasks with TaskTraits
 
 [`base::TaskTraits`](https://cs.chromium.org/chromium/src/base/task/task_traits.h)

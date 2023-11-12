@@ -68,6 +68,7 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHNewTabPageHomeButtonFeature,
     &kIPHPageInfoFeature,
     &kIPHPageInfoStoreInfoFeature,
+    &kIPHPageZoomFeature,
     &kIPHPreviewsOmniboxUIFeature,
     &kIPHPriceDropNTPFeature,
     &kIPHPwaInstallAvailableFeature,
@@ -79,6 +80,8 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHRequestDesktopSiteAppMenuFeature,
     &kIPHRequestDesktopSiteDefaultOnFeature,
     &kIPHRequestDesktopSiteOptInFeature,
+    &kIPHRequestDesktopSiteExceptionsGenericFeature,
+    &kIPHRequestDesktopSiteExceptionsSpecificFeature,
     &kIPHShoppingListMenuItemFeature,
     &kIPHShoppingListSaveFlowFeature,
     &kIPHTabGroupsQuicklyComparePagesFeature,
@@ -116,10 +119,13 @@ const base::Feature* const kAllFeatures[] = {
     &kIPHBadgedTranslateManualTriggerFeature,
     &kIPHDiscoverFeedHeaderFeature,
     &kIPHDefaultSiteViewFeature,
-    &kIPHPasswordSuggestionsFeature,
     &kIPHFollowWhileBrowsingFeature,
     &kIPHOverflowMenuTipFeature,
     &kIPHPriceNotificationsWhileBrowsingFeature,
+    &kIPHiOSDefaultBrowserBadgeEligibilityFeature,
+    &kIPHiOSDefaultBrowserOverflowMenuBadgeFeature,
+    &kIPHiOSDefaultBrowserSettingsBadgeFeature,
+    &kIPHiOSAppStorePromoFeature,
 #endif  // BUILDFLAG(IS_IOS)
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_FUCHSIA)
@@ -159,6 +165,10 @@ const base::Feature* const kAllFeatures[] = {
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_ANDROID) ||
         // BUILDFLAG(IS_FUCHSIA)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    &kIPHGoogleOneOfferNotificationFeature,
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 };
 }  // namespace
 

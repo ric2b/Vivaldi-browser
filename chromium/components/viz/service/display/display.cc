@@ -12,11 +12,13 @@
 #include <utility>
 
 #include "base/containers/contains.h"
+#include "base/cxx17_backports.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
@@ -617,8 +619,34 @@ void DebugDrawFrame(const AggregatedFrame& frame) {
                       base::NumberToString(static_cast<int>(quad->material)));
     DBG_DRAW_TEXT_OPT("frame.root.display_rect", DBG_OPT_GREEN,
                       display_rect.origin(), display_rect.ToString());
+    DBG_DRAW_TEXT_OPT(
+        "frame.root.resource_id", DBG_OPT_RED, display_rect.origin(),
+        base::NumberToString(quad->resources.ids[0].GetUnsafeValue()));
     DBG_DRAW_RECT("frame.root.quad", display_rect);
   }
+}
+
+void DebugDrawFrameVisible(const AggregatedFrame& frame) {
+  if (!VizDebugger::GetInstance()->IsEnabled()) {
+    return;
+  }
+
+  auto& root_render_pass = *frame.render_pass_list.back();
+  [[maybe_unused]] int num_quad_empty = 0;
+  for (auto* quad : root_render_pass.quad_list) {
+    auto& transform = quad->shared_quad_state->quad_to_target_transform;
+    auto display_rect = transform.MapRect(gfx::RectF(quad->visible_rect));
+    DBG_DRAW_TEXT_OPT("frame.root.display_rect_visible", DBG_OPT_GREEN,
+                      display_rect.origin(), display_rect.ToString());
+    DBG_DRAW_RECT("frame.root.visible", display_rect);
+
+    if (quad->visible_rect.IsEmpty()) {
+      num_quad_empty++;
+    }
+  }
+
+  DBG_LOG_OPT("frame.root.num_empty_visible", DBG_OPT_BLUE,
+              "Num quads that have empty visibility =%d", num_quad_empty);
 }
 
 void VisualDebuggerSync(gfx::OverlayTransform current_display_transform,
@@ -817,6 +845,7 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
                                  swapped_trace_id_, "Draw");
     base::ElapsedTimer draw_occlusion_timer;
     RemoveOverdrawQuads(&frame);
+    DebugDrawFrameVisible(frame);
     UMA_HISTOGRAM_COUNTS_1000(
         "Compositing.Display.Draw.Occlusion.Calculation.Time",
         draw_occlusion_timer.Elapsed().InMicroseconds());
@@ -889,7 +918,7 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
     DirectRenderer::SwapFrameData swap_frame_data;
     swap_frame_data.latency_info = std::move(frame.latency_info);
     swap_frame_data.seq =
-        current_surface_id_.local_surface_id().child_sequence_number();
+        current_surface_id_.local_surface_id().parent_sequence_number();
     swap_frame_data.choreographer_vsync_id = params.choreographer_vsync_id;
     if (frame.top_controls_visible_height.has_value()) {
       swap_frame_data.top_controls_visible_height_changed =
@@ -898,7 +927,7 @@ bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
       last_top_controls_visible_height_ = *frame.top_controls_visible_height;
     }
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
     swap_frame_data.ca_layer_error_code =
         overlay_processor_->GetCALayerErrorCode();
 #endif

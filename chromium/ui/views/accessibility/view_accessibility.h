@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -226,8 +226,8 @@ class VIEWS_EXPORT ViewAccessibility {
   // default navigation method.
   void OverrideNextFocus(Widget* widget);
   void OverridePreviousFocus(Widget* widget);
-  Widget* GetNextFocus() const;
-  Widget* GetPreviousFocus() const;
+  Widget* GetNextWindowFocus() const;
+  Widget* GetPreviousWindowFocus() const;
 
   // Override the child tree id.
   void OverrideChildTreeID(ui::AXTreeID tree_id);

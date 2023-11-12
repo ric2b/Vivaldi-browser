@@ -20,6 +20,7 @@
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/password_manager/chrome_webauthn_credentials_delegate.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/cert_verifier_browser_test.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
@@ -29,7 +30,7 @@
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/public/browser/authenticator_environment.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "device/fido/cable/cable_discovery_data.h"
@@ -63,6 +64,8 @@ class WebAuthnBrowserTest : public CertVerifierBrowserTest {
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     CertVerifierBrowserTest::SetUpCommandLine(command_line);
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
     command_line->AppendSwitch(switches::kIgnoreCertificateErrors);
   }
 
@@ -187,6 +190,84 @@ IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, ChromeExtensions) {
   EXPECT_EQ("webauthn: OK", result);
 }
 
+#if BUILDFLAG(IS_WIN)
+// Integration test for Large Blob on Windows.
+IN_PROC_BROWSER_TEST_F(WebAuthnBrowserTest, WinLargeBlob) {
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), https_server_.GetURL("www.example.com", "/title1.html")));
+
+  device::FakeWinWebAuthnApi fake_api;
+  fake_api.set_version(WEBAUTHN_API_VERSION_3);
+  auto virtual_device_factory =
+      std::make_unique<device::test::VirtualFidoDeviceFactory>();
+  virtual_device_factory->set_win_webauthn_api(&fake_api);
+  content::AuthenticatorEnvironment::GetInstance()
+      ->ReplaceDefaultDiscoveryFactoryForTesting(
+          std::move(virtual_device_factory));
+
+  constexpr char kMakeCredentialLargeBlob[] = R"(
+    let cred_id;
+    const blob = "blobby volley";
+    navigator.credentials.create({ publicKey: {
+      challenge: new TextEncoder().encode('climb a mountain'),
+      rp: { name: 'Acme' },
+      user: {
+        id: new TextEncoder().encode('1098237235409872'),
+        name: 'avery.a.jones@example.com',
+        displayName: 'Avery A. Jones'},
+      pubKeyCredParams: [{ type: 'public-key', alg: '-257'}],
+      authenticatorSelection: {
+         requireResidentKey: true,
+      },
+      extensions: { largeBlob: { support: 'required' } },
+    }}).then(cred => {
+      cred_id = cred.rawId;
+      if (!cred.getClientExtensionResults().largeBlob ||
+          !cred.getClientExtensionResults().largeBlob.supported) {
+        window.domAutomationController.send('large blob not supported');
+        return;
+      }
+      return navigator.credentials.get({ publicKey: {
+        challenge: new TextEncoder().encode('run a marathon'),
+        allowCredentials: [{type: 'public-key', id: cred_id}],
+        extensions: {
+          largeBlob: {
+            write: new TextEncoder().encode(blob),
+          },
+        },
+      }});
+    }).then(assertion => {
+      if (!assertion.getClientExtensionResults().largeBlob.written) {
+        window.domAutomationController.send('large blob not written to');
+        return;
+      }
+      return navigator.credentials.get({ publicKey: {
+        challenge: new TextEncoder().encode('solve p=np'),
+        allowCredentials: [{type: 'public-key', id: cred_id}],
+        extensions: {
+          largeBlob: {
+            read: true,
+          },
+        },
+      }});
+    }).then(assertion => {
+      if (new TextDecoder().decode(
+          assertion.getClientExtensionResults().largeBlob.blob) != blob) {
+        window.domAutomationController.send('blob does not match');
+        return;
+      }
+      window.domAutomationController.send('webauthn: OK');
+    }).catch(error => window.domAutomationController.send(
+                      'webauthn: ' + error.toString()));)";
+
+  std::string result;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
+      browser()->tab_strip_model()->GetActiveWebContents(),
+      kMakeCredentialLargeBlob, &result));
+  EXPECT_EQ("webauthn: OK", result);
+}
+#endif  // BUILDFLAG(IS_WIN)
+
 class WebAuthnConditionalUITest : public WebAuthnBrowserTest {
   class Observer : public ChromeAuthenticatorRequestDelegate::TestObserver {
    public:
@@ -232,11 +313,7 @@ class WebAuthnConditionalUITest : public WebAuthnBrowserTest {
     }
 
     void CableV2ExtensionSeen(
-        base::span<const uint8_t> server_link_data,
-        base::span<const uint8_t> experiments,
-        AuthenticatorRequestDialogModel::ExperimentServerLinkSheet exp_sheet,
-        AuthenticatorRequestDialogModel::ExperimentServerLinkTitle exp_title)
-        override {}
+        base::span<const uint8_t> server_link_data) override {}
 
     void AccountSelectorShown(
         const std::vector<device::AuthenticatorGetAssertionResponse>& responses)
@@ -281,8 +358,6 @@ class WebAuthnConditionalUITest : public WebAuthnBrowserTest {
   }
 
  protected:
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kWebAuthConditionalUI};
   std::unique_ptr<Observer> observer_;
   raw_ptr<device::test::VirtualFidoDeviceFactory> virtual_device_factory_;
 };
@@ -363,7 +438,7 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
           "cableAuthentication": [{
             version: 2,
             sessionPreKey: new Uint8Array([$1]).buffer,
-            clientEid: new Uint8Array([$2]),
+            clientEid: new Uint8Array(),
             authenticatorEid: new Uint8Array(),
           }],
         },
@@ -392,11 +467,11 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
     ChromeAuthenticatorRequestDelegate::SetGlobalObserverForTesting(&observer_);
   }
 
-  void DoRequest(std::string server_link_data, std::string experiment_data) {
+  void DoRequest(std::string server_link_data) {
     MaybeInstall();
 
-    const std::string request = base::ReplaceStringPlaceholders(
-        kRequest, {server_link_data, experiment_data}, nullptr);
+    const std::string request =
+        base::ReplaceStringPlaceholders(kRequest, {server_link_data}, nullptr);
 
     std::string result;
     ASSERT_TRUE(content::ExecuteScriptAndExtractString(
@@ -424,16 +499,8 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
     void UIShown(ChromeAuthenticatorRequestDelegate* delegate) override {}
 
     void CableV2ExtensionSeen(
-        base::span<const uint8_t> server_link_data,
-        base::span<const uint8_t> experiments,
-        AuthenticatorRequestDialogModel::ExperimentServerLinkSheet exp_sheet,
-        AuthenticatorRequestDialogModel::ExperimentServerLinkTitle exp_title)
-        override {
-      extensions_.emplace_back(
-          base::HexEncode(server_link_data) + ":" +
-          base::HexEncode(experiments) + ":" +
-          base::NumberToString(static_cast<int>(exp_sheet)) + ":" +
-          base::NumberToString(static_cast<int>(exp_title)));
+        base::span<const uint8_t> server_link_data) override {
+      extensions_.emplace_back(base::HexEncode(server_link_data));
     }
 
     std::vector<std::string> extensions_;
@@ -445,44 +512,10 @@ class WebAuthnCableExtension : public WebAuthnBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(WebAuthnCableExtension, ServerLink) {
-  DoRequest("1,2,3,4", "5,6,7,8");
+  DoRequest("1,2,3,4");
 
   ASSERT_EQ(observer_.extensions_.size(), 1u);
-  EXPECT_EQ(observer_.extensions_[0], "01020304:05060708:1:11");
-}
-
-IN_PROC_BROWSER_TEST_F(WebAuthnCableExtension, ServerLinkExperiments) {
-  constexpr struct {
-    const char* experiment_data;
-    const char* expected;
-  } kTests[] = {
-      {"0", "01020304:00:1:11"},  // invalid; not a multiple of 4 bytes
-      {"0,0,0,0", "01020304:00000000:1:11"},  // unknown value
-      {"0,0,0,1", "01020304:00000001:1:11"},
-      {"0,0,0,2", "01020304:00000002:2:11"},
-      {"0,0,0,3", "01020304:00000003:3:11"},
-      {"0,0,0,4", "01020304:00000004:4:11"},
-      {"0,0,0,5", "01020304:00000005:5:11"},
-      {"0,0,0,6", "01020304:00000006:6:11"},
-      {"0,0,0,7", "01020304:00000007:1:11"},                  // unknown value
-      {"0,0,0,1,0,0,0,2", "01020304:0000000100000002:1:11"},  // conflicting
-      {"0,0,0,10", "01020304:0000000A:1:11"},                 // unknown value
-      {"0,0,0,11", "01020304:0000000B:1:11"},
-      {"0,0,0,12", "01020304:0000000C:1:12"},
-      {"0,0,0,13", "01020304:0000000D:1:11"},  // unknown value
-      {"0,0,0,3,0,0,0,12", "01020304:000000030000000C:3:12"},
-  };
-
-  unsigned test_no = 0;
-  for (const auto& test : kTests) {
-    observer_.extensions_.clear();
-
-    SCOPED_TRACE(test_no++);
-    SCOPED_TRACE(test.experiment_data);
-    DoRequest("1,2,3,4", test.experiment_data);
-    ASSERT_EQ(observer_.extensions_.size(), 1u);
-    EXPECT_EQ(observer_.extensions_[0], test.expected);
-  }
+  EXPECT_EQ(observer_.extensions_[0], "01020304");
 }
 
 // WebAuthnCableSecondFactor primarily exercises
@@ -714,10 +747,7 @@ class WebAuthnCableSecondFactor : public WebAuthnBrowserTest {
     }
 
     void CableV2ExtensionSeen(
-        base::span<const uint8_t> server_link_data,
-        base::span<const uint8_t> experiments,
-        AuthenticatorRequestDialogModel::ExperimentServerLinkSheet,
-        AuthenticatorRequestDialogModel::ExperimentServerLinkTitle) override {}
+        base::span<const uint8_t> server_link_data) override {}
 
     void ConfiguringCable(device::CableRequestType request_type) override {
       switch (request_type) {

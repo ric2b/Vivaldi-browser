@@ -44,6 +44,7 @@
 #include "components/security_interstitials/core/ssl_error_options_mask.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -67,8 +68,8 @@
 #endif
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_error_page/supervised_user_error_page.h"  // nogncheck
 #include "chrome/browser/supervised_user/supervised_user_interstitial.h"
+#include "components/supervised_user/core/browser/supervised_user_error_page.h"  // nogncheck
 #endif
 
 using security_interstitials::TestSafeBrowsingBlockingPageQuiet;
@@ -253,7 +254,8 @@ std::unique_ptr<LookalikeUrlBlockingPage> CreateLookalikeInterstitialPage(
   }
   return std::make_unique<LookalikeUrlBlockingPage>(
       web_contents, safe_url, request_url, ukm::kInvalidSourceId,
-      LookalikeUrlMatchType::kNone, false, /*triggered_by_initial_url=*/false,
+      lookalikes::LookalikeUrlMatchType::kNone, false,
+      /*triggered_by_initial_url=*/false,
       std::make_unique<LookalikeUrlControllerClient>(web_contents, request_url,
                                                      safe_url));
 }
@@ -600,20 +602,20 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
   std::string profile_image_url2;
   net::GetValueForKeyInQuery(url, "profile_image_url2", &profile_image_url2);
 
-  supervised_user_error_page::FilteringBehaviorReason reason =
-      supervised_user_error_page::DEFAULT;
+  supervised_user::FilteringBehaviorReason reason =
+      supervised_user::FilteringBehaviorReason::DEFAULT;
   std::string reason_string;
   if (net::GetValueForKeyInQuery(url, "reason", &reason_string)) {
     if (reason_string == "safe_sites") {
-      reason = supervised_user_error_page::ASYNC_CHECKER;
+      reason = supervised_user::FilteringBehaviorReason::ASYNC_CHECKER;
     } else if (reason_string == "manual") {
-      reason = supervised_user_error_page::MANUAL;
+      reason = supervised_user::FilteringBehaviorReason::MANUAL;
     } else if (reason_string == "not_signed_in") {
-      reason = supervised_user_error_page::NOT_SIGNED_IN;
+      reason = supervised_user::FilteringBehaviorReason::NOT_SIGNED_IN;
     }
   }
 
-  return supervised_user_error_page::BuildHtml(
+  return supervised_user::BuildErrorPageHtml(
       allow_access_requests, profile_image_url, profile_image_url2, custodian,
       custodian_email, second_custodian, second_custodian_email, reason,
       g_browser_process->GetApplicationLocale(), /*already_sent_request=*/false,

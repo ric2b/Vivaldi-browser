@@ -48,10 +48,27 @@ void FireBackgroundTracingTriggerOnUI(
 
 }  // namespace
 
-ProcessNodeImpl::ProcessNodeImpl(content::ProcessType process_type,
-                                 RenderProcessHostProxy render_process_proxy)
+ProcessNodeImpl::ProcessNodeImpl(BrowserProcessNodeTag tag)
+    : process_type_(content::PROCESS_TYPE_BROWSER) {
+  weak_this_ = weak_factory_.GetWeakPtr();
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+}
+
+ProcessNodeImpl::ProcessNodeImpl(
+    RenderProcessHostProxy render_process_host_proxy)
+    : process_type_(content::PROCESS_TYPE_RENDERER),
+      child_process_host_proxy_(std::move(render_process_host_proxy)) {
+  weak_this_ = weak_factory_.GetWeakPtr();
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+}
+
+ProcessNodeImpl::ProcessNodeImpl(
+    content::ProcessType process_type,
+    BrowserChildProcessHostProxy browser_child_process_host_proxy)
     : process_type_(process_type),
-      render_process_host_proxy_(std::move(render_process_proxy)) {
+      child_process_host_proxy_(std::move(browser_child_process_host_proxy)) {
+  DCHECK_NE(process_type, content::PROCESS_TYPE_BROWSER);
+  DCHECK_NE(process_type, content::PROCESS_TYPE_RENDERER);
   weak_this_ = weak_factory_.GetWeakPtr();
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
@@ -78,6 +95,7 @@ void ProcessNodeImpl::Bind(
 void ProcessNodeImpl::SetMainThreadTaskLoadIsLow(
     bool main_thread_task_load_is_low) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
 
   main_thread_task_load_is_low_.SetAndMaybeNotify(this,
                                                   main_thread_task_load_is_low);
@@ -87,6 +105,7 @@ void ProcessNodeImpl::OnV8ContextCreated(
     mojom::V8ContextDescriptionPtr description,
     mojom::IframeAttributionDataPtr iframe_attribution_data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph())) {
     tracker->OnV8ContextCreated(PassKey(), this, *description,
                                 std::move(iframe_attribution_data));
@@ -96,6 +115,7 @@ void ProcessNodeImpl::OnV8ContextCreated(
 void ProcessNodeImpl::OnV8ContextDetached(
     const blink::V8ContextToken& v8_context_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph()))
     tracker->OnV8ContextDetached(PassKey(), this, v8_context_token);
 }
@@ -103,6 +123,7 @@ void ProcessNodeImpl::OnV8ContextDetached(
 void ProcessNodeImpl::OnV8ContextDestroyed(
     const blink::V8ContextToken& v8_context_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph()))
     tracker->OnV8ContextDestroyed(PassKey(), this, v8_context_token);
 }
@@ -112,6 +133,7 @@ void ProcessNodeImpl::OnRemoteIframeAttached(
     const blink::RemoteFrameToken& remote_frame_token,
     mojom::IframeAttributionDataPtr iframe_attribution_data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph())) {
     auto* ec_registry =
         execution_context::ExecutionContextRegistry::GetFromGraph(graph());
@@ -130,6 +152,7 @@ void ProcessNodeImpl::OnRemoteIframeDetached(
     const blink::LocalFrameToken& parent_frame_token,
     const blink::RemoteFrameToken& remote_frame_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   if (auto* tracker = v8_memory::V8ContextTracker::GetFromGraph(graph())) {
     auto* ec_registry =
         execution_context::ExecutionContextRegistry::GetFromGraph(graph());
@@ -147,6 +170,7 @@ void ProcessNodeImpl::OnRemoteIframeDetached(
 void ProcessNodeImpl::FireBackgroundTracingTrigger(
     const std::string& trigger_name) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -187,16 +211,19 @@ void ProcessNodeImpl::SetProcess(base::Process process,
 
 const base::flat_set<FrameNodeImpl*>& ProcessNodeImpl::frame_nodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   return frame_nodes_;
 }
 
 const base::flat_set<WorkerNodeImpl*>& ProcessNodeImpl::worker_nodes() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   return worker_nodes_;
 }
 
 PageNodeImpl* ProcessNodeImpl::GetPageNodeIfExclusive() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
 
   PageNodeImpl* page_node = nullptr;
   for (auto* frame_node : frame_nodes_) {
@@ -210,30 +237,33 @@ PageNodeImpl* ProcessNodeImpl::GetPageNodeIfExclusive() const {
 
 RenderProcessHostId ProcessNodeImpl::GetRenderProcessId() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return RenderProcessHostId(
-      render_process_host_proxy_.render_process_host_id());
+  return render_process_host_proxy().render_process_host_id();
 }
 
 void ProcessNodeImpl::AddFrame(FrameNodeImpl* frame_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   const bool inserted = frame_nodes_.insert(frame_node).second;
   DCHECK(inserted);
 }
 
 void ProcessNodeImpl::RemoveFrame(FrameNodeImpl* frame_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   DCHECK(base::Contains(frame_nodes_, frame_node));
   frame_nodes_.erase(frame_node);
 }
 
 void ProcessNodeImpl::AddWorker(WorkerNodeImpl* worker_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   const bool inserted = worker_nodes_.insert(worker_node).second;
   DCHECK(inserted);
 }
 
 void ProcessNodeImpl::RemoveWorker(WorkerNodeImpl* worker_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   DCHECK(base::Contains(worker_nodes_, worker_node));
   worker_nodes_.erase(worker_node);
 }
@@ -245,6 +275,7 @@ void ProcessNodeImpl::set_priority(base::TaskPriority priority) {
 
 void ProcessNodeImpl::add_hosted_content_type(ContentType content_type) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   hosted_content_types_.Put(content_type);
 }
 
@@ -320,10 +351,12 @@ const std::string& ProcessNodeImpl::GetMetricsName() const {
 
 bool ProcessNodeImpl::VisitFrameNodes(const FrameNodeVisitor& visitor) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   for (auto* frame_impl : frame_nodes()) {
     const FrameNode* frame = frame_impl;
-    if (!visitor.Run(frame))
+    if (!visitor(frame)) {
       return false;
+    }
   }
   return true;
 }
@@ -361,7 +394,16 @@ RenderProcessHostId ProcessNodeImpl::GetRenderProcessHostId() const {
 const RenderProcessHostProxy& ProcessNodeImpl::GetRenderProcessHostProxy()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   return render_process_host_proxy();
+}
+
+const BrowserChildProcessHostProxy&
+ProcessNodeImpl::GetBrowserChildProcessHostProxy() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_NE(process_type_, content::PROCESS_TYPE_BROWSER);
+  DCHECK_NE(process_type_, content::PROCESS_TYPE_RENDERER);
+  return browser_child_process_host_proxy();
 }
 
 base::TaskPriority ProcessNodeImpl::GetPriority() const {
@@ -370,10 +412,14 @@ base::TaskPriority ProcessNodeImpl::GetPriority() const {
 }
 
 ProcessNode::ContentTypes ProcessNodeImpl::GetHostedContentTypes() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   return hosted_content_types();
 }
 
 void ProcessNodeImpl::OnAllFramesInProcessFrozen() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
   for (auto* observer : GetObservers())
     observer->OnAllFramesInProcessFrozen(this);
 }

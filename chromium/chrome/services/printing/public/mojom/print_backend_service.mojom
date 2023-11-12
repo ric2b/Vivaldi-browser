@@ -37,11 +37,9 @@ union PrinterSemanticCapsAndDefaultsResult {
   ResultCode result_code;
 };
 
-// The set of basic info, paper details, and capabilities/defaults for a
-// printer.
+// The set of basic info and capabilities/defaults for a printer.
 struct PrinterCapsAndInfo {
   PrinterBasicInfo printer_info;
-  array<Paper> user_defined_papers;
   PrinterSemanticCapsAndDefaults printer_caps;
 };
 
@@ -145,7 +143,7 @@ interface PrintBackendService {
   //     browser process.
   //   - Platforms other than those identified above do not support a system
   //     print dialog.
-  [EnableIf=is_win]
+  [EnableIf=enable_oop_basic_print_dialog]
   AskUserForSettings(uint32 parent_window_id,
                      int32 max_pages,
                      bool has_selection,

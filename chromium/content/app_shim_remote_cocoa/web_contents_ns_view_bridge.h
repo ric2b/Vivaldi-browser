@@ -10,6 +10,7 @@
 #include <memory>
 
 #import "base/mac/scoped_nsobject.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/remote_cocoa/app_shim/ns_view_ids.h"
 #include "content/common/content_export.h"
 #include "content/common/web_contents_ns_view_bridge.mojom.h"
@@ -60,7 +61,9 @@ class CONTENT_EXPORT WebContentsNSViewBridge : public mojom::WebContentsNSView {
   void StartDrag(const content::DropData& drop_data,
                  uint32_t operation_mask,
                  const gfx::ImageSkia& image,
-                 const gfx::Vector2d& image_offset) override;
+                 const gfx::Vector2d& image_offset,
+                 bool is_privileged) override;
+  void UpdateWindowControlsOverlay(const gfx::Rect& bounding_rect) override;
   void Destroy() override;
 
  private:

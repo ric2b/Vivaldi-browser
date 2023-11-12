@@ -9,15 +9,15 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/process/process.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/time.h"
@@ -25,6 +25,7 @@
 #include "components/named_mojo_ipc_server/connection_info.h"
 #include "components/named_mojo_ipc_server/endpoint_options.h"
 #include "components/named_mojo_ipc_server/named_mojo_server_endpoint_connector.h"
+#include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/platform/platform_channel_endpoint.h"
 #include "mojo/public/cpp/system/invitation.h"
@@ -136,11 +137,37 @@ void NamedMojoIpcServerBase::OnClientConnected(
     return;
   }
 
-  if (!options_.message_pipe_id.has_value()) {
+  bool is_isolated = !options_.message_pipe_id.has_value();
+
+  base::Process peer_process;
+  // A peer process is not needed to open a non-MojoIpcz isolated connection,
+  // and in fact some callers don't have the right ACL to open the peer process
+  // yet, so we only open the peer process if the connection is non-isolated, or
+  // MojoIpcz is enabled.
+  if (!is_isolated || mojo::core::IsMojoIpczEnabled()) {
+#if BUILDFLAG(IS_WIN)
+    // Open process with minimum permissions since the client process might have
+    // restricted its access with DACL.
+    peer_process = base::Process::OpenWithAccess(peer_pid, PROCESS_DUP_HANDLE);
+// Windows opens the process with a system call so we use PLOG to extract more
+// info. Other OSes (i.e. POSIX) don't do that.
+#define INVALID_PROCESS_LOG PLOG
+#else
+    peer_process = base::Process::Open(peer_pid);
+#define INVALID_PROCESS_LOG LOG
+#endif
+    if (!peer_process.IsValid()) {
+      INVALID_PROCESS_LOG(ERROR) << "Failed to open peer process";
+      return;
+    }
+#undef INVALID_PROCESS_LOG
+  }
+
+  if (is_isolated) {
     // Create isolated connection.
     auto connection = std::make_unique<mojo::IsolatedConnection>();
     mojo::ScopedMessagePipeHandle message_pipe =
-        connection->Connect(std::move(endpoint));
+        connection->Connect(std::move(endpoint), std::move(peer_process));
     mojo::ReceiverId receiver_id =
         TrackMessagePipe(std::move(message_pipe), impl, peer_pid);
     active_connections_[receiver_id] = std::move(connection);
@@ -151,23 +178,6 @@ void NamedMojoIpcServerBase::OnClientConnected(
   mojo::OutgoingInvitation invitation;
   mojo::ScopedMessagePipeHandle message_pipe =
       invitation.AttachMessagePipe(*options_.message_pipe_id);
-#if BUILDFLAG(IS_WIN)
-  // Open process with minimum permissions since the client process might have
-  // restricted its access with DACL.
-  base::Process peer_process =
-      base::Process::OpenWithAccess(peer_pid, PROCESS_DUP_HANDLE);
-// Windows opens the process with a system call so we use PLOG to extract more
-// info. Other OSes (i.e. POSIX) don't do that.
-#define INVALID_PROCESS_LOG PLOG
-#else
-  base::Process peer_process = base::Process::Open(peer_pid);
-#define INVALID_PROCESS_LOG LOG
-#endif
-  if (!peer_process.IsValid()) {
-    INVALID_PROCESS_LOG(ERROR) << "Failed to open peer process";
-    return;
-  }
-#undef INVALID_PROCESS_LOG
   mojo::OutgoingInvitation::Send(std::move(invitation), peer_process.Handle(),
                                  std::move(endpoint));
   TrackMessagePipe(std::move(message_pipe), impl, peer_pid);

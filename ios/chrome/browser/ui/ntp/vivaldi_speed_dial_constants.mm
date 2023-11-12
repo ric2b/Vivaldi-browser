@@ -35,6 +35,8 @@ const CGSize vSpeedDialFolderIconSizeList = CGSizeMake(28.f, 28.f);
 const CGSize vSpeedDialItemFaviconSizeRegularLayout = CGSizeMake(16.0, 16.0);
 // Speed Dial item favicon size for layout 'Small'
 const CGSize vSpeedDialItemFaviconSizeSmallLayout = CGSizeMake(28.0, 28.0);
+// Speed Dial item favicon size for layout 'Small' on tablet.
+const CGSize vSpeedDialItemFaviconSizeSmallLayoutTablet = CGSizeMake(20.0, 20.0);
 // Speed Dial item favicon size for layout 'List'
 const CGSize vSpeedDialItemFaviconSizeListLayout = CGSizeMake(36.0, 36.0);
 // Speed Dial favicon corner radius
@@ -112,3 +114,7 @@ NSString* vNTPSpeedDialFolderIcon =
     @"vivaldi_ntp_add_new_speed_dial_folder";
 // Image name for the icon on the speed dial empty view
 NSString* vNTPSDEmptyViewIcon = @"vivaldi_ntp_sd_empty_view_icon";
+// Image name for the icon for favicon fallback
+NSString* vNTPSDFallbackFavicon = @"vivaldi_ntp_fallback_favicon";
+// Image name for the icon for internal pages.
+NSString* vNTPSDInternalPageFavicon = @"vivaldi_ntp_internal_favicon";

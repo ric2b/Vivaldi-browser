@@ -48,12 +48,18 @@ MATCHER(IsFrameHidden,
 class PendingBeaconTimeoutBrowserTestBase : public ContentBrowserTest {
  protected:
   using FeaturesType = std::vector<base::test::FeatureRefAndParams>;
+  using DisabledFeaturesType = std::vector<base::test::FeatureRef>;
 
   void SetUp() override {
-    feature_list_.InitWithFeaturesAndParameters(GetEnabledFeatures(), {});
+    feature_list_.InitWithFeaturesAndParameters(GetEnabledFeatures(),
+                                                GetDisabledFeatures());
     ContentBrowserTest::SetUp();
   }
   virtual const FeaturesType& GetEnabledFeatures() = 0;
+  virtual const DisabledFeaturesType& GetDisabledFeatures() {
+    static const DisabledFeaturesType disabled_features = {};
+    return disabled_features;
+  }
 
   void SetUpOnMainThread() override {
     histogram_tester_ = std::make_unique<base::HistogramTester>();
@@ -337,19 +343,23 @@ struct TestTimeoutType {
 // Tests to cover PendingBeacon's backgroundTimeout & timeout behaviors when
 // BackForwardCache is off.
 //
-// Disables BackForwardCache by setting its cache size to 0 such that a page is
-// discarded right away on user navigating to another page. And on page
-// discard, pending beacons should be sent out no matter what value its
-// backgroundTimeout/timeout is.
+// Disables BackForwardCache such that a page is discarded right away on user
+// navigating to another page.
+// And on page discard, pending beacons should be sent out no matter what value
+// its backgroundTimeout/timeout is.
 class PendingBeaconTimeoutNoBackForwardCacheBrowserTest
     : public PendingBeaconTimeoutBrowserTestBase,
       public testing::WithParamInterface<TestTimeoutType> {
  protected:
   const FeaturesType& GetEnabledFeatures() override {
     static const FeaturesType enabled_features = {
-        {blink::features::kPendingBeaconAPI, {{"send_on_navigation", "true"}}},
-        {features::kBackForwardCache, {{"cache_size", "0"}}}};
+        {blink::features::kPendingBeaconAPI, {{"send_on_navigation", "true"}}}};
     return enabled_features;
+  }
+  const DisabledFeaturesType& GetDisabledFeatures() override {
+    static const DisabledFeaturesType disabled_features = {
+        features::kBackForwardCache};
+    return disabled_features;
   }
 };
 
@@ -444,8 +454,9 @@ class PendingBeaconBackgroundTimeoutBrowserTest
          {{"PendingBeaconMaxBackgroundTimeoutInMs", "60000"},
           // Don't force sending out beacons on pagehide.
           {"send_on_navigation", "false"}}},
-        {features::kBackForwardCache,
-         {{"TimeToLiveInBackForwardCacheInSeconds", "5"}}},
+        {features::kBackForwardCache, {{}}},
+        {features::kBackForwardCacheTimeToLiveControl,
+         {{"time_to_live_seconds", "5"}}},
         // Forces BFCache to work in low memory device.
         {features::kBackForwardCacheMemoryControls,
          {{"memory_threshold_for_back_forward_cache_in_mb", "0"}}}};
@@ -685,8 +696,9 @@ class PendingBeaconMutualTimeoutWithLongBackForwardCacheTTLBrowserTest
         {blink::features::kPendingBeaconAPI,
          {// Don't force sending out beacons on pagehide.
           {"send_on_navigation", "false"}}},
-        {features::kBackForwardCache,
-         {{"TimeToLiveInBackForwardCacheInSeconds", "60"}}},
+        {features::kBackForwardCache, {{}}},
+        {features::kBackForwardCacheTimeToLiveControl,
+         {{"time_to_live_seconds", "60"}}},
         // Forces BFCache to work in low memory device.
         {features::kBackForwardCacheMemoryControls,
          {{"memory_threshold_for_back_forward_cache_in_mb", "0"}}}};
@@ -777,8 +789,9 @@ class PendingBeaconSendOnPagehideBrowserTest
         {blink::features::kPendingBeaconAPI,
          {{"PendingBeaconMaxBackgroundTimeoutInMs", "60000"},
           {"send_on_navigation", "true"}}},
-        {features::kBackForwardCache,
-         {{"TimeToLiveInBackForwardCacheInSeconds", "60"}}},
+        {features::kBackForwardCache, {{}}},
+        {features::kBackForwardCacheTimeToLiveControl,
+         {{"time_to_live_seconds", "60"}}},
         // Forces BFCache to work in low memory device.
         {features::kBackForwardCacheMemoryControls,
          {{"memory_threshold_for_back_forward_cache_in_mb", "0"}}}};
@@ -898,8 +911,8 @@ class PendingBeaconRendererProcessExitBrowserTest
   }
 };
 
-#if BUILDFLAG(IS_MAC)
-// Disabled due to failures on various Mac builders.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+// Disabled due to failures on various Mac/Linux builders.
 // TODO(crbug.com/1382713) Reenable the test.
 #define MAYBE_SendAllOnProcessCrash DISABLED_SendAllOnProcessCrash
 #else

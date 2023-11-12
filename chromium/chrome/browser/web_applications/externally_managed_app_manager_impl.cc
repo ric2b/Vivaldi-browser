@@ -9,12 +9,14 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/externally_managed_app_registration_task.h"
+#include "chrome/browser/web_applications/locks/full_system_lock.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
@@ -45,7 +47,13 @@ ExternallyManagedAppManagerImpl::ExternallyManagedAppManagerImpl(
     Profile* profile)
     : profile_(profile), url_loader_(std::make_unique<WebAppUrlLoader>()) {}
 
-ExternallyManagedAppManagerImpl::~ExternallyManagedAppManagerImpl() = default;
+ExternallyManagedAppManagerImpl::~ExternallyManagedAppManagerImpl() {
+  // Extra check to verify that web_contents is released even if
+  // shutdown somehow has not been invoked.
+  if (!IsShuttingDown()) {
+    Shutdown();
+  }
+}
 
 void ExternallyManagedAppManagerImpl::InstallNow(
     ExternalInstallOptions install_options,
@@ -124,12 +132,13 @@ std::unique_ptr<ExternallyManagedAppInstallTask>
 ExternallyManagedAppManagerImpl::CreateInstallationTask(
     ExternalInstallOptions install_options) {
   return std::make_unique<ExternallyManagedAppInstallTask>(
-      profile_, url_loader_.get(), registrar(), ui_manager(), finalizer(),
+      profile_, url_loader_.get(), ui_manager(), finalizer(),
       command_scheduler(), std::move(install_options));
 }
 
 std::unique_ptr<ExternallyManagedAppRegistrationTaskBase>
 ExternallyManagedAppManagerImpl::StartRegistration(GURL install_url) {
+  DCHECK(!IsShuttingDown());
   ExternallyManagedAppRegistrationTask::RegistrationCallback callback =
       base::BindOnce(&ExternallyManagedAppManagerImpl::OnRegistrationFinished,
                      weak_ptr_factory_.GetWeakPtr(), install_url);
@@ -156,8 +165,22 @@ void ExternallyManagedAppManagerImpl::PostMaybeStartNext() {
 }
 
 void ExternallyManagedAppManagerImpl::MaybeStartNext() {
-  if (current_install_ || is_in_shutdown_)
+  if (current_install_ || IsShuttingDown()) {
     return;
+  }
+  command_scheduler()->ScheduleCallbackWithLock<FullSystemLock>(
+      "ExternallyManagedAppManagerImpl::MaybeStartNext",
+      std::make_unique<FullSystemLockDescription>(),
+      base::BindOnce(
+          &ExternallyManagedAppManagerImpl::MaybeStartNextOnLockAcquired,
+          weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ExternallyManagedAppManagerImpl::MaybeStartNextOnLockAcquired(
+    FullSystemLock& lock) {
+  if (current_install_ || IsShuttingDown()) {
+    return;
+  }
 
   while (!pending_installs_.empty()) {
     std::unique_ptr<TaskAndCallback> front =
@@ -173,7 +196,7 @@ void ExternallyManagedAppManagerImpl::MaybeStartNext() {
     }
 
     absl::optional<AppId> app_id =
-        registrar()->LookupExternalAppId(install_options.install_url);
+        lock.registrar().LookupExternalAppId(install_options.install_url);
 
     // If the URL is not in web_app registrar,
     // then no external source has installed it.
@@ -182,10 +205,10 @@ void ExternallyManagedAppManagerImpl::MaybeStartNext() {
       return;
     }
 
-    if (registrar()->IsInstalled(app_id.value())) {
+    if (lock.registrar().IsInstalled(app_id.value())) {
       if (install_options.wait_for_windows_closed &&
-          ui_manager()->GetNumWindowsForApp(app_id.value()) != 0) {
-        ui_manager()->NotifyOnAllAppWindowsClosed(
+          lock.ui_manager().GetNumWindowsForApp(app_id.value()) != 0) {
+        lock.ui_manager().NotifyOnAllAppWindowsClosed(
             app_id.value(),
             base::BindOnce(&ExternallyManagedAppManagerImpl::Install,
                            weak_ptr_factory_.GetWeakPtr(), install_options,
@@ -196,9 +219,9 @@ void ExternallyManagedAppManagerImpl::MaybeStartNext() {
       // If the app is already installed, only reinstall it if the app is a
       // placeholder app and the client asked for it to be reinstalled.
       if (install_options.reinstall_placeholder &&
-          registrar()->IsPlaceholderApp(app_id.value(),
-                                        ConvertExternalInstallSourceToSource(
-                                            install_options.install_source))) {
+          lock.registrar().IsPlaceholderApp(
+              app_id.value(), ConvertExternalInstallSourceToSource(
+                                  install_options.install_source))) {
         StartInstallationTask(std::move(front));
         return;
       }
@@ -211,7 +234,7 @@ void ExternallyManagedAppManagerImpl::MaybeStartNext() {
         return;
       } else {
         // Add install source before returning the result.
-        ScopedRegistryUpdate update(sync_bridge());
+        ScopedRegistryUpdate update(&lock.sync_bridge());
         WebApp* app_to_update = update->UpdateApp(app_id.value());
         app_to_update->AddSource(ConvertExternalInstallSourceToSource(
             install_options.install_source));
@@ -244,6 +267,9 @@ void ExternallyManagedAppManagerImpl::MaybeStartNext() {
 
 void ExternallyManagedAppManagerImpl::StartInstallationTask(
     std::unique_ptr<TaskAndCallback> task) {
+  if (IsShuttingDown()) {
+    return;
+  }
   DCHECK(!current_install_);
   DCHECK(!is_in_shutdown_);
   if (current_registration_) {
@@ -261,7 +287,7 @@ void ExternallyManagedAppManagerImpl::StartInstallationTask(
 }
 
 bool ExternallyManagedAppManagerImpl::RunNextRegistration() {
-  if (pending_registrations_.empty()) {
+  if (pending_registrations_.empty() || IsShuttingDown()) {
     if (registrations_complete_callback_)
       std::move(registrations_complete_callback_).Run();
     return false;
@@ -274,9 +300,10 @@ bool ExternallyManagedAppManagerImpl::RunNextRegistration() {
 }
 
 void ExternallyManagedAppManagerImpl::CreateWebContentsIfNecessary() {
-  DCHECK(!is_in_shutdown_);
-  if (web_contents_)
+  DCHECK(!IsShuttingDown());
+  if (web_contents_) {
     return;
+  }
 
   web_contents_ = content::WebContents::Create(
       content::WebContents::CreateParams(profile_));
@@ -308,6 +335,10 @@ void ExternallyManagedAppManagerImpl::MaybeEnqueueServiceWorkerRegistration(
     return;
   }
 
+  if (IsShuttingDown()) {
+    return;
+  }
+
   if (install_options.only_use_app_info_factory)
     return;
 
@@ -333,6 +364,10 @@ void ExternallyManagedAppManagerImpl::MaybeEnqueueServiceWorkerRegistration(
     return;
 
   pending_registrations_.push_back(url);
+}
+
+bool ExternallyManagedAppManagerImpl::IsShuttingDown() {
+  return is_in_shutdown_ || profile()->ShutdownStarted();
 }
 
 }  // namespace web_app

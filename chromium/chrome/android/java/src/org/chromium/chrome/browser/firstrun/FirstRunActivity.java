@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.firstrun;
 
 import android.app.Activity;
 import android.content.res.Configuration;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
@@ -26,7 +25,6 @@ import org.chromium.base.Promise;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.BackPressHelper;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.fonts.FontPreloader;
 import org.chromium.chrome.browser.metrics.UmaUtils;
@@ -47,10 +45,12 @@ import java.util.function.BooleanSupplier;
 
 // Vivaldi
 import android.content.Intent;
+import android.os.Build;
 
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.ui.widget.Toast;
+import org.vivaldi.browser.adblock.AdblockManager;
 import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.firstrun.VivaldiFirstRunFragment;
 
@@ -138,15 +138,6 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
      * The pager adapter, which provides the pages to the view pager widget.
      */
     private FirstRunPagerAdapter mPagerAdapter;
-
-    @Override
-    protected void onPreCreate() {
-        super.onPreCreate();
-        BackPressHelper.create(this, getOnBackPressedDispatcher(), () -> {
-            handleBackPressed();
-            return true;
-        });
-    }
 
     private boolean isFlowKnown() {
         return mFreProperties != null;
@@ -451,23 +442,17 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
                     activity.finish();
                 } else {
                     activity.finishAndRemoveTask();
-                    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.LOLLIPOP_MR1) {
-                        // On L ApiCompatibilityUtils.finishAndRemoveTask() sometimes fails. Try one
-                        // last time, see crbug.com/781396 for origin of this approach.
-                        if (!activity.isFinishing()) {
-                            activity.finish();
-                        }
-                    }
                 }
             }
         }
     }
 
-    private void handleBackPressed() {
+    @Override
+    public @BackPressResult int handleBackPress() {
         // Terminate if we are still waiting for the native or for Android EDU / GAIA Child checks.
         if (!mPostNativeAndPolicyPagesCreated) {
             abortFirstRunExperience();
-            return;
+            return BackPressResult.SUCCESS;
         }
 
         mFirstRunFlowSequencer.updateFirstRunProperties(mFreProperties);
@@ -482,6 +467,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         } else {
             setCurrentItemForPager(position);
         }
+        return BackPressResult.SUCCESS;
     }
 
     // FirstRunPageDelegate:
@@ -575,15 +561,23 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
     public void acceptTermsOfService(boolean allowMetricsAndCrashUploading) {
         assert mNativeInitializationPromise.isFulfilled();
 
+        if (!ChromeApplicationImpl.isVivaldi()) {
         // If default is true then it corresponds to opt-out and false corresponds to opt-in.
         UmaUtils.recordMetricsReportingDefaultOptIn(!DEFAULT_METRICS_AND_CRASH_REPORTING);
         RecordHistogram.recordMediumTimesHistogram("MobileFre.FromLaunch.TosAccepted",
                 SystemClock.elapsedRealtime() - mIntentCreationElapsedRealtimeMs);
+        }
         FirstRunUtils.acceptTermsOfService(allowMetricsAndCrashUploading);
         FirstRunStatus.setSkipWelcomePage(true);
         flushPersistentData();
 
         if (sObserver != null) sObserver.onAcceptTermsOfService(this);
+
+
+        // Vivaldi - Initialize Ad-blocker JNI
+        if (ChromeApplicationImpl.isVivaldi()) {
+            AdblockManager.getInstance().initialize();
+        }
     }
 
     /** Initialize local state from launch intent and from saved instance state. */

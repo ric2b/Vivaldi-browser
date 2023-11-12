@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/apps/app_shim/app_shim_host_bootstrap_mac.h"
 #include "chrome/common/chrome_features.h"
@@ -44,6 +44,13 @@ AppShimHost::AppShimHost(AppShimHost::Client* client,
 
 AppShimHost::~AppShimHost() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // If this instance gets destructed while a test is still waiting for it to be
+  // connected, we should unblock the test. The shim would have never connected,
+  // but unblocking the test at least can cause the test to fail gracefully
+  // rather than timeout waiting for something that will never happen.
+  if (on_shim_connected_for_testing_) {
+    std::move(on_shim_connected_for_testing_).Run();
+  }
 }
 
 void AppShimHost::ChannelError(uint32_t custom_reason,

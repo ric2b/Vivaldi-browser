@@ -4,7 +4,7 @@
 
 #include "net/nqe/network_quality_store.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/observer_list.h"
 #include "base/task/single_thread_task_runner.h"
@@ -174,7 +174,8 @@ void NetworkQualityStore::AddNetworkQualitiesCacheObserver(
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,
       base::BindOnce(&NetworkQualityStore::NotifyCacheObserverIfPresent,
-                     weak_ptr_factory_.GetWeakPtr(), observer));
+                     weak_ptr_factory_.GetWeakPtr(),
+                     base::UnsafeDangling(observer)));
 }
 
 void NetworkQualityStore::RemoveNetworkQualitiesCacheObserver(
@@ -184,7 +185,7 @@ void NetworkQualityStore::RemoveNetworkQualitiesCacheObserver(
 }
 
 void NetworkQualityStore::NotifyCacheObserverIfPresent(
-    NetworkQualitiesCacheObserver* observer) const {
+    MayBeDangling<NetworkQualitiesCacheObserver> observer) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!network_qualities_cache_observer_list_.HasObserver(observer))

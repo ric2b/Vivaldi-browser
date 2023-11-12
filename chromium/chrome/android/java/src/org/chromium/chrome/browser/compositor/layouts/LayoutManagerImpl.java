@@ -216,8 +216,8 @@ public class LayoutManagerImpl
         }
 
         @Override
-        public void didAddTab(
-                Tab tab, @TabLaunchType int launchType, @TabCreationState int creationState) {
+        public void didAddTab(Tab tab, @TabLaunchType int launchType,
+                @TabCreationState int creationState, boolean markedForSelection) {
             int tabId = tab.getId();
             if (launchType == TabLaunchType.FROM_RESTORE) {
                 getActiveLayout().onTabRestored(time(), tabId);
@@ -1201,14 +1201,14 @@ public class LayoutManagerImpl
     }
 
     @Override
-    public void handleBackPress() {
+    public @BackPressResult int handleBackPress() {
         for (SceneOverlay sceneOverlay : mSceneOverlays) {
             Boolean enabled = sceneOverlay.getHandleBackPressChangedSupplier().get();
             if (enabled != null && enabled) {
-                sceneOverlay.handleBackPress();
-                return;
+                return sceneOverlay.handleBackPress();
             }
         }
+        return BackPressResult.FAILURE;
     }
 
     @Override

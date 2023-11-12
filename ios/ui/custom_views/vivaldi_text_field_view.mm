@@ -8,6 +8,7 @@
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/custom_views/custom_view_constants.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -34,17 +35,29 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
 @property(nonatomic,weak) UITextField* textField;
 // Textfield text clear button
 @property(nonatomic,weak) UIButton* deleteTextButton;
+// The underline view.
+@property(nonatomic,weak) UIView* underlineView;
+// Boolean to keep track whether current instance corresponding URL.
+@property(nonatomic,assign) BOOL isURLMode;
+// Validation type for current instance of text field.
+@property(nonatomic,assign) URLValidationType validationType;
 @end
 
 @implementation VivaldiTextFieldView
 
 @synthesize textField = _textField;
 @synthesize deleteTextButton = _deleteTextButton;
+@synthesize underlineView = _underlineView;
+@synthesize isURLMode = _isURLMode;
+@synthesize validationType = _validationType;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithPlaceholder:(NSString*)placeholder {
   if (self = [super initWithFrame:CGRectZero]) {
     self.backgroundColor = UIColor.clearColor;
+    self.isURLMode = NO;
+    self.validateScheme = NO;
+    self.validationType = URLTypeGeneric;
     [self setUpUI];
     [self setPlaceholder:placeholder];
   }
@@ -95,6 +108,7 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
   // Bottom underline
   UIView* underlineView = [UIView new];
   underlineView.backgroundColor = UIColor.quaternaryLabelColor;
+  _underlineView = underlineView;
 
   [self addSubview:underlineView];
   [underlineView anchorTop:textField.bottomAnchor
@@ -113,6 +127,18 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
 }
 
 #pragma mark - UITextFieldDelegate
+- (BOOL)textField:(UITextField*)textField
+    shouldChangeCharactersInRange:(NSRange)range
+    replacementString:(NSString*)string {
+    NSString *updatedText = [textField.text
+                             stringByReplacingCharactersInRange:range
+                             withString:string];
+  if (self.isURLMode) {
+    [self validateInput:updatedText];
+  }
+
+  return YES;
+}
 
 -(void)textFieldDidBeginEditing:(UITextField *)textField {
   if ([self.textField hasText] && self.deleteTextButton.alpha == 0) {
@@ -147,6 +173,49 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
   [UIView animateWithDuration:0.3 animations:^{
     [self.deleteTextButton setAlpha:0];
   }];
+
+  // If 'URL' mode, reset the underline when there's no text on the textfield.
+  [self highlightUnderlineWithValidInput:YES];
+}
+
+/// Highlight bottom underline red if entered text is invalid.
+/// Supports email only now.
+
+- (void)validateInput:(NSString*)input {
+  // if 'URL' mode, check whether entered text is value URL and make the
+  // underline highlighted.
+  BOOL isValidInput = self.isURLMode && [self hasText];
+
+  switch (self.validationType) {
+    case URLTypeDomain:
+      isValidInput = isValidInput && [VivaldiGlobalHelpers isValidDomain:input];
+      break;
+    case URLTypeGeneric:
+      isValidInput = isValidInput && [VivaldiGlobalHelpers isValidURL:input];
+      break;
+    default:
+      break;
+  }
+
+  // If scheme is enforced to have with the URL, go through additional step.
+  // At this moment only adding ad and tracker blocker sources enforce it.
+  if (_validateScheme)
+    isValidInput = isValidInput &&
+        [VivaldiGlobalHelpers urlStringHasHTTPorHTTPS:input];
+
+  [self highlightUnderlineWithValidInput:isValidInput];
+}
+
+- (void)highlightUnderlineWithValidInput:(BOOL)isValidInput {
+  __weak __typeof(self) weakSelf = self;
+  [UIView transitionWithView:self.underlineView
+                    duration:0.3
+                     options:UIViewAnimationOptionTransitionCrossDissolve
+                  animations:^{
+    weakSelf.underlineView.backgroundColor =
+          isValidInput ? UIColor.quaternaryLabelColor : UIColor.vSystemRed;
+  }
+                  completion:nil];
 }
 
 #pragma mark - SETTERS
@@ -161,9 +230,14 @@ const CGSize underlineSize = CGSizeMake(0.0, 1.0);
 }
 
 - (void)setURLMode {
+  self.isURLMode = YES;
   self.textField.autocapitalizationType =
     UITextAutocapitalizationTypeNone;
   self.textField.keyboardType = UIKeyboardTypeURL;
+}
+
+- (void)setURLValidationType:(URLValidationType)type {
+  self.validationType = type;
 }
 
 #pragma mark - GETTERS

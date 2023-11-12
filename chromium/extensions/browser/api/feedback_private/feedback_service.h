@@ -5,7 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_API_FEEDBACK_PRIVATE_FEEDBACK_SERVICE_H_
 #define EXTENSIONS_BROWSER_API_FEEDBACK_PRIVATE_FEEDBACK_SERVICE_H_
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_base.h"
@@ -34,6 +34,8 @@ struct FeedbackParams {
   bool send_histograms = false;
   // If true, include bluetooth logs in the feedback.
   bool send_bluetooth_logs = false;
+  // If true, include autofill metadata in the feedback.
+  bool send_autofill_metadata = false;
   // The time when the feedback form submission was received by the backend.
   base::TimeTicks form_submit_time;
 };

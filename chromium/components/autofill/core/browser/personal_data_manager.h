@@ -20,10 +20,9 @@
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
 #include "build/build_config.h"
-#include "components/autofill/core/browser/autofill_profile_save_strike_database.h"
-#include "components/autofill/core/browser/autofill_profile_update_strike_database.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
 #include "components/autofill/core/browser/data_model/iban.h"
@@ -33,7 +32,10 @@
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
 #include "components/autofill/core/browser/personal_data_manager_cleaner.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
-#include "components/autofill/core/browser/strike_database_base.h"
+#include "components/autofill/core/browser/strike_databases/autofill_profile_migration_strike_database.h"
+#include "components/autofill/core/browser/strike_databases/autofill_profile_save_strike_database.h"
+#include "components/autofill/core/browser/strike_databases/autofill_profile_update_strike_database.h"
+#include "components/autofill/core/browser/strike_databases/strike_database_base.h"
 #include "components/autofill/core/browser/sync_utils.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
 #include "components/autofill/core/browser/webdata/autofill_change.h"
@@ -48,6 +50,7 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/driver/sync_service_observer.h"
 #include "components/webdata/common/web_data_service_consumer.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class Profile;
 class PrefService;
@@ -139,11 +142,16 @@ class PersonalDataManager : public KeyedService,
   void OnSyncShutdown(syncer::SyncService* sync) override;
 
   // AccountInfoGetter:
+  // TODO(1411720): Make it return absl::optional.
   CoreAccountInfo GetAccountInfoForPaymentsServer() const override;
   bool IsSyncFeatureEnabled() const override;
 
   // signin::IdentityManager::Observer:
   void OnAccountsCookieDeletedByUserAction() override;
+
+  // Returns the account info of currently signed-in user, or absl::nullopt if
+  // the user is not signed-in or the identity manager is not available.
+  absl::optional<CoreAccountInfo> GetPrimaryAccountInfo() const;
 
   // Returns the current sync status.
   virtual AutofillSyncSigninState GetSyncSigninState() const;
@@ -201,13 +209,16 @@ class PersonalDataManager : public KeyedService,
 
   // Returns the profile with the specified |guid|, or nullptr if there is no
   // profile with the specified |guid|.
-  virtual AutofillProfile* GetProfileByGUID(const std::string& guid);
+  virtual AutofillProfile* GetProfileByGUID(const std::string& guid) const;
 
-  // Returns the profile with the specified |guid| from the given |profiles|, or
-  // nullptr if there is no profile with the specified |guid|.
-  static AutofillProfile* GetProfileFromProfilesByGUID(
-      const std::string& guid,
-      const std::vector<AutofillProfile*>& profiles);
+  // Migrates a given kLocalOrSyncable `profile` to source kAccount. This has
+  // multiple side-effects for the profile:
+  // - It is stored in a different backend.
+  // - It receives a new GUID.
+  // Like all database operations, the migration happens asynchronously.
+  // `profile` (the kLocalOrSyncable one) will not be available in the
+  // PersonalDataManager anymore once the migrating has finished.
+  void MigrateProfileToAccount(const AutofillProfile& profile);
 
   // Adds `iban` to the web database as a local IBAN. Returns the guid of
   // `iban` if the add is successful, or an empty string otherwise.
@@ -370,10 +381,8 @@ class PersonalDataManager : public KeyedService,
 
   // Returns the credit cards to suggest to the user. Those have been deduped
   // and ordered by frecency with the expired cards put at the end of the
-  // vector. If |include_server_cards| is false, server side cards should not
-  // be included.
-  const std::vector<CreditCard*> GetCreditCardsToSuggest(
-      bool include_server_cards) const;
+  // vector.
+  const std::vector<CreditCard*> GetCreditCardsToSuggest() const;
 
   // Re-loads profiles, credit cards, and IBANs from the WebDatabase
   // asynchronously. In the general case, this is a no-op and will re-create
@@ -420,6 +429,9 @@ class PersonalDataManager : public KeyedService,
   // purposes. The value is calculated once and cached, so it will only update
   // when Chrome is restarted.
   virtual const std::string& GetCountryCodeForExperimentGroup() const;
+
+  // Returns all virtual card usage data linked to the credit card.
+  virtual std::vector<VirtualCardUsageData*> GetVirtualCardUsageData() const;
 
   // De-dupe credit card to suggest. Full server cards are preferred over their
   // local duplicates, and local cards are preferred over their masked server
@@ -501,6 +513,18 @@ class PersonalDataManager : public KeyedService,
   virtual void SetProfilesForAllSources(
       std::vector<AutofillProfile>* new_profiles);
 
+  // Returns true if a `kLocalOrSyncable` profile identified by its guid is
+  // blocked for migration to a `kAccount` profile.
+  bool IsProfileMigrationBlocked(const std::string& guid) const;
+
+  // Adds a strike to block a profile identified by its `guid` for migrations.
+  // Does nothing if the strike database is not available.
+  void AddStrikeToBlockProfileMigration(const std::string& guid);
+
+  // Removes potential strikes to block a profile identified by its `guid` for
+  // migrations. Does nothing if the strike database is not available.
+  void RemoveStrikesToBlockProfileMigration(const std::string& guid);
+
   // Returns true if the import of new profiles should be blocked on `url`.
   // Returns false if the strike database is not available, the `url` is not
   // valid or has no host.
@@ -527,6 +551,9 @@ class PersonalDataManager : public KeyedService,
   // Removes potential strikes to block a profile identified by its `guid` for
   // updates. Does nothing if the strike database is not available.
   void RemoveStrikesToBlockProfileUpdate(const std::string& guid);
+
+  // Returns true if Sync is enabled for `model_type`.
+  bool IsSyncEnabledFor(syncer::ModelType model_type) const;
 
   // Used to automatically import addresses without a prompt. Should only be
   // set to true in tests.
@@ -606,14 +633,23 @@ class PersonalDataManager : public KeyedService,
   friend void SetTestProfiles(Profile* base_profile,
                               std::vector<AutofillProfile>* profiles);
 
+  // Used to get a pointer to the strike database for migrating existing
+  // profiles. Note, the result can be a nullptr, for example, on incognito
+  // mode.
+  AutofillProfileMigrationStrikeDatabase* GetProfileMigrationStrikeDatabase();
+  virtual const AutofillProfileMigrationStrikeDatabase*
+  GetProfileMigrationStrikeDatabase() const;
+
   // Used to get a pointer to the strike database for importing new profiles.
-  // Note, the result can be a nullptr.
+  // Note, the result can be a nullptr, for example, on incognito
+  // mode.
   AutofillProfileSaveStrikeDatabase* GetProfileSaveStrikeDatabase();
   virtual const AutofillProfileSaveStrikeDatabase*
   GetProfileSaveStrikeDatabase() const;
 
   // Used to get a pointer to the strike database for updating existing
-  // profiles. Note, the result can be a nullptr.
+  // profiles. Note, the result can be a nullptr, for example, on incognito
+  // mode.
   AutofillProfileUpdateStrikeDatabase* GetProfileUpdateStrikeDatabase();
   virtual const AutofillProfileUpdateStrikeDatabase*
   GetProfileUpdateStrikeDatabase() const;
@@ -650,6 +686,9 @@ class PersonalDataManager : public KeyedService,
   // Loads the autofill offer data from the web database.
   virtual void LoadAutofillOffers();
 
+  // Loads the virtual card usage data from the web database
+  virtual void LoadVirtualCardUsageData();
+
   // Cancels a pending query to the local web database.  |handle| is a pointer
   // to the query handle.
   void CancelPendingLocalQuery(WebDataServiceBase::Handle* handle);
@@ -666,9 +705,17 @@ class PersonalDataManager : public KeyedService,
   // credit cards. On subsequent calls, does nothing.
   void LogStoredCreditCardMetrics() const;
 
+  // The first time this is called, logs an UMA metric about the user's autofill
+  // IBANs. On subsequent calls, does nothing.
+  void LogStoredIbanMetrics() const;
+
   // The first time this is called, logs UMA metrics about the users's autofill
   // offer data. On subsequent calls, does nothing.
   void LogStoredOfferMetrics() const;
+
+  // The first time this is called, logs UMA metrics about the users's autofill
+  // virtual card usage data. On subsequent calls, does nothing.
+  void LogStoredVirtualCardUsageMetrics() const;
 
   // Whether the server cards are enabled and should be suggested to the user.
   virtual bool ShouldSuggestServerCards() const;
@@ -737,6 +784,11 @@ class PersonalDataManager : public KeyedService,
   // The customized card art images for the URL.
   std::map<GURL, std::unique_ptr<gfx::Image>> credit_card_art_images_;
 
+  // Virtual card usage data, which contains information regarding usages of a
+  // virtual card related to a specific merchant website.
+  std::vector<std::unique_ptr<VirtualCardUsageData>>
+      autofill_virtual_card_usage_data_;
+
   // When the manager makes a request from WebDataServiceBase, the database
   // is queried on another sequence, we record the query handle until we
   // get called back.  We store handles for both profile and credit card queries
@@ -752,6 +804,7 @@ class PersonalDataManager : public KeyedService,
   WebDataServiceBase::Handle pending_customer_data_query_ = 0;
   WebDataServiceBase::Handle pending_upi_ids_query_ = 0;
   WebDataServiceBase::Handle pending_offer_data_query_ = 0;
+  WebDataServiceBase::Handle pending_virtual_card_usage_data_query_ = 0;
 
   // The observers.
   base::ObserverList<PersonalDataManagerObserver>::Unchecked observers_;
@@ -847,9 +900,6 @@ class PersonalDataManager : public KeyedService,
   // Returns if there are any pending queries to the web database.
   bool HasPendingQueries();
 
-  // Returns true if the sync is enabled for |model_type|.
-  bool IsSyncEnabledFor(syncer::ModelType model_type);
-
   // Returns the database that is used for storing local data.
   scoped_refptr<AutofillWebDataService> GetLocalDatabase();
 
@@ -922,8 +972,15 @@ class PersonalDataManager : public KeyedService,
   // Whether we have already logged the stored credit card metrics this session.
   mutable bool has_logged_stored_credit_card_metrics_ = false;
 
+  // Whether we have already logged the stored IBAN metrics this session.
+  mutable bool has_logged_stored_iban_metrics_ = false;
+
   // Whether we have already logged the stored offer metrics this session.
   mutable bool has_logged_stored_offer_metrics_ = false;
+
+  // Whether we have already logged the stored virtual card usage metrics this
+  // session.
+  mutable bool has_logged_stored_virtual_card_usage_metrics_ = false;
 
   // An observer to listen for changes to prefs::kAutofillCreditCardEnabled.
   std::unique_ptr<BooleanPrefMember> credit_card_enabled_pref_;
@@ -933,6 +990,11 @@ class PersonalDataManager : public KeyedService,
 
   // An observer to listen for changes to prefs::kAutofillWalletImportEnabled.
   std::unique_ptr<BooleanPrefMember> wallet_enabled_pref_;
+
+  // The database that is used to count guid-keyed strikes to suppress the
+  // migration-prompt of new profiles.
+  std::unique_ptr<AutofillProfileMigrationStrikeDatabase>
+      profile_migration_strike_database_;
 
   // The database that is used to count domain-keyed strikes to suppress the
   // import of new profiles.

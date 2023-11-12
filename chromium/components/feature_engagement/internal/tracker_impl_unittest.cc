@@ -8,10 +8,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_forward.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/task/sequenced_task_runner.h"
@@ -31,6 +31,9 @@
 #include "components/feature_engagement/internal/once_condition_validator.h"
 #include "components/feature_engagement/internal/stats.h"
 #include "components/feature_engagement/internal/time_provider.h"
+#include "components/feature_engagement/public/feature_constants.h"
+#include "components/feature_engagement/public/feature_list.h"
+#include "components/feature_engagement/test/scoped_iph_feature_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace feature_engagement {
@@ -51,6 +54,9 @@ BASE_FEATURE(kTrackerTestFeatureQux,
 BASE_FEATURE(kTrackerTestFeatureSnooze,
              "test_snooze",
              base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kTrackerTestGroupOne,
+             "test_group_one",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 void RegisterFeatureConfig(EditableConfiguration* configuration,
                            const base::Feature& feature,
@@ -62,12 +68,23 @@ void RegisterFeatureConfig(EditableConfiguration* configuration,
   config.used.name = feature.name + std::string("_used");
   config.trigger.name = feature.name + std::string("_trigger");
   config.trigger.storage = 1u;
+  config.groups = {"test_group_one"};
   config.tracking_only = tracking_only;
   if (snooze_params) {
     config.snooze_params.snooze_interval = 7u;
     config.snooze_params.max_limit = 3u;
   }
   configuration->SetConfiguration(&feature, config);
+}
+
+void RegisterGroupConfig(EditableConfiguration* configuration,
+                         const base::Feature& group,
+                         bool valid) {
+  GroupConfig config;
+  config.valid = valid;
+  config.trigger.name = group.name + std::string("_trigger");
+  config.trigger.storage = 1u;
+  configuration->SetConfiguration(&group, config);
 }
 
 // An OnInitializedCallback that stores whether it has been invoked and what
@@ -249,6 +266,8 @@ class TrackerImplTest : public ::testing::Test {
     RegisterFeatureConfig(configuration.get(), kTrackerTestFeatureSnooze,
                           true /* is_valid */, false /* tracking_only */,
                           true /* snooze_params */);
+    RegisterGroupConfig(configuration.get(), kTrackerTestGroupOne,
+                        true /* is_valid */);
 
     std::unique_ptr<TestTrackerInMemoryEventStore> event_store =
         CreateEventStore();
@@ -278,9 +297,8 @@ class TrackerImplTest : public ::testing::Test {
         std::move(condition_validator), std::move(time_provider));
   }
 
-  void VerifyEventTriggerEvents(const base::Feature& feature, uint32_t count) {
-    Event trigger_event = event_store_->GetEvent(
-        configuration_->GetFeatureConfig(feature).trigger.name);
+  void VerifyEventTrigger(std::string event_name, uint32_t count) {
+    Event trigger_event = event_store_->GetEvent(event_name);
     if (count == 0) {
       EXPECT_EQ(0, trigger_event.events_size());
       return;
@@ -289,6 +307,17 @@ class TrackerImplTest : public ::testing::Test {
     EXPECT_EQ(1, trigger_event.events_size());
     EXPECT_EQ(1u, trigger_event.events(0).day());
     EXPECT_EQ(count, trigger_event.events(0).count());
+  }
+
+  void VerifyEventTriggerEvents(const base::Feature& feature, uint32_t count) {
+    VerifyEventTrigger(configuration_->GetFeatureConfig(feature).trigger.name,
+                       count);
+  }
+
+  void VerifyGroupEventTriggerEvents(const base::Feature& group,
+                                     uint32_t count) {
+    VerifyEventTrigger(configuration_->GetGroupConfig(group).trigger.name,
+                       count);
   }
 
   void VerifyHistogramsForFeature(const std::string& histogram_name,
@@ -747,10 +776,13 @@ TEST_F(TrackerImplTest, TestTriggering) {
   // The first time a feature triggers it should be shown.
   EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
   VerifyEventTriggerEvents(kTrackerTestFeatureFoo, 1u);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 1u);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
   VerifyEventTriggerEvents(kTrackerTestFeatureFoo, 1u);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 1u);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureQux));
   VerifyEventTriggerEvents(kTrackerTestFeatureQux, 0);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 1u);
   VerifyUserActionsTriggerChecks(user_action_tester, 2, 0, 0, 1);
   VerifyUserActionsTriggered(user_action_tester, 1, 0, 0, 0);
   VerifyUserActionsNotTriggered(user_action_tester, 1, 0, 0, 1);
@@ -763,8 +795,10 @@ TEST_F(TrackerImplTest, TestTriggering) {
   // shown.
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
   VerifyEventTriggerEvents(kTrackerTestFeatureBar, 0);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 1u);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureQux));
   VerifyEventTriggerEvents(kTrackerTestFeatureQux, 0);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 1u);
   VerifyUserActionsTriggerChecks(user_action_tester, 2, 1, 0, 2);
   VerifyUserActionsTriggered(user_action_tester, 1, 0, 0, 0);
   VerifyUserActionsNotTriggered(user_action_tester, 1, 1, 0, 2);
@@ -777,10 +811,13 @@ TEST_F(TrackerImplTest, TestTriggering) {
   tracker_->Dismissed(kTrackerTestFeatureFoo);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
   VerifyEventTriggerEvents(kTrackerTestFeatureFoo, 1u);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 1u);
   EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
   VerifyEventTriggerEvents(kTrackerTestFeatureBar, 1u);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 2u);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureQux));
   VerifyEventTriggerEvents(kTrackerTestFeatureQux, 0);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 2u);
   VerifyUserActionsTriggerChecks(user_action_tester, 3, 2, 0, 3);
   VerifyUserActionsTriggered(user_action_tester, 1, 1, 0, 0);
   VerifyUserActionsNotTriggered(user_action_tester, 2, 1, 0, 3);
@@ -793,10 +830,13 @@ TEST_F(TrackerImplTest, TestTriggering) {
   tracker_->Dismissed(kTrackerTestFeatureBar);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
   VerifyEventTriggerEvents(kTrackerTestFeatureFoo, 1u);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 2u);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
   VerifyEventTriggerEvents(kTrackerTestFeatureBar, 1u);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 2u);
   EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureQux));
   VerifyEventTriggerEvents(kTrackerTestFeatureQux, 0);
+  VerifyGroupEventTriggerEvents(kTrackerTestGroupOne, 2u);
   VerifyUserActionsTriggerChecks(user_action_tester, 4, 3, 0, 4);
   VerifyUserActionsTriggered(user_action_tester, 1, 1, 0, 0);
   VerifyUserActionsNotTriggered(user_action_tester, 3, 2, 0, 4);
@@ -1181,5 +1221,258 @@ TEST_F(TrackerImplTest, MultipleShownTimeLogged) {
   histogram_tester_.ExpectUniqueTimeSample(histogram_name_bar, base::Seconds(3),
                                            1);
 }
+
+namespace test {
+
+class ScopedIphFeatureListTest : public TrackerImplTest {
+ public:
+  ScopedIphFeatureListTest() = default;
+  ~ScopedIphFeatureListTest() override = default;
+
+  void SetUp() override {
+    TrackerImplTest::SetUp();
+
+    // Ensure all initialization is finished.
+    StoringInitializedCallback callback;
+    tracker_->AddOnInitializedCallback(
+        base::BindOnce(&StoringInitializedCallback::OnInitialized,
+                       base::Unretained(&callback)));
+    base::RunLoop().RunUntilIdle();
+  }
+};
+
+TEST_F(ScopedIphFeatureListTest, InitWithNoFeaturesAllowed) {
+  ScopedIphFeatureList list;
+  list.InitWithNoFeaturesAllowed();
+  // Init should not have enabled any features.
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+  EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+}
+
+TEST_F(ScopedIphFeatureListTest, InitWithNoFeaturesAllowed_AllowedAfterReset) {
+  ScopedIphFeatureList list;
+  list.InitWithNoFeaturesAllowed();
+  list.Reset();
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest,
+       InitWithNoFeaturesAllowed_AllowedAfterDestruct) {
+  {
+    ScopedIphFeatureList list;
+    list.InitWithNoFeaturesAllowed();
+  }
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitWithExistingFeatures) {
+  ScopedIphFeatureList list;
+  list.InitWithExistingFeatures({kTrackerTestFeatureFoo});
+  // Init should not have enabled any features.
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+
+  EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitWithExistingFeatures_AllowedAfterReset) {
+  ScopedIphFeatureList list;
+  list.InitWithExistingFeatures({kTrackerTestFeatureFoo});
+  list.Reset();
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest,
+       InitWithExistingFeatures_AllowedAfterDestruct) {
+  {
+    ScopedIphFeatureList list;
+    list.InitWithExistingFeatures({kTrackerTestFeatureFoo});
+  }
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitForDemo) {
+  ScopedIphFeatureList list;
+  list.InitForDemo(kTrackerTestFeatureFoo);
+
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kIPHDemoMode));
+  EXPECT_EQ(kTrackerTestFeatureFoo.name,
+            base::GetFieldTrialParamValueByFeature(
+                kIPHDemoMode, kIPHDemoModeFeatureChoiceParam));
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+
+  EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitForDemo_Reset) {
+  ScopedIphFeatureList list;
+  list.InitForDemo(kTrackerTestFeatureFoo);
+  list.Reset();
+
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kIPHDemoMode));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitForDemo_Destruct) {
+  {
+    ScopedIphFeatureList list;
+    list.InitForDemo(kTrackerTestFeatureFoo);
+  }
+
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kIPHDemoMode));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitAndEnableFeatures) {
+  ScopedIphFeatureList list;
+  list.InitAndEnableFeatures({kTrackerTestFeatureFoo, kTrackerTestFeatureBaz});
+
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kTrackerTestFeatureBaz));
+
+  EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitAndEnableFeatures_Reset) {
+  ScopedIphFeatureList list;
+  list.InitAndEnableFeatures({kTrackerTestFeatureFoo, kTrackerTestFeatureBaz});
+  list.Reset();
+
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureBaz));
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitAndEnableFeatures_Destruct) {
+  {
+    ScopedIphFeatureList list;
+    list.InitAndEnableFeatures(
+        {kTrackerTestFeatureFoo, kTrackerTestFeatureBaz});
+  }
+
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureBaz));
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitAndEnableFeaturesWithParameters) {
+  ScopedIphFeatureList list;
+  list.InitAndEnableFeaturesWithParameters(
+      {{kTrackerTestFeatureFoo, {{"x_foo", "1"}}},
+       {kTrackerTestFeatureBaz, {{"x_bar", "2"}, {"x_baz", "3"}}}});
+
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+  EXPECT_EQ("1", base::GetFieldTrialParamValueByFeature(kTrackerTestFeatureFoo,
+                                                        "x_foo"));
+  EXPECT_TRUE(base::FeatureList::IsEnabled(kTrackerTestFeatureBaz));
+  EXPECT_EQ("2", base::GetFieldTrialParamValueByFeature(kTrackerTestFeatureBaz,
+                                                        "x_bar"));
+  EXPECT_EQ("3", base::GetFieldTrialParamValueByFeature(kTrackerTestFeatureBaz,
+                                                        "x_baz"));
+
+  EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitAndEnableFeaturesWithParameters_Reset) {
+  ScopedIphFeatureList list;
+  list.InitAndEnableFeaturesWithParameters(
+      {{kTrackerTestFeatureFoo, {{"x_foo", "1"}}},
+       {kTrackerTestFeatureBaz, {{"x_bar", "2"}, {"x_baz", "3"}}}});
+  list.Reset();
+
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureBaz));
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest, InitAndEnableFeaturesWithParameters_Destruct) {
+  {
+    ScopedIphFeatureList list;
+    list.InitAndEnableFeaturesWithParameters(
+        {{kTrackerTestFeatureFoo, {{"x_foo", "1"}}},
+         {kTrackerTestFeatureBaz, {{"x_bar", "2"}, {"x_baz", "3"}}}});
+  }
+
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureFoo));
+  EXPECT_FALSE(base::FeatureList::IsEnabled(kTrackerTestFeatureBaz));
+
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+TEST_F(ScopedIphFeatureListTest, NestedScopes) {
+  ScopedIphFeatureList list1;
+  ScopedIphFeatureList list2;
+  ScopedIphFeatureList list3;
+  list1.InitWithNoFeaturesAllowed();
+  list2.InitWithExistingFeatures({kTrackerTestFeatureFoo});
+  EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  list3.InitWithExistingFeatures({kTrackerTestFeatureBar});
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest, NestedScopes_DestructInWrongOrder) {
+  ScopedIphFeatureList list1;
+  ScopedIphFeatureList list2;
+  ScopedIphFeatureList list3;
+  list1.InitWithNoFeaturesAllowed();
+  list2.InitWithExistingFeatures({kTrackerTestFeatureFoo});
+  list3.InitWithExistingFeatures({kTrackerTestFeatureBar});
+  list1.Reset();
+  list2.Reset();
+  // Destroyed the scope that allowed Foo, but not the one that allowed Bar.
+  EXPECT_FALSE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+  list3.Reset();
+
+  // Now there are no more scopes, so all IPH are allowed.
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+  tracker_->Dismissed(kTrackerTestFeatureFoo);
+}
+
+TEST_F(ScopedIphFeatureListTest, NestedScopes_SameFeature) {
+  ScopedIphFeatureList list1;
+  list1.InitWithExistingFeatures({kTrackerTestFeatureBar});
+  {
+    ScopedIphFeatureList list2;
+    list2.InitWithExistingFeatures(
+        {kTrackerTestFeatureFoo, kTrackerTestFeatureBar});
+    EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureFoo));
+    tracker_->Dismissed(kTrackerTestFeatureFoo);
+  }
+  EXPECT_TRUE(tracker_->ShouldTriggerHelpUI(kTrackerTestFeatureBar));
+  tracker_->Dismissed(kTrackerTestFeatureBar);
+}
+
+}  // namespace test
 
 }  // namespace feature_engagement

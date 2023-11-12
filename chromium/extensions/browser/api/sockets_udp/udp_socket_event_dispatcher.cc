@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/task/single_thread_task_runner.h"
 #include "content/public/browser/browser_thread.h"
@@ -51,14 +51,14 @@ UDPSocketEventDispatcher::UDPSocketEventDispatcher(
   sockets_ = manager->data_;
 }
 
-UDPSocketEventDispatcher::~UDPSocketEventDispatcher() {}
+UDPSocketEventDispatcher::~UDPSocketEventDispatcher() = default;
 
-UDPSocketEventDispatcher::ReceiveParams::ReceiveParams() {}
+UDPSocketEventDispatcher::ReceiveParams::ReceiveParams() = default;
 
 UDPSocketEventDispatcher::ReceiveParams::ReceiveParams(
     const ReceiveParams& other) = default;
 
-UDPSocketEventDispatcher::ReceiveParams::~ReceiveParams() {}
+UDPSocketEventDispatcher::ReceiveParams::~ReceiveParams() = default;
 
 void UDPSocketEventDispatcher::OnSocketBind(const std::string& extension_id,
                                             int socket_id) {

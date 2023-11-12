@@ -10,12 +10,12 @@
 #include <map>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
@@ -29,6 +29,7 @@
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
+#include "components/services/storage/public/mojom/service_worker_database.mojom-forward.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/back_forward_cache_can_store_document_result.h"
@@ -49,6 +50,8 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/result_codes.h"
+#include "crypto/secure_hash.h"
+#include "crypto/sha2.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/c/system/types.h"
 #include "net/base/net_errors.h"
@@ -66,18 +69,8 @@ namespace {
 // Timeout for an installed worker to start.
 constexpr base::TimeDelta kStartInstalledWorkerTimeout = base::Seconds(60);
 
-// Timeout for a request to be handled.
-constexpr base::TimeDelta kRequestTimeout = base::Minutes(5);
-
 const base::FeatureParam<int> kUpdateDelayParam{
     &blink::features::kServiceWorkerUpdateDelay, "update_delay_in_ms", 1000};
-
-// The default value is set to max since it's not used when the feature is
-// disabled. In that case, the service worker will be terminated by the idle
-// timeout.
-const base::FeatureParam<int> kTerminationDelayParam{
-    &features::kServiceWorkerTerminationOnNoControllee,
-    "termination_delay_in_ms", std::numeric_limits<int>::max()};
 
 const char kClaimClientsStateErrorMesage[] =
     "Only the active worker can claim clients.";
@@ -172,7 +165,7 @@ void DidShowPaymentHandlerWindow(
     int render_frame_id) {
   if (success) {
     service_worker_client_utils::DidNavigate(
-        context, url.DeprecatedGetOriginAsURL(), key,
+        context, url, key,
         base::BindOnce(&OnOpenWindowFinished, std::move(callback)),
         GlobalRenderFrameHostId(render_process_id, render_frame_id));
   } else {
@@ -211,6 +204,49 @@ const char* FetchHandlerTypeToSuffix(
     case ServiceWorkerVersion::FetchHandlerType::kEmptyFetchHandler:
       return "_EMPTY_FETCH_HANDLER";
   }
+}
+
+// This function merges SHA256 checksum hash strings in
+// ServiceWokrerResourceRecord and return a single hash string.
+absl::optional<std::string> MergeResourceRecordSHA256ScriptChecksum(
+    const GURL& main_script_url,
+    const ServiceWorkerScriptCacheMap& script_cache_map) {
+  const std::unique_ptr<crypto::SecureHash> checksum =
+      crypto::SecureHash::Create(crypto::SecureHash::SHA256);
+  std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources =
+      script_cache_map.GetResources();
+  // Sort |resources| by |sha256_checksum| value not to make the merged value
+  // inconsistent based on the script order.
+  std::sort(resources.begin(), resources.end(),
+            [](const storage::mojom::ServiceWorkerResourceRecordPtr& record1,
+               const storage::mojom::ServiceWorkerResourceRecordPtr& record2) {
+              if (record1->sha256_checksum && record2->sha256_checksum) {
+                return *record1->sha256_checksum < *record2->sha256_checksum;
+              }
+              return record1->sha256_checksum.has_value();
+            });
+
+  for (auto& resource : resources) {
+    if (!resource->sha256_checksum) {
+      return absl::nullopt;
+    }
+    // This may not be the case because we use the fixed length string, but
+    // insert a delimiter here to distinguish following cases to avoid hash
+    // value collisions: ab,cdef vs abcd,ef
+    const std::string checksum_with_delimiter =
+        *resource->sha256_checksum + "|";
+    checksum->Update(checksum_with_delimiter.data(),
+                     checksum_with_delimiter.size());
+  }
+
+  uint8_t result[crypto::kSHA256Length];
+  checksum->Finish(result, crypto::kSHA256Length);
+  const std::string encoded = base::HexEncode(result);
+
+  DVLOG(3) << "Updated ServiceWorker script checksum. script_url:"
+           << main_script_url.spec() << ", checksum:" << encoded;
+
+  return encoded;
 }
 
 }  // namespace
@@ -854,12 +890,6 @@ void ServiceWorkerVersion::AddControllee(
   // crash.
   CHECK(!base::Contains(controllee_map_, uuid));
 
-  // Set the idle timeout to the default value if there's no controllee and the
-  // worker is running because the worker's idle delay has been set to a shorter
-  // value when all controllee are gone.
-  MaybeUpdateIdleDelayForTerminationOnNoControllee(
-      base::Seconds(blink::mojom::kServiceWorkerDefaultIdleDelayInSeconds));
-
   controllee_map_[uuid] = container_host->GetWeakPtr();
   embedded_worker_->UpdateForegroundPriority();
   ClearTick(&no_controllees_time_);
@@ -901,11 +931,6 @@ void ServiceWorkerVersion::RemoveControllee(const std::string& client_uuid) {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&ServiceWorkerVersion::NotifyControlleeRemoved,
                                 weak_factory_.GetWeakPtr(), client_uuid));
-
-  // When a new controllee checks in before the delay passes, the idle delay
-  // is set to the default in AddControllee().
-  MaybeUpdateIdleDelayForTerminationOnNoControllee(
-      base::Milliseconds(kTerminationDelayParam.Get()));
 }
 
 void ServiceWorkerVersion::OnControlleeNavigationCommitted(
@@ -1215,6 +1240,10 @@ void ServiceWorkerVersion::SetTickClockForTesting(
   tick_clock_ = tick_clock;
 }
 
+void ServiceWorkerVersion::RunUserTasksForTesting() {
+  timeout_timer_.user_task().Run();
+}
+
 bool ServiceWorkerVersion::HasNoWork() const {
   return !HasWorkInBrowser() && worker_is_idle_on_renderer_;
 }
@@ -1309,6 +1338,16 @@ void ServiceWorkerVersion::OnStarted(
     }
   }
 
+  // Update |sha256_script_checksum_| if it's empty. This can happen when the
+  // script is updated and the new service worker version is created. This case
+  // ServiceWorkerVersion::SetResources() isn't called and
+  // |sha256_script_checksum_| should be empty. Calculate the checksum string
+  // with the script newly added/updated in |script_cache_map_|.
+  if (!sha256_script_checksum_) {
+    sha256_script_checksum_ =
+        MergeResourceRecordSHA256ScriptChecksum(script_url_, script_cache_map_);
+  }
+
   // Fire all start callbacks.
   scoped_refptr<ServiceWorkerVersion> protect(this);
   FinishStartWorker(status);
@@ -1322,9 +1361,6 @@ void ServiceWorkerVersion::OnStarted(
     for (const auto& [uuid, timeout_type] : pending_external_requests)
       StartExternalRequest(uuid, timeout_type);
   }
-
-  MaybeUpdateIdleDelayForTerminationOnNoControllee(
-      base::Milliseconds(kTerminationDelayParam.Get()));
 }
 
 void ServiceWorkerVersion::OnStopping() {
@@ -1839,33 +1875,33 @@ void ServiceWorkerVersion::CountFeature(blink::mojom::WebFeature feature) {
   }
 }
 
-void ServiceWorkerVersion::set_cross_origin_embedder_policy(
-    network::CrossOriginEmbedderPolicy cross_origin_embedder_policy) {
-  // Once it is set, the CrossOriginEmbedderPolicy is immutable.
-  DCHECK(!client_security_state_ ||
-         client_security_state_->cross_origin_embedder_policy.value ==
-             network::mojom::CrossOriginEmbedderPolicyValue::kNone ||
-         client_security_state_->cross_origin_embedder_policy ==
-             cross_origin_embedder_policy);
-  if (!client_security_state_) {
-    client_security_state_ = network::mojom::ClientSecurityState::New();
-  }
-  client_security_state_->cross_origin_embedder_policy =
-      std::move(cross_origin_embedder_policy);
-}
-
 network::mojom::CrossOriginEmbedderPolicyValue
 ServiceWorkerVersion::cross_origin_embedder_policy_value() const {
-  return client_security_state_
-             ? client_security_state_->cross_origin_embedder_policy.value
+  return policy_container_host_
+             ? policy_container_host_->cross_origin_embedder_policy().value
              : network::mojom::CrossOriginEmbedderPolicyValue::kNone;
 }
 
 const network::CrossOriginEmbedderPolicy*
 ServiceWorkerVersion::cross_origin_embedder_policy() const {
-  return client_security_state_
-             ? &client_security_state_->cross_origin_embedder_policy
+  return policy_container_host_
+             ? &policy_container_host_->cross_origin_embedder_policy()
              : nullptr;
+}
+
+const network::mojom::ClientSecurityStatePtr
+ServiceWorkerVersion::BuildClientSecurityState() const {
+  if (!policy_container_host_) {
+    return nullptr;
+  }
+
+  const PolicyContainerPolicies& policies = policy_container_host_->policies();
+  return network::mojom::ClientSecurityState::New(
+      policies.cross_origin_embedder_policy, policies.is_web_secure_context,
+      policies.ip_address_space,
+      DerivePrivateNetworkRequestPolicy(policies.ip_address_space,
+                                        policies.is_web_secure_context,
+                                        PrivateNetworkRequestContext::kWorker));
 }
 
 // static
@@ -2083,20 +2119,17 @@ void ServiceWorkerVersion::StartWorkerInternal() {
     params->policy_container =
         policy_container_host_->CreatePolicyContainerForBlink();
 
-    if (base::FeatureList::IsEnabled(
-            features::kPrivateNetworkAccessForWorkers)) {
-      if (!client_security_state_) {
-        client_security_state_ = network::mojom::ClientSecurityState::New();
-      }
-      client_security_state_->ip_address_space =
-          policy_container_host_->ip_address_space();
-      client_security_state_->is_web_secure_context =
-          policy_container_host_->policies().is_web_secure_context;
-      client_security_state_->private_network_request_policy =
-          DerivePrivateNetworkRequestPolicy(
-              policy_container_host_->policies(),
-              PrivateNetworkRequestContext::kWorker);
+    if (!client_security_state_) {
+      client_security_state_ = network::mojom::ClientSecurityState::New();
     }
+    client_security_state_->ip_address_space =
+        policy_container_host_->ip_address_space();
+    client_security_state_->is_web_secure_context =
+        policy_container_host_->policies().is_web_secure_context;
+    client_security_state_->private_network_request_policy =
+        DerivePrivateNetworkRequestPolicy(
+            policy_container_host_->policies(),
+            PrivateNetworkRequestContext::kWorker);
   }
 
   embedded_worker_->Start(std::move(params),
@@ -2580,11 +2613,9 @@ void ServiceWorkerVersion::PrepareForUpdate(
     std::map<GURL, ServiceWorkerUpdateChecker::ComparedScriptInfo>
         compared_script_info_map,
     const GURL& updated_script_url,
-    scoped_refptr<PolicyContainerHost> policy_container_host,
-    network::CrossOriginEmbedderPolicy cross_origin_embedder_policy) {
+    scoped_refptr<PolicyContainerHost> policy_container_host) {
   compared_script_info_map_ = std::move(compared_script_info_map);
   updated_script_url_ = updated_script_url;
-  set_cross_origin_embedder_policy(cross_origin_embedder_policy);
   if (!GetContentClient()
            ->browser()
            ->ShouldServiceWorkerInheritPolicyContainerFromCreator(
@@ -2680,14 +2711,11 @@ ServiceWorkerVersion::RebindStorageReference() {
     case ServiceWorkerRegistration::Status::kIntact:
       break;
     case ServiceWorkerRegistration::Status::kUninstalling:
-    case ServiceWorkerRegistration::Status::kUninstalled: {
-      std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources;
-      script_cache_map_.GetResources(&resources);
-      for (auto& resource : resources) {
+    case ServiceWorkerRegistration::Status::kUninstalled:
+      for (auto& resource : script_cache_map_.GetResources()) {
         purgeable_resources.push_back(resource->resource_id);
       }
       break;
-    }
   }
 
   remote_reference_.reset();
@@ -2696,24 +2724,13 @@ ServiceWorkerVersion::RebindStorageReference() {
       remote_reference_.BindNewPipeAndPassReceiver());
 }
 
-void ServiceWorkerVersion::MaybeUpdateIdleDelayForTerminationOnNoControllee(
-    base::TimeDelta delay) {
-  if (!base::FeatureList::IsEnabled(
-          features::kServiceWorkerTerminationOnNoControllee) ||
-      HasControllee() || running_status() != EmbeddedWorkerStatus::RUNNING) {
-    return;
-  }
-
-  // The idle delay can be updated only when the worker is running.
-  bool update_idle_delay = running_status() == EmbeddedWorkerStatus::RUNNING;
-
-  // The idle delay should not be updated when the worker needs to be
-  // terminated ASAP so that the new worker can be activated soon.
-  update_idle_delay = update_idle_delay && !needs_to_be_terminated_asap_;
-
-  if (update_idle_delay) {
-    endpoint()->SetIdleDelay(delay);
-  }
+void ServiceWorkerVersion::SetResources(
+    const std::vector<storage::mojom::ServiceWorkerResourceRecordPtr>&
+        resources) {
+  DCHECK_EQ(status_, NEW);
+  DCHECK(!sha256_script_checksum_);
+  script_cache_map_.SetResources(resources);
+  sha256_script_checksum_ =
+      MergeResourceRecordSHA256ScriptChecksum(script_url_, script_cache_map_);
 }
-
 }  // namespace content

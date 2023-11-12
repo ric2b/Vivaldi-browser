@@ -55,9 +55,13 @@ by a child template that "extends" this file.
             android:name="android.permission.INTERACT_ACROSS_USERS_FULL"
             android:protectionLevel="signature"
             tools:ignore="ProtectedPermissions" />
+    <uses-permission
+            android:name="android.car.permission.CAR_VENDOR_EXTENSION"
+            android:protectionLevel="signature"
+            tools:ignore="ProtectedPermissions" />
     {% endif %}
 
-    {% if is_oem_renault_build == 'true' %}
+    {% if is_oem_automotive_build == 'true' %}
     <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
     {% endif %}
 
@@ -103,6 +107,9 @@ by a child template that "extends" this file.
     <!-- Vivaldi/Automotive -->
     {% if is_oem_automotive_build == 'false' %}
     <uses-permission-sdk-23 android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.CAMERA" />
+    {% endif %}
+    {% if is_oem_mercedes_build == 'true' %}
     <uses-permission android:name="android.permission.CAMERA" />
     {% endif %}
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
@@ -197,6 +204,10 @@ by a child template that "extends" this file.
     <!-- Vivaldi/Automotive -->
     {% if is_oem_automotive_build == 'false' %}
     <!-- android.permission.CAMERA -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    {% endif %}
+    {% if is_oem_mercedes_build == 'true' %}
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     {% endif %}
@@ -310,6 +321,12 @@ by a child template that "extends" this file.
                 <data android:mimeType="text/html"/>
                 <data android:mimeType="text/plain"/>
                 <data android:mimeType="application/xhtml+xml"/>
+            </intent-filter>
+            <!-- URL share intent support. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain"/>
             </intent-filter>
             <!-- content URI support. -->
             <intent-filter>
@@ -552,7 +569,7 @@ by a child template that "extends" this file.
             {% endif %} {# Vivaldi/Automotive #}
             {% block chrome_activity_common %}
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|density|navigation"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize|uiMode|navigation"
             android:hardwareAccelerated="false"
             {% endblock %}
         >
@@ -657,6 +674,16 @@ by a child template that "extends" this file.
             {{ self.supports_vr() }}
         </activity>
         {% endif %}
+        {% set enable_cardboard = enable_cardboard|default(0) %}
+        {% if enable_cardboard == "true" %}
+        <!-- Based on //third_party/cardboard/src/sdk/qrcode/android/AndroidManifest.xml -->
+        <activity
+            android:name="com.google.cardboard.sdk.QrCodeCaptureActivity"
+            android:exported="false"
+            android:label="@string/title_activity_qr_code_capture"
+            android:theme="@style/Theme.AppCompat.NoActionBar">
+        </activity>
+        {% endif %}
         <activity android:name="org.chromium.chrome.browser.signin.SyncConsentActivity"
             android:theme="@style/Theme.Chromium.DialogWhenLarge"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
@@ -714,14 +741,8 @@ by a child template that "extends" this file.
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
-        <activity android:name="org.vivaldi.browser.panels.PanelActivity"
-            android:theme="@style/PanelActivityTheme"
-            android:windowSoftInputMode="stateAlwaysHidden|adjustPan"
-            android:exported="false"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
-        </activity>
         <activity android:name="org.vivaldi.browser.translate.TranslateHistoryActivity"
-            android:theme="@style/PanelActivityTheme"
+            android:theme="@style/Theme.Chromium.TabbedMode"
             android:windowSoftInputMode="stateAlwaysHidden|adjustPan"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
@@ -795,7 +816,7 @@ by a child template that "extends" this file.
             android:exported="false">
         </activity>
         <activity android:name="org.vivaldi.browser.appmenu.AppMenuSelectionActivity"
-            android:theme="@style/Theme.Chromium.DialogWhenLarge"
+            android:theme="@style/Theme.Vivaldi.Preferences"
             android:exported="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
@@ -803,6 +824,16 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
+        {% if is_oem_lynkco_build == 'true' %}
+        <activity
+            android:name="com.lynkco.connected.incar.commonframework.ui.activity.onboarding.OnboardingActivity"
+            android:theme="@style/Theme.MaterialComponents"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:noHistory="true">
+        </activity>
+        {% endif %}
         <!-- End Vivaldi -->
         <!-- Not used by vivaldi >
         <activity android:name="org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity"
@@ -1095,6 +1126,10 @@ by a child template that "extends" this file.
             android:name="org.chromium.chrome.browser.browserservices.ui.trustedwebactivity.DisclosureAcceptanceBroadcastReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name="org.chromium.chrome.browser.webapps.WebApkInstallBroadcastReceiver"
+            android:exported="false" />
+
         <!-- Service for decoding images in a sandboxed process. -->
         <service
             android:description="@string/decoder_description"
@@ -1105,7 +1140,7 @@ by a child template that "extends" this file.
 
         <!-- Download foreground service -->
         <service android:name="org.chromium.chrome.browser.download.DownloadForegroundService"
-            android:exported="false">
+           android:foregroundServiceType="dataSync" android:exported="false">
         </service>
 
         <!-- Download broadcast manager service -->
@@ -1241,15 +1276,6 @@ by a child template that "extends" this file.
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
 
-        <!-- Background Task Scheduler GCM task service -->
-        <service android:name="org.chromium.components.background_task_scheduler.internal.BackgroundTaskGcmTaskService"
-            android:permission="com.google.android.gms.permission.BIND_NETWORK_TASK_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.google.android.gms.gcm.ACTION_TASK_READY" />
-            </intent-filter>
-        </service>
-
         <!-- Background Task Scheduler alarm receiver -->
         <receiver android:name="org.chromium.components.background_task_scheduler.internal.BackgroundTaskBroadcastReceiver"
             android:exported="false" />
@@ -1373,19 +1399,19 @@ by a child template that "extends" this file.
         <service android:name="org.chromium.chrome.browser.media.MediaCaptureNotificationService"
             android:exported="false"/>
         <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerServices$PlaybackListenerService"
-            android:exported="false">
+            android:foregroundServiceType="mediaPlayback" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
         <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerServices$PresentationListenerService"
-            android:exported="false">
+            android:foregroundServiceType="mediaPlayback" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
         <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerServices$CastListenerService"
-            android:exported="false">
+            android:foregroundServiceType="mediaPlayback" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
@@ -1486,6 +1512,12 @@ by a child template that "extends" this file.
       <!-- ARCore APK integration -->
       <!-- This tag indicates that this application optionally uses ARCore. -->
       <meta-data android:name="com.google.ar.core" android:value="optional" />
+
+      {% block base_application_extra_arcore_definitions %}
+      <meta-data android:name="com.google.ar.core.session_settings"
+          android:value="allow_front_facing_motion_tracking_6dof," />
+      {% endblock base_application_extra_arcore_definitions %}
+
       {% endif %}
 
       <!-- Cast support -->

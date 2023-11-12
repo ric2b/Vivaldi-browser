@@ -26,6 +26,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image_skia.h"
+#include "web_app_install_info.h"
 
 class Profile;
 
@@ -39,6 +40,7 @@ namespace web_app {
 class FileUtilsWrapper;
 class WebAppRegistrar;
 
+using HomeTabIconBitmaps = std::vector<SkBitmap>;
 using SquareSizeDip = int;
 
 // Exclusively used from the UI thread.
@@ -79,6 +81,7 @@ class WebAppIconManager : public WebAppInstallManagerObserver {
     SquareSizePx size_px = 0;
     IconPurpose purpose = IconPurpose::ANY;
   };
+
   // For each of |purposes|, in the given order, looks for an icon with size at
   // least |min_icon_size|. Returns information on the first icon found.
   absl::optional<IconSizeAndPurpose> FindIconMatchBigger(
@@ -99,6 +102,17 @@ class WebAppIconManager : public WebAppInstallManagerObserver {
                  IconPurpose purpose,
                  const SortedSizesPx& icon_sizes,
                  ReadIconsCallback callback);
+
+  // Mimics WebAppShortcutsMenuItemInfo but stores timestamps instead of icons
+  // for os integration.
+  using ShortcutMenuIconTimes =
+      base::flat_map<IconPurpose, base::flat_map<SquareSizePx, base::Time>>;
+  using ShortcutIconDataVector = std::vector<ShortcutMenuIconTimes>;
+  using ShortcutIconDataCallback =
+      base::OnceCallback<void(ShortcutIconDataVector)>;
+
+  void ReadAllShortcutMenuIconsWithTimestamp(const AppId& app_id,
+                                             ShortcutIconDataCallback callback);
 
   using ReadIconsUpdateTimeCallback = base::OnceCallback<void(
       base::flat_map<SquareSizePx, base::Time> time_map)>;
@@ -122,6 +136,18 @@ class WebAppIconManager : public WebAppInstallManagerObserver {
   // Returns empty vector in |callback| if we hit any error.
   void ReadAllShortcutsMenuIcons(const AppId& app_id,
                                  ReadShortcutsMenuIconsCallback callback);
+
+  using ReadHomeTabIconsCallback =
+      base::OnceCallback<void(SkBitmap home_tab_icon_bitmap)>;
+
+  // Reads bitmap for the home tab icon. Returns a SkBitmap
+  // in |callback| if the icon exists. Otherwise, if it doesn't
+  // exist, the SkBitmap is empty.
+  void ReadBestHomeTabIcon(
+      const AppId& app_id,
+      const std::vector<blink::Manifest::ImageResource>& icons,
+      const SquareSizePx min_home_tab_icon_size_px,
+      ReadHomeTabIconsCallback callback);
 
   using ReadIconWithPurposeCallback =
       base::OnceCallback<void(IconPurpose, SkBitmap)>;

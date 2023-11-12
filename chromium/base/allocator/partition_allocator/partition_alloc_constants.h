@@ -13,6 +13,7 @@
 #include "base/allocator/partition_allocator/address_pool_manager_types.h"
 #include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/compiler_specific.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
 #include "base/allocator/partition_allocator/tagging.h"
@@ -189,7 +190,7 @@ constexpr size_t kHighThresholdForAlternateDistribution =
 //     +-----------------------+
 //
 // TagBitmap is only present when
-// defined(PA_ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS) is true.
+// PA_CONFIG(ENABLE_MTE_CHECKED_PTR_SUPPORT_WITH_64_BITS_POINTERS) is true.
 // Free Slot Bitmap is only present when USE_FREESLOT_BITMAP is true. State
 // Bitmap is inserted for partitions that may have quarantine enabled.
 //
@@ -260,12 +261,29 @@ constexpr size_t kSuperPageOffsetMask = kSuperPageAlignment - 1;
 constexpr size_t kSuperPageBaseMask = ~kSuperPageOffsetMask;
 
 // PartitionAlloc's address space is split into pools. See `glossary.md`.
-#if defined(PA_HAS_64_BITS_POINTERS)
-#if BUILDFLAG(ENABLE_PKEYS)
-constexpr size_t kNumPools = 4;
-#else
-constexpr size_t kNumPools = 3;
+
+enum pool_handle : unsigned {
+  kNullPoolHandle = 0u,
+
+  kRegularPoolHandle,
+  kBRPPoolHandle,
+#if BUILDFLAG(HAS_64_BIT_POINTERS)
+  kConfigurablePoolHandle,
 #endif
+
+// New pool_handles will be added here.
+
+#if BUILDFLAG(ENABLE_PKEYS)
+  // The pkey pool must come last since we pkey_mprotect its entry in the
+  // metadata tables, e.g. AddressPoolManager::aligned_pools_
+  kPkeyPoolHandle,
+#endif
+  kMaxPoolHandle
+};
+
+// kNullPoolHandle doesn't have metadata, hence - 1
+constexpr size_t kNumPools = kMaxPoolHandle - 1;
+
 // Maximum pool size. With exception of Configurable Pool, it is also
 // the actual size, unless PA_DYNAMICALLY_SELECT_POOL_SIZE is set, which
 // allows to choose a different size at initialization time for certain
@@ -277,23 +295,18 @@ constexpr size_t kNumPools = 3;
 //
 // When pointer compression is enabled, we cannot use large pools (at most
 // 8GB for each of the glued pools).
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || \
-    defined(PA_POINTER_COMPRESSION)
+#if BUILDFLAG(HAS_64_BIT_POINTERS)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || PA_CONFIG(POINTER_COMPRESSION)
 constexpr size_t kPoolMaxSize = 8 * kGiB;
 #else
 constexpr size_t kPoolMaxSize = 16 * kGiB;
 #endif
-#else  // defined(PA_HAS_64_BITS_POINTERS)
-constexpr size_t kNumPools = 2;
+#else  // BUILDFLAG(HAS_64_BIT_POINTERS)
 constexpr size_t kPoolMaxSize = 4 * kGiB;
 #endif
 constexpr size_t kMaxSuperPagesInPool = kPoolMaxSize / kSuperPageSize;
 
-static constexpr pool_handle kRegularPoolHandle = 1;
-static constexpr pool_handle kBRPPoolHandle = 2;
-static constexpr pool_handle kConfigurablePoolHandle = 3;
 #if BUILDFLAG(ENABLE_PKEYS)
-static constexpr pool_handle kPkeyPoolHandle = 4;
 static_assert(
     kPkeyPoolHandle == kNumPools,
     "The pkey pool must come last since we pkey_mprotect its metadata.");
@@ -307,7 +320,7 @@ static_assert(
 // PROT_MTE.
 constexpr size_t kMaxMemoryTaggingSize = 1024;
 
-#if defined(PA_HAS_MEMORY_TAGGING)
+#if PA_CONFIG(HAS_MEMORY_TAGGING)
 // Returns whether the tag of |object| overflowed, meaning the containing slot
 // needs to be moved to quarantine.
 PA_ALWAYS_INLINE bool HasOverflowTag(void* object) {
@@ -317,7 +330,7 @@ PA_ALWAYS_INLINE bool HasOverflowTag(void* object) {
                 "Overflow tag must be in tag bits");
   return (reinterpret_cast<uintptr_t>(object) & kPtrTagMask) == kOverflowTag;
 }
-#endif  // defined(PA_HAS_MEMORY_TAGGING)
+#endif  // PA_CONFIG(HAS_MEMORY_TAGGING)
 
 PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 NumPartitionPagesPerSuperPage() {
@@ -328,7 +341,7 @@ constexpr PA_ALWAYS_INLINE size_t MaxSuperPagesInPool() {
   return kMaxSuperPagesInPool;
 }
 
-#if defined(PA_HAS_64_BITS_POINTERS)
+#if BUILDFLAG(HAS_64_BIT_POINTERS)
 // In 64-bit mode, the direct map allocation granularity is super page size,
 // because this is the reservation granularity of the pools.
 constexpr PA_ALWAYS_INLINE size_t DirectMapAllocationGranularity() {
@@ -338,7 +351,7 @@ constexpr PA_ALWAYS_INLINE size_t DirectMapAllocationGranularity() {
 constexpr PA_ALWAYS_INLINE size_t DirectMapAllocationGranularityShift() {
   return kSuperPageShift;
 }
-#else   // defined(PA_HAS_64_BITS_POINTERS)
+#else   // BUILDFLAG(HAS_64_BIT_POINTERS)
 // In 32-bit mode, address space is space is a scarce resource. Use the system
 // allocation granularity, which is the lowest possible address space allocation
 // unit. However, don't go below partition page size, so that pool bitmaps
@@ -352,7 +365,7 @@ PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 DirectMapAllocationGranularityShift() {
   return std::max(PageAllocationGranularityShift(), PartitionPageShift());
 }
-#endif  // defined(PA_HAS_64_BITS_POINTERS)
+#endif  // BUILDFLAG(HAS_64_BIT_POINTERS)
 
 PAGE_ALLOCATOR_CONSTANTS_DECLARE_CONSTEXPR PA_ALWAYS_INLINE size_t
 DirectMapAllocationGranularityOffsetMask() {
@@ -463,21 +476,21 @@ constexpr unsigned char kQuarantinedByte = 0xEF;
 // static_cast<uint32_t>(-1) is too close to a "real" size.
 constexpr size_t kInvalidBucketSize = 1;
 
-#if defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+#if PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
 // Requested size that require the hack.
 constexpr size_t kMac11MallocSizeHackRequestedSize = 32;
 // Usable size for allocations that require the hack.
 constexpr size_t kMac11MallocSizeHackUsableSize =
-#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) ||  \
-    defined(PA_REF_COUNT_STORE_REQUESTED_SIZE) || \
-    defined(PA_REF_COUNT_CHECK_COOKIE)
+#if BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) || \
+    PA_CONFIG(REF_COUNT_STORE_REQUESTED_SIZE) || \
+    PA_CONFIG(REF_COUNT_CHECK_COOKIE)
     40;
 #else
     44;
 #endif  // BUILDFLAG(ENABLE_DANGLING_RAW_PTR_CHECKS) ||
-        // defined(PA_REF_COUNT_STORE_REQUESTED_SIZE) ||
-        // defined(PA_REF_COUNT_CHECK_COOKIE)
-#endif  // defined(PA_ENABLE_MAC11_MALLOC_SIZE_HACK)
+        // PA_CONFIG(REF_COUNT_STORE_REQUESTED_SIZE) ||
+        // PA_CONFIG(REF_COUNT_CHECK_COOKIE)
+#endif  // PA_CONFIG(ENABLE_MAC11_MALLOC_SIZE_HACK)
 }  // namespace internal
 
 // These constants are used outside PartitionAlloc itself, so we provide
@@ -496,7 +509,7 @@ enum class PtrPosWithinAlloc {
   // When PA_USE_OOB_POISON is disabled, end-of-allocation pointers are also
   // considered in-bounds.
   kInBounds,
-#if defined(PA_USE_OOB_POISON)
+#if PA_CONFIG(USE_OOB_POISON)
   kAllocEnd,
 #endif
   kFarOOB

@@ -6,8 +6,10 @@
 
 #include <stddef.h>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include <memory>
+
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string_split.h"
@@ -152,7 +154,8 @@ class LinuxInputMethodContextForTesting : public LinuxInputMethodContext {
 
   void UpdateFocus(bool has_client,
                    TextInputType old_type,
-                   TextInputType new_type) override {}
+                   TextInputType new_type,
+                   ui::TextInputClient::FocusReason reason) override {}
 
   void SetCursorLocation(const gfx::Rect& rect) override {
     cursor_position_ = rect;
@@ -315,10 +318,7 @@ class InputMethodAuraLinuxTest : public testing::Test {
   InputMethodAuraLinuxTest& operator=(const InputMethodAuraLinuxTest&) = delete;
 
  protected:
-  InputMethodAuraLinuxTest()
-      : input_method_auralinux_(nullptr),
-        delegate_(nullptr),
-        context_(nullptr) {
+  InputMethodAuraLinuxTest() {
     GetInputMethodContextFactoryForTest() =
         base::BindRepeating([](LinuxInputMethodContextDelegate* delegate)
                                 -> std::unique_ptr<LinuxInputMethodContext> {
@@ -332,8 +332,9 @@ class InputMethodAuraLinuxTest : public testing::Test {
   }
 
   void SetUp() override {
-    delegate_ = new InputMethodDelegateForTesting();
-    input_method_auralinux_ = new InputMethodAuraLinux(delegate_);
+    delegate_ = std::make_unique<InputMethodDelegateForTesting>();
+    input_method_auralinux_ =
+        std::make_unique<InputMethodAuraLinux>(delegate_.get());
     input_method_auralinux_->OnFocus();
     context_ = static_cast<LinuxInputMethodContextForTesting*>(
         input_method_auralinux_->GetContextForTesting());
@@ -343,16 +344,13 @@ class InputMethodAuraLinuxTest : public testing::Test {
     context_->SetSyncMode(false);
     context_->SetEatKey(false);
     context_ = nullptr;
-
-    delete input_method_auralinux_;
-    input_method_auralinux_ = nullptr;
-    delete delegate_;
-    delegate_ = nullptr;
+    input_method_auralinux_.reset();
+    delegate_.reset();
   }
 
-  raw_ptr<InputMethodAuraLinux> input_method_auralinux_;
-  raw_ptr<InputMethodDelegateForTesting> delegate_;
-  raw_ptr<LinuxInputMethodContextForTesting> context_;
+  std::unique_ptr<InputMethodDelegateForTesting> delegate_;
+  std::unique_ptr<InputMethodAuraLinux> input_method_auralinux_;
+  raw_ptr<LinuxInputMethodContextForTesting> context_ = nullptr;
   raw_ptr<TestResult> test_result_;
 };
 
@@ -503,6 +501,75 @@ TEST_F(InputMethodAuraLinuxTest, IBusPinyinTest) {
   test_result_->Verify();
 }
 
+TEST_F(InputMethodAuraLinuxTest, FcitxPinyinTest) {
+  context_->SetSyncMode(false);
+  context_->SetEatKey(true);
+
+  std::unique_ptr<TextInputClientForTesting> client(
+      new TextInputClientForTesting(TEXT_INPUT_TYPE_TEXT));
+  input_method_auralinux_->SetFocusedTextInputClient(client.get());
+  input_method_auralinux_->OnTextInputTypeChanged(client.get());
+  KeyEvent key(ET_KEY_PRESSED, VKEY_A, 0);
+  key.set_character(L'a');
+  input_method_auralinux_->DispatchKeyEvent(&key);
+  input_method_auralinux_->OnPreeditStart();
+
+  // Typing return issues a commit, then preedit end.
+  // When input characters with fcitx+chinese, there has no
+  // composing text and no composition updated.
+  // So do nothing here is to emulate the fcitx+chinese input.
+  KeyEvent key_up(ET_KEY_RELEASED, VKEY_RETURN, 0);
+  input_method_auralinux_->DispatchKeyEvent(&key_up);
+
+  input_method_auralinux_->OnCommit(u"a");
+  input_method_auralinux_->OnPreeditEnd();
+
+  test_result_->ExpectAction("keydown:229");
+  test_result_->ExpectAction("keypress:97");
+  test_result_->Verify();
+}
+
+TEST_F(InputMethodAuraLinuxTest, Fcitx5PinyinTest) {
+  // Fcitx5 performance is consistent with ibus.
+  // The composition is updated when input characters.
+  context_->SetSyncMode(false);
+  context_->SetEatKey(true);
+
+  std::unique_ptr<TextInputClientForTesting> client(
+      new TextInputClientForTesting(TEXT_INPUT_TYPE_TEXT));
+  input_method_auralinux_->SetFocusedTextInputClient(client.get());
+  input_method_auralinux_->OnTextInputTypeChanged(client.get());
+  KeyEvent key(ET_KEY_PRESSED, VKEY_A, 0);
+  key.set_character(L'a');
+  input_method_auralinux_->DispatchKeyEvent(&key);
+  input_method_auralinux_->OnPreeditStart();
+
+  CompositionText comp;
+  comp.text = u"a";
+  input_method_auralinux_->OnPreeditChanged(comp);
+
+  test_result_->ExpectAction("keydown:229");
+  test_result_->ExpectAction("compositionstart");
+  test_result_->ExpectAction("compositionupdate:a");
+  test_result_->Verify();
+
+  // Typing return issues a commit, followed by preedit change (to make
+  // composition empty), then preedit end.
+  KeyEvent key_up(ET_KEY_RELEASED, VKEY_RETURN, 0);
+  input_method_auralinux_->DispatchKeyEvent(&key_up);
+
+  input_method_auralinux_->OnCommit(u"a");
+  comp.text = u"";
+  input_method_auralinux_->OnPreeditChanged(comp);
+  input_method_auralinux_->OnPreeditEnd();
+
+
+  test_result_->ExpectAction("keydown:229");
+  test_result_->ExpectAction("compositionend");
+  test_result_->ExpectAction("textinput:a");
+  test_result_->Verify();
+}
+
 TEST_F(InputMethodAuraLinuxTest, JapaneseCommit) {
   context_->SetSyncMode(false);
   context_->SetEatKey(true);
@@ -628,12 +695,12 @@ void DeadKeyTest(TextInputType text_input_type,
 }
 
 TEST_F(InputMethodAuraLinuxTest, DeadKeyTest) {
-  DeadKeyTest(TEXT_INPUT_TYPE_TEXT, input_method_auralinux_, context_,
+  DeadKeyTest(TEXT_INPUT_TYPE_TEXT, input_method_auralinux_.get(), context_,
               test_result_);
 }
 
 TEST_F(InputMethodAuraLinuxTest, DeadKeyTestTypeNone) {
-  DeadKeyTest(TEXT_INPUT_TYPE_NONE, input_method_auralinux_, context_,
+  DeadKeyTest(TEXT_INPUT_TYPE_NONE, input_method_auralinux_.get(), context_,
               test_result_);
 }
 

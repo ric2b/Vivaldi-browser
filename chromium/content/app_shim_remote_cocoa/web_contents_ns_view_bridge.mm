@@ -4,6 +4,7 @@
 
 #include "content/app_shim_remote_cocoa/web_contents_ns_view_bridge.h"
 
+#import "base/task/sequenced_task_runner.h"
 #include "components/remote_cocoa/app_shim/ns_view_ids.h"
 #import "content/app_shim_remote_cocoa/web_contents_view_cocoa.h"
 #include "content/browser/web_contents/web_contents_view_mac.h"
@@ -100,13 +101,20 @@ void WebContentsNSViewBridge::TakeFocus(bool reverse) {
 void WebContentsNSViewBridge::StartDrag(const content::DropData& drop_data,
                                         uint32_t operation_mask,
                                         const gfx::ImageSkia& image,
-                                        const gfx::Vector2d& image_offset) {
+                                        const gfx::Vector2d& image_offset,
+                                        bool is_privileged) {
   NSPoint offset = NSPointFromCGPoint(
       gfx::PointAtOffsetFromOrigin(image_offset).ToCGPoint());
   [ns_view_ startDragWithDropData:drop_data
                 dragOperationMask:operation_mask
                             image:gfx::NSImageFromImageSkia(image)
-                           offset:offset];
+                           offset:offset
+                     isPrivileged:is_privileged];
+}
+
+void WebContentsNSViewBridge::UpdateWindowControlsOverlay(
+    const gfx::Rect& bounding_rect) {
+  [ns_view_ updateWindowControlsOverlay:bounding_rect];
 }
 
 }  // namespace remote_cocoa

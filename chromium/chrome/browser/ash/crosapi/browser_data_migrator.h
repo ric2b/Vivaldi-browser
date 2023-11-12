@@ -7,9 +7,9 @@
 
 #include <memory>
 
-#include "base/callback.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
@@ -55,7 +55,6 @@ class BrowserDataMigrator {
  public:
   // Represents a kind of the result status.
   enum class ResultKind {
-    kSkipped,
     kSucceeded,
     kFailed,
     kCancelled,
@@ -201,18 +200,11 @@ class BrowserDataMigratorImpl : public BrowserDataMigrator {
                            ManipulateMigrationAttemptCount);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorImplTest, Migrate);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorImplTest, MigrateCancelled);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorImplTest,
-                           MigrateOutOfDiskForCopy);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorImplTest,
-                           MigrateOutOfDiskForMove);
+  FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorImplTest, MigrateOutOfDisk);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorRestartTest,
                            MaybeRestartToMigrateWithMigrationStep);
   FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorRestartTest,
                            MaybeRestartToMigrateMoveAfterCopy);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorRestartTest,
-                           LacrosProfileMigrationForAnyUserDisabled);
-  FRIEND_TEST_ALL_PREFIXES(BrowserDataMigratorRestartTest,
-                           LacrosProfileMigrationForAnyUserDisabledForGoogler);
 
   // The common implementation of `MaybeRestartToMigrate` and
   // `MaybeRestartToMigrateWithDiskCheck`.

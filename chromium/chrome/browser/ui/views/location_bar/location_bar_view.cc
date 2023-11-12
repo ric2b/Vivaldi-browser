@@ -9,10 +9,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/adapters.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/utf_string_conversions.h"
@@ -76,7 +76,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
-#include "components/commerce/core/commerce_feature_list.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -169,7 +168,7 @@ LocationBarView::LocationBarView(Browser* browser,
                                  Delegate* delegate,
                                  bool is_popup_mode)
     : AnimationDelegateViews(this),
-      ChromeOmniboxEditController(browser, profile, command_updater),
+      ChromeOmniboxEditModelDelegate(browser, profile, command_updater),
       browser_(browser),
       profile_(profile),
       delegate_(delegate),
@@ -186,7 +185,9 @@ LocationBarView::LocationBarView(Browser* browser,
       return v->omnibox_view_->model()->is_caret_visible() &&
              !v->GetOmniboxPopupView()->IsOpen();
     });
-
+    if (features::IsChromeRefresh2023()) {
+      views::FocusRing::Get(this)->SetInnerStrokeDisabled();
+    }
     views::InstallPillHighlightPathGenerator(this);
 
 #if BUILDFLAG(IS_MAC)
@@ -296,12 +297,9 @@ void LocationBarView::Init() {
     // first so that they appear on the left side of the icon container.
     // TODO(crbug.com/1318890): Improve the ordering heuristics for page action
     // icons and determine a way to handle simultaneous icon animations.
-    if (base::FeatureList::IsEnabled(commerce::kShoppingList)) {
-      params.types_enabled.push_back(PageActionIconType::kPriceTracking);
-    }
+    params.types_enabled.push_back(PageActionIconType::kPriceTracking);
 
-    if (side_search::IsDSESupportEnabled(profile_) &&
-        side_search::IsEnabledForBrowser(browser_)) {
+    if (side_search::IsEnabledForBrowser(browser_)) {
       params.types_enabled.push_back(PageActionIconType::kSideSearch);
     }
 
@@ -333,6 +331,7 @@ void LocationBarView::Init() {
   // Add icons only when feature is not enabled. Otherwise icons will
   // be added to the ToolbarPageActionIconContainerView.
   params.types_enabled.push_back(PageActionIconType::kSaveCard);
+  params.types_enabled.push_back(PageActionIconType::kSaveIban);
   params.types_enabled.push_back(PageActionIconType::kLocalCardMigration);
   params.types_enabled.push_back(
       PageActionIconType::kVirtualCardManualFallback);
@@ -1010,9 +1009,11 @@ void LocationBarView::RefreshBackground() {
 
 bool LocationBarView::RefreshContentSettingViews() {
   if (web_app::AppBrowserController::IsWebApp(browser_)) {
-    // For hosted apps, the location bar is normally hidden and icons appear in
+    // For web apps, the location bar is normally hidden and icons appear in
     // the window frame instead.
-    GetWidget()->non_client_view()->ResetWindowControls();
+    if (auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser_)) {
+      browser_view->UpdateWebAppStatusIconsVisiblity();
+    }
   }
 
   bool visibility_changed = false;
@@ -1027,9 +1028,11 @@ bool LocationBarView::RefreshContentSettingViews() {
 
 void LocationBarView::RefreshPageActionIconViews() {
   if (web_app::AppBrowserController::IsWebApp(browser_)) {
-    // For hosted apps, the location bar is normally hidden and icons appear in
+    // For web apps, the location bar is normally hidden and icons appear in
     // the window frame instead.
-    GetWidget()->non_client_view()->ResetWindowControls();
+    if (auto* browser_view = BrowserView::GetBrowserViewForBrowser(browser_)) {
+      browser_view->UpdateWebAppStatusIconsVisiblity();
+    }
   }
 
   page_action_icon_controller_->UpdateAll();

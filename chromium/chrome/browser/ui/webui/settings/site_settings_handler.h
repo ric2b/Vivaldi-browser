@@ -90,18 +90,18 @@ class SiteSettingsHandler
   void OnZoomLevelChanged(const content::HostZoomMap::ZoomLevelChange& change);
 
  private:
+  friend class SiteSettingsHandlerBaseTest;
   friend class SiteSettingsHandlerChooserExceptionTest;
   friend class SiteSettingsHandlerInfobarTest;
-  friend class SiteSettingsHandlerTest;
   // TODO(crbug.com/1373962): Remove this friend class when
   // Persistent Permissions is launched.
   friend class PersistentPermissionsSiteSettingsHandlerTest;
   FRIEND_TEST_ALL_PREFIXES(PersistentPermissionsSiteSettingsHandlerTest,
                            HandleGetFileSystemGrants);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerChooserExceptionTest,
-                           HandleGetChooserExceptionListForUsb);
-  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerChooserExceptionTest,
-                           HandleResetChooserExceptionForSiteForUsb);
+  FRIEND_TEST_ALL_PREFIXES(PersistentPermissionsSiteSettingsHandlerTest,
+                           HandleRevokeFileSystemGrant);
+  FRIEND_TEST_ALL_PREFIXES(PersistentPermissionsSiteSettingsHandlerTest,
+                           HandleRevokeFileSystemGrants);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerInfobarTest,
                            SettingPermissionsTriggersInfobar);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest,
@@ -169,6 +169,12 @@ class SiteSettingsHandler
   FRIEND_TEST_ALL_PREFIXES(
       SiteSettingsHandlerTest,
       SendNotificationPermissionReviewList_FeatureDisabled);
+  FRIEND_TEST_ALL_PREFIXES(
+      SiteSettingsHandlerInfobarTest,
+      SettingPermissionsDoesNotTriggerInfobarOnDifferentProfile);
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, HandleGetExtensionName);
+#endif
 
   // Rebuilds the BrowsingDataModel & CookiesTreeModel. Pending requests are
   // serviced when both models are built.
@@ -259,6 +265,13 @@ class SiteSettingsHandler
   // Returns the list of the allowed permission grants as defined by the
   // File System Access API.
   void HandleGetFileSystemGrants(const base::Value::List& args);
+
+  // Revokes the File System Access permission for a given origin
+  // and file path.
+  void HandleRevokeFileSystemGrant(const base::Value::List& args);
+
+  // Revokes all of the File System Access permissions for a given origin.
+  void HandleRevokeFileSystemGrants(const base::Value::List& args);
 
   // Gets and sets a list of ContentSettingTypes for an origin.
   // TODO(https://crbug.com/739241): Investigate replacing the
@@ -358,9 +371,9 @@ class SiteSettingsHandler
   // a lot of notifications, but have low site engagement.
   base::Value::List PopulateNotificationPermissionReviewData();
 
-  // Returns a list of permission grant objects for the allowed permissions
-  // granted via the File System Access API.
-  base::Value::List PopulateFileSystemGrantData(const url::Origin& origin);
+  // Returns a dictionary containing the lists of the allowed permission
+  // grant objects granted via the File System Access API, per origin.
+  base::Value::List PopulateFileSystemGrantData();
 
   // Sends the list of notification permissions to review to the WebUI.
   void SendNotificationPermissionReviewList();
@@ -373,8 +386,8 @@ class SiteSettingsHandler
   // Keeps track of events related to zooming.
   base::CallbackListSubscription host_zoom_map_subscription_;
 
-  // The host for which to fetch usage.
-  std::string usage_host_;
+  // The origin for which to fetch usage.
+  std::string usage_origin_;
 
   // The origin for which to clear usage.
   std::string clearing_origin_;

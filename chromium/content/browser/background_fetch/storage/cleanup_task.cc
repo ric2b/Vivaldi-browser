@@ -6,8 +6,8 @@
 
 #include <memory>
 
-#include "base/bind.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "content/browser/background_fetch/background_fetch.pb.h"
 #include "content/browser/background_fetch/background_fetch_data_manager.h"
 #include "content/browser/background_fetch/storage/database_helpers.h"
@@ -78,11 +78,8 @@ void CleanupTask::DidGetActiveUniqueIds(
           // DeleteRegistrationTask for the actual deletion logic.
           AddDatabaseTask(std::make_unique<DeleteRegistrationTask>(
               data_manager(), service_worker_registration_id,
-              // TODO(https://crbug.com/1199077): Store the full serialization
-              // of the storage key inside `metadata`.
-              blink::StorageKey(
-                  url::Origin::Create(GURL(metadata_proto.origin()))),
-              unique_id, base::BindOnce(&EmptyErrorHandler)));
+              GetMetadataStorageKey(metadata_proto), unique_id,
+              base::BindOnce(&EmptyErrorHandler)));
         }
       }
     }

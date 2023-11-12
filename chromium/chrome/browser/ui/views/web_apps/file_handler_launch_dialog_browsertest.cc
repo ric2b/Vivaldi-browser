@@ -20,14 +20,14 @@
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/web_app_startup_utils.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
+#include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -35,7 +35,6 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
-#include "third_party/blink/public/common/features.h"
 #include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/widget.h"
 
@@ -52,10 +51,10 @@ const char kFileLaunchUrl2[] = "https://example.org/file_launch2/";
 // Tests for the `FileHandlerLaunchDialogView` as well as
 // `startup::web_app::MaybeHandleWebAppLaunch()`. As Chrome OS uses the app
 // service to launch PWAs, this test suite is not run there.
-class FileHandlerLaunchDialogTest : public InProcessBrowserTest {
+class FileHandlerLaunchDialogTest : public WebAppControllerBrowserTest {
  public:
   void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
+    WebAppControllerBrowserTest::SetUpOnMainThread();
     InstallTestWebApp();
   }
 
@@ -108,12 +107,12 @@ class FileHandlerLaunchDialogTest : public InProcessBrowserTest {
         &WebAppProvider::GetForTest(browser()->profile())
              ->sync_bridge_unsafe());
     update->UpdateApp(app_id_)->SetUserDisplayMode(
-        UserDisplayMode::kStandalone);
+        mojom::UserDisplayMode::kStandalone);
   }
 
   const WebApp* GetApp() {
     return WebAppProvider::GetForTest(browser()->profile())
-        ->registrar()
+        ->registrar_unsafe()
         .GetAppById(app_id_);
   }
 
@@ -166,9 +165,6 @@ class FileHandlerLaunchDialogTest : public InProcessBrowserTest {
 
  protected:
   AppId app_id_;
-
-  base::test::ScopedFeatureList feature_list_{
-      blink::features::kFileHandlingAPI};
 };
 
 IN_PROC_BROWSER_TEST_F(FileHandlerLaunchDialogTest,

@@ -20,7 +20,12 @@
 #include "content/browser/attribution_reporting/rate_limit_table.h"
 #include "content/browser/attribution_reporting/stored_source.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/attribution_data_model.h"
 #include "content/public/browser/storage_partition.h"
+
+namespace attribution_reporting {
+class SuitableOrigin;
+}  // namespace attribution_reporting
 
 namespace base {
 class GUID;
@@ -45,10 +50,22 @@ enum class RateLimitResult : int;
 // destroyed on the same sequence. The sequence must outlive |this|.
 class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
  public:
-  // Exposed for testing.
-  static const int kCurrentVersionNumber;
-  static const int kCompatibleVersionNumber;
-  static const int kDeprecatedVersionNumber;
+  // Version number of the database.
+  static constexpr int kCurrentVersionNumber = 47;
+
+  // Earliest version which can use a `kCurrentVersionNumber` database
+  // without failing.
+  static constexpr int kCompatibleVersionNumber = 47;
+
+  // Latest version of the database that cannot be upgraded to
+  // `kCurrentVersionNumber` without razing the database.
+  //
+  // Note that all versions >=15 were introduced during the transitional state
+  // of the Attribution Reporting API and can be removed when done.
+  static constexpr int kDeprecatedVersionNumber = 34;
+
+  static_assert(kCompatibleVersionNumber <= kCurrentVersionNumber);
+  static_assert(kDeprecatedVersionNumber < kCompatibleVersionNumber);
 
   [[nodiscard]] static bool DeleteStorageForTesting(
       const base::FilePath& user_data_directory);
@@ -112,6 +129,8 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
   std::vector<AttributionReport> GetReports(
       const std::vector<AttributionReport::Id>& ids) override;
   std::vector<StoredSource> GetActiveSources(int limit = -1) override;
+  std::vector<AttributionDataModel::DataKey> GetAllDataKeys() override;
+  void DeleteByDataKey(const AttributionDataModel::DataKey& datakey) override;
   bool DeleteReport(AttributionReport::Id report_id) override;
   bool UpdateReportForSendFailure(AttributionReport::Id report_id,
                                   base::Time new_report_time) override;
@@ -201,13 +220,15 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
       VALID_CONTEXT_REQUIRED(sequence_checker_);
 
   [[nodiscard]] absl::optional<AttributionReport::EventLevelData::Id>
-  StoreEventLevelReport(StoredSource::Id source_id,
-                        uint64_t trigger_data,
-                        base::Time trigger_time,
-                        base::Time report_time,
-                        int64_t priority,
-                        const base::GUID& external_report_id,
-                        absl::optional<uint64_t> trigger_debug_key)
+  StoreEventLevelReport(
+      StoredSource::Id source_id,
+      uint64_t trigger_data,
+      base::Time trigger_time,
+      base::Time report_time,
+      int64_t priority,
+      const base::GUID& external_report_id,
+      absl::optional<uint64_t> trigger_debug_key,
+      const attribution_reporting::SuitableOrigin& context_origin)
       VALID_CONTEXT_REQUIRED(sequence_checker_);
 
   absl::optional<AttributionReport> ReadReportFromStatement(sql::Statement&)
@@ -242,6 +263,7 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
   // matching sources were found.
   bool FindMatchingSourceForTrigger(
       const AttributionTrigger& trigger,
+      base::Time trigger_time,
       absl::optional<StoredSource::Id>& source_id_to_attribute,
       std::vector<StoredSource::Id>& source_ids_to_delete,
       std::vector<StoredSource::Id>& source_ids_to_deactivate)
@@ -250,7 +272,6 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
   AttributionTrigger::EventLevelResult MaybeCreateEventLevelReport(
       const AttributionInfo& attribution_info,
       const AttributionTrigger& trigger,
-      bool top_level_filters_match,
       absl::optional<AttributionReport>& report,
       absl::optional<uint64_t>& dedup_key,
       absl::optional<int>& max_event_level_reports_per_destination)
@@ -348,8 +369,8 @@ class CONTENT_EXPORT AttributionStorageSql : public AttributionStorage {
   MaybeCreateAggregatableAttributionReport(
       const AttributionInfo& attribution_info,
       const AttributionTrigger& trigger,
-      bool top_level_filters_match,
       absl::optional<AttributionReport>& report,
+      absl::optional<uint64_t>& dedup_key,
       absl::optional<int>& max_aggregatable_reports_per_destination)
       VALID_CONTEXT_REQUIRED(sequence_checker_);
 

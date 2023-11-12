@@ -18,6 +18,9 @@ namespace safe_browsing {
 // for example to control how often collection should occur.
 BASE_DECLARE_FEATURE(kAdSamplerTriggerFeature);
 
+// Adds page load token to client safe browsing report.
+BASE_DECLARE_FEATURE(kAddPageLoadTokenToClientSafeBrowsingReport);
+
 // Killswitch for client side phishing detection. Since client side models are
 // run on a large fraction of navigations, crashes due to the model are very
 // impactful, even if only a small fraction of users have a bad version of the
@@ -38,6 +41,10 @@ const char kClientSideDetectionTagParamName[] = "reporter_omaha_tag";
 
 // Enables client side detection referrer chain.
 BASE_DECLARE_FEATURE(kClientSideDetectionReferrerChain);
+
+// Enables force request CSD-P ping when RT Lookup Response has FORCE_REQUEST in
+// the client_side_detection_type field
+BASE_DECLARE_FEATURE(kClientSideDetectionTypeForceRequest);
 
 // Enables serving the Android Protego allowlist through the component updater.
 BASE_DECLARE_FEATURE(kComponentUpdaterAndroidProtegoAllowlist);
@@ -77,9 +84,46 @@ BASE_DECLARE_FEATURE(kDownloadTailoredWarnings);
 // no IPH bubble will appear and the ESB option will be expanded on page load.
 BASE_DECLARE_FEATURE(kEsbIphBubbleAndCollapseSettings);
 
+// Specifies whether the ESB IPH bubble on the security settings page is
+// enabled or not.
+extern const base::FeatureParam<bool> kEsbIphBubbleAndCollapseSettingsEnableIph;
+
+// Specifies whether the ESB option on the security settings page is collapsed
+// or not.
+extern const base::FeatureParam<bool>
+    kEsbIphBubbleAndCollapseSettingsEnableCollapse;
+
 // Enables collection of signals related to extension activity and uploads
 // of telemetry reports to SB servers.
 BASE_DECLARE_FEATURE(kExtensionTelemetry);
+
+// Allows the Extension Telemetry Service to accept and use configurations
+// sent by the server.
+BASE_DECLARE_FEATURE(kExtensionTelemetryConfiguration);
+
+// Allows the Extension Telemetry Service to process installed extension files
+// and attach file data to reports.
+BASE_DECLARE_FEATURE(kExtensionTelemetryFileData);
+
+// Specifies the max number of files to process per extension in Extension
+// Telemetry's File Processor.
+extern const base::FeatureParam<int>
+    kExtensionTelemetryFileDataMaxFilesToProcess;
+
+// Specifies the max file size to process in Extension Telemetry's File
+// Processor.
+extern const base::FeatureParam<int>
+    kExtensionTelemetryFileDataMaxFileSizeBytes;
+
+// Specifies the interval for extension telemetry to collect offstore extension
+// file data.
+extern const base::FeatureParam<int>
+    kExtensionTelemetryFileDataCollectionIntervalSeconds;
+
+// Specifies the initial delay for extension telemetry to start collecting
+// offstore extension file data.
+extern const base::FeatureParam<int>
+    kExtensionTelemetryFileDataStartupDelaySeconds;
 
 // Enables data collected by the kExtensionTelemetry to be written and read to
 // disk. This data will be uploaded for analysis.
@@ -146,10 +190,6 @@ BASE_DECLARE_FEATURE(kRealTimeUrlLookupForEnterpriseAllowlistBypass);
 // new triggers
 BASE_DECLARE_FEATURE(kSafeBrowsingCsbrrNewDownloadTrigger);
 
-// Controls whether Client Safe Browsing Reports are sent with a GAIA-tied token
-// for Enhanced Safe Browsing users
-BASE_DECLARE_FEATURE(kSafeBrowsingCsbrrWithToken);
-
 // Controls whether we are disabling consumer download checks for users using
 // the enterprise download checks.
 BASE_DECLARE_FEATURE(kSafeBrowsingDisableConsumerCsdForEnterprise);
@@ -157,6 +197,14 @@ BASE_DECLARE_FEATURE(kSafeBrowsingDisableConsumerCsdForEnterprise);
 // Controls whether we are performing enterprise download checks for users
 // with the appropriate policies enabled.
 BASE_DECLARE_FEATURE(kSafeBrowsingEnterpriseCsd);
+
+// Controls whether the lookup mechanism experiment is enabled, which runs all
+// three lookup mechanisms instead of just real-time URL lookups for ESB users.
+// The other two lookup mechanisms are run in the background, and the results
+// of the three are logged for comparison purposes. This experiment is also
+// known as the hash-prefix real-time lookup experiment, since that mechanism is
+// the main comparison anchor.
+BASE_DECLARE_FEATURE(kSafeBrowsingLookupMechanismExperiment);
 
 // Controls whether cookies are removed when the access token is present.
 BASE_DECLARE_FEATURE(kSafeBrowsingRemoveCookiesInAuthRequests);
@@ -170,6 +218,13 @@ BASE_DECLARE_FEATURE(kSevenZipEvaluationEnabled);
 // default and control groups of the experiment.
 BASE_DECLARE_FEATURE(kSimplifiedUrlDisplay);
 
+// Controls whether the download inspection timeout is applied over the entire
+// request, or just the network communication.
+BASE_DECLARE_FEATURE(kStrictDownloadTimeout);
+
+// Specifies the duration of the timeout, in milliseconds.
+extern const base::FeatureParam<int> kStrictDownloadTimeoutMilliseconds;
+
 // Controls the daily quota for the suspicious site trigger.
 BASE_DECLARE_FEATURE(kSuspiciousSiteTriggerQuotaFeature);
 
@@ -178,6 +233,10 @@ BASE_DECLARE_FEATURE(kSuspiciousSiteTriggerQuotaFeature);
 // notified that they can enable Enhanced Protection through an operating system
 // notification.
 BASE_DECLARE_FEATURE(kTailoredSecurityDesktopNotice);
+
+// Enable a retry for the tailored security dialogs when the dialog
+// fails to show for a user whose google account has sync turned on.
+BASE_DECLARE_FEATURE(kTailoredSecurityDialogRetryMechanism);
 
 // Controls whether the integration of tailored security settings is enabled.
 BASE_DECLARE_FEATURE(kTailoredSecurityIntegration);
@@ -207,6 +266,10 @@ std::string GetClientSideDetectionTag();
 // Returns the tag used for file type policies, as computed from the current
 // feature flag.
 std::string GetFileTypePoliciesTag();
+
+// Enables OptimizationGuide to deliver the client side phishing model instead
+// of through component updater.
+BASE_DECLARE_FEATURE(kClientSideDetectionModelOptimizationGuide);
 
 }  // namespace safe_browsing
 #endif  // COMPONENTS_SAFE_BROWSING_CORE_COMMON_FEATURES_H_

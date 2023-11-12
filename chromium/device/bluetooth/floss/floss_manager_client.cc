@@ -9,11 +9,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/observer_list.h"
 #include "base/task/single_thread_task_runner.h"
@@ -22,6 +22,7 @@
 #include "dbus/message.h"
 #include "dbus/object_proxy.h"
 #include "device/bluetooth/bluez/bluez_features.h"
+#include "device/bluetooth/chromeos_platform_features.h"
 #include "device/bluetooth/floss/floss_dbus_client.h"
 #include "device/bluetooth/floss/floss_features.h"
 
@@ -199,6 +200,12 @@ void FlossManagerClient::SetLLPrivacy(ResponseCallback<Void> callback,
                                enable);
 }
 
+void FlossManagerClient::SetDevCoredump(ResponseCallback<Void> callback,
+                                        const bool enable) {
+  CallExperimentalMethod<Void>(std::move(callback),
+                               experimental::kSetDevCoredump, enable);
+}
+
 // Register manager client against manager.
 void FlossManagerClient::RegisterWithManager() {
   DCHECK(!manager_available_);
@@ -273,7 +280,9 @@ void FlossManagerClient::Init(dbus::Bus* bus,
       &FlossManagerClientCallbacks::OnDefaultAdapterChanged);
   if (!exported_callback_manager_.ExportCallback(
           dbus::ObjectPath(kExportedCallbacksPath),
-          weak_ptr_factory_.GetWeakPtr())) {
+          weak_ptr_factory_.GetWeakPtr(),
+          base::BindOnce(&FlossManagerClient::RegisterWithManager,
+                         weak_ptr_factory_.GetWeakPtr()))) {
     LOG(ERROR) << "Unable to successfully export FlossManagerClientCallbacks.";
     return;
   }
@@ -283,14 +292,22 @@ void FlossManagerClient::Init(dbus::Bus* bus,
       service_name, dbus::ObjectPath(kObjectManagerPath));
   object_manager_->RegisterInterface(kManagerInterface, this);
 
-  // Get manager ready.
-  RegisterWithManager();
-
   // Enable Floss and retry a few times until it is set.
   SetFlossEnabled(floss::features::IsFlossEnabled(), kSetFlossRetryCount,
                   kSetFlossRetryDelayMs,
                   base::BindOnce(&FlossManagerClient::CompleteSetFlossEnabled,
                                  weak_ptr_factory_.GetWeakPtr()));
+
+#if BUILDFLAG(IS_CHROMEOS)
+  SetDevCoredump(base::BindOnce([](DBusResult<Void> ret) {
+                   if (!ret.has_value()) {
+                     LOG(ERROR) << "Fail to set devcoredump.\n";
+                   }
+                 }),
+                 base::FeatureList::IsEnabled(
+                     chromeos::bluetooth::features::kBluetoothCoredump));
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   SetLLPrivacy(
       base::BindOnce([](DBusResult<Void> ret) {
         if (!ret.has_value())

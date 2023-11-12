@@ -4,7 +4,7 @@
 
 #include "chromeos/ash/components/sync_wifi/synced_network_updater_impl.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/guid.h"
 #include "base/values.h"
 #include "chromeos/ash/components/network/network_configuration_handler.h"
@@ -19,7 +19,6 @@
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
 namespace ash::network_config {
 namespace mojom = ::chromeos::network_config::mojom;
 }
@@ -70,6 +69,18 @@ void SyncedNetworkUpdaterImpl::StartAddOrUpdateOperation(
   network_config::mojom::ConfigPropertiesPtr config =
       MojoNetworkConfigFromProto(specifics);
 
+  // We can get into this state when the SSID's are improperly encoded hex
+  // strings, which causes the proto conversion above to return a nullptr.
+  //
+  // TODO(b/270151177) : Dig into to understand why we are getting improperly
+  // encoded SSIDs.
+  if (!config) {
+    NET_LOG(ERROR) << "Failed to generate local network config";
+    metrics_logger_->RecordApplyGenerateLocalNetworkConfig(/*success=*/false);
+    return;
+  }
+
+  metrics_logger_->RecordApplyGenerateLocalNetworkConfig(/*success=*/true);
   StartTimer(change_guid, id);
 
   if (existing_network) {

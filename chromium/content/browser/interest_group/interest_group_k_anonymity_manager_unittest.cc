@@ -172,7 +172,8 @@ TEST_F(InterestGroupKAnonymityManagerTest,
   EXPECT_LT(last_updated, maybe_group->bidding_ads_kanon[0].last_updated);
 }
 
-TEST_F(InterestGroupKAnonymityManagerTest, RegisterAdAsWonPerformsJoinSet) {
+TEST_F(InterestGroupKAnonymityManagerTest,
+       RegisterAdKeysAsJoinedPerformsJoinSet) {
   const GURL top_frame = GURL("https://www.example.com/foo");
   const url::Origin owner = url::Origin::Create(top_frame);
   const std::string name = "foo";
@@ -278,31 +279,19 @@ TEST_F(InterestGroupKAnonymityManagerTest, HandlesServerErrors) {
   // maybe_group->bidding_ads_kanon[0].last_updated);
 }
 
-TEST_F(InterestGroupKAnonymityManagerTest, RenderUrlFromKAnonKeyForAdBid) {
-  const GURL top_frame = GURL("https://www.example.com/foo");
-  const url::Origin owner = url::Origin::Create(top_frame);
-  blink::InterestGroup group = MakeInterestGroup(owner, "foo");
-  group.bidding_url = GURL("https://www.example.com/bidding.js");
-
-  const blink::InterestGroup::Ad& ad = group.ads.value()[0];
-
-  EXPECT_EQ(ad.render_url, RenderUrlFromKAnonKeyForAdBid(
-                               KAnonKeyForAdBid(group, ad.render_url)));
-}
-
 class MockAnonymityServiceDelegate : public KAnonymityServiceDelegate {
  public:
   void JoinSet(std::string id,
                base::OnceCallback<void(bool)> callback) override {
     requested_ids_.emplace_back(std::move(id));
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback), true));
   }
 
   void QuerySets(
       std::vector<std::string> ids,
       base::OnceCallback<void(std::vector<bool>)> callback) override {
-    base::SequencedTaskRunnerHandle::Get()->PostTask(
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback),
                                   std::vector<bool>(ids.size(), true)));
   }

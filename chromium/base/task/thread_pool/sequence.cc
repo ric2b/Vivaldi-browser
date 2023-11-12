@@ -6,10 +6,10 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/critical_closure.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/task_features.h"
 #include "base/time/time.h"
@@ -37,6 +37,26 @@ class SCOPED_LOCKABLE AnnotateLockAcquired {
   const raw_ref<const CheckedLock> acquired_lock_;
 };
 
+void MaybeMakeCriticalClosure(TaskShutdownBehavior shutdown_behavior,
+                              Task& task) {
+  switch (shutdown_behavior) {
+    case TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN:
+      // Nothing to do.
+      break;
+    case TaskShutdownBehavior::SKIP_ON_SHUTDOWN:
+      // MakeCriticalClosure() is arguably useful for SKIP_ON_SHUTDOWN, possibly
+      // in combination with is_immediate=false. However, SKIP_ON_SHUTDOWN is
+      // the default and hence the theoretical benefits don't warrant the
+      // performance implications.
+      break;
+    case TaskShutdownBehavior::BLOCK_SHUTDOWN:
+      task.task =
+          MakeCriticalClosure(task.posted_from, std::move(task.task),
+                              /*is_immediate=*/task.delayed_run_time.is_null());
+      break;
+  }
+}
+
 }  // namespace
 
 Sequence::Transaction::Transaction(Sequence* sequence)
@@ -46,29 +66,19 @@ Sequence::Transaction::Transaction(Sequence::Transaction&& other) = default;
 
 Sequence::Transaction::~Transaction() = default;
 
-bool Sequence::DelayedSortKeyWillChange(const Task& delayed_task) const {
-  AnnotateLockAcquired annotate(lock_);
-  // If sequence has already been picked up by a worker or moved, no need to
-  // proceed further here.
-  if (is_immediate_.load(std::memory_order_relaxed))
-    return false;
-
-  if (IsEmpty())
-    return true;
-
-  return delayed_task.latest_delayed_run_time() <
-         delayed_queue_.top().latest_delayed_run_time();
-}
-
 bool Sequence::Transaction::WillPushImmediateTask() {
+  // In a Transaction.
   AnnotateLockAcquired annotate(sequence()->lock_);
+
   bool was_immediate =
       sequence()->is_immediate_.exchange(true, std::memory_order_relaxed);
   return !was_immediate;
 }
 
 void Sequence::Transaction::PushImmediateTask(Task task) {
+  // In a Transaction.
   AnnotateLockAcquired annotate(sequence()->lock_);
+
   // Use CHECK instead of DCHECK to crash earlier. See http://crbug.com/711167
   // for details.
   CHECK(task.task);
@@ -77,12 +87,8 @@ void Sequence::Transaction::PushImmediateTask(Task task) {
 
   bool was_unretained = sequence()->IsEmpty() && !sequence()->has_worker_;
   bool queue_was_empty = sequence()->queue_.empty();
-  task.task = sequence()->traits_.shutdown_behavior() ==
-                      TaskShutdownBehavior::BLOCK_SHUTDOWN
-                  ? MakeCriticalClosure(
-                        task.posted_from, std::move(task.task),
-                        /*is_immediate=*/task.delayed_run_time.is_null())
-                  : std::move(task.task);
+
+  MaybeMakeCriticalClosure(sequence()->traits_.shutdown_behavior(), task);
 
   sequence()->queue_.push(std::move(task));
 
@@ -96,7 +102,9 @@ void Sequence::Transaction::PushImmediateTask(Task task) {
 }
 
 bool Sequence::Transaction::PushDelayedTask(Task task) {
+  // In a Transaction.
   AnnotateLockAcquired annotate(sequence()->lock_);
+
   // Use CHECK instead of DCHECK to crash earlier. See http://crbug.com/711167
   // for details.
   CHECK(task.task);
@@ -105,11 +113,8 @@ bool Sequence::Transaction::PushDelayedTask(Task task) {
 
   bool top_will_change = sequence()->DelayedSortKeyWillChange(task);
   bool was_empty = sequence()->IsEmpty();
-  task.task =
-      sequence()->traits_.shutdown_behavior() ==
-              TaskShutdownBehavior::BLOCK_SHUTDOWN
-          ? MakeCriticalClosure(task.posted_from, std::move(task.task), false)
-          : std::move(task.task);
+
+  MaybeMakeCriticalClosure(sequence()->traits_.shutdown_behavior(), task);
 
   sequence()->delayed_queue_.insert(std::move(task));
 
@@ -255,6 +260,21 @@ bool Sequence::WillReEnqueue(TimeTicks now,
     is_immediate_.store(false, std::memory_order_relaxed);
 
   return has_ready_tasks;
+}
+
+bool Sequence::DelayedSortKeyWillChange(const Task& delayed_task) const {
+  // If sequence has already been picked up by a worker or moved, no need to
+  // proceed further here.
+  if (is_immediate_.load(std::memory_order_relaxed)) {
+    return false;
+  }
+
+  if (IsEmpty()) {
+    return true;
+  }
+
+  return delayed_task.latest_delayed_run_time() <
+         delayed_queue_.top().latest_delayed_run_time();
 }
 
 bool Sequence::HasReadyTasks(TimeTicks now) const {

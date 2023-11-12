@@ -5,6 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "components/url_formatter/url_fixer.h"
@@ -12,23 +13,24 @@
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
+#import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/favicon/favicon_attributes.h"
 #import "ios/chrome/common/ui/favicon/favicon_constants.h"
 #import "ios/ui/ad_tracker_blocker/cells/vivaldi_atb_setting_item.h"
+#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
 #import "ios/ui/ad_tracker_blocker/settings/vivaldi_atb_settings_view_controller.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_mediator.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_source_type.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_summery_details_view_controller.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_summery_header_view.h"
 #import "ios/ui/helpers/vivaldi_colors_helper.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "url/gurl.h"
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -52,29 +54,28 @@ const UIEdgeInsets titleLabelPadding = UIEdgeInsetsMake(0.f, 12.f, 0.f, 0.f);
 // Size for the favicon
 const CGSize faviconSize = CGSizeMake(22.f, 22.f);
 // Tableview header height
-const CGFloat tableHeaderHeight = 110.f;
+const CGFloat tableHeaderHeight = 80.f;
 // Padding for the summery view.
 const UIEdgeInsets summeryViewPadding = UIEdgeInsetsMake(0, 20.f, 0, 20.f);
 
 // Section identifier for the page
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
-  SectionIdentifierGlobalSettings
+  SectionIdentifierGlobalSettings = kSectionIdentifierEnumZero
 };
 
 // Item type for the row
 typedef NS_ENUM(NSInteger, ItemType) {
-  ItemTypeGlobalSetting
+  ItemTypeGlobalSetting = kItemTypeEnumZero
 };
 
 }
 
-@interface VivaldiATBSummeryViewController()<VivaldiATBConsumer,
-                                            VivaldiATBSummeryHeaderViewDelegate>
+@interface VivaldiATBSummeryViewController()<VivaldiATBConsumer>
 
 // TView to show the summery of the blocked ads and trackers.
 @property (weak, nonatomic) VivaldiATBSummeryHeaderView* summeryView;
 // Button for showing the ad and tracker blocker settings.
-@property (weak, nonatomic) UIButton* privacySettingsButton;
+@property (weak, nonatomic) UIButton* blockerSettingsButton;
 // Favicon view for currently loaded host favicon.
 @property (weak, nonatomic) UIImageView* faviconView;
 // Title label for the title of the host/domain currently loaded.
@@ -82,14 +83,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // FaviconLoader is a keyed service that uses LargeIconService to retrieve
 // favicon images.
 @property(nonatomic, assign) FaviconLoader* faviconLoader;
-// The Browser in which bookmarks are presented
+// The Browser in which blocker engine is active.
 @property(nonatomic, assign) Browser* browser;
 // The user's browser state model used.
 @property(nonatomic, assign) ChromeBrowserState* browserState;
 // Host of the currently loaded website
 @property(nonatomic, strong) NSString* host;
-// The mediator that provides data for this view controller.
-@property(nonatomic, strong) VivaldiATBMediator* mediator;
+// The manager for the adblock that provides all methods and properties for
+// adblocker.
+@property(nonatomic, strong) VivaldiATBManager* adblockManager;
 
 @end
 
@@ -97,14 +99,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @implementation VivaldiATBSummeryViewController
 
 @synthesize summeryView = _summeryView;
-@synthesize privacySettingsButton = _privacySettingsButton;
+@synthesize blockerSettingsButton = _blockerSettingsButton;
 @synthesize faviconView = _faviconView;
 @synthesize titleLabel = _titleLabel;
 @synthesize browser = _browser;
 @synthesize faviconLoader = _faviconLoader;
 @synthesize browserState = _browserState;
 @synthesize host = _host;
-@synthesize mediator = _mediator;
+@synthesize adblockManager = _adblockManager;
 
 #pragma mark - INITIALIZER
 - (instancetype)initWithBrowser:(Browser*)browser
@@ -125,8 +127,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)dealloc {
-  self.mediator.consumer = nil;
-  [self.mediator disconnect];
+  if (!self.adblockManager)
+    return;
+  self.adblockManager.consumer = nil;
+  [self.adblockManager disconnect];
 }
 
 #pragma mark - VIEW CONTROLLER LIFECYCLE
@@ -135,11 +139,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [super loadModel];
   [self setUpTableViewComponents];
   [self loadATBOptions];
-
-  // TODO: - @prio@vivaldi.com
-  // Replace with actual value when backend is implemented.
-  [self.summeryView setValueWithBlockedTrackers:121
-                                            ads:223];
 }
 
 -(void)viewWillAppear:(BOOL)animated {
@@ -230,7 +229,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   VivaldiATBSummeryHeaderView* summeryView =
     [VivaldiATBSummeryHeaderView new];
   _summeryView = summeryView;
-  summeryView.delegate = self;
   [tableHeaderView addSubview:summeryView];
   [summeryView
     fillSuperviewToSafeAreaInsetWithPadding:summeryViewPadding];
@@ -245,23 +243,23 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.tableView.tableFooterView = footerView;
 
   // Settings button
-  UIButton* privacySettingsButton = [UIButton new];
-  privacySettingsButton.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-  privacySettingsButton.layer.cornerRadius = actionButtonCornerRadius;
-  NSString* privacyButtonTitleString =
-    l10n_util::GetNSString(IDS_MANAGE_DEFAULT_SETTINGS);
-  [privacySettingsButton setTitle:privacyButtonTitleString
+  UIButton* blockerSettingsButton = [UIButton new];
+  blockerSettingsButton.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+  blockerSettingsButton.layer.cornerRadius = actionButtonCornerRadius;
+  NSString* settingsButtonTitleString =
+    l10n_util::GetNSString(IDS_VIVALDI_IOS_MANAGE_BLOCKER_SETTINGS);
+  [blockerSettingsButton setTitle:settingsButtonTitleString
                          forState:UIControlStateNormal];
-  [privacySettingsButton
+  [blockerSettingsButton
      setTitleColor:UIColor.vSystemBlue
      forState:UIControlStateNormal];
-  [privacySettingsButton addTarget:self
-                            action:@selector(handlePrivacySettingsButtonTap)
+  [blockerSettingsButton addTarget:self
+                            action:@selector(handleBlockerSettingsButtonTap)
                   forControlEvents:UIControlEventTouchUpInside];
 
-  _privacySettingsButton = privacySettingsButton;
-  [footerView addSubview:privacySettingsButton];
-  [privacySettingsButton
+  _blockerSettingsButton = blockerSettingsButton;
+  [footerView addSubview:blockerSettingsButton];
+  [blockerSettingsButton
     fillSuperviewToSafeAreaInsetWithPadding:actionButtonPadding];
 }
 
@@ -270,22 +268,29 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self dismissViewControllerAnimated:YES completion:nil];
 }
 
-- (void)handlePrivacySettingsButtonTap {
+- (void)handleBlockerSettingsButtonTap {
   NSString* settingsTitleString =
     l10n_util::GetNSString(IDS_PREFS_ADS_TRACKING);
   VivaldiATBSettingsViewController* settingsController =
     [[VivaldiATBSettingsViewController alloc]
-      initWithTitle:settingsTitleString];
+       initWithBrowser:_browser
+                 title:settingsTitleString];
   [self.navigationController
     pushViewController:settingsController animated:YES];
 }
 
-/// Create and start mediator to compute and  populate the ad and tracker
-/// blocker setting options and blocked trackers and ads count for the host.
 - (void)loadATBOptions {
-  self.mediator = [[VivaldiATBMediator alloc] init];
-  self.mediator.consumer = self;
-  [self.mediator startMediating];
+  self.adblockManager = [[VivaldiATBManager alloc] initWithBrowser:_browser];
+  self.adblockManager.consumer = self;
+  [self.adblockManager getSettingOptions];
+}
+
+- (void)updateTableViewHeader {
+  if (!self.adblockManager)
+    return;
+
+  [_summeryView setStatusFromSetting:
+        [self.adblockManager blockingSettingForDomain:_host]];
 }
 
 -(void)reloadModelWithOptions:(NSArray*)options {
@@ -303,13 +308,16 @@ typedef NS_ENUM(NSInteger, ItemType) {
       addSectionWithIdentifier:SectionIdentifierGlobalSettings];
 
   for (id option in options) {
-    VivaldiATBSettingItem* settingOption = [[VivaldiATBSettingItem alloc]
+    VivaldiATBSettingItem* tableViewItem = [[VivaldiATBSettingItem alloc]
         initWithType:ItemTypeGlobalSetting];
-    settingOption.item = option;
-    settingOption.globalDefaultOption = ATBSettingBlockTrackers;
-    settingOption.userPreferredOption = ATBSettingBlockTrackers;
+    tableViewItem.item = option;
+    tableViewItem.globalDefaultOption =
+        [self.adblockManager globalBlockingSetting];
+    tableViewItem.userPreferredOption =
+        [self.adblockManager blockingSettingForDomain:_host];
+    tableViewItem.showDefaultMarker = YES;
 
-    [model addItem:settingOption
+    [model addItem:tableViewItem
          toSectionWithIdentifier:SectionIdentifierGlobalSettings];
   }
 
@@ -335,13 +343,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
     if (!strongSelf)
       return;
 
-    if (!attributes) {
+    if (!attributes || !attributes.faviconImage) {
+      self.faviconView.image = [UIImage imageNamed:vNTPSDFallbackFavicon];
       return;
     }
-
-    if (attributes.faviconImage) {
-      self.faviconView.image = attributes.faviconImage;
-    }
+    self.faviconView.image = attributes.faviconImage;
   };
 
   CGFloat desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
@@ -371,29 +377,63 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self.navigationController pushViewController:controller animated:YES];
 }
 
-#pragma mark - AD AND TRACKER BLOCKER CONSUMER
-
-- (void)refreshSettingOptions:(NSArray*)items {
-  if (items.count == 0)
-    return;
-  [self reloadModelWithOptions:items];
-}
-
-#pragma mark - SUMMERY HEADER VIEW DELEGATE
-
-- (void)didTapAds {
-  [self navigateToDetailsViewControllerWithSource:ATBSourceAds];
-}
-
-- (void)didTapTrackers {
-  [self navigateToDetailsViewControllerWithSource:ATBSourceTrackers];
-}
-
 #pragma mark - UITABLEVIEW DELEGATE
 
 - (void)tableView:(UITableView*)tableView
-didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+  didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
+
+  TableViewModel* model = self.tableViewModel;
+
+  VivaldiATBSettingItem* newSelectedCell =
+      base::mac::ObjCCastStrict<VivaldiATBSettingItem>
+          ([model itemAtIndexPath:indexPath]);
+
+  NSInteger type = newSelectedCell.item.type;
+
+  ATBSettingType siteSpecificSetting;
+
+  if (!self.adblockManager)
+    return;
+  switch (type) {
+    case ATBSettingNoBlocking:
+      siteSpecificSetting = ATBSettingNoBlocking;
+      break;
+    case ATBSettingBlockTrackers:
+      siteSpecificSetting = ATBSettingBlockTrackers;
+      break;
+    case ATBSettingBlockTrackersAndAds:
+      siteSpecificSetting = ATBSettingBlockTrackersAndAds;
+      break;
+    default:
+      siteSpecificSetting = [self.adblockManager globalBlockingSetting];
+      break;
+  }
+
+  // Do nothing if previous and new selection are same.
+  if (siteSpecificSetting ==
+      [self.adblockManager blockingSettingForDomain:_host])
+    return;
+
+  if (![VivaldiGlobalHelpers isValidDomain:_host])
+    return;
+
+  // Remove exceptions first if any.
+  [self.adblockManager removeExceptionForDomain:_host];
+
+  // Add new exception.
+  [self.adblockManager setExceptionForDomain:_host
+                                blockingType:siteSpecificSetting];
+
   [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+#pragma mark: - VivaldiATBConsumer
+
+- (void)didRefreshSettingOptions:(NSArray*)options {
+  if (options.count == 0)
+    return;
+  [self reloadModelWithOptions:options];
+  [self updateTableViewHeader];
 }
 
 @end

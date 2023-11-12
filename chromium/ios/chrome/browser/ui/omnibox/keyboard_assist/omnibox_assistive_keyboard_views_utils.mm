@@ -12,6 +12,10 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -48,6 +52,9 @@ NSArray<UIControl*>* OmniboxAssistiveKeyboardLeadingControls(
     bool useLens) {
   NSMutableArray<UIControl*>* controls = [NSMutableArray<UIControl*> array];
 
+  // Vivaldi: Voice search is not available for chromium, so we will skip
+  // adding the voice search button in keyboard accessory view.
+  if (!vivaldi::IsVivaldiRunning()) {
   UIButton* voiceSearchButton = [[UIButton alloc] initWithFrame:CGRectZero];
   SetUpButtonWithIcon(voiceSearchButton, @"keyboard_accessory_voice_search");
   voiceSearchButton.enabled = ios::provider::IsVoiceSearchEnabled();
@@ -59,6 +66,7 @@ NSArray<UIControl*>* OmniboxAssistiveKeyboardLeadingControls(
                         action:@selector(keyboardAccessoryVoiceSearchTapped:)
               forControlEvents:UIControlEventTouchUpInside];
   [controls addObject:voiceSearchButton];
+  } // End Vivaldi
 
   UIButton* cameraButton = [UIButton buttonWithType:UIButtonTypeCustom];
   if (useLens) {

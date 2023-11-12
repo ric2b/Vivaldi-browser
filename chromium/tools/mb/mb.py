@@ -9,9 +9,6 @@ MB is a wrapper script for GN that can be used to generate build files
 for sets of canned configurations and analyze them.
 """
 
-from __future__ import absolute_import
-from __future__ import print_function
-
 import argparse
 import ast
 import collections
@@ -22,16 +19,13 @@ import pipes
 import platform
 import re
 import shutil
-import sys
 import subprocess
+import sys
 import tempfile
 import traceback
+import urllib.request
 import zipfile
 
-if sys.version_info.major == 2:
-  from urllib2 import urlopen
-else:
-  from urllib.request import urlopen
 
 CHROMIUM_SRC_DIR = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
@@ -917,7 +911,7 @@ class MetaBuildWrapper:
     if self.Exists(expectations_dir):
       jsonish_blob = self._ToJsonish()
       if not validation.CheckExpectations(self, jsonish_blob, expectations_dir):
-        raise MBErr("Expectations out of date. Please run 'mb.py train'.")
+        raise MBErr("Expectations out of date. Run 'tools/mb/mb.py train'.")
 
     validation.CheckKeyOrdering(errs, self.builder_groups, self.configs,
                                 self.mixins)
@@ -2143,7 +2137,7 @@ class MetaBuildWrapper:
 
   def Fetch(self, url):
     # This function largely exists so it can be overridden for testing.
-    f = urlopen(url)
+    f = urllib.request.urlopen(url)
     contents = f.read()
     f.close()
     return contents
@@ -2205,7 +2199,7 @@ class MetaBuildWrapper:
     # This function largely exists so it can be overriden for testing.
     if self.args.dryrun or self.args.verbose or force_verbose:
       self.Print('\nWriting """\\\n%s""" to %s.\n' % (contents, path))
-    with open(path, 'w') as fp:
+    with open(path, 'w', encoding='utf-8', newline='') as fp:
       return fp.write(contents)
 
 

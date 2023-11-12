@@ -6,7 +6,9 @@
 #define COMPONENTS_EXO_SURFACE_TREE_HOST_H_
 
 #include <memory>
+#include <set>
 
+#include "base/containers/queue.h"
 #include "base/memory/weak_ptr.h"
 #include "components/exo/layer_tree_frame_sink_holder.h"
 #include "components/exo/surface.h"
@@ -43,7 +45,7 @@ class SurfaceTreeHost : public SurfaceDelegate,
 
   // Sets a root surface of a surface tree. This surface tree will be hosted in
   // the |host_window_|.
-  void SetRootSurface(Surface* root_surface);
+  virtual void SetRootSurface(Surface* root_surface);
 
   // Returns false if the hit test region is empty.
   bool HasHitTestRegion() const;
@@ -79,14 +81,12 @@ class SurfaceTreeHost : public SurfaceDelegate,
 
   using PresentationCallbacks = std::list<Surface::PresentationCallback>;
 
-  const PresentationCallbacks& presentation_callbacks() const {
-    return presentation_callbacks_;
-  }
-
   base::flat_map<uint32_t, PresentationCallbacks>&
   GetActivePresentationCallbacksForTesting() {
     return active_presentation_callbacks_;
   }
+
+  uint32_t GenerateNextFrameToken() { return ++next_token_; }
 
   // SurfaceDelegate:
   void OnSurfaceCommit() override;
@@ -112,6 +112,7 @@ class SurfaceTreeHost : public SurfaceDelegate,
   void UnsetCanGoBack() override {}
   void SetPip() override {}
   void UnsetPip() override {}
+  void SetFloat() override {}
   void SetAspectRatio(const gfx::SizeF& aspect_ratio) override {}
   void MoveToDesk(int desk_index) override {}
   void SetVisibleOnAllWorkspaces() override {}
@@ -134,12 +135,14 @@ class SurfaceTreeHost : public SurfaceDelegate,
 
   void SetSecurityDelegate(SecurityDelegate* security_delegate);
 
+  void SubmitCompositorFrameForTesting(viz::CompositorFrame frame);
+
  protected:
   void UpdateDisplayOnTree();
 
   // Call this after a buffer has been committed but before a compositor frame
   // has been submitted.
-  void DidCommit();
+  void WillCommit();
 
   // Call this to submit a compositor frame.
   void SubmitCompositorFrame();
@@ -166,6 +169,8 @@ class SurfaceTreeHost : public SurfaceDelegate,
   // the host window's layer's scale factor.
   float GetScaleFactor();
 
+  void CleanUpCallbacks();
+
   Surface* root_surface_ = nullptr;
 
   // Position of root surface relative to topmost, leftmost sub-surface. The
@@ -175,15 +180,17 @@ class SurfaceTreeHost : public SurfaceDelegate,
   std::unique_ptr<aura::Window> host_window_;
   std::unique_ptr<LayerTreeFrameSinkHolder> layer_tree_frame_sink_holder_;
 
-  // This list contains the callbacks to notify the client when it is a good
-  // time to start producing a new frame. These callbacks move to
-  // |frame_callbacks_| when Commit() is called. They fire when the effect
-  // of the Commit() is scheduled to be drawn.
-  std::list<Surface::FrameCallback> frame_callbacks_;
+  // This queue contains lists the callbacks to notify the client when it is a
+  // good time to start producing a new frame. Each list corresponds to a
+  // compositor frame, in the order of submission to
+  // `layer_tree_frame_sink_holder_`.
+  //
+  // These callbacks move to |frame_callbacks_| when Commit() is called. They
+  // fire when the effect of the Commit() is scheduled to be drawn.
+  base::queue<std::list<Surface::FrameCallback>> frame_callbacks_;
 
-  // These lists contains the callbacks to notify the client when surface
+  // These lists contain the callbacks to notify the client when surface
   // contents have been presented.
-  PresentationCallbacks presentation_callbacks_;
   base::flat_map<uint32_t, PresentationCallbacks>
       active_presentation_callbacks_;
 
@@ -206,6 +213,8 @@ class SurfaceTreeHost : public SurfaceDelegate,
   bool client_submits_surfaces_in_pixel_coordinates_ = false;
 
   SecurityDelegate* security_delegate_ = nullptr;
+
+  std::set<gpu::SyncToken> prev_frame_verified_tokens_;
 
   base::WeakPtrFactory<SurfaceTreeHost> weak_ptr_factory_{this};
 };

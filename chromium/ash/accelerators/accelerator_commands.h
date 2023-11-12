@@ -85,6 +85,12 @@ ASH_EXPORT bool CanToggleCalendar();
 
 ASH_EXPORT bool CanToggleDictation();
 
+ASH_EXPORT bool CanToggleFloatingWindow();
+
+ASH_EXPORT bool CanToggleGameDashboard();
+
+ASH_EXPORT bool CanToggleMultitaskMenu();
+
 ASH_EXPORT bool CanToggleOverview();
 
 ASH_EXPORT bool CanTogglePrivacyScreen();
@@ -258,6 +264,9 @@ ASH_EXPORT void ShowEmojiPicker();
 // Sees keyboard shortcut helper.
 ASH_EXPORT void ShowKeyboardShortcutViewer();
 
+// Opens Shortcut Customization.
+ASH_EXPORT void ShowShortcutCustomizationApp();
+
 // Shows stylus tools.
 ASH_EXPORT void ShowStylusTools();
 
@@ -311,6 +320,9 @@ ASH_EXPORT void ToggleFullscreen();
 // Turns the fullscreen magnifier mode on or off.
 ASH_EXPORT void ToggleFullscreenMagnifier();
 
+// Toggles the game dashboard on the current window.
+ASH_EXPORT void ToggleGameDashboard();
+
 // Turns the high contrast mode on or off.
 ASH_EXPORT void ToggleHighContrast();
 
@@ -334,6 +346,9 @@ ASH_EXPORT bool ToggleMinimized();
 
 // Turns the mirror mode on or off.
 ASH_EXPORT void ToggleMirrorMode();
+
+// Toggles the multitask menu.
+ASH_EXPORT void ToggleMultitaskMenu();
 
 // Turns the overview mode on or off.
 ASH_EXPORT void ToggleOverview();

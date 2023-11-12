@@ -80,6 +80,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
@@ -3199,8 +3200,8 @@ TEST_P(OverviewSessionTest, AccessibilityFocusAnnotator) {
 // Tests that accessibility overrides are set as expected on overview related
 // widgets.
 TEST_P(OverviewSessionTest, AccessibilityFocusAnnotatorNoSavedDesks) {
-  // If desks templates is enabled, the a11y order changes. This is tested in
-  // the desks templates test suite.
+  // If saved desk is enabled, the a11y order changes. This is tested in
+  // the saved desk test suite.
   if (GetParam() || saved_desk_util::IsDeskSaveAndRecallEnabled())
     return;
 
@@ -3453,14 +3454,79 @@ INSTANTIATE_TEST_SUITE_P(All, OverviewSessionTest, testing::Bool());
 class FloatOverviewSessionTest : public OverviewTestBase {
  public:
   FloatOverviewSessionTest()
-      : scoped_feature_list_(chromeos::wm::features::kFloatWindow) {}
+      : scoped_feature_list_(chromeos::wm::features::kWindowLayoutMenu) {}
   FloatOverviewSessionTest(const FloatOverviewSessionTest&) = delete;
   FloatOverviewSessionTest& operator=(const FloatOverviewSessionTest&) = delete;
   ~FloatOverviewSessionTest() override = default;
 
+  // Checks if the float container is in its regular position above the
+  // always on top container and below the app list container. Returns false if
+  // this is not true on any of the root windows.
+  bool IsFloatContainerNormalStacked() const {
+    for (aura::Window* root : Shell::GetAllRootWindows()) {
+      if (!IsStackedBelow(
+              root->GetChildById(kShellWindowId_AlwaysOnTopContainer),
+              root->GetChildById(kShellWindowId_FloatContainer))) {
+        return false;
+      }
+      if (!IsStackedBelow(
+              root->GetChildById(kShellWindowId_FloatContainer),
+              root->GetChildById(kShellWindowId_AppListContainer))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool IsFloatContainerBelowActiveDesk() const {
+    for (aura::Window* root : Shell::GetAllRootWindows()) {
+      if (!IsStackedBelow(root->GetChildById(kShellWindowId_FloatContainer),
+                          root->GetChildById(kShellWindowId_DeskContainerA))) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+// Tests that the float container is stacked properly when entering and exiting
+// overview mode.
+TEST_F(FloatOverviewSessionTest, FloatContainerStacking) {
+  UpdateDisplay("800x600,800x600");
+
+  // We need at least one window for an overview enter animation.
+  auto window = CreateAppWindow();
+
+  ui::ScopedAnimationDurationScaleMode duration_scale(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+
+  EXPECT_TRUE(IsFloatContainerNormalStacked());
+
+  // Enter overview. The float container remains above the active desk until
+  // after the overview enter animation is over.
+  ToggleOverview();
+  EXPECT_FALSE(IsFloatContainerBelowActiveDesk());
+  WaitForOverviewEnterAnimation();
+  EXPECT_TRUE(IsFloatContainerBelowActiveDesk());
+
+  // Exit overview. The float container is stacked in its normal position prior
+  // to the exit animation starting.
+  ToggleOverview();
+  EXPECT_FALSE(IsFloatContainerBelowActiveDesk());
+  WaitForOverviewExitAnimation();
+  EXPECT_TRUE(IsFloatContainerNormalStacked());
+
+  // Start overview but exit before the animation is complete. Verify the float
+  // container is stacked in its normal position.
+  ToggleOverview();
+  ToggleOverview();
+  EXPECT_TRUE(IsFloatContainerNormalStacked());
+}
 
 // Tests that when we drag in overview, and there is a floated window, the
 // float container gets restacked so it will appear under the dragged window.
@@ -3474,53 +3540,35 @@ TEST_F(FloatOverviewSessionTest, DraggingWithFloatedWindow) {
   PressAndReleaseKey(ui::VKEY_F, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN);
   ASSERT_TRUE(WindowState::Get(floated_window.get())->IsFloated());
 
-  // Checks if the float container is in its regular position above the
-  // always on top container and below the app list container. This should
-  // always be the case unless we are dragging a non-floated window in overview,
-  // and there is a floated window.
-  auto check_float_container_normal_stacked = []() {
-    for (aura::Window* root : Shell::GetAllRootWindows()) {
-      EXPECT_TRUE(IsStackedBelow(
-          root->GetChildById(kShellWindowId_AlwaysOnTopContainer),
-          root->GetChildById(kShellWindowId_FloatContainer)));
-      EXPECT_TRUE(
-          IsStackedBelow(root->GetChildById(kShellWindowId_FloatContainer),
-                         root->GetChildById(kShellWindowId_AppListContainer)));
-    }
-  };
-
-  check_float_container_normal_stacked();
   ToggleOverview();
+  ASSERT_TRUE(IsFloatContainerBelowActiveDesk());
+
   OverviewItem* normal_item = GetOverviewItemForWindow(normal_window.get());
   OverviewItem* floated_item = GetOverviewItemForWindow(floated_window.get());
 
-  // Dragging the floated window does not cause restacking as it is already on
-  // top of other windows like it should be.
+  // Start dragging the floated window. Check that the float container gets
+  // stacked above the desk container after dragging starts.
   ui::test::EventGenerator* generator = GetEventGenerator();
   generator->set_current_screen_location(
       gfx::ToRoundedPoint(floated_item->target_bounds().CenterPoint()));
   generator->PressLeftButton();
-  check_float_container_normal_stacked();
-
-  // Move the mouse a bit before releasing so that we stay in overview.
   generator->MoveMouseBy(10, 10);
+  EXPECT_TRUE(IsFloatContainerNormalStacked());
+
   generator->ReleaseLeftButton();
 
-  // Start dragging the regular window. Check that the float container gets
-  // stacked under the desk container after dragging starts.
+  // Dragging the normal window does not cause restacking as it is already on
+  // top of other windows like it should be.
+  ASSERT_TRUE(IsFloatContainerBelowActiveDesk());
   generator->set_current_screen_location(
       gfx::ToRoundedPoint(normal_item->target_bounds().CenterPoint()));
   generator->PressLeftButton();
   generator->MoveMouseBy(10, 10);
-  for (aura::Window* root : Shell::GetAllRootWindows()) {
-    EXPECT_TRUE(
-        IsStackedBelow(root->GetChildById(kShellWindowId_FloatContainer),
-                       root->GetChildById(kShellWindowId_DeskContainerA)));
-  }
+  EXPECT_TRUE(IsFloatContainerBelowActiveDesk());
 
   generator->ReleaseLeftButton();
   ASSERT_TRUE(InOverviewSession());
-  check_float_container_normal_stacked();
+  EXPECT_TRUE(IsFloatContainerBelowActiveDesk());
 
   // Tests that the stacking order is correct if we start dragging a normal
   // overview item, and then exit overview.
@@ -3530,7 +3578,7 @@ TEST_F(FloatOverviewSessionTest, DraggingWithFloatedWindow) {
   ToggleOverview();
   // `OverviewWindowDragController` gets deleted using `DeleteSoon()`.
   base::RunLoop().RunUntilIdle();
-  check_float_container_normal_stacked();
+  EXPECT_TRUE(IsFloatContainerNormalStacked());
 }
 
 // Tests that clicking the normal window to activate it does not result in a
@@ -3586,6 +3634,47 @@ TEST_F(FloatOverviewSessionTest, DraggingToNewDeskWithFloatedWindow) {
   EXPECT_EQ(2u, controller->desks().size());
   EXPECT_TRUE(
       base::Contains(controller->desks()[1]->windows(), normal_window.get()));
+}
+
+// Tests that the overview item associated with the floated window appears
+// underneath the about to be dragged window after long pressing.
+TEST_F(FloatOverviewSessionTest, LongPressingWithFloatedWindow) {
+  // Shorten the long press times so we don't have to delay as long.
+  ui::GestureConfiguration* gesture_config =
+      ui::GestureConfiguration::GetInstance();
+  gesture_config->set_long_press_time_in_ms(1);
+  gesture_config->set_short_press_time(base::Milliseconds(1));
+  gesture_config->set_show_press_delay_in_ms(1);
+
+  // Create one normal and one floated window.
+  auto normal_window = CreateAppWindow();
+  auto floated_window = CreateAppWindow();
+  PressAndReleaseKey(ui::VKEY_F, ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN);
+  ASSERT_TRUE(WindowState::Get(floated_window.get())->IsFloated());
+
+  ToggleOverview();
+  ASSERT_TRUE(IsFloatContainerBelowActiveDesk());
+
+  // Simulate a long press on the overview item of the floated window.
+  OverviewItem* float_item = GetOverviewItemForWindow(floated_window.get());
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->set_current_screen_location(
+      gfx::ToRoundedPoint(float_item->target_bounds().CenterPoint()));
+  generator->PressTouch();
+  base::RunLoop run_loop;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE, run_loop.QuitClosure(), base::Milliseconds(2));
+  run_loop.Run();
+
+  // After long pressing, the float container should be stacked above the desk
+  // container so that the overview item of the float window appears above
+  // during the drag.
+  EXPECT_TRUE(IsFloatContainerNormalStacked());
+
+  // Test that on release, the float container is stacked below the desk
+  // container again.
+  generator->ReleaseTouch();
+  EXPECT_TRUE(IsFloatContainerBelowActiveDesk());
 }
 
 class TabletModeOverviewSessionTest : public OverviewTestBase {
@@ -4462,7 +4551,7 @@ class SplitViewOverviewSessionTest : public OverviewTestBase {
     if (!IsDividerAnimating())
       return;
     split_view_controller()->StopAndShoveAnimatedDivider();
-    split_view_controller()->EndResizeImpl();
+    split_view_controller()->EndResizeWithDividerImpl();
     split_view_controller()->EndTabletSplitViewAfterResizingIfAppropriate();
   }
 
@@ -5098,7 +5187,7 @@ TEST_F(SplitViewOverviewSessionTest, AltLeftSquareBracketOnMaximizedWindow) {
   EXPECT_EQ(SplitViewController::State::kNoSnap,
             split_view_controller()->state());
   EXPECT_FALSE(InOverviewSession());
-  const WindowSnapWMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  const WMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
   snapped_window_state->OnWMEvent(&alt_left_square_bracket);
   EXPECT_TRUE(wm::IsActiveWindow(snapped_window.get()));
   EXPECT_EQ(WindowStateType::kPrimarySnapped,
@@ -5119,8 +5208,7 @@ TEST_F(SplitViewOverviewSessionTest, AltRightSquareBracketOnMaximizedWindow) {
   EXPECT_EQ(SplitViewController::State::kNoSnap,
             split_view_controller()->state());
   EXPECT_FALSE(InOverviewSession());
-  const WindowSnapWMEvent alt_right_square_bracket(
-      WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WMEvent alt_right_square_bracket(WM_EVENT_CYCLE_SNAP_SECONDARY);
   snapped_window_state->OnWMEvent(&alt_right_square_bracket);
   EXPECT_TRUE(wm::IsActiveWindow(snapped_window.get()));
   EXPECT_EQ(WindowStateType::kSecondarySnapped,
@@ -5147,11 +5235,10 @@ TEST_F(SplitViewOverviewSessionTest, AltSquareBracketOnUnsnappableWindow) {
         EXPECT_FALSE(InOverviewSession());
       };
   expect_unsnappable_window_is_active_and_maximized();
-  const WindowSnapWMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  const WMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
   unsnappable_window_state->OnWMEvent(&alt_left_square_bracket);
   expect_unsnappable_window_is_active_and_maximized();
-  const WindowSnapWMEvent alt_right_square_bracket(
-      WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WMEvent alt_right_square_bracket(WM_EVENT_CYCLE_SNAP_SECONDARY);
   unsnappable_window_state->OnWMEvent(&alt_right_square_bracket);
   expect_unsnappable_window_is_active_and_maximized();
 }
@@ -5165,7 +5252,7 @@ TEST_F(SplitViewOverviewSessionTest, AltSquareBracketOnSameSideSnappedWindow) {
                                         &window1](WMEventType event_type) {
     wm::ActivateWindow(window1.get());
     WindowState* window1_state = WindowState::Get(window1.get());
-    const WindowSnapWMEvent event(event_type);
+    const WMEvent event(event_type);
     window1_state->OnWMEvent(&event);
     EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
     EXPECT_EQ(WindowStateType::kMaximized, window1_state->GetStateType());
@@ -5221,8 +5308,7 @@ TEST_F(SplitViewOverviewSessionTest,
   const auto test_left_snapping_window1 = [this, &window1, &window2]() {
     wm::ActivateWindow(window1.get());
     WindowState* window1_state = WindowState::Get(window1.get());
-    const WindowSnapWMEvent alt_left_square_bracket(
-        WM_EVENT_CYCLE_SNAP_PRIMARY);
+    const WMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
     window1_state->OnWMEvent(&alt_left_square_bracket);
     EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
     EXPECT_EQ(WindowStateType::kPrimarySnapped, window1_state->GetStateType());
@@ -5235,8 +5321,7 @@ TEST_F(SplitViewOverviewSessionTest,
   const auto test_right_snapping_window1 = [this, &window1, &window2]() {
     wm::ActivateWindow(window1.get());
     WindowState* window1_state = WindowState::Get(window1.get());
-    const WindowSnapWMEvent alt_right_square_bracket(
-        WM_EVENT_CYCLE_SNAP_SECONDARY);
+    const WMEvent alt_right_square_bracket(WM_EVENT_CYCLE_SNAP_SECONDARY);
     window1_state->OnWMEvent(&alt_right_square_bracket);
     EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
     EXPECT_EQ(WindowStateType::kSecondarySnapped,
@@ -5446,9 +5531,9 @@ TEST_F(SplitViewOverviewSessionTest, SplitViewOverviewBothActiveTest) {
   EXPECT_EQ(divider_bounds.right(), overview_grid_bounds.x());
 
   const gfx::Point resize_start_location(divider_bounds.CenterPoint());
-  split_view_controller()->StartResize(resize_start_location);
+  split_view_controller()->StartResizeWithDivider(resize_start_location);
   const gfx::Point resize_end_location(300, 0);
-  split_view_controller()->EndResize(resize_end_location);
+  split_view_controller()->EndResizeWithDivider(resize_end_location);
   SkipDividerSnapAnimation();
 
   const gfx::Rect window1_bounds_after_resize = window1->GetBoundsInScreen();
@@ -5738,8 +5823,8 @@ TEST_F(SplitViewOverviewSessionTest, DragDividerToExitTest) {
 
   // Drag the divider toward closing the snapped window.
   gfx::Rect divider_bounds = GetSplitViewDividerBounds(false /* is_dragging */);
-  split_view_controller()->StartResize(divider_bounds.CenterPoint());
-  split_view_controller()->EndResize(gfx::Point(0, 0));
+  split_view_controller()->StartResizeWithDivider(divider_bounds.CenterPoint());
+  split_view_controller()->EndResizeWithDivider(gfx::Point(0, 0));
   SkipDividerSnapAnimation();
 
   // Test that split view mode is ended. Overview mode is still active.
@@ -5756,8 +5841,8 @@ TEST_F(SplitViewOverviewSessionTest, DragDividerToExitTest) {
   // Drag the divider toward closing the overview window grid.
   divider_bounds = GetSplitViewDividerBounds(false /*is_dragging=*/);
   const gfx::Rect display_bounds = GetWorkAreaInScreen(window2.get());
-  split_view_controller()->StartResize(divider_bounds.CenterPoint());
-  split_view_controller()->EndResize(display_bounds.bottom_right());
+  split_view_controller()->StartResizeWithDivider(divider_bounds.CenterPoint());
+  split_view_controller()->EndResizeWithDivider(display_bounds.bottom_right());
   SkipDividerSnapAnimation();
 
   // Test that split view mode is ended. Overview mode is also ended. |window2|
@@ -5820,10 +5905,10 @@ TEST_F(SplitViewOverviewSessionTest, SnappedWindowBoundsTest) {
 
   // Then drag the divider to left toward closing the snapped window.
   gfx::Rect divider_bounds = GetSplitViewDividerBounds(false /*is_dragging=*/);
-  split_view_controller()->StartResize(divider_bounds.CenterPoint());
+  split_view_controller()->StartResizeWithDivider(divider_bounds.CenterPoint());
   // Drag the divider to a point that is close enough but still have a short
   // distance to the edge of the screen.
-  split_view_controller()->EndResize(gfx::Point(20, 20));
+  split_view_controller()->EndResizeWithDivider(gfx::Point(20, 20));
   SkipDividerSnapAnimation();
 
   // Test that split view mode is ended. Overview mode is still active.
@@ -5846,11 +5931,11 @@ TEST_F(SplitViewOverviewSessionTest, SnappedWindowBoundsTest) {
 
   // Then drag the divider to right toward closing the snapped window.
   divider_bounds = GetSplitViewDividerBounds(false /* is_dragging */);
-  split_view_controller()->StartResize(divider_bounds.CenterPoint());
+  split_view_controller()->StartResizeWithDivider(divider_bounds.CenterPoint());
   // Drag the divider to a point that is close enough but still have a short
   // distance to the edge of the screen.
   end_location2.Offset(-20, -20);
-  split_view_controller()->EndResize(end_location2);
+  split_view_controller()->EndResizeWithDivider(end_location2);
   SkipDividerSnapAnimation();
 
   // Test that split view mode is ended. Overview mode is still active.
@@ -5876,9 +5961,10 @@ TEST_F(SplitViewOverviewSessionTest, SnappedWindowBoundsWithMinimumSizeTest) {
   ToggleOverview();
   split_view_controller()->SnapWindow(
       window1.get(), SplitViewController::SnapPosition::kPrimary);
-  split_view_controller()->StartResize(
+  split_view_controller()->StartResizeWithDivider(
       GetSplitViewDividerBounds(/*is_dragging=*/false).CenterPoint());
-  split_view_controller()->EndResize(gfx::Point(work_area_length / 3, 10));
+  split_view_controller()->EndResizeWithDivider(
+      gfx::Point(work_area_length / 3, 10));
   SkipDividerSnapAnimation();
   // Use |EXPECT_NEAR| for reasons related to rounding and divider thickness.
   EXPECT_NEAR(work_area_length / 3,
@@ -5909,9 +5995,10 @@ TEST_F(SplitViewOverviewSessionTest, SnappedWindowBoundsWithMinimumSizeTest) {
               SplitViewController::SnapPosition::kSecondary, window2.get())
           .width(),
       8);
-  split_view_controller()->StartResize(
+  split_view_controller()->StartResizeWithDivider(
       GetSplitViewDividerBounds(/*is_dragging=*/false).CenterPoint());
-  split_view_controller()->EndResize(gfx::Point(work_area_length * 2 / 3, 10));
+  split_view_controller()->EndResizeWithDivider(
+      gfx::Point(work_area_length * 2 / 3, 10));
   EXPECT_NEAR(work_area_length * 2 / 3,
               split_view_controller()
                   ->GetSnappedWindowBoundsInScreen(
@@ -6377,10 +6464,10 @@ TEST_F(SplitViewOverviewSessionTest,
           ->split_view_divider()
           ->GetDividerBoundsInScreen(/*is_dragging=*/false)
           .CenterPoint();
-  split_view_controller()->StartResize(divider_drag_point);
+  split_view_controller()->StartResizeWithDivider(divider_drag_point);
   divider_drag_point.Offset(20, 0);
-  split_view_controller()->Resize(divider_drag_point);
-  split_view_controller()->EndResize(divider_drag_point);
+  split_view_controller()->ResizeWithDivider(divider_drag_point);
+  split_view_controller()->EndResizeWithDivider(divider_drag_point);
   ASSERT_TRUE(IsDividerAnimating());
 
   OverviewItem* overview_item = GetOverviewItemForWindow(overview_window.get());
@@ -6517,6 +6604,29 @@ TEST_F(SplitViewOverviewSessionTest, NoCrashWhenDraggingDividerInPortrait) {
   generator->PressTouch();
   generator->MoveTouchBy(0, 600);
   generator->ReleaseTouch();
+}
+
+// Tests that in tablet mode, after minimizing and unminimizng a snapped window,
+// it is visible to the user. Regression test for b/267391123.
+TEST_F(SplitViewOverviewSessionTest, WindowVisibleAfterMinimizeUnminimize) {
+  std::unique_ptr<aura::Window> window = CreateAppWindow();
+  auto* window_state = WindowState::Get(window.get());
+
+  split_view_controller()->SnapWindow(
+      window.get(), SplitViewController::SnapPosition::kPrimary);
+  ASSERT_TRUE(InOverviewSession());
+  ASSERT_FALSE(GetOverviewItemForWindow(window.get()));
+
+  window_state->Minimize();
+  ASSERT_TRUE(InOverviewSession());
+  ASSERT_TRUE(GetOverviewItemForWindow(window.get()));
+
+  window->Show();
+  wm::ActivateWindow(window.get());
+  EXPECT_TRUE(window_state->IsSnapped());
+  EXPECT_TRUE(InOverviewSession());
+  EXPECT_TRUE(window->IsVisible());
+  EXPECT_EQ(1.f, window->layer()->GetTargetOpacity());
 }
 
 // Test the split view and overview functionalities in clamshell mode. Split
@@ -7286,15 +7396,14 @@ TEST_F(SplitViewOverviewSessionInClamshellTest,
   EXPECT_FALSE(split_view_controller()->InSplitViewMode());
   EXPECT_FALSE(InOverviewSession());
   // Alt+[
-  const WindowSnapWMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  const WMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
   WindowState* window1_state = WindowState::Get(window1.get());
   window1_state->OnWMEvent(&alt_left_square_bracket);
   EXPECT_EQ(WindowStateType::kPrimarySnapped, window1_state->GetStateType());
   EXPECT_FALSE(split_view_controller()->InSplitViewMode());
   EXPECT_FALSE(InOverviewSession());
   // Alt+]
-  const WindowSnapWMEvent alt_right_square_bracket(
-      WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WMEvent alt_right_square_bracket(WM_EVENT_CYCLE_SNAP_SECONDARY);
   window1_state->OnWMEvent(&alt_right_square_bracket);
   EXPECT_EQ(WindowStateType::kSecondarySnapped, window1_state->GetStateType());
   EXPECT_FALSE(split_view_controller()->InSplitViewMode());
@@ -7314,7 +7423,7 @@ TEST_F(SplitViewOverviewSessionInClamshellTest,
             snapped_window_state->GetStateType());
   EXPECT_TRUE(split_view_controller()->InSplitViewMode());
   EXPECT_TRUE(InOverviewSession());
-  const WindowSnapWMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  const WMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
   snapped_window_state->OnWMEvent(&alt_left_square_bracket);
   EXPECT_EQ(WindowStateType::kNormal, snapped_window_state->GetStateType());
   EXPECT_FALSE(split_view_controller()->InSplitViewMode());
@@ -7334,8 +7443,7 @@ TEST_F(SplitViewOverviewSessionInClamshellTest,
             snapped_window_state->GetStateType());
   EXPECT_TRUE(split_view_controller()->InSplitViewMode());
   EXPECT_TRUE(InOverviewSession());
-  const WindowSnapWMEvent alt_right_square_bracket(
-      WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WMEvent alt_right_square_bracket(WM_EVENT_CYCLE_SNAP_SECONDARY);
   snapped_window_state->OnWMEvent(&alt_right_square_bracket);
   EXPECT_EQ(WindowStateType::kNormal, snapped_window_state->GetStateType());
   EXPECT_FALSE(split_view_controller()->InSplitViewMode());
@@ -7361,7 +7469,7 @@ TEST_F(SplitViewOverviewSessionInClamshellTest,
   EXPECT_EQ(snapped_window.get(), split_view_controller()->secondary_window());
   EXPECT_TRUE(InOverviewSession());
   // Test using Alt+[ to put |snapped_window| on the left.
-  const WindowSnapWMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  const WMEvent alt_left_square_bracket(WM_EVENT_CYCLE_SNAP_PRIMARY);
   snapped_window_state->OnWMEvent(&alt_left_square_bracket);
   EXPECT_TRUE(wm::IsActiveWindow(snapped_window.get()));
   EXPECT_EQ(WindowStateType::kPrimarySnapped,
@@ -7371,8 +7479,7 @@ TEST_F(SplitViewOverviewSessionInClamshellTest,
   EXPECT_EQ(snapped_window.get(), split_view_controller()->primary_window());
   EXPECT_TRUE(InOverviewSession());
   // Test using Alt+] to put |snapped_window| on the right.
-  const WindowSnapWMEvent alt_right_square_bracket(
-      WM_EVENT_CYCLE_SNAP_SECONDARY);
+  const WMEvent alt_right_square_bracket(WM_EVENT_CYCLE_SNAP_SECONDARY);
   snapped_window_state->OnWMEvent(&alt_right_square_bracket);
   EXPECT_TRUE(wm::IsActiveWindow(snapped_window.get()));
   EXPECT_EQ(WindowStateType::kSecondarySnapped,

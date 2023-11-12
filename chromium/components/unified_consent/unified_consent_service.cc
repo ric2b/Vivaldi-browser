@@ -7,7 +7,6 @@
 #include "base/check_op.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/scoped_observation.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync/base/user_selectable_type.h"
@@ -15,6 +14,11 @@
 #include "components/sync/driver/sync_user_settings.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/unified_consent/pref_names.h"
+
+
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+// End Vivaldi
 
 namespace unified_consent {
 
@@ -56,8 +60,14 @@ void UnifiedConsentService::SetUrlKeyedAnonymizedDataCollectionEnabled(
   if (GetMigrationState() != MigrationState::kCompleted)
     SetMigrationState(MigrationState::kCompleted);
 
+  // Vivaldi: Always set false regardless of any settings.
+  if (vivaldi::IsVivaldiRunning()) {
+    pref_service_->SetBoolean(prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
+                              false);
+  } else {
   pref_service_->SetBoolean(prefs::kUrlKeyedAnonymizedDataCollectionEnabled,
                             enabled);
+  } // End Vivaldi
 }
 
 void UnifiedConsentService::Shutdown() {

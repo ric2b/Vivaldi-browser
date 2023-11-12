@@ -6,19 +6,20 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/limits.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
+#include "media/base/media_util.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_frame.h"
@@ -126,7 +127,7 @@ DecoderStream<StreamType>::~DecoderStream() {
                            base::BindOnce(std::move(init_cb_), false));
   }
   if (read_cb_) {
-    read_cb_ = BindToCurrentLoop(std::move(read_cb_));
+    read_cb_ = base::BindPostTaskToCurrentDefault(std::move(read_cb_));
     SatisfyRead(DecoderStatus::Codes::kAborted);
   }
   if (reset_cb_)
@@ -185,7 +186,7 @@ void DecoderStream<StreamType>::Read(ReadCB read_cb) {
 
   TRACE_EVENT_ASYNC_BEGIN0("media", GetReadTraceString<StreamType>(), this);
   if (state_ == STATE_ERROR) {
-    read_cb_ = BindToCurrentLoop(std::move(read_cb));
+    read_cb_ = base::BindPostTaskToCurrentDefault(std::move(read_cb));
     // OnDecodeDone, OnBufferReady, and CompleteDecoderReinitialization all set
     // STATE_ERROR and call SatisfyRead, passing the error back to a ReadCB.
     SatisfyRead(DecoderStatus::Codes::kDecoderStreamInErrorState);
@@ -194,13 +195,13 @@ void DecoderStream<StreamType>::Read(ReadCB read_cb) {
 
   if (state_ == STATE_END_OF_STREAM && ready_outputs_.empty() &&
       unprepared_outputs_.empty()) {
-    read_cb_ = BindToCurrentLoop(std::move(read_cb));
+    read_cb_ = base::BindPostTaskToCurrentDefault(std::move(read_cb));
     SatisfyRead(StreamTraits::CreateEOSOutput());
     return;
   }
 
   if (!ready_outputs_.empty()) {
-    read_cb_ = BindToCurrentLoop(std::move(read_cb));
+    read_cb_ = base::BindPostTaskToCurrentDefault(std::move(read_cb));
     SatisfyRead(ready_outputs_.front());
     ready_outputs_.pop_front();
     MaybePrepareAnotherOutput();
@@ -222,7 +223,7 @@ void DecoderStream<StreamType>::Reset(base::OnceClosure closure) {
   reset_cb_ = std::move(closure);
 
   if (read_cb_) {
-    read_cb_ = BindToCurrentLoop(std::move(read_cb_));
+    read_cb_ = base::BindPostTaskToCurrentDefault(std::move(read_cb_));
     SatisfyRead(DecoderStatus::Codes::kAborted);
   }
 
@@ -512,7 +513,7 @@ void DecoderStream<StreamType>::DecodeInternal(
   DCHECK(buffer);
 
   std::unique_ptr<ScopedDecodeTrace> trace_event;
-  if (ScopedDecodeTrace::IsEnabled()) {
+  if (MediaTraceIsEnabled()) {
     // Because multiple Decode() calls may be in flight, each call needs a
     // unique trace event class to identify it. This scoped event is bound
     // into the OnDecodeDone callback to ensure the trace is always closed.
@@ -726,8 +727,16 @@ void DecoderStream<StreamType>::ReadFromDemuxerStream() {
   TRACE_EVENT_ASYNC_BEGIN0("media", GetDemuxerReadTraceString<StreamType>(),
                            this);
   pending_demuxer_read_ = true;
-  stream_->Read(base::BindOnce(&DecoderStream<StreamType>::OnBufferReady,
-                               weak_factory_.GetWeakPtr()));
+  stream_->Read(1, base::BindOnce(&DecoderStream<StreamType>::OnBuffersRead,
+                                  weak_factory_.GetWeakPtr()));
+}
+
+template <DemuxerStream::Type StreamType>
+void DecoderStream<StreamType>::OnBuffersRead(
+    DemuxerStream::Status status,
+    DemuxerStream::DecoderBufferVector buffers) {
+  DCHECK_LE(buffers.size(), 1u) << "DecoderStream only reads a single-buffer.";
+  OnBufferReady(status, buffers.empty() ? nullptr : std::move(buffers[0]));
 }
 
 template <DemuxerStream::Type StreamType>
@@ -836,7 +845,6 @@ void DecoderStream<StreamType>::OnBufferReady(
         << " decoder config changed midstream, new config: "
         << config.AsHumanReadableString();
 
-    decoder_selector_.NotifyConfigChanged();
     if (config_change_observer_cb_)
       config_change_observer_cb_.Run(config);
 
@@ -1064,7 +1072,9 @@ void DecoderStream<StreamType>::ReportEncryptionType(
                           ? EncryptionType::kEncryptedWithClearLead
                           : EncryptionType::kEncrypted;
   } else if (traits_->GetDecoderConfig(stream_).is_encrypted()) {
-    bool is_buffer_encrypted = buffer->decrypt_config();
+    // Treat EOS as clear buffer which should be rare.
+    bool is_buffer_encrypted =
+        !buffer->end_of_stream() && buffer->decrypt_config();
     encryption_type = !is_buffer_encrypted
                           ? EncryptionType::kEncryptedWithClearLead
                           : EncryptionType::kEncrypted;

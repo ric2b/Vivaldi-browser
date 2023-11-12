@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -98,5 +98,5 @@ void ExposeChromeRendererInterfacesToBrowser(
   // Vivaldi
   binders->Add<content_injection::mojom::Manager>(
       base::BindRepeating(&content_injection::Manager::BindReceiver),
-      base::SequencedTaskRunnerHandle::Get());
+      base::SequencedTaskRunner::GetCurrentDefault());
 }

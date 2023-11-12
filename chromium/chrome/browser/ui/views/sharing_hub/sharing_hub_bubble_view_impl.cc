@@ -98,10 +98,12 @@ void SharingHubBubbleViewImpl::OnThemeChanged() {
   LocationBarBubbleDelegateView::OnThemeChanged();
   if (GetWidget()) {
     set_color(GetColorProvider()->GetColor(ui::kColorMenuBackground));
-    share_link_label_->SetBackgroundColor(
-        GetColorProvider()->GetColor(ui::kColorMenuBackground));
-    share_link_label_->SetEnabledColor(
-        GetColorProvider()->GetColor(ui::kColorMenuItemForeground));
+    if (share_link_label_) {
+      share_link_label_->SetBackgroundColor(
+          GetColorProvider()->GetColor(ui::kColorMenuBackground));
+      share_link_label_->SetEnabledColor(
+          GetColorProvider()->GetColor(ui::kColorMenuItemForeground));
+    }
   }
 }
 
@@ -116,7 +118,6 @@ void SharingHubBubbleViewImpl::OnActionSelected(
     return;
 
   controller_->OnActionSelected(button->action_command_id(),
-                                button->action_is_first_party(),
                                 button->action_name_for_metrics());
 
   Hide();
@@ -146,13 +147,11 @@ void SharingHubBubbleViewImpl::Init() {
   scroll_view_->ClipHeightTo(0, kActionButtonHeight * kMaximumButtons);
   scroll_view_->SetBackgroundThemeColorId(ui::kColorMenuBackground);
 
-  PopulateScrollView(controller_->GetFirstPartyActions(),
-                     controller_->GetThirdPartyActions());
+  PopulateScrollView(controller_->GetFirstPartyActions());
 }
 
 void SharingHubBubbleViewImpl::PopulateScrollView(
-    const std::vector<SharingHubAction>& first_party_actions,
-    const std::vector<SharingHubAction>& third_party_actions) {
+    const std::vector<SharingHubAction>& first_party_actions) {
   auto* action_list_view =
       scroll_view_->SetContents(std::make_unique<views::View>());
   action_list_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -160,28 +159,6 @@ void SharingHubBubbleViewImpl::PopulateScrollView(
       kInterItemPadding));
 
   for (const auto& action : first_party_actions) {
-    auto* view = action_list_view->AddChildView(
-        std::make_unique<SharingHubBubbleActionButton>(this, action));
-    view->SetGroup(kActionButtonGroup);
-  }
-
-  action_list_view->AddChildView(std::make_unique<views::Separator>());
-
-  constexpr int kIndent = 12;
-  constexpr int kLabelLineHeight = 40;
-
-  auto* share_link_label =
-      new views::Label(l10n_util::GetStringUTF16(IDS_SHARING_HUB_SHARE_LABEL),
-                       views::style::CONTEXT_DIALOG_BODY_TEXT);
-  share_link_label->SetLineHeight(kLabelLineHeight);
-  share_link_label->SetMultiLine(true);
-  share_link_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  share_link_label->SizeToFit(views::DISTANCE_BUBBLE_PREFERRED_WIDTH);
-  share_link_label->SetBorder(
-      views::CreateEmptyBorder(gfx::Insets::TLBR(0, kIndent, 0, kIndent)));
-  share_link_label_ = action_list_view->AddChildView(share_link_label);
-
-  for (const auto& action : third_party_actions) {
     auto* view = action_list_view->AddChildView(
         std::make_unique<SharingHubBubbleActionButton>(this, action));
     view->SetGroup(kActionButtonGroup);

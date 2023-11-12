@@ -6,6 +6,7 @@
 #define CHROMEOS_ASH_SERVICES_ASSISTANT_ASSISTANT_HOST_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "chromeos/ash/services/libassistant/public/mojom/audio_input_controller.mojom.h"
@@ -143,6 +144,9 @@ class AssistantHost {
   mojo::PendingReceiver<libassistant::mojom::TimerDelegate> timer_delegate_;
 
   // The thread on which the Libassistant service runs.
+  // Only used to run LibAssistant service without sandbox for development, e.g.
+  // with `--no-sandbox`. Background thread is needed because there are blocking
+  // calls when start LibAssistant service, e.g. creating directories.
   // Warning: must be the last object, so it is destroyed (and flushed) first.
   // This will prevent use-after-free issues where the background thread would
   // access other member variables after they have been destroyed.

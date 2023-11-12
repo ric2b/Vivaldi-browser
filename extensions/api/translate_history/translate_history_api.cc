@@ -94,10 +94,7 @@ ExtensionFunction::ResponseAction TranslateHistoryFunction::Run() {
   if (!model) {
     Respond(Error("Failed to create model"));
   } else if (model->loaded()) {
-    ResponseValue response = RunWithModel(model);
-    if (response) {
-      Respond(std::move(response));
-    }
+    return RespondNow(RunWithModel(model));
   } else {
     AddRef();  // Balanced in MenuModelLoaded().
     model->AddObserver(this);
@@ -113,10 +110,7 @@ void TranslateHistoryFunction::TH_ModelLoaded(TH_Model* model) {
   if (!model->loaded()) {
     Respond(Error("Failed to load model"));
   } else {
-    ResponseValue response = RunWithModel(model);
-    if (response) {
-      Respond(std::move(response));
-    }
+    Respond(RunWithModel(model));
   }
 
   Release();  // Balanced in Run().

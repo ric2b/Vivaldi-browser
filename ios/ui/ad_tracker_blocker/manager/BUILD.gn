@@ -1,0 +1,24 @@
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("manager") {
+  sources = [
+    "vivaldi_atb_manager.h",
+    "vivaldi_atb_manager.mm",
+    "vivaldi_atb_manager_helper.h",
+    "vivaldi_atb_manager_helper.mm",
+    "vivaldi_atb_manager_bridge.h",
+    "vivaldi_atb_manager_bridge.mm",
+  ]
+
+  deps = [
+    "//ui/base",
+    "//services/network/public/mojom",
+  ]
+
+  frameworks = [
+    "Foundation.framework",
+    "UIKit.framework",
+  ]
+
+  configs += [ "//build/config/compiler:enable_arc" ]
+}

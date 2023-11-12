@@ -8,10 +8,13 @@
 #include <XInput.h>
 #include <winerror.h>
 
-#include "base/bind.h"
+#include <utility>
+#include <vector>
+
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/run_loop.h"
@@ -23,7 +26,6 @@
 #include "base/threading/thread.h"
 #include "base/time/time.h"
 #include "base/win/scoped_hstring.h"
-#include "base/win/windows_version.h"
 #include "device/gamepad/gamepad_id_list.h"
 #include "device/gamepad/gamepad_pad_state_provider.h"
 #include "device/gamepad/gamepad_provider.h"
@@ -46,6 +48,8 @@ using ::ABI::Windows::Gaming::Input::GamepadReading;
 
 constexpr uint16_t kHardwareVendorId = 0x045e;
 constexpr uint16_t kHardwareProductId = 0x028e;
+constexpr uint16_t kUnknownHardwareVendorId = 0x0000;
+constexpr uint16_t kUnknownHardwareProductId = 0x0000;
 constexpr uint16_t kTriggerRumbleHardwareProductId = 0x0b13;
 
 constexpr char kGamepadDisplayName[] = "XBOX_SERIES_X";
@@ -159,13 +163,6 @@ class WgiDataFetcherWinTest : public DeviceServiceTestBase {
   WgiDataFetcherWinTest() = default;
   ~WgiDataFetcherWinTest() override = default;
 
-  void SetUp() override {
-    // Windows.Gaming.Input is available in Windows 10.0.10240.0 and later.
-    if (base::win::GetVersion() < base::win::Version::WIN10)
-      GTEST_SKIP();
-    DeviceServiceTestBase::SetUp();
-  }
-
   void SetUpXInputEnv(WgiTestErrorCode error_code) {
     // Resetting MockXInputGetStateExFunc static variable state.
     MockXInputGetStateExFunc(XUSER_MAX_COUNT + 1, nullptr);
@@ -174,12 +171,6 @@ class WgiDataFetcherWinTest : public DeviceServiceTestBase {
             []() { return &MockXInputGetCapabilitiesFunc; }));
     XInputDataFetcherWin::OverrideXInputGetStateExFuncForTesting(
         base::BindLambdaForTesting([]() { return &MockXInputGetStateExFunc; }));
-    // Given that the XInputEnable function has been deprecated in Win10, let's
-    // make it return a nullptr.
-    XInputDataFetcherWin::OverrideXInputEnableFuncForTesting(
-        base::BindLambdaForTesting(
-            []() { return (XInputDataFetcherWin::XInputEnableFunc) nullptr; }));
-
     // The callbacks should return a nullptr for each point of failure.
     switch (error_code) {
       case WgiTestErrorCode::kNullXInputGetCapabilitiesPointer:
@@ -200,7 +191,6 @@ class WgiDataFetcherWinTest : public DeviceServiceTestBase {
   }
 
   void SetUpTestEnv(WgiTestErrorCode error_code = WgiTestErrorCode::kOk) {
-    EXPECT_TRUE(base::win::ScopedHString::ResolveCoreWinRTStringDelayload());
     wgi_environment_ = std::make_unique<FakeWinrtWgiEnvironment>(error_code);
     SetUpXInputEnv(error_code);
     auto fetcher = std::make_unique<WgiDataFetcherWin>();
@@ -513,6 +503,7 @@ TEST_F(WgiDataFetcherWinTest, AddAndRemoveWgiGamepad) {
 
   const auto fake_gamepad = Microsoft::WRL::Make<FakeIGamepad>();
   const auto fake_trigger_rumble_gamepad = Microsoft::WRL::Make<FakeIGamepad>();
+  const auto fake_unknown_gamepad = Microsoft::WRL::Make<FakeIGamepad>();
   auto* fake_gamepad_statics = FakeIGamepadStatics::GetInstance();
 
   // Check that the event handlers were added.
@@ -528,6 +519,9 @@ TEST_F(WgiDataFetcherWinTest, AddAndRemoveWgiGamepad) {
   fake_gamepad_statics->SimulateGamepadAdded(
       fake_trigger_rumble_gamepad, kTriggerRumbleHardwareProductId,
       kHardwareVendorId, kGamepadDisplayName);
+  fake_gamepad_statics->SimulateGamepadAdded(
+      fake_unknown_gamepad, kUnknownHardwareProductId, kUnknownHardwareVendorId,
+      kGamepadDisplayName);
 
   // Wait for the gampad polling thread to handle the gamepad added events.
   FlushPollingThread();
@@ -535,12 +529,14 @@ TEST_F(WgiDataFetcherWinTest, AddAndRemoveWgiGamepad) {
   // Assert that the gamepads have been added to the DataFetcher.
   const base::flat_map<int, std::unique_ptr<WgiGamepadDevice>>& gamepads =
       fetcher().GetGamepadsForTesting();
-  ASSERT_EQ(gamepads.size(), 2u);
+  ASSERT_EQ(gamepads.size(), 3u);
   auto gamepad_iter = gamepads.begin();
   CheckGamepadAdded(fetcher().GetPadState(gamepad_iter++->first),
                     GamepadHapticActuatorType::kDualRumble);
-  CheckGamepadAdded(fetcher().GetPadState(gamepad_iter->first),
+  CheckGamepadAdded(fetcher().GetPadState(gamepad_iter++->first),
                     GamepadHapticActuatorType::kTriggerRumble);
+  CheckGamepadAdded(fetcher().GetPadState(gamepad_iter->first),
+                    GamepadHapticActuatorType::kDualRumble);
 
   // Simulate the gamepad removing behavior, and make the gamepad-removing
   // callback return on a different thread, demonstrated the multi-threaded
@@ -548,6 +544,7 @@ TEST_F(WgiDataFetcherWinTest, AddAndRemoveWgiGamepad) {
   // simulation is in FakeIGamepadStatics class.
   fake_gamepad_statics->SimulateGamepadRemoved(fake_gamepad);
   fake_gamepad_statics->SimulateGamepadRemoved(fake_trigger_rumble_gamepad);
+  fake_gamepad_statics->SimulateGamepadRemoved(fake_unknown_gamepad);
 
   // Wait for the gampad polling thread to handle the gamepad removed event.
   FlushPollingThread();
@@ -980,15 +977,21 @@ TEST_P(WgiDataFetcherWinGamepadIdTest, GamepadIds) {
                                        // XInputTypeXbox360 gamepad.
                                        GamepadId::kMicrosoftProduct028e,
                                        // XInputTypeXboxOne gamepad.
-                                       GamepadId::kMicrosoftProduct0b12};
+                                       GamepadId::kMicrosoftProduct0b12,
+                                       GamepadId::kUnknownGamepad};
 
   // Iterate and add fake gamepads.
   auto* fake_gamepad_statics = FakeIGamepadStatics::GetInstance();
   for (const GamepadId& device_id : kGamepadIds) {
     const auto fake_gamepad = Microsoft::WRL::Make<FakeIGamepad>();
     uint16_t vendor_id, product_id;
-    std::tie(vendor_id, product_id) =
-        GamepadIdList::Get().GetDeviceIdsFromGamepadId(device_id);
+    if (device_id == GamepadId::kUnknownGamepad) {
+      vendor_id = kUnknownHardwareVendorId;
+      product_id = kUnknownHardwareProductId;
+    } else {
+      std::tie(vendor_id, product_id) =
+          GamepadIdList::Get().GetDeviceIdsFromGamepadId(device_id);
+    }
     fake_gamepad_statics->SimulateGamepadAdded(fake_gamepad, product_id,
                                                vendor_id, display_name);
   }
@@ -999,13 +1002,15 @@ TEST_P(WgiDataFetcherWinGamepadIdTest, GamepadIds) {
   // Assert that the gamepads have been added to the DataFetcher.
   const base::flat_map<int, std::unique_ptr<WgiGamepadDevice>>& gamepads =
       fetcher().GetGamepadsForTesting();
-  EXPECT_EQ(gamepads.size(), 3u);
+  EXPECT_EQ(gamepads.size(), 4u);
 
   // Build vector with the expected id strings.
   std::vector<std::u16string> expected_gamepad_id_strings{
       base::StringPrintf(u"%ls (STANDARD GAMEPAD Vendor: 045e Product: 0b21)",
                          base::UTF8ToUTF16(display_name).data()),
-      kKnownXInputDeviceId, kKnownXInputDeviceId};
+      kKnownXInputDeviceId, kKnownXInputDeviceId,
+      base::StringPrintf(u"%ls (STANDARD GAMEPAD)",
+                         base::UTF8ToUTF16(display_name).data())};
 
   size_t id_string_index = 0;
   for (auto it = gamepads.begin(); it != gamepads.end(); ++it) {

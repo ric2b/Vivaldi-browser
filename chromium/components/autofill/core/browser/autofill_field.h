@@ -16,11 +16,11 @@
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/regex_patterns.h"
+#include "components/autofill/core/browser/metrics/log_event.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/proto/password_requirements.pb.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/signatures.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace autofill {
 
@@ -32,6 +32,16 @@ typedef std::map<ServerFieldType, AutofillDataModel::ValidityState>
 
 class AutofillField : public FormFieldData {
  public:
+  using FieldLogEventType = absl::variant<absl::monostate,
+                                          AskForValuesToFillFieldLogEvent,
+                                          TriggerFillFieldLogEvent,
+                                          FillFieldLogEvent,
+                                          TypingFieldLogEvent,
+                                          HeuristicPredictionFieldLogEvent,
+                                          AutocompleteAttributeFieldLogEvent,
+                                          ServerPredictionFieldLogEvent,
+                                          RationalizationFieldLogEvent>;
+
   AutofillField();
   explicit AutofillField(const FormFieldData& field);
 
@@ -146,10 +156,14 @@ class AutofillField : public FormFieldData {
   // field).
   bool IsFieldFillable() const;
 
-  // Returns true if suggestion prompts should not be shown for this field.
-  // Currently, prompts are suppressed if the autocomplete attribute is
-  // unrecognized unless it is a credit card form related field.
-  bool ShouldSuppressPromptDueToUnrecognizedAutocompleteAttribute() const;
+  // Address Autofill gets disabled by an unrecognized autocomplete attribute.
+  // If `kAutofillFillAndImportFromMoreFields` is enabled, this changes and the
+  // server/heuristic predictions overwrite the unrecognized autocomplete
+  // attribute. Depending on the feature's parameters, Autofill then fills or
+  // imports from these fields.
+  // This function returns true if the field's type prediction is only available
+  // due to the aforementioned feature.
+  bool HasPredictionDespiteUnrecognizedAutocompleteAttribute() const;
 
   void set_initial_value_hash(uint32_t value) { initial_value_hash_ = value; }
   absl::optional<uint32_t> initial_value_hash() { return initial_value_hash_; }
@@ -230,6 +244,29 @@ class AutofillField : public FormFieldData {
   bool was_context_menu_shown() const { return was_context_menu_shown_; }
   void set_was_context_menu_shown(bool was_context_menu_shown) {
     was_context_menu_shown_ = was_context_menu_shown;
+  }
+
+  void set_field_log_events(const std::vector<FieldLogEventType>& events) {
+    field_log_events_ = events;
+  }
+
+  const std::vector<FieldLogEventType>& field_log_events() const {
+    return field_log_events_;
+  }
+
+  // Add the field log events into the vector |field_log_events_| when it is
+  // not the same as the last log event in the vector.
+  void AppendLogEventIfNotRepeated(const FieldLogEventType& log_event);
+
+  // Clear all the log events for this field.
+  void ClearLogEvents() { field_log_events_.clear(); }
+
+  void set_autofill_source_profile_guid(
+      const std::string& autofill_profile_guid) {
+    autofill_source_profile_guid_ = autofill_profile_guid;
+  }
+  absl::optional<std::string> autofill_source_profile_guid() const {
+    return autofill_source_profile_guid_;
   }
 
  private:
@@ -332,6 +369,18 @@ class AutofillField : public FormFieldData {
 
   // Set to true if the context menu was triggered and shown on the field.
   bool was_context_menu_shown_ = false;
+
+  // A list of field log events, which record when user interacts the field
+  // during autofill or editing, such as user clicks on the field, the
+  // suggestion list is shown for the field, user accepts one suggestion to
+  // fill the form and user edits the field.
+  std::vector<FieldLogEventType> field_log_events_;
+
+  // The autofill profile's GUID that was used for field filling. It corresponds
+  // to the autofill profile's GUID for the current value if `is_autofilled` is
+  // set or for the previously autofilled value if the field was changed after
+  // filling. nullopt means the field wasn't autofilled.
+  absl::optional<std::string> autofill_source_profile_guid_;
 };
 
 }  // namespace autofill

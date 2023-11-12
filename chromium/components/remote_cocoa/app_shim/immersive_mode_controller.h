@@ -7,7 +7,7 @@
 
 #import <AppKit/AppKit.h>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/functional/callback_forward.h"
 #include "base/mac/scoped_nsobject.h"
 #include "components/remote_cocoa/app_shim/remote_cocoa_app_shim_export.h"
@@ -15,6 +15,7 @@
 
 @class ClearTitlebarViewController;
 @class ImmersiveModeMapper;
+@class ImmersiveModeTitlebarObserver;
 @class ImmersiveModeTitlebarViewController;
 @class ImmersiveModeWindowObserver;
 
@@ -31,21 +32,22 @@ REMOTE_COCOA_APP_SHIM_EXPORT bool IsNSToolbarFullScreenWindow(NSWindow* window);
 
 class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeController {
  public:
-  explicit ImmersiveModeController(NSWindow* browser_widget,
-                                   NSWindow* overlay_widget,
+  explicit ImmersiveModeController(NSWindow* browser_window,
+                                   NSWindow* overlay_window,
                                    base::OnceClosure callback);
-  ~ImmersiveModeController();
+  virtual ~ImmersiveModeController();
 
-  void Enable();
-  void OnTopViewBoundsChanged(const gfx::Rect& bounds);
-  void UpdateToolbarVisibility(mojom::ToolbarVisibilityStyle style);
+  virtual void Enable();
+  virtual void OnTopViewBoundsChanged(const gfx::Rect& bounds);
+  virtual void UpdateToolbarVisibility(mojom::ToolbarVisibilityStyle style);
+  mojom::ToolbarVisibilityStyle last_used_style() { return last_used_style_; }
 
   // Lock the titlebar in place forcing the attached top chrome to also lock in
   // place. The titlebar will be unlocked once calls to TitlebarLock() are
   // balanced with TitlebarUnlock(). When a lock is present, both the titlebar
   // and the top chrome are visible.
-  void TitlebarLock();
-  void TitlebarUnlock();
+  virtual void TitlebarLock();
+  virtual void TitlebarUnlock();
   int titlebar_lock_count() { return titlebar_lock_count_; }
 
   // Reveal top chrome leaving it visible until all outstanding calls to
@@ -55,12 +57,17 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeController {
   // If ToolbarVisibilityStyle is then changed to kAutohide, top
   // chrome will stay on screen until RevealUnlock() is called. At that point
   // top chrome will autohide.
-  void RevealLock();
-  void RevealUnlock();
+  virtual void RevealLock();
+  virtual void RevealUnlock();
   int reveal_lock_count() { return reveal_lock_count_; }
 
   NSWindow* browser_window() { return browser_window_; }
   NSWindow* overlay_window() { return overlay_window_; }
+
+  // When true the titlebar is assumed to be fully visible. For testing only.
+  void SetTitlebarFullyVisibleForTesting(bool fully_visible) {
+    titlebar_fully_visible_for_testing_ = fully_visible;
+  }
 
  private:
   // Pin or unpin the titlebar.
@@ -111,6 +118,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ImmersiveModeController {
   mojom::ToolbarVisibilityStyle last_used_style_ =
       mojom::ToolbarVisibilityStyle::kAutohide;
 
+  bool titlebar_fully_visible_for_testing_ = false;
+
   base::WeakPtrFactory<ImmersiveModeController> weak_ptr_factory_;
 };
 
@@ -134,6 +143,7 @@ REMOTE_COCOA_APP_SHIM_EXPORT @interface ImmersiveModeTitlebarObserver : NSObject
                     (base::WeakPtr<remote_cocoa::ImmersiveModeController>)
                         controller
                        overlayView:(NSView*)overlay_view;
+
 @end
 
 #endif  // COMPONENTS_REMOTE_COCOA_APP_SHIM_IMMERSIVE_MODE_CONTROLLER_H_

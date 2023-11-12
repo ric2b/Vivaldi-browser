@@ -16,7 +16,6 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
-#include "base/win/windows_version.h"
 #include "ui/gfx/color_space_win.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/direct_composition_support.h"
@@ -50,17 +49,6 @@ const char* kDirectCompositionChildSurfaceLabel =
 bool IsVerifyDrawOffsetEnabled() {
   return base::FeatureList::IsEnabled(
       features::kDirectCompositionVerifyDrawOffset);
-}
-
-bool IsWaitableSwapChainEnabled() {
-  // Waitable swap chains were first enabled in Win 8.1/DXGI 1.3
-  return (base::win::GetVersion() >= base::win::Version::WIN8_1) &&
-         base::FeatureList::IsEnabled(features::kDXGIWaitableSwapChain);
-}
-
-UINT GetMaxWaitableQueuedFrames() {
-  return static_cast<UINT>(
-      features::kDXGIWaitableSwapChainMaxQueuedFrames.Get());
 }
 
 }  // namespace
@@ -223,7 +211,7 @@ void* DirectCompositionChildSurfaceWin::GetHandle() {
 
 gfx::SwapResult DirectCompositionChildSurfaceWin::SwapBuffers(
     PresentationCallback callback,
-    FrameData data) {
+    gfx::FrameData data) {
   NOTREACHED();
   return gfx::SwapResult::SWAP_FAILED;
 }
@@ -365,10 +353,12 @@ bool DirectCompositionChildSurfaceWin::SetDrawRectangle(
     desc.AlphaMode =
         has_alpha_ ? DXGI_ALPHA_MODE_PREMULTIPLIED : DXGI_ALPHA_MODE_IGNORE;
     desc.Flags = 0;
-    if (DirectCompositionSwapChainTearingEnabled())
+    if (DirectCompositionSwapChainTearingEnabled()) {
       desc.Flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    if (IsWaitableSwapChainEnabled())
+    }
+    if (DXGIWaitableSwapChainEnabled()) {
       desc.Flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    }
 
     HRESULT hr = dxgi_factory->CreateSwapChainForComposition(
         d3d11_device_.Get(), &desc, nullptr, &swap_chain_);
@@ -398,10 +388,11 @@ bool DirectCompositionChildSurfaceWin::SetDrawRectangle(
           gfx::ColorSpaceWin::GetDXGIColorSpace(color_space_));
       DCHECK(SUCCEEDED(hr))
           << "SetColorSpace1 failed with error " << std::hex << hr;
-      if (IsWaitableSwapChainEnabled()) {
-        hr = swap_chain->SetMaximumFrameLatency(GetMaxWaitableQueuedFrames());
-        DCHECK(SUCCEEDED(hr))
-            << "SetMaximumFrameLatency failed with error " << std::hex << hr;
+      if (DXGIWaitableSwapChainEnabled()) {
+        hr = swap_chain->SetMaximumFrameLatency(
+            GetDXGIWaitableSwapChainMaxQueuedFrames());
+        DCHECK(SUCCEEDED(hr)) << "SetMaximumFrameLatency failed with error "
+                              << logging::SystemErrorCodeToString(hr);
       }
     }
   }
@@ -511,10 +502,12 @@ bool DirectCompositionChildSurfaceWin::Resize(
     UINT buffer_count = gl::DirectCompositionRootSurfaceBufferCount();
     DXGI_FORMAT format = gfx::ColorSpaceWin::GetDXGIFormat(color_space_);
     UINT flags = 0;
-    if (DirectCompositionSwapChainTearingEnabled())
+    if (DirectCompositionSwapChainTearingEnabled()) {
       flags |= DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
-    if (IsWaitableSwapChainEnabled())
+    }
+    if (DXGIWaitableSwapChainEnabled()) {
       flags |= DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
+    }
     HRESULT hr = swap_chain_->ResizeBuffers(buffer_count, size.width(),
                                             size.height(), format, flags);
     UMA_HISTOGRAM_BOOLEAN("GPU.DirectComposition.SwapChainResizeResult",

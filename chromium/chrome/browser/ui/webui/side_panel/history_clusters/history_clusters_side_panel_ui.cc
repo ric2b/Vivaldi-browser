@@ -7,6 +7,7 @@
 #include <string>
 #include <utility>
 
+#include "chrome/browser/image_service/image_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/cr_components/history_clusters/history_clusters_util.h"
@@ -14,8 +15,11 @@
 #include "chrome/browser/ui/webui/history_clusters/history_clusters_handler.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
-#include "chrome/grit/side_panel_resources.h"
+#include "chrome/grit/side_panel_history_clusters_resources.h"
+#include "chrome/grit/side_panel_history_clusters_resources_map.h"
 #include "components/favicon_base/favicon_url_parser.h"
+#include "components/image_service/image_service.h"
+#include "components/image_service/image_service_handler.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_ui.h"
@@ -24,10 +28,9 @@
 HistoryClustersSidePanelUI::HistoryClustersSidePanelUI(content::WebUI* web_ui)
     : ui::MojoBubbleWebUIController(web_ui),
       content::WebContentsObserver(web_ui->GetWebContents()) {
-  content::WebUIDataSource* source = content::WebUIDataSource::Create(
-      chrome::kChromeUIHistoryClustersSidePanelHost);
-
   Profile* const profile = Profile::FromWebUI(web_ui);
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      profile, chrome::kChromeUIHistoryClustersSidePanelHost);
 
   HistoryClustersUtil::PopulateSource(source, profile, /*in_side_panel=*/true);
 
@@ -35,19 +38,11 @@ HistoryClustersSidePanelUI::HistoryClustersSidePanelUI(content::WebUI* web_ui)
       profile, std::make_unique<FaviconSource>(
                    profile, chrome::FaviconUrlFormat::kFavicon2));
 
-  const webui::ResourcePath kHistoryClustersResources[] = {
-      {"history_clusters/history_clusters.html",
-       IDR_SIDE_PANEL_HISTORY_CLUSTERS_HISTORY_CLUSTERS_HTML},
-      {"history_clusters/app.js", IDR_SIDE_PANEL_HISTORY_CLUSTERS_APP_JS},
-      {"history_clusters/app.html.js",
-       IDR_SIDE_PANEL_HISTORY_CLUSTERS_APP_HTML_JS},
-  };
-
   webui::SetupWebUIDataSource(
-      source, kHistoryClustersResources,
+      source,
+      base::make_span(kSidePanelHistoryClustersResources,
+                      kSidePanelHistoryClustersResourcesSize),
       IDR_SIDE_PANEL_HISTORY_CLUSTERS_HISTORY_CLUSTERS_HTML);
-  content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
-                                source);
 }
 
 HistoryClustersSidePanelUI::~HistoryClustersSidePanelUI() = default;
@@ -62,6 +57,19 @@ void HistoryClustersSidePanelUI::BindInterface(
           std::move(pending_page_handler), Profile::FromWebUI(web_ui()),
           web_ui()->GetWebContents());
   history_clusters_handler_->SetSidePanelUIEmbedder(this->embedder());
+}
+
+void HistoryClustersSidePanelUI::BindInterface(
+    mojo::PendingReceiver<image_service::mojom::ImageServiceHandler>
+        pending_page_handler) {
+  base::WeakPtr<image_service::ImageService> image_service_weak;
+  if (auto* image_service =
+          image_service::ImageServiceFactory::GetForBrowserContext(
+              Profile::FromWebUI(web_ui()))) {
+    image_service_weak = image_service->GetWeakPtr();
+  }
+  image_service_handler_ = std::make_unique<image_service::ImageServiceHandler>(
+      std::move(pending_page_handler), std::move(image_service_weak));
 }
 
 base::WeakPtr<HistoryClustersSidePanelUI>

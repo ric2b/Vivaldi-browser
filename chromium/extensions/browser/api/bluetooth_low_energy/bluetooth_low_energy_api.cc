@@ -11,9 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
@@ -342,7 +342,7 @@ BluetoothLowEnergyAPI::BluetoothLowEnergyAPI(BrowserContext* context)
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
-BluetoothLowEnergyAPI::~BluetoothLowEnergyAPI() {}
+BluetoothLowEnergyAPI::~BluetoothLowEnergyAPI() = default;
 
 void BluetoothLowEnergyAPI::Shutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -353,7 +353,8 @@ namespace api {
 BluetoothLowEnergyExtensionFunction::BluetoothLowEnergyExtensionFunction()
     : event_router_(nullptr) {}
 
-BluetoothLowEnergyExtensionFunction::~BluetoothLowEnergyExtensionFunction() {}
+BluetoothLowEnergyExtensionFunction::~BluetoothLowEnergyExtensionFunction() =
+    default;
 
 ExtensionFunction::ResponseAction BluetoothLowEnergyExtensionFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -391,9 +392,9 @@ void BluetoothLowEnergyExtensionFunction::PreDoWork() {
   DoWork();
 }
 
-BLEPeripheralExtensionFunction::BLEPeripheralExtensionFunction() {}
+BLEPeripheralExtensionFunction::BLEPeripheralExtensionFunction() = default;
 
-BLEPeripheralExtensionFunction::~BLEPeripheralExtensionFunction() {}
+BLEPeripheralExtensionFunction::~BLEPeripheralExtensionFunction() = default;
 
 ExtensionFunction::ResponseAction BLEPeripheralExtensionFunction::Run() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -410,9 +411,11 @@ ExtensionFunction::ResponseAction BLEPeripheralExtensionFunction::Run() {
   return BluetoothLowEnergyExtensionFunction::Run();
 }
 
-BluetoothLowEnergyConnectFunction::BluetoothLowEnergyConnectFunction() {}
+BluetoothLowEnergyConnectFunction::BluetoothLowEnergyConnectFunction() =
+    default;
 
-BluetoothLowEnergyConnectFunction::~BluetoothLowEnergyConnectFunction() {}
+BluetoothLowEnergyConnectFunction::~BluetoothLowEnergyConnectFunction() =
+    default;
 
 bool BluetoothLowEnergyConnectFunction::ParseParams() {
   params_ = apibtle::Connect::Params::Create(args());
@@ -449,9 +452,11 @@ void BluetoothLowEnergyConnectFunction::ConnectCallback(
   Respond(WithArguments());
 }
 
-BluetoothLowEnergyDisconnectFunction::BluetoothLowEnergyDisconnectFunction() {}
+BluetoothLowEnergyDisconnectFunction::BluetoothLowEnergyDisconnectFunction() =
+    default;
 
-BluetoothLowEnergyDisconnectFunction::~BluetoothLowEnergyDisconnectFunction() {}
+BluetoothLowEnergyDisconnectFunction::~BluetoothLowEnergyDisconnectFunction() =
+    default;
 
 bool BluetoothLowEnergyDisconnectFunction::ParseParams() {
   params_ = apibtle::Disconnect::Params::Create(args());
@@ -486,9 +491,11 @@ void BluetoothLowEnergyDisconnectFunction::ErrorCallback(
   Respond(Error(StatusToString(status)));
 }
 
-BluetoothLowEnergyGetServiceFunction::BluetoothLowEnergyGetServiceFunction() {}
+BluetoothLowEnergyGetServiceFunction::BluetoothLowEnergyGetServiceFunction() =
+    default;
 
-BluetoothLowEnergyGetServiceFunction::~BluetoothLowEnergyGetServiceFunction() {}
+BluetoothLowEnergyGetServiceFunction::~BluetoothLowEnergyGetServiceFunction() =
+    default;
 
 bool BluetoothLowEnergyGetServiceFunction::ParseParams() {
   params_ = apibtle::GetService::Params::Create(args());

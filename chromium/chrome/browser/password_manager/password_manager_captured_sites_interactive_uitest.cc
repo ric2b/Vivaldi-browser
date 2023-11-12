@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "base/files/file_enumerator.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/automated_tests/cache_replayer.h"
@@ -46,7 +47,8 @@ base::FilePath GetReplayFilesRootDirectory() {
         .AppendASCII("test")
         .AppendASCII("data")
         .AppendASCII("password")
-        .AppendASCII("captured_sites");
+        .AppendASCII("captured_sites")
+        .AppendASCII("artifacts");
   }
 
   ADD_FAILURE() << "Unable to obtain the Chromium src directory!";
@@ -223,8 +225,9 @@ class CapturedSitesPasswordManagerBrowserTest
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     feature_list_.InitWithFeaturesAndParameters(
-        /*enabled_features=*/{{autofill::features::kAutofillShowTypePredictions,
-                               {}}},
+        /*enabled_features=*/
+        {{autofill::features::test::kAutofillServerCommunication, {}},
+         {autofill::features::test::kAutofillShowTypePredictions, {}}},
         {});
     command_line->AppendSwitch(autofill::switches::kShowAutofillSignatures);
     captured_sites_test_utils::TestRecipeReplayer::SetUpHostResolverRules(
@@ -263,7 +266,9 @@ class CapturedSitesPasswordManagerBrowserTest
   std::unique_ptr<captured_sites_test_utils::ProfileDataController>
       profile_controller_;
   base::test::ScopedFeatureList feature_list_;
-  content::WebContents* web_contents_ = nullptr;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #addr-of
+  RAW_PTR_EXCLUSION content::WebContents* web_contents_ = nullptr;
   std::unique_ptr<ServerUrlLoader> server_url_loader_;
 
   base::CallbackListSubscription create_services_subscription_;

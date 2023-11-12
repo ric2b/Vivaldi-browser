@@ -78,10 +78,11 @@ void AnimationEffect::EnsureNormalizedTiming() const {
     // Normalize timings for progress based timelines
     normalized_->timeline_duration = TimelineDuration();
 
-    bool has_timeline_offset = timing_.start_delay.IsTimelineOffset() ||
-                               timing_.end_delay.IsTimelineOffset();
-
-    if (timing_.iteration_duration && !has_timeline_offset) {
+    // TODO(crbug.com/1216527): Refactor for animation-range + delays. Still
+    // some details to sort out in the spec when mixing delays and range
+    // offsets. What happens if you have an animation range and time based
+    // delays?
+    if (timing_.iteration_duration) {
       // Scaling up iteration_duration allows animation effect to be able to
       // handle values produced by progress based timelines. At this point it
       // can be assumed that EndTimeInternal() will give us a good value.
@@ -123,7 +124,8 @@ void AnimationEffect::EnsureNormalizedTiming() const {
             (1.0 / timing_.iteration_count) *
             normalized_->timeline_duration.value();
       } else {
-        // convert to percentages then multiply by the timeline_duration
+        // End time is not 0 or infinite.
+        // Convert to percentages then multiply by the timeline_duration
         normalized_->start_delay =
             (timing_.start_delay.AsTimeValue() / end_time) *
             normalized_->timeline_duration.value();
@@ -136,12 +138,14 @@ void AnimationEffect::EnsureNormalizedTiming() const {
             normalized_->timeline_duration.value();
       }
     } else {
-      // Handle iteration_duration value of "auto". Treat the duration as "auto"
-      // if the using timeline offsets for the start or end delay since in this
-      // case the duration is arbitrary.
+      // Default (auto) duration with a non-monotonic timeline case.
+      // TODO(crbug.com/1216527): Update timing once ratified in the spec.
+      // Normalized timing is purely used internally in order to keep the bulk
+      // of the animation code time-based. Range start and end is combined with
+      // delay and endDelay.
       normalized_->iteration_duration = IntrinsicIterationDuration();
       std::pair<AnimationTimeDelta, AnimationTimeDelta> delay_pair =
-          TimelineOffsetsToTimeDelays();
+          ComputeEffectiveAnimationDelays();
       normalized_->start_delay = delay_pair.first;
       normalized_->end_delay = delay_pair.second;
     }
@@ -361,10 +365,11 @@ const Animation* AnimationEffect::GetAnimation() const {
   return owner_ ? owner_->GetAnimation() : nullptr;
 }
 
-AnimationEffect::TimeDelayPair AnimationEffect::TimelineOffsetsToTimeDelays()
-    const {
+AnimationEffect::TimeDelayPair
+AnimationEffect::ComputeEffectiveAnimationDelays() const {
   if (GetAnimation() && GetAnimation()->timeline()) {
-    return GetAnimation()->timeline()->TimelineOffsetsToTimeDelays(timing_);
+    return GetAnimation()->timeline()->ComputeEffectiveAnimationDelays(
+        owner_->GetAnimation(), timing_);
   }
   return std::make_pair(AnimationTimeDelta(), AnimationTimeDelta());
 }

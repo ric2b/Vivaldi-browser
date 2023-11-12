@@ -77,6 +77,15 @@ const char kReferenceSpaceNotSupported[] =
 const char kIncompatibleLayer[] =
     "XRWebGLLayer was created with a different session.";
 
+const char kBaseLayerAndLayers[] =
+    "Both baseLayer and layers should not be set at the same time when "
+    "updating render state.";
+
+const char kMultiLayersNotEnabled[] =
+    "This session does not support multiple layers.";
+
+const char kDuplicateLayer[] = "All layers in render state must be unique.";
+
 const char kInlineVerticalFOVNotSupported[] =
     "This session does not support inlineVerticalFieldOfView";
 
@@ -297,6 +306,7 @@ void XRSession::MetricsReporter::ReportFeatureUsed(
     case XRSessionFeature::HAND_INPUT:
     case XRSessionFeature::SECONDARY_VIEWS:
     case XRSessionFeature::LAYERS:
+    case XRSessionFeature::FRONT_FACING:
       // Not recording metrics for these features currently.
       break;
   }
@@ -423,6 +433,15 @@ const String XRSession::visibilityState() const {
   }
 }
 
+Vector<String> XRSession::enabledFeatures() const {
+  Vector<String> enabled_features;
+  for (const auto& feature : enabled_features_) {
+    enabled_features.push_back(XRSessionFeatureToString(feature));
+  }
+
+  return enabled_features;
+}
+
 XRAnchorSet* XRSession::TrackedAnchors() const {
   DVLOG(3) << __func__;
 
@@ -478,6 +497,42 @@ void XRSession::updateRenderState(XRRenderStateInit* init,
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       kIncompatibleLayer);
     return;
+  }
+
+  if (RuntimeEnabledFeatures::WebXRLayersEnabled() && init->hasLayers() &&
+      init->layers() && !init->layers()->empty()) {
+    // Validate that we don't have both layers and baseLayer set.
+    if (init->hasBaseLayer() && init->baseLayer()) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                        kBaseLayerAndLayers);
+      return;
+    }
+
+    // Validate that the session was created with the layers feature enabled
+    // when the user wishes to render multiple layers at once.
+    if (init->layers()->size() > 1 &&
+        !IsFeatureEnabled(device::mojom::XRSessionFeature::LAYERS)) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                        kMultiLayersNotEnabled);
+      return;
+    }
+
+    HeapHashSet<Member<const XRLayer>> unique_layers;
+    for (const XRLayer* layer : *init->layers()) {
+      // Check for duplicate layers.
+      if (!unique_layers.insert(layer).is_new_entry) {
+        exception_state.ThrowException(ToExceptionCode(ESErrorType::kTypeError),
+                                       kDuplicateLayer);
+        return;
+      }
+
+      // Validate that all layers were created with this session.
+      if (layer->session() != this) {
+        exception_state.ThrowException(ToExceptionCode(ESErrorType::kTypeError),
+                                       kIncompatibleLayer);
+        return;
+      }
+    }
   }
 
   pending_render_state_.push_back(init);
@@ -614,9 +669,6 @@ ScriptPromise XRSession::requestReferenceSpace(
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
   resolver->Resolve(reference_space);
-
-  UMA_HISTOGRAM_ENUMERATION("XR.WebXR.ReferenceSpace.Succeeded",
-                            requested_type);
 
   return promise;
 }
@@ -1975,7 +2027,7 @@ void XRSession::UpdateCanvasDimensions(Element* element) {
 void XRSession::OnButtonEvent(
     device::mojom::blink::XRInputSourceStatePtr input_state) {
   DCHECK(uses_input_eventing_);
-  auto input_states = base::make_span(&input_state, 1);
+  auto input_states = base::make_span(&input_state, 1u);
   OnInputStateChangeInternal(last_frame_id_, input_states);
   ProcessInputSourceEvents(input_states);
 }

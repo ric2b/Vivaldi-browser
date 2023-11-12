@@ -12,14 +12,45 @@
 
 namespace logging {
 
-// Under these conditions NOTREACHED() will effectively either log or DCHECK.
-#if BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED) || DCHECK_IS_ON()
+// On DCHECK builds NOTREACHED() match the fatality of DCHECKs. When DCHECKs are
+// non-FATAL a crash report will be generated for the first NOTREACHED() that
+// hits per process.
+//
+// Outside DCHECK builds NOTREACHED() will LOG(ERROR) and also upload a crash
+// report without crashing in order to weed out prevalent NOTREACHED()s in the
+// wild before always turning NOTREACHED()s FATAL.
+//
+// TODO(crbug.com/851128): Migrate NOTREACHED() callers to NOTREACHED_NORETURN()
+// which is [[noreturn]] and always FATAL. Once that's done, rename
+// NOTREACHED_NORETURN() back to NOTREACHED() and remove the non-FATAL version.
+#if CHECK_WILL_STREAM() || BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED)
 #define NOTREACHED()   \
   CHECK_FUNCTION_IMPL( \
       ::logging::NotReachedError::NotReached(__FILE__, __LINE__), false)
 #else
-#define NOTREACHED() EAT_CHECK_STREAM_PARAMS()
-#endif  // BUILDFLAG(ENABLE_LOG_ERROR_NOT_REACHED) || DCHECK_IS_ON()
+#define NOTREACHED()                                       \
+  (true) ? ::logging::NotReachedError::TriggerNotReached() \
+         : EAT_CHECK_STREAM_PARAMS()
+#endif
+
+// NOTREACHED_NORETURN() annotates paths that are supposed to be unreachable.
+// They crash if they are ever hit.
+// TODO(crbug.com/851128): Rename back to NOTREACHED() once there are no callers
+// of the old non-CHECK-fatal macro.
+#if CHECK_WILL_STREAM()
+#define NOTREACHED_NORETURN() \
+  ::logging::NotReachedNoreturnError(__FILE__, __LINE__)
+#else
+// This function is used to be able to detect NOTREACHED() failures in stack
+// traces where this symbol is preserved (even if inlined). Its implementation
+// matches logging::CheckFailure() but intentionally uses a different signature.
+[[noreturn]] IMMEDIATE_CRASH_ALWAYS_INLINE void NotReachedFailure() {
+  base::ImmediateCrash();
+}
+
+#define NOTREACHED_NORETURN() \
+  (true) ? ::logging::NotReachedFailure() : EAT_CHECK_STREAM_PARAMS()
+#endif
 
 // The NOTIMPLEMENTED() macro annotates codepaths which have not been
 // implemented yet. If output spam is a serious concern,

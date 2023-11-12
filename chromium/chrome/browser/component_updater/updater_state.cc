@@ -51,9 +51,9 @@ std::unique_ptr<UpdaterState::StateReader> UpdaterState::StateReader::Create(
         // Create a `StateReaderChromiumUpdater` instance only if a prefs.json
         // file for the updater can be found and parsed successfully.
         const absl::optional<base::FilePath> global_prefs_dir =
-            updater::GetBaseDataDirectory(is_machine
-                                              ? updater::UpdaterScope::kSystem
-                                              : updater::UpdaterScope::kUser);
+            updater::GetInstallDirectory(is_machine
+                                             ? updater::UpdaterScope::kSystem
+                                             : updater::UpdaterScope::kUser);
         if (!global_prefs_dir)
           return nullptr;
         std::string contents;
@@ -93,7 +93,8 @@ UpdaterState::StateReaderChromiumUpdater::StateReaderChromiumUpdater(
 
 base::Time UpdaterState::StateReaderChromiumUpdater::FindTimeKey(
     base::StringPiece key) const {
-  return base::ValueToTime(parsed_json_.FindKey(key)).value_or(base::Time());
+  return base::ValueToTime(parsed_json_.GetDict().Find(key))
+      .value_or(base::Time());
 }
 
 std::string UpdaterState::StateReaderChromiumUpdater::GetUpdaterName() const {

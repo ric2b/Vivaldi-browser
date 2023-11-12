@@ -20,10 +20,6 @@ import './safety_check_extensions_child.js';
 import './safety_check_passwords_child.js';
 import './safety_check_safe_browsing_child.js';
 import './safety_check_updates_child.js';
-// <if expr="_google_chrome and is_win">
-import './safety_check_chrome_cleaner_child.js';
-
-// </if>
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
@@ -34,7 +30,7 @@ import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_prox
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, SafetyCheckInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
-import {Router} from '../router.js';
+import {Route, RouteObserverMixin, Router} from '../router.js';
 import {SiteSettingsPermissionsBrowserProxy, SiteSettingsPermissionsBrowserProxyImpl, UnusedSitePermissions} from '../site_settings/site_settings_permissions_browser_proxy.js';
 import {NotificationPermission, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl} from '../site_settings/site_settings_prefs_browser_proxy.js';
 
@@ -47,7 +43,7 @@ interface ParentChangedEvent {
 }
 
 const SettingsSafetyCheckPageElementBase =
-    WebUiListenerMixin(I18nMixin(PolymerElement));
+    RouteObserverMixin(WebUiListenerMixin(I18nMixin(PolymerElement)));
 
 export class SettingsSafetyCheckPageElement extends
     SettingsSafetyCheckPageElementBase {
@@ -99,6 +95,7 @@ export class SettingsSafetyCheckPageElement extends
   private safetyCheckUnusedSitePermissionsEnabled_: boolean;
   private notificationPermissionSites_: NotificationPermission[] = [];
   private unusedSitePermissions_: UnusedSitePermissions[] = [];
+  private shouldRecordMetrics_: boolean = false;
   private siteSettingsBrowserProxy_: SiteSettingsPrefsBrowserProxy =
       SiteSettingsPrefsBrowserProxyImpl.getInstance();
   private permissionsBrowserProxy_: SiteSettingsPermissionsBrowserProxy =
@@ -145,6 +142,27 @@ export class SettingsSafetyCheckPageElement extends
 
     this.unusedSitePermissions_ = await this.permissionsBrowserProxy_
                                       .getRevokedUnusedSitePermissionsList();
+
+    if (this.shouldRecordMetrics_) {
+      this.metricsBrowserProxy_
+          .recordSafetyCheckNotificationsModuleEntryPointShown(
+              this.shouldShowNotificationPermissions_());
+      this.metricsBrowserProxy_
+          .recordSafetyCheckUnusedSitePermissionsModuleEntryPointShown(
+              this.shouldShowUnusedSitePermissions_());
+      this.shouldRecordMetrics_ = false;
+    }
+  }
+
+  /**
+   * Determine whether metrics should be recorded, namely only when the user
+   * visited the privacy setting page embedding Safety Check, and not when
+   * the element is rendered in the background.
+   */
+  override currentRouteChanged(currentRoute: Route) {
+    if (currentRoute.path === routes.PRIVACY.path) {
+      this.shouldRecordMetrics_ = true;
+    }
   }
 
   /** Triggers the safety check. */

@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
@@ -45,7 +45,7 @@ bool IsKeyExempt(const std::string& key) {
 }
 
 // Runs the Redaction tool over the entris of |response|.
-void Redact(feedback::RedactionTool* redactor, SystemLogsResponse* response) {
+void Redact(redaction::RedactionTool* redactor, SystemLogsResponse* response) {
   for (auto& element : *response) {
     if (!IsKeyExempt(element.first))
       element.second = redactor->Redact(element.second);
@@ -80,7 +80,7 @@ SystemLogsFetcher::SystemLogsFetcher(
                     {base::TaskPriority::USER_VISIBLE,
                      base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
               : nullptr),
-      redactor_(scrub_data ? std::make_unique<feedback::RedactionTool>(
+      redactor_(scrub_data ? std::make_unique<redaction::RedactionTool>(
                                  first_party_extension_ids)
                            : nullptr) {}
 

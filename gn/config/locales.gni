@@ -2,6 +2,7 @@ import("//build/config/features.gni")
 
 # Locales about to be added, but not ready
 vivaldi_pending_locales = [
+  "ca@valencia",
   "de-CH",
   "eo",
   "es-PE",
@@ -12,8 +13,8 @@ vivaldi_pending_locales = [
   "jbo",
   "kab",
   "ku",
-  "sc",
   "nn",
+  "sc",
 ]
 
 vivaldi_pending_mobile_locales = []

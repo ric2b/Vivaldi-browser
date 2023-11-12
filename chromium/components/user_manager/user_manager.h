@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/scoped_observation_traits.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager_export.h"
@@ -90,10 +90,6 @@ class USER_MANAGER_EXPORT UserManager {
 
     // Called when another user got added to the existing session.
     virtual void UserAddedToSession(const User* added_user);
-
-    // Called right before notifying on user change so that those who rely
-    // on account_id hash would be accessing up-to-date value.
-    virtual void ActiveUserHashChanged(const std::string& hash);
 
    protected:
     virtual ~UserSessionStateObserver();
@@ -215,6 +211,15 @@ class USER_MANAGER_EXPORT UserManager {
   // picture.
   virtual void RemoveUserFromList(const AccountId& account_id) = 0;
 
+  // Removes the user from persistent list, without triggering user removal
+  // notification.
+  // Used to re-create user in Password changed flow when user can not
+  // remember old password and decides to delete existing user directory and
+  // re-create it.
+  // TODO(b/270040728): Remove this method once internal architecture allows
+  // better solution.
+  virtual void RemoveUserFromListForRecreation(const AccountId& account_id) = 0;
+
   // Returns true if a user with the given account id is found in the persistent
   // list or currently logged in as ephemeral.
   virtual bool IsKnownUser(const AccountId& account_id) const = 0;
@@ -284,6 +289,15 @@ class USER_MANAGER_EXPORT UserManager {
   // Records the identity of the owner user. In the current implementation
   // always stores the email.
   virtual void RecordOwner(const AccountId& owner) = 0;
+
+  // Returns true if the given |user| is the device owner.
+  virtual bool IsOwnerUser(const User* user) const = 0;
+
+  // Returns true if the given |user| is the primary user.
+  virtual bool IsPrimaryUser(const User* user) const = 0;
+
+  // Returns true if the given |user| is an ephemeral user.
+  virtual bool IsEphemeralUser(const User* user) const = 0;
 
   // Returns true if current user is an owner.
   virtual bool IsCurrentUserOwner() const = 0;

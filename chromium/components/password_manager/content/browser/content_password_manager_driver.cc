@@ -6,11 +6,12 @@
 
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/unique_ids.h"
 #include "components/password_manager/content/browser/bad_message.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
 #include "components/password_manager/content/browser/form_meta_data.h"
@@ -132,6 +133,13 @@ void ContentPasswordManagerDriver::SetPasswordFillData(
   }
 }
 
+void ContentPasswordManagerDriver::PasswordFieldHasNoAssociatedUsername(
+    autofill::FieldRendererId password_element_renderer_id) {
+  if (const auto& agent = GetPasswordAutofillAgent()) {
+    agent->PasswordFieldHasNoAssociatedUsername(password_element_renderer_id);
+  }
+}
+
 void ContentPasswordManagerDriver::InformNoSavedCredentials(
     bool should_show_popup_without_passwords) {
   GetPasswordAutofillManager()->OnNoCredentialsFound();
@@ -207,6 +215,12 @@ void ContentPasswordManagerDriver::PreviewGenerationSuggestion(
 
 void ContentPasswordManagerDriver::ClearPreviewedForm() {
   GetAutofillAgent()->ClearPreviewedForm();
+}
+
+void ContentPasswordManagerDriver::SetSuggestionAvailability(
+    autofill::FieldRendererId generation_element_id,
+    const autofill::mojom::AutofillState state) {
+  GetAutofillAgent()->SetSuggestionAvailability(generation_element_id, state);
 }
 
 PasswordGenerationFrameHelper*
@@ -378,7 +392,10 @@ void ContentPasswordManagerDriver::RecordSavePasswordProgress(
   // chrome://password-manager-internals based debugging.
   if (GetLastCommittedURL().SchemeIs(content::kChromeUIScheme))
     return;
-  LOG_AF(client_->GetLogManager()) << log;
+  LOG_AF(client_->GetLogManager())
+      << autofill::Tag{"div"}
+      << autofill::Attrib{"class", "preserve-white-space"} << log
+      << autofill::CTag{"div"};
 }
 
 void ContentPasswordManagerDriver::UserModifiedPasswordField() {

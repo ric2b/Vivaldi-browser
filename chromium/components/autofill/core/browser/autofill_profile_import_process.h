@@ -25,7 +25,7 @@ enum class AutofillProfileImportType {
   // Type is unspecified.
   kImportTypeUnspecified,
   // The observed profile corresponds to a new profile because there are no
-  // mergeable or updateable profiles.
+  // mergeable or updatable profiles.
   kNewProfile,
   // The imported profile is a subset of an already existing profile.
   kDuplicateImport,
@@ -36,7 +36,7 @@ enum class AutofillProfileImportType {
   // after explicit user confirmation.
   kConfirmableMerge,
   // The observed profile corresponds to a new profile because there are no
-  // mergeable or updateable profiles but imports are suppressed for this
+  // mergeable or updatable profiles but imports are suppressed for this
   // domain.
   kSuppressedNewProfile,
   // The observed profile resulted both in a confirmable merge and in a silent
@@ -75,20 +75,22 @@ enum class PhoneImportStatus {
 struct ProfileImportMetadata {
   // Whether the profile's country was complemented automatically.
   bool did_complement_country = false;
-  // Whether the form original contained an invalid country, that was ignored
+  // Whether the form original contained an invalid country that was ignored
   // due to AutofillOverwriteInvalidCountryOnImport.
   // TODO(crbug.com/1362472): Cleanup when launched.
   bool did_ignore_invalid_country = false;
-  // Whether the form originally contained an invalid phone number, that was:
-  // - Removed due to AutofillRemoveInvalidPhoneNumberOnImport.
-  // - The only requirement preventing an import.
-  // TODO(crbug.com/1298424): Cleanup when launched.
+  // Whether the form originally contained a phone number and if that phone
+  // number is considered valid by libphonenumber.
   PhoneImportStatus phone_import_status = PhoneImportStatus::kNone;
   // Whether the profile import from any field that contained an unrecognized
   // autocomplete attribute.
   bool did_import_from_unrecognized_autocomplete_field = false;
   // The origin that the form was submitted on.
   url::Origin origin;
+  // The number of fields with unrecognized autocomplete attribute that used to
+  // construct the observed profile.
+  // TODO(crbug.com/1301721): Remove.
+  int num_autocomplete_unrecognized_fields = 0;
 };
 
 // This class holds the state associated with the import of an AutofillProfile
@@ -221,7 +223,7 @@ class ProfileImportProcess {
   // The profile as it has been observed on form submission.
   AutofillProfile observed_profile_;
 
-  // Profiles that are silently updateable with the observed profile.
+  // Profiles that are silently updatable with the observed profile.
   std::vector<AutofillProfile> updated_profiles_;
 
   // A profile in its original state that can be merged with the observed
@@ -246,7 +248,7 @@ class ProfileImportProcess {
   AutofillClient::SaveAddressProfileOfferUserDecision user_decision_{
       AutofillClient::SaveAddressProfileOfferUserDecision::kUndefined};
 
-  // The appplication locale used for this import process.
+  // The application locale used for this import process.
   std::string app_locale_;
 
   // The url of the form.

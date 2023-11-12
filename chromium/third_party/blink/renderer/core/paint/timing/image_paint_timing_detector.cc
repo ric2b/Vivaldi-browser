@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_image_resource.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_image.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -57,8 +58,10 @@ uint64_t DownScaleIfIntrinsicSizeIsSmaller(
 }
 
 bool ShouldReportAnimatedImages() {
-  return (RuntimeEnabledFeatures::LCPAnimatedImagesWebExposedEnabled() ||
-          base::FeatureList::IsEnabled(features::kLCPAnimatedImagesReporting));
+  return (
+      RuntimeEnabledFeatures::LCPAnimatedImagesWebExposedEnabled() &&
+      (base::FeatureList::IsEnabled(features::kLCPAnimatedImagesReporting) ||
+       base::FeatureList::IsEnabled(features::kLCPVideoFirstFrame)));
 }
 
 static bool LargeImageFirst(const base::WeakPtr<ImageRecord>& a,
@@ -166,12 +169,24 @@ ImageRecord* ImagePaintTimingDetector::UpdateMetricsCandidate() {
   base::TimeTicks time = largest_image_record ? largest_image_record->paint_time
                                               : base::TimeTicks();
   // This doesn't use ShouldReportAnimatedImages(), as it should only update the
-  // record when the base::Feature is enabled, regardless of the runtime-enabled
-  // flag.
-  if (base::FeatureList::IsEnabled(features::kLCPAnimatedImagesReporting) &&
+  // record when the appropriate base::Feature (either
+  // kLCPAnimatedImagesReporting or kLCPVideoFirstFrame) is enabled, regardless
+  // of the state of the LCPAnimatedImagesWebExposed runtime-enabled flag.
+  bool animated_first_frame_ready =
       largest_image_record &&
-      !largest_image_record->first_animated_frame_time.is_null()) {
-    time = largest_image_record->first_animated_frame_time;
+      !largest_image_record->first_animated_frame_time.is_null();
+  if (animated_first_frame_ready) {
+    // If there is no media_timing or no first video frame, use the
+    // kLCPAnimatedImagesReporting flag. Otherwise, use the kLCPVideoFirstFrame
+    // flag.
+    bool is_video =
+        largest_image_record->media_timing &&
+        !largest_image_record->media_timing->GetFirstVideoFrameTime().is_null();
+    if (is_video ? base::FeatureList::IsEnabled(features::kLCPVideoFirstFrame)
+                 : base::FeatureList::IsEnabled(
+                       features::kLCPAnimatedImagesReporting)) {
+      time = largest_image_record->first_animated_frame_time;
+    }
   }
 
   const uint64_t size =
@@ -208,9 +223,7 @@ void ImagePaintTimingDetector::OnPaintFinished() {
     return;
 
   added_entry_in_latest_frame_ = false;
-  // TODO(npm): can we remove this update in favor of updating only during
-  // presentation callback?
-  frame_view_->GetPaintTimingDetector().UpdateLargestContentfulPaintCandidate();
+
   last_registered_frame_index_ = frame_index_++;
   RegisterNotifyPresentationTime();
 }
@@ -562,6 +575,15 @@ bool ImageRecordsManager::RecordFirstPaintAndReturnIsPending(
   }
   if (RuntimeEnabledFeatures::LCPMouseoverHeuristicsEnabled() &&
       is_loaded_after_mouseover) {
+    // TODO(https://crbug.com/1288027): Remove this debugging info once we have
+    // a clearer picture on heuristic failures.
+    if (Document* document = frame_view_->GetFrame().GetDocument()) {
+      document->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
+          mojom::blink::ConsoleMessageSource::kOther,
+          mojom::blink::ConsoleMessageLevel::kVerbose,
+          "Not emitting an LCP image entry, because it was loaded due to a "
+          "mouseover."));
+    }
     return false;
   }
 

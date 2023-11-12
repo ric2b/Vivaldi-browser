@@ -169,7 +169,7 @@ std::unique_ptr<net::test_server::HttpResponse> LoadFrenchPage(
   [ChromeEarlGreyUI openToolsMenu];
 
   [[[EarlGrey selectElementWithMatcher:ReadingListTextBadge()]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 150)
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionRight, 150)
       onElementWithMatcher:grey_accessibilityID(kPopupMenuToolsMenuTableViewId)]
       assertWithMatcher:grey_notNil()];
 
@@ -182,7 +182,7 @@ std::unique_ptr<net::test_server::HttpResponse> LoadFrenchPage(
       selectElementWithMatcher:grey_allOf(grey_accessibilityID(
                                               kToolsMenuReadingListId),
                                           grey_sufficientlyVisible(), nil)]
-         usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 150)
+         usingSearchAction:grey_scrollInDirection(kGREYDirectionRight, 150)
       onElementWithMatcher:grey_accessibilityID(kPopupMenuToolsMenuTableViewId)]
       assertWithMatcher:grey_notNil()];
 
@@ -339,8 +339,7 @@ std::unique_ptr<net::test_server::HttpResponse> LoadFrenchPage(
 
 // Verifies that the New Tab Tip does not appear if all conditions are met,
 // but the NTP is open.
-// TODO(crbug.com/934248) The test is flaky.
-- (void)DISABLED_testNewTabTipPromoDoesNotAppearOnNTP {
+- (void)testNewTabTipPromoDoesNotAppearOnNTP {
   GREYAssert([FeatureEngagementAppInterface enableNewTabTipTriggering],
              @"Feature Engagement tracker did not load");
 
@@ -360,8 +359,7 @@ std::unique_ptr<net::test_server::HttpResponse> LoadFrenchPage(
 
 // Verifies that the bottom toolbar tip is displayed when the phone is in split
 // toolbar mode.
-// TODO(crbug.com/934248) The test is flaky.
-- (void)DISABLED_testBottomToolbarAppear {
+- (void)testBottomToolbarAppear {
   if (![ChromeEarlGrey isSplitToolbarMode])
     return;
 

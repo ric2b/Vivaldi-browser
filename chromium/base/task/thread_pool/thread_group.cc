@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/task/task_features.h"
 #include "base/task/thread_pool/task_tracker.h"
@@ -17,9 +17,7 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "base/win/com_init_check_hook.h"
-#include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_winrt_initializer.h"
-#include "base/win/windows_version.h"
 #endif
 
 namespace base {
@@ -176,8 +174,13 @@ void ThreadGroup::ReEnqueueTaskSourceLockRequired(
     } else {
       // If the TaskSource should be reenqueued in the current thread group,
       // reenqueue it inside the scope of the lock.
-      auto sort_key = transaction_with_task_source.task_source->GetSortKey();
       if (push_to_immediate_queue) {
+        auto sort_key = transaction_with_task_source.task_source->GetSortKey();
+        // When moving |task_source| into |priority_queue_|, it may be destroyed
+        // on another thread as soon as |lock_| is released, since we're no
+        // longer holding a reference to it. To prevent UAF, release
+        // |transaction| before moving |task_source|. Ref. crbug.com/1412008
+        transaction_with_task_source.transaction.Release();
         priority_queue_.Push(
             std::move(transaction_with_task_source.task_source), sort_key);
       }
@@ -252,6 +255,11 @@ void ThreadGroup::PushTaskSourceAndWakeUpWorkersImpl(
     return;
   }
   auto sort_key = transaction_with_task_source.task_source->GetSortKey();
+  // When moving |task_source| into |priority_queue_|, it may be destroyed
+  // on another thread as soon as |lock_| is released, since we're no longer
+  // holding a reference to it. To prevent UAF, release |transaction| before
+  // moving |task_source|. Ref. crbug.com/1412008
+  transaction_with_task_source.transaction.Release();
   priority_queue_.Push(std::move(transaction_with_task_source.task_source),
                        sort_key);
   EnsureEnoughWorkersLockRequired(executor);
@@ -327,18 +335,8 @@ bool ThreadGroup::ShouldYield(TaskSourceSortKey sort_key) {
 std::unique_ptr<win::ScopedWindowsThreadEnvironment>
 ThreadGroup::GetScopedWindowsThreadEnvironment(WorkerEnvironment environment) {
   std::unique_ptr<win::ScopedWindowsThreadEnvironment> scoped_environment;
-  switch (environment) {
-    case WorkerEnvironment::COM_MTA: {
-      if (win::GetVersion() >= win::Version::WIN8) {
-        scoped_environment = std::make_unique<win::ScopedWinrtInitializer>();
-      } else {
-        scoped_environment = std::make_unique<win::ScopedCOMInitializer>(
-            win::ScopedCOMInitializer::kMTA);
-      }
-      break;
-    }
-    default:
-      break;
+  if (environment == WorkerEnvironment::COM_MTA) {
+    scoped_environment = std::make_unique<win::ScopedWinrtInitializer>();
   }
 
   DCHECK(!scoped_environment || scoped_environment->Succeeded());

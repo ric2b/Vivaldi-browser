@@ -7,11 +7,11 @@
 #include <utility>
 
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/files/dir_reader_posix.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/values.h"
@@ -269,12 +269,8 @@ class SigninExtensionsDeviceCloudPolicyBrowserTest
     command_line->AppendSwitch(ash::switches::kLoginManager);
     command_line->AppendSwitch(ash::switches::kForceLoginManagerInTests);
     // The test app has to be allowlisted for sign-in screen.
-    // This test is intentionally not migrated to the new
-    // kAllowlistedExtensionID switch to test that the deprecated one keeps
-    // working.
     command_line->AppendSwitchASCII(
-        extensions::switches::kDEPRECATED_AllowlistedExtensionID,
-        kTestExtensionId);
+        extensions::switches::kAllowlistedExtensionID, kTestExtensionId);
   }
 
   void SetUpInProcessBrowserTestFixture() override {

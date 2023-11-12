@@ -46,7 +46,7 @@ void AppIconReader::ReadIcons(const std::string& app_id,
   IconEffects icon_effects = static_cast<IconEffects>(icon_key.icon_effects);
   int resource_id = GetResourceIdForIcon(app_id, size_in_dip, icon_key);
 
-  if (icon_key.resource_id != IconKey::kInvalidResourceId) {
+  if (resource_id != IconKey::kInvalidResourceId) {
     LoadIconFromResource(icon_type, size_in_dip, resource_id,
                          /*is_placeholder_icon=*/false, icon_effects,
                          std::move(callback));
@@ -55,34 +55,17 @@ void AppIconReader::ReadIcons(const std::string& app_id,
 
   const base::FilePath& base_path = profile_->GetPath();
 
-  switch (icon_type) {
-    case IconType::kUnknown: {
-      std::move(callback).Run(std::make_unique<apps::IconValue>());
-      return;
-    }
-    case IconType::kCompressed:
-      if (icon_effects == apps::IconEffects::kNone) {
-        base::ThreadPool::PostTaskAndReplyWithResult(
-            FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-            base::BindOnce(&ReadOnBackgroundThread, base_path, app_id,
-                           apps_util::ConvertDipToPx(
-                               size_in_dip,
-                               /*quantize_to_supported_scale_factor=*/true)),
-            std::move(callback));
-        return;
-      }
-      [[fallthrough]];
-    case IconType::kUncompressed:
-      [[fallthrough]];
-    case IconType::kStandard: {
-      decodes_.emplace_back(std::make_unique<AppIconDecoder>(
-          base_path, app_id, size_in_dip,
-          base::BindOnce(&AppIconReader::OnUncompressedIconRead,
-                         weak_ptr_factory_.GetWeakPtr(), size_in_dip,
-                         icon_effects, icon_type, std::move(callback))));
-      decodes_.back()->Start();
-    }
+  if (icon_type == IconType::kUnknown) {
+    std::move(callback).Run(std::make_unique<apps::IconValue>());
+    return;
   }
+
+  decodes_.emplace_back(std::make_unique<AppIconDecoder>(
+      base_path, app_id, size_in_dip,
+      base::BindOnce(&AppIconReader::OnUncompressedIconRead,
+                     weak_ptr_factory_.GetWeakPtr(), size_in_dip, icon_effects,
+                     icon_type, std::move(callback))));
+  decodes_.back()->Start();
 }
 
 void AppIconReader::OnUncompressedIconRead(int32_t size_in_dip,
@@ -106,44 +89,43 @@ void AppIconReader::OnUncompressedIconRead(int32_t size_in_dip,
 
   iv->icon_type = icon_type;
 
-  // Apply the icon effects on the uncompressed data. If the caller requests
-  // an uncompressed icon, return the uncompressed result; otherwise, encode
-  // the icon to a compressed icon, return the compressed result.
-  if (icon_effects) {
-    // Per https://www.w3.org/TR/appmanifest/#icon-masks, we apply a white
-    // background in case the maskable icon contains transparent pixels in its
-    // safe zone, and clear the standard icon effect, apply the mask to the icon
-    // without shrinking it.
-    if (iv->is_maskable_icon) {
-      icon_effects &= ~apps::IconEffects::kCrOsStandardIcon;
-      icon_effects |= apps::IconEffects::kCrOsStandardBackground;
-      icon_effects |= apps::IconEffects::kCrOsStandardMask;
-    }
-
-    if (icon_type == apps::IconType::kUncompressed) {
-      // For uncompressed icon, apply the resize and pad effect.
-      icon_effects |= apps::IconEffects::kMdIconStyle;
-
-      // For uncompressed icon, clear the standard icon effects, kBackground
-      // and kMask.
-      icon_effects &= ~apps::IconEffects::kCrOsStandardIcon;
-      icon_effects &= ~apps::IconEffects::kCrOsStandardBackground;
-      icon_effects &= ~apps::IconEffects::kCrOsStandardMask;
-    }
-
-    apps::ApplyIconEffects(
-        icon_effects, size_in_dip, std::move(iv),
-        base::BindOnce(&AppIconReader::OnCompleteWithIconValue,
-                       weak_ptr_factory_.GetWeakPtr(), size_in_dip, icon_type,
-                       std::move(callback)));
+  if (!icon_effects) {
+    // If the caller requests an uncompressed icon, return the uncompressed
+    // result; otherwise, encode the icon to a compressed icon, return the
+    // compressed result.
+    OnCompleteWithIconValue(size_in_dip, icon_type, std::move(callback),
+                            std::move(iv));
     return;
   }
 
-  // If icon effects are none, ReadIcons can return the compressed icon
-  // directly.
-  DCHECK_NE(IconType::kCompressed, icon_type);
+  // Apply the icon effects on the uncompressed data.
 
-  std::move(callback).Run(std::move(iv));
+  // Per https://www.w3.org/TR/appmanifest/#icon-masks, we apply a white
+  // background in case the maskable icon contains transparent pixels in its
+  // safe zone, and clear the standard icon effect, apply the mask to the icon
+  // without shrinking it.
+  if (iv->is_maskable_icon) {
+    icon_effects &= ~apps::IconEffects::kCrOsStandardIcon;
+    icon_effects |= apps::IconEffects::kCrOsStandardBackground;
+    icon_effects |= apps::IconEffects::kCrOsStandardMask;
+  }
+
+  if (icon_type == apps::IconType::kUncompressed) {
+    // For uncompressed icon, apply the resize and pad effect.
+    icon_effects |= apps::IconEffects::kMdIconStyle;
+
+    // For uncompressed icon, clear the standard icon effects, kBackground
+    // and kMask.
+    icon_effects &= ~apps::IconEffects::kCrOsStandardIcon;
+    icon_effects &= ~apps::IconEffects::kCrOsStandardBackground;
+    icon_effects &= ~apps::IconEffects::kCrOsStandardMask;
+  }
+
+  apps::ApplyIconEffects(
+      icon_effects, size_in_dip, std::move(iv),
+      base::BindOnce(&AppIconReader::OnCompleteWithIconValue,
+                     weak_ptr_factory_.GetWeakPtr(), size_in_dip, icon_type,
+                     std::move(callback)));
 }
 
 void AppIconReader::OnCompleteWithIconValue(int32_t size_in_dip,

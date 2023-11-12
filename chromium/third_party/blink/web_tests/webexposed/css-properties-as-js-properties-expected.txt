@@ -8,9 +8,11 @@ alignItems
 alignSelf
 alignmentBaseline
 all
+anchorDefault
 anchorName
 anchorScroll
 animation
+animationComposition
 animationDelay
 animationDelayEnd
 animationDelayStart
@@ -20,6 +22,9 @@ animationFillMode
 animationIterationCount
 animationName
 animationPlayState
+animationRange
+animationRangeEnd
+animationRangeStart
 animationTimeline
 animationTimingFunction
 appRegion
@@ -438,12 +443,14 @@ textSizeAdjust
 textTransform
 textUnderlineOffset
 textUnderlinePosition
+textWrap
 toggle
 toggleGroup
 toggleRoot
 toggleTrigger
 toggleVisibility
 top
+topLayer
 touchAction
 transform
 transformBox
@@ -464,6 +471,7 @@ viewTimeline
 viewTimelineAxis
 viewTimelineInset
 viewTimelineName
+viewTransitionName
 visibility
 webkitAlignContent
 webkitAlignItems

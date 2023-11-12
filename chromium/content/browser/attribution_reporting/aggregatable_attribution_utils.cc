@@ -20,12 +20,11 @@
 #include "components/attribution_reporting/aggregation_keys.h"
 #include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "content/browser/aggregation_service/aggregatable_report.h"
 #include "content/browser/attribution_reporting/aggregatable_histogram_contribution.h"
 #include "content/browser/attribution_reporting/attribution_info.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
-#include "content/browser/attribution_reporting/attribution_source_type.h"
-#include "content/browser/attribution_reporting/attribution_utils.h"
 #include "content/common/aggregatable_report.mojom.h"
 #include "net/base/schemeful_site.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -51,7 +50,7 @@ std::string SerializeTimeRoundedDownToWholeDayInSeconds(base::Time time) {
 
 std::vector<AggregatableHistogramContribution> CreateAggregatableHistogram(
     const attribution_reporting::FilterData& source_filter_data,
-    AttributionSourceType source_type,
+    attribution_reporting::mojom::SourceType source_type,
     const attribution_reporting::AggregationKeys& keys,
     const attribution_reporting::AggregatableTriggerDataList&
         aggregatable_trigger_data,
@@ -64,16 +63,16 @@ std::vector<AggregatableHistogramContribution> CreateAggregatableHistogram(
   // match for the given source, and if applicable modify the bucket based on
   // the given key piece.
   for (const auto& data : aggregatable_trigger_data.vec()) {
-    if (!AttributionFiltersMatch(source_filter_data, source_type,
-                                 data.filters(), data.not_filters())) {
+    if (!source_filter_data.Matches(source_type, data.filters())) {
       ++num_trigger_data_filtered;
       continue;
     }
 
     for (const auto& source_key : data.source_keys()) {
       auto bucket = buckets.find(source_key);
-      if (bucket == buckets.end())
+      if (bucket == buckets.end()) {
         continue;
+      }
 
       bucket->second |= data.key_piece();
     }
@@ -85,8 +84,9 @@ std::vector<AggregatableHistogramContribution> CreateAggregatableHistogram(
   std::vector<AggregatableHistogramContribution> contributions;
   for (const auto& [key_id, key] : buckets) {
     auto value = values.find(key_id);
-    if (value == values.end())
+    if (value == values.end()) {
       continue;
+    }
 
     contributions.emplace_back(key, value->second);
   }
@@ -98,10 +98,11 @@ std::vector<AggregatableHistogramContribution> CreateAggregatableHistogram(
             aggregatable_trigger_data.vec().size());
   }
 
-  DCHECK(!buckets.empty());
-  base::UmaHistogramPercentage(
-      "Conversions.AggregatableReport.DroppedKeysPercentage",
-      100 * (buckets.size() - contributions.size()) / buckets.size());
+  if (!buckets.empty()) {
+    base::UmaHistogramPercentage(
+        "Conversions.AggregatableReport.DroppedKeysPercentage",
+        100 * (buckets.size() - contributions.size()) / buckets.size());
+  }
 
   const int kExclusiveMaxHistogramValue = 101;
 
@@ -148,7 +149,7 @@ absl::optional<AggregatableReportRequest> CreateAggregatableReportRequest(
           attribution_info.source.common_info().source_time()));
   additional_fields.Set(
       "attribution_destination",
-      attribution_info.source.common_info().DestinationSite().Serialize());
+      net::SchemefulSite(attribution_info.context_origin).Serialize());
   return AggregatableReportRequest::Create(
       AggregationServicePayloadContents(
           AggregationServicePayloadContents::Operation::kHistogram,

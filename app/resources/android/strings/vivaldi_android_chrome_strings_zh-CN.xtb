@@ -2,7 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
 <translation id="1397811292916898096">用 <ph name="PRODUCT_NAME" /> 搜索</translation>
-<translation id="1456207338570705181">即触即搜是一个只有在您将谷歌搜索设置为默认搜索引擎时才能使用的功能。它将所选单词和当前页面作为上下文发送到谷歌搜索。您可以在 <ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭这个功能。</translation>
+<translation id="1456207338570705181">即触即搜功能仅当您将谷歌搜索设置为默认搜索引擎时才能使用的。它将所选单词和当前页面作为上下文发送到谷歌搜索。您可以在 <ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭这个功能。</translation>
 <translation id="1598449788754183301">切换普通/隐匿标签</translation>
 <translation id="1644574205037202324">历史</translation>
 <translation id="17513872634828108">打开的标签</translation>

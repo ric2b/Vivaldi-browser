@@ -26,7 +26,6 @@ import androidx.annotation.StringRes;
 import androidx.appcompat.widget.SwitchCompat;
 
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
@@ -287,10 +286,8 @@ public class LegacyIncognitoDescriptionView
 
     /** Adjust the "Learn More" link. */
     private void adjustLearnMore() {
-        boolean readLaterEnabled = ChromeFeatureList.sReadLater.isEnabled();
-        final String subtitleText = getContext().getResources().getString(readLaterEnabled
-                        ? R.string.new_tab_otr_subtitle_with_reading_list
-                        : R.string.new_tab_otr_subtitle);
+        final String subtitleText = getContext().getResources().getString(
+                R.string.new_tab_otr_subtitle_with_reading_list);
         boolean learnMoreInSubtitle = mWidthDp > WIDE_LAYOUT_THRESHOLD_DP;
 
         if (!ChromeApplicationImpl.isVivaldi())

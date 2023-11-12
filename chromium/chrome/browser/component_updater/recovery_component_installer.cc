@@ -13,10 +13,10 @@
 #include <vector>
 
 #include "base/base_paths.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
@@ -27,6 +27,7 @@
 #include "base/process/process.h"
 #include "base/strings/string_util.h"
 #include "base/task/thread_pool.h"
+#include "base/values.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
@@ -109,7 +110,7 @@ bool SimulatingElevatedRecovery() {
 }
 
 std::vector<std::string> GetRecoveryInstallArguments(
-    const base::DictionaryValue& manifest,
+    const base::Value::Dict& manifest,
     bool is_deferred_run,
     const base::Version& version) {
   std::vector<std::string> arguments;
@@ -120,12 +121,12 @@ std::vector<std::string> GetRecoveryInstallArguments(
     arguments.push_back("/deferredrun");
 
   if (const std::string* recovery_args =
-          manifest.FindStringKey("x-recovery-args")) {
+          manifest.FindString("x-recovery-args")) {
     if (base::IsStringASCII(*recovery_args))
       arguments.push_back(*recovery_args);
   }
   if (const std::string* recovery_add_version =
-          manifest.FindStringKey("x-recovery-add-version")) {
+          manifest.FindString("x-recovery-add-version")) {
     if (*recovery_add_version == "yes") {
       arguments.push_back("/version");
       arguments.push_back(version.GetString());
@@ -137,7 +138,7 @@ std::vector<std::string> GetRecoveryInstallArguments(
 
 base::CommandLine BuildRecoveryInstallCommandLine(
     const base::FilePath& command,
-    const base::DictionaryValue& manifest,
+    const base::Value::Dict& manifest,
     bool is_deferred_run,
     const base::Version& version) {
   base::CommandLine command_line(command);
@@ -150,11 +151,10 @@ base::CommandLine BuildRecoveryInstallCommandLine(
   return command_line;
 }
 
-std::unique_ptr<base::DictionaryValue> ReadManifest(
-    const base::FilePath& manifest) {
+base::Value::Dict ReadManifest(const base::FilePath& manifest) {
   JSONFileValueDeserializer deserializer(manifest);
   std::string error;
-  return base::DictionaryValue::From(deserializer.Deserialize(NULL, &error));
+  return std::move(*deserializer.Deserialize(nullptr, &error)).TakeDict();
 }
 
 void WaitForElevatedInstallToComplete(base::Process process) {
@@ -178,12 +178,12 @@ void DoElevatedInstallRecoveryComponent(const base::FilePath& path) {
   if (!base::PathExists(main_file) || !base::PathExists(manifest_file))
     return;
 
-  std::unique_ptr<base::DictionaryValue> manifest(ReadManifest(manifest_file));
-  const std::string* name = manifest->FindStringKey("name");
+  base::Value::Dict manifest(ReadManifest(manifest_file));
+  const std::string* name = manifest.FindString("name");
   if (!name || *name != kRecoveryManifestName)
     return;
   std::string proposed_version;
-  if (const std::string* ptr = manifest->FindStringKey("version")) {
+  if (const std::string* ptr = manifest.FindString("version")) {
     if (base::IsStringASCII(*ptr))
       proposed_version = *ptr;
   }
@@ -194,7 +194,7 @@ void DoElevatedInstallRecoveryComponent(const base::FilePath& path) {
   const bool is_deferred_run = true;
 #if BUILDFLAG(IS_WIN)
   const auto cmdline = BuildRecoveryInstallCommandLine(
-      main_file, *manifest, is_deferred_run, version);
+      main_file, manifest, is_deferred_run, version);
 
   RecordRecoveryComponentUMAEvent(RCE_RUNNING_ELEVATED);
 
@@ -203,15 +203,15 @@ void DoElevatedInstallRecoveryComponent(const base::FilePath& path) {
   options.elevated = true;
   base::Process process = base::LaunchProcess(cmdline, options);
 #elif BUILDFLAG(IS_MAC)
-  base::mac::ScopedAuthorizationRef authRef(
-      base::mac::AuthorizationCreateToRunAsRoot(nullptr));
+  base::mac::ScopedAuthorizationRef authRef =
+      base::mac::AuthorizationCreateToRunAsRoot(nullptr);
   if (!authRef.get()) {
     RecordRecoveryComponentUMAEvent(RCE_ELEVATED_FAILED);
     return;
   }
 
-  const auto arguments = GetRecoveryInstallArguments(
-      *manifest, is_deferred_run, version);
+  const auto arguments =
+      GetRecoveryInstallArguments(manifest, is_deferred_run, version);
   // Convert the arguments memory layout to the format required by
   // ExecuteWithPrivilegesAndGetPID(): an array of string pointers
   // that ends with a null pointer.
@@ -420,40 +420,49 @@ void RecoveryComponentInstaller::Install(
       FROM_HERE, base::BindOnce(std::move(callback), result));
 }
 
-bool RecoveryComponentInstaller::DoInstall(
-    const base::FilePath& unpack_path) {
-  const base::Value manifest = update_client::ReadManifest(unpack_path);
-  if (!manifest.is_dict())
+bool RecoveryComponentInstaller::DoInstall(const base::FilePath& unpack_path) {
+  absl::optional<base::Value::Dict> manifest =
+      update_client::ReadManifest(unpack_path);
+  if (!manifest.has_value()) {
     return false;
-  const std::string* name = manifest.FindStringKey("name");
-  if (!name || *name != kRecoveryManifestName)
+  }
+  const std::string* name = manifest->FindString("name");
+  if (!name || *name != kRecoveryManifestName) {
     return false;
-  const std::string* proposed_version = manifest.FindStringKey("version");
-  if (!proposed_version || !base::IsStringASCII(*proposed_version))
+  }
+  const std::string* proposed_version = manifest->FindString("version");
+  if (!proposed_version || !base::IsStringASCII(*proposed_version)) {
     return false;
+  }
   base::Version version(*proposed_version);
-  if (!version.IsValid())
+  if (!version.IsValid()) {
     return false;
-  if (current_version_.CompareTo(version) >= 0)
+  }
+  if (current_version_.CompareTo(version) >= 0) {
     return false;
+  }
 
   // Passed the basic tests. Copy the installation to a permanent directory.
   base::FilePath path;
-  if (!base::PathService::Get(DIR_RECOVERY_BASE, &path))
+  if (!base::PathService::Get(DIR_RECOVERY_BASE, &path)) {
     return false;
-  if (!base::PathExists(path) && !base::CreateDirectory(path))
+  }
+  if (!base::PathExists(path) && !base::CreateDirectory(path)) {
     return false;
+  }
   path = path.AppendASCII(version.GetString());
-  if (base::PathExists(path) && !base::DeletePathRecursively(path))
+  if (base::PathExists(path) && !base::DeletePathRecursively(path)) {
     return false;
+  }
   if (!base::Move(unpack_path, path)) {
     DVLOG(1) << "Recovery component move failed.";
     return false;
   }
 
   base::FilePath main_file = path.Append(kRecoveryFileName);
-  if (!base::PathExists(main_file))
+  if (!base::PathExists(main_file)) {
     return false;
+  }
 
 #if BUILDFLAG(IS_POSIX)
   // The current version of the CRX unzipping does not restore
@@ -469,8 +478,7 @@ bool RecoveryComponentInstaller::DoInstall(
   // Run the recovery component.
   const bool is_deferred_run = false;
   const auto cmdline = BuildRecoveryInstallCommandLine(
-      main_file, base::Value::AsDictionaryValue(manifest), is_deferred_run,
-      current_version_);
+      main_file, manifest.value(), is_deferred_run, current_version_);
 
   if (!RunInstallCommand(cmdline, path)) {
     return false;

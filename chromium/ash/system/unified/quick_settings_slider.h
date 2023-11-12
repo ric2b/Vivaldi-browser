@@ -62,6 +62,11 @@ class ASH_EXPORT QuickSettingsSlider : public views::Slider {
   void SetSliderStyle(Style style);
   Style slider_style() const { return slider_style_; }
 
+  // Gets the bounds and rounded corner radius for `kRadioInactive` to draw the
+  // focus ring around it in `AudioDetailedView`.
+  gfx::Rect GetInactiveRadioSliderRect();
+  int GetInactiveRadioSliderRoundedCornerRadius();
+
  private:
   // views::Slider:
   SkColor GetThumbColor() const override;
@@ -69,6 +74,7 @@ class ASH_EXPORT QuickSettingsSlider : public views::Slider {
 
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
 
   Style slider_style_;
 };

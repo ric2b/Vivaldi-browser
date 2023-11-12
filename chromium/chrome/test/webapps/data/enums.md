@@ -18,17 +18,17 @@ The tables in this file are parsed as action templates for critical user journey
 
 ## Enums Table
 
-| #Enum Name | Values (* = default) |  |  |  |  |  |  |  |  |  |  |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Site | Standalone* | MinimalUi | NotPromotable | StandaloneNestedA | StandaloneNestedB | Wco | Isolated | FileHandler | NotInstalled | StandaloneNotStartUrl | Screenshots |
-| InstallableSite | Standalone* | MinimalUi | StandaloneNestedA | StandaloneNestedB | Wco | NotInstalled | StandaloneNotStartUrl | Screenshots |
+| #Enum Name | Values (* = default) |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Site | Standalone* | MinimalUi | Tabbed | NotPromotable | StandaloneNestedA | StandaloneNestedB | Wco | Isolated | FileHandler | NotInstalled | StandaloneNotStartUrl | Screenshots | HasSubApps | SubApp1 | SubApp2 |
+| InstallableSite | Standalone* | MinimalUi | Tabbed | StandaloneNestedA | StandaloneNestedB | Wco | NotInstalled | StandaloneNotStartUrl | Screenshots | HasSubApps | SubApp1 | SubApp2 |
 | Title | StandaloneOriginal | StandaloneUpdated |  |  |  |  |  |
 | Color | Red | Green |  |  |  |  |  |
 | ProfileClient | Client2* | Client1 |  |  |  |  |  |
 | UserDisplayPreference | Standalone | Browser |  |  |  |  |  |
 | IsShown | Shown | NotShown |  |  |  |  |  |
 | IsOn | On | Off |  |  |  |  |  |
-| Display | Standalone | MinimalUi | Wco | Browser |  |  |  |
+| Display | Standalone | MinimalUi | Tabbed | Wco | Browser |  |  |  |
 | FileExtension | Foo | Bar |  |  |  |  |  |
 | Location | StartUrl | FileHandleUrlForFoo | FileHandleUrlForBar |  |  |  |  |
 | Number | One | Two |  |  |  |  |  |
@@ -39,3 +39,4 @@ The tables in this file are parsed as action templates for critical user journey
 | WindowOptions | Windowed | Browser |
 | InstallMode | WebApp* | WebShortcut |
 | UpdateDialogResponse | AcceptUpdate | CancelDialogAndUninstall | SkipUpdate |
+| SubAppInstallDialogOptions | UserAllow* | UserDeny | PolicyOverride |

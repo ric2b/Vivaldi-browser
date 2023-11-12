@@ -137,6 +137,10 @@ declare_args() {
   # needs to be evaluated before enabling it there as well.
   init_stack_vars = !(is_android && is_official_build)
 
+  # Zero init has favorable performance/size tradeoffs for Chrome OS
+  # but was not evaluated for other platforms.
+  init_stack_vars_zero = is_chromeos
+
   # This argument is to control whether enabling text section splitting in the
   # final binary. When enabled, the separated text sections with prefix
   # '.text.hot', '.text.unlikely', '.text.startup' and '.text.exit' will not be
@@ -165,9 +169,18 @@ declare_args() {
   # For use by tools/clang/scripts/analyze_includes.py
   show_includes = false
 
+  # Enable Profi algorithm. Profi can infer block and edge counts.
+  # https://clang.llvm.org/docs/UsersManual.html#using-sampling-profilers
+  # TODO(crbug.com/1375958i:) Possibly enable this for Android too.
+  use_profi = is_chromeos
+
   # If true, linker crashes will be rerun with `--reproduce` which causes
   # a reproducer file to be saved.
   save_reproducers_on_lld_crash = false
+
+  # Allow projects that wish to stay on C++17 to override Chromium's default.
+  # TODO(crbug.com/1402249): evaluate removing this end of 2023
+  use_cxx17 = false
 }
 
 declare_args() {
@@ -601,8 +614,7 @@ config("compiler") {
         cflags_cc += [ "-fno-trigraphs" ]
       }
     } else if (is_clang) {
-      if (is_chromeos_device) {
-        # TODO(crbug.com/1392471): Support C++20 in CrOS toolchain.
+      if (use_cxx17) {
         cflags_cc += [ "-std=${standard_prefix}++17" ]
       } else {
         cflags_cc += [ "-std=${standard_prefix}++20" ]
@@ -614,7 +626,7 @@ config("compiler") {
     }
   } else if (is_win) {
     cflags_c += [ "/std:c11" ]
-    if (!is_clang && defined(msvc_use_cxx17) && msvc_use_cxx17) {
+    if (use_cxx17 || (!is_clang && defined(msvc_use_cxx17) && msvc_use_cxx17)) {
       cflags_cc += [ "/std:c++17" ]
     } else {
       cflags_cc += [ "/std:c++20" ]
@@ -627,9 +639,7 @@ config("compiler") {
     # clause, above.
     cflags_c += [ "-std=c11" ]
 
-    if (is_fuchsia) {
-      # TODO(crbug.com/fuchsia/108751): The FIDL compiler generates code that
-      # will not compile in C++20 mode. Switch to C++20 when this is resolved.
+    if (use_cxx17) {
       cflags_cc += [ "-std=c++17" ]
     } else {
       cflags_cc += [ "-std=c++20" ]
@@ -770,6 +780,10 @@ config("compiler") {
     ldflags += [ "-Wl,--undefined-version" ]
   }
 
+  if (use_lld && is_apple) {
+    ldflags += [ "-Wl,--strict-auto-link" ]
+  }
+
   # LLD does call-graph-sorted binary layout by default when profile data is
   # present. On Android this increases binary size due to more thinks for long
   # jumps. Turn it off by default and enable selectively for targets where it's
@@ -811,9 +825,8 @@ config("compiler") {
   # * Windows is not supported as it doesn't use DWARF.
   # * Apple platforms (e.g. MacOS, iPhone, iPad) aren't supported because xcode
   #   lldb doesn't have the needed changes yet.
-  # * Fuchsia isn't supported as zxdb doesn't support simple template names yet.
   # TODO(crbug.com/1379070): Remove if the upstream default ever changes.
-  if (is_clang && !is_nacl && !is_win && !is_apple && !is_fuchsia) {
+  if (is_clang && !is_nacl && !is_win && !is_apple) {
     cflags_cc += [ "-gsimple-template-names" ]
   }
 
@@ -861,6 +874,13 @@ config("compiler") {
     # we discover a reason to turn them off.
     "-Coverflow-checks=on",
 
+    # By default Rust passes `-nodefaultlibs` to the linker, however this
+    # conflicts with our `--unwind=none` flag for Android dylibs, as the latter
+    # is then unused and produces a warning/error. So this removes the
+    # `-nodefaultlibs` from the linker invocation from Rust, which would be used
+    # to compile dylibs on Android, such as for constructing unit test APKs.
+    "-Cdefault-linker-libraries",
+
     # Turn warnings into the "deny" lint level, which produce compiler errors.
     # The equivalent of -Werror for clang/gcc.
     "-Dwarnings",
@@ -879,9 +899,6 @@ config("compiler") {
   if (rust_abi_target != "") {
     rustflags += [ "--target=$rust_abi_target" ]
   }
-  if (use_lto_in_rustc_linking) {
-    rustflags += [ "-Clinker-plugin-lto" ]
-  }
   if (!use_thin_lto || !use_chromium_rust_toolchain) {
     # Don't include bitcode if it won't be used, or can't be used. When
     # use_thin_lto is true, we will try to apply LTO to any objects that have
@@ -892,6 +909,21 @@ config("compiler") {
   }
   if (is_official_build) {
     rustflags += [ "-Ccodegen-units=1" ]
+  }
+}
+
+# Defers LTO optimization to the linker, for use when:
+# * Having the C++ toolchain do the linking against Rust staticlibs, and it
+#   will be using LTO.
+# * Having Rust toolchain invoke the linker, and you're linking Rust and C++
+#   together, so this defers LTO to the linker.
+#
+# Otherwise, Rust does LTO during compilation.
+#
+# https://doc.rust-lang.org/rustc/linker-plugin-lto.html
+config("rust_defer_lto_to_linker") {
+  if (!is_debug && use_thin_lto && is_a_target_toolchain) {
+    rustflags = [ "-Clinker-plugin-lto" ]
   }
 }
 
@@ -906,6 +938,8 @@ config("thinlto_optimize_default") {
     } else {
       ldflags = [ "-Wl,--lto-O" + lto_opt_level ]
     }
+
+    rustflags = [ "-Clto=thin" ]
   }
 }
 
@@ -930,6 +964,8 @@ config("thinlto_optimize_max") {
     } else {
       ldflags = [ "-Wl,--lto-O" + lto_opt_level ]
     }
+
+    rustflags = [ "-Clto=thin" ]
   }
 }
 
@@ -1269,9 +1305,10 @@ config("compiler_codegen") {
     configs += [ "//build/config/nacl:compiler_codegen" ]
   }
 
-  if (current_cpu == "arm64" && is_android) {
-    # On arm64 disable outlining for Android. See crbug.com/931297 for more
-    # information.
+  if (current_cpu == "arm64" && !is_win) {
+    # Disable outlining everywhere on arm64 except Win. For more information see
+    # crbug.com/931297 for Android and crbug.com/1410297 for iOS.
+    # TODO(crbug.com/1411363): Enable this on Windows if possible.
     cflags += [ "-mno-outline" ]
 
     # This can be removed once https://bugs.llvm.org/show_bug.cgi?id=40348
@@ -1395,16 +1432,13 @@ config("clang_revision") {
 }
 
 config("rustc_revision") {
-  if (enable_rust && defined(rustc_version)) {
-    # Similar to the above config, this is here so that all files get
-    # recompiled after a rustc roll. Nothing should ever read this cfg.
-    # $rustc_version is a gn arg set within //build/config/rust.gni
-    # so that users using a custom Rust toolchain can override it.
-    # Its accuracy is checked in //build/rust/std:find_stdlib, which
-    # most of our Rust targets depend upon.
+  if (rustc_revision != "") {
+    # Similar to the above config, this is here so that all files get recompiled
+    # after a rustc roll. Nothing should ever read this cfg. This will not be
+    # set if a custom toolchain is used.
     rustflags = [
       "--cfg",
-      "rustc_version=\"$rustc_version\"",
+      "cr_rustc_revision=\"$rustc_revision\"",
     ]
   }
 }
@@ -1622,6 +1656,9 @@ config("default_warnings") {
 
           # TODO(crbug.com/1352183) Evaluate and possibly enable.
           "-Wno-bitfield-constant-conversion",
+
+          # TODO(crbug.com/1412713) Evaluate and possibly enable.
+          "-Wno-deprecated-this-capture",
         ]
       }
     }
@@ -1646,7 +1683,7 @@ config("default_warnings") {
 # sizes, allocations, indices, or offsets.In cases where type conversion is not
 # possible or is superfluous, use base::strict_cast<> or base::checked_cast<>
 # to convert to size_t as needed.
-# See also: https://docs.google.com/document/d/14yKUwDaorqqNfgdGqHY_nck2nn02XBQcB5N0ue4fax8
+# See also: https://docs.google.com/document/d/1CTbQ-5cQjnjU8aCOtLiA7G6P0i5C6HpSDNlSNq6nl5E
 #
 # To enable in a GN target, use:
 #   configs += [ "//build/config/compiler:prevent_unsafe_narrowing" ]
@@ -2052,7 +2089,7 @@ if (is_win) {
 }
 
 config("default_stack_frames") {
-  if (is_posix || is_fuchsia) {
+  if (!is_win) {
     if (enable_frame_pointers) {
       cflags = [ "-fno-omit-frame-pointer" ]
 
@@ -2316,6 +2353,9 @@ config("afdo") {
       rebased_clang_sample_profile =
           rebase_path(_clang_sample_profile, root_build_dir)
       cflags += [ "-fprofile-sample-use=${rebased_clang_sample_profile}" ]
+      if (use_profi) {
+        cflags += [ "-fsample-profile-use-profi" ]
+      }
       inputs = [ _clang_sample_profile ]
     }
   } else if (auto_profile_path != "" && is_a_target_toolchain) {
@@ -2405,11 +2445,12 @@ config("symbols") {
 
     # The gcc-based nacl compilers don't support -fdebug-compilation-dir (see
     # elsewhere in this file), so they can't have build-dir-independent output.
+    # Moreover pnacl does not support newer flags such as -fdebug-prefix-map
     # Disable symbols for nacl object files to get deterministic,
-    # build-directory-independent output. pnacl and nacl-clang do support that
-    # flag, so we can use use -g1 for pnacl and nacl-clang compiles.
-    # gcc nacl is is_nacl && !is_clang, pnacl and nacl-clang are && is_clang.
-    if ((!is_nacl || is_clang) && current_os != "zos") {
+    # build-directory-independent output.
+    # Keeping -g2 for saigo as it's the only toolchain whose artifacts that are
+    # part of chromium release (other nacl toolchains are used only for tests).
+    if ((!is_nacl || is_nacl_saigo) && current_os != "zos") {
       cflags += [ "-g2" ]
     }
 
@@ -2536,11 +2577,12 @@ config("minimal_symbols") {
 
     # The gcc-based nacl compilers don't support -fdebug-compilation-dir (see
     # elsewhere in this file), so they can't have build-dir-independent output.
+    # Moreover pnacl does not support newer flags such as -fdebug-prefix-map
     # Disable symbols for nacl object files to get deterministic,
-    # build-directory-independent output. pnacl and nacl-clang do support that
-    # flag, so we can use use -g1 for pnacl and nacl-clang compiles.
-    # gcc nacl is is_nacl && !is_clang, pnacl and nacl-clang are && is_clang.
-    if (!is_nacl || is_clang) {
+    # build-directory-independent output.
+    # Keeping -g1 for saigo as it's the only toolchain whose artifacts that are
+    # part of chromium release (other nacl toolchains are used only for tests).
+    if (!is_nacl || is_nacl_saigo) {
       cflags += [ "-g1" ]
     }
 
@@ -2649,12 +2691,7 @@ if (is_android || (is_chromeos_ash && is_chromeos_device)) {
 config("default_init_stack_vars") {
   cflags = []
   if (init_stack_vars && is_clang && !is_nacl && !using_sanitizer) {
-    if (is_chromeos && !chromeos_is_browser_only) {
-      # TODO(adriandole) remove chromeos_is_browser_only condition
-      # once lacros updates toolchain
-
-      # Zero init has favorable performance/size tradeoffs for Chrome OS
-      # but was not evaluated for other platforms.
+    if (init_stack_vars_zero) {
       cflags += [ "-ftrivial-auto-var-init=zero" ]
     } else {
       cflags += [ "-ftrivial-auto-var-init=pattern" ]

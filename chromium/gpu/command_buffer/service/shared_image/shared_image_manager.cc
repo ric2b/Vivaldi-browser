@@ -128,6 +128,8 @@ SharedImageManager::Register(std::unique_ptr<SharedImageBacking> backing,
     return nullptr;
   }
 
+  UMA_HISTOGRAM_ENUMERATION("GPU.SharedImage.BackingType", backing->GetType());
+
   // TODO(jonross): Determine how the direct destruction of a
   // SharedImageRepresentationFactoryRef leads to ref-counting issues as
   // well as thread-checking failures in tests.
@@ -421,14 +423,21 @@ bool SharedImageManager::OnMemoryDump(
   if (args.level_of_detail ==
       base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
     size_t total_size = 0;
-    for (auto& backing : images_)
-      total_size += backing->GetEstimatedSizeForMemoryDump();
+    size_t total_purgeable_size = 0;
+    for (auto& backing : images_) {
+      size_t size = backing->GetEstimatedSizeForMemoryDump();
+      total_size += size;
+      total_purgeable_size += backing->IsPurgeable() ? size : 0;
+    }
 
     base::trace_event::MemoryAllocatorDump* dump =
         pmd->CreateAllocatorDump(base_dump_name);
     dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                     base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                     total_size);
+    dump->AddScalar("purgeable_size",
+                    base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                    total_purgeable_size);
 
     // Early out, no need for more detail in a BACKGROUND dump.
     return true;
@@ -468,7 +477,7 @@ scoped_refptr<gfx::NativePixmap> SharedImageManager::GetNativePixmap(
 }
 
 bool SharedImageManager::SupportsScanoutImages() {
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   return true;
 #elif BUILDFLAG(IS_ANDROID)
   return base::AndroidHardwareBufferCompat::IsSupportAvailable();

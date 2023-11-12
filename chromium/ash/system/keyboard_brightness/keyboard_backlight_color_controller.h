@@ -14,6 +14,8 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom-shared.h"
 #include "base/scoped_observation.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "components/session_manager/session_manager_types.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -30,7 +32,11 @@ class ASH_EXPORT KeyboardBacklightColorController
       public SessionObserver,
       public WallpaperControllerObserver {
  public:
-  KeyboardBacklightColorController();
+  // Default brightness to be set by the `KeyboardBacklightColorController` when
+  // the backlight is off and the user configures a new color.
+  static constexpr double kDefaultBacklightBrightness = 40.0;
+
+  explicit KeyboardBacklightColorController(PrefService* local_state);
 
   KeyboardBacklightColorController(const KeyboardBacklightColorController&) =
       delete;
@@ -42,7 +48,10 @@ class ASH_EXPORT KeyboardBacklightColorController
   // Register the pref to store keyboard color in the given registry.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
-  // Sets the keyboard backlight color for the user with |account_id|.
+  // Sets the keyboard backlight color for the user with |account_id|. This call
+  // also invokes |UpdateAllBacklightZoneColors| to populate the color for all
+  // the zones so that when a zone is customized, we still have the info of what
+  // the correct colors for other zones should be.
   void SetBacklightColor(
       personalization_app::mojom::BacklightColor backlight_color,
       const AccountId& account_id);
@@ -50,6 +59,18 @@ class ASH_EXPORT KeyboardBacklightColorController
   // Returns the currently set backlight color for user with |account_id|.
   personalization_app::mojom::BacklightColor GetBacklightColor(
       const AccountId& account_id);
+
+  // Sets the color of the |zone| for the user with |account_id|.
+  void SetBacklightZoneColor(
+      int zone,
+      personalization_app::mojom::BacklightColor backlight_color,
+      const AccountId& account_id);
+
+  // Returns all the zone colors. The order of the colors corresponds to the
+  // order of the zones. The size of the vector is guaranteed to be the same as
+  // |RgbKeyboardManager::GetZoneCount()|.
+  std::vector<personalization_app::mojom::BacklightColor>
+  GetBacklightZoneColors(const AccountId& account_id);
 
   // RgbKeyboardManagerObserver:
   void OnRgbKeyboardSupportedChanged(bool supported) override;
@@ -60,6 +81,11 @@ class ASH_EXPORT KeyboardBacklightColorController
 
   // WallpaperControllerObserver:
   void OnWallpaperColorsChanged() override;
+
+  // Callback function for PrefChangeRegistrar, when policy value populates the
+  // local state during the sign-in screen, display the keyboard backlight
+  // color.
+  void OnKeyboardBacklightColorLocalStateChanged();
 
   KeyboardBacklightColorNudgeController*
   keyboard_backlight_color_nudge_controller() {
@@ -73,8 +99,26 @@ class ASH_EXPORT KeyboardBacklightColorController
   void DisplayBacklightColor(
       personalization_app::mojom::BacklightColor backlight_color);
 
+  // Displays the |backlight_color| at the specific |zone| on the keyboard.
+  void DisplayBacklightZoneColor(
+      int zone,
+      personalization_app::mojom::BacklightColor backlight_color);
+
   // Sets the keyboard backlight color pref for user with |account_id|.
   void SetBacklightColorPref(
+      personalization_app::mojom::BacklightColor backlight_color,
+      const AccountId& account_id);
+
+  // Updates all the zone colors to be |backlight_color| in pref for the user
+  // with |account_id|.
+  void UpdateAllBacklightZoneColors(
+      personalization_app::mojom::BacklightColor backlight_color,
+      const AccountId& account_id);
+
+  // Updates the keyboard backlight color zone pref at given |zone| for the user
+  // with |account_id|.
+  void UpdateBacklightZoneColorPref(
+      int zone,
       personalization_app::mojom::BacklightColor backlight_color,
       const AccountId& account_id);
 
@@ -85,7 +129,6 @@ class ASH_EXPORT KeyboardBacklightColorController
   void KeyboardBrightnessPercentReceived(absl::optional<double> percentage);
 
   SkColor displayed_color_for_testing_ = SK_ColorTRANSPARENT;
-  bool keyboard_brightness_on_for_testing_ = false;
 
   base::ScopedObservation<SessionControllerImpl, SessionObserver>
       session_observer_{this};
@@ -95,6 +138,10 @@ class ASH_EXPORT KeyboardBacklightColorController
 
   std::unique_ptr<KeyboardBacklightColorNudgeController>
       keyboard_backlight_color_nudge_controller_;
+
+  const raw_ptr<PrefService> local_state_ = nullptr;
+
+  PrefChangeRegistrar pref_change_registrar_local_;
 
   base::WeakPtrFactory<KeyboardBacklightColorController> weak_ptr_factory_{
       this};

@@ -7,8 +7,8 @@
 #include <iterator>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 
@@ -54,10 +54,6 @@ FakeIntentHelperInstance::~FakeIntentHelperInstance() {}
 
 void FakeIntentHelperInstance::AddPreferredPackage(
     const std::string& package_name) {}
-
-void FakeIntentHelperInstance::AddPreferredApp(const std::string& package_name,
-                                               IntentFilter intent_filter,
-                                               mojom::IntentInfoPtr intent) {}
 
 void FakeIntentHelperInstance::SetVerifiedLinks(
     const std::vector<std::string>& package_names,

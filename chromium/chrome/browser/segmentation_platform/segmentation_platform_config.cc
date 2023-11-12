@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "components/segmentation_platform/embedder/default_model/cross_device_user_segment.h"
+#include "components/segmentation_platform/embedder/default_model/device_switcher_model.h"
 #include "components/segmentation_platform/embedder/default_model/feed_user_segment.h"
 #include "components/segmentation_platform/embedder/default_model/frequent_feature_user_model.h"
 #include "components/segmentation_platform/embedder/default_model/low_user_engagement_model.h"
@@ -38,7 +39,6 @@
 #include "components/segmentation_platform/embedder/default_model/intentional_user_model.h"
 #include "components/segmentation_platform/embedder/default_model/power_user_segment.h"
 #include "components/segmentation_platform/embedder/default_model/query_tiles_model.h"
-#include "components/segmentation_platform/embedder/input_delegate/price_tracking_input_delegate.h"
 #endif
 
 namespace segmentation_platform {
@@ -80,10 +80,8 @@ bool IsEnabledContextualPageActions() {
   if (!base::FeatureList::IsEnabled(features::kContextualPageActions))
     return false;
 
-  bool is_price_tracking_enabled =
-      base::FeatureList::IsEnabled(
-          features::kContextualPageActionPriceTracking) &&
-      base::FeatureList::IsEnabled(commerce::kShoppingList);
+  bool is_price_tracking_enabled = base::FeatureList::IsEnabled(
+      features::kContextualPageActionPriceTracking);
 
   bool is_reader_mode_enabled =
       base::FeatureList::IsEnabled(features::kContextualPageActionReaderMode);
@@ -99,16 +97,6 @@ std::unique_ptr<Config> GetConfigForContextualPageActions(
   config->AddSegmentId(
       SegmentId::OPTIMIZATION_TARGET_CONTEXTUAL_PAGE_ACTION_PRICE_TRACKING,
       std::make_unique<ContextualPageActionsModel>());
-
-  auto shopping_service_getter = base::BindRepeating(
-      commerce::ShoppingServiceFactory::GetForBrowserContextIfExists, context);
-  auto bookmark_model_getter =
-      base::BindRepeating(BookmarkModelFactory::GetForBrowserContext, context);
-  auto price_tracking_input_delegate =
-      std::make_unique<processing::PriceTrackingInputDelegate>(
-          shopping_service_getter, bookmark_model_getter);
-  config->input_delegates[proto::CustomInput_FillPolicy_PRICE_TRACKING_HINTS] =
-      std::move(price_tracking_input_delegate);
   config->on_demand_execution = true;
   return config;
 }
@@ -143,6 +131,7 @@ std::vector<std::unique_ptr<Config>> GetSegmentationPlatformConfig(
   configs.emplace_back(ShoppingUserModel::GetConfig());
   configs.emplace_back(CrossDeviceUserSegment::GetConfig());
   configs.emplace_back(ResumeHeavyUserModel::GetConfig());
+  configs.emplace_back(DeviceSwitcherModel::GetConfig());
 
   base::EraseIf(configs, [](const auto& config) { return !config.get(); });
 

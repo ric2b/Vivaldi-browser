@@ -5,10 +5,17 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include <utility>
 
+#include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/test/test_future.h"
+#include "base/types/expected.h"
+#include "chrome/browser/ui/web_applications/test/isolated_web_app_test_utils.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/test/browser_task_environment.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -17,6 +24,7 @@ namespace web_app {
 
 namespace {
 using ::testing::Eq;
+using ::testing::HasSubstr;
 using ::testing::IsFalse;
 using ::testing::IsTrue;
 using ::testing::StartsWith;
@@ -117,6 +125,24 @@ TEST_F(IsolatedWebAppUrlInfoTest, WebBundleIdIsCorrect) {
               Eq("aerugqztij5biqquuk3mfwpsaibuegaqcitgfchwuosuofdjabzqaaic"));
 }
 
+TEST_F(IsolatedWebAppUrlInfoTest, GetStoragePartitionConfigForControlledFrame) {
+  content::BrowserTaskEnvironment task_environment;
+  TestingProfile testing_profile;
+
+  base::expected<IsolatedWebAppUrlInfo, std::string> url_info =
+      IsolatedWebAppUrlInfo::Create(GURL(kValidIsolatedWebAppUrl));
+  content::StoragePartitionConfig iwa_config =
+      url_info->storage_partition_config(&testing_profile);
+  content::StoragePartitionConfig frame_config =
+      url_info->GetStoragePartitionConfigForControlledFrame(
+          &testing_profile, "name", /*in_memory=*/false);
+
+  EXPECT_THAT(frame_config.partition_domain(),
+              Eq(iwa_config.partition_domain()));
+  EXPECT_THAT(frame_config.partition_name(), Eq("name"));
+  EXPECT_FALSE(frame_config.in_memory());
+}
+
 TEST_F(IsolatedWebAppUrlInfoTest, StoragePartitionConfigUsesOrigin) {
   content::BrowserTaskEnvironment task_environment;
   TestingProfile testing_profile;
@@ -132,6 +158,102 @@ TEST_F(IsolatedWebAppUrlInfoTest, StoragePartitionConfigUsesOrigin) {
       /*in_memory=*/false);
   EXPECT_THAT(url_info->storage_partition_config(&testing_profile),
               Eq(expected_config));
+}
+
+class IsolatedWebAppUrlInfoFromIsolatedWebAppLocationTest
+    : public ::testing::Test {
+ private:
+  base::test::TaskEnvironment task_environment_;
+  data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
+};
+
+TEST_F(IsolatedWebAppUrlInfoFromIsolatedWebAppLocationTest,
+       GetIsolatedWebAppUrlInfoWhenInstalledBundleSucceeds) {
+  IsolatedWebAppLocation location = InstalledBundle{};
+  base::test::TestFuture<base::expected<IsolatedWebAppUrlInfo, std::string>>
+      test_future;
+
+  IsolatedWebAppUrlInfo::CreateFromIsolatedWebAppLocation(
+      location, test_future.GetCallback());
+  base::expected<IsolatedWebAppUrlInfo, std::string> result = test_future.Get();
+
+  ASSERT_THAT(result.has_value(), false);
+  EXPECT_THAT(result.error(), HasSubstr("is not implemented"));
+}
+
+TEST_F(IsolatedWebAppUrlInfoFromIsolatedWebAppLocationTest,
+       GetIsolatedWebAppUrlInfoWhenDevModeBundleSucceeds) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath path =
+      temp_dir.GetPath().Append(base::FilePath::FromASCII("test-0.swbn"));
+  TestSignedWebBundle bundle = BuildDefaultTestSignedWebBundle();
+  ASSERT_TRUE(base::WriteFile(path, bundle.data));
+
+  IsolatedWebAppLocation location = DevModeBundle{.path = path};
+  base::test::TestFuture<base::expected<IsolatedWebAppUrlInfo, std::string>>
+      test_future;
+  IsolatedWebAppUrlInfo::CreateFromIsolatedWebAppLocation(
+      location, test_future.GetCallback());
+  base::expected<IsolatedWebAppUrlInfo, std::string> result = test_future.Get();
+
+  ASSERT_THAT(result.has_value(), true);
+  EXPECT_EQ(result.value().web_bundle_id(), bundle.id);
+}
+
+TEST_F(IsolatedWebAppUrlInfoFromIsolatedWebAppLocationTest,
+       GetIsolatedWebAppUrlInfoWhenDevModeBundleFailsWhenFileNotExist) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath path = temp_dir.GetPath().Append(
+      base::FilePath::FromASCII("file_not_exist.swbn"));
+  IsolatedWebAppLocation location = DevModeBundle{.path = path};
+  base::test::TestFuture<base::expected<IsolatedWebAppUrlInfo, std::string>>
+      test_future;
+
+  IsolatedWebAppUrlInfo::CreateFromIsolatedWebAppLocation(
+      location, test_future.GetCallback());
+  base::expected<IsolatedWebAppUrlInfo, std::string> result = test_future.Get();
+
+  ASSERT_THAT(result.has_value(), false);
+  EXPECT_THAT(result.error(),
+              HasSubstr("Failed to read the integrity block of the signed web "
+                        "bundle: FILE_ERROR_NOT_FOUND"));
+}
+
+TEST_F(IsolatedWebAppUrlInfoFromIsolatedWebAppLocationTest,
+       GetIsolatedWebAppUrlInfoWhenDevModeBundleFailsWhenInvalidFile) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  base::FilePath path =
+      temp_dir.GetPath().Append(base::FilePath::FromASCII("invalid_file.swbn"));
+  ASSERT_TRUE(
+      base::WriteFile(path, "clearly, this is not a valid signed web bundle"));
+  IsolatedWebAppLocation location = DevModeBundle{.path = path};
+  base::test::TestFuture<base::expected<IsolatedWebAppUrlInfo, std::string>>
+      test_future;
+
+  IsolatedWebAppUrlInfo::CreateFromIsolatedWebAppLocation(
+      location, test_future.GetCallback());
+  base::expected<IsolatedWebAppUrlInfo, std::string> result = test_future.Get();
+
+  ASSERT_THAT(result.has_value(), false);
+  EXPECT_THAT(result.error(),
+              HasSubstr("Failed to read the integrity block of the signed web "
+                        "bundle: Wrong array size or magic bytes."));
+}
+
+TEST_F(IsolatedWebAppUrlInfoFromIsolatedWebAppLocationTest,
+       GetIsolatedWebAppUrlInfoSucceedsWhenDevModeProxy) {
+  IsolatedWebAppLocation location = DevModeProxy{};
+  base::test::TestFuture<base::expected<IsolatedWebAppUrlInfo, std::string>>
+      test_future;
+
+  IsolatedWebAppUrlInfo::CreateFromIsolatedWebAppLocation(
+      location, test_future.GetCallback());
+  base::expected<IsolatedWebAppUrlInfo, std::string> result = test_future.Get();
+
+  EXPECT_THAT(result.has_value(), true);
 }
 
 class IsolatedWebAppGURLConversionTest

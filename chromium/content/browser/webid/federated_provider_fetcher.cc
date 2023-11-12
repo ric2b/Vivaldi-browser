@@ -44,7 +44,7 @@ FederatedProviderFetcher::FederatedProviderFetcher(
 FederatedProviderFetcher::~FederatedProviderFetcher() = default;
 
 void FederatedProviderFetcher::Start(
-    const std::vector<GURL>& identity_provider_config_urls,
+    const std::set<GURL>& identity_provider_config_urls,
     int icon_ideal_size,
     int icon_minimum_size,
     RequesterCallback callback) {
@@ -109,6 +109,13 @@ void FederatedProviderFetcher::OnWellKnownFetched(
             FederatedAuthRequestResult::kErrorFetchingWellKnownInvalidResponse,
             TokenStatus::kWellKnownInvalidResponse,
             additional_console_error_message);
+        return;
+      }
+      case IdpNetworkRequestManager::ParseStatus::kEmptyListError: {
+        OnError(fetch_result,
+                FederatedAuthRequestResult::kErrorFetchingWellKnownListEmpty,
+                TokenStatus::kWellKnownListEmpty,
+                additional_console_error_message);
         return;
       }
       case IdpNetworkRequestManager::ParseStatus::kSuccess: {
@@ -187,6 +194,10 @@ void FederatedProviderFetcher::OnConfigFetched(
                 FederatedAuthRequestResult::kErrorFetchingConfigInvalidResponse,
                 TokenStatus::kConfigInvalidResponse,
                 additional_console_error_message);
+        return;
+      }
+      case IdpNetworkRequestManager::ParseStatus::kEmptyListError: {
+        NOTREACHED() << "kEmptyListError is undefined for OnConfigFetched";
         return;
       }
       case IdpNetworkRequestManager::ParseStatus::kSuccess: {

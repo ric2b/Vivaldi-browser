@@ -24,6 +24,7 @@
 #include "services/network/public/mojom/trust_tokens.mojom-blink-forward.h"
 #include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/mojom/scroll/scrollbar_mode.mojom-blink.h"
+#include "third_party/blink/public/mojom/timing/resource_timing.mojom-blink.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/dom_window.h"
@@ -102,7 +103,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   Frame* ContentFrame() const final { return content_frame_; }
   void SetContentFrame(Frame&) final;
   void ClearContentFrame() final;
-  void AddResourceTiming(const ResourceTimingInfo&) final;
+  void AddResourceTiming(mojom::blink::ResourceTimingInfoPtr) final;
   void DispatchLoad() final;
   const FramePolicy& GetFramePolicy() const final { return frame_policy_; }
   void IntrinsicSizingInfoChanged() override {}
@@ -120,6 +121,10 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   bool IsDisplayNone() const override { return !embedded_content_view_; }
   mojom::blink::ColorScheme GetColorScheme() const override;
   bool ShouldLazyLoadChildren() const final;
+  void DidReportResourceTiming();
+  bool HasPendingFallbackTimingInfo() const;
+
+  void WillPerformContainerInitiatedNavigation(const KURL&);
 
   // For unit tests, manually trigger the UpdateContainerPolicy method.
   void UpdateContainerPolicyForTests() { UpdateContainerPolicy(); }
@@ -232,6 +237,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
       bool is_loading_attr_lazy,
       AutomaticLazyLoadReason auto_lazy_load_reason);
 
+  void ReportFallbackResourceTimingIfNeeded();
   // Check if the frame should be lazy-loaded and apply when conditions are
   // passed. Return true when lazy-load is applied.
   bool LazyLoadIfPossible(const KURL&,
@@ -247,6 +253,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   FramePolicy frame_policy_;
 
   Member<LazyLoadFrameObserver> lazy_load_frame_observer_;
+  mojom::blink::ResourceTimingInfoPtr fallback_timing_info_;
   bool should_lazy_load_children_;
   bool is_swapping_frames_{false};
 };

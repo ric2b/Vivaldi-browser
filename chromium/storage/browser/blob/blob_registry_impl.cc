@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "net/base/features.h"
@@ -651,7 +651,8 @@ void BlobRegistryImpl::URLStoreForOrigin(
             auto self_owned_associated_receiver =
                 mojo::MakeSelfOwnedAssociatedReceiver(
                     std::make_unique<BlobURLStoreImpl>(
-                        blink::StorageKey(origin), std::move(url_registry)),
+                        blink::StorageKey::CreateFirstParty(origin),
+                        std::move(url_registry)),
                     std::move(receiver));
             if (g_url_store_creation_hook)
               g_url_store_creation_hook->Run(self_owned_associated_receiver);

@@ -22,6 +22,8 @@ class Widget;
 
 namespace ash {
 
+class NotificationListView;
+class PrivacyIndicatorsTrayItemView;
 class Shelf;
 class TrayBubbleView;
 
@@ -42,10 +44,13 @@ class ASH_EXPORT NotificationCenterTray
   // Called when UnifiedSystemTray's preferred visibility changes.
   void OnSystemTrayVisibilityChanged(bool system_tray_visible);
 
+  NotificationListView* GetNotificationListView();
+
   // True if the bubble is shown.
   bool IsBubbleShown() const;
 
   // TrayBackgroundView:
+  std::u16string GetAccessibleNameForBubble() override;
   std::u16string GetAccessibleNameForTray() override;
   void HandleLocaleChange() override;
   void HideBubbleWithView(const TrayBubbleView* bubble_view) override;
@@ -57,6 +62,14 @@ class ASH_EXPORT NotificationCenterTray
   views::Widget* GetBubbleWidget() const override;
   void OnAnyBubbleVisibilityChanged(views::Widget* bubble_widget,
                                     bool visible) override;
+
+  PrivacyIndicatorsTrayItemView* privacy_indicators_view() {
+    return privacy_indicators_view_;
+  }
+
+  NotificationIconsController* notification_icons_controller() {
+    return notification_icons_controller_.get();
+  }
 
  private:
   friend class NotificationCenterTestApi;
@@ -80,6 +93,9 @@ class ASH_EXPORT NotificationCenterTray
   // Manages showing notification icons in the tray.
   const std::unique_ptr<NotificationIconsController>
       notification_icons_controller_;
+
+  // Owned by the views hierarchy.
+  PrivacyIndicatorsTrayItemView* privacy_indicators_view_ = nullptr;
 
   std::unique_ptr<NotificationCenterBubble> bubble_;
 

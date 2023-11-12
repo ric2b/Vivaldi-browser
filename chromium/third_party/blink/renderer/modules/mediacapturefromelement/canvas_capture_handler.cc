@@ -7,10 +7,11 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/client/raster_interface.h"
 #include "media/base/limits.h"
@@ -23,6 +24,9 @@
 #include "third_party/blink/renderer/platform/mediastream/media_stream_component_impl.h"
 #include "third_party/blink/renderer/platform/mediastream/media_stream_source.h"
 #include "third_party/blink/renderer/platform/mediastream/webrtc_uma_histograms.h"
+#include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_copier_base.h"
+#include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "ui/gfx/color_space.h"
@@ -263,12 +267,12 @@ void CanvasCaptureHandler::SendFrame(
     video_frame->set_color_space(color_space);
 
   last_frame_ = video_frame;
-  io_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CanvasCaptureHandler::CanvasCaptureHandlerDelegate::
-                         SendNewFrameOnIOThread,
-                     delegate_->GetWeakPtrForIOThread(), std::move(video_frame),
-                     this_frame_ticks));
+  PostCrossThreadTask(*io_task_runner_, FROM_HERE,
+                      WTF::CrossThreadBindOnce(
+                          &CanvasCaptureHandler::CanvasCaptureHandlerDelegate::
+                              SendNewFrameOnIOThread,
+                          delegate_->GetWeakPtrForIOThread(),
+                          std::move(video_frame), this_frame_ticks));
 }
 
 void CanvasCaptureHandler::AddVideoCapturerSourceToVideoTrack(

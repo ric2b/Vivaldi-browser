@@ -7,11 +7,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/adapters.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -25,6 +25,8 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_service_factory.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -74,6 +76,7 @@
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_utils.h"
 
 namespace {
 
@@ -81,7 +84,7 @@ std::unique_ptr<views::LabelButton> CreateMenuItem(
     int button_id,
     const std::u16string& name,
     views::Button::PressedCallback callback,
-    const gfx::VectorIcon* icon = nullptr) {
+    const ui::ImageModel& icon = ui::ImageModel()) {
   const auto* layout_provider = ChromeLayoutProvider::Get();
   const int horizontal_spacing = layout_provider->GetDistanceMetric(
       views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
@@ -102,7 +105,7 @@ std::unique_ptr<views::LabelButton> CreateMenuItem(
 std::unique_ptr<views::BubbleDialogModelHost::CustomView>
 CreateMenuItemCustomView(const std::u16string& name,
                          views::Button::PressedCallback callback,
-                         const gfx::VectorIcon* icon = nullptr) {
+                         const ui::ImageModel& icon = ui::ImageModel()) {
   return std::make_unique<views::BubbleDialogModelHost::CustomView>(
       CreateMenuItem(-1, name, std::move(callback), icon),
       views::BubbleDialogModelHost::FieldType::kMenuItem);
@@ -150,6 +153,8 @@ class TabGroupEditorBubbleDelegate : public ui::DialogModelDelegate {
     if (!model->group_model())
       return;
 
+    // TODO(dpenning): When adding saved groups to TabGroupEditorBubbleDelegate
+    // disconnect the tab groups first.
     base::RecordAction(
         base::UserMetricsAction("TabGroups_TabGroupBubble_Ungroup"));
     if (header_view) {
@@ -343,25 +348,25 @@ views::Widget* TabGroupEditorBubbleView::Show(
             base::BindRepeating(
                 &TabGroupEditorBubbleDelegate::NewTabInGroupPressed,
                 base::Unretained(bubble_delegate)),
-            &kNewTabInGroupIcon))
+            ui::ImageModel::FromVectorIcon(kNewTabInGroupIcon)))
         .AddCustomField(CreateMenuItemCustomView(
             l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_UNGROUP),
             base::BindRepeating(&TabGroupEditorBubbleDelegate::UngroupPressed,
                                 base::Unretained(bubble_delegate), header_view),
-            &kUngroupIcon))
+            ui::ImageModel::FromVectorIcon(kUngroupIcon)))
         .AddCustomField(CreateMenuItemCustomView(
             l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP),
             base::BindRepeating(
                 &TabGroupEditorBubbleDelegate::CloseGroupPressed,
                 base::Unretained(bubble_delegate)),
-            &kCloseGroupIcon))
+            ui::ImageModel::FromVectorIcon(kCloseGroupIcon)))
         .AddCustomField(CreateMenuItemCustomView(
             l10n_util::GetStringUTF16(
                 IDS_TAB_GROUP_HEADER_CXMENU_MOVE_GROUP_TO_NEW_WINDOW),
             base::BindRepeating(
                 &TabGroupEditorBubbleDelegate::MoveGroupToNewWindowPressed,
                 base::Unretained(bubble_delegate)),
-            &kMoveGroupToNewWindowIcon));
+            ui::ImageModel::FromVectorIcon(kMoveGroupToNewWindowIcon)));
 
     // TODO(pbos): Add enabling/disabling of
     // TAB_GROUP_HEADER_CXMENU_MOVE_GROUP_TO_NEW_WINDOW item.
@@ -507,8 +512,9 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
     save_group_toggle_->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_SAVE_GROUP));
 
-    bool is_saved =
+    const bool is_saved =
         tab_strip_model->group_model()->GetTabGroup(group_)->IsSaved();
+
     save_group_toggle_->SetIsOn(is_saved);
   }
 
@@ -517,30 +523,29 @@ TabGroupEditorBubbleView::TabGroupEditorBubbleView(
       l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_NEW_TAB_IN_GROUP),
       base::BindRepeating(&TabGroupEditorBubbleView::NewTabInGroupPressed,
                           base::Unretained(this)),
-      &kNewTabInGroupIcon));
+      ui::ImageModel::FromVectorIcon(kNewTabInGroupIcon)));
 
   AddChildView(CreateMenuItem(
       TAB_GROUP_HEADER_CXMENU_UNGROUP,
       l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_UNGROUP),
       base::BindRepeating(&TabGroupEditorBubbleView::UngroupPressed,
                           base::Unretained(this), header_view),
-      &kUngroupIcon));
+      ui::ImageModel::FromVectorIcon(kUngroupIcon)));
 
   AddChildView(CreateMenuItem(
-      TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP,
-      l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP),
+      TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP, GetTextForCloseButton(),
       base::BindRepeating(&TabGroupEditorBubbleView::CloseGroupPressed,
                           base::Unretained(this)),
-      &kCloseGroupIcon));
+      ui::ImageModel::FromVectorIcon(kCloseGroupIcon)));
 
-  move_menu_item_ = AddChildView(
-      CreateMenuItem(TAB_GROUP_HEADER_CXMENU_MOVE_GROUP_TO_NEW_WINDOW,
-                     l10n_util::GetStringUTF16(
-                         IDS_TAB_GROUP_HEADER_CXMENU_MOVE_GROUP_TO_NEW_WINDOW),
-                     base::BindRepeating(
-                         &TabGroupEditorBubbleView::MoveGroupToNewWindowPressed,
-                         base::Unretained(this)),
-                     &kMoveGroupToNewWindowIcon));
+  move_menu_item_ = AddChildView(CreateMenuItem(
+      TAB_GROUP_HEADER_CXMENU_MOVE_GROUP_TO_NEW_WINDOW,
+      l10n_util::GetStringUTF16(
+          IDS_TAB_GROUP_HEADER_CXMENU_MOVE_GROUP_TO_NEW_WINDOW),
+      base::BindRepeating(
+          &TabGroupEditorBubbleView::MoveGroupToNewWindowPressed,
+          base::Unretained(this)),
+      ui::ImageModel::FromVectorIcon(kMoveGroupToNewWindowIcon)));
   move_menu_item_->SetEnabled(
       tab_strip_model->count() !=
       tab_strip_model->group_model()->GetTabGroup(group_)->tab_count());
@@ -610,9 +615,10 @@ tab_groups::TabGroupColorId TabGroupEditorBubbleView::InitColorSet() {
 }
 
 void TabGroupEditorBubbleView::UpdateGroup() {
-  absl::optional<int> selected_element = color_selector_->GetSelectedElement();
-  TabGroup* tab_group =
-      browser_->tab_strip_model()->group_model()->GetTabGroup(group_);
+  const absl::optional<int> selected_element =
+      color_selector_->GetSelectedElement();
+  const TabStripModel *const model = browser_->tab_strip_model();
+  TabGroup *const tab_group = model->group_model()->GetTabGroup(group_);
 
   const tab_groups::TabGroupVisualData* current_visual_data =
       tab_group->visual_data();
@@ -625,24 +631,50 @@ void TabGroupEditorBubbleView::UpdateGroup() {
         base::UserMetricsAction("TabGroups_TabGroupBubble_ColorChanged"));
   }
 
+  views::LabelButton* const close_or_delete_button =
+      views::AsViewClass<views::LabelButton>(
+          GetViewByID(TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP));
+  CHECK(close_or_delete_button);
+  close_or_delete_button->SetText(GetTextForCloseButton());
+
   tab_groups::TabGroupVisualData new_data(title_field_->GetText(),
                                           updated_color,
                                           current_visual_data->is_collapsed());
-  tab_group->SetVisualData(new_data, true);
+  tab_group->SetVisualData(new_data, tab_group->IsCustomized());
+}
+
+const std::u16string TabGroupEditorBubbleView::GetTextForCloseButton() {
+  if (!base::FeatureList::IsEnabled(features::kTabGroupsSave)) {
+    return l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP);
+  }
+
+  const bool is_saved = browser_->tab_strip_model()
+                            ->group_model()
+                            ->GetTabGroup(group_)
+                            ->IsSaved();
+
+  return is_saved ? l10n_util::GetStringUTF16(
+                        IDS_TAB_GROUP_HEADER_CXMENU_CLOSE_GROUP)
+                  : l10n_util::GetStringUTF16(
+                        IDS_TAB_GROUP_HEADER_CXMENU_DELETE_GROUP);
 }
 
 void TabGroupEditorBubbleView::OnSaveTogglePressed() {
-  auto* group = browser_->tab_strip_model()->group_model()->GetTabGroup(group_);
+  SavedTabGroupKeyedService* const saved_tab_group_service =
+      SavedTabGroupServiceFactory::GetForProfile(browser_->profile());
+  CHECK(saved_tab_group_service);
 
   if (save_group_toggle_->GetIsOn()) {
     base::RecordAction(
         base::UserMetricsAction("TabGroups_TabGroupBubble_GroupSaved"));
-    group->SaveGroup();
+    saved_tab_group_service->SaveGroup(group_);
   } else {
     base::RecordAction(
         base::UserMetricsAction("TabGroups_TabGroupBubble_GroupUnsaved"));
-    group->UnsaveGroup();
+    saved_tab_group_service->UnsaveGroup(group_);
   }
+
+  UpdateGroup();
 }
 
 void TabGroupEditorBubbleView::NewTabInGroupPressed() {
@@ -659,6 +691,14 @@ void TabGroupEditorBubbleView::NewTabInGroupPressed() {
 void TabGroupEditorBubbleView::UngroupPressed(TabGroupHeader* header_view) {
   base::RecordAction(
       base::UserMetricsAction("TabGroups_TabGroupBubble_Ungroup"));
+  if (base::FeatureList::IsEnabled(features::kTabGroupsSave) &&
+      browser_->profile()->IsRegularProfile() &&
+      save_group_toggle_->GetIsOn()) {
+    SavedTabGroupKeyedService* saved_tab_group_service =
+        SavedTabGroupServiceFactory::GetForProfile(browser_->profile());
+    CHECK(saved_tab_group_service);
+    saved_tab_group_service->DisconnectLocalTabGroup(group_);
+  }
   if (header_view)
     header_view->RemoveObserverFromWidget(GetWidget());
   TabStripModel* const model = browser_->tab_strip_model();
@@ -679,6 +719,14 @@ void TabGroupEditorBubbleView::UngroupPressed(TabGroupHeader* header_view) {
 void TabGroupEditorBubbleView::CloseGroupPressed() {
   base::RecordAction(
       base::UserMetricsAction("TabGroups_TabGroupBubble_CloseGroup"));
+  if (base::FeatureList::IsEnabled(features::kTabGroupsSave) &&
+      browser_->profile()->IsRegularProfile() &&
+      save_group_toggle_->GetIsOn()) {
+    SavedTabGroupKeyedService* saved_tab_group_service =
+        SavedTabGroupServiceFactory::GetForProfile(browser_->profile());
+    CHECK(saved_tab_group_service);
+    saved_tab_group_service->DisconnectLocalTabGroup(group_);
+  }
   browser_->tab_strip_model()->CloseAllTabsInGroup(group_);
   // Close the widget because it is no longer applicable.
   GetWidget()->CloseWithReason(views::Widget::ClosedReason::kUnspecified);

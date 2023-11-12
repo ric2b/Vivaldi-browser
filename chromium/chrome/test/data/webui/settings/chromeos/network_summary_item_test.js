@@ -21,14 +21,15 @@ suite('NetworkSummaryItem', function() {
     return (el !== null) && (el.style.display !== 'none');
   }
 
-  function initWithPSimOnly(isLocked) {
+  function initWithPSimOnly(isLocked, isDeviceEnabled = true) {
     const kTestIccid1 = '00000000000000000000';
 
     const simLockStatus = isLocked ? {lockType: 'sim-pin'} : {lockType: ''};
 
     netSummaryItem.setProperties({
       deviceState: {
-        deviceState: DeviceStateType.kEnabled,
+        deviceState: isDeviceEnabled ? DeviceStateType.kEnabled :
+                                       DeviceStateType.kDisabled,
         type: NetworkType.kCellular,
         simAbsent: false,
         simLockStatus: simLockStatus,
@@ -160,7 +161,7 @@ suite('NetworkSummaryItem', function() {
     netSummaryItem.setProperties({
       deviceState: {
         inhibitReason: InhibitReason.kNotInhibited,
-        deviceState: DeviceStateType.kUnavailable,
+        deviceState: DeviceStateType.kDisabled,
         type: NetworkType.kCellular,
         simAbsent: false,
       },
@@ -179,6 +180,59 @@ suite('NetworkSummaryItem', function() {
                     .disabled);
   });
 
+  test(
+      'Toggle should be disabled when device state is unavailable', function() {
+        netSummaryItem.setProperties({
+          deviceState: {
+            inhibitReason: InhibitReason.kNotInhibited,
+            deviceState: DeviceStateType.kUnavailable,
+            type: NetworkType.kCellular,
+            simAbsent: false,
+          },
+          activeNetworkState: {
+            connectionState: ConnectionStateType.kNotConnected,
+            guid: '',
+            type: NetworkType.kCellular,
+            typeState: {cellular: {networkTechnology: ''}},
+          },
+        });
+
+        flush();
+        assertFalse(
+            netSummaryItem.shadowRoot.querySelector('#deviceEnabledButton')
+                .checked);
+        assertTrue(
+            netSummaryItem.shadowRoot.querySelector('#deviceEnabledButton')
+                .disabled);
+      });
+
+  test(
+      'Toggle should be on and disabled when device state is enabling',
+      function() {
+        netSummaryItem.setProperties({
+          deviceState: {
+            deviceState: DeviceStateType.kEnabling,
+            type: NetworkType.kWiFi,
+          },
+          activeNetworkState: {
+            connectionState: ConnectionStateType.kNotConnected,
+            guid: '',
+            type: NetworkType.kWiFi,
+            typeState: {
+              wifi: {},
+            },
+          },
+        });
+
+        flush();
+        assertTrue(
+            netSummaryItem.shadowRoot.querySelector('#deviceEnabledButton')
+                .checked);
+        assertTrue(
+            netSummaryItem.shadowRoot.querySelector('#deviceEnabledButton')
+                .disabled);
+      });
+
   test('Mobile data toggle shown on locked device', function() {
     initWithESimLocked();
     assertNotEquals(
@@ -186,17 +240,29 @@ suite('NetworkSummaryItem', function() {
     assertTrue(doesElementExist('#deviceEnabledButton'));
   });
 
-  test('pSIM-only locked device, show SIM locked UI', function() {
+  // Regression test for b/264181192.
+  test('pSIM-only locked device enabled, no SIM locked UI', function() {
     initWithPSimOnly(/*isLocked=*/ true);
-    assertTrue(doesElementExist('network-siminfo'));
-    assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
-                   .classList.contains('warning-message'));
+    assertFalse(doesElementExist('network-siminfo'));
     assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
-                    .classList.contains('network-state'));
-    assertFalse(doesElementExist('#deviceEnabledButton'));
+                    .classList.contains('warning-message'));
+    assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
+                   .classList.contains('network-state'));
+    assertTrue(doesElementExist('#deviceEnabledButton'));
   });
 
-  test('pSIM-only locked device, no SIM locked UI', function() {
+  // Regression test for b/264181192.
+  test('pSIM-only locked device disabled, no SIM locked UI', function() {
+    initWithPSimOnly(/*isLocked=*/ true, /*isDeviceEnabled=*/ false);
+    assertFalse(doesElementExist('network-siminfo'));
+    assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
+                    .classList.contains('warning-message'));
+    assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
+                   .classList.contains('network-state'));
+    assertTrue(doesElementExist('#deviceEnabledButton'));
+  });
+
+  test('pSIM-only unlocked device enabled, no SIM locked UI', function() {
     initWithPSimOnly(/*isLocked=*/ false);
     assertFalse(doesElementExist('network-siminfo'));
     assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
@@ -206,7 +272,7 @@ suite('NetworkSummaryItem', function() {
     assertTrue(doesElementExist('#deviceEnabledButton'));
   });
 
-  test('eSIM enabled locked device, show SIM locked UI', function() {
+  test('eSIM enabled locked device, no SIM locked UI', function() {
     initWithESimLocked();
     assertFalse(doesElementExist('network-siminfo'));
     assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
@@ -257,12 +323,11 @@ suite('NetworkSummaryItem', function() {
     const testName = 'test_name';
     const testGuid = '0001';
 
-    function initWithPortalState(flagEnabled, portalState) {
+    function initWithPortalState(portalState) {
       browserProxy = new TestInternetPageBrowserProxy();
       netSummaryItem.browserProxy_ = browserProxy;
 
       netSummaryItem.setProperties({
-        isCaptivePortalUI2022Enabled_: flagEnabled,
         deviceState: {
           deviceState: DeviceStateType.kEnabled,
           inhibitReason: InhibitReason.kNotInhibited,
@@ -292,8 +357,8 @@ suite('NetworkSummaryItem', function() {
 
     test(
         'kPortal shows signin text and opens portal signin on click',
-        function() {
-          initWithPortalState(true /* flagEnabled */, PortalState.kPortal);
+        async function() {
+          initWithPortalState(PortalState.kPortal);
           assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
                          .classList.contains('warning-message'));
           assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
@@ -308,11 +373,9 @@ suite('NetworkSummaryItem', function() {
               netSummaryItem.shadowRoot.querySelector('#networkSummaryItemRow');
           assertTrue(!!networkSummaryItemRow);
           networkSummaryItemRow.click();
-          return browserProxy.whenCalled('showPortalSignin')
-              .then(function(guid) {
-                assertEquals(browserProxy.getCallCount('showPortalSignin'), 1);
-                assertEquals(testGuid, guid);
-              });
+          const guid = await browserProxy.whenCalled('showPortalSignin');
+          assertEquals(browserProxy.getCallCount('showPortalSignin'), 1);
+          assertEquals(testGuid, guid);
         });
 
     test(
@@ -321,7 +384,7 @@ suite('NetworkSummaryItem', function() {
           const showNetworksFiredPromise =
               eventToPromise('show-networks', netSummaryItem);
 
-          initWithPortalState(true /* flagEnabled */, PortalState.kPortal);
+          initWithPortalState(PortalState.kPortal);
           assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
                          .classList.contains('warning-message'));
           assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
@@ -343,9 +406,8 @@ suite('NetworkSummaryItem', function() {
 
     test(
         'kProxyAuthRequired shows signin text and opens portal signin on click',
-        function() {
-          initWithPortalState(
-              true /* flagEnabled */, PortalState.kProxyAuthRequired);
+        async function() {
+          initWithPortalState(PortalState.kProxyAuthRequired);
           assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
                          .classList.contains('warning-message'));
           assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
@@ -360,51 +422,9 @@ suite('NetworkSummaryItem', function() {
               netSummaryItem.shadowRoot.querySelector('#networkSummaryItemRow');
           assertTrue(!!networkSummaryItemRow);
           networkSummaryItemRow.click();
-          return browserProxy.whenCalled('showPortalSignin')
-              .then(function(guid) {
-                assertEquals(browserProxy.getCallCount('showPortalSignin'), 1);
-                assertEquals(testGuid, guid);
-              });
-        });
-
-    test('kPortal does not show sign in when flag is disabled', function() {
-      initWithPortalState(false /* flagEnabled */, PortalState.kPortal);
-      assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
-                      .classList.contains('warning-message'));
-      assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
-                     .classList.contains('network-state'));
-      assertNotEquals(
-          netSummaryItem.getNetworkStateText_(),
-          netSummaryItem.i18n('networkListItemSignIn'));
-      assertNotEquals(netSummaryItem.getTitleText_(), testName);
-
-      // Verify clicking network summary item does not open portal signin
-      const networkSummaryItemRow =
-          netSummaryItem.shadowRoot.querySelector('#networkSummaryItemRow');
-      assertTrue(!!networkSummaryItemRow);
-      networkSummaryItemRow.click();
-      assertEquals(browserProxy.getCallCount('showPortalSignin'), 0);
-    });
-
-    test(
-        'kProxyAuthRequired does not show sign in when flag is disabled',
-        function() {
-          initWithPortalState(
-              false /* flagEnabled */, PortalState.kProxyAuthRequired);
-          assertFalse(netSummaryItem.shadowRoot.querySelector('#networkState')
-                          .classList.contains('warning-message'));
-          assertTrue(netSummaryItem.shadowRoot.querySelector('#networkState')
-                         .classList.contains('network-state'));
-          assertNotEquals(
-              netSummaryItem.getNetworkStateText_(),
-              netSummaryItem.i18n('networkListItemSignIn'));
-          assertNotEquals(netSummaryItem.getTitleText_(), testName);
-          // Verify clicking network summary item does not open portal signin
-          const networkSummaryItemRow =
-              netSummaryItem.shadowRoot.querySelector('#networkSummaryItemRow');
-          assertTrue(!!networkSummaryItemRow);
-          networkSummaryItemRow.click();
-          assertEquals(browserProxy.getCallCount('showPortalSignin'), 0);
+          const guid = await browserProxy.whenCalled('showPortalSignin');
+          assertEquals(browserProxy.getCallCount('showPortalSignin'), 1);
+          assertEquals(testGuid, guid);
         });
   });
 });

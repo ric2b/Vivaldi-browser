@@ -46,9 +46,13 @@ TextInput::~TextInput() {
   Deactivate();
 }
 
-void TextInput::Activate(Seat* seat, Surface* surface) {
+void TextInput::Activate(Seat* seat,
+                         Surface* surface,
+                         ui::TextInputClient::FocusReason reason) {
   DCHECK(surface);
   DCHECK(seat);
+
+  focus_reason_ = reason;
   if (surface_ == surface)
     return;
   DetachInputMethod();
@@ -60,6 +64,7 @@ void TextInput::Activate(Seat* seat, Surface* surface) {
 }
 
 void TextInput::Deactivate() {
+  focus_reason_ = ui::TextInputClient::FOCUS_REASON_NONE;
   if (!surface_)
     return;
   DetachInputMethod();
@@ -132,7 +137,9 @@ void TextInput::SetTypeModeFlags(ui::TextInputType type,
                                  bool should_do_learning) {
   if (!input_method_)
     return;
-  bool changed = (input_type_ != type);
+  bool changed = (input_type_ != type) || (input_mode_ != mode) ||
+                 (flags_ != flags) ||
+                 (should_do_learning_ != should_do_learning);
   input_type_ = type;
   input_mode_ = mode;
   flags_ = flags;
@@ -287,8 +294,7 @@ bool TextInput::HasCompositionText() const {
 }
 
 ui::TextInputClient::FocusReason TextInput::GetFocusReason() const {
-  NOTIMPLEMENTED_LOG_ONCE();
-  return ui::TextInputClient::FOCUS_REASON_OTHER;
+  return focus_reason_;
 }
 
 bool TextInput::GetTextRange(gfx::Range* range) const {

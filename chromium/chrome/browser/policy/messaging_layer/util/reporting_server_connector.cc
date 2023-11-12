@@ -4,24 +4,30 @@
 
 #include "chrome/browser/policy/messaging_layer/util/reporting_server_connector.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
+#include "base/task/bind_post_task.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
+#include "chrome/browser/policy/messaging_layer/upload/encrypted_reporting_client.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/reporting_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "components/embedder_support/user_agent_utils.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_client_registration_helper.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -38,17 +44,17 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/ash/login/users/chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
-#include "components/policy/proto/chrome_device_policy.pb.h"
-#else
-#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #endif
 
 using ::policy::CloudPolicyClient;
 using ::policy::CloudPolicyCore;
 
 namespace reporting {
+
+BASE_FEATURE(kEnableEncryptedReportingClientForUpload,
+             "EnableEncryptedReportingClientForUpload",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Gets the size of payload as a JSON string.
 static int GetPayloadSize(const base::Value::Dict& payload) {
@@ -83,12 +89,16 @@ class PayloadSizeComputationRateLimiterForUma {
 
   // Should payload size be computed and recorded?
   [[nodiscard]] bool ShouldDo() const {
+    DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
     return successful_upload_counter_ % kScaleFactor == 0u;
   }
 
   // Bumps the upload counter. Must call this once after having called
   // |ShouldDo| every time an upload succeeds.
-  void Next() { ++successful_upload_counter_; }
+  void Next() {
+    DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
+    ++successful_upload_counter_;
+  }
 
  private:
   // A counter increases by 1 each time an upload succeeds. Starting from a
@@ -107,28 +117,23 @@ class PayloadSizeUmaReporter {
 
   // Whether payload size should be reported now.
   static bool ShouldReport() {
+    DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
     return base::Time::Now() >= last_reported_time_ + kMinReportTimeDelta;
   }
 
   // Reports to UMA.
   void Report() {
-    DCHECK_GE(request_payload_size_, 0);
+    DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
     DCHECK_GE(response_payload_size_, 0);
 
     last_reported_time_ = base::Time::Now();
-    base::UmaHistogramCounts1M("Browser.ERP.RequestPayloadSize",
-                               request_payload_size_);
     base::UmaHistogramCounts1M("Browser.ERP.ResponsePayloadSize",
                                response_payload_size_);
   }
 
-  // Updates request payload size.
-  void UpdateRequestPayloadSize(int request_payload_size) {
-    request_payload_size_ = request_payload_size;
-  }
-
   // Updates response payload size.
   void UpdateResponsePayloadSize(int response_payload_size) {
+    DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
     response_payload_size_ = response_payload_size;
   }
 
@@ -141,9 +146,6 @@ class PayloadSizeUmaReporter {
   // called in the same sequence.
   static base::Time last_reported_time_;
 
-  // Request payload size. Negative means not set yet.
-  int request_payload_size_ = -1;
-
   // Response payload size. Negative means not set yet.
   int response_payload_size_ = -1;
 };
@@ -151,7 +153,9 @@ class PayloadSizeUmaReporter {
 // static
 base::Time PayloadSizeUmaReporter::last_reported_time_{base::Time::UnixEpoch()};
 
-ReportingServerConnector::ReportingServerConnector() = default;
+ReportingServerConnector::ReportingServerConnector()
+    : encrypted_reporting_client_(
+          std::make_unique<EncryptedReportingClient>()) {}
 
 ReportingServerConnector::~ReportingServerConnector() {
   DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
@@ -192,6 +196,20 @@ void ReportingServerConnector::OnCoreDestruction(CloudPolicyCore* core) {
   core_ = nullptr;
 }
 
+void ReportingServerConnector::UploadEncryptedReportInternal(
+    base::Value::Dict merging_payload,
+    absl::optional<base::Value::Dict> context,
+    ResponseCallbackInternal callback) {
+  if (base::FeatureList::IsEnabled(kEnableEncryptedReportingClientForUpload)) {
+    encrypted_reporting_client_->UploadReport(
+        std::move(merging_payload), std::move(context), client_->dm_token(),
+        client_->client_id(), std::move(callback));
+    return;
+  }
+  client_->UploadEncryptedReport(std::move(merging_payload), std::move(context),
+                                 std::move(callback));
+}
+
 // static
 void ReportingServerConnector::UploadEncryptedReport(
     base::Value::Dict merging_payload,
@@ -205,42 +223,41 @@ void ReportingServerConnector::UploadEncryptedReport(
                        std::move(merging_payload), std::move(callback)));
     return;
   }
+
   // Now we are on UI task runner.
-
-  // Acquire context for the upload.
-  Profile* profile = nullptr;
-#if BUILDFLAG(IS_CHROMEOS)
-  profile = ProfileManager::GetPrimaryUserProfile();
-#else
-  if (g_browser_process) {
-    auto* const profile_manager = g_browser_process->profile_manager();
-    if (profile_manager) {
-      profile = profile_manager->GetLastUsedProfileIfLoaded();
-    }
-  }
-#endif
-  auto context = GetContext(profile);
-
-  // The `policy::CloudPolicyClient` object is retrieved in two different ways
-  // for ChromeOS and non-ChromeOS browsers.
   ReportingServerConnector* const connector = GetInstance();
   auto client_status = connector->EnsureUsableClient();
   if (!client_status.ok()) {
     std::move(callback).Run(client_status);
     return;
   }
+  if (connector->client_->dm_token().empty()) {
+    std::move(callback).Run(
+        Status(error::UNAVAILABLE, "Device DM token not set"));
+    return;
+  }
+
+  // Client is usable. Prepare context for the upload.
+  // Compose the only context elements needed by reporting server.
+  base::Value::Dict context;
+  context.SetByDottedPath("browser.userAgent",
+                          embedder_support::GetUserAgent());
+  context.SetByDottedPath("device.dmToken", connector->client_->dm_token());
 
   // Forward the `UploadEncryptedReport` to the cloud policy client.
   absl::optional<int> request_payload_size;
   if (PayloadSizeComputationRateLimiterForUma::Get().ShouldDo()) {
     request_payload_size = GetPayloadSize(merging_payload);
   }
-  connector->client_->UploadEncryptedReport(
+  connector->UploadEncryptedReportInternal(
       std::move(merging_payload), std::move(context),
-      base::BindOnce(
+      base::BindPostTaskToCurrentDefault(base::BindOnce(
           [](ResponseCallback callback,
              absl::optional<int> request_payload_size,
+             base::WeakPtr<PayloadSizePerHourUmaReporter>
+                 payload_size_per_hour_uma_reporter,
              absl::optional<base::Value::Dict> result) {
+            DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
             if (!result.has_value()) {
               std::move(callback).Run(
                   Status(error::DATA_LOSS, "Failed to upload"));
@@ -259,16 +276,11 @@ void ReportingServerConnector::UploadEncryptedReport(
               // Let UMA report the request and response payload sizes.
               if (PayloadSizeUmaReporter::ShouldReport()) {
                 PayloadSizeUmaReporter payload_size_uma_reporter;
-                payload_size_uma_reporter.UpdateRequestPayloadSize(
-                    request_payload_size.value());
                 payload_size_uma_reporter.UpdateResponsePayloadSize(
                     response_payload_size);
                 payload_size_uma_reporter.Report();
               }
 
-              auto payload_size_per_hour_uma_reporter =
-                  ReportingServerConnector::GetInstance()
-                      ->GetPayloadSizePerHourUmaReporter();
               if (payload_size_per_hour_uma_reporter) {
                 payload_size_per_hour_uma_reporter->RecordRequestPayloadSize(
                     request_payload_size.value());
@@ -279,7 +291,40 @@ void ReportingServerConnector::UploadEncryptedReport(
 
             std::move(callback).Run(std::move(result.value()));
           },
-          std::move(callback), std::move(request_payload_size)));
+          std::move(callback), std::move(request_payload_size),
+          connector->payload_size_per_hour_uma_reporter_.GetWeakPtr())));
+}
+
+StatusOr<::policy::CloudPolicyManager*>
+ReportingServerConnector::GetUserCloudPolicyManager() {
+  DCHECK_CURRENTLY_ON(::content::BrowserThread::UI);
+  // Pointer to `policy::CloudPolicyManager` is retrieved differently
+  // for ChromeOS-Ash, for Android and for all other cases.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  if (!g_browser_process || !g_browser_process->platform_part() ||
+      !g_browser_process->platform_part()->browser_policy_connector_ash()) {
+    return Status(error::UNAVAILABLE,
+                  "Browser process not fit to retrieve CloudPolicyManager");
+  }
+  return g_browser_process->platform_part()
+      ->browser_policy_connector_ash()
+      ->GetDeviceCloudPolicyManager();
+#elif BUILDFLAG(IS_ANDROID)
+  // Android doesn't have access to a device level CloudPolicyClient, so get
+  // the PrimaryUserProfile CloudPolicyClient.
+  if (!ProfileManager::GetPrimaryUserProfile()) {
+    return Status(error::UNAVAILABLE,
+                  "PrimaryUserProfile not fit to retrieve CloudPolicyManager");
+  }
+  return ProfileManager::GetPrimaryUserProfile()->GetUserCloudPolicyManager();
+#else
+  if (!g_browser_process || !g_browser_process->browser_policy_connector()) {
+    return Status(error::UNAVAILABLE,
+                  "Browser process not fit to retrieve CloudPolicyManager");
+  }
+  return g_browser_process->browser_policy_connector()
+      ->machine_level_user_cloud_policy_manager();
+#endif
 }
 
 Status ReportingServerConnector::EnsureUsableCore() {
@@ -287,35 +332,8 @@ Status ReportingServerConnector::EnsureUsableCore() {
   // The `policy::CloudPolicyCore` object is retrieved in two different ways
   // for ChromeOS and non-ChromeOS browsers.
   if (!core_) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-    if (!g_browser_process || !g_browser_process->platform_part() ||
-        !g_browser_process->platform_part()->browser_policy_connector_ash()) {
-      return Status(error::UNAVAILABLE,
-                    "Browser process not fit to retrieve CloudPolicyManager");
-    }
-    ::policy::CloudPolicyManager* const cloud_policy_manager =
-        g_browser_process->platform_part()
-            ->browser_policy_connector_ash()
-            ->GetDeviceCloudPolicyManager();
-#elif BUILDFLAG(IS_ANDROID)
-    // Android doesn't have access to a device level CloudPolicyClient, so get
-    // the PrimaryUserProfile CloudPolicyClient.
-    if (!ProfileManager::GetPrimaryUserProfile()) {
-      return Status(
-          error::UNAVAILABLE,
-          "PrimaryUserProfile not fit to retrieve CloudPolicyManager");
-    }
-    ::policy::CloudPolicyManager* const cloud_policy_manager =
-        ProfileManager::GetPrimaryUserProfile()->GetUserCloudPolicyManager();
-#else
-    if (!g_browser_process || !g_browser_process->browser_policy_connector()) {
-      return Status(error::UNAVAILABLE,
-                    "Browser process not fit to retrieve CloudPolicyManager");
-    }
-    ::policy::CloudPolicyManager* const cloud_policy_manager =
-        g_browser_process->browser_policy_connector()
-            ->machine_level_user_cloud_policy_manager();
-#endif
+    ASSIGN_OR_RETURN(::policy::CloudPolicyManager* const cloud_policy_manager,
+                     GetUserCloudPolicyManager());
     if (cloud_policy_manager == nullptr) {
       return Status(error::FAILED_PRECONDITION,
                     "This is not a managed device or browser");
@@ -353,11 +371,6 @@ Status ReportingServerConnector::EnsureUsableClient() {
 
   // Client is usable.
   return Status::StatusOK();
-}
-
-base::WeakPtr<ReportingServerConnector::PayloadSizePerHourUmaReporter>
-ReportingServerConnector::GetPayloadSizePerHourUmaReporter() {
-  return payload_size_per_hour_uma_reporter_.GetWeakPtr();
 }
 
 // ======== PayloadSizePerHourUmaReporter ==========

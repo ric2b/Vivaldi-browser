@@ -6,7 +6,7 @@
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
-#include "chromium/build/build_config.h"
+#import "chromium/build/build_config.h"
 
 // Note container constants:
 // Accessibility identifier of the Note Home View container.

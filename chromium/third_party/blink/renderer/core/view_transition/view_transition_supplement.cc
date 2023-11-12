@@ -106,6 +106,12 @@ ViewTransition* ViewTransitionSupplement::StartTransition(
   DCHECK(!transition_)
       << "skipTransition() should finish existing |transition_|";
 
+  // We need to be connected to a view to have a transition. We also need a
+  // document element, since that's the originating element for the pseudo tree.
+  if (!document.View() || !document.documentElement()) {
+    return nullptr;
+  }
+
   transition_ =
       ViewTransition::CreateFromScript(&document, script_state, callback, this);
 
@@ -146,7 +152,6 @@ void ViewTransitionSupplement::StartTransition(
   }
   DCHECK(!transition_)
       << "skipTransition() should finish existing |transition_|";
-
   transition_ = ViewTransition::CreateForSnapshotForNavigation(
       &document, std::move(callback), this);
 }
@@ -160,12 +165,32 @@ void ViewTransitionSupplement::CreateFromSnapshotForNavigation(
   supplement->StartTransition(document, std::move(transition_state));
 }
 
+// static
+void ViewTransitionSupplement::AbortTransition(Document& document) {
+  auto* supplement = FromIfExists(document);
+  if (supplement && supplement->transition_) {
+    supplement->transition_->skipTransition();
+    DCHECK(!supplement->transition_);
+  }
+}
+
 void ViewTransitionSupplement::StartTransition(
     Document& document,
     ViewTransitionState transition_state) {
   DCHECK(!transition_) << "Existing transition on new Document";
   transition_ = ViewTransition::CreateFromSnapshotForNavigation(
       &document, std::move(transition_state), this);
+
+  // We may already be past the render blocking if this page is coming back from
+  // a BFCache or has been pre-rendered. In that case, let the transition know
+  // to advance the state. Note that this has to be done outside of
+  // `CreateFromSnapshotForNavigation`, because future phases will cause parts
+  // of the code (layout & paint specifically) to try and access the transition
+  // object, which wouldn't have been set yet if the following code is done in
+  // the constructor.
+  if (document.RenderingHasBegun()) {
+    transition_->NotifyRenderingHasBegun();
+  }
 }
 
 void ViewTransitionSupplement::OnTransitionFinished(
@@ -179,15 +204,6 @@ ViewTransition* ViewTransitionSupplement::GetActiveTransition() {
   return transition_;
 }
 
-void ViewTransitionSupplement::UpdateViewTransitionNames(
-    const Element& element,
-    const ComputedStyle* style) {
-  if (style && style->ViewTransitionName())
-    elements_with_view_transition_name_.insert(&element);
-  else
-    elements_with_view_transition_name_.erase(&element);
-}
-
 ViewTransitionSupplement::ViewTransitionSupplement(Document& document)
     : Supplement<Document>(document) {}
 
@@ -195,7 +211,6 @@ ViewTransitionSupplement::~ViewTransitionSupplement() = default;
 
 void ViewTransitionSupplement::Trace(Visitor* visitor) const {
   visitor->Trace(transition_);
-  visitor->Trace(elements_with_view_transition_name_);
 
   Supplement<Document>::Trace(visitor);
 }
@@ -220,6 +235,44 @@ void ViewTransitionSupplement::AddPendingRequest(
 VectorOf<std::unique_ptr<ViewTransitionRequest>>
 ViewTransitionSupplement::TakePendingRequests() {
   return std::move(pending_requests_);
+}
+
+void ViewTransitionSupplement::OnMetaTagChanged(
+    const AtomicString& content_value) {
+  auto same_origin_opt_in =
+      EqualIgnoringASCIICase(content_value, "same-origin")
+          ? mojom::ViewTransitionSameOriginOptIn::kEnabled
+          : mojom::ViewTransitionSameOriginOptIn::kDisabled;
+
+  if (same_origin_opt_in_ == same_origin_opt_in) {
+    return;
+  }
+  same_origin_opt_in_ = same_origin_opt_in;
+
+  auto* document = GetSupplementable();
+  DCHECK(document);
+  DCHECK(document->GetFrame());
+  document->GetFrame()->GetLocalFrameHostRemote().OnViewTransitionOptInChanged(
+      same_origin_opt_in);
+
+  if (same_origin_opt_in_ == mojom::ViewTransitionSameOriginOptIn::kDisabled &&
+      transition_ && !transition_->IsCreatedViaScriptAPI()) {
+    transition_->skipTransition();
+    DCHECK(!transition_)
+        << "skipTransition() should finish existing |transition_|";
+  }
+}
+
+void ViewTransitionSupplement::WillInsertBody() {
+  if (same_origin_opt_in_ == mojom::ViewTransitionSameOriginOptIn::kEnabled) {
+    return;
+  }
+
+  if (transition_ && transition_->IsForNavigationOnNewDocument()) {
+    transition_->skipTransition();
+    DCHECK(!transition_)
+        << "skipTransition() should finish existing |transition_|";
+  }
 }
 
 }  // namespace blink

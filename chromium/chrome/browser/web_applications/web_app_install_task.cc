@@ -5,20 +5,19 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/web_applications/install_bounce_metric.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_data_retriever.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_icon_generator.h"
@@ -31,6 +30,7 @@
 #include "chrome/common/chrome_features.h"
 #include "components/webapps/browser/features.h"
 #include "components/webapps/browser/install_result_code.h"
+#include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -47,6 +47,7 @@
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -233,11 +234,13 @@ void WebAppInstallTask::UpdateFinalizerClientData(
     options->add_to_applications_menu = params->add_to_applications_menu;
     options->add_to_desktop = params->add_to_desktop;
     options->add_to_quick_launch_bar = params->add_to_quick_launch_bar;
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (params->system_app_type.has_value()) {
       options->system_web_app_data.emplace();
       options->system_web_app_data->system_app_type =
           params->system_app_type.value();
     }
+#endif
   }
 }
 
@@ -322,7 +325,7 @@ void WebAppInstallTask::WebContentsDestroyed() {
                       webapps::InstallResultCode::kWebContentsDestroyed);
 }
 
-base::Value WebAppInstallTask::TakeErrorDict() {
+base::Value::Dict WebAppInstallTask::TakeErrorDict() {
   DCHECK(log_entry_.HasErrorDict());
   return log_entry_.TakeErrorDict();
 }
@@ -449,7 +452,7 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
     blink::mojom::ManifestPtr opt_manifest,
     const GURL& manifest_url,
     bool valid_manifest_for_web_app,
-    bool is_installable) {
+    webapps::InstallableStatusCode error_code) {
   if (ShouldStopInstall())
     return;
 
@@ -498,7 +501,7 @@ void WebAppInstallTask::OnDidPerformInstallableCheck(
   // case we proceed with the installation which adds the SUB_APP install source
   // as well.
   if (install_surface_ == webapps::WebappInstallSource::SUB_APP) {
-    DCHECK(install_params_ && install_params_->parent_app_id.has_value());
+    DCHECK(web_app_info->parent_app_id.has_value());
     if (registrar_->WasInstalledBySubApp(app_id)) {
       CallInstallCallback(std::move(app_id),
                           webapps::InstallResultCode::kSuccessAlreadyInstalled);
@@ -701,7 +704,6 @@ void WebAppInstallTask::OnDialogCompleted(
     finalize_options.locally_installed = install_params_->locally_installed;
     finalize_options.overwrite_existing_manifest_fields =
         install_params_->force_reinstall;
-    finalize_options.parent_app_id = install_params_->parent_app_id;
 
     ApplyParamsToFinalizeOptions(*install_params_, finalize_options);
 
@@ -770,7 +772,7 @@ void WebAppInstallTask::OnInstallFinalizedMaybeReparentTab(
         install_finalizer_->CanReparentTab(app_id, !error);
 
     if (can_reparent_tab &&
-        (web_app_info->user_display_mode != UserDisplayMode::kBrowser)) {
+        (web_app_info->user_display_mode != mojom::UserDisplayMode::kBrowser)) {
       install_finalizer_->ReparentTab(app_id, !error, web_contents());
     }
   }

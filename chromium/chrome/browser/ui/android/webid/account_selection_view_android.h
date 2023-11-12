@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "chrome/browser/ui/webid/account_selection_view.h"
 
 // This class provides an implementation of the AccountSelectionView interface
@@ -22,7 +22,8 @@ class AccountSelectionViewAndroid : public AccountSelectionView {
   void Show(
       const std::string& rp_for_display,
       const std::vector<content::IdentityProviderData>& identity_provider_data,
-      Account::SignInMode sign_in_mode) override;
+      Account::SignInMode sign_in_mode,
+      bool show_auto_reauthn_checkbox) override;
   void ShowFailureDialog(const std::string& rp_for_display,
                          const std::string& idp_for_display) override;
 
@@ -33,7 +34,6 @@ class AccountSelectionViewAndroid : public AccountSelectionView {
       const base::android::JavaParamRef<jobject>& account_picture_url,
       bool is_sign_in);
   void OnDismiss(JNIEnv* env, jint dismiss_reason);
-  void OnAutoSignInCancelled(JNIEnv* env);
 
  private:
   // Returns either true if the java counterpart of this bridge is initialized

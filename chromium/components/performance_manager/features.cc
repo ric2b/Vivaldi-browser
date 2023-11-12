@@ -21,15 +21,15 @@ BASE_FEATURE(kRunOnMainThread,
 #if !BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kBackgroundTabLoadingFromPerformanceManager,
              "BackgroundTabLoadingFromPerformanceManager",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi: Make sure this is not enabled by default unless we want it to be
 
 BASE_FEATURE(kHighEfficiencyModeAvailable,
              "HighEfficiencyModeAvailable",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi: Make sure this is not enabled by default unless we want it to be
 
 BASE_FEATURE(kBatterySaverModeAvailable,
              "BatterySaverModeAvailable",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi: Make sure this is not enabled by default unless we want it to be
 
 const base::FeatureParam<base::TimeDelta> kHighEfficiencyModeTimeBeforeDiscard{
     &kHighEfficiencyModeAvailable, "time_before_discard", base::Hours(2)};
@@ -50,6 +50,27 @@ const base::FeatureParam<int> kHighEfficiencyModePromoMemoryPercentThreshold{
     70,
 };
 
+BASE_FEATURE(kPerformanceControlsPerformanceSurvey,
+             "PerformanceControlsPerformanceSurvey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPerformanceControlsBatteryPerformanceSurvey,
+             "PerformanceControlsBatteryPerformanceSurvey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPerformanceControlsHighEfficiencyOptOutSurvey,
+             "PerformanceControlsHighEfficiencyOptOutSurvey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kPerformanceControlsBatterySaverOptOutSurvey,
+             "PerformanceControlsBatterySaverOptOutSurvey",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<base::TimeDelta>
+    kPerformanceControlsBatterySurveyLookback{
+        &kPerformanceControlsBatteryPerformanceSurvey, "battery_lookback",
+        base::Days(8)};
+
 // On ChromeOS, the adjustment generally seems to be around 3%, sometimes 2%. We
 // choose 3% because it gets us close enough, or overestimates (which is better
 // than underestimating in this instance).
@@ -66,7 +87,7 @@ const base::FeatureParam<int>
 
 BASE_FEATURE(kBFCachePerformanceManagerPolicy,
              "BFCachePerformanceManagerPolicy",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUrgentPageDiscarding,
              "UrgentPageDiscarding",

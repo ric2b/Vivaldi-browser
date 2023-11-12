@@ -12,18 +12,18 @@
 #include <utility>
 
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_checker.h"
-#include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/ownership/owner_key_loader.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
 #include "chrome/browser/ash/ownership/ownership_histograms.h"
@@ -212,13 +212,9 @@ OwnerSettingsServiceAsh::OwnerSettingsServiceAsh(
 
   if (!user_manager::UserManager::IsInitialized()) {
     // interactive_ui_tests does not set user manager.
-    waiting_for_easy_unlock_operation_finshed_ = false;
     return;
   }
 
-  UserSessionManager::GetInstance()->WaitForEasyUnlockKeyOpsFinished(
-      base::BindOnce(&OwnerSettingsServiceAsh::OnEasyUnlockKeyOpsFinished,
-                     weak_factory_.GetWeakPtr()));
   // The ProfileManager may be null in unit tests.
   if (ProfileManager* profile_manager = g_browser_process->profile_manager())
     profile_manager_observation_.Observe(profile_manager);
@@ -260,13 +256,6 @@ void OwnerSettingsServiceAsh::OnTPMTokenReady() {
 
   // TPMTokenLoader initializes the TPM and NSS database which is necessary to
   // determine ownership. Force a reload once we know these are initialized.
-  ReloadKeypair();
-}
-
-void OwnerSettingsServiceAsh::OnEasyUnlockKeyOpsFinished() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  waiting_for_easy_unlock_operation_finshed_ = false;
-
   ReloadKeypair();
 }
 
@@ -324,15 +313,16 @@ bool OwnerSettingsServiceAsh::Set(const std::string& setting,
 bool OwnerSettingsServiceAsh::AppendToList(const std::string& setting,
                                            const base::Value& value) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  const base::Value* old_value = CrosSettings::Get()->GetPref(setting);
-  if (old_value && !old_value->is_list())
+  const base::Value::List* old_value;
+  if (!CrosSettings::Get()->GetList(setting, &old_value)) {
     return false;
+  }
 
-  base::Value new_value =
-      old_value ? old_value->Clone() : base::Value(base::Value::Type::LIST);
+  base::Value::List new_value =
+      old_value ? old_value->Clone() : base::Value::List();
 
   new_value.Append(value.Clone());
-  return Set(setting, new_value);
+  return Set(setting, base::Value(std::move(new_value)));
 }
 
 bool OwnerSettingsServiceAsh::RemoveFromList(const std::string& setting,
@@ -742,8 +732,9 @@ void OwnerSettingsServiceAsh::ReloadKeypairImpl(
     return;
   }
 
-  if (waiting_for_tpm_token_ || waiting_for_easy_unlock_operation_finshed_)
+  if (waiting_for_tpm_token_) {
     return;
+  }
 
   if (base::FeatureList::IsEnabled(ownership::kChromeSideOwnerKeyGeneration)) {
     const bool is_enterprise_managed = g_browser_process->platform_part()

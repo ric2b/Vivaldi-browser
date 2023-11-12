@@ -4,9 +4,9 @@
 
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
 
-#import "base/bind.h"
-#import "base/callback_helpers.h"
 #import "base/feature_list.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback_helpers.h"
 #import "base/memory/ptr_util.h"
 #import "base/strings/string_util.h"
 #import "base/strings/sys_string_conversions.h"
@@ -78,10 +78,6 @@ bool NewTabPageTabHelper::IsActive() const {
   return active_;
 }
 
-void NewTabPageTabHelper::Deactivate() {
-  SetActive(false);
-}
-
 bool NewTabPageTabHelper::IsNTPURL(const GURL& url) {
   // `url` can be chrome://newtab/ or about://newtab/ depending on where `url`
   // comes from (the VisibleURL chrome:// from a navigation item or the actual
@@ -92,11 +88,7 @@ bool NewTabPageTabHelper::IsNTPURL(const GURL& url) {
 }
 
 FeedType NewTabPageTabHelper::GetNextNTPFeedType() {
-  FeedType feed_type = next_ntp_feed_type_;
-  // Resets feed type to default in case next_ntp_feed_type_ was overriden by
-  // SetNextNTPFeedType.
-  next_ntp_feed_type_ = DefaultFeedType();
-  return feed_type;
+  return next_ntp_feed_type_;
 }
 
 void NewTabPageTabHelper::SetNextNTPFeedType(FeedType feed_type) {
@@ -152,32 +144,27 @@ void NewTabPageTabHelper::DidFinishNavigation(
   }
 
   UpdateItem(web_state_->GetNavigationManager()->GetLastCommittedItem());
-  SetActive(IsNTPURL(web_state->GetLastCommittedURL()));
 }
 
-void NewTabPageTabHelper::DidStartLoading(web::WebState* web_state) {
-  // This is needed to avoid flashing the NTP when loading error pages.
-  if (!IsNTPURL(web_state->GetVisibleURL())) {
-    SetActive(false);
-  }
-}
-
-void NewTabPageTabHelper::DidStopLoading(web::WebState* web_state) {
-  if (IsNTPURL(web_state->GetVisibleURL())) {
-    SetActive(true);
+void NewTabPageTabHelper::PageLoaded(
+    web::WebState* web_state,
+    web::PageLoadCompletionStatus load_completion_status) {
+  if (load_completion_status == web::PageLoadCompletionStatus::SUCCESS) {
+    if (IsNTPURL(web_state->GetVisibleURL())) {
+      SetActive(true);
+    }
   }
 }
 
 #pragma mark - Private
 
 void NewTabPageTabHelper::SetActive(bool active) {
-  bool was_active = active_;
+  if (active_ == active) {
+    return;
+  }
   active_ = active;
 
-  // Tell `delegate_` to show or hide the NTP, if necessary.
-  if (active_ != was_active) {
-    [delegate_ newTabPageHelperDidChangeVisibility:this forWebState:web_state_];
-  }
+  [delegate_ newTabPageHelperDidChangeVisibility:this forWebState:web_state_];
 }
 
 WEB_STATE_USER_DATA_KEY_IMPL(NewTabPageTabHelper)

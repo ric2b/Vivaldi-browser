@@ -27,7 +27,6 @@
 #include "components/autofill/core/browser/browser_autofill_manager.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
-#include "components/autofill/core/browser/keyboard_accessory_metrics_logger.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
@@ -42,7 +41,6 @@
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
-#include "components/autofill/ios/browser/autofill_driver_ios_webframe.h"
 #import "components/autofill/ios/browser/autofill_java_script_feature.h"
 #include "components/autofill/ios/browser/autofill_util.h"
 #import "components/autofill/ios/browser/form_suggestion.h"
@@ -172,16 +170,6 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
   std::unique_ptr<autofill::FormActivityObserverBridge>
       _formActivityObserverBridge;
 
-  // AutofillDriverIOSWebFrame will keep a refcountable AutofillDriverIOS.
-  // This is a workaround crbug.com/892612. On submission,
-  // AutofillDownloadManager and CreditCardSaveManager expect
-  // BrowserAutofillManager and AutofillDriver to live after web frame deletion
-  // so AutofillAgent will keep the latest submitted AutofillDriver alive.
-  // TODO(crbug.com/892612): remove this workaround once life cycle of
-  // BrowserAutofillManager is fixed.
-  scoped_refptr<autofill::AutofillDriverIOSRefCountable>
-      _last_submitted_autofill_driver;
-
   scoped_refptr<FieldDataManager> _fieldDataManager;
 
   // ID of the last Autofill query made. Used to discard outdated suggestions.
@@ -264,7 +252,6 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
   autofill::FormData form = forms[0];
   autofillManager->OnFormSubmitted(
       form, false, autofill::mojom::SubmissionSource::FORM_SUBMISSION);
-  autofill::KeyboardAccessoryMetricsLogger::OnFormSubmitted();
 }
 
 // Invokes the form extraction script in |frame| and loads the output into the
@@ -573,7 +560,7 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
             (const std::vector<autofill::FormDataPredictions>&)forms
                         inFrame:(web::WebFrame*)frame {
   if (!base::FeatureList::IsEnabled(
-          autofill::features::kAutofillShowTypePredictions)) {
+          autofill::features::test::kAutofillShowTypePredictions)) {
     return;
   }
 
@@ -646,11 +633,15 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
         popup_suggestion.acceptance_a11y_announcement.has_value()
             ? SysUTF16ToNSString(*popup_suggestion.acceptance_a11y_announcement)
             : nil;
+    // Only show icon for credit card suggestions.
+    NSString* icon = delegate && delegate->GetPopupType() ==
+                                     autofill::PopupType::kCreditCards
+                         ? base::SysUTF8ToNSString(popup_suggestion.icon)
+                         : nil;
     FormSuggestion* suggestion =
         [FormSuggestion suggestionWithValue:value
                          displayDescription:displayDescription
-                                       icon:base::SysUTF8ToNSString(
-                                                popup_suggestion.icon)
+                                       icon:icon
                                  identifier:popup_suggestion.frontend_id
                              requiresReauth:NO
                  acceptanceA11yAnnouncement:acceptanceA11yAnnouncement];
@@ -709,11 +700,12 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
     return;
   }
   // Check that the main frame has already been processed.
-  if (!webState->GetWebFramesManager()->GetMainWebFrame()) {
+  if (!webState->GetPageWorldWebFramesManager()->GetMainWebFrame()) {
     return;
   }
   if (!autofill::AutofillDriverIOS::FromWebStateAndWebFrame(
-           webState, webState->GetWebFramesManager()->GetMainWebFrame())
+           webState,
+           webState->GetPageWorldWebFramesManager()->GetMainWebFrame())
            ->is_processed()) {
     return;
   }
@@ -730,7 +722,6 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
 
 - (void)webStateDestroyed:(web::WebState*)webState {
   DCHECK_EQ(_webState, webState);
-  _last_submitted_autofill_driver = nullptr;
   if (_webState) {
     _formActivityObserverBridge.reset();
     _webState->RemoveObserver(_webStateObserverBridge.get());
@@ -744,7 +735,8 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
 #pragma mark - Private methods
 
 - (void)processPage:(web::WebState*)webState {
-  web::WebFramesManager* framesManager = webState->GetWebFramesManager();
+  web::WebFramesManager* framesManager =
+      webState->GetPageWorldWebFramesManager();
   if (!framesManager->GetMainWebFrame()) {
     return;
   }
@@ -904,18 +896,6 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
       [self autofillManagerFromWebState:webState webFrame:frame];
   if (!autofillManager || !success || forms.empty())
     return;
-  // AutofillDriverIOSWebFrame will keep a refcountable AutofillDriverIOS.
-  // This is a workaround crbug.com/892612. On submission,
-  // AutofillDownloadManager and CreditCardSaveManager expect
-  // BrowserAutofillManager and AutofillDriver to live after web frame deletion
-  // so AutofillAgent will keep the latest submitted AutofillDriver alive.
-  // TODO(crbug.com/892612): remove this workaround once life cycle of
-  // BrowserAutofillManager is fixed.
-  DCHECK(frame);
-  _last_submitted_autofill_driver =
-      autofill::AutofillDriverIOSWebFrame::FromWebFrame(frame)
-          ->GetRetainableDriver();
-  DCHECK(_last_submitted_autofill_driver);
   DCHECK(forms.size() <= 1) << "Only one form should be extracted.";
   [self notifyBrowserAutofillManager:autofillManager
                     ofFormsSubmitted:forms
@@ -1035,9 +1015,9 @@ constexpr base::TimeDelta kA11yAnnouncementQueueDelay = base::Seconds(1);
   if (!_webState)
     return;
 
-  DCHECK(_webState->GetWebFramesManager());
+  DCHECK(_webState->GetPageWorldWebFramesManager());
   web::WebFrame* webFrame =
-      _webState->GetWebFramesManager()->GetFrameWithId(webFrameId);
+      _webState->GetPageWorldWebFramesManager()->GetFrameWithId(webFrameId);
   if (!webFrame)
     return;
 

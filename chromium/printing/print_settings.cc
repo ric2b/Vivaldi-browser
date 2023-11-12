@@ -10,9 +10,13 @@
 #include "printing/buildflags/buildflags.h"
 #include "printing/units.h"
 
-#if BUILDFLAG(USE_CUPS) && (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS))
+#if BUILDFLAG(USE_CUPS)
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_CHROMEOS)
 #include <cups/cups.h>
 #endif
+
+#include "printing/print_job_constants_cups.h"
+#endif  // BUILDFLAG(USE_CUPS)
 
 #if BUILDFLAG(IS_WIN)
 #include "printing/mojom/print.mojom.h"
@@ -22,8 +26,9 @@ namespace printing {
 
 mojom::ColorModel ColorModeToColorModel(int color_mode) {
   if (color_mode < static_cast<int>(mojom::ColorModel::kUnknownColorModel) ||
-      color_mode > static_cast<int>(mojom::ColorModel::kColorModelLast))
+      color_mode > static_cast<int>(mojom::ColorModel::kMaxValue)) {
     return mojom::ColorModel::kUnknownColorModel;
+  }
   return static_cast<mojom::ColorModel>(color_mode);
 }
 
@@ -31,28 +36,6 @@ mojom::ColorModel ColorModeToColorModel(int color_mode) {
 void GetColorModelForModel(mojom::ColorModel color_model,
                            std::string* color_setting_name,
                            std::string* color_value) {
-#if BUILDFLAG(IS_MAC)
-  constexpr char kCUPSColorMode[] = "ColorMode";
-  constexpr char kCUPSColorModel[] = "ColorModel";
-  constexpr char kCUPSPrintoutMode[] = "PrintoutMode";
-  constexpr char kCUPSProcessColorModel[] = "ProcessColorModel";
-  constexpr char kCUPSBrotherMonoColor[] = "BRMonoColor";
-  constexpr char kCUPSBrotherPrintQuality[] = "BRPrintQuality";
-  constexpr char kCUPSEpsonInk[] = "Ink";
-  constexpr char kCUPSSharpARCMode[] = "ARCMode";
-  constexpr char kCUPSXeroxXRXColor[] = "XRXColor";
-#else
-  constexpr char kCUPSColorMode[] = "cups-ColorMode";
-  constexpr char kCUPSColorModel[] = "cups-ColorModel";
-  constexpr char kCUPSPrintoutMode[] = "cups-PrintoutMode";
-  constexpr char kCUPSProcessColorModel[] = "cups-ProcessColorModel";
-  constexpr char kCUPSBrotherMonoColor[] = "cups-BRMonoColor";
-  constexpr char kCUPSBrotherPrintQuality[] = "cups-BRPrintQuality";
-  constexpr char kCUPSEpsonInk[] = "cups-Ink";
-  constexpr char kCUPSSharpARCMode[] = "cups-ARCMode";
-  constexpr char kCUPSXeroxXRXColor[] = "cups-XRXColor";
-#endif  // BUILDFLAG(IS_MAC)
-
   *color_setting_name = kCUPSColorModel;
 
   switch (color_model) {
@@ -144,6 +127,22 @@ void GetColorModelForModel(mojom::ColorModel color_model,
       *color_setting_name = kCUPSBrotherPrintQuality;
       *color_value = kBlack;
       break;
+    case mojom::ColorModel::kCanonCNColorModeColor:
+      *color_setting_name = kCUPSCanonCNColorMode;
+      *color_value = kColor;
+      break;
+    case mojom::ColorModel::kCanonCNColorModeMono:
+      *color_setting_name = kCUPSCanonCNColorMode;
+      *color_value = kMono;
+      break;
+    case mojom::ColorModel::kCanonCNIJGrayScaleOne:
+      *color_setting_name = kCUPSCanonCNIJGrayScale;
+      *color_value = kOne;
+      break;
+    case mojom::ColorModel::kCanonCNIJGrayScaleZero:
+      *color_setting_name = kCUPSCanonCNIJGrayScale;
+      *color_value = kZero;
+      break;
     case mojom::ColorModel::kEpsonInkColor:
       *color_setting_name = kCUPSEpsonInk;
       *color_value = kEpsonColor;
@@ -151,6 +150,22 @@ void GetColorModelForModel(mojom::ColorModel color_model,
     case mojom::ColorModel::kEpsonInkMono:
       *color_setting_name = kCUPSEpsonInk;
       *color_value = kEpsonMono;
+      break;
+    case mojom::ColorModel::kKonicaMinoltaSelectColorColor:
+      *color_setting_name = kCUPSKonicaMinoltaSelectColor;
+      *color_value = kColor;
+      break;
+    case mojom::ColorModel::kKonicaMinoltaSelectColorGrayscale:
+      *color_setting_name = kCUPSKonicaMinoltaSelectColor;
+      *color_value = kGrayscale;
+      break;
+    case mojom::ColorModel::kOkiOKControlColor:
+      *color_setting_name = kCUPSOkiControl;
+      *color_value = kAuto;
+      break;
+    case mojom::ColorModel::kOkiOKControlGray:
+      *color_setting_name = kCUPSOkiControl;
+      *color_value = kGray;
       break;
     case mojom::ColorModel::kSharpARCModeCMColor:
       *color_setting_name = kCUPSSharpARCMode;
@@ -167,6 +182,14 @@ void GetColorModelForModel(mojom::ColorModel color_model,
     case mojom::ColorModel::kXeroxXRXColorBW:
       *color_setting_name = kCUPSXeroxXRXColor;
       *color_value = kXeroxBW;
+      break;
+    case mojom::ColorModel::kXeroxXROutputColorPrintAsColor:
+      *color_setting_name = kCUPSXeroxXROutputColor;
+      *color_value = kPrintAsColor;
+      break;
+    case mojom::ColorModel::kXeroxXROutputColorPrintAsGrayscale:
+      *color_setting_name = kCUPSXeroxXROutputColor;
+      *color_value = kPrintAsGrayscale;
       break;
   }
   // The default case is excluded from the above switch statement to ensure that
@@ -208,9 +231,14 @@ absl::optional<bool> IsColorModelSelected(mojom::ColorModel color_model) {
     case mojom::ColorModel::kProcessColorModelRGB:
     case mojom::ColorModel::kBrotherCUPSColor:
     case mojom::ColorModel::kBrotherBRScript3Color:
+    case mojom::ColorModel::kCanonCNColorModeColor:
+    case mojom::ColorModel::kCanonCNIJGrayScaleZero:
     case mojom::ColorModel::kEpsonInkColor:
+    case mojom::ColorModel::kKonicaMinoltaSelectColorColor:
+    case mojom::ColorModel::kOkiOKControlColor:
     case mojom::ColorModel::kSharpARCModeCMColor:
     case mojom::ColorModel::kXeroxXRXColorAutomatic:
+    case mojom::ColorModel::kXeroxXROutputColorPrintAsColor:
       return true;
     case mojom::ColorModel::kGray:
     case mojom::ColorModel::kBlack:
@@ -221,9 +249,14 @@ absl::optional<bool> IsColorModelSelected(mojom::ColorModel color_model) {
     case mojom::ColorModel::kProcessColorModelGreyscale:
     case mojom::ColorModel::kBrotherCUPSMono:
     case mojom::ColorModel::kBrotherBRScript3Black:
+    case mojom::ColorModel::kCanonCNColorModeMono:
+    case mojom::ColorModel::kCanonCNIJGrayScaleOne:
     case mojom::ColorModel::kEpsonInkMono:
+    case mojom::ColorModel::kKonicaMinoltaSelectColorGrayscale:
+    case mojom::ColorModel::kOkiOKControlGray:
     case mojom::ColorModel::kSharpARCModeCMBW:
     case mojom::ColorModel::kXeroxXRXColorBW:
+    case mojom::ColorModel::kXeroxXROutputColorPrintAsGrayscale:
       return false;
     case mojom::ColorModel::kUnknownColorModel:
       NOTREACHED();
@@ -232,6 +265,9 @@ absl::optional<bool> IsColorModelSelected(mojom::ColorModel color_model) {
   // The default case is excluded from the above switch statement to ensure that
   // all ColorModel values are determinantly handled.
 }
+
+bool PrintSettings::RequestedMedia::operator==(
+    const PrintSettings::RequestedMedia& other) const = default;
 
 // Global SequenceNumber used for generating unique cookie values.
 static base::AtomicSequenceNumber cookie_seq;
@@ -282,11 +318,14 @@ PrintSettings& PrintSettings::operator=(const PrintSettings& settings) {
   username_ = settings.username_;
   oauth_token_ = settings.oauth_token_;
   pin_value_ = settings.pin_value_;
+  client_infos_ = settings.client_infos_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   return *this;
 }
 
 PrintSettings::~PrintSettings() = default;
+
+bool PrintSettings::operator==(const PrintSettings& other) const = default;
 
 void PrintSettings::Clear() {
   ranges_.clear();
@@ -322,6 +361,7 @@ void PrintSettings::Clear() {
   username_.clear();
   oauth_token_.clear();
   pin_value_.clear();
+  client_infos_.clear();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 }
 

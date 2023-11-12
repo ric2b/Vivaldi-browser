@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
 #include "base/values.h"
+#include "chrome/updater/updater_scope.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -43,7 +44,7 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
   // Constructs a provider using the specified |pref_service|.
   // The associated preferences are assumed to already be registered.
   // The |pref_service| must outlive the instance of this class.
-  explicit PersistedData(PrefService* pref_service);
+  PersistedData(UpdaterScope scope, PrefService* pref_service);
   PersistedData(const PersistedData&) = delete;
   PersistedData& operator=(const PersistedData&) = delete;
 
@@ -73,8 +74,8 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
   std::string GetAP(const std::string& id) const;
   void SetAP(const std::string& id, const std::string& ap);
 
-  // This function sets everything in the registration request object into the
-  // persistent data store.
+  // This function sets any non-empty field in the registration request object
+  // into the persistent data store.
   void RegisterApp(const RegistrationRequest& rq);
 
   // This function removes a registered application from the persistent store.
@@ -88,6 +89,12 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
   // than itself, and is never unset, even if the app is uninstalled.
   bool GetHadApps() const;
   void SetHadApps();
+
+  // UsageStatsEnabled reflects whether the updater as a whole is allowed to
+  // send usage stats, and is set or reset periodically based on the usage
+  // stats opt-in state of each product.
+  bool GetUsageStatsEnabled() const;
+  void SetUsageStatsEnabled(bool usage_stats_enabled);
 
   // LastChecked is set when the updater completed successfully a call to
   // `UpdateService::UpdateAll` as indicated by the `UpdateService::Result`
@@ -129,6 +136,7 @@ class PersistedData : public base::RefCountedThreadSafe<PersistedData> {
 
   SEQUENCE_CHECKER(sequence_checker_);
 
+  const UpdaterScope scope_;
   raw_ptr<PrefService> pref_service_ = nullptr;  // Not owned by this class.
 };
 

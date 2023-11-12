@@ -14,7 +14,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/ash/accessibility/system_live_caption_service_factory.h"
+#include "chrome/browser/ash/accessibility/live_caption/system_live_caption_service_factory.h"
 #include "chrome/browser/ash/arc/session/arc_service_launcher.h"
 #include "chrome/browser/ash/camera_mic/vm_camera_mic_manager.h"
 #include "chrome/browser/ash/child_accounts/child_status_reporting_service_factory.h"
@@ -53,6 +53,7 @@
 #include "chromeos/ash/components/peripheral_notification/peripheral_notification_manager.h"
 #include "components/live_caption/caption_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -199,12 +200,11 @@ void UserSessionInitializer::InitializeCerts(Profile* profile) {
     // pass the `NssCertDatabaseGetter` to the `NetworkCertLoader`.
     content::GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
-        base::BindOnce(
-            &GetCertDBOnIOThread,
-            NssServiceFactory::GetForContext(profile)
-                ->CreateNSSCertDatabaseGetterForIOThread(),
-            base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                               base::BindOnce(&OnGotNSSCertDatabaseForUser))));
+        base::BindOnce(&GetCertDBOnIOThread,
+                       NssServiceFactory::GetForContext(profile)
+                           ->CreateNSSCertDatabaseGetterForIOThread(),
+                       base::BindPostTaskToCurrentDefault(
+                           base::BindOnce(&OnGotNSSCertDatabaseForUser))));
   }
 }
 

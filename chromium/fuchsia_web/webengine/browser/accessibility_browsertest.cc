@@ -129,6 +129,11 @@ class FuchsiaFrameAccessibilityTest : public WebEngineBrowserTest {
                     ->IsFullAccessibilityModeForTesting());
   }
 
+  void TearDownOnMainThread() override {
+    frame_ = {};
+    WebEngineBrowserTest::TearDownOnMainThread();
+  }
+
   void LoadPage(base::StringPiece url, base::StringPiece page_title) {
     GURL page_url(embedded_test_server()->GetURL(std::string(url)));
     ASSERT_TRUE(LoadUrlAndExpectResponse(frame_.GetNavigationController(),
@@ -292,7 +297,9 @@ IN_PROC_BROWSER_TEST_F(FuchsiaFrameAccessibilityTest,
       fuchsia::accessibility::semantics::Action::SECONDARY));
 }
 
-IN_PROC_BROWSER_TEST_F(FuchsiaFrameAccessibilityTest, Disconnect) {
+// This test times out frequently, presumably due to a race condition.
+// TODO(crbug.com/1421236): Re-enable this test when it is no longer flaky.
+IN_PROC_BROWSER_TEST_F(FuchsiaFrameAccessibilityTest, DISABLED_Disconnect) {
   base::RunLoop run_loop;
   frame_.ptr().set_error_handler([&run_loop](zx_status_t status) {
     EXPECT_EQ(ZX_ERR_INTERNAL, status);

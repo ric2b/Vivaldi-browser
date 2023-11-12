@@ -62,6 +62,12 @@ const WebContentsView* WebContentsViewChildFrame::GetOuterView() const {
 }
 
 RenderViewHostDelegateView* WebContentsViewChildFrame::GetOuterDelegateView() {
+  // NOTE(andre@vivaldi.com) : Dragging <webview> elements while it loads can
+  // cause RenderWidgetHostImpl::OnUpdateDragCursor to be called when this is
+  // unattached. VB-95503
+  if (!web_contents_->GetOuterWebContents()) {
+    return nullptr;
+  }
   RenderViewHostImpl* outer_rvh = static_cast<RenderViewHostImpl*>(
       web_contents_->GetOuterWebContents()->GetRenderViewHost());
   CHECK(outer_rvh);
@@ -137,6 +143,9 @@ bool WebContentsViewChildFrame::CloseTabAfterEventTrackingIfNeeded() {
 void WebContentsViewChildFrame::OnCapturerCountChanged() {}
 
 void WebContentsViewChildFrame::FullscreenStateChanged(bool is_fullscreen) {}
+
+void WebContentsViewChildFrame::UpdateWindowControlsOverlay(
+    const gfx::Rect& bounding_rect) {}
 
 void WebContentsViewChildFrame::RestoreFocus() {
   NOTREACHED();

@@ -6,6 +6,7 @@
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
@@ -15,6 +16,7 @@
 #include "content/browser/buckets/bucket_manager_host.h"
 #include "content/browser/file_system_access/file_system_access_error.h"
 #include "content/browser/storage_partition_impl.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "mojo/public/cpp/test_support/test_utils.h"
@@ -87,6 +89,9 @@ class BucketManagerHostTest : public testing::Test {
     void BindCacheStorageForBucket(
         const storage::BucketInfo& bucket,
         mojo::PendingReceiver<blink::mojom::CacheStorage> receiver) override {}
+    GlobalRenderFrameHostId GetAssociatedRenderFrameHostId() const override {
+      return GlobalRenderFrameHostId();
+    }
 
     void GetSandboxedFileSystemForBucket(
         const storage::BucketInfo& bucket,
@@ -131,7 +136,8 @@ TEST_F(BucketManagerHostTest, OpenBucket) {
   bucket_manager_host_remote_->OpenBucket(
       "inbox_bucket", blink::mojom::BucketPolicies::New(),
       base::BindLambdaForTesting(
-          [&](mojo::PendingRemote<blink::mojom::BucketHost> remote) {
+          [&](mojo::PendingRemote<blink::mojom::BucketHost> remote,
+              blink::mojom::BucketError error) {
             EXPECT_TRUE(remote.is_valid());
             run_loop.Quit();
           }));
@@ -177,7 +183,8 @@ TEST_F(BucketManagerHostTest, OpenBucketValidateName) {
       remote->OpenBucket(
           it->second, blink::mojom::BucketPolicies::New(),
           base::BindLambdaForTesting(
-              [&](mojo::PendingRemote<blink::mojom::BucketHost> remote) {
+              [&](mojo::PendingRemote<blink::mojom::BucketHost> remote,
+                  blink::mojom::BucketError error) {
                 EXPECT_EQ(remote.is_valid(), it->first);
                 run_loop.Quit();
               }));
@@ -198,7 +205,8 @@ TEST_F(BucketManagerHostTest, DeleteBucket) {
   bucket_manager_host_remote_->OpenBucket(
       "inbox_bucket", blink::mojom::BucketPolicies::New(),
       base::BindLambdaForTesting(
-          [&](mojo::PendingRemote<blink::mojom::BucketHost> remote) {
+          [&](mojo::PendingRemote<blink::mojom::BucketHost> remote,
+              blink::mojom::BucketError error) {
             EXPECT_TRUE(remote.is_valid());
             run_loop.Quit();
           }));
@@ -245,7 +253,8 @@ TEST_F(BucketManagerHostTest, PermissionCheck) {
         bucket_manager_host_remote_->OpenBucket(
             "foo", blink::mojom::BucketPolicies::New(),
             base::BindLambdaForTesting(
-                [&](mojo::PendingRemote<blink::mojom::BucketHost> remote) {
+                [&](mojo::PendingRemote<blink::mojom::BucketHost> remote,
+                    blink::mojom::BucketError error) {
                   EXPECT_TRUE(remote.is_valid());
                   bucket_remote.Bind(std::move(remote));
                   run_loop.Quit();
@@ -292,7 +301,8 @@ TEST_F(BucketManagerHostTest, PermissionCheck) {
         bucket_manager_host_remote_->OpenBucket(
             "foo", std::move(policies),
             base::BindLambdaForTesting(
-                [&](mojo::PendingRemote<blink::mojom::BucketHost> remote) {
+                [&](mojo::PendingRemote<blink::mojom::BucketHost> remote,
+                    blink::mojom::BucketError error) {
                   EXPECT_TRUE(remote.is_valid());
                   bucket_remote2.Bind(std::move(remote));
                   run_loop.Quit();

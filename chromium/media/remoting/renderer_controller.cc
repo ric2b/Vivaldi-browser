@@ -4,14 +4,15 @@
 
 #include "media/remoting/renderer_controller.h"
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "media/remoting/metrics.h"
+#include "media/remoting/remoting_constants.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "media/base/android/media_codec_util.h"
@@ -26,17 +27,8 @@ using mojom::RemotingSinkVideoCapability;
 
 namespace {
 
-// The duration to delay the start of media remoting to ensure all preconditions
-// are held stable before switching to media remoting.
-constexpr base::TimeDelta kDelayedStart = base::Seconds(5);
-
 constexpr int kPixelsPerSec4k = 3840 * 2160 * 30;  // 4k 30fps.
 constexpr int kPixelsPerSec2k = 1920 * 1080 * 30;  // 1080p 30fps.
-
-// The minimum media element duration that is allowed for media remoting.
-// Frequent switching into and out of media remoting for short-duration media
-// can feel "janky" to the user.
-constexpr double kMinRemotingMediaDurationInSec = 60;
 
 StopTrigger GetStopTrigger(mojom::RemotingStopReason reason) {
   switch (reason) {
@@ -455,6 +447,7 @@ RemotingCompatibility RendererController::GetAudioCompatibility() const {
     case AudioCodec::kAC3:
     case AudioCodec::kDTS:
     case AudioCodec::kDTSXP2:
+    case AudioCodec::kDTSE:
       compatible =
           HasAudioCapability(RemotingSinkAudioCapability::CODEC_BASELINE_SET);
       break;
@@ -476,13 +469,15 @@ RemotingCompatibility RendererController::GetCompatibility() const {
   if (!has_video() && !has_audio())
     return RemotingCompatibility::kNoAudioNorVideo;
 
-  if (client_->Duration() <= kMinRemotingMediaDurationInSec)
-    return RemotingCompatibility::kDurationBelowThreshold;
-
   // When `is_media_remoting_requested_`, it is guaranteed that the sink is
-  // compatible. So there's no need to check for compatibilities.
+  // compatible and the media element meets the minimum duration requirement. So
+  // there's no need to check for compatibilities.
   if (is_media_remoting_requested_) {
     return RemotingCompatibility::kCompatible;
+  }
+
+  if (client_->Duration() <= kMinMediaDurationForSwitchingToRemotingInSec) {
+    return RemotingCompatibility::kDurationBelowThreshold;
   }
 
   if (has_video()) {
@@ -543,7 +538,11 @@ void RendererController::UpdateAndMaybeSwitch(StartTrigger start_trigger,
     metrics_recorder_.WillStartSession(start_trigger);
     // |MediaObserverClient::SwitchToRemoteRenderer()| will be called after
     // remoting is started successfully.
-    remoter_->Start();
+    if (is_media_remoting_requested_) {
+      remoter_->StartWithPermissionAlreadyGranted();
+    } else {
+      remoter_->Start();
+    }
   }
 }
 
@@ -557,8 +556,10 @@ void RendererController::OnRendererFatalError(StopTrigger stop_trigger) {
 
   // MOJO_DISCONNECTED means the streaming session has stopped, which is not a
   // fatal error and should not prevent future sessions.
+  // Clean sinks so that `UpdateAndMaybeSwitch` will stop remoting.
   if (stop_trigger != StopTrigger::MOJO_DISCONNECTED) {
     encountered_renderer_fatal_error_ = true;
+    OnSinkGone();
   }
 
   UpdateAndMaybeSwitch(UNKNOWN_START_TRIGGER, stop_trigger);
@@ -568,6 +569,10 @@ void RendererController::SetClient(MediaObserverClient* client) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   client_ = client;
+  // Reset `encountered_renderer_fatal_error_` when the media element changes so
+  // that the previous renderer fatal error won't prevent Remoting the new
+  // content.
+  encountered_renderer_fatal_error_ = false;
   if (!client_) {
     pixel_rate_timer_.Stop();
     if (remote_rendering_started_) {
@@ -631,7 +636,7 @@ void RendererController::MaybeStartCalculatePixelRateTimer() {
   }
 
   pixel_rate_timer_.Start(
-      FROM_HERE, kDelayedStart,
+      FROM_HERE, base::Seconds(kPixelRateCalInSec),
       base::BindOnce(&RendererController::DoCalculatePixelRate,
                      base::Unretained(this), client_->DecodedFrameCount(),
                      clock_->NowTicks()));
@@ -700,6 +705,7 @@ bool RendererController::IsAudioRemotePlaybackSupported() const {
     case AudioCodec::kAC3:
     case AudioCodec::kDTS:
     case AudioCodec::kDTSXP2:
+    case AudioCodec::kDTSE:
       return true;
     default:
       return false;

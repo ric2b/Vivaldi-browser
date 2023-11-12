@@ -9,12 +9,14 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/image_service/image_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -39,6 +41,8 @@
 #include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/features.h"
 #include "components/history_clusters/core/history_clusters_prefs.h"
+#include "components/image_service/image_service.h"
+#include "components/image_service/image_service_handler.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -60,9 +64,9 @@ bool IsUserSignedIn(Profile* profile) {
          identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync);
 }
 
-content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(chrome::kChromeUIHistoryHost);
+content::WebUIDataSource* CreateAndAddHistoryUIHTMLSource(Profile* profile) {
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      profile, chrome::kChromeUIHistoryHost);
 
   static constexpr webui::LocalizedString kStrings[] = {
       // Localized strings (alphabetical order).
@@ -143,9 +147,9 @@ content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
 HistoryUI::HistoryUI(content::WebUI* web_ui)
     : ui::MojoWebUIController(web_ui, /*enable_chrome_send=*/true) {
   Profile* profile = Profile::FromWebUI(web_ui);
-  content::WebUIDataSource* data_source = CreateHistoryUIHTMLSource(profile);
+  content::WebUIDataSource* data_source =
+      CreateAndAddHistoryUIHTMLSource(profile);
   ManagedUIHandler::Initialize(web_ui, data_source);
-  content::WebUIDataSource::Add(profile, data_source);
 
   pref_change_registrar_.Init(profile->GetPrefs());
   pref_change_registrar_.Add(history_clusters::prefs::kVisible,
@@ -190,6 +194,19 @@ void HistoryUI::BindInterface(
       std::make_unique<history_clusters::HistoryClustersHandler>(
           std::move(pending_page_handler), Profile::FromWebUI(web_ui()),
           web_ui()->GetWebContents());
+}
+
+void HistoryUI::BindInterface(
+    mojo::PendingReceiver<image_service::mojom::ImageServiceHandler>
+        pending_page_handler) {
+  base::WeakPtr<image_service::ImageService> image_service_weak;
+  if (auto* image_service =
+          image_service::ImageServiceFactory::GetForBrowserContext(
+              Profile::FromWebUI(web_ui()))) {
+    image_service_weak = image_service->GetWeakPtr();
+  }
+  image_service_handler_ = std::make_unique<image_service::ImageServiceHandler>(
+      std::move(pending_page_handler), std::move(image_service_weak));
 }
 
 void HistoryUI::UpdateDataSource() {

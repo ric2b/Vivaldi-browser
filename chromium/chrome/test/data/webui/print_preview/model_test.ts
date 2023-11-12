@@ -4,7 +4,7 @@
 
 import {Destination, DestinationOrigin, DuplexMode, makeRecentDestination, MarginsType, PrinterType, PrintPreviewModelElement, PrintTicket, RecentDestination, ScalingType, Size} from 'chrome://print/print_preview.js';
 // <if expr="is_chromeos">
-import {GooglePromotedDestinationId} from 'chrome://print/print_preview.js';
+import {GooglePromotedDestinationId, PrinterStatusReason} from 'chrome://print/print_preview.js';
 // </if>
 // <if expr="is_chromeos">
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
@@ -313,10 +313,12 @@ suite(model_test.suiteName, function() {
       showSystemDialog: false,
       // <if expr="is_chromeos">
       printToGoogleDrive: false,
+      printerManuallySelected: false,
       advancedSettings: {
         printArea: 4,
         paperType: 0,
       },
+      printerStatusReason: PrinterStatusReason.UNKNOWN_REASON,
       // </if>
     };
     assertEquals(JSON.stringify(expectedDefaultTicketObject), defaultTicket);
@@ -351,6 +353,7 @@ suite(model_test.suiteName, function() {
       showSystemDialog: false,
       // <if expr="is_chromeos">
       printToGoogleDrive: false,
+      printerManuallySelected: false,
       // </if>
       marginsCustom: {
         marginTop: 100,
@@ -364,6 +367,7 @@ suite(model_test.suiteName, function() {
         printArea: 6,
         paperType: 1,
       },
+      printerStatusReason: PrinterStatusReason.UNKNOWN_REASON,
       // </if>
     };
 

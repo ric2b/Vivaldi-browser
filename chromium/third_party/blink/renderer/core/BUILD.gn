@@ -186,6 +186,25 @@ source_set("prerequisites") {
   ]
 }
 
+blink_python_runner("make_deprecation_info") {
+  script = "../build/scripts/make_deprecation_info.py"
+
+  inputs = scripts_for_json5_files + [
+             "frame/deprecation/deprecation.json5",
+             "../build/scripts/templates/deprecation_info.cc.tmpl",
+           ]
+
+  outputs = [ "$root_gen_dir/third_party/blink/renderer/core/frame/deprecation/deprecation_info.cc" ]
+
+  args = [
+    rebase_path("frame/deprecation/deprecation.json5", root_build_dir),
+    "--output_dir",
+    rebase_path(
+        "$root_gen_dir/third_party/blink/renderer/core/frame/deprecation",
+        root_build_dir),
+  ]
+}
+
 component("core") {
   output_name = "blink_core"
 
@@ -232,6 +251,7 @@ component("core") {
                          "",
                          "fragment_directive")
   sources += rebase_path(blink_core_sources_frame, "", "frame")
+  sources += get_target_outputs(":make_deprecation_info")
   sources += rebase_path(blink_core_sources_fullscreen, "", "fullscreen")
   sources += rebase_path(blink_core_sources_geometry, "", "geometry")
   sources += rebase_path(blink_core_sources_highlight, "", "highlight")
@@ -288,6 +308,7 @@ component("core") {
     "//skia",
     "//third_party/blink/public/mojom:mojom_broadcastchannel_bindings_blink",
     "//third_party/blink/public/mojom:mojom_core_blink",
+    "//third_party/blink/renderer/bindings:buildflags",
     "//third_party/blink/renderer/bindings/core/v8",
     "//third_party/blink/renderer/core/animation",
     "//third_party/blink/renderer/core/exported",
@@ -311,7 +332,10 @@ component("core") {
   deps = [
     ":generate_eventhandler_names",
     ":generated_settings_macros",
+    ":make_deprecation_info",
     "//build:chromeos_buildflags",
+    "//components/attribution_reporting",
+    "//components/attribution_reporting:mojom_blink",
     "//components/paint_preview/common",
     "//components/performance_manager/public/mojom:mojom_blink",
     "//components/power_scheduler",
@@ -383,8 +407,16 @@ blink_core_sources("core_hot") {
   # TODO(ajwong) this is of mirror
   # https://source.chromium.org/chromium/chromium/src/+/master:third_party/blink/renderer/core/core.gni;l=26
   # to undo the configs which is fragile. Find a better way.
-  if (!is_debug && optimize_for_size) {
-    configs -= [ "//build/config/compiler:default_optimization" ]
+  #
+  # 'Hot' code should always be compiled for speed in non-debug builds.
+  if (!is_debug) {
+    # Only attempt to remove the 'default_optimization' label if it is already
+    # present in 'configs'.
+    if (filter_include(configs,
+                       [ "//build/config/compiler:default_optimization" ]) !=
+        []) {
+      configs -= [ "//build/config/compiler:default_optimization" ]
+    }
     configs += [ "//build/config/compiler:optimize_speed" ]
   }
 
@@ -403,6 +435,13 @@ blink_core_sources("core_hot") {
     "//third_party/blink/renderer/core/exported",
     "//third_party/blink/renderer/core/probe",
   ]
+
+  if (use_inner_html_parser_fast_path) {
+    sources += [
+      "html/parser/html_document_parser_fastpath.cc",
+      "html/parser/html_document_parser_fastpath.h",
+    ]
+  }
 }
 
 source_set("testing") {
@@ -530,7 +569,6 @@ generate_event_interfaces("core_event_interfaces") {
     "events/animation_event.idl",
     "events/animation_playback_event.idl",
     "events/before_create_policy_event.idl",
-    "events/before_toggle_event.idl",
     "events/before_unload_event.idl",
     "events/clipboard_event.idl",
     "events/composition_event.idl",
@@ -552,6 +590,7 @@ generate_event_interfaces("core_event_interfaces") {
     "events/resource_progress_event.idl",
     "events/security_policy_violation_event.idl",
     "events/text_event.idl",
+    "events/toggle_event.idl",
     "events/touch_event.idl",
     "events/transition_event.idl",
     "events/ui_event.idl",
@@ -952,11 +991,6 @@ make_names("make_core_generated_performance_entry_names") {
   output_dir = blink_core_output_dir
 }
 
-make_names("make_core_generated_delivery_type_names") {
-  in_files = [ "timing/delivery_type_names.json5" ]
-  output_dir = blink_core_output_dir
-}
-
 make_names("make_core_generated_pointer_type_names") {
   in_files = [ "events/pointer_type_names.json5" ]
   output_dir = blink_core_output_dir
@@ -1015,21 +1049,6 @@ action("make_core_generated_html_entity_table") {
 
   args = [ "-o" ] + rebase_path(outputs, root_build_dir)
   args += rebase_path(inputs, root_build_dir)
-
-  deps = make_core_generated_deps
-}
-
-blink_python_runner("make_core_generated_css_tokenizer_codepoints") {
-  visibility = []  # Allow re-assignment of list.
-  visibility = [ ":*" ]
-  script = "../build/scripts/core/css/make_css_tokenizer_codepoints.py"
-
-  outputs = [ "$blink_core_output_dir/css/css_tokenizer_codepoints.cc" ]
-
-  args = [
-    "--output_dir",
-    "$rel_blink_core_gen_dir/css",
-  ]
 
   deps = make_core_generated_deps
 }
@@ -1160,11 +1179,11 @@ targets_generating_sources = [
   ":make_core_generated_css_value_id_mappings",
   ":make_core_generated_css_value_keywords",
   ":make_core_generated_cssom_types",
-  ":make_core_generated_delivery_type_names",
   ":make_core_generated_event_factory",
   ":make_core_generated_event_names",
   ":make_core_generated_event_target_names",
   ":make_core_generated_event_type_names",
+  ":make_core_generated_html_attribute_name_lookup_trie",
   ":make_core_generated_html_element_factory",
   ":make_core_generated_html_element_lookup_trie",
   ":make_core_generated_html_element_type_helpers",
@@ -1193,19 +1212,8 @@ targets_generating_sources = [
   ":make_core_generated_xml_ns_names",
 ]
 
-if (!is_android) {
-  targets_generating_sources +=
-      [ ":make_core_generated_html_attribute_name_lookup_trie" ]
-}
-
 group("all_generators") {
   public_deps = targets_generating_sources
-  public_deps += [
-    # This target's generated source is #included into another source file.
-    # So we don't want to list it in the "generating sources" list above,
-    # but it does need to be listed as a dependency here.
-    ":make_core_generated_css_tokenizer_codepoints",
-  ]
 }
 
 # Compiles the code generated by the targets above.
@@ -1443,6 +1451,10 @@ source_set("unit_tests") {
       "//ui/gfx/geometry",
     ]
   }
+
+  if (use_inner_html_parser_fast_path) {
+    sources += [ "html/parser/html_document_parser_fastpath_test.cc" ]
+  }
 }
 
 group("unit_tests_data") {
@@ -1476,6 +1488,7 @@ source_set("perf_tests") {
     "html/html_perftest.cc",
     "layout/svg/svg_hit_test_perftest.cc",
     "layout/visual_rect_mapping_perftest.cc",
+    "testing/no_network_url_loader.h",
   ]
 
   configs += [

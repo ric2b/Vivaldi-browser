@@ -91,8 +91,8 @@ class SystemTrustStoreChromeWithUnOwnedSystemStore : public SystemTrustStore {
       std::unique_ptr<TrustStoreChrome> trust_store_chrome,
       TrustStore* trust_store_system)
       : trust_store_chrome_(std::move(trust_store_chrome)) {
-    trust_store_collection_.AddTrustStore(trust_store_chrome_.get());
     trust_store_collection_.AddTrustStore(trust_store_system);
+    trust_store_collection_.AddTrustStore(trust_store_chrome_.get());
   }
 
   TrustStore* GetTrustStore() override { return &trust_store_collection_; }
@@ -377,6 +377,10 @@ TrustStoreWin* GetGlobalTrustStoreWinForCRS() {
   static base::NoDestructor<TrustStoreWin> static_trust_store_win;
   return static_trust_store_win.get();
 }
+
+void InitializeTrustStoreForCRSOnWorkerThread() {
+  GetGlobalTrustStoreWinForCRS()->InitializeStores();
+}
 }  // namespace
 
 std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStoreChromeRoot(
@@ -384,6 +388,19 @@ std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStoreChromeRoot(
   return std::make_unique<SystemTrustStoreChromeWithUnOwnedSystemStore>(
       std::move(chrome_root), GetGlobalTrustStoreWinForCRS());
 }
+
+// We do this in a separate thread as loading the Windows Cert Stores can cause
+// quite a bit of I/O. See crbug.com/1399974 for more context.
+void InitializeTrustStoreWinSystem() {
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&InitializeTrustStoreForCRSOnWorkerThread));
+}
+
+#else
+
+void InitializeTrustStoreWinSystem() {}
 
 #endif  // CHROME_ROOT_STORE_SUPPORTED
 
@@ -397,11 +414,40 @@ std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStore() {
 
 #if BUILDFLAG(CHROME_ROOT_STORE_SUPPORTED)
 
+namespace {
+TrustStoreAndroid* GetGlobalTrustStoreAndroidForCRS() {
+  static base::NoDestructor<TrustStoreAndroid> static_trust_store_android;
+  return static_trust_store_android.get();
+}
+
+void InitializeTrustStoreForCRSOnWorkerThread() {
+  GetGlobalTrustStoreAndroidForCRS()->Initialize();
+}
+}  // namespace
+
 std::unique_ptr<SystemTrustStore> CreateSslSystemTrustStoreChromeRoot(
     std::unique_ptr<TrustStoreChrome> chrome_root) {
-  return std::make_unique<SystemTrustStoreChrome>(
-      std::move(chrome_root), std::make_unique<TrustStoreAndroid>());
+  return std::make_unique<SystemTrustStoreChromeWithUnOwnedSystemStore>(
+      std::move(chrome_root), GetGlobalTrustStoreAndroidForCRS());
 }
+
+void InitializeTrustStoreAndroid() {
+  // Start observing DB change before the Trust Store is initialized so we don't
+  // accidentally miss any changes. See https://crrev.com/c/4226436 for context.
+  //
+  // This call is safe here because we're the only callers of
+  // ObserveCertDBChanges on the singleton TrustStoreAndroid.
+  GetGlobalTrustStoreAndroidForCRS()->ObserveCertDBChanges();
+
+  base::ThreadPool::PostTask(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&InitializeTrustStoreForCRSOnWorkerThread));
+}
+
+#else
+
+void InitializeTrustStoreAndroid() {}
 
 #endif  // CHROME_ROOT_STORE_SUPPORTED
 

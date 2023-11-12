@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
@@ -16,7 +16,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -30,12 +29,11 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/download_target_determiner.h"
+#include "chrome/browser/download/download_ui_model.h"
 #include "chrome/browser/download/offline_item_utils.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
-#include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -63,6 +61,11 @@
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
 #include "ui/views/vector_icons.h"
+#endif
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+#include "chrome/browser/safe_browsing/download_protection/deep_scanning_request.h"
+#include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #endif
 
 using download::DownloadItem;
@@ -121,8 +124,10 @@ class DownloadItemModelData : public base::SupportsUserData::Data {
   // then as all in-progress downloads are.
   absl::optional<base::Time> ephemeral_warning_ui_shown_time_;
 
-  // Was the UI actioned on.
-  bool actioned_on_ = false;
+  // Was the UI actioned on. This defaults to true so that we don't show
+  // extraneous items in the partial view the first time the bubble pops up
+  // after a browser restart.
+  bool actioned_on_ = true;
 
  private:
   DownloadItemModelData();
@@ -483,6 +488,9 @@ void DownloadItemModel::SetWasUINotified(bool was_ui_notified) {
 
 bool DownloadItemModel::WasActionedOn() const {
   const DownloadItemModelData* data = DownloadItemModelData::Get(download_);
+  if (!data) {
+    return DownloadUIModel::WasActionedOn();
+  }
   return data && data->actioned_on_;
 }
 
@@ -563,50 +571,6 @@ void DownloadItemModel::SetIsBeingRevived(bool is_being_revived) {
 
 const download::DownloadItem* DownloadItemModel::GetDownloadItem() const {
   return download_;
-}
-
-std::u16string DownloadItemModel::GetWebDriveName() const {
-  const auto& reroute_info = download_->GetRerouteInfo();
-  if (!reroute_info.IsInitialized() || !reroute_info.has_service_provider()) {
-    return std::u16string();
-  }
-  using Provider = enterprise_connectors::FileSystemServiceProvider;
-  switch (reroute_info.service_provider()) {
-    case (Provider::BOX):
-      return l10n_util::GetStringUTF16(IDS_FILE_SYSTEM_CONNECTOR_BOX);
-    case (Provider::GOOGLE_DRIVE):
-      return l10n_util::GetStringUTF16(IDS_FILE_SYSTEM_CONNECTOR_GOOGLE_DRIVE);
-  }
-}
-
-std::u16string DownloadItemModel::GetWebDriveMessage(bool verbose) const {
-  const auto& reroute_info = download_->GetRerouteInfo();
-  if (!reroute_info.IsInitialized() || !reroute_info.has_service_provider()) {
-    return std::u16string();
-  }
-  using Provider = enterprise_connectors::FileSystemServiceProvider;
-  switch (reroute_info.service_provider()) {
-    case (Provider::BOX): {
-      DCHECK(reroute_info.has_box());
-      const auto& info = reroute_info.box();
-      std::u16string msg, supp_msg;
-      if (info.has_error_message()) {
-        msg = base::UTF8ToUTF16(info.error_message());
-      }
-      if (msg.size() && verbose && info.has_additional_message()) {
-        supp_msg = base::UTF8ToUTF16(info.additional_message());
-      }
-      if (supp_msg.empty()) {
-        return msg;
-      }
-      // "<WEB_DRIVE_MESSAGE> (<SUPPORT_INFO>)"
-      return l10n_util::GetStringFUTF16(
-          IDS_DOWNLOAD_INTERRUPTED_DESCRIPTION_WEB_DRIVE_ERROR, msg, supp_msg);
-    }
-    case (Provider::GOOGLE_DRIVE):
-      break;
-  }
-  return std::u16string();
 }
 
 base::FilePath DownloadItemModel::GetFileNameToReportUser() const {
@@ -976,7 +940,8 @@ DownloadItemModel::GetBubbleUIInfoForTailoredWarning() const {
     return DownloadUIModel::BubbleUIInfo(
                l10n_util::GetStringUTF16(
                    IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_SUSPICIOUS_ARCHIVE))
-        .AddIconAndColor(views::kInfoIcon, ui::kColorAlertMediumSeverity)
+        .AddIconAndColor(vector_icons::kNotSecureWarningIcon,
+                         ui::kColorAlertMediumSeverity)
         .AddPrimaryButton(DownloadCommands::Command::DISCARD)
         .AddSubpageButton(l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_DELETE),
                           DownloadCommands::Command::DISCARD,
@@ -1009,7 +974,7 @@ DownloadItemModel::GetBubbleUIInfoForTailoredWarning() const {
                    l10n_util::GetStringFUTF16(
                        IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_COOKIE_THEFT_AND_ACCOUNT,
                        base::ASCIIToUTF16(email)))
-            .AddIconAndColor(vector_icons::kNotSecureWarningIcon,
+            .AddIconAndColor(vector_icons::kDangerousIcon,
                              ui::kColorAlertHighSeverity)
             .AddPrimaryButton(DownloadCommands::Command::DISCARD)
             .AddSubpageButton(
@@ -1021,7 +986,7 @@ DownloadItemModel::GetBubbleUIInfoForTailoredWarning() const {
     return DownloadUIModel::BubbleUIInfo(
                l10n_util::GetStringUTF16(
                    IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_COOKIE_THEFT))
-        .AddIconAndColor(vector_icons::kNotSecureWarningIcon,
+        .AddIconAndColor(vector_icons::kDangerousIcon,
                          ui::kColorAlertHighSeverity)
         .AddPrimaryButton(DownloadCommands::Command::DISCARD)
         .AddSubpageButton(l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_DELETE),

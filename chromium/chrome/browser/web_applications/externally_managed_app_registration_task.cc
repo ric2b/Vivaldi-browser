@@ -4,7 +4,7 @@
 
 #include "chrome/browser/web_applications/externally_managed_app_registration_task.h"
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/web_app_url_loader.h"
@@ -80,7 +80,8 @@ void ExternallyManagedAppRegistrationTask::SetTimeoutForTesting(
 
 void ExternallyManagedAppRegistrationTask::CheckHasServiceWorker() {
   service_worker_context_->CheckHasServiceWorker(
-      install_url(), blink::StorageKey(url::Origin::Create(install_url())),
+      install_url(),
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(install_url())),
       base::BindOnce(
           &ExternallyManagedAppRegistrationTask::OnDidCheckHasServiceWorker,
           weak_ptr_factory_.GetWeakPtr()));

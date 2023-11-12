@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
 #include "dbus/object_path.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -64,6 +64,14 @@ void FakeBiodClient::SendRestarted() {
 
   for (auto& observer : observers_)
     observer.BiodServiceRestarted();
+}
+
+void FakeBiodClient::SendStatusChanged(biod::BiometricsManagerStatus status) {
+  current_session_ = FingerprintSession::NONE;
+
+  for (auto& observer : observers_) {
+    observer.BiodServiceStatusChanged(status);
+  }
 }
 
 void FakeBiodClient::SendEnrollScanDone(const std::string& fingerprint,

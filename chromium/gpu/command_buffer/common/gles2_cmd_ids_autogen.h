@@ -327,15 +327,18 @@
   OP(CreateAndTexStorage2DSharedImageINTERNALImmediate)        /* 568 */ \
   OP(BeginSharedImageAccessDirectCHROMIUM)                     /* 569 */ \
   OP(EndSharedImageAccessDirectCHROMIUM)                       /* 570 */ \
-  OP(EnableiOES)                                               /* 571 */ \
-  OP(DisableiOES)                                              /* 572 */ \
-  OP(BlendEquationiOES)                                        /* 573 */ \
-  OP(BlendEquationSeparateiOES)                                /* 574 */ \
-  OP(BlendFunciOES)                                            /* 575 */ \
-  OP(BlendFuncSeparateiOES)                                    /* 576 */ \
-  OP(ColorMaskiOES)                                            /* 577 */ \
-  OP(IsEnablediOES)                                            /* 578 */ \
-  OP(ProvokingVertexANGLE)                                     /* 579 */
+  OP(ConvertRGBAToYUVAMailboxesINTERNALImmediate)              /* 571 */ \
+  OP(ConvertYUVAMailboxesToRGBINTERNALImmediate)               /* 572 */ \
+  OP(CopySharedImageINTERNALImmediate)                         /* 573 */ \
+  OP(EnableiOES)                                               /* 574 */ \
+  OP(DisableiOES)                                              /* 575 */ \
+  OP(BlendEquationiOES)                                        /* 576 */ \
+  OP(BlendEquationSeparateiOES)                                /* 577 */ \
+  OP(BlendFunciOES)                                            /* 578 */ \
+  OP(BlendFuncSeparateiOES)                                    /* 579 */ \
+  OP(ColorMaskiOES)                                            /* 580 */ \
+  OP(IsEnablediOES)                                            /* 581 */ \
+  OP(ProvokingVertexANGLE)                                     /* 582 */
 
 enum CommandId {
   kOneBeforeStartPoint =

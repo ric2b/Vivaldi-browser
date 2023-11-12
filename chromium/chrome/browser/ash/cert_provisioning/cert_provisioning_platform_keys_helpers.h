@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_ASH_CERT_PROVISIONING_CERT_PROVISIONING_PLATFORM_KEYS_HELPERS_H_
 #define CHROME_BROWSER_ASH_CERT_PROVISIONING_CERT_PROVISIONING_PLATFORM_KEYS_HELPERS_H_
 
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/cert_provisioning/cert_provisioning_common.h"
 #include "net/cert/x509_certificate.h"
@@ -54,7 +54,7 @@ class CertIterator {
       std::unique_ptr<net::CertificateList> existing_certs,
       chromeos::platform_keys::Status status);
   void OnGetAttributeForKeyDone(scoped_refptr<net::X509Certificate> cert,
-                                const absl::optional<std::string>& attr_value,
+                                absl::optional<std::vector<uint8_t>> attr_value,
                                 chromeos::platform_keys::Status status);
   void StopIteration(chromeos::platform_keys::Status status);
 

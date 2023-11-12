@@ -11,8 +11,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/stringprintf.h"
@@ -53,6 +53,7 @@
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/guest_view/guest_view_feature_util.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
 #include "extensions/browser/guest_view/web_view/web_view_content_script_manager.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
@@ -68,6 +69,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "third_party/blink/public/common/logging/logging_utils.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -354,8 +356,10 @@ void WebViewGuest::CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
     return VivaldiCreateWebContents(std::move(owned_this), create_params, std::move(callback));
   }
 
+  RenderFrameHost* owner_render_frame_host =
+      owner_web_contents()->GetPrimaryMainFrame();
   RenderProcessHost* owner_render_process_host =
-      owner_web_contents()->GetPrimaryMainFrame()->GetProcess();
+      owner_render_frame_host->GetProcess();
   DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
 
   std::string storage_partition_id;
@@ -371,28 +375,11 @@ void WebViewGuest::CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
     std::move(callback).Run(std::move(owned_this), nullptr);
     return;
   }
-  std::string partition_domain = GetOwnerSiteURL().host();
-  auto partition_config = content::StoragePartitionConfig::Create(
-      browser_context(), partition_domain, storage_partition_id,
-      !persist_storage /* in_memory */);
 
-  if (GetOwnerSiteURL().SchemeIs(extensions::kExtensionScheme)) {
-    auto owner_config =
-        extensions::util::GetStoragePartitionConfigForExtensionId(
-            GetOwnerSiteURL().host(), browser_context());
-    if (browser_context()->IsOffTheRecord()) {
-      DCHECK(owner_config.in_memory());
-    }
-    if (!owner_config.is_default()) {
-      partition_config.set_fallback_to_partition_domain_for_blob_urls(
-          owner_config.in_memory()
-              ? content::StoragePartitionConfig::FallbackMode::
-                    kFallbackPartitionInMemory
-              : content::StoragePartitionConfig::FallbackMode::
-                    kFallbackPartitionOnDisk);
-      DCHECK(owner_config == partition_config.GetFallbackForBlobUrls().value());
-    }
-  }
+  content::StoragePartitionConfig partition_config =
+      ExtensionsBrowserClient::Get()->GetWebViewStoragePartitionConfig(
+          browser_context(), owner_render_frame_host->GetSiteInstance(),
+          storage_partition_id, /*in_memory=*/!persist_storage);
 
   // If we already have a webview tag in the same app using the same storage
   // partition, we should use the same SiteInstance so the existing tag and
@@ -411,6 +398,7 @@ void WebViewGuest::CreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
   WebContents::CreateParams params(browser_context(),
                                    std::move(guest_site_instance));
   params.guest_delegate = this;
+  SetCreateParams(create_params, params);
   std::unique_ptr<WebContents> new_contents = WebContents::Create(params);
 
   // Grant access to the origin of the embedder to the guest process. This
@@ -473,7 +461,51 @@ void WebViewGuest::DidInitialize(const base::Value::Dict& create_params) {
   // requests.
   PushWebViewStateToIOThread(web_contents()->GetPrimaryMainFrame());
 
+  MaybeAddToOpenersTabStrip(create_params);
+
   ApplyAttributes(create_params);
+}
+
+void WebViewGuest::MaybeRecreateGuestContents(
+    content::WebContents* embedder_web_contents) {
+  if (!AreWebviewMPArchBehaviorsEnabled(browser_context())) {
+    return;
+  }
+
+  DCHECK(GetCreateParams().has_value());
+  auto& [create_params, web_contents_create_params] = *GetCreateParams();
+  DCHECK_EQ(web_contents_create_params.guest_delegate, this);
+  auto new_web_contents_create_params = web_contents_create_params;
+  new_web_contents_create_params.renderer_initiated_creation = false;
+
+  if (!new_web_contents_create_params.opener_suppressed) {
+    owner_web_contents()->GetPrimaryMainFrame()->AddMessageToConsole(
+        blink::mojom::ConsoleMessageLevel::kWarning,
+        "A <webview> is being attached to a window other than the window of "
+        "its opener <webview>. The window reference the opener <webview> "
+        "obtained from window.open will be invalidated. To debug whether this "
+        "is causing breakage, see "
+        "chrome://flags/#enable-webview-tag-mparch-behavior. The "
+        "ChromeAppsWebViewPermissiveBehaviorAllowed enterprise policy may be "
+        "used to temporarily revert this behavior.");
+  }
+
+  ClearOwnedGuestContents();
+  SetNewOwnerWebContents(embedder_web_contents);
+
+  std::unique_ptr<WebContents> new_contents =
+      WebContents::Create(new_web_contents_create_params);
+  InitWithWebContents(create_params, new_contents.get());
+  TakeGuestContentsOwnership(std::move(new_contents));
+
+  // The original guest main frame had a pending navigation which was discarded.
+  // We'll need to trigger the intended navigation in the new guest contents,
+  // but we need to wait until later in the attachment process, after the state
+  // related to the WebRequest API is set up.
+  recreate_initial_nav_ = base::BindOnce(
+      &WebViewGuest::LoadURLWithParams, weak_ptr_factory_.GetWeakPtr(),
+      new_web_contents_create_params.initial_popup_url, content::Referrer(),
+      ui::PAGE_TRANSITION_AUTO_TOPLEVEL, /*force_navigation=*/true, /*params=*/ nullptr);
 }
 
 void WebViewGuest::ClearCodeCache(base::Time remove_since,
@@ -1211,11 +1243,14 @@ void WebViewGuest::WillAttachToEmbedder() {
   // TODO(alexmos): This may be redundant with the call in
   // RenderFrameCreated() and should be cleaned up.
   PushWebViewStateToIOThread(web_contents()->GetPrimaryMainFrame());
+
+  if (recreate_initial_nav_) {
+    SignalWhenReady(std::move(recreate_initial_nav_));
+  }
 }
 
 bool WebViewGuest::RequiresSslInterstitials() const {
-  return !base::FeatureList::IsEnabled(
-      extensions_features::kWebviewTagMPArchBehavior);
+  return !AreWebviewMPArchBehaviorsEnabled(browser_context());
 }
 
 content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(

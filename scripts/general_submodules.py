@@ -29,6 +29,7 @@ exclude_cipd = [
 
 excluded_modules = [
   "third_party/cros_components",
+  "third_party/cardboard/src",
   ]
 
 def main():

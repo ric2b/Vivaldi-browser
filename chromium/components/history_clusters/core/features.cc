@@ -39,7 +39,7 @@ BASE_FEATURE(kJourneysImages,
 
 BASE_FEATURE(kPersistedClusters,
              "HistoryClustersPersistedClusters",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kOmniboxAction,
              "JourneysOmniboxAction",
@@ -85,32 +85,18 @@ BASE_FEATURE(kHistoryClustersNavigationContextClustering,
              "HistoryClustersNavigationContextClustering",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kHideVisits,
+             "HistoryClustersHideVisits",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 }  // namespace internal
-
-BASE_FEATURE(kJourneysSurveyForHistoryEntrypoint,
-             "JourneysSurveyForHistoryEntrypoint",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-const base::FeatureParam<base::TimeDelta>
-    kJourneysSurveyForHistoryEntrypointDelay{
-        &kJourneysSurveyForHistoryEntrypoint, "survey-delay-duration",
-        base::Seconds(6)};
-
-BASE_FEATURE(kJourneysSurveyForOmniboxEntrypoint,
-             "JourneysSurveyForOmniboxEntrypoint",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-const base::FeatureParam<base::TimeDelta>
-    kJourneysSurveyForOmniboxEntrypointDelay{
-        &kJourneysSurveyForOmniboxEntrypoint, "survey-delay-duration",
-        base::Seconds(6)};
 
 BASE_FEATURE(kSidePanelJourneys,
              "SidePanelJourneys",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 // If enabled, and the main flag is also enabled, the Journeys omnibox
 // entrypoints open Journeys in Side Panel rather than the History WebUI.
 const base::FeatureParam<bool> kSidePanelJourneysOpensFromOmnibox{
-    &kSidePanelJourneys, "SidePanelJourneysOpensFromOmnibox", false};
+    &kSidePanelJourneys, "SidePanelJourneysOpensFromOmnibox", true};
 
 }  // namespace history_clusters

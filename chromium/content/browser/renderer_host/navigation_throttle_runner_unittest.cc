@@ -4,7 +4,7 @@
 
 #include "content/browser/renderer_host/navigation_throttle_runner.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/metrics_hashes.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/navigation_throttle.h"
@@ -42,6 +42,12 @@ class DeletingNavigationThrottle : public NavigationThrottle {
   }
 
   NavigationThrottle::ThrottleCheckResult WillProcessResponse() override {
+    deletion_callback_.Run();
+    return NavigationThrottle::PROCEED;
+  }
+
+  NavigationThrottle::ThrottleCheckResult WillCommitWithoutUrlLoader()
+      override {
     deletion_callback_.Run();
     return NavigationThrottle::PROCEED;
   }
@@ -130,6 +136,13 @@ class NavigationThrottleRunnerTest : public RenderViewHostTestHarness,
     } else {
       CHECK_EQ(0, throttle->GetCallCount(
                       TestNavigationThrottle::WILL_PROCESS_RESPONSE));
+    }
+    if (event == NavigationThrottleRunner::Event::WillCommitWithoutUrlLoader) {
+      CHECK_EQ(1, throttle->GetCallCount(
+                      TestNavigationThrottle::WILL_COMMIT_WITHOUT_URL_LOADER));
+    } else {
+      CHECK_EQ(0, throttle->GetCallCount(
+                      TestNavigationThrottle::WILL_COMMIT_WITHOUT_URL_LOADER));
     }
   }
 
@@ -264,10 +277,12 @@ TEST_P(NavigationThrottleRunnerTestWithEvent,
 INSTANTIATE_TEST_SUITE_P(
     AllEvents,
     NavigationThrottleRunnerTestWithEvent,
-    ::testing::Values(NavigationThrottleRunner::Event::WillStartRequest,
-                      NavigationThrottleRunner::Event::WillRedirectRequest,
-                      NavigationThrottleRunner::Event::WillFailRequest,
-                      NavigationThrottleRunner::Event::WillProcessResponse));
+    ::testing::Values(
+        NavigationThrottleRunner::Event::WillStartRequest,
+        NavigationThrottleRunner::Event::WillRedirectRequest,
+        NavigationThrottleRunner::Event::WillFailRequest,
+        NavigationThrottleRunner::Event::WillProcessResponse,
+        NavigationThrottleRunner::Event::WillCommitWithoutUrlLoader));
 
 class NavigationThrottleRunnerTestWithEventAndAction
     : public NavigationThrottleRunnerTest,
@@ -411,10 +426,12 @@ INSTANTIATE_TEST_SUITE_P(
     AllEvents,
     NavigationThrottleRunnerTestWithEventAndAction,
     ::testing::Combine(
-        ::testing::Values(NavigationThrottleRunner::Event::WillStartRequest,
-                          NavigationThrottleRunner::Event::WillRedirectRequest,
-                          NavigationThrottleRunner::Event::WillFailRequest,
-                          NavigationThrottleRunner::Event::WillProcessResponse),
+        ::testing::Values(
+            NavigationThrottleRunner::Event::WillStartRequest,
+            NavigationThrottleRunner::Event::WillRedirectRequest,
+            NavigationThrottleRunner::Event::WillFailRequest,
+            NavigationThrottleRunner::Event::WillProcessResponse,
+            NavigationThrottleRunner::Event::WillCommitWithoutUrlLoader),
         ::testing::Values(NavigationThrottle::PROCEED,
                           NavigationThrottle::CANCEL,
                           NavigationThrottle::CANCEL_AND_IGNORE,
@@ -490,10 +507,12 @@ INSTANTIATE_TEST_SUITE_P(
     AllEvents,
     NavigationThrottleRunnerTestWithEventAndError,
     ::testing::Combine(
-        ::testing::Values(NavigationThrottleRunner::Event::WillStartRequest,
-                          NavigationThrottleRunner::Event::WillRedirectRequest,
-                          NavigationThrottleRunner::Event::WillFailRequest,
-                          NavigationThrottleRunner::Event::WillProcessResponse),
+        ::testing::Values(
+            NavigationThrottleRunner::Event::WillStartRequest,
+            NavigationThrottleRunner::Event::WillRedirectRequest,
+            NavigationThrottleRunner::Event::WillFailRequest,
+            NavigationThrottleRunner::Event::WillProcessResponse,
+            NavigationThrottleRunner::Event::WillCommitWithoutUrlLoader),
         ::testing::Values(net::ERR_BLOCKED_BY_ADMINISTRATOR, net::ERR_ABORTED),
         ::testing::Values(absl::nullopt, "<html><body>test</body></html>")));
 

@@ -327,7 +327,7 @@ void BrowserSavePasswordProgressLogger::LogPasswordForm(
   }
   log.Set(GetStringFromID(STRING_PASSWORD_GENERATED),
           form.type == PasswordForm::Type::kGenerated);
-  log.Set(GetStringFromID(STRING_TIMES_USED), form.times_used);
+  log.Set(GetStringFromID(STRING_TIMES_USED), form.times_used_in_html_form);
   log.Set(GetStringFromID(STRING_PSL_MATCH), form.is_public_suffix_match);
   LogValue(label, base::Value(std::move(log)));
 }
@@ -349,7 +349,9 @@ void BrowserSavePasswordProgressLogger::LogPasswordRequirements(
 }
 
 void BrowserSavePasswordProgressLogger::SendLog(const std::string& log) {
-  LOG_AF(*log_manager_) << log;
+  LOG_AF(*log_manager_) << autofill::Tag{"div"}
+                        << autofill::Attrib{"class", "preserve-white-space"}
+                        << log << autofill::CTag{"div"};
 }
 
 std::string BrowserSavePasswordProgressLogger::PasswordAttributeLogString(

@@ -76,8 +76,8 @@ void SetProcessTrackDescriptor(int64_t process_start_timestamp) {
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-  perfetto::TrackEvent::SetTrackDescriptor(process_track,
-                                           std::move(process_track_desc));
+  base::TrackEvent::SetTrackDescriptor(process_track,
+                                       std::move(process_track_desc));
 }
 
 namespace {
@@ -96,7 +96,7 @@ void FillThreadTrack(const perfetto::ThreadTrack& track, const char* name) {
     desc.mutable_chrome_thread()->set_thread_type(thread_type);
   }
 
-  perfetto::TrackEvent::SetTrackDescriptor(track, std::move(desc));
+  base::TrackEvent::SetTrackDescriptor(track, std::move(desc));
 }
 
 // Set track descriptors for all threads that exist in the current process
@@ -138,7 +138,7 @@ TrackNameRecorder::TrackNameRecorder()
     : process_start_timestamp_(
           TRACE_TIME_TICKS_NOW().since_origin().InNanoseconds()) {
   base::ThreadIdNameManager::GetInstance()->AddObserver(this);
-  perfetto::TrackEvent::AddSessionObserver(this);
+  base::TrackEvent::AddSessionObserver(this);
   SetThreadTrackDescriptors();
 }
 
@@ -155,16 +155,6 @@ void TrackNameRecorder::OnSetup(const perfetto::DataSourceBase::SetupArgs&) {
 }
 
 void TrackNameRecorder::OnStop(const perfetto::DataSourceBase::StopArgs&) {
-  SetProcessTrackDescriptor(process_start_timestamp_);
-}
-
-void TrackNameRecorder::WillClearIncrementalState(
-    const perfetto::DataSourceBase::ClearIncrementalStateArgs&) {
-  // We periodically re-set the process track descriptor to keep track of
-  // changing process labels. Note that this leads to the descriptor being
-  // written twice, once before the state reset and once immediately after.
-  // TODO(khokhlov): Make it possible to set the track descriptor but not
-  // write it to the trace to save a little trace size here.
   SetProcessTrackDescriptor(process_start_timestamp_);
 }
 

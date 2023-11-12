@@ -6,7 +6,7 @@
 
 #include <tuple>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "components/remote_cocoa/app_shim/alert.h"
 #include "components/remote_cocoa/app_shim/color_panel_bridge.h"
@@ -52,7 +52,7 @@ class NativeWidgetBridgeOwner : public NativeWidgetNSWindowHostHelper {
   // NativeWidgetNSWindowHostHelper:
   id GetNativeViewAccessible() override {
     if (!remote_accessibility_element_) {
-      base::ProcessId browser_pid = base::kNullProcessId;
+      int64_t browser_pid = 0;
       std::vector<uint8_t> element_token;
       host_remote_->GetRootViewAccessibilityToken(&browser_pid, &element_token);
       [NSAccessibilityRemoteUIElement

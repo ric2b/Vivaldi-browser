@@ -98,6 +98,7 @@ source_set("v4l2") {
     ":libv4l2_stubs",
     ":v4l2_status",
     "//base",
+    "//gpu/command_buffer/service:gles2",
     "//gpu/ipc/common",
     "//gpu/ipc/service",
     "//media",
@@ -190,6 +191,7 @@ executable("v4l2_stateless_decoder") {
     "//media:test_support",
     "//media/gpu:common",
     "//media/parsers",
+    "//third_party/libyuv",
   ]
 
   if (use_libgav1_parser) {

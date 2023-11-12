@@ -7,19 +7,23 @@
 #include "base/check_op.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/device_activity/churn_cohort_use_case_impl.h"
+#include "chromeos/ash/components/device_activity/churn_observation_use_case_impl.h"
 #include "chromeos/ash/components/device_activity/daily_use_case_impl.h"
 #include "chromeos/ash/components/device_activity/device_active_use_case.h"
 #include "chromeos/ash/components/device_activity/device_activity_client.h"
-#include "chromeos/ash/components/device_activity/first_active_use_case_impl.h"
 #include "chromeos/ash/components/device_activity/fresnel_pref_names.h"
-#include "chromeos/ash/components/device_activity/monthly_use_case_impl.h"
 #include "chromeos/ash/components/device_activity/twenty_eight_day_active_use_case_impl.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "components/prefs/pref_registry_simple.h"
+#include "components/prefs/pref_service.h"
 #include "components/version_info/channel.h"
 #include "google_apis/google_api_keys.h"
 #include "third_party/private_membership/src/private_membership_rlwe_client.h"
@@ -60,13 +64,29 @@ static const std::unordered_set<policy::DeviceMode>& DeviceModeEnterprise() {
 // TODO(https://crbug.com/1267432): Enable passing base url as a runtime flag.
 const char kFresnelBaseUrl[] = "https://crosfresnel-pa.googleapis.com";
 
+// Number of minutes to wait before retrying
+// reading the .oobe_completed file again.
+constexpr base::TimeDelta kOobeReadFailedRetryDelay = base::Minutes(60);
+
+// Number of times to retry before failing to report any device actives.
+constexpr int kNumberOfRetriesBeforeFail = 120;
+
 // Count the number of PSM device active secret that is set.
 const char kDeviceActiveControllerPsmDeviceActiveSecretIsSet[] =
     "Ash.DeviceActiveController.PsmDeviceActiveSecretIsSet";
 
+// Count the number of devices that are testimage builds.
+const char kDeviceActiveControllerIsTestImageDevice[] =
+    "Ash.DeviceActiveController.IsTestImageDevice";
+
 void RecordPsmDeviceActiveSecretIsSet(bool is_set) {
   base::UmaHistogramBoolean(kDeviceActiveControllerPsmDeviceActiveSecretIsSet,
                             is_set);
+}
+
+void RecordIsTestImageDevice(bool is_test_image) {
+  base::UmaHistogramBoolean(kDeviceActiveControllerIsTestImageDevice,
+                            is_test_image);
 }
 
 class PsmDelegateImpl : public PsmDelegateInterface {
@@ -97,12 +117,20 @@ void DeviceActivityController::RegisterPrefs(PrefRegistrySimple* registry) {
   const base::Time unix_epoch = base::Time::UnixEpoch();
   registry->RegisterTimePref(prefs::kDeviceActiveLastKnownDailyPingTimestamp,
                              unix_epoch);
-  registry->RegisterTimePref(prefs::kDeviceActiveLastKnownMonthlyPingTimestamp,
-                             unix_epoch);
-  registry->RegisterTimePref(
-      prefs::kDeviceActiveLastKnownFirstActivePingTimestamp, unix_epoch);
   registry->RegisterTimePref(
       prefs::kDeviceActiveLastKnown28DayActivePingTimestamp, unix_epoch);
+  registry->RegisterTimePref(
+      prefs::kDeviceActiveChurnCohortMonthlyPingTimestamp, unix_epoch);
+  registry->RegisterTimePref(
+      prefs::kDeviceActiveChurnObservationMonthlyPingTimestamp, unix_epoch);
+  registry->RegisterIntegerPref(prefs::kDeviceActiveLastKnownChurnActiveStatus,
+                                0);
+  registry->RegisterBooleanPref(
+      prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus0, false);
+  registry->RegisterBooleanPref(
+      prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus1, false);
+  registry->RegisterBooleanPref(
+      prefs::kDeviceActiveLastKnownIsActiveCurrentPeriodMinus2, false);
 }
 
 // static
@@ -159,24 +187,53 @@ DeviceActivityController::DeviceActivityController(
     const ChromeDeviceMetadataParameters& chrome_passed_device_params,
     PrefService* local_state,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    base::Time chrome_first_run_time)
+    base::Time chrome_first_run_time,
+    base::RepeatingCallback<base::TimeDelta()> check_oobe_completed_callback)
     : chrome_first_run_time_(chrome_first_run_time),
       chrome_passed_device_params_(chrome_passed_device_params),
-      statistics_provider_(
-          chromeos::system::StatisticsProvider::GetInstance()) {
+      statistics_provider_(system::StatisticsProvider::GetInstance()),
+      oobe_completed_timer_(std::make_unique<base::OneShotTimer>()) {
   DeviceActivityClient::RecordDeviceActivityMethodCalled(
       DeviceActivityClient::DeviceActivityMethod::
           kDeviceActivityControllerConstructor);
 
   DCHECK(local_state);
   DCHECK(!g_ash_device_activity_controller);
+
   g_ash_device_activity_controller = this;
+
+  // Halt if device is a testimage/unknown channel.
+  if (chrome_passed_device_params.chromeos_channel ==
+      version_info::Channel::UNKNOWN) {
+    RecordIsTestImageDevice(true);
+    LOG(ERROR) << "Halt - Client should enter device active reporting logic. "
+               << "Unknown and test image channels should not be counted as "
+               << "legitimate device counts.";
+    return;
+  } else {
+    RecordIsTestImageDevice(false);
+  }
+
+  // Check if active status value is set in local state. If not set, we will
+  // attempt to restore from preserved file in the device activity client.
+  // If set, override the |churn_active_status_|. If both layers of caching
+  // is empty, we will perform check membership requests on the cohort requests
+  // (contains active status objects) to determine the last known value.
+  int churn_active_value =
+      local_state->GetInteger(prefs::kDeviceActiveLastKnownChurnActiveStatus);
+  if (churn_active_value == 0) {
+    LOG(ERROR) << "Active status is not set in the local state.";
+    LOG(ERROR) << "Setting value for |churn_active_status_ptr_| to 0.";
+  }
+
+  churn_active_status_.InitializeValue(churn_active_value);
 
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&device_activity::DeviceActivityController::Start,
                      weak_factory_.GetWeakPtr(), local_state,
-                     url_loader_factory),
+                     url_loader_factory,
+                     std::move(check_oobe_completed_callback)),
       DeviceActivityController::DetermineStartUpDelay(chrome_first_run_time));
 }
 
@@ -184,18 +241,89 @@ DeviceActivityController::~DeviceActivityController() {
   DeviceActivityClient::RecordDeviceActivityMethodCalled(
       DeviceActivityClient::DeviceActivityMethod::
           kDeviceActivityControllerDestructor);
-
   DCHECK_EQ(this, g_ash_device_activity_controller);
   Stop();
   g_ash_device_activity_controller = nullptr;
 }
 
+int DeviceActivityController::GetRetryOobeCompletedCountForTesting() const {
+  return retry_oobe_completed_count_;
+}
+
+base::OneShotTimer*
+DeviceActivityController::GetOobeCompletedTimerForTesting() {
+  DCHECK(oobe_completed_timer_.get() != nullptr);
+  return oobe_completed_timer_.get();
+}
+
 void DeviceActivityController::Start(
     PrefService* local_state,
-    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    base::RepeatingCallback<base::TimeDelta()> check_oobe_completed_callback) {
   DeviceActivityClient::RecordDeviceActivityMethodCalled(
       DeviceActivityClient::DeviceActivityMethod::
           kDeviceActivityControllerStart);
+
+  CheckOobeCompletedInWorker(local_state, url_loader_factory,
+                             std::move(check_oobe_completed_callback));
+}
+
+void DeviceActivityController::Stop() {
+  if (da_client_network_) {
+    da_client_network_.reset();
+  }
+}
+
+void DeviceActivityController::CheckOobeCompletedInWorker(
+    PrefService* local_state,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    base::RepeatingCallback<base::TimeDelta()> check_oobe_completed_callback) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(check_oobe_completed_callback),
+      base::BindOnce(&DeviceActivityController::OnOobeFileWritten,
+                     weak_factory_.GetWeakPtr(), local_state,
+                     url_loader_factory, check_oobe_completed_callback));
+}
+
+void DeviceActivityController::OnOobeFileWritten(
+    PrefService* local_state,
+    scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
+    base::RepeatingCallback<base::TimeDelta()> check_oobe_completed_callback,
+    base::TimeDelta time_since_oobe_file_written) {
+  // We block if the oobe completed file is not written.
+  // ChromeOS devices should go through oobe to be considered a real device.
+  // The ActivateDate is also only set after oobe is written.
+  if (retry_oobe_completed_count_ >= kNumberOfRetriesBeforeFail) {
+    LOG(ERROR) << "Retry failed - .oobe_completed file was not written for "
+               << "1 minute after retrying 120 times. "
+               << "There was a 60 minute wait between each retry and spanned "
+               << "5 days.";
+    return;
+  }
+
+  if (time_since_oobe_file_written < base::Minutes(1)) {
+    retry_oobe_completed_count_ += 1;
+
+    LOG(ERROR) << "Time since oobe file created was less than 1 minute. "
+               << std::endl
+               << "Wait and retry again after 1 minute to ensure that "
+               << "the ActivateDate VPD field is set. " << std::endl
+               << "TimeDelta since oobe flag file was created = "
+               << time_since_oobe_file_written
+               << ". Retry count = " << retry_oobe_completed_count_;
+
+    oobe_completed_timer_->Start(
+        FROM_HERE, kOobeReadFailedRetryDelay,
+        base::BindOnce(&DeviceActivityController::CheckOobeCompletedInWorker,
+                       weak_factory_.GetWeakPtr(), local_state,
+                       url_loader_factory,
+                       std::move(check_oobe_completed_callback)));
+
+    return;
+  }
 
   // Wrap with callback from |psm_device_active_secret_| retrieval using
   // |SessionManagerClient| DBus.
@@ -239,33 +367,28 @@ void DeviceActivityController::OnMachineStatisticsLoaded(
       DeviceActivityClient::DeviceActivityMethod::
           kDeviceActivityControllerOnMachineStatisticsLoaded);
 
-  // Initialize all device active use cases, sorted by
-  // smallest to largest window. i.e. Daily > Monthly > First Active.
   std::vector<std::unique_ptr<DeviceActiveUseCase>> use_cases;
   use_cases.push_back(std::make_unique<DailyUseCaseImpl>(
-      psm_device_active_secret, chrome_passed_device_params_, local_state,
-      std::make_unique<PsmDelegateImpl>()));
-  use_cases.push_back(std::make_unique<MonthlyUseCaseImpl>(
       psm_device_active_secret, chrome_passed_device_params_, local_state,
       std::make_unique<PsmDelegateImpl>()));
   use_cases.push_back(std::make_unique<TwentyEightDayActiveUseCaseImpl>(
       psm_device_active_secret, chrome_passed_device_params_, local_state,
       std::make_unique<PsmDelegateImpl>()));
-  use_cases.push_back(std::make_unique<FirstActiveUseCaseImpl>(
-      psm_device_active_secret, chrome_passed_device_params_, local_state,
+  use_cases.push_back(std::make_unique<ChurnCohortUseCaseImpl>(
+      &churn_active_status_, psm_device_active_secret,
+      chrome_passed_device_params_, local_state,
+      std::make_unique<PsmDelegateImpl>()));
+  use_cases.push_back(std::make_unique<ChurnObservationUseCaseImpl>(
+      &churn_active_status_, psm_device_active_secret,
+      chrome_passed_device_params_, local_state,
       std::make_unique<PsmDelegateImpl>()));
 
   da_client_network_ = std::make_unique<DeviceActivityClient>(
+      &churn_active_status_, local_state,
       NetworkHandler::Get()->network_state_handler(), url_loader_factory,
       std::make_unique<base::RepeatingTimer>(), kFresnelBaseUrl,
-      google_apis::GetFresnelAPIKey(), std::move(use_cases),
-      chrome_first_run_time_);
-}
-
-void DeviceActivityController::Stop() {
-  if (da_client_network_) {
-    da_client_network_.reset();
-  }
+      google_apis::GetFresnelAPIKey(), chrome_first_run_time_,
+      std::move(use_cases));
 }
 
 }  // namespace ash::device_activity

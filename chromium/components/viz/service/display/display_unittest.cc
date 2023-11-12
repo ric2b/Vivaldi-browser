@@ -11,13 +11,14 @@
 #include <unordered_map>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/null_task_runner.h"
@@ -80,6 +81,8 @@ namespace {
 static constexpr FrameSinkId kArbitraryFrameSinkId(3, 3);
 static constexpr FrameSinkId kAnotherFrameSinkId(4, 4);
 static constexpr FrameSinkId kAnotherFrameSinkId2(5, 5);
+
+const uint64_t kBeginFrameSourceId = 1337;
 
 class TestSoftwareOutputDevice : public SoftwareOutputDevice {
  public:
@@ -3431,7 +3434,31 @@ TEST_F(DisplayTest, DrawOcclusionWithLargeDrawQuad) {
   }
 }
 
-TEST_F(DisplayTest, CompositorFrameWithPresentationToken) {
+// Supports testing features::OnBeginFrameAcks, which changes the expectations
+// of what IPCs are sent to the CompositorFrameSinkClient. When enabled
+// OnBeginFrame also handles ReturnResources as well as
+// DidReceiveCompositorFrameAck.
+class OnBeginFrameAcksDisplayTest : public DisplayTest,
+                                    public testing::WithParamInterface<bool> {
+ public:
+  OnBeginFrameAcksDisplayTest();
+  ~OnBeginFrameAcksDisplayTest() override = default;
+
+  bool BeginFrameAcksEnabled() const { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+OnBeginFrameAcksDisplayTest::OnBeginFrameAcksDisplayTest() {
+  if (BeginFrameAcksEnabled()) {
+    scoped_feature_list_.InitAndEnableFeature(features::kOnBeginFrameAcks);
+  } else {
+    scoped_feature_list_.InitAndDisableFeature(features::kOnBeginFrameAcks);
+  }
+}
+
+TEST_P(OnBeginFrameAcksDisplayTest, CompositorFrameWithPresentationToken) {
   RendererSettings settings;
   id_allocator_.GenerateId();
   const LocalSurfaceId local_surface_id(
@@ -3462,8 +3489,10 @@ TEST_F(DisplayTest, CompositorFrameWithPresentationToken) {
     CompositorFrame frame =
         CompositorFrameBuilder()
             .AddRenderPass(gfx::Rect(sub_surface_size), gfx::Rect())
+            .SetBeginFrameSourceId(kBeginFrameSourceId)
             .Build();
-    EXPECT_CALL(sub_client, DidReceiveCompositorFrameAck(_)).Times(1);
+    EXPECT_CALL(sub_client, DidReceiveCompositorFrameAck(_))
+        .Times(BeginFrameAcksEnabled() ? 0 : 1);
     frame_token_1 = frame.metadata.frame_token;
     sub_support->SubmitCompositorFrame(sub_local_surface_id, std::move(frame));
   }
@@ -3513,10 +3542,12 @@ TEST_F(DisplayTest, CompositorFrameWithPresentationToken) {
     CompositorFrame frame = CompositorFrameBuilder()
                                 .AddRenderPass(gfx::Rect(sub_surface_size),
                                                gfx::Rect(sub_surface_size))
+                                .SetBeginFrameSourceId(kBeginFrameSourceId)
                                 .Build();
     frame_token_2 = frame.metadata.frame_token;
 
-    EXPECT_CALL(sub_client, DidReceiveCompositorFrameAck(_)).Times(1);
+    EXPECT_CALL(sub_client, DidReceiveCompositorFrameAck(_))
+        .Times(BeginFrameAcksEnabled() ? 0 : 1);
     sub_support->SubmitCompositorFrame(sub_local_surface_id, std::move(frame));
 
     display_->DrawAndSwap({base::TimeTicks::Now(), base::TimeTicks::Now()});
@@ -3532,15 +3563,25 @@ TEST_F(DisplayTest, CompositorFrameWithPresentationToken) {
     CompositorFrame frame =
         CompositorFrameBuilder()
             .AddRenderPass(gfx::Rect(sub_surface_size), gfx::Rect())
+            .SetBeginFrameSourceId(kBeginFrameSourceId)
             .Build();
 
-    EXPECT_CALL(sub_client, DidReceiveCompositorFrameAck(_)).Times(1);
+    EXPECT_CALL(sub_client, DidReceiveCompositorFrameAck(_))
+        .Times(BeginFrameAcksEnabled() ? 0 : 1);
     sub_support->SubmitCompositorFrame(sub_local_surface_id, std::move(frame));
 
     display_->DrawAndSwap({base::TimeTicks::Now(), base::TimeTicks::Now()});
     RunUntilIdle();
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(,
+                         OnBeginFrameAcksDisplayTest,
+                         testing::Bool(),
+                         [](auto& info) {
+                           return info.param ? "BeginFrameAcks"
+                                             : "CompositoFrameAcks";
+                         });
 
 TEST_F(DisplayTest, BeginFrameThrottling) {
   id_allocator_.GenerateId();

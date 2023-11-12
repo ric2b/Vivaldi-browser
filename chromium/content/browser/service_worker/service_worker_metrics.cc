@@ -7,7 +7,7 @@
 #include <limits>
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
@@ -126,6 +126,8 @@ const char* EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_FETCH_FENCED_FRAME";
     case ServiceWorkerMetrics::EventType::BYPASS_MAIN_RESOURCE:
       return "_BYPASS_MAIN_RESOURCE";
+    case ServiceWorkerMetrics::EventType::SKIP_EMPTY_FETCH_HANDLER:
+      return "_SKIP_EMPTY_FETCH_HANDLER";
   }
   return "_UNKNOWN";
 }
@@ -190,6 +192,8 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Fetch Fenced Frame";
     case ServiceWorkerMetrics::EventType::BYPASS_MAIN_RESOURCE:
       return "_BYPASS_MAIN_RESOURCE";
+    case ServiceWorkerMetrics::EventType::SKIP_EMPTY_FETCH_HANDLER:
+      return "Skip Empty Fetch Handler";
   }
   NOTREACHED() << "Got unexpected event type: " << static_cast<int>(event_type);
   return "error";
@@ -340,12 +344,10 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
                                  time);
       break;
     case EventType::NOTIFICATION_CLICK:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.NotificationClickEvent.Time",
-                                 time);
+      // Do nothing: the histogram has been removed.
       break;
     case EventType::NOTIFICATION_CLOSE:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.NotificationCloseEvent.Time",
-                                 time);
+      // Do nothing: the histogram has been removed.
       break;
     case EventType::PUSH:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.PushEvent.Time", time);
@@ -355,7 +357,7 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
                                  time);
       break;
     case EventType::EXTERNAL_REQUEST:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ExternalRequest.Time", time);
+      // Do nothing: the histogram has been removed.
       break;
     case EventType::PAYMENT_REQUEST:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.PaymentRequestEvent.Time",
@@ -392,16 +394,17 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
           "ServiceWorker.PeriodicBackgroundSyncEvent.Time", time);
       break;
     case EventType::CONTENT_DELETE:
-      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ContentDeleteEvent.Time", time);
+      // Do nothing: the histogram has been removed.
       break;
     case EventType::PUSH_SUBSCRIPTION_CHANGE:
-      UMA_HISTOGRAM_MEDIUM_TIMES(
-          "ServiceWorker.PushSubscriptionChangeEvent.Time", time);
+      // Do nothing: the histogram has been removed.
       break;
     case EventType::BYPASS_MAIN_RESOURCE:
     // The bypass main resource should not be sent as an event.
     case EventType::NAVIGATION_HINT:
     // The navigation hint should not be sent as an event.
+    case EventType::SKIP_EMPTY_FETCH_HANDLER:
+    // The skip empty fetch handler should not be sent as an event.
     case EventType::UNKNOWN:
       NOTREACHED() << "Invalid event type";
       break;

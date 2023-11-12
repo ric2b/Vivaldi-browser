@@ -5,7 +5,6 @@
 #include "net/socket/udp_client_socket.h"
 
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_change_notifier.h"
@@ -177,6 +176,11 @@ void UDPClientSocket::SetDontClose(bool dont_close) {
 #if BUILDFLAG(IS_POSIX)
   socket_.SetDontClose(dont_close);
 #endif
+}
+
+void UDPClientSocket::AdoptOpenedSocket(AddressFamily address_family,
+                                        SocketDescriptor socket) {
+  socket_.AdoptOpenedSocket(address_family, socket);
 }
 
 }  // namespace net

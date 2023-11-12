@@ -6,19 +6,22 @@
 
 #include <dispatch/dispatch.h>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #import "base/ios/ns_error_util.h"
 #include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/autofill/ios/browser/autofill_java_script_feature.h"
 #import "components/autofill/ios/browser/suggestion_controller_java_script_feature.h"
 #import "components/autofill/ios/form_util/form_handlers_java_script_feature.h"
+#import "components/language/ios/browser/language_detection_java_script_feature.h"
 #import "components/password_manager/ios/password_manager_java_script_feature.h"
 #import "components/security_interstitials/core/unsafe_resource.h"
 #include "components/ssl_errors/error_info.h"
 #include "components/strings/grit/components_strings.h"
 #import "components/translate/ios/browser/translate_java_script_feature.h"
+#import "ios/components/security_interstitials/https_only_mode/feature.h"
+#import "ios/components/security_interstitials/ios_security_interstitial_java_script_feature.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_container.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_error.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_error.h"
@@ -51,26 +54,6 @@
 #endif
 
 namespace ios_web_view {
-namespace {
-// Returns an autoreleased string containing the JavaScript loaded from a
-// bundled resource file with the given name (excluding extension).
-NSString* GetPageScript(NSString* script_file_name) {
-  DCHECK(script_file_name);
-  NSString* path =
-      [base::mac::FrameworkBundle() pathForResource:script_file_name
-                                             ofType:@"js"];
-  DCHECK(path) << "Script file not found: "
-               << base::SysNSStringToUTF8(script_file_name) << ".js";
-  NSError* error = nil;
-  NSString* content = [NSString stringWithContentsOfFile:path
-                                                encoding:NSUTF8StringEncoding
-                                                   error:&error];
-  DCHECK(!error) << "Error fetching script: "
-                 << base::SysNSStringToUTF8(error.description);
-  DCHECK(content);
-  return content;
-}
-}  // namespace
 
 WebViewWebClient::WebViewWebClient() = default;
 
@@ -116,22 +99,19 @@ std::vector<web::JavaScriptFeature*> WebViewWebClient::GetJavaScriptFeatures(
   return {autofill::AutofillJavaScriptFeature::GetInstance(),
           autofill::FormHandlersJavaScriptFeature::GetInstance(),
           autofill::SuggestionControllerJavaScriptFeature::GetInstance(),
+          language::LanguageDetectionJavaScriptFeature::GetInstance(),
           password_manager::PasswordManagerJavaScriptFeature::GetInstance(),
+          security_interstitials::IOSSecurityInterstitialJavaScriptFeature::
+              GetInstance(),
           translate::TranslateJavaScriptFeature::GetInstance(),
           WebViewMessageHandlerJavaScriptFeature::GetInstance()};
 }
 
 NSString* WebViewWebClient::GetDocumentStartScriptForMainFrame(
     web::BrowserState* browser_state) const {
-  NSMutableArray* scripts = [NSMutableArray array];
-
   WebViewEarlyPageScriptProvider& provider =
       WebViewEarlyPageScriptProvider::FromBrowserState(browser_state);
-  [scripts addObject:provider.GetScript()];
-
-  [scripts addObject:GetPageScript(@"language_detection")];
-
-  return [scripts componentsJoinedByString:@";"];
+  return provider.GetScript();
 }
 
 std::u16string WebViewWebClient::GetPluginNotSupportedText() const {
@@ -207,6 +187,12 @@ void WebViewWebClient::PrepareErrorPage(
 
 bool WebViewWebClient::EnableLongPressUIContextMenu() const {
   return CWVWebView.chromeContextMenuEnabled;
+}
+
+bool WebViewWebClient::IsMixedContentAutoupgradeEnabled(
+    web::BrowserState* browser_state) const {
+  return base::FeatureList::IsEnabled(
+      security_interstitials::features::kMixedContentAutoupgrade);
 }
 
 }  // namespace ios_web_view

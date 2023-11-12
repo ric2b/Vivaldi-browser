@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
@@ -22,6 +22,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/tab_contents/web_contents_collection.h"
 #include "chrome/browser/themes/theme_service_observer.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper_observer.h"
@@ -36,6 +37,7 @@
 #include "components/sessions/core/session_id.h"
 #include "components/translate/content/browser/content_translate_driver.h"
 #include "components/zoom/zoom_observer.h"
+#include "content/public/browser/fullscreen_types.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -79,6 +81,7 @@ class BrowserCommandController;
 }
 
 namespace content {
+class NavigationHandle;
 class SessionStorageNamespace;
 }
 
@@ -104,6 +107,7 @@ class WebContentsModalDialogHost;
 }
 
 class Browser : public TabStripModelObserver,
+                public WebContentsCollection::Observer,
                 public content::WebContentsDelegate,
                 public ChromeWebModalDialogManagerDelegate,
                 public base::SupportsUserData,
@@ -203,7 +207,11 @@ class Browser : public TabStripModelObserver,
     kSessionRestore,
     kStartupCreator,
     kLastAndUrlsStartupPref,
+    kDeskTemplate,
   };
+
+  // Represents whether a value was known to be explicitly specified.
+  enum class ValueSpecified { kUnknown, kSpecified, kUnspecified };
 
   // The default value for a browser's `restore_id` param.
   static constexpr int kDefaultRestoreId = 0;
@@ -256,6 +264,11 @@ class Browser : public TabStripModelObserver,
 
     // The bounds of the window to open.
     gfx::Rect initial_bounds;
+    // Whether `initial_bounds.origin()` was explicitly specified, if known.
+    // Used to disambiguate coordinate (0,0) from an unspecified location when
+    // parameters originate from the JS Window.open() window features string,
+    // e.g. window.open(... 'left=0,top=0,...') vs window.open(... 'popup,...').
+    ValueSpecified initial_origin_specified = ValueSpecified::kUnknown;
 
     // The workspace the window should open in, if the platform supports it.
     std::string initial_workspace;
@@ -308,7 +321,7 @@ class Browser : public TabStripModelObserver,
     bool can_maximize = true;
 
     // Aspect ratio parameters specific to TYPE_PICTURE_IN_PICTURE.
-    float initial_aspect_ratio = 1.0f;
+    double initial_aspect_ratio = 1.0;
     bool lock_aspect_ratio = false;
 
     // Vivaldi
@@ -703,7 +716,8 @@ class Browser : public TabStripModelObserver,
       content::WebContents* web_contents) override;
   void ExitPictureInPicture() override;
   bool IsBackForwardCacheSupported() override;
-  bool IsPrerender2Supported(content::WebContents& web_contents) override;
+  content::PreloadingEligibility IsPrerender2Supported(
+      content::WebContents& web_contents) override;
   std::unique_ptr<content::WebContents> ActivatePortalWebContents(
       content::WebContents* predecessor_contents,
       std::unique_ptr<content::WebContents> portal_contents) override;
@@ -756,6 +770,11 @@ class Browser : public TabStripModelObserver,
 
   // Sets the browser's user title. Setting it to an empty string clears it.
   void SetWindowUserTitle(const std::string& user_title);
+
+  // Gets the browser for opening chrome:// pages. This will return the opener
+  // browser if the current browser is in picture-in-picture mode, otherwise
+  // returns the current browser.
+  Browser* GetBrowserForOpeningWebUi();
 
   StatusBubble* GetStatusBubbleForTesting();
 
@@ -893,8 +912,6 @@ class Browser : public TabStripModelObserver,
   void RendererResponsive(
       content::WebContents* source,
       content::RenderWidgetHost* render_widget_host) override;
-  void DidNavigatePrimaryMainFramePostCommit(
-      content::WebContents* web_contents) override;
   content::JavaScriptDialogManager* GetJavaScriptDialogManager(
       content::WebContents* source) override;
   bool GuestSaveFrame(content::WebContents* guest_web_contents) override;
@@ -920,8 +937,8 @@ class Browser : public TabStripModelObserver,
   void ExitFullscreenModeForTab(content::WebContents* web_contents) override;
   bool IsFullscreenForTabOrPending(
       const content::WebContents* web_contents) override;
-  bool IsFullscreenForTabOrPending(const content::WebContents* web_contents,
-                                   int64_t* display_id) override;
+  content::FullscreenState GetFullscreenState(
+      const content::WebContents* web_contents) const override;
   blink::mojom::DisplayMode GetDisplayMode(
       const content::WebContents* web_contents) override;
   blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel(
@@ -976,6 +993,11 @@ class Browser : public TabStripModelObserver,
       content::RenderFrameHost* render_frame_host) override;
 #endif
 
+  // WebContentsCollection::Observer:
+  void DidFinishNavigation(
+      content::WebContents* web_contents,
+      content::NavigationHandle* navigation_handle) override;
+
   // Overridden from WebContentsModalDialogManagerDelegate:
   void SetWebContentsBlocked(content::WebContents* web_contents,
                              bool blocked) override;
@@ -987,6 +1009,8 @@ class Browser : public TabStripModelObserver,
                          bool starred) override;
 
   // Overridden from ZoomObserver:
+  void OnZoomControllerDestroyed(
+      zoom::ZoomController* zoom_controller) override;
   void OnZoomChanged(
       const zoom::ZoomController::ZoomChangedEventData& data) override;
 
@@ -1183,10 +1207,7 @@ class Browser : public TabStripModelObserver,
   std::unique_ptr<ScopedProfileKeepAlive> profile_keep_alive_;
 
   // This Browser's window.
-  //
-  // TODO(crbug.com/1298696): pixel_browser_tests breaks with MTECheckedPtr
-  // enabled. Triage.
-  raw_ptr<BrowserWindow, DegradeToNoOpWhenMTE> window_;
+  raw_ptr<BrowserWindow> window_;
 
   std::unique_ptr<TabStripModelDelegate> const tab_strip_model_delegate_;
   std::unique_ptr<TabStripModel> const tab_strip_model_;
@@ -1322,6 +1343,12 @@ class Browser : public TabStripModelObserver,
 #endif
 
   const base::ElapsedTimer creation_timer_;
+
+  // The opener browser of the document picture-in-picture browser. Null if the
+  // current browser is a regular browser.
+  raw_ptr<Browser> opener_browser_ = nullptr;
+
+  WebContentsCollection web_contents_collection_{this};
 
   // Vivaldi
   // True if this is Vivaldi browser object.

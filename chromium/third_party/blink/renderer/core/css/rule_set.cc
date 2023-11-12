@@ -39,12 +39,15 @@
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
 #include "third_party/blink/renderer/core/css/css_selector.h"
 #include "third_party/blink/renderer/core/css/css_selector_list.h"
+#include "third_party/blink/renderer/core/css/selector_checker-inl.h"
+#include "third_party/blink/renderer/core/css/selector_checker.h"
 #include "third_party/blink/renderer/core/css/selector_filter.h"
 #include "third_party/blink/renderer/core/css/style_rule_import.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html/track/text_track_cue.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 
@@ -80,12 +83,13 @@ static inline ValidPropertyFilter DetermineValidPropertyFilter(
       case CSSSelector::kPseudoTargetText:
       case CSSSelector::kPseudoGrammarError:
       case CSSSelector::kPseudoSpellingError:
-        if (RuntimeEnabledFeatures::HighlightInheritanceEnabled())
-          return ValidPropertyFilter::kHighlight;
-        else
-          return ValidPropertyFilter::kHighlightLegacy;
       case CSSSelector::kPseudoHighlight:
-        return ValidPropertyFilter::kHighlight;
+        if (UsesHighlightPseudoInheritance(
+                component->GetPseudoId(component->GetPseudoType()))) {
+          return ValidPropertyFilter::kHighlight;
+        } else {
+          return ValidPropertyFilter::kHighlightLegacy;
+        }
       default:
         break;
     }
@@ -118,7 +122,33 @@ RuleData::RuleData(StyleRule* rule,
       valid_property_filter_(
           static_cast<std::underlying_type_t<ValidPropertyFilter>>(
               DetermineValidPropertyFilter(add_rule_flags, Selector()))),
+      is_entirely_covered_by_bucketing_(
+          false),  // Will be computed in ComputeEntirelyCoveredByBucketing().
+      is_easy_(false),  // Ditto.
       descendant_selector_identifier_hashes_() {}
+
+void RuleData::ComputeEntirelyCoveredByBucketing() {
+  is_easy_ = EasySelectorChecker::IsEasy(&Selector());
+  is_entirely_covered_by_bucketing_ = true;
+  for (const CSSSelector* selector = &Selector(); selector;
+       selector = selector->TagHistory()) {
+    if (!selector->IsCoveredByBucketing()) {
+      is_entirely_covered_by_bucketing_ = false;
+      break;
+    }
+  }
+}
+
+void RuleData::ResetEntirelyCoveredByBucketing() {
+  for (CSSSelector* selector = &MutableSelector(); selector;
+       selector = selector->TagHistory()) {
+    selector->SetCoveredByBucketing(false);
+    if (selector->Relation() != CSSSelector::kSubSelector) {
+      break;
+    }
+  }
+  is_entirely_covered_by_bucketing_ = false;
+}
 
 void RuleData::ComputeBloomFilterHashes() {
 #if DCHECK_IS_ON()
@@ -171,8 +201,9 @@ static void ExtractSelectorValues(const CSSSelector* selector,
       break;
     case CSSSelector::kTag:
       if (selector->TagQName().LocalName() !=
-          CSSSelector::UniversalSelectorAtom())
+          CSSSelector::UniversalSelectorAtom()) {
         tag_name = selector->TagQName().LocalName();
+      }
       break;
     case CSSSelector::kPseudoClass:
     case CSSSelector::kPseudoElement:
@@ -193,6 +224,7 @@ static void ExtractSelectorValues(const CSSSelector* selector,
         case CSSSelector::kPseudoSpatialNavigationInterest:
         case CSSSelector::kPseudoSlotted:
         case CSSSelector::kPseudoSelectorFragmentAnchor:
+        case CSSSelector::kPseudoRoot:
           pseudo_type = selector->GetPseudoType();
           break;
         case CSSSelector::kPseudoWebKitCustomElement:
@@ -267,7 +299,33 @@ static const CSSSelector* ExtractBestSelectorValues(
   return it;
 }
 
-bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
+template <class Func>
+static void MarkAsCoveredByBucketing(CSSSelector& selector,
+                                     Func&& should_mark_func) {
+  if (!RuntimeEnabledFeatures::CSSEasySelectorsEnabled()) {
+    return;
+  }
+  for (CSSSelector* s = &selector;;
+       ++s) {  // Termination condition within loop.
+    if (should_mark_func(*s)) {
+      s->SetCoveredByBucketing(true);
+    }
+
+    // NOTE: We could also have tested single-element :is() and :where()
+    // if the inside matches, but it's very rare, so we save the runtime
+    // here instead. (& in nesting selectors could perhaps be somewhat
+    // more common, but we currently don't bucket on & at all.)
+    //
+    // We could also have taken universal selectors no matter what
+    // should_mark_func() says, but again, we consider that not worth it.
+
+    if (s->IsLastInTagHistory() || s->Relation() != CSSSelector::kSubSelector) {
+      break;
+    }
+  }
+}
+
+void RuleSet::FindBestRuleSetAndAdd(CSSSelector& component,
                                     const RuleData& rule_data) {
   AtomicString id;
   AtomicString class_name;
@@ -289,13 +347,21 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
 
   // Prefer rule sets in order of most likely to apply infrequently.
   if (!id.empty()) {
+    MarkAsCoveredByBucketing(component, [&id](const CSSSelector& selector) {
+      return selector.Match() == CSSSelector::kId && selector.Value() == id;
+    });
     AddToRuleSet(id, id_rules_, rule_data);
-    return true;
+    return;
   }
 
   if (!class_name.empty()) {
+    MarkAsCoveredByBucketing(component,
+                             [&class_name](const CSSSelector& selector) {
+                               return selector.Match() == CSSSelector::kClass &&
+                                      selector.Value() == class_name;
+                             });
     AddToRuleSet(class_name, class_rules_, rule_data);
-    return true;
+    return;
   }
 
   if (!attr_name.empty()) {
@@ -303,7 +369,11 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
     if (attr_name == html_names::kStyleAttr) {
       has_bucket_for_style_attr_ = true;
     }
-    return true;
+    // NOTE: Cannot mark anything as covered by bucketing, since the bucketing
+    // does not verify namespaces. (We could consider doing so if the namespace
+    // is *, but we'd need to be careful about case sensitivity wrt. legacy
+    // attributes.)
+    return;
   }
 
   if (!custom_pseudo_element_name.empty()) {
@@ -315,36 +385,54 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
     DCHECK(class_name.empty());
     AddToRuleSet(custom_pseudo_element_name, ua_shadow_pseudo_element_rules_,
                  rule_data);
-    return true;
+    // TODO: Mark as covered by bucketing?
+    return;
   }
 
   if (!part_name.empty()) {
     AddToRuleSet(part_pseudo_rules_, rule_data);
-    return true;
+    // TODO: Mark as covered by bucketing?
+    return;
   }
 
   switch (pseudo_type) {
     case CSSSelector::kPseudoCue:
       AddToRuleSet(cue_pseudo_rules_, rule_data);
-      return true;
+      return;
     case CSSSelector::kPseudoLink:
     case CSSSelector::kPseudoVisited:
     case CSSSelector::kPseudoAnyLink:
     case CSSSelector::kPseudoWebkitAnyLink:
+      MarkAsCoveredByBucketing(component, [](const CSSSelector& selector) {
+        // We can only mark kPseudoAnyLink as checked by bucketing;
+        // CollectMatchingRules() does not pre-check e.g. whether
+        // the link is visible or not.
+        return selector.Match() == CSSSelector::kPseudoClass &&
+               (selector.GetPseudoType() == CSSSelector::kPseudoAnyLink ||
+                selector.GetPseudoType() == CSSSelector::kPseudoWebkitAnyLink);
+      });
       AddToRuleSet(link_pseudo_class_rules_, rule_data);
-      return true;
+      return;
     case CSSSelector::kPseudoSpatialNavigationInterest:
       AddToRuleSet(spatial_navigation_interest_class_rules_, rule_data);
-      return true;
+      return;
     case CSSSelector::kPseudoFocus:
+      MarkAsCoveredByBucketing(component, [](const CSSSelector& selector) {
+        return selector.Match() == CSSSelector::kPseudoClass &&
+               selector.GetPseudoType() == CSSSelector::kPseudoFocus;
+      });
       AddToRuleSet(focus_pseudo_class_rules_, rule_data);
-      return true;
+      return;
     case CSSSelector::kPseudoSelectorFragmentAnchor:
       AddToRuleSet(selector_fragment_anchor_rules_, rule_data);
-      return true;
+      return;
     case CSSSelector::kPseudoFocusVisible:
+      MarkAsCoveredByBucketing(component, [](const CSSSelector& selector) {
+        return selector.Match() == CSSSelector::kPseudoClass &&
+               selector.GetPseudoType() == CSSSelector::kPseudoFocusVisible;
+      });
       AddToRuleSet(focus_visible_pseudo_class_rules_, rule_data);
-      return true;
+      return;
     case CSSSelector::kPseudoPlaceholder:
     case CSSSelector::kPseudoFileSelectorButton:
       if (it->FollowsPart()) {
@@ -357,24 +445,41 @@ bool RuleSet::FindBestRuleSetAndAdd(const CSSSelector& component,
                                : shadow_element_names::kPseudoInputPlaceholder;
         AddToRuleSet(name, ua_shadow_pseudo_element_rules_, rule_data);
       }
-      return true;
+      return;
     case CSSSelector::kPseudoHost:
     case CSSSelector::kPseudoHostContext:
       AddToRuleSet(shadow_host_rules_, rule_data);
-      return true;
+      return;
     case CSSSelector::kPseudoSlotted:
       AddToRuleSet(slotted_pseudo_element_rules_, rule_data);
-      return true;
+      return;
+    case CSSSelector::kPseudoRoot:
+      MarkAsCoveredByBucketing(component, [](const CSSSelector& selector) {
+        return selector.Match() == CSSSelector::kPseudoClass &&
+               selector.GetPseudoType() == CSSSelector::kPseudoRoot;
+      });
+      AddToRuleSet(root_element_rules_, rule_data);
+      return;
     default:
       break;
   }
 
   if (!tag_name.empty()) {
+    // Covered by bucketing only if the selector would match any namespace
+    // (since the bucketing does not take the namespace into account).
+    MarkAsCoveredByBucketing(
+        component, [&tag_name](const CSSSelector& selector) {
+          return selector.Match() == CSSSelector::kTag &&
+                 selector.TagQName().LocalName() == tag_name &&
+                 selector.TagQName().NamespaceURI() == g_star_atom;
+        });
     AddToRuleSet(tag_name, tag_rules_, rule_data);
-    return true;
+    return;
   }
 
-  return false;
+  // If we didn't find a specialized map to stick it in, file under universal
+  // rules.
+  AddToRuleSet(universal_rules_, rule_data);
 }
 
 void RuleSet::AddRule(StyleRule* rule,
@@ -398,14 +503,11 @@ void RuleSet::AddRule(StyleRule* rule,
   ++rule_count_;
   if (features_.CollectFeaturesFromSelector(rule_data.Selector(),
                                             style_scope) ==
-      RuleFeatureSet::kSelectorNeverMatches)
+      RuleFeatureSet::kSelectorNeverMatches) {
     return;
-
-  if (!FindBestRuleSetAndAdd(rule_data.Selector(), rule_data)) {
-    // If we didn't find a specialized map to stick it in, file under universal
-    // rules.
-    AddToRuleSet(universal_rules_, rule_data);
   }
+
+  FindBestRuleSetAndAdd(rule_data.MutableSelector(), rule_data);
 
   // If the rule has CSSSelector::kMatchLink, it means that there is a :visited
   // or :link pseudo-class somewhere in the selector. In those cases, we
@@ -413,6 +515,9 @@ void RuleSet::AddRule(StyleRule* rule,
   // where we are in an unvisited link (kMatchLink), and another which covers
   // the visited link case (kMatchVisited).
   if (rule_data.LinkMatchType() == CSSSelector::kMatchLink) {
+    // Now the selector will be in two buckets.
+    rule_data.ResetEntirelyCoveredByBucketing();
+
     RuleData visited_dependent(rule, rule_data.SelectorIndex(),
                                rule_data.GetPosition(), extra_specificity,
                                add_rule_flags | kRuleIsVisitedDependent);
@@ -433,13 +538,16 @@ void RuleSet::AddRuleToLayerIntervals(const CascadeLayer* cascade_layer,
   const CascadeLayer* last_interval_layer =
       layer_intervals_.empty() ? implicit_outer_layer_.Get()
                                : layer_intervals_.back().value.Get();
-  if (!cascade_layer)
+  if (!cascade_layer) {
     cascade_layer = implicit_outer_layer_;
-  if (cascade_layer == last_interval_layer)
+  }
+  if (cascade_layer == last_interval_layer) {
     return;
+  }
 
-  if (!cascade_layer)
+  if (!cascade_layer) {
     cascade_layer = EnsureImplicitOuterLayer();
+  }
   layer_intervals_.push_back(Interval<CascadeLayer>(cascade_layer, position));
 }
 
@@ -451,8 +559,9 @@ static void AddRuleToIntervals(const T* value,
                                HeapVector<RuleSet::Interval<T>>& intervals) {
   const T* last_value =
       intervals.empty() ? nullptr : intervals.back().value.Get();
-  if (value == last_value)
+  if (value == last_value) {
     return;
+  }
 
   intervals.push_back(RuleSet::Interval<T>(value, position));
 }
@@ -527,8 +636,7 @@ void RuleSet::AddChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
       AddFontPaletteValuesRule(font_palette_values_rule);
     } else if (auto* font_feature_values_rule =
                    DynamicTo<StyleRuleFontFeatureValues>(rule)) {
-      // TODO(crbug.com/1394327): Handle cascade layers for
-      // @font-feature-values.
+      font_feature_values_rule->SetCascadeLayer(cascade_layer);
       AddFontFeatureValuesRule(font_feature_values_rule);
     } else if (auto* keyframes_rule = DynamicTo<StyleRuleKeyframes>(rule)) {
       keyframes_rule->SetCascadeLayer(cascade_layer);
@@ -565,12 +673,14 @@ void RuleSet::AddChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
                     container_query, sub_layer, style_scope);
     } else if (auto* layer_statement_rule =
                    DynamicTo<StyleRuleLayerStatement>(rule)) {
-      for (const auto& layer_name : layer_statement_rule->GetNames())
+      for (const auto& layer_name : layer_statement_rule->GetNames()) {
         GetOrAddSubLayer(cascade_layer, layer_name);
+      }
     } else if (auto* scope_rule = DynamicTo<StyleRuleScope>(rule)) {
       const StyleScope* inner_style_scope = &scope_rule->GetStyleScope();
-      if (style_scope)
+      if (style_scope) {
         inner_style_scope = inner_style_scope->CopyWithParent(style_scope);
+      }
       AddChildRules(scope_rule->ChildRules(), medium, add_rule_flags,
                     container_query, cascade_layer, inner_style_scope);
     }
@@ -579,8 +689,9 @@ void RuleSet::AddChildRules(const HeapVector<Member<StyleRuleBase>>& rules,
 
 bool RuleSet::MatchMediaForAddRules(const MediaQueryEvaluator& evaluator,
                                     const MediaQuerySet* media_queries) {
-  if (!media_queries)
+  if (!media_queries) {
     return true;
+  }
   bool match_media =
       evaluator.Eval(*media_queries, &features_.MutableMediaQueryResultFlags());
   media_query_set_results_.push_back(
@@ -597,16 +708,18 @@ void RuleSet::AddRulesFromSheet(StyleSheetContents* sheet,
   DCHECK(sheet);
 
   for (const auto& pre_import_layer : sheet->PreImportLayerStatementRules()) {
-    for (const auto& name : pre_import_layer->GetNames())
+    for (const auto& name : pre_import_layer->GetNames()) {
       GetOrAddSubLayer(cascade_layer, name);
+    }
   }
 
   const HeapVector<Member<StyleRuleImport>>& import_rules =
       sheet->ImportRules();
   for (unsigned i = 0; i < import_rules.size(); ++i) {
     StyleRuleImport* import_rule = import_rules[i].Get();
-    if (!MatchMediaForAddRules(medium, import_rule->MediaQueries()))
+    if (!MatchMediaForAddRules(medium, import_rule->MediaQueries())) {
       continue;
+    }
     CascadeLayer* import_layer = cascade_layer;
     if (import_rule->IsLayered()) {
       import_layer =
@@ -644,17 +757,22 @@ void RuleSet::AddStyleRule(StyleRule* style_rule,
 
 CascadeLayer* RuleSet::GetOrAddSubLayer(CascadeLayer* cascade_layer,
                                         const StyleRuleBase::LayerName& name) {
-  if (!cascade_layer)
+  if (!cascade_layer) {
     cascade_layer = EnsureImplicitOuterLayer();
+  }
   return cascade_layer->GetOrAddSubLayer(name);
 }
 
 void RuleMap::Add(const AtomicString& key, const RuleData& rule_data) {
   RuleMap::Extent& rules =
       buckets.insert(key, RuleMap::Extent()).stored_value->value;
-  if (rules.length == 0)
+  if (rules.length == 0) {
     rules.bucket_number = num_buckets++;
+  }
   RuleData rule_data_copy = rule_data;
+  if (RuntimeEnabledFeatures::CSSEasySelectorsEnabled()) {
+    rule_data_copy.ComputeEntirelyCoveredByBucketing();
+  }
   rule_data_copy.SetBucketInformation(rules.bucket_number,
                                       /*order_in_bucket=*/rules.length++);
   backing.push_back(std::move(rule_data_copy));
@@ -890,8 +1008,9 @@ bool IsRuleListSorted(const RuleList& rules) {
   unsigned last_position = 0;
   bool first_rule = true;
   for (const RuleData& rule : rules) {
-    if (!first_rule && rule.GetPosition() <= last_position)
+    if (!first_rule && rule.GetPosition() <= last_position) {
       return false;
+    }
     first_rule = false;
     last_position = rule.GetPosition();
   }
@@ -934,11 +1053,13 @@ bool RuleSet::DidMediaQueryResultsChange(
 
 const CascadeLayer* RuleSet::GetLayerForTest(const RuleData& rule) const {
   if (!layer_intervals_.size() ||
-      layer_intervals_[0].start_position > rule.GetPosition())
+      layer_intervals_[0].start_position > rule.GetPosition()) {
     return implicit_outer_layer_;
+  }
   for (unsigned i = 1; i < layer_intervals_.size(); ++i) {
-    if (layer_intervals_[i].start_position > rule.GetPosition())
+    if (layer_intervals_[i].start_position > rule.GetPosition()) {
       return layer_intervals_[i - 1].value;
+    }
   }
   return layer_intervals_.back().value;
 }
@@ -977,6 +1098,7 @@ void RuleSet::Trace(Visitor* visitor) const {
   visitor->Trace(property_rules_);
   visitor->Trace(counter_style_rules_);
   visitor->Trace(position_fallback_rules_);
+  visitor->Trace(root_element_rules_);
   visitor->Trace(media_query_set_results_);
   visitor->Trace(implicit_outer_layer_);
   visitor->Trace(layer_intervals_);
@@ -989,8 +1111,9 @@ void RuleSet::Trace(Visitor* visitor) const {
 
 #ifndef NDEBUG
 void RuleSet::Show() const {
-  for (const RuleData& rule : all_rules_)
+  for (const RuleData& rule : all_rules_) {
     rule.Selector().Show();
+  }
 }
 #endif
 

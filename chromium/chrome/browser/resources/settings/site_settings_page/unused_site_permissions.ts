@@ -18,10 +18,15 @@ import './site_review_shared.css.js';
 import {CrToastElement} from 'chrome://resources/cr_elements/cr_toast/cr_toast.js';
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {assert} from 'chrome://resources/js/assert_ts.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
+import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {PluralStringProxyImpl} from 'chrome://resources/js/plural_string_proxy.js';
+import {isUndoKeyboardEvent} from 'chrome://resources/js/util_ts.js';
 import {DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {MetricsBrowserProxy, MetricsBrowserProxyImpl, SafetyCheckUnusedSitePermissionsModuleInteractions} from '../metrics_browser_proxy.js';
+import {routes} from '../route.js';
+import {Route, RouteObserverMixin} from '../router.js';
 import {ContentSettingsTypes, MODEL_UPDATE_DELAY_MS} from '../site_settings/constants.js';
 import {SiteSettingsMixin} from '../site_settings/site_settings_mixin.js';
 import {SiteSettingsPermissionsBrowserProxy, SiteSettingsPermissionsBrowserProxyImpl, UnusedSitePermissions} from '../site_settings/site_settings_permissions_browser_proxy.js';
@@ -36,6 +41,12 @@ export interface SettingsUnusedSitePermissionsElement {
   };
 }
 
+/** Actions the user can perform to review their unused site permissions. */
+enum Action {
+  ALLOW_AGAIN = 'allow_again',
+  GOT_IT = 'got_it',
+}
+
 /**
  * Information about unused site permissions with an additional flag controlling
  * the removal animation.
@@ -44,8 +55,8 @@ interface UnusedSitePermissionsDisplay extends UnusedSitePermissions {
   visible: boolean;
 }
 
-const SettingsUnusedSitePermissionsElementBase = TooltipMixin(
-    I18nMixin(WebUiListenerMixin(SiteSettingsMixin(PolymerElement))));
+const SettingsUnusedSitePermissionsElementBase = TooltipMixin(I18nMixin(
+    RouteObserverMixin(WebUiListenerMixin(SiteSettingsMixin(PolymerElement)))));
 
 export class SettingsUnusedSitePermissionsElement extends
     SettingsUnusedSitePermissionsElementBase {
@@ -61,6 +72,27 @@ export class SettingsUnusedSitePermissionsElement extends
     return {
       /* The string for the primary header label. */
       headerString_: String,
+
+      /** Most recent site permissions the user has allowed again. */
+      lastUnusedSitePermissionsAllowedAgain_: {
+        type: Object,
+        value: null,
+      },
+
+      /** Most recent site permissions list the user has acknowledged. */
+      lastUnusedSitePermissionsListAcknowledged_: {
+        type: Array,
+        value: null,
+      },
+
+      /**
+       * Last action the user has taken, determines the function of the undo
+       * button in the toast.
+       */
+      lastUserAction_: {
+        type: Action,
+        value: null,
+      },
 
       /**
        * List of unused sites where permissions have been removed. This list
@@ -91,23 +123,30 @@ export class SettingsUnusedSitePermissionsElement extends
       unusedSitePermissionsReviewListExpanded_: {
         type: Boolean,
         value: true,
+        observer: 'onListExpandedChanged_',
       },
     };
   }
 
   private browserProxy_: SiteSettingsPermissionsBrowserProxy =
       SiteSettingsPermissionsBrowserProxyImpl.getInstance();
+  private eventTracker_: EventTracker = new EventTracker();
   private headerString_: string;
+  private lastUnusedSitePermissionsAllowedAgain_: UnusedSitePermissions|null;
+  private lastUnusedSitePermissionsListAcknowledged_: UnusedSitePermissions[]|
+      null;
+  private lastUserAction_: Action|null;
   private modelUpdateDelayMsForTesting_: number|null = null;
   private sites_: UnusedSitePermissionsDisplay[]|null;
   private shouldShowCompletionInfo_: boolean;
   private subtitleString_: string;
   private toastText_: string|null;
   private unusedSitePermissionsReviewListExpanded_: boolean;
+  private metricsBrowserProxy_: MetricsBrowserProxy =
+      MetricsBrowserProxyImpl.getInstance();
+  private shouldRefocusExpandButton_: boolean = false;
 
   override async connectedCallback() {
-    super.connectedCallback();
-
     this.addWebUiListener(
         'unused-permission-review-list-maybe-changed',
         (sites: UnusedSitePermissions[]) =>
@@ -115,7 +154,31 @@ export class SettingsUnusedSitePermissionsElement extends
 
     const sites =
         await this.browserProxy_.getRevokedUnusedSitePermissionsList();
+
     this.onUnusedSitePermissionListChanged_(sites);
+    // This should be called after the sites have been retrieved such that
+    // currentRouteChanged is called afterwards.
+    super.connectedCallback();
+  }
+
+  override currentRouteChanged(currentRoute: Route) {
+    if (currentRoute !== routes.SITE_SETTINGS) {
+      // Remove event listener when navigating away from the page.
+      this.eventTracker_.remove(document, 'keydown');
+      return;
+    }
+    // Only record the metrics when the user navigates to the site settings page
+    // that shows the unused sites module.
+    assert(this.sites_);
+    this.metricsBrowserProxy_
+        .recordSafetyCheckUnusedSitePermissionsListCountHistogram(
+            this.sites_.length);
+    this.metricsBrowserProxy_
+        .recordSafetyCheckUnusedSitePermissionsModuleInteractionsHistogram(
+            SafetyCheckUnusedSitePermissionsModuleInteractions.OPEN_REVIEW_UI);
+
+    this.eventTracker_.add(
+        document, 'keydown', (e: Event) => this.onKeyDown_(e as KeyboardEvent));
   }
 
   /** Show info that review is completed when there are no permissions left. */
@@ -198,23 +261,34 @@ export class SettingsUnusedSitePermissionsElement extends
   private onAllowAgainClick_(event: DomRepeatEvent<UnusedSitePermissions>) {
     event.stopPropagation();
     const item = event.model.item;
+    this.lastUserAction_ = Action.ALLOW_AGAIN;
+    this.lastUnusedSitePermissionsAllowedAgain_ = item;
+
     this.showUndoToast_(
         this.i18n('safetyCheckUnusedSitePermissionsToastLabel', item.origin));
     this.hideItem_(item.origin);
     setTimeout(
         this.browserProxy_.allowPermissionsAgainForUnusedSite.bind(
-            this.browserProxy_, item),
+            this.browserProxy_, item.origin),
         this.getModelUpdateDelayMs_());
+    this.metricsBrowserProxy_
+        .recordSafetyCheckUnusedSitePermissionsModuleInteractionsHistogram(
+            SafetyCheckUnusedSitePermissionsModuleInteractions.ALLOW_AGAIN);
   }
 
   private async onGotItClick_(e: Event) {
     e.stopPropagation();
     assert(this.sites_ !== null);
+    this.lastUserAction_ = Action.GOT_IT;
+    this.lastUnusedSitePermissionsListAcknowledged_ = this.sites_;
 
-    this.browserProxy_.acknowledgeRevokedUnusedSitePermissionsList(this.sites_);
+    this.browserProxy_.acknowledgeRevokedUnusedSitePermissionsList();
     const toastText = await PluralStringProxyImpl.getInstance().getPluralString(
         'safetyCheckUnusedSitePermissionsToastBulkLabel', this.sites_.length);
     this.showUndoToast_(toastText);
+    this.metricsBrowserProxy_
+        .recordSafetyCheckUnusedSitePermissionsModuleInteractionsHistogram(
+            SafetyCheckUnusedSitePermissionsModuleInteractions.ACKNOWLEDGE_ALL);
   }
 
   /* Repopulate the list when unused site permission list is updated. */
@@ -244,6 +318,68 @@ export class SettingsUnusedSitePermissionsElement extends
         await PluralStringProxyImpl.getInstance().getPluralString(
             'safetyCheckUnusedSitePermissionsSecondaryLabel',
             this.sites_.length);
+    // Focus on the expand button after the undo button is clicked and sites are
+    // loaded again.
+    if (this.shouldRefocusExpandButton_) {
+      this.shouldRefocusExpandButton_ = false;
+      const expandButton = this.shadowRoot!.querySelector('cr-expand-button');
+      assert(expandButton);
+      expandButton.focus();
+    }
+  }
+
+  private onListExpandedChanged_(isExpanded: boolean) {
+    if (!isExpanded) {
+      this.metricsBrowserProxy_
+          .recordSafetyCheckUnusedSitePermissionsModuleInteractionsHistogram(
+              SafetyCheckUnusedSitePermissionsModuleInteractions.MINIMIZE);
+    }
+  }
+
+  private onUndoClick_(e: Event) {
+    e.stopPropagation();
+    this.undoLastAction_();
+  }
+
+  private undoLastAction_() {
+    switch (this.lastUserAction_) {
+      case Action.ALLOW_AGAIN:
+        assert(this.lastUnusedSitePermissionsAllowedAgain_ !== null);
+        this.browserProxy_.undoAllowPermissionsAgainForUnusedSite(
+            this.lastUnusedSitePermissionsAllowedAgain_);
+        this.lastUnusedSitePermissionsAllowedAgain_ = null;
+        this.metricsBrowserProxy_
+            .recordSafetyCheckUnusedSitePermissionsModuleInteractionsHistogram(
+                SafetyCheckUnusedSitePermissionsModuleInteractions
+                    .UNDO_ALLOW_AGAIN);
+        break;
+      case Action.GOT_IT:
+        assert(this.lastUnusedSitePermissionsListAcknowledged_ !== null);
+        this.browserProxy_.undoAcknowledgeRevokedUnusedSitePermissionsList(
+            this.lastUnusedSitePermissionsListAcknowledged_);
+        this.lastUnusedSitePermissionsListAcknowledged_ = null;
+        this.metricsBrowserProxy_
+            .recordSafetyCheckUnusedSitePermissionsModuleInteractionsHistogram(
+                SafetyCheckUnusedSitePermissionsModuleInteractions
+                    .UNDO_ACKNOWLEDGE_ALL);
+        break;
+      default:
+        assertNotReached();
+    }
+    this.lastUserAction_ = null;
+    this.shouldRefocusExpandButton_ = true;
+    this.$.undoToast.hide();
+  }
+
+  private onKeyDown_(e: KeyboardEvent) {
+    // Only allow undoing via ctrl+z when the undo toast is opened.
+    if (!this.$.undoToast.open) {
+      return;
+    }
+
+    if (isUndoKeyboardEvent(e)) {
+      this.undoLastAction_();
+    }
   }
 
   private showUndoToast_(text: string) {

@@ -14,8 +14,8 @@
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/session/arc_service_manager.h"
 #include "ash/components/arc/session/arc_vm_client_adapter.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_functions.h"
@@ -418,6 +418,11 @@ void ArcVolumeMounterBridge::OnSetUpExternalStorageMountPoints(
 
   arcvm_external_storage_mount_points_are_ready_ = true;
   std::move(callback).Run(true);
+}
+
+// static
+void ArcVolumeMounterBridge::EnsureFactoryBuilt() {
+  ArcVolumeMounterBridgeFactory::GetInstance();
 }
 
 }  // namespace arc

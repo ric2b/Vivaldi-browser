@@ -5,7 +5,7 @@
 #include "services/tracing/public/cpp/perfetto/custom_event_recorder.h"
 
 #include "base/base64.h"
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
@@ -65,14 +65,14 @@ struct InternedHistogramName
 CustomEventRecorder::CustomEventRecorder() {
   DETACH_FROM_SEQUENCE(perfetto_sequence_checker_);
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
-  perfetto::TrackEvent::AddSessionObserver(this);
+  base::TrackEvent::AddSessionObserver(this);
 #endif
 }
 
 CustomEventRecorder::~CustomEventRecorder()
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 {
-  perfetto::TrackEvent::RemoveSessionObserver(this);
+  base::TrackEvent::RemoveSessionObserver(this);
 }
 #else
     = default;
@@ -230,7 +230,7 @@ void CustomEventRecorder::OnTracingStopped(
 #if BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
   // We have to flush explicitly because we're using the asynchronous stop
   // mechanism.
-  perfetto::TrackEvent::Flush();
+  base::TrackEvent::Flush();
   std::move(stop_complete_callback).Run();
 #endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
 }

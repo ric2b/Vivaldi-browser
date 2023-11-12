@@ -96,3 +96,18 @@ imageset("vivaldi_ntp_sd_empty_view_icon") {
     "vivaldi_ntp_sd_empty_view_icon.imageset/vivaldi_ntp_sd_empty_view_icon.pdf",
   ]
 }
+
+imageset("vivaldi_ntp_fallback_favicon") {
+  sources = [
+    "vivaldi_ntp_fallback_favicon.imageset/Contents.json",
+    "vivaldi_ntp_fallback_favicon.imageset/vivaldi_ntp_fallback_favicon.pdf",
+    "vivaldi_ntp_fallback_favicon.imageset/vivaldi_ntp_fallback_favicon_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_ntp_internal_favicon") {
+  sources = [
+    "vivaldi_ntp_internal_favicon.imageset/Contents.json",
+    "vivaldi_ntp_internal_favicon.imageset/vivaldi_ntp_internal_favicon.pdf",
+  ]
+}

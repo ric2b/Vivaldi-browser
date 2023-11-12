@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -407,7 +407,7 @@ void V8ContextTracker::OnTakenFromGraph(Graph* graph) {
   graph->RemoveGraphObserver(this);
 }
 
-base::Value V8ContextTracker::DescribeFrameNodeData(
+base::Value::Dict V8ContextTracker::DescribeFrameNodeData(
     const FrameNode* node) const {
   DCHECK_ON_GRAPH_SEQUENCE(node->GetGraph());
 
@@ -417,12 +417,12 @@ base::Value V8ContextTracker::DescribeFrameNodeData(
   if (ec_data)
     v8_context_count = ec_data->v8_context_count();
 
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetIntKey("v8_context_count", v8_context_count);
+  base::Value::Dict dict;
+  dict.Set("v8_context_count", static_cast<int>(v8_context_count));
   return dict;
 }
 
-base::Value V8ContextTracker::DescribeProcessNodeData(
+base::Value::Dict V8ContextTracker::DescribeProcessNodeData(
     const ProcessNode* node) const {
   DCHECK_ON_GRAPH_SEQUENCE(node->GetGraph());
 
@@ -439,16 +439,18 @@ base::Value V8ContextTracker::DescribeProcessNodeData(
         process_data->GetDestroyedExecutionContextDataCount();
   }
 
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetIntKey("v8_context_count", v8_context_count);
-  dict.SetIntKey("detached_v8_context_count", detached_v8_context_count);
-  dict.SetIntKey("execution_context_count", execution_context_count);
-  dict.SetIntKey("destroyed_execution_context_count",
-                 destroyed_execution_context_count);
+  base::Value::Dict dict;
+  dict.Set("v8_context_count", static_cast<int>(v8_context_count));
+  dict.Set("detached_v8_context_count",
+           static_cast<int>(detached_v8_context_count));
+  dict.Set("execution_context_count",
+           static_cast<int>(execution_context_count));
+  dict.Set("destroyed_execution_context_count",
+           static_cast<int>(destroyed_execution_context_count));
   return dict;
 }
 
-base::Value V8ContextTracker::DescribeWorkerNodeData(
+base::Value::Dict V8ContextTracker::DescribeWorkerNodeData(
     const WorkerNode* node) const {
   DCHECK_ON_GRAPH_SEQUENCE(node->GetGraph());
   size_t v8_context_count = 0;
@@ -457,8 +459,8 @@ base::Value V8ContextTracker::DescribeWorkerNodeData(
   if (ec_data)
     v8_context_count = ec_data->v8_context_count();
 
-  base::Value dict(base::Value::Type::DICTIONARY);
-  dict.SetIntKey("v8_context_count", v8_context_count);
+  base::Value::Dict dict;
+  dict.Set("v8_context_count", static_cast<int>(v8_context_count));
   return dict;
 }
 

@@ -172,10 +172,10 @@ mojom::InputFieldType TextInputTypeToMojoType(ui::TextInputType type) {
 }
 
 mojom::AutocorrectMode GetAutocorrectMode(
-    ui::AutocorrectionMode autocorrection_mode,
-    ui::SpellcheckMode spellcheck_mode) {
-  return autocorrection_mode == ui::AutocorrectionMode::kDisabled ||
-                 spellcheck_mode == ui::SpellcheckMode::kDisabled
+    AutocorrectionMode autocorrection_mode,
+    SpellcheckMode spellcheck_mode) {
+  return autocorrection_mode == AutocorrectionMode::kDisabled ||
+                 spellcheck_mode == SpellcheckMode::kDisabled
              ? mojom::AutocorrectMode::kDisabled
              : mojom::AutocorrectMode::kEnabled;
 }
@@ -192,6 +192,20 @@ enum class ImeServiceEvent {
 
 void LogEvent(ImeServiceEvent event) {
   UMA_HISTOGRAM_ENUMERATION("InputMethod.Mojo.Extension.Event", event);
+}
+
+enum class JapaneseStartupAction {
+  kStillLegacy = 0,
+  kAlreadyMigrated = 1,
+  kPerformMigration = 2,
+  kUndoMigration = 3,
+  kMaxValue = kUndoMigration
+};
+
+void LogJapaneseStartupAction(JapaneseStartupAction japanese_startup_action) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "InputMethod.PhysicalKeyboard.Japanese.StartupAction",
+      japanese_startup_action);
 }
 
 // Not using a EnumTraits here because the mapping is not 1:1.
@@ -360,6 +374,30 @@ absl::optional<mojom::NamedDomKey> NamedDomKeyToMojom(
       return mojom::NamedDomKey::kPageUp;
     case ui::DomKey::TAB:
       return mojom::NamedDomKey::kTab;
+    case ui::DomKey::F1:
+      return mojom::NamedDomKey::kF1;
+    case ui::DomKey::F2:
+      return mojom::NamedDomKey::kF2;
+    case ui::DomKey::F3:
+      return mojom::NamedDomKey::kF3;
+    case ui::DomKey::F4:
+      return mojom::NamedDomKey::kF4;
+    case ui::DomKey::F5:
+      return mojom::NamedDomKey::kF5;
+    case ui::DomKey::F6:
+      return mojom::NamedDomKey::kF6;
+    case ui::DomKey::F7:
+      return mojom::NamedDomKey::kF7;
+    case ui::DomKey::F8:
+      return mojom::NamedDomKey::kF8;
+    case ui::DomKey::F9:
+      return mojom::NamedDomKey::kF9;
+    case ui::DomKey::F10:
+      return mojom::NamedDomKey::kF10;
+    case ui::DomKey::F11:
+      return mojom::NamedDomKey::kF11;
+    case ui::DomKey::F12:
+      return mojom::NamedDomKey::kF12;
     default:
       return absl::nullopt;
   }
@@ -485,19 +523,18 @@ std::string MojomLayoutToXkbLayout(mojom::PinyinLayout layout) {
   }
 }
 
-mojom::PersonalizationMode GetPersonalizationMode(
-    ui::PersonalizationMode mode) {
+mojom::PersonalizationMode GetPersonalizationMode(PersonalizationMode mode) {
   switch (mode) {
-    case ui::PersonalizationMode::kEnabled:
+    case PersonalizationMode::kEnabled:
       return mojom::PersonalizationMode::kEnabled;
-    case ui::PersonalizationMode::kDisabled:
+    case PersonalizationMode::kDisabled:
       return mojom::PersonalizationMode::kDisabled;
   }
 }
 
 mojom::InputFieldInfoPtr CreateInputFieldInfo(
     const std::string& engine_id,
-    const ui::TextInputMethod::InputContext& context,
+    const TextInputMethod::InputContext& context,
     const InputFieldContext& input_field_context,
     PrefService* prefs,
     bool is_normal_screen) {
@@ -529,7 +566,7 @@ void OverrideXkbLayoutIfNeeded(ImeKeyboard* keyboard,
 
 void UpdateCandidatesWindowSync(ime::mojom::CandidatesWindowPtr window) {
   IMECandidateWindowHandlerInterface* candidate_window_handler =
-      ui::IMEBridge::Get()->GetCandidateWindowHandler();
+      IMEBridge::Get()->GetCandidateWindowHandler();
   if (!candidate_window_handler) {
     return;
   }
@@ -627,14 +664,13 @@ void NativeInputMethodEngineObserver::OnJapaneseDecoderConnected(bool bound) {
     return;
   }
   if (!base::FeatureList::IsEnabled(features::kSystemJapanesePhysicalTyping)) {
-    if (IsJapaneseSettingsMigrationComplete(*prefs_)) {
-      SetJapaneseSettingsMigrationComplete(*prefs_, false);
-    }
     return;
   }
   if (IsJapaneseSettingsMigrationComplete(*prefs_)) {
+    LogJapaneseStartupAction(JapaneseStartupAction::kAlreadyMigrated);
     return;
   }
+  LogJapaneseStartupAction(JapaneseStartupAction::kPerformMigration);
   japanese_decoder_->FetchJapaneseConfig(base::BindOnce(
       &NativeInputMethodEngineObserver::OnJapaneseSettingsReceived,
       weak_ptr_factory_.GetWeakPtr()));
@@ -702,6 +738,15 @@ void NativeInputMethodEngineObserver::ActivateTextClient(
 }
 
 void NativeInputMethodEngineObserver::OnActivate(const std::string& engine_id) {
+  if (!base::FeatureList::IsEnabled(features::kSystemJapanesePhysicalTyping) &&
+      base::StartsWith(engine_id, "nacl_mozc_")) {
+    if (IsJapaneseSettingsMigrationComplete(*prefs_)) {
+      LogJapaneseStartupAction(JapaneseStartupAction::kUndoMigration);
+      SetJapaneseSettingsMigrationComplete(*prefs_, false);
+    } else {
+      LogJapaneseStartupAction(JapaneseStartupAction::kStillLegacy);
+    }
+  }
   // Always hide the candidates window and clear the quick settings menu when
   // switching input methods.
   UpdateCandidatesWindowSync(nullptr);
@@ -865,7 +910,7 @@ void NativeInputMethodEngineObserver::OnBlur(const std::string& engine_id,
 void NativeInputMethodEngineObserver::OnKeyEvent(
     const std::string& engine_id,
     const ui::KeyEvent& event,
-    ui::TextInputMethod::KeyEventDoneCallback callback) {
+    TextInputMethod::KeyEventDoneCallback callback) {
   if (assistive_suggester_->IsAssistiveFeatureEnabled()) {
     if (assistive_suggester_->OnKeyEvent(event)) {
       std::move(callback).Run(
@@ -918,7 +963,7 @@ void NativeInputMethodEngineObserver::OnKeyEvent(
       }
 
       auto process_key_event_callback = base::BindOnce(
-          [](ui::TextInputMethod::KeyEventDoneCallback original_callback,
+          [](TextInputMethod::KeyEventDoneCallback original_callback,
              mojom::KeyEventResult result) {
             std::move(original_callback)
                 .Run((result == mojom::KeyEventResult::kConsumedByIme)
@@ -955,11 +1000,6 @@ void NativeInputMethodEngineObserver::OnDeactivated(
   ime_base_observer_->OnDeactivated(engine_id);
 }
 
-void NativeInputMethodEngineObserver::OnCompositionBoundsChanged(
-    const std::vector<gfx::Rect>& bounds) {
-  ime_base_observer_->OnCompositionBoundsChanged(bounds);
-}
-
 void NativeInputMethodEngineObserver::OnCaretBoundsChanged(
     const gfx::Rect& caret_bounds) {
   ime_base_observer_->OnCaretBoundsChanged(caret_bounds);
@@ -968,29 +1008,24 @@ void NativeInputMethodEngineObserver::OnCaretBoundsChanged(
 void NativeInputMethodEngineObserver::OnSurroundingTextChanged(
     const std::string& engine_id,
     const std::u16string& text,
-    int cursor_pos,
-    int anchor_pos,
+    const gfx::Range selection_range,
     int offset_pos) {
-  DCHECK_GE(cursor_pos, 0);
-  DCHECK_GE(anchor_pos, 0);
-
   last_surrounding_text_ = SurroundingText{.text = text,
-                                           .cursor_pos = cursor_pos,
-                                           .anchor_pos = anchor_pos,
+                                           .selection_range = selection_range,
                                            .offset_pos = offset_pos};
 
-  assistive_suggester_->OnSurroundingTextChanged(text, cursor_pos, anchor_pos);
-  autocorrect_manager_->OnSurroundingTextChanged(text, cursor_pos, anchor_pos);
+  assistive_suggester_->OnSurroundingTextChanged(text, selection_range);
+  autocorrect_manager_->OnSurroundingTextChanged(text, selection_range);
   if (grammar_manager_->IsOnDeviceGrammarEnabled()) {
-    grammar_manager_->OnSurroundingTextChanged(text, cursor_pos, anchor_pos);
+    grammar_manager_->OnSurroundingTextChanged(text, selection_range);
   }
   if (ShouldRouteToNativeMojoEngine(engine_id)) {
     if (IsInputMethodBound()) {
       SendSurroundingTextToNativeMojoEngine(last_surrounding_text_);
     }
   } else {
-    ime_base_observer_->OnSurroundingTextChanged(engine_id, text, cursor_pos,
-                                                 anchor_pos, offset_pos);
+    ime_base_observer_->OnSurroundingTextChanged(engine_id, text,
+                                                 selection_range, offset_pos);
   }
 }
 
@@ -1027,6 +1062,14 @@ void NativeInputMethodEngineObserver::OnAssistiveWindowButtonClicked(
         chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
             ProfileManager::GetActiveUserProfile(),
             chromeos::settings::mojom::kSmartInputsSubpagePath);
+      }
+      if (button.window_type == ash::ime::AssistiveWindowType::kLearnMore) {
+        autocorrect_manager_->HideUndoWindow();
+        base::RecordAction(base::UserMetricsAction(
+            "ChromeOS.Settings.InputMethod.Autocorrect.Open"));
+        chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+            ProfileManager::GetActiveUserProfile(),
+            chromeos::settings::mojom::kInputMethodOptionsSubpagePath);
       }
       break;
     case ui::ime::ButtonId::kSuggestion:
@@ -1112,7 +1155,7 @@ void NativeInputMethodEngineObserver::CommitText(
     mojom::CommitTextCursorBehavior cursor_behavior) {
   if (!IsTextClientActive())
     return;
-  ui::IMEBridge::Get()->GetInputContextHandler()->CommitText(
+  IMEBridge::Get()->GetInputContextHandler()->CommitText(
       text,
       cursor_behavior == mojom::CommitTextCursorBehavior::kMoveCursorBeforeText
           ? ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorBeforeText
@@ -1144,7 +1187,7 @@ void NativeInputMethodEngineObserver::SetComposition(
     composition.ime_text_spans.push_back(CompositionSpanToImeTextSpan(*span));
   }
 
-  ui::IMEBridge::Get()->GetInputContextHandler()->UpdateCompositionText(
+  IMEBridge::Get()->GetInputContextHandler()->UpdateCompositionText(
       std::move(composition),
       /*cursor_pos=*/new_cursor_position,
       /*visible=*/true);
@@ -1157,7 +1200,7 @@ void NativeInputMethodEngineObserver::SetCompositionRange(uint32_t start_index,
 
   const auto ordered_range = std::minmax(start_index, end_index);
   // TODO(b/151884011): Turn on underlining for composition-based languages.
-  ui::IMEBridge::Get()->GetInputContextHandler()->SetComposingRange(
+  IMEBridge::Get()->GetInputContextHandler()->SetComposingRange(
       ordered_range.first, ordered_range.second,
       {ui::ImeTextSpan(
           ui::ImeTextSpan::Type::kComposition, /*start_offset=*/0,
@@ -1170,8 +1213,7 @@ void NativeInputMethodEngineObserver::FinishComposition() {
   if (!IsTextClientActive())
     return;
 
-  ui::TextInputTarget* input_context =
-      ui::IMEBridge::Get()->GetInputContextHandler();
+  TextInputTarget* input_context = IMEBridge::Get()->GetInputContextHandler();
 
   input_context->ConfirmComposition(/*reset_engine=*/false);
 
@@ -1197,7 +1239,7 @@ void NativeInputMethodEngineObserver::DeleteSurroundingText(
     uint32_t num_after_cursor) {
   if (!IsTextClientActive())
     return;
-  ui::IMEBridge::Get()->GetInputContextHandler()->DeleteSurroundingText(
+  IMEBridge::Get()->GetInputContextHandler()->DeleteSurroundingText(
       num_before_cursor, num_after_cursor);
 }
 
@@ -1235,10 +1277,8 @@ void NativeInputMethodEngineObserver::UpdateCandidatesWindow(
 
 void NativeInputMethodEngineObserver::RecordUkm(mojom::UkmEntryPtr entry) {
   if (entry->is_non_compliant_api()) {
-    ui::RecordUkmNonCompliantApi(
-        ui::IMEBridge::Get()
-            ->GetInputContextHandler()
-            ->GetClientSourceForMetrics(),
+    RecordUkmNonCompliantApi(
+        IMEBridge::Get()->GetInputContextHandler()->GetClientSourceForMetrics(),
         entry->get_non_compliant_api()->non_compliant_operation);
   }
 }
@@ -1304,14 +1344,18 @@ bool NativeInputMethodEngineObserver::IsTextClientActive() {
 void NativeInputMethodEngineObserver::SendSurroundingTextToNativeMojoEngine(
     const SurroundingText& surrounding_text) {
   std::vector<size_t> selection_indices = {
-      static_cast<size_t>(surrounding_text.anchor_pos),
-      static_cast<size_t>(surrounding_text.cursor_pos)};
+      static_cast<size_t>(surrounding_text.selection_range.start()),
+      static_cast<size_t>(surrounding_text.selection_range.end())};
   std::string utf8_text = base::UTF16ToUTF8AndAdjustOffsets(
       surrounding_text.text, &selection_indices);
 
+  // Due to a legacy mistake, the selection is reversed (i.e. 'focus' is the
+  // start and 'anchor' is the end), opposite to what the API documentation
+  // claims.
+  // TODO(b/245020074): Fix this without breaking existing 1p IMEs.
   auto selection = mojom::SelectionRange::New();
-  selection->anchor = selection_indices[0];
-  selection->focus = selection_indices[1];
+  selection->anchor = selection_indices[1];
+  selection->focus = selection_indices[0];
 
   input_method_->OnSurroundingTextChanged(
       std::move(utf8_text), surrounding_text.offset_pos, std::move(selection));

@@ -7,10 +7,10 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
@@ -96,10 +96,15 @@ void VersionedTestInstaller::Install(
     std::unique_ptr<InstallParams> /*install_params*/,
     ProgressCallback progress_callback,
     Callback callback) {
-  const base::Value manifest = update_client::ReadManifest(unpack_path);
-  const std::string* version_string = manifest.FindStringKey("version");
-  if (!version_string || !base::IsStringASCII(*version_string))
+  absl::optional<base::Value::Dict> manifest =
+      update_client::ReadManifest(unpack_path);
+  if (!manifest) {
     return;
+  }
+  const std::string* version_string = manifest->FindString("version");
+  if (!version_string || !base::IsStringASCII(*version_string)) {
+    return;
+  }
 
   const base::Version version(*version_string);
   const base::FilePath path =

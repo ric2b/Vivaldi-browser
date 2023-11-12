@@ -9,7 +9,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -98,6 +98,7 @@ class TestGuestViewManager : public GuestViewManager {
 
  private:
   FRIEND_TEST_ALL_PREFIXES(GuestViewManagerTest, AddRemove);
+  FRIEND_TEST_ALL_PREFIXES(GuestViewManagerTest, ReuseIdForRecreatedGuestPage);
 
   // guest_view::GuestViewManager:
   void AddGuest(int guest_instance_id,

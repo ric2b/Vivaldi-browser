@@ -8,8 +8,8 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
@@ -20,6 +20,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
+#include "net/cert/cert_verify_result.h"
 #include "net/log/net_log_with_source.h"
 #include "net/test/cert_builder.h"
 #include "net/test/cert_test_util.h"

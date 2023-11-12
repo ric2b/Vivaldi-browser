@@ -8,10 +8,10 @@
 #include <stdint.h>
 #include <cstdint>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/sequence_checker.h"
@@ -1746,7 +1746,7 @@ TEST_P(SQLDatabaseTest, ComputeMmapSizeForOpen) {
   ASSERT_TRUE(!db_->DoesTableExist("meta"));
 
   // When the meta table is first created, it sets up to map everything.
-  MetaTable().Init(db_.get(), 1, 1);
+  ASSERT_TRUE(MetaTable().Init(db_.get(), 1, 1));
   ASSERT_TRUE(db_->DoesTableExist("meta"));
   ASSERT_GT(db_->ComputeMmapSizeForOpen(), kMmapAlot);
   ASSERT_TRUE(MetaTable::GetMmapStatus(db_.get(), &mmap_status));
@@ -1765,7 +1765,7 @@ TEST_P(SQLDatabaseTest, ComputeMmapSizeForOpen) {
   // Re-initializing the meta table does not re-create the key if the table
   // already exists.
   ASSERT_TRUE(db_->Execute("DELETE FROM meta WHERE key = 'mmap_status'"));
-  MetaTable().Init(db_.get(), 1, 1);
+  ASSERT_TRUE(MetaTable().Init(db_.get(), 1, 1));
   ASSERT_EQ(MetaTable::kMmapSuccess, mmap_status);
   ASSERT_TRUE(MetaTable::GetMmapStatus(db_.get(), &mmap_status));
   ASSERT_EQ(0, mmap_status);

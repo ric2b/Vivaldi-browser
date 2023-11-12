@@ -11,10 +11,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/ranges/algorithm.h"
@@ -484,7 +484,7 @@ bool ClientCertResolver::IsAnyResolveTaskRunning() const {
 bool ClientCertResolver::ResolveClientCertificateSync(
     const client_cert::ConfigType client_cert_type,
     const client_cert::ClientCertConfig& client_cert_config,
-    base::Value* shill_properties) {
+    base::Value::Dict* shill_properties) {
   if (!ShouldResolveCert(client_cert_config))
     return false;
 
@@ -510,8 +510,7 @@ bool ClientCertResolver::ResolveClientCertificateSync(
 
   if (cert_it == client_cert_and_issuers.end()) {
     VLOG(1) << "Couldn't find a matching client cert";
-    client_cert::SetEmptyShillProperties(client_cert_type,
-                                         shill_properties->GetDict());
+    client_cert::SetEmptyShillProperties(client_cert_type, *shill_properties);
     return false;
   }
 
@@ -525,7 +524,7 @@ bool ClientCertResolver::ResolveClientCertificateSync(
     return false;
   }
   client_cert::SetShillProperties(client_cert_type, slot_id, pkcs11_id,
-                                  shill_properties->GetDict());
+                                  *shill_properties);
   return true;
 }
 
@@ -642,7 +641,7 @@ void ClientCertResolver::ResolveNetworks(
 
     ::onc::ONCSource onc_source = ::onc::ONC_SOURCE_NONE;
     std::string userhash;
-    const base::Value* policy =
+    const base::Value::Dict* policy =
         managed_network_config_handler_->FindPolicyByGuidAndProfile(
             network->guid(), network->profile_path(),
             ManagedNetworkConfigurationHandler::PolicyType::kOriginal,
@@ -658,7 +657,7 @@ void ClientCertResolver::ResolveNetworks(
 
     VLOG(2) << "Inspecting network " << network->path();
     client_cert::ClientCertConfig cert_config;
-    OncToClientCertConfig(onc_source, policy->GetDict(), &cert_config);
+    OncToClientCertConfig(onc_source, *policy, &cert_config);
 
     // Skip networks that don't have a ClientCertPattern or ClientCertRef.
     if (!ShouldResolveCert(cert_config))

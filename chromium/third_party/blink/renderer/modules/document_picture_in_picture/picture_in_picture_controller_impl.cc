@@ -7,7 +7,8 @@
 #include <limits>
 #include <utility>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
+#include "base/task/single_thread_task_runner.h"
 #include "media/mojo/mojom/media_player.mojom-blink.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
@@ -73,6 +74,14 @@ PictureInPictureControllerImpl::IsDocumentAllowed(bool report_failure) const {
   LocalFrame* frame = GetSupplementable()->GetFrame();
   if (!frame)
     return Status::kFrameDetached;
+
+  // Picture-in-Picture is not allowed if the window is a document
+  // Picture-in-Picture window.
+  if (RuntimeEnabledFeatures::DocumentPictureInPictureAPIEnabled(
+          GetSupplementable()->GetExecutionContext()) &&
+      DomWindow() && DomWindow()->IsPictureInPictureWindow()) {
+    return Status::kDocumentPip;
+  }
 
   // `GetPictureInPictureEnabled()` returns false when the embedder or the
   // system forbids the page from using Picture-in-Picture.
@@ -351,19 +360,36 @@ void PictureInPictureControllerImpl::CreateDocumentPictureInPictureWindow(
   if (!LocalFrame::ConsumeTransientUserActivation(opener.GetFrame())) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotAllowedError,
                                       "Document PiP requires user activation");
+    resolver->Reject(exception_state);
     return;
   }
 
   WebPictureInPictureWindowOptions web_options;
+  web_options.width = options->width();
+  web_options.height = options->height();
   web_options.initial_aspect_ratio = options->initialAspectRatio();
-  web_options.lock_aspect_ratio = options->lockAspectRatio();
+
+  // If either width or height is specified, then both must be specified.
+  if (web_options.width > 0 && web_options.height == 0) {
+    exception_state.ThrowRangeError(
+        "Height must be specified if width is specified");
+    resolver->Reject(exception_state);
+    return;
+  } else if (web_options.width == 0 && web_options.height > 0) {
+    exception_state.ThrowRangeError(
+        "Width must be specified if height is specified");
+    resolver->Reject(exception_state);
+    return;
+  }
 
   auto* dom_window = opener.openPictureInPictureWindow(
       script_state->GetIsolate(), web_options, exception_state);
 
   // If we can't create a window, reject the promise with the exception state.
-  if (!dom_window || exception_state.HadException())
+  if (!dom_window || exception_state.HadException()) {
+    resolver->Reject(exception_state);
     return;
+  }
 
   auto* local_dom_window = dom_window->ToLocalDOMWindow();
   DCHECK(local_dom_window);

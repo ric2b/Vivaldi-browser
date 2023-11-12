@@ -7,9 +7,9 @@
 #import <Foundation/NSPathUtilities.h>
 #import <dispatch/dispatch.h>
 
-#import "base/bind.h"
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
+#import "base/functional/bind.h"
 #import "base/location.h"
 #import "base/mac/foundation_util.h"
 #import "base/strings/sys_string_conversions.h"
@@ -28,7 +28,7 @@ namespace {
 // Delay between each invocations of `UpdateMemoryValues`.
 constexpr base::TimeDelta kMemoryMonitorDelay = base::Seconds(30);
 
-// Checks the values of free RAM and free disk space and updates breakpad with
+// Checks the values of free RAM and free disk space and updates crash keys with
 // these values. Also updates available free disk space for PreviousSessionInfo.
 void UpdateMemoryValues() {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
@@ -62,13 +62,16 @@ void UpdateMemoryValues() {
 void AsynchronousFreeMemoryMonitor() {
   UpdateMemoryValues();
   base::ThreadPool::PostDelayedTask(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&AsynchronousFreeMemoryMonitor), kMemoryMonitorDelay);
 }
 }  // namespace
 
 void StartFreeMemoryMonitor() {
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(&AsynchronousFreeMemoryMonitor));
+  base::ThreadPool::PostTask(FROM_HERE,
+                             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+                              base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+                             base::BindOnce(&AsynchronousFreeMemoryMonitor));
 }

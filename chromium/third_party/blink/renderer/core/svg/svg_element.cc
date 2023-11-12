@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
 #include "third_party/blink/renderer/core/animation/svg_interpolation_environment.h"
 #include "third_party/blink/renderer/core/animation/svg_interpolation_types_map.h"
+#include "third_party/blink/renderer/core/css/post_style_update_scope.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -265,7 +266,7 @@ void SVGElement::ClearAnimatedAttribute(const QualifiedName& attribute) {
   ForSelfAndInstances(this, [&params](SVGElement* element) {
     if (SVGAnimatedPropertyBase* animated_property =
             element->PropertyFromAttribute(params.name)) {
-      animated_property->AnimationEnded();
+      animated_property->SetAnimatedValue(nullptr);
       element->SvgAttributeChanged(params);
     }
   });
@@ -677,14 +678,11 @@ void SVGElement::ParseAttribute(const AttributeModificationParams& params) {
 
 // If the attribute is not present in the map, the map will return the "empty
 // value" - which is kAnimatedUnknown.
-struct AnimatedPropertyTypeHashTraits : HashTraits<AnimatedPropertyType> {
-  static const bool kEmptyValueIsZero = true;
-  static AnimatedPropertyType EmptyValue() { return kAnimatedUnknown; }
-};
+using AnimatedPropertyTypeHashTraits =
+    EnumHashTraits<AnimatedPropertyType, kAnimatedUnknown>;
 
 using AttributeToPropertyTypeMap = HashMap<QualifiedName,
                                            AnimatedPropertyType,
-                                           DefaultHash<QualifiedName>,
                                            HashTraits<QualifiedName>,
                                            AnimatedPropertyTypeHashTraits>;
 AnimatedPropertyType SVGElement::AnimatedPropertyTypeForCSSAttribute(
@@ -783,8 +781,7 @@ bool SVGElement::IsAnimatableCSSProperty(const QualifiedName& attr_name) {
 bool SVGElement::IsPresentationAttribute(const QualifiedName& name) const {
   if (const SVGAnimatedPropertyBase* property = PropertyFromAttribute(name))
     return property->HasPresentationAttributeMapping();
-  if (RuntimeEnabledFeatures::LangAttributeAwareSvgTextEnabled() &&
-      (name.Matches(xml_names::kLangAttr) || name == svg_names::kLangAttr)) {
+  if (name.Matches(xml_names::kLangAttr) || name == svg_names::kLangAttr) {
     return true;
   }
   return CssPropertyIdForSVGAttributeName(GetExecutionContext(), name) >
@@ -838,11 +835,9 @@ void SVGElement::CollectStyleForPresentationAttribute(
       AddPropertyToPresentationAttributeStyle(style, property_id, value);
     }
   } else if (name.Matches(xml_names::kLangAttr)) {
-    if (RuntimeEnabledFeatures::LangAttributeAwareSvgTextEnabled())
-      MapLanguageAttributeToLocale(value, style);
+    MapLanguageAttributeToLocale(value, style);
   } else if (name == svg_names::kLangAttr) {
-    if (RuntimeEnabledFeatures::LangAttributeAwareSvgTextEnabled() &&
-        !FastHasAttribute(xml_names::kLangAttr)) {
+    if (!FastHasAttribute(xml_names::kLangAttr)) {
       MapLanguageAttributeToLocale(value, style);
     }
   }
@@ -1069,7 +1064,7 @@ void SVGElement::CollectExtraStyleForPresentationAttribute(
   }
 }
 
-scoped_refptr<ComputedStyle> SVGElement::CustomStyleForLayoutObject(
+scoped_refptr<const ComputedStyle> SVGElement::CustomStyleForLayoutObject(
     const StyleRecalcContext& style_recalc_context) {
   SVGElement* corresponding_element = CorrespondingElement();
   if (!corresponding_element) {
@@ -1084,11 +1079,15 @@ scoped_refptr<ComputedStyle> SVGElement::CustomStyleForLayoutObject(
   StyleRequest style_request;
   style_request.parent_override = style;
   style_request.layout_parent_override = style;
+  style_request.styled_element = this;
+  StyleRecalcContext corresponding_recalc_context(style_recalc_context);
+  corresponding_recalc_context.old_style =
+      PostStyleUpdateScope::GetOldStyle(*this);
   return GetDocument().GetStyleResolver().ResolveStyle(
-      corresponding_element, style_recalc_context, style_request);
+      corresponding_element, corresponding_recalc_context, style_request);
 }
 
-bool SVGElement::LayoutObjectIsNeeded(const ComputedStyle& style) const {
+bool SVGElement::LayoutObjectIsNeeded(const DisplayStyle& style) const {
   return IsValid() && HasSVGParent() && Element::LayoutObjectIsNeeded(style);
 }
 

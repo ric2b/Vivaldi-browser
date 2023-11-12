@@ -197,6 +197,41 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Accessibility.ScreenAI">
+  <owner>abigailbklein@google.com</owner>
+  <owner>rhalavati@google.com</owner>
+  <owner>kyungjunlee@google.com</owner>
+  <summary>
+    Records the time taken to distill a web page.
+  </summary>
+  <metric name="Screen2xDistillationTime.Failure">
+    <summary>
+      The amount of time (ms) required to distill a web page if distillation
+      failed.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="Screen2xDistillationTime.Success">
+    <summary>
+      The amount of time (ms) required to distill a web page if distillation
+      succeeded.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="AccuracyTipDialog">
   <obsolete>
     Deprecated as of 12/2022.
@@ -540,6 +575,9 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="AdPageLoadCustomSampling2" singular="True">
+  <obsolete>
+    Removed 2022/12 in favor of AdPageLoadCustomSampling3
+  </obsolete>
   <owner>yaoxia@chromium.org</owner>
   <owner>johnidel@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
@@ -586,6 +624,58 @@ be describing additional metrics about the same event.
       of the densities accumulated over the page load time rounded to the
       nearest exponential bucket integer with bucket spacing 1.3. For negative
       values, the bucketing will be taken on its magnitude part.
+    </summary>
+  </metric>
+</event>
+
+<event name="AdPageLoadCustomSampling3" singular="True">
+  <owner>yaoxia@chromium.org</owner>
+  <owner>johnidel@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    Recorded when the page is being destroyed/navigated away or when the app
+    enters the background on mobile. This is separate from the `AdPageLoad`
+    event to allow it to be recorded on all pages (i.e. not only pages that have
+    loaded non-zero ad byte), and to allow a potentially different sampling.
+    Both iframe and img ads are covered.
+  </summary>
+  <metric name="AverageViewportAdDensity">
+    <summary>
+      The estimated average viewport ad density. Each density value is
+      calculated as the area of (iframe and img) ads within the viewport * 100 /
+      viewport area, where each overlapping area is counted once. And this
+      returns the average of the densities accumulated over the page load time
+      rounded to the nearest integer.
+    </summary>
+  </metric>
+  <metric name="KurtosisViewportAdDensity">
+    <summary>
+      The estimated kurtosis of the viewport ad density. Each density value is
+      calculated as the area of (iframe and img) ads within the viewport * 100 /
+      viewport area, where each overlapping area is counted once. And this
+      returns the kurtosis of the densities accumulated over the page load time
+      rounded to the nearest exponential bucket integer with bucket spacing 1.3.
+      For negative values, the bucketing will be taken on its magnitude part.
+    </summary>
+  </metric>
+  <metric name="SkewnessViewportAdDensity">
+    <summary>
+      The estimated skewness of the viewport ad density. Each density value is
+      calculated as the area of (iframe and img) ads within the viewport * 100 /
+      viewport area, where each overlapping area is counted once. And this
+      returns the skewness of the densities accumulated over the page load time
+      rounded to the nearest exponential bucket integer with bucket spacing 1.3.
+      For negative values, the bucketing will be taken on its magnitude part.
+    </summary>
+  </metric>
+  <metric name="VarianceViewportAdDensity">
+    <summary>
+      The estimated variance of the viewport ad density. Each density value is
+      calculated as the area of (iframe and img) ads within the viewport * 100 /
+      viewport area, where each overlapping area is counted once. And this
+      returns the variance of the densities accumulated over the page load time
+      rounded to the nearest exponential bucket integer with bucket spacing 1.3.
+      For negative values, the bucketing will be taken on its magnitude part.
     </summary>
   </metric>
 </event>
@@ -1980,6 +2070,55 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Autofill.FastCheckoutFormStatus">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <summary>
+    Recorded at the end of a Fast Checkout run.
+  </summary>
+  <metric name="Filled" enum="Boolean">
+    <summary>
+      1 if the form was filled by Fast Checkout, 0 otherwise.
+    </summary>
+  </metric>
+  <metric name="FormSignature">
+    <summary>
+      An approximately 10-bit hash of the form's actual signature.
+    </summary>
+  </metric>
+  <metric name="FormTypes">
+    <summary>
+      Type of form. Stored as bitvector. A set i-th bit implies enum FormType's
+      i-th type was detected. Multiple types are possible.
+    </summary>
+  </metric>
+  <metric name="RunId">
+    <summary>
+      Unique run ID for linking to other UKM events.
+    </summary>
+  </metric>
+</event>
+
+<event name="Autofill.FastCheckoutRunOutcome">
+  <owner>bwolfgang@google.com</owner>
+  <owner>jkeitel@google.com</owner>
+  <owner>vizcay@google.com</owner>
+  <summary>
+    Recorded at the end of a Fast Checkout run.
+  </summary>
+  <metric name="RunId">
+    <summary>
+      Unique run ID for linking to other UKM events.
+    </summary>
+  </metric>
+  <metric name="RunOutcome" enum="FastCheckoutRunOutcome">
+    <summary>
+      States if the run was successful or why it was not.
+    </summary>
+  </metric>
+</event>
+
 <event name="Autofill.FieldFillStatus">
   <owner>rogerm@chromium.org</owner>
   <summary>
@@ -2279,13 +2418,19 @@ be describing additional metrics about the same event.
   </summary>
   <metric name="AutofillAssistantIntent" enum="AutofillAssistantIntent">
     <summary>
-      Describes the trigger source that invoked Autofill. Only recorded if
-      AutofillAssistantIntent was not undefined.
+      Obsolete. Used to describe the trigger source that invoked Autofill. Was
+      only recorded if AutofillAssistantIntent was not undefined.
     </summary>
   </metric>
   <metric name="AutofillFills">
     <summary>
       Number of Autofill fills invoked by the user on the current form.
+    </summary>
+  </metric>
+  <metric name="FastCheckoutRunId">
+    <summary>
+      Optional, only set if a form was filled by Fast Checkout. Unique ID of a
+      Fast Checkout run.
     </summary>
   </metric>
   <metric name="FillingAcceptance">
@@ -2578,6 +2723,297 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Autofill2.FieldInfo">
+  <owner>battre@chromium.org</owner>
+  <owner>chrome-autofill-team@google.com</owner>
+  <summary>
+    All information about a specific field, recorded at form submission or form
+    destruction time (whatever comes first).
+  </summary>
+  <metric name="AutofillSkippedStatus">
+    <summary>
+      Whether filling the field was skipped during autofill, and if it was
+      skipped, what the skipping reasons were. Recorded as a DenseSet of
+      |SkipStatus|.
+    </summary>
+  </metric>
+  <metric name="FieldSessionIdentifier">
+    <summary>
+      A random variable assigned to a specific instance of a form control (e.g.
+      a HTML input element). This should be globally unique and suitable for
+      distinguishing fields. Two different users would have different values.
+      For the same user, the same field in the same form in two different tabs
+      would have two different values.
+    </summary>
+  </metric>
+  <metric name="FieldSignature">
+    <summary>
+      The signature of the field, a 10 bit hash value (0-1021) of the field name
+      and field type used to denote this field for query and voting purposes.
+    </summary>
+  </metric>
+  <metric name="FilledValueWasModified" enum="Boolean">
+    <summary>
+      Whether the user modified a field after autofilling/autocompleting it.
+    </summary>
+  </metric>
+  <metric name="FormSessionIdentifier">
+    <summary>
+      A random variable assigned to a specific instance of a HTML form in a
+      specific renderer. This should be globally unique and suitable for
+      counting distinct forms. Two different users would have different values.
+      A single user loading the same form in two different tabs would have two
+      different values. This is used to link the fields to a form in
+      Autofill2.FormSummary.
+    </summary>
+  </metric>
+  <metric name="HadTypedOrFilledValueAtSubmission" enum="Boolean">
+    <summary>
+      Whether there was a value after user typed or autofilled in the field at
+      form submission or form destruction time.
+    </summary>
+  </metric>
+  <metric name="HadValueBeforeFilling" enum="Boolean">
+    <summary>
+      Whether there was a value before autofill in the field.
+    </summary>
+  </metric>
+  <metric name="HeuristicType" enum="AutofillServerFieldType">
+    <summary>
+      There are multiple heuristic classification strategies working in
+      parallel. This type is predicted from the active pattern source.
+    </summary>
+  </metric>
+  <metric name="HeuristicTypeDefault" enum="AutofillServerFieldType">
+    <summary>
+      The type of the field predicted from the source of local heuristics on the
+      client, which uses patterns applied for most users, the types are from
+      |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="HeuristicTypeExperimental" enum="AutofillServerFieldType">
+    <summary>
+      The type of the field predicted from the heuristics that uses experimental
+      patterns, the types are from |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="HeuristicTypeLegacy" enum="AutofillServerFieldType">
+    <summary>
+      The type of the field predicted from patterns whose stability is above
+      suspicion, the types are from |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="HeuristicTypeNextGen" enum="AutofillServerFieldType">
+    <summary>
+      The type of the field predicted from the heuristics that uses patterns
+      only for non-user-visible metrics, one step before experimental, the types
+      are from |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="HtmlFieldMode" enum="AutocompleteHtmlFieldMode">
+    <summary>
+      The mode according to the autocomplete attribute of a field. Only set if a
+      field has a valid autocomplete attribute. Currently this is used to
+      specify if the field is part of the billing or shipping address. See
+      autofill::mojom::HtmlFieldMode.
+    </summary>
+  </metric>
+  <metric name="HtmlFieldType" enum="AutocompleteHtmlFieldType">
+    <summary>
+      The field type specified in the autocomplete attribute of the field. Only
+      set if a field has a valid autocomplete attribute. See
+      autofill::mojom::HtmlFieldType.
+    </summary>
+  </metric>
+  <metric name="IsFocusable" enum="Boolean">
+    <summary>
+      Whether the field is focusable to the user. This is an approximation of
+      visibility with false positives.
+    </summary>
+  </metric>
+  <metric name="OverallType" enum="AutofillServerFieldType">
+    <summary>
+      The final field type from the list of |autofill::ServerFieldType| that we
+      choose after rationalization, which is used to determine the autofill
+      suggestion when the user triggers autofilling.
+    </summary>
+  </metric>
+  <metric name="RankInFieldSignatureGroup">
+    <summary>
+      If multiple fields have the same signature, this indicates the position
+      within this set of fields. This allows us to understand problems related
+      to duplicated field signatures.
+    </summary>
+  </metric>
+  <metric name="SectionId">
+    <summary>
+      A single HTML form can consist of multiple sections. A section is a set of
+      fields that are filled together. For example a single form can contain a
+      shipping and a billing address. Each of those corresponds to one section.
+      The sections are mapped to consecutive natural numbers starting at 1. The
+      section IDs are unique per form.
+    </summary>
+  </metric>
+  <metric name="ServerPredictionSource1" enum="AutofillServerPredictionSource">
+    <summary>
+      The major source of predictions from the Autofill crowdsourced server, see
+      AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction::Source.
+    </summary>
+  </metric>
+  <metric name="ServerPredictionSource2" enum="AutofillServerPredictionSource">
+    <summary>
+      The additional source of predictions from the Autofill crowdsourced server
+      if there is an additional prediction, see
+      AutofillQueryResponse::FormSuggestion::FieldSuggestion::FieldPrediction::Source.
+    </summary>
+  </metric>
+  <metric name="ServerType1" enum="AutofillServerFieldType">
+    <summary>
+      The type of the field predicted from the Autofill crowdsourced server from
+      majority voting (and some more complex stuff). The types are from
+      |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="ServerType2" enum="AutofillServerFieldType">
+    <summary>
+      The additional type of the field predicted from the Autofill crowdsourced
+      server if there is an additional prediction. The types are from
+      |autofill::ServerFieldType|.
+    </summary>
+  </metric>
+  <metric name="ServerTypeIsOverride" enum="Boolean">
+    <summary>
+      This is an annotation for server predicted field types which indicates
+      that a manual override defines the server type. This allows us to assess
+      the impact of server overrides and detect possible problems with it.
+    </summary>
+  </metric>
+  <metric name="SuggestionWasAccepted" enum="Boolean">
+    <summary>
+      Whether the suggestion was accepted. This is only set for a field where a
+      suggestion was shown and accepted by the user. It is not the same as
+      autofilled, which is true for all the fields that were filled. More than
+      one field can have an accepted suggestion because the form can be split
+      into multiple sections (e.g. shipping and billing address) or because the
+      user triggers autofill multiple times.
+    </summary>
+  </metric>
+  <metric name="SuggestionWasAvailable" enum="Boolean">
+    <summary>
+      Whether there was a suggestion available for the field from user data.
+      This is only set for a field that was focused by the user.
+    </summary>
+  </metric>
+  <metric name="SuggestionWasShown" enum="Boolean">
+    <summary>
+      Whether a suggestion popup was ever shown on this field (i.e. the field
+      had focus and user had data on file).
+    </summary>
+  </metric>
+  <metric name="TypeChangedByRationalization" enum="Boolean">
+    <summary>
+      Whether the field's type was changed by running the rationalization.
+    </summary>
+  </metric>
+  <metric name="UserTypedIntoField" enum="Boolean">
+    <summary>
+      Whether the user ever typed into the field (regardless of autofill).
+    </summary>
+  </metric>
+  <metric name="WasAutofilled" enum="Boolean">
+    <summary>
+      Whether the field was ever filled by autofill. This applies to all the
+      fields that were autofilled, not just the field that was clicked. If a
+      fill operation did not change the value of a field because the old value
+      matches the filled value, this is still recorded as a WasAutofilled =
+      true.
+    </summary>
+  </metric>
+  <metric name="WasFocused" enum="Boolean">
+    <summary>
+      Whether the user ever focused on the field.
+    </summary>
+  </metric>
+  <metric name="WasRefill" enum="Boolean">
+    <summary>
+      Whether the form was refilled by autofill.
+    </summary>
+  </metric>
+</event>
+
+<event name="Autofill2.FormSummary">
+  <owner>battre@chromium.org</owner>
+  <owner>chrome-autofill-team@google.com</owner>
+  <summary>
+    Information recorded for a HTML form element on the HTML page, recorded at
+    form submission or form destruction time (whatever comes first).
+  </summary>
+  <metric name="AutofillFormEvents">
+    <summary>
+      A bit vector of some autofill form events that records a funnel of this
+      autofill form. The autofill form events are from an enum list specifying
+      the possible status of the autofill forms, such as if a dropdown with
+      suggestions was shown, if the user interacted with a field in the form.
+      Some of the events are triggered separately for address and credit card
+      forms, e.g. if all the fillable fields in the credit card forms were
+      filled. New form events can be added over time and a form can have
+      multiple form events.
+    </summary>
+  </metric>
+  <metric name="FormSessionIdentifier">
+    <summary>
+      A random variable assigned to a specific instance of a HTML form in a
+      specific renderer. This should be globally unique and suitable for
+      counting distinct forms. Two different users would have different values.
+      A single user loading the same form in two different tabs would have two
+      different values. This is used to link the fields in this form in
+      Autofill2.FieldInfo.
+    </summary>
+  </metric>
+  <metric name="FormSignature">
+    <summary>
+      The signature of the form, which is a 10-bit hash of the form's domain,
+      name and all the supported form fields (including empty names).
+    </summary>
+  </metric>
+  <metric name="IsInMainframe" enum="Boolean">
+    <summary>
+      This indicates whether the form is located in the main frame or in an
+      iframe. A cross-origin autofill is prevented only because shared-autofill
+      is disabled in the field's frame. Shared-autofill is a policy-controlled
+      feature by which a frame can allow a child-frame to be autofilled across
+      origin. We record the url of the main frame not the iframe even if the
+      form is in the iframe.
+    </summary>
+  </metric>
+  <metric name="MillisecondsFromFirstInteratctionUntilSubmission">
+    <summary>
+      The time interval from first interaction on the form to form submission in
+      ms in exponential buckets from |GetSemanticBucketMinForDurationTiming()|.
+    </summary>
+  </metric>
+  <metric name="MillisecondsFromFormParsedUntilSubmission">
+    <summary>
+      The time interval from form parse to form submission in ms in exponential
+      buckets from |GetSemanticBucketMinForDurationTiming()|.
+    </summary>
+  </metric>
+  <metric name="SampleRate">
+    <summary>
+      A sampling rate is a precomputed positive integer and is applied to each
+      form and adaptive to the popularity of forms. The most popular forms are
+      classified into a `very popular` category and maybe apply a 1:100 sampling
+      while the less popular forms have a sampling of 1:1. If the sampling is
+      1:X, this sample rate value stores the `X`.
+    </summary>
+  </metric>
+  <metric name="WasSubmitted" enum="Boolean">
+    <summary>
+      Whether the form was submitted.
+    </summary>
+  </metric>
+</event>
+
 <event name="BackForwardCacheDisabledForRenderFrameHostReason">
   <owner>altimin@chromium.org</owner>
   <owner>hajimehoshi@chromium.org</owner>
@@ -2848,10 +3284,55 @@ be describing additional metrics about the same event.
 
 <event name="Blink.FedCm">
   <owner>yigu@chromium.org</owner>
-  <owner>webid-core@google.com</owner>
+  <owner>web-identity-eng@google.com</owner>
   <summary>
     Records performance metrics for FedCM(Federated Credential Management) API.
   </summary>
+  <metric name="AutoReauthn.BlockedByContentSettings" enum="Boolean">
+    <summary>
+      Records whether the FedCM auto re-authn call is blocked because the auto
+      re-authn content settings permission is disabled. Records at most one
+      sample per FedCM API with auto re-authn enabled: some failures could occur
+      before this metric is recorded.
+    </summary>
+  </metric>
+  <metric name="AutoReauthn.BlockedByEmbargo" enum="Boolean">
+    <summary>
+      Records whether the FedCM auto re-authn call is blocked because the auto
+      re-authn is under embargo, i.e. due to cooldown. Records at most one
+      sample per FedCM API with auto re-authn enabled: some failures could occur
+      before this metric is recorded.
+    </summary>
+  </metric>
+  <metric name="AutoReauthn.ReturningAccounts" enum="FedCmReturningAccounts">
+    <summary>
+      Records whether there was zero, one, or multiple returning accounts when a
+      site calls the FedCM API with autoReauthn: true. Records at most one
+      sample per failed API call: some failures could occur before this metric
+      is recorded.
+    </summary>
+  </metric>
+  <metric name="AutoReauthn.Succeeded" enum="Boolean">
+    <summary>
+      Records whether auto re-authn checks succeeded or not. The count would
+      provide roughly the number of FedCM re-authn attempts, the true count
+      would provide the number of times the re-authn UI is shown to the user,
+      and the false count would provide the number of attempts where auto
+      re-authn was blocked for some non-network related reason. Records at most
+      one sample per FedCM API with auto re-authn enabled: some failures could
+      occur before this metric is recorded.
+    </summary>
+  </metric>
+  <metric name="AutoReauthn.TimeFromEmbargoWhenBlocked">
+    <summary>
+      Records the amount of time that has passed from the time the FedCM auto
+      re-authn API was embargoed to the time in which the next call occurs. Only
+      records a sample when there is an auto re-authn FedCM API call which is
+      blocked due to embargo. Samples are exponentially bucketed, with a max
+      bucket of 10 minutes, the embargo duration (see
+      `kFederatedIdentityAutoReauthnEmbargoDuration`).
+    </summary>
+  </metric>
   <metric name="FedCmSessionID">
     <summary>
       Records the session ID associated to the FedCM call for which this event
@@ -2906,7 +3387,7 @@ be describing additional metrics about the same event.
 
 <event name="Blink.FedCmIdp">
   <owner>npm@chromium.org</owner>
-  <owner>webid-core@google.com</owner>
+  <owner>web-identity-eng@google.com</owner>
   <summary>
     Records performance metrics for FedCM (Federated Credential Management) API.
     Recorded when the web developer calls the FedCM API. Individual metrics are
@@ -5535,6 +6016,112 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="ClientHints.AcceptCHFrameUsage">
+  <owner>arichiv@chromium.org</owner>
+  <owner>victortan@chromium.org</owner>
+  <summary>
+    Record when a Client Hint is requested in an ACCEPT_CH TLS Frame.
+  </summary>
+  <metric name="Type" enum="WebClientHintsType">
+    <summary>
+      Records an enum representing the specific Client Hint type that was
+      requested.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="ClientHints.AcceptCHHeaderUsage">
+  <owner>arichiv@chromium.org</owner>
+  <owner>victortan@chromium.org</owner>
+  <summary>
+    Record when a Client Hint is requested in a Accept-CH HTTP Response Header.
+  </summary>
+  <metric name="Type" enum="WebClientHintsType">
+    <summary>
+      Records an enum representing the specific Client Hint type that was
+      requested.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="ClientHints.AcceptCHMetaUsage">
+  <owner>arichiv@chromium.org</owner>
+  <owner>victortan@chromium.org</owner>
+  <summary>
+    Record when a Client Hint is requested in a Accept-CH HTML Meta Tag.
+  </summary>
+  <metric name="Type" enum="WebClientHintsType">
+    <summary>
+      Records an enum representing the specific Client Hint type that was
+      requested.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="ClientHints.CriticalCHHeaderUsage">
+  <owner>arichiv@chromium.org</owner>
+  <owner>victortan@chromium.org</owner>
+  <summary>
+    Record when a Client Hint is requested in a Critical-CH HTTP Response
+    Header.
+  </summary>
+  <metric name="Type" enum="WebClientHintsType">
+    <summary>
+      Records an enum representing the specific Client Hint type that was
+      requested.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
+<event name="ClientHints.DelegateCHMetaUsage">
+  <owner>arichiv@chromium.org</owner>
+  <owner>victortan@chromium.org</owner>
+  <summary>
+    Record when a Client Hint is requested in a Delegate-CH HTML Meta Tag.
+  </summary>
+  <metric name="Type" enum="WebClientHintsType">
+    <summary>
+      Records an enum representing the specific Client Hint type that was
+      requested.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="ClientRenderingAPI">
   <owner>aaronhk@chromium.org</owner>
   <owner>cwallez@chromium.org</owner>
@@ -6284,8 +6871,24 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="DIPS.Deletion" singular="True">
+  <owner>rtarpine@google.com</owner>
+  <owner>dc-komics@google.com</owner>
+  <summary>
+    Recorded when DIPS judges a site to be an incidental party and deletes its
+    storage.
+  </summary>
+  <metric name="Detected" enum="BooleanDetected">
+    <summary>
+      Always set to true (only present because UKM events require at least one
+      metric).
+    </summary>
+  </metric>
+</event>
+
 <event name="DIPS.Redirect" singular="True">
   <owner>rtarpine@google.com</owner>
+  <owner>dc-komics@google.com</owner>
   <summary>
     Recorded on every HTTP redirect or client-side bounce, where a client-side
     bounce is a non-user-initiated navigation starting soon after the previous
@@ -6352,6 +6955,7 @@ be describing additional metrics about the same event.
 
 <event name="DIPS.TriggeringAction">
   <owner>kaklilu@google.com</owner>
+  <owner>dc-komics@google.com</owner>
   <summary>
     Recorded on a repeated interval when DIPS may want to clear site storage to
     improve user privacy. These metrics will be used to determine which
@@ -6757,6 +7361,159 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="Extensions.OnNavigation" singular="True">
+  <owner>chikamune@chromium.org</owner>
+  <owner>yyanagisawa@chromium.org</owner>
+  <owner>sisidovski@chromium.org</owner>
+  <owner>hiroshige@chromium.org</owner>
+  <owner>kouhei@chromium.org</owner>
+  <summary>
+    Records the extension related metrics that might have negative impacts on
+    LCP. This is recorded when navigation is finished.
+  </summary>
+  <metric name="DeclarativeNetRequestFeedbackPermissionCount">
+    <summary>
+      The number of enabled extensions that have a DeclarativeNetRequestFeedback
+      permission. The exponential bucketing is applied for privacy reasons by
+      using ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="DeclarativeNetRequestPermissionCount">
+    <summary>
+      The number of enabled extensions that have a DeclarativeNetRequest
+      permission. The exponential bucketing is applied for privacy reasons by
+      using ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="DeclarativeNetRequestWithHostAccessPermissionCount">
+    <summary>
+      The number of enabled extensions that have a
+      DeclarativeNetRequestWithHostAccess permission. The exponential bucketing
+      is applied for privacy reasons by using
+      ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="DeclarativeWebRequestPermissionCount">
+    <summary>
+      The number of enabled extensions that have a DeclarativeWebRequest
+      permission. The exponential bucketing is applied for privacy reasons by
+      using ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="EnabledExtensionCount">
+    <summary>
+      The number of enabled extensions that are not themes nor apps nor
+      components. The exponential bucketing is applied for privacy reasons by
+      using ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="EnabledExtensionCount.HaveHostPermissions">
+    <summary>
+      The number of enabled extensions that have host permissions for the
+      navigation target URL. The exponential bucketing is applied for privacy
+      reasons by using ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="EnabledExtensionCount.InjectContentScript">
+    <summary>
+      The number of enabled extensions that inject content scripts. The
+      exponential bucketing is applied for privacy reasons by using
+      ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="WebRequestAuthProviderPermissionCount">
+    <summary>
+      The number of enabled extensions that have a WebRequestAuthProvider
+      permission. The exponential bucketing is applied for privacy reasons by
+      using ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="WebRequestBlockingPermissionCount">
+    <summary>
+      The number of enabled extensions that have a WebRequestBlocking
+      permission. The exponential bucketing is applied for privacy reasons by
+      using ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="WebRequestPermissionCount">
+    <summary>
+      The number of enabled extensions that have a WebRequest permission. The
+      exponential bucketing is applied for privacy reasons by using
+      ukm::GetExponentialBucketMin(value, 2).
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+</event>
+
 <event name="Extensions.WebRequest.KeepaliveRequestFinished">
   <owner>yhirano@chromium.org</owner>
   <owner>kinuko@chromium.org</owner>
@@ -7088,8 +7845,7 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="Graphics.Smoothness.EventLatency">
-  <owner>mohsen@chromium.org</owner>
-  <owner>sadrul@chromium.org</owner>
+  <owner>jonross@chromium.org</owner>
   <summary>
     Tracks the duration of stages in the rendering pipeline when processing a
     single frame in response to an input event. To meet UKM goals for data
@@ -7916,7 +8672,7 @@ be describing additional metrics about the same event.
 
 <event name="Graphics.Smoothness.Latency">
   <owner>animations-dev@chromium.org</owner>
-  <owner>sadrul@chromium.org</owner>
+  <owner>jonross@chromium.org</owner>
   <owner>schenney@chromium.org</owner>
   <summary>
     Tracks the duration of stages in the rendering pipeline while processing a
@@ -8440,7 +9196,7 @@ be describing additional metrics about the same event.
 <event name="Graphics.Smoothness.NormalizedPercentDroppedFrames"
     singular="True">
   <owner>animations-dev@chromium.org</owner>
-  <owner>sadrul@chromium.org</owner>
+  <owner>jonross@chromium.org</owner>
   <summary>
     Measures various normalizations for the smoothness metric. The metric is
     measured by counting dropped frames, and various normalization strategies
@@ -8895,8 +9651,11 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="Graphics.Smoothness.PercentDroppedFrames">
+  <obsolete>
+    Deprecated 02/2023.
+  </obsolete>
   <owner>animations-dev@chromium.org</owner>
-  <owner>sadrul@chromium.org</owner>
+  <owner>jonross@chromium.org</owner>
   <summary>
     Tracks the percent of dropped frames for a particular sequence of frames
     such as during scroll or animation. PercentDroppedFrames is measured by
@@ -9225,7 +9984,7 @@ be describing additional metrics about the same event.
     Deprecated 02/2020.
   </obsolete>
   <owner>animations-dev@chromium.org</owner>
-  <owner>sadrul@chromium.org</owner>
+  <owner>jonross@chromium.org</owner>
   <summary>
     As of 2020-02-12, this is deprecated in favor of
     Graphics.Smoothness.PercentDroppedFrames.
@@ -10113,7 +10872,9 @@ be describing additional metrics about the same event.
   <owner>thegreenfrog@chromium.org</owner>
   <owner>michaeldo@chromium.org</owner>
   <summary>
-    Logged when the FindInPage returns a user search request result.
+    Logged when the FindInPage returns a user search request result. Starting
+    from M111, this is only logged at the end of the Find session i.e. when the
+    Find UI is dismissed.
   </summary>
   <metric name="HasMatches" enum="Boolean">
     <summary>
@@ -12877,8 +13638,7 @@ be describing additional metrics about the same event.
   </summary>
   <metric name="AnchorIndex">
     <summary>
-      The index of the clicked-on anchor element in NavigationPredictor's
-      |top_urls_|.
+      The index of the clicked-on anchor element in the tracked list.
     </summary>
   </metric>
   <metric name="BucketedPathHash">
@@ -12980,6 +13740,13 @@ be describing additional metrics about the same event.
     <summary>
       1 if the href of the anchor element at the time the click is handled is
       the same as the href when the element was created. 0 if the href changed.
+    </summary>
+  </metric>
+  <metric name="NavigationStartToLinkClickedMs">
+    <summary>
+      The time in milliseconds between the moment an entry for the anchor
+      element was logged to UKM and the moment the user clicked on it.
+      Exponentially bucketed, 1.3 factor.
     </summary>
   </metric>
 </event>
@@ -13084,6 +13851,50 @@ be describing additional metrics about the same event.
     <summary>
       A bool that is set if the page is a search result page for the browser's
       default search engine
+    </summary>
+  </metric>
+</event>
+
+<event name="NavigationPredictorUserInteractions">
+  <owner>ryansturm@chromium.org</owner>
+  <owner>isaboori@google.com</owner>
+  <summary>
+    Metrics that describe user interaction with an anchor element. This event is
+    emitted once per randomly selected anchor elements.
+  </summary>
+  <metric name="AnchorIndex">
+    <summary>
+      The index of the anchor element in NavigationPredictor's |top_urls_|.
+    </summary>
+  </metric>
+  <metric name="IsInViewport">
+    <summary>
+      1 if anchor element is in viewport, otherwise 0.
+    </summary>
+  </metric>
+  <metric name="IsPointerHoveringOver">
+    <summary>
+      1 if the pointer is hovering over the anchor element, otherwise 0.
+    </summary>
+  </metric>
+  <metric name="MaxEnteredViewportToLeftViewportMs">
+    <summary>
+      Maximum time between the moment the anchor element entered the viewport
+      and the moment it left the viewport in milliseconds. Exponentially
+      bucketed using GetExponentialBucketMin a value of 1.3.
+    </summary>
+  </metric>
+  <metric name="MaxHoverDwellTimeMs">
+    <summary>
+      Maximum dwelltime of pointer hovering over the anchor element in
+      milliseconds. Exponentially bucketed using GetExponentialBucketMin a value
+      of 1.3.
+    </summary>
+  </metric>
+  <metric name="PointerHoveringOverCount">
+    <summary>
+      How many times the pointer was hovering over the anchor element.
+      Exponentially bucketed using GetExponentialBucketMin a value of 1.3.
     </summary>
   </metric>
 </event>
@@ -13193,6 +14004,9 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="Net.LegacyTLSVersion">
+  <obsolete>
+    Deprecated as of 2/2023.
+  </obsolete>
   <owner>davidben@chromium.org</owner>
   <summary>
     Recorded when a resource is loaded using TLS 1.0 or TLS 1.1.
@@ -13218,6 +14032,9 @@ be describing additional metrics about the same event.
 </event>
 
 <event name="Network.CacheTransparency">
+  <obsolete>
+    Deprecated in Jan 2023 in favor of Network.CacheTransparency2.
+  </obsolete>
   <owner>nidhijaju@chromium.org</owner>
   <owner>ricea@chromium.org</owner>
   <summary>
@@ -13237,6 +14054,40 @@ be describing additional metrics about the same event.
         </statistics>
       </history>
     </aggregation>
+  </metric>
+  <metric name="TotalBytesFetched">
+    <summary>
+      Records the total bytes fetched by the network.
+    </summary>
+  </metric>
+</event>
+
+<event name="Network.CacheTransparency2">
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>ricea@chromium.org</owner>
+  <summary>
+    Metrics for Cache Transparency which aims to allow a list of pervasive
+    payloads to be specified and cached in a single-keyed cache to improve
+    loading performance. Recorded for each navigation and subresource load.
+  </summary>
+  <metric name="FoundPervasivePayload" enum="Boolean">
+    <summary>
+      Records whether a requested resource's URL matched with any of the URLs in
+      the Cache Transparency Pervasive Payloads List.
+    </summary>
+    <aggregation>
+      <history>
+        <statistics>
+          <enumeration/>
+        </statistics>
+      </history>
+    </aggregation>
+  </metric>
+  <metric name="PervasiveBytesFetched">
+    <summary>
+      Records the number of bytes fetched by the network for pervasive payloads
+      on a page.
+    </summary>
   </metric>
   <metric name="TotalBytesFetched">
     <summary>
@@ -15272,6 +16123,24 @@ be describing additional metrics about the same event.
       image, and omitted when it is text.
     </summary>
   </metric>
+  <metric name="PaintTiming.LargestContentfulPaintImageLoadEnd">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the LCP element(image) finishes loading. For
+      animated images, this is when the image resource finishes loading
+      completely, not the first frame time. See web.dev/optimize-lcp for more
+      details. This metric is not recorded when the LCP element is text or
+      video.
+    </summary>
+  </metric>
+  <metric name="PaintTiming.LargestContentfulPaintImageLoadStart">
+    <summary>
+      Measures the time in milliseconds from navigation timing's navigation
+      start to the time when the LCP element(image) starts loading. See
+      web.dev/optimize-lcp for more details. This metric is not recorded when
+      the LCP element is text or video.
+    </summary>
+  </metric>
   <metric name="PaintTiming.LargestContentfulPaintRequestPriority"
       enum="NetRequestPriority">
     <summary>
@@ -15548,6 +16417,14 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="PageLoad.CacheTransparencyEnabled" singular="True">
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>ricea@chromium.org</owner>
+  <summary>
+    Recorded for page loads where Cache Transparency is enabled.
+  </summary>
+</event>
+
 <event name="PageLoad.FromGoogleSearch" singular="True">
   <owner>sullivan@chromium.org</owner>
   <owner>mushan@chromium.org</owner>
@@ -15627,6 +16504,15 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="PageLoad.PervasivePayloadsEnabled" singular="True">
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>ricea@chromium.org</owner>
+  <summary>
+    Recorded for page loads where the pervasive payloads list is inputted to
+    Chrome.
+  </summary>
+</event>
+
 <event name="PageLoad.ServiceWorkerControlled" singular="True">
   <owner>wanderview@chromium.org</owner>
   <owner>asamidoi@chromium.org</owner>
@@ -15662,6 +16548,28 @@ be describing additional metrics about the same event.
       Set to 1 when the InfoBar was shown, but not acted upon. Set to 2 when the
       page was paused, but not resumed. Set to 3 when the page was resumed. If
       the InfoBar was not shown, this metrics is not recorded.
+    </summary>
+  </metric>
+</event>
+
+<event name="PageLoadInitiatorForAdTagging" singular="True">
+  <owner>yaoxia@chromium.org</owner>
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    Metrics about the initiator context of a page load (e.g. whether certain
+    condition was true and/or what triggered the page load). Recorded when a
+    page commits. The metrics are specific to ad related conditions or purposes.
+  </summary>
+  <metric name="FromAdClick" enum="Boolean">
+    <summary>
+      Whether the page was opened due to a click on an ad.
+    </summary>
+  </metric>
+  <metric name="FromUser" enum="Boolean">
+    <summary>
+      Whether the navigation occurred due to a user action. This includes
+      omnibox navigations as well as renderer initiated navigations with user
+      activation.
     </summary>
   </metric>
 </event>
@@ -16128,7 +17036,7 @@ be describing additional metrics about the same event.
       enum="PasswordManager.PasswordChangeSuccessTracker.EndEvent">
     <summary>
       Records how the flow was ended, e.g. whether it ended with an generated
-      password from an automated flow, a password reset link, etc.
+      password from a manual flow, a password reset link, etc.
     </summary>
   </metric>
   <metric name="EntryPoint"
@@ -16141,8 +17049,8 @@ be describing additional metrics about the same event.
   <metric name="StartEvent"
       enum="PasswordManager.PasswordChangeSuccessTracker.StartEvent">
     <summary>
-      Records how the flow was started, e.g. whether it was an automated flow, a
-      manual flow will a well-known/.change-password URL, etc.
+      Records how the flow was started, e.g. whether it was a manual from
+      settings, a manual flow will a well-known/.change-password URL, etc.
     </summary>
   </metric>
 </event>
@@ -16153,10 +17061,7 @@ be describing additional metrics about the same event.
   <summary>
     Metrics related to password change. The Password Checkup in Chrome Settings
     aims to help users find their leaked passwords. After getting list of
-    compromised passwords, user can trigger password change. On some limited
-    number of sites automated password change is available and on others only
-    manual change is available. We collect what type of password change user
-    triggered.
+    compromised passwords, user can trigger password change.
   </summary>
   <metric name="PasswordChangeType" enum="PasswordChangeType">
     <summary>
@@ -16495,6 +17400,27 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="PerformanceManager.PageResourceUsage">
+  <owner>anthonyvd@chromium.org</owner>
+  <owner>joenotcharles@chromium.org</owner>
+  <summary>
+    Metrics detailing the estimated resources used by pages. The resources of a
+    renderer process are allocated to all pages hosted in that process using the
+    algorithm in performance_manager::ProcessMetricsDecorator. An event is
+    collected for each open page every 5 minutes.
+  </summary>
+  <metric name="PrivateFootprintEstimate">
+    <summary>
+      The estimated private footprint of the page, in kilobytes.
+    </summary>
+  </metric>
+  <metric name="ResidentSetSizeEstimate">
+    <summary>
+      The estimated resident set size of the page, in kilobytes.
+    </summary>
+  </metric>
+</event>
+
 <event name="PerformanceManager.PageTimelineState">
   <owner>anthonyvd@chromium.org</owner>
   <owner>spvw@chromium.org</owner>
@@ -16555,7 +17481,7 @@ be describing additional metrics about the same event.
   <metric name="ResidentSetSize">
     <summary>
       The total resident set size footprint of this page at the moment the
-      sample was recorded, in bytes.
+      sample was recorded, in kilobytes.
     </summary>
   </metric>
   <metric name="SliceId">
@@ -17681,6 +18607,21 @@ be describing additional metrics about the same event.
       are from the Chrome enum content::PreloadingType.
     </summary>
   </metric>
+  <metric name="ReadyTime">
+    <summary>
+      The amount of time the attempt took to reach a state in which it is ready
+      to be used for the next navigation, in milliseconds. Note: currently only
+      Prefetch, Prerender and NoStatePrefetch have a ready state. This field is
+      only meaningful to these three types of preloading.
+    </summary>
+  </metric>
+  <metric name="TimeToNextNavigation">
+    <summary>
+      The amount of time the attempt took to reach the next navigation, in
+      milliseconds. This can happen multiple times, but only the first is
+      recorded.
+    </summary>
+  </metric>
   <metric name="TriggeringOutcome">
     <summary>
       Specifies whether the preloading attempt triggered and was used for the
@@ -17742,6 +18683,21 @@ be describing additional metrics about the same event.
       The type of preloading operation used for the preloading attempt.
     </summary>
   </metric>
+  <metric name="ReadyTime">
+    <summary>
+      The amount of time the attempt took to reach a state in which it is ready
+      to be used for the next navigation, in milliseconds. Note: currently only
+      Prefetch, Prerender and NoStatePrefetch have a ready state. This field is
+      only meaningful to these three types of preloading.
+    </summary>
+  </metric>
+  <metric name="TimeToNextNavigation">
+    <summary>
+      The amount of time the attempt took to reach the next navigation, in
+      milliseconds. This can happen multiple times, but only the first is
+      recorded.
+    </summary>
+  </metric>
   <metric name="TriggeringOutcome">
     <summary>
       Specifies whether the preloading triggered and was used for the next
@@ -17781,6 +18737,13 @@ be describing additional metrics about the same event.
       content::PreloadingPredictor or ChromePreloadingPredictor.
     </summary>
   </metric>
+  <metric name="TimeToNextNavigation">
+    <summary>
+      The amount of time the prediction took to reach the next navigation, in
+      milliseconds. This can happen multiple times, but only the first is
+      recorded.
+    </summary>
+  </metric>
 </event>
 
 <event name="Preloading.Prediction.PreviousPrimaryPage">
@@ -17812,6 +18775,13 @@ be describing additional metrics about the same event.
     <summary>
       The type of preloading predictor which made the preloading prediction.
       Values are from content::PreloadingPredictor or ChromePreloadingPredictor.
+    </summary>
+  </metric>
+  <metric name="TimeToNextNavigation">
+    <summary>
+      The amount of time the prediction took to reach the next navigation, in
+      milliseconds. This can happen multiple times, but only the first is
+      recorded.
     </summary>
   </metric>
 </event>
@@ -17873,6 +18843,18 @@ be describing additional metrics about the same event.
       metric, we measure the latency of user interactions by
       Responsiveness.UserInteraction.MaxEventDuration.
     </summary>
+    <aggregation>
+      <history>
+        <index fields="profile.country"/>
+        <index fields="profile.country,profile.system_ram"/>
+        <index fields="profile.is_dominant_version"/>
+        <index fields="profile.is_latest_version"/>
+        <index fields="profile.system_ram"/>
+        <statistics>
+          <quantiles type="std-percentiles"/>
+        </statistics>
+      </history>
+    </aggregation>
   </metric>
   <metric name="InteractiveTiming.WorstUserInteractionLatency.MaxEventDuration">
     <summary>
@@ -19348,6 +20330,78 @@ be describing additional metrics about the same event.
       Predicted result from executing the ML model. This is normally a score for
       determining whether to show a particular feature. The value is a floating
       number between 0 to 1 and encoded into IEEE 754 double precision here.
+      This is being deprecated. Use PredictionResult1 instead. Will add
+      deprecated flag once all the code are start using PredictionResult1.
+    </summary>
+  </metric>
+  <metric name="PredictionResult1">
+    <summary>
+      The 1st output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult10">
+    <summary>
+      The 10th output when inferencing the ML model with input data. The value
+      is a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult2">
+    <summary>
+      The 2nd output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult3">
+    <summary>
+      The 3rd output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult4">
+    <summary>
+      The 4th output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult5">
+    <summary>
+      The 5th output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult6">
+    <summary>
+      The 6th output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult7">
+    <summary>
+      The 7th output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult8">
+    <summary>
+      The 8th output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
+    </summary>
+  </metric>
+  <metric name="PredictionResult9">
+    <summary>
+      The 9th output when inferencing the ML model with input data. The value is
+      a floating number between 0 to 1 and encoded into IEEE 754 double
+      precision here.
     </summary>
   </metric>
   <metric name="SelectionResult">
@@ -19489,6 +20543,20 @@ be describing additional metrics about the same event.
       Whether the user selected a device, an app or nothing (i.e. dismissal) in
       the user interface. For some entry points this might always be the same
       value (e.g. right clicks always select devices).
+    </summary>
+  </metric>
+</event>
+
+<event name="Shopping.AddToCartDetection">
+  <owner>wychen@chromium.org</owner>
+  <owner>yuezhanggg@chromium.org</owner>
+  <summary>
+    Metrics related to DOM-based AddToCart button detection in ChromeCart.
+  </summary>
+  <metric name="HeuristicsExecutionTime">
+    <summary>
+      Logged when DOM-based AddToCart button detection heuristic is executed and
+      records the execution time. This is expressed in microseconds.
     </summary>
   </metric>
 </event>
@@ -22132,6 +23200,272 @@ be describing additional metrics about the same event.
   </metric>
 </event>
 
+<event name="V8CompileHints.Version1">
+  <owner>marja@chromium.org</owner>
+  <owner>v8-loading@google.com</owner>
+  <summary>
+    Data about which JavaScript functions are compiled. The collected data is
+    obfuscated to not reveal script URLs. The total data, 2048 B, is split into
+    separate int64s.
+  </summary>
+  <metric name="Data000"/>
+  <metric name="Data001"/>
+  <metric name="Data002"/>
+  <metric name="Data003"/>
+  <metric name="Data004"/>
+  <metric name="Data005"/>
+  <metric name="Data006"/>
+  <metric name="Data007"/>
+  <metric name="Data008"/>
+  <metric name="Data009"/>
+  <metric name="Data010"/>
+  <metric name="Data011"/>
+  <metric name="Data012"/>
+  <metric name="Data013"/>
+  <metric name="Data014"/>
+  <metric name="Data015"/>
+  <metric name="Data016"/>
+  <metric name="Data017"/>
+  <metric name="Data018"/>
+  <metric name="Data019"/>
+  <metric name="Data020"/>
+  <metric name="Data021"/>
+  <metric name="Data022"/>
+  <metric name="Data023"/>
+  <metric name="Data024"/>
+  <metric name="Data025"/>
+  <metric name="Data026"/>
+  <metric name="Data027"/>
+  <metric name="Data028"/>
+  <metric name="Data029"/>
+  <metric name="Data030"/>
+  <metric name="Data031"/>
+  <metric name="Data032"/>
+  <metric name="Data033"/>
+  <metric name="Data034"/>
+  <metric name="Data035"/>
+  <metric name="Data036"/>
+  <metric name="Data037"/>
+  <metric name="Data038"/>
+  <metric name="Data039"/>
+  <metric name="Data040"/>
+  <metric name="Data041"/>
+  <metric name="Data042"/>
+  <metric name="Data043"/>
+  <metric name="Data044"/>
+  <metric name="Data045"/>
+  <metric name="Data046"/>
+  <metric name="Data047"/>
+  <metric name="Data048"/>
+  <metric name="Data049"/>
+  <metric name="Data050"/>
+  <metric name="Data051"/>
+  <metric name="Data052"/>
+  <metric name="Data053"/>
+  <metric name="Data054"/>
+  <metric name="Data055"/>
+  <metric name="Data056"/>
+  <metric name="Data057"/>
+  <metric name="Data058"/>
+  <metric name="Data059"/>
+  <metric name="Data060"/>
+  <metric name="Data061"/>
+  <metric name="Data062"/>
+  <metric name="Data063"/>
+  <metric name="Data064"/>
+  <metric name="Data065"/>
+  <metric name="Data066"/>
+  <metric name="Data067"/>
+  <metric name="Data068"/>
+  <metric name="Data069"/>
+  <metric name="Data070"/>
+  <metric name="Data071"/>
+  <metric name="Data072"/>
+  <metric name="Data073"/>
+  <metric name="Data074"/>
+  <metric name="Data075"/>
+  <metric name="Data076"/>
+  <metric name="Data077"/>
+  <metric name="Data078"/>
+  <metric name="Data079"/>
+  <metric name="Data080"/>
+  <metric name="Data081"/>
+  <metric name="Data082"/>
+  <metric name="Data083"/>
+  <metric name="Data084"/>
+  <metric name="Data085"/>
+  <metric name="Data086"/>
+  <metric name="Data087"/>
+  <metric name="Data088"/>
+  <metric name="Data089"/>
+  <metric name="Data090"/>
+  <metric name="Data091"/>
+  <metric name="Data092"/>
+  <metric name="Data093"/>
+  <metric name="Data094"/>
+  <metric name="Data095"/>
+  <metric name="Data096"/>
+  <metric name="Data097"/>
+  <metric name="Data098"/>
+  <metric name="Data099"/>
+  <metric name="Data100"/>
+  <metric name="Data101"/>
+  <metric name="Data102"/>
+  <metric name="Data103"/>
+  <metric name="Data104"/>
+  <metric name="Data105"/>
+  <metric name="Data106"/>
+  <metric name="Data107"/>
+  <metric name="Data108"/>
+  <metric name="Data109"/>
+  <metric name="Data110"/>
+  <metric name="Data111"/>
+  <metric name="Data112"/>
+  <metric name="Data113"/>
+  <metric name="Data114"/>
+  <metric name="Data115"/>
+  <metric name="Data116"/>
+  <metric name="Data117"/>
+  <metric name="Data118"/>
+  <metric name="Data119"/>
+  <metric name="Data120"/>
+  <metric name="Data121"/>
+  <metric name="Data122"/>
+  <metric name="Data123"/>
+  <metric name="Data124"/>
+  <metric name="Data125"/>
+  <metric name="Data126"/>
+  <metric name="Data127"/>
+  <metric name="Data128"/>
+  <metric name="Data129"/>
+  <metric name="Data130"/>
+  <metric name="Data131"/>
+  <metric name="Data132"/>
+  <metric name="Data133"/>
+  <metric name="Data134"/>
+  <metric name="Data135"/>
+  <metric name="Data136"/>
+  <metric name="Data137"/>
+  <metric name="Data138"/>
+  <metric name="Data139"/>
+  <metric name="Data140"/>
+  <metric name="Data141"/>
+  <metric name="Data142"/>
+  <metric name="Data143"/>
+  <metric name="Data144"/>
+  <metric name="Data145"/>
+  <metric name="Data146"/>
+  <metric name="Data147"/>
+  <metric name="Data148"/>
+  <metric name="Data149"/>
+  <metric name="Data150"/>
+  <metric name="Data151"/>
+  <metric name="Data152"/>
+  <metric name="Data153"/>
+  <metric name="Data154"/>
+  <metric name="Data155"/>
+  <metric name="Data156"/>
+  <metric name="Data157"/>
+  <metric name="Data158"/>
+  <metric name="Data159"/>
+  <metric name="Data160"/>
+  <metric name="Data161"/>
+  <metric name="Data162"/>
+  <metric name="Data163"/>
+  <metric name="Data164"/>
+  <metric name="Data165"/>
+  <metric name="Data166"/>
+  <metric name="Data167"/>
+  <metric name="Data168"/>
+  <metric name="Data169"/>
+  <metric name="Data170"/>
+  <metric name="Data171"/>
+  <metric name="Data172"/>
+  <metric name="Data173"/>
+  <metric name="Data174"/>
+  <metric name="Data175"/>
+  <metric name="Data176"/>
+  <metric name="Data177"/>
+  <metric name="Data178"/>
+  <metric name="Data179"/>
+  <metric name="Data180"/>
+  <metric name="Data181"/>
+  <metric name="Data182"/>
+  <metric name="Data183"/>
+  <metric name="Data184"/>
+  <metric name="Data185"/>
+  <metric name="Data186"/>
+  <metric name="Data187"/>
+  <metric name="Data188"/>
+  <metric name="Data189"/>
+  <metric name="Data190"/>
+  <metric name="Data191"/>
+  <metric name="Data192"/>
+  <metric name="Data193"/>
+  <metric name="Data194"/>
+  <metric name="Data195"/>
+  <metric name="Data196"/>
+  <metric name="Data197"/>
+  <metric name="Data198"/>
+  <metric name="Data199"/>
+  <metric name="Data200"/>
+  <metric name="Data201"/>
+  <metric name="Data202"/>
+  <metric name="Data203"/>
+  <metric name="Data204"/>
+  <metric name="Data205"/>
+  <metric name="Data206"/>
+  <metric name="Data207"/>
+  <metric name="Data208"/>
+  <metric name="Data209"/>
+  <metric name="Data210"/>
+  <metric name="Data211"/>
+  <metric name="Data212"/>
+  <metric name="Data213"/>
+  <metric name="Data214"/>
+  <metric name="Data215"/>
+  <metric name="Data216"/>
+  <metric name="Data217"/>
+  <metric name="Data218"/>
+  <metric name="Data219"/>
+  <metric name="Data220"/>
+  <metric name="Data221"/>
+  <metric name="Data222"/>
+  <metric name="Data223"/>
+  <metric name="Data224"/>
+  <metric name="Data225"/>
+  <metric name="Data226"/>
+  <metric name="Data227"/>
+  <metric name="Data228"/>
+  <metric name="Data229"/>
+  <metric name="Data230"/>
+  <metric name="Data231"/>
+  <metric name="Data232"/>
+  <metric name="Data233"/>
+  <metric name="Data234"/>
+  <metric name="Data235"/>
+  <metric name="Data236"/>
+  <metric name="Data237"/>
+  <metric name="Data238"/>
+  <metric name="Data239"/>
+  <metric name="Data240"/>
+  <metric name="Data241"/>
+  <metric name="Data242"/>
+  <metric name="Data243"/>
+  <metric name="Data244"/>
+  <metric name="Data245"/>
+  <metric name="Data246"/>
+  <metric name="Data247"/>
+  <metric name="Data248"/>
+  <metric name="Data249"/>
+  <metric name="Data250"/>
+  <metric name="Data251"/>
+  <metric name="Data252"/>
+  <metric name="Data253"/>
+  <metric name="Data254"/>
+  <metric name="Data255"/>
+</event>
+
 <event name="VirtualKeyboard.Open">
   <owner>shend@chromium.org</owner>
   <summary>
@@ -22485,6 +23819,7 @@ be describing additional metrics about the same event.
     Features of a web app recorded at most once per day if a user interacted
     with the web app. Recorded for installed and/or promotable (installable) web
     apps unless noted otherwise on the metric. Keyed by start_url of the app.
+    Note: Changed in Feb 2022 to only record when App sync is enabled.
   </summary>
   <metric name="BackgroundDuration">
     <summary>

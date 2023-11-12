@@ -9,11 +9,12 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/functional/callback.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/login_manager/dbus-constants.h"
 
@@ -105,6 +106,9 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
 
     // Called when screen lock state is updated.
     virtual void ScreenLockedStateUpdated() {}
+
+    // Called when a powerwash is requested.
+    virtual void PowerwashRequested(bool admin_requested) {}
   };
 
   // Interface for performing actions on behalf of the stub implementation.
@@ -242,8 +246,19 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
 
   // Starts a remotely initiated factory reset, similar to |StartDeviceWipe|
   // above, but also performs additional checks on Chrome OS side.
+  // session_manager validates |signed_command| against |signature_type|
+  // algorithm.
+  //
+  // If the device is not managed by AD, session_manager does not expect
+  // unsigned remote commands or em::PolicyFetchRequest::NONE as
+  // |signature_type|.
+  // If managed by AD, unsigned powerwash requests and
+  // em::PolicyFetchRequest::NONE signature type are allowed, and any extra
+  // validation checks are skipped.
   virtual void StartRemoteDeviceWipe(
-      const enterprise_management::SignedData& signed_command) = 0;
+      const enterprise_management::SignedData& signed_command,
+      enterprise_management::PolicyFetchRequest::SignatureType
+          signature_type) = 0;
 
   // Set the block_demode and check_enrollment flags to 0 in the VPD.
   virtual void ClearForcedReEnrollmentVpd(
@@ -530,10 +545,5 @@ class COMPONENT_EXPORT(SESSION_MANAGER) SessionManagerClient {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ash::SessionManagerClient;
-}
 
 #endif  // CHROMEOS_ASH_COMPONENTS_DBUS_SESSION_MANAGER_SESSION_MANAGER_CLIENT_H_

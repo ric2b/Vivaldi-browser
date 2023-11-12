@@ -263,28 +263,23 @@ bool NeedsFullUpdateAfterPaintingChunk(
 }  // namespace
 
 void PaintArtifactCompositor::SetNeedsFullUpdateAfterPaintIfNeeded(
-    const PaintChunkSubset& previous,
-    const PaintChunkSubset& repainted) {
+    const PaintArtifact& previous,
+    const PaintArtifact& repainted) {
   if (needs_update_)
     return;
 
   // Adding or removing chunks requires a full update to add/remove cc::layers.
-  if (previous.size() != repainted.size()) {
+  if (previous.PaintChunks().size() != repainted.PaintChunks().size()) {
     SetNeedsUpdate(PaintArtifactCompositorUpdateReason::
                        kPaintArtifactCompositorNeedsFullUpdateChunksChanged);
     return;
   }
 
   // Loop over both paint chunk subsets in order.
-  auto previous_chunk_it = previous.begin();
-  auto repainted_chunk_it = repainted.begin();
-  for (; previous_chunk_it != previous.end();
-       ++previous_chunk_it, ++repainted_chunk_it) {
-    const auto& previous_chunk = *previous_chunk_it;
-    const auto& repainted_chunk = *repainted_chunk_it;
-    if (NeedsFullUpdateAfterPaintingChunk(
-            previous_chunk, previous.GetPaintArtifact(), repainted_chunk,
-            repainted.GetPaintArtifact())) {
+  for (wtf_size_t i = 0; i < previous.PaintChunks().size(); i++) {
+    if (NeedsFullUpdateAfterPaintingChunk(previous.PaintChunks()[i], previous,
+                                          repainted.PaintChunks()[i],
+                                          repainted)) {
       SetNeedsUpdate(
           PaintArtifactCompositorUpdateReason::
               kPaintArtifactCompositorNeedsFullUpdateAfterPaintingChunk);
@@ -376,9 +371,9 @@ bool PaintArtifactCompositor::DecompositeEffect(
 }
 
 void PaintArtifactCompositor::LayerizeGroup(
-    const PaintChunkSubset& chunks,
+    scoped_refptr<const PaintArtifact> artifact,
     const EffectPaintPropertyNode& current_group,
-    PaintChunkIterator& chunk_cursor,
+    Vector<PaintChunk>::const_iterator& chunk_cursor,
     HashSet<const TransformPaintPropertyNode*>& directly_composited_transforms,
     bool force_draws_content) {
   wtf_size_t first_layer_in_current_group = pending_layers_.size();
@@ -400,14 +395,14 @@ void PaintArtifactCompositor::LayerizeGroup(
   // previous layer. Again finding the host costs O(qd). Merging would cost
   // O(p) due to copying the chunk list. Subtotal: O((qd + p)d) = O(qd^2 + pd)
   // Assuming p > d, the total complexity would be O(pqd + qd^2 + pd) = O(pqd)
-  while (chunk_cursor != chunks.end()) {
+  while (chunk_cursor != artifact->PaintChunks().end()) {
     // Look at the effect node of the next chunk. There are 3 possible cases:
     // A. The next chunk belongs to the current group but no subgroup.
     // B. The next chunk does not belong to the current group.
     // C. The next chunk belongs to some subgroup of the current group.
     const auto& chunk_effect = chunk_cursor->properties.Effect().Unalias();
     if (&chunk_effect == &current_group) {
-      pending_layers_.emplace_back(chunks, chunk_cursor);
+      pending_layers_.emplace_back(artifact, *chunk_cursor);
       ++chunk_cursor;
       // force_draws_content doesn't apply to pending layers that require own
       // layer, specifically scrollbar layers, foreign layers, scroll hit
@@ -424,7 +419,7 @@ void PaintArtifactCompositor::LayerizeGroup(
       // Case C: The following chunks belong to a subgroup. Process them by
       //         a recursion call.
       wtf_size_t first_layer_in_subgroup = pending_layers_.size();
-      LayerizeGroup(chunks, *subgroup, chunk_cursor,
+      LayerizeGroup(artifact, *subgroup, chunk_cursor,
                     directly_composited_transforms,
                     force_draws_content || subgroup->DrawsContent());
       // The above LayerizeGroup generated new layers in pending_layers_
@@ -480,12 +475,11 @@ void PaintArtifactCompositor::LayerizeGroup(
 
 void PaintArtifactCompositor::CollectPendingLayers(
     scoped_refptr<const PaintArtifact> artifact) {
-  PaintChunkSubset subset(artifact);
-  auto cursor = subset.begin();
   HashSet<const TransformPaintPropertyNode*> directly_composited_transforms;
-  LayerizeGroup(subset, EffectPaintPropertyNode::Root(), cursor,
+  Vector<PaintChunk>::const_iterator cursor = artifact->PaintChunks().begin();
+  LayerizeGroup(artifact, EffectPaintPropertyNode::Root(), cursor,
                 directly_composited_transforms, /*force_draws_content*/ false);
-  DCHECK(cursor == subset.end());
+  DCHECK(cursor == artifact->PaintChunks().end());
   pending_layers_.ShrinkToReasonableCapacity();
 }
 
@@ -513,7 +507,7 @@ void SynthesizedClip::UpdateLayer(const ClipPaintPropertyNode& clip,
   AdjustMaskLayerGeometry(transform, layer_offset, layer_bounds);
   new_projection.PostTranslate(-layer_offset);
 
-  if (!path && new_projection.IsIdentityOr2DTranslation()) {
+  if (!path && new_projection.IsIdentityOr2dTranslation()) {
     gfx::Vector2dF translation = new_projection.To2dTranslation();
     new_rrect.offset(translation.x(), translation.y());
     needs_display = !rrect_is_local_ || new_rrect != rrect_;
@@ -546,7 +540,7 @@ SynthesizedClip::PaintContentsToDisplayList() {
     cc_list->push<cc::DrawRRectOp>(rrect_, flags);
   } else {
     cc_list->push<cc::SaveOp>();
-    if (projection_.IsIdentityOr2DTranslation()) {
+    if (projection_.IsIdentityOr2dTranslation()) {
       gfx::Vector2dF translation = projection_.To2dTranslation();
       cc_list->push<cc::TranslateOp>(translation.x(), translation.y());
     } else {
@@ -664,7 +658,7 @@ void PaintArtifactCompositor::Update(
   pending_layers_.reserve(old_size);
 
   // Make compositing decisions, storing the result in |pending_layers_|.
-  CollectPendingLayers(artifact);
+  CollectPendingLayers(std::move(artifact));
   PendingLayer::DecompositeTransforms(pending_layers_);
 
   LayerListBuilder layer_list_builder;
@@ -735,8 +729,8 @@ void PaintArtifactCompositor::Update(
     if (layer.subtree_property_changed())
       root_layer_->SetNeedsCommit();
 
-    auto shared_element_id = layer.ViewTransitionResourceId();
-    if (shared_element_id.IsValid()) {
+    auto transition_resource_id = layer.ViewTransitionResourceId();
+    if (transition_resource_id.IsValid()) {
       host->property_trees()
           ->effect_tree_mutable()
           .AddTransitionPseudoElementEffectId(effect_id);
@@ -930,36 +924,22 @@ void PaintArtifactCompositor::SetLayerDebugInfoEnabled(bool enabled) {
 
 static void UpdateLayerDebugInfo(
     cc::Layer& layer,
-    const PaintChunk::Id& id,
-    const String& name,
-    DOMNodeId owner_node_id,
+    const PendingLayer& pending_layer,
     CompositingReasons compositing_reasons,
     RasterInvalidationTracking* raster_invalidation_tracking) {
   cc::LayerDebugInfo& debug_info = layer.EnsureDebugInfo();
-
-  debug_info.name = name.Utf8();
+  debug_info.name = pending_layer.DebugName().Utf8();
   debug_info.compositing_reasons =
       CompositingReason::Descriptions(compositing_reasons);
   debug_info.compositing_reason_ids =
       CompositingReason::ShortNames(compositing_reasons);
-  debug_info.owner_node_id = owner_node_id;
+  debug_info.owner_node_id = pending_layer.OwnerNodeId();
 
   if (RasterInvalidationTracking::IsTracingRasterInvalidations() &&
       raster_invalidation_tracking) {
     raster_invalidation_tracking->AddToLayerDebugInfo(debug_info);
     raster_invalidation_tracking->ClearInvalidations();
   }
-}
-
-static void UpdateLayerDebugInfo(
-    cc::Layer& layer,
-    const PaintChunk::Id& id,
-    const PaintArtifact& paint_artifact,
-    CompositingReasons compositing_reasons,
-    RasterInvalidationTracking* raster_invalidation_tracking) {
-  UpdateLayerDebugInfo(layer, id, paint_artifact.ClientDebugName(id.client_id),
-                       paint_artifact.ClientOwnerNodeId(id.client_id),
-                       compositing_reasons, raster_invalidation_tracking);
 }
 
 void PaintArtifactCompositor::UpdateDebugInfo() const {
@@ -973,8 +953,7 @@ void PaintArtifactCompositor::UpdateDebugInfo() const {
     if (auto* client = pending_layer.GetContentLayerClient())
       tracking = client->GetRasterInvalidator().GetTracking();
     UpdateLayerDebugInfo(
-        layer, pending_layer.FirstPaintChunk().id,
-        pending_layer.Chunks().GetPaintArtifact(),
+        layer, pending_layer,
         GetCompositingReasons(pending_layer, previous_pending_layer), tracking);
     previous_pending_layer = &pending_layer;
   }
@@ -1005,6 +984,15 @@ CompositingReasons PaintArtifactCompositor::GetCompositingReasons(
   }
 
   CompositingReasons reasons = CompositingReason::kNone;
+  if (layer.GetPropertyTreeState().Transform().IsBackfaceHidden() &&
+      (!previous_layer || !previous_layer->GetPropertyTreeState()
+                               .Transform()
+                               .IsBackfaceHidden())) {
+    reasons = CompositingReason::kBackfaceVisibilityHidden;
+  } else if (layer.GetCompositingType() == PendingLayer::kOverlap) {
+    return CompositingReason::kOverlap;
+  }
+
   if (!previous_layer ||
       &layer.GetPropertyTreeState().Transform() !=
           &previous_layer->GetPropertyTreeState().Transform()) {
@@ -1034,10 +1022,6 @@ CompositingReasons PaintArtifactCompositor::GetCompositingReasons(
         reasons |= CompositingReason::kBlendingWithCompositedDescendants;
     }
   }
-
-  if (reasons == CompositingReason::kNone &&
-      layer.GetCompositingType() == PendingLayer::kOverlap)
-    reasons = CompositingReason::kOverlap;
 
   return reasons;
 }

@@ -260,11 +260,6 @@
     "dependencies": ["permission:hid"],
     "contexts": ["blessed_extension"]
   },
-  "hid.getUserSelectedDevices": {
-    "contexts": ["blessed_extension"],
-    "channel": "dev",
-    "dependencies": ["permission:hid"]
-  },
   "i18n": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app",
@@ -347,8 +342,10 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
+      "chrome://apps/",
       "chrome://bookmarks/*",
       "chrome://bookmarks-side-panel.top-chrome/*",
+      "chrome://customize-chrome-side-panel.top-chrome/*",
       "chrome://download-shelf.top-chrome/*",
       "chrome://eche-app/*",
       "chrome://extensions/*",

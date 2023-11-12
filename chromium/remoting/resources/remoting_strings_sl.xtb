@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Zaznana je bila nezdružljiva različica protokola. Poskrbite, da ste v obeh računalnikih nameščeni najnovejši različici, in poskusite znova.</translation>
 <translation id="1008557486741366299">Ne zdaj</translation>
 <translation id="1201402288615127009">Naprej</translation>
+<translation id="1296511125400541222">Copyright 2023 Ustvarjalci Chromiuma. Vse pravice pridržane.</translation>
 <translation id="1450760146488584666">Zahtevani predmet ne obstaja.</translation>
 <translation id="1480046233931937785">Seznam sodelujočih</translation>
 <translation id="1520828917794284345">Prilagodi velikost namizja</translation>
@@ -34,7 +35,6 @@
 <translation id="2599300881200251572">Ta storitev omogoča dohodne povezave iz odjemalcev za Oddaljeno namizje za Chrome.</translation>
 <translation id="2647232381348739934">Storitev Oddaljeno povezovanje s Chromom</translation>
 <translation id="2676780859508944670">Obdelava …</translation>
-<translation id="2692522824157224199">Copyright 2022 Google LLC. Vse pravice pridržane.</translation>
 <translation id="2699970397166997657">Oddaljeno povezovanje s Chromom</translation>
 <translation id="2758123043070977469">Pri preverjanju pristnosti je prišlo do napake. Prijavite se znova.</translation>
 <translation id="2803375539583399270">Vnesite kodo PIN</translation>
@@ -71,7 +71,6 @@
 <translation id="4257751272692708833">Aplikacija za posredovanje URL-jev storitve <ph name="PRODUCT_NAME" /></translation>
 <translation id="4277736576214464567">Koda za dostop je neveljavna. Poskusite znova.</translation>
 <translation id="4281844954008187215">Pogoji storitve</translation>
-<translation id="4372650392690220936">Copyright 2022 Ustvarjalci Chromiuma. Vse pravice pridržane.</translation>
 <translation id="4405930547258349619">Knjižnica jedra</translation>
 <translation id="443560535555262820">Odpri nastavitve dostopnosti</translation>
 <translation id="4450893287417543264">Tega ne prikaži več</translation>
@@ -85,6 +84,7 @@
 <translation id="4808503597364150972">Vnesite kodo PIN za gostitelja <ph name="HOSTNAME" />.</translation>
 <translation id="4812684235631257312">Gostitelj</translation>
 <translation id="4867841927763172006">Pošlji PrtScn</translation>
+<translation id="4960795469833295568">Copyright 2023 Google LLC. Vse pravice pridržane.</translation>
 <translation id="4985296110227979402">Računalnik morate najprej nastaviti za oddaljeni dostop.</translation>
 <translation id="4987330545941822761">Oddaljeno namizje za Chrome ne more določiti brskalnika za lokalno odpiranje URL-jev. Izberite ga na spodnjem seznamu.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (brez povezave)</translation>

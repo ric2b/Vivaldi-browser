@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_help_coordinator.h"
 
-#import "base/threading/sequenced_task_runner_handle.h"
+#import "base/task/sequenced_task_runner.h"
 #import "base/time/time.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/feature_constants.h"
@@ -100,10 +100,6 @@ constexpr base::TimeDelta kMenuTipDelay = base::Seconds(1);
   [sceneState removeObserver:self];
 }
 
-- (void)showPopupMenuButtonIPH {
-  [self showPopupMenuBubbleIfNecessary];
-}
-
 - (void)showOverflowMenuIPHInViewController:(UIViewController*)menu {
   // There are 2 reasons to show the IPH in the overflow menu:
   // 1. The alternate flow is enabled and the feature tracker says it can show.
@@ -174,6 +170,19 @@ constexpr base::TimeDelta kMenuTipDelay = base::Seconds(1);
     return;
   }
 
+  // If the Feature Engagement Tracker isn't ready, queue up and re-show when
+  // it has finished initializing.
+  if (!self.featureEngagementTracker->IsInitialized()) {
+    __weak __typeof(self) weakSelf = self;
+    self.featureEngagementTracker->AddOnInitializedCallback(
+        base::BindRepeating(^(bool success) {
+          if (!success) {
+            return;
+          }
+          [weakSelf showPopupMenuBubbleIfNecessary];
+        }));
+  }
+
   // Skip if a presentation is already in progress
   if (self.popupMenuBubblePresenter) {
     return;
@@ -206,7 +215,7 @@ constexpr base::TimeDelta kMenuTipDelay = base::Seconds(1);
   // Present the bubble after the delay.
   self.popupMenuBubblePresenter = bubblePresenter;
   __weak __typeof(self) weakSelf = self;
-  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, base::BindOnce(^{
         [weakSelf presentPopupMenuBubbleAtAnchorPoint:anchorPoint];
         [weakSelf.UIUpdater updateUIForIPHDisplayed:PopupMenuTypeToolsMenu];

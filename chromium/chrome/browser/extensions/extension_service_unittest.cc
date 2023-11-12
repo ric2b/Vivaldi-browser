@@ -14,11 +14,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
@@ -34,6 +34,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/test_future.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -299,7 +301,7 @@ void PersistExtensionWithPaths(
                                    .Set(keys::kName, "Test extension")
                                    .Set(keys::kVersion, "1.0")
                                    .Set(keys::kManifestVersion, 2)
-                                   .BuildDict();
+                                   .Build();
 
   // Persist manifest file.
   base::FilePath manifest_path = extension_dir.Append(kManifestFilename);
@@ -732,6 +734,35 @@ class ExtensionServiceTest : public ExtensionServiceTestWithInstall {
     task_environment()->RunUntilIdle();
 
     ASSERT_FALSE(IsBlocked(extension_id));
+  }
+
+  // Test that certain histograms are emitted for user and non-user profiles
+  // (users for ChromeOS Ash).
+  void RunEmitUserHistogramsTest(int nonuser_expected_total_count,
+                                 int user_expected_total_count) {
+    base::HistogramTester histograms;
+    TestExtensionDir good_extension_dir;
+    good_extension_dir.WriteManifest(
+        R"({
+           "name": "Good Extension",
+           "version": "0.1",
+           "manifest_version": 2
+         })");
+
+    ChromeTestExtensionLoader loader(testing_profile());
+    loader.set_pack_extension(false);
+    loader.LoadExtension(good_extension_dir.UnpackedPath());
+
+    histograms.ExpectTotalCount("Extensions.InstallType", 1);
+    histograms.ExpectTotalCount("Extensions.InstallSource", 1);
+    histograms.ExpectTotalCount("Extensions.InstallType.NonUser",
+                                nonuser_expected_total_count);
+    histograms.ExpectTotalCount("Extensions.InstallType.User",
+                                user_expected_total_count);
+    histograms.ExpectTotalCount("Extensions.InstallSource.NonUser",
+                                nonuser_expected_total_count);
+    histograms.ExpectTotalCount("Extensions.InstallSource.User",
+                                user_expected_total_count);
   }
 
   const base::Value::Dict* GetExtensionPref(const std::string& extension_id) {
@@ -1268,6 +1299,26 @@ TEST_F(ExtensionServiceTest, InstallExtension) {
 
   // TODO(erikkay): add more tests for many of the failure cases.
   // TODO(erikkay): add tests for upgrade cases.
+}
+
+TEST_F(ExtensionServiceTest, InstallExtension_EmitUserHistograms) {
+  InitializeEmptyExtensionService();
+
+  ASSERT_NO_FATAL_FAILURE(MaybeSetUpTestUser(
+      /*is_guest=*/false));
+  RunEmitUserHistogramsTest(
+      /*nonuser_expected_total_count=*/0,
+      /*user_expected_total_count=*/1);
+}
+
+TEST_F(ExtensionServiceTest, InstallExtension_NonUserEmitHistograms) {
+  InitializeEmptyExtensionService();
+
+  ASSERT_NO_FATAL_FAILURE(MaybeSetUpTestUser(
+      /*is_guest=*/true));
+  RunEmitUserHistogramsTest(
+      /*nonuser_expected_total_count=*/1,
+      /*user_expected_total_count=*/0);
 }
 
 // Test that correct notifications are sent to ExtensionRegistryObserver on
@@ -2617,10 +2668,10 @@ TEST_F(ExtensionServiceTest,
   ASSERT_FALSE(base::PathExists(manifest_dir));
 
   // First create a correct manifest and Load the extension successfully.
-  base::DictionaryValue manifest;
-  manifest.SetStringKey("version", "1.0");
-  manifest.SetStringKey("name", "malformed manifest reload test");
-  manifest.SetIntKey("manifest_version", 2);
+  base::Value::Dict manifest;
+  manifest.Set("version", "1.0");
+  manifest.Set("name", "malformed manifest reload test");
+  manifest.Set("manifest_version", 2);
 
   JSONFileValueSerializer serializer(manifest_dir);
   ASSERT_TRUE(serializer.Serialize(manifest));
@@ -2636,7 +2687,7 @@ TEST_F(ExtensionServiceTest,
   EXPECT_EQ("1.0", loaded_extensions()[0]->VersionString());
 
   // Change the version to a malformed version.
-  manifest.SetStringKey("version", "2.0b");
+  manifest.Set("version", "2.0b");
   ASSERT_TRUE(serializer.Serialize(manifest));
 
   std::string extension_id = loaded_extensions()[0]->id();
@@ -2656,7 +2707,7 @@ TEST_F(ExtensionServiceTest,
   EXPECT_TRUE(registry()->disabled_extensions().Contains(extension_id));
 
   // Fix the version.
-  manifest.SetStringKey("version", "2.0");
+  manifest.Set("version", "2.0");
   ASSERT_TRUE(serializer.Serialize(manifest));
 
   // Reload the extension.
@@ -3118,10 +3169,10 @@ TEST_F(ExtensionServiceTest, LoadExtensionsCanDowngrade) {
   ASSERT_FALSE(base::PathExists(manifest_path));
 
   // Start with version 2.0.
-  base::DictionaryValue manifest;
-  manifest.SetStringKey("version", "2.0");
-  manifest.SetStringKey("name", "LOAD Downgrade Test");
-  manifest.SetIntKey("manifest_version", 2);
+  base::Value::Dict manifest;
+  manifest.Set("version", "2.0");
+  manifest.Set("name", "LOAD Downgrade Test");
+  manifest.Set("manifest_version", 2);
 
   JSONFileValueSerializer serializer(manifest_path);
   ASSERT_TRUE(serializer.Serialize(manifest));
@@ -3137,7 +3188,7 @@ TEST_F(ExtensionServiceTest, LoadExtensionsCanDowngrade) {
 
   // Now set the version number to 1.0, reload the extensions and verify that
   // the downgrade was accepted.
-  manifest.SetStringKey("version", "1.0");
+  manifest.Set("version", "1.0");
   ASSERT_TRUE(serializer.Serialize(manifest));
 
   UnpackedInstaller::Create(service())->Load(extension_path);
@@ -3529,7 +3580,7 @@ TEST_F(ExtensionServiceTest, NoUnsetBlocklistInPrefs) {
   EXPECT_TRUE(registry()->enabled_extensions().Contains(good0));
   EXPECT_FALSE(registry()->blocklisted_extensions().Contains(good0));
 
-  base::Value attributes(base::Value::Type::DICTIONARY);
+  base::Value attributes(base::Value::Type::DICT);
   attributes.SetKey("_malware", base::Value(true));
 
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
@@ -4749,7 +4800,7 @@ TEST_F(ExtensionServiceTest, DisableRemotelyForMalware) {
   InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
   EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
 
-  base::Value attributes(base::Value::Type::DICTIONARY);
+  base::Value attributes(base::Value::Type::DICT);
   attributes.SetKey("_malware", base::Value(true));
   EXPECT_EQ(1u, registry()->enabled_extensions().size());
 
@@ -4774,7 +4825,7 @@ TEST_F(ExtensionServiceTest, NoEnableRemotelyDisabledExtension) {
   InstallCRX(data_dir().AppendASCII("good.crx"), INSTALL_NEW);
   EXPECT_TRUE(registry()->enabled_extensions().GetByID(good_crx));
 
-  base::Value attributes(base::Value::Type::DICTIONARY);
+  base::Value attributes(base::Value::Type::DICT);
   attributes.SetKey("_malware", base::Value(true));
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
   service()->DisableExtension(good_crx, disable_reason::DISABLE_USER_ACTION);
@@ -5201,18 +5252,13 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
       profile()->GetDefaultStoragePartition()->GetLocalStorageControl();
   mojo::Remote<blink::mojom::StorageArea> area;
   local_storage_control->BindStorageArea(
-      blink::StorageKey(url::Origin::Create(ext_url)),
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(ext_url)),
       area.BindNewPipeAndPassReceiver());
   {
-    bool success = false;
-    base::RunLoop run_loop;
+    base::test::TestFuture<bool> future;
     area->Put({'k', 'e', 'y'}, {'v', 'a', 'l', 'u', 'e'}, absl::nullopt,
-              "source", base::BindLambdaForTesting([&](bool success_in) {
-                success = success_in;
-                run_loop.Quit();
-              }));
-    run_loop.Run();
-    ASSERT_TRUE(success);
+              "source", future.GetCallback());
+    ASSERT_TRUE(future.Get());
   }
 
   // Create indexed db. It is enough to only simulate this by
@@ -5229,7 +5275,7 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
     auto bucket_locator = storage::BucketLocator();
     bucket_locator.id = storage::BucketId::FromUnsafeValue(1);
     bucket_locator.storage_key =
-        blink::StorageKey(url::Origin::Create(ext_url));
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(ext_url));
     idb_control_test->GetFilePathForTesting(
         bucket_locator,
         base::BindLambdaForTesting([&](const base::FilePath& path) {
@@ -5271,35 +5317,21 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
   task_environment()->RunUntilIdle();
 
   // Check that the localStorage data been removed.
-  std::vector<storage::mojom::StorageUsageInfoPtr> usage_infos;
   {
-    base::RunLoop run_loop;
-    local_storage_control->GetUsage(base::BindLambdaForTesting(
-        [&](std::vector<storage::mojom::StorageUsageInfoPtr> usage_infos_in) {
-          usage_infos.swap(usage_infos_in);
-          run_loop.Quit();
-        }));
-    run_loop.Run();
+    base::test::TestFuture<std::vector<storage::mojom::StorageUsageInfoPtr>>
+        future;
+    local_storage_control->GetUsage(future.GetCallback());
+    EXPECT_TRUE(future.Get().empty());
   }
-  EXPECT_TRUE(usage_infos.empty());
 
   // Check if the indexed db has disappeared too.
   EXPECT_FALSE(base::DirectoryExists(idb_path));
 }
 
-void SetCookieSaveData(bool* result_out,
-                       base::OnceClosure callback,
-                       net::CookieAccessResult result) {
-  *result_out = result.status.IsInclude();
-  std::move(callback).Run();
-}
-
-void GetCookiesSaveData(std::vector<net::CanonicalCookie>* result_out,
-                        base::OnceClosure callback,
-                        const net::CookieAccessResultList& result,
-                        const net::CookieAccessResultList& excluded_cookies) {
-  *result_out = net::cookie_util::StripAccessResults(result);
-  std::move(callback).Run();
+std::vector<net::CanonicalCookie> IncludedCookies(
+    const net::CookieAccessResultList& result,
+    const net::CookieAccessResultList& excluded) {
+  return net::cookie_util::StripAccessResults(result);
 }
 
 // Verifies app state is removed upon uninstall.
@@ -5351,26 +5383,22 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
   ASSERT_TRUE(cc.get());
 
   {
-    bool set_result = false;
-    base::RunLoop run_loop;
+    base::test::TestFuture<bool> future;
     cookie_manager_remote->SetCanonicalCookie(
         *cc.get(), origin1, net::CookieOptions::MakeAllInclusive(),
-        base::BindOnce(&SetCookieSaveData, &set_result,
-                       run_loop.QuitClosure()));
-    run_loop.Run();
-    EXPECT_TRUE(set_result);
+        base::BindOnce([](net::CookieAccessResult result) {
+          return result.status.IsInclude();
+        }).Then(future.GetCallback()));
+    EXPECT_TRUE(future.Get());
   }
 
   {
-    base::RunLoop run_loop;
-    std::vector<net::CanonicalCookie> cookies_result;
+    base::test::TestFuture<std::vector<net::CanonicalCookie>> future;
     cookie_manager_remote->GetCookieList(
         origin1, net::CookieOptions::MakeAllInclusive(),
         net::CookiePartitionKeyCollection(),
-        base::BindOnce(&GetCookiesSaveData, &cookies_result,
-                       run_loop.QuitClosure()));
-    run_loop.Run();
-    EXPECT_EQ(1U, cookies_result.size());
+        base::BindOnce(IncludedCookies).Then(future.GetCallback()));
+    EXPECT_EQ(1U, future.Get().size());
   }
 
   // Open a database.
@@ -5386,18 +5414,13 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
       profile()->GetDefaultStoragePartition()->GetLocalStorageControl();
   mojo::Remote<blink::mojom::StorageArea> area;
   local_storage_control->BindStorageArea(
-      blink::StorageKey(url::Origin::Create(origin1)),
+      blink::StorageKey::CreateFirstParty(url::Origin::Create(origin1)),
       area.BindNewPipeAndPassReceiver());
   {
-    bool success = false;
-    base::RunLoop run_loop;
+    base::test::TestFuture<bool> future;
     area->Put({'k', 'e', 'y'}, {'v', 'a', 'l', 'u', 'e'}, absl::nullopt,
-              "source", base::BindLambdaForTesting([&](bool success_in) {
-                success = success_in;
-                run_loop.Quit();
-              }));
-    run_loop.Run();
-    ASSERT_TRUE(success);
+              "source", future.GetCallback());
+    ASSERT_TRUE(future.Get());
   }
 
   // Create indexed db. It is enough to only simulate this by
@@ -5414,7 +5437,7 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
     auto bucket_locator = storage::BucketLocator();
     bucket_locator.id = storage::BucketId::FromUnsafeValue(1);
     bucket_locator.storage_key =
-        blink::StorageKey(url::Origin::Create(origin1));
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(origin1));
     idb_control_test->GetFilePathForTesting(
         bucket_locator,
         base::BindLambdaForTesting([&](const base::FilePath& path) {
@@ -5436,15 +5459,12 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
 
   {
     // Check that the cookie is still there.
-    base::RunLoop run_loop;
-    std::vector<net::CanonicalCookie> cookies_result;
+    base::test::TestFuture<std::vector<net::CanonicalCookie>> future;
     cookie_manager_remote->GetCookieList(
         origin1, net::CookieOptions::MakeAllInclusive(),
         net::CookiePartitionKeyCollection(),
-        base::BindOnce(&GetCookiesSaveData, &cookies_result,
-                       run_loop.QuitClosure()));
-    run_loop.Run();
-    EXPECT_EQ(1U, cookies_result.size());
+        base::BindOnce(IncludedCookies).Then(future.GetCallback()));
+    EXPECT_EQ(1U, future.Get().size());
   }
 
   // Now uninstall the other. Storage should be cleared for the apps.
@@ -5456,15 +5476,12 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
 
   {
     // Check that the cookie is gone.
-    base::RunLoop run_loop;
-    std::vector<net::CanonicalCookie> cookies_result;
+    base::test::TestFuture<std::vector<net::CanonicalCookie>> future;
     cookie_manager_remote->GetCookieList(
         origin1, net::CookieOptions::MakeAllInclusive(),
         net::CookiePartitionKeyCollection(),
-        base::BindOnce(&GetCookiesSaveData, &cookies_result,
-                       run_loop.QuitClosure()));
-    run_loop.Run();
-    EXPECT_EQ(0U, cookies_result.size());
+        base::BindOnce(IncludedCookies).Then(future.GetCallback()));
+    EXPECT_EQ(0U, future.Get().size());
   }
 
   // The database should have vanished as well.
@@ -5479,17 +5496,12 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
   task_environment()->RunUntilIdle();
 
   // Check that the localStorage data been removed.
-  std::vector<storage::mojom::StorageUsageInfoPtr> usage_infos;
   {
-    base::RunLoop run_loop;
-    local_storage_control->GetUsage(base::BindLambdaForTesting(
-        [&](std::vector<storage::mojom::StorageUsageInfoPtr> usage_infos_in) {
-          usage_infos.swap(usage_infos_in);
-          run_loop.Quit();
-        }));
-    run_loop.Run();
+    base::test::TestFuture<std::vector<storage::mojom::StorageUsageInfoPtr>>
+        future;
+    local_storage_control->GetUsage(future.GetCallback());
+    EXPECT_TRUE(future.Get().empty());
   }
-  EXPECT_TRUE(usage_infos.empty());
 
   // Check if the indexed db has disappeared too.
   EXPECT_FALSE(base::DirectoryExists(idb_path));
@@ -5503,7 +5515,7 @@ TEST_F(ExtensionServiceTest, LoadExtension) {
       R"({
            "name": "Good Extension",
            "version": "0.1",
-           "manifest_version": 2
+           "manifest_version": 3
          })");
 
   {
@@ -6040,19 +6052,6 @@ TEST_F(ExtensionServiceTest, ExternalPrefProvider) {
   {
     EXPECT_EQ(0, visitor.Visit(json_data));
   }
-
-  // Test is_bookmark_app.
-  MockProviderVisitor from_bookmark_visitor(
-      base_path, Extension::FROM_BOOKMARK);
-  json_data =
-      "{"
-      "  \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\": {"
-      "    \"external_crx\": \"RandomExtension.crx\","
-      "    \"external_version\": \"1.0\","
-      "    \"is_bookmark_app\": true"
-      "  }"
-      "}";
-  EXPECT_EQ(1, from_bookmark_visitor.Visit(json_data));
 
   // Test is_from_webstore.
   MockProviderVisitor from_webstore_visitor(
@@ -7637,7 +7636,7 @@ TEST_F(ExtensionServiceTest, CannotDisableSharedModules) {
   scoped_refptr<const Extension> extension =
       ExtensionBuilder("Shared Module")
           .SetManifestPath("export.resources",
-                           ListBuilder().Append("foo.js").BuildList())
+                           ListBuilder().Append("foo.js").Build())
           .AddFlags(Extension::FROM_WEBSTORE)
           .Build();
 

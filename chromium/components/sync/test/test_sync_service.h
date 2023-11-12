@@ -44,7 +44,6 @@ class TestSyncService : public SyncService {
   // errors are treated equally.
   void SetPersistentAuthErrorOtherThanWebSignout();
   void SetPersistentAuthErrorWithWebSignout();
-  void SetTransientAuthError();
   void ClearAuthError();
 
   void SetFirstSetupComplete(bool first_setup_complete);
@@ -71,6 +70,7 @@ class TestSyncService : public SyncService {
   const syncer::SyncUserSettings* GetUserSettings() const override;
   DisableReasonSet GetDisableReasons() const override;
   TransportState GetTransportState() const override;
+  UserActionableError GetUserActionableError() const override;
   bool IsLocalSyncEnabled() const override;
   CoreAccountInfo GetAccountInfo() const override;
   bool HasSyncConsent() const override;

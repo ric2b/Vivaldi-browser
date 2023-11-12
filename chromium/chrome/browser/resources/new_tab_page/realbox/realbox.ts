@@ -2,22 +2,26 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import './realbox_dropdown.js';
-import './realbox_icon.js';
+import 'chrome://resources/cr_components/omnibox/realbox_dropdown.js';
+import 'chrome://resources/cr_components/omnibox/realbox_icon.js';
 
+import {AutocompleteMatch, AutocompleteResult, NavigationPredictor, PageCallbackRouter, PageHandlerInterface} from 'chrome://resources/cr_components/omnibox/omnibox.mojom-webui.js';
+import {RealboxBrowserProxy} from 'chrome://resources/cr_components/omnibox/realbox_browser_proxy.js';
+import {RealboxDropdownElement} from 'chrome://resources/cr_components/omnibox/realbox_dropdown.js';
+import {RealboxIconElement} from 'chrome://resources/cr_components/omnibox/realbox_icon.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {MetricsReporterImpl} from 'chrome://resources/js/metrics_reporter/metrics_reporter.js';
 import {hasKeyModifiers} from 'chrome://resources/js/util_ts.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
-import {AutocompleteMatch, AutocompleteResult, NavigationPredictor, PageCallbackRouter, PageHandlerInterface} from '../omnibox.mojom-webui.js';
 import {decodeString16, mojoString16, mojoTimeDelta} from '../utils.js';
 
 import {getTemplate} from './realbox.html.js';
-import {RealboxBrowserProxy} from './realbox_browser_proxy.js';
-import {RealboxDropdownElement} from './realbox_dropdown.js';
-import {RealboxIconElement} from './realbox_icon.js';
+
+// 900px ~= 561px (max value for --ntp-search-box-width) * 1.5 + some margin.
+const showSecondaryMatchesMediaQueryList =
+    window.matchMedia('(min-width: 900px)');
 
 interface Input {
   text: string;
@@ -55,6 +59,26 @@ export class RealboxElement extends PolymerElement {
       //========================================================================
       // Public properties
       //========================================================================
+
+      /** Whether secondary matches can be shown. */
+      canShowSecondaryMatches: {
+        type: Boolean,
+        value: () => showSecondaryMatchesMediaQueryList.matches &&
+            loadTimeData.getBoolean('showSecondarySide'),
+        reflectToAttribute: true,
+      },
+
+      /** Whether secondary matches were at any point available to show. */
+      hadSecondaryMatches: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+
+      /** Whether secondary matches are currently available to show. */
+      hasSecondaryMatches: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
 
       /** Whether the theme is dark. */
       isDark: {
@@ -181,7 +205,7 @@ export class RealboxElement extends PolymerElement {
 
       /**
        * Index of the currently selected match, if any.
-       * Do not modify this. Use <ntp-realbox-dropdown> API to change selection.
+       * Do not modify this. Use <cr-realbox-dropdown> API to change selection.
        */
       selectedMatchIndex_: {
         type: Number,
@@ -196,10 +220,12 @@ export class RealboxElement extends PolymerElement {
     };
   }
 
+  canShowSecondaryMatches: boolean;
   isDark: boolean;
   matchesAreVisible: boolean;
   matchSearchbox: boolean;
   realboxLensSearchEnabled: boolean;
+  hadSecondaryMatches: boolean;
   singleColoredIcons: boolean;
   private charTypedTime_: number;
   private inputAriaLive_: string;
@@ -235,6 +261,8 @@ export class RealboxElement extends PolymerElement {
     this.autocompleteResultChangedListenerId_ =
         this.callbackRouter_.autocompleteResultChanged.addListener(
             this.onAutocompleteResultChanged_.bind(this));
+    showSecondaryMatchesMediaQueryList.addEventListener(
+        'change', this.onCanShowSecondaryMatchesChanged_.bind(this));
   }
 
   override disconnectedCallback() {
@@ -242,6 +270,8 @@ export class RealboxElement extends PolymerElement {
     assert(this.autocompleteResultChangedListenerId_);
     this.callbackRouter_.removeListener(
         this.autocompleteResultChangedListenerId_);
+    showSecondaryMatchesMediaQueryList.removeEventListener(
+        'change', this.onCanShowSecondaryMatchesChanged_.bind(this));
   }
 
   override ready() {
@@ -260,13 +290,14 @@ export class RealboxElement extends PolymerElement {
     }
 
     this.result_ = result;
-    const hasMatches = result && result.matches && result.matches.length > 0;
+    const hasMatches = result?.matches?.length > 0;
     this.matchesAreVisible = hasMatches;
 
     this.$.input.focus();
 
     const firstMatch = hasMatches ? this.result_.matches[0] : null;
     if (firstMatch && firstMatch.allowedToBeDefaultMatch) {
+      // Select the default match and update the input.
       this.$.matches.selectFirst();
       this.updateInput_({
         text: this.lastQueriedInput_,
@@ -282,7 +313,7 @@ export class RealboxElement extends PolymerElement {
     } else if (
         hasMatches && this.selectedMatchIndex_ !== -1 &&
         this.selectedMatchIndex_ < this.result_.matches.length) {
-      // Restore the selection, if any.
+      // Restore the selection and update the input.
       this.$.matches.selectIndex(this.selectedMatchIndex_);
       this.updateInput_({
         text: decodeString16(this.selectedMatch_!.fillIntoEdit),
@@ -290,6 +321,7 @@ export class RealboxElement extends PolymerElement {
         moveCursorToEnd: true,
       });
     } else {
+      // Remove the selection and update the input.
       this.$.matches.unselect();
       this.updateInput_({
         inline: '',
@@ -300,6 +332,11 @@ export class RealboxElement extends PolymerElement {
   //============================================================================
   // Event handlers
   //============================================================================
+
+  private onCanShowSecondaryMatchesChanged_(e: MediaQueryListEvent) {
+    this.canShowSecondaryMatches =
+        e.matches && loadTimeData.getBoolean('showSecondarySide');
+  }
 
   private onHeaderFocusin_() {
     // The header got focus. Unselect the selected match and clear the input.

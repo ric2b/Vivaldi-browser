@@ -132,19 +132,39 @@ using MenuItemViewTestInsert20 = MenuItemViewTestInsert<2, 0>;
 using MenuItemViewTestInsert22 = MenuItemViewTestInsert<2, 2>;
 
 // If this flakes, disable and log details in http://crbug.com/523255.
-VIEW_TEST(MenuItemViewTestInsert00, InsertItem00)
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_InsertItem00 DISABLED_InsertItem00
+#else
+#define MAYBE_InsertItem00 InsertItem00
+#endif
+VIEW_TEST(MenuItemViewTestInsert00, MAYBE_InsertItem00)
 
 // If this flakes, disable and log details in http://crbug.com/523255.
-VIEW_TEST(MenuItemViewTestInsert02, InsertItem02)
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_InsertItem02 DISABLED_InsertItem02
+#else
+#define MAYBE_InsertItem02 InsertItem02
+#endif
+VIEW_TEST(MenuItemViewTestInsert02, MAYBE_InsertItem02)
 
 // If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert10, InsertItem10)
 
 // If this flakes, disable and log details in http://crbug.com/523255.
-VIEW_TEST(MenuItemViewTestInsert12, InsertItem12)
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_InsertItem12 DISABLED_InsertItem12
+#else
+#define MAYBE_InsertItem12 InsertItem12
+#endif
+VIEW_TEST(MenuItemViewTestInsert12, MAYBE_InsertItem12)
 
 // If this flakes, disable and log details in http://crbug.com/523255.
-VIEW_TEST(MenuItemViewTestInsert20, InsertItem20)
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_InsertItem20 DISABLED_InsertItem20
+#else
+#define MAYBE_InsertItem20 InsertItem20
+#endif
+VIEW_TEST(MenuItemViewTestInsert20, MAYBE_InsertItem20)
 
 // If this flakes, disable and log details in http://crbug.com/523255.
 VIEW_TEST(MenuItemViewTestInsert22, InsertItem22)
@@ -217,13 +237,7 @@ using MenuItemViewTestInsertWithSubmenu1 = MenuItemViewTestInsertWithSubmenu<1>;
 VIEW_TEST(MenuItemViewTestInsertWithSubmenu0, InsertItemWithSubmenu0)
 
 // If this flakes, disable and log details in http://crbug.com/523255.
-// Failing on Linux Ozone Tester (Wayland) (See crbug.com/1236048).
-#if BUILDFLAG(IS_OZONE)
-#define MAYBE_InsertItemWithSubmenu1 DISABLED_InsertItemWithSubmenu1
-#else
-#define MAYBE_InsertItemWithSubmenu1 InsertItemWithSubmenu1
-#endif
-VIEW_TEST(MenuItemViewTestInsertWithSubmenu1, MAYBE_InsertItemWithSubmenu1)
+VIEW_TEST(MenuItemViewTestInsertWithSubmenu1, InsertItemWithSubmenu1)
 
 // Test class for removing a menu item while the menu is open.
 template <int REMOVE_INDEX, int SELECT_INDEX>

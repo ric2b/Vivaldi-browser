@@ -34,6 +34,7 @@
 #include "base/time/time.h"
 #include "net/base/ip_endpoint.h"
 #include "net/ssl/ssl_info.h"
+#include "services/network/public/cpp/trigger_attestation.h"
 #include "services/network/public/mojom/alternate_protocol_usage.mojom-shared.h"
 #include "services/network/public/mojom/cross_origin_embedder_policy.mojom-shared.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
@@ -191,9 +192,6 @@ class PLATFORM_EXPORT ResourceResponse final {
     has_major_certificate_errors_ = has_major_certificate_errors;
   }
 
-  bool IsLegacyTLSVersion() const { return is_legacy_tls_version_; }
-  void SetIsLegacyTLSVersion(bool value) { is_legacy_tls_version_ = value; }
-
   bool HasRangeRequested() const { return has_range_requested_; }
   void SetHasRangeRequested(bool value) { has_range_requested_ = value; }
 
@@ -296,6 +294,15 @@ class PLATFORM_EXPORT ResourceResponse final {
     remote_ip_endpoint_ = value;
   }
 
+  const absl::optional<network::TriggerAttestation>& GetTriggerAttestation()
+      const {
+    return trigger_attestation_;
+  }
+  void SetTriggerAttestation(
+      const absl::optional<network::TriggerAttestation>& value) {
+    trigger_attestation_ = value;
+  }
+
   network::mojom::IPAddressSpace AddressSpace() const { return address_space_; }
   void SetAddressSpace(network::mojom::IPAddressSpace value) {
     address_space_ = value;
@@ -350,7 +357,7 @@ class PLATFORM_EXPORT ResourceResponse final {
   void SetEncodedDataLength(int64_t value);
 
   int64_t EncodedBodyLength() const { return encoded_body_length_; }
-  void SetEncodedBodyLength(int64_t value);
+  void SetEncodedBodyLength(uint64_t value);
 
   int64_t DecodedBodyLength() const { return decoded_body_length_; }
   void SetDecodedBodyLength(int64_t value);
@@ -476,10 +483,6 @@ class PLATFORM_EXPORT ResourceResponse final {
   // True if the resource was retrieved by the embedder in spite of
   // certificate errors.
   bool has_major_certificate_errors_ : 1;
-
-  // True if the response was sent over TLS 1.0 or 1.1, which are deprecated and
-  // will be removed in the future.
-  bool is_legacy_tls_version_ : 1;
 
   // This corresponds to the range-requested flag in the Fetch spec:
   // https://fetch.spec.whatwg.org/#concept-response-range-requested-flag
@@ -612,7 +615,7 @@ class PLATFORM_EXPORT ResourceResponse final {
   int64_t encoded_data_length_ = 0;
 
   // Size of the response body in bytes prior to decompression.
-  int64_t encoded_body_length_ = 0;
+  uint64_t encoded_body_length_ = 0;
 
   // Sizes of the response body in bytes after any content-encoding is
   // removed.
@@ -638,6 +641,8 @@ class PLATFORM_EXPORT ResourceResponse final {
   absl::optional<net::AuthChallengeInfo> auth_challenge_info_;
 
   bool emitted_extra_info_ = false;
+
+  absl::optional<network::TriggerAttestation> trigger_attestation_;
 };
 
 }  // namespace blink

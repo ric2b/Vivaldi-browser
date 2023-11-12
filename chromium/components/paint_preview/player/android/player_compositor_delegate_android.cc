@@ -10,7 +10,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/unguessable_token_android.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task/bind_post_task.h"
@@ -267,14 +267,11 @@ jint PlayerCompositorDelegateAndroid::RequestBitmap(
       task_runner_,
       base::BindOnce(
           &ConvertToJavaBitmap,
-          base::BindPostTask(
-              base::SequencedTaskRunner::GetCurrentDefault(),
-              base::BindOnce(
-                  &PlayerCompositorDelegateAndroid::OnJavaBitmapCallback,
-                  weak_factory_.GetWeakPtr(),
-                  ScopedJavaGlobalRef<jobject>(j_bitmap_callback),
-                  ScopedJavaGlobalRef<jobject>(j_error_callback),
-                  request_id_))));
+          base::BindPostTaskToCurrentDefault(base::BindOnce(
+              &PlayerCompositorDelegateAndroid::OnJavaBitmapCallback,
+              weak_factory_.GetWeakPtr(),
+              ScopedJavaGlobalRef<jobject>(j_bitmap_callback),
+              ScopedJavaGlobalRef<jobject>(j_error_callback), request_id_))));
   ++request_id_;
 
   absl::optional<base::UnguessableToken> frame_guid;
@@ -344,9 +341,14 @@ ScopedJavaLocalRef<jstring> PlayerCompositorDelegateAndroid::OnClick(
     const JavaParamRef<jobject>& j_frame_guid,
     jint j_x,
     jint j_y) {
-  auto res = PlayerCompositorDelegate::OnClick(
+  absl::optional<base::UnguessableToken> frame_guid =
       base::android::UnguessableTokenAndroid::FromJavaUnguessableToken(
-          env, j_frame_guid),
+          env, j_frame_guid);
+  if (!frame_guid.has_value()) {
+    return base::android::ConvertUTF8ToJavaString(env, "");
+  }
+  auto res = PlayerCompositorDelegate::OnClick(
+      frame_guid.value(),
       gfx::Rect(static_cast<int>(j_x), static_cast<int>(j_y), 1U, 1U));
   if (res.empty())
     return base::android::ConvertUTF8ToJavaString(env, "");

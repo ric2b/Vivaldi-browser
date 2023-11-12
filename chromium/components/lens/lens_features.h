@@ -27,11 +27,6 @@ BASE_DECLARE_FEATURE(kLensImageCompression);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensSearchOptimizations);
 
-// Enables Lens integration into the Chrome screenshot sharing feature by adding
-// a "Search Image" button.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kLensSearchImageInScreenshotSharing);
-
 // Enables Latency logging for the LensStandalone feature.
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kEnableLatencyLogging);
@@ -40,14 +35,9 @@ BASE_DECLARE_FEATURE(kEnableLatencyLogging);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kEnableRegionSearchKeyboardShortcut);
 
-// Enable the Lens Region Search feature on the PDF viewer.
+// Enables context menu option for translating image feature.
 COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kEnableRegionSearchOnPdfViewer);
-
-// Enables the modification of the instruction chip UI that is presented when
-// region search is opened.
-COMPONENT_EXPORT(LENS_FEATURES)
-BASE_DECLARE_FEATURE(kLensInstructionChipImprovements);
+BASE_DECLARE_FEATURE(kEnableImageTranslate);
 
 // Enables the image search side panel experience for third party default search
 // engines
@@ -62,34 +52,9 @@ BASE_DECLARE_FEATURE(kLensRegionSearchStaticPage);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensImageFormatOptimizations);
 
-// Enables using `Google` as the visual search provider instead of `Google
-// Lens`.
+// Enables the context menu in the Lens side panel.
 COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kUseGoogleAsVisualSearchProvider;
-
-// Enables alternate option 1 for the Region Search context menu item text.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kRegionSearchUseMenuItemAltText1;
-
-// Enables alternate option 2 for the Region Search context menu item text.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kRegionSearchUseMenuItemAltText2;
-
-// Enables alternate option 3 for the Region Search context menu item text.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kRegionSearchUseMenuItemAltText3;
-
-// Enables UKM logging for the Lens Region Search feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kEnableUKMLoggingForRegionSearch;
-
-// Enables UKM logging for the LensStandalone feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kEnableUKMLoggingForImageSearch;
-
-// Enables the side panel for Lens features on Chrome where supported.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kEnableSidePanelForLens;
+BASE_DECLARE_FEATURE(EnableContextMenuInLensSidePanel);
 
 // The base URL for Lens.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -102,25 +67,6 @@ extern const base::FeatureParam<bool> kEnableLensHtmlRedirectFix;
 // Enables Lens fullscreen search on Desktop platforms.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern const base::FeatureParam<bool> kEnableFullscreenSearch;
-
-// Enables using side panel in the Chrome Screenshot sharing feature integration
-// instead of a new tab.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kUseSidePanelForScreenshotSharing;
-
-// Forces the Chrome Screenshot sharing dialog bubble to stay open after the
-// user clicks the Search Image button.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kEnablePersistentBubble;
-
-// Enables the use of the selection with image icon when using the instruction
-// chip improvements feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kUseSelectionIconWithImage;
-
-// Enables the use of an alternative string for the instruction chip.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern const base::FeatureParam<bool> kUseAltChipString;
 
 // Enables encoding to WebP for image search queries.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -155,14 +101,6 @@ extern bool GetEnableLatencyLogging();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool GetEnableImageSearchUnifiedSidePanelFor3PDse();
 
-// Returns whether to enable UKM logging for Lens Region Search feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetEnableUKMLoggingForRegionSearch();
-
-// Returns whether to enable UKM logging for LensStandalone feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool GetEnableUKMLoggingForImageSearch();
-
 // Returns the max pixel width/height for the image to be sent to Lens via
 // region search. The images are sent at 1x as PNGs.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -188,26 +126,6 @@ extern bool GetEnableLensHtmlRedirectFix();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensFullscreenSearchEnabled();
 
-// Returns whether to use alternative option 1 for the Region Search context
-// menu item text.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool UseRegionSearchMenuItemAltText1();
-
-// Returns whether to use alternative option 2 for the Region Search context
-// menu item text.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool UseRegionSearchMenuItemAltText2();
-
-// Returns whether to use alternative option 3 for the Region Search context
-// menu item text.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool UseRegionSearchMenuItemAltText3();
-
-// Returns whether to use `Google` as the visual search provider for all
-// relevant Lens context menu strings.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool UseGoogleAsVisualSearchProvider();
-
 // Returns whether the Lens side panel is enabled for image search.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensSidePanelEnabled();
@@ -221,32 +139,14 @@ extern bool IsLensSidePanelEnabledForRegionSearch();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensInScreenshotSharingEnabled();
 
-// Returns whether the instruction chip improvement feature is enabled.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool IsLensInstructionChipImprovementsEnabled();
-
-// Returns whether to use the Chrome Side Panel for the Lens integration in
-// Chrome Screenshot Sharing feature
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool UseSidePanelForScreenshotSharing();
-
-// Returns whether the Chrome Screenshot Sharing Bubble disappears after the
-// user clicks the Search Image button
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool EnablePersistentBubble();
-
-// Returns if we should use the selection with image icon instead of the default
-// when using the instruction chip improvements feature.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool UseSelectionIconWithImage();
-
-// Returns whether we should use an alternative instruction chip string.
-COMPONENT_EXPORT(LENS_FEATURES)
-extern bool UseAltChipString();
-
 // Returns whether we should use a WebUI static page for region search.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensRegionSearchStaticPageEnabled();
+
+// Returns whether we should use the search inside image with Google context
+// menu string.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool UseLensContextMenuItemAlternateText();
 
 // Returns whether to use WebP encoding for image search queries.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -267,6 +167,10 @@ extern bool IsJpegForRegionSearchEnabled();
 // Get the encoding quality for region search queries.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetRegionSearchEncodingQuality();
+
+// Returns whether to enable the context menu in the Lens side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetEnableContextMenuInLensSidePanel();
 }  // namespace features
 }  // namespace lens
 

@@ -61,7 +61,8 @@ class PhoneHubTrayTest : public AshTestBase {
     feature_list_.InitWithFeatures(
         /*enabled_features=*/{features::kPhoneHub,
                               features::kPhoneHubCameraRoll,
-                              features::kEcheLauncher, features::kEcheSWA},
+                              features::kEcheLauncher, features::kEcheSWA,
+                              features::kPhoneHubNudge},
         /*disabled_features=*/{});
     auto delegate = std::make_unique<MockNewWindowDelegate>();
     new_window_delegate_ = delegate.get();
@@ -95,6 +96,10 @@ class PhoneHubTrayTest : public AshTestBase {
 
   phonehub::FakeOnboardingUiTracker* GetOnboardingUiTracker() {
     return phone_hub_manager_.fake_onboarding_ui_tracker();
+  }
+
+  phonehub::AppStreamLauncherDataModel* GetAppStreamLauncherDataModel() {
+    return phone_hub_manager_.fake_app_stream_launcher_data_model();
   }
 
   void PressReturnKeyOnTrayButton() {
@@ -614,6 +619,34 @@ TEST_F(PhoneHubTrayTest, DismissOnboardingFlowByClickingOutside) {
   EXPECT_FALSE(GetOnboardingUiTracker()->ShouldShowOnboardingUi());
 }
 
+TEST_F(PhoneHubTrayTest, ShouldNotShowMiniLauncherOnCloseBubble) {
+  GetFeatureStatusProvider()->SetStatus(
+      phonehub::FeatureStatus::kEnabledAndConnected);
+
+  ClickTrayButton();
+  EXPECT_TRUE(phone_hub_tray_->is_active());
+
+  // Simulate showing the app stream mini launcher
+  GetAppStreamLauncherDataModel()->SetShouldShowMiniLauncher(true);
+  EXPECT_TRUE(GetAppStreamLauncherDataModel()->GetShouldShowMiniLauncher());
+
+  // Simulate a click outside the bubble.
+  phone_hub_tray_->ClickedOutsideBubble();
+
+  // Clicking outside should dismiss the bubble and should not show the app
+  // stream mini launcher.
+  EXPECT_FALSE(phone_hub_tray_->GetBubbleView());
+  EXPECT_TRUE(phone_hub_tray_->GetVisible());
+  EXPECT_FALSE(GetAppStreamLauncherDataModel()->GetShouldShowMiniLauncher());
+
+  // Opening the bubble again should still have the app stream mini launcher
+  // not shown.
+  ClickTrayButton();
+  EXPECT_TRUE(phone_hub_tray_->GetBubbleView());
+  EXPECT_TRUE(phone_hub_tray_->GetVisible());
+  EXPECT_FALSE(GetAppStreamLauncherDataModel()->GetShouldShowMiniLauncher());
+}
+
 TEST_F(PhoneHubTrayTest, ClickButtonsOnDisconnectedView) {
   // Simulates a phone disconnected error state to show the disconnected view.
   GetFeatureStatusProvider()->SetStatus(
@@ -742,6 +775,52 @@ TEST_F(PhoneHubTrayTest, SafeAccessToHeaderView) {
 
   // Make sure it does not cause a UAF error.This is caught by ASAN (go/asan)
   phone_hub_tray_->UpdateHeaderVisibility();
+}
+
+TEST_F(PhoneHubTrayTest, MultiDisplay) {
+  // Connect a second display, make sure the phone hub tray is shown still.
+  UpdateDisplay("500x400,500x400");
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+  EXPECT_EQ(2U, root_windows.size());
+
+  auto* secondary_phone_hub_tray =
+      StatusAreaWidgetTestHelper::GetSecondaryStatusAreaWidget()
+          ->phone_hub_tray();
+  secondary_phone_hub_tray->SetPhoneHubManager(&phone_hub_manager_);
+
+  EXPECT_TRUE(phone_hub_tray_->GetVisible());
+  EXPECT_TRUE(secondary_phone_hub_tray->GetVisible());
+}
+
+TEST_F(PhoneHubTrayTest, ShowNudge) {
+  // Simulate kOnboardingWithoutPhone state.
+  GetFeatureStatusProvider()->SetStatus(
+      phonehub::FeatureStatus::kEligiblePhoneButNotSetUp);
+  GetOnboardingUiTracker()->SetShouldShowOnboardingUi(true);
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  PhoneHubNudgeController* nudge_controller =
+      phone_hub_tray_->phone_hub_nudge_controller_for_testing();
+  SystemNudge* nudge = nudge_controller->GetSystemNudgeForTesting();
+  EXPECT_TRUE(nudge);
+}
+
+TEST_F(PhoneHubTrayTest, HideNudge) {
+  GetFeatureStatusProvider()->SetStatus(
+      phonehub::FeatureStatus::kEligiblePhoneButNotSetUp);
+  GetOnboardingUiTracker()->SetShouldShowOnboardingUi(true);
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+
+  PhoneHubNudgeController* nudge_controller =
+      phone_hub_tray_->phone_hub_nudge_controller_for_testing();
+  SystemNudge* nudge = nudge_controller->GetSystemNudgeForTesting();
+  EXPECT_TRUE(nudge);
+
+  ClickTrayButton();
+  nudge = nudge_controller->GetSystemNudgeForTesting();
+  EXPECT_FALSE(nudge);
 }
 
 }  // namespace ash

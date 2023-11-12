@@ -33,7 +33,7 @@
 
 class AutocompleteResult;
 class OmniboxClient;
-class OmniboxEditController;
+class OmniboxEditModelDelegate;
 class OmniboxPopupView;
 
 namespace gfx {
@@ -68,7 +68,7 @@ class OmniboxEditModel {
   };
 
   OmniboxEditModel(OmniboxView* view,
-                   OmniboxEditController* controller,
+                   OmniboxEditModelDelegate* edit_model_delegate,
                    std::unique_ptr<OmniboxClient> client);
   virtual ~OmniboxEditModel();
   OmniboxEditModel(const OmniboxEditModel&) = delete;
@@ -89,7 +89,7 @@ class OmniboxEditModel {
   void set_popup_view(OmniboxPopupView* popup_view);
   OmniboxPopupView* get_popup_view();
 
-  OmniboxEditController* controller() const { return controller_; }
+  OmniboxEditModelDelegate* delegate() const { return edit_model_delegate_; }
 
   OmniboxClient* client() const { return client_.get(); }
 
@@ -198,7 +198,8 @@ class OmniboxEditModel {
   // Starts an autocomplete prefetch request so that zero-prefix providers can
   // optionally start a prefetch request to warm up the their underlying
   // service(s) and/or optionally cache their otherwise async response.
-  void StartPrefetch();
+  // Virtual for testing.
+  virtual void StartPrefetch();
 
   // Closes the popup and cancels any pending asynchronous queries.
   void StopAutocomplete();
@@ -222,14 +223,6 @@ class OmniboxEditModel {
   void AcceptInput(
       WindowOpenDisposition disposition,
       base::TimeTicks match_selection_timestamp = base::TimeTicks());
-
-  // Executes the action associated with `match`. `match_position` is also
-  // passed for metrics. `disposition` may be used by actions to open
-  // in another tab, a new window, etc.
-  void ExecuteAction(const AutocompleteMatch& match,
-                     size_t match_position,
-                     base::TimeTicks match_selection_timestamp,
-                     WindowOpenDisposition disposition);
 
   // Asks the browser to load |match|. |index| is only used for logging, and
   // can be kNoMatch if the popup was closed, or if none of the suggestions
@@ -548,6 +541,20 @@ class OmniboxEditModel {
                        // with ctrl-l or copying the selected text with ctrl-c.
   };
 
+  // If the match in result() specified by `match_index` has an
+  // action that takes over the match, this executes that action
+  // with given `disposition` and returns true. Returns false otherwise.
+  bool ExecuteTakeoverAction(size_t match_index,
+                             WindowOpenDisposition disposition,
+                             base::TimeTicks match_selection_timestamp);
+
+  // Executes the action associated with match at given `selection`
+  // within result(). `disposition` may be used by actions to open
+  // in another tab, a new window, etc.
+  void ExecuteAction(OmniboxPopupSelection selection,
+                     WindowOpenDisposition disposition,
+                     base::TimeTicks match_selection_timestamp);
+
   // Returns true if a query to an autocomplete provider is currently
   // in progress.  This logic should in the future live in
   // AutocompleteController but resides here for now.  This method is used by
@@ -620,7 +627,7 @@ class OmniboxEditModel {
 
   raw_ptr<OmniboxView> view_;
 
-  raw_ptr<OmniboxEditController> controller_;
+  raw_ptr<OmniboxEditModelDelegate> edit_model_delegate_;
 
   OmniboxFocusState focus_state_;
 

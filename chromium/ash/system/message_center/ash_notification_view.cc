@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/rounded_image_view.h"
 #include "ash/public/cpp/style/color_provider.h"
@@ -20,43 +21,55 @@
 #include "ash/style/icon_button.h"
 #include "ash/style/pill_button.h"
 #include "ash/system/message_center/ash_notification_control_button_factory.h"
+#include "ash/system/message_center/ash_notification_drag_controller.h"
 #include "ash/system/message_center/ash_notification_expand_button.h"
 #include "ash/system/message_center/ash_notification_input_container.h"
 #include "ash/system/message_center/message_center_constants.h"
+#include "ash/system/message_center/message_center_controller.h"
 #include "ash/system/message_center/message_center_style.h"
 #include "ash/system/message_center/message_center_utils.h"
 #include "ash/system/message_center/metrics_utils.h"
 #include "ash/system/message_center/notification_grouping_controller.h"
 #include "ash/wm/work_area_insets.h"
-#include "base/bind.h"
+#include "base/base64.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
 #include "base/time/time.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/animation_throughput_reporter.h"
+#include "ui/compositor/canvas_painter.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/animation/tween.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/message_center/message_center.h"
+#include "ui/message_center/notification_list.h"
 #include "ui/message_center/notification_view_controller.h"
 #include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "ui/message_center/vector_icons.h"
+#include "ui/message_center/views/large_image_view.h"
 #include "ui/message_center/views/notification_background_painter.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/notification_header_view.h"
@@ -70,6 +83,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/drag_utils.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/flex_layout.h"
@@ -83,6 +97,10 @@
 #include "ui/views/view_class_properties.h"
 
 namespace {
+
+// Used when encoding a notification drop image into binary data. The drop image
+// should be resized if either its length or its width exceeds this threshold.
+constexpr int kMaxDragImageSizeInDIP = 2000;
 
 constexpr auto kNotificationViewPadding = gfx::Insets(4);
 constexpr int kMainRightViewVerticalSpacing = 4;
@@ -99,7 +117,8 @@ constexpr int kActionsRowHorizontalSpacing = 8;
 constexpr auto kContentRowPadding = gfx::Insets::TLBR(16, 0, 0, 0);
 
 constexpr int kLeftContentVerticalSpacing = 4;
-constexpr int kTitleRowMinimumWidth = 186;
+constexpr int kTitleRowMinimumWidthWithIcon = 186;
+constexpr int kTitleRowMinimumWidth = 266;
 constexpr int kTitleRowSpacing = 6;
 
 constexpr auto kHeaderRowExpandedPadding = gfx::Insets::TLBR(4, 0, 8, 0);
@@ -241,6 +260,26 @@ void ScaleAndTranslateView(views::View* view,
       .SetTransform(view, gfx::Transform(), gfx::Tween::ACCEL_0_100_DECEL_80);
 }
 
+// Returns the HTML snippet that contains the binary data of `bitmap`. Returns
+// `absl::nullopt` if having any error.
+absl::optional<std::u16string> GetHtmlForBitmap(const SkBitmap& bitmap) {
+  std::vector<unsigned char> image_data;
+  if (gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, /*discard_transparency=*/false,
+                                        &image_data)) {
+    std::string encoded_data;
+    base::Base64Encode(
+        /*input=*/std::string(image_data.cbegin(), image_data.cend()),
+        &encoded_data);
+    const std::string html = base::StrCat(
+        {"<img src=\"data:image/png;base64,", encoded_data, "\"/>"});
+    std::u16string html_in_u16;
+    if (base::UTF8ToUTF16(html.c_str(), html.size(), &html_in_u16)) {
+      return html_in_u16;
+    }
+  }
+  return absl::nullopt;
+}
+
 }  // namespace
 
 namespace ash {
@@ -253,19 +292,23 @@ BEGIN_METADATA(AshNotificationView, NotificationTitleRow, views::View)
 END_METADATA
 
 void AshNotificationView::AddedToWidget() {
+  MessageView::AddedToWidget();
+
   // crbug/1337661: We need to abort animations in a grouped parent view when
   // it's widget is being destroyed. By default when a widget is destroyed, all
   // current animations are forced to finish. The grouped notification removal
   // animation triggers an additional resize animation when it is finished. This
   // needs to be aborted explicitly to prevent a crash. We do not need to this
   // observation for grouped notification views.
-  if (!is_grouped_child_view_)
+  if (!is_grouped_child_view_) {
     widget_observation_.Observe(GetWidget());
+  }
 }
 
 void AshNotificationView::Layout() {
-  if (is_animating_)
+  if (is_animating_) {
     return;
+  }
 
   message_center::NotificationViewBase::Layout();
 }
@@ -375,6 +418,11 @@ void AshNotificationView::NotificationTitleRow::
   }
 }
 
+void AshNotificationView::NotificationTitleRow::SetMaxAvailableWidth(
+    int max_available_width) {
+  max_available_width_ = max_available_width;
+}
+
 gfx::Size AshNotificationView::NotificationTitleRow::CalculatePreferredSize()
     const {
   // TODO(crbug.com/1349528): The size constraint is not passed down from the
@@ -382,8 +430,8 @@ gfx::Size AshNotificationView::NotificationTitleRow::CalculatePreferredSize()
   // the view. The layout manager can size the view beyond this width if there
   // is available space. This works similar to applying a max width on the
   // internal labels.
-  return gfx::Size(kTitleRowMinimumWidth,
-                   GetHeightForWidth(kTitleRowMinimumWidth));
+  return gfx::Size(max_available_width_,
+                   GetHeightForWidth(max_available_width_));
 }
 
 void AshNotificationView::NotificationTitleRow::OnThemeChanged() {
@@ -408,6 +456,11 @@ AshNotificationView::AshNotificationView(
       is_grouped_parent_view_(notification.group_parent()),
       is_grouped_child_view_(notification.group_child()),
       shown_in_popup_(shown_in_popup) {
+  if (features::IsNotificationImageDragEnabled()) {
+    set_drag_controller(
+        Shell::Get()->message_center_controller()->drag_controller());
+  }
+
   message_center_observer_.Observe(message_center::MessageCenter::Get());
   // TODO(crbug/1232197): fix views and layout to match spec.
   // Instantiate view instances and define layout and view hierarchy.
@@ -675,8 +728,9 @@ void AshNotificationView::AnimateSingleToGroup(
          AshNotificationExpandButton* expand_button,
          NotificationGroupingController* grouping_controller,
          const std::string& notification_id, std::string parent_id) {
-        if (!parent)
+        if (!parent) {
           return;
+        }
 
         auto* parent_notification =
             message_center::MessageCenter::Get()->FindNotificationById(
@@ -686,8 +740,9 @@ void AshNotificationView::AnimateSingleToGroup(
                 notification_id);
         // The child and parent notifications are not guaranteed to exist. If
         // they were deleted avoid the animation cleanup.
-        if (!parent_notification || !child_notification)
+        if (!parent_notification || !child_notification) {
           return;
+        }
 
         grouping_controller->ConvertFromSingleToGroupNotificationAfterAnimation(
             notification_id, parent_id, parent_notification);
@@ -739,7 +794,11 @@ void AshNotificationView::AnimateSingleToGroup(
 }
 
 void AshNotificationView::ToggleExpand() {
-  SetManuallyExpandedOrCollapsed(true);
+  const bool target_expanded_state = !IsExpanded();
+
+  SetManuallyExpandedOrCollapsed(
+      target_expanded_state ? message_center::ExpandState::USER_EXPANDED
+                            : message_center::ExpandState::USER_COLLAPSED);
 
   if (inline_reply() && inline_reply()->GetVisible()) {
     message_center_utils::FadeOutView(
@@ -757,7 +816,7 @@ void AshNotificationView::ToggleExpand() {
         "Ash.NotificationView.InlineReply.FadeOut.AnimationSmoothness");
   }
 
-  SetExpanded(!IsExpanded());
+  SetExpanded(target_expanded_state);
 
   PerformExpandCollapseAnimation();
 
@@ -781,13 +840,63 @@ void AshNotificationView::GroupedNotificationsPreferredSizeChanged() {
   PreferredSizeChanged();
 }
 
+absl::optional<gfx::Rect> AshNotificationView::GetDragAreaBounds() const {
+  DCHECK(features::IsNotificationImageDragEnabled());
+  if (!IsDraggable()) {
+    return absl::nullopt;
+  }
+
+  const views::View* large_image_view =
+      GetViewByID(message_center::NotificationViewBase::kLargeImageView);
+  gfx::RectF larget_image_bounds(large_image_view->GetLocalBounds());
+  views::View::ConvertRectToTarget(large_image_view, /*target=*/this,
+                                   &larget_image_bounds);
+  return gfx::ToEnclosedRect(larget_image_bounds);
+}
+
+absl::optional<gfx::ImageSkia> AshNotificationView::GetDragImage() {
+  DCHECK(features::IsNotificationImageDragEnabled());
+  if (!IsDraggable()) {
+    return absl::nullopt;
+  }
+
+  // Assume that an Ash notification has at most one large image view. Fetch the
+  // image shown in the large image view.
+  return static_cast<message_center::LargeImageView*>(
+             GetViewByID(message_center::NotificationViewBase::kLargeImageView))
+      ->drawn_image();
+}
+
+void AshNotificationView::AttachDropData(ui::OSExchangeData* data) {
+  DCHECK(IsDraggable());
+
+  // If the notification large image is file-backed, attach the image file path
+  // to `data`; otherwise, attach the large image's binary data.
+  if (const absl::optional<base::FilePath>& image_path =
+          message_center::MessageCenter::Get()
+              ->FindNotificationById(notification_id())
+              ->rich_notification_data()
+              .image_path) {
+    data->SetFilename(*image_path);
+  } else {
+    AttachBinaryImageAsDropData(data);
+  }
+}
+
+bool AshNotificationView::IsDraggable() const {
+  // A notification view is draggable only when it contains a large image.
+  DCHECK(features::IsNotificationImageDragEnabled());
+  return GetViewByID(message_center::NotificationViewBase::kLargeImageView);
+}
+
 base::TimeDelta AshNotificationView::GetBoundsAnimationDuration(
     const message_center::Notification& notification) const {
   // This is called after the parent gets notified of
   // `ChildPreferredSizeChanged()`, so the current expanded state is the target
   // state.
-  if (!notification.image().IsEmpty())
+  if (!notification.image().IsEmpty()) {
     return base::Milliseconds(kLargeImageExpandAndCollapseAnimationDuration);
+  }
 
   if (HasInlineReply(notification) || is_grouped_parent_view_) {
     if (IsExpanded()) {
@@ -803,8 +912,9 @@ base::TimeDelta AshNotificationView::GetBoundsAnimationDuration(
         kInlineSettingsExpandAndCollapseAnimationDuration);
   }
 
-  if (IsExpanded())
+  if (IsExpanded()) {
     return base::Milliseconds(kGeneralExpandAnimationDuration);
+  }
   return base::Milliseconds(kGeneralCollapseAnimationDuration);
 }
 
@@ -812,8 +922,9 @@ void AshNotificationView::AddGroupNotification(
     const message_center::Notification& notification) {
   DCHECK(is_grouped_parent_view_);
   // Do not add a grouped notification if a view for it already exists.
-  if (FindGroupNotificationView(notification.id()))
+  if (FindGroupNotificationView(notification.id())) {
     return;
+  }
 
   auto notification_view =
       std::make_unique<AshNotificationView>(notification,
@@ -848,8 +959,9 @@ void AshNotificationView::PopulateGroupNotifications(
         std::make_unique<AshNotificationView>(*notification,
                                               /*shown_in_popup=*/false);
 
-    if (!total_grouped_notifications_)
+    if (!total_grouped_notifications_) {
       header_row()->SetTimestamp(notification->timestamp());
+    }
 
     notification_view->SetVisible(
         total_grouped_notifications_ <
@@ -872,8 +984,9 @@ void AshNotificationView::PopulateGroupNotifications(
 void AshNotificationView::RemoveGroupNotification(
     const std::string& notification_id) {
   auto* child_view = FindGroupNotificationView(notification_id);
-  if (!child_view)
+  if (!child_view) {
     return;
+  }
 
   base::WeakPtr<AshNotificationView> to_be_removed =
       static_cast<AshNotificationView*>(child_view)->weak_factory_.GetWeakPtr();
@@ -885,19 +998,22 @@ void AshNotificationView::RemoveGroupNotification(
     to_be_removed->layer()->GetAnimator()->AbortAllAnimations();
   }
 
-  if (!to_be_removed)
+  if (!to_be_removed) {
     return;
+  }
 
   auto on_notification_slid_out = base::BindRepeating(
       [](base::WeakPtr<AshNotificationView> self,
          const std::string& notification_id) {
-        if (!self)
+        if (!self) {
           return;
+        }
 
         views::View* to_be_removed =
             self->FindGroupNotificationView(notification_id);
-        if (!to_be_removed)
+        if (!to_be_removed) {
           return;
+        }
 
         self->total_grouped_notifications_--;
         self->expand_button_->UpdateGroupedNotificationsCount(
@@ -910,13 +1026,15 @@ void AshNotificationView::RemoveGroupNotification(
   auto on_animation_aborted = base::BindRepeating(
       [](base::WeakPtr<AshNotificationView> self,
          const std::string& notification_id) {
-        if (!self)
+        if (!self) {
           return;
+        }
 
         views::View* to_be_removed =
             self->FindGroupNotificationView(notification_id);
-        if (!to_be_removed)
+        if (!to_be_removed) {
           return;
+        }
 
         self->total_grouped_notifications_--;
         self->expand_button_->UpdateGroupedNotificationsCount(
@@ -1029,12 +1147,14 @@ void AshNotificationView::UpdateWithNotification(
   is_grouped_child_view_ = notification.group_child();
   is_grouped_parent_view_ = notification.group_parent();
 
-  if (grouped_notifications_scroll_view_)
+  if (grouped_notifications_scroll_view_) {
     grouped_notifications_scroll_view_->SetVisible(is_grouped_parent_view_);
+  }
   grouped_notifications_container_->SetVisible(is_grouped_parent_view_);
 
-  if (is_grouped_child_view_ && !is_nested())
+  if (is_grouped_child_view_ && !is_nested()) {
     SetIsNested();
+  }
 
   header_row()->SetIsInGroupChildNotification(is_grouped_child_view_);
   UpdateMessageLabelInExpandedState(notification);
@@ -1045,8 +1165,9 @@ void AshNotificationView::UpdateWithNotification(
 
   // Configure views style.
   UpdateIconAndButtonsColor(&notification);
-  if (message_label())
+  if (message_label()) {
     ConfigureLabelStyle(message_label(), kMessageLabelSize, false);
+  }
   if (inline_reply()) {
     SkColor text_color = ash::AshColorProvider::Get()->GetContentLayerColor(
         ash::AshColorProvider::ContentLayerType::kTextColorSecondary);
@@ -1095,6 +1216,15 @@ void AshNotificationView::CreateOrUpdateTitleView(
     title_row_->UpdateTitle(title);
     ReorderViewInLeftContent(title_row_);
   }
+
+  int max_available_width = notification.icon().IsEmpty()
+                                ? kTitleRowMinimumWidth
+                                : kTitleRowMinimumWidthWithIcon;
+  if (shown_in_popup_) {
+    max_available_width -=
+        message_center::kNotificationWidth - kNotificationInMessageCenterWidth;
+  }
+  title_row_->SetMaxAvailableWidth(max_available_width);
 
   title_row_->UpdateTimestamp(notification.timestamp());
 }
@@ -1168,8 +1298,9 @@ void AshNotificationView::UpdateControlButtonsVisibility() {
   control_buttons_view()->ShowSnoozeButton(false);
 
   // Hide settings button for grouped child notifications.
-  if (is_grouped_child_view_)
+  if (is_grouped_child_view_) {
     control_buttons_view()->ShowSettingsButton(false);
+  }
 }
 
 bool AshNotificationView::IsIconViewShown() const {
@@ -1182,8 +1313,9 @@ void AshNotificationView::SetExpandButtonEnabled(bool enabled) {
 
 bool AshNotificationView::IsExpandable() const {
   // Inline settings can not be expanded.
-  if (GetMode() == Mode::SETTING)
+  if (GetMode() == Mode::SETTING) {
     return false;
+  }
 
   // Notification should always be expandable since we hide `header_row()` in
   // collapsed state.
@@ -1207,8 +1339,9 @@ void AshNotificationView::OnThemeChanged() {
       AshColorProvider::ContentLayerType::kTextColorSecondary);
   header_row()->SetColor(secondary_text_color);
 
-  if (message_label())
+  if (message_label()) {
     message_label()->SetEnabledColor(secondary_text_color);
+  }
 
   if (control_buttons_view_) {
     control_buttons_view_->SetButtonIconColors(
@@ -1216,8 +1349,9 @@ void AshNotificationView::OnThemeChanged() {
             AshColorProvider::ContentLayerType::kIconColorPrimary));
   }
 
-  if (message_label_in_expanded_state_)
+  if (message_label_in_expanded_state_) {
     message_label_in_expanded_state_->SetEnabledColor(secondary_text_color);
+  }
 
   UpdateIconAndButtonsColor(
       message_center::MessageCenter::Get()->FindVisibleNotificationById(
@@ -1271,8 +1405,9 @@ int AshNotificationView::GetLargeImageViewMaxWidth() const {
 }
 
 void AshNotificationView::ToggleInlineSettings(const ui::Event& event) {
-  if (!inline_settings_enabled())
+  if (!inline_settings_enabled()) {
     return;
+  }
 
   bool should_show_inline_settings = !inline_settings_row()->GetVisible();
   PerformToggleInlineSettingsAnimation(should_show_inline_settings);
@@ -1342,8 +1477,9 @@ views::View* AshNotificationView::FindGroupNotificationView(
 void AshNotificationView::OnNotificationRemoved(
     const std::string& notification_id,
     bool by_user) {
-  if (!is_grouped_parent_view_)
+  if (!is_grouped_parent_view_) {
     return;
+  }
 
   RemoveGroupNotification(notification_id);
 }
@@ -1419,8 +1555,9 @@ void AshNotificationView::UpdateGroupedNotificationsVisibility() {
         IsExpanded() ||
         i < message_center_style::kMaxGroupedNotificationsInCollapsedState;
 
-    if (view->GetVisible() == show_notification_view)
+    if (view->GetVisible() == show_notification_view) {
       continue;
+    }
 
     view->SetVisible(show_notification_view);
   }
@@ -1455,8 +1592,9 @@ void AshNotificationView::UpdateBackground(int top_radius, int bottom_radius) {
     return;
   }
 
-  if (!is_grouped_child_view_)
+  if (!is_grouped_child_view_) {
     background_color_ = background_color;
+  }
   top_radius_ = top_radius;
   bottom_radius_ = bottom_radius;
 
@@ -1483,8 +1621,9 @@ void AshNotificationView::UpdateAppIconView(
   // Grouped child notification use notification's icon for the app icon view,
   // so we don't need further update here.
   if (!notification ||
-      (is_grouped_child_view_ && !notification->icon().IsEmpty()))
+      (is_grouped_child_view_ && !notification->icon().IsEmpty())) {
     return;
+  }
 
   SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kInvertedButtonLabelColor);
@@ -1511,14 +1650,16 @@ SkColor AshNotificationView::CalculateIconAndButtonsColor(
   SkColor default_color = AshColorProvider::Get()->GetControlsLayerColor(
       AshColorProvider::ControlsLayerType::kControlBackgroundColorActive);
 
-  if (!notification)
+  if (!notification) {
     return default_color;
+  }
 
   auto color_id = notification->accent_color_id();
   absl::optional<SkColor> accent_color = notification->accent_color();
 
-  if ((!color_id || !GetWidget()) && !accent_color.has_value())
+  if ((!color_id || !GetWidget()) && !accent_color.has_value()) {
     return default_color;
+  }
 
   SkColor fg_color;
   // ColorProvider needs widget to be created.
@@ -1562,16 +1703,18 @@ void AshNotificationView::UpdateIconAndButtonsColor(
     static_cast<PillButton*>(action_button)->SetButtonTextColor(button_color);
   }
 
-  if (snooze_button_)
+  if (snooze_button_) {
     snooze_button_->SetIconColor(button_color);
+  }
 }
 
 void AshNotificationView::AnimateResizeAfterRemoval(
     views::View* to_be_removed) {
   auto on_resize_complete = base::BindRepeating(
       [](base::WeakPtr<AshNotificationView> self) {
-        if (!self)
+        if (!self) {
           return;
+        }
 
         self->set_is_animating(false);
 
@@ -1590,8 +1733,9 @@ void AshNotificationView::AnimateResizeAfterRemoval(
 
   auto* notification_view_controller = message_center_utils::
       GetActiveNotificationViewControllerForNotificationView(this);
-  if (notification_view_controller)
+  if (notification_view_controller) {
     notification_view_controller->AnimateResize();
+  }
 
   if (shown_in_popup_) {
     grouped_notifications_scroll_view_->Layout();
@@ -1628,8 +1772,9 @@ void AshNotificationView::AnimateResizeAfterRemoval(
 }
 
 void AshNotificationView::PerformExpandCollapseAnimation() {
-  if (title_row_)
+  if (title_row_) {
     title_row_->PerformExpandCollapseAnimation();
+  }
 
   // Fade in `header row()` if this is not a grouped parent view.
   if (header_row() && header_row()->GetVisible() && !is_grouped_parent_view_) {
@@ -1677,8 +1822,9 @@ void AshNotificationView::PerformExpandCollapseAnimation() {
   if (total_grouped_notifications_) {
     // Ensure layout is up-to-date before animating expand button. This is used
     // for its bounds animation.
-    if (needs_layout())
+    if (needs_layout()) {
       Layout();
+    }
     DCHECK(!needs_layout());
 
     expand_button_->AnimateExpandCollapse();
@@ -1787,8 +1933,9 @@ void AshNotificationView::PerformLargeImageAnimation() {
 void AshNotificationView::PerformToggleInlineSettingsAnimation(
     bool should_show_inline_settings) {
   if (ui::ScopedAnimationDurationScaleMode::duration_multiplier() ==
-      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION)
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION) {
     return;
+  }
 
   message_center_utils::InitLayerForAnimations(main_right_view_);
   message_center_utils::InitLayerForAnimations(inline_settings_row());
@@ -1901,8 +2048,9 @@ int AshNotificationView::CalculateMaxHeightForGroupedNotifications() {
 
 bool AshNotificationView::IsMessageLabelTruncated() {
   // True if the expanded label has more than one line.
-  if (message_label_in_expanded_state_->GetRequiredLines() > 1)
+  if (message_label_in_expanded_state_->GetRequiredLines() > 1) {
     return true;
+  }
 
   // Get the first row's width of `message_label_in_expanded_state_`'s text,
   // which is also the text width of this label since it has one line. If text
@@ -1915,6 +2063,36 @@ bool AshNotificationView::IsMessageLabelTruncated() {
           .front()
           .width();
   return text_width > left_content()->width();
+}
+
+void AshNotificationView::AttachBinaryImageAsDropData(
+    ui::OSExchangeData* data) {
+  DCHECK(IsDraggable());
+
+  // Fetch the original image from the large image view.
+  const gfx::ImageSkia& image =
+      static_cast<message_center::LargeImageView*>(
+          GetViewByID(message_center::NotificationViewBase::kLargeImageView))
+          ->original_image();
+  DCHECK(!image.size().IsEmpty());
+
+  // Shrink `image` if it is too big.
+  const float ratio = static_cast<float>(kMaxDragImageSizeInDIP) /
+                      std::max(image.size().width(), image.size().height());
+  absl::optional<gfx::ImageSkia> resized_image;
+  if (!cc::MathUtil::IsWithinEpsilon(ratio, 1.f) && ratio < 1.f) {
+    gfx::SizeF resized_size(image.size());
+    resized_size.Scale(ratio);
+    resized_image.emplace(gfx::ImageSkiaOperations::CreateResizedImage(
+        image, skia::ImageOperations::RESIZE_BEST,
+        gfx::ToFlooredSize(resized_size)));
+  }
+
+  // Add the drop data in the format of HTML.
+  if (const absl::optional<std::u16string> html_snippet = GetHtmlForBitmap(
+          resized_image ? *resized_image->bitmap() : *image.bitmap())) {
+    data->SetHtml(*html_snippet, /*base_url=*/GURL());
+  }
 }
 
 }  // namespace ash

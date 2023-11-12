@@ -9,6 +9,8 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/thread_restrictions.h"
 #include "mojo/public/cpp/system/wait.h"
@@ -23,6 +25,7 @@
 #include "third_party/blink/renderer/core/loader/resource/script_resource.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/crypto.h"
+#include "third_party/blink/renderer/platform/heap/cross_thread_persistent.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/tracing/trace_event.h"
 #include "third_party/blink/renderer/platform/loader/fetch/cached_metadata.h"
@@ -160,9 +163,8 @@ class ResourceScriptStreamer::ScriptDecoder {
       std::unique_ptr<ParkableStringImpl::SecureDigest> digest,
       CrossThreadOnceClosure main_thread_continuation) {
     if (response_body_loader_client) {
-      response_body_loader_client->DidReceiveDecodedData(
-          decoded_data, std::make_unique<ScriptResource::ScriptDecodedDataInfo>(
-                            std::move(digest)));
+      response_body_loader_client->DidReceiveDecodedData(decoded_data,
+                                                         std::move(digest));
     }
 
     std::move(main_thread_continuation).Run();
@@ -746,11 +748,19 @@ bool ResourceScriptStreamer::TryStartStreamingTask() {
   source_ = std::make_unique<v8::ScriptCompiler::StreamedSource>(
       std::move(stream_ptr), encoding_);
 
+  // Call FeatureList::IsEnabled only once.
+  static bool compile_hints_enabled =
+      base::FeatureList::IsEnabled(features::kProduceCompileHints);
+
+  v8::ScriptCompiler::CompileOptions compile_options =
+      compile_hints_enabled ? v8::ScriptCompiler::kProduceCompileHints
+                            : v8::ScriptCompiler::kNoCompileOptions;
+
   std::unique_ptr<v8::ScriptCompiler::ScriptStreamingTask>
       script_streaming_task =
           base::WrapUnique(v8::ScriptCompiler::StartStreaming(
               V8PerIsolateData::MainThreadIsolate(), source_.get(),
-              script_type_));
+              script_type_, compile_options));
 
   if (!script_streaming_task) {
     // V8 cannot stream the script.

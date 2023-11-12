@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Protokolo-bertsio ez bateragarri bat hauteman da. Ziurtatu softwarearen azken bertsioa instalatuta daukazula bi ordenagailuetan eta saiatu berriro.</translation>
 <translation id="1008557486741366299">Ez une honetan</translation>
 <translation id="1201402288615127009">Hurrengoa</translation>
+<translation id="1296511125400541222">Copyright 2023 The Chromium Authors. Eskubide guztiak erreserbatuta.</translation>
 <translation id="1297009705180977556">Errore bat gertatu da <ph name="HOSTNAME" /> ostalarira konektatzean</translation>
 <translation id="1450760146488584666">Eskatutako objektua ez dago.</translation>
 <translation id="1480046233931937785">Kredituak</translation>
@@ -36,7 +37,6 @@ Baimen hori emateko, sakatu beheko "<ph name="BUTTON_NAME" />" botoia pantailare
 <translation id="2599300881200251572">Zerbitzu honek Chrome-ren Urruneko pantaila aplikazioaren bezeroen sarrerako konexioak gaitzen ditu.</translation>
 <translation id="2647232381348739934">Chromoting zerbitzua</translation>
 <translation id="2676780859508944670">Lanean…</translation>
-<translation id="2692522824157224199">Copyright 2022 Google LLC. Eskubide guztiak erreserbatuta.</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2758123043070977469">Arazo bat izan da autentifikatzean. Hasi berriro saioa.</translation>
 <translation id="2803375539583399270">Idatzi PINa</translation>
@@ -73,7 +73,6 @@ Baimen hori emateko, sakatu beheko "<ph name="BUTTON_NAME" />" botoia pantailare
 <translation id="4257751272692708833"><ph name="PRODUCT_NAME" /> bezeroko URLen birbidaltzailea</translation>
 <translation id="4277736576214464567">Sarbide-kodeak ez du balio. Saiatu berriro.</translation>
 <translation id="4281844954008187215">Zerbitzu-baldintzak</translation>
-<translation id="4372650392690220936">Copyright 2022 The Chromium Authors. Eskubide guztiak erreserbatuta.</translation>
 <translation id="4405930547258349619">Liburutegi nagusia</translation>
 <translation id="443560535555262820">Ireki erabilerraztasun-hobespenak</translation>
 <translation id="4450893287417543264">Ez erakutsi berriro</translation>
@@ -90,6 +89,7 @@ Baimen hori emateko, sakatu beheko "<ph name="BUTTON_NAME" />" botoia pantailare
 <translation id="4808503597364150972">Idatzi <ph name="HOSTNAME" /> ostalarira konektatzeko PINa.</translation>
 <translation id="4812684235631257312">Ostalaria</translation>
 <translation id="4867841927763172006">Bidali Inpr Pa</translation>
+<translation id="4960795469833295568">Copyright 2023 Google LLC. Eskubide guztiak erreserbatuta.</translation>
 <translation id="4974476491460646149"><ph name="HOSTNAME" /> ostalaritik deskonektatu da</translation>
 <translation id="4985296110227979402">Lehenik, ordenagailua konfiguratu behar duzu urrunetik atzitu ahal izateko</translation>
 <translation id="4987330545941822761">Chrome-ren Urruneko pantaila aplikazioak ezin du zehaztu URLak ordenagailuan irekitzeko arakatzailea. Hautatu zerrenda honetako bat.</translation>

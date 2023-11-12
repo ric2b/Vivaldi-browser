@@ -9,10 +9,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/hash/md5.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -299,6 +299,9 @@ std::string ResultCodeToMessage(const PrinterSetupResult result) {
     // Unknown problem.
     case PrinterSetupResult::kFatalError:
       return "Unknown error occurred.";
+    // Printer requires manual setup.
+    case PrinterSetupResult::kManualSetupRequired:
+      return "Printer requires manual setup.";
     // This is not supposed to happen.
     case PrinterSetupResult::kMaxValue:
       return "The error code is invalid.";

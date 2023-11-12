@@ -41,7 +41,6 @@
 #include "components/exo/wayland/wl_output.h"
 #include "components/exo/wayland/xdg_shell.h"
 #include "components/exo/wm_helper.h"
-#include "components/exo/wm_helper_chromeos.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window_occlusion_tracker.h"
@@ -348,6 +347,7 @@ AuraSurface::~AuraSurface() {
   if (surface_) {
     surface_->RemoveSurfaceObserver(this);
     surface_->SetProperty(kSurfaceHasAuraSurfaceKey, false);
+    wm::SetTooltipText(surface_->window(), nullptr);
   }
 }
 
@@ -684,7 +684,23 @@ void AuraSurface::ShowTooltip(const char* text,
   auto* window = surface_->window();
   wm::SetTooltipText(window, &tooltip_text_);
   wm::SetTooltipId(window, surface_);
-  ash::Shell::Get()->tooltip_controller()->UpdateTooltip(window);
+
+  auto* tooltip_controller = ash::Shell::Get()->tooltip_controller();
+  tooltip_controller->SetShowTooltipDelay(window, show_delay);
+  tooltip_controller->SetHideTooltipTimeout(window, hide_delay);
+
+  switch (trigger) {
+    case ZAURA_SURFACE_TOOLTIP_TRIGGER_CURSOR:
+      tooltip_controller->UpdateTooltip(window);
+      break;
+    case ZAURA_SURFACE_TOOLTIP_TRIGGER_KEYBOARD:
+      tooltip_controller->UpdateTooltipFromKeyboardWithAnchorPoint(position,
+                                                                   window);
+      break;
+    default:
+      VLOG(2) << "Unknown aura-shell tooltip trigger type: " << trigger;
+      tooltip_controller->UpdateTooltip(window);
+  }
 }
 
 void AuraSurface::HideTooltip() {
@@ -720,7 +736,8 @@ using AuraSurfaceConfigureCallback =
     base::RepeatingCallback<void(const gfx::Rect& bounds,
                                  chromeos::WindowStateType state_type,
                                  bool resizing,
-                                 bool activated)>;
+                                 bool activated,
+                                 float raster_scale)>;
 
 uint32_t HandleAuraSurfaceConfigureCallback(
     wl_resource* resource,
@@ -730,10 +747,11 @@ uint32_t HandleAuraSurfaceConfigureCallback(
     chromeos::WindowStateType state_type,
     bool resizing,
     bool activated,
-    const gfx::Vector2d& origin_offset) {
+    const gfx::Vector2d& origin_offset,
+    float raster_scale) {
   uint32_t serial =
       serial_tracker->GetNextSerial(SerialTracker::EventType::OTHER_EVENT);
-  callback.Run(bounds, state_type, resizing, activated);
+  callback.Run(bounds, state_type, resizing, activated, raster_scale);
   xdg_surface_send_configure(resource, serial);
   wl_client_flush(wl_resource_get_client(resource));
   return serial;
@@ -882,7 +900,8 @@ void AddState(wl_array* states, T state) {
 void AuraToplevel::OnConfigure(const gfx::Rect& bounds,
                                chromeos::WindowStateType state_type,
                                bool resizing,
-                               bool activated) {
+                               bool activated,
+                               float raster_scale) {
   wl_array states;
   wl_array_init(&states);
   if (state_type == chromeos::WindowStateType::kMaximized)
@@ -914,6 +933,12 @@ void AuraToplevel::OnConfigure(const gfx::Rect& bounds,
   zaura_toplevel_send_configure(aura_toplevel_resource_, bounds.x(), bounds.y(),
                                 bounds.width(), bounds.height(), &states);
   wl_array_release(&states);
+
+  if (wl_resource_get_version(aura_toplevel_resource_) >=
+      ZAURA_TOPLEVEL_CONFIGURE_RASTER_SCALE_SINCE_VERSION) {
+    uint32_t value = *reinterpret_cast<uint32_t*>(&raster_scale);
+    zaura_toplevel_send_configure_raster_scale(aura_toplevel_resource_, value);
+  }
 }
 
 AuraPopup::AuraPopup(ShellSurfaceBase* shell_surface)
@@ -1082,6 +1107,9 @@ const uint32_t kFixedBugIds[] = {
     1352584,
     1358908,
     1400226,
+    1402158,
+    1405471,
+    1410676,
 };
 
 // Implements aura shell interface and monitors workspace state needed
@@ -1092,7 +1120,7 @@ class WaylandAuraShell : public ash::DesksController::Observer,
  public:
   WaylandAuraShell(wl_resource* aura_shell_resource, Display* display)
       : aura_shell_resource_(aura_shell_resource), seat_(display->seat()) {
-    WMHelperChromeOS* helper = WMHelperChromeOS::GetInstance();
+    WMHelper* helper = WMHelper::GetInstance();
     helper->AddTabletModeObserver(this);
     ash::DesksController::Get()->AddObserver(this);
     if (wl_resource_get_version(aura_shell_resource_) >=
@@ -1116,7 +1144,7 @@ class WaylandAuraShell : public ash::DesksController::Observer,
   WaylandAuraShell(const WaylandAuraShell&) = delete;
   WaylandAuraShell& operator=(const WaylandAuraShell&) = delete;
   ~WaylandAuraShell() override {
-    WMHelperChromeOS* helper = WMHelperChromeOS::GetInstance();
+    WMHelper* helper = WMHelper::GetInstance();
     helper->RemoveTabletModeObserver(this);
     ash::DesksController::Get()->RemoveObserver(this);
     if (seat_)
@@ -1200,10 +1228,6 @@ class WaylandAuraShell : public ash::DesksController::Observer,
     if (wl_resource_get_version(aura_shell_resource_) <
         ZAURA_SHELL_ACTIVATED_SINCE_VERSION)
       return;
-    if (gained_active_surface == lost_active_surface &&
-        last_has_focused_client_ == has_focused_client)
-      return;
-    last_has_focused_client_ = has_focused_client;
 
     wl_resource* gained_active_surface_resource =
         gained_active_surface ? GetSurfaceResource(gained_active_surface)
@@ -1226,6 +1250,12 @@ class WaylandAuraShell : public ash::DesksController::Observer,
         wl_resource_get_client(lost_active_surface_resource) != client) {
       lost_active_surface_resource = nullptr;
     }
+
+    if (gained_active_surface_resource == lost_active_surface_resource &&
+        last_has_focused_client_ == has_focused_client) {
+      return;
+    }
+    last_has_focused_client_ = has_focused_client;
 
     zaura_shell_send_activated(aura_shell_resource_,
                                gained_active_surface_resource,

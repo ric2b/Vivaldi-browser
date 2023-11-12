@@ -10,7 +10,7 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util_win.h"
@@ -306,10 +306,10 @@ GoogleUpdatePoliciesAndState::GoogleUpdatePoliciesAndState() = default;
 GoogleUpdatePoliciesAndState::~GoogleUpdatePoliciesAndState() = default;
 
 base::Value GetGoogleUpdatePolicyNames() {
-  base::Value names(base::Value::Type::LIST);
+  base::Value::List names;
   for (const auto& key_value : GetGoogleUpdatePolicySchemas())
     names.Append(base::Value(key_value.first));
-  return names;
+  return base::Value(std::move(names));
 }
 
 policy::PolicyConversions::PolicyToSchemaMap GetGoogleUpdatePolicySchemas() {

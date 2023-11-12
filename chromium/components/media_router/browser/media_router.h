@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/callback_list.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -29,6 +29,7 @@
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "components/media_router/browser/logger_impl.h"
+#include "components/media_router/browser/media_router_debugger.h"
 #include "components/media_router/common/mojom/media_controller.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -187,6 +188,10 @@ class MediaRouter : public KeyedService {
 
   // Returns a pointer to LoggerImpl that can be used to add logging messages.
   virtual LoggerImpl* GetLogger() = 0;
+
+  // Returns the instance of the debugger for this MediaRouter instance.
+  virtual MediaRouterDebugger& GetDebugger() = 0;
+
 #endif  // !BUILDFLAG(IS_ANDROID)
 
  private:

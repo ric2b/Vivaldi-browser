@@ -647,7 +647,12 @@ void HTMLMediaElement::DidMoveToNewDocument(Document& old_document) {
 
 bool HTMLMediaElement::ShouldReusePlayer(Document& old_document,
                                          Document& new_document) const {
-  if (!RuntimeEnabledFeatures::DocumentPictureInPictureAPIEnabled()) {
+  // Don't reuse player if the Document Picture-in-Picture API is disabled for
+  // both documents.
+  if (!RuntimeEnabledFeatures::DocumentPictureInPictureAPIEnabled(
+          old_document.domWindow()->GetExecutionContext()) &&
+      !RuntimeEnabledFeatures::DocumentPictureInPictureAPIEnabled(
+          new_document.domWindow()->GetExecutionContext())) {
     return false;
   }
 
@@ -800,7 +805,7 @@ void HTMLMediaElement::FinishParsingChildren() {
     ScheduleTextTrackResourceLoad();
 }
 
-bool HTMLMediaElement::LayoutObjectIsNeeded(const ComputedStyle& style) const {
+bool HTMLMediaElement::LayoutObjectIsNeeded(const DisplayStyle& style) const {
   return ShouldShowControls() && HTMLElement::LayoutObjectIsNeeded(style);
 }
 
@@ -4756,7 +4761,8 @@ void HTMLMediaElement::DidMediaMetadataChange(
     bool has_video,
     media::AudioCodec audio_codec,
     media::VideoCodec video_codec,
-    media::MediaContentType media_content_type) {
+    media::MediaContentType media_content_type,
+    bool is_encrypted_media) {
   for (auto& observer : media_player_observer_remote_set_->Value()) {
     observer->OnMediaMetadataChanged(has_audio, has_video, media_content_type);
   }
@@ -4767,6 +4773,7 @@ void HTMLMediaElement::DidMediaMetadataChange(
   }
   video_codec_ = video_codec;
   audio_codec_ = audio_codec;
+  is_encrypted_media_ = is_encrypted_media;
   OnRemotePlaybackMetadataChange();
 }
 
@@ -4929,7 +4936,7 @@ void HTMLMediaElement::OnRemotePlaybackMetadataChange() {
             WTF::String(media::GetCodecName(video_codec_)),
             WTF::String(media::GetCodecName(audio_codec_)),
             is_remote_playback_disabled_, is_remote_rendering_,
-            WTF::String(remote_device_friendly_name_)));
+            WTF::String(remote_device_friendly_name_), is_encrypted_media_));
   }
 }
 

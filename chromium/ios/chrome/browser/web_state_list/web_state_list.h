@@ -9,8 +9,9 @@
 #include <vector>
 
 #include "base/auto_reset.h"
-#include "base/callback_forward.h"
 #include "base/compiler_specific.h"
+#include "base/functional/callback_forward.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "url/gurl.h"
@@ -75,6 +76,9 @@ class WebStateList {
   WebStateList& operator=(const WebStateList&) = delete;
 
   ~WebStateList();
+
+  // Returns a weak pointer to the WebStateList.
+  base::WeakPtr<WebStateList> AsWeakPtr();
 
   // Returns whether the model is empty or not.
   bool empty() const { return web_state_wrappers_.empty(); }
@@ -182,6 +186,10 @@ class WebStateList {
   // is a bitwise combination of ClosingFlags values.
   void CloseWebStateAt(int index, int close_flags);
 
+  // Closes and destroys all non-pinned WebStates. The `close_flags` is a
+  // bitwise combination of ClosingFlags values.
+  void CloseAllNonPinnedWebStates(int close_flags);
+
   // Closes and destroys all WebStates. The `close_flags` is a bitwise
   // combination of ClosingFlags values.
   void CloseAllWebStates(int close_flags);
@@ -249,11 +257,11 @@ class WebStateList {
   // Assumes that the WebStateList is locked.
   void CloseWebStateAtImpl(int index, int close_flags);
 
-  // Closes and destroys all WebStates. The `close_flags` is a bitwise
-  // combination of ClosingFlags values.
+  // Closes and destroys all WebStates after `start_index`. The `close_flags`
+  // is a bitwise combination of ClosingFlags values.
   //
   // Assumes that the WebStateList is locked.
-  void CloseAllWebStatesImpl(int close_flags);
+  void CloseAllWebStatesAfterIndexImpl(int start_index, int close_flags);
 
   // Makes the WebState at the specified index the active WebState.
   //
@@ -306,6 +314,8 @@ class WebStateList {
   // to call this with an index such that `ContainsIndex(index)` returns false.
   WebStateWrapper* GetWebStateWrapperAt(int index) const;
 
+  SEQUENCE_CHECKER(sequence_checker_);
+
   // The WebStateList delegate.
   WebStateListDelegate* delegate_ = nullptr;
 
@@ -330,7 +340,8 @@ class WebStateList {
   // Lock to prevent nesting batched operations.
   bool batch_operation_in_progress_ = false;
 
-  SEQUENCE_CHECKER(sequence_checker_);
+  // Weak pointer factory.
+  base::WeakPtrFactory<WebStateList> weak_factory_{this};
 };
 
 #endif  // IOS_CHROME_BROWSER_WEB_STATE_LIST_WEB_STATE_LIST_H_

@@ -17,8 +17,6 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/lens_commands.h"
 #import "ios/chrome/browser/ui/commands/omnibox_commands.h"
-#import "ios/chrome/browser/ui/commands/show_signin_command.h"
-#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_synchronizing.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_feature.h"
@@ -27,7 +25,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_metrics.h"
-#import "ios/chrome/browser/ui/content_suggestions/user_account_image_update_delegate.h"
 #import "ios/chrome/browser/ui/icons/symbols.h"
 #import "ios/chrome/browser/ui/lens/lens_entrypoint.h"
 #import "ios/chrome/browser/ui/ntp/logo_vendor.h"
@@ -62,16 +59,7 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
 @interface ContentSuggestionsHeaderViewController () <
     DoodleObserver,
     UIIndirectScribbleInteractionDelegate,
-    UIPointerInteractionDelegate,
-    UserAccountImageUpdateDelegate>
-
-// If YES the animations of the fake omnibox triggered when the collection is
-// scrolled (expansion) are disabled. This is used for the fake omnibox focus
-// animations so the constraints aren't changed while the ntp is scrolled.
-@property(nonatomic, assign) BOOL disableScrollAnimation;
-
-// `YES` when notifications indicate the omnibox is focused.
-@property(nonatomic, assign, getter=isOmniboxFocused) BOOL omniboxFocused;
+    UIPointerInteractionDelegate>
 
 // `YES` if this consumer is has voice search enabled.
 @property(nonatomic, assign) BOOL voiceSearchIsEnabled;
@@ -82,7 +70,9 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
 @property(nonatomic, strong) ContentSuggestionsHeaderView* headerView;
 @property(nonatomic, strong) UIButton* fakeOmnibox;
 @property(nonatomic, strong) UIButton* accessibilityButton;
+@property(nonatomic, strong) NSString* identityDiscAccessibilityLabel;
 @property(nonatomic, strong, readwrite) UIButton* identityDiscButton;
+@property(nonatomic, strong) UIImage* identityDiscImage;
 @property(nonatomic, strong) UIButton* fakeTapButton;
 @property(nonatomic, strong) NSLayoutConstraint* doodleHeightConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* doodleTopMarginConstraint;
@@ -92,31 +82,15 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
 @property(nonatomic, strong) NSLayoutConstraint* headerViewHeightConstraint;
 @property(nonatomic, assign) BOOL logoFetched;
 
+// Whether the Google logo or doodle is being shown.
+@property(nonatomic, assign) BOOL logoIsShowing;
+
 @end
 
 @implementation ContentSuggestionsHeaderViewController
 
-@synthesize collectionSynchronizer = _collectionSynchronizer;
-@synthesize showing = _showing;
-@synthesize omniboxFocused = _omniboxFocused;
-@synthesize headerView = _headerView;
-@synthesize fakeOmnibox = _fakeOmnibox;
-@synthesize accessibilityButton = _accessibilityButton;
-@synthesize doodleHeightConstraint = _doodleHeightConstraint;
-@synthesize doodleTopMarginConstraint = _doodleTopMarginConstraint;
-@synthesize fakeOmniboxWidthConstraint = _fakeOmniboxWidthConstraint;
-@synthesize fakeOmniboxHeightConstraint = _fakeOmniboxHeightConstraint;
-@synthesize fakeOmniboxTopMarginConstraint = _fakeOmniboxTopMarginConstraint;
-@synthesize voiceSearchIsEnabled = _voiceSearchIsEnabled;
-@synthesize logoIsShowing = _logoIsShowing;
-@synthesize logoFetched = _logoFetched;
-@synthesize layoutGuideCenter = _layoutGuideCenter;
-
 - (instancetype)init {
-  if (self = [super initWithNibName:nil bundle:nil]) {
-    _focusOmniboxWhenViewAppears = YES;
-  }
-  return self;
+  return [super initWithNibName:nil bundle:nil];
 }
 
 #pragma mark - Public
@@ -157,11 +131,59 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
   [self.accessibilityButton removeObserver:self forKeyPath:@"highlighted"];
 }
 
-#pragma mark - ContentSuggestionsHeaderControlling
+- (void)expandHeaderForFocus {
+  // Make sure that the offset is after the pinned offset to have the fake
+  // omnibox taking the full width.
+  CGFloat offset = 9000;
+  [self.headerView updateSearchFieldWidth:self.fakeOmniboxWidthConstraint
+                                   height:self.fakeOmniboxHeightConstraint
+                                topMargin:self.fakeOmniboxTopMarginConstraint
+                                forOffset:offset
+                              screenWidth:self.headerView.bounds.size.width
+                           safeAreaInsets:self.view.safeAreaInsets];
 
+  self.fakeOmniboxWidthConstraint.constant = self.headerView.bounds.size.width;
+  [self.headerView layoutIfNeeded];
+  NamedGuide* omniboxGuide = [NamedGuide guideWithName:kOmniboxGuide
+                                                  view:self.headerView];
+  CGRect omniboxFrameInFakebox =
+      [[omniboxGuide owningView] convertRect:[omniboxGuide layoutFrame]
+                                      toView:self.fakeOmnibox];
+  self.headerView.fakeLocationBarLeadingConstraint.constant =
+      omniboxFrameInFakebox.origin.x;
+  self.headerView.fakeLocationBarTrailingConstraint.constant =
+      -(self.fakeOmnibox.bounds.size.width -
+        (omniboxFrameInFakebox.origin.x + omniboxFrameInFakebox.size.width));
+  self.headerView.voiceSearchButton.alpha = 0;
+  self.headerView.cancelButton.alpha = 0.7;
+  self.headerView.omnibox.alpha = 1;
+  self.headerView.searchHintLabel.alpha = 0;
+  [self.headerView layoutIfNeeded];
+}
+
+- (void)completeHeaderFakeOmniboxFocusAnimationWithFinalPosition:
+    (UIViewAnimatingPosition)finalPosition {
+  self.headerView.omnibox.hidden = YES;
+  self.headerView.cancelButton.hidden = YES;
+  self.headerView.searchHintLabel.alpha = 1;
+  self.headerView.voiceSearchButton.alpha = 1;
+  if (finalPosition == UIViewAnimatingPositionEnd &&
+      self.delegate.scrolledToMinimumHeight) {
+    // Check to see if the collection are still scrolled to the top --
+    // it's possible (and difficult) to unfocus the omnibox and initiate a
+    // -shiftTilesDownForOmniboxDefocus before the animation here completes.
+    if (IsSplitToolbarMode(self)) {
+      [self.dispatcher onFakeboxAnimationComplete];
+    }
+  }
+}
+
+// TODO(crbug.com/1403613): Name animateScrollAnimation something more aligned
+// to its true state indication. Why update the constraints only somtimes?
 - (void)updateFakeOmniboxForOffset:(CGFloat)offset
                        screenWidth:(CGFloat)screenWidth
-                    safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
+                    safeAreaInsets:(UIEdgeInsets)safeAreaInsets
+            animateScrollAnimation:(BOOL)animateScrollAnimation {
   if (self.isShowing) {
     CGFloat progress =
         self.logoIsShowing || !IsRegularXRegularSizeClass(self)
@@ -177,28 +199,19 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
     }
   }
 
-  if (self.disableScrollAnimation)
-    return;
-
-  [self.headerView updateSearchFieldWidth:self.fakeOmniboxWidthConstraint
-                                   height:self.fakeOmniboxHeightConstraint
-                                topMargin:self.fakeOmniboxTopMarginConstraint
-                                forOffset:offset
-                              screenWidth:screenWidth
-                           safeAreaInsets:safeAreaInsets];
+  if (animateScrollAnimation) {
+    [self.headerView updateSearchFieldWidth:self.fakeOmniboxWidthConstraint
+                                     height:self.fakeOmniboxHeightConstraint
+                                  topMargin:self.fakeOmniboxTopMarginConstraint
+                                  forOffset:offset
+                                screenWidth:screenWidth
+                             safeAreaInsets:safeAreaInsets];
+  }
 }
 
 - (void)updateFakeOmniboxForWidth:(CGFloat)width {
   self.fakeOmniboxWidthConstraint.constant =
       content_suggestions::SearchFieldWidth(width, self.traitCollection);
-}
-
-- (void)unfocusOmnibox {
-  if (self.omniboxFocused) {
-    [self.dispatcher cancelOmniboxEdit];
-  } else {
-    [self locationBarResignsFirstResponder];
-  }
 }
 
 - (void)layoutHeader {
@@ -223,14 +236,6 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
   }
 
   return AlignValueToPixel(offsetY);
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-  [super viewDidAppear:animated];
-
-  if (self.focusOmniboxWhenViewAppears && !self.omniboxFocused) {
-    [self focusAccessibilityOnOmnibox];
-  }
 }
 
 - (CGFloat)headerHeight {
@@ -283,6 +288,17 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
                       andHeaderView:self.headerView];
 
     [self.logoVendor fetchDoodle];
+  }
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+  [super viewDidAppear:animated];
+  // Check if the identity disc button was properly set before the view appears.
+  DCHECK(self.identityDiscButton);
+  if (base::FeatureList::IsEnabled(switches::kIdentityStatusConsistency)) {
+    DCHECK(self.identityDiscImage);
+    DCHECK(self.identityDiscButton.accessibilityLabel);
+    DCHECK([self.identityDiscButton imageForState:UIControlStateNormal]);
   }
 }
 
@@ -368,12 +384,9 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
   // Set up a button. Details for the button will be set through delegate
   // implementation of UserAccountImageUpdateDelegate.
   self.identityDiscButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  self.identityDiscButton.accessibilityLabel =
-      l10n_util::GetNSString(IDS_ACCNAME_PARTICLE_DISC);
-  [self.identityDiscButton addTarget:self
-                              action:@selector(identityDiscTapped)
+  [self.identityDiscButton addTarget:self.commandHandler
+                              action:@selector(identityDiscWasTapped)
                     forControlEvents:UIControlEventTouchUpInside];
-
   self.identityDiscButton.pointerInteractionEnabled = YES;
   self.identityDiscButton.pointerStyleProvider =
       ^UIPointerStyle*(UIButton* button, UIPointerEffect* proposedEffect,
@@ -390,11 +403,34 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
     return [UIPointerStyle styleWithEffect:proposedEffect shape:shape];
   };
 
-    // TODO(crbug.com/965958): Set action on button to launch into Settings.
-    [self.headerView setIdentityDiscView:self.identityDiscButton];
+  if (base::FeatureList::IsEnabled(switches::kIdentityStatusConsistency)) {
+    // `self.identityDiscButton` should not be updated if
+    // `self.identityDiscImage` is not available yet.
+    if (self.identityDiscImage) {
+      [self updateIdentityDiscState];
+    }
+  } else {
+    [self updateIdentityDiscState];
+  }
+  [self.headerView setIdentityDiscView:self.identityDiscButton];
+}
 
-  // Register to receive the avatar of the currently signed in user.
-  [self.delegate registerImageUpdater:self];
+// Configures `identityDiscButton` with the current state of
+// `identityDiscImage`.
+- (void)updateIdentityDiscState {
+  if (base::FeatureList::IsEnabled(switches::kIdentityStatusConsistency)) {
+    DCHECK(self.identityDiscImage);
+    DCHECK(self.identityDiscAccessibilityLabel);
+  } else {
+    self.identityDiscButton.hidden = !self.identityDiscImage;
+  }
+  self.identityDiscButton.accessibilityLabel =
+      self.identityDiscAccessibilityLabel;
+  [self.identityDiscButton setImage:self.identityDiscImage
+                           forState:UIControlStateNormal];
+  self.identityDiscButton.imageView.layer.cornerRadius =
+      self.identityDiscImage.size.width / 2;
+  self.identityDiscButton.imageView.layer.masksToBounds = YES;
 }
 
 - (void)openLens {
@@ -423,13 +459,13 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
 - (void)fakeTapViewTapped {
   base::RecordAction(base::UserMetricsAction("MobileFakeViewNTPTapped"));
   [self logOmniboxAction];
-  [self focusFakebox];
+  [self.delegate focusFakebox];
 }
 
 - (void)fakeboxTapped {
   base::RecordAction(base::UserMetricsAction("MobileFakeboxNTPTapped"));
   [self logOmniboxAction];
-  [self focusFakebox];
+  [self.delegate focusFakebox];
 }
 
 - (void)logOmniboxAction {
@@ -442,27 +478,9 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
   }
 }
 
-- (void)focusFakebox {
-  [self shiftTilesUp];
-}
-
 - (void)focusAccessibilityOnOmnibox {
   UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
                                   self.fakeOmnibox);
-}
-
-- (void)identityDiscTapped {
-  base::RecordAction(base::UserMetricsAction("MobileNTPIdentityDiscTapped"));
-  if ([self.delegate isSignedIn]) {
-    [self.dispatcher showSettingsFromViewController:self.baseViewController];
-  } else {
-    ShowSigninCommand* const showSigninCommand = [[ShowSigninCommand alloc]
-        initWithOperation:AuthenticationOperationSigninAndSync
-              accessPoint:signin_metrics::AccessPoint::
-                              ACCESS_POINT_NTP_SIGNED_OUT_ICON];
-    [self.dispatcher showSignin:showSigninCommand
-             baseViewController:self.baseViewController];
-  }
 }
 
 // TODO(crbug.com/807330) The fakebox is currently a collection of views spread
@@ -546,86 +564,6 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
       .active = YES;
   [fakeOmnibox.centerXAnchor constraintEqualToAnchor:headerView.centerXAnchor]
       .active = YES;
-}
-
-- (void)shiftTilesDown {
-  if (IsSplitToolbarMode(self)) {
-    [self.dispatcher onFakeboxBlur];
-  }
-  [self.collectionSynchronizer shiftTilesDown];
-}
-
-- (void)shiftTilesUp {
-  if (self.disableScrollAnimation)
-    return;
-
-  void (^animations)() = nil;
-  if (![self.delegate isScrolledToMinimumHeight]) {
-    // Only trigger the fake omnibox animation if the header isn't scrolled to
-    // the top. Otherwise just rely on the normal animation.
-    self.disableScrollAnimation = YES;
-    [self.dispatcher focusOmniboxNoAnimation];
-    NamedGuide* omniboxGuide = [NamedGuide guideWithName:kOmniboxGuide
-                                                    view:self.headerView];
-    // Layout the owning view to make sure that the constrains are applied.
-    [omniboxGuide.owningView layoutIfNeeded];
-
-    self.headerView.omnibox.hidden = NO;
-    self.headerView.cancelButton.hidden = NO;
-    self.headerView.omnibox.alpha = 0;
-    self.headerView.cancelButton.alpha = 0;
-    animations = ^{
-      // Make sure that the offset is after the pinned offset to have the fake
-      // omnibox taking the full width.
-      CGFloat offset = 9000;
-      [self.headerView
-          updateSearchFieldWidth:self.fakeOmniboxWidthConstraint
-                          height:self.fakeOmniboxHeightConstraint
-                       topMargin:self.fakeOmniboxTopMarginConstraint
-                       forOffset:offset
-                     screenWidth:self.headerView.bounds.size.width
-                  safeAreaInsets:self.view.safeAreaInsets];
-
-      self.fakeOmniboxWidthConstraint.constant =
-          self.headerView.bounds.size.width;
-      [self.headerView layoutIfNeeded];
-      CGRect omniboxFrameInFakebox =
-          [[omniboxGuide owningView] convertRect:[omniboxGuide layoutFrame]
-                                          toView:self.fakeOmnibox];
-      self.headerView.fakeLocationBarLeadingConstraint.constant =
-          omniboxFrameInFakebox.origin.x;
-      self.headerView.fakeLocationBarTrailingConstraint.constant = -(
-          self.fakeOmnibox.bounds.size.width -
-          (omniboxFrameInFakebox.origin.x + omniboxFrameInFakebox.size.width));
-      self.headerView.voiceSearchButton.alpha = 0;
-      self.headerView.cancelButton.alpha = 0.7;
-      self.headerView.omnibox.alpha = 1;
-      self.headerView.searchHintLabel.alpha = 0;
-      [self.headerView layoutIfNeeded];
-    };
-  }
-
-  void (^completionBlock)(UIViewAnimatingPosition) =
-      ^(UIViewAnimatingPosition finalPosition) {
-        self.headerView.omnibox.hidden = YES;
-        self.headerView.cancelButton.hidden = YES;
-        self.headerView.searchHintLabel.alpha = 1;
-        self.headerView.voiceSearchButton.alpha = 1;
-        self.disableScrollAnimation = NO;
-        if (finalPosition == UIViewAnimatingPositionEnd &&
-            [self.delegate isScrolledToMinimumHeight]) {
-          // Check to see if the collection are still scrolled to the top --
-          // it's possible (and difficult) to unfocus the omnibox and initiate a
-          // -shiftTilesDown before the animation here completes.
-          [self.dispatcher fakeboxFocused];
-          if (IsSplitToolbarMode(self)) {
-            [self.dispatcher onFakeboxAnimationComplete];
-          }
-        }
-      };
-
-  [self.collectionSynchronizer shiftTilesUpWithAnimations:animations
-                                               completion:completionBlock];
 }
 
 - (CGFloat)topInset {
@@ -712,7 +650,7 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
   [self.commandHandler updateForHeaderSizeChange];
 }
 
-#pragma mark - NTPHomeConsumer
+#pragma mark - ContentSuggestionsHeaderConsumer
 
 - (void)setLogoIsShowing:(BOOL)logoIsShowing {
   _logoIsShowing = logoIsShowing;
@@ -728,18 +666,7 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
   if (!self.isShowing)
     return;
 
-  self.omniboxFocused = YES;
-
-  [self shiftTilesUp];
-}
-
-- (void)locationBarResignsFirstResponder {
-  if (!self.isShowing && ![self.delegate isScrolledToMinimumHeight])
-    return;
-
-  self.omniboxFocused = NO;
-
-  [self shiftTilesDown];
+  [self.delegate focusFakebox];
 }
 
 - (void)setVoiceSearchIsEnabled:(BOOL)voiceSearchIsEnabled {
@@ -751,43 +678,60 @@ NSString* const kSignOutIdentityIconName = @"sign_out_icon";
 
 #pragma mark - UserAccountImageUpdateDelegate
 
-- (void)updateAccountImage:(UIImage*)image {
-  if (![self.delegate isSignedIn] &&
-      base::FeatureList::IsEnabled(switches::kIdentityStatusConsistency)) {
-    DCHECK(!image);
+- (void)setSignedOutAccountImage {
+  if (base::FeatureList::IsEnabled(switches::kIdentityStatusConsistency)) {
     if (UseSymbols()) {
-      image = DefaultSymbolTemplateWithPointSize(
+      self.identityDiscImage = DefaultSymbolTemplateWithPointSize(
           kPersonCropCircleSymbol, ntp_home::kSignedOutIdentityIconDimension);
     } else {
-      image = [UIImage imageNamed:kSignOutIdentityIconName];
+      self.identityDiscImage = [UIImage imageNamed:kSignOutIdentityIconName];
     }
+    self.identityDiscAccessibilityLabel =
+        l10n_util::GetNSString(IDS_IOS_IDENTITY_DISC_SIGNED_OUT);
   } else {
-    // TODO(crbug.com/1385758): Update this logic after
-    // kIdentityStatusConsistency is rolled out as image can't be
-    // null when the user is signed-in.
-    self.identityDiscButton.hidden = !image;
-    DCHECK(image == nil ||
-           (image.size.width == ntp_home::kIdentityAvatarDimension &&
-            image.size.height == ntp_home::kIdentityAvatarDimension))
-        << base::SysNSStringToUTF8([image description]);
+    self.identityDiscImage = nil;
   }
-  [self.identityDiscButton setImage:image forState:UIControlStateNormal];
-  self.identityDiscButton.imageView.layer.cornerRadius = image.size.width / 2;
-  self.identityDiscButton.imageView.layer.masksToBounds = YES;
+  // `self.identityDiscButton` should not be updated if the view has not been
+  // created yet.
+  if (self.identityDiscButton) {
+    [self updateIdentityDiscState];
+  }
+}
+
+- (void)updateAccountImage:(UIImage*)image
+                      name:(NSString*)name
+                     email:(NSString*)email {
+  DCHECK(image && image.size.width == ntp_home::kIdentityAvatarDimension &&
+         image.size.height == ntp_home::kIdentityAvatarDimension)
+      << base::SysNSStringToUTF8([image description]);
+  DCHECK(email);
+
+  self.identityDiscImage = image;
+  if (name) {
+    self.identityDiscAccessibilityLabel = l10n_util::GetNSStringF(
+        IDS_IOS_IDENTITY_DISC_WITH_NAME_AND_EMAIL,
+        base::SysNSStringToUTF16(name), base::SysNSStringToUTF16(email));
+  } else {
+    self.identityDiscAccessibilityLabel = l10n_util::GetNSStringF(
+        IDS_IOS_IDENTITY_DISC_WITH_EMAIL, base::SysNSStringToUTF16(email));
+  }
+  // `self.identityDiscButton` should not be updated if the view has not been
+  // created yet.
+  if (self.identityDiscButton) {
+    [self updateIdentityDiscState];
+  }
 }
 
 #pragma mark UIPointerInteractionDelegate
 
 - (UIPointerRegion*)pointerInteraction:(UIPointerInteraction*)interaction
                       regionForRequest:(UIPointerRegionRequest*)request
-                         defaultRegion:(UIPointerRegion*)defaultRegion
-    API_AVAILABLE(ios(13.4)) {
+                         defaultRegion:(UIPointerRegion*)defaultRegion {
   return defaultRegion;
 }
 
 - (UIPointerStyle*)pointerInteraction:(UIPointerInteraction*)interaction
-                       styleForRegion:(UIPointerRegion*)region
-    API_AVAILABLE(ios(13.4)) {
+                       styleForRegion:(UIPointerRegion*)region {
   // Without this, the hover effect looks slightly oversized.
   CGRect rect = CGRectInset(interaction.view.bounds, 1, 1);
   UIBezierPath* path =

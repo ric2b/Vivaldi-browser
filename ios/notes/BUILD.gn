@@ -50,7 +50,6 @@ source_set("notes") {
     "//ios/chrome/browser/main:public",
     "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/table_view",
-    "//ios/chrome/browser/ui/table_view:presentation",
     "//ios/chrome/browser/ui/table_view:styler",
     "//ios/chrome/browser/ui/table_view:utils",
     "//ios/chrome/browser/ui/table_view:views",

@@ -13,7 +13,6 @@
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
 #include "components/feed/core/proto/v2/store.pb.h"
-#include "components/feed/core/proto/v2/web_feed_identifier_token.pb.h"
 #include "components/feed/core/proto/v2/wire/capability.pb.h"
 #include "components/feed/core/proto/v2/wire/chrome_client_info.pb.h"
 #include "components/feed/core/proto/v2/wire/feed_entry_point_data.pb.h"
@@ -21,6 +20,8 @@
 #include "components/feed/core/proto/v2/wire/feed_query.pb.h"
 #include "components/feed/core/proto/v2/wire/feed_request.pb.h"
 #include "components/feed/core/proto/v2/wire/request.pb.h"
+#include "components/feed/core/proto/v2/wire/web_feed_id.pb.h"
+#include "components/feed/core/proto/v2/wire/web_feed_identifier_token.pb.h"
 #include "components/feed/core/v2/config.h"
 #include "components/feed/core/v2/enums.h"
 #include "components/feed/core/v2/feed_stream.h"
@@ -124,7 +125,8 @@ feedwire::Request CreateFeedQueryRequest(
     feedwire::FeedQuery::RequestReason request_reason,
     const RequestMetadata& request_metadata,
     const std::string& consistency_token,
-    const std::string& next_page_token) {
+    const std::string& next_page_token,
+    const SingleWebFeedEntryPoint single_feed_entry_point) {
   feedwire::Request request;
   request.set_request_version(feedwire::Request::FEED_QUERY);
 
@@ -160,16 +162,15 @@ feedwire::Request CreateFeedQueryRequest(
     feed_request.add_client_capability(Capability::AMP_GROUP_DATASTORE);
   }
 
-  if (base::FeatureList::IsEnabled(reading_list::switches::kReadLater)) {
-    feed_request.add_client_capability(Capability::READ_LATER);
-  } else {
-    feed_request.add_client_capability(Capability::DOWNLOAD_LINK);
-  }
+  feed_request.add_client_capability(Capability::READ_LATER);
 
 #if BUILDFLAG(IS_ANDROID)
   // Note that the Crow feature is referenced as THANK_CREATOR within the feed.
   if (base::FeatureList::IsEnabled(kShareCrowButton)) {
     feed_request.add_client_capability(Capability::THANK_CREATOR);
+  }
+  if (base::FeatureList::IsEnabled(kCormorant)) {
+    feed_request.add_client_capability(Capability::OPEN_WEB_FEED_COMMAND);
   }
 #endif
 
@@ -225,9 +226,26 @@ feedwire::Request CreateFeedQueryRequest(
     entry_point.set_feed_entry_point_source_value(
         feedwire::FeedEntryPointSource::CHROME_FOLLOWING_FEED);
   } else if (stream_type.IsSingleWebFeed()) {
-    // TODO (add other param to branch on other entry points)
-    entry_point.set_feed_entry_point_source_value(
-        feedwire::FeedEntryPointSource::CHROME_SINGLE_WEB_FEED_MENU);
+    switch (single_feed_entry_point) {
+      case SingleWebFeedEntryPoint::kMenu:
+        entry_point.set_feed_entry_point_source_value(
+            feedwire::FeedEntryPointSource::CHROME_SINGLE_WEB_FEED_MENU);
+        break;
+      case SingleWebFeedEntryPoint::kAttribution:
+        entry_point.set_feed_entry_point_source_value(
+            feedwire::FeedEntryPointSource::CHROME_SINGLE_WEB_FEED_ATTRIBUTION);
+        break;
+      case SingleWebFeedEntryPoint::kRecommendation:
+        entry_point.set_feed_entry_point_source_value(
+            feedwire::FeedEntryPointSource::
+                CHROME_SINGLE_WEB_FEED_RECOMMENDATION);
+        break;
+      case SingleWebFeedEntryPoint::kOther:
+        entry_point.set_feed_entry_point_source_value(
+            feedwire::FeedEntryPointSource::CHROME_SINGLE_WEB_FEED_OTHER);
+
+        break;
+    }
   }
 
   // |consistency_token|, for action reporting, is only applicable to signed-in
@@ -280,6 +298,16 @@ void SetTimesFollowedFromWebPageMenu(feedwire::Request* request,
           request_metadata.followed_from_web_page_menu_count);
 }
 
+// Set the sign in status for the feed query to Discover from the request
+// metadata.sign_in_status
+void SetChromeSignInStatus(feedwire::Request* request,
+                           const RequestMetadata& request_metadata) {
+  request->mutable_feed_request()
+      ->mutable_feed_query()
+      ->mutable_chrome_fulfillment_info()
+      ->mutable_sign_in_status()
+      ->set_sign_in_status(request_metadata.sign_in_status);
+}
 }  // namespace
 
 std::string ContentIdString(const feedwire::ContentId& content_id) {
@@ -361,10 +389,11 @@ feedwire::Request CreateFeedQueryRefreshRequest(
     const StreamType& stream_type,
     feedwire::FeedQuery::RequestReason request_reason,
     const RequestMetadata& request_metadata,
-    const std::string& consistency_token) {
-  feedwire::Request request =
-      CreateFeedQueryRequest(stream_type, request_reason, request_metadata,
-                             consistency_token, std::string());
+    const std::string& consistency_token,
+    const SingleWebFeedEntryPoint single_feed_entry_point) {
+  feedwire::Request request = CreateFeedQueryRequest(
+      stream_type, request_reason, request_metadata, consistency_token,
+      std::string(), single_feed_entry_point);
   if (stream_type.IsWebFeed()) {
     // A special token that requests content for followed Web Feeds.
     constexpr char kChromeFollowToken[] = "\"\004\022\002\b5*\tFollowing";
@@ -375,9 +404,10 @@ feedwire::Request CreateFeedQueryRefreshRequest(
         ->set_web_feed_token(kChromeFollowToken);
   } else if (stream_type.IsSingleWebFeed()) {
     // A special token that requests content for the Single Web Feed.
-    webfeedidentifier::WebFeedIdentifierToken web_feed_id;
-    web_feed_id.mutable_outer_id()->mutable_inner_id()->set_web_feed_name(
-        stream_type.GetWebFeedId().c_str());
+    feedwire::WebFeedIdentifierToken web_feed_id;
+    web_feed_id.mutable_web_feed_id()
+        ->mutable_domain_web_feed_id()
+        ->set_web_feed_name(stream_type.GetWebFeedId().c_str());
 
     request.mutable_feed_request()
         ->mutable_feed_query()
@@ -388,6 +418,7 @@ feedwire::Request CreateFeedQueryRefreshRequest(
   SetNoticeCardAcknowledged(&request, request_metadata);
   SetInfoCardTrackingStates(&request, request_metadata);
   SetTimesFollowedFromWebPageMenu(&request, request_metadata);
+  SetChromeSignInStatus(&request, request_metadata);
   return request;
 }
 
@@ -397,7 +428,8 @@ feedwire::Request CreateFeedQueryLoadMoreRequest(
     const std::string& next_page_token) {
   return CreateFeedQueryRequest(
       StreamType(StreamKind::kForYou), feedwire::FeedQuery::NEXT_PAGE_SCROLL,
-      request_metadata, consistency_token, next_page_token);
+      request_metadata, consistency_token, next_page_token,
+      SingleWebFeedEntryPoint::kOther);
 }
 
 }  // namespace feed

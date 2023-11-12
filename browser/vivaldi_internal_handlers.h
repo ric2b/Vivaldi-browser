@@ -3,8 +3,8 @@
 #ifndef BROWSER_VIVALID_DOWNLOADS_UTIL_H_
 #define BROWSER_VIVALID_DOWNLOADS_UTIL_H_
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "url/gurl.h"
 
 class Profile;

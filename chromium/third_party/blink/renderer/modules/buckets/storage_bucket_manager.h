@@ -29,9 +29,7 @@ class MODULES_EXPORT StorageBucketManager final
   static const char kSupplementName[];
 
   // Web-exposed as navigator.storageBuckets
-  static StorageBucketManager* storageBuckets(ScriptState* script_state,
-                                              NavigatorBase& navigator,
-                                              ExceptionState& exception_state);
+  static StorageBucketManager* storageBuckets(NavigatorBase& navigator);
 
   explicit StorageBucketManager(NavigatorBase& navigator);
   ~StorageBucketManager() override = default;
@@ -53,7 +51,8 @@ class MODULES_EXPORT StorageBucketManager final
   mojom::blink::BucketManagerHost* GetBucketManager(ScriptState* script_state);
 
   void DidOpen(ScriptPromiseResolver* resolver,
-               mojo::PendingRemote<mojom::blink::BucketHost> bucket_remote);
+               mojo::PendingRemote<mojom::blink::BucketHost> bucket_remote,
+               mojom::blink::BucketError error);
   void DidGetKeys(ScriptPromiseResolver* resolver,
                   const Vector<String>& keys,
                   bool success);

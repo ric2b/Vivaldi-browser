@@ -8,15 +8,16 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/functional/overloaded.h"
 #include "base/pickle.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/proto/web_app.pb.h"
 #include "chrome/browser/web_applications/user_display_mode.h"
@@ -46,6 +47,10 @@
 #include "third_party/blink/public/mojom/manifest/manifest.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/webui/system_apps/public/system_web_app_type.h"
+#endif
 
 namespace web_app {
 
@@ -486,6 +491,7 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
         chromeos_data.handles_file_open_intents);
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (web_app.client_data().system_web_app_data.has_value()) {
     auto& swa_data = web_app.client_data().system_web_app_data.value();
 
@@ -495,6 +501,7 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
         static_cast<ash::SystemWebAppDataProto_SystemWebAppType>(
             swa_data.system_app_type));
   }
+#endif
 
   local_data->set_user_run_on_os_login_mode(
       ToWebAppProtoRunOnOsLoginMode(web_app.run_on_os_login_mode()));
@@ -657,6 +664,14 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     url_handler_proto->set_has_origin_wildcard(url_handler.has_origin_wildcard);
   }
 
+  for (const auto& scope_extension : web_app.scope_extensions()) {
+    WebAppScopeExtensionProto* scope_extension_proto =
+        local_data->add_scope_extensions();
+    scope_extension_proto->set_origin(scope_extension.origin.Serialize());
+    scope_extension_proto->set_has_origin_wildcard(
+        scope_extension.has_origin_wildcard);
+  }
+
   if (web_app.lock_screen_start_url().is_valid()) {
     local_data->set_lock_screen_start_url(
         web_app.lock_screen_start_url().spec());
@@ -683,8 +698,6 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
 
   local_data->set_window_controls_overlay_enabled(
       web_app.window_controls_overlay_enabled());
-
-  local_data->set_is_storage_isolated(web_app.IsStorageIsolated());
 
   if (web_app.launch_handler()) {
     local_data->mutable_launch_handler()->set_client_mode(
@@ -737,6 +750,15 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     if (absl::holds_alternative<TabStrip::Visibility>(tab_strip.home_tab)) {
       mutable_tab_strip->set_home_tab_visibility(TabStripVisibilityToProto(
           absl::get<TabStrip::Visibility>(tab_strip.home_tab)));
+    } else {
+      auto* mutable_home_tab_params =
+          mutable_tab_strip->mutable_home_tab_params();
+      absl::optional<std::vector<blink::Manifest::ImageResource>> icons =
+          absl::get<blink::Manifest::HomeTabParams>(tab_strip.home_tab).icons;
+      for (const auto& image_resource : *icons) {
+        *(mutable_home_tab_params->add_icons()) =
+            AppImageResourceToProto(image_resource);
+      }
     }
 
     if (absl::holds_alternative<TabStrip::Visibility>(
@@ -755,9 +777,8 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     }
   }
 
-  if (web_app.current_os_integration_states().has_value()) {
-    local_data->mutable_current_os_integration_states();
-  }
+  *local_data->mutable_current_os_integration_states() =
+      web_app.current_os_integration_states();
 
   if (web_app.app_size_in_bytes().has_value())
     local_data->set_app_size_in_bytes(web_app.app_size_in_bytes().value());
@@ -772,21 +793,21 @@ std::unique_ptr<WebAppProto> WebAppDatabase::CreateWebAppProto(
     auto* mutable_data = local_data->mutable_isolation_data();
     absl::visit(
         base::Overloaded{
-            [&mutable_data](const IsolationData::InstalledBundle& bundle) {
+            [&mutable_data](const InstalledBundle& bundle) {
               mutable_data->mutable_installed_bundle()->set_path(
                   FilePathToProto(bundle.path));
             },
-            [&mutable_data](const IsolationData::DevModeBundle& bundle) {
+            [&mutable_data](const DevModeBundle& bundle) {
               mutable_data->mutable_dev_mode_bundle()->set_path(
                   FilePathToProto(bundle.path));
             },
-            [&mutable_data](const IsolationData::DevModeProxy& proxy) {
+            [&mutable_data](const DevModeProxy& proxy) {
               DCHECK(!proxy.proxy_url.opaque());
               mutable_data->mutable_dev_mode_proxy()->set_proxy_url(
                   proxy.proxy_url.Serialize());
             },
         },
-        web_app.isolation_data().value().content);
+        web_app.isolation_data().value().location);
   }
 
   return local_data;
@@ -916,6 +937,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     web_app->SetWebAppChromeOsData(std::move(chromeos_data));
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (local_data.client_data().has_system_web_app_data()) {
     ash::SystemWebAppData& swa_data =
         web_app->client_data()->system_web_app_data.emplace();
@@ -923,6 +945,7 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     swa_data.system_app_type = static_cast<ash::SystemWebAppType>(
         local_data.client_data().system_web_app_data().system_app_type());
   }
+#endif
 
   // Optional fields:
   if (local_data.has_launch_query_params())
@@ -1259,6 +1282,25 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
   web_app->SetUrlHandlers(std::move(url_handlers));
 
+  std::vector<ScopeExtensionInfo> scope_extensions;
+  for (const auto& scope_extension_proto : local_data.scope_extensions()) {
+    ScopeExtensionInfo scope_extension;
+
+    url::Origin origin =
+        url::Origin::Create(GURL(scope_extension_proto.origin()));
+    if (origin.opaque()) {
+      DLOG(ERROR) << "WebApp ScopeExtension proto url parse error: "
+                  << origin.GetDebugString();
+      return nullptr;
+    }
+    scope_extension.origin = std::move(origin);
+    scope_extension.has_origin_wildcard =
+        scope_extension_proto.has_origin_wildcard();
+
+    scope_extensions.push_back(std::move(scope_extension));
+  }
+  web_app->SetScopeExtensions(std::move(scope_extensions));
+
   if (local_data.has_lock_screen_start_url()) {
     web_app->SetLockScreenStartUrl(GURL(local_data.lock_screen_start_url()));
   }
@@ -1307,8 +1349,6 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
     web_app->SetWindowControlsOverlayEnabled(
         local_data.window_controls_overlay_enabled());
   }
-
-  web_app->SetStorageIsolated(local_data.is_storage_isolated());
 
   if (local_data.has_launch_handler()) {
     const LaunchHandlerProto& launch_handler_proto =
@@ -1375,7 +1415,14 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
       tab_strip.home_tab = ProtoToTabStripVisibility(
           local_data.tab_strip().home_tab_visibility());
     } else {
-      tab_strip.home_tab = blink::Manifest::HomeTabParams();
+      absl::optional<std::vector<blink::Manifest::ImageResource>> icons =
+          ParseAppImageResource(
+              "WebApp", local_data.tab_strip().home_tab_params().icons());
+      blink::Manifest::HomeTabParams home_tab_params;
+      if (!icons->empty()) {
+        home_tab_params.icons = std::move(*icons);
+      }
+      tab_strip.home_tab = std::move(home_tab_params);
     }
 
     if (local_data.tab_strip().has_new_tab_button_visibility()) {
@@ -1411,8 +1458,8 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
   }
 
   if (local_data.has_isolation_data()) {
-    switch (local_data.isolation_data().content_case()) {
-      case IsolationDataProto::ContentCase::kInstalledBundle: {
+    switch (local_data.isolation_data().location_case()) {
+      case IsolationDataProto::LocationCase::kInstalledBundle: {
         absl::optional<base::FilePath> path = ProtoToFilePath(
             local_data.isolation_data().installed_bundle().path());
         if (!path.has_value()) {
@@ -1421,11 +1468,11 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
           return nullptr;
         }
         web_app->SetIsolationData(
-            IsolationData(IsolationData::InstalledBundle{.path = *path}));
+            WebApp::IsolationData(InstalledBundle{.path = *path}));
         break;
       }
 
-      case IsolationDataProto::ContentCase::kDevModeBundle: {
+      case IsolationDataProto::LocationCase::kDevModeBundle: {
         absl::optional<base::FilePath> path = ProtoToFilePath(
             local_data.isolation_data().dev_mode_bundle().path());
         if (!path.has_value()) {
@@ -1434,11 +1481,11 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
           return nullptr;
         }
         web_app->SetIsolationData(
-            IsolationData(IsolationData::DevModeBundle{.path = *path}));
+            WebApp::IsolationData(DevModeBundle{.path = *path}));
         break;
       }
 
-      case IsolationDataProto::ContentCase::kDevModeProxy: {
+      case IsolationDataProto::LocationCase::kDevModeProxy: {
         GURL gurl_proxy_url =
             GURL(local_data.isolation_data().dev_mode_proxy().proxy_url());
         url::Origin proxy_url = url::Origin::Create(gurl_proxy_url);
@@ -1450,13 +1497,13 @@ std::unique_ptr<WebApp> WebAppDatabase::CreateWebApp(
           return nullptr;
         }
         web_app->SetIsolationData(
-            IsolationData(IsolationData::DevModeProxy{.proxy_url = proxy_url}));
+            WebApp::IsolationData(DevModeProxy{.proxy_url = proxy_url}));
         break;
       }
 
-      case IsolationDataProto::ContentCase::CONTENT_NOT_SET:
+      case IsolationDataProto::LocationCase::LOCATION_NOT_SET:
         DLOG(ERROR) << "WebApp proto isolation_data parse error: "
-                    << "content not set";
+                    << "location not set";
         return nullptr;
     }
   }

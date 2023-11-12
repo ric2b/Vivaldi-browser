@@ -7,9 +7,9 @@
 #include <limits>
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/safe_conversions.h"
@@ -805,6 +805,13 @@ H264Decoder::H264Accelerator::Status H264Decoder::StartNewFrame(
       return H264Accelerator::Status::kFail;
   }
 
+  if (recovery_frame_cnt_ && *recovery_frame_cnt_ >= max_frame_num_) {
+    DVLOG(1) << "Invalid recovery_frame_cnt=" << *recovery_frame_cnt_
+             << " (it must be less or equal to max_frame_num-1=" << max_frame_num_ - 1
+             << ")";
+    return H264Accelerator::Status::kFail;
+  }
+
   if (!InitCurrPicture(slice_hdr))
     return H264Accelerator::Status::kFail;
 
@@ -1306,7 +1313,8 @@ H264Decoder::H264Accelerator::Status H264Decoder::ProcessEncryptedSliceHeader(
   DCHECK(curr_slice_hdr_);
   std::vector<base::span<const uint8_t>> spans(prior_cencv1_nalus_.begin(),
                                                prior_cencv1_nalus_.end());
-  spans.emplace_back(curr_nalu_->data, curr_nalu_->size);
+  spans.emplace_back(curr_nalu_->data,
+                     base::checked_cast<size_t>(curr_nalu_->size));
   std::vector<SubsampleEntry> all_subsamples(prior_cencv1_subsamples_.begin(),
                                              prior_cencv1_subsamples_.end());
   all_subsamples.insert(all_subsamples.end(), subsamples.begin(),
@@ -1321,7 +1329,8 @@ H264Decoder::H264Accelerator::Status H264Decoder::ProcessEncryptedSliceHeader(
 
   // Insert this encrypted slice data as well in case this is a multi-slice
   // picture.
-  prior_cencv1_nalus_.emplace_back(curr_nalu_->data, curr_nalu_->size);
+  prior_cencv1_nalus_.emplace_back(
+      curr_nalu_->data, base::checked_cast<size_t>(curr_nalu_->size));
   prior_cencv1_subsamples_.insert(prior_cencv1_subsamples_.end(),
                                   subsamples.begin(), subsamples.end());
   return rv;
@@ -1586,7 +1595,9 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
           SET_ERROR_AND_RETURN();
         accelerator_->ProcessSPS(
             parser_.GetSPS(sps_id),
-            base::span<const uint8_t>(curr_nalu_->data, curr_nalu_->size));
+            base::span<const uint8_t>(
+                curr_nalu_->data,
+                base::checked_cast<size_t>(curr_nalu_->size)));
 
         if (state_ == State::kNeedStreamMetadata)
           state_ = State::kAfterReset;
@@ -1610,7 +1621,9 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
           SET_ERROR_AND_RETURN();
         accelerator_->ProcessPPS(
             parser_.GetPPS(last_parsed_pps_id_),
-            base::span<const uint8_t>(curr_nalu_->data, curr_nalu_->size));
+            base::span<const uint8_t>(
+                curr_nalu_->data,
+                base::checked_cast<size_t>(curr_nalu_->size)));
         break;
       }
 
@@ -1632,8 +1645,8 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
           const std::vector<SubsampleEntry>& subsamples =
               parser_.GetCurrentSubsamples();
           if (!subsamples.empty()) {
-            prior_cencv1_nalus_.emplace_back(curr_nalu_->data,
-                                             curr_nalu_->size);
+            prior_cencv1_nalus_.emplace_back(
+                curr_nalu_->data, base::checked_cast<size_t>(curr_nalu_->size));
             DCHECK_EQ(1u, subsamples.size());
             prior_cencv1_subsamples_.push_back(subsamples[0]);
             // Since the SEI is encrypted, do not try to parse it below as it
@@ -1656,12 +1669,11 @@ H264Decoder::DecodeResult H264Decoder::Decode() {
               if (state_ == State::kAfterReset && !recovery_frame_cnt_ &&
                   !recovery_frame_num_) {
                 recovery_frame_cnt_ = sei_msg.recovery_point.recovery_frame_cnt;
-                if (0 > *recovery_frame_cnt_ ||
-                    *recovery_frame_cnt_ >= max_frame_num_) {
+
+                if (0 > *recovery_frame_cnt_) {
                   DVLOG(1) << "Invalid recovery_frame_cnt="
                            << *recovery_frame_cnt_
-                           << " (it must be [0, max_frame_num_-1="
-                           << max_frame_num_ - 1 << "])";
+                           << " (it must not be less then 0)";
                   SET_ERROR_AND_RETURN();
                 }
                 DVLOG(3) << "Recovery point SEI is found, recovery_frame_cnt_="

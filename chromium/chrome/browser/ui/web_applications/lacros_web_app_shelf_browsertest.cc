@@ -8,6 +8,7 @@
 #include "base/timer/timer.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/lacros/browser_test_util.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -19,11 +20,11 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/test/web_app_navigation_browsertest.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/test/app_registry_cache_waiter.h"
 #include "chrome/browser/web_applications/test/service_worker_registration_waiter.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test_observers.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
@@ -107,7 +108,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, Activation) {
       InstallWebAppFromPageAndCloseAppBrowser(browser(), app2_url);
 
   AppReadinessWaiter(profile(), app1_id).Await();
-  Browser* app_browser1 = LaunchWebAppBrowser(profile(), app1_id);
+  Browser* app_browser1 = LaunchWebAppBrowser(app1_id);
   EXPECT_TRUE(AppBrowserController::IsForWebApp(app_browser1, app1_id));
   ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
       app1_id, static_cast<uint32_t>(ShelfItemState::kActive)));
@@ -115,7 +116,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, Activation) {
   ASSERT_TRUE(AddTabAtIndex(/*index=*/1, app1_url, ui::PAGE_TRANSITION_TYPED));
 
   AppReadinessWaiter(profile(), app2_id).Await();
-  LaunchWebAppBrowser(profile(), app2_id);
+  LaunchWebAppBrowser(app2_id);
   ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
       app2_id, static_cast<uint32_t>(ShelfItemState::kActive)));
   ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
@@ -154,7 +155,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, Navigation) {
 
   GURL out_of_scope_url = https_server().GetURL("/empty.html");
 
-  Browser* app_browser1 = LaunchWebAppBrowser(profile(), app1_id);
+  Browser* app_browser1 = LaunchWebAppBrowser(app1_id);
   {
     NavigateParams params(app_browser1, out_of_scope_url,
                           ui::PAGE_TRANSITION_LINK);
@@ -172,7 +173,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, Navigation) {
   ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
       app1_id, static_cast<uint32_t>(ShelfItemState::kActive)));
 
-  LaunchWebAppBrowser(profile(), app2_id);
+  LaunchWebAppBrowser(app2_id);
   ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
       app2_id, static_cast<uint32_t>(ShelfItemState::kActive)));
   ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
@@ -198,7 +199,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, BadgeShown) {
       InstallWebAppFromPageAndCloseAppBrowser(browser(), app_url);
 
   AppReadinessWaiter(profile(), app_id).Await();
-  Browser* app_browser = LaunchWebAppBrowser(profile(), app_id);
+  Browser* app_browser = LaunchWebAppBrowser(app_id);
   content::WebContents* const web_contents =
       app_browser->tab_strip_model()->GetActiveWebContents();
   EXPECT_TRUE(AppBrowserController::IsForWebApp(app_browser, app_id));
@@ -240,23 +241,24 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, RunningInTab) {
       InstallWebAppFromPageAndCloseAppBrowser(browser(), app2_url);
 
   {
-    auto& sync_bridge = WebAppProvider::GetForTest(profile())->sync_bridge();
+    auto& sync_bridge =
+        WebAppProvider::GetForTest(profile())->sync_bridge_unsafe();
 
-    Browser* app_browser1 = LaunchWebAppBrowser(profile(), app1_id);
+    Browser* app_browser1 = LaunchWebAppBrowser(app1_id);
     ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
         app1_id, static_cast<uint32_t>(ShelfItemState::kActive)));
     waiter.PinOrUnpinItemInShelf(app1_id, /*pin=*/true);
     CloseAndWait(app_browser1);
-    sync_bridge.SetAppUserDisplayMode(app1_id, UserDisplayMode::kBrowser,
+    sync_bridge.SetAppUserDisplayMode(app1_id, mojom::UserDisplayMode::kBrowser,
                                       /*is_user_action=*/true);
     AppWindowModeWaiter(profile(), app1_id, apps::WindowMode::kBrowser).Await();
 
-    Browser* app_browser2 = LaunchWebAppBrowser(profile(), app2_id);
+    Browser* app_browser2 = LaunchWebAppBrowser(app2_id);
     ASSERT_TRUE(browser_test_util::WaitForShelfItemState(
         app2_id, static_cast<uint32_t>(ShelfItemState::kActive)));
     waiter.PinOrUnpinItemInShelf(app2_id, /*pin=*/true);
     CloseAndWait(app_browser2);
-    sync_bridge.SetAppUserDisplayMode(app2_id, UserDisplayMode::kBrowser,
+    sync_bridge.SetAppUserDisplayMode(app2_id, mojom::UserDisplayMode::kBrowser,
                                       /*is_user_action=*/true);
     AppWindowModeWaiter(profile(), app2_id, apps::WindowMode::kBrowser).Await();
   }
@@ -330,7 +332,8 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, CreateShortcut) {
       chromeos::LacrosService::Get()
           ->GetRemote<crosapi::mojom::TestController>()
           .get();
-  auto& sync_bridge = WebAppProvider::GetForTest(profile())->sync_bridge();
+  auto& sync_bridge =
+      WebAppProvider::GetForTest(profile())->sync_bridge_unsafe();
 
   GURL app1_url(
       embedded_test_server()->GetURL("/banners/scope_a/no_manifest.html"));
@@ -378,7 +381,7 @@ IN_PROC_BROWSER_TEST_F(LacrosWebAppShelfBrowserTest, CreateShortcut) {
 
   // Launch app1 in a browser tab (only).
   {
-    sync_bridge.SetAppUserDisplayMode(app1_id, UserDisplayMode::kBrowser,
+    sync_bridge.SetAppUserDisplayMode(app1_id, mojom::UserDisplayMode::kBrowser,
                                       /*is_user_action=*/false);
     AppWindowModeWaiter(profile(), app1_id, apps::WindowMode::kBrowser).Await();
 

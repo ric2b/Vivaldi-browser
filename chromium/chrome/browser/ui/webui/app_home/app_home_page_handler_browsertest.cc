@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/test_future.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "components/webapps/browser/installable/installable_metrics.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -34,7 +36,7 @@
 #if BUILDFLAG(IS_WIN)
 #include "base/base_paths_win.h"
 #include "base/test/scoped_path_override.h"
-#endif  // BUILDFLAG(OS_WIN)
+#endif  // BUILDFLAG(IS_WIN)
 
 using web_app::AppId;
 using GetAppsCallback =
@@ -47,6 +49,7 @@ namespace {
 constexpr char kTestAppUrl[] = "https://www.example.com/";
 constexpr char kTestManifestUrl[] = "https://www.example.com/manifest.json";
 constexpr char kTestAppName[] = "Test App";
+constexpr char kTestAppNameWithUnsupportedText[] = "Test App (unsupported app)";
 
 #if !BUILDFLAG(IS_MAC)
 void FlushShortcutTasks() {
@@ -138,27 +141,14 @@ class TestAppHomePageHandler : public AppHomePageHandler {
   base::OnceClosure run_on_os_login_mode_changed_handle_;
 };
 
-std::unique_ptr<WebAppInstallInfo> BuildWebAppInfo() {
+std::unique_ptr<WebAppInstallInfo> BuildWebAppInfo(std::string test_app_name) {
   auto app_info = std::make_unique<WebAppInstallInfo>();
   app_info->start_url = GURL(kTestAppUrl);
   app_info->scope = GURL(kTestAppUrl);
-  app_info->title = base::UTF8ToUTF16(base::StringPiece(kTestAppName));
+  app_info->title = base::UTF8ToUTF16(base::StringPiece(test_app_name));
   app_info->manifest_url = GURL(kTestManifestUrl);
 
   return app_info;
-}
-
-GetAppsCallback WrapGetAppsCallback(
-    std::vector<app_home::mojom::AppInfoPtr>* out,
-    base::OnceClosure quit_closure) {
-  return base::BindOnce(
-      [](base::OnceClosure quit_closure,
-         std::vector<app_home::mojom::AppInfoPtr>* out,
-         std::vector<app_home::mojom::AppInfoPtr> result) {
-        *out = std::move(result);
-        std::move(quit_closure).Run();
-      },
-      std::move(quit_closure), out);
 }
 
 }  // namespace
@@ -172,9 +162,13 @@ class AppHomePageHandlerTest : public InProcessBrowserTest {
 
   ~AppHomePageHandlerTest() override = default;
 
+  void SetUpOnMainThread() override {
+    web_app::test::WaitUntilWebAppProviderAndSubsystemsReady(
+        web_app::WebAppProvider::GetForTest(profile()));
+  }
+
  protected:
   std::unique_ptr<TestAppHomePageHandler> GetAppHomePageHandler() {
-    AddBlankTabAndShow(browser());
     content::WebContents* contents =
         browser()->tab_strip_model()->GetWebContentsAt(0);
     test_web_ui_.set_web_contents(contents);
@@ -187,9 +181,12 @@ class AppHomePageHandlerTest : public InProcessBrowserTest {
     return extensions::ExtensionSystem::Get(profile())->extension_service();
   }
 
-  AppId InstallTestWebApp() {
-    AppId installed_app_id =
-        web_app::test::InstallWebApp(profile(), BuildWebAppInfo());
+  AppId InstallTestWebApp(WebappInstallSource install_source =
+                              WebappInstallSource::OMNIBOX_INSTALL_ICON,
+                          std::string test_app_name = kTestAppName) {
+    AppId installed_app_id = web_app::test::InstallWebApp(
+        profile(), BuildWebAppInfo(test_app_name),
+        /*overwrite_existing_manifest_fields=*/false, install_source);
 
     return installed_app_id;
   }
@@ -201,18 +198,17 @@ class AppHomePageHandlerTest : public InProcessBrowserTest {
   }
 
   scoped_refptr<const extensions::Extension> InstallTestExtensionApp() {
-    base::DictionaryValue manifest;
-    manifest.SetString(extensions::manifest_keys::kName, kTestAppName);
-    manifest.SetString(extensions::manifest_keys::kVersion, "0.0.0.0");
-    manifest.SetString(extensions::manifest_keys::kApp, "true");
-    manifest.SetString(extensions::manifest_keys::kPlatformAppBackgroundPage,
-                       std::string());
+    base::Value::Dict manifest;
+    manifest.SetByDottedPath(extensions::manifest_keys::kName, kTestAppName);
+    manifest.SetByDottedPath(extensions::manifest_keys::kVersion, "0.0.0.0");
+    manifest.SetByDottedPath(
+        extensions::manifest_keys::kPlatformAppBackgroundPage, std::string());
 
     std::string error;
     scoped_refptr<extensions::Extension> extension =
         extensions::Extension::Create(
             base::FilePath(), extensions::mojom::ManifestLocation::kUnpacked,
-            manifest.GetDict(), 0, &error);
+            manifest, 0, &error);
 
     extension_service()->AddExtension(extension.get());
     return extension;
@@ -286,14 +282,27 @@ IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, GetApps) {
   std::unique_ptr<TestAppHomePageHandler> page_handler =
       GetAppHomePageHandler();
 
-  std::vector<app_home::mojom::AppInfoPtr> app_infos;
-  base::RunLoop run_loop;
-  page_handler->GetApps(
-      WrapGetAppsCallback(&app_infos, run_loop.QuitClosure()));
-  run_loop.Run();
+  base::test::TestFuture<std::vector<app_home::mojom::AppInfoPtr>> future;
+  page_handler->GetApps(future.GetCallback());
+  auto app_infos = future.Take();
 
   EXPECT_EQ(kTestAppUrl, app_infos[0]->start_url);
   EXPECT_EQ(kTestAppName, app_infos[0]->name);
+  EXPECT_TRUE(app_infos[0]->may_uninstall);
+}
+
+IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, ForceInstalledApp) {
+  AppId installed_app_id =
+      InstallTestWebApp(WebappInstallSource::EXTERNAL_POLICY);
+
+  std::unique_ptr<TestAppHomePageHandler> page_handler =
+      GetAppHomePageHandler();
+
+  base::test::TestFuture<std::vector<app_home::mojom::AppInfoPtr>> future;
+  page_handler->GetApps(future.GetCallback());
+  auto app_infos = future.Take();
+
+  EXPECT_FALSE(app_infos[0]->may_uninstall);
 }
 
 IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, OnWebAppInstalled) {
@@ -307,7 +316,7 @@ IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, OnWebAppInstalled) {
 IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, OnExtensionLoaded) {
   std::unique_ptr<TestAppHomePageHandler> page_handler =
       GetAppHomePageHandler();
-  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppName)));
+  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppNameWithUnsupportedText)));
   scoped_refptr<const extensions::Extension> extension =
       InstallTestExtensionApp();
   ASSERT_NE(extension, nullptr);
@@ -335,7 +344,7 @@ IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, OnExtensionUninstall) {
       GetAppHomePageHandler();
 
   // First, install a test extension app for test.
-  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppName)));
+  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppNameWithUnsupportedText)));
   scoped_refptr<const extensions::Extension> extension =
       InstallTestExtensionApp();
   page_handler->Wait();
@@ -371,7 +380,7 @@ IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, UninstallExtensionApp) {
       GetAppHomePageHandler();
 
   // First, install a test extension app for test.
-  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppName)));
+  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppNameWithUnsupportedText)));
   scoped_refptr<const extensions::Extension> extension =
       InstallTestExtensionApp();
   page_handler->Wait();
@@ -432,7 +441,7 @@ IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, CreateExtensionAppShortcut) {
       GetAppHomePageHandler();
 
   // First, install a test extension app for test.
-  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppName)));
+  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppNameWithUnsupportedText)));
   scoped_refptr<const extensions::Extension> extension =
       InstallTestExtensionApp();
   page_handler->Wait();
@@ -467,9 +476,25 @@ IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, SetRunOnOsLoginMode) {
   loop.Run();
   EXPECT_EQ(web_app::RunOnOsLoginMode::kWindowed,
             web_app::WebAppProvider::GetForWebApps(profile())
-                ->registrar()
+                ->registrar_unsafe()
                 .GetAppRunOnOsLoginMode(installed_app_id)
                 .value);
+}
+
+IN_PROC_BROWSER_TEST_F(AppHomePageHandlerTest, HandleLaunchDeprecatedApp) {
+  std::unique_ptr<TestAppHomePageHandler> page_handler =
+      GetAppHomePageHandler();
+  EXPECT_CALL(page_, AddApp(MatchAppName(kTestAppNameWithUnsupportedText)))
+      .Times(testing::AtLeast(1));
+  scoped_refptr<const extensions::Extension> extension =
+      InstallTestExtensionApp();
+  page_handler->Wait();
+
+  auto waiter = views::NamedWidgetShownWaiter(
+      views::test::AnyWidgetTestPasskey{}, "DeprecatedAppsDialogView");
+  page_handler->LaunchApp(extension->id(), nullptr);
+  // Launch deprecated app will show deprecated apps dialog view.
+  EXPECT_NE(waiter.WaitIfNeededAndGet(), nullptr);
 }
 
 }  // namespace webapps

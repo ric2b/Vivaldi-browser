@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 
 #include "base/json/json_reader.h"
 #include "base/strings/string_number_conversions.h"
@@ -26,17 +27,19 @@ BrowserInfo::BrowserInfo()
 BrowserInfo::~BrowserInfo() {}
 
 Status ParseBrowserInfo(const std::string& data, BrowserInfo* browser_info) {
-  std::unique_ptr<base::Value> value = base::JSONReader::ReadDeprecated(data);
-  if (!value.get())
+  absl::optional<base::Value> value = base::JSONReader::Read(data);
+  if (!value) {
     return Status(kUnknownError, "version info not in JSON");
+  }
 
   if (!value->is_dict())
     return Status(kUnknownError, "version info not a dictionary");
 
-  const base::Value* android_package = value->FindKey("Android-Package");
+  const base::Value* android_package = value->GetDict().Find("Android-Package");
   if (android_package) {
-    if (!android_package->is_string())
+    if (!android_package->is_string()) {
       return Status(kUnknownError, "'Android-Package' is not a string");
+    }
     browser_info->android_package = android_package->GetString();
   }
 

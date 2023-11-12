@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/demo_mode/demo_mode_test_helper.h"
@@ -167,9 +167,9 @@ class DemoModeResourcesRemoverTest : public testing::Test {
   // inject it into DemoModeResourcesRemover using OverrideTimeForTesting().
   base::SimpleTestTickClock test_clock_;
 
- private:
   std::unique_ptr<ScopedStubInstallAttributes> install_attributes_;
 
+ private:
   base::FilePath demo_resources_path_;
 
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
@@ -254,6 +254,7 @@ TEST_F(DemoModeResourcesRemoverTest, LowDiskSpace) {
 
 TEST_F(DemoModeResourcesRemoverTest, LowDiskSpaceInDemoSession) {
   ASSERT_TRUE(CreateDemoModeResources());
+  install_attributes_->Get()->SetDemoMode();
   demo_mode_test_helper_->InitializeSession();
 
   std::unique_ptr<DemoModeResourcesRemover> remover =
@@ -324,6 +325,7 @@ TEST_F(DemoModeResourcesRemoverTest, AttemptRemovalInDemoSession) {
   ASSERT_TRUE(CreateDemoModeResources());
   std::unique_ptr<DemoModeResourcesRemover> remover =
       DemoModeResourcesRemover::CreateIfNeeded(&local_state_);
+  install_attributes_->Get()->SetDemoMode();
   demo_mode_test_helper_->InitializeSession();
 
   absl::optional<DemoModeResourcesRemover::RemovalResult> result;

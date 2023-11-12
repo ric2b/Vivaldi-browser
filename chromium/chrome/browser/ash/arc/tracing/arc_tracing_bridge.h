@@ -12,7 +12,7 @@
 
 #include "ash/components/arc/mojom/tracing.mojom-forward.h"
 #include "ash/components/arc/session/connection_observer.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
@@ -64,6 +64,8 @@ class ArcTracingBridge : public KeyedService,
 
   // Stops tracing and calls |callback| when stopped.
   void StopTracing(StopCallback callback);
+
+  static void EnsureFactoryBuilt();
 
  private:
   // TODO(crbug.com/839086): Remove once we have replaced the legacy tracing

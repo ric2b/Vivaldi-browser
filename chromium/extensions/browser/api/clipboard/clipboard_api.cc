@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -48,7 +48,7 @@ void ClipboardAPI::OnClipboardDataChanged() {
   }
 }
 
-ClipboardSetImageDataFunction::~ClipboardSetImageDataFunction() {}
+ClipboardSetImageDataFunction::~ClipboardSetImageDataFunction() = default;
 
 ExtensionFunction::ResponseAction ClipboardSetImageDataFunction::Run() {
   std::unique_ptr<clipboard::SetImageData::Params> params(

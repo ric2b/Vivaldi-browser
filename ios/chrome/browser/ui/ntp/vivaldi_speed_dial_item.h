@@ -5,7 +5,7 @@
 
 #import <Foundation/Foundation.h>
 
-#include "url/gurl.h"
+#import "url/gurl.h"
 
 namespace bookmarks {
 class BookmarkNode;
@@ -31,6 +31,8 @@ class BookmarkNode;
 - (NSString*)nickname;
 - (GURL)url;
 - (NSString*)urlString;
+- (NSString*)host;
+- (BOOL)isInternalPage;
 - (NSString*)thumbnail;
 - (NSString*)description;
 - (NSDate*)createdAt;

@@ -37,10 +37,18 @@ bool IsFormatSupportedForScanout(viz::SharedImageFormat format) {
       return false;
   }
 }
+constexpr uint32_t kDXGISwapChainUsage = SHARED_IMAGE_USAGE_DISPLAY_READ |
+                                         SHARED_IMAGE_USAGE_DISPLAY_WRITE |
+                                         SHARED_IMAGE_USAGE_SCANOUT;
+constexpr uint32_t kDCompSurfaceUsage =
+    SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_SCANOUT |
+    SHARED_IMAGE_USAGE_SCANOUT_DCOMP_SURFACE;
+constexpr uint32_t kSupportedUsage = kDXGISwapChainUsage | kDCompSurfaceUsage;
 
 }  // namespace
 
-DCompImageBackingFactory::DCompImageBackingFactory() = default;
+DCompImageBackingFactory::DCompImageBackingFactory()
+    : SharedImageBackingFactory(kSupportedUsage) {}
 
 DCompImageBackingFactory::~DCompImageBackingFactory() = default;
 
@@ -87,7 +95,6 @@ std::unique_ptr<SharedImageBacking> DCompImageBackingFactory::CreateSharedImage(
 
 std::unique_ptr<SharedImageBacking> DCompImageBackingFactory::CreateSharedImage(
     const Mailbox& mailbox,
-    int client_id,
     gfx::GpuMemoryBufferHandle handle,
     gfx::BufferFormat format,
     gfx::BufferPlane plane,
@@ -113,13 +120,6 @@ bool DCompImageBackingFactory::IsSupported(
   }
 
   // TODO(tangm): Allow write-only swap chain usage?
-  constexpr uint32_t kDXGISwapChainUsage = SHARED_IMAGE_USAGE_DISPLAY_READ |
-                                           SHARED_IMAGE_USAGE_DISPLAY_WRITE |
-                                           SHARED_IMAGE_USAGE_SCANOUT;
-  constexpr uint32_t kDCompSurfaceUsage =
-      SHARED_IMAGE_USAGE_DISPLAY_WRITE | SHARED_IMAGE_USAGE_SCANOUT |
-      SHARED_IMAGE_USAGE_SCANOUT_DCOMP_SURFACE;
-
   bool is_usage_valid =
       usage == kDXGISwapChainUsage || usage == kDCompSurfaceUsage;
   if (!is_usage_valid) {
@@ -134,7 +134,7 @@ bool DCompImageBackingFactory::IsSupported(
   // dc overlays are to be used for rgb10, the caller should use swap chains
   // instead.
   if (usage == kDCompSurfaceUsage &&
-      format.resource_format() == viz::ResourceFormat::RGBA_1010102) {
+      format == viz::SinglePlaneFormat::kRGBA_1010102) {
     return false;
   }
 

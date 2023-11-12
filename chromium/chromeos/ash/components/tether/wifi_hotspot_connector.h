@@ -5,7 +5,7 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_TETHER_WIFI_HOTSPOT_CONNECTOR_H_
 #define CHROMEOS_ASH_COMPONENTS_TETHER_WIFI_HOTSPOT_CONNECTOR_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/clock.h"
@@ -24,6 +24,7 @@ namespace ash {
 class NetworkConnect;
 class NetworkState;
 class NetworkStateHandler;
+class TechnologyStateController;
 
 namespace tether {
 
@@ -31,6 +32,7 @@ namespace tether {
 class WifiHotspotConnector : public NetworkStateHandlerObserver {
  public:
   WifiHotspotConnector(NetworkStateHandler* network_state_handler,
+                       TechnologyStateController* technolog_state_controller,
                        NetworkConnect* network_connect);
 
   WifiHotspotConnector(const WifiHotspotConnector&) = delete;
@@ -69,9 +71,8 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
   void InitiateConnectionToCurrentNetwork();
   void CompleteActiveConnectionAttempt(bool success);
   void CreateWifiConfiguration();
-  base::DictionaryValue CreateWifiPropertyDictionary(
-      const std::string& ssid,
-      const std::string& password);
+  base::Value::Dict CreateWifiPropertyDictionary(const std::string& ssid,
+                                                 const std::string& password);
   void OnConnectionTimeout();
 
   void SetTestDoubles(std::unique_ptr<base::OneShotTimer> test_timer,
@@ -79,6 +80,7 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
                       scoped_refptr<base::TaskRunner> test_task_runner);
 
   NetworkStateHandler* network_state_handler_;
+  TechnologyStateController* technology_state_controller_;
 
   NetworkStateHandlerScopedObservation network_state_handler_observer_{this};
 

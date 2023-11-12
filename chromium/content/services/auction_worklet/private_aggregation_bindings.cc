@@ -13,8 +13,8 @@
 
 #include "base/check.h"
 #include "base/feature_list.h"
-#include "base/notreached.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/string_util.h"
 #include "content/common/aggregatable_report.mojom.h"
 #include "content/common/private_aggregation_features.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
@@ -24,6 +24,7 @@
 #include "gin/dictionary.h"
 #include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "v8/include/v8-exception.h"
 #include "v8/include/v8-external.h"
 #include "v8/include/v8-function-callback.h"
@@ -38,15 +39,15 @@ namespace {
 // Converts base value string to corresponding mojom enum.
 absl::optional<auction_worklet::mojom::BaseValue> BaseValueStringToEnum(
     const std::string& base_value) {
-  if (base_value == "winningBid") {
+  if (base_value == "winning-bid") {
     return auction_worklet::mojom::BaseValue::kWinningBid;
-  } else if (base_value == "highestScoringOtherBid") {
+  } else if (base_value == "highest-scoring-other-bid") {
     return auction_worklet::mojom::BaseValue::kHighestScoringOtherBid;
-  } else if (base_value == "scriptRunTime") {
+  } else if (base_value == "script-run-time") {
     return auction_worklet::mojom::BaseValue::kScriptRunTime;
-  } else if (base_value == "signalsFetchTime") {
+  } else if (base_value == "signals-fetch-time") {
     return auction_worklet::mojom::BaseValue::kSignalsFetchTime;
-  } else if (base_value == "bidRejectReason") {
+  } else if (base_value == "bid-reject-reason") {
     return auction_worklet::mojom::BaseValue::kBidRejectReason;
   }
   // Invalid (out of range) base_value.
@@ -54,10 +55,10 @@ absl::optional<auction_worklet::mojom::BaseValue> BaseValueStringToEnum(
 }
 
 // If returns `absl::nullopt`, will output an error to `error_out`.
-// Modified from worklet_utils::ConvertBigIntToUint128().
-absl::optional<auction_worklet::mojom::OffsetPtr> ConvertBigIntToOffset(
-    v8::Local<v8::BigInt> bigint,
-    std::string* error_out) {
+// Modified from `worklet_utils::ConvertBigIntToUint128()`.
+absl::optional<auction_worklet::mojom::BucketOffsetPtr>
+ConvertBigIntToBucketOffset(v8::Local<v8::BigInt> bigint,
+                            std::string* error_out) {
   if (bigint.IsEmpty()) {
     *error_out = "Failed to interpret as BigInt";
     return absl::nullopt;
@@ -74,79 +75,120 @@ absl::optional<auction_worklet::mojom::OffsetPtr> ConvertBigIntToOffset(
   uint64_t words[2] = {0, 0};  // Least significant to most significant.
   bigint->ToWordsArray(&sign_bit, &word_count, words);
 
-  return auction_worklet::mojom::Offset::New(
+  return auction_worklet::mojom::BucketOffset::New(
       absl::MakeUint128(words[1], words[0]),
       /*is_negative=*/sign_bit);
 }
 
-absl::optional<auction_worklet::mojom::SignalBucketOrValuePtr>
-GetSignalBucketOrValue(v8::Isolate* isolate,
-                       v8::Local<v8::Value> input,
-                       bool is_bucket) {
+// TODO(qingxinwu): Factor out common code shared between this function and
+// GetSignalValue to reduce duplicate code.
+absl::optional<auction_worklet::mojom::SignalBucketPtr> GetSignalBucket(
+    v8::Isolate* isolate,
+    v8::Local<v8::Value> input) {
   DCHECK(input->IsObject());
   gin::Dictionary result_dict(isolate, input.As<v8::Object>());
 
   std::string base_value_string;
-  if (!result_dict.Get("base_value", &base_value_string))
+  if (!result_dict.Get("baseValue", &base_value_string)) {
     return absl::nullopt;
+  }
 
   absl::optional<auction_worklet::mojom::BaseValue> base_value_opt =
       BaseValueStringToEnum(base_value_string);
-  if (!base_value_opt.has_value())
+  if (!base_value_opt.has_value()) {
     return absl::nullopt;
+  }
 
-  double scale = 0.0;
+  double scale = 1.0;
   v8::Local<v8::Value> js_scale;
-  bool has_scale = false;
   if (result_dict.Get("scale", &js_scale) && !js_scale.IsEmpty() &&
       !js_scale->IsNullOrUndefined()) {
-    if (!js_scale->IsNumber())
+    if (!js_scale->IsNumber()) {
       return absl::nullopt;
-
+    }
+    // TODO(qingxinwu): Return empty if scale is NaN or infinite.
     scale = js_scale.As<v8::Number>()->Value();
-    has_scale = true;
   }
 
   v8::Local<v8::Value> js_offset;
-  if (!result_dict.Get("offset", &js_offset)) {
-    return auction_worklet::mojom::SignalBucketOrValue::New(
-        base_value_opt.value(), scale, has_scale,
-        /*offset=*/nullptr);
+  if (!result_dict.Get("offset", &js_offset) || js_offset.IsEmpty() ||
+      js_offset->IsNullOrUndefined()) {
+    return auction_worklet::mojom::SignalBucket::New(base_value_opt.value(),
+                                                     scale,
+                                                     /*offset=*/nullptr);
   }
 
-  auction_worklet::mojom::OffsetPtr offset;
-  // Offset has to be BigInt for bucket, and int for value.
-  if (is_bucket && js_offset->IsBigInt()) {
-    std::string error;
-
-    absl::optional<auction_worklet::mojom::OffsetPtr> maybe_offset =
-        ConvertBigIntToOffset(js_offset.As<v8::BigInt>(), &error);
-    if (!maybe_offset.has_value())
-      return nullptr;
-
-    offset = std::move(maybe_offset.value());
-  } else if (!is_bucket && js_offset->IsInt32()) {
-    // Convert it to int128 as well to allow value dictionary share the same
-    // mojo type with bucket for simplicity. It will be parsed back to int
-    // when used.
-    int value_offset = js_offset.As<v8::Int32>()->Value();
-    offset =
-        auction_worklet::mojom::Offset::New(std::abs(value_offset),
-                                            /*is_negative=*/value_offset < 0);
-  } else {
+  auction_worklet::mojom::BucketOffsetPtr offset;
+  // Offset must be BigInt for bucket.
+  if (!js_offset->IsBigInt()) {
     return absl::nullopt;
   }
 
-  return auction_worklet::mojom::SignalBucketOrValue::New(
-      base_value_opt.value(), scale, has_scale, std::move(offset));
+  // TODO(qingxinwu): `error` is ignored currently. Report it and consider
+  // surfacing more informative errors like "offset must be BigInt for bucket".
+  std::string error;
+  absl::optional<auction_worklet::mojom::BucketOffsetPtr> maybe_offset =
+      ConvertBigIntToBucketOffset(js_offset.As<v8::BigInt>(), &error);
+  if (!maybe_offset.has_value()) {
+    return nullptr;
+  }
+  offset = std::move(maybe_offset.value());
+  return auction_worklet::mojom::SignalBucket::New(base_value_opt.value(),
+                                                   scale, std::move(offset));
+}
+
+absl::optional<auction_worklet::mojom::SignalValuePtr> GetSignalValue(
+    v8::Isolate* isolate,
+    v8::Local<v8::Value> input) {
+  DCHECK(input->IsObject());
+  gin::Dictionary result_dict(isolate, input.As<v8::Object>());
+
+  std::string base_value_string;
+  if (!result_dict.Get("baseValue", &base_value_string)) {
+    return absl::nullopt;
+  }
+
+  absl::optional<auction_worklet::mojom::BaseValue> base_value_opt =
+      BaseValueStringToEnum(base_value_string);
+  if (!base_value_opt.has_value()) {
+    return absl::nullopt;
+  }
+
+  double scale = 1.0;
+  v8::Local<v8::Value> js_scale;
+  if (result_dict.Get("scale", &js_scale) && !js_scale.IsEmpty() &&
+      !js_scale->IsNullOrUndefined()) {
+    if (!js_scale->IsNumber()) {
+      return absl::nullopt;
+    }
+    // TODO(b/266615909): Disallow scale being NaN or infinite.
+    scale = js_scale.As<v8::Number>()->Value();
+  }
+
+  v8::Local<v8::Value> js_offset;
+  if (!result_dict.Get("offset", &js_offset) || js_offset.IsEmpty() ||
+      js_offset->IsNullOrUndefined()) {
+    return auction_worklet::mojom::SignalValue::New(base_value_opt.value(),
+                                                    scale,
+                                                    /*offset=*/0);
+  }
+
+  // Offset must be int32 for value.
+  if (!js_offset->IsInt32()) {
+    return absl::nullopt;
+  }
+  int32_t offset = js_offset.As<v8::Int32>()->Value();
+  return auction_worklet::mojom::SignalValue::New(base_value_opt.value(), scale,
+                                                  offset);
 }
 
 auction_worklet::mojom::AggregatableReportForEventContributionPtr
 ParseForEventContribution(v8::Isolate* isolate,
-                          v8::Local<v8::Value> arg,
+                          const std::string& event_type,
+                          v8::Local<v8::Value> arg_contribution,
                           std::string* error) {
   gin::Dictionary dict(isolate);
-  bool success = gin::ConvertFromV8(isolate, arg, &dict);
+  bool success = gin::ConvertFromV8(isolate, arg_contribution, &dict);
   DCHECK(success);
 
   v8::Local<v8::Value> js_bucket;
@@ -182,9 +224,8 @@ ParseForEventContribution(v8::Isolate* isolate,
     bucket = auction_worklet::mojom::ForEventSignalBucket::NewIdBucket(
         maybe_bucket.value());
   } else if (js_bucket->IsObject()) {
-    absl::optional<auction_worklet::mojom::SignalBucketOrValuePtr>
-        maybe_signal_bucket_ptr =
-            GetSignalBucketOrValue(isolate, js_bucket, /*is_bucket=*/true);
+    absl::optional<auction_worklet::mojom::SignalBucketPtr>
+        maybe_signal_bucket_ptr = GetSignalBucket(isolate, js_bucket);
     if (!maybe_signal_bucket_ptr.has_value()) {
       *error = "Invalid bucket dictionary";
       return nullptr;
@@ -204,9 +245,8 @@ ParseForEventContribution(v8::Isolate* isolate,
       return nullptr;
     }
   } else if (js_value->IsObject()) {
-    absl::optional<auction_worklet::mojom::SignalBucketOrValuePtr>
-        maybe_signal_value_ptr =
-            GetSignalBucketOrValue(isolate, js_value, /*is_bucket=*/false);
+    absl::optional<auction_worklet::mojom::SignalValuePtr>
+        maybe_signal_value_ptr = GetSignalValue(isolate, js_value);
     if (!maybe_signal_value_ptr.has_value()) {
       *error = "Invalid value dictionary";
       return nullptr;
@@ -222,14 +262,21 @@ ParseForEventContribution(v8::Isolate* isolate,
   }
 
   return auction_worklet::mojom::AggregatableReportForEventContribution::New(
-      std::move(bucket), std::move(value));
+      std::move(bucket), std::move(value), std::move(event_type));
 }
 
 }  // namespace
 
+const char kReservedAlways[] = "reserved.always";
+const char kReservedWin[] = "reserved.win";
+const char kReservedLoss[] = "reserved.loss";
+
 PrivateAggregationBindings::PrivateAggregationBindings(
-    AuctionV8Helper* v8_helper)
-    : v8_helper_(v8_helper) {}
+    AuctionV8Helper* v8_helper,
+    bool private_aggregation_permissions_policy_allowed)
+    : v8_helper_(v8_helper),
+      private_aggregation_permissions_policy_allowed_(
+          private_aggregation_permissions_policy_allowed) {}
 
 PrivateAggregationBindings::~PrivateAggregationBindings() = default;
 
@@ -255,14 +302,17 @@ void PrivateAggregationBindings::FillInGlobalTemplate(
       v8_helper_->CreateStringFromLiteral("sendHistogramReport"),
       send_histogram_report_template);
 
-  v8::Local<v8::FunctionTemplate> report_contribution_for_event_template =
-      v8::FunctionTemplate::New(
-          v8_helper_->isolate(),
-          &PrivateAggregationBindings::ReportContributionForEvent, v8_this);
-  report_contribution_for_event_template->RemovePrototype();
-  private_aggregation_template->Set(
-      v8_helper_->CreateStringFromLiteral("reportContributionForEvent"),
-      report_contribution_for_event_template);
+  if (base::FeatureList::IsEnabled(
+          blink::features::kPrivateAggregationApiFledgeExtensions)) {
+    v8::Local<v8::FunctionTemplate> report_contribution_for_event_template =
+        v8::FunctionTemplate::New(
+            v8_helper_->isolate(),
+            &PrivateAggregationBindings::ReportContributionForEvent, v8_this);
+    report_contribution_for_event_template->RemovePrototype();
+    private_aggregation_template->Set(
+        v8_helper_->CreateStringFromLiteral("reportContributionForEvent"),
+        report_contribution_for_event_template);
+  }
 
   v8::Local<v8::FunctionTemplate> enable_debug_mode_template =
       v8::FunctionTemplate::New(v8_helper_->isolate(),
@@ -280,8 +330,6 @@ void PrivateAggregationBindings::FillInGlobalTemplate(
 
 void PrivateAggregationBindings::Reset() {
   private_aggregation_contributions_.clear();
-  private_aggregation_for_event_win_contributions_.clear();
-  private_aggregation_for_event_loss_contributions_.clear();
   debug_mode_details_.is_enabled = false;
   debug_mode_details_.debug_key = nullptr;
 }
@@ -293,7 +341,7 @@ PrivateAggregationBindings::TakePrivateAggregationRequests() {
   requests.reserve(private_aggregation_contributions_.size());
   base::ranges::transform(
       private_aggregation_contributions_, std::back_inserter(requests),
-      [this](content::mojom::AggregatableReportHistogramContributionPtr&
+      [this](auction_worklet::mojom::AggregatableReportContributionPtr&
                  contribution) {
         return auction_worklet::mojom::PrivateAggregationRequest::New(
             std::move(contribution),
@@ -306,23 +354,6 @@ PrivateAggregationBindings::TakePrivateAggregationRequests() {
   return requests;
 }
 
-std::vector<auction_worklet::mojom::PrivateAggregationForEventRequestPtr>
-PrivateAggregationBindings::TakePrivateAggregationForEventRequests(
-    const std::string& event_type) {
-  if (event_type == "reserved.win") {
-    return PrivateAggregationRequestsFromContribution(
-        std::move(private_aggregation_for_event_win_contributions_));
-  } else if (event_type == "reserved.loss") {
-    return PrivateAggregationRequestsFromContribution(
-        std::move(private_aggregation_for_event_loss_contributions_));
-  } else {
-    // Todo(qingxinwu): Support other event types (maybe arbitrary), such as
-    // "click".
-    NOTREACHED();
-    return {};
-  }
-}
-
 void PrivateAggregationBindings::SendHistogramReport(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   PrivateAggregationBindings* bindings =
@@ -330,14 +361,17 @@ void PrivateAggregationBindings::SendHistogramReport(
           v8::External::Cast(*args.Data())->Value());
 
   content::mojom::AggregatableReportHistogramContributionPtr contribution =
-      worklet_utils::ParseSendHistogramReportArguments(gin::Arguments(args));
+      worklet_utils::ParseSendHistogramReportArguments(
+          gin::Arguments(args),
+          bindings->private_aggregation_permissions_policy_allowed_);
   if (contribution.is_null()) {
     // Indicates an exception was thrown.
     return;
   }
 
   bindings->private_aggregation_contributions_.push_back(
-      std::move(contribution));
+      auction_worklet::mojom::AggregatableReportContribution::
+          NewHistogramContribution(std::move(contribution)));
 }
 
 void PrivateAggregationBindings::ReportContributionForEvent(
@@ -360,9 +394,17 @@ void PrivateAggregationBindings::ReportContributionForEvent(
     return;
   }
 
+  if (base::StartsWith(event_type, "reserved.") && event_type != kReservedWin &&
+      event_type != kReservedLoss && event_type != kReservedAlways) {
+    // Don't throw an error if an invalid reserved event type is provided, to
+    // provide forward compatibility with new reserved event types added later.
+    return;
+  }
+
   std::string error;
   auction_worklet::mojom::AggregatableReportForEventContributionPtr
-      contribution = ParseForEventContribution(isolate, args[1], &error);
+      contribution =
+          ParseForEventContribution(isolate, event_type, args[1], &error);
 
   if (contribution.is_null()) {
     DCHECK(base::IsStringUTF8(error));
@@ -371,15 +413,9 @@ void PrivateAggregationBindings::ReportContributionForEvent(
     return;
   }
 
-  // TODO(qingxinwu): Consider throwing an error if `event_type` has "reserved."
-  // prefix, but is not recognized as one of the reserved event types.
-  if (event_type == "reserved.win") {
-    bindings->private_aggregation_for_event_win_contributions_.push_back(
-        std::move(contribution));
-  } else if (event_type == "reserved.loss") {
-    bindings->private_aggregation_for_event_loss_contributions_.push_back(
-        std::move(contribution));
-  }
+  bindings->private_aggregation_contributions_.push_back(
+      auction_worklet::mojom::AggregatableReportContribution::
+          NewForEventContribution(std::move(contribution)));
 }
 
 void PrivateAggregationBindings::EnableDebugMode(
@@ -389,30 +425,9 @@ void PrivateAggregationBindings::EnableDebugMode(
           v8::External::Cast(*args.Data())->Value());
 
   worklet_utils::ParseAndApplyEnableDebugModeArguments(
-      gin::Arguments(args), bindings->debug_mode_details_);
-}
-
-std::vector<auction_worklet::mojom::PrivateAggregationForEventRequestPtr>
-PrivateAggregationBindings::PrivateAggregationRequestsFromContribution(
-    std::vector<
-        auction_worklet::mojom::AggregatableReportForEventContributionPtr>
-        contributions) {
-  std::vector<auction_worklet::mojom::PrivateAggregationForEventRequestPtr>
-      requests;
-  requests.reserve(contributions.size());
-  base::ranges::transform(
-      contributions, std::back_inserter(requests),
-      [this](auction_worklet::mojom::AggregatableReportForEventContributionPtr&
-                 contribution) {
-        return auction_worklet::mojom::PrivateAggregationForEventRequest::New(
-            std::move(contribution),
-            // TODO(alexmt): consider allowing this to be set
-            content::mojom::AggregationServiceMode::kDefault,
-            debug_mode_details_.Clone());
-      });
-  contributions.clear();
-
-  return requests;
+      gin::Arguments(args),
+      bindings->private_aggregation_permissions_policy_allowed_,
+      bindings->debug_mode_details_);
 }
 
 }  // namespace auction_worklet

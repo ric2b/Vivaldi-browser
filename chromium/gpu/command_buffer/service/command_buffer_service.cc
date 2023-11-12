@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/memory/page_size.h"
 #include "base/strings/string_piece.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/memory_dump_request_args.h"
@@ -219,6 +218,13 @@ void CommandBufferService::Flush(int32_t put_offset,
   }
 
   handler->BeginDecoding();
+
+  // BeginDecoding can cause context loss due to resuming shared image access.
+  if (state_.error != error::kNoError) {
+    handler->EndDecoding();
+    return;
+  }
+
   int end = put_offset_ < state_.get_offset ? num_entries_ : put_offset_;
   while (put_offset_ != state_.get_offset) {
     int num_entries = end - state_.get_offset;

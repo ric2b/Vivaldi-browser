@@ -106,24 +106,6 @@ void WebElement::SetAttribute(const WebString& attr_name,
                                   IGNORE_EXCEPTION_FOR_TESTING);
 }
 
-unsigned WebElement::AttributeCount() const {
-  if (!ConstUnwrap<Element>()->hasAttributes())
-    return 0;
-  return ConstUnwrap<Element>()->Attributes().size();
-}
-
-WebString WebElement::AttributeLocalName(unsigned index) const {
-  if (index >= AttributeCount())
-    return WebString();
-  return ConstUnwrap<Element>()->Attributes().at(index).LocalName();
-}
-
-WebString WebElement::AttributeValue(unsigned index) const {
-  if (index >= AttributeCount())
-    return WebString();
-  return ConstUnwrap<Element>()->Attributes().at(index).Value();
-}
-
 WebString WebElement::TextContent() const {
   return ConstUnwrap<Element>()->textContent();
 }
@@ -235,12 +217,6 @@ WebString WebElement::GetComputedValue(const WebString& property_name) {
   auto* computed_style =
       MakeGarbageCollected<CSSComputedStyleDeclaration>(element);
   return computed_style->GetPropertyCSSValue(property_id)->CssText();
-}
-
-void WebElement::UseCountParamUrlUsageIfNeeded(bool is_pdf) const {
-  if (auto* object =
-          ::blink::DynamicTo<HTMLObjectElement>(ConstUnwrap<Element>()))
-    object->UseCountParamUrlUsageIfNeeded(is_pdf);
 }
 
 WebElement::WebElement(Element* elem) : WebNode(elem) {}

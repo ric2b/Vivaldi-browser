@@ -8,9 +8,9 @@
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/login_screen.h"
 #include "ash/public/cpp/login_screen_model.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/memory/weak_ptr.h"
@@ -21,11 +21,9 @@
 #include "base/strings/string_util.h"
 #include "base/task/current_thread.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/authpolicy/authpolicy_helper.h"
-#include "chrome/browser/ash/login/easy_unlock/easy_unlock_service.h"
 #include "chrome/browser/ash/login/hats_unlock_survey_trigger.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/lock/views_screen_locker.h"
@@ -73,6 +71,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "services/audio/public/cpp/sounds/sounds_manager.h"
+#include "services/device/public/mojom/fingerprint.mojom-shared.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -190,9 +189,11 @@ ScreenLocker::ScreenLocker(const user_manager::UserList& users)
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   audio::SoundsManager* manager = audio::SoundsManager::Get();
   manager->Initialize(static_cast<int>(Sound::kLock),
-                      bundle.GetRawDataResource(IDR_SOUND_LOCK_WAV));
+                      bundle.GetRawDataResource(IDR_SOUND_LOCK_WAV),
+                      media::AudioCodec::kPCM);
   manager->Initialize(static_cast<int>(Sound::kUnlock),
-                      bundle.GetRawDataResource(IDR_SOUND_UNLOCK_WAV));
+                      bundle.GetRawDataResource(IDR_SOUND_UNLOCK_WAV),
+                      media::AudioCodec::kPCM);
   content::GetDeviceService().BindFingerprint(
       fp_service_.BindNewPipeAndPassReceiver());
 
@@ -329,8 +330,6 @@ void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
       quick_unlock_storage->pin_storage_prefs()->ResetUnlockAttemptCount();
       quick_unlock_storage->fingerprint_storage()->ResetUnlockAttemptCount();
     }
-
-    UserSessionManager::GetInstance()->UpdateEasyUnlockKeys(user_context);
   } else {
     NOTREACHED() << "Logged in user not found.";
   }
@@ -521,24 +520,7 @@ void ScreenLocker::ContinueAuthenticate(
 }
 
 void ScreenLocker::AttemptUnlock(std::unique_ptr<UserContext> user_context) {
-  if (features::IsUseAuthFactorsEnabled()) {
-    authenticator_->AuthenticateToUnlock(std::move(user_context));
-  } else {
-    // Take a copy of the user context and bind a callback to pass to
-    // `AuthenticateToCheck`.
-    // The copy of the user context might seem unnecessary because
-    // AuthenticateToCheck takes it by const reference, but it isn't: At least
-    // the fake implementation of AuthenticateToCheck accesses this reference
-    // *after* running the callback. Since the callback owns the unique_ptr
-    // that holds onto the context, that user context is destroyed after the
-    // callback is done executing, and any references to it would be dangling.
-    UserContext user_context_copy = *user_context;
-    auto callback =
-        base::BindOnce(&ScreenLocker::OnPasswordAuthSuccess,
-                       weak_factory_.GetWeakPtr(), std::move(user_context));
-    extended_authenticator_->AuthenticateToCheck(user_context_copy,
-                                                 std::move(callback));
-  }
+  authenticator_->AuthenticateToUnlock(std::move(user_context));
 }
 
 const user_manager::User* ScreenLocker::FindUnlockUser(
@@ -865,6 +847,22 @@ bool ScreenLocker::IsUserLoggedIn(const AccountId& account_id) const {
 void ScreenLocker::OnRestarted() {
   StartFingerprintAuthSession(
       user_manager::UserManager::Get()->GetPrimaryUser());
+}
+
+void ScreenLocker::OnStatusChanged(
+    device::mojom::BiometricsManagerStatus status) {
+  switch (status) {
+    case device::mojom::BiometricsManagerStatus::INITIALIZED:
+      StartFingerprintAuthSession(
+          user_manager::UserManager::Get()->GetPrimaryUser());
+      return;
+    case device::mojom::BiometricsManagerStatus::UNKNOWN:
+    default:
+      break;
+  }
+  LOG(ERROR) << "ScreenLocker StatusChanged to an unknown state: "
+             << static_cast<int>(status);
+  NOTREACHED();
 }
 
 void ScreenLocker::OnEnrollScanDone(device::mojom::ScanResult scan_result,

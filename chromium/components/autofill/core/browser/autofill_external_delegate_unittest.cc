@@ -113,10 +113,7 @@ class MockAutofillClient : public TestAutofillClient {
 class MockBrowserAutofillManager : public BrowserAutofillManager {
  public:
   MockBrowserAutofillManager(AutofillDriver* driver, MockAutofillClient* client)
-      : BrowserAutofillManager(driver,
-                               client,
-                               "en-US",
-                               EnableDownloadManager(false)) {}
+      : BrowserAutofillManager(driver, client, "en-US") {}
   MockBrowserAutofillManager(const MockBrowserAutofillManager&) = delete;
   MockBrowserAutofillManager& operator=(const MockBrowserAutofillManager&) =
       delete;
@@ -263,7 +260,6 @@ TEST_F(AutofillExternalDelegateUnitTest, TestExternalDelegateVirtualCalls) {
                                             AutoselectFirstSuggestion(false));
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIdsAre(element_ids));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 
   EXPECT_CALL(*browser_autofill_manager_,
               FillOrPreviewForm(mojom::RendererFormDataAction::kFill, _, _, _));
@@ -307,7 +303,6 @@ TEST_F(AutofillExternalDelegateUnitTest,
                    "Signin_Impression_FromAutofillDropdown"));
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIdsAre(element_ids));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 
   EXPECT_CALL(*browser_autofill_manager_,
               FillOrPreviewForm(mojom::RendererFormDataAction::kFill, _, _, _));
@@ -346,7 +341,6 @@ TEST_F(AutofillExternalDelegateUnitTest,
                    "Signin_Impression_FromAutofillDropdown"));
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIdsAre(element_ids));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 
   EXPECT_CALL(autofill_client_,
               ExecuteCommand(autofill::POPUP_ITEM_ID_CREDIT_CARD_SIGNIN_PROMO));
@@ -395,7 +389,6 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateDataList) {
                                             AutoselectFirstSuggestion(false));
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIdsAre(element_ids));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 
   // Try calling OnSuggestionsReturned with no Autofill values and ensure
   // the datalist items are still shown.
@@ -411,7 +404,6 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateDataList) {
               SuggestionVectorIdsAre(testing::ElementsAre(
                   static_cast<int>(POPUP_ITEM_ID_DATALIST_ENTRY))));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 // Test that datalist values can get updated while a popup is showing.
@@ -454,7 +446,6 @@ TEST_F(AutofillExternalDelegateUnitTest, UpdateDataListWhileShowingPopup) {
                                             AutoselectFirstSuggestion(false));
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIdsAre(element_ids));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 
   // This would normally get called from ShowAutofillPopup, but it is mocked so
   // we need to call OnPopupShown ourselves.
@@ -512,7 +503,6 @@ TEST_F(AutofillExternalDelegateUnitTest, DuplicateAutofillDatalistValues) {
                                             AutoselectFirstSuggestion(false));
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIdsAre(element_ids));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 // Test that we de-dupe autocomplete values against datalist values, keeping the
@@ -557,7 +547,6 @@ TEST_F(AutofillExternalDelegateUnitTest, DuplicateAutocompleteDatalistValues) {
                                             AutoselectFirstSuggestion(false));
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIdsAre(element_ids));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 // Test that the Autofill popup is able to display warnings explaining why
@@ -585,7 +574,6 @@ TEST_F(AutofillExternalDelegateUnitTest, AutofillWarnings) {
   EXPECT_EQ(open_args.element_bounds, gfx::RectF());
   EXPECT_EQ(open_args.text_direction, base::i18n::UNKNOWN_DIRECTION);
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 // Test that Autofill warnings are removed if there are also autocomplete
@@ -615,7 +603,6 @@ TEST_F(AutofillExternalDelegateUnitTest,
               SuggestionVectorIdsAre(testing::ElementsAre(
                   static_cast<int>(POPUP_ITEM_ID_AUTOCOMPLETE_ENTRY))));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 // Test that the Autofill delegate doesn't try and fill a form with a
@@ -649,9 +636,11 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateFillsIbanEntry) {
   // This should call ShowAutofillPopup.
   std::vector<Suggestion> suggestions;
   suggestions.emplace_back();
-  std::u16string iban_value = u"IE12BOFI90000112345678";
-  suggestions[0].main_text.value = iban_value;
+  std::u16string masked_iban_value = u"IE12 **** **** **** **56 78";
+  std::u16string ummasked_iban_value = u"IE12 BOFI 9000 0112 3456 78";
+  suggestions[0].main_text.value = masked_iban_value;
   suggestions[0].labels = {{Suggestion::Text(u"My doctor's IBAN")}};
+  suggestions[0].payload = Suggestion::ValueToFill(ummasked_iban_value);
   suggestions[0].frontend_id = POPUP_ITEM_ID_IBAN_ENTRY;
   external_delegate_->OnSuggestionsReturned(field_id_, suggestions,
                                             AutoselectFirstSuggestion(false));
@@ -662,14 +651,14 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateFillsIbanEntry) {
                   static_cast<int>(POPUP_ITEM_ID_IBAN_ENTRY))));
 
   EXPECT_CALL(*autofill_driver_, RendererShouldClearPreviewedForm()).Times(1);
-  EXPECT_CALL(*autofill_driver_,
-              RendererShouldPreviewFieldWithValue(field_id_, iban_value));
-  external_delegate_->DidSelectSuggestion(iban_value, POPUP_ITEM_ID_IBAN_ENTRY,
-                                          Suggestion::BackendId());
+  EXPECT_CALL(*autofill_driver_, RendererShouldPreviewFieldWithValue(
+                                     field_id_, masked_iban_value));
+  external_delegate_->DidSelectSuggestion(
+      masked_iban_value, POPUP_ITEM_ID_IBAN_ENTRY, Suggestion::BackendId());
   EXPECT_CALL(autofill_client_,
               HideAutofillPopup(PopupHidingReason::kAcceptSuggestion));
   EXPECT_CALL(*autofill_driver_,
-              RendererShouldFillFieldWithValue(field_id_, iban_value));
+              RendererShouldFillFieldWithValue(field_id_, ummasked_iban_value));
   external_delegate_->DidAcceptSuggestion(suggestions[0], 0);
 }
 
@@ -973,15 +962,18 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateFillFieldWithValue) {
                                      dummy_string),
       0);
 
+  std::u16string masked_iban_value = u"IE12 **** **** **** **56 78";
+  std::u16string ummasked_iban_value = u"IE12 BOFI 9000 0112 3456 78";
   // Test that IBANs get autofilled.
   EXPECT_CALL(*autofill_driver_,
-              RendererShouldFillFieldWithValue(field_id_, dummy_string));
-  EXPECT_CALL(
-      *autofill_client_.GetMockIBANManager(),
-      OnSingleFieldSuggestionSelected(dummy_string, POPUP_ITEM_ID_IBAN_ENTRY))
-      .Times(1);
+              RendererShouldFillFieldWithValue(field_id_, ummasked_iban_value));
+  EXPECT_CALL(*autofill_client_.GetMockIBANManager(),
+              OnSingleFieldSuggestionSelected(masked_iban_value,
+                                              POPUP_ITEM_ID_IBAN_ENTRY));
   external_delegate_->DidAcceptSuggestion(
-      test::CreateAutofillSuggestion(POPUP_ITEM_ID_IBAN_ENTRY, dummy_string),
+      test::CreateAutofillSuggestion(
+          POPUP_ITEM_ID_IBAN_ENTRY, masked_iban_value,
+          Suggestion::ValueToFill(ummasked_iban_value)),
       0);
 }
 
@@ -1013,7 +1005,6 @@ TEST_F(AutofillExternalDelegateUnitTest, ShouldShowGooglePayIcon) {
               SuggestionVectorStoreIndicatorIconsAre(element_icons));
 #endif
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 TEST_F(AutofillExternalDelegateUnitTest,
@@ -1038,7 +1029,6 @@ TEST_F(AutofillExternalDelegateUnitTest,
       field_id_, autofill_item, AutoselectFirstSuggestion(false), false);
   EXPECT_THAT(open_args.suggestions, SuggestionVectorIconsAre(element_icons));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 TEST_F(AutofillExternalDelegateUnitTest, ShouldUseNewSettingName) {
@@ -1066,7 +1056,6 @@ TEST_F(AutofillExternalDelegateUnitTest, ShouldUseNewSettingName) {
   EXPECT_THAT(open_args.suggestions,
               SuggestionVectorMainTextsAre(element_main_texts));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 // Test that browser autofill manager will handle the unmasking request for the
@@ -1120,7 +1109,6 @@ TEST_F(AutofillExternalDelegateCardsFromAccountTest,
   EXPECT_THAT(open_args.suggestions,
               SuggestionVectorMainTextsAre(element_main_texts));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 // Tests that the prompt to show account cards shows up when the corresponding
@@ -1142,7 +1130,6 @@ TEST_F(AutofillExternalDelegateCardsFromAccountTest,
   EXPECT_THAT(open_args.suggestions,
               SuggestionVectorMainTextsAre(element_main_texts));
   EXPECT_FALSE(open_args.autoselect_first_suggestion);
-  EXPECT_EQ(open_args.popup_type, PopupType::kPersonalInformation);
 }
 
 #if BUILDFLAG(IS_IOS)

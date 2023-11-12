@@ -57,24 +57,6 @@ TEST_F('BookmarksCommandManagerTest', 'DISABLED_All', function() {
   mocha.run();
 });
 
-var BookmarksDNDManagerTest = class extends BookmarksBrowserTest {
-  /** @override */
-  get browsePreload() {
-    return 'chrome://bookmarks/test_loader.html?module=bookmarks/dnd_manager_test.js';
-  }
-};
-
-// http://crbug.com/803570 : Flaky on Win 7 (dbg)
-GEN('#if BUILDFLAG(IS_WIN) && !defined(NDEBUG)');
-GEN('#define MAYBE_All DISABLED_All');
-GEN('#else');
-GEN('#define MAYBE_All All');
-GEN('#endif');
-
-TEST_F('BookmarksDNDManagerTest', 'MAYBE_All', function() {
-  mocha.run();
-});
-
 var BookmarksEditDialogTest = class extends BookmarksBrowserTest {
   /** @override */
   get browsePreload() {

@@ -2,6 +2,9 @@
 
 #import "ios/ui/helpers/vivaldi_snapshot_store_helper.h"
 
+#import <ImageIO/ImageIO.h>
+
+
 // Namespace
 namespace {
 // Maximum resolution for the image is 400px.

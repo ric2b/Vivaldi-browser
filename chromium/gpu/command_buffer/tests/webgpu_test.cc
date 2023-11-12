@@ -49,8 +49,8 @@ WebGPUTest::WebGPUTest() = default;
 WebGPUTest::~WebGPUTest() = default;
 
 bool WebGPUTest::WebGPUSupported() const {
-  // Win7 does not support WebGPU
-  if (GPUTestBotConfig::CurrentConfigMatches("Win7")) {
+  // Nexus 5X does not support WebGPU
+  if (GPUTestBotConfig::CurrentConfigMatches("Android Qualcomm 0x4010800")) {
     return false;
   }
 
@@ -82,6 +82,14 @@ void WebGPUTest::TearDown() {
 }
 
 void WebGPUTest::Initialize(const Options& options) {
+  // Some tests that inherit from WebGPUTest call Initialize in SetUp, which
+  // won't be skipped even if the SKIP_TEST_IF in WebGPUTest::SetUp() is
+  // triggered. As a result, to avoid potential crashes, skip initializing if
+  // this device has been marked as not supporting WebGPU.
+  if (!WebGPUSupported()) {
+    return;
+  }
+
   gpu::GpuPreferences gpu_preferences;
   gpu_preferences.enable_webgpu = true;
   gpu_preferences.use_passthrough_cmd_decoder =
@@ -94,6 +102,8 @@ void WebGPUTest::Initialize(const Options& options) {
   gpu_preferences.enable_unsafe_webgpu = options.enable_unsafe_webgpu;
   gpu_preferences.texture_target_exception_list =
       gpu::CreateBufferUsageAndFormatExceptionList();
+  // Disable the blocklist so even blocked adapters may be tested.
+  gpu_preferences.disabled_dawn_features_list = {"adapter_blocklist"};
 
   gpu_service_holder_ =
       std::make_unique<viz::TestGpuServiceHolder>(gpu_preferences);
@@ -112,7 +122,7 @@ void WebGPUTest::Initialize(const Options& options) {
   cmd_helper_ = std::make_unique<webgpu::WebGPUCmdHelper>(
       context_->GetCommandBufferForTest());
 
-  webgpu()->SetLostContextCallback(base::BindLambdaForTesting(
+  webgpu_impl()->SetLostContextCallback(base::BindLambdaForTesting(
       []() { GTEST_FAIL() << "Context lost unexpectedly."; }));
 
   DawnProcTable procs = webgpu()->GetAPIChannel()->GetProcs();
@@ -146,7 +156,11 @@ void WebGPUTest::Initialize(const Options& options) {
   }
 }
 
-webgpu::WebGPUImplementation* WebGPUTest::webgpu() const {
+webgpu::WebGPUInterface* WebGPUTest::webgpu() const {
+  return context_->GetImplementation();
+}
+
+webgpu::WebGPUImplementation* WebGPUTest::webgpu_impl() const {
   return context_->GetImplementation();
 }
 
@@ -219,6 +233,16 @@ wgpu::Device WebGPUTest::GetNewDevice() {
   auto* callback = webgpu::BindWGPUOnceCallback(
       [](wgpu::Device* device_out, bool* done, WGPURequestDeviceStatus status,
          WGPUDevice device, const char* message) {
+        // Fail the test with error message if returned status is not success
+        if (status != WGPURequestDeviceStatus_Success) {
+          if (message) {
+            GTEST_FAIL() << "RequestDevice returns unexpected message: "
+                         << message;
+          } else {
+            GTEST_FAIL()
+                << "RequestDevice returns unexpected status without message.";
+          }
+        }
         *device_out = wgpu::Device::Acquire(device);
         *done = true;
       },
@@ -269,9 +293,10 @@ TEST_F(WebGPUTest, FlushNoCommands) {
 TEST_F(WebGPUTest, ReportLoss) {
   Initialize(WebGPUTest::Options());
 
-  GpuControlClient* webgpu_as_client = webgpu();
+  GpuControlClient* webgpu_as_client = webgpu_impl();
   int lost_count = 0;
-  webgpu()->SetLostContextCallback(base::BindOnce(&CountCallback, &lost_count));
+  webgpu_impl()->SetLostContextCallback(
+      base::BindOnce(&CountCallback, &lost_count));
   EXPECT_EQ(0, lost_count);
 
   webgpu_as_client->OnGpuControlLostContext();
@@ -284,9 +309,10 @@ TEST_F(WebGPUTest, ReportLoss) {
 TEST_F(WebGPUTest, ReportLossReentrant) {
   Initialize(WebGPUTest::Options());
 
-  GpuControlClient* webgpu_as_client = webgpu();
+  GpuControlClient* webgpu_as_client = webgpu_impl();
   int lost_count = 0;
-  webgpu()->SetLostContextCallback(base::BindOnce(&CountCallback, &lost_count));
+  webgpu_impl()->SetLostContextCallback(
+      base::BindOnce(&CountCallback, &lost_count));
   EXPECT_EQ(0, lost_count);
 
   webgpu_as_client->OnGpuControlLostContextMaybeReentrant();
@@ -298,8 +324,8 @@ TEST_F(WebGPUTest, ReportLossReentrant) {
 TEST_F(WebGPUTest, RequestAdapterAfterContextLost) {
   Initialize(WebGPUTest::Options());
 
-  webgpu()->SetLostContextCallback(base::DoNothing());
-  webgpu()->OnGpuControlLostContext();
+  webgpu_impl()->SetLostContextCallback(base::DoNothing());
+  webgpu_impl()->OnGpuControlLostContext();
 
   bool called = false;
   wgpu::RequestAdapterOptions ra_options = {};
@@ -319,8 +345,8 @@ TEST_F(WebGPUTest, RequestAdapterAfterContextLost) {
 TEST_F(WebGPUTest, RequestDeviceAfterContextLost) {
   Initialize(WebGPUTest::Options());
 
-  webgpu()->SetLostContextCallback(base::DoNothing());
-  webgpu()->OnGpuControlLostContext();
+  webgpu_impl()->SetLostContextCallback(base::DoNothing());
+  webgpu_impl()->OnGpuControlLostContext();
 
   bool called = false;
 
@@ -381,7 +407,7 @@ TEST_F(WebGPUTest, SPIRVIsDisallowed) {
                                        void* userdata) {
     // We match on this string to make sure the shader module creation fails
     // because SPIR-V is disallowed and not because codeSize=0.
-    EXPECT_THAT(message, testing::HasSubstr("SPIR-V is disallowed"));
+    EXPECT_THAT(message, testing::HasSubstr("SPIR"));
     EXPECT_EQ(type, WGPUErrorType_Validation);
     *static_cast<bool*>(userdata) = true;
   };

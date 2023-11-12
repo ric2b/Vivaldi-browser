@@ -11,9 +11,9 @@
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_metrics.h"
 #include "ash/public/cpp/holding_space/holding_space_prefs.h"
-#include "base/callback_helpers.h"
 #include "base/containers/adapters.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_helpers.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -255,15 +255,11 @@ void HoldingSpaceKeyedService::AddScan(const base::FilePath& file_path) {
   AddItemOfType(HoldingSpaceItem::Type::kScan, file_path);
 }
 
-void HoldingSpaceKeyedService::AddScreenRecording(
-    const base::FilePath& screen_recording_file) {
-  AddItemOfType(HoldingSpaceItem::Type::kScreenRecording,
-                screen_recording_file);
-}
-
-void HoldingSpaceKeyedService::AddScreenshot(
-    const base::FilePath& screenshot_file) {
-  AddItemOfType(HoldingSpaceItem::Type::kScreenshot, screenshot_file);
+void HoldingSpaceKeyedService::AddScreenCapture(
+    HoldingSpaceItem::Type type,
+    const base::FilePath& file_path) {
+  DCHECK(HoldingSpaceItem::IsScreenCapture(type));
+  AddItemOfType(type, file_path);
 }
 
 void HoldingSpaceKeyedService::SetSuggestions(

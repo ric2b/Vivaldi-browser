@@ -48,7 +48,6 @@ import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
-import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.components.browser_ui.util.DimensionCompat;
 import org.chromium.components.embedder_support.view.ContentView;
 import org.chromium.content_public.browser.GestureListenerManager;
@@ -319,11 +318,6 @@ public class FullscreenHtmlApiHandler implements ActivityStateListener, WindowFo
             }
 
             @Override
-            public void onDidFinishNavigationNoop(Tab tab, NavigationHandle navigation) {
-                if (!navigation.isInPrimaryMainFrame()) return;
-            }
-
-            @Override
             public void onInteractabilityChanged(Tab tab, boolean interactable) {
                 // Compare |tab| with |TabModelSelector#getCurrentTab()| which is a safer
                 // indicator for the active tab than |mTab|, since the invocation order of
@@ -485,9 +479,11 @@ public class FullscreenHtmlApiHandler implements ActivityStateListener, WindowFo
                 exitFullscreen(
                         mWebContentsInFullscreen, mContentViewInFullscreen, mTabInFullscreen);
             } else {
-                assert mPendingFullscreenOptions
-                        != null : "No content previously set to fullscreen.";
-                mPendingFullscreenOptions.setCanceled();
+                if (mPendingFullscreenOptions != null) mPendingFullscreenOptions.setCanceled();
+                if (mAreControlsHidden.get()) {
+                    TabBrowserControlsConstraintsHelper.update(
+                            mTab, BrowserControlsState.SHOWN, true);
+                }
             }
             mWebContentsInFullscreen = null;
             mContentViewInFullscreen = null;
@@ -674,13 +670,6 @@ public class FullscreenHtmlApiHandler implements ActivityStateListener, WindowFo
 
         if (mTab == null) return false;
 
-        // The toast tells user how to leave fullscreen by touching the screen. Currently
-        // we do not show the toast when we're browsing in VR, since VR doesn't have
-        // touchscreen and the toast doesn't have any useful information.
-        if (VrModuleProvider.getDelegate().isInVr() || VrModuleProvider.getDelegate().bootsToVr()) {
-            return false;
-        }
-
         final ViewGroup parent = mTab.getContentView();
         if (parent == null) return false;
 
@@ -827,7 +816,8 @@ public class FullscreenHtmlApiHandler implements ActivityStateListener, WindowFo
         mToastFadeAnimation.cancel();
         mToastFadeAnimation.alpha(0)
                 .setDuration(TOAST_FADE_MS)
-                .withEndAction(this::hideImmediatelyNotificationToast);
+                .withEndAction(this::hideImmediatelyNotificationToast)
+                .start();
     }
 
     // ActivityStateListener
@@ -980,6 +970,10 @@ public class FullscreenHtmlApiHandler implements ActivityStateListener, WindowFo
 
     void setVersionCompatForTesting(DimensionCompat compat) {
         mDimensionCompat = compat;
+    }
+
+    FullscreenOptions getPendingFullscreenOptionsForTesting() {
+        return mPendingFullscreenOptions;
     }
 
     void triggerWindowLayoutChangeForTesting() {

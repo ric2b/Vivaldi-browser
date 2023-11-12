@@ -81,6 +81,9 @@ enum class DialogViewID : int {
   // The following are the ids for the individual sheets.
   CONTACT_INFO_EDITOR_SHEET,
   CREDIT_CARD_EDITOR_SHEET,
+  ERROR_SHEET,
+  ORDER_SUMMARY_SHEET,
+  PAYMENT_REQUEST_SHEET,
   SHIPPING_ADDRESS_EDITOR_SHEET,
 
   // The sheet opens payment app window.
@@ -88,6 +91,12 @@ enum class DialogViewID : int {
 
   // The icon displayed in the header for a payment app's window.
   PAYMENT_APP_HEADER_ICON,
+
+  // The header view of a payment app's window.
+  PAYMENT_APP_HEADER,
+
+  // The scroll view of the payment sheet.
+  PAYMENT_SHEET_SCROLL_VIEW,
 
   // NOTE: Keep these values last.
   // Used to offset the IDs of input fields, which gets added to the Autofill

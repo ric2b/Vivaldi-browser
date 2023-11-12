@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Une version de protocole incompatible a été détectée. Veuillez vous assurer que vous disposez de la dernière version du logiciel sur les deux ordinateurs et essayez de nouveau.</translation>
 <translation id="1008557486741366299">Pas maintenant</translation>
 <translation id="1201402288615127009">Suivant</translation>
+<translation id="1296511125400541222">© 2023 Les auteurs de Chromium. Tous droits réservés.</translation>
 <translation id="1297009705180977556">Erreur lors de la connexion à <ph name="HOSTNAME" /></translation>
 <translation id="1450760146488584666">L'objet demandé n'existe pas.</translation>
 <translation id="1480046233931937785">Crédits</translation>
@@ -36,7 +37,6 @@ Si l'option « <ph name="SERVICE_SCRIPT_NAME" /> » est déjà cochée, décoc
 <translation id="2599300881200251572">Ce service permet les connexions entrantes de clients de Bureau à distance Chrome.</translation>
 <translation id="2647232381348739934">Service Chromoting</translation>
 <translation id="2676780859508944670">Opération en cours...</translation>
-<translation id="2692522824157224199">© 2022 Google LLC. Tous droits réservés.</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2758123043070977469">Une erreur s'est produite lors de l'authentification, veuillez vous reconnecter.</translation>
 <translation id="2803375539583399270">Entrer le NIP</translation>
@@ -73,7 +73,6 @@ Si l'option « <ph name="SERVICE_SCRIPT_NAME" /> » est déjà cochée, décoc
 <translation id="4257751272692708833">Transfert d'URL <ph name="PRODUCT_NAME" /></translation>
 <translation id="4277736576214464567">Le code d'accès n'est pas valide. Veuillez réessayer.</translation>
 <translation id="4281844954008187215">Conditions d'utilisation</translation>
-<translation id="4372650392690220936">© 2022 Les auteurs de Chromium. Tous droits réservés.</translation>
 <translation id="4405930547258349619">Bibliothèque principale</translation>
 <translation id="443560535555262820">Ouvrir les préférences d'accessibilité</translation>
 <translation id="4450893287417543264">Ne plus afficher</translation>
@@ -90,6 +89,7 @@ Si l'option « <ph name="SERVICE_SCRIPT_NAME" /> » est déjà cochée, décoc
 <translation id="4808503597364150972">Veuillez entrer votre NIP pour <ph name="HOSTNAME" />.</translation>
 <translation id="4812684235631257312">Hôte</translation>
 <translation id="4867841927763172006">Envoyer Impr. écran</translation>
+<translation id="4960795469833295568">© 2023 Google LLC. Tous droits réservés.</translation>
 <translation id="4974476491460646149">Connexion fermée pour <ph name="HOSTNAME" /></translation>
 <translation id="4985296110227979402">Vous devez d'abord configurer votre ordinateur pour l'accès à distance</translation>
 <translation id="4987330545941822761">Bureau à distance Chrome ne peut pas déterminer le navigateur pour ouvrir les URL localement. Veuillez le choisir dans la liste ci-dessous.</translation>

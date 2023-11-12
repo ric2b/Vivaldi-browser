@@ -108,6 +108,12 @@ BASE_FEATURE(kWebViewRecordAppDataDirectorySize,
              "WebViewRecordAppDataDirectorySize",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Flag to restrict main frame Web Content to verified web content. Verification
+// happens via Digital Asset Links.
+BASE_FEATURE(kWebViewRestrictSensitiveContent,
+             "WebViewRestrictSensitiveContent",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Disallows window.{alert, prompt, confirm} if triggered inside a subframe that
 // is not same origin with the main frame.
 BASE_FEATURE(kWebViewSuppressDifferentOriginSubframeJSDialogs,
@@ -149,14 +155,20 @@ BASE_FEATURE(kWebViewXRequestedWithHeaderManifestAllowList,
              "WebViewXRequestedWithHeaderManifestAllowList",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// This persists client hints between top-level navigations.
-BASE_FEATURE(kWebViewClientHintsControllerDelegate,
-             "WebViewClientHintsControllerDelegate",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // This enables image drage out for Webview.
 BASE_FEATURE(kWebViewImageDrag,
              "WebViewImageDrag",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// This enables uploading UMA data with a higher frequency.
+// This Feature is checked and used in downstream internal code.
+BASE_FEATURE(kWebViewUmaUploadQualityOfServiceSetToDefault,
+             "WebViewUmaUploadQualityOfServiceSetToDefault",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// This enables zoom keyboard shortcuts for zoom-in, zoom-out and zoom reset.
+BASE_FEATURE(kWebViewZoomKeyboardShortcuts,
+             "WebViewZoomKeyboardShortcuts",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

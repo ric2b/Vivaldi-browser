@@ -10,9 +10,9 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/i18n/string_compare.h"
 #include "base/memory/raw_ptr.h"
@@ -41,7 +41,6 @@
 #include "ui/gfx/favicon_size.h"
 
 #include "app/vivaldi_apptools.h"
-#include "app/vivaldi_resources.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 #include "components/datasource/vivaldi_data_url_utils.h"
@@ -346,14 +345,17 @@ void BookmarkModel::Move(const BookmarkNode* node,
 }
 
 void BookmarkModel::UpdateLastUsedTime(const BookmarkNode* node,
-                                       const base::Time time) {
+                                       const base::Time time,
+                                       bool just_opened) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(loaded_);
   DCHECK(node);
 
   base::Time last_used_time = node->date_last_used();
   UpdateLastUsedTimeImpl(node, time);
-  metrics::RecordBookmarkOpened(time, last_used_time, node->date_added());
+  if (just_opened) {
+    metrics::RecordBookmarkOpened(time, last_used_time, node->date_added());
+  }
 }
 
 void BookmarkModel::UpdateLastUsedTimeImpl(const BookmarkNode* node,

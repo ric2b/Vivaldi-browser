@@ -31,6 +31,7 @@
 #include <memory>
 
 #include "base/notreached.h"
+#include "base/task/single_thread_task_runner.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -483,6 +484,11 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
     ExecutionContext* context_;
   };
 
+  // Returns true if this execution context has obtained storage access via the
+  // Storage Access API. In practice, this can only return true for
+  // LocalDOMWindows.
+  virtual bool HasStorageAccess() const { return false; }
+
  protected:
   explicit ExecutionContext(v8::Isolate* isolate, Agent*);
   ExecutionContext(const ExecutionContext&) = delete;
@@ -501,8 +507,8 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
       const String& message,
       bool discard_duplicates,
       absl::optional<mojom::ConsoleMessageCategory> category) override;
-  virtual void AddConsoleMessageImpl(ConsoleMessage*,
-                                     bool discard_duplicates) = 0;
+  void AddConsoleMessageImpl(ConsoleMessage*,
+                             bool discard_duplicates) override = 0;
 
   v8::Isolate* const isolate_;
 

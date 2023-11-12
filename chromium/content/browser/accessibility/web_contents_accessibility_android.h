@@ -33,10 +33,6 @@ constexpr int kMaxContentChangedEventsToFire = 5;
 // of 20 implies 20 steps, or a 5% move with each increment/decrement action.
 constexpr int kDefaultNumberOfTicksForSliders = 20;
 
-// The minimum amount a slider can move per increment/decement action as a
-// percentage of the total range, regardless of step value set on the element.
-constexpr float kMinimumPercentageMoveForSliders = 0.01f;
-
 // Max dimensions for the image data of a node.
 constexpr gfx::Size kMaxImageSize = gfx::Size(2000, 2000);
 }  // namespace
@@ -61,11 +57,15 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   WebContentsAccessibilityAndroid(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      WebContents* web_contents);
+      WebContents* web_contents,
+      const base::android::JavaParamRef<jobject>&
+          jaccessibility_node_info_builder);
   WebContentsAccessibilityAndroid(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      jlong ax_tree_update_ptr);
+      jlong ax_tree_update_ptr,
+      const base::android::JavaParamRef<jobject>&
+          jaccessibility_node_info_builder);
 
   WebContentsAccessibilityAndroid(const WebContentsAccessibilityAndroid&) =
       delete;
@@ -83,6 +83,7 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   // --------------------------------------------------------------------------
 
   void DeleteEarly(JNIEnv* env);
+  void UnInitialize(JNIEnv* env);
 
   // Global methods.
   jboolean IsEnabled(JNIEnv* env);
@@ -342,6 +343,7 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
 
   // A weak reference to the Java WebContentsAccessibilityAndroid object.
   JavaObjectWeakGlobalRef java_ref_;
+  JavaObjectWeakGlobalRef java_anib_ref_;
 
   const raw_ptr<WebContentsImpl> web_contents_;
 

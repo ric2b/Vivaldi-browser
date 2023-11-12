@@ -10,8 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
@@ -62,7 +62,7 @@ class VpnProvidersObserver
   explicit VpnProvidersObserver(Delegate*);
   ~VpnProvidersObserver() override;
 
-  // chromeos::network_config::CrosNetworkConfigObserver:
+  // ash::network_config::CrosNetworkConfigObserver:
   void OnVpnProvidersChanged() override;
 
  private:
@@ -253,7 +253,7 @@ class VpnServiceAsh : public crosapi::mojom::VpnService,
   // configuration provided that it belongs to some enabled extension.
   void OnGetShillProperties(
       const std::string& service_path,
-      absl::optional<base::Value> configuration_properties);
+      absl::optional<base::Value::Dict> configuration_properties);
 
   // Always returns a valid pointer.
   VpnServiceForExtensionAsh* GetVpnServiceForExtension(

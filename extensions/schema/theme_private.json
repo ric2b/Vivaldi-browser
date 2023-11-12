@@ -84,20 +84,9 @@
         "id": "ImportOptions",
         "type": "object",
         "properties": {
-          "windowId": {
-            "type": "number",
-            "optional": true,
-            "description": "The window that shows the import archive selector dialog. Must mot be given if dataBlob is given."
-          },
-          "dialogTitle": {
-            "type": "string",
-            "optional": true,
-            "description": "The title to use in the import archive selector dialog. Must mot be given if dataBlob is given."
-          },
           "dataBlob": {
             "type": "binary",
-            "optional": true,
-            "description": "The archive to import the theme from. It will be used instead of a user-selected file. It should be a typed array on JS side. This must not be given if windowId or dialogTitle are specified."
+            "description": "The archive to import the theme from."
           }
         }
       },

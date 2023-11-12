@@ -5,7 +5,7 @@
 // must be repeated in the remainder of the list. Search engines will be ordered
 // based on the order of these lists, excluding the first two entries.
 const PrepopulatedEngine* const engines_default[] = {
-    &yahoo,  // default
+    &duckduckgo,  // default
     &duckduckgo,  // defaultPrivate
     &bing,
     &yahoo,

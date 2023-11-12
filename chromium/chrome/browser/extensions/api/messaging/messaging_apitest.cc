@@ -9,10 +9,10 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
@@ -615,7 +615,7 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest, NotInstalled) {
                            .Set("name", "Fake extension")
                            .Set("version", "1")
                            .Set("manifest_version", 2)
-                           .BuildDict())
+                           .Build())
           .Build();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), chromium_org_url()));
@@ -1483,7 +1483,7 @@ IN_PROC_BROWSER_TEST_F(ExternallyConnectableMessagingTest,
                            .Set("name", "Fake extension")
                            .Set("version", "1")
                            .Set("manifest_version", 2)
-                           .BuildDict())
+                           .Build())
           .Build();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), chromium_org_url()));
@@ -1556,8 +1556,9 @@ class ServiceWorkerMessagingApiTest : public MessagingApiTest {
 
 // After sending message from extension and got response back, there should be
 // no in-flight request hanging.
+// TODO(https://crbug.com/1417555): Disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(ServiceWorkerMessagingApiTest,
-                       InflightCountAfterSendMessage) {
+                       DISABLED_InflightCountAfterSendMessage) {
   constexpr char kManifest[] =
       R"({
            "name": "Test Extension",
@@ -1628,7 +1629,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerMessagingApiTest,
   content::RunAllTasksUntilIdle();
 
   url::Origin extension_origin = url::Origin::Create(extension->url());
-  blink::StorageKey extension_key(extension_origin);
+  const blink::StorageKey extension_key =
+      blink::StorageKey::CreateFirstParty(extension_origin);
   EXPECT_EQ(0u, GetWorkerRefCount(extension_key));
 }
 

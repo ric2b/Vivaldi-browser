@@ -9,6 +9,7 @@
 #import "ios/chrome/browser/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_speed_dial_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/settings/start_page/vivaldi_start_page_layout_style.h"
 #import "ui/base/device_form_factor.h"
@@ -44,8 +45,6 @@ const int numberOfItemsListiPad = 4;
 
 @interface VivaldiStartPageLayoutPreviewView()<UICollectionViewDataSource>
 @property(weak,nonatomic) UICollectionView *collectionView;
-// A BOOL to keep track the device orientation
-@property(assign,nonatomic) BOOL isDeviceLandscape;
 // Currently selected layout
 @property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
 @end
@@ -53,7 +52,6 @@ const int numberOfItemsListiPad = 4;
 @implementation VivaldiStartPageLayoutPreviewView
 
 @synthesize collectionView = _collectionView;
-@synthesize isDeviceLandscape = _isDeviceLandscape;
 @synthesize selectedLayout = _selectedLayout;
 
 #pragma mark - INITIALIZER
@@ -92,10 +90,9 @@ const int numberOfItemsListiPad = 4;
 }
 
 #pragma mark - SETTERS
-- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
-                  isLandscape:(BOOL)isLandscape {
+- (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style {
   self.selectedLayout = style;
-  self.isDeviceLandscape = isLandscape;
+  [self.collectionView.collectionViewLayout invalidateLayout];
   [self.collectionView reloadData];
 }
 
@@ -213,19 +210,24 @@ const int numberOfItemsListiPad = 4;
   return section;
 }
 
-/// Returns whether current device is iPhone or iPad.
+/// Returns true if device is iPad and multitasking UI has
+/// enough space to show iPad layout preview.
 - (BOOL)isCurrentDeviceTablet {
-  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET;
+  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
+      ((VivaldiGlobalHelpers.isHorizontalTraitRegular &&
+        VivaldiGlobalHelpers.isVerticalTraitRegular) ||
+        VivaldiGlobalHelpers.iPadLayoutState == LayoutStateFullScreen ||
+       VivaldiGlobalHelpers.iPadLayoutState == LayoutStateTwoThirdScreen);
 }
 
-// Returns the multiplier to generate the grid item from view width.
+/// Returns the multiplier to generate the grid item from view width.
 - (CGFloat)itemSizeWidth {
   switch (_selectedLayout) {
     case VivaldiStartPageLayoutStyleLarge:
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadLarge;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneLargeLand;
         } else {
           return vSDWidthiPhoneLarge;
@@ -235,7 +237,7 @@ const int numberOfItemsListiPad = 4;
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadMedium;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneMediumLand;
         } else {
           return vSDWidthiPhoneMedium;
@@ -245,7 +247,7 @@ const int numberOfItemsListiPad = 4;
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadSmall;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneSmallLand;
         } else {
           return vSDWidthiPhoneSmall;
@@ -255,7 +257,7 @@ const int numberOfItemsListiPad = 4;
       if (self.isCurrentDeviceTablet) {
         return vSDWidthiPadList;
       } else {
-        if (self.isDeviceLandscape) {
+        if (self.showiPhoneLandscapeLayout) {
           return vSDWidthiPhoneListLand;
         } else {
           return vSDWidthiPhoneList;
@@ -273,8 +275,15 @@ const int numberOfItemsListiPad = 4;
 
 /// Returns the section padding.
 - (CGFloat)getSectionPadding {
-  return self.isDeviceLandscape ?
+  return (self.showiPhoneLandscapeLayout) ?
     vSDSectionPaddingiPhoneLandscape : vSDSectionPaddingiPhonePortrait;
+}
+
+/// Returns true when app is running on split mode in
+/// iPad with half/half screen state
+- (BOOL)isAppStateHalfScreen {
+  return VivaldiGlobalHelpers.isSplitOrSlideOver &&
+      VivaldiGlobalHelpers.iPadLayoutState == LayoutStateHalfScreen;
 }
 
 /// Returns the number of items to render on preview based on device trait, type
@@ -294,23 +303,32 @@ const int numberOfItemsListiPad = 4;
   } else {
     switch (_selectedLayout) {
       case VivaldiStartPageLayoutStyleLarge:
-        return _isDeviceLandscape ?
+        return (self.showiPhoneLandscapeLayout) ?
           numberOfItemsLargeLandscape :
           numberOfItemsLarge;
       case VivaldiStartPageLayoutStyleMedium:
-        return _isDeviceLandscape ?
+        return (self.showiPhoneLandscapeLayout) ?
           numberOfItemsMediumLandscape :
           numberOfItemsMedium;
       case VivaldiStartPageLayoutStyleSmall:
-        return _isDeviceLandscape ?
+        return (self.showiPhoneLandscapeLayout) ?
           numberOfItemsSmallLandscape :
           numberOfItemsSmall;
       case VivaldiStartPageLayoutStyleList:
-        return _isDeviceLandscape ?
+        return (self.showiPhoneLandscapeLayout) ?
           numberOfItemsListLandscape :
           numberOfItemsList;
     }
   }
+}
+
+/// Returns true for iPhone in landscape and iPad in half/half state.
+/// In iPad half/half state leaves a bigger space which can be utilized
+/// showing the same number of items as iPhone landscape would
+/// show.
+- (BOOL)showiPhoneLandscapeLayout {
+  return VivaldiGlobalHelpers.isVerticalTraitCompact ||
+      self.isAppStateHalfScreen;
 }
 
 @end

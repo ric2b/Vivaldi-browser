@@ -4,6 +4,15 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
+import static org.hamcrest.Matchers.allOf;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.lessThan;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.hamcrest.MockitoHamcrest.intThat;
+
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.areAnimatorsEnabled;
 
 import android.content.res.ColorStateList;
@@ -20,6 +29,7 @@ import android.widget.FrameLayout;
 
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.filters.SmallTest;
 
@@ -29,8 +39,10 @@ import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Spy;
 
 import org.chromium.base.test.UiThreadTest;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.tasks.tab_management.TabGridDialogView.VisibilityListener;
@@ -50,6 +62,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Tests for {@link TabGridPanelViewBinder}.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
+@Batch(Batch.PER_CLASS)
 public class TabGridPanelViewBinderTest extends BlankUiTestActivityTestCase {
     private static final String TAG = "TGPVBT";
     private static final int CONTENT_TOP_MARGIN = 56;
@@ -64,6 +77,10 @@ public class TabGridPanelViewBinderTest extends BlankUiTestActivityTestCase {
     private EditText mTitleTextView;
     private View mMainContent;
     private ScrimCoordinator mScrimCoordinator;
+    @Spy
+    private GridLayoutManager mLayoutManager;
+    @Spy
+    private LinearLayoutManager mLinearLayoutManager;
 
     @Override
     public void setUpTest() throws Exception {
@@ -74,7 +91,8 @@ public class TabGridPanelViewBinderTest extends BlankUiTestActivityTestCase {
             mContentView =
                     (TabListRecyclerView) LayoutInflater.from(getActivity())
                             .inflate(R.layout.tab_list_recycler_view_layout, parentView, false);
-            mContentView.setLayoutManager(new GridLayoutManager(getActivity(), 2));
+            mLayoutManager = spy(new GridLayoutManager(getActivity(), 2));
+            mContentView.setLayoutManager(mLayoutManager);
             mToolbarView = (TabGroupUiToolbarView) LayoutInflater.from(getActivity())
                                    .inflate(R.layout.bottom_tab_grid_toolbar, mContentView, false);
             LayoutInflater.from(getActivity())
@@ -466,6 +484,34 @@ public class TabGridPanelViewBinderTest extends BlankUiTestActivityTestCase {
         });
 
         Assert.assertNotNull(mTabGridDialogView.getVisibilityListenerForTesting());
+    }
+
+    @Test
+    @SmallTest
+    @UiThreadTest
+    public void testSetInitialScrollIndex() {
+        mContentView.layout(0, 0, 100, 500);
+
+        mModel.set(TabGridPanelProperties.INITIAL_SCROLL_INDEX, 5);
+
+        verify(mLayoutManager, times(1))
+                .scrollToPositionWithOffset(eq(5),
+                        intThat(allOf(lessThan(mContentView.getHeight() / 2), greaterThan(0))));
+    }
+
+    @Test
+    @SmallTest
+    @UiThreadTest
+    public void testSetInitialScrollIndex_Linear() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mLinearLayoutManager = spy(new LinearLayoutManager(getActivity()));
+            mContentView.setLayoutManager(mLinearLayoutManager);
+        });
+        mContentView.layout(0, 0, 100, 500);
+
+        mModel.set(TabGridPanelProperties.INITIAL_SCROLL_INDEX, 5);
+
+        verify(mLinearLayoutManager, times(1)).scrollToPositionWithOffset(eq(5), eq(0));
     }
 
     @Override

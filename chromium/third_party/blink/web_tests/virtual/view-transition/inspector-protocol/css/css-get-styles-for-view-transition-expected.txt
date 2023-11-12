@@ -51,7 +51,39 @@ The test verifies functionality of querying style information for view-transitio
                                 name : display
                                 value : block
                             }
-                            [1] : {
+                        ]
+                        shorthandEntries : [
+                        ]
+                    }
+                    supports : [
+                    ]
+                }
+            }
+            [1] : {
+                matchingSelectors : [
+                    [0] : 0
+                ]
+                rule : {
+                    containerQueries : [
+                    ]
+                    layers : [
+                    ]
+                    media : [
+                    ]
+                    origin : user-agent
+                    scopes : [
+                    ]
+                    selectorList : {
+                        selectors : [
+                            [0] : {
+                                text : :root
+                            }
+                        ]
+                        text : :root
+                    }
+                    style : {
+                        cssProperties : [
+                            [0] : {
                                 name : view-transition-name
                                 value : root
                             }
@@ -101,55 +133,32 @@ The test verifies functionality of querying style information for view-transitio
                                         value : 0px
                                     }
                                     [2] : {
-                                        name : left
+                                        name : right
                                         value : 0px
                                     }
                                     [3] : {
+                                        name : bottom
+                                        value : 0px
+                                    }
+                                    [4] : {
+                                        name : left
+                                        value : 0px
+                                    }
+                                    [5] : {
                                         name : pointer-events
                                         value : none
                                     }
-                                ]
-                                shorthandEntries : [
-                                ]
-                            }
-                            supports : [
-                            ]
-                        }
-                    }
-                    [1] : {
-                        matchingSelectors : [
-                            [0] : 0
-                        ]
-                        rule : {
-                            containerQueries : [
-                            ]
-                            layers : [
-                            ]
-                            media : [
-                            ]
-                            origin : user-agent
-                            scopes : [
-                            ]
-                            selectorList : {
-                                selectors : [
-                                    [0] : {
-                                        text : html::view-transition
-                                    }
-                                ]
-                                text : html::view-transition
-                            }
-                            style : {
-                                cssProperties : [
-                                    [0] : {
-                                        name : width
-                                        value : 800px
-                                    }
-                                    [1] : {
-                                        name : height
-                                        value : 600px
+                                    [6] : {
+                                        important : true
+                                        name : top-layer
+                                        value : browser !important
                                     }
                                 ]
                                 shorthandEntries : [
+                                    [0] : {
+                                        name : inset
+                                        value : 0px
+                                    }
                                 ]
                             }
                             supports : [
@@ -198,14 +207,6 @@ The test verifies functionality of querying style information for view-transitio
                                         value : 0px
                                     }
                                     [3] : {
-                                        name : will-change
-                                        value : transform
-                                    }
-                                    [4] : {
-                                        name : transform-origin
-                                        value : left top
-                                    }
-                                    [5] : {
                                         name : pointer-events
                                         value : auto
                                     }
@@ -340,14 +341,6 @@ The test verifies functionality of querying style information for view-transitio
                                         value : 0px
                                     }
                                     [3] : {
-                                        name : will-change
-                                        value : transform
-                                    }
-                                    [4] : {
-                                        name : transform-origin
-                                        value : left top
-                                    }
-                                    [5] : {
                                         name : pointer-events
                                         value : auto
                                     }
@@ -832,10 +825,6 @@ The test verifies functionality of querying style information for view-transitio
                                         name : block-size
                                         value : auto
                                     }
-                                    [4] : {
-                                        name : will-change
-                                        value : opacity
-                                    }
                                 ]
                                 shorthandEntries : [
                                 ]
@@ -1118,10 +1107,6 @@ The test verifies functionality of querying style information for view-transitio
                                     [3] : {
                                         name : block-size
                                         value : auto
-                                    }
-                                    [4] : {
-                                        name : will-change
-                                        value : opacity
                                     }
                                 ]
                                 shorthandEntries : [
@@ -1406,10 +1391,6 @@ The test verifies functionality of querying style information for view-transitio
                                         name : block-size
                                         value : auto
                                     }
-                                    [4] : {
-                                        name : will-change
-                                        value : opacity
-                                    }
                                 ]
                                 shorthandEntries : [
                                 ]
@@ -1546,10 +1527,6 @@ The test verifies functionality of querying style information for view-transitio
                                     [3] : {
                                         name : block-size
                                         value : auto
-                                    }
-                                    [4] : {
-                                        name : will-change
-                                        value : opacity
                                     }
                                 ]
                                 shorthandEntries : [
@@ -1750,55 +1727,32 @@ Dumping styles for : ::view-transition with id undefined{
                                 value : 0px
                             }
                             [2] : {
-                                name : left
+                                name : right
                                 value : 0px
                             }
                             [3] : {
+                                name : bottom
+                                value : 0px
+                            }
+                            [4] : {
+                                name : left
+                                value : 0px
+                            }
+                            [5] : {
                                 name : pointer-events
                                 value : none
                             }
-                        ]
-                        shorthandEntries : [
-                        ]
-                    }
-                    supports : [
-                    ]
-                }
-            }
-            [1] : {
-                matchingSelectors : [
-                    [0] : 0
-                ]
-                rule : {
-                    containerQueries : [
-                    ]
-                    layers : [
-                    ]
-                    media : [
-                    ]
-                    origin : user-agent
-                    scopes : [
-                    ]
-                    selectorList : {
-                        selectors : [
-                            [0] : {
-                                text : html::view-transition
-                            }
-                        ]
-                        text : html::view-transition
-                    }
-                    style : {
-                        cssProperties : [
-                            [0] : {
-                                name : width
-                                value : 800px
-                            }
-                            [1] : {
-                                name : height
-                                value : 600px
+                            [6] : {
+                                important : true
+                                name : top-layer
+                                value : browser !important
                             }
                         ]
                         shorthandEntries : [
+                            [0] : {
+                                name : inset
+                                value : 0px
+                            }
                         ]
                     }
                     supports : [
@@ -1852,14 +1806,6 @@ Dumping styles for : ::view-transition-group with id root{
                                 value : 0px
                             }
                             [3] : {
-                                name : will-change
-                                value : transform
-                            }
-                            [4] : {
-                                name : transform-origin
-                                value : left top
-                            }
-                            [5] : {
                                 name : pointer-events
                                 value : auto
                             }
@@ -2145,10 +2091,6 @@ Dumping styles for : ::view-transition-old with id root{
                             [3] : {
                                 name : block-size
                                 value : auto
-                            }
-                            [4] : {
-                                name : will-change
-                                value : opacity
                             }
                         ]
                         shorthandEntries : [
@@ -2437,10 +2379,6 @@ Dumping styles for : ::view-transition-new with id root{
                                 name : block-size
                                 value : auto
                             }
-                            [4] : {
-                                name : will-change
-                                value : opacity
-                            }
                         ]
                         shorthandEntries : [
                         ]
@@ -2576,14 +2514,6 @@ Dumping styles for : ::view-transition-group with id shared{
                                 value : 0px
                             }
                             [3] : {
-                                name : will-change
-                                value : transform
-                            }
-                            [4] : {
-                                name : transform-origin
-                                value : left top
-                            }
-                            [5] : {
                                 name : pointer-events
                                 value : auto
                             }
@@ -2938,10 +2868,6 @@ Dumping styles for : ::view-transition-old with id shared{
                                 name : block-size
                                 value : auto
                             }
-                            [4] : {
-                                name : will-change
-                                value : opacity
-                            }
                         ]
                         shorthandEntries : [
                         ]
@@ -3228,10 +3154,6 @@ Dumping styles for : ::view-transition-new with id shared{
                             [3] : {
                                 name : block-size
                                 value : auto
-                            }
-                            [4] : {
-                                name : will-change
-                                value : opacity
                             }
                         ]
                         shorthandEntries : [

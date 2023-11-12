@@ -240,7 +240,9 @@ PowerButton::PowerButton()
                               base::Unretained(this)),
           IconButton::Type::kMediumFloating,
           &kUnifiedMenuPowerIcon,
-          IDS_ASH_STATUS_TRAY_SHUTDOWN))),
+          IDS_ASH_STATUS_TRAY_SHUTDOWN,
+          /*is_togglable=*/true,
+          /*has_border=*/false))),
       context_menu_(std::make_unique<MenuController>(/*button=*/this)) {
   SetID(VIEW_ID_QS_POWER_BUTTON);
   SetLayoutManager(std::make_unique<views::FillLayout>());
@@ -265,6 +267,11 @@ PowerButton::PowerButton()
       ->SetPathGenerator(
           std::make_unique<HighlightPathGenerator>(/*power_button=*/this));
   button_content_->SetFocusPainter(nullptr);
+  button_content_->SetIconColorId(cros_tokens::kCrosSysOnSurface);
+  button_content_->SetIconToggledColorId(
+      cros_tokens::kCrosSysSystemOnPrimaryContainer);
+  button_content_->SetBackgroundToggledColorId(
+      cros_tokens::kCrosSysSystemPrimaryContainer);
 }
 
 PowerButton::~PowerButton() = default;
@@ -277,10 +284,8 @@ bool PowerButton::IsMenuShowing() {
 void PowerButton::OnThemeChanged() {
   views::View::OnThemeChanged();
 
-  button_content_->SetIconColor(
-      GetColorProvider()->GetColor(cros_tokens::kCrosSysPrimary));
   SkColor inactive_color =
-      GetColorProvider()->GetColor(cros_tokens::kCrosSysOnPrimary);
+      GetColorProvider()->GetColor(cros_tokens::kCrosSysSystemOnBase);
   SkColor active_color =
       GetColorProvider()->GetColor(cros_tokens::kCrosSysSystemPrimaryContainer);
   background_view_->layer()->SetColor(IsMenuShowing() ? active_color
@@ -297,6 +302,7 @@ void PowerButton::UpdateView() {
     focus_ring->InvalidateLayout();
     focus_ring->SchedulePaint();
   }
+  button_content_->SetToggled(IsMenuShowing());
 }
 
 void PowerButton::UpdateRoundedCorners() {
@@ -314,14 +320,15 @@ void PowerButton::OnButtonActivated(const ui::Event& event) {
       QsButtonCatalogName::kPowerButton);
   ui::MenuSourceType type;
 
-  if (event.IsMouseEvent())
+  if (event.IsMouseEvent()) {
     type = ui::MENU_SOURCE_MOUSE;
-  else if (event.IsTouchEvent())
+  } else if (event.IsTouchEvent()) {
     type = ui::MENU_SOURCE_TOUCH;
-  else if (event.IsKeyEvent())
+  } else if (event.IsKeyEvent()) {
     type = ui::MENU_SOURCE_KEYBOARD;
-  else
+  } else {
     type = ui::MENU_SOURCE_STYLUS;
+  }
 
   context_menu_->ShowContextMenuForView(
       /*source=*/this, GetBoundsInScreen().CenterPoint(), type);

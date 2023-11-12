@@ -3,10 +3,14 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ash/login/oobe_quick_start/target_device_bootstrap_controller.h"
-#include <memory>
 
+#include <memory>
+#include <string>
+
+#include "base/command_line.h"
 #include "base/test/bind.h"
 #include "chrome/browser/ash/login/oobe_quick_start/connectivity/fake_target_device_connection_broker.h"
+#include "chrome/browser/nearby_sharing/fake_nearby_connections_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
@@ -51,13 +55,15 @@ class TargetDeviceBootstrapControllerTest : public testing::Test {
   void SetUp() override { CreateBootstrapController(); }
   void TearDown() override {
     bootstrap_controller_->RemoveObserver(fake_observer_.get());
+    TargetDeviceConnectionBrokerFactory::SetFactoryForTesting(nullptr);
   }
 
   void CreateBootstrapController() {
     TargetDeviceConnectionBrokerFactory::SetFactoryForTesting(
         &connection_broker_factory_);
 
-    bootstrap_controller_ = std::make_unique<TargetDeviceBootstrapController>();
+    bootstrap_controller_ = std::make_unique<TargetDeviceBootstrapController>(
+        fake_nearby_connections_manager_.GetWeakPtr());
     fake_observer_ = std::make_unique<FakeObserver>();
     bootstrap_controller_->AddObserver(fake_observer_.get());
   }
@@ -69,6 +75,7 @@ class TargetDeviceBootstrapControllerTest : public testing::Test {
 
  protected:
   FakeTargetDeviceConnectionBroker::Factory connection_broker_factory_;
+  FakeNearbyConnectionsManager fake_nearby_connections_manager_;
   std::unique_ptr<FakeObserver> fake_observer_;
   std::unique_ptr<TargetDeviceBootstrapController> bootstrap_controller_;
 };
@@ -180,6 +187,19 @@ TEST_F(TargetDeviceBootstrapControllerTest, CloseConnection) {
       absl::holds_alternative<ErrorCode>(fake_observer_->last_status.payload));
   EXPECT_EQ(absl::get<ErrorCode>(fake_observer_->last_status.payload),
             ErrorCode::CONNECTION_CLOSED);
+}
+
+TEST_F(TargetDeviceBootstrapControllerTest, GetPhoneInstanceId) {
+  // Ensure GetPhoneInstanceId() returns an empty string when no command line
+  // switch is set.
+  ASSERT_TRUE(bootstrap_controller_->GetPhoneInstanceId().empty());
+
+  std::string kExpectedPhoneInstanceID = "someArbitraryInstanceID";
+  base::CommandLine::ForCurrentProcess()->InitFromArgv(
+      {"", "--quick-start-phone-instance-id=" + kExpectedPhoneInstanceID});
+
+  EXPECT_EQ(bootstrap_controller_->GetPhoneInstanceId(),
+            kExpectedPhoneInstanceID);
 }
 
 }  // namespace ash::quick_start

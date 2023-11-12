@@ -46,7 +46,7 @@ public class SiteSettingsCategory {
             Type.JAVASCRIPT, Type.MICROPHONE, Type.NFC, Type.NOTIFICATIONS, Type.POPUPS,
             Type.PROTECTED_MEDIA, Type.SENSORS, Type.SOUND, Type.USB, Type.VIRTUAL_REALITY,
             Type.USE_STORAGE, Type.AUTO_DARK_WEB_CONTENT, Type.REQUEST_DESKTOP_SITE,
-            Type.FEDERATED_IDENTITY_API, Type.THIRD_PARTY_COOKIES, Type.SITE_DATA,
+            Type.FEDERATED_IDENTITY_API, Type.THIRD_PARTY_COOKIES, Type.SITE_DATA, Type.ANTI_ABUSE,
             Type.AUTOPLAY, // Vivaldi
             Type.NUM_ENTRIES})
     @Retention(RetentionPolicy.SOURCE)
@@ -81,11 +81,14 @@ public class SiteSettingsCategory {
         int FEDERATED_IDENTITY_API = 25;
         int THIRD_PARTY_COOKIES = 26;
         int SITE_DATA = 27;
-        int AUTOPLAY = 28; // Vivaldi
+        int ANTI_ABUSE = 28;
+
+
+        int AUTOPLAY = 29; // Vivaldi
         /**
          * Number of handled categories used for calculating array sizes.
          */
-        int NUM_ENTRIES = 29; // Vivaldi
+        int NUM_ENTRIES = 30; // Vivaldi
     }
 
     private final BrowserContextHandle mBrowserContextHandle;
@@ -164,6 +167,8 @@ public class SiteSettingsCategory {
         switch (type) {
             case Type.ADS:
                 return ContentSettingsType.ADS;
+            case Type.ANTI_ABUSE:
+                return ContentSettingsType.ANTI_ABUSE;
             case Type.AUGMENTED_REALITY:
                 return ContentSettingsType.AR;
             case Type.AUTO_DARK_WEB_CONTENT:
@@ -245,6 +250,8 @@ public class SiteSettingsCategory {
         switch (type) {
             case Type.ADS:
                 return "ads";
+            case Type.ANTI_ABUSE:
+                return "anti_abuse";
             case Type.AUGMENTED_REALITY:
                 return "augmented_reality";
             case Type.AUTO_DARK_WEB_CONTENT:

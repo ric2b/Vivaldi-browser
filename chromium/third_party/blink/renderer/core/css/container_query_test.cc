@@ -25,10 +25,8 @@
 
 namespace blink {
 
-class ContainerQueryTest : public PageTestBase, private ScopedLayoutNGForTest {
+class ContainerQueryTest : public PageTestBase {
  public:
-  ContainerQueryTest() : ScopedLayoutNGForTest(true) {}
-
   bool HasUnknown(StyleRuleContainer* rule) {
     return rule && rule->GetContainerQuery().Query().HasUnknown();
   }
@@ -45,8 +43,9 @@ class ContainerQueryTest : public PageTestBase, private ScopedLayoutNGForTest {
       UnknownHandling unknown_handling = UnknownHandling::kError) {
     auto* rule = DynamicTo<StyleRuleContainer>(
         css_test_helpers::ParseRule(GetDocument(), rule_string));
-    if ((unknown_handling == UnknownHandling::kError) && HasUnknown(rule))
+    if ((unknown_handling == UnknownHandling::kError) && HasUnknown(rule)) {
       return nullptr;
+    }
     return rule;
   }
 
@@ -55,8 +54,9 @@ class ContainerQueryTest : public PageTestBase, private ScopedLayoutNGForTest {
       UnknownHandling unknown_handling = UnknownHandling::kError) {
     String rule = "@container " + query + " {}";
     StyleRuleContainer* container = ParseAtContainer(rule, unknown_handling);
-    if (!container)
+    if (!container) {
       return nullptr;
+    }
     return &container->GetContainerQuery();
   }
 
@@ -64,22 +64,25 @@ class ContainerQueryTest : public PageTestBase, private ScopedLayoutNGForTest {
       String query_string) {
     ContainerQuery* query =
         ParseContainerQuery(query_string, UnknownHandling::kAllow);
-    if (!query)
+    if (!query) {
       return absl::nullopt;
+    }
     return GetInnerQuery(*query).CollectFeatureFlags();
   }
 
   ContainerSelector ContainerSelectorFrom(String query_string) {
     ContainerQuery* query =
         ParseContainerQuery(query_string, UnknownHandling::kAllow);
-    if (!query)
+    if (!query) {
       return ContainerSelector();
+    }
     return ContainerSelector(g_null_atom, GetInnerQuery(*query));
   }
 
   String SerializeCondition(StyleRuleContainer* container) {
-    if (!container)
+    if (!container) {
       return "";
+    }
     return container->GetContainerQuery().ToString();
   }
 
@@ -97,16 +100,18 @@ class ContainerQueryTest : public PageTestBase, private ScopedLayoutNGForTest {
   }
 
   String ComputedValueString(Element* element, String property_name) {
-    if (const CSSValue* value = ComputedValue(element, property_name))
+    if (const CSSValue* value = ComputedValue(element, property_name)) {
       return value->CssText();
+    }
     return g_null_atom;
   }
 
   // Get animations count for a specific element without force-updating
   // style and layout-tree.
   size_t GetAnimationsCount(Element* element) {
-    if (auto* element_animations = element->GetElementAnimations())
+    if (auto* element_animations = element->GetElementAnimations()) {
       return element_animations->Animations().size();
+    }
     return 0;
   }
 
@@ -116,7 +121,12 @@ class ContainerQueryTest : public PageTestBase, private ScopedLayoutNGForTest {
     PostStyleUpdateScope post_style_update_scope(GetDocument());
     SetBodyInnerHTML(html);
     DCHECK(PostStyleUpdateScope::CurrentAnimationData());
-    return PostStyleUpdateScope::CurrentAnimationData()->old_styles_.size();
+    size_t old_styles_count =
+        PostStyleUpdateScope::CurrentAnimationData()->old_styles_.size();
+    // We don't care about the effects of this Apply call, except that it
+    // silences a DCHECK in ~PostStyleUpdateScope.
+    post_style_update_scope.Apply();
+    return old_styles_count;
   }
 };
 
@@ -143,8 +153,8 @@ TEST_F(ContainerQueryTest, PreludeParsing) {
       "(width < 300px)",
       SerializeCondition(ParseAtContainer("@container (width < 300px) {}")));
 
-  EXPECT_EQ("not (width)", SerializeCondition(ParseAtContainer(
-                               "@container somename not (width) {}")));
+  EXPECT_EQ("somename not (width)", SerializeCondition(ParseAtContainer(
+                                        "@container somename not (width) {}")));
 
   EXPECT_EQ("(width) and (height)", SerializeCondition(ParseAtContainer(
                                         "@container (width) and (height) {}")));
@@ -152,7 +162,17 @@ TEST_F(ContainerQueryTest, PreludeParsing) {
   EXPECT_EQ("(width) or (height)", SerializeCondition(ParseAtContainer(
                                        "@container (width) or (height) {}")));
 
+  EXPECT_EQ("test_name (width) or (height)",
+            SerializeCondition(ParseAtContainer(
+                "@container test_name (width) or (height) {}")));
+
+  EXPECT_EQ("test_name ((max-width: 500px) or (max-height: 500px))",
+            SerializeCondition(
+                ParseAtContainer("@container test_name ((max-width: 500px) "
+                                 "or (max-height: 500px)) {}")));
+
   // Invalid:
+  EXPECT_FALSE(ParseAtContainer("@container test_name {}"));
   EXPECT_FALSE(ParseAtContainer("@container 100px {}"));
   EXPECT_FALSE(ParseAtContainer("@container calc(1) {}"));
   EXPECT_FALSE(ParseAtContainer("@container {}"));
@@ -172,13 +192,17 @@ TEST_F(ContainerQueryTest, ValidFeatures) {
   EXPECT_TRUE(ParseAtContainer("@container (min-aspect-ratio: 1/2) {}"));
   EXPECT_TRUE(ParseAtContainer("@container (max-aspect-ratio: 1/2) {}"));
   EXPECT_TRUE(ParseAtContainer("@container (orientation: portrait) {}"));
+  EXPECT_TRUE(
+      ParseAtContainer("@container test_name (orientation: portrait) {}"));
 
   EXPECT_FALSE(ParseAtContainer("@container (color) {}"));
+  EXPECT_FALSE(ParseAtContainer("@container test_name (color) {}"));
   EXPECT_FALSE(ParseAtContainer("@container (color-index) {}"));
   EXPECT_FALSE(ParseAtContainer("@container (color-index >= 1) {}"));
   EXPECT_FALSE(ParseAtContainer("@container (grid) {}"));
   EXPECT_FALSE(ParseAtContainer("@container (resolution: 150dpi) {}"));
   EXPECT_FALSE(ParseAtContainer("@container size(width) {}"));
+  EXPECT_FALSE(ParseAtContainer("@container test_name size(width) {}"));
 }
 
 TEST_F(ContainerQueryTest, FeatureFlags) {
@@ -186,6 +210,8 @@ TEST_F(ContainerQueryTest, FeatureFlags) {
             FeatureFlagsFrom("(width: 100gil)"));
   EXPECT_EQ(MediaQueryExpNode::kFeatureWidth,
             FeatureFlagsFrom("(width: 100px)"));
+  EXPECT_EQ(MediaQueryExpNode::kFeatureWidth,
+            FeatureFlagsFrom("test_name (width: 100px)"));
   EXPECT_EQ(MediaQueryExpNode::kFeatureHeight,
             FeatureFlagsFrom("(height < 100px)"));
   EXPECT_EQ(MediaQueryExpNode::kFeatureInlineSize,
@@ -261,12 +287,13 @@ TEST_F(ContainerQueryTest, ImplicitContainerSelector) {
 
 TEST_F(ContainerQueryTest, RuleParsing) {
   StyleRuleContainer* container = ParseAtContainer(R"CSS(
-    @container (min-width: 100px) {
+    @container test_name (min-width: 100px) {
       div { width: 100px; }
       span { height: 100px; }
     }
   )CSS");
   ASSERT_TRUE(container);
+  ASSERT_EQ("test_name", container->GetContainerQuery().Selector().Name());
 
   CSSStyleSheet* sheet = css_test_helpers::CreateStyleSheet(GetDocument());
   auto* rule = DynamicTo<CSSContainerRule>(
@@ -591,9 +618,11 @@ TEST_F(ContainerQueryTest, OldStyleForTransitions) {
     UpdateAllLifecyclePhasesForTest();
     EXPECT_EQ("25px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
+
+    EXPECT_FALSE(post_style_update_scope.Apply());
   }
 
-  // PostStyleUpdateScope going out of scope applies the update.
+  // Animation count should be updated after PostStyleUpdateScope::Apply.
   EXPECT_EQ(1u, GetAnimationsCount(target));
 
   // Verify that the newly-updated Animation produces the correct value.
@@ -660,9 +689,11 @@ TEST_F(ContainerQueryTest, TransitionAppearingInFinalPass) {
     UpdateAllLifecyclePhasesForTest();
     EXPECT_EQ("25px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
+
+    EXPECT_FALSE(post_style_update_scope.Apply());
   }
 
-  // PostStyleUpdateScope going out of scope applies the update.
+  // Animation count should be updated after PostStyleUpdateScope::Apply.
   EXPECT_EQ(1u, GetAnimationsCount(target));
 
   // Verify that the newly-updated Animation produces the correct value.
@@ -729,9 +760,11 @@ TEST_F(ContainerQueryTest, TransitionTemporarilyAppearing) {
     UpdateAllLifecyclePhasesForTest();
     EXPECT_EQ("40px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
+
+    EXPECT_FALSE(post_style_update_scope.Apply());
   }
 
-  // PostStyleUpdateScope going out of scope applies the update.
+  // Animation count should be updated after PostStyleUpdateScope::Apply.
   // We ultimately ended up with no transition, hence we should have no
   // Animations on the element.
   EXPECT_EQ(0u, GetAnimationsCount(target));
@@ -798,9 +831,11 @@ TEST_F(ContainerQueryTest, RedefiningAnimations) {
     UpdateAllLifecyclePhasesForTest();
     EXPECT_EQ("40px", ComputedValueString(target, "height"));
     EXPECT_EQ(0u, GetAnimationsCount(target));
+
+    EXPECT_FALSE(post_style_update_scope.Apply());
   }
 
-  // PostStyleUpdateScope going out of scope applies the update.
+  // Animation count should be updated after PostStyleUpdateScope::Apply.
   EXPECT_EQ(1u, GetAnimationsCount(target));
 
   // Verify that the newly-updated Animation produces the correct value.
@@ -859,9 +894,11 @@ TEST_F(ContainerQueryTest, UnsetAnimation) {
     UpdateAllLifecyclePhasesForTest();
     EXPECT_EQ("20px", ComputedValueString(target, "height"));
     EXPECT_EQ(1u, GetAnimationsCount(target));
+
+    EXPECT_FALSE(post_style_update_scope.Apply());
   }
 
-  // PostStyleUpdateScope going out of scope applies the update.
+  // Animation count should be updated after PostStyleUpdateScope::Apply.
   // (Although since we didn't cancel, there is nothing to update).
   EXPECT_EQ(1u, GetAnimationsCount(target));
 

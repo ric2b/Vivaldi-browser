@@ -76,4 +76,7 @@ if (is_vivaldi_automotive && !is_vivaldi_polestar) {
   if (is_vivaldi_mercedes) {
     android_vivaldi_manifest_package += ".mercedes"
   }
+  if (is_vivaldi_volvo) {
+    android_vivaldi_manifest_package += ".volvo"
+  }
 }

@@ -19,11 +19,12 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/overview/overview_observer.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
-#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_helpers.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/version.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -45,6 +46,8 @@
 #include "chromeos/ash/components/dbus/shill/shill_third_party_vpn_driver_client.h"
 #include "chromeos/ash/components/dbus/userdataauth/cryptohome_misc_client.h"
 #include "chromeos/ash/components/network/network_handler_test_helper.h"
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/tts_utterance.h"
 #include "crypto/sha2.h"
@@ -61,6 +64,7 @@
 #include "ui/events/event_source.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/interaction/interaction_test_util_views.h"
 
@@ -137,20 +141,19 @@ void TestControllerAsh::ClickElement(const std::string& element_name,
   }
 
   // Pick the first view that matches the element name.
-  views::View* view = views[0];
+  views::Button* button = views::Button::AsButton(views[0]);
+  if (!button) {
+    std::move(callback).Run(/*success=*/false);
+    return;
+  }
 
   // We directly send mouse events to the view. It's also possible to use
   // EventGenerator to move the mouse and send a click. Unfortunately, that
   // approach has occasional flakiness. This is presumably due to another window
   // appearing on top of the dialog and taking the mouse events but has not been
   // explicitly diagnosed.
-  views::TrackedElementViews* tracked_element =
-      views::ElementTrackerViews::GetInstance()->GetElementForView(
-          view, /*assign_temporary_id=*/false);
-  views::test::InteractionTestUtilSimulatorViews simulator;
-  simulator.PressButton(tracked_element,
-                        ui::test::InteractionTestUtil::InputType::kMouse);
-
+  views::test::InteractionTestUtilSimulatorViews::PressButton(
+      button, ui::test::InteractionTestUtil::InputType::kMouse);
   std::move(callback).Run(/*success=*/true);
 }
 
@@ -494,7 +497,7 @@ void TestControllerAsh::CloseAllBrowserWindows(
 void TestControllerAsh::TriggerTabScrubbing(
     float x_offset,
     TriggerTabScrubbingCallback callback) {
-  crosapi::BrowserManager::Get()->HandleTabScrubbing(x_offset);
+  crosapi::BrowserManager::Get()->HandleTabScrubbing(x_offset, false);
 
   // Return whether tab scrubbing logic has started or not in Ash.
   //
@@ -614,7 +617,7 @@ void TestControllerAsh::CreateAndCancelPrintJob(
   std::unique_ptr<ash::CupsPrintJob> print_job =
       std::make_unique<ash::CupsPrintJob>(
           chromeos::Printer(), /*job_id=*/0, job_title, /*total_page_number=*/1,
-          ::printing::PrintJob::Source::PRINT_PREVIEW,
+          ::printing::PrintJob::Source::kPrintPreview,
           /*source_id=*/"", ash::printing::proto::PrintSettings());
 
   ash::CupsPrintJobManager* print_job_manager =
@@ -884,7 +887,7 @@ void ShillClientTestInterfaceAsh::AddIPConfig(const std::string& ip_config_path,
                                               ::base::Value properties,
                                               AddIPConfigCallback callback) {
   auto* ip_config_test = ash::ShillIPConfigClient::Get()->GetTestInterface();
-  ip_config_test->AddIPConfig(ip_config_path, properties);
+  ip_config_test->AddIPConfig(ip_config_path, std::move(properties).TakeDict());
   std::move(callback).Run();
 }
 

@@ -10,10 +10,11 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ash/drive/drive_integration_service.h"
 #include "chrome/browser/ash/drive/file_system_util.h"
@@ -244,12 +245,14 @@ extensions::api::file_manager_private::VmType VmTypeToJs(
 void SingleEntryPropertiesGetterForDriveFs::Start(
     const storage::FileSystemURL& file_system_url,
     Profile* const profile,
+    const std::set<extensions::api::file_manager_private::EntryPropertyName>
+        requested_properties,
     ResultCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   SingleEntryPropertiesGetterForDriveFs* instance =
-      new SingleEntryPropertiesGetterForDriveFs(file_system_url, profile,
-                                                std::move(callback));
+      new SingleEntryPropertiesGetterForDriveFs(
+          file_system_url, profile, requested_properties, std::move(callback));
   instance->StartProcess();
 
   // The instance will be destroyed by itself.
@@ -258,10 +261,13 @@ void SingleEntryPropertiesGetterForDriveFs::Start(
 SingleEntryPropertiesGetterForDriveFs::SingleEntryPropertiesGetterForDriveFs(
     const storage::FileSystemURL& file_system_url,
     Profile* const profile,
+    const std::set<extensions::api::file_manager_private::EntryPropertyName>
+        requested_properties,
     ResultCallback callback)
     : callback_(std::move(callback)),
       file_system_url_(file_system_url),
       running_profile_(profile),
+      requested_properties_(requested_properties),
       properties_(std::make_unique<
                   extensions::api::file_manager_private::EntryProperties>()) {
   DCHECK(callback_);
@@ -293,6 +299,42 @@ void SingleEntryPropertiesGetterForDriveFs::StartProcess() {
     return;
   }
 
+  if (base::FeatureList::IsEnabled(ash::features::kFilesInlineSyncStatus)) {
+    drivefs::SyncState sync_state =
+        integration_service->GetSyncStateForPath(file_system_url_.path());
+    properties_->progress = sync_state.progress;
+    switch (sync_state.status) {
+      case drivefs::SyncStatus::kQueued:
+        properties_->sync_status = file_manager_private::SYNC_STATUS_QUEUED;
+        break;
+      case drivefs::SyncStatus::kInProgress:
+        properties_->sync_status =
+            file_manager_private::SYNC_STATUS_IN_PROGRESS;
+        break;
+      case drivefs::SyncStatus::kError:
+        properties_->sync_status = file_manager_private::SYNC_STATUS_ERROR;
+        break;
+      default:
+        properties_->sync_status = file_manager_private::SYNC_STATUS_NOT_FOUND;
+        break;
+    }
+
+    std::set<extensions::api::file_manager_private::EntryPropertyName>
+        remote_requests;
+    base::ranges::set_difference(
+        requested_properties_, locally_available_properties_,
+        std::inserter(remote_requests, remote_requests.end()));
+
+    // If only locally available metadata was requested (sync status and
+    // progress) we don't need to request further metadata from DriveFS.
+    // Note: for backwards compatibility, not requesting any properties is
+    // currently considered the same as requesting all properties.
+    if (!requested_properties_.empty() && remote_requests.empty()) {
+      CompleteGetEntryProperties(drive::FILE_ERROR_OK);
+      return;
+    }
+  }
+
   drivefs_interface->GetMetadata(
       path,
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
@@ -309,33 +351,6 @@ void SingleEntryPropertiesGetterForDriveFs::OnGetFileInfo(
   if (!metadata) {
     CompleteGetEntryProperties(error);
     return;
-  }
-
-  if (base::FeatureList::IsEnabled(ash::features::kFilesInlineSyncStatus)) {
-    drive::DriveIntegrationService* integration_service =
-        drive::DriveIntegrationServiceFactory::FindForProfile(running_profile_);
-    drivefs::SyncStatusAndProgress status_and_progress =
-        (!integration_service) ? drivefs::SyncStatusAndProgress::kNotFound
-                               : integration_service->GetSyncStatusForPath(
-                                     file_system_url_.path());
-    switch (status_and_progress.status) {
-      case drivefs::SyncStatus::kQueued:
-        properties_->sync_status = file_manager_private::SYNC_STATUS_QUEUED;
-        break;
-      case drivefs::SyncStatus::kInProgress:
-        properties_->sync_status =
-            file_manager_private::SYNC_STATUS_IN_PROGRESS;
-        properties_->progress = status_and_progress.progress;
-        break;
-      case drivefs::SyncStatus::kError:
-        properties_->sync_status = file_manager_private::SYNC_STATUS_ERROR;
-        break;
-      default:
-        properties_->sync_status = file_manager_private::SYNC_STATUS_NOT_FOUND;
-        break;
-    }
-  } else {
-    properties_->sync_status = file_manager_private::SYNC_STATUS_NOT_FOUND;
   }
 
   properties_->size = metadata->size;
@@ -664,6 +679,35 @@ CreateMountableGuestList(Profile* profile) {
     guests.push_back(std::move(guest));
   }
   return guests;
+}
+
+bool ToRecentSourceFileType(
+    extensions::api::file_manager_private::FileCategory input_category,
+    ash::RecentSource::FileType* output_type) {
+  switch (input_category) {
+    case extensions::api::file_manager_private::FILE_CATEGORY_NONE:
+      // The FileCategory is an optional parameter. Thus we convert NONE to All.
+      // If the calling code does not specify the restrictions on the category
+      // we do not enforce then.
+    case extensions::api::file_manager_private::FILE_CATEGORY_ALL:
+      *output_type = ash::RecentSource::FileType::kAll;
+      return true;
+    case extensions::api::file_manager_private::FILE_CATEGORY_AUDIO:
+      *output_type = ash::RecentSource::FileType::kAudio;
+      return true;
+    case extensions::api::file_manager_private::FILE_CATEGORY_IMAGE:
+      *output_type = ash::RecentSource::FileType::kImage;
+      return true;
+    case extensions::api::file_manager_private::FILE_CATEGORY_VIDEO:
+      *output_type = ash::RecentSource::FileType::kVideo;
+      return true;
+    case extensions::api::file_manager_private::FILE_CATEGORY_DOCUMENT:
+      *output_type = ash::RecentSource::FileType::kDocument;
+      return true;
+    default:
+      NOTREACHED();
+      return false;
+  }
 }
 
 }  // namespace util

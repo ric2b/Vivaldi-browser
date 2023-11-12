@@ -4,7 +4,8 @@
 #define IOS_NOTES_NOTE_FOLDER_VIEW_CONTROLLER_H_
 
 #import <UIKit/UIKit.h>
-#include <set>
+
+#import <set>
 
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_controller.h"
 

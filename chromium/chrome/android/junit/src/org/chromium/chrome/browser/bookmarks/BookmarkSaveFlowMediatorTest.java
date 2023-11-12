@@ -18,8 +18,11 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.subscriptions.CommerceSubscription;
-import org.chromium.chrome.browser.subscriptions.SubscriptionsManager;
+import org.chromium.components.commerce.core.CommerceSubscription;
+import org.chromium.components.commerce.core.IdentifierType;
+import org.chromium.components.commerce.core.ManagementType;
+import org.chromium.components.commerce.core.ShoppingService;
+import org.chromium.components.commerce.core.SubscriptionType;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.shadows.ShadowAppCompatResources;
 
@@ -41,7 +44,7 @@ public class BookmarkSaveFlowMediatorTest {
     @Mock
     BookmarkModel mModel;
     @Mock
-    SubscriptionsManager mSubscriptionsManager;
+    ShoppingService mShoppingService;
     @Mock
     CommerceSubscription mSubscription;
 
@@ -49,7 +52,7 @@ public class BookmarkSaveFlowMediatorTest {
     public void setup() {
         MockitoAnnotations.initMocks(this);
         mMediator = new BookmarkSaveFlowMediator(
-                mModel, mPropertyModel, mContext, mCloseRunnable, mSubscriptionsManager);
+                mModel, mPropertyModel, mContext, mCloseRunnable, mShoppingService);
         mMediator.setSubscriptionForTesting(mSubscription);
     }
 
@@ -62,15 +65,46 @@ public class BookmarkSaveFlowMediatorTest {
                 (int) mPropertyModel.get(
                         BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_START_ICON_RES));
 
-        mMediator.onSubscribe(Arrays.asList(mSubscription));
+        mMediator.onSubscribe(Arrays.asList(mSubscription), true);
         Assert.assertTrue(
                 mPropertyModel.get(BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_TOGGLED));
         Assert.assertEquals(R.drawable.price_tracking_enabled_filled,
                 (int) mPropertyModel.get(
                         BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_START_ICON_RES));
-        Mockito.verify(mSubscriptionsManager, Mockito.never())
+        Mockito.verify(mShoppingService, Mockito.never())
                 .subscribe(Mockito.any(CommerceSubscription.class), Mockito.any());
-        Mockito.verify(mSubscriptionsManager, Mockito.never())
+        Mockito.verify(mShoppingService, Mockito.never())
+                .unsubscribe(Mockito.any(CommerceSubscription.class), Mockito.any());
+    }
+
+    // Ensure the toggle logic still works when the subscription object changes but has identical
+    // information.
+    @Test
+    public void subscribed_DifferentObjects() {
+        String clusterId = "1234";
+        CommerceSubscription original = new CommerceSubscription(SubscriptionType.PRICE_TRACK,
+                IdentifierType.PRODUCT_CLUSTER_ID, clusterId, ManagementType.USER_MANAGED, null);
+        CommerceSubscription clone = new CommerceSubscription(SubscriptionType.PRICE_TRACK,
+                IdentifierType.PRODUCT_CLUSTER_ID, clusterId, ManagementType.USER_MANAGED, null);
+
+        mMediator.setSubscriptionForTesting(original);
+
+        mMediator.setPriceTrackingToggleVisualsOnly(false);
+        Assert.assertFalse(
+                mPropertyModel.get(BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_TOGGLED));
+        Assert.assertEquals(R.drawable.price_tracking_disabled,
+                (int) mPropertyModel.get(
+                        BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_START_ICON_RES));
+
+        mMediator.onSubscribe(Arrays.asList(clone), true);
+        Assert.assertTrue(
+                mPropertyModel.get(BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_TOGGLED));
+        Assert.assertEquals(R.drawable.price_tracking_enabled_filled,
+                (int) mPropertyModel.get(
+                        BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_START_ICON_RES));
+        Mockito.verify(mShoppingService, Mockito.never())
+                .subscribe(Mockito.any(CommerceSubscription.class), Mockito.any());
+        Mockito.verify(mShoppingService, Mockito.never())
                 .unsubscribe(Mockito.any(CommerceSubscription.class), Mockito.any());
     }
 
@@ -83,15 +117,15 @@ public class BookmarkSaveFlowMediatorTest {
                 (int) mPropertyModel.get(
                         BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_START_ICON_RES));
 
-        mMediator.onUnsubscribe(Arrays.asList(mSubscription));
+        mMediator.onUnsubscribe(Arrays.asList(mSubscription), true);
         Assert.assertFalse(
                 mPropertyModel.get(BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_TOGGLED));
         Assert.assertEquals(R.drawable.price_tracking_disabled,
                 (int) mPropertyModel.get(
                         BookmarkSaveFlowProperties.NOTIFICATION_SWITCH_START_ICON_RES));
-        Mockito.verify(mSubscriptionsManager, Mockito.never())
+        Mockito.verify(mShoppingService, Mockito.never())
                 .subscribe(Mockito.any(CommerceSubscription.class), Mockito.any());
-        Mockito.verify(mSubscriptionsManager, Mockito.never())
+        Mockito.verify(mShoppingService, Mockito.never())
                 .unsubscribe(Mockito.any(CommerceSubscription.class), Mockito.any());
     }
 }

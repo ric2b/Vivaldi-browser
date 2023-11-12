@@ -12,6 +12,7 @@
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/aggregation_service/aggregation_service.mojom.h"
+#include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/aggregatable_trigger_data.h"
 #include "components/attribution_reporting/aggregatable_values.h"
 #include "components/attribution_reporting/event_trigger_data.h"
@@ -22,18 +23,19 @@
 namespace attribution_reporting {
 
 struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) TriggerRegistration {
+  // Doesn't log metric on parsing failures.
   static base::expected<TriggerRegistration, mojom::TriggerRegistrationError>
       Parse(base::Value::Dict);
 
+  // Logs metric on parsing failures.
   static base::expected<TriggerRegistration, mojom::TriggerRegistrationError>
   Parse(base::StringPiece json);
 
   TriggerRegistration();
 
-  TriggerRegistration(Filters filters,
-                      Filters not_filters,
+  TriggerRegistration(FilterPair,
                       absl::optional<uint64_t> debug_key,
-                      absl::optional<uint64_t> aggregatable_dedup_key,
+                      AggregatableDedupKeyList aggregatable_dedup_keys,
                       EventTriggerDataList event_triggers,
                       AggregatableTriggerDataList aggregatable_trigger_data,
                       AggregatableValues aggregatable_values,
@@ -51,10 +53,9 @@ struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) TriggerRegistration {
 
   base::Value::Dict ToJson() const;
 
-  Filters filters;
-  Filters not_filters;
+  FilterPair filters;
   absl::optional<uint64_t> debug_key;
-  absl::optional<uint64_t> aggregatable_dedup_key;
+  AggregatableDedupKeyList aggregatable_dedup_keys;
   EventTriggerDataList event_triggers;
   AggregatableTriggerDataList aggregatable_trigger_data;
   AggregatableValues aggregatable_values;

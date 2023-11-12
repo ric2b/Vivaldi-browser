@@ -7,9 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/observer_list.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
@@ -17,6 +16,7 @@
 #include "components/policy/core/browser/configuration_policy_handler_list.h"
 #include "components/policy/core/browser/policy_conversions_client.h"
 #include "components/policy/core/browser/policy_error_map.h"
+#include "components/policy/core/common/policy_logger.h"
 #include "components/prefs/pref_value_map.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -31,18 +31,21 @@ void LogErrors(std::unique_ptr<PolicyErrorMap> errors,
   DCHECK(errors->IsReady());
   for (auto& pair : *errors) {
     std::u16string policy = base::ASCIIToUTF16(pair.first);
-    DLOG(WARNING) << "Policy " << policy << ": " << pair.second.message;
+    DLOG_POLICY(WARNING, POLICY_PROCESSING)
+        << "Policy " << policy << ": " << pair.second.message;
   }
   for (const auto& policy : deprecated_policies) {
-    VLOG(1) << "Policy " << policy << " has been deprecated.";
+    VLOG_POLICY(1, POLICY_PROCESSING)
+        << "Policy " << policy << " has been deprecated.";
   }
   for (const auto& policy : future_policies) {
-    VLOG(1) << "Policy " << policy << " has not been released yet.";
+    VLOG_POLICY(1, POLICY_PROCESSING)
+        << "Policy " << policy << " has not been released yet.";
   }
 }
 
-bool IsLevel(PolicyLevel level, const PolicyMap::const_iterator iter) {
-  return iter->second.level == level;
+bool IsLevel(PolicyLevel level, PolicyMap::const_reference iter) {
+  return iter.second.level == level;
 }
 
 }  // namespace
@@ -134,8 +137,7 @@ PrefValueMap* ConfigurationPolicyPrefStore::CreatePreferencesFromPolicies() {
   PolicyMap filtered_policies =
       policy_service_
           ->GetPolicies(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
-          .Clone();
-  filtered_policies.EraseNonmatching(base::BindRepeating(&IsLevel, level_));
+          .CloneIf(base::BindRepeating(&IsLevel, level_));
 
   std::unique_ptr<PolicyErrorMap> errors = std::make_unique<PolicyErrorMap>();
 

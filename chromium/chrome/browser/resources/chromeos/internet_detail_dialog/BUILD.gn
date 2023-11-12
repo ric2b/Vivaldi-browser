@@ -7,7 +7,7 @@ import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/grit/preprocess_if_expr.gni")
 import("//tools/polymer/html_to_js.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
-import("../../tools/optimize_webui.gni")
+import("//ui/webui/resources/tools/optimize_webui.gni")
 
 preprocess_folder = "preprocessed"
 preprocess_manifest = "preprocessed_manifest.json"
@@ -18,7 +18,6 @@ if (optimize_webui) {
 
   optimize_webui("build") {
     host = "internet-detail-dialog"
-    js_out_files = [ "internet_detail_dialog_container.rollup.js" ]
     js_module_in_files = [ "internet_detail_dialog_container.js" ]
     input = rebase_path("$target_gen_dir/$preprocess_folder", root_build_dir)
 
@@ -28,14 +27,17 @@ if (optimize_webui) {
       "chrome://resources/mojo/chromeos/services/network_config/public/mojom/network_types.mojom-webui.js",
       "chrome://resources/mojo/services/network/public/mojom/ip_address.mojom-webui.js",
       "chrome://resources/ash/common/network/mojo_interface_provider.js",
-      "chrome://resources/js/cr.js",
     ]
 
     deps = [
       ":preprocess",
       ":preprocess_generated",
-      "../../../../../ui/webui/resources:library",
-      "../../../../../ui/webui/resources:preprocess",
+      "//ash/webui/common/resources:css_wrapper_files",
+      "//ash/webui/common/resources:html_wrapper_files",
+      "//ash/webui/common/resources:preprocess",
+      "//ui/webui/resources/cr_components/localized_link:build_ts",
+      "//ui/webui/resources/cr_elements:build_ts",
+      "//ui/webui/resources/mojo:library",
     ]
   }
 }

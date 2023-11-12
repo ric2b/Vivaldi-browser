@@ -9,18 +9,20 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/password_manager/chrome_webauthn_credentials_delegate.h"
 #include "chrome/browser/password_manager/chrome_webauthn_credentials_delegate_factory.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_controller.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_controller_webauthn_delegate.h"
-#include "chrome/browser/touch_to_fill/touch_to_fill_webauthn_credential.h"
 #include "chrome/browser/webauthn/webauthn_metrics_util.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
+#include "components/password_manager/core/browser/passkey_credential.h"
 #include "content/public/browser/web_contents.h"
 #include "device/fido/discoverable_credential_metadata.h"
+
+using password_manager::PasskeyCredential;
 
 // static
 WebAuthnRequestDelegateAndroid*
@@ -65,13 +67,13 @@ void WebAuthnRequestDelegateAndroid::OnWebAuthnRequestPending(
     return;
   }
 
-  std::vector<TouchToFillWebAuthnCredential> display_credentials;
+  std::vector<PasskeyCredential> display_credentials;
   base::ranges::transform(credentials, std::back_inserter(display_credentials),
                           [](const auto& credential) {
-                            return TouchToFillWebAuthnCredential(
-                                TouchToFillWebAuthnCredential::Username(
+                            return PasskeyCredential(
+                                PasskeyCredential::Username(
                                     base::UTF8ToUTF16(*credential.user.name)),
-                                TouchToFillWebAuthnCredential::BackendId(
+                                PasskeyCredential::BackendId(
                                     base::Base64Encode(credential.cred_id)));
                           });
 

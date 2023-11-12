@@ -10,11 +10,9 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "base/auto_reset.h"
 #include "base/containers/flat_map.h"
 #include "base/guid.h"
 #include "base/observer_list.h"
-#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "ui/aura/window_observer.h"
@@ -50,6 +48,34 @@ class ASH_EXPORT Desk {
     virtual void OnDeskNameChanged(const std::u16string& new_name) = 0;
   };
 
+  // Suspends notification of content updates within its scope. Note that the
+  // relevant `Desk` must outlive this class.
+  class ScopedContentUpdateNotificationDisabler {
+   public:
+    // `desks` are the desks whose content update will be suspended. If
+    // `notify_when_destroyed` is true, it will send out a notification when
+    // this is destroyed and there are no other disablers.
+    ScopedContentUpdateNotificationDisabler(
+        const std::vector<std::unique_ptr<Desk>>& desks,
+        bool notify_when_destroyed);
+    ScopedContentUpdateNotificationDisabler(const std::vector<Desk*>& desks,
+                                            bool notify_when_destroyed);
+
+    ScopedContentUpdateNotificationDisabler(
+        const ScopedContentUpdateNotificationDisabler&) = delete;
+    ScopedContentUpdateNotificationDisabler& operator=(
+        const ScopedContentUpdateNotificationDisabler&) = delete;
+
+    ~ScopedContentUpdateNotificationDisabler();
+
+   private:
+    std::vector<Desk*> desks_;
+
+    // Notifies all desks in `desks_` via `NotifyContentChanged()` when this is
+    // destroyed and there are no other disablers.
+    const bool notify_when_destroyed_;
+  };
+
   // Tracks stacking order for a window that is visible on all desks. This is
   // used to support per-desk z-orders for all-desk windows. Entries are stored
   // in ascending `order`.
@@ -81,10 +107,6 @@ class ASH_EXPORT Desk {
   const std::u16string& name() const { return name_; }
 
   bool is_active() const { return is_active_; }
-
-  bool should_notify_content_changed() const {
-    return should_notify_content_changed_;
-  }
 
   bool is_name_set_by_user() const { return is_name_set_by_user_; }
 
@@ -129,14 +151,16 @@ class ASH_EXPORT Desk {
 
   void WillRemoveWindowFromDesk(aura::Window* window);
 
-  base::AutoReset<bool> GetScopedNotifyContentChangedDisabler();
-
   bool ContainsAppWindows() const;
 
   // Sets the desk's name to |new_name| and updates the observers.
   // |set_by_user| should be true if this name was given to the desk by the user
   // from its mini view in overview mode.
   void SetName(std::u16string new_name, bool set_by_user);
+
+  // Sets the desks `uuid_` to the `new_guid` if `new_guid` is valid, used when
+  // restoring desks on sign-in. If `new_guid` is invalid no change happens.
+  void SetGuid(base::GUID new_guid);
 
   // Prepares for the animation to activate this desk (i.e. this desk is not
   // active yet), by showing its containers on all root windows while setting
@@ -231,6 +255,9 @@ class ASH_EXPORT Desk {
   // or not longer being all-desk).
   void RemoveAllDeskWindow(aura::Window* window);
 
+  // Returns true if notification of content update is suspended.
+  bool ContentUpdateNotificationSuspended() const;
+
  private:
   friend class DesksTestApi;
 
@@ -254,8 +281,17 @@ class ASH_EXPORT Desk {
   // |g_weekly_active_desks| and set |this| to interacted with.
   void MaybeIncrementWeeklyActiveDesks();
 
+  // Suspends notification of content update.
+  void SuspendContentUpdateNotification();
+
+  // Resumes notification of content update. If `notify_when_fully_resumed` is
+  // true, it will send out one notification at the end about the content update
+  // if there are no remaining pending suspensions, e.g. there are no other
+  // content update notification disablers.
+  void ResumeContentUpdateNotification(bool notify_when_fully_resumed);
+
   // Uniquely identifies the desk.
-  const base::GUID uuid_;
+  base::GUID uuid_;
 
   // The associated container ID with this desk.
   const int container_id_;
@@ -277,10 +313,11 @@ class ASH_EXPORT Desk {
 
   bool is_active_ = false;
 
-  // If false, observers won't be notified of desk's contents changes. This is
-  // used to throttle those notifications when we add or remove many windows,
-  // and we want to notify observers only once.
-  bool should_notify_content_changed_ = true;
+  // Count of pending content update notification suspensions. If it is greater
+  // than 0, observers won't be notified of desk's content changes. This is used
+  // to throttle those notifications when we add or remove many windows, and we
+  // want to notify observers only once.
+  int content_update_notification_suspend_count_ = 0;
 
   // True if the `PrepareForActivationAnimation()` was called, and this desk's
   // containers are shown while their layer opacities are temporarily set to 0.

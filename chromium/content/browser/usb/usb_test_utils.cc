@@ -4,7 +4,7 @@
 
 #include "content/browser/usb/usb_test_utils.h"
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "services/device/public/mojom/usb_device.mojom.h"
 #include "services/device/public/mojom/usb_enumeration_options.mojom.h"
 
@@ -47,14 +47,6 @@ void MockUsbDelegate::OnDeviceRemoved(
 void MockUsbDelegate::OnPermissionRevoked(const url::Origin& origin) {
   for (auto& observer : observer_list_)
     observer.OnPermissionRevoked(origin);
-}
-
-UsbTestContentBrowserClient::UsbTestContentBrowserClient() = default;
-
-UsbTestContentBrowserClient::~UsbTestContentBrowserClient() = default;
-
-UsbDelegate* UsbTestContentBrowserClient::GetUsbDelegate() {
-  return &delegate_;
 }
 
 }  // namespace content

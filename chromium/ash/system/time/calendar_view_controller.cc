@@ -186,10 +186,8 @@ void CalendarViewController::ShowEventListView(
   selected_date_row_index_ = row_index;
   expanded_row_index_ = row_index;
 
-  base::TimeDelta time_difference =
-      calendar_utils::GetTimeDifference(selected_date);
-  selected_date_midnight_ = (selected_date + time_difference).UTCMidnight();
-  selected_date_midnight_utc_ = selected_date_midnight_ - time_difference;
+  std::tie(selected_date_midnight_, selected_date_midnight_utc_) =
+      calendar_utils::GetMidnight(selected_date);
 
   // Notify observers.
   for (auto& observer : observers_)
@@ -214,6 +212,32 @@ void CalendarViewController::OnEventListOpened() {
 
 void CalendarViewController::OnEventListClosed() {
   is_event_list_showing_ = false;
+}
+
+void CalendarViewController::RecordEventListItemActivated(
+    const ui::Event& event) {
+  // The EventListItemView is used by both the event list view and the up next
+  // view. So if the event list view is not showing, then it's in the up next
+  // view.
+  if (is_event_list_showing_) {
+    calendar_metrics::RecordEventListItemActivated(event);
+    return;
+  }
+
+  calendar_metrics::RecordEventListItemInUpNextLaunched(event);
+}
+
+void CalendarViewController::RecordJoinMeetingButtonPressed(
+    const ui::Event& event) {
+  // The EventListItemView is used by both the event list view and the up next
+  // view. So if the event list view is not showing, then it's in the up next
+  // view.
+  if (is_event_list_showing_) {
+    calendar_metrics::RecordJoinButtonPressedFromEventListView(event);
+    return;
+  }
+
+  calendar_metrics::RecordJoinButtonPressedFromUpNextView(event);
 }
 
 void CalendarViewController::OnCalendarEventWillLaunch() {

@@ -9,7 +9,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -30,10 +30,11 @@
 #include "remoting/host/chromeos/frame_sink_desktop_capturer.h"
 #endif
 
-#if defined(REMOTING_USE_WAYLAND)
+#if BUILDFLAG(IS_LINUX)
 #include "base/environment.h"
 #include "base/nix/xdg_util.h"
 #include "remoting/host/linux/wayland_desktop_capturer.h"
+#include "remoting/host/linux/wayland_utils.h"
 #endif
 
 namespace remoting {
@@ -58,12 +59,14 @@ class DesktopCapturerProxy::Core : public webrtc::DesktopCapturer::Callback {
       std::unique_ptr<webrtc::SharedMemoryFactory> shared_memory_factory);
   void SelectSource(SourceId id);
   void CaptureFrame();
+  void SetMaxFrameRate(uint32_t max_frame_rate);
 #if defined(WEBRTC_USE_GIO)
   void GetAndSetMetadata();
 #endif
 
  private:
   // webrtc::DesktopCapturer::Callback implementation.
+  void OnFrameCaptureStart() override;
   void OnCaptureResult(webrtc::DesktopCapturer::Result result,
                        std::unique_ptr<webrtc::DesktopFrame> frame) override;
 
@@ -96,7 +99,7 @@ void DesktopCapturerProxy::Core::CreateCapturer(
     capturer_ = std::make_unique<webrtc::DesktopCapturerDifferWrapper>(
         std::make_unique<AuraDesktopCapturer>());
   }
-#elif defined(REMOTING_USE_WAYLAND)
+#elif BUILDFLAG(IS_LINUX)
   static base::nix::SessionType session_type = base::nix::SessionType::kUnset;
   if (session_type == base::nix::SessionType::kUnset) {
     std::unique_ptr<base::Environment> env = base::Environment::Create();
@@ -112,8 +115,9 @@ void DesktopCapturerProxy::Core::CreateCapturer(
 #else   // !BUILDFLAG(IS_CHROMEOS_ASH)
   capturer_ = webrtc::DesktopCapturer::CreateScreenCapturer(options);
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-  if (!capturer_)
+  if (!capturer_) {
     LOG(ERROR) << "Failed to initialize screen capturer.";
+  }
 }
 
 void DesktopCapturerProxy::Core::Start(
@@ -122,8 +126,9 @@ void DesktopCapturerProxy::Core::Start(
   DCHECK(!caller_task_runner_);
 
   caller_task_runner_ = caller_task_runner;
-  if (capturer_)
+  if (capturer_) {
     capturer_->Start(this);
+  }
 }
 
 void DesktopCapturerProxy::Core::SetSharedMemoryFactory(
@@ -153,6 +158,14 @@ void DesktopCapturerProxy::Core::CaptureFrame() {
   }
 }
 
+void DesktopCapturerProxy::Core::SetMaxFrameRate(uint32_t max_frame_rate) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  if (capturer_) {
+    capturer_->SetMaxFrameRate(max_frame_rate);
+  }
+}
+
 #if defined(WEBRTC_USE_GIO)
 void DesktopCapturerProxy::Core::GetAndSetMetadata() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -166,11 +179,15 @@ void DesktopCapturerProxy::Core::GetAndSetMetadata() {
 }
 #endif
 
+void DesktopCapturerProxy::Core::OnFrameCaptureStart() {
+  caller_task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&DesktopCapturerProxy::OnFrameCaptureStarting, proxy_));
+}
+
 void DesktopCapturerProxy::Core::OnCaptureResult(
     webrtc::DesktopCapturer::Result result,
     std::unique_ptr<webrtc::DesktopFrame> frame) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-
   caller_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&DesktopCapturerProxy::OnFrameCaptured, proxy_,
                                 result, std::move(frame)));
@@ -251,6 +268,12 @@ bool DesktopCapturerProxy::SelectSource(SourceId id) {
   return false;
 }
 
+void DesktopCapturerProxy::OnFrameCaptureStarting() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  callback_->OnFrameCaptureStart();
+}
+
 void DesktopCapturerProxy::OnFrameCaptured(
     webrtc::DesktopCapturer::Result result,
     std::unique_ptr<webrtc::DesktopFrame> frame) {
@@ -275,6 +298,24 @@ void DesktopCapturerProxy::OnMetadata(webrtc::DesktopCaptureMetadata metadata) {
 
   std::move(metadata_callback_).Run(std::move(metadata));
 }
-
 #endif
+
+bool DesktopCapturerProxy::SupportsFrameCallbacks() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+#if BUILDFLAG(IS_LINUX)
+  return IsRunningWayland();
+#else
+  return false;
+#endif
+}
+
+void DesktopCapturerProxy::SetMaxFrameRate(uint32_t max_frame_rate) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  capture_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&Core::SetMaxFrameRate,
+                                base::Unretained(core_.get()), max_frame_rate));
+}
+
 }  // namespace remoting

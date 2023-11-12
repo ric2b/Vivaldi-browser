@@ -9,9 +9,9 @@
 #include <utility>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
 #include "base/rand_util.h"
@@ -98,7 +98,6 @@
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
 #include "chrome/browser/ash/accessibility/speech_monitor.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "extensions/browser/browsertest_util.h"
 #include "ui/base/test/ui_controls.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(ENABLE_EXTENSIONS)
@@ -1191,21 +1190,25 @@ class AutofillInteractiveTest : public AutofillInteractiveTestBase {
 class AutofillInteractiveTestWithHistogramTester
     : public AutofillInteractiveTest {
  public:
+  AutofillInteractiveTestWithHistogramTester() {
+    feature_list_.InitWithFeatureState(
+        features::test::kAutofillServerCommunication, true);
+  }
+
   void SetUp() override {
-    // Only allow requests to be loaded that are necessary for the test. This
-    // allows a histogram to test properties of some specific requests.
-    std::vector<std::string> allowlist = {
-        "/internal/test_url_path", "https://clients1.google.com/tbproxy",
-        "https://content-autofill.googleapis.com/"};
-    url_loader_interceptor_ =
-        std::make_unique<URLLoaderInterceptor>(base::BindLambdaForTesting(
-            [&](URLLoaderInterceptor::RequestParams* params) {
-              // Intercept if not allow-listed.
-              return base::ranges::all_of(allowlist, [&params](const auto& s) {
-                return params->url_request.url.spec().find(s) ==
-                       std::string::npos;
-              });
-            }));
+    url_loader_interceptor_ = std::make_unique<URLLoaderInterceptor>(
+        base::BindRepeating([](URLLoaderInterceptor::RequestParams* params) {
+          // Only allow requests to be loaded that are necessary for the test.
+          // This allows a histogram to test properties of some specific
+          // requests.
+          std::vector<std::string> allowlist = {
+              "/internal/test_url_path", "https://clients1.google.com/tbproxy",
+              "https://content-autofill.googleapis.com/"};
+          // Intercept if not allow-listed.
+          return base::ranges::all_of(allowlist, [&params](const auto& s) {
+            return params->url_request.url.spec().find(s) == std::string::npos;
+          });
+        }));
     AutofillInteractiveTest::SetUp();
   }
 
@@ -1222,6 +1225,7 @@ class AutofillInteractiveTestWithHistogramTester
 
  private:
   std::unique_ptr<URLLoaderInterceptor> url_loader_interceptor_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 // Test the basic form-fill flow.
@@ -2891,11 +2895,19 @@ class AutofillInteractiveFencedFrameTest
       public ::testing::WithParamInterface<FrameType> {
  protected:
   AutofillInteractiveFencedFrameTest() {
+    std::vector<base::test::FeatureRefAndParams> enabled;
+    std::vector<base::test::FeatureRef> disabled;
     if (GetParam() != FrameType::kIFrame) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kAutofillEnableWithinFencedFrame}, {});
+      enabled.push_back({blink::features::kBrowsingTopics, {}});
+      enabled.push_back({blink::features::kBrowsingTopicsXHR, {}});
+      enabled.push_back({blink::features::kFencedFramesAPIChanges, {}});
+      enabled.push_back({features::kAutofillEnableWithinFencedFrame, {}});
+      scoped_feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
       fenced_frame_test_helper_ =
           std::make_unique<content::test::FencedFrameTestHelper>();
+    } else {
+      disabled.push_back(features::kAutofillEnableWithinFencedFrame);
+      scoped_feature_list_.InitWithFeaturesAndParameters(enabled, disabled);
     }
   }
   ~AutofillInteractiveFencedFrameTest() override = default;

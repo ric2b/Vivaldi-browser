@@ -21,14 +21,16 @@ String CSSScopeRule::PreludeText() const {
   const StyleScope& scope =
       To<StyleRuleScope>(*group_rule_.Get()).GetStyleScope();
 
-  result.Append('(');
-  result.Append(scope.From().SelectorsText());
-  result.Append(')');
-
-  if (scope.To()) {
-    result.Append(" to (");
-    result.Append(scope.To()->SelectorsText());
+  if (!scope.IsImplicit()) {
+    result.Append('(');
+    result.Append(CSSSelectorList::SelectorsText(scope.From()));
     result.Append(')');
+
+    if (scope.To()) {
+      result.Append(" to (");
+      result.Append(CSSSelectorList::SelectorsText(scope.To()));
+      result.Append(')');
+    }
   }
 
   return result.ReleaseString();
@@ -36,8 +38,12 @@ String CSSScopeRule::PreludeText() const {
 
 String CSSScopeRule::cssText() const {
   StringBuilder result;
-  result.Append("@scope ");
-  result.Append(PreludeText());
+  result.Append("@scope");
+  String prelude = PreludeText();
+  if (!prelude.empty()) {
+    result.Append(" ");
+    result.Append(prelude);
+  }
   AppendCSSTextForItems(result);
   return result.ReleaseString();
 }

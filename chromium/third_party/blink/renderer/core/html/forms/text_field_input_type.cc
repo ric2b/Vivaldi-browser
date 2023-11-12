@@ -96,7 +96,7 @@ class DataListIndicatorElement final : public HTMLDivElement {
   void InitializeInShadowTree() {
     DCHECK(ContainingShadowRoot());
     DCHECK(ContainingShadowRoot()->IsUserAgent());
-    SetShadowPseudoId(AtomicString("-webkit-calendar-picker-indicator"));
+    SetShadowPseudoId(shadow_element_names::kPseudoCalendarPickerIndicator);
     setAttribute(html_names::kIdAttr, shadow_element_names::kIdPickerIndicator);
     setAttribute(html_names::kStyleAttr,
                  "display:list-item; "
@@ -289,13 +289,10 @@ bool TextFieldInputType::ShouldSubmitImplicitly(const Event& event) {
   return InputTypeView::ShouldSubmitImplicitly(event);
 }
 
-scoped_refptr<ComputedStyle> TextFieldInputType::CustomStyleForLayoutObject(
-    scoped_refptr<ComputedStyle> original_style) {
+void TextFieldInputType::AdjustStyle(ComputedStyleBuilder& builder) {
   // The flag is necessary in order that a text field <input> with non-'visible'
   // overflow property doesn't change its baseline.
-  ComputedStyleBuilder builder(*original_style);
   builder.SetShouldIgnoreOverflowPropertyForInlineBlockBaseline();
-  return builder.TakeStyle();
 }
 
 LayoutObject* TextFieldInputType::CreateLayoutObject(

@@ -5,6 +5,7 @@
 #import "ios/chrome/browser/passwords/ios_chrome_password_check_manager.h"
 
 #import "base/strings/utf_string_conversions.h"
+#import "base/task/sequenced_task_runner.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/password_manager/core/browser/ui/credential_utils.h"
@@ -71,6 +72,12 @@ PasswordCheckState ConvertBulkCheckState(State state) {
   NOTREACHED();
   return PasswordCheckState::kIdle;
 }
+
+// Returns true if the Password Checkup feature flag is enabled.
+bool IsPasswordCheckupEnabled() {
+  return base::FeatureList::IsEnabled(
+      password_manager::features::kIOSPasswordCheckup);
+}
 }  // namespace
 
 IOSChromePasswordCheckManager::IOSChromePasswordCheckManager(
@@ -114,6 +121,17 @@ void IOSChromePasswordCheckManager::StartPasswordCheck() {
         scoped_refptr<IOSChromePasswordCheckManager>(this));
     bulk_leak_check_service_adapter_.StartBulkLeakCheck(kPasswordCheckDataKey,
                                                         &data);
+
+    if (IsPasswordCheckupEnabled()) {
+      insecure_credentials_manager_.StartWeakCheck(base::BindOnce(
+          &IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished,
+          weak_ptr_factory_.GetWeakPtr()));
+
+      insecure_credentials_manager_.StartReuseCheck(base::BindOnce(
+          &IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished,
+          weak_ptr_factory_.GetWeakPtr()));
+    }
+
     is_check_running_ = true;
     start_time_ = base::Time::Now();
   } else {
@@ -136,26 +154,16 @@ PasswordCheckState IOSChromePasswordCheckManager::GetPasswordCheckState()
 }
 
 base::Time IOSChromePasswordCheckManager::GetLastPasswordCheckTime() const {
-  return base::Time::FromDoubleT(browser_state_->GetPrefs()->GetDouble(
-      password_manager::prefs::kLastTimePasswordCheckCompleted));
+  base::Time last_password_check =
+      base::Time::FromDoubleT(browser_state_->GetPrefs()->GetDouble(
+          password_manager::prefs::kLastTimePasswordCheckCompleted));
+
+  return std::max(last_password_check, last_completed_weak_or_reuse_check_);
 }
 
 std::vector<CredentialUIEntry>
-IOSChromePasswordCheckManager::GetUnmutedCompromisedCredentials() const {
-  std::vector<CredentialUIEntry> compromised_crendentials =
-      insecure_credentials_manager_.GetInsecureCredentialEntries();
-
-  // Only filter out the muted compromised credentials if the flag is enabled.
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::kMuteCompromisedPasswords)) {
-    base::EraseIf(compromised_crendentials, [](const auto& credential) {
-      return (credential.IsLeaked() &&
-              credential.password_issues.at(InsecureType::kLeaked).is_muted) ||
-             (credential.IsPhished() &&
-              credential.password_issues.at(InsecureType::kPhished).is_muted);
-    });
-  }
-  return compromised_crendentials;
+IOSChromePasswordCheckManager::GetInsecureCredentials() const {
+  return insecure_credentials_manager_.GetInsecureCredentialEntries();
 }
 
 void IOSChromePasswordCheckManager::OnSavedPasswordsChanged() {
@@ -168,7 +176,7 @@ void IOSChromePasswordCheckManager::OnSavedPasswordsChanged() {
 
 void IOSChromePasswordCheckManager::OnInsecureCredentialsChanged() {
   for (auto& observer : observers_) {
-    observer.CompromisedCredentialsChanged();
+    observer.InsecureCredentialsChanged();
   }
 }
 
@@ -187,7 +195,7 @@ void IOSChromePasswordCheckManager::OnStateChanged(State state) {
     if (is_check_running_) {
       const base::TimeDelta elapsed = base::Time::Now() - start_time_;
       if (elapsed < kDelay) {
-        base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+        base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
             FROM_HERE,
             base::BindOnce(&IOSChromePasswordCheckManager::
                                NotifyPasswordCheckStatusChanged,
@@ -208,6 +216,11 @@ void IOSChromePasswordCheckManager::OnCredentialDone(
   if (is_leaked) {
     insecure_credentials_manager_.SaveInsecureCredential(credential);
   }
+}
+
+void IOSChromePasswordCheckManager::OnWeakOrReuseCheckFinished() {
+  last_completed_weak_or_reuse_check_ = base::Time::Now();
+  NotifyPasswordCheckStatusChanged();
 }
 
 void IOSChromePasswordCheckManager::NotifyPasswordCheckStatusChanged() {

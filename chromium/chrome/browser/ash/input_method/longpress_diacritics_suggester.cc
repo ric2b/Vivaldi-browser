@@ -142,6 +142,10 @@ void LongpressDiacriticsSuggester::SetEngineId(const std::string& engine_id) {
   engine_id_ = engine_id;
 }
 
+bool LongpressDiacriticsSuggester::HasDiacriticSuggestions(char c) {
+  return !GetDiacriticsFor(c, engine_id_).empty();
+}
+
 void LongpressDiacriticsSuggester::OnFocus(int context_id) {
   Reset();
   focused_context_id_ = context_id;
@@ -241,8 +245,7 @@ SuggestionStatus LongpressDiacriticsSuggester::HandleKeyEvent(
 
 bool LongpressDiacriticsSuggester::TrySuggestWithSurroundingText(
     const std::u16string& text,
-    int cursor_pos,
-    int anchor_pos) {
+    const gfx::Range selection_range) {
   // Should dismiss on text change.
   return false;
 }

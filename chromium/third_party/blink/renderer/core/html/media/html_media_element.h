@@ -494,7 +494,7 @@ class CORE_EXPORT HTMLMediaElement
 
   bool SupportsFocus() const final;
   bool IsMouseFocusable() const final;
-  bool LayoutObjectIsNeeded(const ComputedStyle&) const override;
+  bool LayoutObjectIsNeeded(const DisplayStyle&) const override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout) override;
   void DidNotifySubtreeInsertionsToDocument() override;
   void DidRecalcStyle(const StyleRecalcChange) final;
@@ -566,12 +566,12 @@ class CORE_EXPORT HTMLMediaElement
   void DidPlayerStartPlaying() override;
   void DidPlayerPaused(bool stream_ended) override;
   void DidPlayerMutedStatusChange(bool muted) override;
-  void DidMediaMetadataChange(
-      bool has_audio,
-      bool has_video,
-      media::AudioCodec audio_codec,
-      media::VideoCodec video_codec,
-      media::MediaContentType media_content_type) override;
+  void DidMediaMetadataChange(bool has_audio,
+                              bool has_video,
+                              media::AudioCodec audio_codec,
+                              media::VideoCodec video_codec,
+                              media::MediaContentType media_content_type,
+                              bool is_encrypted_media) override;
   void DidPlayerMediaPositionStateChange(double playback_rate,
                                          base::TimeDelta duration,
                                          base::TimeDelta position,
@@ -860,6 +860,8 @@ class CORE_EXPORT HTMLMediaElement
   bool is_remote_playback_disabled_ = false;
   // Whether the player is rendering remotely.
   bool is_remote_rendering_ = false;
+  // Whether the media content is encrypted.
+  bool is_encrypted_media_ = false;
   WebString remote_device_friendly_name_;
   media::AudioCodec audio_codec_ = media::AudioCodec::kUnknown;
   media::VideoCodec video_codec_ = media::VideoCodec::kUnknown;

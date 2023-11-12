@@ -14,6 +14,7 @@
 #include "base/containers/unique_ptr_adapters.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/safe_browsing/core/browser/db/hit_report.h"
 #include "components/safe_browsing/core/browser/db/util.h"
@@ -63,7 +64,9 @@ class PingManager : public KeyedService {
       WebUIDelegate* webui_delegate,
       scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
       base::RepeatingCallback<ChromeUserPopulation()>
-          get_user_population_callback);
+          get_user_population_callback,
+      base::RepeatingCallback<ChromeUserPopulation::PageLoadToken(GURL)>
+          get_page_load_token_callback);
 
   void OnURLLoaderComplete(network::SimpleURLLoader* source,
                            std::unique_ptr<std::string> response_body);
@@ -99,7 +102,9 @@ class PingManager : public KeyedService {
       WebUIDelegate* webui_delegate,
       scoped_refptr<base::SequencedTaskRunner> ui_task_runner,
       base::RepeatingCallback<ChromeUserPopulation()>
-          get_user_population_callback);
+          get_user_population_callback,
+      base::RepeatingCallback<ChromeUserPopulation::PageLoadToken(GURL)>
+          get_page_load_token_callback);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(PingManagerTest, TestSafeBrowsingHitUrl);
@@ -147,6 +152,10 @@ class PingManager : public KeyedService {
 
   // Pulls the user population.
   base::RepeatingCallback<ChromeUserPopulation()> get_user_population_callback_;
+
+  // Pulls the page load token.
+  base::RepeatingCallback<ChromeUserPopulation::PageLoadToken(GURL)>
+      get_page_load_token_callback_;
 
   base::WeakPtrFactory<PingManager> weak_factory_{this};
 };

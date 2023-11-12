@@ -19,7 +19,7 @@ NSString* cellId = @"cellId";
 // Collection view line spacing between items.
 CGFloat lineSpacing = 12.0;
 
-NSInteger numberOfPages = 3;
+NSInteger numberOfPages = 4;
 
 CGFloat iconSize = 56.0;
 }
@@ -77,6 +77,7 @@ CGFloat iconSize = 56.0;
 #pragma mark - SETTERS
 
 - (void)selectItemWithIndex:(NSInteger)index {
+    activeIndex = index;
     [self scrollToItemWithIndex:index];
 }
 

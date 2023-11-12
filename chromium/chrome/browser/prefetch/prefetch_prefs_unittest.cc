@@ -6,10 +6,13 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/battery/battery_saver.h"
+#include "chrome/browser/data_saver/data_saver.h"
 #include "chrome/browser/prefetch/pref_names.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "content/public/common/content_features.h"
+#include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 TEST(PrefetchPrefsTest, GetPreloadPagesState) {
@@ -71,7 +74,16 @@ TEST(PrefetchPrefsTest, SetPreloadPagesState) {
             static_cast<int>(prefetch::NetworkPredictionOptions::kExtended));
 }
 
-TEST(PrefetchPrefsTest, IsSomePreloadingEnabled) {
+class PrefetchPrefsPreloadingTest : public ::testing::Test {
+ public:
+  PrefetchPrefsPreloadingTest() = default;
+  ~PrefetchPrefsPreloadingTest() override = default;
+
+  // IsSomePreloadingEnabled[IgnoringFinch]() requires a threaded environment.
+  base::test::TaskEnvironment task_environment_;
+};
+
+TEST_F(PrefetchPrefsPreloadingTest, IsSomePreloadingEnabled) {
   TestingPrefServiceSimple prefs;
   prefs.registry()->RegisterIntegerPref(
       prefs::kNetworkPredictionOptions,
@@ -103,9 +115,10 @@ TEST(PrefetchPrefsTest, IsSomePreloadingEnabled) {
             content::PreloadingEligibility::kEligible);
 }
 
-TEST(PrefetchPrefsTest, IsSomePreloadingEnabled_PreloadingHoldback) {
+TEST_F(PrefetchPrefsPreloadingTest,
+       IsSomePreloadingEnabled_PreloadingHoldback) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(prefetch::kPreloadingHoldback);
+  features.InitAndEnableFeature(features::kPreloadingHoldback);
   TestingPrefServiceSimple prefs;
   prefs.registry()->RegisterIntegerPref(
       prefs::kNetworkPredictionOptions,
@@ -137,9 +150,9 @@ TEST(PrefetchPrefsTest, IsSomePreloadingEnabled_PreloadingHoldback) {
             content::PreloadingEligibility::kPreloadingDisabled);
 }
 
-TEST(PrefetchPrefsTest, IsSomePreloadingEnabledIgnoringFinch) {
+TEST_F(PrefetchPrefsPreloadingTest, IsSomePreloadingEnabledIgnoringFinch) {
   base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(prefetch::kPreloadingHoldback);
+  features.InitAndEnableFeature(features::kPreloadingHoldback);
   TestingPrefServiceSimple prefs;
   prefs.registry()->RegisterIntegerPref(
       prefs::kNetworkPredictionOptions,
@@ -177,6 +190,9 @@ class PrefetchPrefsWithBatterySaverTest : public ::testing::Test {
   ~PrefetchPrefsWithBatterySaverTest() override = default;
 
   void TearDown() override { battery::ResetIsBatterySaverEnabledForTesting(); }
+
+  // IsSomePreloadingEnabled[IgnoringFinch]() requires a threaded environment.
+  base::test::TaskEnvironment task_environment_;
 };
 
 TEST_F(PrefetchPrefsWithBatterySaverTest,
@@ -204,8 +220,6 @@ TEST_F(PrefetchPrefsWithBatterySaverTest, IsSomePreloadingEnabled) {
   prefs.SetInteger(
       prefs::kNetworkPredictionOptions,
       static_cast<int>(prefetch::NetworkPredictionOptions::kStandard));
-  EXPECT_EQ(prefetch::IsSomePreloadingEnabled(prefs),
-            content::PreloadingEligibility::kEligible);
 
   battery::OverrideIsBatterySaverEnabledForTesting(false);
   EXPECT_EQ(prefetch::IsSomePreloadingEnabled(prefs),
@@ -214,4 +228,29 @@ TEST_F(PrefetchPrefsWithBatterySaverTest, IsSomePreloadingEnabled) {
   battery::OverrideIsBatterySaverEnabledForTesting(true);
   EXPECT_EQ(prefetch::IsSomePreloadingEnabled(prefs),
             content::PreloadingEligibility::kBatterySaverEnabled);
+}
+
+class PrefetchPrefsWithDataSaverTest : public ::testing::Test {
+ public:
+  PrefetchPrefsWithDataSaverTest() = default;
+  ~PrefetchPrefsWithDataSaverTest() override = default;
+
+  void TearDown() override { data_saver::ResetIsDataSaverEnabledForTesting(); }
+
+  // IsSomePreloadingEnabledIgnoringFinch() requires a threaded environment.
+  base::test::TaskEnvironment task_environment_;
+};
+
+TEST_F(PrefetchPrefsWithDataSaverTest, IsSomePreloadingEnabledIgnoringFinch) {
+  TestingPrefServiceSimple prefs;
+  prefs.registry()->RegisterIntegerPref(
+      prefs::kNetworkPredictionOptions,
+      static_cast<int>(prefetch::NetworkPredictionOptions::kDefault));
+  data_saver::OverrideIsDataSaverEnabledForTesting(false);
+  EXPECT_EQ(prefetch::IsSomePreloadingEnabledIgnoringFinch(prefs),
+            content::PreloadingEligibility::kEligible);
+
+  data_saver::OverrideIsDataSaverEnabledForTesting(true);
+  EXPECT_EQ(prefetch::IsSomePreloadingEnabledIgnoringFinch(prefs),
+            content::PreloadingEligibility::kDataSaverEnabled);
 }

@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/values.h"
 #include "chrome/test/chromedriver/session.h"
 
@@ -332,6 +332,12 @@ Status ExecuteDeleteAllCookies(Session* session,
                                const base::Value::Dict& params,
                                std::unique_ptr<base::Value>* value,
                                Timeout* timeout);
+
+Status ExecuteSetRPHRegistrationMode(Session* session,
+                                     WebView* web_view,
+                                     const base::Value::Dict& params,
+                                     std::unique_ptr<base::Value>* value,
+                                     Timeout* timeout);
 
 Status ExecuteSetLocation(Session* session,
                           WebView* web_view,

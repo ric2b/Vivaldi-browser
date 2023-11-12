@@ -4,16 +4,16 @@
 
 #include "media/gpu/chromeos/mailbox_video_frame_converter.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/service/scheduler.h"
-#include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "media/base/format_utils.h"
 #include "media/base/video_frame.h"
@@ -24,12 +24,6 @@
 #include "ui/gl/gl_bindings.h"
 
 namespace media {
-
-namespace {
-
-constexpr GLenum kTextureTarget = GL_TEXTURE_EXTERNAL_OES;
-
-}  // anonymous namespace
 
 class GpuDelegateImpl : public MailboxVideoFrameConverter::GpuDelegate {
  public:
@@ -74,9 +68,8 @@ class GpuDelegateImpl : public MailboxVideoFrameConverter::GpuDelegate {
     DCHECK(shared_image_stub);
 
     if (!shared_image_stub->CreateSharedImage(
-            mailbox, gpu::kPlatformVideoFramePoolClientId, std::move(handle),
-            format, plane, size, color_space, surface_origin, alpha_type,
-            usage)) {
+            mailbox, std::move(handle), format, plane, size, color_space,
+            surface_origin, alpha_type, usage)) {
       return base::NullCallback();
     }
 
@@ -270,10 +263,11 @@ void MailboxVideoFrameConverter::ConvertFrame(scoped_refptr<VideoFrame> frame) {
 
   input_frame_queue_.emplace(frame, origin_frame_id);
 
-  // |frame| keeps a refptr of |origin_frame|. |origin_frame| is guaranteed
-  // alive by carrying |frame|. |origin_frame| owns the SharedImage, so as long
-  // as |frame| lives, |shared_image| is valid. Hence, it's safe to use
-  // base::Unretained here.
+  // Either |frame| keeps a refptr of |origin_frame| or |origin_frame| points to
+  // the same thing as |frame|. Therefore, |origin_frame| is guaranteed to be
+  // valid by carrying |frame|. Additionally, |origin_frame| owns the
+  // SharedImage, so as long as |frame| lives, |shared_image| is valid. Hence,
+  // it's safe to use base::Unretained here.
   gpu_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&MailboxVideoFrameConverter::ConvertFrameOnGPUThread,
@@ -299,9 +293,20 @@ void MailboxVideoFrameConverter::WrapMailboxAndVideoFrameAndOutput(
     return;
   input_frame_queue_.pop();
 
+  const auto buffer_format = VideoPixelFormatToGfxBufferFormat(frame->format());
+  // GenerateSharedImageOnGPUThread() should have checked the |origin_frame|'s
+  // format (which should be the same as the |frame|'s format).
+  CHECK_EQ(frame->format(), origin_frame->format());
+  CHECK(buffer_format);
+
   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
+
   mailbox_holders[0] =
-      gpu::MailboxHolder(mailbox, gpu::SyncToken(), kTextureTarget);
+      gpu::MailboxHolder(mailbox, gpu::SyncToken(),
+                         gpu::NativeBufferNeedsPlatformSpecificTextureTarget(
+                             *buffer_format, gfx::BufferPlane::DEFAULT)
+                             ? gpu::GetPlatformSpecificTextureTarget()
+                             : GL_TEXTURE_2D);
 
   VideoFrame::ReleaseMailboxCB release_mailbox_cb = base::BindOnce(
       [](scoped_refptr<base::SequencedTaskRunner> gpu_task_runner,
@@ -359,7 +364,7 @@ void MailboxVideoFrameConverter::ConvertFrameOnGPUThread(
   const gfx::ColorSpace src_color_space = frame->ColorSpace();
   const gfx::Rect visible_rect = frame->visible_rect();
 
-  // |origin_frame| is kept alive by |frame|.
+  // |origin_frame| is valid as long as |frame| is carried.
   auto wrap_mailbox_and_video_frame_and_output_cb = base::BindOnce(
       &MailboxVideoFrameConverter::WrapMailboxAndVideoFrameAndOutput,
       parent_weak_this_, base::Unretained(origin_frame), std::move(frame));
@@ -398,7 +403,7 @@ void MailboxVideoFrameConverter::ConvertFrameOnGPUThread(
   DCHECK(new_shared_image->HasData());
 
   const gpu::Mailbox mailbox = new_shared_image->mailbox();
-  // |origin_frame| is kept alive by |frame| in
+  // |origin_frame| is valid as long as |frame| lives. |frame| is kept alive in
   // |wrap_mailbox_and_video_frame_and_output_cb|.
   parent_task_runner_->PostTask(
       FROM_HERE,

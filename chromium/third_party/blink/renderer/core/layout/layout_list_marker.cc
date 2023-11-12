@@ -259,7 +259,8 @@ MinMaxSizes LayoutListMarker::ComputeIntrinsicLogicalWidths() const {
       case ListMarker::ListStyleCategory::kNone:
         break;
       case ListMarker::ListStyleCategory::kSymbol:
-        sizes = ListMarker::WidthOfSymbol(StyleRef());
+        sizes = ListMarker::WidthOfSymbol(
+            StyleRef(), StyleRef().ListStyleType()->GetCounterStyleName());
         break;
       case ListMarker::ListStyleCategory::kLanguage:
       case ListMarker::ListStyleCategory::kStaticString:
@@ -285,7 +286,7 @@ void LayoutListMarker::UpdateMargins(LayoutUnit marker_inline_size) {
   const ComputedStyle& list_item_style = ListItem()->StyleRef();
   if (IsInside()) {
     std::tie(margin_start, margin_end) = ListMarker::InlineMarginsForInside(
-        GetDocument(), style, list_item_style);
+        GetDocument(), ComputedStyleBuilder(style), list_item_style);
   } else {
     std::tie(margin_start, margin_end) = ListMarker::InlineMarginsForOutside(
         GetDocument(), style, list_item_style, marker_inline_size);
@@ -358,7 +359,9 @@ LayoutRect LayoutListMarker::GetRelativeMarkerRect() const {
     case ListMarker::ListStyleCategory::kNone:
       return LayoutRect();
     case ListMarker::ListStyleCategory::kSymbol:
-      return ListMarker::RelativeSymbolMarkerRect(StyleRef(), Size().Width());
+      return ListMarker::RelativeSymbolMarkerRect(
+          StyleRef(), StyleRef().ListStyleType()->GetCounterStyleName(),
+          Size().Width());
     case ListMarker::ListStyleCategory::kLanguage:
     case ListMarker::ListStyleCategory::kStaticString: {
       const SimpleFontData* font_data = StyleRef().GetFont().PrimaryFont();

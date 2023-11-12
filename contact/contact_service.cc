@@ -14,8 +14,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/functional/callback.h"
 #include "base/i18n/string_compare.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -28,7 +28,6 @@
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -113,9 +112,9 @@ bool ContactService::Init(
 
   // Create the contact backend.
   scoped_refptr<ContactBackend> backend(new ContactBackend(
-      new ContactBackendDelegate(weak_ptr_factory_.GetWeakPtr(),
-                                 base::ThreadTaskRunnerHandle::Get()),
-      backend_task_runner_));
+    new ContactBackendDelegate(weak_ptr_factory_.GetWeakPtr(),
+      base::SingleThreadTaskRunner::GetCurrentDefault()),
+    backend_task_runner_));
   contact_backend_.swap(backend);
 
   ScheduleTask(base::BindOnce(&ContactBackend::Init, contact_backend_, no_db,

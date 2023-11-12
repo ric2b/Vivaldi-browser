@@ -8,9 +8,9 @@
 
 #include <tuple>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/sequence_checker.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -55,6 +55,7 @@ class GalleryWatchManagerShutdownNotifierFactory
       : BrowserContextKeyedServiceShutdownNotifierFactory(
             "GalleryWatchManager") {
     DependsOn(MediaGalleriesPreferencesFactory::GetInstance());
+    DependsOn(MediaFileSystemRegistry::GetFactoryInstance());
   }
   ~GalleryWatchManagerShutdownNotifierFactory() override {}
 };
@@ -503,4 +504,9 @@ void GalleryWatchManager::OnRemovableStorageDetached(
       ++it;
     }
   }
+}
+
+// static
+void GalleryWatchManager::EnsureFactoryBuilt() {
+  GalleryWatchManagerShutdownNotifierFactory::GetInstance();
 }

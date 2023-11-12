@@ -8,17 +8,18 @@
 #include <set>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
@@ -28,7 +29,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_media_id.h"
 #include "content/public/common/content_features.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_facing.h"
 #include "media/capture/video/video_capture_device.h"
@@ -41,9 +41,12 @@ void LogVideoCaptureError(media::VideoCaptureError error) {
 }
 
 const base::UnguessableToken& FakeSessionId() {
+  // TODO(https://crbug.com/1406985): Investigate whether there's a better way
+  // to accomplish this (without using UnguessableToken::Deserialize).
   static const base::UnguessableToken fake_session_id(
       base::UnguessableToken::Deserialize(0xFFFFFFFFFFFFFFFFU,
-                                          0xFFFFFFFFFFFFFFFFU));
+                                          0xFFFFFFFFFFFFFFFFU)
+          .value());
   return fake_session_id;
 }
 
@@ -131,9 +134,10 @@ void VideoCaptureManager::EnumerateDevices(
   EmitLogMessage("VideoCaptureManager::EnumerateDevices", 1);
 
   // Pass a timer for UMA histogram collection.
-  video_capture_provider_->GetDeviceInfosAsync(media::BindToCurrentLoop(
-      base::BindOnce(&VideoCaptureManager::OnDeviceInfosReceived, this,
-                     base::ElapsedTimer(), std::move(client_callback))));
+  video_capture_provider_->GetDeviceInfosAsync(
+      base::BindPostTaskToCurrentDefault(
+          base::BindOnce(&VideoCaptureManager::OnDeviceInfosReceived, this,
+                         base::ElapsedTimer(), std::move(client_callback))));
 }
 
 base::UnguessableToken VideoCaptureManager::Open(

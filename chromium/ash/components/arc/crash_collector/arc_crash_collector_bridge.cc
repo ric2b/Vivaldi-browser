@@ -12,8 +12,8 @@
 
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
-#include "base/bind.h"
 #include "base/files/scoped_file.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/process/launch.h"
@@ -189,6 +189,11 @@ std::vector<std::string> ArcCrashCollectorBridge::CreateCrashReporterArgs() {
     args.push_back("--arc_fingerprint=" + fingerprint_.value());
 
   return args;
+}
+
+// static
+void ArcCrashCollectorBridge::EnsureFactoryBuilt() {
+  ArcCrashCollectorBridgeFactory::GetInstance();
 }
 
 }  // namespace arc

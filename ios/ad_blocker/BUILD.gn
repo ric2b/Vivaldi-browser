@@ -1,0 +1,62 @@
+source_set("ad_blocker") {
+  sources = [
+    "adblock_content_rule_list_provider.h",
+    "adblock_content_rule_list_provider.mm",
+    "adblock_rule_service_impl.h",
+    "adblock_rule_service_impl.mm",
+  ]
+
+  deps = [
+    ":utils",
+    ":rules_compiler",
+    "//base:base",
+    "//components/keyed_service/core",
+    "//ios/web/public",
+    "//ios/web/web_state/ui:wk_web_view_configuration_provider",
+    "//vivaldi/components/ad_blocker",
+  ]
+
+  configs += ["//build/config/compiler:enable_arc"]
+}
+
+source_set("utils") {
+  sources = [
+    "utils.cc",
+    "utils.h",
+  ]
+
+  deps = [
+    "//base:base",
+  ]
+}
+
+
+source_set("rules_compiler") {
+  sources = [
+    "ios_rules_compiler.cc",
+    "ios_rules_compiler.h",
+  ]
+
+  public_deps= [
+    "//vivaldi/components/ad_blocker:adblock_parser",
+  ]
+
+  deps = [
+    ":utils",
+    "//base:base",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "ios_rules_compiler_unittest.cc",
+  ]
+
+  deps = [
+    ":rules_compiler",
+    "//base",
+    "//testing/gtest",
+  ]
+}

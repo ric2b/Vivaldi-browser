@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "ash/public/cpp/app_list/app_list_types.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -27,7 +27,6 @@
 #include "components/sync/model/string_ordinal.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_change_processor.h"
-#include "components/sync/model/sync_error_factory.h"
 #include "components/sync/model/syncable_service.h"
 #include "components/sync/protocol/app_list_specifics.pb.h"
 
@@ -244,8 +243,7 @@ class AppListSyncableService : public syncer::SyncableService,
   absl::optional<syncer::ModelError> MergeDataAndStartSyncing(
       syncer::ModelType type,
       const syncer::SyncDataList& initial_sync_data,
-      std::unique_ptr<syncer::SyncChangeProcessor> sync_processor,
-      std::unique_ptr<syncer::SyncErrorFactory> error_handler) override;
+      std::unique_ptr<syncer::SyncChangeProcessor> sync_processor) override;
   void StopSyncing(syncer::ModelType type) override;
   syncer::SyncDataList GetAllSyncDataForTesting() const;
   absl::optional<syncer::ModelError> ProcessSyncChanges(
@@ -358,23 +356,6 @@ class AppListSyncableService : public syncer::SyncableService,
   void HandleUpdateStarted();
   void HandleUpdateFinished(bool clean_up_after_init_sync);
 
-  // Cleans up the folder sync item with only one item in it.
-  // There are some edge cases with synch which will create a folder with only
-  // one item in it, which is not legitimate and the folder should be removed.
-  // We will find such folders after the initial sync and clean them up.
-  void CleanUpSingleItemSyncFolder();
-
-  // Returns child item if |sync_item| is a user created folder with only one
-  // child item in it; otherwise, returns nullptr.
-  SyncItem* GetOnlyChildOfUserCreatedFolder(SyncItem* sync_item);
-
-  // Returns true if |sync_item| is a user created folder with only one
-  // child item in it, the child item will be removed out of the folder and
-  // place at the same location of its original folder.
-  // Otherwise, return false, no change will be made.
-  bool RemoveOnlyChildOutOfUserCreatedFolderIfNecessary(
-      const std::string& item_id);
-
   // Returns true if extension service is ready.
   bool IsExtensionServiceReady() const;
 
@@ -427,7 +408,6 @@ class AppListSyncableService : public syncer::SyncableService,
 
   std::unique_ptr<AppServiceAppModelBuilder> app_service_apps_builder_;
   std::unique_ptr<syncer::SyncChangeProcessor> sync_processor_;
-  std::unique_ptr<syncer::SyncErrorFactory> sync_error_handler_;
   SyncItemMap sync_items_;
   // Map that keeps pending request to transfer attributes from one app to
   // another.

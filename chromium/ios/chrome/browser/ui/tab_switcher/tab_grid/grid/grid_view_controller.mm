@@ -15,6 +15,8 @@
 #import "base/notreached.h"
 #import "base/numerics/safe_conversions.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/tabs/features.h"
+#import "ios/chrome/browser/tabs/inactive_tabs/features.h"
 #import "ios/chrome/browser/ui/commands/thumb_strip_commands.h"
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_data_source.h"
 #import "ios/chrome/browser/ui/commerce/price_card/price_card_item.h"
@@ -23,9 +25,9 @@
 #import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_view.h"
 #import "ios/chrome/browser/ui/menu/menu_histograms.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_collection_drag_drop_handler.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_collection_drag_drop_metrics.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_constants.h"
-#import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_context_menu_provider.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_empty_view.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_header.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_image_data_source.h"
@@ -34,9 +36,12 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_view_controller+private.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/horizontal_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/plus_sign_cell.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_button.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/inactive_tabs/inactive_tabs_button_header.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/suggested_actions/suggested_actions_delegate.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/suggested_actions/suggested_actions_grid_cell.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/suggested_actions/suggested_actions_view_controller.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_context_menu/tab_context_menu_provider.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_layout.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_item.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
@@ -49,7 +54,8 @@
 // Vivaldi
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/vivaldi_tab_grid_constants.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/device_form_factor.h"
 
 using ui::GetDeviceFormFactor;
@@ -60,8 +66,6 @@ using vivaldi::IsVivaldiRunning;
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
-
-extern const char kUmaDragDropTabs[] = "IOS.TabSwitcher.DragDropTabs";
 
 namespace {
 
@@ -74,14 +78,11 @@ constexpr int kOpenTabsSectionIndex = 0;
 constexpr int kSuggestedActionsSectionIndex = 1;
 
 NSString* const kCellIdentifier = @"GridCellIdentifier";
-
 NSString* const kPlusSignCellIdentifier = @"PlusSignCellIdentifier";
-
 NSString* const kSuggestedActionsCellIdentifier =
     @"SuggestedActionsCellIdentifier";
-
-NSString* const kSuggestedActionsSectionIdentifier =
-    @"SuggestedActionsSectionIdentifier";
+NSString* const kGridHeaderIdentifier = @"GridHeaderIdentifier";
+NSString* const kInactiveTabsHeaderIdentifier = @"InactiveTabsHeaderIdentifier";
 
 // Creates an NSIndexPath with `index` in section 0.
 NSIndexPath* CreateIndexPath(NSInteger index) {
@@ -175,6 +176,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 // YES if the dragged tab moved to a new index.
 @property(nonatomic, assign) BOOL dragEndAtNewIndex;
 
+// Whether there are inactive tabs to consider. If there are and the grid is in
+// TabGridModeNormal, a button is displayed at the top, advertizing them.
+@property(nonatomic, assign) NSUInteger inactiveTabsCount;
+
 @end
 
 @implementation GridViewController
@@ -226,7 +231,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       forCellWithReuseIdentifier:kSuggestedActionsCellIdentifier];
   [collectionView registerClass:[GridHeader class]
       forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
-             withReuseIdentifier:UICollectionElementKindSectionHeader];
+             withReuseIdentifier:kGridHeaderIdentifier];
+  [collectionView registerClass:[InactiveTabsButtonHeader class]
+      forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
+             withReuseIdentifier:kInactiveTabsHeaderIdentifier];
 
   // During deletion (in horizontal layout) the backgroundView can resize,
   // revealing temporarily the collectionView background. This makes sure
@@ -329,6 +337,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (BOOL)isGridEmpty {
   return self.items.count == 0;
+}
+
+- (NSSet<NSString*>*)visibleGridItems {
+  NSArray<NSIndexPath*>* visibleItemsIndexPaths =
+      [self.collectionView indexPathsForVisibleItems];
+  return [self itemIdentifiersFromIndexPaths:visibleItemsIndexPaths];
 }
 
 - (void)setMode:(TabGridMode)mode {
@@ -458,7 +472,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       if ([cell hasIdentifier:self.lastInsertedItemID])
         activeItem.isAppearing = YES;
       selectionItem = [GridTransitionItem
-          itemWithCell:[GridTransitionSelectionCell transitionCellFromCell:cell]
+          itemWithCell:[GridCell transitionSelectionCellFromCell:cell]
                 center:attributes.center];
     } else {
       UIView* cellSnapshot = [cell snapshotViewAfterScreenUpdates:YES];
@@ -533,31 +547,47 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (UICollectionReusableView*)collectionView:(UICollectionView*)collectionView
           viewForSupplementaryElementOfKind:(NSString*)kind
                                 atIndexPath:(NSIndexPath*)indexPath {
-  GridHeader* headerView =
-      [collectionView dequeueReusableSupplementaryViewOfKind:kind
-                                         withReuseIdentifier:kind
-                                                forIndexPath:indexPath];
-  if ([kind isEqualToString:UICollectionElementKindSectionHeader]) {
-    switch (indexPath.section) {
-      case kOpenTabsSectionIndex: {
-        headerView.title = l10n_util::GetNSString(
-            IDS_IOS_TABS_SEARCH_OPEN_TABS_SECTION_HEADER_TITLE);
-        NSString* resultsCount = [NSString
-            stringWithFormat:@"%ld",
-                             base::checked_cast<NSInteger>(self.items.count)];
-        headerView.value =
-            l10n_util::GetNSStringF(IDS_IOS_TABS_SEARCH_OPEN_TABS_COUNT,
-                                    base::SysNSStringToUTF16(resultsCount));
-        break;
+  switch (_mode) {
+    case TabGridModeNormal: {
+      InactiveTabsButtonHeader* header = [collectionView
+          dequeueReusableSupplementaryViewOfKind:kind
+                             withReuseIdentifier:kInactiveTabsHeaderIdentifier
+                                    forIndexPath:indexPath];
+      header.button.count = self.inactiveTabsCount;
+      [header.button addTarget:self
+                        action:@selector(didTapInactiveTabsButton)
+              forControlEvents:UIControlEventTouchUpInside];
+      return header;
+    }
+    case TabGridModeSelection:
+      NOTREACHED();
+      return nil;
+    case TabGridModeSearch: {
+      GridHeader* headerView = [collectionView
+          dequeueReusableSupplementaryViewOfKind:kind
+                             withReuseIdentifier:kGridHeaderIdentifier
+                                    forIndexPath:indexPath];
+      switch (indexPath.section) {
+        case kOpenTabsSectionIndex: {
+          headerView.title = l10n_util::GetNSString(
+              IDS_IOS_TABS_SEARCH_OPEN_TABS_SECTION_HEADER_TITLE);
+          NSString* resultsCount = [NSString
+              stringWithFormat:@"%ld",
+                               base::checked_cast<NSInteger>(self.items.count)];
+          headerView.value =
+              l10n_util::GetNSStringF(IDS_IOS_TABS_SEARCH_OPEN_TABS_COUNT,
+                                      base::SysNSStringToUTF16(resultsCount));
+          break;
+        }
+        case kSuggestedActionsSectionIndex: {
+          headerView.title =
+              l10n_util::GetNSString(IDS_IOS_TABS_SEARCH_SUGGESTED_ACTIONS);
+          break;
+        }
       }
-      case kSuggestedActionsSectionIndex: {
-        headerView.title =
-            l10n_util::GetNSString(IDS_IOS_TABS_SEARCH_SUGGESTED_ACTIONS);
-        break;
-      }
+      return headerView;
     }
   }
-  return headerView;
 }
 
 - (UICollectionViewCell*)collectionView:(UICollectionView*)collectionView
@@ -648,15 +678,25 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                              layout:
                                  (UICollectionViewLayout*)collectionViewLayout
     referenceSizeForHeaderInSection:(NSInteger)section {
-  if (_mode != TabGridModeSearch || !_searchText.length) {
-    return CGSizeZero;
-  }
-  CGFloat height = UIContentSizeCategoryIsAccessibilityCategory(
-                       self.traitCollection.preferredContentSizeCategory)
-                       ? kGridHeaderAccessibilityHeight
-                       : kGridHeaderHeight;
+  switch (_mode) {
+    case TabGridModeNormal:
+      if (!IsInactiveTabsEnabled() || self.inactiveTabsCount == 0) {
+        return CGSizeZero;
+      }
+      return CGSizeMake(collectionView.bounds.size.width, 100);
+    case TabGridModeSelection:
+      return CGSizeZero;
+    case TabGridModeSearch:
+      if (_searchText.length == 0) {
+        return CGSizeZero;
+      }
 
-  return CGSizeMake(collectionView.bounds.size.width, height);
+      CGFloat height = UIContentSizeCategoryIsAccessibilityCategory(
+                           self.traitCollection.preferredContentSizeCategory)
+                           ? kGridHeaderAccessibilityHeight
+                           : kGridHeaderHeight;
+      return CGSizeMake(collectionView.bounds.size.width, height);
+  }
 }
 
 // This prevents the user from dragging a cell past the plus sign cell (the last
@@ -735,8 +775,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     scenario = MenuScenarioHistogram::kTabGridEntry;
   }
 
-  return [self.menuProvider contextMenuConfigurationForGridCell:cell
-                                                   menuScenario:scenario];
+  return [self.menuProvider contextMenuConfigurationForTabCell:cell
+                                                  menuScenario:scenario];
 }
 
 - (UICollectionViewTransitionLayout*)
@@ -764,14 +804,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (UIPointerRegion*)pointerInteraction:(UIPointerInteraction*)interaction
                       regionForRequest:(UIPointerRegionRequest*)request
-                         defaultRegion:(UIPointerRegion*)defaultRegion
-    API_AVAILABLE(ios(13.4)) {
+                         defaultRegion:(UIPointerRegion*)defaultRegion {
   return defaultRegion;
 }
 
 - (UIPointerStyle*)pointerInteraction:(UIPointerInteraction*)interaction
-                       styleForRegion:(UIPointerRegion*)region
-    API_AVAILABLE(ios(13.4)) {
+                       styleForRegion:(UIPointerRegion*)region {
   UIPointerLiftEffect* effect = [UIPointerLiftEffect
       effectWithPreview:[[UITargetedPreview alloc]
                             initWithView:interaction.view]];
@@ -783,7 +821,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 - (void)collectionView:(UICollectionView*)collectionView
     dragSessionWillBegin:(id<UIDragSession>)session {
   self.dragEndAtNewIndex = NO;
-  base::UmaHistogramEnumeration(kUmaDragDropTabs, DragDropTabs::kDragBegin);
+  base::UmaHistogramEnumeration(kUmaGridViewDragDropTabs,
+                                DragDropTabs::kDragBegin);
 
   [self.delegate gridViewControllerDragSessionWillBegin:self];
 }
@@ -793,7 +832,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   DragDropTabs dragEvent = self.dragEndAtNewIndex
                                ? DragDropTabs::kDragEndAtNewIndex
                                : DragDropTabs::kDragEndAtSameIndex;
-  base::UmaHistogramEnumeration(kUmaDragDropTabs, dragEvent);
+  base::UmaHistogramEnumeration(kUmaGridViewDragDropTabs, dragEvent);
 
   // Used to let the Taptic Engine return to its idle state.
   // To preserve power, the Taptic Engine remains in a prepared state for only a
@@ -931,7 +970,12 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     NSIndexPath* dropIndexPath = CreateIndexPath(destinationIndex);
     // Drop synchronously if local object is available.
     if (item.dragItem.localObject) {
-      [coordinator dropItem:item.dragItem toItemAtIndexPath:dropIndexPath];
+      __weak __typeof(self) weakSelf = self;
+      [self.delegate gridViewControllerDropAnimationWillBegin:weakSelf];
+      [[coordinator dropItem:item.dragItem toItemAtIndexPath:dropIndexPath]
+          addCompletion:^(UIViewAnimatingPosition finalPosition) {
+            [weakSelf.delegate gridViewControllerDropAnimationDidEnd:weakSelf];
+          }];
       // The sourceIndexPath is non-nil if the drop item is from this same
       // collection view.
       [self.dragDropHandler dropItem:item.dragItem
@@ -961,6 +1005,22 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                                          toIndex:destinationIndex
                               placeholderContext:context];
     }
+  }
+}
+
+- (void)collectionView:(UICollectionView*)collectionView
+    dropSessionDidEnter:(id<UIDropSession>)session {
+  if (IsPinnedTabsEnabled()) {
+    // Notify the delegate that a drag cames from another app.
+    [self.delegate gridViewControllerDragSessionWillBegin:self];
+  }
+}
+
+- (void)collectionView:(UICollectionView*)collectionView
+     dropSessionDidEnd:(id<UIDropSession>)session {
+  if (IsPinnedTabsEnabled()) {
+    // Notify the delegate that a drag ends from another app.
+    [self.delegate gridViewControllerDropAnimationDidEnd:self];
   }
 }
 
@@ -1177,16 +1237,22 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
       [self animateEmptyStateIn];
     }
   };
+
+  __weak __typeof(self) weakSelf = self;
   auto completion = ^(BOOL finished) {
-    if (self.items.count > 0) {
-      [self.collectionView
-          selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
+    if (weakSelf.items.count > 0) {
+      [weakSelf.collectionView
+          selectItemAtIndexPath:CreateIndexPath(weakSelf.selectedIndex)
                        animated:NO
                  scrollPosition:UICollectionViewScrollPositionNone];
     }
-    [self.delegate gridViewController:self didChangeItemCount:self.items.count];
-    [self updateFractionVisibleOfLastItem];
+    [weakSelf.delegate gridViewController:weakSelf
+                       didChangeItemCount:weakSelf.items.count];
+    [weakSelf.delegate gridViewController:weakSelf
+                      didRemoveItemWIthID:removedItemID];
+    [weakSelf updateFractionVisibleOfLastItem];
   };
+
   [self performModelUpdates:modelUpdates
                 collectionViewUpdates:collectionViewUpdates
                    useSpringAnimation:NO
@@ -1237,8 +1303,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
   NSUInteger fromIndex = [self indexOfItemWithID:itemID];
   // If this move would be a no-op, early return and avoid spurious UI updates.
-  if (fromIndex == toIndex)
+  if (fromIndex == toIndex || toIndex == NSNotFound ||
+      fromIndex == NSNotFound) {
     return;
+  }
   auto modelUpdates = ^{
     TabSwitcherItem* item = self.items[fromIndex];
     [self.items removeObjectAtIndex:fromIndex];
@@ -1248,27 +1316,37 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
     [self.collectionView moveItemAtIndexPath:CreateIndexPath(fromIndex)
                                  toIndexPath:CreateIndexPath(toIndex)];
   };
+
+  __weak __typeof(self) weakSelf = self;
   auto completion = ^(BOOL finished) {
+    if (!weakSelf) {
+      return;
+    }
+
+    [weakSelf.delegate gridViewController:weakSelf
+                        didMoveItemWithID:itemID
+                                  toIndex:toIndex];
+
     // Bring back selected halo only for the moved cell, which lost it during
     // the move (drag & drop).
-    if (self.selectedIndex != toIndex) {
+    if (weakSelf.selectedIndex != toIndex) {
       return;
     }
     // Force reload of the selected cell now to avoid extra delay for the
     // blue halo to appear. Bring the halo in 100ms.
-    [UIView
-        animateWithDuration:0.1
-                 animations:^{
-                   [self.collectionView reloadItemsAtIndexPaths:@[
-                     CreateIndexPath(self.selectedIndex)
-                   ]];
-                   [self.collectionView
-                       selectItemAtIndexPath:CreateIndexPath(self.selectedIndex)
-                                    animated:NO
-                              scrollPosition:
-                                  UICollectionViewScrollPositionNone];
-                 }
-                 completion:nil];
+    [UIView animateWithDuration:0.1
+                     animations:^{
+                       [weakSelf.collectionView reloadItemsAtIndexPaths:@[
+                         CreateIndexPath(weakSelf.selectedIndex)
+                       ]];
+                       [weakSelf.collectionView
+                           selectItemAtIndexPath:CreateIndexPath(
+                                                     weakSelf.selectedIndex)
+                                        animated:NO
+                                  scrollPosition:
+                                      UICollectionViewScrollPositionNone];
+                     }
+                     completion:nil];
   };
   [self performModelUpdates:modelUpdates
                 collectionViewUpdates:collectionViewUpdates
@@ -1281,6 +1359,36 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 
 - (void)dismissModals {
   ios::provider::DismissModalsForCollectionView(self.collectionView);
+}
+
+#pragma mark - InactiveTabsCountConsumer
+
+- (void)advertizeInactiveTabsWithCount:(NSUInteger)count {
+  DCHECK(IsInactiveTabsEnabled());
+  NSUInteger oldCount = self.inactiveTabsCount;
+  if (self.inactiveTabsCount == count) {
+    return;
+  }
+  self.inactiveTabsCount = count;
+
+  // Update the header.
+  if (oldCount == 0 || count == 0) {
+    // The header should appear or disappear. Reload the section.
+    NSIndexSet* openTabsSection =
+        [NSIndexSet indexSetWithIndex:kOpenTabsSectionIndex];
+    [self.collectionView reloadSections:openTabsSection];
+  } else {
+    // The header just needs to be updated with the new count.
+    NSIndexPath* indexPath =
+        [NSIndexPath indexPathForItem:0 inSection:kOpenTabsSectionIndex];
+    InactiveTabsButtonHeader* header =
+        base::mac::ObjCCast<InactiveTabsButtonHeader>([self.collectionView
+            supplementaryViewForElementKind:UICollectionElementKindSectionHeader
+                                atIndexPath:indexPath]);
+    // Note: At this point, `header` could be nil if not visible, or if the
+    // supplementary view is not an InactiveTabsButtonHeader.
+    header.button.count = count;
+  }
 }
 
 #pragma mark - LayoutSwitcher
@@ -1357,6 +1465,13 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   }
 }
 
+#pragma mark - Actions
+
+// Called when the Inactive Tabs button is tapped.
+- (void)didTapInactiveTabsButton {
+  [self.delegate didTapInactiveTabsButtonInGridViewController:self];
+}
+
 #pragma mark - Private properties
 
 - (NSUInteger)selectedIndex {
@@ -1364,7 +1479,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 - (CGFloat)offsetPastEndOfScrollView {
-  // Use collectionViewLayout.collectionViwContentSize because it has the
+  // Use collectionViewLayout.collectionViewContentSize because it has the
   // correct size during a batch update.
   return self.collectionView.contentOffset.x +
          self.collectionView.frame.size.width -
@@ -1717,6 +1832,22 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
                               base::SysNSStringToUTF16(resultsCount));
 }
 
+// Converts `indexPaths` into corresponding item identifiers.
+- (NSSet<NSString*>*)itemIdentifiersFromIndexPaths:
+    (NSArray<NSIndexPath*>*)indexPaths {
+  NSMutableSet<NSString*>* itemIdentifiers = [NSMutableSet set];
+
+  [indexPaths enumerateObjectsUsingBlock:^(NSIndexPath* indexPath,
+                                           NSUInteger index, BOOL* stop) {
+    NSUInteger itemIndex = base::checked_cast<NSUInteger>(indexPath.item);
+    if (itemIndex < self.items.count) {
+      [itemIdentifiers addObject:self.items[itemIndex].identifier];
+    }
+  }];
+
+  return [itemIdentifiers copy];
+}
+
 #pragma mark Suggested Actions Section
 
 - (void)updateSuggestedActionsSection {
@@ -1746,6 +1877,7 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 }
 
 #pragma mark - Public Editing Mode Selection
+
 - (void)selectAllItemsForEditing {
   if (_mode != TabGridModeSelection) {
     return;
@@ -2043,9 +2175,10 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   return section;
 }
 
-/// Returns whether current device is iPhone or iPad.
+/// Returns true when device is iPad and horizontal trait is regular.
 - (BOOL)isCurrentDeviceTablet {
-  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET;
+  return GetDeviceFormFactor() == DEVICE_FORM_FACTOR_TABLET &&
+      VivaldiGlobalHelpers.isHorizontalTraitRegular;
 }
 
 /// Returns the size for each tab grid item tile.
@@ -2053,7 +2186,8 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
   if (self.isCurrentDeviceTablet) {
     return vTabGridItemSizeMultiplieriPad;
   } else {
-    if (!self.isDevicePortrait) {
+    if (VivaldiGlobalHelpers.isVerticalTraitCompact ||
+        self.isAppStateHalfScreen) {
       return vTabGridItemSizeMultiplieriPhoneLandscape;
     } else {
       return vTabGridItemSizeMultiplieriPhonePortrait;
@@ -2072,20 +2206,28 @@ NSIndexPath* CreateIndexPath(NSInteger index) {
 /// Return the item padding for iPhone and iPad
 /// Same item padding is used for both portrait and landscape mode.
 - (CGFloat)getItemPadding {
-  return self.isCurrentDeviceTablet ?
+  return self.isCurrentDeviceTablet && !VivaldiGlobalHelpers.isSplitOrSlideOver ?
     vTabGridItemPaddingiPad : vTabGridItemPaddingiPhone;
 }
 
 /// Returns the section padding for tablet
 - (CGFloat)getSectionPaddingForTablet {
-  return !self.isDevicePortrait ?
-    vTabGridSectionPaddingiPadLandscape : vTabGridSectionPaddingiPadPortrait;
+  return VivaldiGlobalHelpers.isiPadOrientationPortrait ||
+    VivaldiGlobalHelpers.isSplitOrSlideOver ?
+    vTabGridSectionPaddingiPadPortrait : vTabGridSectionPaddingiPadLandscape;
 }
 
 /// Returns the section padding for iPhone
 - (CGFloat)getSectionPaddingForPhone {
-  return !self.isDevicePortrait ?
+  return VivaldiGlobalHelpers.isVerticalTraitCompact ?
     vTabGridSectionPaddingiPhoneLandscape : vTabGridSectionPaddingiPhonePortrait;
+}
+
+/// Returns true when app is running on split mode in
+/// iPad with half/half screen state
+- (BOOL)isAppStateHalfScreen {
+  return VivaldiGlobalHelpers.isSplitOrSlideOver &&
+      VivaldiGlobalHelpers.iPadLayoutState == LayoutStateHalfScreen;
 }
 
 @end

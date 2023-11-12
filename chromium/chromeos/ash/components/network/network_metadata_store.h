@@ -66,9 +66,10 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkMetadataStore
   // NetworkConfigurationObserver::
   void OnConfigurationCreated(const std::string& service_path,
                               const std::string& guid) override;
-  void OnConfigurationModified(const std::string& service_path,
-                               const std::string& guid,
-                               const base::Value* set_properties) override;
+  void OnConfigurationModified(
+      const std::string& service_path,
+      const std::string& guid,
+      const base::Value::Dict* set_properties) override;
   void OnConfigurationRemoved(const std::string& service_path,
                               const std::string& guid) override;
 
@@ -114,6 +115,12 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkMetadataStore
   // Returns custom apn list for cellular network with given guid. Returns
   // nullptr if no pref exists for |network_guid|.
   virtual const base::Value::List* GetCustomApnList(
+      const std::string& network_guid);
+
+  // Returns the pre APN revamp custom apns for a cellular network with given
+  // guid. Returns nullptr if no pref exists for |network_guid|. Can only be
+  // called if the APN Revamp flag is enabled.
+  virtual const base::Value::List* GetPreRevampCustomApnList(
       const std::string& network_guid);
 
   // When the active user is the device owner and its the first login, this
@@ -194,10 +201,5 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) NetworkMetadataStore
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::NetworkMetadataStore;
-}
 
 #endif  // CHROMEOS_ASH_COMPONENTS_NETWORK_NETWORK_METADATA_STORE_H_

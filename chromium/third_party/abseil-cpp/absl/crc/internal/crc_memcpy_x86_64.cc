@@ -52,14 +52,14 @@
 #include <type_traits>
 
 #include "absl/base/dynamic_annotations.h"
-#include "absl/base/internal/prefetch.h"
 #include "absl/base/optimization.h"
+#include "absl/base/prefetch.h"
 #include "absl/crc/crc32c.h"
 #include "absl/crc/internal/cpu_detect.h"
 #include "absl/crc/internal/crc_memcpy.h"
 #include "absl/strings/string_view.h"
 
-#if defined(__SSE4_2__) || (defined(_MSC_VER) && defined(__AVX__))
+#ifdef ABSL_INTERNAL_HAVE_X86_64_ACCELERATED_CRC_MEMCPY_ENGINE
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -242,10 +242,8 @@ crc32c_t AcceleratedCrcMemcpyEngine<vec_regions, int_regions>::Compute(
   while (copy_rounds > kBlocksPerCacheLine) {
     // Prefetch kPrefetchAhead bytes ahead of each pointer.
     for (size_t i = 0; i < kRegions; i++) {
-      absl::base_internal::PrefetchT0(src_bytes + kPrefetchAhead +
-                                      region_size * i);
-      absl::base_internal::PrefetchT0(dst_bytes + kPrefetchAhead +
-                                      region_size * i);
+      absl::PrefetchToLocalCache(src_bytes + kPrefetchAhead + region_size * i);
+      absl::PrefetchToLocalCache(dst_bytes + kPrefetchAhead + region_size * i);
     }
 
     // Load and store data, computing CRC on the way.
@@ -431,4 +429,4 @@ std::unique_ptr<CrcMemcpyEngine> CrcMemcpy::GetTestEngine(int vector,
 ABSL_NAMESPACE_END
 }  // namespace absl
 
-#endif  // defined(__SSE4_2__) || (defined(_MSC_VER) && defined(__AVX__))
+#endif  // ABSL_INTERNAL_HAVE_X86_64_ACCELERATED_CRC_MEMCPY_ENGINE

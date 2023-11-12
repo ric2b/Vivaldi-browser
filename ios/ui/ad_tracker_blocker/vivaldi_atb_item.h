@@ -5,19 +5,19 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_options.h"
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 
-// The item model for the tracker blocker setting option.
+// The item model for the tracker blocker setting types.
 @interface VivaldiATBItem : NSObject
 
 @property(nonatomic, strong) NSString* title;
 @property(nonatomic, strong) NSString* subtitle;
-@property(nonatomic, assign) ATBSettingOption option;
+@property(nonatomic, assign) ATBSettingType type;
 
 // INITIALIZER
 - (instancetype) initWithTitle:(NSString*)title
                       subtitle:(NSString*)subtitle
-                        option:(ATBSettingOption)option;
+                          type:(ATBSettingType)type;
 
 @end
 

@@ -13,10 +13,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
@@ -157,6 +157,15 @@ gfx::ImageSkia* GetImageSkiaNamed(int id) {
   return ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(id);
 }
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PreloadBookmarkMetricsEvent {
+  kMouseOver = 0,
+  kMouseDown = 1,
+  kMouseClick = 2,
+  kMaxValue = kMouseClick,
+};
+
 // BookmarkButtonBase -----------------------------------------------
 
 // Base class for non-menu hosting buttons used on the bookmark bar.
@@ -229,7 +238,31 @@ class BookmarkButton : public BookmarkButtonBase {
   BookmarkButton(PressedCallback callback,
                  const GURL& url,
                  const std::u16string& title)
-      : BookmarkButtonBase(std::move(callback), title), url_(url) {}
+      : BookmarkButtonBase(std::move(callback), title), url_(url) {
+    const auto mouseover_and_mousedown_recorder_callback =
+        [](views::Button* button) {
+          switch (button->GetState()) {
+            case views::Button::ButtonState::STATE_PRESSED:
+              base::UmaHistogramEnumeration(
+                  "Prerender.Experimental.BookmarkUrlButtonEvent",
+                  PreloadBookmarkMetricsEvent::kMouseDown);
+              break;
+            case views::Button::ButtonState::STATE_HOVERED:
+              base::UmaHistogramEnumeration(
+                  "Prerender.Experimental.BookmarkUrlButtonEvent",
+                  PreloadBookmarkMetricsEvent::kMouseOver);
+              break;
+            case views::Button::ButtonState::STATE_DISABLED:
+            case views::Button::ButtonState::STATE_NORMAL:
+            case views::Button::ButtonState::STATE_COUNT:
+              break;
+          }
+        };
+
+    state_change_subscription_ =
+        this->AddStateChangedCallback(base::BindRepeating(
+            mouseover_and_mousedown_recorder_callback, base::Unretained(this)));
+  }
   BookmarkButton(const BookmarkButton&) = delete;
   BookmarkButton& operator=(const BookmarkButton&) = delete;
 
@@ -261,6 +294,7 @@ class BookmarkButton : public BookmarkButtonBase {
   mutable int max_tooltip_width_ = 0;
   mutable std::u16string tooltip_text_;
   const raw_ref<const GURL> url_;
+  base::CallbackListSubscription state_change_subscription_;
 };
 
 BEGIN_METADATA(BookmarkButton, BookmarkButtonBase)
@@ -305,17 +339,15 @@ class BookmarkFolderButton : public BookmarkMenuButtonBase {
     // ui::EF_MIDDLE_MOUSE_BUTTON opens all bookmarked links in separate tabs.
     SetTriggerableEventFlags(ui::EF_LEFT_MOUSE_BUTTON |
                              ui::EF_MIDDLE_MOUSE_BUTTON);
+
+    // If the folder is unnamed, set the name to a default string for unnamed
+    // folders; otherwise set the name to the user-supplied folder name.
+    SetAccessibleName(GetText().empty() ? l10n_util::GetStringUTF16(
+                                              IDS_UNNAMED_BOOKMARK_FOLDER)
+                                        : GetText());
   }
   BookmarkFolderButton(const BookmarkFolderButton&) = delete;
   BookmarkFolderButton& operator=(const BookmarkFolderButton&) = delete;
-
-  // Returns an accessible name for the folder. If the folder is unnamed, it
-  // will use a default, otherwise it will use the user-supplied folder name.
-  std::u16string GetAccessibleName() const {
-    return GetText().empty()
-               ? l10n_util::GetStringUTF16(IDS_UNNAMED_BOOKMARK_FOLDER)
-               : GetText();
-  }
 
   std::u16string GetTooltipText(const gfx::Point& p) const override {
     return GetAccessibleName();
@@ -351,25 +383,6 @@ END_METADATA
 // BookmarkTabGroupButton
 // -------------------------------------------------------
 
-// OverflowButton (chevron) --------------------------------------------------
-
-class OverflowButton : public BookmarkMenuButtonBase {
- public:
-  METADATA_HEADER(OverflowButton);
-  OverflowButton(PressedCallback callback, BookmarkBarView* owner)
-      : BookmarkMenuButtonBase(std::move(callback)), owner_(owner) {}
-  OverflowButton(const OverflowButton&) = delete;
-  OverflowButton& operator=(const OverflowButton&) = delete;
-
-  bool OnMousePressed(const ui::MouseEvent& e) override {
-    owner_->StopThrobbing(true);
-    return BookmarkMenuButtonBase::OnMousePressed(e);
-  }
-
- private:
-  raw_ptr<BookmarkBarView> owner_;
-};
-
 void RecordAppLaunch(Profile* profile, const GURL& url) {
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(profile)
@@ -381,9 +394,6 @@ void RecordAppLaunch(Profile* profile, const GURL& url) {
   extensions::RecordAppLaunchType(extension_misc::APP_LAUNCH_BOOKMARK_BAR,
                                   extension->GetType());
 }
-
-BEGIN_METADATA(OverflowButton, BookmarkMenuButtonBase)
-END_METADATA
 
 }  // namespace
 
@@ -629,15 +639,6 @@ views::MenuItemView* BookmarkBarView::GetContextMenu() {
 
 views::MenuItemView* BookmarkBarView::GetDropMenu() {
   return bookmark_drop_menu_ ? bookmark_drop_menu_->menu() : nullptr;
-}
-
-void BookmarkBarView::StopThrobbing(bool immediate) {
-  if (!throbbing_view_)
-    return;
-
-  // If not immediate, cycle through 2 more complete cycles.
-  throbbing_view_->StartThrobbing(immediate ? 0 : 4);
-  throbbing_view_ = nullptr;
 }
 
 // static
@@ -1122,17 +1123,6 @@ void BookmarkBarView::BookmarkMenuControllerDeleted(
     bookmark_drop_menu_ = nullptr;
 }
 
-void BookmarkBarView::OnBookmarkBubbleShown(const BookmarkNode* node) {
-  StopThrobbing(true);
-  if (!node)
-    return;  // Generally shouldn't happen.
-  StartThrobbing(node, false);
-}
-
-void BookmarkBarView::OnBookmarkBubbleHidden() {
-  StopThrobbing(false);
-}
-
 void BookmarkBarView::BookmarkModelLoaded(BookmarkModel* model,
                                           bool ids_reassigned) {
   // There should be no buttons. If non-zero it means Load was invoked more than
@@ -1172,17 +1162,10 @@ void BookmarkBarView::BookmarkNodeMoved(BookmarkModel* model,
   // mouse/touch-device, the location will update accordingly.
   InvalidateDrop();
 
-  bool was_throbbing =
-      throbbing_view_ &&
-      throbbing_view_ == DetermineViewToThrobFromRemove(old_parent, old_index);
-  if (was_throbbing)
-    throbbing_view_->StopThrobbing();
   bool needs_layout_and_paint =
       BookmarkNodeRemovedImpl(model, old_parent, old_index);
   if (BookmarkNodeAddedImpl(model, new_parent, new_index))
     needs_layout_and_paint = true;
-  if (was_throbbing && new_index < bookmark_buttons_.size())
-    StartThrobbing(new_parent->children()[new_index].get(), false);
   if (needs_layout_and_paint)
     LayoutAndPaint();
 
@@ -1225,8 +1208,6 @@ void BookmarkBarView::BookmarkAllUserNodesRemoved(
   InvalidateDrop();
 
   UpdateOtherAndManagedButtonsVisibility();
-
-  StopThrobbing(true);
 
   // Remove the existing buttons.
   for (views::LabelButton* button : bookmark_buttons_) {
@@ -1348,6 +1329,11 @@ void BookmarkBarView::OnButtonPressed(const bookmarks::BookmarkNode* node,
   RecordAppLaunch(browser_->profile(), node->url());
   chrome::OpenAllIfAllowed(browser_, {node},
                            ui::DispositionFromEventFlags(event.flags()), false);
+  if (event.IsMouseEvent()) {
+    base::UmaHistogramEnumeration(
+        "Prerender.Experimental.BookmarkUrlButtonEvent",
+        PreloadBookmarkMetricsEvent::kMouseClick);
+  }
   RecordBookmarkLaunch(
       BookmarkLaunchLocation::kAttachedBar,
       profile_metrics::GetBrowserProfileType(browser_->profile()));
@@ -1513,14 +1499,13 @@ std::unique_ptr<MenuButton> BookmarkBarView::CreateManagedBookmarksButton() {
 }
 
 std::unique_ptr<MenuButton> BookmarkBarView::CreateOverflowButton() {
-  auto button = std::make_unique<OverflowButton>(
-      base::BindRepeating(
+  auto button =
+      std::make_unique<BookmarkMenuButtonBase>(base::BindRepeating(
           [](BookmarkBarView* bar, const ui::Event& event) {
             bar->OnMenuButtonPressed(bar->bookmark_model_->bookmark_bar_node(),
                                      event);
           },
-          base::Unretained(this)),
-      this);
+          base::Unretained(this)));
 
   // The overflow button's image contains an arrow and therefore it is a
   // direction sensitive image and we need to flip it if the UI layout is
@@ -1660,10 +1645,6 @@ bool BookmarkBarView::BookmarkNodeRemovedImpl(BookmarkModel* model,
                                               const BookmarkNode* parent,
                                               size_t index) {
   const bool needs_layout = UpdateOtherAndManagedButtonsVisibility();
-
-  StopThrobbing(true);
-  // No need to start throbbing again as the bookmark bubble can't be up at
-  // the same time as the user reorders.
 
   if (parent != model->bookmark_bar_node()) {
     // Only children of the bookmark_bar_node get buttons.
@@ -1890,66 +1871,6 @@ void BookmarkBarView::WriteBookmarkDragData(const BookmarkNode* node,
   drag_data.Write(browser_->profile()->GetPath(), data);
 }
 
-void BookmarkBarView::StartThrobbing(const BookmarkNode* node,
-                                     bool overflow_only) {
-  DCHECK(!throbbing_view_);
-
-  // Determine which visible button is showing the bookmark (or is an ancestor
-  // of the bookmark).
-  const BookmarkNode* bbn = bookmark_model_->bookmark_bar_node();
-  const BookmarkNode* parent_on_bb = node;
-  while (parent_on_bb) {
-    const BookmarkNode* parent = parent_on_bb->parent();
-    if (parent == bbn)
-      break;
-    parent_on_bb = parent;
-  }
-  if (parent_on_bb) {
-    size_t index = bbn->GetIndexOf(parent_on_bb).value();
-    if (index >= GetFirstHiddenNodeIndex()) {
-      // Node is hidden, animate the overflow button.
-      throbbing_view_ = overflow_button_;
-    } else if (!overflow_only) {
-      throbbing_view_ = static_cast<views::Button*>(bookmark_buttons_[index]);
-    }
-  } else if (bookmarks::IsDescendantOf(node, managed_->managed_node())) {
-    throbbing_view_ = managed_bookmarks_button_;
-  } else if (!overflow_only) {
-    throbbing_view_ = other_bookmarks_button_;
-  }
-
-  // Use a large number so that the button continues to throb.
-  if (throbbing_view_)
-    throbbing_view_->StartThrobbing(std::numeric_limits<int>::max());
-}
-
-views::Button* BookmarkBarView::DetermineViewToThrobFromRemove(
-    const BookmarkNode* parent,
-    size_t old_index) {
-  const BookmarkNode* bbn = bookmark_model_->bookmark_bar_node();
-  const BookmarkNode* old_node = parent;
-  size_t old_index_on_bb = old_index;
-  while (old_node && old_node != bbn) {
-    const BookmarkNode* old_parent = old_node->parent();
-    if (old_parent == bbn) {
-      old_index_on_bb = bbn->GetIndexOf(old_node).value();
-      break;
-    }
-    old_node = old_parent;
-  }
-  if (old_node) {
-    if (old_index_on_bb >= GetFirstHiddenNodeIndex()) {
-      // Node is hidden, animate the overflow button.
-      return overflow_button_;
-    }
-    return static_cast<views::Button*>(bookmark_buttons_[old_index_on_bb]);
-  }
-  if (bookmarks::IsDescendantOf(parent, managed_->managed_node()))
-    return managed_bookmarks_button_;
-  // Node wasn't on the bookmark bar, use the "Other Bookmarks" button.
-  return other_bookmarks_button_;
-}
-
 void BookmarkBarView::UpdateAppearanceForTheme() {
   // We don't always have a color provider (ui tests, for example).
   const ui::ColorProvider* color_provider = GetColorProvider();
@@ -1972,8 +1893,7 @@ void BookmarkBarView::UpdateAppearanceForTheme() {
       chrome::GetBookmarkFolderIcon(chrome::BookmarkFolderIconType::kManaged,
                                     kColorBookmarkFolderIcon));
 
-  if (apps_page_shortcut_->GetVisible())
-    apps_page_shortcut_->SetEnabledTextColors(color);
+  apps_page_shortcut_->SetEnabledTextColors(color);
 
   const SkColor overflow_color =
       color_provider->GetColor(kColorBookmarkButtonIcon);

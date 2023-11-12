@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <memory>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
@@ -227,6 +227,10 @@ scoped_refptr<DecoderBuffer> CreateFakeVideoBufferForTest(
     base::TimeDelta timestamp,
     base::TimeDelta duration);
 
+// Create a mismatched DecoderBuffer to verify in unit tests that we error
+// out and do not continue to decode or decrypt if subsamples do not match.
+scoped_refptr<DecoderBuffer> CreateMismatchedBufferForTest();
+
 // Verify if a fake video DecoderBuffer is valid.
 bool VerifyFakeVideoBufferForTest(const DecoderBuffer& buffer,
                                   const VideoDecoderConfig& config);
@@ -270,13 +274,19 @@ MATCHER_P(DecoderConfigEq, config, "") {
   return arg.Matches(config);
 }
 
-MATCHER_P(HasTimestamp, timestamp_in_ms, "") {
-  return arg.get() && !arg->end_of_stream() &&
-         arg->timestamp().InMilliseconds() == timestamp_in_ms;
+MATCHER_P(ReadOneAndHasTimestamp, timestamp_in_ms, "") {
+  DCHECK_EQ(arg.size(), 1u);
+  return !arg[0]->end_of_stream() &&
+         arg[0]->timestamp().InMilliseconds() == timestamp_in_ms;
 }
 
-MATCHER(IsEndOfStream, "") {
-  return arg.get() && arg->end_of_stream();
+MATCHER(ReadOneAndIsEndOfStream, "") {
+  DCHECK_EQ(arg.size(), 1u);
+  return arg[0]->end_of_stream();
+}
+
+MATCHER(IsEmpty, "") {
+  return arg.empty();
 }
 
 MATCHER(EosBeforeHaveMetadata, "") {
@@ -556,6 +566,10 @@ MATCHER_P(FrameEndTimestampOutOfRange, frame_type, "") {
   return CONTAINS_STRING(arg,
                          "Frame end timestamp for " + std::string(frame_type) +
                              " frame exceeds range allowed by implementation");
+}
+
+MATCHER(HlsDemuxerCtor, "") {
+  return CONTAINS_STRING(arg, "HlsDemuxer");
 }
 
 }  // namespace media

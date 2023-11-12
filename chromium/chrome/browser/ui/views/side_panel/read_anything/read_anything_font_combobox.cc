@@ -4,10 +4,11 @@
 
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_font_combobox.h"
 
-#include "chrome/browser/ui/views/side_panel/read_anything/read_anything_constants.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_model.h"
+#include "chrome/common/accessibility/read_anything_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/models/image_model.h"
 #include "ui/base/models/menu_model.h"
@@ -40,7 +41,7 @@ ReadAnythingFontCombobox::ReadAnythingFontCombobox(
     : Combobox(std::move(delegate->GetFontComboboxModel())),
       delegate_(std::move(delegate)) {
   SetTooltipTextAndAccessibleName(
-      l10n_util::GetStringUTF16(IDS_READ_ANYTHING_FONT_NAME_COMBOBOX_LABEL));
+      l10n_util::GetStringUTF16(IDS_READING_MODE_FONT_NAME_COMBOBOX_LABEL));
   SetCallback(
       base::BindRepeating(&ReadAnythingFontCombobox::FontNameChangedCallback,
                           weak_pointer_factory_.GetWeakPtr()));
@@ -67,5 +68,8 @@ void ReadAnythingFontCombobox::FontNameChangedCallback() {
 gfx::Size ReadAnythingFontCombobox::GetMinimumSize() const {
   return gfx::Size(kMinimumComboboxWidth, CalculatePreferredSize().height());
 }
+
+BEGIN_METADATA(ReadAnythingFontCombobox, views::Combobox)
+END_METADATA
 
 ReadAnythingFontCombobox::~ReadAnythingFontCombobox() = default;

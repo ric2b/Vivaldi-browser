@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/read_only_shared_memory_region.h"
@@ -485,12 +485,12 @@ class PasswordProtectionServiceBaseTest
         nullptr);
 
     if (!verdict_dictionary.is_dict())
-      verdict_dictionary = base::Value(base::Value::Type::DICTIONARY);
+      verdict_dictionary = base::Value(base::Value::Type::DICT);
 
-    base::Value invalid_verdict_entry(base::Value::Type::DICTIONARY);
+    base::Value invalid_verdict_entry(base::Value::Type::DICT);
     invalid_verdict_entry.SetStringKey("invalid", "invalid_string");
 
-    base::Value invalid_cache_expression_entry(base::Value::Type::DICTIONARY);
+    base::Value invalid_cache_expression_entry(base::Value::Type::DICT);
     invalid_cache_expression_entry.SetKey("invalid_cache_expression",
                                           std::move(invalid_verdict_entry));
     verdict_dictionary.SetKey(
@@ -841,11 +841,12 @@ TEST_P(PasswordProtectionServiceBaseTest, TestGetCachedVerdicts) {
                 LoginReputationClientRequest::PASSWORD_REUSE_EVENT,
                 reused_password_account_type, &actual_verdict));
 
-  // Return VERDICT_TYPE_UNSPECIFIED if look up for a URL whose variants match
-  // test.com/def, but the corresponding verdict is expired.
+  // Return SAFE if look up for a URL whose variants match
+  // test.com/def, but the corresponding verdict is expired, so the most
+  // matching unexpired verdict will return SAFE
   reused_password_account_type.set_account_type(
       ReusedPasswordAccountType::GSUITE);
-  EXPECT_EQ(LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED,
+  EXPECT_EQ(LoginReputationClientResponse::SAFE,
             password_protection_service_->GetCachedVerdict(
                 GURL("http://test.com/def/ghi/index.html"),
                 LoginReputationClientRequest::PASSWORD_REUSE_EVENT,

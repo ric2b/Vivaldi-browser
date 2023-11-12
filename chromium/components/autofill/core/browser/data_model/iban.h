@@ -14,19 +14,9 @@
 namespace autofill {
 
 // A form group that stores IBAN information.
+// Note: Only local IBAN is supported for now.
 class IBAN : public AutofillDataModel {
  public:
-  enum RecordType {
-    // A new IBAN which is extracted from the form.
-    NEW_IBAN,
-    // An IBAN stored and editable locally.
-    // Note: We only have local IBAN for now.
-    LOCAL_IBAN,
-    // An IBAN synced down from the server. These are read-only locally.
-    // Note: Server IBAN is not supported for now.
-    SERVER_IBAN,
-  };
-
   explicit IBAN(const std::string& guid);
 
   IBAN();
@@ -44,15 +34,10 @@ class IBAN : public AutofillDataModel {
   bool IsDeletable() const override;
 
   std::u16string GetRawInfo(ServerFieldType type) const override;
-  void SetRawInfoWithVerificationStatus(
-      ServerFieldType type,
-      const std::u16string& value,
-      structured_address::VerificationStatus status) override;
+  void SetRawInfoWithVerificationStatus(ServerFieldType type,
+                                        const std::u16string& value,
+                                        VerificationStatus status) override;
   void GetSupportedTypes(ServerFieldTypeSet* supported_types) const override;
-
-  // How this IBAN is stored.
-  RecordType record_type() const { return record_type_; }
-  void set_record_type(RecordType type) { record_type_ = type; }
 
   // Returns true if there are no values (field types) set.
   bool IsEmpty(const std::string& app_locale) const;
@@ -65,7 +50,7 @@ class IBAN : public AutofillDataModel {
   // the IBANs themselves.
   int Compare(const IBAN& iban) const;
 
-  // Equality operators compare GUIDs, origins, |record_type_|, |value_|,
+  // Equality operators compare GUIDs, origins, |value_|,
   // |nickname_| and the |server_id_|.
   bool operator==(const IBAN& iban) const;
   bool operator!=(const IBAN& iban) const;
@@ -86,8 +71,9 @@ class IBAN : public AutofillDataModel {
 
   // Converts value (E.g., CH12 1234 1234 1234 1234) of IBAN to a partially
   // masked text formatted by the following rules:
-  // 1. Reveal the first and the last four characters.
-  // 2. Mask the remaining digits.
+  // 1. Always reveal the first and the last four characters.
+  // 2. Mask the remaining digits if `is_value_masked` is true, otherwise,
+  //    display the digits.
   // 3. The identifier string will be arranged in groups of four with a space
   //    between each group.
   //
@@ -95,7 +81,8 @@ class IBAN : public AutofillDataModel {
   // BE71 0961 2345 6769 will be shown as: BE71 **** **** 6769.
   // CH56 0483 5012 3456 7800 9 will be shown as: CH56 **** **** **** *800 9.
   // DE91 1000 0000 0123 4567 89 will be shown as: DE91 **** **** **** **67 89.
-  std::u16string GetIdentifierStringForAutofillDisplay() const;
+  std::u16string GetIdentifierStringForAutofillDisplay(
+      bool is_value_masked = true) const;
 
  private:
   // Returns a version of |value_| which does not have any separator characters
@@ -105,10 +92,6 @@ class IBAN : public AutofillDataModel {
   // This is the ID assigned by the server to uniquely identify this IBAN.
   // Note: server_id is empty for now as only local IBAN is supported.
   std::string server_id_;
-
-  // Type of how IBAN is stored, either local or server.
-  // Note: IBAN will only be stored locally for now.
-  RecordType record_type_;
 
   // The IBAN's value, i.e., the actual bank account number.
   std::u16string value_;

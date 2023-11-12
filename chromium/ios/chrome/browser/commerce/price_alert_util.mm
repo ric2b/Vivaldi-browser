@@ -14,11 +14,20 @@
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 bool IsPriceAlertsEligible(web::BrowserState* browser_state) {
+
+  // Vivaldi: Don't show price alerts for us.
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   if (browser_state->IsOffTheRecord()) {
     return false;
   }

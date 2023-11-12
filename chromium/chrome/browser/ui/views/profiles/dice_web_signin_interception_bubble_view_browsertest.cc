@@ -6,8 +6,9 @@
 
 #include <string>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -24,6 +25,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
+#include "chrome/test/base/profile_destruction_waiter.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/google/core/common/google_util.h"
 #include "components/policy/core/common/management/scoped_management_service_override_for_testing.h"
@@ -37,6 +39,7 @@
 #include "ui/base/ui_base_switches.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/test/widget_test.h"
+#include "ui/views/widget/any_widget_observer.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -52,35 +55,6 @@ struct TestParam {
   bool use_dark_theme = false;
   SkColor4f intercepted_profile_color = SkColors::kLtGray;
   SkColor4f primary_profile_color = SkColors::kBlue;
-};
-
-class ProfileDestructionWatcher : public ProfileObserver {
- public:
-  ProfileDestructionWatcher() = default;
-
-  ProfileDestructionWatcher(const ProfileDestructionWatcher&) = delete;
-  ProfileDestructionWatcher& operator=(const ProfileDestructionWatcher&) =
-      delete;
-
-  ~ProfileDestructionWatcher() override = default;
-
-  void Watch(Profile* profile) { observed_profiles_.AddObservation(profile); }
-  void WaitForDestruction() { run_loop_.Run(); }
-  bool destroyed() const { return destroyed_; }
-
- private:
-  // ProfileObserver:
-  void OnProfileWillBeDestroyed(Profile* profile) override {
-    DCHECK(!destroyed_) << "Double profile destruction";
-    destroyed_ = true;
-    observed_profiles_.RemoveObservation(profile);
-    run_loop_.Quit();
-  }
-
-  bool destroyed_ = false;
-  base::RunLoop run_loop_;
-  base::ScopedMultiSourceObservation<Profile, ProfileObserver>
-      observed_profiles_{this};
 };
 
 // To be passed as 4th argument to `INSTANTIATE_TEST_SUITE_P()`, allows the test
@@ -215,10 +189,15 @@ class DiceWebSigninInterceptionBubblePixelTest
         GURL(chrome::kChromeUIDiceWebSigninInterceptURL)};
     observer.StartWatchingNewWebContents();
 
+    views::NamedWidgetShownWaiter widget_waiter(
+        views::test::AnyWidgetTestPasskey{},
+        "DiceWebSigninInterceptionBubbleView");
+
     bubble_handle_ = DiceWebSigninInterceptionBubbleView::CreateBubble(
         browser(), GetAvatarButton(browser()), GetTestBubbleParameters(),
         base::DoNothing());
 
+    widget_waiter.WaitIfNeededAndGet();
     observer.Wait();
   }
 
@@ -250,9 +229,20 @@ class DiceWebSigninInterceptionBubblePixelTest
     primary_account.email = "tessa.tester@primary.com";
     primary_account.hosted_domain =
         is_primary_account_managed ? "primary.com" : kNoHostedDomainFound;
+    bool show_managed_disclaimer =
+        (GetParam().is_intercepted_account_managed ||
+         GetParam().management_authority !=
+             policy::EnterpriseManagementAuthority::NONE) &&
+        (base::FeatureList::IsEnabled(kSigninInterceptBubbleV2) ||
+         base::FeatureList::IsEnabled(kSyncPromoAfterSigninIntercept));
 
-    return {GetParam().interception_type, intercepted_account, primary_account,
-            GetParam().intercepted_profile_color.toSkColor()};
+    return {GetParam().interception_type,
+            intercepted_account,
+            primary_account,
+            GetParam().intercepted_profile_color.toSkColor(),
+            /*show_guest_option=*/false,
+            /*show_link_data_option=*/false,
+            show_managed_disclaimer};
   }
 
   std::unique_ptr<ScopedDiceWebSigninInterceptionBubbleHandle> bubble_handle_;
@@ -284,6 +274,25 @@ IN_PROC_BROWSER_TEST_P(DiceWebSigninInterceptionBubbleV2PixelTest,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          DiceWebSigninInterceptionBubbleV2PixelTest,
+                         testing::ValuesIn(kTestParams),
+                         &ParamToTestSuffix);
+
+class DiceWebSigninInterceptionBubbleV1SyncPromoPixelTest
+    : public DiceWebSigninInterceptionBubblePixelTest {
+ public:
+  DiceWebSigninInterceptionBubbleV1SyncPromoPixelTest() = default;
+
+  base::test::ScopedFeatureList scoped_feature_list_{
+      kSyncPromoAfterSigninIntercept};
+};
+
+IN_PROC_BROWSER_TEST_P(DiceWebSigninInterceptionBubbleV1SyncPromoPixelTest,
+                       InvokeUi_default) {
+  ShowAndVerifyUi();
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         DiceWebSigninInterceptionBubbleV1SyncPromoPixelTest,
                          testing::ValuesIn(kTestParams),
                          &ParamToTestSuffix);
 
@@ -449,14 +458,13 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptionBubbleBrowserTest,
   EXPECT_FALSE(callback_result_.has_value());
 
   // Close the browser without closing the bubble.
-  ProfileDestructionWatcher profile_destruction_watcher;
-  profile_destruction_watcher.Watch(new_profile);
+  ProfileDestructionWaiter profile_destruction_waiter(new_profile);
   new_browser->window()->Close();
 
   // The profile is not destroyed, because the bubble is retaining it.
   EXPECT_TRUE(g_browser_process->profile_manager()->HasKeepAliveForTesting(
       new_profile, ProfileKeepAliveOrigin::kDiceWebSigninInterceptionBubble));
-  EXPECT_FALSE(profile_destruction_watcher.destroyed());
+  EXPECT_FALSE(profile_destruction_waiter.destroyed());
 
   // Close the bubble.
   views::test::WidgetDestroyedWaiter widget_destroyed_waiter(widget);
@@ -466,7 +474,7 @@ IN_PROC_BROWSER_TEST_F(DiceWebSigninInterceptionBubbleBrowserTest,
   EXPECT_EQ(callback_result_, SigninInterceptionResult::kIgnored);
 
   // The keep-alive is released and the profile is destroyed.
-  profile_destruction_watcher.WaitForDestruction();
+  profile_destruction_waiter.Wait();
 
   // Check that histograms are recorded.
   histogram_tester.ExpectUniqueSample("Signin.InterceptResult.MultiUser",

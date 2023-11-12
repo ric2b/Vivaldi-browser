@@ -24,7 +24,6 @@
 
 namespace {
 const int kWasmPageSize = 1 << 16;
-}  // namespace
 
 // Web platform security features are implemented by content/ and blink/.
 // However, since ContentBrowserClientImpl::LogWebFeatureForCurrentPage() is
@@ -45,7 +44,11 @@ class ChromeWebPlatformSecurityMetricsBrowserTest
             // SharedArrayBuffer is needed for these tests.
             features::kSharedArrayBuffer,
         },
-        {});
+        {
+            // Disabled because some subtests set document.domain and this
+            // feature flag prevents that:
+            blink::features::kOriginAgentClusterDefaultEnabled,
+        });
   }
 
   content::WebContents* web_contents() const {
@@ -154,6 +157,20 @@ class ChromeWebPlatformSecurityMetricsBrowserTest
   base::test::ScopedFeatureList features_;
 };
 
+// Return the child of `parent`.
+// Precondition: the number of children must be one.
+content::RenderFrameHost* GetChild(content::RenderFrameHost& parent) {
+  content::RenderFrameHost* child_rfh = nullptr;
+  parent.ForEachRenderFrameHost([&](content::RenderFrameHost* rfh) {
+    if (&parent == rfh->GetParent()) {
+      CHECK(!child_rfh) << "Multiple children found";
+      child_rfh = rfh;
+    }
+  });
+  CHECK(child_rfh) << "No children found";
+  return child_rfh;
+}
+
 // Check the kCrossOriginOpenerPolicyReporting feature usage. No header => 0
 // count.
 IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
@@ -162,6 +179,70 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   GURL url = https_server().GetURL("a.com", "/title1.html");
   EXPECT_TRUE(content::NavigateToURL(web_contents(), url));
   ExpectHistogramIncreasedBy(0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       PrivateNetworkAccessIgnoredCrossSitePreflightError) {
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(),
+      https_server().GetURL(
+          "a.com",
+          "/private_network_access/no-favicon-treat-as-public-address.html")));
+
+  ASSERT_EQ(true, content::EvalJs(
+                      web_contents(),
+                      content::JsReplace(
+                          "fetch($1).then(response => response.ok)",
+                          https_server().GetURL("b.com", "/cors-ok.txt"))));
+
+  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredPreflightError, 1);
+  CheckCounter(
+      WebFeature::kPrivateNetworkAccessIgnoredCrossOriginPreflightError, 1);
+  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredCrossSitePreflightError,
+               1);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    ChromeWebPlatformSecurityMetricsBrowserTest,
+    PrivateNetworkAccessIgnoredCrossOriginSameSitePreflightError) {
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(),
+      https_server().GetURL(
+          "a.com",
+          "/private_network_access/no-favicon-treat-as-public-address.html")));
+
+  ASSERT_EQ(true, content::EvalJs(web_contents(),
+                                  content::JsReplace(
+                                      "fetch($1).then(response => response.ok)",
+                                      https_server().GetURL("subdomain.a.com",
+                                                            "/cors-ok.txt"))));
+
+  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredPreflightError, 1);
+  CheckCounter(
+      WebFeature::kPrivateNetworkAccessIgnoredCrossOriginPreflightError, 1);
+  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredCrossSitePreflightError,
+               0);
+}
+
+IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
+                       PrivateNetworkAccessIgnoredSameOriginPreflightError) {
+  ASSERT_TRUE(content::NavigateToURL(
+      web_contents(),
+      https_server().GetURL(
+          "a.com",
+          "/private_network_access/no-favicon-treat-as-public-address.html")));
+
+  ASSERT_EQ(true, content::EvalJs(
+                      web_contents(),
+                      content::JsReplace(
+                          "fetch($1).then(response => response.ok)",
+                          https_server().GetURL("a.com", "/cors-ok.txt"))));
+
+  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredPreflightError, 1);
+  CheckCounter(
+      WebFeature::kPrivateNetworkAccessIgnoredCrossOriginPreflightError, 0);
+  CheckCounter(WebFeature::kPrivateNetworkAccessIgnoredCrossSitePreflightError,
+               0);
 }
 
 // Check the kCrossOriginOpenerPolicyReporting feature usage. COOP-Report-Only +
@@ -1957,6 +2038,61 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
   CheckHistogramCount("Navigation.BlobUrl.Sandboxed", false, 1);
 }
 
+using SameDocumentCrossOriginInitiatorTest =
+    ChromeWebPlatformSecurityMetricsBrowserTest;
+
+IN_PROC_BROWSER_TEST_F(SameDocumentCrossOriginInitiatorTest, SameOrigin) {
+  const GURL parent_url = https_server().GetURL("a.test", "/empty.html");
+  const GURL child_url = https_server().GetURL("a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), parent_url));
+  LoadIFrame(child_url);
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+  EXPECT_TRUE(content::ExecJs(
+      web_contents(), "document.querySelector('iframe').src += '#foo';"));
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(SameDocumentCrossOriginInitiatorTest, SameSite) {
+  const GURL parent_url = https_server().GetURL("a.a.test", "/empty.html");
+  const GURL child_url = https_server().GetURL("b.a.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), parent_url));
+  LoadIFrame(child_url);
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+  EXPECT_TRUE(content::ExecJs(
+      web_contents(), "document.querySelector('iframe').src += '#foo';"));
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
+  // TODO(https://crbug.com/1408429) It seems the initiator origin is wrong,
+  // e.g. `child_url` instead of `parent_url`, causing the metrics not to be
+  // recorded.
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+}
+
+IN_PROC_BROWSER_TEST_F(SameDocumentCrossOriginInitiatorTest, CrossOrigin) {
+  const GURL parent_url = https_server().GetURL("a.test", "/empty.html");
+  const GURL child_url = https_server().GetURL("b.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), parent_url));
+  LoadIFrame(child_url);
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+  EXPECT_TRUE(content::ExecJs(
+      web_contents(), "document.querySelector('iframe').src += '#foo';"));
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 1);
+}
+
+IN_PROC_BROWSER_TEST_F(SameDocumentCrossOriginInitiatorTest,
+                       SameOriginInitiated) {
+  const GURL parent_url = https_server().GetURL("a.test", "/empty.html");
+  const GURL child_url = https_server().GetURL("b.test", "/empty.html");
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), parent_url));
+  LoadIFrame(child_url);
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+  EXPECT_TRUE(
+      content::ExecJs(GetChild(*(web_contents()->GetPrimaryMainFrame())),
+                      "location.href += '#foo';"));
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents()));
+  CheckCounter(WebFeature::kSameDocumentCrossOriginInitiator, 0);
+}
+
 // TODO(arthursonzogni): Add basic test(s) for the WebFeatures:
 // [ ] CrossOriginOpenerPolicySameOrigin
 // [ ] CrossOriginOpenerPolicySameOriginAllowPopups
@@ -1964,3 +2100,5 @@ IN_PROC_BROWSER_TEST_F(ChromeWebPlatformSecurityMetricsBrowserTest,
 //
 // Added by:
 // https://chromium-review.googlesource.com/c/chromium/src/+/2122140
+
+}  // namespace

@@ -15,6 +15,7 @@ import org.chromium.components.external_intents.ExternalNavigationHandler.Overri
 import org.chromium.components.external_intents.InterceptNavigationDelegateClient;
 import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.components.external_intents.RedirectHandler;
+import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
@@ -39,11 +40,6 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
             public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigationHandle) {
                 mInterceptNavigationDelegate.onNavigationFinishedInPrimaryMainFrame(
                         navigationHandle);
-            }
-
-            @Override
-            public void didFinishNavigationNoop(NavigationHandle navigation) {
-                mInterceptNavigationDelegate.onNavigationFinishedNoop(navigation);
             }
         };
     }
@@ -98,11 +94,6 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
     @Override
     public boolean isIncognito() {
         return mTab.getProfile().isIncognito();
-    }
-
-    @Override
-    public boolean isHidden() {
-        return !mTab.isVisible();
     }
 
     @Override
@@ -167,7 +158,7 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
                     navigation.setIsUserDecidingIntentLaunch();
                 }
                 break;
-            case OverrideUrlLoadingResultType.OVERRIDE_WITH_CLOBBERING_TAB:
+            case OverrideUrlLoadingResultType.OVERRIDE_WITH_NAVIGATE_TAB:
             case OverrideUrlLoadingResultType.NO_OVERRIDE:
             default:
                 break;
@@ -176,5 +167,11 @@ public class InterceptNavigationDelegateClientImpl implements InterceptNavigatio
 
     static void closeTab(TabImpl tab) {
         tab.getBrowser().destroyTab(tab);
+    }
+
+    @Override
+    public void loadUrlIfPossible(LoadUrlParams loadUrlParams) {
+        if (mDestroyed) return;
+        mTab.loadUrl(loadUrlParams);
     }
 }

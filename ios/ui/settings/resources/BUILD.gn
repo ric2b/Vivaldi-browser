@@ -28,6 +28,13 @@ imageset("chrome_icon") {
   ]
 }
 
+imageset("blue_vivaldi_icon") {
+  sources = [
+    "blue_vivaldi_icon.imageset/Contents.json",
+    "blue_vivaldi_icon.imageset/blue_vivaldi_icon.pdf",
+  ]
+}
+
 imageset("sync_autofill") {
   sources = [
     "sync_autofill.imageset/Contents.json",
@@ -174,5 +181,15 @@ imageset("vivaldi_setting_version") {
   sources = [
     "vivaldi_setting_version.imageset/Contents.json",
     "vivaldi_setting_version.imageset/vivaldi_setting_version.pdf",
+  ]
+}
+
+# Misc
+
+imageset("vivaldi_passwords_autofill_banner") {
+  sources = [
+    "vivaldi_passwords_autofill_banner.imageset/Contents.json",
+    "vivaldi_passwords_autofill_banner.imageset/vivaldi_passwords_autofill_banner@2x.png",
+    "vivaldi_passwords_autofill_banner.imageset/vivaldi_passwords_autofill_banner@3x.png",
   ]
 }

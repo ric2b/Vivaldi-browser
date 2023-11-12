@@ -34,6 +34,12 @@ extern const char kVivaldiAccountServerUrlOpenId[];
 extern const char kVivaldiSyncServerUrl[];
 extern const char kVivaldiSyncNotificationsServerUrl[];
 
+extern const char kVivaldiClientHintsBrand[];
+extern const char kVivaldiClientHintsBrandAppendVivaldi[];
+extern const char kVivaldiClientHintsBrandCustomBrand[];
+extern const char kVivaldiClientHintsBrandCustomBrandVersion[];
+
+
 // Old pref names that have been changed during the migration
 // to the new prefs api.
 extern const char kOldAlwaysLoadPinnedTabAfterRestore[];
@@ -71,6 +77,10 @@ extern const char kVivaldiDesktopTabsEnabled[];
 extern const char kVivaldiTabStackEnabled[];
 #endif
 
+#if BUILDFLAG(IS_ANDROID)
+// Background media playback for YouTube.
+extern const char kBackgroundMediaPlaybackAllowed[];
+#endif
 }  // namespace vivaldiprefs
 
 #endif  // PREFS_VIVALDI_PREF_NAMES_H_

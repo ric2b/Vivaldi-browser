@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/location_bar/location_bar_view_controller.h"
 
-#import "base/bind.h"
 #import "base/containers/contains.h"
+#import "base/functional/bind.h"
 #import "base/ios/ios_util.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
@@ -38,8 +38,8 @@
 #import "ios/chrome/browser/ui/location_bar/location_bar_constants+vivaldi.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/ad_tracker_blocker/vivaldi_atb_constants.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
@@ -274,14 +274,12 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   [self.view addSubview:self.locationBarSteadyView];
   self.locationBarSteadyView.translatesAutoresizingMaskIntoConstraints = NO;
 
-  // Vivaldi
-  [self setUpVivaldiCommon];
-  if (self.isDeviceIPad) {
-  AddSameConstraints(self.locationBarSteadyView, self.view);
+  if (IsVivaldiRunning()) {
+    [self setUpVivaldiCommon];
+    [self setUpLocationBarConstraintsVivaldi];
   } else {
-    [self setUpLocationBarModForiPhone];
-  }
-  // End Vivaldi
+  AddSameConstraints(self.locationBarSteadyView, self.view);
+  } // End Vivaldi
 
   [self updateTrailingButtonState];
   [self switchToEditing:NO];
@@ -304,6 +302,11 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [self updateTrailingButtonState];
   [super traitCollectionDidChange:previousTraitCollection];
+
+  // Vivaldi
+  [self handleVivaldiMenuButtonVisibility];
+  // End Vivaldi
+
 }
 
 #pragma mark - FullscreenUIElement
@@ -432,7 +435,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   self.locationBarSteadyView.hidden = hidden;
 
   // Vivaldi
-  if (self.hasValidOrientation && !self.isDevicePortrait) {
+  if (self.hideVivaldiTopToolbarButtons) {
     self.vivaldiMenuButton.hidden = YES;
     self.vivaldiShieldButton.hidden = YES;
   } else {
@@ -915,6 +918,13 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 
 #pragma mark - VIVALDI
 
+- (void)viewWillTransitionToSize:(CGSize)size
+       withTransitionCoordinator:
+  (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  [self handleVivaldiMenuButtonVisibility];
+}
+
 /// Set up common UI changes for both iPhone and iPads.
 - (void)setUpVivaldiCommon {
   self.editView.backgroundColor =
@@ -927,7 +937,7 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 /// Set up Vivaldi menu button and make changes to the UI and constraints for
 /// iPhone. iPad is not affected by this since the menu button is already part
 /// of the tool bar on iPad.
-- (void)setUpLocationBarModForiPhone {
+- (void)setUpLocationBarConstraintsVivaldi {
 
   UIButton* vivaldiMenuButton = [UIButton new];
   _vivaldiMenuButton = vivaldiMenuButton;
@@ -988,43 +998,35 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
   [self handleVivaldiMenuButtonVisibility];
 }
 
-- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:
-  (id<UIViewControllerTransitionCoordinator>)coordinator {
-  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-  if (self.isDeviceIPad || !self.hasValidOrientation)
-    return;
-  [self handleVivaldiMenuButtonVisibility];
-}
-
 /// Device orientation change handler for Vivaldi.
 /// In landscape mode for iPhone, we won't show the Vivaldi menu and tracker
 /// blocker shield as they are part of toolbar more menu.
 - (void)handleVivaldiMenuButtonVisibility {
-  if (self.isDevicePortrait) {
-    self.vivaldiMenuButton.alpha = 1.0;
-    self.vivaldiShieldButton.alpha = 1.0;
+  if (self.hideVivaldiTopToolbarButtons) {
+    self.vivaldiMenuButton.hidden = YES;
+    self.vivaldiShieldButton.hidden = YES;
 
     [NSLayoutConstraint deactivateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraintNoShield,
-      self.locationBarSteadyViewTrailingConstraintNoMenu
+      self.locationBarSteadyViewLeadingConstraint,
+      self.locationBarSteadyViewTrailingConstraint
     ]];
 
     [NSLayoutConstraint activateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraint,
-      self.locationBarSteadyViewTrailingConstraint
+      self.locationBarSteadyViewLeadingConstraintNoShield,
+      self.locationBarSteadyViewTrailingConstraintNoMenu
     ]];
   } else {
-    self.vivaldiMenuButton.alpha = 0.0;
-    self.vivaldiShieldButton.alpha = 0.0;
+    self.vivaldiMenuButton.hidden = NO;
+    self.vivaldiShieldButton.hidden = NO;
 
     [NSLayoutConstraint deactivateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraint,
-      self.locationBarSteadyViewTrailingConstraint
+      self.locationBarSteadyViewLeadingConstraintNoShield,
+      self.locationBarSteadyViewTrailingConstraintNoMenu
     ]];
 
     [NSLayoutConstraint activateConstraints:@[
-      self.locationBarSteadyViewLeadingConstraintNoShield,
-      self.locationBarSteadyViewTrailingConstraintNoMenu
+      self.locationBarSteadyViewLeadingConstraint,
+      self.locationBarSteadyViewTrailingConstraint
     ]];
   }
 }
@@ -1032,6 +1034,18 @@ const NSString* kScribbleOmniboxElementId = @"omnibox";
 - (LocationBarSteadyView*)steadyView {
   return self.locationBarSteadyView;
 }
+
+/// Returns true on iPad full screen or 2/3, and iPhone landscape.
+- (BOOL)hideVivaldiTopToolbarButtons {
+  if (VivaldiGlobalHelpers.isDeviceTablet) {
+    return VivaldiGlobalHelpers.isVerticalTraitRegular &&
+        VivaldiGlobalHelpers.isHorizontalTraitRegular;
+  } else {
+    return VivaldiGlobalHelpers.isVerticalTraitCompact ||
+        VivaldiGlobalHelpers.isHorizontalTraitRegular;
+  }
+}
+
 // End Vivaldi
 
 @end

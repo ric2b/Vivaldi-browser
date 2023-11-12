@@ -15,7 +15,6 @@ import android.view.MenuItem;
 
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
-import androidx.vectordrawable.graphics.drawable.VectorDrawableCompat;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
@@ -31,6 +30,7 @@ import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxBridge;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxReferrer;
 import org.chromium.chrome.browser.privacy_sandbox.PrivacySandboxSettingsBaseFragment;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.metrics.SettingsAccessPoint;
 import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.settings.ChromeManagedPreferenceDelegate;
@@ -40,11 +40,11 @@ import org.chromium.chrome.browser.sync.settings.GoogleServicesSettings;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.usage_stats.UsageStatsConsentDialog;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
-import org.chromium.components.browser_ui.settings.ManagedPreferenceDelegate;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.site_settings.ContentSettingsResources;
 import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
+import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.user_prefs.UserPrefs;
@@ -81,7 +81,6 @@ public class PrivacySettings
     private static final String PREF_WEBRTC_BROADCAST_IP = "webrtc_broadcast_ip";
     private static final String PREF_PHONE_AS_A_SECURITY_KEY = "phone_as_a_security_key";
 
-    private ManagedPreferenceDelegate mManagedPreferenceDelegate;
     private IncognitoLockSettings mIncognitoLockSettings;
 
     /**
@@ -150,8 +149,6 @@ public class PrivacySettings
 
         setHasOptionsMenu(true);
 
-        mManagedPreferenceDelegate = createManagedPreferenceDelegate();
-
         ChromeSwitchPreference canMakePaymentPref =
                 (ChromeSwitchPreference) findPreference(PREF_CAN_MAKE_PAYMENT);
         canMakePaymentPref.setOnPreferenceChangeListener(this);
@@ -161,9 +158,29 @@ public class PrivacySettings
         httpsFirstModePref.setVisible(
                 ChromeFeatureList.isEnabled(ChromeFeatureList.HTTPS_FIRST_MODE));
         httpsFirstModePref.setOnPreferenceChangeListener(this);
-        httpsFirstModePref.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
+        httpsFirstModePref.setManagedPreferenceDelegate(new ChromeManagedPreferenceDelegate() {
+            @Override
+            public boolean isPreferenceControlledByPolicy(Preference preference) {
+                String key = preference.getKey();
+                assert PREF_HTTPS_FIRST_MODE.equals(key) : "Unexpected preference key: " + key;
+                return UserPrefs.get(Profile.getLastUsedRegularProfile())
+                        .isManagedPreference(Pref.HTTPS_ONLY_MODE_ENABLED);
+            }
+
+            @Override
+            public boolean isPreferenceClickDisabledByPolicy(Preference preference) {
+                // Advanced Protection automatically enables HTTPS-Only Mode so
+                // lock the setting.
+                return isPreferenceControlledByPolicy(preference)
+                        || SafeBrowsingBridge.isUnderAdvancedProtection();
+            }
+        });
         httpsFirstModePref.setChecked(UserPrefs.get(Profile.getLastUsedRegularProfile())
                                               .getBoolean(Pref.HTTPS_ONLY_MODE_ENABLED));
+        if (SafeBrowsingBridge.isUnderAdvancedProtection()) {
+            httpsFirstModePref.setSummary(getContext().getResources().getString(
+                    R.string.settings_https_first_mode_with_advanced_protection_summary));
+        }
 
         Preference secureDnsPref = findPreference(PREF_SECURE_DNS);
         if (ChromeApplicationImpl.isVivaldi())
@@ -352,23 +369,12 @@ public class PrivacySettings
                             R.string.text_on : R.string.text_off);
     }
 
-    private ChromeManagedPreferenceDelegate createManagedPreferenceDelegate() {
-        return preference -> {
-            String key = preference.getKey();
-            if (PREF_HTTPS_FIRST_MODE.equals(key)) {
-                return UserPrefs.get(Profile.getLastUsedRegularProfile())
-                        .isManagedPreference(Pref.HTTPS_ONLY_MODE_ENABLED);
-            }
-            return false;
-        };
-    }
-
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         menu.clear();
         MenuItem help =
                 menu.add(Menu.NONE, R.id.menu_id_targeted_help, Menu.NONE, R.string.menu_help);
-        help.setIcon(VectorDrawableCompat.create(
+        help.setIcon(TraceEventVectorDrawableCompat.create(
                 getResources(), R.drawable.ic_help_and_feedback, getActivity().getTheme()));
     }
 

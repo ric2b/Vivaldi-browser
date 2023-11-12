@@ -12,19 +12,19 @@
 #include "base/containers/flat_map.h"
 #include "base/guid.h"
 #include "base/time/time.h"
+#include "components/attribution_reporting/source_type.mojom.h"
 #include "content/browser/attribution_reporting/attribution_report.h"
-#include "content/browser/attribution_reporting/attribution_source_type.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/browser/attribution_reporting/combinatorics.h"
 #include "content/browser/attribution_reporting/common_source_info.h"
 #include "content/browser/attribution_reporting/stored_source.h"
-#include "content/public/browser/attribution_reporting.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
 
 namespace {
 
+using ::attribution_reporting::mojom::SourceType;
 using ::testing::AllOf;
 using ::testing::Ge;
 using ::testing::Lt;
@@ -33,12 +33,11 @@ using FakeReport = ::content::AttributionStorageDelegate::FakeReport;
 
 constexpr base::TimeDelta kDefaultExpiry = base::Days(30);
 
-AttributionReport GetReport(
-    base::Time source_time,
-    base::Time trigger_time,
-    base::TimeDelta expiry = kDefaultExpiry,
-    base::TimeDelta report_window = kDefaultExpiry,
-    AttributionSourceType source_type = AttributionSourceType::kNavigation) {
+AttributionReport GetReport(base::Time source_time,
+                            base::Time trigger_time,
+                            base::TimeDelta expiry = kDefaultExpiry,
+                            base::TimeDelta report_window = kDefaultExpiry,
+                            SourceType source_type = SourceType::kNavigation) {
   return ReportBuilder(
              AttributionInfoBuilder(SourceBuilder(source_time)
                                         .SetExpiry(expiry)
@@ -50,7 +49,7 @@ AttributionReport GetReport(
       .Build();
 }
 
-void RunRandomFakeReportsTest(const AttributionSourceType source_type,
+void RunRandomFakeReportsTest(const SourceType source_type,
                               const int num_stars,
                               const int num_bars,
                               const int num_samples,
@@ -197,7 +196,7 @@ TEST(AttributionStorageDelegateImplTest,
   const AttributionReport report =
       GetReport(source_time, trigger_time,
                 /*expiry=*/base::Days(1),
-                /*report_window=*/base::Days(1), AttributionSourceType::kEvent);
+                /*report_window=*/base::Days(1), SourceType::kEvent);
   EXPECT_EQ(source_time + base::Days(1) + base::Hours(1),
             AttributionStorageDelegateImpl().GetEventLevelReportTime(
                 report.attribution_info().source.common_info(),
@@ -211,7 +210,7 @@ TEST(AttributionStorageDelegateImplTest,
   const AttributionReport report =
       GetReport(source_time, trigger_time,
                 /*expiry=*/base::Days(4),
-                /*report_window=*/base::Days(4), AttributionSourceType::kEvent);
+                /*report_window=*/base::Days(4), SourceType::kEvent);
   EXPECT_EQ(source_time + base::Days(4) + base::Hours(1),
             AttributionStorageDelegateImpl().GetEventLevelReportTime(
                 report.attribution_info().source.common_info(),
@@ -268,91 +267,101 @@ TEST(AttributionStorageDelegateImplTest, GetFakeReportsForSequenceIndex) {
       kImpressionTime + kExpiry + base::Hours(1);
 
   const struct {
-    AttributionSourceType source_type;
+    SourceType source_type;
     int sequence_index;
     std::vector<FakeReport> expected;
   } kTestCases[] = {
       // Event sources only have 3 output states, so we can enumerate them:
       {
-          .source_type = AttributionSourceType::kEvent,
+          .source_type = SourceType::kEvent,
           .sequence_index = 0,
           .expected = {},
       },
       {
-          .source_type = AttributionSourceType::kEvent,
+          .source_type = SourceType::kEvent,
           .sequence_index = 1,
           .expected = {{
               .trigger_data = 0,
+              .trigger_time = kExpiryReportTime - base::Hours(1),
               .report_time = kExpiryReportTime,
           }},
       },
       {
-          .source_type = AttributionSourceType::kEvent,
+          .source_type = SourceType::kEvent,
           .sequence_index = 2,
           .expected = {{
               .trigger_data = 1,
+              .trigger_time = kExpiryReportTime - base::Hours(1),
               .report_time = kExpiryReportTime,
           }},
       },
       // Navigation sources have 2925 output states, so pick interesting ones:
       {
-          .source_type = AttributionSourceType::kNavigation,
+          .source_type = SourceType::kNavigation,
           .sequence_index = 0,
           .expected = {},
       },
       {
-          .source_type = AttributionSourceType::kNavigation,
+          .source_type = SourceType::kNavigation,
           .sequence_index = 20,
           .expected = {{
               .trigger_data = 3,
+              .trigger_time = kEarlyReportTime1 - base::Hours(1),
               .report_time = kEarlyReportTime1,
           }},
       },
       {
-          .source_type = AttributionSourceType::kNavigation,
+          .source_type = SourceType::kNavigation,
           .sequence_index = 41,
           .expected =
               {
                   {
                       .trigger_data = 4,
+                      .trigger_time = kEarlyReportTime1 - base::Hours(1),
                       .report_time = kEarlyReportTime1,
                   },
                   {
                       .trigger_data = 2,
+                      .trigger_time = kEarlyReportTime1 - base::Hours(1),
                       .report_time = kEarlyReportTime1,
                   },
               },
       },
       {
-          .source_type = AttributionSourceType::kNavigation,
+          .source_type = SourceType::kNavigation,
           .sequence_index = 50,
           .expected =
               {
                   {
                       .trigger_data = 4,
+                      .trigger_time = kEarlyReportTime1 - base::Hours(1),
                       .report_time = kEarlyReportTime1,
                   },
                   {
                       .trigger_data = 4,
+                      .trigger_time = kEarlyReportTime1 - base::Hours(1),
                       .report_time = kEarlyReportTime1,
                   },
               },
       },
       {
-          .source_type = AttributionSourceType::kNavigation,
+          .source_type = SourceType::kNavigation,
           .sequence_index = 1268,
           .expected =
               {
                   {
                       .trigger_data = 1,
+                      .trigger_time = kExpiryReportTime - base::Hours(1),
                       .report_time = kExpiryReportTime,
                   },
                   {
                       .trigger_data = 6,
+                      .trigger_time = kEarlyReportTime2 - base::Hours(1),
                       .report_time = kEarlyReportTime2,
                   },
                   {
                       .trigger_data = 7,
+                      .trigger_time = kEarlyReportTime1 - base::Hours(1),
                       .report_time = kEarlyReportTime1,
                   },
               },
@@ -379,7 +388,7 @@ TEST(AttributionStorageDelegateImplTest,
   //
   // For the distribution check, the probability of failure with `tolerance` is
   // at most 1e-9.
-  RunRandomFakeReportsTest(AttributionSourceType::kEvent,
+  RunRandomFakeReportsTest(SourceType::kEvent,
                            /*num_stars=*/1,
                            /*num_bars=*/2,
                            /*num_samples=*/100'000,
@@ -394,7 +403,7 @@ TEST(AttributionStorageDelegateImplTest,
   //
   // For the distribution check, the probability of failure with `tolerance` is
   // at most .0002.
-  RunRandomFakeReportsTest(AttributionSourceType::kNavigation,
+  RunRandomFakeReportsTest(SourceType::kNavigation,
                            /*num_stars=*/3,
                            /*num_bars=*/24,
                            /*num_samples=*/150'000,
@@ -403,16 +412,16 @@ TEST(AttributionStorageDelegateImplTest,
 
 TEST(AttributionStorageDelegateImplTest, SanitizeTriggerData) {
   const struct {
-    AttributionSourceType source_type;
+    SourceType source_type;
     uint64_t trigger_data;
     uint64_t expected;
   } kTestCases[] = {
-      {AttributionSourceType::kNavigation, 7, 7},
-      {AttributionSourceType::kNavigation, 8, 0},
-      {AttributionSourceType::kNavigation, 9, 1},
-      {AttributionSourceType::kEvent, 1, 1},
-      {AttributionSourceType::kEvent, 2, 0},
-      {AttributionSourceType::kEvent, 3, 1},
+      {SourceType::kNavigation, 7, 7},  //
+      {SourceType::kNavigation, 8, 0},  //
+      {SourceType::kNavigation, 9, 1},  //
+      {SourceType::kEvent, 1, 1},       //
+      {SourceType::kEvent, 2, 0},       //
+      {SourceType::kEvent, 3, 1},       //
   };
 
   for (const auto& test_case : kTestCases) {

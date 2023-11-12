@@ -24,21 +24,21 @@ import './clear_storage_dialog_shared.css.js';
 import './site_details_permission.js';
 
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxyImpl, PrivacyElementInteractions} from '../metrics_browser_proxy.js';
 import {routes} from '../route.js';
-import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
+import {Route, RouteObserverMixin, Router} from '../router.js';
 
-import {ContentSetting, ContentSettingsTypes} from './constants.js';
+import {ChooserType, ContentSetting, ContentSettingsTypes} from './constants.js';
 import {getTemplate} from './site_details.html.js';
 import {SiteDetailsPermissionElement} from './site_details_permission.js';
-import {SiteSettingsMixin, SiteSettingsMixinInterface} from './site_settings_mixin.js';
+import {SiteSettingsMixin} from './site_settings_mixin.js';
 import {WebsiteUsageBrowserProxy, WebsiteUsageBrowserProxyImpl} from './website_usage_browser_proxy.js';
 
 export interface SiteDetailsElement {
@@ -52,13 +52,8 @@ export interface SiteDetailsElement {
   };
 }
 
-const SiteDetailsElementBase =
-    RouteObserverMixin(
-        SiteSettingsMixin(WebUiListenerMixin(I18nMixin(PolymerElement)))) as {
-      new (): PolymerElement & I18nMixinInterface &
-          WebUiListenerMixinInterface & SiteSettingsMixinInterface &
-          RouteObserverMixinInterface,
-    };
+const SiteDetailsElementBase = RouteObserverMixin(
+    SiteSettingsMixin(WebUiListenerMixin(I18nMixin(PolymerElement))));
 
 export class SiteDetailsElement extends SiteDetailsElementBase {
   static get is() {
@@ -133,9 +128,21 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
             loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
       },
 
+      isPrivacySandboxSettings4_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('isPrivacySandboxSettings4');
+        },
+      },
+
       contentSettingsTypesEnum_: {
         type: Object,
         value: ContentSettingsTypes,
+      },
+
+      chooserTypeEnum_: {
+        type: Object,
+        value: ChooserType,
       },
     };
   }
@@ -149,8 +156,6 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
   private fpsEnterprisePref_: chrome.settingsPrivate.PrefObject;
   private enableExperimentalWebPlatformFeatures_: boolean;
   private enableWebBluetoothNewPermissionsBackend_: boolean;
-
-  private fetchingForHost_: string = '';
   private websiteUsageProxy_: WebsiteUsageBrowserProxy =
       WebsiteUsageBrowserProxyImpl.getInstance();
 
@@ -189,9 +194,8 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
       if (!valid) {
         Router.getInstance().navigateToPreviousRoute();
       } else {
-        this.fetchingForHost_ = this.toUrl(this.origin_)!.hostname;
         this.storedData_ = '';
-        this.websiteUsageProxy_.fetchUsageTotal(this.fetchingForHost_);
+        this.websiteUsageProxy_.fetchUsageTotal(this.origin_);
         this.browserProxy.getCategoryList(this.origin_).then((categoryList) => {
           this.updatePermissions_(categoryList, /*hideOthers=*/ true);
         });
@@ -219,16 +223,16 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
 
   /**
    * Callback for when the usage total is known.
-   * @param host The host that the usage was fetched for.
+   * @param origin The origin that the usage was fetched for.
    * @param usage The string showing how much data the given host is using.
    * @param cookies The string showing how many cookies the given host is using.
    * @param fpsMembership The string showing first party set membership details.
    * @param fpsPolicy Whether a policy is applied to this FPS member.
    */
   private onUsageTotalChanged_(
-      host: string, usage: string, cookies: string, fpsMembership: string,
+      origin: string, usage: string, cookies: string, fpsMembership: string,
       fpsPolicy: boolean) {
-    if (this.fetchingForHost_ === host) {
+    if (this.origin_ === origin) {
       this.storedData_ = usage;
       this.numCookies_ = cookies;
       this.fpsMembership_ = fpsMembership;
@@ -280,6 +284,15 @@ export class SiteDetailsElement extends SiteDetailsElementBase {
           assert(exceptionList.length > 0);
           this.pageTitle = exceptionList[0].isolatedWebAppName ??
               this.originRepresentation(exceptionList[0].displayName);
+
+          // If the origin is an extension origin, use the extension name if
+          // available.
+          if (exceptionList[0].extensionNameWithId !== undefined) {
+            const url = this.toUrl(exceptionList[0].origin);
+            if (url !== null && url.protocol === 'chrome-extension:') {
+              this.pageTitle = exceptionList[0].extensionNameWithId;
+            }
+          }
         });
   }
 

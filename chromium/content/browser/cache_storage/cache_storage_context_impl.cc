@@ -4,11 +4,10 @@
 
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/services/storage/public/cpp/buckets/bucket_info.h"
 #include "components/services/storage/public/cpp/buckets/constants.h"
@@ -157,10 +156,10 @@ void CacheStorageContextImpl::ApplyPolicyUpdates(
   for (const auto& update : policy_updates) {
     if (!update->purge_on_shutdown)
       storage_keys_to_purge_on_shutdown_.erase(
-          blink::StorageKey(update->origin));
+          blink::StorageKey::CreateFirstParty(update->origin));
     else
       storage_keys_to_purge_on_shutdown_.insert(
-          blink::StorageKey(std::move(update->origin)));
+          blink::StorageKey::CreateFirstParty(std::move(update->origin)));
   }
 }
 

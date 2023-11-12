@@ -12,6 +12,7 @@
 // NOLINT(build/header_guard)
 // no-include-guard-because-multiply-included
 
+#include "chrome/browser/page_info/page_info_buildflags.h"
 #include "chrome/browser/password_manager/password_manager_buildflags.h"
 
 // LINK_RESOURCE_ID is used for IDs that come from a .grd file.
@@ -40,8 +41,6 @@ DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SAFETYTIP_SHIELD,
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SAVE_PASSWORD,
                     R.drawable.ic_vpn_key_blue)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_TRANSLATE, R.drawable.infobar_translate)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_MOBILE_FRIENDLY,
-                    R.drawable.infobar_mobile_friendly)
 LINK_RESOURCE_ID(IDR_AUTOFILL_GOOGLE_PAY_WITH_DIVIDER,
                  R.drawable.google_pay_with_divider)
 
@@ -57,6 +56,8 @@ DECLARE_RESOURCE_ID(IDR_ANDROID_MESSAGE_SAFETY_CHECK, R.drawable.safety_check)
 DECLARE_RESOURCE_ID(IDR_ANDROID_MESSAGE_SHIELD, R.drawable.shield)
 DECLARE_RESOURCE_ID(IDR_ANDORID_MESSAGE_PASSWORD_MANAGER_ERROR,
                     R.drawable.ic_key_error)
+DECLARE_RESOURCE_ID(IDR_ANDROID_IC_MOBILE_FRIENDLY,
+                    R.drawable.ic_mobile_friendly)
 
 // Unified Password Manager resources
 // Color logo is used for Google branded builds only.
@@ -105,5 +106,15 @@ DECLARE_RESOURCE_ID(IDR_ANDROID_AUTOFILL_ADDRESS,
                     R.drawable.gm_filled_location_on_24)
 
 // We use PNG files for the following images.
-LINK_RESOURCE_ID(IDR_CREDIT_CARD_CVC_HINT, R.drawable.cvc_icon)
-LINK_RESOURCE_ID(IDR_CREDIT_CARD_CVC_HINT_AMEX, R.drawable.cvc_icon_amex)
+LINK_RESOURCE_ID(IDR_CREDIT_CARD_CVC_HINT_BACK, R.drawable.cvc_icon)
+LINK_RESOURCE_ID(IDR_CREDIT_CARD_CVC_HINT_FRONT_AMEX, R.drawable.cvc_icon_amex)
+
+// About this site resources
+// Page insights logo is used for Google branded builds only.
+#if BUILDFLAG(PAGE_INFO_USE_INTERNAL_ANDROID_RESOURCES)
+DECLARE_RESOURCE_ID(IDR_ANDROID_ABOUT_THIS_SITE_LOGO_24DP,
+                    R.drawable.ic_page_insights_logo_24dp)
+#else
+DECLARE_RESOURCE_ID(IDR_ANDROID_ABOUT_THIS_SITE_LOGO_24DP,
+                    R.drawable.ic_info_outline_grey_24dp)
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && BUILDFLAG(IS_ANDROID)

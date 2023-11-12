@@ -2,7 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-assert(!is_ios)
+import("//build/config/features.gni")
+
+assert(use_blink)
 
 # This source set should contain only types and constants and no dependencies,
 # for use in crosapi type mappings.
@@ -76,6 +78,8 @@ source_set("browser") {
       "android/add_to_homescreen_mediator.h",
       "android/add_to_homescreen_params.cc",
       "android/add_to_homescreen_params.h",
+      "android/ambient_badge_metrics.cc",
+      "android/ambient_badge_metrics.h",
       "android/app_banner_manager_android.cc",
       "android/app_banner_manager_android.h",
       "android/bottomsheet/pwa_bottom_sheet_controller.cc",

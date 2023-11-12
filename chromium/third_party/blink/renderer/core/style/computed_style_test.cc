@@ -100,9 +100,10 @@ TEST_F(ComputedStyleTest, ClipPathEqual) {
   EXPECT_EQ(*builder1.TakeStyle(), *builder2.TakeStyle());
 }
 
-TEST_F(ComputedStyleTest, SVGStackingContext) {
-  scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  style->UpdateIsStackingContextWithoutContainment(false, false, true);
+TEST_F(ComputedStyleTest, ForcesStackingContext) {
+  ComputedStyleBuilder builder = CreateComputedStyleBuilder();
+  builder.SetForcesStackingContext(true);
+  scoped_refptr<const ComputedStyle> style = builder.TakeStyle();
   EXPECT_TRUE(style->IsStackingContextWithoutContainment());
 }
 
@@ -111,8 +112,6 @@ TEST_F(ComputedStyleTest, Preserve3dForceStackingContext) {
   builder.SetTransformStyle3D(ETransformStyle3D::kPreserve3d);
   builder.SetOverflowX(EOverflow::kHidden);
   builder.SetOverflowY(EOverflow::kHidden);
-  builder.MutableInternalStyle()->UpdateIsStackingContextWithoutContainment(
-      false, false, false);
   scoped_refptr<const ComputedStyle> style = builder.TakeStyle();
   EXPECT_EQ(ETransformStyle3D::kFlat, style->UsedTransformStyle3D());
   EXPECT_TRUE(style->IsStackingContextWithoutContainment());
@@ -124,11 +123,73 @@ TEST_F(ComputedStyleTest, LayoutContainmentStackingContext) {
 
   ComputedStyleBuilder builder(*style);
   builder.SetContain(kContainsLayout);
-  builder.MutableInternalStyle()->UpdateIsStackingContextWithoutContainment(
-      false, false, false);
   style = builder.TakeStyle();
   // Containment doesn't change IsStackingContextWithoutContainment
   EXPECT_FALSE(style->IsStackingContextWithoutContainment());
+}
+
+TEST_F(ComputedStyleTest, IsStackingContextWithoutContainmentAfterClone) {
+  ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();
+  builder1.SetForcesStackingContext(true);
+  scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
+  EXPECT_TRUE(style1->IsStackingContextWithoutContainment());
+
+  ComputedStyleBuilder builder2(*style1);
+  scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
+  EXPECT_TRUE(style2->IsStackingContextWithoutContainment());
+
+  // Verify that the cached value for IsStackingContextWithoutContainment
+  // isn't copied from `style1`.
+  ComputedStyleBuilder builder3(*style1);
+  builder3.SetForcesStackingContext(false);
+  scoped_refptr<const ComputedStyle> style3 = builder3.TakeStyle();
+  EXPECT_FALSE(style3->IsStackingContextWithoutContainment());
+}
+
+TEST_F(ComputedStyleTest, DerivedFlagCopyNonInheritedFromCached) {
+  {
+    ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();
+    builder1.SetForcesStackingContext(true);
+    scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
+    EXPECT_TRUE(style1->IsStackingContextWithoutContainment());
+
+    // Calling CopyNonInheritedFromCached should not change whether or not
+    // the style is a stacking context.
+    ComputedStyleBuilder builder2 = CreateComputedStyleBuilder();
+    builder2.CopyNonInheritedFromCached(*style1);
+    scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
+    EXPECT_TRUE(style2->IsStackingContextWithoutContainment());
+  }
+
+  // The same as above, except that IsStackingContextWithoutContainment is
+  // expected to be false.
+  {
+    ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();
+    scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
+    EXPECT_FALSE(style1->IsStackingContextWithoutContainment());
+
+    ComputedStyleBuilder builder2 = CreateComputedStyleBuilder();
+    builder2.CopyNonInheritedFromCached(*style1);
+    scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
+    EXPECT_FALSE(style2->IsStackingContextWithoutContainment());
+  }
+
+  // The same as the first case, except builder2 sets
+  // SetForcesStackingContext(false) after calling
+  // CopyNonInheritedFromCached.
+  {
+    ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();
+    builder1.SetForcesStackingContext(true);
+    scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
+    EXPECT_TRUE(style1->IsStackingContextWithoutContainment());
+
+    ComputedStyleBuilder builder2 = CreateComputedStyleBuilder();
+    builder2.CopyNonInheritedFromCached(*style1);
+    builder2.SetForcesStackingContext(false);
+    scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
+    // Value copied from 'style1' must not persist.
+    EXPECT_FALSE(style2->IsStackingContextWithoutContainment());
+  }
 }
 
 TEST_F(ComputedStyleTest, TrackedPseudoStyle) {
@@ -299,7 +360,7 @@ TEST_F(ComputedStyleTest,
   scoped_refptr<ComputedStyle> style = CreateComputedStyle();
   ComputedStyleBuilder builder(*style);
   builder.SetOverflowX(EOverflow::kHidden);
-  scoped_refptr<ComputedStyle> other = builder.TakeStyle();
+  scoped_refptr<const ComputedStyle> other = builder.TakeStyle();
 
   StyleDifference diff;
   style->UpdatePropertySpecificDifferences(*other, diff);
@@ -767,8 +828,7 @@ TEST_F(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(initial.get()));
 
-  scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  state.SetStyle(style);
+  state.SetStyle(*initial);
 
   CSSPropertyRef ref("color-scheme", state.GetDocument());
 
@@ -779,10 +839,12 @@ TEST_F(ComputedStyleTest, ApplyColorSchemeLightOnDark) {
   light_value->Append(*CSSIdentifierValue::Create(CSSValueID::kLight));
 
   To<Longhand>(ref.GetProperty()).ApplyValue(state, *dark_value);
-  EXPECT_EQ(mojom::blink::ColorScheme::kDark, style->UsedColorScheme());
+  EXPECT_EQ(mojom::blink::ColorScheme::kDark,
+            state.StyleBuilder().UsedColorScheme());
 
   To<Longhand>(ref.GetProperty()).ApplyValue(state, *light_value);
-  EXPECT_EQ(mojom::blink::ColorScheme::kLight, style->UsedColorScheme());
+  EXPECT_EQ(mojom::blink::ColorScheme::kLight,
+            state.StyleBuilder().UsedColorScheme());
 }
 
 TEST_F(ComputedStyleTest, ApplyInternalLightDarkColor) {
@@ -801,8 +863,7 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkColor) {
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(initial.get()));
 
-  scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  state.SetStyle(style);
+  state.SetStyle(*initial);
 
   CSSValueList* dark_value = CSSValueList::CreateSpaceSeparated();
   dark_value->Append(*CSSIdentifierValue::Create(CSSValueID::kDark));
@@ -819,12 +880,14 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkColor) {
   cascade1.MutableMatchResult().AddMatchedProperties(color_declaration);
   cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration);
   cascade1.Apply();
+  scoped_refptr<const ComputedStyle> style = state.StyleBuilder().CloneStyle();
   EXPECT_EQ(Color::kWhite, style->VisitedDependentColor(GetCSSPropertyColor()));
 
   StyleCascade cascade2(state);
   cascade2.MutableMatchResult().AddMatchedProperties(color_declaration);
   cascade2.MutableMatchResult().AddMatchedProperties(light_declaration);
   cascade2.Apply();
+  style = state.StyleBuilder().CloneStyle();
   EXPECT_EQ(Color::kBlack, style->VisitedDependentColor(GetCSSPropertyColor()));
 }
 
@@ -844,8 +907,7 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(initial.get()));
 
-  scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  state.SetStyle(style);
+  state.SetStyle(*initial);
 
   auto* bgimage_declaration = ParseDeclarationBlock(
       "background-image:-internal-light-dark(none, url(dummy.png))",
@@ -857,16 +919,15 @@ TEST_F(ComputedStyleTest, ApplyInternalLightDarkBackgroundImage) {
   cascade1.MutableMatchResult().AddMatchedProperties(bgimage_declaration);
   cascade1.MutableMatchResult().AddMatchedProperties(dark_declaration);
   cascade1.Apply();
-  EXPECT_TRUE(style->HasBackgroundImage());
+  EXPECT_TRUE(state.TakeStyle()->HasBackgroundImage());
 
-  style = CreateComputedStyle();
-  state.SetStyle(style);
+  state.SetStyle(*initial);
 
   StyleCascade cascade2(state);
   cascade2.MutableMatchResult().AddMatchedProperties(bgimage_declaration);
   cascade2.MutableMatchResult().AddMatchedProperties(light_declaration);
   cascade2.Apply();
-  EXPECT_FALSE(style->HasBackgroundImage());
+  EXPECT_FALSE(state.TakeStyle()->HasBackgroundImage());
 }
 
 TEST_F(ComputedStyleTest, StrokeWidthZoomAndCalc) {
@@ -880,8 +941,7 @@ TEST_F(ComputedStyleTest, StrokeWidthZoomAndCalc) {
                            nullptr /* StyleRecalcContext */,
                            StyleRequest(initial.get()));
 
-  scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  state.SetStyle(style);
+  state.SetStyle(*initial);
   state.StyleBuilder().SetEffectiveZoom(1.5);
 
   auto* calc_value = CSSMathFunctionValue::Create(
@@ -889,6 +949,7 @@ TEST_F(ComputedStyleTest, StrokeWidthZoomAndCalc) {
           10, CSSPrimitiveValue::UnitType::kNumber)));
 
   To<Longhand>(GetCSSPropertyStrokeWidth()).ApplyValue(state, *calc_value);
+  scoped_refptr<const ComputedStyle> style = state.TakeStyle();
   auto* computed_value = To<Longhand>(GetCSSPropertyStrokeWidth())
                              .CSSValueFromComputedStyleInternal(
                                  *style, nullptr /* layout_object */,
@@ -1442,28 +1503,28 @@ TEST_F(ComputedStyleTest, ApplyInitialAnimationNameAndTransitionProperty) {
                            StyleRequest(initial.get()));
 
   scoped_refptr<ComputedStyle> style = CreateComputedStyle();
-  state.SetStyle(style);
-  EXPECT_FALSE(style->Animations());
-  EXPECT_FALSE(style->Transitions());
+  state.SetStyle(*initial);
+  EXPECT_FALSE(state.StyleBuilder().Animations());
+  EXPECT_FALSE(state.StyleBuilder().Transitions());
 
   To<Longhand>(GetCSSPropertyAnimationName()).ApplyInitial(state);
   To<Longhand>(GetCSSPropertyTransitionProperty()).ApplyInitial(state);
-  EXPECT_FALSE(style->Animations());
-  EXPECT_FALSE(style->Transitions());
+  EXPECT_FALSE(state.StyleBuilder().Animations());
+  EXPECT_FALSE(state.StyleBuilder().Transitions());
 }
 
-#define TEST_STYLE_VALUE_NO_DIFF(field_name)                        \
-  {                                                                 \
-    ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();   \
-    ComputedStyleBuilder builder2 = CreateComputedStyleBuilder();   \
-    builder1.Set##field_name(                                       \
-        ComputedStyleInitialValues::Initial##field_name());         \
-    builder2.Set##field_name(                                       \
-        ComputedStyleInitialValues::Initial##field_name());         \
-    scoped_refptr<ComputedStyle> style1 = builder1.TakeStyle();     \
-    scoped_refptr<ComputedStyle> style2 = builder2.TakeStyle();     \
-    auto diff = style1->VisualInvalidationDiff(*document, *style2); \
-    EXPECT_FALSE(diff.HasDifference());                             \
+#define TEST_STYLE_VALUE_NO_DIFF(field_name)                          \
+  {                                                                   \
+    ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();     \
+    ComputedStyleBuilder builder2 = CreateComputedStyleBuilder();     \
+    builder1.Set##field_name(                                         \
+        ComputedStyleInitialValues::Initial##field_name());           \
+    builder2.Set##field_name(                                         \
+        ComputedStyleInitialValues::Initial##field_name());           \
+    scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle(); \
+    scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle(); \
+    auto diff = style1->VisualInvalidationDiff(*document, *style2);   \
+    EXPECT_FALSE(diff.HasDifference());                               \
   }
 
 // Ensures ref-counted values are compared by their values, not by pointers.
@@ -1538,8 +1599,9 @@ TEST_F(ComputedStyleTest, ShouldApplyAnyContainment) {
                                CSSValueID::kContents,
                                CSSValueID::kFlowRoot,
                                CSSValueID::kNone};
-  if (RuntimeEnabledFeatures::MathMLCoreEnabled())
+  if (RuntimeEnabledFeatures::MathMLCoreEnabled()) {
     display_types.push_back(CSSValueID::kMath);
+  }
 
   for (auto contain :
        {CSSValueID::kNone, CSSValueID::kLayout, CSSValueID::kPaint,
@@ -1602,6 +1664,39 @@ TEST_F(ComputedStyleTest, DebugDiffFields) {
   EXPECT_EQ(DebugField::width_, style1->DebugDiffFields(*style2)[0]);
   EXPECT_EQ("width_",
             ComputedStyleBase::DebugFieldToString(DebugField::width_));
+}
+
+TEST_F(ComputedStyleTest, DerivedDebugDiff) {
+  using DebugField = ComputedStyleBase::DebugField;
+
+  ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();
+  ComputedStyleBuilder builder2 = CreateComputedStyleBuilder();
+
+  builder1.SetForcesStackingContext(true);
+
+  scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
+  scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
+
+  ASSERT_EQ(2u, style1->DebugDiffFields(*style2).size());
+  EXPECT_EQ(DebugField::forces_stacking_context_,
+            style1->DebugDiffFields(*style2)[0]);
+  EXPECT_EQ(DebugField::is_stacking_context_without_containment_,
+            style1->DebugDiffFields(*style2)[1]);
+}
+
+TEST_F(ComputedStyleTest, DerivedDebugDiffLazy) {
+  ComputedStyleBuilder builder1 = CreateComputedStyleBuilder();
+  ComputedStyleBuilder builder2 = CreateComputedStyleBuilder();
+
+  scoped_refptr<const ComputedStyle> style1 = builder1.TakeStyle();
+  scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
+
+  // Trigger lazy-evaluation of the field on *one* of the styles.
+  EXPECT_FALSE(style1->IsStackingContextWithoutContainment());
+
+  // We should not detect a difference, because ComputedStyle(Base) should
+  // evaluate the field automatically when needed.
+  EXPECT_EQ(0u, style1->DebugDiffFields(*style2).size());
 }
 
 #endif  // #if DCHECK_IS_ON()
@@ -1687,7 +1782,7 @@ TEST_F(ComputedStyleTest, BasicBuilder) {
   builder.SetScrollPaddingLeft(left);
   builder.SetScrollPaddingRight(right);
 
-  scoped_refptr<ComputedStyle> style = builder.TakeStyle();
+  scoped_refptr<const ComputedStyle> style = builder.TakeStyle();
 
   EXPECT_NE(left, original->ScrollPaddingLeft());
   EXPECT_NE(right, original->ScrollPaddingRight());
@@ -1706,7 +1801,7 @@ TEST_F(ComputedStyleTest, MoveBuilder) {
 
   EXPECT_FALSE(builder1.TakeStyle());
 
-  scoped_refptr<ComputedStyle> style2 = builder2.TakeStyle();
+  scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
   ASSERT_TRUE(style2);
   EXPECT_EQ(one, style2->ScrollPaddingLeft());
 }
@@ -1722,7 +1817,7 @@ TEST_F(ComputedStyleTest, MoveAssignBuilder) {
 
   EXPECT_FALSE(builder1.TakeStyle());
 
-  scoped_refptr<ComputedStyle> style2 = builder2.TakeStyle();
+  scoped_refptr<const ComputedStyle> style2 = builder2.TakeStyle();
   ASSERT_TRUE(style2);
   EXPECT_EQ(one, style2->ScrollPaddingLeft());
 }

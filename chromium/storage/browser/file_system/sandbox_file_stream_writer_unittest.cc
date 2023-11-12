@@ -11,10 +11,11 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "components/services/storage/public/cpp/buckets/bucket_info.h"
 #include "components/services/storage/public/cpp/buckets/constants.h"
@@ -75,6 +76,7 @@ class SandboxFileStreamWriterTest : public FileStreamWriterTest {
   }
 
   void TearDown() override {
+    file_system_context_ = nullptr;
     quota_manager_proxy_ = nullptr;
     quota_manager_ = nullptr;
     base::RunLoop().RunUntilIdle();
@@ -83,9 +85,9 @@ class SandboxFileStreamWriterTest : public FileStreamWriterTest {
  protected:
   scoped_refptr<MockSpecialStoragePolicy> special_storage_policy_;
 
-  scoped_refptr<FileSystemContext> file_system_context_;
   scoped_refptr<MockQuotaManager> quota_manager_;
   scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
+  scoped_refptr<FileSystemContext> file_system_context_;
 
   struct quota_usage_and_info {
     blink::mojom::QuotaStatusCode status;

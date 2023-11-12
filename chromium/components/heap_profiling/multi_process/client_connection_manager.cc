@@ -4,7 +4,7 @@
 
 #include "components/heap_profiling/multi_process/client_connection_manager.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/rand_util.h"
 #include "components/services/heap_profiling/public/cpp/controller.h"
@@ -16,10 +16,10 @@
 #include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_host.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/common/child_process_host.h"
 #include "content/public/common/process_type.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
@@ -115,8 +115,6 @@ ClientConnectionManager::~ClientConnectionManager() {
 
 void ClientConnectionManager::Start() {
   Add(this);
-  registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CREATED,
-                 content::NotificationService::AllBrowserContextsAndSources());
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
                  content::NotificationService::AllBrowserContextsAndSources());
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_TERMINATED,
@@ -246,6 +244,13 @@ void ClientConnectionManager::StartProfilingNonRendererChild(
                      std::move(client), data.GetProcess().Pid(), process_type));
 }
 
+void ClientConnectionManager::OnRenderProcessHostCreated(
+    content::RenderProcessHost* host) {
+  if (ShouldProfileNewRenderer(host)) {
+    StartProfilingRenderer(host);
+  }
+}
+
 void ClientConnectionManager::Observe(
     int type,
     const content::NotificationSource& source,
@@ -262,11 +267,6 @@ void ClientConnectionManager::Observe(
   if ((type == content::NOTIFICATION_RENDERER_PROCESS_TERMINATED ||
        type == content::NOTIFICATION_RENDERER_PROCESS_CLOSED)) {
     profiled_renderers_.erase(host);
-  }
-
-  if (type == content::NOTIFICATION_RENDERER_PROCESS_CREATED &&
-      ShouldProfileNewRenderer(host)) {
-    StartProfilingRenderer(host);
   }
 }
 

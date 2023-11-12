@@ -127,6 +127,7 @@ public class NotificationIntentInterceptor {
      * @param pendingIntentProvider Provides the {@link PendingIntent} to launch Chrome.
      *
      */
+    @SuppressWarnings("WrongConstant") // https://crbug.com/1412248 flags from PendingIntent.
     public static PendingIntent createInterceptPendingIntent(@IntentType int intentType,
             int intentId, NotificationMetadata metadata,
             @Nullable PendingIntentProvider pendingIntentProvider) {
@@ -163,9 +164,8 @@ public class NotificationIntentInterceptor {
 
         // This flag ensures the broadcast is delivered with foreground priority to speed up the
         // broadcast delivery.
-        if (shouldUseBroadcast && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-        }
+        if (shouldUseBroadcast) intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+
         // Use request code to distinguish different PendingIntents on Android.
         int originalRequestCode =
                 pendingIntentProvider != null ? pendingIntentProvider.getRequestCode() : 0;

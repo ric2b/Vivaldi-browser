@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/path_service.h"
@@ -30,13 +30,6 @@ namespace {
 // automatically starting up. This is now replaced by its inverse
 // kSyncRequested.
 const char kSyncSuppressStart[] = "sync.suppress_start";
-
-#if BUILDFLAG(IS_ANDROID)
-// Obsolete pref that used to store whether sync should no longer respect the
-// state of the master toggle for this user. This is now always the case.
-const char kObsoleteSyncDecoupledFromAndroidMasterSync[] =
-    "sync.decoupled_from_master_sync";
-#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace
 
@@ -102,10 +95,6 @@ void SyncPrefs::RegisterProfilePrefs(PrefRegistrySimple* registry) {
 
   // Obsolete prefs.
   registry->RegisterBooleanPref(kSyncSuppressStart, false);
-#if BUILDFLAG(IS_ANDROID)
-  registry->RegisterBooleanPref(kObsoleteSyncDecoupledFromAndroidMasterSync,
-                                false);
-#endif  // BUILDFLAG(IS_ANDROID)
 }
 
 void SyncPrefs::AddSyncPrefObserver(SyncPrefObserver* sync_pref_observer) {
@@ -365,13 +354,6 @@ void SyncPrefs::SetPassphrasePromptMutedProductVersion(int major_version) {
 void SyncPrefs::ClearPassphrasePromptMutedProductVersion() {
   pref_service_->ClearPref(prefs::kSyncPassphrasePromptMutedProductVersion);
 }
-
-#if BUILDFLAG(IS_ANDROID)
-void ClearObsoleteSyncDecoupledFromAndroidMasterSync(
-    PrefService* pref_service) {
-  pref_service->ClearPref(kObsoleteSyncDecoupledFromAndroidMasterSync);
-}
-#endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 void MigrateSyncRequestedPrefPostMice(PrefService* pref_service) {

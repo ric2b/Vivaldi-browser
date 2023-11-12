@@ -20,7 +20,8 @@ namespace {
 const LayoutObject* AnchorScrollObject(const LayoutObject* layout_object) {
   if (!layout_object || !layout_object->IsOutOfFlowPositioned())
     return nullptr;
-  const AnchorScrollValue* value = layout_object->StyleRef().AnchorScroll();
+  const ComputedStyle& style = layout_object->StyleRef();
+  const AnchorSpecifierValue* value = style.AnchorScroll();
   if (!value)
     return nullptr;
 
@@ -36,19 +37,22 @@ const LayoutObject* AnchorScrollObject(const LayoutObject* layout_object) {
   if (!anchor_query)
     return nullptr;
 
-  const Element* element = DynamicTo<Element>(layout_object->GetNode());
-  const bool is_in_top_layer = element ? element->IsInTopLayer() : false;
+  bool is_in_top_layer = layout_object->IsInTopLayer();
 
   const NGPhysicalFragment* fragment = nullptr;
-  if (value->IsImplicit()) {
+  if (value->IsNamed()) {
+    fragment = anchor_query->Fragment(&value->GetName(), is_in_top_layer);
+  } else if (value->IsDefault() && style.AnchorDefault()) {
+    fragment = anchor_query->Fragment(style.AnchorDefault(), is_in_top_layer);
+  } else {
+    DCHECK(value->IsImplicit() ||
+           (value->IsDefault() && !style.AnchorDefault()));
+    Element* element = DynamicTo<Element>(layout_object->GetNode());
     Element* anchor = element ? element->ImplicitAnchorElement() : nullptr;
     LayoutObject* anchor_layout_object =
         anchor ? anchor->GetLayoutObject() : nullptr;
     if (anchor_layout_object)
       fragment = anchor_query->Fragment(anchor_layout_object, is_in_top_layer);
-  } else {
-    DCHECK(value->IsNamed());
-    fragment = anchor_query->Fragment(&value->GetName(), is_in_top_layer);
   }
 
   // |is_in_top_layer| allows NGPhysicalAnchorQuery to return elements that are
@@ -106,7 +110,7 @@ AnchorScrollData::SnapshotDiff AnchorScrollData::TakeAndCompareSnapshot(
     bool update) {
   DCHECK(IsActive());
 
-  HeapVector<Member<const PaintLayer>> new_scroll_container_layers;
+  Vector<CompositorElementId> new_scroll_container_ids;
   gfx::Vector2dF new_accumulated_scroll_offset;
   gfx::Vector2d new_accumulated_scroll_origin;
 
@@ -122,18 +126,17 @@ AnchorScrollData::SnapshotDiff AnchorScrollData::TakeAndCompareSnapshot(
       // |bounding_layer| must be either null (for fixed-positioned |owner_|) or
       // an ancestor of |starting_layer|, so we'll never have a null layer here.
       DCHECK(layer);
-      if (!layer->GetScrollableArea()->HasOverflow())
-        continue;
-      new_scroll_container_layers.push_back(layer);
-      new_accumulated_scroll_offset +=
-          layer->GetScrollableArea()->GetScrollOffset();
+      const PaintLayerScrollableArea* scrollable_area =
+          layer->GetScrollableArea();
+      new_scroll_container_ids.push_back(scrollable_area->GetScrollElementId());
+      new_accumulated_scroll_offset += scrollable_area->GetScrollOffset();
       new_accumulated_scroll_origin +=
-          layer->GetScrollableArea()->ScrollOrigin().OffsetFromOrigin();
+          scrollable_area->ScrollOrigin().OffsetFromOrigin();
     }
   }
 
   SnapshotDiff diff;
-  if (scroll_container_layers_ != new_scroll_container_layers) {
+  if (scroll_container_ids_ != new_scroll_container_ids) {
     diff = SnapshotDiff::kScrollersOrFallbackPosition;
   } else if (accumulated_scroll_offset_ != new_accumulated_scroll_offset ||
              accumulated_scroll_origin_ != new_accumulated_scroll_origin) {
@@ -145,7 +148,7 @@ AnchorScrollData::SnapshotDiff AnchorScrollData::TakeAndCompareSnapshot(
   }
 
   if (update && diff != SnapshotDiff::kNone) {
-    scroll_container_layers_.swap(new_scroll_container_layers);
+    scroll_container_ids_.swap(new_scroll_container_ids);
     accumulated_scroll_offset_ = new_accumulated_scroll_offset;
     accumulated_scroll_origin_ = new_accumulated_scroll_origin;
   }
@@ -231,7 +234,6 @@ void AnchorScrollData::InvalidatePaint() {
 
 void AnchorScrollData::Trace(Visitor* visitor) const {
   visitor->Trace(owner_);
-  visitor->Trace(scroll_container_layers_);
   ScrollSnapshotClient::Trace(visitor);
   ElementRareDataField::Trace(visitor);
 }

@@ -4,9 +4,9 @@
 
 #include <stddef.h>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -987,11 +987,10 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, RestoreWindow) {
   EXPECT_EQ(url1_, restored_tab->GetURL());
 }
 
-// https://crbug.com/825305: Timeout flakiness on Win7 Tests (dbg)(1) bot and
-// Mac10.13 Tests (dbg) and PASS/FAIL flakiness on Linux Chromium OS ASan LSan
-// Tests (1) bot.
+// https://crbug.com/825305: Timeout flakiness on Mac10.13 Tests (dbg) and
+// PASS/FAIL flakiness on Linux Chromium OS ASan LSan Tests (1) bot.
 #if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
-    !defined(NDEBUG)
+    (!defined(NDEBUG) && !BUILDFLAG(IS_WIN))
 #define MAYBE_RestoreTabWithSpecialURL DISABLED_RestoreTabWithSpecialURL
 #else
 #define MAYBE_RestoreTabWithSpecialURL RestoreTabWithSpecialURL
@@ -1021,11 +1020,10 @@ IN_PROC_BROWSER_TEST_F(TabRestoreTest, MAYBE_RestoreTabWithSpecialURL) {
 }
 
 // https://crbug.com/667932: Flakiness on linux_chromium_asan_rel_ng bot.
-// https://crbug.com/825305: Timeout flakiness on Win7 Tests (dbg)(1) and
-// Mac10.13 Tests (dbg) bots.
+// https://crbug.com/825305: Timeout flakiness on Mac10.13 Tests (dbg) bots.
 // Also fails on Linux Tests (dbg).
 #if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
-    !defined(NDEBUG)
+    (!defined(NDEBUG) && !BUILDFLAG(IS_WIN))
 #define MAYBE_RestoreTabWithSpecialURLOnBack DISABLED_RestoreTabWithSpecialURLOnBack
 #else
 #define MAYBE_RestoreTabWithSpecialURLOnBack RestoreTabWithSpecialURLOnBack

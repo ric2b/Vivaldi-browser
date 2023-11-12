@@ -10,8 +10,10 @@ import {AutomationUtil} from '../../common/automation_util.js';
 import {constants} from '../../common/constants.js';
 import {CursorUnit} from '../../common/cursors/cursor.js';
 import {CursorRange} from '../../common/cursors/range.js';
+import {EventHandler} from '../../common/event_handler.js';
 import {TtsSpeechProperties} from '../common/tts_types.js';
 
+import {ChromeVoxRange} from './chromevox_range.js';
 import {ChromeVoxState} from './chromevox_state.js';
 import {CommandHandlerInterface} from './command_handler_interface.js';
 
@@ -73,12 +75,11 @@ export class AutoScrollHandler {
       return false;
     }
 
-    if (!target.start || !target.start.node ||
-        !ChromeVoxState.instance.currentRange.start.node) {
+    if (!target.start?.node || !ChromeVoxRange.current.start.node) {
       return true;
     }
 
-    const rangeBeforeScroll = ChromeVoxState.instance.currentRange;
+    const rangeBeforeScroll = ChromeVoxRange.current;
     let scrollable = this.findScrollableAncestor_(target);
 
     // At the beginning or the end of the document, there is a case where the
@@ -99,7 +100,7 @@ export class AutoScrollHandler {
     this.lastScrolledTime_ = new Date();
     this.relatedFocusEventHappened_ = false;
 
-    this.scrollForCommandNavigation_.apply(this, arguments)
+    this.scrollForCommandNavigation_(...arguments)
         .catch(() => this.isScrolling_ = false);
     return false;
   }
@@ -110,16 +111,11 @@ export class AutoScrollHandler {
    * @return {?AutomationNode}
    */
   findScrollableAncestor_(target) {
-    let scrollable = null;
     const ancestors = AutomationUtil.getUniqueAncestors(
-        target.start.node, ChromeVoxState.instance.currentRange.start.node);
-    for (let i = 0; i < ancestors.length; i++) {
-      if (AutomationPredicate.autoScrollable(ancestors[i])) {
-        scrollable = ancestors[i];
-        break;
-      }
-    }
-    return scrollable;
+        target.start.node, ChromeVoxRange.current.start.node);
+    const scrollable =
+        ancestors.find(node => AutomationPredicate.autoScrollable(node));
+    return scrollable ?? null;
   }
 
   /**
@@ -132,7 +128,7 @@ export class AutoScrollHandler {
   tryFindingContainingScrollableIfAtEdge_(target, dir, scrollable) {
     let current = target.start.node;
     let parent = current.parent;
-    while (parent && parent.root === current.root) {
+    while (parent?.root === current.root) {
       if (!(dir === constants.Dir.BACKWARD && parent.firstChild === current) &&
           !(dir === constants.Dir.FORWARD && parent.lastChild === current)) {
         // Currently on non-edge node. Don't try scrolling.
@@ -178,9 +174,7 @@ export class AutoScrollHandler {
     // be dispatched multiple times, and there is a chance that the ui tree is
     // in an intermediate state. Just wait for a while so that the UI gets
     // stabilized.
-    await new Promise(
-        resolve =>
-            setTimeout(resolve, AutoScrollHandler.DELAY_HANDLE_SCROLLED_MS));
+    await new Promise(resolve => setTimeout(resolve, DELAY_HANDLE_SCROLLED_MS));
 
     this.isScrolling_ = false;
 
@@ -197,14 +191,14 @@ export class AutoScrollHandler {
           pred, unit, dir, rootPred, this.scrollingNode_);
 
       ChromeVoxState.instance.navigateToRange(
-          nextRange || target, false, speechProps);
+          nextRange ?? target, false, speechProps);
       return;
     }
 
     // If the focus has been changed for some reason, do nothing to
     // prevent disturbing the latest navigation.
-    if (!ChromeVoxState.instance.currentRange ||
-        !this.rangeBeforeScroll_.equals(ChromeVoxState.instance.currentRange)) {
+    if (!ChromeVoxRange.current ||
+        !this.rangeBeforeScroll_.equals(ChromeVoxRange.current)) {
       return;
     }
 
@@ -242,6 +236,7 @@ export class AutoScrollHandler {
         reject('Scrollable cannot be null when waiting for scroll event');
       }
       let cleanUp;
+      let listener;
       let timeoutId;
       const onTimeout = () => {
         cleanUp();
@@ -252,17 +247,14 @@ export class AutoScrollHandler {
         resolve();
       };
       cleanUp = () => {
-        for (const e of AutoScrollHandler.RELATED_SCROLL_EVENT_TYPES) {
-          scrollable.removeEventListener(e, onScrolled, true);
-        }
+        listener.stop();
         clearTimeout(timeoutId);
       };
 
-      for (const e of AutoScrollHandler.RELATED_SCROLL_EVENT_TYPES) {
-        scrollable.addEventListener(e, onScrolled, true);
-      }
-      timeoutId =
-          setTimeout(onTimeout, AutoScrollHandler.TIMEOUT_SCROLLED_EVENT_MS);
+      listener = new EventHandler(
+          scrollable, RELATED_SCROLL_EVENT_TYPES, onScrolled, {capture: true});
+      listener.start();
+      timeoutId = setTimeout(onTimeout, TIMEOUT_SCROLLED_EVENT_MS);
     });
   }
 
@@ -326,7 +318,7 @@ export class AutoScrollHandler {
       return true;
     }
     const elapsedTime = new Date() - this.lastScrolledTime_;
-    if (elapsedTime > AutoScrollHandler.TIMEOUT_FOCUS_EVENT_DROP_MS) {
+    if (elapsedTime > TIMEOUT_FOCUS_EVENT_DROP_MS) {
       return true;
     }
 
@@ -341,13 +333,18 @@ export class AutoScrollHandler {
   }
 }
 
+/** @type {AutoScrollHandler} */
+AutoScrollHandler.instance;
+
+// Variables local to the module.
+
 /**
  * An array of Automation event types that AutoScrollHandler observes when
  * performing a scroll action.
  * @private
  * @const {!Array<EventType>}
  */
-AutoScrollHandler.RELATED_SCROLL_EVENT_TYPES = [
+const RELATED_SCROLL_EVENT_TYPES = [
   // This is sent by ARC++.
   EventType.SCROLL_POSITION_CHANGED,
   // These two events are sent by Web and Views via AXEventGenerator.
@@ -363,14 +360,14 @@ AutoScrollHandler.RELATED_SCROLL_EVENT_TYPES = [
  * https://github.com/google/talkback/blob/acd0bc7631a3dfbcf183789c7557596a45319e1f/talkback/src/main/java/ScrollEventInterpreter.java#L169
  * @const {number}
  */
-AutoScrollHandler.TIMEOUT_SCROLLED_EVENT_MS = 1500;
+const TIMEOUT_SCROLLED_EVENT_MS = 1500;
 
 /**
  * The timeout that the focused event should be dropped. This is longer than
  * |TIMEOUT_CALLBACK_MS| because a focus event can happen after the scrolling.
  * @const {number}
  */
-AutoScrollHandler.TIMEOUT_FOCUS_EVENT_DROP_MS = 2000;
+const TIMEOUT_FOCUS_EVENT_DROP_MS = 2000;
 
 /**
  * The delay in milliseconds to wait to handle a scrolled event after the event
@@ -378,7 +375,4 @@ AutoScrollHandler.TIMEOUT_FOCUS_EVENT_DROP_MS = 2000;
  * https://github.com/google/talkback/blob/6c0b475b7f52469e309e51bfcc13de58f18176ff/talkback/src/main/java/com/google/android/accessibility/talkback/interpreters/AutoScrollInterpreter.java#L42
  * @const {number}
  */
-AutoScrollHandler.DELAY_HANDLE_SCROLLED_MS = 150;
-
-/** @type {AutoScrollHandler} */
-AutoScrollHandler.instance;
+const DELAY_HANDLE_SCROLLED_MS = 150;

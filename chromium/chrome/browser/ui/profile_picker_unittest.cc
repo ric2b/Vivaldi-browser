@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/profile_picker.h"
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -237,9 +237,7 @@ TEST_F(ProfilePickerParamsTest, ForFirstRun_Notify) {
     EXPECT_EQ(base::FilePath::FromASCII(chrome::kInitialProfile),
               params.profile_path().BaseName());
     EXPECT_CALL(callback, Run(ProfilePicker::FirstRunExitStatus::kCompleted));
-    params.NotifyFirstRunExited(
-        ProfilePicker::FirstRunExitStatus::kCompleted,
-        ProfilePicker::FirstRunExitSource::kFlowFinished);
+    params.NotifyFirstRunExited(ProfilePicker::FirstRunExitStatus::kCompleted);
   }
 }
 #endif

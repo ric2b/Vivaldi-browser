@@ -10,6 +10,30 @@ imageset("vivaldi_atb_shield") {
   ]
 }
 
+imageset("vivaldi_atb_shield_notrack") {
+  sources = [
+    "vivaldi_atb_shield_notrack.imageset/Contents.json",
+    "vivaldi_atb_shield_notrack.imageset/vivaldi_atb_shield_notrack.pdf",
+    "vivaldi_atb_shield_notrack.imageset/vivaldi_atb_shield_notrack_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_atb_shield_trackers") {
+  sources = [
+    "vivaldi_atb_shield_trackers.imageset/Contents.json",
+    "vivaldi_atb_shield_trackers.imageset/vivaldi_atb_shield_trackers.pdf",
+    "vivaldi_atb_shield_trackers.imageset/vivaldi_atb_shield_trackers_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_atb_shield_trackers_and_ads") {
+  sources = [
+    "vivaldi_atb_shield_trackers_and_ads.imageset/Contents.json",
+    "vivaldi_atb_shield_trackers_and_ads.imageset/vivaldi_atb_shield_trackers_and_ads.pdf",
+    "vivaldi_atb_shield_trackers_and_ads.imageset/vivaldi_atb_shield_trackers_and_ads_dark.pdf",
+  ]
+}
+
 imageset("vivaldi_atb_settings_selection_check") {
   sources = [
     "vivaldi_atb_settings_selection_check.imageset/Contents.json",

@@ -329,7 +329,8 @@ bool ListMarker::IsMarkerImage(const LayoutObject& marker) const {
          ListItem(marker)->StyleRef().GeneratesMarkerImage();
 }
 
-LayoutUnit ListMarker::WidthOfSymbol(const ComputedStyle& style) {
+LayoutUnit ListMarker::WidthOfSymbol(const ComputedStyle& style,
+                                     const AtomicString& list_style) {
   const Font& font = style.GetFont();
   const SimpleFontData* font_data = font.PrimaryFont();
   DCHECK(font_data);
@@ -339,18 +340,19 @@ LayoutUnit ListMarker::WidthOfSymbol(const ComputedStyle& style) {
     // See http://crbug.com/1228157
     return LayoutUnit();
   }
-  const AtomicString& name = style.ListStyleType()->GetCounterStyleName();
-  if (name == "disclosure-open" || name == "disclosure-closed")
+  if (list_style == "disclosure-open" || list_style == "disclosure-closed") {
     return DisclosureSymbolSize(style);
+  }
   return LayoutUnit((font_data->GetFontMetrics().Ascent() * 2 / 3 + 1) / 2 + 2);
 }
 
 std::pair<LayoutUnit, LayoutUnit> ListMarker::InlineMarginsForInside(
     Document& document,
-    const ComputedStyle& marker_style,
+    const ComputedStyleBuilder& marker_style_builder,
     const ComputedStyle& list_item_style) {
-  if (!marker_style.ContentBehavesAsNormal())
+  if (!marker_style_builder.GetDisplayStyle().ContentBehavesAsNormal()) {
     return {};
+  }
   if (list_item_style.GeneratesMarkerImage())
     return {LayoutUnit(), LayoutUnit(kCMarkerPaddingPx)};
   switch (GetListStyleCategory(document, list_item_style)) {
@@ -358,11 +360,15 @@ std::pair<LayoutUnit, LayoutUnit> ListMarker::InlineMarginsForInside(
       const AtomicString& name =
           list_item_style.ListStyleType()->GetCounterStyleName();
       if (name == "disclosure-open" || name == "disclosure-closed") {
-        return {LayoutUnit(), LayoutUnit(kClosureMarkerMarginEm *
-                                         marker_style.SpecifiedFontSize())};
+        return {LayoutUnit(),
+                LayoutUnit(
+                    kClosureMarkerMarginEm *
+                    marker_style_builder.GetFontDescription().SpecifiedSize())};
       }
-      return {LayoutUnit(-1),
-              LayoutUnit(kCUAMarkerMarginEm * marker_style.ComputedFontSize())};
+      return {
+          LayoutUnit(-1),
+          LayoutUnit(kCUAMarkerMarginEm *
+                     marker_style_builder.GetFontDescription().ComputedSize())};
     }
     default:
       break;
@@ -411,6 +417,7 @@ std::pair<LayoutUnit, LayoutUnit> ListMarker::InlineMarginsForOutside(
 }
 
 LayoutRect ListMarker::RelativeSymbolMarkerRect(const ComputedStyle& style,
+                                                const AtomicString& list_style,
                                                 LayoutUnit width) {
   LayoutRect relative_rect;
   const SimpleFontData* font_data = style.GetFont().PrimaryFont();
@@ -422,8 +429,7 @@ LayoutRect ListMarker::RelativeSymbolMarkerRect(const ComputedStyle& style,
   // http://crbug.com/543193
   const FontMetrics& font_metrics = font_data->GetFontMetrics();
   const int ascent = font_metrics.Ascent();
-  const AtomicString& name = style.ListStyleType()->GetCounterStyleName();
-  if (name == "disclosure-open" || name == "disclosure-closed") {
+  if (list_style == "disclosure-open" || list_style == "disclosure-closed") {
     LayoutUnit marker_size = DisclosureSymbolSize(style);
     relative_rect = LayoutRect(LayoutUnit(), ascent - marker_size, marker_size,
                                marker_size);

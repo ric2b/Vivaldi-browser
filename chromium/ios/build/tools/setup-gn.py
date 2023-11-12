@@ -19,7 +19,7 @@ import tempfile
 
 SUPPORTED_TARGETS = ('iphoneos', 'iphonesimulator', 'maccatalyst')
 SUPPORTED_CONFIGS = ('Debug', 'Release', 'Profile', 'Official')
-ADDITIONAL_FILE_ROOTS = ('//ios', '//ios_internal', '//docs')
+ADDITIONAL_FILE_ROOTS = ('//ios', '//ios_internal', '//docs', '//components')
 
 # Pattern matching lines from ~/.lldbinit that must not be copied to the
 # generated .lldbinit file. They match what the user were told to add to
@@ -60,6 +60,12 @@ class ConfigParserWithStringInterpolation(configparser.ConfigParser):
     except configparser.NoOptionError:
       return fallback
     return self._UnquoteString(self._ExpandEnvVar(raw_value))
+
+  def getboolean(self, section, option, fallback=False):
+    try:
+      return super().getboolean(section, option)
+    except configparser.NoOptionError:
+      return fallback
 
   def _UnquoteString(self, string):
     if not string or string[0] != '"' or string[-1] != '"':
@@ -223,7 +229,8 @@ class GnGenerator(object):
       gn_command.append('--xcode-configs=' + ';'.join(SUPPORTED_CONFIGS))
       gn_command.append('--xcode-config-build-dir='
                         '//out/${CONFIGURATION}${EFFECTIVE_PLATFORM_NAME}')
-      if self._settings.has_section('filters'):
+      use_blink = self._settings.getboolean('gn_args', 'use_blink')
+      if self._settings.has_section('filters') and not use_blink:
         target_filters = self._settings.values('filters')
         if target_filters:
           gn_command.append('--filters=%s' % ';'.join(target_filters))

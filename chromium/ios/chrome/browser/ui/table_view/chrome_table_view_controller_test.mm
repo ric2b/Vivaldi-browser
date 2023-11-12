@@ -70,6 +70,13 @@ int ChromeTableViewControllerTest::NumberOfItemsInSection(int section) {
   return [[controller_ tableViewModel] numberOfItemsInSection:section];
 }
 
+bool ChromeTableViewControllerTest::HasTableViewItem(int section, int item) {
+  TableViewModel* model = [controller_ tableViewModel];
+  NSIndexPath* index_path = [NSIndexPath indexPathForItem:item
+                                                inSection:section];
+  return [model hasItemAtIndexPath:index_path];
+}
+
 id ChromeTableViewControllerTest::GetTableViewItem(int section, int item) {
   TableViewModel* model = [controller_ tableViewModel];
   NSIndexPath* index_path = [NSIndexPath indexPathForItem:item
@@ -123,17 +130,6 @@ void ChromeTableViewControllerTest::CheckTextCellText(NSString* expected_text,
   id cell = GetTableViewItem(section, item);
   ASSERT_TRUE([cell respondsToSelector:@selector(text)]);
   EXPECT_NSEQ(expected_text, [cell text]);
-}
-
-void ChromeTableViewControllerTest::CheckURLCellEmptyTitle(
-    NSString* expected_title,
-    int section,
-    int item) {
-  id cell = GetTableViewItem(section, item);
-  ASSERT_TRUE([cell respondsToSelector:@selector(title)]);
-  ASSERT_TRUE([cell respondsToSelector:@selector(displayedURL)]);
-  EXPECT_EQ(nil, [cell title]);
-  EXPECT_NSEQ(expected_title, [cell displayedURL]);
 }
 
 void ChromeTableViewControllerTest::CheckTextCellTextWithId(

@@ -24,6 +24,7 @@ enum DialogViewId : int {
                              // save bubble or a manage cards view.
   SIGN_IN_PROMO_VIEW,        // Contains the sign-in promo view
   MANAGE_CARDS_VIEW,         // The manage cards view
+  MANAGE_IBANS_VIEW,         // The manage IBANs view
   EXPIRATION_DATE_VIEW,      // Contains the dropdowns for expiration date
   USER_INFORMATION_VIEW,     // User avatar/display picture and email address.
 
@@ -41,13 +42,17 @@ enum DialogViewId : int {
                         // or [Done] depending on context
   CANCEL_BUTTON,        // Typically says [No thanks]
   CLOSE_BUTTON,         // Typically says [Close]
-  MANAGE_CARDS_BUTTON,  // Typicall says [Manage cards]
+  MANAGE_CARDS_BUTTON,  // Typically says [Manage cards]
+  MANAGE_IBANS_BUTTON,  // Typically says [Manage payments]
+
+  TOGGLE_IBAN_VALUE_MASKING_BUTTON,  // Used to mask/unmask IBAN value.
 
   // The following are views::Link objects (clickable).
   LEARN_MORE_LINK,
 
   // The following are views::Textfield objects.
   CARDHOLDER_NAME_TEXTFIELD,  // Used for cardholder name entry/confirmation
+  NICKNAME_TEXTFIELD,         // Used for IBAN nickname entry/confirmation
 
   // The following are views::TooltipIcon objects.
   CARDHOLDER_NAME_TOOLTIP,  // Appears during cardholder name entry/confirmation
@@ -59,6 +64,8 @@ enum DialogViewId : int {
 
   // The following are views::Label objects.
   EXPIRATION_DATE_LABEL,  // Appears during save offer bubble
+  IBAN_VALUE_LABEL,       // Shows or hides during IBAN offer bubble
+  NICKNAME_LABEL,         // Appears during manage saved IBAN bubble.
 };
 
 }  // namespace autofill

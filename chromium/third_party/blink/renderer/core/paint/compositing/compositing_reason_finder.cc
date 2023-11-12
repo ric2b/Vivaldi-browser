@@ -4,7 +4,6 @@
 
 #include "third_party/blink/renderer/core/paint/compositing/compositing_reason_finder.h"
 
-#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node.h"
@@ -346,11 +345,12 @@ CompositingReasonFinder::DirectReasonsForPaintPropertiesExceptScrolling(
 
   if (auto* transition =
           ViewTransitionUtils::GetActiveTransition(object.GetDocument())) {
-    // Note that `NeedsSharedElementEffectNode` returns true for values that are
-    // in the non-transition-pseudo tree DOM. That is, things like layout view
-    // or the shared elements that we are transitioning.
-    if (transition->NeedsSharedElementEffectNode(object))
-      reasons |= CompositingReason::kViewTransitionSharedElement;
+    // Note that `NeedsViewTransitionEffectNode` returns true for values that
+    // are in the non-transition-pseudo tree DOM. That is, things like layout
+    // view or the view transition elements that we are transitioning.
+    if (transition->NeedsViewTransitionEffectNode(object)) {
+      reasons |= CompositingReason::kViewTransitionElement;
+    }
   }
 
   return reasons;
@@ -404,16 +404,13 @@ CompositingReasonFinder::PotentialCompositingReasonsFor3DTransform(
     const ComputedStyle& style) {
   CompositingReasons reasons = CompositingReason::kNone;
 
-  if (Platform::Current()->IsLowEndDevice()) {
-    // Don't composite "trivial" 3D transforms such as translateZ(0).
-    if (style.Transform().HasNonTrivial3DComponent())
+  if (style.Transform().HasNonPerspective3DOperation()) {
+    if (style.Transform().HasNonTrivial3DComponent()) {
       reasons |= CompositingReason::k3DTransform;
-  } else {
-    if (style.Transform().HasNonPerspective3DOperation()) {
-      if (style.Transform().HasNonTrivial3DComponent())
-        reasons |= CompositingReason::k3DTransform;
-      else
-        reasons |= CompositingReason::kTrivial3DTransform;
+    } else {
+      // This reason is not used in TransformPaintPropertyNode for low-end
+      // devices. See PaintPropertyTreeBuilder.
+      reasons |= CompositingReason::kTrivial3DTransform;
     }
   }
 

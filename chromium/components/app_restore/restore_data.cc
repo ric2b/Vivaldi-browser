@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/i18n/number_formatting.h"
+#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "components/app_constants/constants.h"
@@ -72,12 +73,12 @@ std::unique_ptr<RestoreData> RestoreData::Clone() const {
 }
 
 base::Value RestoreData::ConvertToValue() const {
-  base::Value restore_data_dict(base::Value::Type::DICTIONARY);
+  base::Value restore_data_dict(base::Value::Type::DICT);
   for (const auto& it : app_id_to_launch_list_) {
     if (it.second.empty())
       continue;
 
-    base::Value info_dict(base::Value::Type::DICTIONARY);
+    base::Value info_dict(base::Value::Type::DICT);
     for (const auto& data : it.second) {
       info_dict.SetKey(base::NumberToString(data.first),
                        data.second->ConvertToValue());
@@ -276,6 +277,17 @@ void RestoreData::MakeWindowIdsUniqueForDeskTemplate() {
     }
     launch_list = std::move(new_launch_list);
   }
+}
+
+void RestoreData::UpdateBrowserAppIdToLacros() {
+  auto app_launch_list_iter =
+      app_id_to_launch_list_.find(app_constants::kChromeAppId);
+  if (app_launch_list_iter == app_id_to_launch_list_.end()) {
+    return;
+  }
+  app_id_to_launch_list_[app_constants::kLacrosAppId] =
+      std::move(app_launch_list_iter->second);
+  RemoveApp(app_constants::kChromeAppId);
 }
 
 std::string RestoreData::ToString() const {

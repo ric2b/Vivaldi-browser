@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/version.h"
@@ -68,6 +68,7 @@ class UpdateServiceImplInactive : public UpdateService {
               const std::string& /*install_data_index*/,
               Priority /*priority*/,
               PolicySameVersionUpdate /*policy_same_version_update*/,
+              bool /*do_update_check_only*/,
               StateChangeCallback /*state_update*/,
               Callback callback) override {
     VLOG(1) << __func__ << " (Inactive)";

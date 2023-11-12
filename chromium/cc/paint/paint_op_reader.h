@@ -5,6 +5,7 @@
 #ifndef CC_PAINT_PAINT_OP_READER_H_
 #define CC_PAINT_PAINT_OP_READER_H_
 
+#include "base/bits.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
 #include "cc/paint/paint_export.h"
@@ -30,30 +31,22 @@ class CC_PAINT_EXPORT PaintOpReader {
  public:
   // The DeserializeOptions passed to the reader must set all fields if it can
   // be used to for deserializing images, paint records or text blobs.
+  // See PaintOpWriter for the alignment requirement for `memory`.
   PaintOpReader(const volatile void* memory,
                 size_t size,
                 const PaintOp::DeserializeOptions& options,
-                bool enable_security_constraints = false)
-      : memory_(static_cast<const volatile char*>(memory) +
-                PaintOpWriter::HeaderBytes()),
-        remaining_bytes_(
-            base::bits::AlignDown(size, PaintOpWriter::Alignment())),
-        options_(options),
-        enable_security_constraints_(enable_security_constraints) {
-    DCHECK_EQ(memory_,
-              base::bits::AlignUp(memory_, PaintOpWriter::Alignment()));
-    if (remaining_bytes_ < PaintOpWriter::HeaderBytes()) {
-      valid_ = false;
-      return;
-    }
-    remaining_bytes_ -= PaintOpWriter::HeaderBytes();
-  }
+                bool enable_security_constraints = false);
 
   static void FixupMatrixPostSerialization(SkMatrix* matrix);
-  static bool ReadAndValidateOpHeader(const volatile void* input,
-                                      size_t input_size,
-                                      uint8_t* type,
-                                      uint32_t* skip);
+
+  // This should be called before before reading PaintOp data. This function
+  // should not be called if this PaintOpReader is used to read specific data
+  // instead of a whole PaintOp.
+  bool ReadAndValidateOpHeader(uint8_t* op_type, size_t* serialized_size);
+
+  size_t BufferAlignment() const {
+    return PaintOpWriter::BufferAlignment(enable_security_constraints_);
+  }
 
   bool valid() const { return valid_; }
   size_t remaining_bytes() const { return remaining_bytes_; }
@@ -130,13 +123,13 @@ class CC_PAINT_EXPORT PaintOpReader {
   // would exceed the available budfer.
   const volatile void* ExtractReadableMemory(size_t bytes);
 
-  // Aligns the memory to the given alignment.
+  // Aligns the memory to the given `alignment` which must be within the range
+  // of [PaintOpWriter::kDefaultAlignment, BufferAlignment()].
   void AlignMemory(size_t alignment);
 
-  void AssertAlignment(size_t alignment) {
+  void AssertFieldAlignment() {
 #if DCHECK_IS_ON()
-    uintptr_t memory = reinterpret_cast<uintptr_t>(memory_);
-    DCHECK_EQ(base::bits::AlignUp(memory, alignment), memory);
+    PaintOpWriter::AssertAlignment(memory_, PaintOpWriter::kDefaultAlignment);
 #endif
   }
 
@@ -300,7 +293,7 @@ class CC_PAINT_EXPORT PaintOpReader {
       const absl::optional<PaintFilter::CropRect>& crop_rect);
 
   // Returns the size of the read record, 0 if error.
-  size_t Read(sk_sp<PaintRecord>* record);
+  size_t Read(absl::optional<PaintRecord>* record);
 
   void Read(SkRegion* region);
   uint8_t* CopyScratchSpace(size_t bytes);

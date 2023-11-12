@@ -4,7 +4,7 @@
 
 #include "chromecast/media/base/media_codec_support.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 
@@ -33,6 +33,8 @@ AudioCodec ToCastAudioCodec(const ::media::AudioCodec codec) {
       return kCodecDTS;
     case ::media::AudioCodec::kDTSXP2:
       return kCodecDTSXP2;
+    case ::media::AudioCodec::kDTSE:
+      return kCodecDTSE;
     case ::media::AudioCodec::kFLAC:
       return kCodecFLAC;
     case ::media::AudioCodec::kMpegHAudio:

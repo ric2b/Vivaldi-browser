@@ -21,6 +21,7 @@ group("resources") {
 
   if (!is_android) {
     public_deps += [
+      ":app_icon_resources",
       ":component_extension_resources",
       ":dev_ui_paks",
       "access_code_cast:resources",
@@ -33,8 +34,6 @@ group("resources") {
       "feedback:resources",
       "gaia_auth_host:resources",
       "history:resources",
-      "image_editor:trusted_resources",
-      "image_editor:untrusted_resources",
       "inline_login:resources",
       "management:resources",
       "new_tab_page:resources",
@@ -45,11 +44,19 @@ group("resources") {
       "privacy_sandbox:resources",
       "profile_internals:resources",
       "settings:resources",
-      "side_panel:resources",
+      "side_panel/bookmarks:resources",
       "side_panel/customize_chrome:resources",
+      "side_panel/history_clusters:resources",
+      "side_panel/read_anything:resources",
+      "side_panel/reading_list:resources",
+      "side_panel/search_companion:resources",
+      "side_panel/shared:resources",
+      "side_panel/user_notes:resources",
       "signin:resources",
+      "suggest_internals:resources",
       "support_tool:resources",
       "tab_search:resources",
+      "web_app_internals:resources",
       "webui_gallery:resources",
       "whats_new:resources",
     ]
@@ -126,30 +133,15 @@ group("resources") {
   }
 }
 
-if (enable_js_type_check) {
+if (is_chromeos_ash && enable_js_type_check) {
   group("closure_compile") {
-    deps = []
-    if (is_chromeos_ash) {
-      deps += [
-        "chromeos:closure_compile",
-        "gaia_auth_host:closure_compile",
-        "nearby_internals:closure_compile",
-        "nearby_share:closure_compile",
-        "nearby_share/shared:closure_compile_module",
-        "settings:closure_compile",
-      ]
-    }
-    if (is_android) {
-      deps += [
-        "explore_sites_internals:closure_compile",
-        "internals/notifications:closure_compile",
-        "video_tutorials:closure_compile",
-      ]
-    }
-
-    if (is_chromeos) {
-      deps += [ "chromeos/contact_center_insights:closure_compile" ]
-    }
+    deps = [
+      "chromeos:closure_compile",
+      "chromeos/contact_center_insights:closure_compile",
+      "gaia_auth_host:closure_compile",
+      "nearby_internals:closure_compile",
+      "nearby_share:closure_compile",
+    ]
   }
 }
 
@@ -176,6 +168,19 @@ if (!is_android) {
       "grit/component_extension_resources_map.cc",
       "grit/component_extension_resources_map.h",
       "component_extension_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+
+  grit("app_icon_resources") {
+    source = "app_icon/app_icon_resources.grd"
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/app_icon_resources.h",
+      "grit/app_icon_resources_map.cc",
+      "grit/app_icon_resources_map.h",
+      "app_icon_resources_100_percent.pak",
+      "app_icon_resources_200_percent.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }
@@ -277,6 +282,7 @@ repack("dev_ui_paks") {
     "$root_gen_dir/components/history_clusters_internals_resources.pak",
     "$root_gen_dir/components/metrics_internals_resources.pak",
     "$root_gen_dir/components/optimization_guide_internals_resources.pak",
+    "$root_gen_dir/components/policy_resources.pak",
     "$root_gen_dir/components/sync_driver_sync_internals_resources.pak",
     "$root_gen_dir/content/browser/resources/media/media_internals_resources.pak",
     "$root_gen_dir/content/browser/webrtc/resources/webrtc_internals_resources.pak",
@@ -296,6 +302,7 @@ repack("dev_ui_paks") {
     "//components/history_clusters/history_clusters_internals/resources",
     "//components/metrics/debug:resources",
     "//components/optimization_guide/optimization_guide_internals/resources",
+    "//components/policy/resources/webui:resources",
     "//components/resources:dev_ui_components_resources",
     "//components/sync/driver/resources",
     "//content:dev_ui_content_resources",

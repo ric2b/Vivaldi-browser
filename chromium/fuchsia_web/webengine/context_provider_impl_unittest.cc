@@ -20,9 +20,6 @@
 #include <vector>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -32,6 +29,9 @@
 #include "base/fuchsia/process_context.h"
 #include "base/fuchsia/scoped_service_binding.h"
 #include "base/fuchsia/test_component_context_for_process.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
 #include "base/strings/strcat.h"
 #include "base/test/bind.h"
@@ -542,10 +542,9 @@ TEST_F(ContextProviderImplTest, WithProfileDir) {
 
   // Setup data dir.
   ASSERT_TRUE(profile_temp_dir.CreateUniqueTempDir());
-  ASSERT_EQ(
+  ASSERT_TRUE(
       base::WriteFile(profile_temp_dir.GetPath().AppendASCII(kTestDataFileIn),
-                      nullptr, 0),
-      0);
+                      base::StringPiece()));
 
   // Pass a handle data dir to the context.
   create_params.set_data_directory(

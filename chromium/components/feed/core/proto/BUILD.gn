@@ -16,13 +16,12 @@ proto_library("proto_v2") {
     "v2/store.proto",
     "v2/ui.proto",
     "v2/user_actions_store.proto",
-    "v2/web_feed_identifier_token.proto",
     "v2/wire/action_diagnostic_info.proto",
     "v2/wire/action_payload.proto",
     "v2/wire/action_surface.proto",
+    "v2/wire/capabilities_debug_data.proto",
     "v2/wire/capability.proto",
     "v2/wire/chrome_client_info.proto",
-    "v2/wire/chrome_feed_response_metadata.proto",
     "v2/wire/chrome_fulfillment_info.proto",
     "v2/wire/client_info.proto",
     "v2/wire/client_user_profiles.proto",
@@ -58,6 +57,8 @@ proto_library("proto_v2") {
     "v2/wire/upload_actions_request.proto",
     "v2/wire/upload_actions_response.proto",
     "v2/wire/version.proto",
+    "v2/wire/web_feed_id.proto",
+    "v2/wire/web_feed_identifier_token.proto",
     "v2/wire/web_feed_matcher.proto",
     "v2/wire/web_feed_token.proto",
     "v2/wire/web_feeds.proto",
@@ -65,6 +66,10 @@ proto_library("proto_v2") {
     "v2/wire/xsurface_content.proto",
     "v2/xsurface.proto",
   ]
+}
+
+proto_library("proto_ios_shared_v2") {
+  sources = [ "v2/wire/chrome_feed_response_metadata.proto" ]
 }
 
 if (is_android) {

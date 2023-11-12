@@ -18,12 +18,12 @@
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/child_process_host.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/child_process_host.h"
 
 using content::BrowserContext;
 using content::RenderProcessHost;
@@ -216,18 +216,31 @@ std::unique_ptr<content::WebContents>
 GuestViewManager::CreateGuestWithWebContentsParams(
     const std::string& view_type,
     content::WebContents* owner_web_contents,
-    const content::WebContents::CreateParams& create_params) {
+    const content::WebContents::CreateParams& create_params,
+    int disposition) {
   std::unique_ptr<GuestViewBase> guest =
       CreateGuestInternal(owner_web_contents, view_type);
   if (!guest)
     return nullptr;
 
+  // TODO(crbug.com/1409929): For the noopener case, it would be better to delay
+  // the creation of the guest contents until attachment.
   content::WebContents::CreateParams guest_create_params(create_params);
   guest_create_params.guest_delegate = guest.get();
 
   std::unique_ptr<content::WebContents> guest_web_contents =
       WebContents::Create(guest_create_params);
-  guest->InitWithWebContents(base::Value::Dict(), guest_web_contents.get());
+  base::Value::Dict guest_params = base::Value::Dict();
+
+  // Vivaldi
+  guest_params.Set("opener_process_id", create_params.opener_render_process_id);
+  guest_params.Set("opener_render_frame_id", create_params.opener_render_frame_id);
+  guest_params.Set("disposition", disposition);
+  // End Vivaldi
+
+  guest->SetCreateParams(guest_params, guest_create_params);
+
+  guest->InitWithWebContents(guest_params, guest_web_contents.get());
   ManageOwnership(std::move(guest));
   // Ownership of the guest WebContents goes to the content layer until we get
   // it back in AddNewContents.
@@ -288,7 +301,7 @@ void GuestViewManager::AddGuest(int guest_instance_id,
   delegate_->OnGuestAdded(guest_web_contents);
 }
 
-void GuestViewManager::RemoveGuest(int guest_instance_id) {
+void GuestViewManager::RemoveGuest(int guest_instance_id, bool invalidate_id) {
   guest_web_contents_by_instance_id_.erase(guest_instance_id);
 
   auto id_iter = reverse_instance_id_map_.find(guest_instance_id);
@@ -296,6 +309,10 @@ void GuestViewManager::RemoveGuest(int guest_instance_id) {
     const ElementInstanceKey& instance_id_key = id_iter->second;
     instance_id_map_.erase(instance_id_key);
     reverse_instance_id_map_.erase(id_iter);
+  }
+
+  if (!invalidate_id) {
+    return;
   }
 
   // All the instance IDs that lie within [0, last_instance_id_removed_]

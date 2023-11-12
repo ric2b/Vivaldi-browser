@@ -490,9 +490,6 @@ template("linux_package") {
   if (defined(is_vivaldi) && is_vivaldi) {
     package = "vivaldi"
     version = vivaldi_version_full
-    if (chrome_pgo_phase > 0) {
-      version += ".pgo"
-    }
   }
   else if (is_chrome_branded) {
     package = "google-chrome"

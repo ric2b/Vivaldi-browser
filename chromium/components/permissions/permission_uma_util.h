@@ -14,7 +14,9 @@
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_result.h"
 #include "components/permissions/prediction_service/prediction_service_messages.pb.h"
+#include "components/permissions/request_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom-forward.h"
 
 namespace blink {
 enum class PermissionType;
@@ -22,7 +24,9 @@ enum class PermissionType;
 
 namespace content {
 class BrowserContext;
+class RenderFrameHost;
 class WebContents;
+class RenderFrameHost;
 }  // namespace content
 
 class GURL;
@@ -74,6 +78,7 @@ enum class RequestTypeForUma {
   PERMISSION_IDLE_DETECTION = 27,
   PERMISSION_FILE_HANDLING = 28,
   PERMISSION_U2F_API_REQUEST = 29,
+  PERMISSION_TOP_LEVEL_STORAGE_ACCESS = 30,
   // NUM must be the last value in the enum.
   NUM
 };
@@ -117,8 +122,45 @@ enum class PermissionEmbargoStatus {
   // Removed: PERMISSIONS_BLACKLISTING = 1,
   REPEATED_DISMISSALS = 2,
   REPEATED_IGNORES = 3,
+  RECENT_DISPLAY = 4,
 
   // Keep this at the end.
+  NUM,
+};
+
+// Used for UMA to record the strict level of permission policy which is
+// configured to allow sub-frame origin. Any new values should be inserted
+// immediately prior to NUM. All values here should have corresponding entries
+// PermissionsPolicyConfiguration area of enums.xml.
+enum class PermissionHeaderPolicyForUMA {
+  // No (or an invalid) Permissions-Policy header was present, results in an
+  // empty features list. It indicates none security-awareness of permissions
+  // policy configuration.
+  HEADER_NOT_PRESENT_OR_INVALID = 0,
+
+  // Permissions-Policy header was present, but it did not define an allowlist
+  // for the feature. It indicates less security-awareness of permissions policy
+  // configuration.
+  FEATURE_NOT_PRESENT = 1,
+
+  // The sub-frame origin is included in allow-list of permission
+  // policy. This indicates a good policy configuration.
+  FEATURE_ALLOWLIST_EXPLICITLY_MATCHES_ORIGIN = 2,
+
+  // Granted by setting value of permission policy to '*'. This also
+  // indicates a bad policy configuration.
+  FEATURE_ALLOWLIST_IS_WILDCARD = 3,
+
+  // The Permissions-Policy header was present and defined an empty
+  // allowlist for the feature. The feature will be disabled everywhere.
+  FEATURE_ALLOWLIST_IS_NONE = 4,
+
+  // The sub-frame origin is not explicitly declared in allow-list of top level
+  // permission policy. It generally indicates less security-awareness of
+  // policy configuration.
+  FEATURE_ALLOWLIST_DOES_NOT_MATCH_ORIGIN = 5,
+
+  // Always keep this at the end.
   NUM,
 };
 
@@ -313,6 +355,53 @@ enum class PermissionChangeAction {
   kMaxValue = RESET_FROM_DENIED
 };
 
+// The reason the permission action `PermissionAction::IGNORED` was triggered.
+enum class PermissionIgnoredReason {
+  // Ignore was triggered due to closure of the browser window
+  WINDOW_CLOSED = 0,
+
+  // Ignore was triggered due to closure of the tab
+  TAB_CLOSED = 1,
+
+  // Ignore was triggered due to navigation
+  NAVIGATION = 2,
+
+  // Catches all other cases
+  UNKNOWN = 3,
+
+  // Always keep at the end
+  NUM
+};
+
+// This enum backs up the
+// 'Permissions.PageInfo.Changed.{PermissionType}.Reallowed.Outcome' histograms
+// enum. It is used for collecting permission usage rates after permission
+// status was reallowed via PageInfo. It is applicable only if permission is
+// allowed as all other states are no-op for an origin.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class PermissionChangeInfo {
+  kInfobarShownPageReloadPermissionUsed = 0,
+
+  kInfobarShownPageReloadPermissionNotUsed = 1,
+
+  kInfobarShownNoPageReloadPermissionUsed = 2,
+
+  kInfobarShownNoPageReloadPermissionNotUsed = 3,
+
+  kInfobarNotShownPageReloadPermissionUsed = 4,
+
+  kInfobarNotShownPageReloadPermissionNotUsed = 5,
+
+  kInfobarNotShownNoPageReloadPermissionUsed = 6,
+
+  kInfobarNotShownNoPageReloadPermissionNotUsed = 7,
+
+  // Always keep at the end.
+  kMaxValue = kInfobarNotShownNoPageReloadPermissionNotUsed
+};
+
 // Provides a convenient way of logging UMA for permission related operations.
 class PermissionUmaUtil {
  public:
@@ -332,11 +421,18 @@ class PermissionUmaUtil {
   static const char kPermissionsPromptDeniedGesture[];
   static const char kPermissionsPromptDeniedNoGesture[];
 
+  static const char kPermissionsExperimentalUsagePrefix[];
+  static const char kPermissionsActionPrefix[];
+
   PermissionUmaUtil() = delete;
   PermissionUmaUtil(const PermissionUmaUtil&) = delete;
   PermissionUmaUtil& operator=(const PermissionUmaUtil&) = delete;
 
   static void PermissionRequested(ContentSettingsType permission);
+
+  static void RecordPermissionRequestedFromFrame(
+      ContentSettingsType content_settings_type,
+      content::RenderFrameHost* rfh);
 
   static void PermissionRequestPreignored(blink::PermissionType permission);
 
@@ -355,6 +451,12 @@ class PermissionUmaUtil {
       PermissionStatusSource source);
 
   static void RecordEmbargoStatus(PermissionEmbargoStatus embargo_status);
+
+  static void RecordPermissionRecoverySuccessRate(
+      ContentSettingsType permission,
+      bool is_used,
+      bool show_infobar,
+      bool page_reload);
 
   // Recorded when a permission prompt creation is in progress.
   static void RecordPermissionPromptAttempt(
@@ -382,6 +484,7 @@ class PermissionUmaUtil {
       absl::optional<PermissionPromptDispositionReason> ui_reason,
       absl::optional<PredictionGrantLikelihood> predicted_grant_likelihood,
       absl::optional<bool> prediction_decision_held_back,
+      absl::optional<permissions::PermissionIgnoredReason> ignored_reason,
       bool did_show_prompt,
       bool did_click_manage,
       bool did_click_learn_more);
@@ -437,6 +540,11 @@ class PermissionUmaUtil {
       PermissionAction previous_action,
       ContentSetting setting_after);
 
+  static void RecordPageInfoPermissionChange(ContentSettingsType type,
+                                             ContentSetting setting_before,
+                                             ContentSetting setting_after,
+                                             bool suppress_reload_page_bar);
+
   static std::string GetPermissionActionString(
       PermissionAction permission_action);
 
@@ -453,6 +561,21 @@ class PermissionUmaUtil {
 
   static bool IsPromptDispositionLoud(
       PermissionPromptDisposition prompt_disposition);
+
+  static void RecordIgnoreReason(
+      const std::vector<PermissionRequest*>& requests,
+      PermissionPromptDisposition prompt_disposition,
+      PermissionIgnoredReason reason);
+
+  // Record metrics related to usage of permissions delegation.
+  static void RecordPermissionsUsageSourceAndPolicyConfiguration(
+      ContentSettingsType content_settings_type,
+      content::RenderFrameHost* render_frame_host);
+
+  static void RecordCrossOriginFrameActionAndPolicyConfiguration(
+      ContentSettingsType content_settings_type,
+      PermissionAction action,
+      content::RenderFrameHost* render_frame_host);
 
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation
@@ -501,6 +624,7 @@ class PermissionUmaUtil {
       const GURL& requesting_origin,
       content::WebContents* web_contents,
       content::BrowserContext* browser_context,
+      content::RenderFrameHost* render_frame_host,
       absl::optional<PredictionGrantLikelihood> predicted_grant_likelihood,
       absl::optional<bool> prediction_decision_held_back);
 

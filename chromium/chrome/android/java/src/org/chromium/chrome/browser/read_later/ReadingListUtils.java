@@ -13,7 +13,6 @@ import org.chromium.base.Log;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUndoController;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
-import org.chromium.chrome.browser.bookmarks.ReadingListFeatures;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.bookmarks.BookmarkId;
@@ -65,8 +64,7 @@ public final class ReadingListUtils {
      * @return Whether the given {@link BookmarkId} is a type-swappable reading list item.
      */
     public static boolean isSwappableReadingListItem(@Nullable BookmarkId id) {
-        return ReadingListFeatures.shouldAllowBookmarkTypeSwapping()
-                && id.getType() == BookmarkType.READING_LIST;
+        return id.getType() == BookmarkType.READING_LIST;
     }
 
     /**
@@ -84,8 +82,7 @@ public final class ReadingListUtils {
             @NonNull BottomSheetController bottomsheetController,
             @NonNull BookmarkModel bookmarkModel, @NonNull BookmarkId bookmarkId,
             @BookmarkType int bookmarkType) {
-        if (!ReadingListFeatures.shouldAllowBookmarkTypeSwapping() || bookmarkId == null
-                || bookmarkId.getType() != BookmarkType.NORMAL
+        if (bookmarkId == null || bookmarkId.getType() != BookmarkType.NORMAL
                 || bookmarkType != BookmarkType.READING_LIST) {
             return false;
         }
@@ -106,7 +103,7 @@ public final class ReadingListUtils {
         if (Boolean.TRUE.equals(sSkipShowSaveFlowForTesting)) return true;
         BookmarkUtils.showSaveFlow(activity, bottomsheetController,
                 /*fromExplicitTrackUi=*/false, newBookmark,
-                /*wasBookmarkMoved=*/true);
+                /*wasBookmarkMoved=*/true, /*isNewBookmark=*/false);
         return true;
     }
 
@@ -124,8 +121,6 @@ public final class ReadingListUtils {
     public static void typeSwapBookmarksIfNecessary(BookmarkModel bookmarkModel,
             List<BookmarkId> bookmarksToMove, List<BookmarkId> typeSwappedBookmarks,
             BookmarkId newParentId) {
-        if (!ReadingListFeatures.shouldAllowBookmarkTypeSwapping()) return;
-
         List<BookmarkId> outputList = new ArrayList<>();
         while (!bookmarksToMove.isEmpty()) {
             BookmarkId bookmarkId = bookmarksToMove.remove(0);

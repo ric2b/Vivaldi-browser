@@ -55,7 +55,8 @@ class SandboxProfileCache {
     return *cache;
   }
 
-  sandbox::mac::SandboxPolicy* Query(sandbox::mojom::Sandbox sandbox_type) {
+  const sandbox::mac::SandboxPolicy* Query(
+      sandbox::mojom::Sandbox sandbox_type) {
     base::AutoLock lock(lock_);
     auto it = cache_.find(sandbox_type);
     if (it == cache_.end())
@@ -79,8 +80,8 @@ class SandboxProfileCache {
 }  // namespace
 
 absl::optional<mojo::NamedPlatformChannel>
-ChildProcessLauncherHelper::CreateNamedPlatformChannelOnClientThread() {
-  DCHECK(client_task_runner_->RunsTasksInCurrentSequence());
+ChildProcessLauncherHelper::CreateNamedPlatformChannelOnLauncherThread() {
+  DCHECK(CurrentlyOnProcessLauncherTaskRunner());
   return absl::nullopt;
 }
 
@@ -101,6 +102,10 @@ ChildProcessLauncherHelper::GetFilesToMap() {
   return CreateDefaultPosixFilesToMap(
       child_process_id(), mojo_channel_->remote_endpoint(),
       /*files_to_preload=*/{}, GetProcessType(), command_line());
+}
+
+bool ChildProcessLauncherHelper::IsUsingLaunchOptions() {
+  return true;
 }
 
 bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
@@ -134,7 +139,7 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
     // problem.
     options->environment.insert(std::make_pair("OS_ACTIVITY_MODE", "disable"));
 
-    auto* cached_policy = SandboxProfileCache::Get().Query(sandbox_type);
+    const auto* cached_policy = SandboxProfileCache::Get().Query(sandbox_type);
     if (cached_policy) {
       policy_ = *cached_policy;
     } else {
@@ -178,23 +183,18 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
         base::StringPrintf("%s%d", sandbox::switches::kSeatbeltClient, pipe));
   }
 
-  for (const auto& remapped_fd : file_data_->additional_remapped_fds) {
-    options->fds_to_remap.emplace_back(remapped_fd.second.get(),
-                                       remapped_fd.first);
-  }
-
   return true;
 }
 
 ChildProcessLauncherHelper::Process
 ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
-    const base::LaunchOptions& options,
+    const base::LaunchOptions* options,
     std::unique_ptr<PosixFileDescriptorInfo> files_to_register,
     bool* is_synchronous_launch,
     int* launch_result) {
   *is_synchronous_launch = true;
   ChildProcessLauncherHelper::Process process;
-  process.process = base::LaunchProcess(*command_line(), options);
+  process.process = base::LaunchProcess(*command_line(), *options);
   *launch_result = process.process.IsValid() ? LAUNCH_RESULT_SUCCESS
                                              : LAUNCH_RESULT_FAILURE;
   return process;
@@ -202,7 +202,7 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
 
 void ChildProcessLauncherHelper::AfterLaunchOnLauncherThread(
     const ChildProcessLauncherHelper::Process& process,
-    const base::LaunchOptions& options) {
+    const base::LaunchOptions* options) {
   // Send the sandbox profile after launch so that the child will exist and be
   // waiting for the message on its side of the pipe.
   if (process.process.IsValid() && seatbelt_exec_client_.get() != nullptr) {
@@ -248,7 +248,6 @@ void ChildProcessLauncherHelper::SetProcessBackgroundedOnLauncherThread(
   }
 }
 
-// static
 base::File OpenFileToShare(const base::FilePath& path,
                            base::MemoryMappedFile::Region* region) {
   // Not used yet (until required files are described in the service manifest on

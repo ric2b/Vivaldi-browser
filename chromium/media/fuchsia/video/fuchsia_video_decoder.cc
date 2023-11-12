@@ -16,24 +16,24 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/ipc/common/gpu_memory_buffer_impl_native_pixmap.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_context.h"
 #include "media/base/media_switches.h"
 #include "media/base/video_aspect_ratio.h"
 #include "media/base/video_color_space.h"
 #include "media/base/video_frame.h"
-#include "media/fuchsia/cdm/fuchsia_cdm_context.h"
-#include "media/fuchsia/cdm/fuchsia_stream_decryptor.h"
+#include "media/cdm/fuchsia/fuchsia_cdm_context.h"
+#include "media/cdm/fuchsia/fuchsia_stream_decryptor.h"
 #include "media/fuchsia/common/decrypting_sysmem_buffer_stream.h"
 #include "media/fuchsia/common/passthrough_sysmem_buffer_stream.h"
 #include "media/fuchsia/common/stream_processor_helper.h"
-#include "media/fuchsia/mojom/fuchsia_media.mojom.h"
+#include "media/mojo/mojom/fuchsia_media.mojom.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/client_native_pixmap_factory.h"
 #include "ui/ozone/public/client_native_pixmap_factory_ozone.h"
@@ -160,8 +160,8 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
     auto frame = VideoFrame::WrapNativeTextures(
         pixel_format, mailboxes,
-        BindToCurrentLoop(base::BindOnce(&OutputMailbox::OnFrameDestroyed,
-                                         base::Unretained(this))),
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &OutputMailbox::OnFrameDestroyed, base::Unretained(this))),
         coded_size, visible_rect, natural_size, timestamp);
 
     // Request a fence we'll wait on before reusing the buffer.
@@ -196,8 +196,8 @@ class FuchsiaVideoDecoder::OutputMailbox {
 
     raster_context_provider_->ContextSupport()->SignalSyncToken(
         release_sync_token_,
-        BindToCurrentLoop(base::BindOnce(&OutputMailbox::OnSyncTokenSignaled,
-                                         weak_factory_.GetWeakPtr())));
+        base::BindPostTaskToCurrentDefault(base::BindOnce(
+            &OutputMailbox::OnSyncTokenSignaled, weak_factory_.GetWeakPtr())));
   }
 
   void OnSyncTokenSignaled() {
@@ -271,7 +271,7 @@ void FuchsiaVideoDecoder::Initialize(const VideoDecoderConfig& config,
   DCHECK(output_cb);
   DCHECK(decode_callbacks_.empty());
 
-  auto done_callback = BindToCurrentLoop(std::move(init_cb));
+  auto done_callback = base::BindPostTaskToCurrentDefault(std::move(init_cb));
 
   // There should be no pending decode request, so DropInputQueue() is not
   // expected to fail.
@@ -302,7 +302,7 @@ void FuchsiaVideoDecoder::Initialize(const VideoDecoderConfig& config,
   }
 
   media::mojom::VideoDecoderSecureMemoryMode secure_mode =
-      media::mojom::VideoDecoderSecureMemoryMode::CLEAR_INPUT;
+      media::mojom::VideoDecoderSecureMemoryMode::CLEAR;
   if (secure_input) {
     if (!use_overlays_for_video_) {
       DLOG(ERROR) << "Protected content can be rendered only using overlays.";
@@ -312,11 +312,13 @@ void FuchsiaVideoDecoder::Initialize(const VideoDecoderConfig& config,
       return;
     }
     secure_mode = media::mojom::VideoDecoderSecureMemoryMode::SECURE;
-  } else if (!use_overlays_for_video_) {
-    // Protected output buffers can be rendered only using overlays. If overlays
-    // are not allowed then the output buffers cannot be protected.
-    secure_mode = media::mojom::VideoDecoderSecureMemoryMode::CLEAR;
+  } else if (use_overlays_for_video_ &&
+             base::CommandLine::ForCurrentProcess()->HasSwitch(
+                 switches::kForceProtectedVideoOutputBuffers)) {
+    secure_mode = media::mojom::VideoDecoderSecureMemoryMode::SECURE_OUTPUT;
   }
+  protected_output_ =
+      secure_mode != media::mojom::VideoDecoderSecureMemoryMode::CLEAR;
 
   // Reset output buffers since we won't be able to re-use them.
   ReleaseOutputBuffers();
@@ -667,6 +669,11 @@ void FuchsiaVideoDecoder::OnStreamProcessorOutputPacket(
   // Allow this video frame to be promoted as an overlay, because it was
   // registered with an ImagePipe.
   frame->metadata().allow_overlay = use_overlays_for_video_;
+
+  if (protected_output_) {
+    frame->metadata().protected_video = true;
+    frame->metadata().hw_protected = true;
+  }
 
   output_cb_.Run(std::move(frame));
 }

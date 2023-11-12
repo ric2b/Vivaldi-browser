@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "build/chromeos_buildflags.h"
@@ -490,6 +490,17 @@ class EventGenerator {
 
   std::unique_ptr<TestTickClock> tick_clock_;
 };
+
+// This generates key events for moidfiers as well as the key with
+// modifiers.
+// TODO(crbug.com/1415115): Remove this once the EventGenerator is
+// modified to generate the same sequence.
+void EmulateFullKeyPressReleaseSequence(test::EventGenerator* generator,
+                                        KeyboardCode key,
+                                        bool control,
+                                        bool shift,
+                                        bool alt,
+                                        bool command);
 
 }  // namespace test
 }  // namespace ui

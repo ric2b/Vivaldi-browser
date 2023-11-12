@@ -2,16 +2,16 @@
 
 #import "ios/notes/cells/note_folder_item.h"
 
-#include "base/i18n/rtl.h"
-#include "base/mac/foundation_util.h"
+#import "base/i18n/rtl.h"
+#import "base/mac/foundation_util.h"
+#import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
+#import "ios/chrome/browser/ui/util/rtl_geometry.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/notes/cells/note_table_cell_title_edit_delegate.h"
 #import "ios/notes/note_ui_constants.h"
 #import "ios/notes/note_utils_ios.h"
-#import "ios/notes/cells/note_table_cell_title_edit_delegate.h"
-#import "ios/chrome/browser/ui/util/rtl_geometry.h"
-#include "ios/chrome/grit/ios_strings.h"
-#include "ui/base/l10n/l10n_util_mac.h"
-
-#import "vivaldi/mobile_common/grit/vivaldi_mobile_common_native_strings.h"
+#import "ui/base/l10n/l10n_util_mac.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -23,6 +23,7 @@ namespace {
 const CGFloat kFolderCellIndentationWidth = 32.0;
 // The amount in points by which to inset horizontally the cell contents.
 const CGFloat kFolderCellHorizonalInset = 17.0;
+const CGFloat textStackSpacing = 4;
 }  // namespace
 
 #pragma mark - NoteFolderItem
@@ -56,7 +57,7 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
           l10n_util::GetNSString(IDS_VIVALDI_NOTE_CREATE_GROUP);
       // Note using the same image for folders as bookmarks now
       folderCell.folderImageView.image =
-          [UIImage imageNamed:@"bookmark_blue_new_folder"];
+          [UIImage imageNamed:vBookmarkAddFolder];
       folderCell.accessibilityIdentifier =
           kNoteCreateNewFolderCellIdentifier;
       folderCell.accessibilityTraits |= UIAccessibilityTraitButton;
@@ -75,7 +76,7 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
           folderCell.indentationConstraint.constant +
           kFolderCellIndentationWidth * self.indentationLevel;
       folderCell.folderImageView.image =
-          [UIImage imageNamed:@"bookmark_blue_folder"];
+          [UIImage imageNamed:vBookmarksFolderIcon];
       break;
     }
   }
@@ -127,10 +128,30 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
         setContentHuggingPriority:UILayoutPriorityDefaultLow
                           forAxis:UILayoutConstraintAxisHorizontal];
 
+    // Folder items count label
+    UILabel* folderItemsLabel = [UILabel new];
+    _folderItemsLabel = folderItemsLabel;
+    folderItemsLabel.adjustsFontForContentSizeCategory = YES;
+    folderItemsLabel.font =
+        [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    folderItemsLabel.textColor = UIColor.secondaryLabelColor;
+    folderItemsLabel.textAlignment = NSTextAlignmentLeft;
+
+    // Vertical stack view for textfield and the items count label
+    UIStackView* verticalStack =
+        [[UIStackView alloc] initWithArrangedSubviews:@[
+          self.folderTitleTextField, folderItemsLabel
+        ]];
+    verticalStack.axis = UILayoutConstraintAxisVertical;
+    verticalStack.spacing = textStackSpacing;
+    verticalStack.distribution = UIStackViewDistributionFillProportionally;
+    verticalStack.alignment = UIStackViewAlignmentLeading;
+    verticalStack.translatesAutoresizingMaskIntoConstraints = NO;
+
     // Container StackView.
     UIStackView* horizontalStack =
         [[UIStackView alloc] initWithArrangedSubviews:@[
-          self.folderImageView, self.folderTitleTextField
+          self.folderImageView, verticalStack
         ]];
     horizontalStack.axis = UILayoutConstraintAxisHorizontal;
     horizontalStack.spacing = kNoteCellViewSpacing;
@@ -192,6 +213,7 @@ const CGFloat kFolderCellHorizonalInset = 17.0;
   self.folderTitleTextField.accessibilityIdentifier = nil;
   self.accessoryType = UITableViewCellAccessoryNone;
   self.isAccessibilityElement = YES;
+  self.folderItemsLabel.text = nil;
 }
 
 #pragma mark NoteTableCellTitleEditing

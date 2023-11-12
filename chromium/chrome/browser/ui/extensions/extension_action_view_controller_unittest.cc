@@ -8,16 +8,13 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
-#include "base/json/json_reader.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
-#include "chrome/browser/extensions/chrome_extensions_browser_client.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_action_test_util.h"
@@ -27,31 +24,29 @@
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/site_permissions_helper.h"
 #include "chrome/browser/extensions/test_extension_system.h"
+#include "chrome/browser/extensions/user_script_listener.h"
 #include "chrome/browser/ui/extensions/extension_action_test_helper.h"
 #include "chrome/browser/ui/extensions/extensions_container.h"
 #include "chrome/browser/ui/extensions/icon_with_badge_image_source.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
-#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/sessions/content/session_tab_helper.h"
-#include "content/public/browser/notification_service.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
-#include "extensions/browser/notification_types.h"
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
 #include "extensions/common/mojom/run_location.mojom-shared.h"
-#include "extensions/common/user_script.h"
-#include "extensions/test/permissions_manager_waiter.h"
 #include "extensions/test/test_extension_dir.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/models/image_model.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/native_theme/native_theme.h"
 
@@ -86,8 +81,11 @@ class ExtensionActionViewControllerUnitTest : public BrowserWithTestWindowTest {
     extension_service_ =
         extensions::ExtensionSystem::Get(profile())->extension_service();
 
-    test_util_ = ExtensionActionTestHelper::Create(browser(), false);
+    // Create web contents before creating the test helper since the
+    // extensions menu needs them (e.g compute the string for current site).
+    AddTab(browser(), GURL(u"https://example.com"));
 
+    test_util_ = ExtensionActionTestHelper::Create(browser(), false);
     view_size_ = test_util_->GetToolbarActionSize();
   }
 
@@ -174,8 +172,6 @@ TEST_F(ExtensionActionViewControllerUnitTest,
   const std::string id =
       CreateAndAddExtension("extension", extensions::ActionInfo::TYPE_PAGE)
           ->id();
-
-  AddTab(browser(), GURL("chrome://newtab"));
 
   content::WebContents* web_contents = GetActiveWebContents();
   ExtensionActionViewController* const action = GetViewControllerForId(id);
@@ -367,10 +363,10 @@ TEST_F(ExtensionActionViewControllerUnitTest,
 
   // Unpin the extension and ephemerally pop it out.
   toolbar_model()->SetActionVisibility(id, false);
-  EXPECT_FALSE(container()->IsActionVisibleOnToolbar(action));
+  EXPECT_FALSE(container()->IsActionVisibleOnToolbar(id));
   base::RunLoop run_loop;
   container()->PopOutAction(action, run_loop.QuitClosure());
-  EXPECT_TRUE(container()->IsActionVisibleOnToolbar(action));
+  EXPECT_TRUE(container()->IsActionVisibleOnToolbar(id));
   // The string should still just be "pin".
   check_visibility_string(action, IDS_EXTENSIONS_PIN_TO_TOOLBAR);
 }
@@ -816,7 +812,7 @@ TEST_F(ExtensionActionViewControllerUnitTest, TestGetIconWithNullWebContents) {
   // a non-empty icon should be returned.
   ExtensionActionViewController* const controller =
       GetViewControllerForId(extension->id());
-  gfx::Image icon = controller->GetIcon(nullptr, view_size());
+  ui::ImageModel icon = controller->GetIcon(nullptr, view_size());
   EXPECT_FALSE(icon.IsEmpty());
 }
 
@@ -893,17 +889,6 @@ TEST_F(ExtensionActionViewControllerFeatureUnitTest, GetHoverCardStatus) {
   EXPECT_EQ(GetHoverCardSiteAccessState(controllerC, web_contents),
             HoverCardState::SiteAccess::kExtensionRequestsAccess);
 
-  // Grant all extensions site access. Verify extension A hover card state is
-  // "does not want access" and extensions B and C is "all extensions allowed".
-  permissions_manager->UpdateUserSiteSetting(
-      url, UserSiteSetting::kGrantAllExtensions);
-  EXPECT_EQ(GetHoverCardSiteAccessState(controllerA, web_contents),
-            HoverCardState::SiteAccess::kExtensionDoesNotWantAccess);
-  EXPECT_EQ(GetHoverCardSiteAccessState(controllerB, web_contents),
-            HoverCardState::SiteAccess::kAllExtensionsAllowed);
-  EXPECT_EQ(GetHoverCardSiteAccessState(controllerC, web_contents),
-            HoverCardState::SiteAccess::kAllExtensionsAllowed);
-
   // Block all extensions site access. Verify all extensions appear as "all
   // extensions blocked" (even though extension A never requested access).
   permissions_manager->UpdateUserSiteSetting(
@@ -926,4 +911,81 @@ TEST_F(ExtensionActionViewControllerFeatureUnitTest, GetHoverCardStatus) {
             HoverCardState::SiteAccess::kExtensionHasAccess);
   EXPECT_EQ(GetHoverCardSiteAccessState(controllerC, web_contents),
             HoverCardState::SiteAccess::kExtensionRequestsAccess);
+}
+
+class ExtensionActionViewControllerFeatureWithPermittedSitesUnitTest
+    : public ExtensionActionViewControllerFeatureUnitTest {
+ public:
+  ExtensionActionViewControllerFeatureWithPermittedSitesUnitTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        extensions_features::kExtensionsMenuAccessControlWithPermittedSites);
+  }
+  ~ExtensionActionViewControllerFeatureWithPermittedSitesUnitTest() override =
+      default;
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Tests hover card status after changing user site settings and site access.
+TEST_F(ExtensionActionViewControllerFeatureWithPermittedSitesUnitTest,
+       GetHoverCardStatus) {
+  std::string url_string = "https://example.com/";
+  auto extensionA =
+      CreateAndAddExtension("Extension A", extensions::ActionInfo::TYPE_ACTION);
+  auto extensionB = CreateAndAddExtensionWithGrantedHostPermissions(
+      "Extension B", extensions::ActionInfo::TYPE_ACTION, {url_string});
+  auto extensionC = CreateAndAddExtensionWithGrantedHostPermissions(
+      "Extension c", extensions::ActionInfo::TYPE_ACTION, {url_string});
+
+  AddTab(browser(), GURL(url_string));
+  content::WebContents* web_contents = GetActiveWebContents();
+  ASSERT_TRUE(web_contents);
+  auto url = url::Origin::Create(web_contents->GetLastCommittedURL());
+
+  ExtensionActionViewController* const controllerA =
+      GetViewControllerForId(extensionA->id());
+  ASSERT_TRUE(controllerA);
+  ExtensionActionViewController* const controllerB =
+      GetViewControllerForId(extensionB->id());
+  ASSERT_TRUE(controllerB);
+  ExtensionActionViewController* const controllerC =
+      GetViewControllerForId(extensionC->id());
+  ASSERT_TRUE(controllerC);
+
+  // By default, user site setting is "customize by extension" and site access
+  // is granted to every extension that requests them. Thus, verify extension A
+  // hover card state is "does not want access" and the rest is "have access".
+  auto* permissions_manager =
+      extensions::PermissionsManager::Get(browser()->profile());
+  ASSERT_EQ(permissions_manager->GetUserSiteSetting(url),
+            UserSiteSetting::kCustomizeByExtension);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerA, web_contents),
+            HoverCardState::SiteAccess::kExtensionDoesNotWantAccess);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerB, web_contents),
+            HoverCardState::SiteAccess::kExtensionHasAccess);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerC, web_contents),
+            HoverCardState::SiteAccess::kExtensionHasAccess);
+
+  // Withhold extension C host permissions. Verify only extension C changed
+  // hover card state to "requests access".
+  extensions::ScriptingPermissionsModifier(profile(), extensionC)
+      .SetWithholdHostPermissions(true);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerA, web_contents),
+            HoverCardState::SiteAccess::kExtensionDoesNotWantAccess);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerB, web_contents),
+            HoverCardState::SiteAccess::kExtensionHasAccess);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerC, web_contents),
+            HoverCardState::SiteAccess::kExtensionRequestsAccess);
+
+  // Grant all extensions site access. Verify extension A hover card state is
+  // "does not want access" and extensions B and C is "all extensions allowed".
+  permissions_manager->UpdateUserSiteSetting(
+      url, UserSiteSetting::kGrantAllExtensions);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerA, web_contents),
+            HoverCardState::SiteAccess::kExtensionDoesNotWantAccess);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerB, web_contents),
+            HoverCardState::SiteAccess::kAllExtensionsAllowed);
+  EXPECT_EQ(GetHoverCardSiteAccessState(controllerC, web_contents),
+            HoverCardState::SiteAccess::kAllExtensionsAllowed);
 }

@@ -5,9 +5,9 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_SITE_AFFILIATION_MOCK_AFFILIATION_SERVICE_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_SITE_AFFILIATION_MOCK_AFFILIATION_SERVICE_H_
 
+#include "components/password_manager/core/browser/affiliation/affiliation_service.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_form.h"
-#include "components/password_manager/core/browser/affiliation/affiliation_service.h"
 #include "services/network/test/test_network_connection_tracker.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -47,19 +47,14 @@ class MockAffiliationService : public AffiliationService {
   MOCK_METHOD(void, TrimCacheForFacetURI, (const FacetURI&), (override));
   MOCK_METHOD(void, TrimUnusedCache, (std::vector<FacetURI>), (override));
   MOCK_METHOD(void, GetAllGroups, (GroupsCallback), (override, const));
-
-  void ExpectCallToInjectAffiliationAndBrandingInformation(
-      const std::vector<AffiliationAndBrandingInformation>& results_to_inject);
-
-  void InjectAffiliationAndBrandingInformation(
-      std::vector<std::unique_ptr<PasswordForm>> forms,
-      AffiliationService::StrategyOnCacheMiss strategy_on_cache_miss,
-      PasswordFormsOrErrorCallback result_callback) override;
-
- private:
-  MOCK_METHOD(std::vector<AffiliationAndBrandingInformation>,
-              OnInjectAffiliationAndBrandingInformationCalled,
-              ());
+  MOCK_METHOD(void,
+              GetPSLExtensions,
+              (base::OnceCallback<void(std::vector<std::string>)>),
+              (override, const));
+  MOCK_METHOD(void,
+              UpdateAffiliationsAndBranding,
+              (const std::vector<FacetURI>&, base::OnceClosure),
+              (override));
 };
 
 }  // namespace password_manager

@@ -5,7 +5,7 @@
 package org.chromium.components.background_task_scheduler;
 
 import android.content.Context;
-import android.os.Bundle;
+import android.os.PersistableBundle;
 
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
@@ -52,12 +52,6 @@ public class TaskInfo {
          * @param periodicInfo object to act on.
          */
         void visit(PeriodicInfo periodicInfo);
-        /**
-         * Applies actions on a given {@link ExactInfo}. This affects information regarding
-         * timing for an exact task.
-         * @param exactInfo object to act on.
-         */
-        void visit(ExactInfo exactInfo);
     }
 
     /**
@@ -322,71 +316,6 @@ public class TaskInfo {
         }
     }
 
-    /**
-     * Specifies information regarding exact tasks.
-     */
-    public static class ExactInfo implements TimingInfo {
-        private final long mTriggerAtMs;
-
-        private ExactInfo(Builder builder) {
-            mTriggerAtMs = builder.mTriggerAtMs;
-        }
-
-        public long getTriggerAtMs() {
-            return mTriggerAtMs;
-        }
-
-        @Override
-        public void accept(TimingInfoVisitor visitor) {
-            visitor.visit(this);
-        }
-
-        @Override
-        public String toString() {
-            StringBuilder sb = new StringBuilder("{");
-            sb.append("triggerAtMs: ").append(mTriggerAtMs).append("}");
-            return sb.toString();
-        }
-
-        /**
-         * TODO(crbug.com/1190755): Either remove this or make sure it's compatible with Android S.
-         * Warning: This functionality might get removed, check with OWNERS before using this in new
-         * code: //components/background_task_scheduler/OWNERS.
-         * @return a new {@link Builder} object to set the values of the exact task.
-         */
-        public static Builder create() {
-            return new Builder();
-        }
-
-        /**
-         * A helper builder to provide a way to build {@link ExactInfo}.
-         *
-         * @see #create()
-         */
-        public static final class Builder {
-            private long mTriggerAtMs;
-
-            /**
-             * Sets the exact UTC timestamp at which to schedule the exact task.
-             * @param triggerAtMs the UTC timestamp at which the task should be started.
-             * @return the {@link Builder} for creating the {@link ExactInfo} object.
-             */
-            public Builder setTriggerAtMs(long triggerAtMs) {
-                mTriggerAtMs = triggerAtMs;
-                return this;
-            }
-
-            /**
-             * Build the {@link ExactInfo object} specified by this builder.
-             *
-             * @return the {@link ExactInfo} object.
-             */
-            public ExactInfo build() {
-                return new ExactInfo(this);
-            }
-        }
-    }
-
     @IntDef({NetworkType.NONE, NetworkType.ANY, NetworkType.UNMETERED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface NetworkType {
@@ -420,7 +349,7 @@ public class TaskInfo {
      * The extras to provide to the {@link BackgroundTask} when it is run.
      */
     @NonNull
-    private final Bundle mExtras;
+    private final PersistableBundle mExtras;
 
     /**
      * The type of network the task requires to run.
@@ -450,7 +379,7 @@ public class TaskInfo {
 
     private TaskInfo(Builder builder) {
         mTaskId = builder.mTaskId;
-        mExtras = builder.mExtras == null ? new Bundle() : builder.mExtras;
+        mExtras = builder.mExtras == null ? new PersistableBundle() : builder.mExtras;
         mRequiredNetworkType = builder.mRequiredNetworkType;
         mRequiresCharging = builder.mRequiresCharging;
         mIsPersisted = builder.mIsPersisted;
@@ -469,7 +398,7 @@ public class TaskInfo {
      * @return the extras that will be provided to the {@link BackgroundTask}.
      */
     @NonNull
-    public Bundle getExtras() {
+    public PersistableBundle getExtras() {
         return mExtras;
     }
 
@@ -652,7 +581,7 @@ public class TaskInfo {
     public static final class Builder {
         private final int mTaskId;
 
-        private Bundle mExtras;
+        private PersistableBundle mExtras;
         @NetworkType
         private int mRequiredNetworkType;
         private boolean mRequiresCharging;
@@ -678,7 +607,7 @@ public class TaskInfo {
          * @param bundle the bundle of extra values necessary for this task.
          * @return this {@link Builder}.
          */
-        public Builder setExtras(Bundle bundle) {
+        public Builder setExtras(PersistableBundle bundle) {
             mExtras = bundle;
             return this;
         }

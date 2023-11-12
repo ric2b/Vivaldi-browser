@@ -7,10 +7,11 @@
 #include <memory>
 #include <sstream>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
+#import "base/task/single_thread_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -19,15 +20,19 @@
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/image_transport_surface_delegate.h"
 #include "ui/accelerated_widget_mac/ca_layer_tree_coordinator.h"
-#include "ui/accelerated_widget_mac/io_surface_context.h"
-#include "ui/base/cocoa/remote_layer_api.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/video_types.h"
 #include "ui/gl/ca_renderer_layer_params.h"
-#include "ui/gl/gl_context.h"
+#include "ui/gl/gl_features.h"
 #include "ui/gl/gpu_switching_manager.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "ui/accelerated_widget_mac/io_surface_context.h"
+#include "ui/base/cocoa/remote_layer_api.h"
+#include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_cgl.h"
+#endif
 
 // From ANGLE's EGL/eglext_angle.h. This should be included instead of being
 // redefined here.
@@ -51,8 +56,11 @@ ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
     base::WeakPtr<ImageTransportSurfaceDelegate> delegate)
     : gl::Presenter(display, gfx::Size()),
       delegate_(delegate),
+#if BUILDFLAG(IS_MAC)
       use_remote_layer_api_(ui::RemoteLayerAPISupported()),
+#endif
       scale_factor_(1),
+      vsync_callback_(delegate->GetGpuVSyncCallback()),
       gl_renderer_id_(0),
       weak_ptr_factory_(this) {
   ui::GpuSwitchingManager::GetInstance()->AddObserver(this);
@@ -66,6 +74,7 @@ ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
            ->workarounds()
            .disable_av_sample_buffer_display_layer;
 
+#if BUILDFLAG(IS_MAC)
   ca_layer_tree_coordinator_ = std::make_unique<ui::CALayerTreeCoordinator>(
       use_remote_layer_api_, allow_av_sample_buffer_display_layer);
 
@@ -77,6 +86,10 @@ ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
                                                    options:@{}] retain]);
     [ca_context_ setLayer:ca_layer_tree_coordinator_->GetCALayerForDisplay()];
   }
+#else
+  ca_layer_tree_coordinator_ = std::make_unique<ui::CALayerTreeCoordinator>(
+      /*allow_remote_layers=*/false, allow_av_sample_buffer_display_layer);
+#endif
 }
 
 ImageTransportSurfaceOverlayMacEGL::~ImageTransportSurfaceOverlayMacEGL() {
@@ -93,10 +106,6 @@ void ImageTransportSurfaceOverlayMacEGL::PrepareToDestroy(bool have_context) {}
 
 void ImageTransportSurfaceOverlayMacEGL::Destroy() {
   ca_layer_tree_coordinator_.reset();
-}
-
-bool ImageTransportSurfaceOverlayMacEGL::IsOffscreen() {
-  return false;
 }
 
 void ImageTransportSurfaceOverlayMacEGL::ApplyBackpressure() {
@@ -116,10 +125,11 @@ void ImageTransportSurfaceOverlayMacEGL::BufferPresented(
   std::move(callback).Run(feedback);
 }
 
-gfx::SwapResult ImageTransportSurfaceOverlayMacEGL::SwapBuffersInternal(
+void ImageTransportSurfaceOverlayMacEGL::Present(
     gl::GLSurface::SwapCompletionCallback completion_callback,
-    gl::GLSurface::PresentationCallback presentation_callback) {
-  TRACE_EVENT0("gpu", "ImageTransportSurfaceOverlayMac::SwapBuffersInternal");
+    gl::GLSurface::PresentationCallback presentation_callback,
+    gfx::FrameData data) {
+  TRACE_EVENT0("gpu", "ImageTransportSurfaceOverlayMac::Present");
 
   constexpr base::TimeDelta kHistogramMinTime = base::Microseconds(5);
   constexpr base::TimeDelta kHistogramMaxTime = base::Milliseconds(16);
@@ -173,9 +183,13 @@ gfx::SwapResult ImageTransportSurfaceOverlayMacEGL::SwapBuffersInternal(
     TRACE_EVENT_INSTANT2("test_gpu", "SwapBuffers", TRACE_EVENT_SCOPE_THREAD,
                          "GLImpl", static_cast<int>(gl::GetGLImplementation()),
                          "width", pixel_size_.width());
+#if BUILDFLAG(IS_MAC)
     if (use_remote_layer_api_) {
       params.ca_context_id = [ca_context_ contextId];
     } else {
+#else
+    if (true) {
+#endif
       IOSurfaceRef io_surface =
           ca_layer_tree_coordinator_->GetIOSurfaceForDisplay();
       if (io_surface) {
@@ -205,68 +219,9 @@ gfx::SwapResult ImageTransportSurfaceOverlayMacEGL::SwapBuffersInternal(
       base::BindOnce(&ImageTransportSurfaceOverlayMacEGL::BufferPresented,
                      weak_ptr_factory_.GetWeakPtr(),
                      std::move(presentation_callback), feedback));
-  return gfx::SwapResult::SWAP_ACK;
-}
-
-gfx::SwapResult ImageTransportSurfaceOverlayMacEGL::SwapBuffers(
-    gl::GLSurface::PresentationCallback callback,
-    gl::FrameData data) {
-  return SwapBuffersInternal(base::DoNothing(), std::move(callback));
-}
-
-void ImageTransportSurfaceOverlayMacEGL::SwapBuffersAsync(
-    gl::GLSurface::SwapCompletionCallback completion_callback,
-    gl::GLSurface::PresentationCallback presentation_callback,
-    gl::FrameData data) {
-  SwapBuffersInternal(std::move(completion_callback),
-                      std::move(presentation_callback));
-}
-
-gfx::SwapResult ImageTransportSurfaceOverlayMacEGL::PostSubBuffer(
-    int x,
-    int y,
-    int width,
-    int height,
-    gl::GLSurface::PresentationCallback callback,
-    gl::FrameData data) {
-  return SwapBuffersInternal(base::DoNothing(), std::move(callback));
-}
-
-void ImageTransportSurfaceOverlayMacEGL::PostSubBufferAsync(
-    int x,
-    int y,
-    int width,
-    int height,
-    gl::GLSurface::SwapCompletionCallback completion_callback,
-    gl::GLSurface::PresentationCallback presentation_callback,
-    gl::FrameData data) {
-  SwapBuffersInternal(std::move(completion_callback),
-                      std::move(presentation_callback));
-}
-
-gfx::SwapResult ImageTransportSurfaceOverlayMacEGL::CommitOverlayPlanes(
-    gl::GLSurface::PresentationCallback callback,
-    gl::FrameData data) {
-  return SwapBuffersInternal(base::DoNothing(), std::move(callback));
-}
-
-void ImageTransportSurfaceOverlayMacEGL::CommitOverlayPlanesAsync(
-    gl::GLSurface::SwapCompletionCallback completion_callback,
-    gl::GLSurface::PresentationCallback presentation_callback,
-    gl::FrameData data) {
-  SwapBuffersInternal(std::move(completion_callback),
-                      std::move(presentation_callback));
-}
-
-bool ImageTransportSurfaceOverlayMacEGL::SupportsPostSubBuffer() {
-  return true;
 }
 
 bool ImageTransportSurfaceOverlayMacEGL::SupportsCommitOverlayPlanes() {
-  return true;
-}
-
-bool ImageTransportSurfaceOverlayMacEGL::SupportsAsyncSwap() {
   return true;
 }
 
@@ -330,14 +285,6 @@ bool ImageTransportSurfaceOverlayMacEGL::ScheduleCALayer(
       ->ScheduleCALayer(params);
 }
 
-bool ImageTransportSurfaceOverlayMacEGL::IsSurfaceless() const {
-  return true;
-}
-
-gfx::SurfaceOrigin ImageTransportSurfaceOverlayMacEGL::GetOrigin() const {
-  return gfx::SurfaceOrigin::kTopLeft;
-}
-
 bool ImageTransportSurfaceOverlayMacEGL::Resize(
     const gfx::Size& pixel_size,
     float scale_factor,
@@ -351,6 +298,7 @@ bool ImageTransportSurfaceOverlayMacEGL::Resize(
 
 void ImageTransportSurfaceOverlayMacEGL::OnGpuSwitched(
     gl::GpuPreference active_gpu_heuristic) {
+#if BUILDFLAG(IS_MAC)
   // Create a new context, and use the GL renderer ID that the new context gets.
   scoped_refptr<ui::IOSurfaceContext> context_on_new_gpu =
       ui::IOSurfaceContext::Get(ui::IOSurfaceContext::kCALayerContext);
@@ -370,11 +318,27 @@ void ImageTransportSurfaceOverlayMacEGL::OnGpuSwitched(
   // surface that is observing the GPU switch.
   base::SingleThreadTaskRunner::GetCurrentDefault()->ReleaseSoon(
       FROM_HERE, std::move(context_on_new_gpu));
+#endif
 }
 
 void ImageTransportSurfaceOverlayMacEGL::SetCALayerErrorCode(
     gfx::CALayerResult ca_layer_error_code) {
   ca_layer_error_code_ = ca_layer_error_code;
+}
+
+void ImageTransportSurfaceOverlayMacEGL::SetVSyncDisplayID(int64_t display_id) {
+}
+
+bool ImageTransportSurfaceOverlayMacEGL::SupportsGpuVSync() const {
+  return features::UseGpuVsync();
+}
+
+void ImageTransportSurfaceOverlayMacEGL::SetGpuVSyncEnabled(bool enabled) {
+  if (gpu_vsync_enabled_ == enabled) {
+    return;
+  }
+
+  gpu_vsync_enabled_ = enabled;
 }
 
 }  // namespace gpu

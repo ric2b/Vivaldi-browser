@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -44,6 +44,7 @@ MojoDataPipeReader::~MojoDataPipeReader() {
 void MojoDataPipeReader::CompleteCurrentRead() {
   DVLOG(4) << __func__;
   DCHECK(done_cb_);
+  current_buffer_ = nullptr;
   current_buffer_size_ = 0;
   std::move(done_cb_).Run(true);
 }

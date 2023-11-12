@@ -10,6 +10,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner_helpers.h"
+#include "base/task/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
@@ -180,7 +181,7 @@ class WebViewPlugin : public blink::WebPlugin, public blink::WebViewObserver {
     void BindToFrame(blink::WebNavigationControl* frame) override;
     void DidClearWindowObject() override;
     void FrameDetached() override;
-    std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory()
+    scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory()
         override;
 
     // blink::mojom::WidgetHost implementation.

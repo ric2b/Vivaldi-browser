@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <string>
+#include <utility>
 
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
@@ -54,11 +55,10 @@ class MockOriginTrialsDelegate
   base::flat_map<url::Origin, base::flat_set<std::string>> persisted_trials_;
 
   int get_persisted_trials_count_ = 0;
-  int is_trial_persisted_count_ = 0;
-  int persist_trials_from_tokens_count_ = 0;
 
   base::flat_set<std::string> GetPersistedTrialsForOrigin(
       const url::Origin& origin,
+      const url::Origin& top_level_origin,
       base::Time current_time) override {
     get_persisted_trials_count_++;
     const auto& it = persisted_trials_.find(origin);
@@ -70,20 +70,28 @@ class MockOriginTrialsDelegate
   }
 
   bool IsTrialPersistedForOrigin(const url::Origin& origin,
+                                 const url::Origin& top_level_origin,
                                  const base::StringPiece trial_name,
                                  const base::Time current_time) override {
-    is_trial_persisted_count_++;
     const auto& it = persisted_trials_.find(origin);
     return it != persisted_trials_.end() && it->second.contains(trial_name);
   }
 
   void PersistTrialsFromTokens(
       const url::Origin& origin,
+      const url::Origin& top_level_origin,
       const base::span<const std::string> header_tokens,
       const base::Time current_time) override {
-    persist_trials_from_tokens_count_++;
+    DCHECK(false) << "Critical Origin Trial Throttle should not override full "
+                     "set of tokens, only append.";
   }
 
+  void PersistAdditionalTrialsFromTokens(
+      const url::Origin& origin,
+      const url::Origin& top_level_origin,
+      const base::span<const url::Origin> script_origins,
+      const base::span<const std::string> header_tokens,
+      const base::Time current_time) override {}
   void ClearPersistedTokens() override { persisted_trials_.clear(); }
 
   void AddPersistedTrialForTest(const base::StringPiece url,
@@ -111,7 +119,9 @@ class MockRestartDelegate : public blink::URLLoaderThrottle::Delegate {
 class CriticalOriginTrialsThrottleTest : public ::testing::Test {
  public:
   CriticalOriginTrialsThrottleTest()
-      : origin_trials_delegate_(), throttle_(origin_trials_delegate_) {
+      : origin_trials_delegate_(),
+        throttle_(origin_trials_delegate_,
+                  url::Origin::Create(GURL(kExampleURL))) {
     throttle_.set_delegate(&throttle_delegate_);
   }
 

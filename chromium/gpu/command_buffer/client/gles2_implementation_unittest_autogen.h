@@ -3006,6 +3006,54 @@ TEST_F(GLES2ImplementationTest, EndSharedImageAccessDirectCHROMIUM) {
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
+TEST_F(GLES2ImplementationTest, ConvertRGBAToYUVAMailboxesINTERNAL) {
+  GLbyte data[80] = {0};
+  struct Cmds {
+    cmds::ConvertRGBAToYUVAMailboxesINTERNALImmediate cmd;
+    GLbyte data[80];
+  };
+
+  for (int jj = 0; jj < 80; ++jj) {
+    data[jj] = static_cast<GLbyte>(jj);
+  }
+  Cmds expected;
+  expected.cmd.Init(1, 2, 3, &data[0]);
+  gl_->ConvertRGBAToYUVAMailboxesINTERNAL(1, 2, 3, &data[0]);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, ConvertYUVAMailboxesToRGBINTERNAL) {
+  GLbyte data[144] = {0};
+  struct Cmds {
+    cmds::ConvertYUVAMailboxesToRGBINTERNALImmediate cmd;
+    GLbyte data[144];
+  };
+
+  for (int jj = 0; jj < 144; ++jj) {
+    data[jj] = static_cast<GLbyte>(jj);
+  }
+  Cmds expected;
+  expected.cmd.Init(1, 2, 3, &data[0]);
+  gl_->ConvertYUVAMailboxesToRGBINTERNAL(1, 2, 3, &data[0]);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
+TEST_F(GLES2ImplementationTest, CopySharedImageINTERNAL) {
+  GLbyte data[32] = {0};
+  struct Cmds {
+    cmds::CopySharedImageINTERNALImmediate cmd;
+    GLbyte data[32];
+  };
+
+  for (int jj = 0; jj < 32; ++jj) {
+    data[jj] = static_cast<GLbyte>(jj);
+  }
+  Cmds expected;
+  expected.cmd.Init(1, 2, 3, 4, 5, 6, true, &data[0]);
+  gl_->CopySharedImageINTERNAL(1, 2, 3, 4, 5, 6, true, &data[0]);
+  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
+}
+
 TEST_F(GLES2ImplementationTest, EnableiOES) {
   struct Cmds {
     cmds::EnableiOES cmd;

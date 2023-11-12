@@ -15,9 +15,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -146,9 +146,7 @@ class DownloadProtectionService {
   bool enabled() const { return enabled_; }
 
   // Returns the timeout that is used by CheckClientDownload().
-  int64_t download_request_timeout_ms() const {
-    return download_request_timeout_ms_;
-  }
+  base::TimeDelta GetDownloadRequestTimeout() const;
 
   // Checks the user permissions, and submits the downloaded file if
   // appropriate. Returns whether the submission was successful.

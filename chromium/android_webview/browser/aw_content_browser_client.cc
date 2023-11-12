@@ -18,6 +18,7 @@
 #include "android_webview/browser/aw_devtools_manager_delegate.h"
 #include "android_webview/browser/aw_feature_list_creator.h"
 #include "android_webview/browser/aw_http_auth_handler.h"
+#include "android_webview/browser/aw_origin_verification_scheduler_bridge.h"
 #include "android_webview/browser/aw_resource_context.h"
 #include "android_webview/browser/aw_settings.h"
 #include "android_webview/browser/aw_speech_recognition_manager_delegate.h"
@@ -40,12 +41,12 @@
 #include "base/android/locale_utils.h"
 #include "base/base_paths_android.h"
 #include "base/base_switches.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/scoped_file.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
@@ -199,8 +200,9 @@ std::string AwContentBrowserClient::GetAcceptLangsImpl() {
 
   // If accept languages do not contain en-US, add in en-US which will be
   // used with a lower q-value.
-  if (locales_string.find("en-US") == std::string::npos)
+  if (locales_string.find("en-US") == std::string::npos) {
     locales_string += ",en-US";
+  }
   return locales_string;
 }
 
@@ -330,8 +332,9 @@ bool AwContentBrowserClient::IsHandledURL(const GURL& url) {
     return !IsAndroidSpecialFileUrl(url);
   }
   for (const char* supported_protocol : kProtocolList) {
-    if (scheme == supported_protocol)
+    if (scheme == supported_protocol) {
       return true;
+    }
   }
   return false;
 }
@@ -355,6 +358,7 @@ void AwContentBrowserClient::AppendExtraCommandLineSwitches(
         ::switches::kEnableCrashReporter,
         ::switches::kEnableCrashReporterForTesting,
         embedder_support::kOriginTrialDisabledFeatures,
+        embedder_support::kOriginTrialPublicKey,
     };
 
     command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
@@ -423,8 +427,9 @@ base::OnceClosure AwContentBrowserClient::SelectClientCertificate(
     std::unique_ptr<content::ClientCertificateDelegate> delegate) {
   AwContentsClientBridge* client =
       AwContentsClientBridge::FromWebContents(web_contents);
-  if (client)
+  if (client) {
     client->SelectClientCertificate(cert_request_info, std::move(delegate));
+  }
   return base::OnceClosure();
 }
 
@@ -556,8 +561,9 @@ AwContentBrowserClient::CreateThrottlesForNavigation(
       navigation_interception::InterceptNavigationDelegate::
           MaybeCreateThrottleFor(navigation_handle,
                                  navigation_interception::SynchronyMode::kSync);
-  if (intercept_navigation_throttle)
+  if (intercept_navigation_throttle) {
     throttles.push_back(std::move(intercept_navigation_throttle));
+  }
 
   throttles.push_back(std::make_unique<PolicyBlocklistNavigationThrottle>(
       navigation_handle,
@@ -566,8 +572,9 @@ AwContentBrowserClient::CreateThrottlesForNavigation(
   std::unique_ptr<AwSafeBrowsingNavigationThrottle> safe_browsing_throttle =
       AwSafeBrowsingNavigationThrottle::MaybeCreateThrottleFor(
           navigation_handle);
-  if (safe_browsing_throttle)
+  if (safe_browsing_throttle) {
     throttles.push_back(std::move(safe_browsing_throttle));
+  }
   return throttles;
 }
 
@@ -587,6 +594,18 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
 
   std::vector<std::unique_ptr<blink::URLLoaderThrottle>> result;
 
+  content::WebContents* web_contents = wc_getter.Run();
+  AwSettings* aw_settings = AwSettings::FromWebContents(web_contents);
+  if (request.is_outermost_main_frame &&
+      ((aw_settings && aw_settings->GetRestrictSensitiveWebContentEnabled()) ||
+       base::FeatureList::IsEnabled(
+           features::kWebViewRestrictSensitiveContent))) {
+    auto* origin_verification_bridge =
+        AwOriginVerificationSchedulerBridge::GetInstance();
+    result.push_back(digital_asset_links::BrowserURLLoaderThrottle::Create(
+        origin_verification_bridge));
+  }
+
   result.push_back(safe_browsing::BrowserURLLoaderThrottle::Create(
       base::BindOnce(
           [](AwContentBrowserClient* client) {
@@ -597,7 +616,8 @@ AwContentBrowserClient::CreateURLLoaderThrottles(
       // TODO(crbug.com/1033760): rt_lookup_service is
       // used to perform real time URL check, which is gated by UKM opted-in.
       // Since AW currently doesn't support UKM, this feature is not enabled.
-      /* rt_lookup_service */ nullptr));
+      /* rt_lookup_service */ nullptr,
+      /* hash_realtime_service */ nullptr));
 
   if (request.destination == network::mojom::RequestDestination::kDocument) {
     const bool is_load_url =
@@ -644,15 +664,17 @@ bool AwContentBrowserClient::ShouldOverrideUrlLoading(
   *ignore_navigation = false;
 
   // Only GETs can be overridden.
-  if (request_method != "GET")
+  if (request_method != "GET") {
     return true;
+  }
 
   bool application_initiated =
       browser_initiated || transition & ui::PAGE_TRANSITION_FORWARD_BACK;
 
   // Don't offer application-initiated navigations unless it's a redirect.
-  if (application_initiated && !is_redirect)
+  if (application_initiated && !is_redirect) {
     return true;
+  }
 
   // For HTTP schemes, only top-level navigations can be overridden. Similarly,
   // WebView Classic lets app override only top level about:blank navigations.
@@ -668,17 +690,20 @@ bool AwContentBrowserClient::ShouldOverrideUrlLoading(
   if (!is_outermost_main_frame &&
       (gurl.SchemeIs(url::kHttpScheme) || gurl.SchemeIs(url::kHttpsScheme) ||
        gurl.SchemeIs(url::kAboutScheme) ||
-       gurl.SchemeIs(url::kUuidInPackageScheme)))
+       gurl.SchemeIs(url::kUuidInPackageScheme))) {
     return true;
+  }
 
   WebContents* web_contents =
       WebContents::FromFrameTreeNodeId(frame_tree_node_id);
-  if (web_contents == nullptr)
+  if (web_contents == nullptr) {
     return true;
+  }
   AwContentsClientBridge* client_bridge =
       AwContentsClientBridge::FromWebContents(web_contents);
-  if (client_bridge == nullptr)
+  if (client_bridge == nullptr) {
     return true;
+  }
 
   std::u16string url = base::UTF8ToUTF16(gurl.possibly_invalid_spec());
 
@@ -998,8 +1023,9 @@ std::string AwContentBrowserClient::GetUserAgent() {
 
 content::ContentBrowserClient::WideColorGamutHeuristic
 AwContentBrowserClient::GetWideColorGamutHeuristic() {
-  if (base::FeatureList::IsEnabled(features::kWebViewWideColorGamutSupport))
+  if (base::FeatureList::IsEnabled(features::kWebViewWideColorGamutSupport)) {
     return WideColorGamutHeuristic::kUseWindow;
+  }
 
   if (display::HasForceDisplayColorProfile() &&
       display::GetForcedDisplayColorProfile() ==
@@ -1062,6 +1088,16 @@ void AwContentBrowserClient::OnDisplayInsecureContent(
 // static
 void AwContentBrowserClient::DisableCreatingThreadPool() {
   g_should_create_thread_pool = false;
+}
+
+bool AwContentBrowserClient::IsAttributionReportingOperationAllowed(
+    content::BrowserContext* browser_context,
+    AttributionReportingOperation operation,
+    content::RenderFrameHost* rfh,
+    const url::Origin* source_origin,
+    const url::Origin* destination_origin,
+    const url::Origin* reporting_origin) {
+  return false;
 }
 
 }  // namespace android_webview

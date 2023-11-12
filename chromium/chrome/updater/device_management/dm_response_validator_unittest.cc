@@ -8,7 +8,6 @@
 #include <memory>
 #include <utility>
 
-#include "chrome/updater/constants.h"
 #include "chrome/updater/device_management/dm_cached_policy_info.h"
 #include "chrome/updater/device_management/dm_message.h"
 #include "chrome/updater/device_management/dm_policy_builder_for_testing.h"
@@ -78,6 +77,10 @@ TEST_F(DMResponseValidatorTests, ValidationOKWithoutPublicKey) {
 }
 
 TEST_F(DMResponseValidatorTests, ValidationOKWithPublicKey) {
+  // Cached info should be created before parsing next policy response.
+  CachedPolicyInfo cached_info;
+  GetCachedInfoWithPublicKey(cached_info);
+
   std::unique_ptr<::enterprise_management::DeviceManagementResponse>
       dm_response = GetDefaultTestingPolicyFetchDMResponse(
           /*first_request=*/false, /*rotate_to_new_key=*/false,
@@ -87,8 +90,6 @@ TEST_F(DMResponseValidatorTests, ValidationOKWithPublicKey) {
   const ::enterprise_management::PolicyFetchResponse& response =
       dm_response->policy_response().responses(0);
 
-  CachedPolicyInfo cached_info;
-  GetCachedInfoWithPublicKey(cached_info);
   DMResponseValidator validator(cached_info, "test-dm-token", "test-device-id");
   PolicyValidationResult validation_result;
   EXPECT_TRUE(validator.ValidatePolicyResponse(response, validation_result));
@@ -160,6 +161,10 @@ TEST_F(DMResponseValidatorTests, NoCachedPublicKey) {
 }
 
 TEST_F(DMResponseValidatorTests, BadSignedPublicKey) {
+  // Cached info should be created before parsing next policy response.
+  CachedPolicyInfo cached_info;
+  GetCachedInfoWithPublicKey(cached_info);
+
   // Validation should fail if the public key is not signed properly.
   std::unique_ptr<::enterprise_management::DeviceManagementResponse>
       dm_response = GetDefaultTestingPolicyFetchDMResponse(
@@ -170,8 +175,6 @@ TEST_F(DMResponseValidatorTests, BadSignedPublicKey) {
   const ::enterprise_management::PolicyFetchResponse& response =
       dm_response->policy_response().responses(0);
 
-  CachedPolicyInfo cached_info;
-  GetCachedInfoWithPublicKey(cached_info);
   DMResponseValidator validator(cached_info, "test-dm-token", "test-device-id");
   PolicyValidationResult validation_result;
   EXPECT_FALSE(validator.ValidatePolicyResponse(response, validation_result));

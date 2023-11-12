@@ -4,27 +4,25 @@
       "dcheck_always_on": true,
       "devtools_skip_typecheck": false,
       "ffmpeg_branding": "Chrome",
-      "is_chrome_for_testing_branded": true,
+      "is_chrome_for_testing": true,
       "is_component_build": false,
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 0,
-      "use_clang_coverage": true,
       "use_dummy_lastchange": true,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "mac-rel-cft": {
     "gn_args": {
       "dcheck_always_on": true,
       "ffmpeg_branding": "Chrome",
-      "is_chrome_for_testing_branded": true,
+      "is_chrome_for_testing": true,
       "is_component_build": false,
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 0,
-      "use_clang_coverage": true,
-      "use_goma": true
+      "use_remoteexec": true
     }
   },
   "win-rel-cft": {
@@ -32,13 +30,12 @@
       "dcheck_always_on": true,
       "enable_resource_allowlist_generation": false,
       "ffmpeg_branding": "Chrome",
-      "is_chrome_for_testing_branded": true,
+      "is_chrome_for_testing": true,
       "is_component_build": false,
       "is_debug": false,
       "proprietary_codecs": true,
       "symbol_level": 0,
-      "use_clang_coverage": true,
-      "use_goma": true
+      "use_remoteexec": true
     }
   }
 }

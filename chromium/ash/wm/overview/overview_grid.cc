@@ -12,8 +12,8 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/metrics/histogram_macros.h"
-#include "ash/public/cpp/desks_templates_delegate.h"
 #include "ash/public/cpp/metrics_util.h"
+#include "ash/public/cpp/saved_desk_delegate.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/screen_util.h"
@@ -21,6 +21,8 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/toast/toast_manager_impl.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
+#include "ash/wm/desks/cros_next_default_desk_button.h"
+#include "ash/wm/desks/cros_next_desk_icon_button.h"
 #include "ash/wm/desks/desk_mini_view.h"
 #include "ash/wm/desks/desk_name_view.h"
 #include "ash/wm/desks/desks_bar_view.h"
@@ -45,6 +47,7 @@
 #include "ash/wm/overview/overview_item.h"
 #include "ash/wm/overview/overview_item_view.h"
 #include "ash/wm/overview/overview_session.h"
+#include "ash/wm/overview/overview_types.h"
 #include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/overview_window_drag_controller.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
@@ -57,11 +60,12 @@
 #include "ash/wm/workspace/backdrop_controller.h"
 #include "ash/wm/workspace/workspace_layout_manager.h"
 #include "ash/wm/workspace_controller.h"
-#include "base/bind.h"
 #include "base/containers/adapters.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/ranges/algorithm.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "components/app_restore/full_restore_utils.h"
 #include "ui/aura/client/aura_constants.h"
@@ -70,9 +74,11 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/presentation_time_recorder.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/compositor/throughput_tracker.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/views/animation/animation_builder.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -87,8 +93,8 @@ constexpr int kNoItemsIndicatorHorizontalPaddingDp = 16;
 constexpr int kNoItemsIndicatorRoundingDp = 16;
 constexpr int kNoItemsIndicatorVerticalPaddingDp = 8;
 
-// Distance from the bottom of the SaveDeskAsTemplate button to the top of the
-// first overview item.
+// Distance from the bottom of the save desk as template button to the top of
+// the first overview item.
 constexpr int kSaveDeskAsTemplateOverviewItemSpacingDp = 40;
 
 // Windows are not allowed to get taller than this.
@@ -121,6 +127,12 @@ constexpr base::TimeDelta kOcclusionUnpauseDurationForScroll =
 
 constexpr base::TimeDelta kOcclusionUnpauseDurationForRotation =
     base::Milliseconds(300);
+
+// The animiation duration of desks bar slide out animation when exiting
+// overview mode.
+constexpr base::TimeDelta kExpandedDesksBarSlideDuration =
+    base::Milliseconds(350);
+constexpr base::TimeDelta kZeroDesksBarSlideDuration = base::Milliseconds(250);
 
 // Toast id for the toast that is displayed when a user tries to move a window
 // that is visible on all desks to another desk.
@@ -283,8 +295,8 @@ std::unique_ptr<views::Widget> CreateDropTargetWidget(
   return widget;
 }
 
-// Creates `save_desk_button_container_widget_`. It contains save desk as
-// template button and save for later button.
+// Creates `save_desk_button_container_widget_`. It contains SaveDeskAsTemplate
+// button and save for later button.
 std::unique_ptr<views::Widget> CreateSaveDeskButtonContainerWidget(
     aura::Window* root_window) {
   views::Widget::InitParams params;
@@ -310,6 +322,8 @@ std::unique_ptr<views::Widget> CreateSaveDeskButtonContainerWidget(
   auto widget = std::make_unique<views::Widget>();
   widget->set_focus_on_creation(false);
   widget->Init(std::move(params));
+  // Turn off default widget animations.
+  widget->SetVisibilityAnimationTransition(views::Widget::ANIMATE_NONE);
 
   aura::Window* window = widget->GetNativeWindow();
   window->parent()->StackChildAtBottom(window);
@@ -354,6 +368,44 @@ bool ShouldExcludeItemFromGridLayout(
 }
 
 }  // namespace
+
+// A self-deleting object that performs slide out animation for the desks
+// bar when exiting the overview mode. It owns the desks bar widget, thus when
+// the slide out animation is done, it will delete itself and destroy the desks
+// bar widget as well.
+class DesksBarSlideAnimation {
+ public:
+  DesksBarSlideAnimation(std::unique_ptr<views::Widget> desks_widget,
+                         bool is_zero_state)
+      : desks_widget_(std::move(desks_widget)) {
+    gfx::Transform transform;
+    transform.Translate(0, -desks_widget_->GetWindowBoundsInScreen().height());
+
+    const auto duration = is_zero_state ? kZeroDesksBarSlideDuration
+                                        : kExpandedDesksBarSlideDuration;
+    views::AnimationBuilder()
+        .OnEnded(base::BindOnce(
+            [](DesksBarSlideAnimation* animation) { delete animation; },
+            base::Unretained(this)))
+        .OnAborted(base::BindOnce(
+            [](DesksBarSlideAnimation* animation) { delete animation; },
+            base::Unretained(this)))
+        .SetPreemptionStrategy(
+            ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
+        .Once()
+        .SetDuration(duration)
+        .SetTransform(desks_widget_->GetLayer(), transform,
+                      gfx::Tween::ACCEL_20_DECEL_100);
+  }
+
+  DesksBarSlideAnimation(const DesksBarSlideAnimation&) = delete;
+  DesksBarSlideAnimation& operator=(const DesksBarSlideAnimation&) = delete;
+
+  ~DesksBarSlideAnimation() = default;
+
+ private:
+  std::unique_ptr<views::Widget> desks_widget_;
+};
 
 // The class to observe the overview window that the dragged tabs will merge
 // into. After the dragged tabs merge into the overview window, and if the
@@ -458,6 +510,19 @@ OverviewGrid::~OverviewGrid() = default;
 
 void OverviewGrid::Shutdown(OverviewEnterExitType exit_type) {
   EndNudge();
+
+  if (chromeos::features::IsJellyrollEnabled() && desks_widget_ &&
+      exit_type != OverviewEnterExitType::kImmediateExit) {
+    // When applying the slide out animation to the `desks_widget_` during
+    // overview grid shutdown phase, we need to make the lifetime of the
+    // `desks_widget_` longer than its owner (overview grid). Thus move the
+    // ownership of `desks_widget_` from the overview grid to
+    // `DesksBarSlideAnimation` which is a self-deleting object, when the
+    // animation is done, it will delete itself and destroy `desks_widget_` as
+    // well.
+    new DesksBarSlideAnimation(std::move(desks_widget_),
+                               desks_bar_view_->IsZeroState());
+  }
 
   SplitViewController::Get(root_window_)->RemoveObserver(this);
   ScreenRotationAnimator::GetForRootWindow(root_window_)->RemoveObserver(this);
@@ -584,12 +649,9 @@ void OverviewGrid::PositionWindows(
     bool should_animate_item = animate;
     // If we're in entering overview process, not all window items in the grid
     // might need animation even if the grid needs animation.
-    if (animate && transition == OverviewTransition::kEnter)
-      should_animate_item = window_item->should_animate_when_entering();
-
     if (animate && transition == OverviewTransition::kEnter) {
-      if (window_item->should_animate_when_entering() &&
-          !has_non_cover_animating) {
+      should_animate_item = window_item->should_animate_when_entering();
+      if (should_animate_item && !has_non_cover_animating) {
         has_non_cover_animating |=
             !CanCoverAvailableWorkspace(window_item->GetWindow());
         ++animate_count;
@@ -768,10 +830,17 @@ void OverviewGrid::RemoveItem(OverviewItem* overview_item,
 }
 
 void OverviewGrid::RemoveAllItemsForSavedDeskLaunch() {
-  for (auto& item : window_list_) {
-    item->RevertHideForSavedDeskLibrary(/*animate=*/false);
-    item->RestoreWindow(/*reset_transform=*/true,
-                        /*was_saved_desk_library_showing=*/true);
+  {
+    // Wait until the end to notify content changes for all desks.
+    Desk::ScopedContentUpdateNotificationDisabler desks_scoped_notify_disabler(
+        /*desks=*/DesksController::Get()->desks(),
+        /*notify_when_destroyed=*/true);
+
+    for (auto& item : window_list_) {
+      item->RevertHideForSavedDeskLibrary(/*animate=*/false);
+      item->RestoreWindow(/*reset_transform=*/true,
+                          /*was_saved_desk_library_showing=*/true);
+    }
   }
   window_list_.clear();
   num_incognito_windows_ = 0;
@@ -1084,6 +1153,8 @@ void OverviewGrid::OnStartingAnimationComplete(bool canceled) {
     return;
 
   MaybeInitDesksWidget();
+
+  UpdateSaveDeskButtons();
 
   for (auto& window : window_list())
     window->OnStartingAnimationComplete();
@@ -1483,20 +1554,31 @@ bool OverviewGrid::MaybeDropItemOnDeskMiniViewOrNewDeskButton(
     if (target_desk == desks_controller->active_desk())
       return false;
 
+    if (chromeos::features::IsJellyrollEnabled()) {
+      // Make sure that new desk button goes back to the expanded state after
+      // the window is dropped on an existing desk.
+      desks_bar_view_->UpdateDeskIconButtonState(
+          desks_bar_view_->new_desk_button(),
+          /*target_state=*/CrOSNextDeskIconButton::State::kExpanded);
+    }
+
     return desks_controller->MoveWindowFromActiveDeskTo(
         dragged_window, target_desk, root_window_,
         DesksMoveWindowFromActiveDeskSource::kDragAndDrop);
   }
 
-  if (!features::IsDragWindowToNewDeskEnabled())
-    return false;
-
   if (!desks_controller->CanCreateDesks())
     return false;
 
-  if (!desks_bar_view_->expanded_state_new_desk_button()->IsPointOnButton(
-          screen_location)) {
-    return false;
+  if (chromeos::features::IsJellyrollEnabled()) {
+    if (!desks_bar_view_->new_desk_button()->IsPointOnButton(screen_location)) {
+      return false;
+    }
+  } else {
+    if (!desks_bar_view_->expanded_state_new_desk_button()->IsPointOnButton(
+            screen_location)) {
+      return false;
+    }
   }
 
   desks_bar_view_->OnNewDeskButtonPressed(
@@ -1726,7 +1808,7 @@ void OverviewGrid::CommitNameChanges() {
   if (desks_widget_)
     DeskNameView::CommitChanges(desks_widget_.get());
 
-  // The templates grid may not be shown.
+  // The saved desk grid may not be shown.
   if (saved_desk_library_widget_)
     SavedDeskNameView::CommitChanges(saved_desk_library_widget_.get());
 }
@@ -1746,8 +1828,16 @@ void OverviewGrid::ShowSavedDeskLibrary() {
     saved_desk_library_widget_->SetBounds(library_bounds);
   }
 
-  for (auto& overview_mode_item : window_list_)
-    overview_mode_item->HideForSavedDeskLibrary(/*animate=*/true);
+  {
+    // Wait until the end to notify content changes for all desks.
+    Desk::ScopedContentUpdateNotificationDisabler desks_scoped_notify_disabler(
+        /*desks=*/DesksController::Get()->desks(),
+        /*notify_when_destroyed=*/true);
+
+    for (auto& overview_mode_item : window_list_) {
+      overview_mode_item->HideForSavedDeskLibrary(/*animate=*/true);
+    }
+  }
 
   // There may be an existing animation in progress triggered by
   // `HideSavedDeskLibrary()` below, which animates a widget to 0.f before
@@ -1764,10 +1854,17 @@ void OverviewGrid::ShowSavedDeskLibrary() {
 
   UpdateSaveDeskButtons();
 
+  // When desks bar is at zero state, the library button's state update will be
+  // handled by `UpdateNewMiniViews` when expanding the desks bar.
   if (desks_bar_view_->IsZeroState()) {
     desks_bar_view_->UpdateNewMiniViews(/*initializing_bar_view=*/false,
                                         /*expanding_bar_view=*/true);
+  } else if (chromeos::features::IsJellyrollEnabled()) {
+    desks_bar_view_->UpdateDeskIconButtonState(
+        desks_bar_view_->library_button(),
+        /*target_state=*/CrOSNextDeskIconButton::State::kActive);
   }
+
   desks_bar_view_->UpdateButtonsForSavedDeskGrid();
 }
 
@@ -1780,6 +1877,11 @@ void OverviewGrid::HideSavedDeskLibrary(bool exit_overview) {
                                    grid_layer->GetTargetOpacity() == 0.f;
   if (already_hiding_grid)
     return;
+
+  // Wait until the end to notify content changes for all desks.
+  Desk::ScopedContentUpdateNotificationDisabler desks_scoped_notify_disabler(
+      /*desks=*/DesksController::Get()->desks(),
+      /*notify_when_destroyed=*/true);
 
   if (exit_overview && overview_session_->enter_exit_overview_type() ==
                            OverviewEnterExitType::kImmediateExit) {
@@ -1803,7 +1905,7 @@ void OverviewGrid::HideSavedDeskLibrary(bool exit_overview) {
 
     FadeOutWidgetFromOverview(
         std::move(saved_desk_library_widget_),
-        OVERVIEW_ANIMATION_EXIT_OVERVIEW_MODE_DESKS_TEMPLATES_GRID_FADE_OUT);
+        OVERVIEW_ANIMATION_EXIT_OVERVIEW_MODE_SAVED_DESK_GRID_FADE_OUT);
     return;
   }
 
@@ -1813,6 +1915,14 @@ void OverviewGrid::HideSavedDeskLibrary(bool exit_overview) {
                       /*animate=*/true,
                       base::BindOnce(&OverviewGrid::OnSavedDeskGridFadedOut,
                                      weak_ptr_factory_.GetWeakPtr()));
+  if (chromeos::features::IsJellyrollEnabled()) {
+    // The saved desk library is hidden because of a new desk is created for
+    // saved desk. We have animation of adding a new desk for the library
+    // button, thus to avoid the animation glitches, directly update the state
+    // for the library button instead of applying the scale animation to it.
+    desks_bar_view_->library_button()->UpdateState(
+        CrOSNextDeskIconButton::State::kExpanded);
+  }
 }
 
 bool OverviewGrid::IsShowingSavedDeskLibrary() const {
@@ -1824,11 +1934,12 @@ bool OverviewGrid::WillShowSavedDeskLibrary() const {
          saved_desk_library_widget_->GetLayer()->GetTargetVisibility() != 0.f;
 }
 
-bool OverviewGrid::IsTemplateNameBeingModified() const {
+bool OverviewGrid::IsSavedDeskNameBeingModified() const {
   if (auto* library_view = GetSavedDeskLibraryView()) {
     for (auto* grid_view : library_view->grid_views()) {
-      if (grid_view->IsTemplateNameBeingModified())
+      if (grid_view->IsSavedDeskNameBeingModified()) {
         return true;
+      }
     }
   }
   return false;
@@ -1854,6 +1965,10 @@ void OverviewGrid::UpdateNoWindowsWidget(bool no_items) {
     params.parent =
         root_window_->GetChildById(desks_util::GetActiveDeskContainerId());
     params.hide_in_mini_view = true;
+    if (overview_session_ &&
+        overview_session_->ShouldEnterWithoutAnimations()) {
+      params.disable_default_visibility_animation = true;
+    }
     no_windows_widget_ = std::make_unique<RoundedLabelWidget>();
     no_windows_widget_->Init(std::move(params));
 
@@ -1878,8 +1993,8 @@ void OverviewGrid::RefreshNoWindowsWidgetBounds(bool animate) {
 void OverviewGrid::UpdateSaveDeskButtons() {
   // TODO(crbug.com/1275282): The button should be updated whenever the
   // overview grid changes, i.e. switches between active desks and/or the
-  // templates grid. This will be needed when we make it so that switching desks
-  // keeps us in overview mode.
+  // saved desk grid. This will be needed when we make it so that switching
+  // desks keeps us in overview mode.
   if (!saved_desk_util::IsSavedDesksEnabled())
     return;
 
@@ -2159,8 +2274,6 @@ void OverviewGrid::MaybeInitDesksWidget() {
   // the container.
   auto* window = desks_widget_->GetNativeWindow();
   window->parent()->StackChildAtBottom(window);
-
-  UpdateSaveDeskButtons();
 }
 
 std::vector<gfx::RectF> OverviewGrid::GetWindowRects(
@@ -2509,7 +2622,7 @@ void OverviewGrid::OnSaveDeskAsTemplateButtonPressed() {
     return;
   container->SetEnabled(false);
 
-  overview_session_->saved_desk_presenter()->MaybeSaveActiveDeskAsTemplate(
+  overview_session_->saved_desk_presenter()->MaybeSaveActiveDeskAsSavedDesk(
       DeskTemplateType::kTemplate, root_window());
 }
 
@@ -2521,7 +2634,7 @@ void OverviewGrid::OnSaveDeskForLaterButtonPressed() {
     return;
   container->SetEnabled(false);
 
-  overview_session_->saved_desk_presenter()->MaybeSaveActiveDeskAsTemplate(
+  overview_session_->saved_desk_presenter()->MaybeSaveActiveDeskAsSavedDesk(
       DeskTemplateType::kSaveAndRecall, root_window());
 }
 
@@ -2559,8 +2672,9 @@ void OverviewGrid::UpdateNumSavedDeskUnsupportedWindows(aura::Window* window,
   int addend = increment ? 1 : -1;
   if (!DeskTemplate::IsAppTypeSupported(window) || !has_restore_id)
     num_unsupported_windows_ += addend;
-  else if (Shell::Get()->desks_templates_delegate()->IsIncognitoWindow(window))
+  else if (Shell::Get()->saved_desk_delegate()->IsIncognitoWindow(window)) {
     num_incognito_windows_ += addend;
+  }
 
   DCHECK_GE(num_unsupported_windows_, 0);
   DCHECK_GE(num_incognito_windows_, 0);

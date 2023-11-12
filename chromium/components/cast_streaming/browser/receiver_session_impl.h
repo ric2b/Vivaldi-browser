@@ -9,7 +9,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "components/cast_streaming/browser/cast_streaming_session.h"
-#include "components/cast_streaming/browser/demuxer_stream_data_provider.h"
+#include "components/cast_streaming/browser/frame/demuxer_stream_data_provider.h"
 #include "components/cast_streaming/browser/public/receiver_session.h"
 #include "components/cast_streaming/public/mojom/demuxer_connector.mojom.h"
 #include "components/cast_streaming/public/mojom/renderer_controller.mojom.h"
@@ -57,8 +57,6 @@ class ReceiverSessionImpl final
 
     // ReceiverSession::RendererController overrides.
     bool IsValid() const override;
-    void StartPlayingFrom(base::TimeDelta time) override;
-    void SetPlaybackRate(double playback_rate) override;
     void SetVolume(float volume) override;
 
    private:
@@ -66,6 +64,13 @@ class ReceiverSessionImpl final
 
     mojo::Remote<media::mojom::Renderer> renderer_controls_;
   };
+
+  // Helper function to execute code shared between the two implementations of
+  // StartStreamingAsync().
+  void StartStreamingAsyncInternal(
+      mojo::AssociatedRemote<mojom::DemuxerConnector> demuxer_connector);
+
+  void PreloadBuffersAndStartPlayback();
 
   // Handler for |demuxer_connector_| disconnect.
   void OnMojoDisconnect();

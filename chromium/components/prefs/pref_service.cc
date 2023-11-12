@@ -9,11 +9,11 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/json/values_util.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -23,7 +23,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "build/chromeos_buildflags.h"
 #include "components/prefs/default_pref_store.h"
@@ -236,19 +235,20 @@ void PrefService::IteratePreferenceValues(
     callback.Run(it.first, *GetPreferenceValue(it.first));
 }
 
-base::Value PrefService::GetPreferenceValues(
+base::Value::Dict PrefService::GetPreferenceValues(
     IncludeDefaults include_defaults) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  base::Value out(base::Value::Type::DICTIONARY);
+  base::Value::Dict out;
   for (const auto& it : *pref_registry_) {
     if (include_defaults == INCLUDE_DEFAULTS) {
-      out.SetPath(it.first, GetPreferenceValue(it.first)->Clone());
+      out.SetByDottedPath(it.first, GetPreferenceValue(it.first)->Clone());
     } else {
       const Preference* pref = FindPreference(it.first);
-      if (pref->IsDefaultValue())
+      if (pref->IsDefaultValue()) {
         continue;
-      out.SetPath(it.first, pref->GetValue()->Clone());
+      }
+      out.SetByDottedPath(it.first, pref->GetValue()->Clone());
     }
   }
   return out;
@@ -505,8 +505,7 @@ base::TimeDelta PrefService::GetTimeDelta(const std::string& path) const {
 
 base::Value* PrefService::GetMutableUserPref(const std::string& path,
                                              base::Value::Type type) {
-  CHECK(type == base::Value::Type::DICTIONARY ||
-        type == base::Value::Type::LIST);
+  CHECK(type == base::Value::Type::DICT || type == base::Value::Type::LIST);
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const Preference* pref = FindPreference(path);

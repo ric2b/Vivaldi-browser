@@ -59,7 +59,7 @@ class BreadcrumbPersistentStorageManager;
 }  // namespace breadcrumbs
 
 namespace extensions {
-class ExtensionsBrowserClient;
+class ChromeExtensionsBrowserClient;
 }
 
 namespace gcm {
@@ -282,7 +282,7 @@ class BrowserProcessImpl : public BrowserProcess,
   std::unique_ptr<GpuModeManager> gpu_mode_manager_;
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  std::unique_ptr<extensions::ExtensionsBrowserClient>
+  std::unique_ptr<extensions::ChromeExtensionsBrowserClient>
       extensions_browser_client_;
 
   scoped_refptr<extensions::EventRouterForwarder>
@@ -381,7 +381,7 @@ class BrowserProcessImpl : public BrowserProcess,
   // but some users of component updater only install per-user.
   std::unique_ptr<component_updater::ComponentUpdateService> component_updater_;
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
   // Used to create a singleton instance of SodaInstallerImpl, which can be
   // retrieved using speech::SodaInstaller::GetInstance().
   // SodaInstallerImpl depends on ComponentUpdateService, so define it here

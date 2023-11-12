@@ -8,10 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/time/time.h"
@@ -75,8 +76,9 @@ class MockSurfaceLayerBridge : public WebSurfaceLayerBridge {
   MOCK_METHOD0(UnregisterFrameSinkHierarchy, void());
 
   viz::FrameSinkId frame_sink_id_ = viz::FrameSinkId(1, 1);
-  viz::LocalSurfaceId local_surface_id_ =
-      viz::LocalSurfaceId(11, base::UnguessableToken::Deserialize(0x111111, 0));
+  viz::LocalSurfaceId local_surface_id_ = viz::LocalSurfaceId(
+      11,
+      base::UnguessableToken::CreateForTesting(0x111111, 0));
   viz::SurfaceId surface_id_ =
       viz::SurfaceId(frame_sink_id_, local_surface_id_);
 };
@@ -579,12 +581,12 @@ class WebMediaPlayerMSTest
   void DidPlayerStartPlaying() override {}
   void DidPlayerPaused(bool) override {}
   void DidPlayerMutedStatusChange(bool muted) override {}
-  void DidMediaMetadataChange(
-      bool has_audio,
-      bool has_video,
-      media::AudioCodec audio_codec,
-      media::VideoCodec video_codec,
-      media::MediaContentType media_content_type) override {}
+  void DidMediaMetadataChange(bool has_audio,
+                              bool has_video,
+                              media::AudioCodec audio_codec,
+                              media::VideoCodec video_codec,
+                              media::MediaContentType media_content_type,
+                              bool is_encrypted_media) override {}
   void DidPlayerMediaPositionStateChange(double playback_rate,
                                          base::TimeDelta duration,
                                          base::TimeDelta position,
@@ -625,6 +627,7 @@ class WebMediaPlayerMSTest
   MOCK_METHOD0(DoStartRendering, void());
   MOCK_METHOD0(DoStopRendering, void());
   MOCK_METHOD0(DoDidReceiveFrame, void());
+  MOCK_METHOD0(DoOnPictureInPictureStateChange, void());
 
   MOCK_METHOD1(DoSetCcLayer, void(bool));
   MOCK_METHOD1(DoNetworkStateChanged, void(WebMediaPlayer::NetworkState));
@@ -845,6 +848,48 @@ TEST_P(WebMediaPlayerMSTest, NoWaitForFrameForAudio) {
   testing::Mock::VerifyAndClearExpectations(this);
 
   EXPECT_CALL(*this, DoSetCcLayer(false));
+}
+
+// Test that OnPictureInPictureStateChange is not called for audio elements.
+// This test explicitly sets display type to picture in picture, for an audio
+// element, for testing purposes only (See crbug.com/1403547 for reference).
+TEST_P(WebMediaPlayerMSTest, PictureInPictureStateChangeNotCalled) {
+  InitializeWebMediaPlayerMS();
+  is_audio_element_ = true;
+  MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
+
+  Vector<int> timestamps({0, 33, 66, 100, 133, 166, 200, 233, 266, 300, 333,
+                          366, 400, 433, 466, 500, 533, 566, 600});
+  provider->QueueFrames(timestamps);
+
+  if (enable_surface_layer_for_video_) {
+    EXPECT_CALL(*submitter_ptr_, StartRendering());
+    EXPECT_CALL(*this, GetDisplayType())
+        .WillRepeatedly(Return(DisplayType::kPictureInPicture));
+
+  } else {
+    EXPECT_CALL(*this, DoSetCcLayer(true));
+    EXPECT_CALL(*this, DoStartRendering());
+  }
+  EXPECT_CALL(*this,
+              DoReadyStateChanged(WebMediaPlayer::kReadyStateHaveMetadata));
+  EXPECT_CALL(*this,
+              DoReadyStateChanged(WebMediaPlayer::kReadyStateHaveEnoughData));
+  EXPECT_CALL(*this,
+              CheckSizeChanged(gfx::Size(kStandardWidth, kStandardHeight)));
+  message_loop_controller_.RunAndWaitForStatus(media::PIPELINE_OK);
+  const gfx::Size& natural_size = player_->NaturalSize();
+  EXPECT_EQ(kStandardWidth, natural_size.width());
+  EXPECT_EQ(kStandardHeight, natural_size.height());
+  testing::Mock::VerifyAndClearExpectations(this);
+
+  EXPECT_CALL(*this, DoSetCcLayer(false));
+  if (enable_surface_layer_for_video_) {
+    EXPECT_CALL(*submitter_ptr_, StopUsingProvider());
+  } else {
+    EXPECT_CALL(*this, DoStopRendering());
+  }
+  EXPECT_CALL(*this, DoOnPictureInPictureStateChange()).Times(0);
 }
 
 TEST_P(WebMediaPlayerMSTest, NoWaitForFrameForAudioOnly) {

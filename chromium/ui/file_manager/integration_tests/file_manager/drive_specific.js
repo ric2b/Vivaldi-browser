@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {ENTRIES, EntryType, getCaller, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
+import {ENTRIES, EntryType, expectHistogramTotalCount, getCaller, getUserActionCount, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
 import {navigateWithDirectoryTree, remoteCall, setupAndWaitUntilReady, waitForMediaApp} from './background.js';
@@ -872,23 +872,6 @@ testcase.driveOfflineInfoBanner = async () => {
 };
 
 /**
- * Tests that the Drive offline info banner does not show when the
- * DriveFsBidirectionalNativeMessaging flag is disabled.
- */
-testcase.driveOfflineInfoBannerWithoutFlag = async () => {
-  // Open Files app on Drive.
-  const appId = await setupAndWaitUntilReady(RootPath.DRIVE, []);
-
-  await remoteCall.isolateBannerForTesting(
-      appId, 'drive-offline-pinning-banner');
-  const driveOfflineInfoBannerHiddenQuery =
-      '#banners > drive-offline-pinning-banner';
-
-  // Check: the Drive Offline info banner should not appear.
-  await remoteCall.waitForElementLost(appId, driveOfflineInfoBannerHiddenQuery);
-};
-
-/**
  * Tests that the inline file sync "in progress" icon is displayed in Drive as
  * the file starts syncing then disappears as it finishes syncing.
  */
@@ -917,10 +900,13 @@ testcase.driveInlineSyncStatusSingleFile = async () => {
     syncStatus: 'in_progress',
   });
 
-  const syncInProgressQuery = '[data-sync-status=in_progress]';
+  // On `DriveFsTestVolume::SetFileSyncStatus`, the fake event setting the
+  // path's status hardcodes the progress as 50 bytes / 100 bytes transferred.
+  // Verify this data reaches the UI as a progress value of 50%.
+  const inlineStatus = await remoteCall.waitForElement(
+      appId, '[data-sync-status=in_progress] .progress');
 
-  // Verify the "sync in progress" icon is displayed.
-  await remoteCall.waitForElement(appId, syncInProgressQuery);
+  chrome.test.assertEq(Number(inlineStatus.attributes['progress']), 0.5);
 
   // Fake the file finishing syncing.
   await sendTestMessage({
@@ -930,7 +916,7 @@ testcase.driveInlineSyncStatusSingleFile = async () => {
   });
 
   // Verify the "sync in progress" icon is no longer displayed.
-  await remoteCall.waitForElementLost(appId, syncInProgressQuery);
+  await remoteCall.waitForElementLost(appId, '[data-sync-status=in_progress]');
 };
 
 /**
@@ -1206,4 +1192,130 @@ testcase.driveDeleteDialogDoesntMentionPermanentDelete = async () => {
 
   // Wait for completion of file deletion.
   await remoteCall.waitForElementLost(appId, helloTxtSelector);
+};
+
+/**
+ * Tests that Google One offer banner appears if a user navigates to Drive
+ * volume.
+ */
+testcase.driveGoogleOneOfferBannerEnabled = async () => {
+  const userActionShown = 'FileBrowser.GoogleOneOffer.Shown';
+  const userActionGetPerk = 'FileBrowser.GoogleOneOffer.GetPerk';
+  const userActionDismiss = 'FileBrowser.GoogleOneOffer.Dismiss';
+
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  // Visibility of a banner is controlled with hidden attribute once it gets
+  // attached to the DOM.
+  await remoteCall.waitForElement(
+      appId, 'google-one-offer-banner:not([hidden])');
+  chrome.test.assertEq(1, await getUserActionCount(userActionShown));
+
+  // extra-button (get perk button) is provided by google-one-offer-banner.
+  await remoteCall.waitAndClickElement(
+      appId, ['google-one-offer-banner', '[slot="extra-button"]']);
+  chrome.test.assertEq(1, await getUserActionCount(userActionGetPerk));
+  // Check: dismiss event should not be recorded for dismiss caused by the get
+  // perk button click.
+  chrome.test.assertEq(0, await getUserActionCount(userActionDismiss));
+  await remoteCall.waitForLastOpenedBrowserTabUrl(
+      'https://www.google.com/chromebook/perks/?id=google.one.2019');
+  await remoteCall.waitForElement(appId, 'google-one-offer-banner[hidden]');
+  // Check: If Google One offer banner is shown, Drive welcome banner should not
+  // be shown. Holding space welcome banner is the next one after the Drive
+  // welcome banner.
+  await remoteCall.waitForElement(
+      appId, 'holding-space-welcome-banner:not([hidden])');
+};
+
+/**
+ * Tests that Google One offer banner does not appear if the flag is off, which
+ * is the default.
+ */
+testcase.driveGoogleOneOfferBannerDisabled = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  // If Google One offer banner is not shown, Drive welcome banner should be
+  // shown. We cannot test google-one-offer-banner[hidden] here as it should not
+  // be in the DOM tree.
+  await remoteCall.waitForElement(appId, 'drive-welcome-banner:not([hidden])');
+};
+
+/**
+ * Test that Google One offer banner can get dismissed with a click of Dismiss
+ * button.
+ */
+testcase.driveGoogleOneOfferBannerDismiss = async () => {
+  const userActionDismiss = 'FileBrowser.GoogleOneOffer.Dismiss';
+
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  // Visibility of a banner is controlled with hidden attribute once it gets
+  // attached to the DOM.
+  await remoteCall.waitForElement(
+      appId, 'google-one-offer-banner:not([hidden])');
+
+  // dismiss-button is provided by educational-banner.
+  await remoteCall.waitAndClickElement(
+      appId,
+      ['google-one-offer-banner', 'educational-banner', '#dismiss-button']);
+  chrome.test.assertEq(1, await getUserActionCount(userActionDismiss));
+  await remoteCall.waitForElement(appId, 'google-one-offer-banner[hidden]');
+};
+
+/**
+ * Test that when files get deleted locally, they get unpinned prior to being
+ * deleted.
+ */
+testcase.driveLocalDeleteUnpinsItem = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  // Select test.txt which is already pinned.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="test.txt"]');
+  await remoteCall.waitForElement(
+      appId, '[file-name="test.txt"][selected] xf-icon[type=offline]');
+
+  // Ensure the metadata for the file is set to pinned.
+  await remoteCall.expectDriveItemPinnedStatus(appId, '/root/test.txt', true);
+
+  // Delete the file and ensure it disappears from the file list.
+  await remoteCall.waitAndClickElement(
+      appId, '#delete-button:not([hidden]):not([disabled])');
+  // Check: the delete confirm dialog should appear.
+  await remoteCall.waitForElement(appId, '.cr-dialog-container.shown');
+
+  // Click the delete confirm dialog 'Delete' button.
+  const dialogDeleteButton =
+      await remoteCall.waitAndClickElement(appId, '.cr-dialog-ok');
+
+  await remoteCall.waitForElementLost(
+      appId, '#file-list [file-name="test.txt"]');
+
+  // Ensure the file was unpinned prior to deleting.
+  await remoteCall.expectDriveItemPinnedStatus(appId, '/root/test.txt', false);
+};
+
+/**
+ * Test that when files get deleted in the cloud, they get unpinned after being
+ * deleted.
+ */
+testcase.driveCloudDeleteUnpinsItem = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  // Select test.txt which is already pinned.
+  await remoteCall.waitAndClickElement(
+      appId, '#file-list [file-name="test.txt"]');
+  await remoteCall.waitForElement(
+      appId, '[file-name="test.txt"][selected] xf-icon[type=offline]');
+
+  // Ensure the metadata for the file is set to pinned.
+  await remoteCall.expectDriveItemPinnedStatus(appId, '/root/test.txt', true);
+
+  await remoteCall.sendDriveCloudDeleteEvent(appId, '/root/test.txt');
+  await remoteCall.waitForElementLost(
+      appId, '#file-list [file-name="test.txt"]');
+
+  // Ensure the file was unpinned prior to deleting.
+  await remoteCall.expectDriveItemPinnedStatus(appId, '/root/test.txt', false);
 };

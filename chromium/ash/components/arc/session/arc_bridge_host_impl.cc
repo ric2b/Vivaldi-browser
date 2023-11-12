@@ -17,7 +17,6 @@
 #include "ash/components/arc/mojom/bluetooth.mojom.h"
 #include "ash/components/arc/mojom/boot_phase_monitor.mojom.h"
 #include "ash/components/arc/mojom/camera.mojom.h"
-#include "ash/components/arc/mojom/cert_store.mojom.h"
 #include "ash/components/arc/mojom/clipboard.mojom.h"
 #include "ash/components/arc/mojom/compatibility_mode.mojom.h"
 #include "ash/components/arc/mojom/crash_collector.mojom.h"
@@ -31,6 +30,7 @@
 #include "ash/components/arc/mojom/intent_helper.mojom.h"
 #include "ash/components/arc/mojom/keyboard_shortcut.mojom.h"
 #include "ash/components/arc/mojom/keymaster.mojom.h"
+#include "ash/components/arc/mojom/keymint.mojom.h"
 #include "ash/components/arc/mojom/kiosk.mojom.h"
 #include "ash/components/arc/mojom/lock_screen.mojom.h"
 #include "ash/components/arc/mojom/media_session.mojom.h"
@@ -52,7 +52,6 @@
 #include "ash/components/arc/mojom/property.mojom.h"
 #include "ash/components/arc/mojom/rotation_lock.mojom.h"
 #include "ash/components/arc/mojom/screen_capture.mojom.h"
-#include "ash/components/arc/mojom/sensor.mojom.h"
 #include "ash/components/arc/mojom/sharesheet.mojom.h"
 #include "ash/components/arc/mojom/storage_manager.mojom.h"
 #include "ash/components/arc/mojom/system_ui.mojom.h"
@@ -69,8 +68,8 @@
 #include "ash/components/arc/session/mojo_channel.h"
 #include "ash/public/cpp/external_arc/message_center/arc_notification_manager.h"
 #include "ash/public/cpp/message_center/arc_notifications_host_initializer.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/ranges/algorithm.h"
 #include "chromeos/components/sensors/mojom/cros_sensor_service.mojom.h"
 
@@ -153,12 +152,6 @@ void ArcBridgeHostImpl::OnCameraInstanceReady(
   OnInstanceReady(arc_bridge_service_->camera(), std::move(camera_remote));
 }
 
-void ArcBridgeHostImpl::OnCertStoreInstanceReady(
-    mojo::PendingRemote<mojom::CertStoreInstance> instance_remote) {
-  OnInstanceReady(arc_bridge_service_->cert_store(),
-                  std::move(instance_remote));
-}
-
 void ArcBridgeHostImpl::OnClipboardInstanceReady(
     mojo::PendingRemote<mojom::ClipboardInstance> clipboard_remote) {
   OnInstanceReady(arc_bridge_service_->clipboard(),
@@ -238,6 +231,11 @@ void ArcBridgeHostImpl::OnKeymasterInstanceReady(
     mojo::PendingRemote<mojom::KeymasterInstance> keymaster_remote) {
   OnInstanceReady(arc_bridge_service_->keymaster(),
                   std::move(keymaster_remote));
+}
+
+void ArcBridgeHostImpl::OnKeyMintInstanceReady(
+    mojo::PendingRemote<mojom::keymint::KeyMintInstance> keymint_remote) {
+  OnInstanceReady(arc_bridge_service_->keymint(), std::move(keymint_remote));
 }
 
 void ArcBridgeHostImpl::OnKioskInstanceReady(
@@ -366,22 +364,10 @@ void ArcBridgeHostImpl::OnScreenCaptureInstanceReady(
                   std::move(screen_capture_remote));
 }
 
-void ArcBridgeHostImpl::OnSensorInstanceReady(
-    mojo::PendingRemote<mojom::SensorInstance> sensor_remote) {
-  OnInstanceReady(arc_bridge_service_->sensor(), std::move(sensor_remote));
-}
-
 void ArcBridgeHostImpl::OnSharesheetInstanceReady(
     mojo::PendingRemote<mojom::SharesheetInstance> sharesheet_remote) {
   OnInstanceReady(arc_bridge_service_->sharesheet(),
                   std::move(sharesheet_remote));
-}
-
-void ArcBridgeHostImpl::OnSmartCardManagerInstanceReady(
-    mojo::PendingRemote<mojom::SmartCardManagerInstance>
-        smart_card_manager_remote) {
-  OnInstanceReady(arc_bridge_service_->smart_card_manager(),
-                  std::move(smart_card_manager_remote));
 }
 
 void ArcBridgeHostImpl::OnStorageManagerInstanceReady(

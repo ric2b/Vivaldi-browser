@@ -20,12 +20,36 @@
 #include "device/fido/authenticator_make_credential_response.h"
 #include "device/fido/discoverable_credential_metadata.h"
 #include "device/fido/fido_transport_protocol.h"
+#include "device/fido/fido_types.h"
 #include "device/fido/get_assertion_request_handler.h"
 #include "device/fido/make_credential_request_handler.h"
 #include "device/fido/opaque_attestation_statement.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/microsoft_webauthn/webauthn.h"
 
 namespace device {
+
+namespace {
+
+absl::optional<std::vector<uint8_t>> HMACSecretOutputs(
+    const WEBAUTHN_HMAC_SECRET_SALT& salt) {
+  constexpr size_t kOutputLength = 32;
+  if (salt.cbFirst != kOutputLength ||
+      (salt.cbSecond != 0 && salt.cbSecond != kOutputLength)) {
+    FIDO_LOG(ERROR) << "Incorrect HMAC output lengths: " << salt.cbFirst << " "
+                    << salt.cbSecond;
+    return absl::nullopt;
+  }
+
+  std::vector<uint8_t> ret;
+  ret.insert(ret.end(), salt.pbFirst, salt.pbFirst + salt.cbFirst);
+  if (salt.cbSecond == kOutputLength) {
+    ret.insert(ret.end(), salt.pbSecond, salt.pbSecond + salt.cbSecond);
+  }
+  return ret;
+}
+
+}  // namespace
 
 absl::optional<AuthenticatorMakeCredentialResponse>
 ToAuthenticatorMakeCredentialResponse(
@@ -85,6 +109,9 @@ ToAuthenticatorMakeCredentialResponse(
       WEBAUTHN_CREDENTIAL_ATTESTATION_VERSION_4) {
     ret.enterprise_attestation_returned = credential_attestation.bEpAtt;
     ret.is_resident_key = credential_attestation.bResidentKey;
+    if (credential_attestation.bLargeBlobSupported) {
+      ret.large_blob_type = LargeBlobSupportType::kKey;
+    }
   }
 
   return ret;
@@ -93,7 +120,7 @@ ToAuthenticatorMakeCredentialResponse(
 absl::optional<AuthenticatorGetAssertionResponse>
 ToAuthenticatorGetAssertionResponse(
     const WEBAUTHN_ASSERTION& assertion,
-    const std::vector<PublicKeyCredentialDescriptor>& allow_list) {
+    const CtapGetAssertionOptions& request_options) {
   auto authenticator_data =
       AuthenticatorData::DecodeAuthenticatorData(base::span<const uint8_t>(
           assertion.pbAuthenticatorData, assertion.cbAuthenticatorData));
@@ -115,6 +142,21 @@ ToAuthenticatorGetAssertionResponse(
   if (assertion.cbUserId > 0) {
     response.user_entity = PublicKeyCredentialUserEntity(std::vector<uint8_t>(
         assertion.pbUserId, assertion.pbUserId + assertion.cbUserId));
+  }
+  if (assertion.dwVersion >= WEBAUTHN_ASSERTION_VERSION_2 &&
+      assertion.dwCredLargeBlobStatus ==
+          WEBAUTHN_CRED_LARGE_BLOB_STATUS_SUCCESS) {
+    if (request_options.large_blob_read) {
+      response.large_blob = std::vector<uint8_t>(
+          assertion.pbCredLargeBlob,
+          assertion.pbCredLargeBlob + assertion.cbCredLargeBlob);
+    } else if (request_options.large_blob_write) {
+      response.large_blob_written = true;
+    }
+  }
+  if (assertion.dwVersion >= WEBAUTHN_ASSERTION_VERSION_3 &&
+      assertion.pHmacSecret) {
+    response.hmac_secret = HMACSecretOutputs(*assertion.pHmacSecret);
   }
   return response;
 }
@@ -205,6 +247,17 @@ std::vector<WEBAUTHN_CREDENTIAL_EX> ToWinCredentialExVector(
                                ToWinTransportsMask(credential.transports)});
   }
   return result;
+}
+
+uint32_t ToWinLargeBlobSupport(LargeBlobSupport large_blob_support) {
+  switch (large_blob_support) {
+    case LargeBlobSupport::kNotRequested:
+      return WEBAUTHN_LARGE_BLOB_SUPPORT_NONE;
+    case LargeBlobSupport::kPreferred:
+      return WEBAUTHN_LARGE_BLOB_SUPPORT_PREFERRED;
+    case LargeBlobSupport::kRequired:
+      return WEBAUTHN_LARGE_BLOB_SUPPORT_REQUIRED;
+  }
 }
 
 CtapDeviceResponseCode WinErrorNameToCtapDeviceResponseCode(

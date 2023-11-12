@@ -15,6 +15,7 @@
 #include "content/browser/devtools/protocol/audits.h"
 #include "content/browser/devtools/protocol/audits_handler.h"
 #include "content/browser/devtools/protocol/browser_handler.h"
+#include "content/browser/devtools/protocol/device_access_handler.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/devtools/protocol/fetch_handler.h"
 #include "content/browser/devtools/protocol/input_handler.h"
@@ -59,6 +60,8 @@ namespace content {
 namespace devtools_instrumentation {
 
 namespace {
+
+const char kPrivacySandboxExtensionsAPI[] = "PrivacySandboxExtensionsAPI";
 
 template <typename Handler, typename... MethodArgs, typename... Args>
 void DispatchToAgents(DevToolsAgentHostImpl* host,
@@ -194,6 +197,9 @@ std::string FederatedAuthRequestResultToProtocol(
     case FederatedAuthRequestResult::kErrorFetchingWellKnownInvalidResponse: {
       return FederatedAuthRequestIssueReasonEnum::WellKnownInvalidResponse;
     }
+    case FederatedAuthRequestResult::kErrorFetchingWellKnownListEmpty: {
+      return FederatedAuthRequestIssueReasonEnum::WellKnownListEmpty;
+    }
     case FederatedAuthRequestResult::kErrorConfigNotInWellKnown: {
       return FederatedAuthRequestIssueReasonEnum::ConfigNotInWellKnown;
     }
@@ -227,6 +233,9 @@ std::string FederatedAuthRequestResultToProtocol(
     }
     case FederatedAuthRequestResult::kErrorFetchingAccountsInvalidResponse: {
       return FederatedAuthRequestIssueReasonEnum::AccountsInvalidResponse;
+    }
+    case FederatedAuthRequestResult::kErrorFetchingAccountsListEmpty: {
+      return FederatedAuthRequestIssueReasonEnum::AccountsListEmpty;
     }
     case FederatedAuthRequestResult::kErrorFetchingIdTokenHttpNotFound: {
       return FederatedAuthRequestIssueReasonEnum::IdTokenHttpNotFound;
@@ -275,6 +284,48 @@ BuildFederatedAuthRequestIssue(
                    .SetDetails(std::move(protocol_issue_details))
                    .Build();
   return issue;
+}
+
+const char* DeprecationIssueTypeToProtocol(
+    blink::mojom::DeprecationIssueType error_type) {
+  switch (error_type) {
+    case blink::mojom::DeprecationIssueType::kPrivacySandboxExtensionsAPI:
+      return kPrivacySandboxExtensionsAPI;
+  }
+}
+
+std::unique_ptr<protocol::Audits::InspectorIssue> BuildDeprecationIssue(
+    const blink::mojom::DeprecationIssueDetailsPtr& issue_details) {
+  std::unique_ptr<protocol::Audits::SourceCodeLocation> source_code_location =
+      protocol::Audits::SourceCodeLocation::Create()
+          .SetUrl(issue_details->affected_location->url.value())
+          .SetLineNumber(issue_details->affected_location->line)
+          .SetColumnNumber(issue_details->affected_location->column)
+          .Build();
+
+  if (issue_details->affected_location->script_id.has_value()) {
+    source_code_location->SetScriptId(
+        issue_details->affected_location->script_id.value());
+  }
+
+  auto deprecation_issue_details =
+      protocol::Audits::DeprecationIssueDetails::Create()
+          .SetSourceCodeLocation(std::move(source_code_location))
+          .SetType(DeprecationIssueTypeToProtocol(issue_details->type))
+          .Build();
+
+  auto protocol_issue_details =
+      protocol::Audits::InspectorIssueDetails::Create()
+          .SetDeprecationIssueDetails(std::move(deprecation_issue_details))
+          .Build();
+
+  auto deprecation_issue =
+      protocol::Audits::InspectorIssue::Create()
+          .SetCode(protocol::Audits::InspectorIssueCodeEnum::DeprecationIssue)
+          .SetDetails(std::move(protocol_issue_details))
+          .Build();
+
+  return deprecation_issue;
 }
 
 void UpdateChildFrameTrees(FrameTreeNode* ftn, bool update_target_info) {
@@ -355,7 +406,7 @@ void OnFrameTreeNodeDestroyed(FrameTreeNode& frame_tree_node) {
 }
 
 void WillInitiatePrerender(FrameTree& frame_tree) {
-  DCHECK_EQ(FrameTree::Type::kPrerender, frame_tree.type());
+  DCHECK(frame_tree.is_prerendering());
   auto* wc = WebContentsImpl::FromFrameTreeNode(frame_tree.root());
   if (auto* host = WebContentsDevToolsAgentHost::GetFor(wc))
     host->WillInitiatePrerender(frame_tree.root());
@@ -377,11 +428,39 @@ void DidCancelPrerender(const GURL& prerendering_url,
                         FrameTreeNode* ftn,
                         PrerenderFinalStatus status,
                         const std::string& disallowed_api_method) {
+  if (!ftn) {
+    return;
+  }
   std::string initiating_frame_id =
       ftn->current_frame_host()->devtools_frame_token().ToString();
   DispatchToAgents(ftn, &protocol::PageHandler::DidCancelPrerender,
                    prerendering_url, initiating_frame_id, status,
                    disallowed_api_method);
+}
+
+void DidUpdatePrefetchStatus(FrameTreeNode* ftn,
+                             const GURL& prefetch_url,
+                             PreloadingTriggeringOutcome status) {
+  if (!ftn) {
+    return;
+  }
+  std::string initiating_frame_id =
+      ftn->current_frame_host()->devtools_frame_token().ToString();
+  DispatchToAgents(ftn, &protocol::PageHandler::DidUpdatePrefetchStatus,
+                   initiating_frame_id, prefetch_url, status);
+}
+
+void DidUpdatePrerenderStatus(int initiator_frame_tree_node_id,
+                              const GURL& prerender_url,
+                              PreloadingTriggeringOutcome status) {
+  auto* ftn = FrameTreeNode::GloballyFindByID(initiator_frame_tree_node_id);
+  // ftn will be null if this is browser-initiated, which has no initiator.
+  if (ftn) {
+    std::string initiating_frame_id =
+        ftn->current_frame_host()->devtools_frame_token().ToString();
+    DispatchToAgents(ftn, &protocol::PageHandler::DidUpdatePrerenderStatus,
+                     initiating_frame_id, prerender_url, status);
+  }
 }
 
 namespace {
@@ -1383,7 +1462,7 @@ void ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
   if (!ftn)
     return;
 
-  AddIssueToIssueStorage(frame, issue->clone());
+  AddIssueToIssueStorage(frame, issue->Clone());
   DispatchToAgents(ftn, &protocol::AuditsHandler::OnIssueAdded, issue);
 }
 
@@ -1400,6 +1479,9 @@ void BuildAndReportBrowserInitiatedIssue(
              blink::mojom::InspectorIssueCode::kFederatedAuthRequestIssue) {
     issue = BuildFederatedAuthRequestIssue(
         info->details->federated_auth_request_details);
+  } else if (info->code ==
+             blink::mojom::InspectorIssueCode::kDeprecationIssue) {
+    issue = BuildDeprecationIssue(info->details->deprecation_issue_details);
   } else {
     NOTREACHED() << "Unsupported type of browser-initiated issue";
   }
@@ -1667,6 +1749,40 @@ protocol::Audits::GenericIssueErrorType GenericIssueErrorTypeToProtocol(
           CrossOriginPortalPostMessageError;
     case blink::mojom::GenericIssueErrorType::kFormLabelForNameError:
       return protocol::Audits::GenericIssueErrorTypeEnum::FormLabelForNameError;
+    case blink::mojom::GenericIssueErrorType::kFormDuplicateIdForInputError:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormDuplicateIdForInputError;
+    case blink::mojom::GenericIssueErrorType::kFormInputWithNoLabelError:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormInputWithNoLabelError;
+    case blink::mojom::GenericIssueErrorType::
+        kFormAutocompleteAttributeEmptyError:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormAutocompleteAttributeEmptyError;
+    case blink::mojom::GenericIssueErrorType::
+        kFormEmptyIdAndNameAttributesForInputError:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormEmptyIdAndNameAttributesForInputError;
+    case blink::mojom::GenericIssueErrorType::
+        kFormAriaLabelledByToNonExistingId:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormAriaLabelledByToNonExistingId;
+    case blink::mojom::GenericIssueErrorType::
+        kFormInputAssignedAutocompleteValueToIdOrNameAttributeError:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormInputAssignedAutocompleteValueToIdOrNameAttributeError;
+    case blink::mojom::GenericIssueErrorType::
+        kFormLabelHasNeitherForNorNestedInput:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormLabelHasNeitherForNorNestedInput;
+    case blink::mojom::GenericIssueErrorType::
+        kFormLabelForMatchesNonExistingIdError:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormLabelForMatchesNonExistingIdError;
+    case blink::mojom::GenericIssueErrorType::
+        kFormHasPasswordFieldWithoutUsernameFieldError:
+      return protocol::Audits::GenericIssueErrorTypeEnum::
+          FormHasPasswordFieldWithoutUsernameFieldError;
   }
 }
 
@@ -1713,6 +1829,26 @@ void DidRejectCrossOriginPortalMessage(
       render_frame_host_impl->GetDevToolsFrameToken().ToString();
 
   BuildAndReportGenericIssue(render_frame_host_impl, issue_info);
+}
+
+void UpdateDeviceRequestPrompt(RenderFrameHost* render_frame_host,
+                               DevtoolsDeviceRequestPromptInfo* prompt_info) {
+  FrameTreeNode* ftn = FrameTreeNode::From(render_frame_host);
+  if (!ftn)
+    return;
+  DispatchToAgents(ftn,
+                   &protocol::DeviceAccessHandler::UpdateDeviceRequestPrompt,
+                   prompt_info);
+}
+
+void CleanUpDeviceRequestPrompt(RenderFrameHost* render_frame_host,
+                                DevtoolsDeviceRequestPromptInfo* prompt_info) {
+  FrameTreeNode* ftn = FrameTreeNode::From(render_frame_host);
+  if (!ftn)
+    return;
+  DispatchToAgents(ftn,
+                   &protocol::DeviceAccessHandler::CleanUpDeviceRequestPrompt,
+                   prompt_info);
 }
 
 }  // namespace devtools_instrumentation

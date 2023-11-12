@@ -257,12 +257,12 @@ error::Error RasterDecoderImpl::HandleClearPaintCacheINTERNAL(
   return error::kNoError;
 }
 
-error::Error RasterDecoderImpl::HandleCopySubTextureINTERNALImmediate(
+error::Error RasterDecoderImpl::HandleCopySharedImageINTERNALImmediate(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  const volatile raster::cmds::CopySubTextureINTERNALImmediate& c =
+  const volatile raster::cmds::CopySharedImageINTERNALImmediate& c =
       *static_cast<
-          const volatile raster::cmds::CopySubTextureINTERNALImmediate*>(
+          const volatile raster::cmds::CopySharedImageINTERNALImmediate*>(
           cmd_data);
   GLint xoffset = static_cast<GLint>(c.xoffset);
   GLint yoffset = static_cast<GLint>(c.yoffset);
@@ -282,20 +282,20 @@ error::Error RasterDecoderImpl::HandleCopySubTextureINTERNALImmediate(
       gles2::GetImmediateDataAs<volatile const GLbyte*>(c, mailboxes_size,
                                                         immediate_data_size);
   if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTextureINTERNAL",
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySharedImageINTERNAL",
                        "width < 0");
     return error::kNoError;
   }
   if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySubTextureINTERNAL",
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopySharedImageINTERNAL",
                        "height < 0");
     return error::kNoError;
   }
   if (mailboxes == nullptr) {
     return error::kOutOfBounds;
   }
-  DoCopySubTextureINTERNAL(xoffset, yoffset, x, y, width, height, unpack_flip_y,
-                           mailboxes);
+  DoCopySharedImageINTERNAL(xoffset, yoffset, x, y, width, height,
+                            unpack_flip_y, mailboxes);
   return error::kNoError;
 }
 
@@ -342,6 +342,7 @@ error::Error RasterDecoderImpl::HandleReadbackARGBImagePixelsINTERNALImmediate(
                        ReadbackARGBImagePixelsINTERNALImmediate*>(cmd_data);
   GLint src_x = static_cast<GLint>(c.src_x);
   GLint src_y = static_cast<GLint>(c.src_y);
+  GLint plane_index = static_cast<GLint>(c.plane_index);
   GLuint dst_width = static_cast<GLuint>(c.dst_width);
   GLuint dst_height = static_cast<GLuint>(c.dst_height);
   GLuint row_bytes = static_cast<GLuint>(c.row_bytes);
@@ -364,8 +365,8 @@ error::Error RasterDecoderImpl::HandleReadbackARGBImagePixelsINTERNALImmediate(
   if (mailbox == nullptr) {
     return error::kOutOfBounds;
   }
-  DoReadbackARGBImagePixelsINTERNAL(src_x, src_y, dst_width, dst_height,
-                                    row_bytes, dst_sk_color_type,
+  DoReadbackARGBImagePixelsINTERNAL(src_x, src_y, plane_index, dst_width,
+                                    dst_height, row_bytes, dst_sk_color_type,
                                     dst_sk_alpha_type, shm_id, shm_offset,
                                     color_space_offset, pixels_offset, mailbox);
   return error::kNoError;

@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "services/device/public/mojom/sensor_provider.mojom.h"
 
 namespace device {
@@ -114,11 +114,6 @@ PlatformSensorProviderBase::CloneSharedMemoryRegion() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   CreateSharedBufferIfNeeded();
   return mapped_region_.region.Duplicate();
-}
-
-bool PlatformSensorProviderBase::HasSensors() const {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return !sensor_map_.empty();
 }
 
 void PlatformSensorProviderBase::NotifySensorCreated(

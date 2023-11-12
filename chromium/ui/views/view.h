@@ -13,9 +13,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/containers/contains.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -144,6 +144,20 @@ enum PropertyEffects {
   // Changes to the property should cause the preferred size to change. This
   // implies kPropertyEffectsLayout.
   kPropertyEffectsPreferredSizeChanged = 0x00000004,
+};
+
+// When adding layers to the view, this indicates the region into which the
+// layer is placed, in the region above or beneath the view.
+enum class LayerRegion {
+  kAbove,
+  kBelow,
+};
+
+// When calling |GetLayersInOrder|, this will indicate whether the View's
+// own layer should be included in the returned vector or not.
+enum class ViewLayer {
+  kInclude,
+  kExclude,
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -664,9 +678,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // for another reason.
   void DestroyLayer();
 
-  // Add or remove layers below this view. This view does not take ownership of
-  // the layers. It is the caller's responsibility to keep track of this View's
-  // size and update their layer accordingly.
+  // Add or remove layers above or below this view. This view does not take
+  // ownership of the layers. It is the caller's responsibility to keep track of
+  // this View's size and update their layer accordingly.
   //
   // In very rare cases, it may be necessary to override these. If any of this
   // view's contents must be painted to the same layer as its parent, or can't
@@ -675,23 +689,26 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // layers for subpixel rendering reasons. Overrides should be made
   // judiciously, and generally they should just forward the calls to a child
   // view. They must be overridden together for correctness.
-  virtual void AddLayerBeneathView(ui::Layer* new_layer);
-  virtual void RemoveLayerBeneathView(ui::Layer* old_layer);
+  virtual void AddLayerToRegion(ui::Layer* new_layer, LayerRegion region);
+  virtual void RemoveLayerFromRegions(ui::Layer* old_layer);
 
-  // This is like RemoveLayerBeneathView() but doesn't remove |old_layer| from
+  // This is like RemoveLayerFromRegions() but doesn't remove |old_layer| from
   // its parent. This is useful for when a layer beneth this view is owned by a
   // ui::LayerOwner which just recreated it (by calling RecreateLayer()). In
-  // this case, this function can be called to remove it from |layers_beneath_|,
-  // and to stop observing it, but it remains in the layer tree since the
-  // expectation of ui::LayerOwner::RecreateLayer() is that the old layer
-  // remains under the same parent, and stacked above the newly cloned layer.
-  void RemoveLayerBeneathViewKeepInLayerTree(ui::Layer* old_layer);
+  // this case, this function can be called to remove it from |layers_below_| or
+  // |layers_above_|, and to stop observing it, but it remains in the layer tree
+  // since the expectation of ui::LayerOwner::RecreateLayer() is that the old
+  // layer remains under the same parent, and stacked above the newly cloned
+  // layer.
+  void RemoveLayerFromRegionsKeepInLayerTree(ui::Layer* old_layer);
 
   // Gets the layers associated with this view that should be immediate children
   // of the parent layer. They are returned in bottom-to-top order. This
-  // includes |this->layer()| and any layers added with |AddLayerBeneathView()|.
+  // optionally includes |this->layer()| and any layers added with
+  // |AddLayerToRegion()|.
   // Returns an empty vector if this view doesn't paint to a layer.
-  std::vector<ui::Layer*> GetLayersInOrder();
+  std::vector<ui::Layer*> GetLayersInOrder(
+      ViewLayer view_layer = ViewLayer::kInclude);
 
   // ui::LayerObserver:
   void LayerDestroyed(ui::Layer* layer) override;
@@ -1407,6 +1424,16 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // view.
   virtual void GetAccessibleNodeData(ui::AXNodeData* node_data) {}
 
+  // Sets/gets the accessible name.
+  // The value of the accessible name is a localized, end-user-consumable string
+  // which may be derived from visible information (e.g. the text on a button)
+  // or invisible information (e.g. the alternative text describing an icon).
+  // In the case of focusable objects, the name will be presented by the screen
+  // reader when that object gains focus and is critical to understanding the
+  // purpose of that object non-visually.
+  void SetAccessibleName(const std::u16string& name);
+  virtual const std::u16string& GetAccessibleName() const;
+
   // Handle a request from assistive technology to perform an action on this
   // view. Returns true on success, but note that the success/failure is
   // not propagated to the client that requested the action, since the
@@ -1477,6 +1504,11 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
     // Coordinates of the mouse press.
     gfx::Point start_pt;
   };
+
+  // Accessibility -------------------------------------------------------------
+
+  // Called when the accessible name of the View changed.
+  virtual void OnAccessibleNameChanged(const std::u16string& new_name) {}
 
   // Size and disposition ------------------------------------------------------
 
@@ -1933,6 +1965,16 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Creates a mask layer for the current view using |clip_path_|.
   void CreateMaskLayer();
 
+  // Implementation for adding a layer above or beneath the view layer. Called
+  // from |AddLayerToRegion()|.
+  void AddLayerToRegionImpl(ui::Layer* new_layer,
+                            std::vector<ui::Layer*>& layer_vector);
+
+  // Sets this view's layer and the layers above and below's parent to the given
+  // parent_layer. This will also ensure the layers are added to the given
+  // parent in the correct order.
+  void SetLayerParent(ui::Layer* parent_layer);
+
   // Layout --------------------------------------------------------------------
 
   // Returns whether a layout is deferred to a layout manager, either the
@@ -2152,10 +2194,11 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // Whether we are painting to a layer because of a non-identity transform.
   bool paint_to_layer_for_transform_ = false;
 
-  // Set of layers that should be painted beneath this View's layer. These
-  // layers are maintained as siblings of this View's layer and are stacked
-  // beneath.
-  std::vector<ui::Layer*> layers_beneath_;
+  // Set of layers that should be painted above and beneath this View's layer.
+  // These layers are maintained as siblings of this View's layer and are
+  // stacked above and beneath, respectively.
+  std::vector<ui::Layer*> layers_above_;
+  std::vector<ui::Layer*> layers_below_;
 
   // If painting to a layer |mask_layer_| will mask the current layer and all
   // child layers to within the |clip_path_|.
@@ -2217,6 +2260,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // a View is ready to paint it should also be set up to be accessible.
   bool has_run_accessibility_paint_checks_ = false;
 
+  // The current accessible name.
+  std::u16string accessible_name_;
+
   // Observers -----------------------------------------------------------------
 
   base::ObserverList<ViewObserver>::Unchecked observers_;
@@ -2241,6 +2287,7 @@ template <typename LayoutManager>
 BuilderT&& SetLayoutManager(std::unique_ptr<LayoutManager> layout_manager) && {
   return std::move(this->SetLayoutManager(std::move(layout_manager)));
 }
+VIEW_BUILDER_PROPERTY(std::u16string, AccessibleName)
 VIEW_BUILDER_PROPERTY(std::unique_ptr<Background>, Background)
 VIEW_BUILDER_PROPERTY(std::unique_ptr<Border>, Border)
 VIEW_BUILDER_PROPERTY(gfx::Rect, BoundsRect)

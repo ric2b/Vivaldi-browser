@@ -207,12 +207,12 @@ public class AutofillProfilesFragment extends PreferenceFragmentCompat
             }
         };
 
-        return new EditorDialog(getActivity(), runnable, Profile.getLastUsedRegularProfile());
+        return new EditorDialog(
+                getActivity(), runnable, Profile.getLastUsedRegularProfile(), false);
     }
 
     private void editAddress(EditorDialog dialog, AutofillAddress autofillAddress) {
-        AddressEditor addressEditor =
-                new AddressEditor(AddressEditor.Purpose.AUTOFILL_SETTINGS, /*saveToDisk=*/true);
+        AddressEditor addressEditor = new AddressEditor(/*saveToDisk=*/true);
         addressEditor.setEditorDialog(dialog);
 
         /*

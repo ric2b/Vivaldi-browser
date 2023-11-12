@@ -8,6 +8,7 @@
 import {LocalStorage} from '../../../common/local_storage.js';
 import {BrailleDisplayState, BrailleKeyCommand, BrailleKeyEvent} from '../../common/braille/braille_key_types.js';
 import {NavBraille} from '../../common/braille/nav_braille.js';
+import {SettingsManager} from '../../common/settings_manager.js';
 
 import {BrailleCaptionsBackground} from './braille_captions_background.js';
 import {BrailleTranslatorManager} from './braille_translator_manager.js';
@@ -16,11 +17,7 @@ import {PanStrategy} from './pan_strategy.js';
 import {ValueSpan} from './spans.js';
 
 export class BrailleDisplayManager {
-  /**
-   * @param {!BrailleTranslatorManager} translatorManager Keeps track
-   *     of the current translator to use.
-   */
-  constructor(translatorManager) {
+  constructor() {
     /** @private {number|undefined} */
     this.blinkerId_;
 
@@ -56,30 +53,22 @@ export class BrailleDisplayManager {
      */
     this.realDisplayState_ = this.displayState_;
 
-    /** @private {!BrailleTranslatorManager} */
-    this.translatorManager_ = translatorManager;
-
     this.init_();
   }
 
   /** @private */
   init_() {
-    this.translatorManager_.addChangeListener(
+    BrailleTranslatorManager.instance.addChangeListener(
         () => this.translateContent_(this.content_, this.expansionType_));
 
-    chrome.storage.onChanged.addListener((changes, area) => {
-      if (area === 'local' && 'brailleWordWrap' in changes) {
-        this.updatePanStrategy_(changes.brailleWordWrap.newValue);
-      }
-      if (area === 'local' &&
-          ('virtualBrailleRows' in changes ||
-           'virtualBrailleColumns' in changes)) {
-        this.onCaptionsStateChanged_();
-      }
-    });
-    chrome.storage.local.get(
-        {brailleWordWrap: true},
-        items => this.updatePanStrategy_(items.brailleWordWrap));
+    SettingsManager.addListenerForKey(
+        'brailleWordWrap', wrap => this.updatePanStrategy_(wrap));
+    SettingsManager.addListenerForKey(
+        'virtualBrailleRows', () => this.onCaptionsStateChanged_());
+    SettingsManager.addListenerForKey(
+        'virtualBrailleColumns', () => this.onCaptionsStateChanged_());
+
+    this.updatePanStrategy_(SettingsManager.getBoolean('brailleWordWrap'));
 
     BrailleCaptionsBackground.init(() => this.onCaptionsStateChanged_());
     if (goog.isDef(chrome.brailleDisplayPrivate)) {
@@ -242,11 +231,10 @@ export class BrailleDisplayManager {
       // Update the dimensions of the virtual braille captions display to those
       // of a real physical display when one is plugged in.
       processDisplayState(newState);
-      LocalStorage.set('menuBrailleCommands', true);
+      SettingsManager.set('menuBrailleCommands', true);
     } else {
-      BrailleCaptionsBackground.getVirtualDisplayState().then(
-          processDisplayState);
-      LocalStorage.set('menuBrailleCommands', false);
+      processDisplayState(BrailleCaptionsBackground.getVirtualDisplayState());
+      SettingsManager.set('menuBrailleCommands', false);
     }
   }
 
@@ -359,7 +347,8 @@ export class BrailleDisplayManager {
       this.refresh_();
     };
 
-    const translator = this.translatorManager_.getExpandingTranslator();
+    const translator =
+        BrailleTranslatorManager.instance.getExpandingTranslator();
     if (!translator) {
       writeTranslatedContent(new ArrayBuffer(0), [], []);
     } else {

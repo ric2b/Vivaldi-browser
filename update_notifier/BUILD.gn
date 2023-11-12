@@ -57,7 +57,7 @@ generate_embedded_i18n("generate_strings") {
   languages = languages_json.languages
   vivaldi_translation_locales = [ ]
   foreach(code_and_names, languages.list) {
-    vivaldi_translation_locales += [ code_and_names[0] ]
+    vivaldi_translation_locales += [ string_replace(code_and_names[0], "@", "-") ]
   }
   vivaldi_translation_locales -= [ "en-US" ]
 

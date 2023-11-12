@@ -27,7 +27,6 @@
 #include "chrome/browser/ui/views/tabs/tab_drag_context.h"
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
 #include "chrome/browser/ui/views/tabs/tab_group_views.h"
-#include "chrome/browser/ui/views/tabs/tab_layout_state.h"
 #include "chrome/browser/ui/views/tabs/tab_slot_controller.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -232,7 +231,7 @@ class TabStrip : public views::View,
   bool IsValidModelIndex(int index) const override;
   absl::optional<int> GetActiveIndex() const override;
   int NumPinnedTabsInModel() const override;
-  void OnDropIndexUpdate(int index, bool drop_before) override;
+  void OnDropIndexUpdate(absl::optional<int> index, bool drop_before) override;
   absl::optional<int> GetFirstTabInGroup(
       const tab_groups::TabGroupId& group) const override;
   gfx::Range ListTabsInGroup(

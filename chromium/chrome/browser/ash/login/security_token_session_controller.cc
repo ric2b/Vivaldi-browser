@@ -9,10 +9,10 @@
 
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -125,7 +125,7 @@ void LoadStoredChallengeResponseSpkiKeysForUser(
     base::flat_set<std::string>* extension_ids) {
   // TODO(crbug.com/1164373) This approach does not work for ephemeral users.
   // Instead, only get the certificate that was actually used on the last login.
-  const base::Value known_user_value =
+  const base::Value::List known_user_value =
       user_manager::KnownUser(local_state).GetChallengeResponseKeys(account_id);
   std::vector<DeserializedChallengeResponseKey>
       deserialized_challenge_response_keys;

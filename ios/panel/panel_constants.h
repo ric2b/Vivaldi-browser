@@ -10,8 +10,9 @@ int panel_search_view_height = 56;
 int panel_header_height = 112;
 int panel_top_view_height = 56;
 int panel_sidebar_width = 360;
-int panel_sidebar_top = 115;
-int panel_padding = 12;
+int panel_sidebar_top = 128;
+int panel_top_padding = 12;
+int panel_horizontal_padding = 20;
 int panel_sheet_corner_radius = 20;
 int panel_icon_size = 56;
 

@@ -44,22 +44,18 @@ struct BatteryDischarge {
   BatteryDischargeMode mode;
   // Discharge rate in milliwatts.
   absl::optional<int64_t> rate_milliwatts;
-  // Discharge rate in milliwatts, calculated using the used capacity instead of
-  // the current capacity.
-  absl::optional<int64_t> alt_rate_milliwatts;
+#if BUILDFLAG(IS_WIN)
+  // Discharge rate in milliwatts, if the client's battery discharge granularity
+  // is at most 17 mWh. Calculated using the used capacity instead of the
+  // current capacity.
+  absl::optional<int64_t> rate_milliwatts_with_precise_granularity;
+#endif  // BUILDFLAG(IS_WIN)
   // Discharge rate in hundredth of a percent per minute.
   absl::optional<int64_t> rate_relative;
 };
 
 // Returns the discharge rate in milliwatts.
 int64_t CalculateDischargeRateMilliwatts(
-    const base::BatteryLevelProvider::BatteryState& previous_battery_state,
-    const base::BatteryLevelProvider::BatteryState& new_battery_state,
-    base::TimeDelta interval_duration);
-
-// Returns the discharge rate in milliwatts, using the used capacity instead of
-// the current capacity.
-int64_t CalculateAltDischargeRateMilliwatts(
     const base::BatteryLevelProvider::BatteryState& previous_battery_state,
     const base::BatteryLevelProvider::BatteryState& new_battery_state,
     base::TimeDelta interval_duration);

@@ -371,9 +371,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   if (wait) {
     [self waitForWebStateVisible];
     [self waitForPageToFinishLoading];
-    EG_TEST_HELPER_ASSERT_TRUE(
-        [ChromeEarlGreyAppInterface waitForWindowIDInjectionIfNeeded],
-        @"WindowID failed to inject");
     // Loading URL (especially the first time) can trigger alerts.
     [SystemAlertHandler handleSystemAlertIfVisible];
   }
@@ -902,12 +899,17 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
                     syncTimeout:timeout]);
 }
 
+- (void)waitForSyncTransportStateActiveWithTimeout:(base::TimeDelta)timeout {
+  EG_TEST_HELPER_ASSERT_NO_ERROR([ChromeEarlGreyAppInterface
+      waitForSyncTransportStateActiveWithTimeout:timeout]);
+}
+
 - (const std::string)syncCacheGUID {
   NSString* cacheGUID = [ChromeEarlGreyAppInterface syncCacheGUID];
   return base::SysNSStringToUTF8(cacheGUID);
 }
 
-- (void)verifySyncServerURLs:(NSArray<NSString*>*)URLs {
+- (void)verifySyncServerSessionURLs:(NSArray<NSString*>*)URLs {
   EG_TEST_HELPER_ASSERT_NO_ERROR(
       [ChromeEarlGreyAppInterface verifySessionsOnSyncServerWithSpecs:URLs]);
 }
@@ -930,6 +932,24 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
                   }];
 
   bool success = [verifyEntities waitWithTimeout:timeout.InSecondsF()];
+  EG_TEST_HELPER_ASSERT_TRUE(success, errorString);
+}
+
+- (void)waitForSyncServerHistoryURLs:(NSArray<NSURL*>*)URLs
+                             timeout:(base::TimeDelta)timeout {
+  NSString* errorString =
+      [NSString stringWithFormat:@"Expected %zu URLs.", [URLs count]];
+  __block NSError* blockError = nil;
+  GREYCondition* verifyURLs =
+      [GREYCondition conditionWithName:errorString
+                                 block:^{
+                                   blockError = [ChromeEarlGreyAppInterface
+                                       verifyHistoryOnSyncServerWithURLs:URLs];
+                                   return !blockError;
+                                 }];
+
+  bool success = [verifyURLs waitWithTimeout:timeout.InSecondsF()];
+  EG_TEST_HELPER_ASSERT_NO_ERROR(blockError);
   EG_TEST_HELPER_ASSERT_TRUE(success, errorString);
 }
 
@@ -1028,10 +1048,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
                            inWindowWithNumber:windowNumber];
   if (wait) {
     [self waitForPageToFinishLoadingInWindowWithNumber:windowNumber];
-    EG_TEST_HELPER_ASSERT_TRUE(
-        [ChromeEarlGreyAppInterface
-            waitForWindowIDInjectionIfNeededInWindowWithNumber:windowNumber],
-        @"WindowID failed to inject");
     // Loading URL (especially the first time) can trigger alerts.
     [SystemAlertHandler handleSystemAlertIfVisible];
   }
@@ -1263,6 +1279,10 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
   return [ChromeEarlGreyAppInterface isDemographicMetricsReportingEnabled];
 }
 
+- (BOOL)isSyncHistoryDataTypeEnabled {
+  return [ChromeEarlGreyAppInterface isSyncHistoryDataTypeEnabled];
+}
+
 - (BOOL)appHasLaunchSwitch:(const std::string&)launchSwitch {
   return [ChromeEarlGreyAppInterface
       appHasLaunchSwitch:base::SysUTF8ToNSString(launchSwitch)];
@@ -1286,14 +1306,6 @@ id<GREYAction> grey_longPressWithDuration(base::TimeDelta duration) {
 
 - (BOOL)isNewOverflowMenuEnabled {
   return [ChromeEarlGreyAppInterface isNewOverflowMenuEnabled];
-}
-
-- (BOOL)isNewOmniboxPopupEnabled {
-  return [ChromeEarlGreyAppInterface isNewOmniboxPopupEnabled];
-}
-
-- (BOOL)isExperimentalOmniboxEnabled {
-  return [ChromeEarlGreyAppInterface isExperimentalOmniboxEnabled];
 }
 
 // Returns whether the UseLensToSearchForImage feature is enabled;

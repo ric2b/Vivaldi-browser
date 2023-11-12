@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -138,7 +138,7 @@ void CopyBoundsSpec(const app_window::BoundsSpecification* input_spec,
 
 }  // namespace
 
-AppWindowCreateFunction::AppWindowCreateFunction() {}
+AppWindowCreateFunction::AppWindowCreateFunction() = default;
 
 ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   // Don't create app window if the system is shutting down.
@@ -207,23 +207,23 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
               existing_window->Show(AppWindow::SHOW_ACTIVE);
           }
 
-          base::Value result(base::Value::Type::DICTIONARY);
-          result.SetIntKey("frameId", frame_id);
+          base::Value::Dict result;
+          result.Set("frameId", frame_id);
           existing_window->GetSerializedState(&result);
-          result.SetBoolKey("existingWindow", true);
+          result.Set("existingWindow", true);
           // We should not return the window until that window is properly
           // initialized. Hence, adding a callback for window first navigation
           // completion.
           if (existing_window->DidFinishFirstNavigation())
-            return RespondNow(OneArgument(std::move(result)));
+            return RespondNow(OneArgument(base::Value(std::move(result))));
 
-          existing_window->AddOnDidFinishFirstNavigationCallback(
-              base::BindOnce(&AppWindowCreateFunction::
-                                 OnAppWindowFinishedFirstNavigationOrClosed,
-                             this, OneArgument(std::move(result))));
+          existing_window->AddOnDidFinishFirstNavigationCallback(base::BindOnce(
+              &AppWindowCreateFunction::
+                  OnAppWindowFinishedFirstNavigationOrClosed,
+              this, OneArgument(base::Value(std::move(result)))));
 
           if (options->viv_ext_data.has_value()) {
-            result.SetKey("vivExtData",
+            result.Set("vivExtData",
                base::Value(options->viv_ext_data.value()));
           }
 
@@ -425,17 +425,17 @@ ExtensionFunction::ResponseAction AppWindowCreateFunction::Run() {
   if (create_params.creator_process_id == created_frame->GetProcess()->GetID())
     frame_id = created_frame->GetRoutingID();
 
-  base::Value result(base::Value::Type::DICTIONARY);
-  result.SetIntKey("frameId", frame_id);
-  result.SetStringKey("id", app_window->window_key());
+  base::Value::Dict result;
+  result.Set("frameId", frame_id);
+  result.Set("id", app_window->window_key());
   app_window->GetSerializedState(&result);
 
   if (options && options->viv_ext_data.has_value()) {
-    result.SetKey("vivExtData",
+    result.Set("vivExtData",
         base::Value(options->viv_ext_data.value()));
   }
 
-  ResponseValue result_arg = OneArgument(std::move(result));
+  ResponseValue result_arg = OneArgument(base::Value(std::move(result)));
 
   if (AppWindowRegistry::Get(browser_context())
           ->HadDevToolsAttached(app_window->web_contents())) {

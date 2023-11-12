@@ -15,6 +15,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/message_center/message_center_export.h"
+#include "ui/message_center/notification_list.h"
 #include "ui/message_center/views/message_view.h"
 #include "ui/message_center/views/notification_input_container.h"
 #include "ui/views/animation/ink_drop.h"
@@ -60,27 +61,6 @@ class CompactTitleMessageView : public views::View {
   raw_ptr<views::Label> message_ = nullptr;
 };
 
-class LargeImageView : public views::View {
- public:
-  explicit LargeImageView(const gfx::Size& max_size);
-  LargeImageView(const LargeImageView&) = delete;
-  LargeImageView& operator=(const LargeImageView&) = delete;
-  ~LargeImageView() override;
-
-  void SetImage(const gfx::ImageSkia& image);
-
-  void OnPaint(gfx::Canvas* canvas) override;
-  const char* GetClassName() const override;
-  void OnThemeChanged() override;
-
- private:
-  gfx::Size GetResizedImageSize();
-
-  gfx::Size max_size_;
-  gfx::Size min_size_;
-  gfx::ImageSkia image_;
-};
-
 // View that displays all current types of notification (web, basic, image, and
 // list) except the custom notification. Future notification types may be
 // handled by other classes, in which case instances of those classes would be
@@ -106,6 +86,7 @@ class MESSAGE_CENTER_EXPORT NotificationViewBase
     kHeaderLeftContent,
     kCollapsedSummaryView,
     kAppIconViewContainer,
+    kLargeImageView,
   };
 
   NotificationViewBase(const NotificationViewBase&) = delete;
@@ -127,7 +108,7 @@ class MESSAGE_CENTER_EXPORT NotificationViewBase
   bool IsExpanded() const override;
   void SetExpanded(bool expanded) override;
   bool IsManuallyExpandedOrCollapsed() const override;
-  void SetManuallyExpandedOrCollapsed(bool value) override;
+  void SetManuallyExpandedOrCollapsed(ExpandState state) override;
   void OnSettingsButtonPressed(const ui::Event& event) override;
 
   // views::InkDropObserver:

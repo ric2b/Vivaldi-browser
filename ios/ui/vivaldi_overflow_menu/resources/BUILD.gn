@@ -1,0 +1,252 @@
+# Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("resources") {
+  deps = [
+    ":vivaldi_overflow_menu_site_info",
+    ":vivaldi_overflow_menu_recent_tabs",
+    ":vivaldi_overflow_menu_passwords",
+    ":vivaldi_overflow_menu_settings",
+
+    ":vivaldi_overflow_reload",
+    ":vivaldi_overflow_stop",
+    ":vivaldi_overflow_new_tab",
+    ":vivaldi_overflow_new_private_tab",
+    ":vivaldi_overflow_new_window",
+
+    ":vivaldi_overflow_add_bookmark",
+    ":vivaldi_overflow_edit_bookmark",
+    ":vivaldi_overflow_add_reading_list",
+    ":vivaldi_overflow_edit_reading_list",
+    ":vivaldi_overflow_clear_history",
+    ":vivaldi_overflow_translate",
+    ":vivaldi_overflow_desktop_site",
+    ":vivaldi_overflow_mobile_site",
+    ":vivaldi_overflow_find_in_page",
+    ":vivaldi_overflow_zoom",
+
+    ":vivaldi_overflow_bookmarks",
+    ":vivaldi_overflow_notes",
+    ":vivaldi_overflow_history",
+    ":vivaldi_overflow_reading_list",
+    ":vivaldi_overflow_downloads",
+
+    ":vivaldi_overflow_help",
+    ":vivaldi_overflow_about",
+  ]
+}
+
+# Top common section
+imageset("vivaldi_overflow_menu_site_info") {
+  sources = [
+    "vivaldi_overflow_menu_site_info.imageset/Contents.json",
+    "vivaldi_overflow_menu_site_info.imageset/vivaldi_overflow_menu_site_info.pdf",
+    "vivaldi_overflow_menu_site_info.imageset/vivaldi_overflow_menu_site_info_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_menu_recent_tabs") {
+  sources = [
+    "vivaldi_overflow_menu_recent_tabs.imageset/Contents.json",
+    "vivaldi_overflow_menu_recent_tabs.imageset/vivaldi_overflow_menu_recent_tabs.pdf",
+    "vivaldi_overflow_menu_recent_tabs.imageset/vivaldi_overflow_menu_recent_tabs_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_menu_passwords") {
+  sources = [
+    "vivaldi_overflow_menu_passwords.imageset/Contents.json",
+    "vivaldi_overflow_menu_passwords.imageset/vivaldi_overflow_menu_passwords.pdf",
+    "vivaldi_overflow_menu_passwords.imageset/vivaldi_overflow_menu_passwords_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_menu_settings") {
+  sources = [
+    "vivaldi_overflow_menu_settings.imageset/Contents.json",
+    "vivaldi_overflow_menu_settings.imageset/vivaldi_overflow_menu_settings.pdf",
+    "vivaldi_overflow_menu_settings.imageset/vivaldi_overflow_menu_settings_dark.pdf",
+  ]
+}
+
+
+# Second section
+imageset("vivaldi_overflow_reload") {
+  sources = [
+    "vivaldi_overflow_reload.imageset/Contents.json",
+    "vivaldi_overflow_reload.imageset/vivaldi_overflow_reload.pdf",
+    "vivaldi_overflow_reload.imageset/vivaldi_overflow_reload_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_stop") {
+  sources = [
+    "vivaldi_overflow_stop.imageset/Contents.json",
+    "vivaldi_overflow_stop.imageset/vivaldi_overflow_stop.pdf",
+    "vivaldi_overflow_stop.imageset/vivaldi_overflow_stop_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_new_tab") {
+  sources = [
+    "vivaldi_overflow_new_tab.imageset/Contents.json",
+    "vivaldi_overflow_new_tab.imageset/vivaldi_overflow_new_tab.pdf",
+    "vivaldi_overflow_new_tab.imageset/vivaldi_overflow_new_tab_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_new_private_tab") {
+  sources = [
+    "vivaldi_overflow_new_private_tab.imageset/Contents.json",
+    "vivaldi_overflow_new_private_tab.imageset/vivaldi_overflow_new_private_tab.pdf",
+    "vivaldi_overflow_new_private_tab.imageset/vivaldi_overflow_new_private_tab_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_new_window") {
+  sources = [
+    "vivaldi_overflow_new_window.imageset/Contents.json",
+    "vivaldi_overflow_new_window.imageset/vivaldi_overflow_new_window.pdf",
+    "vivaldi_overflow_new_window.imageset/vivaldi_overflow_new_window_dark.pdf",
+  ]
+}
+
+
+# Third section
+imageset("vivaldi_overflow_add_bookmark") {
+  sources = [
+    "vivaldi_overflow_add_bookmark.imageset/Contents.json",
+    "vivaldi_overflow_add_bookmark.imageset/vivaldi_overflow_add_bookmark.pdf",
+    "vivaldi_overflow_add_bookmark.imageset/vivaldi_overflow_add_bookmark_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_edit_bookmark") {
+  sources = [
+    "vivaldi_overflow_edit_bookmark.imageset/Contents.json",
+    "vivaldi_overflow_edit_bookmark.imageset/vivaldi_overflow_edit_bookmark.pdf",
+    "vivaldi_overflow_edit_bookmark.imageset/vivaldi_overflow_edit_bookmark_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_add_reading_list") {
+  sources = [
+    "vivaldi_overflow_add_reading_list.imageset/Contents.json",
+    "vivaldi_overflow_add_reading_list.imageset/vivaldi_overflow_add_reading_list.pdf",
+    "vivaldi_overflow_add_reading_list.imageset/vivaldi_overflow_add_reading_list_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_edit_reading_list") {
+  sources = [
+    "vivaldi_overflow_edit_reading_list.imageset/Contents.json",
+    "vivaldi_overflow_edit_reading_list.imageset/vivaldi_overflow_edit_reading_list.pdf",
+    "vivaldi_overflow_edit_reading_list.imageset/vivaldi_overflow_edit_reading_list_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_clear_history") {
+  sources = [
+    "vivaldi_overflow_clear_history.imageset/Contents.json",
+    "vivaldi_overflow_clear_history.imageset/vivaldi_overflow_clear_history.pdf",
+    "vivaldi_overflow_clear_history.imageset/vivaldi_overflow_clear_history_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_translate") {
+  sources = [
+    "vivaldi_overflow_translate.imageset/Contents.json",
+    "vivaldi_overflow_translate.imageset/vivaldi_overflow_translate.pdf",
+    "vivaldi_overflow_translate.imageset/vivaldi_overflow_translate_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_desktop_site") {
+  sources = [
+    "vivaldi_overflow_desktop_site.imageset/Contents.json",
+    "vivaldi_overflow_desktop_site.imageset/vivaldi_overflow_desktop_site.pdf",
+    "vivaldi_overflow_desktop_site.imageset/vivaldi_overflow_desktop_site_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_mobile_site") {
+  sources = [
+    "vivaldi_overflow_mobile_site.imageset/Contents.json",
+    "vivaldi_overflow_mobile_site.imageset/vivaldi_overflow_mobile_site.pdf",
+    "vivaldi_overflow_mobile_site.imageset/vivaldi_overflow_mobile_site_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_find_in_page") {
+  sources = [
+    "vivaldi_overflow_find_in_page.imageset/Contents.json",
+    "vivaldi_overflow_find_in_page.imageset/vivaldi_overflow_find_in_page.pdf",
+    "vivaldi_overflow_find_in_page.imageset/vivaldi_overflow_find_in_page_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_zoom") {
+  sources = [
+    "vivaldi_overflow_zoom.imageset/Contents.json",
+    "vivaldi_overflow_zoom.imageset/vivaldi_overflow_zoom.pdf",
+    "vivaldi_overflow_zoom.imageset/vivaldi_overflow_zoom_dark.pdf",
+  ]
+}
+
+# Fourth section
+imageset("vivaldi_overflow_bookmarks") {
+  sources = [
+    "vivaldi_overflow_bookmarks.imageset/Contents.json",
+    "vivaldi_overflow_bookmarks.imageset/vivaldi_overflow_bookmarks.pdf",
+    "vivaldi_overflow_bookmarks.imageset/vivaldi_overflow_bookmarks_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_notes") {
+  sources = [
+    "vivaldi_overflow_notes.imageset/Contents.json",
+    "vivaldi_overflow_notes.imageset/vivaldi_overflow_notes.pdf",
+    "vivaldi_overflow_notes.imageset/vivaldi_overflow_notes_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_history") {
+  sources = [
+    "vivaldi_overflow_history.imageset/Contents.json",
+    "vivaldi_overflow_history.imageset/vivaldi_overflow_history.pdf",
+    "vivaldi_overflow_history.imageset/vivaldi_overflow_history_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_reading_list") {
+  sources = [
+    "vivaldi_overflow_reading_list.imageset/Contents.json",
+    "vivaldi_overflow_reading_list.imageset/vivaldi_overflow_reading_list.pdf",
+    "vivaldi_overflow_reading_list.imageset/vivaldi_overflow_reading_list_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_downloads") {
+  sources = [
+    "vivaldi_overflow_downloads.imageset/Contents.json",
+    "vivaldi_overflow_downloads.imageset/vivaldi_overflow_downloads.pdf",
+    "vivaldi_overflow_downloads.imageset/vivaldi_overflow_downloads_dark.pdf",
+  ]
+}
+
+# Final section
+imageset("vivaldi_overflow_help") {
+  sources = [
+    "vivaldi_overflow_help.imageset/Contents.json",
+    "vivaldi_overflow_help.imageset/vivaldi_overflow_help.pdf",
+    "vivaldi_overflow_help.imageset/vivaldi_overflow_help_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_overflow_about") {
+  sources = [
+    "vivaldi_overflow_about.imageset/Contents.json",
+    "vivaldi_overflow_about.imageset/vivaldi_overflow_about.pdf",
+  ]
+}

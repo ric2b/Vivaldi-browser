@@ -18,6 +18,7 @@
 
 namespace blink {
 
+class Document;
 class Element;
 class ExceptionState;
 class ToggleRootList;
@@ -25,7 +26,7 @@ class ToggleRootList;
 // Represents the set of toggles on an element.
 using ToggleMap = HeapHashMap<AtomicString, Member<CSSToggle>>;
 
-using CSSToggleMapMaplike = MaplikeReadAPIs<CSSToggleMap>;
+using CSSToggleMapMaplike = Maplike<CSSToggleMap>;
 
 class CORE_EXPORT CSSToggleMap : public ScriptWrappable,
                                  public CSSToggleMapMaplike,
@@ -42,6 +43,8 @@ class CORE_EXPORT CSSToggleMap : public ScriptWrappable,
   void CreateToggles(const ToggleRootList* toggle_roots);
 
   void Trace(Visitor* visitor) const override;
+
+  void DidMoveToNewDocument(Document& old_document);
 
   CSSToggleMap* set(const AtomicString& key,
                     CSSToggle* value,

@@ -61,12 +61,13 @@ const CGFloat kFakeLocationBarHeightMargin = 2;
 const CGFloat kEndButtonFakeboxTrailingSpace = 12.0;
 const CGFloat kEndButtonOmniboxTrailingSpace = 7.0;
 
-// The constants for the constraints affecting the vertical separator that
-// appears between the Lens and Voice Search buttons.
-const CGFloat kLensButtonSeparatorWidth = 1;
-const CGFloat kLensButtonSeparatorHeight = 12;
-const CGFloat kLensButtonSeparatorLeftMargin = 8;
-const CGFloat kLensButtonSeparatorRightMargin = 13;
+// The constants for the constraints the leading-edge aligned UI elements.
+const CGFloat kHintLabelFakeboxLeadingSpace = 12.0;
+const CGFloat kHintLabelOmniboxLeadingSpace = 7.0;
+
+// The constants for the constraints affecting the separation between the Lens
+// and Voice Search buttons.
+const CGFloat kEndButtonSeparation = 19.0;
 
 // Returns the height of the toolbar based on the preferred content size of the
 // application.
@@ -83,9 +84,6 @@ CGFloat ToolbarHeight() {
 
 // The Lens button. May be null if Lens is not available.
 @property(nonatomic, strong, readwrite) ExtendedTouchTargetButton* lensButton;
-// The view that seperates the Lens and voice search buttons. May be null if
-// Lens is not available.
-@property(nonatomic, strong) UIView* lensButtonSeparator;
 
 @property(nonatomic, strong, readwrite)
     ExtendedTouchTargetButton* voiceSearchButton;
@@ -98,6 +96,13 @@ CGFloat ToolbarHeight() {
     NSLayoutConstraint* fakeLocationBarHeightConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* fakeToolbarTopConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* hintLabelLeadingConstraint;
+@property(nonatomic, strong) NSLayoutConstraint* hintLabelTrailingConstraint;
+// In the new layout, the hint label should always be at least inside the fake
+// omnibox. When the fake omnibox is shrunk, the position from the leading side
+// of the search field should yield. This constraint is not defined for the old
+// layout.
+@property(nonatomic, strong)
+    NSLayoutConstraint* hintLabelLeadingMarginConstraint;
 // The end button should always be at least inside the fake omnibox.
 // When the fake omnibox is shrunk, the position from the trailing side of
 // the search field should yield.
@@ -217,12 +222,29 @@ CGFloat ToolbarHeight() {
   content_suggestions::ConfigureSearchHintLabel(self.searchHintLabel,
                                                 searchField);
   self.searchHintLabel.font = [self hintLabelFont];
-  self.hintLabelLeadingConstraint = [self.searchHintLabel.leadingAnchor
-      constraintGreaterThanOrEqualToAnchor:[searchField leadingAnchor]
-                                  constant:ntp_header::kHintLabelSidePadding];
+
+  if (base::FeatureList::IsEnabled(kNewNTPOmniboxLayout)) {
+    // Enable the leading-edge-alignment hint label constraints.
+    self.hintLabelLeadingMarginConstraint = [self.searchHintLabel.leadingAnchor
+        constraintEqualToAnchor:[searchField leadingAnchor]];
+    self.hintLabelLeadingMarginConstraint.priority =
+        UILayoutPriorityDefaultHigh + 1;
+    self.hintLabelLeadingConstraint = [self.searchHintLabel.leadingAnchor
+        constraintGreaterThanOrEqualToAnchor:self.fakeLocationBar.leadingAnchor
+                                    constant:kHintLabelFakeboxLeadingSpace];
+    [self.hintLabelLeadingMarginConstraint setActive:YES];
+  } else {
+    // The old omnibox layout has the label centered horizontally in the
+    // fakebox.
+    self.hintLabelLeadingConstraint = [self.searchHintLabel.leadingAnchor
+        constraintGreaterThanOrEqualToAnchor:[searchField leadingAnchor]
+                                    constant:ntp_header::
+                                                 kCenteredHintLabelSidePadding];
+    [[self.searchHintLabel.centerXAnchor
+        constraintEqualToAnchor:self.fakeLocationBar.centerXAnchor]
+        setActive:YES];
+  }
   [NSLayoutConstraint activateConstraints:@[
-    [self.searchHintLabel.centerXAnchor
-        constraintEqualToAnchor:self.fakeLocationBar.centerXAnchor],
     self.hintLabelLeadingConstraint,
     [self.searchHintLabel.heightAnchor
         constraintEqualToAnchor:self.fakeLocationBar.heightAnchor
@@ -235,6 +257,9 @@ CGFloat ToolbarHeight() {
   // is taking the full width, there are few points that are not accessible and
   // allow to select the content below it.
   self.searchHintLabel.isAccessibilityElement = NO;
+  [self.searchHintLabel
+      setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                      forAxis:UILayoutConstraintAxisHorizontal];
 
   // Voice search.
   self.voiceSearchButton =
@@ -252,12 +277,6 @@ CGFloat ToolbarHeight() {
         [ExtendedTouchTargetButton buttonWithType:UIButtonTypeSystem];
     content_suggestions::ConfigureLensButton(self.lensButton, searchField);
     endButton = self.lensButton;
-
-    self.lensButtonSeparator = [[UIView alloc] init];
-    self.lensButtonSeparator.backgroundColor =
-        [UIColor colorNamed:kToolbarShadowColor];
-    self.lensButtonSeparator.translatesAutoresizingMaskIntoConstraints = NO;
-    [searchField addSubview:self.lensButtonSeparator];
   }
 
   // Constraints.
@@ -292,22 +311,10 @@ CGFloat ToolbarHeight() {
   // the end.
   if (self.lensButton) {
     [NSLayoutConstraint activateConstraints:@[
-      // Separator constraints.
-      [self.lensButtonSeparator.leadingAnchor
-          constraintEqualToAnchor:self.voiceSearchButton.trailingAnchor
-                         constant:kLensButtonSeparatorLeftMargin],
-      [self.lensButtonSeparator.trailingAnchor
-          constraintEqualToAnchor:self.lensButton.leadingAnchor
-                         constant:-kLensButtonSeparatorRightMargin],
-      [self.lensButtonSeparator.centerYAnchor
-          constraintEqualToAnchor:self.fakeLocationBar.centerYAnchor],
-      [self.lensButtonSeparator.widthAnchor
-          constraintEqualToConstant:ui::AlignValueToUpperPixel(
-                                        kLensButtonSeparatorWidth)],
-      [self.lensButtonSeparator.heightAnchor
-          constraintEqualToConstant:ui::AlignValueToUpperPixel(
-                                        kLensButtonSeparatorHeight)],
       // Lens button constraints.
+      [self.lensButton.leadingAnchor
+          constraintEqualToAnchor:self.voiceSearchButton.trailingAnchor
+                         constant:kEndButtonSeparation],
       [self.lensButton.centerYAnchor
           constraintEqualToAnchor:self.fakeLocationBar.centerYAnchor],
     ]];
@@ -321,13 +328,15 @@ CGFloat ToolbarHeight() {
       constraintLessThanOrEqualToAnchor:self.fakeLocationBar.trailingAnchor
                                constant:-kEndButtonFakeboxTrailingSpace];
 
+  // The voice search button is always on the leading side, even if the Lens
+  // button is visible.
+  self.hintLabelTrailingConstraint = [self.searchHintLabel.trailingAnchor
+      constraintLessThanOrEqualToAnchor:self.voiceSearchButton.leadingAnchor];
+  self.hintLabelTrailingConstraint.priority = UILayoutPriorityDefaultHigh;
   [NSLayoutConstraint activateConstraints:@[
     [self.voiceSearchButton.centerYAnchor
         constraintEqualToAnchor:self.fakeLocationBar.centerYAnchor],
-    // The voice search button is always on the left, even if the Lens button is
-    // visible.
-    [self.searchHintLabel.trailingAnchor
-        constraintLessThanOrEqualToAnchor:self.voiceSearchButton.leadingAnchor],
+    self.hintLabelTrailingConstraint,
     self.endButtonTrailingMarginConstraint,
     self.endButtonTrailingConstraint,
   ]];
@@ -407,6 +416,15 @@ CGFloat ToolbarHeight() {
   CGFloat percent =
       [self searchFieldProgressForOffset:offset safeAreaInsets:safeAreaInsets];
 
+  // Offset the hint label constraints with half of the change in width
+  // from the original scale, since constraints are calculated before
+  // transformations are applied. This prevents the label from overlapping
+  // with other UI elements.
+  CGFloat hintLabelScalingExtraOffset =
+      (content_suggestions::kHintTextScale * (1 - percent)) *
+      self.searchHintLabel.bounds.size.width * 0.5;
+  self.hintLabelTrailingConstraint.constant = -hintLabelScalingExtraOffset;
+
   CGFloat toolbarExpandedHeight = ToolbarHeight();
 
   if (!IsSplitToolbarMode(self)) {
@@ -429,8 +447,14 @@ CGFloat ToolbarHeight() {
     self.fakeLocationBarTrailingConstraint.constant = 0;
     self.fakeLocationBarTopConstraint.constant = 0;
 
-    self.hintLabelLeadingConstraint.constant =
-        ntp_header::kHintLabelSidePadding;
+    // Reset the view horizontal constraints.
+    if (base::FeatureList::IsEnabled(kNewNTPOmniboxLayout)) {
+      self.hintLabelLeadingMarginConstraint.constant =
+          kHintLabelFakeboxLeadingSpace + hintLabelScalingExtraOffset;
+    } else {
+      self.hintLabelLeadingConstraint.constant =
+          ntp_header::kCenteredHintLabelSidePadding;
+    }
     self.endButtonTrailingMarginConstraint.constant = 0;
 
     self.separator.alpha = 0;
@@ -456,11 +480,9 @@ CGFloat ToolbarHeight() {
   // Calculate the amount to shrink the width and height of background so that
   // it's where the focused adapative toolbar focuses.
   CGFloat inset = !IsSplitToolbarMode(self) ? kBackgroundLandscapeInset : 0;
-  CGFloat leadingMargin = IsOmniboxActionsEnabled()
-                              ? kExpandedLocationBarLeadingMarginRefreshedPopup
-                              : kExpandedLocationBarHorizontalMargin;
   self.fakeLocationBarLeadingConstraint.constant =
-      (safeAreaInsets.left + leadingMargin + inset) * percent;
+      (safeAreaInsets.left + kExpandedLocationBarLeadingMargin + inset) *
+      percent;
   self.fakeLocationBarTrailingConstraint.constant =
       -(safeAreaInsets.right + kExpandedLocationBarHorizontalMargin + inset) *
       percent;
@@ -479,7 +501,7 @@ CGFloat ToolbarHeight() {
   self.fakeLocationBar.layer.cornerRadius =
       self.fakeLocationBarHeightConstraint.constant / 2;
 
-  // Scale the hintLabel, and make sure the frame stays left aligned.
+  // Scale the hintLabel and update the horizontal constraint constant.
   [self scaleHintLabelForPercent:percent];
 
   // Adjust the position of the search field's subviews by adjusting their
@@ -493,8 +515,21 @@ CGFloat ToolbarHeight() {
       -kEndButtonFakeboxTrailingSpace +
       (kEndButtonFakeboxTrailingSpace - kEndButtonOmniboxTrailingSpace) *
           percent;
-  self.hintLabelLeadingConstraint.constant =
-      subviewsDiff + ntp_header::kHintLabelSidePadding;
+
+  if (base::FeatureList::IsEnabled(kNewNTPOmniboxLayout)) {
+    // A similar positioning scheme is applied to the leading-edge-aligned
+    // hint label as the trailing-edge-aligned buttons.
+    self.hintLabelLeadingMarginConstraint.constant = subviewsDiff;
+    CGFloat desiredLeadingSpace =
+        kHintLabelFakeboxLeadingSpace -
+        (kHintLabelFakeboxLeadingSpace - kHintLabelOmniboxLeadingSpace) *
+            percent;
+    self.hintLabelLeadingConstraint.constant =
+        desiredLeadingSpace + hintLabelScalingExtraOffset;
+  } else {
+    self.hintLabelLeadingConstraint.constant =
+        subviewsDiff + ntp_header::kCenteredHintLabelSidePadding;
+  }
 }
 
 - (void)setFakeboxHighlighted:(BOOL)highlighted {
@@ -567,6 +602,7 @@ CGFloat ToolbarHeight() {
 
 // Scale the the hint label down to at most content_suggestions::kHintTextScale.
 - (void)scaleHintLabelForPercent:(CGFloat)percent {
+  DCHECK(self.searchHintLabel);
   CGFloat scaleValue =
       1 + (content_suggestions::kHintTextScale * (1 - percent));
   self.searchHintLabel.transform =

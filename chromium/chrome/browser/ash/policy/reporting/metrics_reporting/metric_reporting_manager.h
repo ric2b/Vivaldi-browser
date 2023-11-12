@@ -118,6 +118,12 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
                                      bool enable_default_value,
                                      base::TimeDelta init_delay);
 
+  void InitManualTelemetryCollector(const std::string& collector_name,
+                                    Sampler* sampler,
+                                    MetricReportQueue* metric_report_queue,
+                                    const std::string& enable_setting_path,
+                                    bool enable_default_value);
+
   void InitPeriodicCollector(const std::string& collector_name,
                              Sampler* sampler,
                              MetricReportQueue* metric_report_queue,
@@ -168,6 +174,9 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
 
   void InitDisplayCollectors();
 
+  // Initializes a periodic collector that collects device activity state.
+  void InitDeviceActivityCollector();
+
   base::TimeDelta GetUploadDelay() const;
 
   std::vector<CollectorBase*> GetTelemetryCollectorsFromSetting(
@@ -185,15 +194,6 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
   // instance.
   std::vector<std::unique_ptr<Sampler>> samplers_
       GUARDED_BY_CONTEXT(sequence_checker_);
-
-  base::flat_map<std::string, std::unique_ptr<CollectorBase>>
-      telemetry_collectors_ GUARDED_BY_CONTEXT(sequence_checker_);
-
-  std::vector<std::unique_ptr<CollectorBase>> info_collectors_
-      GUARDED_BY_CONTEXT(sequence_checker_);
-
-  std::vector<std::unique_ptr<MetricEventObserverManager>>
-      event_observer_managers_ GUARDED_BY_CONTEXT(sequence_checker_);
 
   std::unique_ptr<MetricReportQueue> info_report_queue_;
   std::unique_ptr<MetricReportQueue> telemetry_report_queue_;
@@ -217,6 +217,15 @@ class MetricReportingManager : public policy::ManagedSessionService::Observer,
   // `telemetry_collectors_` to make sure it won't be used for event driven
   // telemetry.
   std::unique_ptr<CollectorBase> network_bandwidth_collector_;
+
+  base::flat_map<std::string, std::unique_ptr<CollectorBase>>
+      telemetry_collectors_ GUARDED_BY_CONTEXT(sequence_checker_);
+
+  std::vector<std::unique_ptr<CollectorBase>> info_collectors_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+
+  std::vector<std::unique_ptr<MetricEventObserverManager>>
+      event_observer_managers_ GUARDED_BY_CONTEXT(sequence_checker_);
 
   std::unique_ptr<Delegate> delegate_;
 };

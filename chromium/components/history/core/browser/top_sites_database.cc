@@ -10,10 +10,10 @@
 #include <tuple>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequence_checker.h"
@@ -311,8 +311,7 @@ bool TopSitesDatabase::UpgradeToVersion5(sql::MetaTable& meta_table) {
   if (!db_->Execute(kRenameSql))
     return false;
 
-  meta_table.SetVersionNumber(5);
-  return true;
+  return meta_table.SetVersionNumber(5);
 }
 
 bool TopSitesDatabase::InitImpl(const base::FilePath& db_name) {

@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/run_loop.h"
@@ -98,7 +98,7 @@ class TracingControllerTestEndpoint
 
 class TracingControllerTest : public ContentBrowserTest {
  public:
-  TracingControllerTest() {}
+  TracingControllerTest() = default;
 
   void SetUp() override {
     get_categories_done_callback_count_ = 0;
@@ -108,10 +108,10 @@ class TracingControllerTest : public ContentBrowserTest {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     ash::DebugDaemonClient::InitializeFake();
     // Set statistic provider for hardware class tests.
-    chromeos::system::StatisticsProvider::SetTestProvider(
+    ash::system::StatisticsProvider::SetTestProvider(
         &fake_statistics_provider_);
     fake_statistics_provider_.SetMachineStatistic(
-        chromeos::system::kHardwareClassKey, "test-hardware-class");
+        ash::system::kHardwareClassKey, "test-hardware-class");
 #endif
     ContentBrowserTest::SetUp();
   }
@@ -127,7 +127,7 @@ class TracingControllerTest : public ContentBrowserTest {
     EXPECT_TRUE(NavigateToURL(shell, GetTestUrl("", "title1.html")));
   }
 
-  absl::optional<base::Value> GenerateMetadataDict() {
+  absl::optional<base::Value::Dict> GenerateMetadataDict() {
     return std::move(metadata_);
   }
 
@@ -247,7 +247,7 @@ class TracingControllerTest : public ContentBrowserTest {
 
       base::Value::Dict metadata;
       metadata.Set("not-whitelisted", "this_not_found");
-      metadata_ = base::Value(std::move(metadata));
+      metadata_ = std::move(metadata);
       tracing::TraceEventMetadataSource::GetInstance()->AddGeneratorFunction(
           base::BindRepeating(&TracingControllerTest::GenerateMetadataDict,
                               base::Unretained(this)));
@@ -330,7 +330,7 @@ class TracingControllerTest : public ContentBrowserTest {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
  protected:
-  chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
+  ash::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
 #endif
 
  private:
@@ -338,7 +338,7 @@ class TracingControllerTest : public ContentBrowserTest {
   int enable_recording_done_callback_count_;
   int disable_recording_done_callback_count_;
   base::FilePath last_actual_recording_file_path_;
-  absl::optional<base::Value> metadata_;
+  absl::optional<base::Value::Dict> metadata_;
   std::unique_ptr<std::string> last_data_;
 };
 
@@ -432,7 +432,7 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest,
   absl::optional<base::Value> trace_json = base::JSONReader::Read(last_data());
   ASSERT_TRUE(trace_json);
   const base::Value* metadata_json =
-      trace_json->FindKeyOfType("metadata", base::Value::Type::DICTIONARY);
+      trace_json->FindKeyOfType("metadata", base::Value::Type::DICT);
   ASSERT_TRUE(metadata_json);
 
   EXPECT_TRUE(KeyNotEquals(metadata_json, "cpu-brand", "__stripped__"));

@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "extensions/common/constants.h"
@@ -33,7 +33,7 @@ ExtensionLocalizationPeer::ExtensionLocalizationPeer(
       message_sender_(message_sender),
       request_url_(request_url) {}
 
-ExtensionLocalizationPeer::~ExtensionLocalizationPeer() {}
+ExtensionLocalizationPeer::~ExtensionLocalizationPeer() = default;
 
 // static
 scoped_refptr<blink::WebRequestPeer>

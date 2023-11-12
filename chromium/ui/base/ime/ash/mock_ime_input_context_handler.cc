@@ -11,7 +11,7 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/gfx/range/range.h"
 
-namespace ui {
+namespace ash {
 
 MockIMEInputContextHandler::MockIMEInputContextHandler()
     : commit_text_call_count_(0),
@@ -22,13 +22,16 @@ MockIMEInputContextHandler::~MockIMEInputContextHandler() = default;
 
 void MockIMEInputContextHandler::CommitText(
     const std::u16string& text,
-    TextInputClient::InsertTextCursorBehavior cursor_behavior) {
+    ui::TextInputClient::InsertTextCursorBehavior cursor_behavior) {
   ++commit_text_call_count_;
   last_commit_text_ = text;
+  for (Observer& observer : observers_) {
+    observer.OnCommitText(text);
+  }
 }
 
 void MockIMEInputContextHandler::UpdateCompositionText(
-    const CompositionText& text,
+    const ui::CompositionText& text,
     uint32_t cursor_pos,
     bool visible) {
   ++update_preedit_text_call_count_;
@@ -77,7 +80,7 @@ void MockIMEInputContextHandler::SetAutocorrectRange(
   std::move(callback).Run(autocorrect_enabled_);
 }
 
-absl::optional<GrammarFragment>
+absl::optional<ui::GrammarFragment>
 MockIMEInputContextHandler::GetGrammarFragmentAtCursor() {
   for (const auto& fragment : grammar_fragments_) {
     if (fragment.range.Contains(cursor_range_)) {
@@ -89,8 +92,8 @@ MockIMEInputContextHandler::GetGrammarFragmentAtCursor() {
 
 bool MockIMEInputContextHandler::ClearGrammarFragments(
     const gfx::Range& range) {
-  std::vector<GrammarFragment> updated_fragments;
-  for (const GrammarFragment& fragment : grammar_fragments_) {
+  std::vector<ui::GrammarFragment> updated_fragments;
+  for (const ui::GrammarFragment& fragment : grammar_fragments_) {
     if (!range.Contains(fragment.range)) {
       updated_fragments.push_back(fragment);
     }
@@ -100,7 +103,7 @@ bool MockIMEInputContextHandler::ClearGrammarFragments(
 }
 
 bool MockIMEInputContextHandler::AddGrammarFragments(
-    const std::vector<GrammarFragment>& fragments) {
+    const std::vector<ui::GrammarFragment>& fragments) {
   grammar_fragments_.insert(grammar_fragments_.end(), fragments.begin(),
                             fragments.end());
   return true;
@@ -131,11 +134,11 @@ void MockIMEInputContextHandler::Reset() {
   sent_key_events_.clear();
 }
 
-void MockIMEInputContextHandler::SendKeyEvent(KeyEvent* event) {
+void MockIMEInputContextHandler::SendKeyEvent(ui::KeyEvent* event) {
   sent_key_events_.emplace_back(*event);
 }
 
-InputMethod* MockIMEInputContextHandler::GetInputMethod() {
+ui::InputMethod* MockIMEInputContextHandler::GetInputMethod() {
   return nullptr;
 }
 
@@ -146,8 +149,9 @@ void MockIMEInputContextHandler::ConfirmComposition(bool reset_engine) {
   if (!HasCompositionText())
     return;
 
-  CommitText(last_update_composition_arg_.composition_text.text,
-             TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
+  CommitText(
+      last_update_composition_arg_.composition_text.text,
+      ui::TextInputClient::InsertTextCursorBehavior::kMoveCursorAfterText);
   last_update_composition_arg_.composition_text.text = std::u16string();
 }
 
@@ -163,4 +167,12 @@ ukm::SourceId MockIMEInputContextHandler::GetClientSourceForMetrics() {
   return ukm::kInvalidSourceId;
 }
 
-}  // namespace ui
+void MockIMEInputContextHandler::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void MockIMEInputContextHandler::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
+}  // namespace ash

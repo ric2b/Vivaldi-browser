@@ -7,8 +7,9 @@
 
 #include <string>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/function_ref.h"
 #include "base/types/token_type.h"
 #include "components/performance_manager/public/execution_context_priority/execution_context_priority.h"
 #include "components/performance_manager/public/graph/node.h"
@@ -48,7 +49,7 @@ using execution_context_priority::PriorityAndReason;
 // or a service worker is registered to handle their network requests.
 class WorkerNode : public Node {
  public:
-  using WorkerNodeVisitor = base::RepeatingCallback<bool(const WorkerNode*)>;
+  using WorkerNodeVisitor = base::FunctionRef<bool(const WorkerNode*)>;
 
   // The different possible worker types.
   enum class WorkerType {
@@ -121,6 +122,11 @@ class WorkerNode : public Node {
   // kilobytes. This is an estimate because RSS is computed by process, and a
   // process can host multiple workers.
   virtual uint64_t GetResidentSetKbEstimate() const = 0;
+
+  // Returns the most recently estimated private footprint of the worker, in
+  // kilobytes. This is an estimate because PMF is computed by process, and a
+  // process can host multiple workers.
+  virtual uint64_t GetPrivateFootprintKbEstimate() const = 0;
 };
 
 // Pure virtual observer interface. Derive from this if you want to be forced to

@@ -49,34 +49,22 @@ class SilentTurnSyncOnHelperDelegate : public TurnSyncOnHelper::Delegate {
       bool is_managed_account,
       base::OnceCallback<void(LoginUIService::SyncConfirmationUIClosedResult)>
           callback) override {
-    LOG(WARNING) << "crbug.com/1340791 | Unexpected Sync disabled prompt.";
     // If Sync is disabled, the `TurnSyncOnHelper` should quit earlier due to
     // `ShouldAbortBeforeShowSyncDisabledConfirmation()`.
     NOTREACHED();
   }
 
-  void ShowLoginError(const SigninUIError& error) override {
-    LOG(WARNING) << "crbug.com/1340791 | Login error: "
-                 << static_cast<int>(error.type());
-    NOTREACHED();
-  }
+  void ShowLoginError(const SigninUIError& error) override { NOTREACHED(); }
 
   void ShowMergeSyncDataConfirmation(const std::string&,
                                      const std::string&,
                                      signin::SigninChoiceCallback) override {
-    LOG(WARNING) << "crbug.com/1340791 | Unexpected data merge prompt";
     NOTREACHED();
   }
 
-  void ShowSyncSettings() override {
-    LOG(WARNING) << "crbug.com/1340791 | Unexpected Sync settings prompt";
-    NOTREACHED();
-  }
+  void ShowSyncSettings() override { NOTREACHED(); }
 
-  void SwitchToProfile(Profile*) override {
-    LOG(WARNING) << "crbug.com/1340791 | Unexpected profile switch";
-    NOTREACHED();
-  }
+  void SwitchToProfile(Profile*) override { NOTREACHED(); }
 };
 
 }  // namespace
@@ -126,7 +114,7 @@ void SilentSyncEnabler::TryEnableSyncSilentlyWithToken() {
   new TurnSyncOnHelper(
       profile_, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
       signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO,
-      signin_metrics::Reason::kForcedSigninPrimaryAccount, account_id,
+      signin_metrics::Reason::kSigninPrimaryAccount, account_id,
       TurnSyncOnHelper::SigninAbortedMode::KEEP_ACCOUNT,
       std::make_unique<SilentTurnSyncOnHelperDelegate>(), std::move(callback_));
 }

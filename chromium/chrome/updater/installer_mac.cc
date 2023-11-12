@@ -4,8 +4,8 @@
 
 #include "chrome/updater/installer.h"
 
-#include "base/callback.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/time/time.h"
@@ -20,14 +20,16 @@ AppInstallerResult RunApplicationInstaller(
     const base::FilePath& app_installer,
     const std::string& arguments,
     const absl::optional<base::FilePath>& installer_data_file,
+    bool usage_stats_enabled,
     const base::TimeDelta& timeout,
     InstallProgressCallback /*progress_callback*/) {
   VLOG(1) << "Running application install from DMG at " << app_installer;
   // InstallFromArchive() returns the exit code of the script. 0 is success and
   // anything else should be an error.
-  const int exit_code = InstallFromArchive(
-      app_installer, app_info.ecp, app_info.ap, app_info.scope,
-      app_info.version, arguments, installer_data_file, timeout);
+  const int exit_code =
+      InstallFromArchive(app_installer, app_info.ecp, app_info.ap,
+                         app_info.scope, app_info.version, arguments,
+                         installer_data_file, usage_stats_enabled, timeout);
   return exit_code == 0
              ? AppInstallerResult()
              : AppInstallerResult(kErrorApplicationInstallerFailed, exit_code);

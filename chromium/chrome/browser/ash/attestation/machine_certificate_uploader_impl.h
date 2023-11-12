@@ -8,17 +8,14 @@
 #include <string>
 #include <utility>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/attestation/machine_certificate_uploader.h"
 #include "chromeos/ash/components/dbus/attestation/interface.pb.h"
 #include "chromeos/ash/components/dbus/constants/attestation_constants.h"
+#include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-namespace policy {
-class CloudPolicyClient;
-}  // namespace policy
 
 namespace ash {
 namespace attestation {
@@ -90,9 +87,8 @@ class MachineCertificateUploaderImpl : public MachineCertificateUploader {
   // upload.
   void CheckIfUploaded(const ::attestation::GetKeyInfoReply& reply);
 
-  // Called when a certificate upload operation completes.  On success, |status|
-  // will be true.
-  void OnUploadComplete(bool status);
+  // Called when a certificate upload operation completes.
+  void OnUploadComplete(policy::CloudPolicyClient::Result result);
 
   // Marks a key as uploaded in the payload proto.
   void MarkAsUploaded(const ::attestation::GetKeyInfoReply& reply);

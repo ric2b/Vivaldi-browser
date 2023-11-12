@@ -13,10 +13,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -125,10 +125,11 @@ void GetExtensionSettingsPoliciesFromParsedJson(
     const base::Value& settings_value = entry.second;
 
     if (settings_value.is_dict()) {
-      const base::Value* installation_mode =
-          settings_value.FindKey(kExtensionSettingsInstallationModeName);
-      if (installation_mode && installation_mode->GetString() ==
-                                   kExtensionSettingsForceInstalledValue) {
+      const std::string* installation_mode =
+          settings_value.GetDict().FindString(
+              kExtensionSettingsInstallationModeName);
+      if (installation_mode &&
+          *installation_mode == kExtensionSettingsForceInstalledValue) {
         policies->emplace_back(
             extension_id, registry_key.hkey, registry_key.path,
             kExtensionSettingsRegistryEntryName, type, saved_json);

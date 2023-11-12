@@ -24,6 +24,7 @@
 #include "ui/color/color_mixer.h"
 #include "ui/color/color_provider.h"
 #include "ui/color/color_recipe.h"
+#include "ui/color/color_transform.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font.h"
@@ -210,28 +211,28 @@ bool QtUi::GetDisplayProperty(int id, int* result) const {
 }
 
 DISABLE_CFI_VCALL
-SkColor QtUi::GetFocusRingColor() const {
-  return shim_->GetColor(ColorType::kHighlightBg, ColorState::kNormal);
+void QtUi::GetFocusRingColor(SkColor* color) const {
+  *color = shim_->GetColor(ColorType::kHighlightBg, ColorState::kNormal);
 }
 
 DISABLE_CFI_VCALL
-SkColor QtUi::GetActiveSelectionBgColor() const {
-  return shim_->GetColor(ColorType::kHighlightBg, ColorState::kNormal);
+void QtUi::GetActiveSelectionBgColor(SkColor* color) const {
+  *color = shim_->GetColor(ColorType::kHighlightBg, ColorState::kNormal);
 }
 
 DISABLE_CFI_VCALL
-SkColor QtUi::GetActiveSelectionFgColor() const {
-  return shim_->GetColor(ColorType::kHighlightFg, ColorState::kNormal);
+void QtUi::GetActiveSelectionFgColor(SkColor* color) const {
+  *color = shim_->GetColor(ColorType::kHighlightFg, ColorState::kNormal);
 }
 
 DISABLE_CFI_VCALL
-SkColor QtUi::GetInactiveSelectionBgColor() const {
-  return shim_->GetColor(ColorType::kHighlightBg, ColorState::kInactive);
+void QtUi::GetInactiveSelectionBgColor(SkColor* color) const {
+  *color = shim_->GetColor(ColorType::kHighlightBg, ColorState::kInactive);
 }
 
 DISABLE_CFI_VCALL
-SkColor QtUi::GetInactiveSelectionFgColor() const {
-  return shim_->GetColor(ColorType::kHighlightFg, ColorState::kInactive);
+void QtUi::GetInactiveSelectionFgColor(SkColor* color) const {
+  *color = shim_->GetColor(ColorType::kHighlightFg, ColorState::kInactive);
 }
 
 DISABLE_CFI_VCALL
@@ -438,9 +439,6 @@ void QtUi::AddNativeColorMixer(ui::ColorProvider* provider,
       {ui::kColorNativeHeaderSeparatorBorderInactive, ColorType::kMidground,
        ColorState::kInactive},
       {ui::kColorNativeLabelForeground, ColorType::kWindowFg},
-      {ui::kColorNativeTabForegroundInactiveFrameActive, ColorType::kButtonFg},
-      {ui::kColorNativeTabForegroundInactiveFrameInactive, ColorType::kButtonFg,
-       ColorState::kInactive},
       {ui::kColorNativeTextfieldBorderUnfocused, ColorType::kMidground,
        ColorState::kInactive},
       {ui::kColorNativeToolbarBackground, ColorType::kButtonBg},
@@ -448,10 +446,19 @@ void QtUi::AddNativeColorMixer(ui::ColorProvider* provider,
   for (const auto& map : kMaps)
     mixer[map.id] = {shim_->GetColor(map.role, map.state)};
 
+  const bool use_custom_frame =
+      key.frame_type == ui::ColorProviderManager::FrameType::kChromium;
   mixer[ui::kColorFrameActive] = {
-      shim_->GetFrameColor(ColorState::kNormal, true)};
+      shim_->GetFrameColor(ColorState::kNormal, use_custom_frame)};
   mixer[ui::kColorFrameInactive] = {
-      shim_->GetFrameColor(ColorState::kInactive, true)};
+      shim_->GetFrameColor(ColorState::kInactive, use_custom_frame)};
+
+  const SkColor button_fg =
+      shim_->GetColor(ColorType::kButtonFg, ColorState::kNormal);
+  mixer[ui::kColorNativeTabForegroundInactiveFrameActive] =
+      ui::BlendForMinContrast({button_fg}, {ui::kColorFrameActive});
+  mixer[ui::kColorNativeTabForegroundInactiveFrameInactive] =
+      ui::BlendForMinContrast({button_fg}, {ui::kColorFrameInactive});
 }
 
 DISABLE_CFI_VCALL

@@ -10,7 +10,6 @@
 # win tool. The script assumes that the root build directory is the current dir
 # and the files will be written to the current directory.
 
-from __future__ import print_function
 
 import argparse
 import errno
@@ -24,6 +23,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 import gn_helpers
 
 SCRIPT_DIR = os.path.dirname(__file__)
+SDK_VERSION = '10.0.22621.0'
+
 
 def _ExtractImportantEnvironment(output_of_set):
   """Extracts environment variables required for the toolchain to run from
@@ -186,7 +187,7 @@ def _LoadToolchainEnv(cpu, toolchain_root, sdk_dir, target_store, options):
     # Explicitly specifying the SDK version to build with to avoid accidentally
     # building with a new and untested SDK. This should stay in sync with the
     # packaged toolchain in build/vs_toolchain.py.
-    args.append('10.0.20348.0')
+    args.append(SDK_VERSION)
     variables = _LoadEnvFromBat(args)
   return _ExtractImportantEnvironment(variables)
 

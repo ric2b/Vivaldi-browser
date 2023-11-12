@@ -7,8 +7,8 @@
 
 #include <memory>
 
-#include "base/callback.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/password_edit_dialog/android/password_edit_dialog_bridge.h"
 #include "chrome/browser/ui/passwords/manage_passwords_state.h"
@@ -153,6 +153,8 @@ class SaveUpdatePasswordMessageDelegate {
   PasswordEditDialogFactory password_edit_dialog_factory_;
 
   raw_ptr<content::WebContents> web_contents_ = nullptr;
+
+  // Can be the empty string, the account email, or the account full name.
   std::string account_email_;
   bool update_password_ = false;
 

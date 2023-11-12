@@ -7,9 +7,9 @@
 #include <set>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/hash/md5.h"
 #include "base/json/values_util.h"
 #include "base/lazy_instance.h"
@@ -133,7 +133,7 @@ class SelectFileDialog : public ui::SelectFileDialog::Listener {
 void WriteToFile(const base::FilePath& path, const std::string& content) {
   DCHECK(!path.empty());
 
-  base::WriteFile(path, content.c_str(), content.length());
+  base::WriteFile(path, content);
 }
 
 void AppendToFile(const base::FilePath& path, const std::string& content) {
@@ -341,7 +341,7 @@ void DevToolsFileHelper::UpgradeDraggedFileSystemPermissions(
     const ShowInfoBarCallback& show_info_bar_callback) {
   const GURL gurl(file_system_url);
   storage::FileSystemURL root_url = isolated_context()->CrackURL(
-      gurl, blink::StorageKey(url::Origin::Create(gurl)));
+      gurl, blink::StorageKey::CreateFirstParty(url::Origin::Create(gurl)));
   if (!root_url.is_valid() || !root_url.path().empty())
     return;
 

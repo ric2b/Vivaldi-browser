@@ -56,6 +56,12 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "url/gurl.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -224,9 +230,13 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   [model addItem:[self clearBrowsingDetailItem]
       toSectionWithIdentifier:SectionIdentifierPrivacyContent];
 
+  // Vivaldi: Skip safe browsing setting
+  if (!IsVivaldiRunning()) {
   // Privacy Safe Browsing item.
   [model addItem:[self safeBrowsingDetailItem]
       toSectionWithIdentifier:SectionIdentifierSafeBrowsing];
+  } // End Vivaldi
+
   [model setFooter:[self showPrivacyFooterItem]
       forSectionWithIdentifier:base::FeatureList::IsEnabled(
                                    kIOS3PIntentsInIncognito)

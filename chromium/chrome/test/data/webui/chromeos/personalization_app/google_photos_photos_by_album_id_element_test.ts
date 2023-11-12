@@ -56,6 +56,8 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
               title: 'foo',
               photoCount: 1,
               preview: {url: 'foo.com'},
+              timestamp: {internalValue: BigInt('1')},
+              isShared: false,
             };
 
             // Set values returned by |wallpaperProvider|.
@@ -122,6 +124,8 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
       // Use svg data urls so that img on-load event fires and removes the
       // placeholder attribute.
       preview: {url: createSvgDataUrl('svg-1')},
+      timestamp: {internalValue: BigInt('1')},
+      isShared: false,
     };
 
     const otherAlbum: GooglePhotosAlbum = {
@@ -129,6 +133,8 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
       title: 'bar',
       photoCount: 1,
       preview: {url: createSvgDataUrl('svg-2')},
+      timestamp: {internalValue: BigInt('2')},
+      isShared: false,
     };
 
     const photosByAlbumId: Record<string, GooglePhotosPhoto[]> = {
@@ -267,8 +273,14 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
   test('displays photo selected', async () => {
     personalizationStore.setReducersEnabled(true);
 
-    const album: GooglePhotosAlbum =
-        {id: '1', title: '', photoCount: 2, preview: {url: ''}};
+    const album: GooglePhotosAlbum = {
+      id: '1',
+      title: '',
+      photoCount: 2,
+      preview: {url: ''},
+      timestamp: {internalValue: BigInt('1')},
+      isShared: false,
+    };
 
     const photo: GooglePhotosPhoto = {
       id: '9bd1d7a3-f995-4445-be47-53c5b58ce1cb',
@@ -342,11 +354,11 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
     // Complete the pending selection.
     personalizationStore.data.wallpaper.pendingSelected = null;
     personalizationStore.data.wallpaper.currentSelected = {
-      url: photo.url,
       attribution: [],
+      description: undefined,
+      key: photo.id,
       layout: WallpaperLayout.kCenter,
       type: WallpaperType.kOnceGooglePhotos,
-      key: photo.id,
     };
     personalizationStore.notifyObservers();
     await waitAfterNextRender(googlePhotosPhotosByAlbumIdElement);
@@ -367,11 +379,11 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
     // Complete the pending selection.
     personalizationStore.data.wallpaper.pendingSelected = null;
     personalizationStore.data.wallpaper.currentSelected = {
-      url: anotherPhoto.url,
       attribution: [],
+      description: undefined,
+      key: anotherPhoto.id,
       layout: WallpaperLayout.kCenter,
       type: WallpaperType.kOnceGooglePhotos,
-      key: anotherPhoto.id,
     };
     personalizationStore.notifyObservers();
     await waitAfterNextRender(googlePhotosPhotosByAlbumIdElement);
@@ -392,11 +404,11 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
     // Complete the pending selection.
     personalizationStore.data.wallpaper.pendingSelected = null;
     personalizationStore.data.wallpaper.currentSelected = {
-      url: yetAnotherPhoto.url,
       attribution: [],
+      description: undefined,
+      key: yetAnotherPhoto.dedupKey!,
       layout: WallpaperLayout.kCenter,
       type: WallpaperType.kOnceGooglePhotos,
-      key: yetAnotherPhoto.dedupKey,
     };
     personalizationStore.notifyObservers();
     await waitAfterNextRender(googlePhotosPhotosByAlbumIdElement);
@@ -417,11 +429,11 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
     // Complete the pending selection.
     personalizationStore.data.wallpaper.pendingSelected = null;
     personalizationStore.data.wallpaper.currentSelected = {
-      url: {url: 'foo://'},
       attribution: [],
+      description: undefined,
+      key: '//foo',
       layout: WallpaperLayout.kCenter,
       type: WallpaperType.kCustomized,
-      key: '//foo',
     };
     personalizationStore.notifyObservers();
     await waitAfterNextRender(googlePhotosPhotosByAlbumIdElement);
@@ -434,8 +446,14 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
   test('displays placeholders until photos are present', async () => {
     // Prepare Google Photos data.
     const photosCount = 5;
-    const album: GooglePhotosAlbum =
-        {id: '1', title: '', photoCount: photosCount, preview: {url: ''}};
+    const album: GooglePhotosAlbum = {
+      id: '1',
+      title: '',
+      photoCount: photosCount,
+      preview: {url: ''},
+      timestamp: {internalValue: BigInt('1')},
+      isShared: false,
+    };
     const photos: GooglePhotosPhoto[] = Array.from(
         {length: photosCount}, (_, i) => ({
                                  id: `id-${i}`,
@@ -527,8 +545,14 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
     personalizationStore.setReducersEnabled(true);
 
     const photosCount = 200;
-    const album: GooglePhotosAlbum =
-        {id: '1', title: '', photoCount: photosCount, preview: {url: ''}};
+    const album: GooglePhotosAlbum = {
+      id: '1',
+      title: '',
+      photoCount: photosCount,
+      preview: {url: ''},
+      timestamp: {internalValue: BigInt('1')},
+      isShared: false,
+    };
 
     // Set albums returned by |wallpaperProvider|.
     wallpaperProvider.setGooglePhotosAlbums([album]);
@@ -633,8 +657,14 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
   });
 
   test('reattempts failed photos load on show', async () => {
-    const album = new GooglePhotosAlbum();
-    album.id = '1';
+    const album: GooglePhotosAlbum = {
+      id: '1',
+      title: '',
+      photoCount: 0,
+      isShared: false,
+      preview: {url: ''},
+      timestamp: {internalValue: BigInt(0)},
+    };
 
     // Initialize Google Photos data in the |personalizationStore| such as would
     // occur if photos for an album were previously fetched but failed to load.
@@ -677,6 +707,8 @@ suite('GooglePhotosPhotosByAlbumIdTest', function() {
       title: 'foo',
       photoCount: 1,
       preview: {url: 'foo.com'},
+      timestamp: {internalValue: BigInt('1')},
+      isShared: false,
     };
 
     const photo: GooglePhotosPhoto = {

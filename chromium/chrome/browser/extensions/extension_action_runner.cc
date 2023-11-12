@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
@@ -43,6 +43,7 @@
 #include "extensions/browser/permissions_manager.h"
 #include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_features.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest.h"
@@ -209,6 +210,13 @@ void ExtensionActionRunner::HandleUserSiteSettingModified(
     const base::flat_set<ToolbarActionsModel::ActionId>& action_ids,
     const url::Origin& origin,
     PermissionsManager::UserSiteSetting new_site_settings) {
+  // Granting access to all extensions is only allowed iff feature is enabled.
+  DCHECK(
+      new_site_settings !=
+          PermissionsManager::UserSiteSetting::kGrantAllExtensions ||
+      base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsMenuAccessControlWithPermittedSites));
+
   auto* registry = ExtensionRegistry::Get(browser_context_);
   std::vector<const Extension*> extensions;
   extensions.reserve(action_ids.size());

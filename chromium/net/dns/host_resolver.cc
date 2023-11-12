@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
@@ -317,7 +317,7 @@ HostCache* HostResolver::GetHostCache() {
 }
 
 base::Value HostResolver::GetDnsConfigAsValue() const {
-  return base::Value(base::Value::Type::DICTIONARY);
+  return base::Value(base::Value::Type::DICT);
 }
 
 void HostResolver::SetRequestContext(URLRequestContext* request_context) {

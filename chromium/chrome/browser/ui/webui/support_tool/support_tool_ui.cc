@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/ranges/algorithm.h"
 #include "base/time/time.h"
@@ -23,15 +24,17 @@
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/support_tool/data_collection_module.pb.h"
 #include "chrome/browser/support_tool/data_collector.h"
+#include "chrome/browser/support_tool/screenshot_data_collector.h"
 #include "chrome/browser/support_tool/support_tool_handler.h"
 #include "chrome/browser/support_tool/support_tool_util.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/webui/support_tool/support_tool_ui_utils.h"
 #include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/support_tool_resources.h"
 #include "chrome/grit/support_tool_resources_map.h"
-#include "components/feedback/pii_types.h"
+#include "components/feedback/redaction_tool/pii_types.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "content/public/browser/web_contents.h"
@@ -46,11 +49,13 @@
 
 namespace {
 
-content::WebUIDataSource* CreateSupportToolHTMLSource(const GURL& url) {
-  content::WebUIDataSource* source =
-      content::WebUIDataSource::Create(chrome::kChromeUISupportToolHost);
+void CreateAndAddSupportToolHTMLSource(Profile* profile, const GURL& url) {
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      profile, chrome::kChromeUISupportToolHost);
 
   source->AddString("caseId", GetSupportCaseIDFromURL(url));
+  source->AddBoolean("enableScreenshot", base::FeatureList::IsEnabled(
+                                             features::kSupportToolScreenshot));
 
   webui::SetupWebUIDataSource(
       source, base::make_span(kSupportToolResources, kSupportToolResourcesSize),
@@ -58,8 +63,6 @@ content::WebUIDataSource* CreateSupportToolHTMLSource(const GURL& url) {
 
   source->AddResourcePath("url-generator",
                           IDR_SUPPORT_TOOL_URL_GENERATOR_CONTAINER_HTML);
-
-  return source;
 }
 
 }  // namespace
@@ -91,6 +94,8 @@ class SupportToolMessageHandler : public content::WebUIMessageHandler,
 
   void HandleGetAllDataCollectors(const base::Value::List& args);
 
+  void HandleTakeScreenshot(const base::Value::List& args);
+
   void HandleStartDataCollection(const base::Value::List& args);
 
   void HandleCancelDataCollection(const base::Value::List& args);
@@ -111,12 +116,16 @@ class SupportToolMessageHandler : public content::WebUIMessageHandler,
  private:
   base::Value::List GetAccountsList();
 
+  void OnScreenshotTaken(absl::optional<SupportToolError> error);
+
   void OnDataCollectionDone(const PIIMap& detected_pii,
                             std::set<SupportToolError> errors);
 
   void OnDataExportDone(base::FilePath path, std::set<SupportToolError> errors);
 
-  std::set<feedback::PIIType> selected_pii_to_keep_;
+  bool include_screenshot_ = false;
+  std::unique_ptr<ScreenshotDataCollector> screenshot_data_collector_;
+  std::set<redaction::PIIType> selected_pii_to_keep_;
   base::FilePath data_path_;
   std::unique_ptr<SupportToolHandler> handler_;
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
@@ -148,6 +157,10 @@ void SupportToolMessageHandler::RegisterMessages() {
       base::BindRepeating(&SupportToolMessageHandler::HandleStartDataCollection,
                           weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
+      "takeScreenshot",
+      base::BindRepeating(&SupportToolMessageHandler::HandleTakeScreenshot,
+                          weak_ptr_factory_.GetWeakPtr()));
+  web_ui()->RegisterMessageCallback(
       "cancelDataCollection",
       base::BindRepeating(
           &SupportToolMessageHandler::HandleCancelDataCollection,
@@ -162,7 +175,7 @@ void SupportToolMessageHandler::RegisterMessages() {
           &SupportToolMessageHandler::HandleShowExportedDataInFolder,
           weak_ptr_factory_.GetWeakPtr()));
   web_ui()->RegisterMessageCallback(
-      "generateCustomizedURL",
+      "generateCustomizedUrl",
       base::BindRepeating(
           &SupportToolMessageHandler::HandleGenerateCustomizedURL,
           weak_ptr_factory_.GetWeakPtr()));
@@ -172,10 +185,11 @@ base::Value::List SupportToolMessageHandler::GetAccountsList() {
   Profile* profile = Profile::FromWebUI(web_ui());
   base::Value::List account_list;
 
-  // Guest mode does not have a primary account (or an IdentityManager).
-  if (profile->IsGuestSession())
+  // Guest session and incognito mode do not have a primary account (or an
+  // IdentityManager).
+  if (profile->IsGuestSession() || profile->IsIncognitoProfile()) {
     return account_list;
-
+  }
   for (const auto& account : signin_ui_util::GetOrderedAccountsForDisplay(
            profile, /*restrict_to_accounts_eligible_for_sync=*/false)) {
     if (!account.IsEmpty())
@@ -215,17 +229,46 @@ void SupportToolMessageHandler::HandleGetAllDataCollectors(
   ResolveJavascriptCallback(callback_id, GetAllDataCollectorItems());
 }
 
+void SupportToolMessageHandler::HandleTakeScreenshot(
+    const base::Value::List& args) {
+  screenshot_data_collector_ = std::make_unique<ScreenshotDataCollector>();
+  screenshot_data_collector_->CollectDataAndDetectPII(
+      base::BindOnce(&SupportToolMessageHandler::OnScreenshotTaken,
+                     weak_ptr_factory_.GetWeakPtr()),
+      /*task_runner_for_redaction_tool=*/nullptr,
+      /*redaction_tool_container=*/nullptr);
+}
+
+void SupportToolMessageHandler::OnScreenshotTaken(
+    absl::optional<SupportToolError> error) {
+  if (error) {
+    LOG(ERROR) << error.value().error_message;
+  }
+  AllowJavascript();
+  FireWebUIListener("screenshot-received",
+                    screenshot_data_collector_->GetScreenshotBase64());
+}
+
 // Starts data collection with the issue details and selected set of data
 // collectors that are sent from UI. Returns the result to UI in the format UI
 // accepts.
 void SupportToolMessageHandler::HandleStartDataCollection(
     const base::Value::List& args) {
-  CHECK_EQ(3U, args.size());
+  CHECK_EQ(4U, args.size());
   const base::Value& callback_id = args[0];
   const base::Value::Dict* issue_details = args[1].GetIfDict();
   DCHECK(issue_details);
   const base::Value::List* data_collectors = args[2].GetIfList();
   DCHECK(data_collectors);
+  const std::string* editedScreenshotBase64 = args[3].GetIfString();
+  DCHECK(editedScreenshotBase64);
+  if (*editedScreenshotBase64 != "") {
+    include_screenshot_ = true;
+    screenshot_data_collector_->SetScreenshotBase64(
+        std::move(*editedScreenshotBase64));
+  } else {
+    include_screenshot_ = false;
+  }
   std::set<support_tool::DataCollectorType> included_data_collectors =
       GetIncludedDataCollectorTypes(data_collectors);
   // Send error message to UI if there's no selected data collectors to include.
@@ -291,6 +334,7 @@ void SupportToolMessageHandler::HandleStartDataExport(
   DownloadPrefs* download_prefs =
       DownloadPrefs::FromBrowserContext(web_contents->GetBrowserContext());
   base::FilePath suggested_path = download_prefs->SaveFilePath();
+  ui::SelectFileDialog::FileTypeInfo file_types;
 
   select_file_dialog_->SelectFile(
       ui::SelectFileDialog::SELECT_SAVEAS_FILE,
@@ -298,7 +342,7 @@ void SupportToolMessageHandler::HandleStartDataExport(
       /*default_path=*/
       GetDefaultFileToExport(suggested_path, handler_->GetCaseId(),
                              handler_->GetDataCollectionTimestamp()),
-      /*file_types=*/nullptr,
+      /*file_types=*/&file_types,
       /*file_type_index=*/0,
       /*default_extension=*/base::FilePath::StringType(), owning_window,
       /*params=*/nullptr);
@@ -309,6 +353,9 @@ void SupportToolMessageHandler::FileSelected(const base::FilePath& path,
                                              void* params) {
   FireWebUIListener("support-data-export-started");
   select_file_dialog_.reset();
+  if (include_screenshot_) {
+    this->handler_->AddDataCollector(std::move(screenshot_data_collector_));
+  }
   this->handler_->ExportCollectedData(
       std::move(selected_pii_to_keep_), path,
       base::BindOnce(&SupportToolMessageHandler::OnDataExportDone,
@@ -376,9 +423,8 @@ SupportToolUI::SupportToolUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   web_ui->AddMessageHandler(std::make_unique<SupportToolMessageHandler>());
 
   // Set up the chrome://support-tool/ source.
-  Profile* profile = Profile::FromWebUI(web_ui);
-  content::WebUIDataSource::Add(
-      profile, CreateSupportToolHTMLSource(web_ui->GetWebContents()->GetURL()));
+  CreateAndAddSupportToolHTMLSource(Profile::FromWebUI(web_ui),
+                                    web_ui->GetWebContents()->GetURL());
 }
 
 SupportToolUI::~SupportToolUI() = default;

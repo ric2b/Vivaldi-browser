@@ -4,8 +4,8 @@
 
 #include "services/device/generic_sensor/platform_sensor_fusion.h"
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/notreached.h"
@@ -42,10 +42,7 @@ class PlatformSensorFusion::Factory : public base::RefCounted<Factory> {
         result_callback_(std::move(callback)),
         reading_buffer_(reading_buffer),
         provider_(provider) {
-    const auto& types = fusion_algorithm_->source_types();
-    DCHECK(!types.empty());
-    // Make sure there are no dups.
-    DCHECK(base::ranges::adjacent_find(types) == types.end());
+    DCHECK(!fusion_algorithm_->source_types().empty());
     DCHECK(result_callback_);
     DCHECK(reading_buffer_);
     DCHECK(provider_);

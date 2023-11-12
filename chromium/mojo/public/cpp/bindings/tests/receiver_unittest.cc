@@ -5,9 +5,9 @@
 #include <stdint.h>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -777,11 +777,11 @@ using ReceiverSerializationTest = ReceiverTest;
 
 TEST_P(ReceiverSerializationTest, NullGenericPendingReceiver) {
   Remote<mojom::TestGenericBinder> remote;
+  GenericPendingReceiver receiver;
   TestGenericBinderImpl binder(remote.BindNewPipeAndPassReceiver());
 
   // Bind a null, nullable receiver.
   remote->BindOptionalReceiver(GenericPendingReceiver());
-  GenericPendingReceiver receiver;
   binder.WaitForNextReceiver(&receiver);
   EXPECT_FALSE(receiver.is_valid());
 
@@ -828,11 +828,11 @@ TEST_P(ReceiverSerializationTest, NullGenericPendingReceiver) {
 
 TEST_P(ReceiverSerializationTest, NullGenericPendingAssociatedReceiver) {
   Remote<mojom::TestGenericBinder> remote;
+  GenericPendingAssociatedReceiver receiver;
   TestGenericBinderImpl binder(remote.BindNewPipeAndPassReceiver());
 
   // Bind a null, nullable associated receiver.
   remote->BindOptionalAssociatedReceiver(GenericPendingAssociatedReceiver());
-  GenericPendingAssociatedReceiver receiver;
   binder.WaitForNextAssociatedReceiver(&receiver);
   EXPECT_FALSE(receiver.is_valid());
 

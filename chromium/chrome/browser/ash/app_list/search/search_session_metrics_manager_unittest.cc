@@ -20,8 +20,9 @@ namespace {
 
 using Type = ash::SearchResultType;
 
-constexpr char HomeButtonHistogram[] = "Apps.AppList.Search.Session.HomeButton";
-constexpr char SearchKeyHistogram[] = "Apps.AppList.Search.Session.SearchKey";
+constexpr char HomeButtonHistogram[] =
+    "Apps.AppList.Search.Session2.HomeButton";
+constexpr char SearchKeyHistogram[] = "Apps.AppList.Search.Session2.SearchKey";
 
 }  // namespace
 
@@ -65,7 +66,7 @@ TEST_F(SearchSessionMetricsManagerTest, AnswerCardImpression) {
   results.emplace_back(CreateFakeResult(Type::KEYBOARD_SHORTCUT, "result_id"));
 
   metrics_manager()->OnSearchSessionStarted();
-  metrics_manager_->OnImpression(location, results, query);
+  metrics_manager_->OnSeen(location, results, query);
 
   // No metrics should be recorded until the search session ends.
   histogram_tester()->ExpectTotalCount(HomeButtonHistogram, 0);
@@ -73,11 +74,11 @@ TEST_F(SearchSessionMetricsManagerTest, AnswerCardImpression) {
 
   // One answer card impression should be recorded for the kSearchKey show
   // source.
-  metrics_manager()->OnSearchSessionEnded();
+  metrics_manager()->OnSearchSessionEnded(query);
   histogram_tester()->ExpectTotalCount(HomeButtonHistogram, 0);
   histogram_tester()->ExpectTotalCount(SearchKeyHistogram, 1);
   histogram_tester()->ExpectUniqueSample(
-      SearchKeyHistogram, ash::SearchSessionResult::kAnswerCardImpression, 1);
+      SearchKeyHistogram, ash::SearchSessionConclusion::kAnswerCardSeen, 1);
 }
 
 TEST_F(SearchSessionMetricsManagerTest, LaunchResult) {
@@ -98,18 +99,22 @@ TEST_F(SearchSessionMetricsManagerTest, LaunchResult) {
   results.emplace_back(launched_result);
 
   metrics_manager()->OnSearchSessionStarted();
-  metrics_manager_->OnImpression(location, results, query);
+  metrics_manager_->OnSeen(location, results, query);
 
   // No metrics should be recorded until the search session ends.
   histogram_tester()->ExpectTotalCount(HomeButtonHistogram, 0);
   histogram_tester()->ExpectTotalCount(SearchKeyHistogram, 0);
 
-  // No metrics should be recorded until the search session ends.
   metrics_manager()->OnLaunch(location, launched_result, results, query);
+  // No metrics should be recorded until the search session ends.
+  histogram_tester()->ExpectTotalCount(HomeButtonHistogram, 0);
+  histogram_tester()->ExpectTotalCount(SearchKeyHistogram, 0);
+
+  metrics_manager()->OnSearchSessionEnded(query);
   histogram_tester()->ExpectTotalCount(HomeButtonHistogram, 0);
   histogram_tester()->ExpectTotalCount(SearchKeyHistogram, 1);
-  histogram_tester()->ExpectUniqueSample(SearchKeyHistogram,
-                                         ash::SearchSessionResult::kLaunch, 1);
+  histogram_tester()->ExpectUniqueSample(
+      SearchKeyHistogram, ash::SearchSessionConclusion::kLaunch, 1);
 }
 
 TEST_F(SearchSessionMetricsManagerTest, AbandonResult) {
@@ -123,13 +128,15 @@ TEST_F(SearchSessionMetricsManagerTest, AbandonResult) {
   results.emplace_back(CreateFakeResult(Type::ANSWER_CARD, "result_id"));
   results.emplace_back(CreateFakeResult(Type::KEYBOARD_SHORTCUT, "result_id"));
 
+  const std::u16string query = u"query";
+
   metrics_manager()->OnSearchSessionStarted();
-  metrics_manager()->OnSearchSessionEnded();
+  metrics_manager()->OnSearchSessionEnded(query);
 
   histogram_tester()->ExpectTotalCount(HomeButtonHistogram, 0);
   histogram_tester()->ExpectTotalCount(SearchKeyHistogram, 1);
-  histogram_tester()->ExpectUniqueSample(SearchKeyHistogram,
-                                         ash::SearchSessionResult::kQuit, 1);
+  histogram_tester()->ExpectUniqueSample(
+      SearchKeyHistogram, ash::SearchSessionConclusion::kQuit, 1);
 }
 
 }  // namespace app_list::test

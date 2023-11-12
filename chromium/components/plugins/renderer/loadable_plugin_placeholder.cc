@@ -6,13 +6,12 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/string_escape.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -88,12 +87,6 @@ void LoadablePluginPlaceholder::ReplacePlugin(blink::WebPlugin* new_plugin) {
   plugin()->Destroy();
 }
 
-void LoadablePluginPlaceholder::SetMessage(const std::u16string& message) {
-  message_ = message;
-  if (finished_loading_)
-    UpdateMessage();
-}
-
 void LoadablePluginPlaceholder::UpdateMessage() {
   if (!plugin())
     return;
@@ -164,10 +157,6 @@ const content::WebPluginInfo& LoadablePluginPlaceholder::GetPluginInfo() const {
 
 void LoadablePluginPlaceholder::SetIdentifier(const std::string& identifier) {
   identifier_ = identifier;
-}
-
-const std::string& LoadablePluginPlaceholder::GetIdentifier() const {
-  return identifier_;
 }
 
 bool LoadablePluginPlaceholder::LoadingBlocked() const {

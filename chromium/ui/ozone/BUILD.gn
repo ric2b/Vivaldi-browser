@@ -155,13 +155,14 @@ component("ozone_base") {
   }
 
   if (is_fuchsia) {
-    public_deps += [ "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.images" ]
+    public_deps += [
+      "//third_party/fuchsia-sdk/sdk/fidl/fuchsia.images:fuchsia.images_hlcpp",
+    ]
   }
 
   visibility += [
     # Everyone should depend on //ui/ozone instead except a handful of
     # things that would otherwise create a cycle.
-    "//chromeos/ash/components/system",
     "//ui/base/ime/ash/*",
     "//ui/events/ozone/*",
     "//ui/ozone/common/*",
@@ -176,8 +177,6 @@ component("ozone_base") {
 
 source_set("platform") {
   sources = [
-    "common/base_keyboard_hook.cc",
-    "common/base_keyboard_hook.h",
     "common/stub_client_native_pixmap_factory.cc",
     "common/stub_client_native_pixmap_factory.h",
     "platform_constructor_list.h",
@@ -244,6 +243,7 @@ source_set("ozone_switches") {
   visibility += [
     "//chrome/test:browser_tests_runner",
     "//media/mojo/services",
+    "//ui/display:display_unittests",
   ]
 }
 
@@ -419,6 +419,11 @@ test("ozone_unittests") {
   assert_no_deps = [ "//ui/ozone" ]
 
   data_deps = [ "//testing/buildbot/filters:ozone_unittests_filters" ]
+
+  if (is_fuchsia) {
+    additional_manifest_fragments =
+        [ "//build/config/fuchsia/test/test_ui_stack.shard.test-cml" ]
+  }
 }
 
 # X11 backend has its own test suite only built when we are using the x11

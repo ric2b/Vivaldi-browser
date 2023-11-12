@@ -42,7 +42,7 @@ const char kTestEuiccPath[] = "/org/chromium/Hermes/Euicc/0";
 const char kTestEuiccPath2[] = "/org/chromium/Hermes/Euicc/1";
 const char kTestESimProfilePath[] =
     "/org/chromium/Hermes/Euicc/1/Profile/1000000000000000002";
-const char kTesServicePath[] = "/service/1";
+const char kTestServicePath[] = "/service/cellular102";
 const char kTestEid[] = "12345678901234567890123456789012";
 const char kTestEid2[] = "12345678901234567890123456789000";
 const char kCellularGuid[] = "cellular_guid";
@@ -59,7 +59,7 @@ void CheckShillConfiguration(bool is_installed) {
   std::string service_path =
       ShillServiceClient::Get()->GetTestInterface()->FindServiceMatchingGUID(
           kCellularGuid);
-  const base::Value* properties =
+  const base::Value::Dict* properties =
       ShillServiceClient::Get()->GetTestInterface()->GetServiceProperties(
           service_path);
 
@@ -67,13 +67,13 @@ void CheckShillConfiguration(bool is_installed) {
     EXPECT_EQ(properties, nullptr);
     return;
   }
-  const std::string* guid = properties->FindStringKey(shill::kGuidProperty);
+  const std::string* guid = properties->FindString(shill::kGuidProperty);
   EXPECT_EQ(kCellularGuid, *guid);
   // UIData should not be empty if cellular service is configured.
   const std::string* ui_data_value =
-      properties->FindStringKey(shill::kUIDataProperty);
+      properties->FindString(shill::kUIDataProperty);
   EXPECT_NE(*ui_data_value, std::string());
-  const std::string* iccid = properties->FindStringKey(shill::kIccidProperty);
+  const std::string* iccid = properties->FindString(shill::kIccidProperty);
   EXPECT_EQ(kICCID, *iccid);
 }
 
@@ -177,7 +177,7 @@ class CellularPolicyHandlerTest : public testing::Test {
         dbus::ObjectPath(kTestEuiccPath), kICCID, /*name=*/std::string(),
         /*nickname=*/std::string(),
         /*service_provider=*/std::string(), /*activation_code=*/std::string(),
-        kTesServicePath, hermes::profile::State::kInactive,
+        kTestServicePath, hermes::profile::State::kInactive,
         hermes::profile::ProfileClass::kOperational,
         HermesEuiccClient::TestInterface::AddCarrierProfileBehavior::
             kAddProfileWithoutService);
@@ -205,19 +205,26 @@ class CellularPolicyHandlerTest : public testing::Test {
 
   void InstallESimPolicy(const std::string& onc_json,
                          const std::string& activation_code,
-                         bool expect_install_success) {
-    base::Value policy = chromeos::onc::ReadDictionaryFromJson(onc_json);
-    cellular_policy_handler_->InstallESim(activation_code, policy);
+                         bool expect_install_success,
+                         bool auto_connect = false) {
+    absl::optional<base::Value::Dict> policy =
+        chromeos::onc::ReadDictionaryFromJson(onc_json);
+    ASSERT_TRUE(policy.has_value());
+    cellular_policy_handler_->InstallESim(activation_code, *policy);
     FastForwardProfileRefreshDelay();
     base::RunLoop().RunUntilIdle();
 
-    if (expect_install_success) {
+    if (!expect_install_success) {
+      EXPECT_LE(0u, network_connection_handler_->connect_calls().size());
+      return;
+    }
+    FastForwardAutoConnectWaiting(auto_connect);
+    base::RunLoop().RunUntilIdle();
+    if (!auto_connect) {
       EXPECT_LE(1u, network_connection_handler_->connect_calls().size());
       network_connection_handler_->connect_calls()
           .back()
           .InvokeSuccessCallback();
-    } else {
-      EXPECT_LE(0u, network_connection_handler_->connect_calls().size());
     }
     base::RunLoop().RunUntilIdle();
   }
@@ -239,6 +246,19 @@ class CellularPolicyHandlerTest : public testing::Test {
     // Connect can result in two profile refresh calls before and after
     // enabling profile. Fast forward by delay after refresh.
     FastForwardBy(2 * kProfileRefreshCallbackDelay);
+  }
+
+  void FastForwardAutoConnectWaiting(bool auto_connect) {
+    if (auto_connect) {
+      task_environment_.FastForwardBy(base::Seconds(10));
+      ShillServiceClient::Get()->GetTestInterface()->SetServiceProperty(
+          kTestServicePath, shill::kStateProperty,
+          base::Value(shill::kStateOnline));
+      return;
+    }
+
+    task_environment_.FastForwardBy(
+        CellularConnectionHandler::kWaitingForAutoConnectTimeout);
   }
 
   void FastForwardBy(base::TimeDelta delay) {
@@ -279,7 +299,8 @@ TEST_F(CellularPolicyHandlerTest, InstallProfileSuccess) {
                     HermesEuiccClient::Get()
                         ->GetTestInterface()
                         ->GenerateFakeActivationCode(),
-                    /*expect_install_success=*/true);
+                    /*expect_install_success=*/true,
+                    /*auto_connect=*/true);
   CheckShillConfiguration(/*is_installed=*/true);
   CheckIccidSmdpPairInPref(/*is_installed=*/true);
 
@@ -318,6 +339,7 @@ TEST_F(CellularPolicyHandlerTest, InstallWaitForDeviceState) {
   ShillDeviceClient::Get()->GetTestInterface()->AddDevice(
       "/device/cellular1", shill::kTypeCellular, "TestCellular");
   FastForwardProfileRefreshDelay();
+  FastForwardAutoConnectWaiting(/*auto_connect=*/false);
   base::RunLoop().RunUntilIdle();
   CheckShillConfiguration(/*is_installed=*/true);
 }
@@ -338,6 +360,7 @@ TEST_F(CellularPolicyHandlerTest, InstallWaitForEuicc) {
   CheckShillConfiguration(/*is_installed=*/false);
   SetupEuicc();
   FastForwardProfileRefreshDelay();
+  FastForwardAutoConnectWaiting(/*auto_connect=*/false);
   base::RunLoop().RunUntilIdle();
   CheckShillConfiguration(/*is_installed=*/true);
   CheckIccidSmdpPairInPref(/*is_installed=*/true);

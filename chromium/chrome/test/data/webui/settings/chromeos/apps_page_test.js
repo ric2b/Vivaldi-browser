@@ -4,18 +4,17 @@
 
 import 'chrome://os-settings/chromeos/os_settings.js';
 
-import {AndroidAppsBrowserProxyImpl, appNotificationHandlerMojomWebui, createBoolPermission, Router, routes, routesMojomWebui, setAppNotificationProviderForTesting} from 'chrome://os-settings/chromeos/os_settings.js';
-import {Permission} from 'chrome://resources/cr_components/app_management/app_management.mojom-webui.js';
+import {AndroidAppsBrowserProxyImpl, appNotificationHandlerMojom, createBoolPermission, Router, routes, routesMojomWebui, setAppNotificationProviderForTesting} from 'chrome://os-settings/chromeos/os_settings.js';
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
-import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {getDeepActiveElement} from 'chrome://resources/ash/common/util.js';
+import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {flushTasks, waitAfterNextRender} from 'chrome://webui-test/polymer_test_util.js';
 
 import {TestAndroidAppsBrowserProxy} from './test_android_apps_browser_proxy.js';
 
 const {App, AppNotificationsObserverRemote, Readiness} =
-    appNotificationHandlerMojomWebui;
+    appNotificationHandlerMojom;
 
 /** @type {?OsSettingsAppsPageElement} */
 let appsPage = null;

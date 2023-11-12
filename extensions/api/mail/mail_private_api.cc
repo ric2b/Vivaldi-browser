@@ -203,27 +203,38 @@ base::FilePath GetSavePath(base::FilePath file_path,
 bool Save(base::FilePath file_path,
           std::vector<base::FilePath::StringType> string_paths,
           base::FilePath::StringType file_name,
-          std::string data) {
+          std::string data,
+          bool append) {
   file_path = GetSavePath(file_path, string_paths, file_name);
   if (!file_path.IsAbsolute()) {
     return false;
   }
 
-  int size = data.size();
-  int wrote = base::WriteFile(file_path, data.data(), size);
-  return size == wrote;
+  // AppendToFile returns true if all data was written, whereas WriteToFile
+  // returns number of bytes and -1 on failure.
+  if (append) {
+    return base::AppendToFile(file_path, data.data());
+  } else {
+    int size = data.size();
+    int wrote = base::WriteFile(file_path, data.data(), size);
+    return size == wrote;
+  }
 }
 
 bool SaveBuffer(base::FilePath file_path,
                 std::vector<base::FilePath::StringType> string_paths,
                 base::FilePath::StringType file_name,
-                const std::vector<uint8_t>& data) {
+                const std::vector<uint8_t>& data,
+                bool append) {
   file_path = GetSavePath(file_path, string_paths, file_name);
   if (!file_path.IsAbsolute()) {
     return false;
   }
-  return base::WriteFile(file_path, reinterpret_cast<const char*>(data.data()),
-                         data.size()) != -1;
+  if (append) {
+    return base::AppendToFile(file_path, data);
+  } else {
+    return base::WriteFile(file_path, data);
+  }
 }
 
 GetDirectoryResult CreateDirectory(base::FilePath file_path,
@@ -261,14 +272,17 @@ MailPrivateWriteTextToMessageFileFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath file_path = profile->GetPath();
 
+  bool append = params->append ? *(params->append) : false;
+
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&Save, file_path, string_paths, file_name, data),
+      base::BindOnce(&Save, file_path, string_paths, file_name, data, append),
       base::BindOnce(&MailPrivateWriteTextToMessageFileFunction::OnFinished,
                      this));
 
   return RespondLater();
 }
+
 void MailPrivateWriteTextToMessageFileFunction::OnFinished(bool result) {
   if (result == true) {
     Respond(NoArguments());
@@ -292,10 +306,12 @@ MailPrivateWriteBufferToMessageFileFunction::Run() {
   Profile* profile = Profile::FromBrowserContext(browser_context());
   base::FilePath file_path = profile->GetPath();
 
+  bool append = params->append ? *(params->append) : false;
+
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::BindOnce(&SaveBuffer, file_path, string_paths, file_name,
-                     params->raw),
+                     params->raw, append),
       base::BindOnce(&MailPrivateWriteBufferToMessageFileFunction::OnFinished,
                      this));
 

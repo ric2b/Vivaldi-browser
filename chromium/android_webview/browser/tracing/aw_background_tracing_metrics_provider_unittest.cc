@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
@@ -61,6 +61,10 @@ class AwBackgroundTracingMetricsProviderTest : public testing::Test {
         content::BackgroundTracingManager::GetInstance().SetActiveScenario(
             std::move(config),
             content::BackgroundTracingManager::ANONYMIZE_DATA));
+  }
+
+  void TearDown() override {
+    content::BackgroundTracingManager::GetInstance().AbortScenarioForTesting();
   }
 
  private:

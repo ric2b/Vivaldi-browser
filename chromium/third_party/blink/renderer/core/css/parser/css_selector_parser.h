@@ -70,6 +70,7 @@ class CORE_EXPORT CSSSelectorParser {
       HeapVector<CSSSelector>&);
 
   static bool ConsumeANPlusB(CSSParserTokenRange&, std::pair<int, int>&);
+  CSSSelectorList* ConsumeNthChildOfSelectors(CSSParserTokenRange&);
 
   static bool SupportsComplexSelector(CSSParserTokenRange,
                                       const CSSParserContext*);
@@ -85,14 +86,14 @@ class CORE_EXPORT CSSSelectorParser {
   // https://drafts.csswg.org/css-cascade-6/#typedef-scope-start
   // https://drafts.csswg.org/css-cascade-6/#typedef-scope-end
   //
-  // Note that <scope-start> / <scope-end> are *forgiving* selector lists.
-  // Therefore empty lists, represented by !CSSSelectorList::IsValid(), are
-  // allowed.
-  //
-  // Parse errors are signalled by returning nullptr.
-  static CSSSelectorList* ParseScopeBoundary(CSSParserTokenRange,
-                                             const CSSParserContext*,
-                                             StyleSheetContents*);
+  // Parse errors are signalled by returning absl::nullopt. Empty spans are
+  // normal and expected, since <scope-start> / <scope-end> are forgiving
+  // selector lists.
+  static absl::optional<base::span<CSSSelector>> ParseScopeBoundary(
+      CSSParserTokenRange,
+      const CSSParserContext*,
+      StyleSheetContents*,
+      HeapVector<CSSSelector>&);
 
  private:
   CSSSelectorParser(const CSSParserContext*,
@@ -123,17 +124,22 @@ class CORE_EXPORT CSSSelectorParser {
   CSSSelectorList* ConsumeNestedSelectorList(CSSParserTokenRange&);
   CSSSelectorList* ConsumeForgivingNestedSelectorList(CSSParserTokenRange&);
   // https://drafts.csswg.org/selectors/#typedef-forgiving-selector-list
-  CSSSelectorList* ConsumeForgivingComplexSelectorList(CSSParserTokenRange&);
+  absl::optional<base::span<CSSSelector>> ConsumeForgivingComplexSelectorList(
+      CSSParserTokenRange&);
   CSSSelectorList* ConsumeForgivingCompoundSelectorList(CSSParserTokenRange&);
   // https://drafts.csswg.org/selectors/#typedef-relative-selector-list
   CSSSelectorList* ConsumeForgivingRelativeSelectorList(CSSParserTokenRange&);
   CSSSelectorList* ConsumeRelativeSelectorList(CSSParserTokenRange&);
+  void AddPlaceholderParentSelectorIfNeeded(
+      const CSSParserTokenRange& argument);
 
   base::span<CSSSelector> ConsumeNestedRelativeSelector(
       CSSParserTokenRange& range);
   base::span<CSSSelector> ConsumeRelativeSelector(CSSParserTokenRange&);
-  base::span<CSSSelector> ConsumeComplexSelector(CSSParserTokenRange& range,
-                                                 bool in_nested_style_rule);
+  base::span<CSSSelector> ConsumeComplexSelector(
+      CSSParserTokenRange& range,
+      bool in_nested_style_rule,
+      bool first_in_complex_selector_list);
 
   // ConsumePartialComplexSelector() method provides the common logic of
   // consuming a complex selector and consuming a relative selector.

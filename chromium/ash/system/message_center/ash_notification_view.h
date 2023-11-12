@@ -70,6 +70,24 @@ class ASH_EXPORT AshNotificationView
   // Called when a child notificaiton's preferred size changes.
   void GroupedNotificationsPreferredSizeChanged();
 
+  // Drag related functions ----------------------------------------------------
+
+  // Returns the bounds of the area where the drag can be initiated. The
+  // returned bounds are in `AshNotificationView` local coordinates. Returns
+  // `absl::nullopt` if the notification view is not draggable.
+  absl::optional<gfx::Rect> GetDragAreaBounds() const;
+
+  // Returns the drag image shown when the ash notification is under drag.
+  // Returns `absl::nullopt` if the notification view is not draggable.
+  absl::optional<gfx::ImageSkia> GetDragImage();
+
+  // Attaches the drop data. This method should be called only if this
+  // notification view is draggable.
+  void AttachDropData(ui::OSExchangeData* data);
+
+  // Returns true if this notification view is draggable.
+  bool IsDraggable() const;
+
   // message_center::MessageView:
   void AddGroupNotification(
       const message_center::Notification& notification) override;
@@ -144,7 +162,7 @@ class ASH_EXPORT AshNotificationView
   END_VIEW_BUILDER
 
  private:
-  friend class AshNotificationViewTest;
+  friend class AshNotificationViewTestBase;
   friend class NotificationGroupingControllerTest;
 
   // Customized title row for this notification view with added timestamp in
@@ -170,6 +188,9 @@ class ASH_EXPORT AshNotificationView
     // Perform expand/collapse animation in children views.
     void PerformExpandCollapseAnimation();
 
+    // Set the maximum available width for this view.
+    void SetMaxAvailableWidth(int max_available_width);
+
     // views::View:
     gfx::Size CalculatePreferredSize() const override;
     void OnThemeChanged() override;
@@ -177,13 +198,16 @@ class ASH_EXPORT AshNotificationView
     views::Label* title_view() { return title_view_; }
 
    private:
-    friend class AshNotificationViewTest;
+    friend class AshNotificationViewTestBase;
     // Showing notification title.
     views::Label* const title_view_;
 
     // Timestamp view shown alongside the title in collapsed state.
     views::Label* const title_row_divider_;
     views::Label* const timestamp_in_collapsed_view_;
+
+    // The maximum width available to the title row.
+    int max_available_width_ = 0;
 
     // Timer that updates the timestamp over time.
     base::OneShotTimer timestamp_update_timer_;
@@ -266,6 +290,10 @@ class ASH_EXPORT AshNotificationView
   // Label::IsDisplayTextTruncated doesn't work when `message_label()` hasn't
   // been laid out yet.
   bool IsMessageLabelTruncated();
+
+  // Attaches the large image's binary data as drop data. This method should be
+  // called only if this notification view is draggable.
+  void AttachBinaryImageAsDropData(ui::OSExchangeData* data);
 
   // Owned by views hierarchy.
   views::View* main_view_ = nullptr;

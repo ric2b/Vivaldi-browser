@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
-#include "base/supports_user_data.h"
 #include "build/build_config.h"
 #include "components/autofill/content/common/mojom/autofill_agent.mojom.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom.h"
@@ -32,7 +31,6 @@ class RenderFrameHost;
 
 namespace autofill {
 
-class AutofillableData;
 class ContentAutofillDriverFactory;
 class ContentAutofillRouter;
 
@@ -121,11 +119,9 @@ class ContentAutofillDriver : public AutofillDriver,
   static ContentAutofillDriver* GetForRenderFrameHost(
       content::RenderFrameHost* render_frame_host);
 
-  // Partially constructs the ContentAutofillDriver. The ContentAutofillDriver
-  // needs an AutofillManager that should be set via set_autofill_manager() (for
-  // Android Autofill) or set_browser_autofill_manager (for Chromium).
-  // Outside of unittests, ContentAutofillDriverFactory is instantiated and set
-  // up by the ContentAutofillDriverFactory.
+  // Partially constructs the ContentAutofillDriver: afterwards, the caller
+  // *must* set a non-null AutofillManager with set_autofill_manager().
+  // Outside of unittests, this is done by ContentAutofillDriverFactory.
   ContentAutofillDriver(content::RenderFrameHost* render_frame_host,
                         ContentAutofillRouter* autofill_router);
   ContentAutofillDriver(const ContentAutofillDriver&) = delete;
@@ -158,29 +154,16 @@ class ContentAutofillDriver : public AutofillDriver,
   // autofill::AutofillDriver:
   // These are the non-event functions from autofill::AutofillDriver. The events
   // are defined in the private part below.
-  bool IsIncognito() const override;
   bool IsInActiveFrame() const override;
   bool IsInAnyMainFrame() const override;
   bool IsPrerendering() const override;
   bool CanShowAutofillUi() const override;
   ui::AXTreeID GetAxTreeId() const override;
-  scoped_refptr<network::SharedURLLoaderFactory> GetURLLoaderFactory() override;
   bool RendererIsAvailable() override;
   void HandleParsedForms(const std::vector<FormData>& forms) override {}
   void PopupHidden() override;
   net::IsolationInfo IsolationInfo() override;
-
-  // Triggers filling of |fill_data| into |raw_form| and |raw_field|. This event
-  // is called only by Autofill Assistant on the browser side and provides the
-  // |fill_data| itself. This is different from the usual Autofill flow, where
-  // the renderer triggers Autofill with the AskForValuesToFill() event, which
-  // displays the Autofill popup to select the fill data.
-  // FillFormForAssistant() is located in ContentAutofillDriver so that
-  // |raw_form| and |raw_field| get their meta data set analogous to
-  // AskForValuesToFill().
-  void FillFormForAssistant(const AutofillableData& fill_data,
-                            const FormData& raw_form,
-                            const FormFieldData& raw_field);
+  void SetShouldSuppressKeyboard(bool suppress) override;
 
   // Called to inform the browser that in the field with `form_global_id` and
   // `field_global_id`, the context menu was triggered. This is different from
@@ -230,11 +213,6 @@ class ContentAutofillDriver : public AutofillDriver,
   void SetKeyPressHandler(
       const content::RenderWidgetHost::KeyPressEventCallback& handler);
   void UnsetKeyPressHandler();
-
-  // Sets whether the keyboard should be suppressed. Used to keep the keyboard
-  // hidden while the bottom sheet (e.g. Touch To Fill) is shown. Forwarded to
-  // the last-queried source remembered by ContentAutofillRouter.
-  virtual void SetShouldSuppressKeyboard(bool suppress);
 
   // Callbacks that are called also in other functions by ContentAutofillRouter.
   void FocusNoLongerOnFormCallback(bool had_interacted_form);
@@ -286,6 +264,9 @@ class ContentAutofillDriver : public AutofillDriver,
       const mojom::AutofillState state) override;
   void SendFieldsEligibleForManualFillingToRenderer(
       const std::vector<FieldGlobalId>& fields) override;
+  void TriggerReparseInAllFrames(
+      base::OnceCallback<void(bool success)> trigger_reparse_finished_callback)
+      override;
 
   // mojom::AutofillDriver:
   // Events triggered by the renderer. These events are routed by

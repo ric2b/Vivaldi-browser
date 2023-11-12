@@ -4,26 +4,37 @@
 
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_coordinator.h"
 
+#import <utility>
+#import <vector>
+
 #import "base/mac/foundation_util.h"
 #import "base/metrics/histogram_functions.h"
+#import "base/ranges/algorithm.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/password_manager/core/browser/password_manager_metrics_util.h"
 #import "components/password_manager/core/browser/ui/affiliated_group.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/strings/grit/components_strings.h"
+#import "ios/chrome/browser/credential_provider_promo/features.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/passwords/password_tab_helper.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/commands/credential_provider_promo_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
+#import "ios/chrome/browser/ui/settings/password/password_details/password_details.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_consumer.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_handler.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_mediator.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_table_view_controller.h"
+#import "ios/chrome/browser/ui/settings/utils/password_utils.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -38,6 +49,9 @@
 
   // Manager responsible for password check feature.
   IOSChromePasswordCheckManager* _manager;
+
+  // The handler used for CredentialProviderPromoCommands.
+  id<CredentialProviderPromoCommands> _credentialProviderPromoHandler;
 }
 
 // Main view controller for this coordinator.
@@ -81,6 +95,10 @@
     _credential = credential;
     _manager = manager;
     _reauthenticationModule = reauthModule;
+    if (IsCredentialProviderExtensionPromoEnabledOnPasswordCopied()) {
+      _credentialProviderPromoHandler = HandlerForProtocol(
+          browser->GetCommandDispatcher(), CredentialProviderPromoCommands);
+    }
   }
   return self;
 }
@@ -103,6 +121,10 @@
     _affiliatedGroup = affiliatedGroup;
     _manager = manager;
     _reauthenticationModule = reauthModule;
+    if (IsCredentialProviderExtensionPromoEnabledOnPasswordCopied()) {
+      _credentialProviderPromoHandler = HandlerForProtocol(
+          browser->GetCommandDispatcher(), CredentialProviderPromoCommands);
+    }
   }
   return self;
 }
@@ -186,42 +208,6 @@
   [self.alertCoordinator start];
 }
 
-- (void)showPasswordDeleteDialogWithOrigin:(NSString*)origin
-                       compromisedPassword:(BOOL)compromisedPassword {
-  NSString* message;
-
-  if (origin.length > 0) {
-    int stringID = compromisedPassword
-                       ? IDS_IOS_DELETE_COMPROMISED_PASSWORD_DESCRIPTION
-                       : IDS_IOS_DELETE_PASSWORD_DESCRIPTION;
-    message =
-        l10n_util::GetNSStringF(stringID, base::SysNSStringToUTF16(origin));
-  }
-  self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser
-                           title:nil
-                         message:message
-                   barButtonItem:self.viewController.deleteButton];
-
-  __weak __typeof(self) weakSelf = self;
-
-  [self.actionSheetCoordinator
-      addItemWithTitle:l10n_util::GetNSString(IDS_IOS_CONFIRM_PASSWORD_DELETION)
-                action:^{
-                  [weakSelf passwordDeletionConfirmedForCompromised:
-                                compromisedPassword];
-                }
-                 style:UIAlertActionStyleDestructive];
-
-  [self.actionSheetCoordinator
-      addItemWithTitle:l10n_util::GetNSString(IDS_IOS_CANCEL_PASSWORD_DELETION)
-                action:nil
-                 style:UIAlertActionStyleCancel];
-
-  [self.actionSheetCoordinator start];
-}
-
 - (void)showPasswordEditDialogWithOrigin:(NSString*)origin {
   NSString* message = l10n_util::GetNSStringF(IDS_IOS_EDIT_PASSWORD_DESCRIPTION,
                                               base::SysNSStringToUTF16(origin));
@@ -250,17 +236,137 @@
   [self.actionSheetCoordinator start];
 }
 
+// TODO(crbug.com/1359392): By convention, passing nil for `anchorView` means
+// to use the delete button in the bottom bar as the anchor. This is a temporary
+// hack and will be removed when `kPasswordsGrouping` is enabled by default.
+- (void)showPasswordDeleteDialogWithPasswordDetails:(PasswordDetails*)password
+                                         anchorView:(UIView*)anchorView {
+  NSString* title;
+  NSString* message;
+  // Blocked websites have empty `password` and no title or message.
+  if ([password.password length]) {
+    if (base::FeatureList::IsEnabled(
+            password_manager::features::kPasswordsGrouping)) {
+      std::tie(title, message) =
+          GetPasswordAlertTitleAndMessageForOrigins(password.origins);
+    } else {
+      message = l10n_util::GetNSStringF(
+          password.isCompromised
+              ? IDS_IOS_DELETE_COMPROMISED_PASSWORD_DESCRIPTION
+              : IDS_IOS_DELETE_PASSWORD_DESCRIPTION,
+          base::SysNSStringToUTF16(password.origins[0]));
+    }
+  }
+  NSString* buttonText =
+      l10n_util::GetNSString(base::FeatureList::IsEnabled(
+                                 password_manager::features::kPasswordsGrouping)
+                                 ? IDS_IOS_DELETE_ACTION_TITLE
+                                 : IDS_IOS_CONFIRM_PASSWORD_DELETION);
+
+  self.actionSheetCoordinator =
+      anchorView
+          ? [[ActionSheetCoordinator alloc]
+                initWithBaseViewController:self.viewController
+                                   browser:self.browser
+                                     title:title
+                                   message:message
+                                      rect:anchorView.frame
+                                      view:anchorView]
+          : [[ActionSheetCoordinator alloc]
+                initWithBaseViewController:self.viewController
+                                   browser:self.browser
+                                     title:title
+                                   message:message
+                             barButtonItem:self.viewController.deleteButton];
+  __weak __typeof(self) weakSelf = self;
+  [self.actionSheetCoordinator
+      addItemWithTitle:buttonText
+                action:^{
+                  [weakSelf
+                      passwordDeletionConfirmedForCompromised:password
+                                                                  .isCompromised
+                                                     password:password];
+                }
+                 style:UIAlertActionStyleDestructive];
+  [self.actionSheetCoordinator
+      addItemWithTitle:l10n_util::GetNSString(IDS_IOS_CANCEL_PASSWORD_DELETION)
+                action:nil
+                 style:UIAlertActionStyleCancel];
+  [self.actionSheetCoordinator start];
+}
+
+- (void)moveCredentialToAccountStore:(PasswordDetails*)password {
+  // TODO(crbug.com/1400217): Instantiate the coordinator for the confirmation
+  // dialog in case there are conflicting passwords.
+  const std::vector<password_manager::CredentialUIEntry>& credentials =
+      self.mediator.credentials;
+  auto it = base::ranges::find_if(
+      credentials,
+      [password](const password_manager::CredentialUIEntry& credential) {
+        return base::SysNSStringToUTF8(password.signonRealm) ==
+                   credential.GetFirstSignonRealm() &&
+               base::SysNSStringToUTF16(password.username) ==
+                   credential.username &&
+               base::SysNSStringToUTF16(password.password) ==
+                   credential.password;
+      });
+  if (it != credentials.end()) {
+    web::WebState* webState =
+        self.browser->GetWebStateList()->GetActiveWebState();
+    DCHECK(webState) << "It is impossible to open password details UI when all "
+                        "tabs are closed.";
+    [self.mediator
+        moveCredentialToAccountStore:*it
+                              client:PasswordTabHelper::FromWebState(webState)
+                                         ->GetPasswordManagerClient()];
+  }
+}
+
 - (void)showPasswordDetailsInEditModeWithoutAuthentication {
   [self.viewController showEditViewWithoutAuthentication];
+}
+
+- (void)onPasswordCopiedByUser {
+  if (IsCredentialProviderExtensionPromoEnabledOnPasswordCopied()) {
+    DCHECK(_credentialProviderPromoHandler);
+    [_credentialProviderPromoHandler
+        showCredentialProviderPromoWithTrigger:CredentialProviderPromoTrigger::
+                                                   PasswordCopied];
+  }
+}
+
+- (void)onAllPasswordsDeleted {
+  DCHECK_EQ(self.baseNavigationController.topViewController,
+            self.viewController);
+  [self.baseNavigationController popViewControllerAnimated:YES];
 }
 
 #pragma mark - Private
 
 // Notifies delegate about password deletion and records metric if needed.
-- (void)passwordDeletionConfirmedForCompromised:(BOOL)compromised {
-  // TODO(crbug.com/1358988): Fix logic here.
-  [self.delegate passwordDetailsCoordinator:self
-                           deleteCredential:self.mediator.credentials[0]];
+- (void)passwordDeletionConfirmedForCompromised:(BOOL)compromised
+                                       password:(PasswordDetails*)password {
+  // Map from PasswordDetails to CredentialUIEntry. Should support blocklists.
+  // `self.mediator.credentials` returns a different copy on each call, so cache
+  // in a single local variable for use below.
+  std::vector<password_manager::CredentialUIEntry> credentials =
+      self.mediator.credentials;
+  auto it = base::ranges::find_if(
+      credentials,
+      [password](const password_manager::CredentialUIEntry& credential) {
+        return credential.GetFirstSignonRealm() ==
+                   base::SysNSStringToUTF8(password.signonRealm) &&
+               credential.username ==
+                   base::SysNSStringToUTF16(password.username) &&
+               credential.password ==
+                   base::SysNSStringToUTF16(password.password);
+      });
+  if (it == credentials.end()) {
+    // TODO(crbug.com/1359392): Convert into DCHECK.
+    return;
+  }
+
+  [self.mediator removeCredential:*it];
   if (compromised) {
     base::UmaHistogramEnumeration(
         "PasswordManager.BulkCheck.UserAction",

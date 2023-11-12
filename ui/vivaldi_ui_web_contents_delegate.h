@@ -90,7 +90,8 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
   void BeforeUnloadFired(content::WebContents* tab,
                          bool proceed,
                          bool* proceed_to_fire_unload) override;
-
+  blink::mojom::DisplayMode GetDisplayMode(
+      const content::WebContents* source) override;
 
  private:
   // content::WebContentsObserver
@@ -106,7 +107,7 @@ class VivaldiUIWebContentsDelegate : public content::WebContentsDelegate,
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
   void PrimaryMainDocumentElementAvailable() override;
-  void BeforeUnloadFired(bool proceed, const base::TimeTicks& proceed_time) override;
+  void BeforeUnloadFired(bool proceed) override;
 
   void UpdateDraggableRegions(
       content::RenderFrameHost* sender,

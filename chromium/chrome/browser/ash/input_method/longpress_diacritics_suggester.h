@@ -34,7 +34,8 @@ enum class IMEPKLongpressDiacriticAction {
   kShowWindow = 0,
   kAccept = 1,
   kDismiss = 2,
-  kMaxValue = kDismiss,
+  kAutoRepeatSuppressed = 3,
+  kMaxValue = kAutoRepeatSuppressed,
 };
 
 class LongpressDiacriticsSuggester : public Suggester {
@@ -53,13 +54,16 @@ class LongpressDiacriticsSuggester : public Suggester {
       const std::vector<ime::AssistiveSuggestion>& suggestions) override;
   SuggestionStatus HandleKeyEvent(const ui::KeyEvent& event) override;
   bool TrySuggestWithSurroundingText(const std::u16string& text,
-                                     int cursor_pos,
-                                     int anchor_pos) override;
+                                     gfx::Range selection_range) override;
   bool AcceptSuggestion(size_t index) override;
   void DismissSuggestion() override;
   AssistiveType GetProposeActionType() override;
   bool HasSuggestions() override;
   std::vector<ime::AssistiveSuggestion> GetSuggestions() override;
+
+  // Whether or not the given character has possible diacritic suggestion in
+  // the current layout engine.
+  bool HasDiacriticSuggestions(char c);
 
  private:
   void SetButtonHighlighted(size_t index, bool highlighted);

@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# pylint: disable=too-many-lines
+
 import collections
 import fnmatch
 import logging
@@ -13,6 +15,7 @@ import unittest
 
 from telemetry.internal.results import artifact_compatibility_wrapper as acw
 from telemetry.testing import serially_executed_browser_test_case
+from telemetry.util import minidump_utils
 from telemetry.util import screenshot
 from typ import json_results
 
@@ -36,6 +39,11 @@ _SUPPORTED_WIN_INTEL_GPUS_WITH_YUY2_OVERLAYS = [0x5912, 0x3e92, 0x9bc5]
 _SUPPORTED_WIN_INTEL_GPUS_WITH_NV12_OVERLAYS = [0x5912, 0x3e92, 0x9bc5]
 # Hardware overlays are disabled in 26.20.100.8141 per crbug.com/1079393#c105
 _UNSUPPORTED_WIN_INTEL_GPU_DRIVERS_WITH_NV12_OVERLAYS = ['5912-26.20.100.8141']
+
+_ARGS_TO_CONSOLIDATE = frozenset([
+    '--enable-features',
+    '--disable-features',
+])
 
 TestTuple = Tuple[str, ct.GeneratedTest]
 TestTupleGenerator = Generator[TestTuple, None, None]
@@ -252,6 +260,9 @@ class GpuIntegrationTest(
     if cls._disable_log_uploads:
       browser_options.logs_cloud_bucket = None
 
+    # Consolildate any arguments that require it.
+    browser_args = _ConsolidateBrowserArgs(browser_args)
+
     # Append the new arguments.
     browser_options.AppendExtraBrowserArgs(browser_args)
 
@@ -266,9 +277,8 @@ class GpuIntegrationTest(
     cls._last_launched_profile = (profile_dir, profile_type)
     cls.SetBrowserOptions(cls._finder_options)
 
-  @classmethod
   def RestartBrowserIfNecessaryWithArgs(
-      cls,
+      self,
       additional_args: Optional[List[str]] = None,
       force_restart: bool = False,
       profile_dir: Optional[str] = None,
@@ -292,6 +302,12 @@ class GpuIntegrationTest(
           used to seed a new temporary directory which is used, or 'exact' which
           means the exact specified directory will be used instead.
     """
+    # cls is largely used here since this used to be a class method and we want
+    # to maintain the previous behavior with regards to storing browser launch
+    # information between tests. As such, we also disable protected access
+    # checks since those would be allowed if this were actually a class method.
+    # pylint: disable=protected-access
+    cls = self.__class__
     new_browser_args = cls._GenerateAndSanitizeBrowserArgs(additional_args)
 
     diff_browser_args = set(new_browser_args) != cls._last_launched_browser_args
@@ -306,15 +322,25 @@ class GpuIntegrationTest(
                                         profile_type)
       cls.StartBrowser()
 
-  @classmethod
-  def RestartBrowserWithArgs(cls,
+    # If we restarted due to a change in browser args, it's possible that a
+    # Skip expectation now applies to the test, so check for that.
+    if diff_browser_args:
+      expected_results, _ = self.GetExpectationsForTest()
+      if ResultType.Skip in expected_results:
+        message = (
+            'Determined that Skip expectation applies after browser restart')
+        logging.warning(message)
+        self.skipTest(message)
+    # pylint: enable=protected-access
+
+  def RestartBrowserWithArgs(self,
                              additional_args: Optional[List[str]] = None,
                              profile_dir: Optional[str] = None,
                              profile_type: str = 'clean') -> None:
-    cls.RestartBrowserIfNecessaryWithArgs(additional_args,
-                                          force_restart=True,
-                                          profile_dir=profile_dir,
-                                          profile_type=profile_type)
+    self.RestartBrowserIfNecessaryWithArgs(additional_args,
+                                           force_restart=True,
+                                           profile_dir=profile_dir,
+                                           profile_type=profile_type)
 
   # The following is the rest of the framework for the GPU integration tests.
 
@@ -393,37 +419,14 @@ class GpuIntegrationTest(
     # by a bad combination of command-line arguments. So reset to the original
     # options in attempt to successfully launch a browser.
     if cls.browser is None:
-      cls._RestartTsProxyServerIfNecessary()
+      cls.platform.RestartTsProxyServerOnRemotePlatforms()
       cls.SetBrowserOptions(cls.GetOriginalFinderOptions())
       cls.StartBrowser()
     else:
       cls.StopBrowser()
-      cls._RestartTsProxyServerIfNecessary()
+      cls.platform.RestartTsProxyServerOnRemotePlatforms()
       cls.SetBrowserOptions(cls._finder_options)
       cls.StartBrowser()
-
-  @classmethod
-  def _RestartTsProxyServerIfNecessary(cls) -> None:
-    """Restarts the TsProxyServer on remote platforms.
-
-    If something goes wrong with the connection to the remote device (SSH, adb,
-    etc.), then the forwarder between the device and the host will potentially
-    break, breaking all further network connectivity. So, restart the server
-    and its forwarder.
-    """
-    # TODO(crbug.com/1245346): Move this into Telemetry itself once it is
-    # shown to work.
-    os_name = cls.platform.GetOSName()
-    if os_name in ('android', 'chromeos'):
-      logging.warning(
-          'Restarting TsProxyServer due to being on a remote platform')
-      # pylint: disable=protected-access
-      network_controller_backend = (
-          cls.platform._platform_backend.network_controller_backend)
-      wpr_mode = network_controller_backend._wpr_mode
-      # pylint: enable=protected-access
-      network_controller_backend.Close()
-      network_controller_backend.Open(wpr_mode)
 
   # pylint: disable=no-self-use
   def _ShouldForceRetryOnFailureFirstTest(self) -> bool:
@@ -627,6 +630,7 @@ class GpuIntegrationTest(
       return True
     return False
 
+  # pylint: disable=too-many-return-statements
   def _ClearExpectedCrashes(self, expected_crashes: Dict[str, int]) -> bool:
     """Clears any expected crash minidumps so they're not caught later.
 
@@ -641,26 +645,53 @@ class GpuIntegrationTest(
     # We can't get crashes if we don't have a browser.
     if self.browser is None:
       return True
-    # TODO(crbug.com/1006331): Properly match type once we have a way of
-    # checking the crashed process type without symbolizing the minidump.
+
     total_expected_crashes = sum(expected_crashes.values())
     # The Telemetry-wide cleanup will handle any remaining minidumps, so early
     # return here since we don't expect any, which saves us a bit of work.
     if total_expected_crashes == 0:
       return True
-    unsymbolized_minidumps = self.browser.GetAllUnsymbolizedMinidumpPaths()
-    total_unsymbolized_minidumps = len(unsymbolized_minidumps)
 
-    if total_expected_crashes == total_unsymbolized_minidumps:
+    unsymbolized_minidumps = self.browser.GetAllUnsymbolizedMinidumpPaths()
+
+    # Windows does not currently have a way of extracting process type from a
+    # minidump, so all we can do is assert that the number of crashes matches.
+    # TODO(crbug.com/1006331): Remove this if/when minidump_dump or an
+    # equivalent is available on Windows.
+    if self.browser.platform.GetOSName() == 'win':
+      total_unsymbolized_minidumps = len(unsymbolized_minidumps)
+      if total_expected_crashes == total_unsymbolized_minidumps:
+        for path in unsymbolized_minidumps:
+          self.browser.IgnoreMinidump(path)
+        return True
+      logging.error(
+          'Found %d unsymbolized minidumps when we expected %d. Expected '
+          'crash breakdown: %s', total_unsymbolized_minidumps,
+          total_expected_crashes, expected_crashes)
+      return False
+
+    # On other platforms, we can extract the process type from a minidump and
+    # ensure that we only got the expected kind of crashes.
+    crash_counts = collections.defaultdict(int)
+    for path in unsymbolized_minidumps:
+      crash_type = minidump_utils.GetProcessTypeFromMinidump(path)
+      if not crash_type:
+        logging.error(
+            'Unable to verify expected crashes due to inability to extract '
+            'process type from minidump %s', path)
+        return False
+      crash_counts[crash_type] += 1
+
+    if crash_counts == expected_crashes:
       for path in unsymbolized_minidumps:
         self.browser.IgnoreMinidump(path)
       return True
 
     logging.error(
-        'Found %d unsymbolized minidumps when we expected %d. Expected '
-        'crash breakdown: %s', total_unsymbolized_minidumps,
-        total_expected_crashes, expected_crashes)
+        'Found mismatch between expected and actual crash counts. Expected: '
+        '%s, Actual: %s', expected_crashes, crash_counts)
     return False
+  # pylint: enable=too-many-return-statements
 
   # pylint: disable=no-self-use
   def GetExpectedCrashes(self, args: ct.TestArgs) -> Dict[str, int]:
@@ -807,8 +838,9 @@ class GpuIntegrationTest(
       # target the discrete GPU.
       gpu_tags.append(gpu_helper.GetANGLERenderer(gpu_info))
       gpu_tags.append(gpu_helper.GetCommandDecoder(gpu_info))
-      gpu_tags.append(gpu_helper.GetOOPCanvasStatus(gpu_info.feature_status))
+      gpu_tags.append(gpu_helper.GetOOPCanvasStatus(gpu_info))
       gpu_tags.append(gpu_helper.GetAsanStatus(gpu_info))
+      gpu_tags.append(gpu_helper.GetClangCoverage(gpu_info))
       gpu_tags.append(gpu_helper.GetTargetCpuStatus(gpu_info))
       if gpu_info and gpu_info.devices:
         for ii in range(0, len(gpu_info.devices)):
@@ -839,8 +871,7 @@ class GpuIntegrationTest(
 
       # Add tags based on GPU feature status.
       startup_args = getattr(browser, 'startup_args', None)
-      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info.feature_status,
-                                                 startup_args)
+      skia_renderer = gpu_helper.GetSkiaRenderer(gpu_info, startup_args)
       tags.append(skia_renderer)
     display_server = gpu_helper.GetDisplayServer(browser.browser_type)
     if display_server:
@@ -927,6 +958,47 @@ class GpuIntegrationTest(
         'unknown-gpu-0x8c',
         'unknown-gpu-',
     ]
+
+
+def _ConsolidateBrowserArgs(browser_args: List[str]):
+  """Consolidates browser args that require it to work properly.
+
+  As a concrete example, the --enable-features flag can only be passed once and
+  uses a comma-separated list of feature names. If --enable-features gets passed
+  multiple times, those multiple instances will be consolidated into a single
+  list containing elements from all instances.
+
+  Args:
+    browser_args: A list of strings containing browser arguments
+
+  Returns:
+    A copy of browser_args with any necessary browser args consolidated.
+  """
+  consolidated_args = []
+  found_args = collections.defaultdict(list)
+  # Use indices instead of a regular iterator since we potentially need to skip
+  # over elements.
+  index = 0
+  while index < len(browser_args):
+    arg = browser_args[index]
+    if arg in _ARGS_TO_CONSOLIDATE:
+      # Syntax is `--enable-features A,B`
+      value = browser_args[index + 1]
+      found_args[arg].append(value)
+      index += 2
+    elif '=' in arg and arg.split('=', 1)[0] in _ARGS_TO_CONSOLIDATE:
+      # Syntax is `--enable-features=A,B`
+      flag, value = arg.split('=', 1)
+      found_args[flag].append(value)
+      index += 1
+    else:
+      # No consolidation needed.
+      consolidated_args.append(arg)
+      index += 1
+
+  for k, v in found_args.items():
+    consolidated_args.append('%s=%s' % (k, ','.join(v)))
+  return consolidated_args
 
 
 def LoadAllTestsInModule(module: types.ModuleType) -> unittest.TestSuite:

@@ -6,7 +6,7 @@
 #define ASH_SYSTEM_MESSAGE_CENTER_MESSAGE_CENTER_UTILS_H_
 
 #include "ash/ash_export.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "ui/gfx/animation/tween.h"
 #include "ui/message_center/public/cpp/notification.h"
 
@@ -40,6 +40,10 @@ std::vector<message_center::Notification*> GetSortedNotificationsWithOwnView();
 // indicator in status area since they already have a dedicated tray item, and
 // grouped notifications only need to be counted as one.
 size_t ASH_EXPORT GetNotificationCount();
+
+// Returns true if there are any notifications hidden because we're on the
+// lockscreen. Should be only called if the screen is locked.
+bool AreNotificationsHiddenOnLockscreen();
 
 // Get the notification view controller associated to a certain display.
 message_center::NotificationViewController*

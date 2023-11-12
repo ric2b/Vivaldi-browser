@@ -5,15 +5,14 @@
 #include "media/filters/mac/audio_toolbox_audio_decoder.h"
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/mac/mac_logging.h"
 #include "base/ranges/algorithm.h"
 #include "base/sys_byteorder.h"
-#include "base/task/single_thread_task_runner.h"
+#include "base/task/bind_post_task.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_discard_helper.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/limits.h"
 #include "media/base/status.h"
 #include "media/base/timestamp_constants.h"
@@ -114,8 +113,9 @@ OSStatus ProvideInputCallback(AudioConverterRef decoder,
   buffer_list->mBuffers[0].mNumberChannels = 0;
   buffer_list->mBuffers[0].mDataByteSize = input_data->buffer->data_size();
 
-  // No const version of this API unfortunately, so we need writable_data().
-  buffer_list->mBuffers[0].mData = input_data->buffer->writable_data();
+  // No const version of this API unfortunately, so we need const_cast().
+  buffer_list->mBuffers[0].mData =
+      const_cast<uint8_t*>(input_data->buffer->data());
 
   if (packets)
     *packets = &input_data->packet;
@@ -173,7 +173,7 @@ void AudioToolboxAudioDecoder::Initialize(const AudioDecoderConfig& config,
   decoder_.reset();
 
   output_cb_ = output_cb;
-  BindToCurrentLoop(std::move(init_cb))
+  base::BindPostTaskToCurrentDefault(std::move(init_cb))
       .Run(CreateAACDecoder(config)
                ? DecoderStatus::Codes::kOk
                : DecoderStatus::Codes::kFailedToCreateDecoder);
@@ -185,7 +185,7 @@ void AudioToolboxAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
   // occurs with some damaged files.
   if (!buffer->end_of_stream() && buffer->timestamp() == kNoTimestamp) {
     DLOG(ERROR) << "Received a buffer without timestamps!";
-    BindToCurrentLoop(std::move(decode_cb))
+    base::BindPostTaskToCurrentDefault(std::move(decode_cb))
         .Run(DecoderStatus::Codes::kMissingTimestamp);
     return;
   }
@@ -214,13 +214,13 @@ void AudioToolboxAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
       output_buffer_list_.get(), nullptr);
 
   if (result == kNoMoreDataError && !num_frames) {
-    BindToCurrentLoop(std::move(decode_cb)).Run(OkStatus());
+    base::BindPostTaskToCurrentDefault(std::move(decode_cb)).Run(OkStatus());
     return;
   }
 
   if (result != noErr && result != kNoMoreDataError) {
     OSSTATUS_DLOG(ERROR, result) << "AudioConverterFillComplexBuffer() failed";
-    BindToCurrentLoop(std::move(decode_cb))
+    base::BindPostTaskToCurrentDefault(std::move(decode_cb))
         .Run(DecoderStatus::Codes::kPlatformDecodeFailure);
     return;
   }
@@ -232,10 +232,11 @@ void AudioToolboxAudioDecoder::Decode(scoped_refptr<DecoderBuffer> buffer,
     output_buffer->TrimEnd(output_bus_->frames() - num_frames);
   if (discard_helper_->ProcessBuffers(buffer->time_info(),
                                       output_buffer.get())) {
-    BindToCurrentLoop(output_cb_).Run(std::move(output_buffer));
+    base::BindPostTaskToCurrentDefault(output_cb_)
+        .Run(std::move(output_buffer));
   }
 
-  BindToCurrentLoop(std::move(decode_cb)).Run(OkStatus());
+  base::BindPostTaskToCurrentDefault(std::move(decode_cb)).Run(OkStatus());
 }
 
 void AudioToolboxAudioDecoder::Reset(base::OnceClosure reset_cb) {
@@ -245,7 +246,7 @@ void AudioToolboxAudioDecoder::Reset(base::OnceClosure reset_cb) {
   OSSTATUS_DLOG_IF(WARNING, result != noErr, result)
       << "AudioConverterReset() failed";
   discard_helper_->Reset(discard_helper_->decoder_delay());
-  BindToCurrentLoop(std::move(reset_cb)).Run();
+  base::BindPostTaskToCurrentDefault(std::move(reset_cb)).Run();
 }
 
 bool AudioToolboxAudioDecoder::NeedsBitstreamConversion() const {

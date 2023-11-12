@@ -7,6 +7,7 @@
 #include <iterator>
 
 #include "base/run_loop.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/test/bind.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.h"
@@ -226,7 +227,16 @@ TEST(BroadcastChannelTest, OutgoingMessagesMarkedWithAgentClusterId) {
   EXPECT_FALSE(tester->sent_messages()[0].locked_to_sender_agent_cluster);
 }
 
-TEST(BroadcastChannelTest, OutgoingAgentClusterLockedMessage) {
+// TODO(crbug.com/1413818): iOS doesn't support WebAssembly yet.
+#if BUILDFLAG(IS_IOS)
+#define MAYBE_OutgoingAgentClusterLockedMessage \
+  DISABLED_OutgoingAgentClusterLockedMessage
+#else
+#define MAYBE_OutgoingAgentClusterLockedMessage \
+  OutgoingAgentClusterLockedMessage
+#endif
+
+TEST(BroadcastChannelTest, MAYBE_OutgoingAgentClusterLockedMessage) {
   DummyPageHolder holder;
   ExecutionContext* execution_context = holder.GetFrame().DomWindow();
   ScriptState* script_state = ToScriptStateForMainWorld(&holder.GetFrame());

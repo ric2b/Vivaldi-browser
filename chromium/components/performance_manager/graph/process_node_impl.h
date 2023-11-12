@@ -17,6 +17,7 @@
 #include "components/performance_manager/graph/node_attached_data.h"
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/graph/properties.h"
+#include "components/performance_manager/public/browser_child_process_host_proxy.h"
 #include "components/performance_manager/public/graph/process_node.h"
 #include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
 #include "components/performance_manager/public/mojom/v8_contexts.mojom.h"
@@ -25,6 +26,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace performance_manager {
@@ -33,7 +35,10 @@ class FrameNodeImpl;
 class ProcessNodeImpl;
 class WorkerNodeImpl;
 
-// A process node follows the lifetime of a RenderProcessHost.
+// Tag used to create a process node for the browser process.
+struct BrowserProcessNodeTag {};
+
+// A process node follows the lifetime of a chrome process.
 // It may reference zero or one processes at a time, but during its lifetime, it
 // may reference more than one process. This can happen if the associated
 // renderer crashes, and an associated frame is then reloaded or re-navigated.
@@ -52,8 +57,16 @@ class ProcessNodeImpl
 
   static constexpr NodeTypeEnum Type() { return NodeTypeEnum::kProcess; }
 
-  ProcessNodeImpl(content::ProcessType process_type,
-                  RenderProcessHostProxy render_process_proxy);
+  // Constructor for the browser process.
+  explicit ProcessNodeImpl(BrowserProcessNodeTag tag);
+
+  // Constructor for a renderer process.
+  explicit ProcessNodeImpl(RenderProcessHostProxy render_process_host_proxy);
+
+  // Constructor for a non-renderer child process.
+  ProcessNodeImpl(
+      content::ProcessType process_type,
+      BrowserChildProcessHostProxy browser_child_process_host_proxy);
 
   ProcessNodeImpl(const ProcessNodeImpl&) = delete;
   ProcessNodeImpl& operator=(const ProcessNodeImpl&) = delete;
@@ -99,7 +112,6 @@ class ProcessNodeImpl
   }
   void set_resident_set_kb(uint64_t resident_set_kb) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
     resident_set_kb_ = resident_set_kb;
   }
 
@@ -144,11 +156,19 @@ class ProcessNodeImpl
 
   bool main_thread_task_load_is_low() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
     return main_thread_task_load_is_low_.value();
   }
 
   const RenderProcessHostProxy& render_process_host_proxy() const {
-    return render_process_host_proxy_;
+    DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
+    return absl::get<RenderProcessHostProxy>(child_process_host_proxy_);
+  }
+
+  const BrowserChildProcessHostProxy& browser_child_process_host_proxy() const {
+    DCHECK_NE(process_type_, content::PROCESS_TYPE_BROWSER);
+    DCHECK_NE(process_type_, content::PROCESS_TYPE_RENDERER);
+    return absl::get<BrowserChildProcessHostProxy>(child_process_host_proxy_);
   }
 
   base::TaskPriority priority() const {
@@ -158,6 +178,7 @@ class ProcessNodeImpl
 
   ContentTypes hosted_content_types() const {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    DCHECK_EQ(process_type_, content::PROCESS_TYPE_RENDERER);
     return hosted_content_types_;
   }
 
@@ -214,6 +235,8 @@ class ProcessNodeImpl
   uint64_t GetResidentSetKb() const override;
   RenderProcessHostId GetRenderProcessHostId() const override;
   const RenderProcessHostProxy& GetRenderProcessHostProxy() const override;
+  const BrowserChildProcessHostProxy& GetBrowserChildProcessHostProxy()
+      const override;
   base::TaskPriority GetPriority() const override;
   ContentTypes GetHostedContentTypes() const override;
 
@@ -240,12 +263,14 @@ class ProcessNodeImpl
   absl::optional<int32_t> exit_status_ GUARDED_BY_CONTEXT(sequence_checker_);
   std::string metrics_name_ GUARDED_BY_CONTEXT(sequence_checker_);
 
-  const content::ProcessType process_type_
-      GUARDED_BY_CONTEXT(sequence_checker_);
+  // The type of the process that this node represents.
+  const content::ProcessType process_type_;
 
-  // This is used during frame node initialization.
-  // TODO(siggi): It seems unnecessary to initialize this at creation time?
-  const RenderProcessHostProxy render_process_host_proxy_;
+  // The proxy that allows access to either the RenderProcessHost or the
+  // BrowserChildProcessHost associated with this process, if `this` is a
+  // process node for a child process (process_type() != PROCESS_TYPE_BROWSER).
+  const absl::variant<RenderProcessHostProxy, BrowserChildProcessHostProxy>
+      child_process_host_proxy_;
 
   ObservedProperty::NotifiesOnlyOnChanges<
       bool,

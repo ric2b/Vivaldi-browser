@@ -63,6 +63,12 @@ apps::IntentPtr MakeShareIntent(const GURL& filesystem_url,
 apps::IntentPtr MakeShareIntent(const std::string& text,
                                 const std::string& title);
 
+// Creates an intent for sharing |filesystem_urls|, with |dlpSourceUrls|.
+apps::IntentPtr MakeShareIntent(
+    const std::vector<GURL>& filesystem_urls,
+    const std::vector<std::string>& mime_types,
+    const std::vector<std::string>& dlp_source_urls);
+
 // Create an edit intent for the file with a given |filesystem_url| and
 // |mime_type|.
 apps::IntentPtr MakeEditIntent(const GURL& filesystem_url,
@@ -124,37 +130,6 @@ bool ExtensionMatched(const std::string& file_name,
 //    "share_title": "title",
 // }
 base::Value ConvertIntentToValue(const apps::IntentPtr& intent);
-
-// Gets the string value from base::DictionaryValue, e.g. { "key": "value" }
-// returns "value".
-absl::optional<std::string> GetStringValueFromDict(
-    const base::Value::Dict& dict,
-    const std::string& key_name);
-
-// Gets absl::optional<bool> value from base::DictionaryValue, e.g. {
-// "key": "value" } returns "value".
-absl::optional<bool> GetBoolValueFromDict(const base::DictionaryValue& dict,
-                                          const std::string& key_name);
-
-// Gets GURL from base::DictionaryValue, e.g. { "url": "abc.com" } returns
-// "abc.com".
-absl::optional<GURL> GetGurlValueFromDict(const base::DictionaryValue& dict,
-                                          const std::string& key_name);
-
-// Gets std::vector<IntentFilePtr> from base::DictionaryValue, e.g. {
-// "file_urls": "/abc, /a" } returns
-// std::vector<apps::IntentFilePtr>{"/abc", "/a"}.
-std::vector<apps::IntentFilePtr> GetFilesFromDict(
-    const base::DictionaryValue& dict,
-    const std::string& key_name);
-
-std::vector<std::string> GetCategoriesFromDict(
-    const base::DictionaryValue& dict,
-    const std::string& key_name);
-
-base::flat_map<std::string, std::string> GetExtrasFromDict(
-    const base::DictionaryValue& dict,
-    const std::string& key_name);
 
 // Converts base::Value to Intent. Returns nullptr for invalid base::Values.
 apps::IntentPtr ConvertValueToIntent(base::Value&& value);

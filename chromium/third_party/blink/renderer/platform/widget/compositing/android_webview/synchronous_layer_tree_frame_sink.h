@@ -9,9 +9,9 @@
 
 #include <memory>
 
-#include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
+#include "base/functional/callback.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -115,9 +115,11 @@ class SynchronousLayerTreeFrameSink
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
       Vector<viz::ReturnedResource> resources) override;
-  void OnBeginFrame(const viz::BeginFrameArgs& args,
-                    const HashMap<uint32_t, viz::FrameTimingDetails>&
-                        timing_details) override;
+  void OnBeginFrame(
+      const viz::BeginFrameArgs& args,
+      const HashMap<uint32_t, viz::FrameTimingDetails>& timing_details,
+      bool frame_ack,
+      Vector<viz::ReturnedResource> resources) override;
   void ReclaimResources(Vector<viz::ReturnedResource> resources) override;
   void OnBeginFramePausedChanged(bool paused) override;
   void OnCompositorFrameTransitionDirectiveProcessed(

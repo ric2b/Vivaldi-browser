@@ -21,7 +21,6 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "extensions/browser/script_executor.h"
-#include "extensions/common/mojom/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom.h"
 
 #ifdef VIVALDI_BUILD
@@ -187,6 +186,8 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
                          WebContentsCreatedCallback callback) final;
   void DidAttachToEmbedder() final;
   void DidInitialize(const base::Value::Dict& create_params) final;
+  void MaybeRecreateGuestContents(
+      content::WebContents* embedder_web_contents) final;
   void EmbedderFullscreenToggled(bool entered_fullscreen) final;
   void FindReply(content::WebContents* source,
                  int request_id,
@@ -327,8 +328,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   void SetTransparency();
 
-  extensions::mojom::LocalFrame* GetLocalFrame();
-
   bool IsBackForwardCacheSupported() override;
 
   // Identifies the set of rules registries belonging to this guest.
@@ -403,6 +402,10 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
 
   // Store spatial navigation status.
   bool is_spatial_navigation_enabled_;
+
+  // Used to delay the navigation of a recreated guest contents until later in
+  // the attachment process when state related to the WebRequest API is set up.
+  base::OnceClosure recreate_initial_nav_;
 
 #ifdef VIVALDI_BUILD
 #include "extensions/api/guest_view/vivaldi_web_view_guest_class.inc"

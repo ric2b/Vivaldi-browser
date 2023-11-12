@@ -10,13 +10,16 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/check.h"
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ash/printing/cups_print_job.h"
@@ -33,6 +36,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/printing/printing_constants.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -46,6 +50,7 @@ namespace ash {
 namespace {
 
 using ::chromeos::CupsWrapper;
+using StatusReason = crosapi::mojom::StatusReason::Reason;
 
 // The rate at which we will poll CUPS for print job updates.
 constexpr base::TimeDelta kPollRate = base::Milliseconds(1000);
@@ -63,6 +68,12 @@ enum JobResultForHistogram {
   FILTER_FAILED = 5,        // filter failed
   CLIENT_UNAUTHORIZED = 6,  // cancelled due to client unauthorized
   RESULT_MAX
+};
+
+// Holds the print job data for recording to metrics upon print job completion.
+struct PrinterMetrics {
+  bool printer_manually_selected;
+  absl::optional<StatusReason> printer_status_reason;
 };
 
 // Returns the appropriate JobResultForHistogram for a given |state|.  Only
@@ -129,6 +140,16 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
   void OnDocDone(::printing::PrintJob* job,
                  ::printing::PrintedDocument* document,
                  int job_id) {
+    // Store the printer data for metrics to be recorded upon print job status
+    // updates.
+    const std::string printer_id =
+        base::UTF16ToUTF8(document->settings().device_name());
+    const std::string key = CupsPrintJob::CreateUniqueId(printer_id, job_id);
+    DCHECK(!printer_metrics_cache_.contains(key));
+    printer_metrics_cache_.emplace(
+        key, PrinterMetrics{job->settings().printer_manually_selected(),
+                            job->settings().printer_status_reason()});
+
     // This event occurs after the print job has been successfully sent to the
     // spooler which is when we begin tracking the print queue.
     DCHECK(document);
@@ -137,9 +158,8 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
       title = ::printing::SimplifyDocumentTitle(
           l10n_util::GetStringUTF16(IDS_DEFAULT_PRINT_DOCUMENT_TITLE));
     }
-    CreatePrintJob(base::UTF16ToUTF8(document->settings().device_name()),
-                   base::UTF16ToUTF8(title), job_id, document->page_count(),
-                   job->source(), job->source_id(),
+    CreatePrintJob(printer_id, base::UTF16ToUTF8(title), job_id,
+                   document->page_count(), job->source(), job->source_id(),
                    PrintSettingsToProto(document->settings()));
   }
 
@@ -206,7 +226,9 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
     const std::string printer_id = job->printer().id();
 
     // Stop monitoring jobs after we cancel them.  The user no longer cares.
-    jobs_.erase(job->GetUniqueId());
+    const std::string unique_id = job->GetUniqueId();
+    jobs_.erase(unique_id);
+    printer_metrics_cache_.erase(unique_id);
 
     cups_wrapper_->CancelJob(printer_id, job_id);
   }
@@ -295,6 +317,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
           VLOG(1) << "Removing Job " << print_job->document_title();
           RecordJobResult(ResultForHistogram(print_job->state()));
           jobs_.erase(entry);
+          printer_metrics_cache_.erase(key);
         } else {
           active_jobs.push_back(key);
         }
@@ -326,6 +349,7 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
     }
 
     jobs_.clear();
+    printer_metrics_cache_.clear();
   }
 
   // Notify observers that a state update has occurred for |job|.
@@ -367,6 +391,111 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
         NotifyJobUpdated(job);
         break;
     }
+
+    RecordPrinterMetricIfJobComplete(job);
+  }
+
+  // Only record metrics for print jobs with states that denote success complete
+  // or an error status.
+  void RecordPrinterMetricIfJobComplete(base::WeakPtr<CupsPrintJob> job) {
+    const std::string unique_id = job->GetUniqueId();
+    auto iter = printer_metrics_cache_.find(unique_id);
+    if (iter == printer_metrics_cache_.end()) {
+      return;
+    }
+
+    bool print_job_success;
+    switch (job->state()) {
+      // Consider these print job statuses as "in progress" jobs so don't record
+      // metrics yet.
+      case CupsPrintJob::State::STATE_NONE:
+      case CupsPrintJob::State::STATE_WAITING:
+      case CupsPrintJob::State::STATE_STARTED:
+      case CupsPrintJob::State::STATE_PAGE_DONE:
+      case CupsPrintJob::State::STATE_RESUMED:
+        return;
+      // The set of states for a print job considered "failed" for metrics
+      // recording.
+      case CupsPrintJob::State::STATE_SUSPENDED:
+      case CupsPrintJob::State::STATE_CANCELLED:
+      case CupsPrintJob::State::STATE_FAILED:
+      case CupsPrintJob::State::STATE_ERROR:
+        print_job_success = false;
+        break;
+      case CupsPrintJob::State::STATE_DOCUMENT_DONE:
+        print_job_success = true;
+        break;
+    }
+
+    // Record PrintAttemptOutcome.
+    const PrinterMetrics& metrics = iter->second;
+    chromeos::PrintAttemptOutcome print_attempt_outcome;
+    if (print_job_success && metrics.printer_manually_selected) {
+      print_attempt_outcome = chromeos::PrintAttemptOutcome::
+          kPrintJobSuccessManuallySelectedPrinter;
+    } else if (print_job_success && !metrics.printer_manually_selected) {
+      print_attempt_outcome =
+          chromeos::PrintAttemptOutcome::kPrintJobSuccessInitialPrinter;
+    } else if (!print_job_success && metrics.printer_manually_selected) {
+      print_attempt_outcome =
+          chromeos::PrintAttemptOutcome::kPrintJobFailManuallySelectedPrinter;
+    } else {
+      print_attempt_outcome =
+          chromeos::PrintAttemptOutcome::kPrintJobFailInitialPrinter;
+    }
+    base::UmaHistogramEnumeration("PrintPreview.PrintAttemptOutcome",
+                                  print_attempt_outcome);
+
+    // Record printer status print job success.
+    if (metrics.printer_status_reason.has_value()) {
+      const std::string histogram_name = base::StrCat(
+          {"PrintPreview.PrinterStatus.",
+           GetPrinterStatusHistogramName(metrics.printer_status_reason.value()),
+           ".PrintJobSuccess"});
+      base::UmaHistogramBoolean(histogram_name, print_job_success);
+    }
+
+    printer_metrics_cache_.erase(unique_id);
+  }
+
+  // Maps the printer status reason to the variant names used for the
+  // "PrintPreview.PrinterStatus.{StatusReason}.PrintJobSuccess" histogram.
+  std::string GetPrinterStatusHistogramName(
+      StatusReason printer_status_reason) {
+    switch (printer_status_reason) {
+      case StatusReason::kUnknownReason:
+        return "UnknownReason";
+      case StatusReason::kDeviceError:
+        return "DeviceError";
+      case StatusReason::kDoorOpen:
+        return "DoorOpen";
+      case StatusReason::kLowOnInk:
+        return "LowOnInk";
+      case StatusReason::kLowOnPaper:
+        return "LowOnPaper";
+      case StatusReason::kNoError:
+        return "NoError";
+      case StatusReason::kOutOfInk:
+        return "OutOfInk";
+      case StatusReason::kOutOfPaper:
+        return "OutOfPaper";
+      case StatusReason::kOutputAreaAlmostFull:
+        return "OutputAreaAlmostFull";
+      case StatusReason::kOutputFull:
+        return "OutputFull";
+      case StatusReason::kPaperJam:
+        return "PaperJam";
+      case StatusReason::kPaused:
+        return "Paused";
+      case StatusReason::kPrinterQueueFull:
+        return "PrinterQueueFull";
+      case StatusReason::kPrinterUnreachable:
+        return "PrinterUnreachable";
+      case StatusReason::kStopped:
+        return "Stopped";
+      case StatusReason::kTrayMissing:
+        return "TrayMissing";
+    }
   }
 
   // Ongoing print jobs.
@@ -374,6 +503,11 @@ class CupsPrintJobManagerImpl : public CupsPrintJobManager {
 
   // Records the number of consecutive times the GetJobs query has failed.
   int retry_count_ = 0;
+
+  // Stores the desired printer metrics in a map keyed by the CupsPrintJob
+  // `unique_id`. Once the corresponding print job either fails or completes,
+  // record the metrics entry to histograms and remove it from the map.
+  base::flat_map<std::string, PrinterMetrics> printer_metrics_cache_;
 
   base::RepeatingTimer timer_;
   std::unique_ptr<CupsWrapper> cups_wrapper_;

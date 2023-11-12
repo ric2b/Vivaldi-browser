@@ -5,14 +5,11 @@
 
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/guid.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "components/bookmarks/browser/bookmark_node.h"
-
-namespace base {
-class Value;
-}
 
 namespace bookmarks {
 class BookmarkModel;
@@ -70,6 +67,7 @@ const std::string& GetThumbnail(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode::MetaInfoMap& meta_info_map);
 
 bool IsSeparator(const BookmarkNode* node);
+bool IsTrash(const BookmarkNode* node);
 
 void InitModelNonClonedKeys(BookmarkModel* bookmark_model);
 
@@ -102,7 +100,7 @@ void SetNodeThumbnail(BookmarkModel* model,
                       const std::string& path);
 
 typedef base::RepeatingCallback<bool(const std::string&)> BookmarkWriteFunc;
-bool WriteBookmarkData(const base::Value& value,
+bool WriteBookmarkData(const base::Value::Dict& value,
                        BookmarkWriteFunc write_func,
                        BookmarkWriteFunc write_func_att);
 

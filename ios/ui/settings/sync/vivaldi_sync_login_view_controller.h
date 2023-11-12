@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/settings/settings_root_table_view_controller.h"
+#import "ios/ui/settings/sync/settings_root_table_view_controller+vivaldi.h"
 
 @class VivaldiSyncLoginViewController;
 
@@ -19,6 +19,8 @@
 - (void)logInButtonPressed:(NSString*)username
                   password:(NSString*)password
               savePassword:(BOOL)savePassword;
+
+- (void)createAccountLinkPressed;
 
 @end
 
@@ -34,7 +36,7 @@
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
-- (void)loginFailed;
+- (void)loginFailed:(NSString*)errorMessage;
 
 @end
 

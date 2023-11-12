@@ -4,7 +4,7 @@
 
 #import "ios/net/cookies/ns_http_system_cookie_store.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/time/time.h"
 #import "ios/net/cookies/cookie_creation_time_manager.h"
 #import "ios/net/cookies/cookie_store_ios_client.h"
@@ -42,10 +42,7 @@ NSHTTPSystemCookieStore::~NSHTTPSystemCookieStore() = default;
 void NSHTTPSystemCookieStore::GetCookiesForURLAsync(
     const GURL& url,
     SystemCookieCallbackForCookies callback) {
-  ReportGetCookiesForURLCall(SystemCookieStoreType::kNSHTTPSystemCookieStore);
   NSArray* cookies = GetCookiesForURL(url);
-  net::ReportGetCookiesForURLResult(
-      SystemCookieStoreType::kNSHTTPSystemCookieStore, cookies.count != 0);
   RunCookieCallback(base::BindOnce(std::move(callback), cookies));
 }
 

@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -1416,6 +1416,7 @@ TEST_F(ManagePasswordsUIControllerTest, AuthenticateUserToRevealPasswords) {
 TEST_F(ManagePasswordsUIControllerTest, SaveBubbleAfterLeakCheck) {
   std::vector<const PasswordForm*> matches;
   auto test_form_manager = CreateFormManagerWithBestMatches(&matches);
+  MockPasswordFormManagerForUI* form_manager_ptr = test_form_manager.get();
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
   EXPECT_TRUE(controller()->opened_automatic_bubble());
@@ -1434,6 +1435,13 @@ TEST_F(ManagePasswordsUIControllerTest, SaveBubbleAfterLeakCheck) {
   // The bubble is gone.
   EXPECT_FALSE(controller()->opened_bubble());
 
+  // After closing the lead check dialog, the blocklisting will be checked again
+  // to decide whether to reopen the save prompt.
+  EXPECT_CALL(*form_manager_ptr, IsBlocklisted()).WillOnce(Return(false));
+  EXPECT_CALL(*form_manager_ptr, GetInteractionsStats())
+      .WillOnce(
+          Return(base::span<const password_manager::InteractionsStats>()));
+
   // Close the dialog.
   EXPECT_CALL(dialog_prompt, ControllerGone);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
@@ -1441,6 +1449,44 @@ TEST_F(ManagePasswordsUIControllerTest, SaveBubbleAfterLeakCheck) {
 
   // The save bubble is back.
   EXPECT_TRUE(controller()->opened_automatic_bubble());
+  ExpectIconAndControllerStateIs(password_manager::ui::PENDING_PASSWORD_STATE);
+}
+
+TEST_F(ManagePasswordsUIControllerTest,
+       NoSaveBubbleAfterLeakCheckForBlocklistedWebsites) {
+  std::vector<const PasswordForm*> matches;
+  auto test_form_manager =
+      CreateFormManagerWithBestMatches(&matches, /*is_blocklisted=*/true);
+  MockPasswordFormManagerForUI* form_manager_ptr = test_form_manager.get();
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
+  controller()->OnPasswordSubmitted(std::move(test_form_manager));
+  EXPECT_FALSE(controller()->opened_automatic_bubble());
+
+  // Leak detection dialog hides the bubble.
+  PasswordLeakDialogMock dialog_prompt;
+  CredentialLeakDialogController* dialog_controller = nullptr;
+  EXPECT_CALL(*controller(), CreateCredentialLeakPrompt)
+      .WillOnce(DoAll(SaveArg<0>(&dialog_controller), Return(&dialog_prompt)));
+  EXPECT_CALL(dialog_prompt, ShowCredentialLeakPrompt);
+  controller()->OnCredentialLeak(
+      password_manager::CreateLeakType(password_manager::IsSaved(false),
+                                       password_manager::IsReused(false),
+                                       password_manager::IsSyncing(false)),
+      GURL(kExampleUrl), kExampleUsername);
+  // The bubble is gone.
+  EXPECT_FALSE(controller()->opened_bubble());
+
+  // After closing the lead check dialog, the blocklisting will be checked again
+  // to decide whether to reopen the save prompt.
+  EXPECT_CALL(*form_manager_ptr, IsBlocklisted()).WillOnce(Return(true));
+
+  // Close the dialog.
+  EXPECT_CALL(dialog_prompt, ControllerGone);
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
+  dialog_controller->OnAcceptDialog();
+
+  // The save bubble should not be opened because the website is blocklisted.
+  EXPECT_FALSE(controller()->opened_automatic_bubble());
   ExpectIconAndControllerStateIs(password_manager::ui::PENDING_PASSWORD_STATE);
 }
 
@@ -1879,6 +1925,50 @@ TEST_F(ManagePasswordsUIControllerTest,
 
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(0);
   controller()->OnBiometricAuthenticationForFilling(profile()->GetPrefs());
+}
+
+TEST_F(ManagePasswordsUIControllerTest,
+       BiometricAuthPromoNotShowIfThereIsAnotherDialog) {
+  // Show account chooser dialog.
+  std::vector<std::unique_ptr<PasswordForm>> local_credentials;
+  local_credentials.emplace_back(
+      std::make_unique<PasswordForm>(test_local_form()));
+  url::Origin origin = url::Origin::Create(GURL(kExampleUrl));
+  CredentialManagerDialogController* dialog_controller = nullptr;
+  EXPECT_CALL(*controller(), CreateAccountChooser(_))
+      .WillOnce(
+          DoAll(SaveArg<0>(&dialog_controller), Return(&dialog_prompt())));
+  EXPECT_CALL(dialog_prompt(), ShowAccountChooser());
+  EXPECT_CALL(*controller(), HasBrowserWindow()).WillOnce(Return(true));
+  base::MockCallback<ManagePasswordsState::CredentialsCallback> choose_callback;
+  EXPECT_TRUE(controller()->OnChooseCredentials(std::move(local_credentials),
+                                                origin, choose_callback.Get()));
+  EXPECT_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE,
+            controller()->GetState());
+
+  // Now try to show promo for biometric auth before filling.
+  profile()->GetPrefs()->SetBoolean(
+      password_manager::prefs::kHasUserInteractedWithBiometricAuthPromo, false);
+  profile()->GetPrefs()->SetInteger(
+      password_manager::prefs::kBiometricAuthBeforeFillingPromoShownCounter, 0);
+  profile()->GetPrefs()->SetBoolean(
+      password_manager::prefs::kBiometricAuthenticationBeforeFilling, false);
+
+  controller()->OnBiometricAuthenticationForFilling(profile()->GetPrefs());
+  EXPECT_EQ(0, profile()->GetPrefs()->GetInteger(
+                   password_manager::prefs::
+                       kBiometricAuthBeforeFillingPromoShownCounter));
+
+  // Verify that account chooser is still shown.
+  EXPECT_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE,
+            controller()->GetState());
+
+  // Choose a credential to verify that there is no crash.
+  EXPECT_CALL(choose_callback, Run(Pointee(test_local_form())));
+  dialog_controller->OnChooseCredentials(
+      *dialog_controller->GetLocalForms()[0],
+      password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD);
+  EXPECT_EQ(password_manager::ui::MANAGE_STATE, controller()->GetState());
 }
 
 TEST_F(ManagePasswordsUIControllerTest, BiometricActivationConfirmation) {

@@ -27,6 +27,10 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/size.h"
 
+namespace base {
+class TimeTicks;
+}
+
 namespace media {
 
 // Handles image processing accelerators that expose a V4L2 memory-to-memory
@@ -51,8 +55,7 @@ class MEDIA_GPU_EXPORT V4L2ImageProcessorBackend
       const PortConfig& output_config,
       OutputMode output_mode,
       VideoRotation relative_rotation,
-      ErrorCB error_cb,
-      scoped_refptr<base::SequencedTaskRunner> backend_task_runner);
+      ErrorCB error_cb);
 
   V4L2ImageProcessorBackend(const V4L2ImageProcessorBackend&) = delete;
   V4L2ImageProcessorBackend& operator=(const V4L2ImageProcessorBackend&) =
@@ -88,6 +91,8 @@ class MEDIA_GPU_EXPORT V4L2ImageProcessorBackend
                               gfx::Size* output_size,
                               size_t* num_planes);
 
+  std::string type() const override;
+
  private:
   friend struct std::default_delete<V4L2ImageProcessorBackend>;
 
@@ -106,19 +111,20 @@ class MEDIA_GPU_EXPORT V4L2ImageProcessorBackend
     LegacyFrameReadyCB legacy_ready_cb;
     scoped_refptr<VideoFrame> output_frame;
     size_t output_buffer_id;
+
+    // This is filled only if chrome tracing in "media" category is enabled.
+    absl::optional<base::TimeTicks> start_time;
   };
 
-  V4L2ImageProcessorBackend(
-      scoped_refptr<base::SequencedTaskRunner> backend_task_runner,
-      scoped_refptr<V4L2Device> device,
-      const PortConfig& input_config,
-      const PortConfig& output_config,
-      v4l2_memory input_memory_type,
-      v4l2_memory output_memory_type,
-      OutputMode output_mode,
-      VideoRotation relative_rotation,
-      size_t num_buffers,
-      ErrorCB error_cb);
+  V4L2ImageProcessorBackend(scoped_refptr<V4L2Device> device,
+                            const PortConfig& input_config,
+                            const PortConfig& output_config,
+                            v4l2_memory input_memory_type,
+                            v4l2_memory output_memory_type,
+                            OutputMode output_mode,
+                            VideoRotation relative_rotation,
+                            size_t num_buffers,
+                            ErrorCB error_cb);
   ~V4L2ImageProcessorBackend() override;
   void Destroy() override;
   // Stop all processing on |poll_task_runner_|.

@@ -149,7 +149,8 @@
           "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6", "ctrl+shift+numpad6"]},
           "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7", "ctrl+shift+numpad7"]},
           "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8", "ctrl+shift+numpad8"]},
-          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]}
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]},
+          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
         }
       ],
       "default_linux": [
@@ -298,7 +299,8 @@
           "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["ctrl+shift+6", "ctrl+shift+numpad6"]},
           "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["ctrl+shift+7", "ctrl+shift+numpad7"]},
           "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["ctrl+shift+8", "ctrl+shift+numpad8"]},
-          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]}
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["ctrl+shift+9", "ctrl+shift+numpad9"]},
+          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
         }
       ],
       "default_mac": [
@@ -447,7 +449,8 @@
           "COMMAND_WORKSPACE_SWITCH_6": {"shortcuts": ["shift+meta+6"]},
           "COMMAND_WORKSPACE_SWITCH_7": {"shortcuts": ["shift+meta+7"]},
           "COMMAND_WORKSPACE_SWITCH_8": {"shortcuts": ["shift+meta+8"]},
-          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["shift+meta+9"]}
+          "COMMAND_WORKSPACE_SWITCH_9": {"shortcuts": ["shift+meta+9"]},
+          "COMMAND_HIBERNATE_INACTIVE_WORKSPACES": {"shortcuts": []}
         }
       ]
     },
@@ -895,6 +898,11 @@
     },
     "biscuit": {
       "load_bookmarks": {
+        "type": "boolean",
+        "default": false,
+        "syncable": true
+      },
+      "log_rocker_gestures": {
         "type": "boolean",
         "default": false,
         "syncable": true
@@ -2200,6 +2208,11 @@
             "id": "PanelChat",
             "width": -1,
             "resizable": false
+          },
+          {
+            "id": "PanelSession",
+            "width": -1,
+            "resizable": false
           }
         ],
         "syncable": false
@@ -2735,6 +2748,52 @@
         "type": "boolean",
         "default": true,
         "syncable": true
+      },
+      "save_all_workspaces": {
+        "description": "Save information of all workspaces when saving a session",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
+      "save_on_exit": {
+        "description": "Automatically save current set of pages to the session history on exit",
+        "type": "enum",
+        "enum_values": {
+          "prompt": 0,
+          "off": 1,
+          "on": 2
+        },
+        "default": "prompt",
+        "syncable": true
+      },
+      "exit_save_list_size": {
+         "description": "Number of entries the exit save list can hold",
+         "type": "integer",
+         "default": 5,
+          "syncable": true
+      },
+      "dialog": {
+        "sorting": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "createDateJS"},
+          "syncable": true
+        }
+      },
+      "panel": {
+        "sorting": {
+          "type": "dictionary",
+          "default": {"sortOrder": 1, "sortField": "createDateJS"},
+          "syncable": true
+        },
+        "itemSize": {
+          "type": "enum",
+          "enum_values": {
+            "detailed": 1,
+            "compact": 2
+          },
+          "default": "detailed",
+          "syncable": true
+        }
       }
     },
     "settings": {
@@ -2904,8 +2963,24 @@
           "syncable": true
         },
         "width": {
+          "description": "[DEPRECATED 2023/2]",
           "type": "integer",
           "default": 170,
+          "syncable": false
+        },
+        "size": {
+          "description": "Size of the speed dials",
+          "type": "enum",
+          "enum_values": {
+            "icon": 0,
+            "tiny": 1,
+            "small": 2,
+            "medium": 3,
+            "large": 4,
+            "huge": 5,
+            "fit_to_columns": 6
+          },
+          "default": "small",
           "syncable": false
         },
         "tracker_suggestion_show": {
@@ -3427,6 +3502,11 @@
       }
     },
     "appearance": {
+      "disable_title_bar": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "css_ui_mods_directory": {
         "type": "file_path",
         "description": "CSS modifications directory where *.css files will be injected from.",
@@ -3435,7 +3515,7 @@
       },
       "hud": {
         "enabled": {
-          "description": "Display overlaid Head-Up Display",
+          "description": "[DEPRECATED 2023/2] Display overlaid Head-Up Display",
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -3808,7 +3888,7 @@
             "url": "",
             "name": "Beach",
             "accentFromPage": true,
-            "accentOnWindow": false,
+            "accentOnWindow": true,
             "accentSaturationLimit": 1,
             "backgroundImage": "/resources/bg_alt_4.webp",
             "backgroundPosition": "stretch",
@@ -3818,7 +3898,7 @@
             "colorFg": "#192419",
             "colorHighlightBg": "#e9780e",
             "colorWindowBg": "#f1efea",
-            "contrast": 5,
+            "contrast": 1,
             "preferSystemAccent": false,
             "alpha": 0.80,
             "blur": 10,
@@ -3878,17 +3958,29 @@
       "navigation": {
         "type": "list",
         "default": [
+          "PanelToggle",
+          "FlexibleSpacer",
           "Back",
           "Forward",
-          "Rewind",
-          "FastForward",
           "Reload",
-          "Home",
           "AddressField",
           "SearchField",
-          "AccountButton",
+          "FlexibleSpacer",
           "UpdateButton",
-          "Extensions"
+          "Extensions",
+          "AccountButton"
+        ],
+        "default_linux": [
+          "PanelToggle",
+          "FlexibleSpacer",
+          "Back",
+          "Forward",
+          "Reload",
+          "AddressField",
+          "SearchField",
+          "FlexibleSpacer",
+          "Extensions",
+          "AccountButton"
         ],
         "syncable": false
       },
@@ -3900,14 +3992,15 @@
           "PanelDownloads",
           "PanelHistory",
           "PanelNotes",
-          "PanelWindow",
           "PanelTranslate",
+          "PanelWindow",
           "PanelMail",
           "PanelCalendar",
           "PanelTasks",
           "PanelFeeds",
           "PanelContacts",
           "PanelChat",
+          "PanelSession",
           "WEBPANEL_949d4873-deed-4168-b306-92d1848687a5",
           "WEBPANEL_ckmam0bsw00002y5xoafpww5i",
           "WEBPANEL_ckn7fhhqx0000hc2roo8jshm4",
@@ -3920,25 +4013,23 @@
       "status": {
         "type": "list",
         "default": [
-          "PanelToggle",
-          "BreakMode",
           "SyncStatus",
           "MailStatus",
           "CalendarStatus",
           "StatusInfo",
           "VersionInfo",
           "CaptureImages",
-          "TilingToggle",
           "ImagesToggle",
+          "TilingToggle",
           "PageActions",
-          "Zoom",
-          "Clock"
+          "Zoom"
         ],
         "syncable": false
       },
       "mail": {
         "type": "list",
         "default": [
+          "PanelToggle",
           "MailBack",
           "MailForward",
           "MailReload",
@@ -3967,6 +4058,7 @@
       "mail_message": {
         "type": "list",
         "default": [
+          "PanelToggle",
           "MailBack",
           "MailForward",
           "MailReload",
@@ -3991,6 +4083,7 @@
       "mail_composer": {
         "type": "list",
         "default": [
+          "PanelToggle",
           "MailBack",
           "MailForward",
           "MailReload",
@@ -4378,7 +4471,7 @@
       },
       "button": {
         "show_in_tabbar": {
-          "description": "[DEPRECATED 2023/01]",
+          "description": "Display Workspace button in Tab Bar",
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -4600,6 +4693,22 @@
     "kVivaldiTranslateLanguageList": {
       "path": "vivaldi.translate.language_list",
       "type": "list"
+    },
+    "kVivaldiClientHintsBrand": {
+      "path": "vivaldi.ClientHintsBrand",
+      "type": "integer"
+    },
+    "kVivaldiClientHintsBrandAppendVivaldi": {
+      "path": "vivaldi.ClientHintsBrandAppendVivaldi",
+      "type": "boolean"
+    },
+    "kVivaldiClientHintsBrandCustomBrand": {
+      "path": "vivaldi.ClientHintsCustomBrand",
+      "type": "string"
+    },
+    "kVivaldiClientHintsBrandCustomBrandVersion": {
+      "path": "vivaldi.ClientHintsCustomBrandVersion",
+      "type": "string"
     }
   }
 }

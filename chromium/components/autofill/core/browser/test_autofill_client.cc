@@ -41,6 +41,19 @@ version_info::Channel TestAutofillClient::GetChannel() const {
   return channel_for_testing_;
 }
 
+bool TestAutofillClient::IsOffTheRecord() {
+  return is_off_the_record_;
+}
+
+AutofillDownloadManager* TestAutofillClient::GetDownloadManager() {
+  return download_manager_.get();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+TestAutofillClient::GetURLLoaderFactory() {
+  return test_shared_loader_factory_;
+}
+
 TestPersonalDataManager* TestAutofillClient::GetPersonalDataManager() {
   return test_personal_data_manager_.get();
 }
@@ -58,9 +71,9 @@ MerchantPromoCodeManager* TestAutofillClient::GetMerchantPromoCodeManager() {
   return &mock_merchant_promo_code_manager_;
 }
 
-CreditCardCVCAuthenticator* TestAutofillClient::GetCVCAuthenticator() {
+CreditCardCvcAuthenticator* TestAutofillClient::GetCvcAuthenticator() {
   if (!cvc_authenticator_)
-    cvc_authenticator_ = std::make_unique<CreditCardCVCAuthenticator>(this);
+    cvc_authenticator_ = std::make_unique<CreditCardCvcAuthenticator>(this);
   return cvc_authenticator_.get();
 }
 
@@ -151,7 +164,7 @@ TestAutofillClient::CreateCreditCardInternalAuthenticator(
 }
 #endif
 
-void TestAutofillClient::ShowAutofillSettings(bool show_credit_card_settings) {}
+void TestAutofillClient::ShowAutofillSettings(PopupType popup_type) {}
 
 void TestAutofillClient::ShowUnmaskPrompt(
     const autofill::CreditCard& card,
@@ -293,21 +306,22 @@ bool TestAutofillClient::HasCreditCardScanFeature() {
 
 void TestAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {}
 
+bool TestAutofillClient::TryToShowFastCheckout(
+    const FormData& form,
+    const FormFieldData& field,
+    base::WeakPtr<AutofillManager> autofill_manager) {
+  return false;
+}
+
+void TestAutofillClient::HideFastCheckout(bool allow_further_runs) {}
+
 bool TestAutofillClient::IsFastCheckoutSupported() {
   return false;
 }
 
-bool TestAutofillClient::IsFastCheckoutTriggerForm(const FormData& form,
-                                                   const FormFieldData& field) {
+bool TestAutofillClient::IsShowingFastCheckoutUI() {
   return false;
 }
-
-bool TestAutofillClient::ShowFastCheckout(
-    base::WeakPtr<FastCheckoutDelegate> delegate) {
-  return false;
-}
-
-void TestAutofillClient::HideFastCheckout() {}
 
 bool TestAutofillClient::IsTouchToFillCreditCardSupported() {
   return false;
@@ -315,7 +329,7 @@ bool TestAutofillClient::IsTouchToFillCreditCardSupported() {
 
 bool TestAutofillClient::ShowTouchToFillCreditCard(
     base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard* const> cards_to_suggest) {
+    base::span<const autofill::CreditCard> cards_to_suggest) {
   return false;
 }
 
@@ -329,8 +343,8 @@ void TestAutofillClient::UpdateAutofillPopupDataListValues(
     const std::vector<std::u16string>& values,
     const std::vector<std::u16string>& labels) {}
 
-base::span<const Suggestion> TestAutofillClient::GetPopupSuggestions() const {
-  return base::span<const Suggestion>();
+std::vector<Suggestion> TestAutofillClient::GetPopupSuggestions() const {
+  return {};
 }
 
 void TestAutofillClient::PinPopupView() {}
@@ -369,14 +383,6 @@ void TestAutofillClient::DidFillOrPreviewField(
 bool TestAutofillClient::IsContextSecure() const {
   // Simplified secure context check for tests.
   return form_origin_.SchemeIs("https");
-}
-
-bool TestAutofillClient::ShouldShowSigninPromo() {
-  return false;
-}
-
-bool TestAutofillClient::AreServerCardsSupported() const {
-  return true;
 }
 
 void TestAutofillClient::ExecuteCommand(int id) {}

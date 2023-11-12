@@ -6,8 +6,8 @@
 
 #include <memory>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
@@ -86,7 +86,7 @@ class RTCRtpReceiverImplTest : public ::testing::Test {
   scoped_refptr<blink::TestWebRTCStatsReportObtainer> GetStats() {
     scoped_refptr<blink::TestWebRTCStatsReportObtainer> obtainer =
         base::MakeRefCounted<TestWebRTCStatsReportObtainer>();
-    receiver_->GetStats(obtainer->GetStatsCallbackWrapper(), {});
+    receiver_->GetStats(obtainer->GetStatsCallbackWrapper(), {}, false);
     return obtainer;
   }
 
@@ -153,9 +153,9 @@ TEST_F(RTCRtpReceiverImplTest, GetStats) {
   // Make the mock return a blink version of the |webtc_report|. The mock does
   // not perform any stats filtering, we just set it to a dummy value.
   rtc::scoped_refptr<webrtc::RTCStatsReport> webrtc_report =
-      webrtc::RTCStatsReport::Create(0u);
-  webrtc_report->AddStats(
-      std::make_unique<webrtc::RTCInboundRTPStreamStats>("stats-id", 1234u));
+      webrtc::RTCStatsReport::Create(webrtc::Timestamp::Micros(0));
+  webrtc_report->AddStats(std::make_unique<webrtc::RTCInboundRTPStreamStats>(
+      "stats-id", webrtc::Timestamp::Micros(1234)));
   peer_connection_->SetGetStatsReport(webrtc_report.get());
 
   auto obtainer = GetStats();
@@ -169,7 +169,7 @@ TEST_F(RTCRtpReceiverImplTest, GetStats) {
   EXPECT_EQ(report->Size(), 1u);
   auto stats = report->GetStats(blink::WebString::FromUTF8("stats-id"));
   EXPECT_TRUE(stats);
-  EXPECT_EQ(stats->Timestamp(), 1.234);
+  EXPECT_EQ(stats->TimestampMs(), 1.234);
 }
 
 TEST_F(RTCRtpReceiverImplTest, CreateReceiverWithInsertableStreams) {

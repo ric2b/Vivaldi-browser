@@ -5,9 +5,9 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/compiler_specific.h"
-#include "notes/notes_model.h"
-#include "notes/notes_model_observer.h"
+#import "base/compiler_specific.h"
+#import "notes/notes_model_observer.h"
+#import "notes/notes_model.h"
 
 // The ObjC translations of the C++ observer callbacks are defined here.
 @protocol NoteModelBridgeObserver<NSObject>

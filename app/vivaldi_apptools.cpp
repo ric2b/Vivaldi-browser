@@ -13,6 +13,7 @@ namespace {
 const char *const vivaldi_extra_locales_array[] = {
   "af",
   "be",
+  "ca@valencia",
   "de-CH",
   "en-AU",
   "en-IN",

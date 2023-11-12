@@ -244,6 +244,26 @@ NGBreakAppeal CalculateBreakAppealInside(
   return appeal;
 }
 
+LogicalSize FragmentainerLogicalCapacity(
+    const NGPhysicalBoxFragment& fragmentainer) {
+  DCHECK(fragmentainer.IsFragmentainerBox());
+  LogicalSize logical_size =
+      WritingModeConverter(fragmentainer.Style().GetWritingDirection())
+          .ToLogical(fragmentainer.Size());
+  // TODO(layout-dev): This should really be checking if there are any
+  // descendants that take up block space rather than if it has overflow. In
+  // other words, we would still want to clamp a zero height fragmentainer if
+  // it had content with zero inline size and non-zero block size. This would
+  // likely require us to store an extra flag on NGPhysicalBoxFragment.
+  if (fragmentainer.HasLayoutOverflow()) {
+    // Don't clamp the fragmentainer to a block size of 1 if it is truly a
+    // zero-height column.
+    logical_size.block_size =
+        ClampedToValidFragmentainerCapacity(logical_size.block_size);
+  }
+  return logical_size;
+}
+
 LogicalOffset GetFragmentainerProgression(const NGBoxFragmentBuilder& builder,
                                           NGFragmentationType type) {
   if (type == kFragmentColumn) {
@@ -357,7 +377,8 @@ void SetupFragmentBuilderForFragmentation(
     // since captions are not part of the "table box", and any specified
     // block-size pertains to the table box, while the captions are on the
     // outside of the "table box", but still part of the fragment.
-    if (!node.IsTable()) {
+    if (!node.IsTable() &&
+        builder->InitialBorderBoxSize().inline_size != kIndefiniteSize) {
       // Pass an "infinite" intrinsic size to see how the block-size is
       // constrained. If it doesn't affect the block size, it means that we can
       // tell before layout how much more space this node needs.
@@ -399,6 +420,10 @@ void SetupFragmentBuilderForFragmentation(
   }
 
   if (space.IsPaginated()) {
+    // As long as the page name inside doesn't change, we can stay on the same
+    // page as the preceding content.
+    builder->SetPreviousPageName(space.PageName());
+
     if (const AtomicString page_name = node.PageName())
       builder->SetStartPageNameIfNeeded(page_name);
   }
@@ -493,13 +518,18 @@ NGBreakStatus FinishFragmentation(NGBlockNode node,
     // different pages, lest it be clipped and lost.
     //
     // There is a last-resort breakpoint before trailing border and padding, so
-    // first check if we can break there and still make progress.
+    // first check if we can break there and still make progress. Don't allow a
+    // break here for table cells, though, as that might disturb the row
+    // stretching machinery, causing an infinite loop. We'd add the stretch
+    // amount to the block-size to the content box of the table cell, even
+    // though we're past it.
     DCHECK_GE(desired_intrinsic_block_size, trailing_border_padding);
     DCHECK_GE(desired_block_size, trailing_border_padding);
 
     LayoutUnit subtractable_border_padding;
-    if (desired_block_size > trailing_border_padding)
+    if (desired_block_size > trailing_border_padding && !node.IsTableCell()) {
       subtractable_border_padding = trailing_border_padding;
+    }
 
     LayoutUnit modified_intrinsic_block_size = std::max(
         space_left, desired_intrinsic_block_size - subtractable_border_padding);
@@ -1307,6 +1337,17 @@ PhysicalOffset OffsetInStitchedFragments(
 #endif
     }
     stitched_block_size += NGFragment(writing_direction, walker).BlockSize();
+
+    // Repeated content isn't stitched, so just stop when we have processed one
+    // fragment.
+    if (walker.BreakToken() && walker.BreakToken()->IsRepeated()) {
+#if DCHECK_IS_ON()
+      // We haven't necessarily found |fragment|, but it doesn't matter in this
+      // case. Just silence the DHCECK below.
+      found_self = true;
+#endif
+      break;
+    }
   }
 #if DCHECK_IS_ON()
   DCHECK(found_self);

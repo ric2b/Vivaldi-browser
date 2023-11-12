@@ -545,7 +545,7 @@ ExtensionFunction::ResponseAction UtilitiesCanOpenUrlExternallyFunction::Run() {
     // until the user blocks it. But on Mac and Windows the behavior is more
     // sensible.
     std::u16string application_name =
-        shell_integration::GetApplicationNameForProtocol(url);
+        shell_integration::GetApplicationNameForScheme(url);
     if (!application_name.empty()) {
       result = true;
       break;
@@ -557,7 +557,7 @@ ExtensionFunction::ResponseAction UtilitiesCanOpenUrlExternallyFunction::Run() {
     // TODO(igor@vivaldi.com): Figure out if this check is really necessary
     // given the above GetApplicationNameForProtocol() check?
     auto default_protocol_worker =
-        base::MakeRefCounted<shell_integration::DefaultProtocolClientWorker>(
+        base::MakeRefCounted<shell_integration::DefaultSchemeClientWorker>(
             url.scheme());
 
     // StartCheckIsDefault takes ownership and releases everything once all
@@ -989,7 +989,7 @@ ExtensionFunction::ResponseAction UtilitiesTakeMutexFunction::Run() {
 void UtilitiesTakeMutexFunction::OnMutexAcquired(std::string name,
                                                  int release_token) {
   namespace Results = vivaldi::utilities::TakeMutex::Results;
-  base::Value mutex_handle(base::Value::Type::DICTIONARY);
+  base::Value mutex_handle(base::Value::Type::DICT);
   mutex_handle.SetStringKey(kMutexNameKey, std::move(name));
   mutex_handle.SetIntKey(kMutexReleaseTokenKey, release_token);
   Respond(ArgumentList(Results::Create(std::move(mutex_handle))));

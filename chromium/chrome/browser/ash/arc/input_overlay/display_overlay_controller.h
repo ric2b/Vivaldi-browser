@@ -16,6 +16,8 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/layout/layout_types.h"
+#include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
 
 namespace views {
 class Widget;
@@ -35,20 +37,20 @@ class ActionEditMenu;
 class EditFinishView;
 class MessageView;
 class EducationalView;
+class NudgeView;
 
 // DisplayOverlayController manages the input mapping view, view and edit mode,
 // menu, and educational dialog. It also handles the visibility of the
 // |ActionEditMenu| and |MessageView| by listening to the |LocatedEvent|.
 class DisplayOverlayController : public ui::EventHandler,
-                                 public ash::ColorModeObserver {
+                                 public ash::ColorModeObserver,
+                                 public views::WidgetObserver {
  public:
   DisplayOverlayController(TouchInjector* touch_injector, bool first_launch);
   DisplayOverlayController(const DisplayOverlayController&) = delete;
   DisplayOverlayController& operator=(const DisplayOverlayController&) = delete;
   ~DisplayOverlayController() override;
 
-  // Virtual for test.
-  virtual void OnWindowBoundsChanged();
   void SetDisplayMode(DisplayMode mode);
   // Get the bounds of |menu_entry_| in screen coordinates.
   absl::optional<gfx::Rect> GetOverlayMenuEntryBounds();
@@ -83,12 +85,19 @@ class DisplayOverlayController : public ui::EventHandler,
   void OnActionRemoved(Action* action);
   void OnActionTrashButtonPressed(Action* action);
 
+  // For menu entry hover state:
+  void SetMenuEntryHoverState(bool curr_hover_state);
+
   // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnTouchEvent(ui::TouchEvent* event) override;
 
   // ash::ColorModeObserver:
   void OnColorModeChanged(bool dark_mode_enabled) override;
+
+  // views::WidgetObserver:
+  void OnWidgetBoundsChanged(views::Widget* widget,
+                             const gfx::Rect& new_bounds) override;
 
   const TouchInjector* touch_injector() const { return touch_injector_; }
 
@@ -116,9 +125,10 @@ class DisplayOverlayController : public ui::EventHandler,
   void AddMenuEntryView(views::Widget* overlay_widget);
   void RemoveMenuEntryView();
   void OnMenuEntryPressed();
-  void OnMenuEntryDragEnd(absl::optional<gfx::Point> location);
+  void OnMenuEntryPositionChanged(bool leave_focus,
+                                  absl::optional<gfx::Point> location);
   void FocusOnMenuEntry();
-  void ClearFocusOnMenuEntry();
+  void ClearFocus();
   void RemoveInputMenuView();
 
   void AddInputMappingView(views::Widget* overlay_widget);
@@ -156,11 +166,19 @@ class DisplayOverlayController : public ui::EventHandler,
   // of their view bounds.
   void ProcessPressedEvent(const ui::LocatedEvent& event);
 
+  // When the input is processed on overlay in edit mode, PlaceholderActivity
+  // task window becomes the front task window. This ensures the target task
+  // window is moved back to the front of task stack on ARC side for view mode.
+  void EnsureTaskWindowToFrontForViewMode(views::Widget* overlay_widget);
+
+  bool ShowingNudge();
+
   // For test:
   gfx::Rect GetInputMappingViewBoundsForTesting();
   void DismissEducationalViewForTesting();
   InputMenuView* GetInputMenuView() { return input_menu_view_; }
   MenuEntryView* GetMenuEntryView() { return menu_entry_; }
+  void TriggerWidgetBoundsChangedForTesting();
 
   const raw_ptr<TouchInjector> touch_injector_;
 
@@ -172,7 +190,10 @@ class DisplayOverlayController : public ui::EventHandler,
   raw_ptr<EditFinishView> edit_finish_view_ = nullptr;
   raw_ptr<MessageView> message_ = nullptr;
   raw_ptr<EducationalView> educational_view_ = nullptr;
-  raw_ptr<ash::PillButton> nudge_view_ = nullptr;
+  // TODO(b/260937747): Update or remove when removing flags
+  // |kArcInputOverlayAlphaV2| or |kArcInputOverlayBeta|.
+  raw_ptr<ash::PillButton> nudge_view_alpha_ = nullptr;
+  raw_ptr<NudgeView> nudge_view_ = nullptr;
   // TODO(b/250900717): Below are temporary UIs for editor feature.
   raw_ptr<ash::PillButton> add_action_tap_ = nullptr;
   raw_ptr<ash::PillButton> add_action_move_ = nullptr;

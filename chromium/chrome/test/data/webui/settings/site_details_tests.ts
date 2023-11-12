@@ -11,6 +11,7 @@ import {ChooserType, ContentSetting, ContentSettingsTypes, SiteDetailsElement, S
 import {MetricsBrowserProxyImpl, PrivacyElementInteractions, Router, routes} from 'chrome://settings/settings.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 
 import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 import {TestSiteSettingsPrefsBrowserProxy} from './test_site_settings_prefs_browser_proxy.js';
@@ -33,28 +34,20 @@ class TestWebsiteUsageBrowserProxy extends TestBrowserProxy implements
   }
 }
 
-/** @fileoverview Suite of tests for site-details. */
+/** Suite of tests for site-details. */
 suite('SiteDetails', function() {
-  /**
-   * A site list element created before each test.
-   */
+  /** A site list element created before each test. */
   let testElement: SiteDetailsElement;
 
-  /**
-   * An example pref with 1 pref in each category.
-   */
+  /** An example pref with 1 pref in each category. */
   let prefs: SiteSettingsPref;
 
-  /**
-   * The mock site settings prefs proxy object to use during test.
-   */
+  /** The mock site settings prefs proxy object to use during test. */
   let browserProxy: TestSiteSettingsPrefsBrowserProxy;
 
   let testMetricsBrowserProxy: TestMetricsBrowserProxy;
 
-  /**
-   * The mock website usage proxy object to use during test.
-   */
+  /** The mock website usage proxy object to use during test. */
   let websiteUsageProxy: TestWebsiteUsageBrowserProxy;
 
   // Initialize a site-details before each test.
@@ -210,7 +203,7 @@ suite('SiteDetails', function() {
     // If there is, check the correct amount of usage is specified.
     const usage = '1 KB';
     webUIListenerCallback(
-        'usage-total-changed', 'foo.com', usage, '10 cookies');
+        'usage-total-changed', 'https://foo.com:443', usage, '10 cookies');
     assertTrue(testElement.$.noStorage.hidden);
     assertFalse(testElement.$.storage.hidden);
     assertTrue(testElement.$.usage.textContent!.includes(usage));
@@ -229,7 +222,7 @@ suite('SiteDetails', function() {
     ]);
 
     const hostRequested = results[1];
-    assertEquals('foo.com', hostRequested);
+    assertEquals('https://foo.com:443', hostRequested);
     webUIListenerCallback(
         'usage-total-changed', hostRequested, '1 KB', '10 cookies');
     assertEquals(
@@ -259,7 +252,7 @@ suite('SiteDetails', function() {
     // Ensure the mock's methods were called and check usage was cleared
     // on clicking the trash button.
     const hostRequested = results[1];
-    assertEquals('foo.com', hostRequested);
+    assertEquals('https://foo.com:443', hostRequested);
     webUIListenerCallback(
         'usage-total-changed', hostRequested, '1 KB', '10 cookies');
     assertEquals(
@@ -281,85 +274,71 @@ suite('SiteDetails', function() {
     assertEquals(PrivacyElementInteractions.SITE_DETAILS_CLEAR_DATA, metric);
   });
 
-  test('correct pref settings are shown', function() {
+  test('correct pref settings are shown', async function() {
     browserProxy.setPrefs(prefs);
     testElement = createSiteDetails('https://foo.com:443');
 
-    return browserProxy.whenCalled('isOriginValid')
-        .then(() => {
-          return browserProxy.whenCalled('getOriginPermissions');
-        })
-        .then(() => {
-          testElement.shadowRoot!.querySelectorAll('site-details-permission')
-              .forEach((siteDetailsPermission) => {
-                if (!isChromeOS &&
-                    siteDetailsPermission.category ===
-                        ContentSettingsTypes.PROTECTED_CONTENT) {
-                  return;
-                }
+    await browserProxy.whenCalled('isOriginValid').then(async () => {
+      await browserProxy.whenCalled('getOriginPermissions');
+    });
 
-                // Verify settings match the values specified in |prefs|.
-                let expectedSetting = ContentSetting.ALLOW;
-                let expectedSource = SiteSettingSource.PREFERENCE;
-                let expectedMenuValue = ContentSetting.ALLOW;
+    const siteDetailsPermissions =
+        testElement.shadowRoot!.querySelectorAll('site-details-permission');
+    siteDetailsPermissions.forEach((siteDetailsPermission) => {
+      if (!isChromeOS &&
+          siteDetailsPermission.category ===
+              ContentSettingsTypes.PROTECTED_CONTENT) {
+        return;
+      }
 
-                // For all the categories with non-user-set 'Allow' preferences,
-                // update expected values.
-                if (siteDetailsPermission.category ===
-                        ContentSettingsTypes.NOTIFICATIONS ||
-                    siteDetailsPermission.category ===
-                        ContentSettingsTypes.JAVASCRIPT ||
-                    siteDetailsPermission.category ===
-                        ContentSettingsTypes.IMAGES ||
-                    siteDetailsPermission.category ===
-                        ContentSettingsTypes.POPUPS ||
-                    siteDetailsPermission.category ===
-                        ContentSettingsTypes.FILE_SYSTEM_WRITE) {
-                  expectedSetting =
-                      prefs.exceptions[siteDetailsPermission.category][0]!
-                          .setting;
-                  expectedSource =
-                      prefs.exceptions[siteDetailsPermission.category][0]!
-                          .source;
-                  expectedMenuValue =
-                      (expectedSource === SiteSettingSource.DEFAULT) ?
-                      ContentSetting.DEFAULT :
-                      expectedSetting;
-                }
-                assertEquals(
-                    expectedSetting, siteDetailsPermission.site.setting);
-                assertEquals(expectedSource, siteDetailsPermission.site.source);
-                assertEquals(
-                    expectedMenuValue,
-                    siteDetailsPermission.$.permission.value);
-              });
-        });
+      // Verify settings match the values specified in |prefs|.
+      let expectedSetting = ContentSetting.ALLOW;
+      let expectedSource = SiteSettingSource.PREFERENCE;
+      let expectedMenuValue = ContentSetting.ALLOW;
+
+      // For all the categories with non-user-set 'Allow' preferences,
+      // update expected values.
+      if (siteDetailsPermission.category ===
+              ContentSettingsTypes.NOTIFICATIONS ||
+          siteDetailsPermission.category === ContentSettingsTypes.JAVASCRIPT ||
+          siteDetailsPermission.category === ContentSettingsTypes.IMAGES ||
+          siteDetailsPermission.category === ContentSettingsTypes.POPUPS ||
+          siteDetailsPermission.category ===
+              ContentSettingsTypes.FILE_SYSTEM_WRITE) {
+        expectedSetting =
+            prefs.exceptions[siteDetailsPermission.category][0]!.setting;
+        expectedSource =
+            prefs.exceptions[siteDetailsPermission.category][0]!.source;
+        expectedMenuValue = expectedSource === SiteSettingSource.DEFAULT ?
+            ContentSetting.DEFAULT :
+            expectedSetting;
+      }
+      assertEquals(expectedSetting, siteDetailsPermission.site.setting);
+      assertEquals(expectedSource, siteDetailsPermission.site.source);
+      assertEquals(expectedMenuValue, siteDetailsPermission.$.permission.value);
+    });
   });
 
-  test('categories can be hidden', function() {
+  test('categories can be hidden', async function() {
     browserProxy.setPrefs(prefs);
     // Only the categories in this list should be visible to the user.
     browserProxy.setCategoryList(
         [ContentSettingsTypes.NOTIFICATIONS, ContentSettingsTypes.GEOLOCATION]);
     testElement = createSiteDetails('https://foo.com:443');
 
-    return browserProxy.whenCalled('isOriginValid')
-        .then(() => {
-          return browserProxy.whenCalled('getOriginPermissions');
-        })
-        .then(() => {
-          testElement.shadowRoot!.querySelectorAll('site-details-permission')
-              .forEach((siteDetailsPermission) => {
-                const shouldBeVisible = siteDetailsPermission.category ===
-                        ContentSettingsTypes.NOTIFICATIONS ||
-                    siteDetailsPermission.category ===
-                        ContentSettingsTypes.GEOLOCATION;
-                assertEquals(
-                    !shouldBeVisible, siteDetailsPermission.$.details.hidden);
-              });
+    await browserProxy.whenCalled('isOriginValid');
+    await browserProxy.whenCalled('getOriginPermissions');
+
+    testElement.shadowRoot!.querySelectorAll('site-details-permission')
+        .forEach((siteDetailsPermission) => {
+          const shouldBeVisible = siteDetailsPermission.category ===
+                  ContentSettingsTypes.NOTIFICATIONS ||
+              siteDetailsPermission.category ===
+                  ContentSettingsTypes.GEOLOCATION;
+          assertEquals(
+              !shouldBeVisible, siteDetailsPermission.$.details.hidden);
         });
   });
-
 
   test('show confirmation dialog on reset settings', async function() {
     browserProxy.setPrefs(prefs);
@@ -467,22 +446,21 @@ suite('SiteDetails', function() {
     assertEquals(
         routes.SITE_SETTINGS_SITE_DETAILS.path,
         Router.getInstance().getCurrentRoute().path);
-    const args = await browserProxy.whenCalled('isOriginValid');
 
+    const args = await browserProxy.whenCalled('isOriginValid');
     assertEquals(invalid_url, args);
     await new Promise((resolve) => {
       listenOnce(window, 'popstate', resolve);
     });
-
     assertEquals(
         routes.SITE_SETTINGS.path, Router.getInstance().getCurrentRoute().path);
   });
 
-  test('call fetch block autoplay status', function() {
+  test('call fetch block autoplay status', async function() {
     const origin = 'https://foo.com:443';
     browserProxy.setPrefs(prefs);
     testElement = createSiteDetails(origin);
-    return browserProxy.whenCalled('fetchBlockAutoplayStatus');
+    await browserProxy.whenCalled('fetchBlockAutoplayStatus');
   });
 
   test('check first party set membership label empty string', async function() {
@@ -495,7 +473,7 @@ suite('SiteDetails', function() {
     ]);
 
     const hostRequested = results[0];
-    assertEquals('foo.com', hostRequested);
+    assertEquals('https://foo.com:443', hostRequested);
     webUIListenerCallback(
         'usage-total-changed', hostRequested, '1 KB', '10 cookies', '');
     assertTrue(testElement.$.fpsMembership.hidden);
@@ -514,7 +492,7 @@ suite('SiteDetails', function() {
         ]);
 
         const hostRequested = results[0];
-        assertEquals('foo.com', hostRequested);
+        assertEquals('https://foo.com:443', hostRequested);
         webUIListenerCallback(
             'usage-total-changed', hostRequested, '1 KB', '10 cookies',
             'Allowed for 1 foo.com site', false);
@@ -528,6 +506,7 @@ suite('SiteDetails', function() {
             testElement.shadowRoot!.querySelector<HTMLElement>('#fpsPolicy');
         assertEquals(null, fpsPolicy);
       });
+
   test(
       'first party set policy shown when managed key is set to true',
       async function() {
@@ -540,7 +519,7 @@ suite('SiteDetails', function() {
         ]);
 
         const hostRequested = results[0];
-        assertEquals('foo.com', hostRequested);
+        assertEquals('https://foo.com:443', hostRequested);
         webUIListenerCallback(
             'usage-total-changed', hostRequested, '1 KB', '10 cookies',
             'Allowed for 1 foo.com site', true);
@@ -553,5 +532,51 @@ suite('SiteDetails', function() {
         const fpsPolicy =
             testElement.shadowRoot!.querySelector<HTMLElement>('#fpsPolicy');
         assertFalse(fpsPolicy!.hidden);
+      });
+
+  test(
+      'clear data dialog warns about ad personalization data removal',
+      function() {
+        const origin = 'https://foo.com:443';
+        browserProxy.setPrefs(prefs);
+        testElement = createSiteDetails(origin);
+
+        flush();
+
+        assertTrue(Boolean(testElement.shadowRoot!.querySelector<HTMLElement>(
+            '#confirmClearStorage #adPersonalization')));
+      });
+});
+
+// TODO(crbug.com/1378703): Remove once PrivacySandboxSettings4 has been rolled
+// out.
+suite('SiteDetailsPrivacySandboxSettings4Disabled', function() {
+  suiteSetup(function() {
+    loadTimeData.overrideValues({
+      isPrivacySandboxSettings4: false,
+    });
+  });
+
+  /** A site list element created before each test. */
+  let testElement: SiteDetailsElement;
+
+  function createSiteDetails(origin: string) {
+    const siteDetailsElement = document.createElement('site-details');
+    document.body.appendChild(siteDetailsElement);
+    Router.getInstance().navigateTo(
+        routes.SITE_SETTINGS_SITE_DETAILS,
+        new URLSearchParams('site=' + origin));
+    return siteDetailsElement;
+  }
+
+  test(
+      'clear data dialog does not warn about ad personalization data removal',
+      function() {
+        const origin = 'https://foo.com:443';
+        testElement = createSiteDetails(origin);
+
+        flush();
+        assertFalse(Boolean(testElement.shadowRoot!.querySelector<HTMLElement>(
+            '#confirmClearStorage #adPersonalization')));
       });
 });

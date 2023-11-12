@@ -11,9 +11,9 @@
 #include <vector>
 
 #include "ash/constants/ash_pref_names.h"
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/containers/contains.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/notreached.h"
@@ -56,11 +56,11 @@ constexpr char kPolicyEntryFileExtensionsKey[] = "file_extensions";
 constexpr char kSubkeyURL[] = "url";
 constexpr char kSubkeyHash[] = "hash";
 
-absl::optional<std::string> GetSubkeyString(const base::Value& dict,
+absl::optional<std::string> GetSubkeyString(const base::Value::Dict& dict,
                                             PolicyErrorMap* errors,
                                             const std::string& policy,
                                             const std::string& subkey) {
-  const base::Value* policy_value = dict.FindKey(subkey);
+  const base::Value* policy_value = dict.Find(subkey);
 
   if (!policy_value) {
     errors->AddError(policy, IDS_POLICY_NOT_SPECIFIED_ERROR,
@@ -81,23 +81,19 @@ absl::optional<std::string> GetSubkeyString(const base::Value& dict,
   return policy_value->GetString();
 }
 
-constexpr base::StringPiece kScreenDimDelayAC[] = {"AC", "Delays", "ScreenDim"};
-constexpr base::StringPiece kScreenOffDelayAC[] = {"AC", "Delays", "ScreenOff"};
-constexpr base::StringPiece kIdleWarningDelayAC[] = {"AC", "Delays",
-                                                     "IdleWarning"};
-constexpr base::StringPiece kIdleDelayAC[] = {"AC", "Delays", "Idle"};
-constexpr base::StringPiece kIdleActionAC[] = {"AC", "IdleAction"};
-constexpr base::StringPiece kScreenDimDelayBattery[] = {"Battery", "Delays",
-                                                        "ScreenDim"};
-constexpr base::StringPiece kScreenOffDelayBattery[] = {"Battery", "Delays",
-                                                        "ScreenOff"};
-constexpr base::StringPiece kIdleWarningDelayBattery[] = {"Battery", "Delays",
-                                                          "IdleWarning"};
-constexpr base::StringPiece kIdleDelayBattery[] = {"Battery", "Delays", "Idle"};
-constexpr base::StringPiece kIdleActionBattery[] = {"Battery", "IdleAction"};
+constexpr char kScreenDimDelayAC[] = "AC.Delays.ScreenDim";
+constexpr char kScreenOffDelayAC[] = "AC.Delays.ScreenOff";
+constexpr char kIdleWarningDelayAC[] = "AC.Delays.IdleWarning";
+constexpr char kIdleDelayAC[] = "AC.Delays.Idle";
+constexpr char kIdleActionAC[] = "AC.IdleAction";
+constexpr char kScreenDimDelayBattery[] = "Battery.Delays.ScreenDim";
+constexpr char kScreenOffDelayBattery[] = "Battery.Delays.ScreenOff";
+constexpr char kIdleWarningDelayBattery[] = "Battery.Delays.IdleWarning";
+constexpr char kIdleDelayBattery[] = "Battery.Delays.Idle";
+constexpr char kIdleActionBattery[] = "Battery.IdleAction";
 
 constexpr char kScreenLockDelayAC[] = "AC";
-const char kScreenLockDelayBattery[] = "Battery";
+constexpr char kScreenLockDelayBattery[] = "Battery";
 
 constexpr char kActionSuspend[] = "Suspend";
 constexpr char kActionLogout[] = "Logout";
@@ -171,10 +167,11 @@ bool ExternalDataPolicyHandler::CheckPolicySettings(
 
   const base::Value* value = entry->value(base::Value::Type::DICT);
   DCHECK(value);
+  const base::Value::Dict& dict = value->GetDict();
   absl::optional<std::string> url_string =
-      GetSubkeyString(*value, errors, policy, kSubkeyURL);
+      GetSubkeyString(dict, errors, policy, kSubkeyURL);
   absl::optional<std::string> hash_string =
-      GetSubkeyString(*value, errors, policy, kSubkeyHash);
+      GetSubkeyString(dict, errors, policy, kSubkeyHash);
   if (!url_string || !hash_string)
     return false;
 
@@ -227,9 +224,9 @@ bool NetworkConfigurationPolicyHandler::CheckPolicySettings(
   if (!value)
     return true;
 
-  base::Value root_dict =
+  absl::optional<base::Value::Dict> root_dict =
       chromeos::onc::ReadDictionaryFromJson(value->GetString());
-  if (!root_dict.is_dict()) {
+  if (!root_dict.has_value()) {
     errors->AddError(policy_name(), IDS_POLICY_NETWORK_CONFIG_PARSE_FAILED);
     return false;
   }
@@ -247,8 +244,8 @@ bool NetworkConfigurationPolicyHandler::CheckPolicySettings(
   // ONC policies are always unencrypted.
   chromeos::onc::Validator::Result validation_result;
   validator.ValidateAndRepairObject(
-      &chromeos::onc::kToplevelConfigurationSignature, root_dict,
-      &validation_result);
+      &chromeos::onc::kToplevelConfigurationSignature,
+      base::Value(std::move(*root_dict)), &validation_result);
 
   // Pass error/warning message and non-localized debug_info to PolicyErrorMap.
   std::vector<base::StringPiece> messages;
@@ -322,17 +319,18 @@ NetworkConfigurationPolicyHandler::SanitizeNetworkConfig(
   if (!config)
     return absl::nullopt;
 
-  base::Value toplevel_dict =
+  absl::optional<base::Value::Dict> config_dict =
       chromeos::onc::ReadDictionaryFromJson(config->GetString());
-  if (!toplevel_dict.is_dict())
+  if (!config_dict.has_value()) {
     return absl::nullopt;
+  }
 
   // Placeholder to insert in place of the filtered setting.
   const char kPlaceholder[] = "********";
 
-  toplevel_dict = chromeos::onc::MaskCredentialsInOncObject(
-      chromeos::onc::kToplevelConfigurationSignature, toplevel_dict,
-      kPlaceholder);
+  base::Value toplevel_dict = chromeos::onc::MaskCredentialsInOncObject(
+      chromeos::onc::kToplevelConfigurationSignature,
+      base::Value(std::move(*config_dict)), kPlaceholder);
 
   std::string json_string;
   base::JSONWriter::WriteWithOptions(
@@ -528,42 +526,49 @@ void PowerManagementIdleSettingsPolicyHandler::ApplyPolicySettings(
     const PolicyMap& policies,
     PrefValueMap* prefs) {
   std::unique_ptr<base::Value> policy_value;
-  if (!CheckAndGetValue(policies, nullptr, &policy_value) || !policy_value)
+  if (!CheckAndGetValue(policies, nullptr, &policy_value) || !policy_value) {
     return;
-  DCHECK(policy_value->is_dict());
+  }
+  const base::Value::Dict& policy_value_dict = policy_value->GetDict();
 
   SetPrefValueIfNotNull(prefs, ash::prefs::kPowerAcScreenDimDelayMs,
-                        policy_value->FindPath(kScreenDimDelayAC));
+                        policy_value_dict.FindByDottedPath(kScreenDimDelayAC));
   SetPrefValueIfNotNull(prefs, ash::prefs::kPowerAcScreenOffDelayMs,
-                        policy_value->FindPath(kScreenOffDelayAC));
-  SetPrefValueIfNotNull(prefs, ash::prefs::kPowerAcIdleWarningDelayMs,
-                        policy_value->FindPath(kIdleWarningDelayAC));
+                        policy_value_dict.FindByDottedPath(kScreenOffDelayAC));
+  SetPrefValueIfNotNull(
+      prefs, ash::prefs::kPowerAcIdleWarningDelayMs,
+      policy_value_dict.FindByDottedPath(kIdleWarningDelayAC));
 
-  const base::Value* idle_delay_ac_value = policy_value->FindPath(kIdleDelayAC);
+  const base::Value* idle_delay_ac_value =
+      policy_value_dict.FindByDottedPath(kIdleDelayAC);
   SetPrefValueIfNotNull(prefs, ash::prefs::kPowerAcIdleDelayMs,
                         idle_delay_ac_value);
 
   base::Value idle_action_ac_value = CalculateIdleActionValue(
-      policy_value->FindPath(kIdleActionAC), idle_delay_ac_value);
+      policy_value_dict.FindByDottedPath(kIdleActionAC), idle_delay_ac_value);
   if (!idle_action_ac_value.is_none()) {
     prefs->SetValue(ash::prefs::kPowerAcIdleAction,
                     std::move(idle_action_ac_value));
   }
 
-  SetPrefValueIfNotNull(prefs, ash::prefs::kPowerBatteryScreenDimDelayMs,
-                        policy_value->FindPath(kScreenDimDelayBattery));
-  SetPrefValueIfNotNull(prefs, ash::prefs::kPowerBatteryScreenOffDelayMs,
-                        policy_value->FindPath(kScreenOffDelayBattery));
-  SetPrefValueIfNotNull(prefs, ash::prefs::kPowerBatteryIdleWarningDelayMs,
-                        policy_value->FindPath(kIdleWarningDelayBattery));
+  SetPrefValueIfNotNull(
+      prefs, ash::prefs::kPowerBatteryScreenDimDelayMs,
+      policy_value_dict.FindByDottedPath(kScreenDimDelayBattery));
+  SetPrefValueIfNotNull(
+      prefs, ash::prefs::kPowerBatteryScreenOffDelayMs,
+      policy_value_dict.FindByDottedPath(kScreenOffDelayBattery));
+  SetPrefValueIfNotNull(
+      prefs, ash::prefs::kPowerBatteryIdleWarningDelayMs,
+      policy_value_dict.FindByDottedPath(kIdleWarningDelayBattery));
 
   const base::Value* idle_delay_battery_value =
-      policy_value->FindPath(kIdleDelayBattery);
+      policy_value_dict.FindByDottedPath(kIdleDelayBattery);
   SetPrefValueIfNotNull(prefs, ash::prefs::kPowerBatteryIdleDelayMs,
                         idle_delay_battery_value);
 
   base::Value idle_action_battery_value = CalculateIdleActionValue(
-      policy_value->FindPath(kIdleActionBattery), idle_delay_battery_value);
+      policy_value_dict.FindByDottedPath(kIdleActionBattery),
+      idle_delay_battery_value);
   if (!idle_action_battery_value.is_none()) {
     prefs->SetValue(ash::prefs::kPowerBatteryIdleAction,
                     std::move(idle_action_battery_value));
@@ -585,12 +590,12 @@ void ScreenLockDelayPolicyHandler::ApplyPolicySettings(
   std::unique_ptr<base::Value> policy_value;
   if (!CheckAndGetValue(policies, nullptr, &policy_value) || !policy_value)
     return;
-  DCHECK(policy_value->is_dict());
+  const base::Value::Dict& policy_value_dict = policy_value->GetDict();
 
   SetPrefValueIfNotNull(prefs, ash::prefs::kPowerAcScreenLockDelayMs,
-                        policy_value->FindPath(kScreenLockDelayAC));
+                        policy_value_dict.Find(kScreenLockDelayAC));
   SetPrefValueIfNotNull(prefs, ash::prefs::kPowerBatteryScreenLockDelayMs,
-                        policy_value->FindPath(kScreenLockDelayBattery));
+                        policy_value_dict.Find(kScreenLockDelayBattery));
 }
 
 ScreenBrightnessPercentPolicyHandler::ScreenBrightnessPercentPolicyHandler(
@@ -609,13 +614,13 @@ void ScreenBrightnessPercentPolicyHandler::ApplyPolicySettings(
   std::unique_ptr<base::Value> policy_value;
   if (!CheckAndGetValue(policies, nullptr, &policy_value) || !policy_value)
     return;
-  DCHECK(policy_value->is_dict());
+  const base::Value::Dict& policy_value_dict = policy_value->GetDict();
 
   SetPrefValueIfNotNull(prefs, ash::prefs::kPowerAcScreenBrightnessPercent,
-                        policy_value->FindPath(kScreenBrightnessPercentAC));
+                        policy_value_dict.Find(kScreenBrightnessPercentAC));
   SetPrefValueIfNotNull(
       prefs, ash::prefs::kPowerBatteryScreenBrightnessPercent,
-      policy_value->FindPath(kScreenBrightnessPercentBattery));
+      policy_value_dict.Find(kScreenBrightnessPercentBattery));
 }
 
 ArcServicePolicyHandler::ArcServicePolicyHandler(const char* policy,

@@ -17,11 +17,14 @@ namespace attribution_reporting {
 class AggregatableTriggerData;
 class AggregatableValues;
 class AggregationKeys;
+class DestinationSet;
 class FilterData;
 class Filters;
 class SuitableOrigin;
 
+struct AggregatableDedupKey;
 struct EventTriggerData;
+struct FilterPair;
 struct SourceRegistration;
 struct TriggerRegistration;
 
@@ -33,9 +36,17 @@ bool operator==(const FilterData&, const FilterData&);
 
 std::ostream& operator<<(std::ostream&, const FilterData&);
 
+bool operator==(const FilterPair&, const FilterPair&);
+
+std::ostream& operator<<(std::ostream&, const FilterPair&);
+
 bool operator==(const Filters&, const Filters&);
 
 std::ostream& operator<<(std::ostream&, const Filters&);
+
+bool operator==(const DestinationSet&, const DestinationSet&);
+
+std::ostream& operator<<(std::ostream&, const DestinationSet&);
 
 bool operator==(const SourceRegistration&, const SourceRegistration&);
 
@@ -60,6 +71,10 @@ std::ostream& operator<<(std::ostream&, const TriggerRegistration&);
 bool operator==(const SuitableOrigin&, const SuitableOrigin&);
 
 std::ostream& operator<<(std::ostream&, const SuitableOrigin&);
+
+bool operator==(const AggregatableDedupKey&, const AggregatableDedupKey&);
+
+std::ostream& operator<<(std::ostream&, const AggregatableDedupKey&);
 
 template <typename T, size_t kMaxSize>
 bool operator==(const BoundedList<T, kMaxSize>& a,

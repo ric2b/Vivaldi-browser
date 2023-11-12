@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
 
 namespace media {
@@ -17,6 +17,13 @@ VideoFrameReceiverOnTaskRunner::VideoFrameReceiverOnTaskRunner(
     : receiver_(receiver), task_runner_(std::move(task_runner)) {}
 
 VideoFrameReceiverOnTaskRunner::~VideoFrameReceiverOnTaskRunner() = default;
+
+void VideoFrameReceiverOnTaskRunner::OnCaptureConfigurationChanged() {
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&VideoFrameReceiver::OnCaptureConfigurationChanged,
+                     receiver_));
+}
 
 void VideoFrameReceiverOnTaskRunner::OnNewBuffer(
     int buffer_id,

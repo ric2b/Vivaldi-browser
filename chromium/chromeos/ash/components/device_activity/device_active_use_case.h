@@ -10,20 +10,25 @@
 
 #include "base/component_export.h"
 #include "base/time/time.h"
+#include "chromeos/ash/components/dbus/private_computing/private_computing_service.pb.h"
+#include "chromeos/ash/components/device_activity/churn_active_status.h"
 #include "chromeos/ash/components/device_activity/fresnel_service.pb.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/private_membership/src/private_membership_rlwe_client.h"
 
 class PrefService;
-
-namespace chromeos::system {
-class StatisticsProvider;
-}  // namespace chromeos::system
 
 namespace version_info {
 enum class Channel;
 }  // namespace version_info
 
-namespace ash::device_activity {
+namespace ash {
+
+namespace system {
+class StatisticsProvider;
+}
+
+namespace device_activity {
 
 // Fields used in setting device active metadata, that are explicitly
 // required from outside of ASH_CHROME due to the dependency limitations
@@ -62,21 +67,27 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   DeviceActiveUseCase& operator=(const DeviceActiveUseCase&) = delete;
   virtual ~DeviceActiveUseCase();
 
-  // Generate the window identifier for the use case.
-  // Granularity of formatted date will be based on the use case.
-  //
-  // Method is called to generate |window_id_| every time the machine
-  // transitions out of the idle state. When reporting the use case is
-  // completed for a use case, the |window_id_| is reset to absl::nullopt.
-  virtual std::string GenerateUTCWindowIdentifier(base::Time ts) const = 0;
-
   // Generate Fresnel PSM import request body.
   // This will create the device metadata dimensions sent by PSM import by use
   // case.
   //
   // Important: Each new dimension added to metadata will need to be approved by
   // privacy.
-  virtual FresnelImportDataRequest GenerateImportRequestBody() = 0;
+  virtual absl::optional<FresnelImportDataRequest>
+  GenerateImportRequestBody() = 0;
+
+  // Whether current device active use case check-in is enabled or not.
+  virtual bool IsEnabledCheckIn() = 0;
+
+  // Whether current device active use case check membership is enabled or not.
+  virtual bool IsEnabledCheckMembership() = 0;
+
+  // Generate status storing the last ping pacific date.
+  virtual private_computing::ActiveStatus GenerateActiveStatus() = 0;
+
+  // Define churn observation use case method in parent class with default
+  // return value of empty string for all other use cases.
+  virtual std::string GetObservationPeriod(int period);
 
   // Method used to reset the non constant saved state of the device active use
   // case. The state should be cleared after reporting device actives.
@@ -85,8 +96,8 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   PrefService* GetLocalState() const;
 
   // Return the last known ping timestamp from local state pref, by use case.
-  // For example, the monthly use case will return the last known monthly
-  // timestamp from the local state pref.
+  // For example, the 28DA use case will return the last known timestamp
+  // when the device was active.
   base::Time GetLastKnownPingTimestamp() const;
 
   // Set the last known ping timestamp in local state pref.
@@ -110,9 +121,17 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   absl::optional<private_membership::rlwe::RlwePlaintextId> GetPsmIdentifier()
       const;
 
+  // Generate the window identifier for the use case.
+  // Granularity of formatted date will be based on the use case.
+  //
+  // Method is called to generate |window_id_| every time the machine
+  // transitions out of the idle state. When reporting the use case is
+  // completed for a use case, the |window_id_| is reset to absl::nullopt.
+  virtual std::string GenerateWindowIdentifier(base::Time ts) const;
+
   // Compute the psm identifiers to date pairs for the use case object.
   // This is used to determine when the last sent psm id and its date is.
-  // Date is rounded to nearest UTC midnight for simplicity.
+  // Date is rounded to nearest PT midnight for simplicity.
   virtual bool SavePsmIdToDateMap(base::Time ts);
 
   // Generates the |psm_ids_to_query_| using the |psm_id_to_date_| map.
@@ -144,32 +163,19 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   // Determine if a device ping is needed for a given device window.
   // Performing this check helps reduce QPS to the |CheckingMembership|
   // network requests.
-  //
-  // The first active use case will always return true since the window
-  // identifier is constant.
-  virtual bool IsDevicePingRequired(base::Time new_ping_ts) const;
+  bool IsDevicePingRequired(base::Time new_ping_ts) const;
 
   // Regenerated when the state machine enters check membership Oprf state.
   // Client Generates protos used in request body of Oprf and Query requests.
   void SetPsmRlweClient(
       std::vector<private_membership::rlwe::RlwePlaintextId> psm_ids);
 
-  // Generates the AES-256 encrypted ciphertext, which is used to store
-  // the timestamp for only the first active use case.
-  // The device stable secret (only known to the chromebook itself) is needed to
-  // encrypt/decrypt this value. This ensures the first active timestamp is
-  // reversible by only the device itself.
-  virtual bool EncryptPsmValueAsCiphertext(base::Time ts);
-
-  // Retrieves and decrypts the AES-256 encrypted psm value to a timestamp.
-  virtual base::Time DecryptPsmValueAsTimestamp(std::string ciphertext) const;
-
-  // Format a base::Time object to a valid UTC date.
+  // Format a PT adjusted base::Time object to a valid date string.
   // This function removes the exact time of day when generating the date string
   // by nulling out the hour, minute, second, and millisecond.
   // Method is used to store and read the last ping timestamp as a string
   // when interacting with preserved files over private_computingd dbus.
-  std::string FormatUTCDateString(base::Time ts);
+  std::string FormatPTDateString(base::Time ts);
 
   // Uniquely identifies a window of time for device active counting.
   //
@@ -177,6 +183,17 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   // This field is used apart of PSM Oprf, Query, and Import requests.
   absl::optional<private_membership::rlwe::RlwePlaintextId>
   GeneratePsmIdentifier(absl::optional<std::string> window_id) const;
+
+  // Once the client has initiated churn_active_status object, then pass
+  // the reference to the churn use cases to get the churn active status.
+  void SetChurnActiveStatus(ChurnActiveStatus* churn_active_status);
+
+  // Uses the churn_active_status to get the device churn active status
+  // metadata.
+  ChurnActiveStatus* GetChurnActiveStatus();
+
+  // Retrieve the timestamp when the device came active.
+  base::Time GetActiveTs() const;
 
  protected:
   // Retrieve full hardware class from MachineStatistics.
@@ -218,6 +235,11 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   std::vector<FresnelImportData> new_import_data_;
 
  private:
+  // Stores the timestamp passed to |SetWindowIdentifier| method.
+  // In production, this represents the timestamp when the device
+  // first because active.
+  base::Time active_ts_;
+
   // The ChromeOS platform code will provide a derived PSM device active secret
   // via callback.
   //
@@ -228,10 +250,7 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   // |DeviceActiveUseCase| object lifetime.
   const ChromeDeviceMetadataParameters chrome_passed_device_params_;
 
-  // Key used to query the local state pref for the last ping timestamp by use
-  // case.
-  // For example, the monthly use case will store the key mapping to the last
-  // monthly ping timestamp in the local state pref.
+  // Key used to query the local state pref for the last ping timestamp.
   const std::string use_case_pref_key_;
 
   // The PSM dataset on the serverside is segmented by the PSM use case.
@@ -248,14 +267,19 @@ class COMPONENT_EXPORT(CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY)
   std::unique_ptr<PsmDelegateInterface> psm_delegate_;
 
   // Singleton lives throughout class lifetime.
-  chromeos::system::StatisticsProvider* const statistics_provider_;
+  system::StatisticsProvider* const statistics_provider_;
 
   // Generated on demand each time the state machine leaves the idle state.
   // Client Generates protos used in request body of Oprf and Query requests.
   std::unique_ptr<private_membership::rlwe::PrivateMembershipRlweClient>
       psm_rlwe_client_;
+
+  // The churn_active_status is used for Churn Cohort and Observation use
+  // cases to calculate the churn active status metadata.
+  ChurnActiveStatus* churn_active_status_ = nullptr;
 };
 
-}  // namespace ash::device_activity
+}  // namespace device_activity
+}  // namespace ash
 
 #endif  // CHROMEOS_ASH_COMPONENTS_DEVICE_ACTIVITY_DEVICE_ACTIVE_USE_CASE_H_

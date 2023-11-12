@@ -7,9 +7,9 @@
 #include <stddef.h>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -25,11 +25,13 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/fake_profile_manager.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/profiles/profile_helper.h"
+#include "chrome/browser/profiles/profile_types_ash.h"
 #include "components/account_id/account_id.h"
 #include "components/user_manager/fake_user_manager.h"
 #endif
@@ -39,7 +41,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #endif
 
 const char kGuestProfileName[] = "Guest";
@@ -66,6 +68,10 @@ TestingProfileManager::TestingProfileManager(
 TestingProfileManager::~TestingProfileManager() {
   ProfileDestroyer::DestroyPendingProfilesForShutdown();
 
+  // Drop unowned references before destroying the object that owns them.
+  profile_manager_ = nullptr;
+  local_state_ = nullptr;
+
   // Destroying this class also destroys the LocalState, so make sure the
   // associated ProfileManager is also destroyed.
   browser_process_->SetProfileManager(nullptr);
@@ -91,9 +97,7 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
   // Create a path for the profile based on the name.
   base::FilePath profile_path(profiles_path_);
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (profile_name != chrome::kInitialProfile &&
-      profile_name != chrome::kLockScreenProfile &&
-      profile_name != ash::ProfileHelper::GetLockScreenAppProfileName()) {
+  if (IsUserProfilePath(base::FilePath(profile_name))) {
     const std::string fake_email =
         profile_name.find('@') == std::string::npos
             ? base::ToLowerASCII(profile_name) + "@test"
@@ -141,7 +145,7 @@ TestingProfile* TestingProfileManager::CreateTestingProfile(
   entry->SetAvatarIconIndex(avatar_id);
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   entry->SetSupervisedUserId(is_supervised_profile
-                                 ? ::supervised_users::kChildAccountSUID
+                                 ? ::supervised_user::kChildAccountSUID
                                  : std::string());
 #endif
   entry->SetLocalProfileName(user_name, entry->IsUsingDefaultName());

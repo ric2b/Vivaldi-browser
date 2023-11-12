@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/performance_controls/tab_discard_tab_helper.h"
 
 #include "chrome/browser/performance_manager/public/user_tuning/user_performance_tuning_manager.h"
+#include "content/public/common/url_constants.h"
 
 namespace {
 // Conversion constant for bytes to kilobytes.
@@ -17,8 +18,8 @@ TabDiscardTabHelper::TabDiscardTabHelper(content::WebContents* contents)
     : content::WebContentsObserver(contents),
       content::WebContentsUserData<TabDiscardTabHelper>(*contents) {}
 
-bool TabDiscardTabHelper::IsChipVisible() const {
-  return was_discarded_;
+bool TabDiscardTabHelper::ShouldChipBeVisible() const {
+  return was_discarded_ && is_page_supported_;
 }
 
 bool TabDiscardTabHelper::ShouldIconAnimate() const {
@@ -43,7 +44,7 @@ uint64_t TabDiscardTabHelper::GetMemorySavingsInBytes() const {
           PreDiscardResourceUsage::FromWebContents(&GetWebContents());
   return pre_discard_resource_usage == nullptr
              ? 0
-             : pre_discard_resource_usage->resident_set_size_estimate_kb() *
+             : pre_discard_resource_usage->memory_footprint_estimate_kb() *
                    kKiloByte;
 }
 
@@ -61,9 +62,33 @@ void TabDiscardTabHelper::DidStartNavigation(
     // them causes the state to get reset.
     return;
   }
-  was_discarded_ = navigation_handle->ExistingDocumentWasDiscarded();
+  discard_reason_ = GetDiscardReason(navigation_handle);
+  was_discarded_ =
+      discard_reason_.has_value() &&
+      discard_reason_.value() == mojom::LifecycleUnitDiscardReason::PROACTIVE;
   was_animated_ = false;
   was_chip_hidden_ = false;
+  is_page_supported_ = DoesChipSupportPage(navigation_handle->GetURL());
+}
+
+bool TabDiscardTabHelper::DoesChipSupportPage(const GURL& url) const {
+  return !url.SchemeIs(content::kChromeUIScheme);
+}
+
+absl::optional<mojom::LifecycleUnitDiscardReason>
+TabDiscardTabHelper::GetDiscardReason(
+    content::NavigationHandle* navigation_handle) const {
+  if (navigation_handle->ExistingDocumentWasDiscarded()) {
+    auto* pre_discard_resource_usage = performance_manager::user_tuning::
+        UserPerformanceTuningManager::PreDiscardResourceUsage::FromWebContents(
+            navigation_handle->GetWebContents());
+    return pre_discard_resource_usage == nullptr
+               ? absl::nullopt
+               : absl::make_optional<mojom::LifecycleUnitDiscardReason>(
+                     pre_discard_resource_usage->discard_reason());
+  }
+
+  return absl::nullopt;
 }
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(TabDiscardTabHelper);

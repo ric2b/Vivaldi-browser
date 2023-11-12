@@ -16,7 +16,6 @@
 
 namespace blink {
 
-class GPUAdapter;
 class GPUDevice;
 class GPUCanvasConfiguration;
 class GPUSwapChain;
@@ -107,8 +106,6 @@ class GPUCanvasContext : public CanvasRenderingContext,
 
   void configure(const GPUCanvasConfiguration* descriptor, ExceptionState&);
   void unconfigure();
-  String getPreferredFormat(ExecutionContext* execution_context,
-                            GPUAdapter* adapter);
   GPUTexture* getCurrentTexture(ExceptionState&);
 
   // WebGPUSwapBufferProvider::Client implementation
@@ -116,8 +113,7 @@ class GPUCanvasContext : public CanvasRenderingContext,
 
  private:
   void DetachSwapBuffers();
-  GPUTexture* ReplaceCurrentTexture();
-  void ResizeSwapbuffers(gfx::Size size);
+  void ReplaceDrawingBuffer(bool destroy_swap_buffers);
   void InitializeAlphaModePipeline(WGPUTextureFormat format);
 
   void FinalizeFrame(bool) override;
@@ -148,14 +144,12 @@ class GPUCanvasContext : public CanvasRenderingContext,
   bool new_texture_required_ = true;
   bool stopped_ = false;
 
-  // TODO(crbug.com/1326473): Remove after deprecation period.
-  gfx::Size configured_size_;
-
   // Matches [[configuration]] != null in the WebGPU specification.
   bool configured_ = false;
   // Matches [[texture_descriptor]] in the WebGPU specification except that it
   // never becomes null.
   WGPUTextureDescriptor texture_descriptor_;
+  std::unique_ptr<WGPUTextureFormat[]> view_formats_;
 };
 
 }  // namespace blink

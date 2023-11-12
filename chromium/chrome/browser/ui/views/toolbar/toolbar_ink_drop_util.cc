@@ -4,11 +4,13 @@
 
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/color/chrome_color_mixer.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/color/color_provider.h"
 #include "ui/gfx/color_palette.h"
@@ -17,7 +19,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/animation/ink_drop.h"
-#include "ui/views/animation/ink_drop_host_view.h"
+#include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/highlight_path_generator.h"
@@ -77,7 +79,7 @@ void ConfigureInkDropForToolbar(views::Button* host) {
   views::InkDrop::Get(host)->SetMode(views::InkDropHost::InkDropMode::ON);
   views::InkDrop::Get(host)->SetVisibleOpacity(kToolbarInkDropVisibleOpacity);
   views::InkDrop::Get(host)->SetHighlightOpacity(
-      kToolbarInkDropHighlightVisibleOpacity);
+      kToolbarInkDropHighlightVisibleAlpha / float{SK_AlphaOPAQUE});
   views::InkDrop::Get(host)->SetBaseColorCallback(
       base::BindRepeating(&GetToolbarInkDropBaseColor, host));
 }

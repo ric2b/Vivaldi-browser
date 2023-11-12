@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.signin;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.pressBack;
+import static androidx.test.espresso.assertion.ViewAssertions.doesNotExist;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.isRoot;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
@@ -14,6 +15,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -146,6 +148,41 @@ public class SigninSignoutIntegrationTest {
 
     @Test
     @LargeTest
+    public void testSignInAndEnableSyncNonDisplayableAccountEmail() {
+        when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
+        ExternalAuthUtils.setInstanceForTesting(mExternalAuthUtilsMock);
+        CoreAccountInfo coreAccountInfo = mSigninTestRule.addAccount(
+                SigninTestRule.generateChildEmail(AccountManagerTestRule.TEST_ACCOUNT_EMAIL),
+                SigninTestRule.NON_DISPLAYABLE_EMAIL_ACCOUNT_CAPABILITIES);
+        mSigninTestRule.waitForSeeding();
+        SyncConsentActivity syncConsentActivity = ActivityTestUtils.waitForActivity(
+                InstrumentationRegistry.getInstrumentation(), SyncConsentActivity.class, () -> {
+                    SyncConsentActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
+                            mActivityTestRule.getActivity(), SigninAccessPoint.SETTINGS,
+                            coreAccountInfo.getEmail());
+                });
+
+        // The child account will be automatically signed in.
+        CriteriaHelper.pollUiThread(
+                () -> mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SIGNIN));
+        verify(mSignInStateObserverMock).onSignedIn();
+
+        assertNotSyncing();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { syncConsentActivity.findViewById(R.id.positive_button).performClick(); });
+        CriteriaHelper.pollUiThread(
+                () -> mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SYNC));
+        // Enabling Sync will invoke SignInStateObserverMock.onSignedIn() a second time.
+        verify(mSignInStateObserverMock, times(2)).onSignedIn();
+        verify(mSignInStateObserverMock, never()).onSignedOut();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertEquals(coreAccountInfo,
+                    mSigninManager.getIdentityManager().getPrimaryAccountInfo(ConsentLevel.SYNC));
+        });
+    }
+
+    @Test
+    @LargeTest
     public void testSignOut() {
         mSigninTestRule.addTestAccountThenSigninAndEnableSync();
         mSettingsActivityTestRule.startSettingsActivity();
@@ -224,6 +261,38 @@ public class SigninSignoutIntegrationTest {
         });
     }
 
+    @Test
+    @LargeTest
+    public void testChildAccountSignInAndSync() {
+        when(mExternalAuthUtilsMock.canUseGooglePlayServices(any())).thenReturn(true);
+        ExternalAuthUtils.setInstanceForTesting(mExternalAuthUtilsMock);
+        CoreAccountInfo coreChildAccountInfo =
+                mSigninTestRule.addChildTestAccountThenWaitForSignin();
+        SyncConsentActivity syncConsentActivity = ActivityTestUtils.waitForActivity(
+                InstrumentationRegistry.getInstrumentation(), SyncConsentActivity.class, () -> {
+                    SyncConsentActivityLauncherImpl.get().launchActivityForPromoDefaultFlow(
+                            mActivityTestRule.getActivity(), SigninAccessPoint.SETTINGS,
+                            coreChildAccountInfo.getEmail());
+                });
+        CriteriaHelper.pollUiThread(
+                () -> mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SIGNIN));
+        verify(mSignInStateObserverMock).onSignedIn();
+
+        assertNotSyncing();
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> { syncConsentActivity.findViewById(R.id.positive_button).performClick(); });
+
+        CriteriaHelper.pollUiThread(
+                () -> mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SYNC));
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertEquals(coreChildAccountInfo,
+                    mSigninManager.getIdentityManager().getPrimaryAccountInfo(ConsentLevel.SYNC));
+        });
+        verify(mSignInStateObserverMock, times(2)).onSignedIn();
+        verify(mSignInStateObserverMock, never()).onSignedOut();
+        onView(withText(R.string.account_management_sign_out)).check(doesNotExist());
+    }
+
     private void addOneTestBookmark() {
         Assert.assertNull("This method should be called only once!", mBookmarkModel);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -249,10 +318,15 @@ public class SigninSignoutIntegrationTest {
 
     private void assertSignedOut() {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertFalse("Account should be signed out!",
+            Assert.assertFalse("Account should be signed in!",
+                    mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SIGNIN));
+        });
+    }
+
+    private void assertNotSyncing() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertFalse("Account should not be syncing!",
                     mSigninManager.getIdentityManager().hasPrimaryAccount(ConsentLevel.SYNC));
-            Assert.assertNull(
-                    mSigninManager.getIdentityManager().getPrimaryAccountInfo(ConsentLevel.SYNC));
         });
     }
 }

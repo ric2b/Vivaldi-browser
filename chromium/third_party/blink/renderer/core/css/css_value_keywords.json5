@@ -623,7 +623,6 @@
     "underline",
     "view",
     "wavy",
-    "-webkit-nowrap",
 
     // math-shift
     // normal
@@ -859,6 +858,12 @@
     "visual",
 
     //
+    // animation-composition
+    //
+    "replace",
+    "accumulate",
+
+    //
     // animation-direction
     //
     "alternate",
@@ -1056,6 +1061,9 @@
     "browser",
     "window-controls-overlay",
     "tabbed",
+
+    // (overflow-block:) media feature
+    "paged",
 
     // position
     "sticky",
@@ -1599,8 +1607,10 @@
     // animation-[end-]delay
     // contain
     // cover
-    "enter",
+    "entry",
     "exit",
+    "entry-crossing",
+    "exit-crossing",
 
     // scroll()
     "root",

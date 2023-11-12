@@ -23,6 +23,7 @@ import java.util.Calendar;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
@@ -79,7 +80,7 @@ public class AboutChromeSettings
                 int ui_dpi = VivaldiPreferences.getSharedPreferencesManager().readInt(
                         VivaldiPreferences.UI_SCALE_VALUE);
                 version = version.concat(" [ui=" + ui_dpi);
-                version = version.concat(" page=" + PageZoomUtils.getDefaultZoomAsSeekValue(
+                version = version.concat(" page=" + PageZoomUtils.getDefaultZoomAsSeekBarValue(
                         Profile.getLastUsedRegularProfile()) + "]");
             }
             version = version.concat(" (OEM)");
@@ -90,9 +91,16 @@ public class AboutChromeSettings
             version = version.concat("(RNO)");
         } else if (BuildConfig.IS_OEM_LYNKCO_BUILD) {
             version = version.concat("(LYNK)");
+            if (OemLynkcoExtensions.getInstance().isProdEnvironment())
+                version = version.concat("[prod]");
+            else
+                version = version.concat("[dev]");
         } else if (BuildConfig.IS_OEM_MERCEDES_BUILD) {
             version = version.concat("(MB)");
+        } else if (BuildConfig.IS_OEM_VOLVO_BUILD) {
+            version = version.concat("(VOLVO)");
         }
+
         if (VersionInfo.isOfficialBuild()) {
             return version;
         }

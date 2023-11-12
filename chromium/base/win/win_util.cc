@@ -101,37 +101,6 @@ POWER_PLATFORM_ROLE GetPlatformRole() {
   return PowerDeterminePlatformRoleEx(POWER_PLATFORM_ROLE_V2);
 }
 
-// Method used for Windows 8.1 and later.
-// Since we support versions earlier than 8.1, we must dynamically load this
-// function from user32.dll, so it won't fail to load in runtime. For earlier
-// Windows versions GetProcAddress will return null and report failure so that
-// callers can fall back on the deprecated SetProcessDPIAware.
-bool SetProcessDpiAwarenessWrapper(PROCESS_DPI_AWARENESS value) {
-  if (!IsUser32AndGdi32Available())
-    return false;
-
-  static const auto set_process_dpi_awareness_func =
-      reinterpret_cast<decltype(&::SetProcessDpiAwareness)>(
-          GetUser32FunctionPointer("SetProcessDpiAwarenessInternal"));
-  if (set_process_dpi_awareness_func) {
-    HRESULT hr = set_process_dpi_awareness_func(value);
-    if (SUCCEEDED(hr))
-      return true;
-    DLOG_IF(ERROR, hr == E_ACCESSDENIED)
-        << "Access denied error from SetProcessDpiAwarenessInternal. "
-           "Function called twice, or manifest was used.";
-    NOTREACHED()
-        << "SetProcessDpiAwarenessInternal failed with unexpected error: "
-        << hr;
-    return false;
-  }
-
-  DCHECK_LT(GetVersion(), Version::WIN8_1) << "SetProcessDpiAwarenessInternal "
-                                              "should be available on all "
-                                              "platforms >= Windows 8.1";
-  return false;
-}
-
 // Enable V2 per-monitor high-DPI support for the process. This will cause
 // Windows to scale dialogs, comctl32 controls, context menus, and non-client
 // area owned by this process on a per-monitor basis. If per-monitor V2 is not
@@ -269,8 +238,7 @@ bool IsWindows10OrGreaterTabletMode(HWND hwnd) {
            IsDeviceUsedAsATablet(/*reason=*/nullptr);
   }
 
-  if (!ResolveCoreWinRTDelayload() ||
-      !ScopedHString::ResolveCoreWinRTStringDelayload()) {
+  if (!ResolveCoreWinRTDelayload()) {
     return false;
   }
 
@@ -302,13 +270,6 @@ bool IsWindows10OrGreaterTabletMode(HWND hwnd) {
 bool IsKeyboardPresentOnSlate(HWND hwnd, std::string* reason) {
   bool result = false;
 
-  if (GetVersion() < Version::WIN8) {
-    if (reason)
-      *reason = "Detection not supported";
-    return false;
-  }
-
-  // This function is only supported for Windows 8 and up.
   if (CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableUsbKeyboardDetect)) {
     if (reason)
@@ -554,12 +515,6 @@ void SetAbortBehaviorForCrashReporting() {
 }
 
 bool IsTabletDevice(std::string* reason, HWND hwnd) {
-  if (GetVersion() < Version::WIN8) {
-    if (reason)
-      *reason = "Tablet device detection not supported below Windows 8\n";
-    return false;
-  }
-
   if (IsWindows10OrGreaterTabletMode(hwnd))
     return true;
 
@@ -576,12 +531,6 @@ bool IsDeviceUsedAsATablet(std::string* reason) {
   // return value, so that this method returns the same result whether or not
   // reason is NULL.
   absl::optional<bool> ret;
-
-  if (GetVersion() < Version::WIN8) {
-    if (reason)
-      *reason = "Tablet device detection not supported below Windows 8\n";
-    return false;
-  }
 
   if (GetSystemMetrics(SM_MAXIMUMTOUCHES) == 0) {
     if (reason) {
@@ -662,10 +611,6 @@ bool IsUser32AndGdi32Available() {
   static auto is_user32_and_gdi32_available = []() {
     // If win32k syscalls aren't disabled, then user32 and gdi32 are available.
 
-    // Can't disable win32k prior to windows 8.
-    if (GetVersion() < Version::WIN8)
-      return true;
-
     using GetProcessMitigationPolicyType =
         decltype(GetProcessMitigationPolicy)*;
     GetProcessMitigationPolicyType get_process_mitigation_policy_func =
@@ -741,31 +686,6 @@ void DisableFlicks(HWND hwnd) {
                                      TABLET_DISABLE_FLICKFALLBACKKEYS));
 }
 
-bool IsProcessPerMonitorDpiAware() {
-  enum class PerMonitorDpiAware {
-    UNKNOWN = 0,
-    PER_MONITOR_DPI_UNAWARE,
-    PER_MONITOR_DPI_AWARE,
-  };
-  static PerMonitorDpiAware per_monitor_dpi_aware = PerMonitorDpiAware::UNKNOWN;
-  if (per_monitor_dpi_aware == PerMonitorDpiAware::UNKNOWN) {
-    per_monitor_dpi_aware = PerMonitorDpiAware::PER_MONITOR_DPI_UNAWARE;
-    HMODULE shcore_dll = ::LoadLibrary(L"shcore.dll");
-    if (shcore_dll) {
-      auto get_process_dpi_awareness_func =
-          reinterpret_cast<decltype(::GetProcessDpiAwareness)*>(
-              ::GetProcAddress(shcore_dll, "GetProcessDpiAwareness"));
-      if (get_process_dpi_awareness_func) {
-        PROCESS_DPI_AWARENESS awareness;
-        if (SUCCEEDED(get_process_dpi_awareness_func(nullptr, &awareness)) &&
-            awareness == PROCESS_PER_MONITOR_DPI_AWARE)
-          per_monitor_dpi_aware = PerMonitorDpiAware::PER_MONITOR_DPI_AWARE;
-      }
-    }
-  }
-  return per_monitor_dpi_aware == PerMonitorDpiAware::PER_MONITOR_DPI_AWARE;
-}
-
 void EnableHighDPISupport() {
   if (!IsUser32AndGdi32Available())
     return;
@@ -774,15 +694,11 @@ void EnableHighDPISupport() {
   if (EnablePerMonitorV2())
     return;
 
-  // Fall back to per-monitor DPI for older versions of Win10 instead of
-  // Win8.1 since Win8.1 does not have EnableChildWindowDpiMessage,
-  // necessary for correct non-client area scaling across monitors.
-  PROCESS_DPI_AWARENESS process_dpi_awareness =
-      GetVersion() >= Version::WIN10 ? PROCESS_PER_MONITOR_DPI_AWARE
-                                     : PROCESS_SYSTEM_DPI_AWARE;
-  if (!SetProcessDpiAwarenessWrapper(process_dpi_awareness)) {
-    // For windows versions where SetProcessDpiAwareness is not available or
-    // failed, try its predecessor.
+  // Fall back to per-monitor DPI for older versions of Win10.
+  PROCESS_DPI_AWARENESS process_dpi_awareness = PROCESS_PER_MONITOR_DPI_AWARE;
+  if (!::SetProcessDpiAwareness(process_dpi_awareness)) {
+    // For windows versions where SetProcessDpiAwareness fails, try its
+    // predecessor.
     BOOL result = ::SetProcessDPIAware();
     DCHECK(result) << "SetProcessDPIAware failed.";
   }

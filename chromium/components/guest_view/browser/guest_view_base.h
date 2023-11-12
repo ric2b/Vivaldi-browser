@@ -10,6 +10,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_multi_source_observation.h"
 #include "base/values.h"
 #include "components/guest_view/browser/guest_view_message_handler.h"
 #include "components/guest_view/common/guest_view_constants.h"
@@ -139,6 +140,19 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void InitWithWebContents(const base::Value::Dict& create_params,
                            content::WebContents* guest_web_contents);
 
+  void SetCreateParams(
+      const base::Value::Dict& create_params,
+      const content::WebContents::CreateParams& web_contents_create_params);
+
+  // As part of the migration of GuestViews to MPArch, we need to know what the
+  // embedder WebContents is at the time that the guest page is created.
+  // <webview>s have an edge case where we have to create the guest page before
+  // then. We assume the owner doesn't change before attachment, but if it does,
+  // we destroy and recreate the guest page. See this doc for details:
+  // https://docs.google.com/document/d/1RVbtvklXUg9QCNvMT0r-1qDwJNeQFGoTCOD1Ur9mDa4/edit?usp=sharing
+  virtual void MaybeRecreateGuestContents(
+      content::WebContents* embedder_web_contents) = 0;
+
   // Used to toggle autosize mode for this GuestView, and set both the automatic
   // and normal sizes.
   void SetSize(const SetSizeParams& params);
@@ -235,9 +249,18 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   void SetOpener(GuestViewBase* opener);
 
+  const absl::optional<
+      std::pair<base::Value::Dict, content::WebContents::CreateParams>>&
+  GetCreateParams() const;
+
   void TakeGuestContentsOwnership(
       std::unique_ptr<content::WebContents> guest_web_contents);
   void ClearOwnedGuestContents();
+
+  void SetNewOwnerWebContents(content::WebContents* owner_web_contents);
+
+  // BrowserPluginGuestDelegate implementation.
+  content::RenderFrameHost* GetProspectiveOuterDocument() override;
 
   // WebContentsDelegate implementation.
   bool HandleKeyboardEvent(
@@ -245,9 +268,6 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
       const content::NativeWebKeyboardEvent& event) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
-  content::WebContents* GetResponsibleWebContents(
-      content::WebContents* web_contents) override;
-  gfx::Size GetSizeForNewRenderView(content::WebContents* web_contents) override;
 
   // WebContentsObserver implementation.
   void DidFinishNavigation(
@@ -340,6 +360,9 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   virtual WebContentsDelegate* GetDevToolsConnector();
 
+  // Vivaldi
+  gfx::Size GetSizeForNewRenderView(content::WebContents* web_contents) override;
+
  private:
   class OwnerContentsObserver;
   class OpenerLifetimeObserver;
@@ -349,11 +372,13 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // BrowserPluginGuestDelegate implementation.
   std::unique_ptr<content::WebContents> CreateNewGuestWindow(
-      const content::WebContents::CreateParams& create_params) final;
+      const content::WebContents::CreateParams& create_params,
+      int disposition) final;
   content::WebContents* GetOwnerWebContents() final;
 
   // WebContentsDelegate implementation.
-  void ActivateContents(content::WebContents* contents) final;
+  // Vivaldi-note;Was final, but changed for VB-11750.
+  void ActivateContents(content::WebContents* contents) override;
   void ContentsMouseEvent(content::WebContents* source,
                           bool motion,
                           bool exited) final;
@@ -375,7 +400,8 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void DidStopLoading() final;
   void RenderViewReady() final;
 
-  // ui_zoom::ZoomObserver implementation.
+  // zoom::ZoomObserver implementation.
+  void OnZoomControllerDestroyed(zoom::ZoomController* source) final;
   void OnZoomChanged(
       const zoom::ZoomController::ZoomChangedEventData& data) final;
 
@@ -484,6 +510,13 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // guest WebContents.
   bool self_owned_ = false;
 
+  // The params used when creating the guest contents. These are saved here in
+  // case we need to recreate the guest contents. Not all guest types need to
+  // store these.
+  absl::optional<
+      std::pair<base::Value::Dict, content::WebContents::CreateParams>>
+      create_params_;
+
   // Indicates whether autosize mode is enabled or not.
   bool auto_size_enabled_ = false;
 
@@ -498,6 +531,10 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // Whether the guest view is inside a plugin document.
   bool is_full_page_plugin_ = false;
+
+  // Used to observe the ZoomControllers of the guest and the embedder.
+  base::ScopedMultiSourceObservation<zoom::ZoomController, zoom::ZoomObserver>
+      zoom_controller_observations_{this};
 
   // This is used to ensure pending tasks will not fire after this object is
   // destroyed.

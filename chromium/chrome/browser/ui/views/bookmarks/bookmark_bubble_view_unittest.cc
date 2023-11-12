@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -111,7 +111,7 @@ class BookmarkBubbleViewTest : public BrowserWithTestWindowTest {
     BookmarkBubbleView::ShowBubble(
         anchor_widget_->GetContentsView(),
         browser()->tab_strip_model()->GetActiveWebContents(), nullptr, nullptr,
-        nullptr, profile(), GURL(kTestBookmarkURL), true);
+        profile(), GURL(kTestBookmarkURL), true);
   }
 
   PriceTrackingView* GetPriceTrackingView() {

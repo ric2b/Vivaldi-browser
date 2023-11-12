@@ -10,23 +10,23 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list_types.h"
 #include "base/time/time.h"
 #include "chrome/browser/ash/platform_keys/key_permissions/key_permissions.pb.h"
 #include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_manager.h"
-#include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_pref_util.h"
+#include "chrome/browser/ash/platform_keys/key_permissions/key_permissions_util.h"
 #include "chrome/browser/ash/platform_keys/key_permissions/user_private_token_kpm_service_factory.h"
 #include "chrome/browser/ash/platform_keys/platform_keys_service.h"
 #include "chrome/browser/ash/platform_keys/platform_keys_service_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/platform_keys/extension_key_permissions_service.h"
-#include "chrome/browser/platform_keys/platform_keys.h"
+#include "chrome/browser/chromeos/platform_keys/extension_key_permissions_service.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -126,7 +126,7 @@ void KeyPermissionsManagerImpl::KeyPermissionsInChapsUpdater::Update(
 }
 
 void KeyPermissionsManagerImpl::KeyPermissionsInChapsUpdater::UpdateWithAllKeys(
-    std::vector<std::string> public_key_spki_der_list,
+    std::vector<std::vector<uint8_t>> public_key_spki_der_list,
     Status keys_retrieval_status) {
   DCHECK(public_key_spki_der_queue_.empty());
 
@@ -225,7 +225,8 @@ void KeyPermissionsManagerImpl::KeyPermissionsInChapsUpdater::
                              public_key_spki_der.end());
   key_permissions_manager_->platform_keys_service_->SetAttributeForKey(
       key_permissions_manager_->token_id_, std::move(public_key_str),
-      KeyAttributeType::kKeyPermissions, key_permissions.SerializeAsString(),
+      KeyAttributeType::kKeyPermissions,
+      internal::KeyPermissionsProtoToBytes(key_permissions),
       base::BindOnce(&KeyPermissionsInChapsUpdater::OnKeyPermissionsUpdated,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -420,13 +421,14 @@ void KeyPermissionsManagerImpl::AllowKeyForCorporateUsage(
                              public_key_spki_der.end());
   platform_keys_service_->SetAttributeForKey(
       token_id_, std::move(public_key_str), KeyAttributeType::kKeyPermissions,
-      key_permissions.SerializeAsString(), std::move(callback));
+      internal::KeyPermissionsProtoToBytes(key_permissions),
+      std::move(callback));
 }
 
 void KeyPermissionsManagerImpl::IsKeyAllowedForUsageWithPermissions(
     IsKeyAllowedForUsageCallback callback,
     KeyUsage usage,
-    const absl::optional<std::string>& serialized_key_permissions,
+    absl::optional<std::vector<uint8_t>> serialized_key_permissions,
     Status key_attribute_retrieval_status) {
   if (key_attribute_retrieval_status != Status::kSuccess) {
     LOG(ERROR) << "Error while retrieving key permissions: "
@@ -441,7 +443,8 @@ void KeyPermissionsManagerImpl::IsKeyAllowedForUsageWithPermissions(
   }
 
   chaps::KeyPermissions key_permissions;
-  if (!key_permissions.ParseFromString(serialized_key_permissions.value())) {
+  if (!internal::KeyPermissionsProtoFromBytes(
+          serialized_key_permissions.value(), key_permissions)) {
     LOG(ERROR) << "Couldn't deserialize key permissions proto message.";
     std::move(callback).Run(/*allowed=*/false, Status::kErrorInternal);
     return;

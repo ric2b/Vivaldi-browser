@@ -9,10 +9,9 @@
 #include <stddef.h>
 
 #include "base/base_paths.h"
-#include "base/bind.h"
 #include "base/command_line.h"
-#include "base/debug/activity_tracker.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -205,8 +204,6 @@ void TerminateProcessWithHistograms(const base::Process& process,
       internal::SendRemoteProcessInteractionResultHistogram(
           ProcessSingleton::TERMINATE_SUCCEEDED);
     }
-    base::debug::GlobalActivityTracker::RecordProcessExitIfEnabled(
-        process.Pid(), exit_code);
     UMA_HISTOGRAM_TIMES("Chrome.ProcessSingleton.TerminateProcessTime",
                         base::TimeTicks::Now() - start_time);
     base::UmaHistogramSparse(

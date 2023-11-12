@@ -75,6 +75,7 @@ group("All") {
       "//vivaldi/tools/vivaldi_proxy",
       "//chrome/installer/mini_installer",
       "//components/zucchini:zucchini",
+      "//components/zucchini:zucchini64",
       "//vivaldi/update_notifier",
     ]
     if (vivaldi_build_tests) {
@@ -148,6 +149,9 @@ group("All") {
   }
   if (is_ios) {
     deps += ["//ios/chrome/app:chrome"]
+    if (getenv("CHROME_HEADLESS") != "1") {  # Signing provisions needed for building on builders
+      deps += ["//ios/components:all_tests"]
+    }
   }
   if (is_mac || is_linux || is_android) {
     deps += [

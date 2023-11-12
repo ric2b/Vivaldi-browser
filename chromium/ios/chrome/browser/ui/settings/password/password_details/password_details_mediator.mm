@@ -4,9 +4,18 @@
 
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_mediator.h"
 
+#import <memory>
+#import <utility>
+#import <vector>
+
 #import "base/containers/contains.h"
+#import "base/containers/cxx20_erase.h"
+#import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/password_manager/core/browser/move_password_to_account_store_helper.h"
+#import "components/password_manager/core/browser/password_manager_metrics_util.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "components/sync/base/features.h"
 #import "ios/chrome/browser/passwords/password_check_observer_bridge.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details.h"
 #import "ios/chrome/browser/ui/settings/password/password_details/password_details_consumer.h"
@@ -16,13 +25,21 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+
+bool IsPasswordNotesWithBackupEnabled() {
+  return base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup);
+}
+
+}  // namespace
+
 using base::SysNSStringToUTF16;
 
 @interface PasswordDetailsMediator () <
     PasswordCheckObserver,
     PasswordDetailsTableViewControllerDelegate> {
   // Password Check manager.
-  IOSChromePasswordCheckManager* _manager;
+  raw_ptr<IOSChromePasswordCheckManager> _manager;
 
   // Listens to compromised passwords changes.
   std::unique_ptr<PasswordCheckObserverBridge> _passwordCheckObserver;
@@ -51,8 +68,8 @@ using base::SysNSStringToUTF16;
     _manager = manager;
     _credentials = credentials;
     _displayName = displayName;
-    _passwordCheckObserver.reset(
-        new PasswordCheckObserverBridge(self, manager));
+    _passwordCheckObserver =
+        std::make_unique<PasswordCheckObserverBridge>(self, manager);
     DCHECK(!_credentials.empty());
 
     // TODO(crbug.com/1400692): Improve saved passwords logic when helper is
@@ -96,27 +113,43 @@ using base::SysNSStringToUTF16;
     return;
   _consumer = consumer;
 
-  [self fetchPasswordWith:_manager->GetUnmutedCompromisedCredentials()];
+  [self providePasswordsToConsumer];
+
+  if (_credentials[0].blocked_by_user) {
+    DCHECK_EQ(_credentials.size(), 1u);
+    [_consumer setIsBlockedSite:YES];
+  }
 }
 
 - (void)disconnect {
-  _manager->RemoveObserver(_passwordCheckObserver.get());
+  _passwordCheckObserver.reset();
+  _manager = nullptr;
 }
 
-// Update the usernames by domain dictionary by removing the old username and
-// adding the new one if it has changed.
-- (void)updateOldUsernameInDict:(NSString*)oldUsername
-                  toNewUsername:(NSString*)newUsername
-                withSignonRealm:(NSString*)signonRealm {
-  if ([oldUsername isEqualToString:newUsername]) {
-    return;
-  }
+- (void)removeCredential:
+    (const password_manager::CredentialUIEntry&)credential {
+  // TODO(crbug.com/1359392). Once kPasswordsGrouping launches, the mediator
+  // should update the passwords model and receive the updates via
+  // SavedPasswordsPresenterObserver, instead of replicating the updates to its
+  // own copy and calling [self providePasswordsToConsumer:]. Today when the
+  // flag is disabled and the password is edited, it's impossible to identify
+  // the new object to show (sign-on realm can't be used as an id, there might
+  // be multiple credentials; nor username/password since the values changed).
+  base::Erase(_credentials, credential);
+  _manager->GetSavedPasswordsPresenter()->RemoveCredential(credential);
+  [self providePasswordsToConsumer];
+}
 
-  NSMutableSet* set = [_usernamesWithSameDomainDict objectForKey:signonRealm];
-  if (set) {
-    [set removeObject:oldUsername];
-    [set addObject:newUsername];
-  }
+- (void)moveCredentialToAccountStore:
+            (const password_manager::CredentialUIEntry&)credential
+                              client:(password_manager::PasswordManagerClient*)
+                                         client {
+  MovePasswordsToAccountStore(
+      _manager->GetSavedPasswordsPresenter()->GetCorrespondingPasswordForms(
+          credential),
+      client,
+      password_manager::metrics_util::MoveToAccountStoreTrigger::
+          kExplicitlyTriggeredInSettings);
 }
 
 #pragma mark - PasswordDetailsTableViewControllerDelegate
@@ -125,14 +158,15 @@ using base::SysNSStringToUTF16;
             (PasswordDetailsTableViewController*)viewController
                didEditPasswordDetails:(PasswordDetails*)password
                       withOldUsername:(NSString*)oldUsername
-                       andOldPassword:(NSString*)oldPassword {
+                          oldPassword:(NSString*)oldPassword
+                              oldNote:(NSString*)oldNote {
   if ([password.password length] != 0) {
     password_manager::CredentialUIEntry original_credential;
 
-    auto it = std::find_if(
-        _credentials.begin(), _credentials.end(),
-        [password, oldUsername,
-         oldPassword](password_manager::CredentialUIEntry credential) {
+    auto it = base::ranges::find_if(
+        _credentials,
+        [password, oldUsername, oldPassword,
+         oldNote](const password_manager::CredentialUIEntry& credential) {
           return
               [password.signonRealm
                   isEqualToString:[NSString stringWithUTF8String:
@@ -141,7 +175,10 @@ using base::SysNSStringToUTF16;
               [oldUsername isEqualToString:base::SysUTF16ToNSString(
                                                credential.username)] &&
               [oldPassword isEqualToString:base::SysUTF16ToNSString(
-                                               credential.password)];
+                                               credential.password)] &&
+              (!IsPasswordNotesWithBackupEnabled() ||
+               [oldNote
+                   isEqualToString:base::SysUTF16ToNSString(credential.note)]);
         });
 
     // There should be no reason not to find the credential in the vector of
@@ -153,6 +190,9 @@ using base::SysNSStringToUTF16;
         original_credential;
     updated_credential.username = SysNSStringToUTF16(password.username);
     updated_credential.password = SysNSStringToUTF16(password.password);
+    if (IsPasswordNotesWithBackupEnabled()) {
+      updated_credential.note = SysNSStringToUTF16(password.note);
+    }
     if (_manager->GetSavedPasswordsPresenter()->EditSavedCredentials(
             original_credential, updated_credential) ==
         password_manager::SavedPasswordsPresenter::EditResult::kSuccess) {
@@ -172,7 +212,7 @@ using base::SysNSStringToUTF16;
 }
 
 - (void)didFinishEditingPasswordDetails {
-  [self fetchPasswordWith:_manager->GetUnmutedCompromisedCredentials()];
+  [self providePasswordsToConsumer];
 }
 
 - (void)passwordDetailsViewController:
@@ -220,23 +260,40 @@ using base::SysNSStringToUTF16;
   // passwords.
 }
 
-- (void)compromisedCredentialsDidChange {
-  [self fetchPasswordWith:_manager->GetUnmutedCompromisedCredentials()];
+- (void)insecureCredentialsDidChange {
+  [self providePasswordsToConsumer];
 }
 
 #pragma mark - Private
 
-// Updates password details and sets it to a consumer.
-- (void)fetchPasswordWith:
-    (const std::vector<password_manager::CredentialUIEntry>&)credentials {
+// Pushes password details to the consumer.
+- (void)providePasswordsToConsumer {
   NSMutableArray<PasswordDetails*>* passwords = [NSMutableArray array];
+  std::vector<password_manager::CredentialUIEntry> insecureCredentials =
+      _manager->GetInsecureCredentials();
   for (password_manager::CredentialUIEntry credential : _credentials) {
     PasswordDetails* password =
         [[PasswordDetails alloc] initWithCredential:credential];
-    password.compromised = base::Contains(credentials, credential);
+    password.compromised = base::Contains(insecureCredentials, credential);
     [passwords addObject:password];
   }
   [self.consumer setPasswords:passwords andTitle:_displayName];
+}
+
+// Update the usernames by domain dictionary by removing the old username and
+// adding the new one if it has changed.
+- (void)updateOldUsernameInDict:(NSString*)oldUsername
+                  toNewUsername:(NSString*)newUsername
+                withSignonRealm:(NSString*)signonRealm {
+  if ([oldUsername isEqualToString:newUsername]) {
+    return;
+  }
+
+  NSMutableSet* set = [_usernamesWithSameDomainDict objectForKey:signonRealm];
+  if (set) {
+    [set removeObject:oldUsername];
+    [set addObject:newUsername];
+  }
 }
 
 @end

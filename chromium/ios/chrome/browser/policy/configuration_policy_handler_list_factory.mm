@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/policy/configuration_policy_handler_list_factory.h"
 
-#import "base/bind.h"
 #import "base/check.h"
+#import "base/functional/bind.h"
 #import "components/autofill/core/browser/autofill_address_policy_handler.h"
 #import "components/autofill/core/browser/autofill_credit_card_policy_handler.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
@@ -65,6 +65,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { policy::key::kChromeVariations,
     variations::prefs::kVariationsRestrictionsByPolicy,
     base::Value::Type::INTEGER },
+  { policy::key::kCredentialProviderPromoEnabled,
+    prefs::kIosCredentialProviderPromoPolicyEnabled,
+    base::Value::Type::BOOLEAN },
   { policy::key::kDisableSafeBrowsingProceedAnyway,
     prefs::kSafeBrowsingProceedAnywayDisabled,
     base::Value::Type::BOOLEAN },
@@ -119,6 +122,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { policy::key::kShoppingListEnabled,
     commerce::kShoppingListEnabledPrefName,
     base::Value::Type::BOOLEAN},
+  { policy::key::kMixedContentAutoupgradeEnabled,
+    prefs::kMixedContentAutoupgradeEnabled,
+    base::Value::Type::BOOLEAN},
 };
 // clang-format on
 
@@ -128,13 +134,13 @@ void PopulatePolicyHandlerParameters(
 }  // namespace
 
 std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildPolicyHandlerList(
-    bool allow_future_policies,
+    bool are_future_policies_allowed_by_default,
     const policy::Schema& chrome_schema) {
   std::unique_ptr<policy::ConfigurationPolicyHandlerList> handlers =
       std::make_unique<policy::ConfigurationPolicyHandlerList>(
           base::BindRepeating(&PopulatePolicyHandlerParameters),
           base::BindRepeating(&policy::GetChromePolicyDetails),
-          allow_future_policies);
+          are_future_policies_allowed_by_default);
 
   for (size_t i = 0; i < std::size(kSimplePolicyMap); ++i) {
     handlers->AddHandler(std::make_unique<SimplePolicyHandler>(

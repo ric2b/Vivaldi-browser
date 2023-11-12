@@ -12,6 +12,7 @@
 #include "chrome/browser/cart/cart_discount_metric_collector.h"
 #include "chrome/browser/cart/chrome_cart.mojom.h"
 #include "chrome/browser/commerce/coupons/coupon_service_factory.h"
+#include "chrome/browser/commerce/shopping_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
@@ -27,6 +28,8 @@
 #include "components/commerce/core/commerce_heuristics_data.h"
 #include "components/commerce/core/commerce_heuristics_data_metrics_helper.h"
 #include "components/commerce/core/proto/cart_db_content.pb.h"
+#include "components/commerce/core/proto/price_tracking.pb.h"
+#include "components/commerce/core/shopping_service.h"
 #include "components/optimization_guide/proto/hints.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -86,11 +89,6 @@ absl::optional<base::Value> JSONToDictionary(int resource_id) {
   return value;
 }
 
-bool IsExpired(const cart_db::ChromeCartContentProto& proto) {
-  return (base::Time::Now() - base::Time::FromDoubleT(proto.timestamp()))
-             .InDays() > 14;
-}
-
 const re2::RE2& GetSkipCartExtractionPattern() {
   re2::RE2::Options options;
   options.set_case_sensitive(false);
@@ -130,7 +128,9 @@ CartService::CartService(Profile* profile)
       discount_link_fetcher_(std::make_unique<CartDiscountLinkFetcher>()),
       metrics_tracker_(std::make_unique<CartMetricsTracker>(
           chrome::FindTabbedBrowser(profile, false))),
-      coupon_service_(CouponServiceFactory::GetForProfile(profile)) {
+      coupon_service_(CouponServiceFactory::GetForProfile(profile)),
+      shopping_service_(
+          commerce::ShoppingServiceFactory::GetForBrowserContext(profile)) {
   history_service_observation_.Observe(HistoryServiceFactory::GetForProfile(
       profile_, ServiceAccessType::EXPLICIT_ACCESS));
   coupon_service_->MaybeFeatureStatusChanged(IsCartAndDiscountEnabled());
@@ -203,12 +203,13 @@ void CartService::LoadAllActiveCarts(CartDB::LoadCallback callback) {
                                         std::move(callback)));
 }
 
-void CartService::AddCart(const std::string& domain,
+void CartService::AddCart(const GURL& navigation_url,
                           const absl::optional<GURL>& cart_url,
                           const cart_db::ChromeCartContentProto& proto) {
-  cart_db_->LoadCart(domain, base::BindOnce(&CartService::OnAddCart,
-                                            weak_ptr_factory_.GetWeakPtr(),
-                                            domain, cart_url, proto));
+  cart_db_->LoadCart(
+      eTLDPlusOne(navigation_url),
+      base::BindOnce(&CartService::OnAddCart, weak_ptr_factory_.GetWeakPtr(),
+                     navigation_url, cart_url, proto));
 }
 
 void CartService::DeleteCart(const GURL& url, bool ignore_remove_status) {
@@ -328,6 +329,13 @@ const GURL CartService::AppendUTM(const GURL& base_url) {
                                             kUTMCampaignChromeCartTag);
 }
 
+void CartService::HasActiveCartForURL(const GURL& url,
+                                      base::OnceCallback<void(bool)> callback) {
+  LoadCart(eTLDPlusOne(url),
+           base::BindOnce(&CartService::HasActiveCartForURLCallback,
+                          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
 void CartService::ShouldShowDiscountConsent(
     base::OnceCallback<void(bool)> callback) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
@@ -419,6 +427,25 @@ void CartService::RecordDiscountConsentStatusAtLoad(bool should_show_consent) {
           static_cast<int>(current_variation));
     }
   }
+}
+
+bool CartService::IsCartExpired(const cart_db::ChromeCartContentProto& proto) {
+  return (base::Time::Now() - base::Time::FromDoubleT(proto.timestamp()))
+             .InDays() > kCartExpirationTimeInDays;
+}
+
+void CartService::HasActiveCartForURLCallback(
+    base::OnceCallback<void(bool)> callback,
+    bool success,
+    std::vector<CartDB::KeyAndValue> proto_pairs) {
+  // Check if there is a cart for the corresponding domain and
+  // if the cart has not expired.
+  if (!success || proto_pairs.size() == 0) {
+    std::move(callback).Run(false);
+    return;
+  }
+  DCHECK(proto_pairs.size() == 1);
+  std::move(callback).Run(!IsCartExpired(proto_pairs[0].second));
 }
 
 void CartService::ShouldShowDiscountConsentCallback(
@@ -521,12 +548,6 @@ void CartService::OnGetDiscountURL(
       cart_proto.discount_info().rule_discount_info().empty()) {
     if (cart_proto.discount_info().has_coupons()) {
       CartDiscountMetricCollector::RecordClickedOnDiscount(true);
-      // code based rbd.
-      if (commerce::kCodeBasedRuleDiscount.Get() &&
-          !cart_proto.discount_info().coupon_info().empty()) {
-        CacheUsedDiscounts(cart_proto, /*is_code_based_rbd=*/true);
-        CleanUpDiscounts(cart_proto);
-      }
     } else {
       CartDiscountMetricCollector::RecordClickedOnDiscount(false);
     }
@@ -554,7 +575,7 @@ void CartService::OnDiscountURLFetched(
   std::move(callback).Run(discount_url.is_valid() ? AppendUTM(discount_url)
                                                   : default_cart_url);
   if (discount_url.is_valid()) {
-    CacheUsedDiscounts(cart_proto, /*is_code_based_rbd=*/false);
+    CacheUsedDiscounts(cart_proto);
     CleanUpDiscounts(cart_proto);
     CartDiscountMetricCollector::RecordAppliedDiscount();
   }
@@ -841,7 +862,7 @@ void CartService::OnLoadCarts(CartDB::LoadCallback callback,
   std::set<std::string> merchants_to_erase;
   for (CartDB::KeyAndValue kv : proto_pairs) {
     const GURL& cart_url(GURL(kv.second.merchant_cart_url()));
-    if (IsExpired(kv.second) || ShouldSkip(cart_url)) {
+    if (IsCartExpired(kv.second) || ShouldSkip(cart_url)) {
       // Removed carts should remain removed.
       if (!kv.second.is_removed()) {
         DeleteCart(cart_url, true);
@@ -908,7 +929,7 @@ void CartService::SetCartRemovedStatus(
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
-void CartService::OnAddCart(const std::string& domain,
+void CartService::OnAddCart(const GURL& navigation_url,
                             const absl::optional<GURL>& cart_url,
                             cart_db::ChromeCartContentProto proto,
                             bool success,
@@ -918,6 +939,7 @@ void CartService::OnAddCart(const std::string& domain,
   }
   // Restore module visibility anytime a cart-related action happens.
   RestoreHidden();
+  std::string domain = eTLDPlusOne(navigation_url);
   absl::optional<std::string> merchant_name_from_component =
       commerce_heuristics::CommerceHeuristicsData::GetInstance()
           .GetMerchantName(domain);
@@ -961,7 +983,24 @@ void CartService::OnAddCart(const std::string& domain,
     return;
   }
 
+  bool has_product_image = proto.product_image_urls().size();
+  absl::optional<GURL> cached_image_url;
+  // When this cart addition is caused by AddToCart detection and there
+  // is no product image detected on the renderer side, try to get cached
+  // product image from ShoppingService using navigation_url which could be PDP
+  // URL.
+  if (!has_product_image && commerce::kAddToCartProductImage.Get()) {
+    absl::optional<commerce::ProductInfo> info =
+        shopping_service_->GetAvailableProductInfoForUrl(navigation_url);
+    if (info.has_value() && info.value().image_url.is_valid()) {
+      cached_image_url = info.value().image_url;
+    }
+  }
+
   if (proto_pairs.size() == 0) {
+    if (cached_image_url.has_value()) {
+      proto.add_product_image_urls(cached_image_url.value().spec());
+    }
     cart_db_->AddCart(domain, std::move(proto),
                       base::BindOnce(&CartService::OnOperationFinished,
                                      weak_ptr_factory_.GetWeakPtr()));
@@ -974,14 +1013,12 @@ void CartService::OnAddCart(const std::string& domain,
     return;
   }
 
-  bool has_product_image = false;
   // If the new proto has product images, we can copy the product images to the
   // existing proto without worrying about overwriting as it reflects the latest
   // state.
-  if (proto.product_image_urls().size()) {
+  if (has_product_image) {
     *(existing_proto.mutable_product_image_urls()) =
         std::move(proto.product_image_urls());
-    has_product_image = true;
   }
   existing_proto.set_is_hidden(false);
   existing_proto.set_timestamp(proto.timestamp());
@@ -1020,6 +1057,18 @@ void CartService::OnAddCart(const std::string& domain,
           std::move(proto.product_infos());
     }
   }
+
+  // Add the cached product image from ShoppingService to the existing proto if
+  // it's not already included.
+  if (!has_product_image && cached_image_url.has_value()) {
+    std::string url_string = cached_image_url.value().spec();
+    auto existing_images = existing_proto.product_image_urls();
+    if (std::find(existing_images.begin(), existing_images.end(), url_string) ==
+        existing_images.end()) {
+      existing_proto.add_product_image_urls(url_string);
+    }
+  }
+
   cart_db_->AddCart(domain, std::move(existing_proto),
                     base::BindOnce(&CartService::OnOperationFinished,
                                    weak_ptr_factory_.GetWeakPtr()));
@@ -1034,26 +1083,6 @@ void CartService::UpdateDiscounts(const GURL& cart_url,
     return;
   }
 
-  // Filter used code-based Rule-based Discounts.
-  if (commerce::kCodeBasedRuleDiscount.Get() && new_proto.has_discount_info() &&
-      new_proto.discount_info().coupon_info_size() > 0) {
-    std::vector<cart_db::CouponInfoProto> coupon_info_protos;
-    std::string merchant_id = new_proto.discount_info().merchant_id();
-    for (const auto& coupon_info : new_proto.discount_info().coupon_info()) {
-      std::string key = merchant_id + "-" + coupon_info.promo_id();
-      if (is_tester || !IsDiscountUsed(key)) {
-        coupon_info_protos.emplace_back(coupon_info);
-      }
-    }
-    if (coupon_info_protos.empty()) {
-      new_proto.mutable_discount_info()->clear_coupon_info();
-      new_proto.mutable_discount_info()->set_has_coupons(false);
-    } else {
-      *new_proto.mutable_discount_info()->mutable_coupon_info() = {
-          coupon_info_protos.begin(), coupon_info_protos.end()};
-    }
-  }
-
   // Filter used codeless Rule-based Discounts.
   if (new_proto.has_discount_info() &&
       !new_proto.discount_info().rule_discount_info().empty()) {
@@ -1065,11 +1094,7 @@ void CartService::UpdateDiscounts(const GURL& cart_url,
       }
     }
     if (rule_discount_info_protos.empty()) {
-      if (commerce::kCodeBasedRuleDiscount.Get()) {
-        new_proto.mutable_discount_info()->clear_rule_discount_info();
-      } else {
-        new_proto.clear_discount_info();
-      }
+      new_proto.clear_discount_info();
     } else {
       *new_proto.mutable_discount_info()->mutable_rule_discount_info() = {
           rule_discount_info_protos.begin(), rule_discount_info_protos.end()};
@@ -1131,37 +1156,16 @@ void CartService::UpdateFreeListingCoupons(
 }
 
 void CartService::CacheUsedDiscounts(
-    const cart_db::ChromeCartContentProto& proto,
-    bool is_code_based_rbd) {
-  if (!proto.has_discount_info()) {
+    const cart_db::ChromeCartContentProto& proto) {
+  if (!proto.has_discount_info() ||
+      proto.discount_info().rule_discount_info().empty()) {
     VLOG(1) << "Empty rule based discounts, cache nothing";
     return;
   }
-  auto& discount_info = proto.discount_info();
-  if (is_code_based_rbd) {
-    DCHECK(commerce::kCodeBasedRuleDiscount.Get())
-        << "Should be called only if the code-based RBD feature is enabled.";
-    if (discount_info.coupon_info_size() == 0) {
-      VLOG(1) << "Empty code-based rule based discounts, cache nothing";
-      return;
-    }
-    ScopedDictPrefUpdate update(profile_->GetPrefs(),
-                                prefs::kCartUsedDiscounts);
-    std::string merchant_id = discount_info.merchant_id();
-    for (auto coupon_info : discount_info.coupon_info()) {
-      std::string key = merchant_id + "-" + coupon_info.promo_id();
-      update->Set(key, true);
-    }
-  } else {
-    if (discount_info.rule_discount_info().empty()) {
-      VLOG(1) << "Empty codeless rule based discounts, cache nothing";
-      return;
-    }
-    ScopedDictPrefUpdate update(profile_->GetPrefs(),
-                                prefs::kCartUsedDiscounts);
-    for (auto rule_discount_info : discount_info.rule_discount_info()) {
-      update->Set(rule_discount_info.rule_id(), true);
-    }
+
+  ScopedDictPrefUpdate update(profile_->GetPrefs(), prefs::kCartUsedDiscounts);
+  for (auto rule_discount_info : proto.discount_info().rule_discount_info()) {
+    update->Set(rule_discount_info.rule_id(), true);
   }
 }
 
@@ -1178,14 +1182,6 @@ void CartService::CleanUpDiscounts(cart_db::ChromeCartContentProto proto) {
   // Clean up the rule-based discounts.
   if (!proto.discount_info().rule_discount_info().empty()) {
     proto.clear_discount_info();
-  }
-
-  // Clean up code-based rule discounts.
-  if (commerce::kCodeBasedRuleDiscount.Get()) {
-    if (proto.has_discount_info() &&
-        proto.discount_info().coupon_info_size() > 0) {
-      proto.clear_discount_info();
-    }
   }
 
   cart_db_->AddCart(eTLDPlusOne(GURL(proto.merchant_cart_url())), proto,

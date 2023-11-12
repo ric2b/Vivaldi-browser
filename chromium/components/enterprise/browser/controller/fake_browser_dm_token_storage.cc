@@ -4,8 +4,8 @@
 
 #include "components/enterprise/browser/controller/fake_browser_dm_token_storage.h"
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/enterprise/browser/enterprise_switches.h"
 
@@ -109,6 +109,10 @@ std::string FakeBrowserDMTokenStorage::MockDelegate::InitDMToken() {
 
 bool FakeBrowserDMTokenStorage::MockDelegate::InitEnrollmentErrorOption() {
   return enrollment_error_option_;
+}
+
+bool FakeBrowserDMTokenStorage::MockDelegate::CanInitEnrollmentToken() const {
+  return true;
 }
 
 BrowserDMTokenStorage::StoreTask

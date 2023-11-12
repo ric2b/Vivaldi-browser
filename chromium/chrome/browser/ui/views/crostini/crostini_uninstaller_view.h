@@ -5,9 +5,11 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_CROSTINI_CROSTINI_UNINSTALLER_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_CROSTINI_CROSTINI_UNINSTALLER_VIEW_H_
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+
+class Profile;
 
 namespace views {
 class Label;
@@ -16,9 +18,11 @@ class ProgressBar;
 
 namespace crostini {
 enum class CrostiniResult;
-}  // namespace crostini
 
-class Profile;
+// Shows the Crostini Uninstaller dialog.
+void ShowCrostiniUninstallerView(Profile* profile);
+
+}  // namespace crostini
 
 // The Crostini uninstaller. Provides a warning to the user and
 // uninstalls Crostinin if the user chooses to do so.

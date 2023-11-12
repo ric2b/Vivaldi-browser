@@ -8,7 +8,6 @@
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_shim/app_shim_manager_mac.h"
 #include "chrome/browser/apps/platform_apps/app_window_registry_util.h"
@@ -522,14 +521,23 @@ extensions::AppWindowRegistry::AppWindowList GetAppWindowsForNSWindow(
 
 - (void)removeMenuItems {
   NSMenu* mainMenu = [NSApp mainMenu];
+  // Vivaldi changes to prevent crash in VB-96169
+  if ([mainMenu indexOfItem:_appMenuItem] >= 0) { // Vivaldi
   [mainMenu removeItem:_appMenuItem];
+  } // Vivaldi
+  if ([mainMenu indexOfItem:_fileMenuItem] >= 0) { // Vivaldi
   [mainMenu removeItem:_fileMenuItem];
+  } // Vivaldi
   if ([mainMenu indexOfItem:_viewMenuItem] >= 0)
     [mainMenu removeItem:_viewMenuItem];
   if ([mainMenu indexOfItem:_historyMenuItem] >= 0)
     [mainMenu removeItem:_historyMenuItem];
+  if ([mainMenu indexOfItem:_editMenuItem] >= 0) { // Vivaldi
   [mainMenu removeItem:_editMenuItem];
+  } // Vivaldi
+  if ([mainMenu indexOfItem:_windowMenuItem] >= 0) { // Vivaldi
   [mainMenu removeItem:_windowMenuItem];
+  } // Vivaldi
 
   // Restore the Chrome main menu bar.
   for (NSMenuItem* item in [mainMenu itemArray])

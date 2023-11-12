@@ -14,7 +14,6 @@
 #include "content/browser/preloading/prerender/prerender_attributes.h"
 #include "content/browser/preloading/prerender/prerender_final_status.h"
 #include "content/browser/preloading/prerender/prerender_host_registry.h"
-#include "content/browser/site_instance_impl.h"
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/preloading_data.h"
 #include "content/public/test/mock_web_contents_observer.h"
@@ -29,7 +28,6 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/loader_constants.h"
 
 namespace content {
@@ -68,22 +66,19 @@ std::unique_ptr<NavigationSimulatorImpl> CreateActivation(
   return navigation;
 }
 
-class TestWebContentsDelegate : public WebContentsDelegate {
- public:
-  TestWebContentsDelegate() = default;
-  ~TestWebContentsDelegate() override = default;
-  bool IsPrerender2Supported(WebContents& web_contents) override {
-    return true;
-  }
-};
-
 class PrerenderHostTest : public RenderViewHostImplTestHarness {
  public:
-  PrerenderHostTest() = default;
+  PrerenderHostTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        blink::features::kPrerender2MainFrameNavigation);
+  }
+
+  ~PrerenderHostTest() override = default;
 
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
-    contents()->SetDelegate(&web_contents_delegate_);
+    web_contents_delegate_ =
+        std::make_unique<test::ScopedPrerenderWebContentsDelegate>(*contents());
     contents()->NavigateAndCommit(GURL("https://example.com"));
   }
 
@@ -100,8 +95,8 @@ class PrerenderHostTest : public RenderViewHostImplTestHarness {
     return PrerenderAttributes(
         url, PrerenderTriggerType::kSpeculationRule,
         /*embedder_histogram_suffix=*/"", Referrer(),
-        rfh->GetLastCommittedOrigin(), rfh->GetLastCommittedURL(),
-        rfh->GetProcess()->GetID(), rfh->GetFrameToken(),
+        rfh->GetLastCommittedOrigin(), rfh->GetProcess()->GetID(),
+        contents()->GetWeakPtr(), rfh->GetFrameToken(),
         rfh->GetFrameTreeNodeId(), rfh->GetPageUkmSourceId(),
         ui::PAGE_TRANSITION_LINK, std::move(url_match_predicate));
   }
@@ -136,9 +131,11 @@ class PrerenderHostTest : public RenderViewHostImplTestHarness {
 
  private:
   test::ScopedPrerenderFeatureList prerender_feature_list_;
-  TestWebContentsDelegate web_contents_delegate_;
+  std::unique_ptr<test::ScopedPrerenderWebContentsDelegate>
+      web_contents_delegate_;
   base::HistogramTester histogram_tester_;
   ukm::TestAutoSetUkmRecorder ukm_recorder_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 TEST_F(PrerenderHostTest, Activate) {
@@ -165,8 +162,9 @@ TEST_F(PrerenderHostTest, DontActivate) {
   ExpectFinalStatus(PrerenderFinalStatus::kDestroyed);
 }
 
-// Tests that main frame navigations in a prerendered page cannot occur even if
-// they start after the prerendered page has been reserved for activation.
+// Tests that cross-site main frame navigations in a prerendered page cannot
+// occur even if they start after the prerendered page has been reserved for
+// activation.
 TEST_F(PrerenderHostTest, MainFrameNavigationForReservedHost) {
   // Start prerendering a page.
   const GURL kPrerenderingUrl("https://example.com/next");
@@ -207,22 +205,22 @@ TEST_F(PrerenderHostTest, MainFrameNavigationForReservedHost) {
     const GURL kBadUrl("https://example2.test/");
     TestNavigationManager tno(contents(), kBadUrl);
 
-    // Start a cross-origin navigation in the prerendered page. It should be
+    // Start a cross-site navigation in the prerendered page. It should be
     // cancelled.
     auto navigation_2 = NavigationSimulatorImpl::CreateRendererInitiated(
         kBadUrl, prerender_rfh);
     navigation_2->Start();
     EXPECT_EQ(NavigationThrottle::CANCEL,
               navigation_2->GetLastThrottleCheckResult());
-    tno.WaitForNavigationFinished();
+    ASSERT_TRUE(tno.WaitForNavigationFinished());
     EXPECT_FALSE(tno.was_committed());
 
-    // The cross-origin navigation cancels the activation.
+    // The cross-site navigation cancels the activation.
     installer.condition().CallResumeClosure();
     prerender_host_observer.WaitForDestroyed();
     EXPECT_FALSE(prerender_host_observer.was_activated());
     EXPECT_EQ(registry().FindHostByUrlForTesting(kPrerenderingUrl), nullptr);
-    ExpectFinalStatus(PrerenderFinalStatus::kMainFrameNavigation);
+    ExpectFinalStatus(PrerenderFinalStatus::kCrossSiteNavigation);
   }
 
   // The activation falls back to regular navigation.
@@ -441,7 +439,7 @@ TEST_F(PrerenderHostTest, CanceledPrerenderCannotBeReadyForActivation) {
   PreloadingURLMatchCallback same_url_matcher =
       PreloadingData::GetSameURLMatcher(kPrerenderingUrl);
   PreloadingAttempt* preloading_attempt = preloading_data->AddPreloadingAttempt(
-      ToPreloadingPredictor(ContentPreloadingPredictor::kSpeculationRules),
+      content_preloading_predictor::kSpeculationRules,
       PreloadingType::kPrerender, std::move(same_url_matcher));
 
   const int prerender_frame_tree_node_id = registry().CreateAndStartHost(

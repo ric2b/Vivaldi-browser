@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/lazy_instance.h"
 #include "components/version_info/version_info.h"
@@ -95,6 +95,7 @@ class SimpleFeature : public Feature {
   bool IsInternal() const override;
   bool IsIdInBlocklist(const HashedExtensionId& hashed_id) const override;
   bool IsIdInAllowlist(const HashedExtensionId& hashed_id) const override;
+  bool RequiresDelegatedAvailabilityCheck() const override;
 
   static bool IsIdInArray(const std::string& extension_id,
                           const char* const array[],
@@ -128,6 +129,11 @@ class SimpleFeature : public Feature {
   void set_session_types(
       std::initializer_list<mojom::FeatureSessionType> types);
   void set_internal(bool is_internal) { is_internal_ = is_internal; }
+  void set_requires_delegated_availability_check(
+      bool requires_delegated_availability_check) {
+    requires_delegated_availability_check_ =
+        requires_delegated_availability_check;
+  }
   void set_developer_mode_only(bool is_developer_mode_only) {
     developer_mode_only_ = is_developer_mode_only;
   }
@@ -292,6 +298,7 @@ class SimpleFeature : public Feature {
 
   bool component_extensions_auto_granted_;
   bool is_internal_;
+  bool requires_delegated_availability_check_{false};
   bool developer_mode_only_{false};
   bool disallow_for_service_workers_;
 

@@ -11,18 +11,24 @@
 // instructions at:
 // https://goto.google.com/chrome-trace-privacy-filtered-fields
 
+#include "base/memory/raw_ptr_exclusion.h"
+
 namespace tracing {
 
 // A MessageInfo node created from a tree of TracePacket proto messages.
 struct MessageInfo {
   // List of accepted field ids in the output for this message. The end of list
   // is marked by a -1.
-  const int* accepted_field_ids;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #global-scope, #constexpr-var-initializer
+  RAW_PTR_EXCLUSION const int* accepted_field_ids;
 
   // List of sub messages that correspond to the accepted field ids list. There
   // is no end of list marker and the length is this list is equal to length of
   // |accepted_field_ids| - 1.
-  const MessageInfo* const* const sub_messages;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #global-scope, #constexpr-var-initializer
+  RAW_PTR_EXCLUSION const MessageInfo* const* const sub_messages;
 };
 
 // Proto Message: Clock
@@ -549,9 +555,9 @@ constexpr MessageInfo kTriggerRule = {kTriggerRuleIndices,
                                       kTriggerRuleComplexMessages};
 
 // Proto Message: TraceMetadata
-constexpr int kTraceMetadataIndices[] = {1, 2, -1};
-constexpr MessageInfo const* kTraceMetadataComplexMessages[] = {&kTriggerRule,
-                                                                &kTriggerRule};
+constexpr int kTraceMetadataIndices[] = {1, 2, 3, -1};
+constexpr MessageInfo const* kTraceMetadataComplexMessages[] = {
+    &kTriggerRule, &kTriggerRule, nullptr};
 constexpr MessageInfo kTraceMetadata = {kTraceMetadataIndices,
                                         kTraceMetadataComplexMessages};
 

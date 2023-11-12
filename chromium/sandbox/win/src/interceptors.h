@@ -48,6 +48,13 @@ enum InterceptorId {
   REGISTERCLASSW_ID,
   // Signed dispatcher:
   CREATE_SECTION_ID,
+
+  // Vivaldi get app name override
+  GET_MODULE_FILENAME_A,
+  GET_MODULE_FILENAME_W,
+  GET_MODULE_FILENAME_EX_A,
+  GET_MODULE_FILENAME_EX_W,
+
   INTERCEPTOR_MAX_ID
 };
 

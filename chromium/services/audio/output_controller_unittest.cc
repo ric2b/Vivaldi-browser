@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/environment.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -312,11 +312,8 @@ class AudioManagerForControllerTest final : public media::FakeAudioManager {
   }
 
   media::FakeAudioLogFactory fake_audio_log_factory_;
-  // TODO(crbug.com/1298696): Breaks services_unittests.
-  raw_ptr<MockAudioOutputStream, DegradeToNoOpWhenMTE> last_created_stream_ =
-      nullptr;
-  raw_ptr<MockAudioOutputStream, DegradeToNoOpWhenMTE> last_closed_stream_ =
-      nullptr;
+  raw_ptr<MockAudioOutputStream> last_created_stream_ = nullptr;
+  raw_ptr<MockAudioOutputStream> last_closed_stream_ = nullptr;
 };
 
 ACTION(PopulateBuffer) {

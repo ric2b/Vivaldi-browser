@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/memory/raw_ptr_exclusion.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/resource_sizes.h"
@@ -14,6 +15,7 @@
 #include "gpu/command_buffer/service/shared_image/external_vk_image_gl_representation.h"
 #include "gpu/command_buffer/service/shared_image/external_vk_image_overlay_representation.h"
 #include "gpu/command_buffer/service/shared_image/external_vk_image_skia_representation.h"
+#include "gpu/command_buffer/service/shared_image/gl_texture_holder.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
@@ -25,6 +27,7 @@
 #include "gpu/vulkan/vulkan_image.h"
 #include "gpu/vulkan/vulkan_implementation.h"
 #include "gpu/vulkan/vulkan_util.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/skia/include/gpu/GrBackendSemaphore.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/buildflags.h"
@@ -55,41 +58,6 @@ namespace gpu {
 
 namespace {
 
-static const struct GLFormatInfo {
-  GLenum gl_format;
-  GLenum gl_type;
-  GLuint bytes_per_pixel;
-} kFormatTable[] = {
-    {GL_RGBA, GL_UNSIGNED_BYTE, 4},                // RGBA_8888
-    {GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, 2},       // RGBA_4444
-    {GL_BGRA, GL_UNSIGNED_BYTE, 4},                // BGRA_8888
-    {GL_RED, GL_UNSIGNED_BYTE, 1},                 // ALPHA_8
-    {GL_RED, GL_UNSIGNED_BYTE, 1},                 // LUMINANCE_8
-    {GL_RGB, GL_UNSIGNED_SHORT_5_6_5, 2},          // RGB_565
-    {GL_BGR, GL_UNSIGNED_SHORT_5_6_5, 2},          // BGR_565
-    {GL_ZERO, GL_ZERO, 0},                         // ETC1
-    {GL_RED, GL_UNSIGNED_BYTE, 1},                 // RED_8
-    {GL_RG, GL_UNSIGNED_BYTE, 2},                  // RG_88
-    {GL_RED, GL_HALF_FLOAT_OES, 2},                // LUMINANCE_F16
-    {GL_RGBA, GL_HALF_FLOAT_OES, 8},               // RGBA_F16
-    {GL_RED, GL_UNSIGNED_SHORT, 2},                // R16_EXT
-    {GL_RG, GL_UNSIGNED_SHORT, 4},                 // RG16_EXT
-    {GL_RGBA, GL_UNSIGNED_BYTE, 4},                // RGBX_8888
-    {GL_BGRA, GL_UNSIGNED_BYTE, 4},                // BGRX_8888
-    {GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV, 4},  // RGBA_1010102
-    {GL_BGRA, GL_UNSIGNED_INT_2_10_10_10_REV, 4},  // BGRA_1010102
-    {GL_ZERO, GL_ZERO, 0},                         // YVU_420
-    {GL_ZERO, GL_ZERO, 0},                         // YUV_420_BIPLANAR
-    {GL_ZERO, GL_ZERO, 0},                         // YUVA_420_TRIPLANAR
-    {GL_ZERO, GL_ZERO, 0},                         // P010
-};
-static_assert(std::size(kFormatTable) == (viz::RESOURCE_FORMAT_MAX + 1),
-              "kFormatTable does not handle all cases.");
-
-GLFormatInfo GetGLFormatInfo(viz::SharedImageFormat format) {
-  return kFormatTable[format.resource_format()];
-}
-
 class ScopedDedicatedMemoryObject {
  public:
   explicit ScopedDedicatedMemoryObject(gl::GLApi* api) : api_(api) {
@@ -103,7 +71,9 @@ class ScopedDedicatedMemoryObject {
   GLuint id() const { return id_; }
 
  private:
-  gl::GLApi* const api_;
+  // This field is not a raw_ptr<> because it was filtered by the rewriter for:
+  // #union
+  RAW_PTR_EXCLUSION gl::GLApi* const api_;
   GLuint id_;
 };
 
@@ -112,8 +82,9 @@ bool UseSeparateGLTexture(SharedContextState* context_state,
   if (!context_state->support_vulkan_external_object())
     return true;
 
-  if (format.resource_format() != viz::ResourceFormat::BGRA_8888)
+  if (format != viz::SinglePlaneFormat::kBGRA_8888) {
     return false;
+  }
 
   auto* gl_context = context_state->real_context();
   const auto* version_info = gl_context->GetVersionInfo();
@@ -174,8 +145,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
     SkAlphaType alpha_type,
     uint32_t usage,
     const base::flat_map<VkFormat, VkImageUsageFlags>& image_usage_cache,
-    base::span<const uint8_t> pixel_data,
-    bool using_gmb) {
+    base::span<const uint8_t> pixel_data) {
   bool is_external = context_state->support_vulkan_external_object();
 
   auto* device_queue = context_state->vk_context_provider()->GetDeviceQueue();
@@ -332,22 +302,13 @@ ExternalVkImageBacking::~ExternalVkImageBacking() {
   fence_helper()->EnqueueVulkanObjectCleanupForSubmittedWork(std::move(image_));
   backend_texture_ = GrBackendTexture();
 
-  if (texture_) {
-    // Ensure that a context is current before removing the ref and calling
-    // glDeleteTextures.
-    if (!gl::GLContext::GetCurrent())
-      context_state()->MakeCurrent(nullptr, true /* need_gl */);
-    texture_->RemoveLightweightRef(have_context());
-  }
-
-  if (texture_passthrough_) {
-    // Ensure that a context is current before releasing |texture_passthrough_|,
-    // it calls glDeleteTextures.
-    if (!gl::GLContext::GetCurrent())
-      context_state()->MakeCurrent(nullptr, true /* need_gl */);
-    if (!have_context())
-      texture_passthrough_->MarkContextLost();
-    texture_passthrough_ = nullptr;
+  if (gl_texture_) {
+    // Ensure that a context is current before glDeleteTexture().
+    MakeGLContextCurrent();
+    if (!have_context()) {
+      gl_texture_->SetContextLost();
+    }
+    gl_texture_.reset();
   }
 }
 
@@ -365,8 +326,9 @@ bool ExternalVkImageBacking::BeginAccess(
 
   if (readonly && !reads_in_progress_) {
     UpdateContent(kInVkImage);
-    if (texture_ || texture_passthrough_)
+    if (gl_texture_) {
       UpdateContent(kInGLTexture);
+    }
   }
 
   if (gl_reads_in_progress_ && need_synchronization()) {
@@ -376,13 +338,10 @@ bool ExternalVkImageBacking::BeginAccess(
     // resume the GL access.
     DCHECK(!is_gl);
     DCHECK(readonly);
-    DCHECK(texture_passthrough_ || texture_);
+    DCHECK(gl_texture_);
 
-    GLuint texture_id = texture_passthrough_
-                            ? texture_passthrough_->service_id()
-                            : texture_->service_id();
-    if (!gl::GLContext::GetCurrent())
-      context_state()->MakeCurrent(/*gl_surface=*/nullptr, /*needs_gl=*/true);
+    GLuint texture_id = gl_texture_->GetServiceId();
+    MakeGLContextCurrent();
 
     GrVkImageInfo info;
     auto result = backend_texture_.getVkImageInfo(&info);
@@ -471,12 +430,9 @@ void ExternalVkImageBacking::EndAccess(bool readonly,
     // access, we need to resume GL read access.
     DCHECK(!is_gl);
     DCHECK(readonly);
-    DCHECK(texture_passthrough_ || texture_);
-    GLuint texture_id = texture_passthrough_
-                            ? texture_passthrough_->service_id()
-                            : texture_->service_id();
-    if (!gl::GLContext::GetCurrent())
-      context_state()->MakeCurrent(/*gl_surface=*/nullptr, /*needs_gl=*/true);
+    DCHECK(gl_texture_);
+    GLuint texture_id = gl_texture_->GetServiceId();
+    MakeGLContextCurrent();
     std::vector<ExternalSemaphore> external_semaphores;
     BeginAccessInternal(true, &external_semaphores);
     DCHECK_LE(external_semaphores.size(), 1u);
@@ -507,7 +463,11 @@ void ExternalVkImageBacking::Update(std::unique_ptr<gfx::GpuFence> in_fence) {
   DCHECK(!in_fence);
 }
 
-bool ExternalVkImageBacking::UploadFromMemory(const SkPixmap& pixmap) {
+bool ExternalVkImageBacking::UploadFromMemory(
+    const std::vector<SkPixmap>& pixmaps) {
+  DCHECK_EQ(pixmaps.size(), 1u);
+  auto& pixmap = pixmaps[0];
+
   if (!UploadToVkImage(pixmap))
     return false;
 
@@ -515,7 +475,7 @@ bool ExternalVkImageBacking::UploadFromMemory(const SkPixmap& pixmap) {
   latest_content_ = kInVkImage;
 
   // Also upload to GL texture if there is a separate one.
-  if (use_separate_gl_texture() && (texture_ || texture_passthrough_)) {
+  if (use_separate_gl_texture() && gl_texture_) {
     UploadToGLTexture(pixmap);
     latest_content_ |= kInGLTexture;
   }
@@ -601,17 +561,26 @@ std::unique_ptr<DawnImageRepresentation> ExternalVkImageBacking::ProduceDawn(
 #endif
 }
 
-GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
-  GrVkImageInfo image_info;
-  bool result = backend_texture_.getVkImageInfo(&image_info);
-  DCHECK(result);
+bool ExternalVkImageBacking::MakeGLContextCurrent() {
+  if (gl::GLContext::GetCurrent()) {
+    return true;
+  }
+  return context_state()->MakeCurrent(/*surface=*/nullptr, /*needs_gl=*/true);
+}
+
+bool ExternalVkImageBacking::ProduceGLTextureInternal(bool is_passthrough) {
   gl::GLApi* api = gl::g_current_gl_context;
   absl::optional<ScopedDedicatedMemoryObject> memory_object;
   if (!use_separate_gl_texture()) {
+    GrVkImageInfo image_info;
+    bool result = backend_texture_.getVkImageInfo(&image_info);
+    DCHECK(result);
+
 #if BUILDFLAG(IS_POSIX)
     auto memory_fd = image_->GetMemoryFd();
-    if (!memory_fd.is_valid())
-      return 0;
+    if (!memory_fd.is_valid()) {
+      return false;
+    }
     memory_object.emplace(api);
     api->glImportMemoryFdEXTFn(memory_object->id(), image_info.fAlloc.fSize,
                                GL_HANDLE_TYPE_OPAQUE_FD_EXT,
@@ -619,7 +588,7 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
 #elif BUILDFLAG(IS_WIN)
     auto memory_handle = image_->GetMemoryHandle();
     if (!memory_handle.IsValid()) {
-      return 0;
+      return false;
     }
     memory_object.emplace(api);
     api->glImportMemoryWin32HandleEXTFn(
@@ -628,7 +597,7 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
 #elif BUILDFLAG(IS_FUCHSIA)
     zx::vmo vmo = image_->GetMemoryZirconHandle();
     if (!vmo)
-      return 0;
+      return false;
     memory_object.emplace(api);
     api->glImportMemoryZirconHandleANGLEFn(
         memory_object->id(), image_info.fAlloc.fSize,
@@ -638,6 +607,13 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
 #endif
   }
 
+  bool use_rgbx = context_state()
+                      ->feature_info()
+                      ->feature_flags()
+                      .angle_rgbx_internal_format;
+  GLFormatDesc format_desc =
+      ToGLFormatDesc(format(), /*plane_index=*/0, use_rgbx);
+
   GLuint texture_service_id = 0;
   api->glGenTexturesFn(1, &texture_service_id);
   gl::ScopedTextureBinder scoped_texture_binder(GL_TEXTURE_2D,
@@ -646,24 +622,18 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
   if (use_separate_gl_texture()) {
     DCHECK(!memory_object);
     if (UseTexStorage2D(context_state_.get())) {
-      bool use_rgbx = context_state()
-                          ->feature_info()
-                          ->feature_flags()
-                          .angle_rgbx_internal_format;
-      GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
-      api->glTexStorage2DEXTFn(GL_TEXTURE_2D, 1, internal_format,
+      api->glTexStorage2DEXTFn(GL_TEXTURE_2D, 1,
+                               format_desc.storage_internal_format,
                                size().width(), size().height());
     } else {
-      auto gl_format_info = GetGLFormatInfo(format());
-      auto gl_format = gl_format_info.gl_format;
-      auto gl_type = gl_format_info.gl_type;
-      if (gl_format == GL_ZERO || gl_type == GL_ZERO)
-        LOG(FATAL) << "Not support format: " << format().ToString();
-      api->glTexImage2DFn(GL_TEXTURE_2D, 0, gl_format, size().width(),
-                          size().height(), 0, gl_format, gl_type, nullptr);
+      api->glTexImage2DFn(GL_TEXTURE_2D, 0, format_desc.image_internal_format,
+                          size().width(), size().height(), 0,
+                          format_desc.data_format, format_desc.data_type,
+                          nullptr);
     }
   } else {
     DCHECK(memory_object);
@@ -674,92 +644,82 @@ GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
     // when creating the image, so communicate that information to ANGLE.  This
     // makes sure that ANGLE recreates the VkImage identically to Chromium.
     DCHECK(image_->usage() != 0);
-    bool use_rgbx = context_state()
-                        ->feature_info()
-                        ->feature_flags()
-                        .angle_rgbx_internal_format;
-    GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
     if (UseMinimalUsageFlags(context_state())) {
       api->glTexStorageMemFlags2DANGLEFn(
-          GL_TEXTURE_2D, 1, internal_format, size().width(), size().height(),
-          memory_object->id(), 0, image_->flags(), image_->usage(), nullptr);
+          GL_TEXTURE_2D, 1, format_desc.storage_internal_format, size().width(),
+          size().height(), memory_object->id(), 0, image_->flags(),
+          image_->usage(), nullptr);
     } else {
-      api->glTexStorageMem2DEXTFn(GL_TEXTURE_2D, 1, internal_format,
-                                  size().width(), size().height(),
-                                  memory_object->id(), 0);
+      api->glTexStorageMem2DEXTFn(
+          GL_TEXTURE_2D, 1, format_desc.storage_internal_format, size().width(),
+          size().height(), memory_object->id(), 0);
     }
   }
 
-  return texture_service_id;
+  gl_texture_ = std::make_unique<GLTextureHolder>(
+      format().resource_format(), size(), is_passthrough, nullptr);
+
+  if (is_passthrough) {
+    auto texture = base::MakeRefCounted<gpu::gles2::TexturePassthrough>(
+        texture_service_id, GL_TEXTURE_2D, format_desc.storage_internal_format,
+        size().width(), size().height(),
+        /*depth=*/1, /*border=*/0, format_desc.data_format,
+        format_desc.data_type);
+    gl_texture_->InitializeWithTexture(format_desc, std::move(texture));
+  } else {
+    auto* texture = gles2::CreateGLES2TextureWithLightRef(texture_service_id,
+                                                          GL_TEXTURE_2D);
+    // If the backing is already cleared, no need to clear it again.
+    gfx::Rect cleared_rect;
+    if (IsCleared()) {
+      cleared_rect = gfx::Rect(size());
+    }
+
+    texture->SetLevelInfo(GL_TEXTURE_2D, 0, format_desc.storage_internal_format,
+                          size().width(), size().height(), 1, 0,
+                          format_desc.data_format, format_desc.data_type,
+                          cleared_rect);
+    texture->SetImmutable(true, true);
+    gl_texture_->InitializeWithTexture(format_desc, texture);
+  }
+
+  return true;
 }
 
 std::unique_ptr<GLTextureImageRepresentation>
 ExternalVkImageBacking::ProduceGLTexture(SharedImageManager* manager,
                                          MemoryTypeTracker* tracker) {
-  DCHECK(!texture_passthrough_);
   if (!(usage() & SHARED_IMAGE_USAGE_GLES2)) {
     DLOG(ERROR) << "The backing is not created with GLES2 usage.";
     return nullptr;
   }
 
-  if (!texture_) {
-    GLuint texture_service_id = ProduceGLTextureInternal();
-    if (!texture_service_id)
+  if (!gl_texture_) {
+    if (!ProduceGLTextureInternal(/*is_passthrough=*/false)) {
       return nullptr;
-    bool use_rgbx = context_state()
-                        ->feature_info()
-                        ->feature_flags()
-                        .angle_rgbx_internal_format;
-    GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
-    GLenum gl_format = GLDataFormat(format());
-    GLenum gl_type = GLDataType(format());
-
-    texture_ = gles2::CreateGLES2TextureWithLightRef(texture_service_id,
-                                                     GL_TEXTURE_2D);
-    // If the backing is already cleared, no need to clear it again.
-    gfx::Rect cleared_rect;
-    if (IsCleared())
-      cleared_rect = gfx::Rect(size());
-
-    texture_->SetLevelInfo(GL_TEXTURE_2D, 0, internal_format, size().width(),
-                           size().height(), 1, 0, gl_format, gl_type,
-                           cleared_rect);
-    texture_->SetImmutable(true, true);
+    }
   }
   return std::make_unique<ExternalVkImageGLRepresentation>(
-      manager, this, tracker, texture_, texture_->service_id());
+      manager, this, tracker, gl_texture_->texture());
 }
 
 std::unique_ptr<GLTexturePassthroughImageRepresentation>
 ExternalVkImageBacking::ProduceGLTexturePassthrough(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker) {
-  DCHECK(!texture_);
   if (!(usage() & SHARED_IMAGE_USAGE_GLES2)) {
     DLOG(ERROR) << "The backing is not created with GLES2 usage.";
     return nullptr;
   }
 
-  if (!texture_passthrough_) {
-    GLuint texture_service_id = ProduceGLTextureInternal();
-    if (!texture_service_id)
+  if (!gl_texture_) {
+    if (!ProduceGLTextureInternal(/*is_passthrough=*/true)) {
       return nullptr;
-    bool use_rgbx = context_state()
-                        ->feature_info()
-                        ->feature_flags()
-                        .angle_rgbx_internal_format;
-    GLuint internal_format = TextureStorageFormat(format(), use_rgbx);
-    GLenum gl_format = GLDataFormat(format());
-    GLenum gl_type = GLDataType(format());
-
-    texture_passthrough_ = base::MakeRefCounted<gpu::gles2::TexturePassthrough>(
-        texture_service_id, GL_TEXTURE_2D, internal_format, size().width(),
-        size().height(),
-        /*depth=*/1, /*border=*/0, gl_format, gl_type);
+    }
   }
 
   return std::make_unique<ExternalVkImageGLPassthroughRepresentation>(
-      manager, this, tracker, texture_passthrough_->service_id());
+      manager, this, tracker, gl_texture_->passthrough_texture());
 }
 
 std::unique_ptr<SkiaImageRepresentation> ExternalVkImageBacking::ProduceSkia(
@@ -805,11 +765,21 @@ void ExternalVkImageBacking::UpdateContent(uint32_t content_flags) {
   }
 }
 
-bool ExternalVkImageBacking::WritePixelsWithCallback(
-    size_t data_size,
-    size_t stride,
-    WriteBufferCallback callback) {
-  DCHECK(stride == 0 || size().height() * stride <= data_size);
+void ExternalVkImageBacking::CopyPixelsFromGLTextureToVkImage() {
+  DCHECK(use_separate_gl_texture());
+  DCHECK(gl_texture_);
+
+  // Make sure GrContext is not using GL. So we don't need reset GrContext
+  DCHECK(!context_state_->GrContextIsGL());
+
+  // Make sure a gl context is current, since textures are shared between all gl
+  // contexts, we don't care which gl context is current.
+  if (!MakeGLContextCurrent()) {
+    return;
+  }
+
+  SkImageInfo sk_image_info = AsSkImageInfo();
+  size_t data_size = sk_image_info.computeMinByteSize();
 
   VkBufferCreateInfo buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -828,25 +798,33 @@ bool ExternalVkImageBacking::WritePixelsWithCallback(
                                       0, &stage_buffer, &stage_allocation);
   if (result != VK_SUCCESS) {
     DLOG(ERROR) << "vkCreateBuffer() failed." << result;
-    return false;
+    return;
   }
+
+  absl::Cleanup destroy_buffer = [&]() {
+    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
+  };
 
   void* buffer = nullptr;
   result = vma::MapMemory(allocator, stage_allocation, &buffer);
   if (result != VK_SUCCESS) {
     DLOG(ERROR) << "vma::MapMemory() failed. " << result;
-    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
-    return false;
+    return;
   }
 
-  std::move(callback).Run(buffer);
+  SkPixmap pixmap(sk_image_info, buffer, sk_image_info.minRowBytes());
+  if (!gl_texture_->ReadbackToMemory(pixmap)) {
+    DLOG(ERROR) << "GL readback failed";
+    vma::UnmapMemory(allocator, stage_allocation);
+    return;
+  }
+
   vma::UnmapMemory(allocator, stage_allocation);
 
   std::vector<ExternalSemaphore> external_semaphores;
-  if (!BeginAccessInternal(false /* readonly */, &external_semaphores)) {
+  if (!BeginAccessInternal(/*readonly=*/false, &external_semaphores)) {
     DLOG(ERROR) << "BeginAccess() failed.";
-    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
-    return false;
+    return;
   }
 
   auto command_buffer = command_pool_->CreatePrimaryCommandBuffer();
@@ -862,25 +840,27 @@ bool ExternalVkImageBacking::WritePixelsWithCallback(
           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
       backend_texture_.setVkImageLayout(VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     }
-    uint32_t buffer_width =
-        stride ? stride * 8 / BitsPerPixel(format()) : size().width();
     command_buffer->CopyBufferToImage(stage_buffer, image_info.fImage,
-                                      buffer_width, size().height(),
+                                      size().width(), size().height(),
                                       size().width(), size().height());
   }
 
   SetCleared();
 
+  // Everything was successful so `stage_buffer` + `stage_allocation` ownership
+  // will be passed to EnqueueBufferCleanupForSubmittedWork().
+  std::move(destroy_buffer).Cancel();
+
   if (!need_synchronization()) {
     DCHECK(external_semaphores.empty());
     command_buffer->Submit(0, nullptr, 0, nullptr);
-    EndAccessInternal(false /* readonly */, ExternalSemaphore());
+    EndAccessInternal(/*readonly=*/false, ExternalSemaphore());
 
     fence_helper()->EnqueueVulkanObjectCleanupForSubmittedWork(
         std::move(command_buffer));
     fence_helper()->EnqueueBufferCleanupForSubmittedWork(stage_buffer,
                                                          stage_allocation);
-    return true;
+    return;
   }
 
   std::vector<VkSemaphore> begin_access_semaphores;
@@ -895,7 +875,7 @@ bool ExternalVkImageBacking::WritePixelsWithCallback(
                          begin_access_semaphores.data(), 1,
                          &vk_end_access_semaphore);
 
-  EndAccessInternal(false /* readonly */, std::move(end_access_semaphore));
+  EndAccessInternal(/*readonly=*/false, std::move(end_access_semaphore));
   // |external_semaphores| have been waited on and can be reused when submitted
   // GPU work is done.
   ReturnPendingSemaphoresWithFenceHelper(std::move(external_semaphores));
@@ -904,14 +884,23 @@ bool ExternalVkImageBacking::WritePixelsWithCallback(
       std::move(command_buffer));
   fence_helper()->EnqueueBufferCleanupForSubmittedWork(stage_buffer,
                                                        stage_allocation);
-  return true;
 }
 
-bool ExternalVkImageBacking::ReadPixelsWithCallback(
-    size_t data_size,
-    size_t stride,
-    ReadBufferCallback callback) {
-  DCHECK(stride == 0 || size().height() * stride <= data_size);
+void ExternalVkImageBacking::CopyPixelsFromVkImageToGLTexture() {
+  DCHECK(use_separate_gl_texture());
+  DCHECK(gl_texture_);
+
+  // Make sure GrContext is not using GL. So we don't need reset GrContext
+  DCHECK(!context_state_->GrContextIsGL());
+
+  // Make sure a gl context is current, since textures are shared between all gl
+  // contexts, we don't care which gl context is current.
+  if (!MakeGLContextCurrent()) {
+    return;
+  }
+
+  SkImageInfo sk_image_info = AsSkImageInfo();
+  size_t data_size = sk_image_info.computeMinByteSize();
 
   VkBufferCreateInfo buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -930,17 +919,20 @@ bool ExternalVkImageBacking::ReadPixelsWithCallback(
                                       0, &stage_buffer, &stage_allocation);
   if (result != VK_SUCCESS) {
     DLOG(ERROR) << "vkCreateBuffer() failed." << result;
-    return false;
+    return;
   }
+
+  absl::Cleanup destroy_buffer = [&]() {
+    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
+  };
 
   // ReadPixelsWithCallback() is only called for separate texture.
   DCHECK(!need_synchronization());
 
   std::vector<ExternalSemaphore> external_semaphores;
-  if (!BeginAccessInternal(true /* readonly */, &external_semaphores)) {
+  if (!BeginAccessInternal(/*readonly=*/true, &external_semaphores)) {
     DLOG(ERROR) << "BeginAccess() failed.";
-    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
-    return false;
+    return;
   }
   DCHECK(external_semaphores.empty());
 
@@ -957,36 +949,34 @@ bool ExternalVkImageBacking::ReadPixelsWithCallback(
           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
       backend_texture_.setVkImageLayout(VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
     }
-    uint32_t buffer_width =
-        stride ? stride * 8 / BitsPerPixel(format()) : size().width();
     command_buffer->CopyImageToBuffer(stage_buffer, image_info.fImage,
-                                      buffer_width, size().height(),
+                                      size().width(), size().height(),
                                       size().width(), size().height());
   }
 
   command_buffer->Submit(0, nullptr, 0, nullptr);
   command_buffer->Wait(UINT64_MAX);
   command_buffer->Destroy();
-  EndAccessInternal(true /* readonly */, ExternalSemaphore());
+  EndAccessInternal(/*readonly=*/true, ExternalSemaphore());
 
   void* buffer = nullptr;
   result = vma::MapMemory(allocator, stage_allocation, &buffer);
   if (result != VK_SUCCESS) {
     DLOG(ERROR) << "vma::MapMemory() failed. " << result;
-    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
-    return false;
+    return;
   }
 
-  std::move(callback).Run(buffer);
-  vma::UnmapMemory(allocator, stage_allocation);
-  vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
+  SkPixmap pixmap(sk_image_info, buffer, sk_image_info.minRowBytes());
+  if (!gl_texture_->UploadFromMemory(pixmap)) {
+    DLOG(ERROR) << "GL upload failed";
+  }
 
-  return true;
+  vma::UnmapMemory(allocator, stage_allocation);
 }
 
 bool ExternalVkImageBacking::UploadToVkImage(const SkPixmap& pixmap) {
   std::vector<ExternalSemaphore> external_semaphores;
-  if (!BeginAccessInternal(false /* readonly */, &external_semaphores)) {
+  if (!BeginAccessInternal(/*readonly=*/false, &external_semaphores)) {
     DLOG(ERROR) << "BeginAccess() failed.";
     return false;
   }
@@ -1000,7 +990,7 @@ bool ExternalVkImageBacking::UploadToVkImage(const SkPixmap& pixmap) {
 
   if (!need_synchronization()) {
     DCHECK(external_semaphores.empty());
-    EndAccessInternal(false /* readonly */, ExternalSemaphore());
+    EndAccessInternal(/*readonly=*/false, ExternalSemaphore());
     return true;
   }
 
@@ -1023,167 +1013,24 @@ bool ExternalVkImageBacking::UploadToVkImage(const SkPixmap& pixmap) {
   // Submit so the |end_access_semaphore| is ready for waiting.
   gr_context->submit();
 
-  EndAccessInternal(false /* readonly */, std::move(end_access_semaphore));
+  EndAccessInternal(/*readonly=*/false, std::move(end_access_semaphore));
   // |external_semaphores| have been waited on and can be reused when submitted
   // GPU work is done.
   ReturnPendingSemaphoresWithFenceHelper(std::move(external_semaphores));
   return true;
 }
 
-void ExternalVkImageBacking::CopyPixelsFromGLTextureToVkImage() {
-  DCHECK(use_separate_gl_texture());
-  DCHECK_NE(!!texture_, !!texture_passthrough_);
-  const GLuint texture_service_id =
-      texture_ ? texture_->service_id() : texture_passthrough_->service_id();
-
-  auto gl_format_info = GetGLFormatInfo(format());
-  auto gl_format = gl_format_info.gl_format;
-  auto gl_type = gl_format_info.gl_type;
-  auto bytes_per_pixel = gl_format_info.bytes_per_pixel;
-
-  if (gl_format == GL_ZERO) {
-    NOTREACHED() << "Not supported resource format=" << format().ToString();
-    return;
-  }
-
-  // Make sure GrContext is not using GL. So we don't need reset GrContext
-  DCHECK(!context_state_->GrContextIsGL());
-
-  // Make sure a gl context is current, since textures are shared between all gl
-  // contexts, we don't care which gl context is current.
-  if (!gl::GLContext::GetCurrent() &&
-      !context_state_->MakeCurrent(nullptr, true /* needs_gl */))
-    return;
-
-  gl::GLApi* api = gl::g_current_gl_context;
-  GLuint framebuffer;
-  api->glGenFramebuffersEXTFn(1, &framebuffer);
-  gl::ScopedFramebufferBinder scoped_framebuffer_binder(framebuffer);
-  api->glFramebufferTexture2DEXTFn(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                   GL_TEXTURE_2D, texture_service_id, 0);
-  DCHECK_EQ(api->glCheckFramebufferStatusEXTFn(GL_READ_FRAMEBUFFER),
-            static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE))
-      << "CheckFramebufferStatusEXT() failed.";
-
-  base::CheckedNumeric<size_t> checked_size = bytes_per_pixel;
-  checked_size *= size().width();
-  checked_size *= size().height();
-  DCHECK(checked_size.IsValid());
-
-  gl::ScopedPixelStore pack_row_length(GL_PACK_ROW_LENGTH, 0);
-  gl::ScopedPixelStore pack_skip_pixels(GL_PACK_SKIP_PIXELS, 0);
-  gl::ScopedPixelStore pack_skip_rows(GL_PACK_SKIP_ROWS, 0);
-  // Use 1 byte alignment for Vulkan image buffer copy.
-  gl::ScopedPixelStore pack_alignment(GL_PACK_ALIGNMENT, 1);
-
-  WritePixelsWithCallback(
-      checked_size.ValueOrDie(), 0,
-      base::BindOnce(
-          [](gl::GLApi* api, const gfx::Size& size, GLenum format, GLenum type,
-             void* buffer) {
-            api->glReadPixelsFn(0, 0, size.width(), size.height(), format, type,
-                                buffer);
-            DCHECK_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
-          },
-          api, size(), gl_format, gl_type));
-  api->glDeleteFramebuffersEXTFn(1, &framebuffer);
-}
-
-void ExternalVkImageBacking::CopyPixelsFromVkImageToGLTexture() {
-  DCHECK(use_separate_gl_texture());
-  DCHECK_NE(!!texture_, !!texture_passthrough_);
-  const GLuint texture_service_id =
-      texture_ ? texture_->service_id() : texture_passthrough_->service_id();
-
-  auto gl_format_info = GetGLFormatInfo(format());
-  auto gl_format = gl_format_info.gl_format;
-  auto gl_type = gl_format_info.gl_type;
-  auto bytes_per_pixel = gl_format_info.bytes_per_pixel;
-
-  if (gl_format == GL_ZERO) {
-    NOTREACHED() << "Not supported resource format=" << format().ToString();
-    return;
-  }
-
-  // Make sure GrContext is not using GL. So we don't need reset GrContext
-  DCHECK(!context_state_->GrContextIsGL());
-
-  // Make sure a gl context is current, since textures are shared between all gl
-  // contexts, we don't care which gl context is current.
-  if (!gl::GLContext::GetCurrent() &&
-      !context_state_->MakeCurrent(nullptr, true /* needs_gl */))
-    return;
-
-  gl::GLApi* api = gl::g_current_gl_context;
-  base::CheckedNumeric<size_t> checked_size = bytes_per_pixel;
-  checked_size *= size().width();
-  checked_size *= size().height();
-  DCHECK(checked_size.IsValid());
-
-  gl::ScopedTextureBinder scoped_texture_binder(GL_TEXTURE_2D,
-                                                texture_service_id);
-
-  gl::ScopedPixelStore unpack_row_length(GL_UNPACK_ROW_LENGTH, 0);
-  gl::ScopedPixelStore unpack_skip_pixels(GL_UNPACK_SKIP_PIXELS, 0);
-  gl::ScopedPixelStore unpack_skip_rows(GL_UNPACK_SKIP_ROWS, 0);
-  // Use 1 byte alignment for Vulkan image buffer copy.
-  gl::ScopedPixelStore unpack_alignment(GL_UNPACK_ALIGNMENT, 1);
-
-  ReadPixelsWithCallback(
-      checked_size.ValueOrDie(), 0,
-      base::BindOnce(
-          [](gl::GLApi* api, const gfx::Size& size, GLenum format, GLenum type,
-             const void* buffer) {
-            api->glTexSubImage2DFn(GL_TEXTURE_2D, 0, 0, 0, size.width(),
-                                   size.height(), format, type, buffer);
-            DCHECK_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
-          },
-          api, size(), gl_format, gl_type));
-}
-
 void ExternalVkImageBacking::UploadToGLTexture(const SkPixmap& pixmap) {
   DCHECK(use_separate_gl_texture());
-  DCHECK_NE(!!texture_, !!texture_passthrough_);
-  const GLuint texture_service_id =
-      texture_ ? texture_->service_id() : texture_passthrough_->service_id();
-
-  auto gl_format_info = GetGLFormatInfo(format());
-  auto gl_format = gl_format_info.gl_format;
-  auto gl_type = gl_format_info.gl_type;
-  auto bytes_per_pixel = gl_format_info.bytes_per_pixel;
-
-  if (gl_format == GL_ZERO) {
-    NOTREACHED() << "Not supported resource format=" << format().ToString();
-    return;
-  }
-
-  // Make sure GrContext is not using GL. So we don't need reset GrContext
-  DCHECK(!context_state_->GrContextIsGL());
+  DCHECK(gl_texture_);
 
   // Make sure a gl context is current, since textures are shared between all gl
   // contexts, we don't care which gl context is current.
-  if (!gl::GLContext::GetCurrent() &&
-      !context_state_->MakeCurrent(nullptr, true /* needs_gl */))
+  if (!MakeGLContextCurrent()) {
     return;
+  }
 
-  gl::GLApi* api = gl::g_current_gl_context;
-  gl::ScopedTextureBinder scoped_texture_binder(GL_TEXTURE_2D,
-                                                texture_service_id);
-
-  gl::ScopedPixelStore unpack_row_length(GL_UNPACK_ROW_LENGTH, 0);
-  gl::ScopedPixelStore unpack_skip_pixels(GL_UNPACK_SKIP_PIXELS, 0);
-  gl::ScopedPixelStore unpack_skip_rows(GL_UNPACK_SKIP_ROWS, 0);
-  // Chrome uses 4 bytes alignment for shared memory GMB.
-  gl::ScopedPixelStore unpack_alignment(GL_UNPACK_ALIGNMENT, 4);
-
-  base::CheckedNumeric<size_t> checked_size = bytes_per_pixel;
-  checked_size *= size().width();
-  checked_size *= size().height();
-  DCHECK(checked_size.IsValid());
-
-  api->glTexSubImage2DFn(GL_TEXTURE_2D, 0, 0, 0, size().width(),
-                         size().height(), gl_format, gl_type, pixmap.addr());
-  DCHECK_EQ(api->glGetErrorFn(), static_cast<GLenum>(GL_NO_ERROR));
+  gl_texture_->UploadFromMemory(pixmap);
 }
 
 bool ExternalVkImageBacking::BeginAccessInternal(

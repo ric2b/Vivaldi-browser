@@ -9,7 +9,7 @@
 #include <queue>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -281,10 +281,6 @@ class AURA_EXPORT WindowEventDispatcher : public ui::EventProcessor,
   // Calls SynthesizeMouseMove() if |window| is currently visible and contains
   // the mouse cursor.
   void SynthesizeMouseMoveAfterChangeToWindow(Window* window);
-
-  // Determines whether to report event latency.
-  bool ShouldReportEventLatency(ui::EventTarget* target,
-                                const ui::EventDispatchDetails& details);
 
   ui::EventDispatchDetails PreDispatchLocatedEvent(Window* target,
                                                    ui::LocatedEvent* event);

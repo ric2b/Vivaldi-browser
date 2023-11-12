@@ -10,12 +10,12 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
@@ -219,7 +219,8 @@ StreamModel* FeedStream::GetModel(const StreamType& stream_type) {
 }
 
 feedwire::DiscoverLaunchResult FeedStream::TriggerStreamLoad(
-    const StreamType& stream_type) {
+    const StreamType& stream_type,
+    SingleWebFeedEntryPoint entry_point) {
   Stream& stream = GetStream(stream_type);
   if (stream.model || stream.model_loading_in_progress)
     return feedwire::DiscoverLaunchResult::CARDS_UNSPECIFIED;
@@ -240,6 +241,7 @@ feedwire::DiscoverLaunchResult FeedStream::TriggerStreamLoad(
   stream.surface_updater->LoadStreamStarted(/*manual_refreshing=*/false);
   LoadStreamTask::Options options;
   options.stream_type = stream_type;
+  options.single_feed_entry_point = entry_point;
   task_queue_.AddTask(FROM_HERE,
                       std::make_unique<LoadStreamTask>(
                           options, this,
@@ -253,7 +255,7 @@ void FeedStream::InitializeComplete(WaitForStoreInitializeTask::Result result) {
   for (const feedstore::StreamData& stream_data :
        result.startup_data.stream_data) {
     StreamType stream_type =
-        feedstore::StreamTypeFromId(stream_data.stream_id());
+        feedstore::StreamTypeFromKey(stream_data.stream_key());
     if (stream_type.IsValid()) {
       GetStream(stream_type).content_ids =
           feedstore::GetContentIds(stream_data);
@@ -274,7 +276,7 @@ void FeedStream::InitializeComplete(WaitForStoreInitializeTask::Result result) {
   for (const feedstore::StreamData& stream_data :
        result.startup_data.stream_data) {
     StreamType stream_type =
-        feedstore::StreamTypeFromId(stream_data.stream_id());
+        feedstore::StreamTypeFromKey(stream_data.stream_key());
     if (stream_type.IsValid())
       MaybeNotifyHasUnreadContent(stream_type);
   }
@@ -448,8 +450,9 @@ void FeedStream::AttachSurface(FeedStreamSurface* surface) {
     return;
   }
 
-  stream.surfaces.SurfaceAdded(surface,
-                               TriggerStreamLoad(surface->GetStreamType()));
+  stream.surfaces.SurfaceAdded(
+      surface, TriggerStreamLoad(surface->GetStreamType(),
+                                 surface->GetSingleWebFeedEntryPoint()));
 
   // Cancel any scheduled model unload task.
   ++stream.unload_on_detach_sequence_number;
@@ -600,8 +603,9 @@ void FeedStream::ManualRefresh(const StreamType& stream_type,
                                base::OnceCallback<void(bool)> callback) {
   Stream& stream = GetStream(stream_type);
 
-  // Bail out immediately if loading in progress.
-  if (stream.model_loading_in_progress) {
+  // Bail out immediately if loading in progress, or if no surfaces are
+  // attached.
+  if (stream.model_loading_in_progress || stream.surfaces.empty()) {
     return std::move(callback).Run(false);
   }
   stream.model_loading_in_progress = true;
@@ -833,8 +837,7 @@ void FeedStream::OnStoreChange(StreamModel::StoreUpdate update) {
     DCHECK(!update.update_request);
     store_->WriteOperations(update.stream_type, update.sequence_number,
                             update.operations);
-  } else {
-    DCHECK(update.update_request);
+  } else if (update.update_request) {
     if (update.overwrite_stream_data) {
       DCHECK_EQ(update.sequence_number, 0);
       store_->OverwriteStream(update.stream_type,
@@ -971,6 +974,16 @@ bool FeedStream::ShouldForceSignedOutFeedQueryRequest(
          base::TimeTicks::Now() < signed_out_for_you_refreshes_until_;
 }
 
+feedwire::ChromeSignInStatus::SignInStatus FeedStream::GetSignInStatus() const {
+  if (IsSyncOn()) {
+    return feedwire::ChromeSignInStatus::SYNCED;
+  }
+  if (IsSignedIn()) {
+    return feedwire::ChromeSignInStatus::SIGNED_IN_WITHOUT_SYNC;
+  }
+  return feedwire::ChromeSignInStatus::NOT_SIGNED_IN;
+}
+
 RequestMetadata FeedStream::GetCommonRequestMetadata(
     bool signed_in_request,
     bool allow_expired_session_id) const {
@@ -1036,6 +1049,8 @@ RequestMetadata FeedStream::GetRequestMetadata(const StreamType& stream_type,
         stream_metadata->last_server_response_time_millis(),
         stream_metadata->last_fetch_time_millis());
   }
+  // Set sign in status for request metadata
+  result.sign_in_status = GetSignInStatus();
 
   return result;
 }
@@ -1189,8 +1204,6 @@ void FeedStream::IncrementFollowedFromWebPageMenuCount() {
 }
 
 void FeedStream::ClearAll() {
-  metrics_reporter_->OnClearAll(
-      base::Time::Now() - GetLastFetchTime(StreamType(StreamKind::kForYou)));
   clear_all_in_progress_ = true;
   task_queue_.AddTask(FROM_HERE, std::make_unique<ClearAllTask>(this));
 }

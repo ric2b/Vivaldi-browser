@@ -11,9 +11,10 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
+#include "third_party/blink/renderer/platform/allow_discouraged_type.h"
 #include "third_party/blink/renderer/platform/geometry/layout_size.h"
 #include "third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.h"
-#include "third_party/blink/renderer/platform/graphics/view_transition_shared_element_id.h"
+#include "third_party/blink/renderer/platform/graphics/view_transition_element_id.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/heap_traits.h"
 #include "ui/gfx/geometry/transform.h"
@@ -30,8 +31,9 @@ class PseudoElement;
 //    are generated after the new Document has loaded and the transition can be
 //    started.
 //
-// 2) Tracking changes in the state of shared elements that are mirrored in the
-//    style for their corresponding pseudo element. For example, if a shared
+// 2) Tracking changes in the state of transition elements that are mirrored in
+// the
+//    style for their corresponding pseudo element. For example, if a transition
 //    element's size or viewport space transform is updated. This data is used
 //    to generate a dynamic UA stylesheet for these pseudo elements.
 //
@@ -65,12 +67,12 @@ class ViewTransitionStyleTracker
   ViewTransitionStyleTracker(Document& document, ViewTransitionState);
   ~ViewTransitionStyleTracker();
 
-  void AddSharedElementsFromCSS();
+  void AddTransitionElementsFromCSS();
 
   // Returns true if the pseudo element corresponding to the given id and name
   // is the only child.
   bool MatchForOnlyChild(PseudoId pseudo_id,
-                         AtomicString view_transition_name) const;
+                         const AtomicString& view_transition_name) const;
 
   // Indicate that capture was requested. This verifies that the combination of
   // set elements and names is valid. Returns true if capture phase started, and
@@ -140,7 +142,7 @@ class ViewTransitionStyleTracker
 
   int CapturedTagCount() const { return captured_name_count_; }
 
-  bool IsSharedElement(Node* node) const;
+  bool IsTransitionElement(Node* node) const;
 
   // This function represents whether root itself is participating in the
   // transition (i.e. it has a name in the current phase). Note that we create
@@ -157,17 +159,23 @@ class ViewTransitionStyleTracker
 
   VectorOf<Element> GetTransitioningElements() const;
 
-  // In physical pixels. Returns the snapshot viewport rect, relative to the
-  // fixed viewport origin. See README.md for a detailed description of the
-  // snapshot viewport.
-  gfx::Rect GetSnapshotViewportRect() const;
+  // In physical pixels. Returns the size of the snapshot root rect. This is
+  // the fixed viewport size "as-if" all transient browser UI were hidden (e.g.
+  // include the mobile URL bar, virutal-keyboard, layout scrollbars in the
+  // rect size).
+  gfx::Size GetSnapshotRootSize() const;
 
-  // In physical pixels. Returns the offset within the root snapshot which
-  // should be used as the paint origin. The root snapshot fills the snapshot
-  // viewport, which is overlaid by viewport-insetting UI widgets such as the
-  // mobile URL bar. Because of this, we offset paint so that content is
-  // painted where it appears on the screen (rather than under the UI).
-  gfx::Vector2d GetRootSnapshotPaintOffset() const;
+  // In physical pixels. Returns the offset from the fixed viewport's origin to
+  // the snapshot root rect. These values will always be <= 0.
+  gfx::Vector2d GetFixedToSnapshotRootOffset() const;
+
+  // In physical pixels. Returns the offset from the frame origin to the the
+  // snapshot root rect. The only time this currently differs from the above
+  // offset is with a left-side vertical scrollbar (i.e. a vertical scrollbar
+  // in an RTL document). In that case the frame origin is at x-coordinate 0
+  // while the fixed viewport origin is inset by the scrollbar width.  Note: In
+  // Chrome, only iframes can have a left-side vertical scrollbar.
+  gfx::Vector2d GetFrameToSnapshotRootOffset() const;
 
   // Returns a serializable representation of the state cached by this class to
   // recreate the same pseudo-element tree in a new Document.
@@ -179,6 +187,7 @@ class ViewTransitionStyleTracker
   // These state transitions are executed in a serial order unless the
   // transition is aborted.
   enum class State { kIdle, kCapturing, kCaptured, kStarted, kFinished };
+  static const char* StateToString(State state);
 
   struct ElementData : public GarbageCollected<ElementData> {
     void Trace(Visitor* visitor) const;
@@ -211,7 +220,7 @@ class ViewTransitionStyleTracker
     // any of element's own effects, in a pseudo element layer.
     scoped_refptr<EffectPaintPropertyNode> effect_node;
 
-    // Index to add to the view transition shared element id.
+    // Index to add to the view transition element id.
     int element_index;
 
     // The visual overflow rect for this element. This is used to compute
@@ -231,17 +240,22 @@ class ViewTransitionStyleTracker
     VectorOf<AtomicString> names;
   };
 
+  // In physical pixels. Returns the snapshot root rect, relative to the
+  // fixed viewport origin. See README.md for a detailed description of the
+  // snapshot root rect.
+  gfx::Rect GetSnapshotRootInFixedViewport() const;
+
   void InvalidateStyle();
   bool HasLiveNewContent() const;
   void EndTransition();
 
   void AddConsoleError(String message, Vector<DOMNodeId> related_nodes = {});
-  void AddSharedElement(Element*, const AtomicString&);
+  void AddTransitionElement(Element*, const AtomicString&);
   bool FlattenAndVerifyElements(VectorOf<Element>&,
                                 VectorOf<AtomicString>&,
                                 absl::optional<RootData>&);
 
-  void AddSharedElementsFromCSSRecursive(PaintLayer*);
+  void AddTransitionElementsFromCSSRecursive(PaintLayer*);
 
   int OldRootDataTagSize() const {
     return old_root_data_ ? old_root_data_->names.size() : 0;
@@ -260,6 +274,8 @@ class ViewTransitionStyleTracker
       LayoutBoxModelObject& box,
       LayoutBoxModelObject* ancestor = nullptr);
 
+  bool SnapshotRootDidChangeSize() const;
+
   Member<Document> document_;
 
   // Indicates which step during the transition we're currently at.
@@ -274,6 +290,15 @@ class ViewTransitionStyleTracker
   // Tracks the number of names discovered during the capture phase of the
   // transition.
   int captured_name_count_ = 0;
+
+  // Tracks the size of the snapshot root rect that was used to generate
+  // snapshots. If the snapshot root changes size at any point in the
+  // transition the transition will be aborted. For SPA transitions, this will
+  // be empty until the kCapturing phase. For a cross-document transition, this
+  // will be initialized from the cached state at creation but is currently
+  // unset.
+  // TODO(bokan): Implement for cross-document transitions. crbug.com/1404957.
+  absl::optional<gfx::Size> snapshot_root_size_at_capture_;
 
   // Map of the CSS |view-transition-name| property to state for that tag.
   HeapHashMap<AtomicString, Member<ElementData>> element_data_map_;
@@ -300,11 +325,12 @@ class ViewTransitionStyleTracker
   // by script for the start phase.
   int set_element_sequence_id_ = 0;
   HeapHashMap<Member<Element>, HashSet<std::pair<AtomicString, int>>>
-      pending_shared_element_names_;
+      pending_transition_element_names_;
 
   // This vector is passed as constructed to cc's view transition request,
   // so this uses the std::vector for that reason, instead of WTF::Vector.
-  std::vector<viz::ViewTransitionElementResourceId> capture_resource_ids_;
+  std::vector<viz::ViewTransitionElementResourceId> capture_resource_ids_
+      ALLOW_DISCOURAGED_TYPE("cc API uses STL types");
 };
 
 }  // namespace blink

@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">असंगत प्रोटोकॉल वर्शन का पता लगा था. कृपया सुनिश्‍चित करें कि आपके पास दोनों कंप्‍यूटरों पर सॉफ़्टवेयर का नवीनतम वर्शन इंस्‍टॉल किया हुआ है और फिर से प्रयास करें.</translation>
 <translation id="1008557486741366299">अभी नहीं</translation>
 <translation id="1201402288615127009">अगला</translation>
+<translation id="1296511125400541222">Copyright 2023 The Chromium Authors. सभी अधिकार सुरक्षित हैं.</translation>
 <translation id="1297009705180977556"><ph name="HOSTNAME" /> से कनेक्ट करने में गड़बड़ी</translation>
 <translation id="1450760146488584666">अनुरोधित ऑब्‍जेक्‍ट मौजूद नहीं है.</translation>
 <translation id="1480046233931937785">क्रेडिट</translation>
@@ -36,7 +37,6 @@
 <translation id="2599300881200251572">यह सेवा Chrome दूरस्थ डेस्कटॉप क्लाइंट के इनकमिंग कनेक्शन सक्षम करती है.</translation>
 <translation id="2647232381348739934">Chromoting सेवा</translation>
 <translation id="2676780859508944670">काम कर रहा है…</translation>
-<translation id="2692522824157224199">Copyright 2022 Google LLC. सभी अधिकार सुरक्षित हैं.</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2758123043070977469">प्रमाणीकरण करते समय कोई समस्या हुई, कृपया फिर से लॉगिन करें.</translation>
 <translation id="2803375539583399270">पिन डालें</translation>
@@ -73,7 +73,6 @@
 <translation id="4257751272692708833"><ph name="PRODUCT_NAME" /> URL Forwarder</translation>
 <translation id="4277736576214464567">एक्सेस कोड गलत है. कृपया फिर से कोशिश करें.</translation>
 <translation id="4281844954008187215">सेवा की शर्तें</translation>
-<translation id="4372650392690220936">Copyright 2022 The Chromium Authors. सभी अधिकार सुरक्षित हैं.</translation>
 <translation id="4405930547258349619">मुख्य लाइब्रेरी</translation>
 <translation id="443560535555262820">'सुलभता' प्राथमिकताएं खोलें</translation>
 <translation id="4450893287417543264">फिर से न दिखाएं</translation>
@@ -90,6 +89,7 @@
 <translation id="4808503597364150972">कृपया <ph name="HOSTNAME" /> के लिए अपना पिन दर्ज करें.</translation>
 <translation id="4812684235631257312">होस्ट</translation>
 <translation id="4867841927763172006">PrtScn भेजें</translation>
+<translation id="4960795469833295568">Copyright 2023 Google LLC. सभी अधिकार सुरक्षित हैं.</translation>
 <translation id="4974476491460646149"><ph name="HOSTNAME" /> का कनेक्शन बंद है</translation>
 <translation id="4985296110227979402">आपको सबसे पहले अपने कंप्यूटर को रिमोट (दूर के) एक्सेस के लिए सेट करना होगा</translation>
 <translation id="4987330545941822761">'Chrome रिमोट डेस्कटॉप', कंप्यूटर पर यूआरएल खोलने के लिए ब्राउज़र नहीं चुन सकता. कृपया, नीचे दी गई सूची से चुनें.</translation>

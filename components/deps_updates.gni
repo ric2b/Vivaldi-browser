@@ -45,3 +45,10 @@ if (vivaldi_build_tests) {
       ]
   }
 }
+
+update_template_instance("//components/feed/core/proto:proto_v2") {
+  if (!defined(deps)) {
+    deps = []
+  }
+  deps += [ "//components/feed/core/proto:proto_ios_shared_v2" ]
+}

@@ -29,6 +29,8 @@ from error import AuditorError, ErrorType
 import util
 from util import UniqueId, HashCode
 
+from datetime import datetime
+
 # Path to the directory where this script is.
 SCRIPT_DIR = Path(__file__).resolve().parent
 
@@ -284,6 +286,9 @@ class Annotation:
     combination.proto.policy.chrome_policy.extend(
         other.proto.policy.chrome_policy)
 
+    combination.proto.policy.chrome_device_policy.extend(
+        other.proto.policy.chrome_device_policy)
+
     return combination, []
 
   def needs_two_ids(self) -> bool:
@@ -307,12 +312,22 @@ class Annotation:
       return self.second_id == other.second_id
     return False
 
+  def is_field_populated(self, field_name: str) -> bool:
+    """Checks if a field has a value. If field is internal or user_data
+        then checks that the list of fields is not empty."""
+    attr = getattr(self.proto.semantics, field_name)
+    if not attr:
+      return False
+    if field_name in ['internal', 'user_data']:
+      return bool(attr.ListFields())
+    return True
+
   def get_semantics_field_numbers(self) -> List[int]:
     """Returns the proto field numbers of TrafficSemantics fields that are
     included in this annotation."""
     return [
         f.number for f in traffic_annotation.TrafficSemantics.DESCRIPTOR.fields
-        if getattr(self.proto.semantics, f.name)
+        if self.is_field_populated(f.name)
     ]
 
   def get_policy_field_numbers(self) -> List[int]:
@@ -412,10 +427,11 @@ class Annotation:
         and policy.cookies_allowed == CookiesAllowed.YES):
       unspecifieds.append("cookies_store")
 
-    # If either of 'chrome_policy' or 'policy_exception_justification' are
+    # If either a policy or a 'policy_exception_justification' are
     # available, ignore not having the other one.
-    if not policy.chrome_policy and not policy.policy_exception_justification:
+    if (not self.has_policy() and not policy.policy_exception_justification):
       unspecifieds.append("chrome_policy")
+      unspecifieds.append("chrome_device_policy")
       unspecifieds.append("policy_exception_justification")
 
     if unspecifieds:
@@ -440,7 +456,7 @@ class Annotation:
               self.file, self.line)
       ]
 
-    if policy.chrome_policy and policy.policy_exception_justification:
+    if self.has_policy() and policy.policy_exception_justification:
       return [
           AuditorError(
               ErrorType.INCONSISTENT_ANNOTATION,
@@ -448,6 +464,103 @@ class Annotation:
               "present.", self.file, self.line)
       ]
 
+    return []
+
+  def check_new_fields(self, is_safe_listed: bool) -> List[AuditorError]:
+    """Checks empty or invalid value in internal::contacts::email,
+    user_data::type and last_reviewed fields in annotation."""
+    errors = []
+    missing_fields = []
+    semantics = self.proto.semantics
+
+    missing_last_reviewed_field = not semantics.last_reviewed
+    if missing_last_reviewed_field:
+      missing_fields.append("last_reviewed")
+
+    missing_contacts = self._check_contacts()
+    if missing_contacts:
+      missing_fields.append(missing_contacts)
+
+    missing_user_data = not semantics.user_data.type
+    if missing_user_data:
+      missing_fields.append("user_data::type")
+    else:
+      errors.extend(self._validate_user_data_type_values())
+
+    if missing_fields:
+      error_txt = ', '.join(missing_fields)
+      errors.append(
+          AuditorError(ErrorType.MISSING_NEW_FIELDS,
+                       "missing fields: {}".format(error_txt), self.file,
+                       self.line))
+
+    # If file is not in safe list then return all errors encountered for
+    # last_reviewed, contacts and user_data.
+    if not is_safe_listed:
+      return errors
+
+    # Any files should be removed from safe_list list if no error encountered.
+    if not errors:
+      return [
+          AuditorError(ErrorType.REMOVE_FROM_SAFE_LIST,
+                       "Annotation tagged with MISSING_NEW_FIELDS is complete",
+                       self.file, self.line)
+      ]
+
+    # File can only be in safe_list if all 3 fields are missing. Partially
+    # populating fields is not allowed.
+    if missing_contacts and missing_user_data and missing_last_reviewed_field:
+      return []
+
+    # Return error for file in safe_list with partially populated fields.
+    errors.append(
+        AuditorError(
+            ErrorType.MISSING_NEW_FIELDS,
+            "Cannot partially populate fields and add file in safe_list.txt",
+            self.file, self.line))
+
+    return errors
+
+  def check_last_reviewed_date_format(self) -> List[AuditorError]:
+    """If last_reviewed date field format does not match YYYY-mm-dd, then
+    return INVALID_DATE_FORMAT error."""
+    date_str = self.proto.semantics.last_reviewed
+    try:
+      if date_str:
+        datetime.strptime(date_str, '%Y-%m-%d')
+    except ValueError:
+      return [
+          AuditorError(ErrorType.INVALID_DATE_FORMAT, "Should be YYYY-mm-dd",
+                       self.file, self.line)
+      ]
+    return []
+
+  def has_policy(self) -> bool:
+    """Return true if any policy field is set"""
+    return (self.proto.policy.chrome_policy
+            or self.proto.policy.chrome_device_policy)
+
+  def _check_contacts(self) -> Optional[str]:
+    """Checks presence of contacts fields in the annotation. All available
+    contacts fields should contain email"""
+    all_contacts = self.proto.semantics.internal.contacts
+
+    if not all_contacts:
+      return "internal::contacts"
+
+    if any(not contact.email for contact in all_contacts):
+      return "internal::contacts::email"
+
+    return None
+
+  def _validate_user_data_type_values(self) -> List[AuditorError]:
+    """Checks if any of semantics::user_data:type has an UNSPECIFIED value."""
+    semantics = self.proto.semantics
+    if semantics.UserData.UserDataType.UNSPECIFIED in semantics.user_data.type:
+      return [
+          AuditorError(ErrorType.INVALID_USER_DATA_TYPE, "UNSPECIFIED",
+                       self.file, self.line)
+      ]
     return []
 
 
@@ -461,6 +574,9 @@ class ExceptionType(Enum):
   TEST_ANNOTATION = "test_annotation"
   # Ignore CreateMutableNetworkTrafficAnnotationTag().
   MUTABLE_TAG = "mutable_tag"
+  # Ignore usage of newly added fields (contacts, user_data, last_reviewed)
+  # in annotation.
+  MISSING_NEW_FIELDS = "missing_new_fields"
 
   @classmethod
   def from_error_type(cls, error_type: ErrorType):
@@ -1207,11 +1323,7 @@ class Exporter:
 class Auditor:
   """Extracts and validates annotations from the codebase."""
 
-  SAFE_LIST_PATH = (SRC_DIR / "tools" / "traffic_annotation" / "auditor" /
-                    "safe_list.txt")
-  # TODO(b/203773498): Remove ChromeOS safelist after cleanup.
-  CHROME_OS_SAFE_LIST_PATH = (SRC_DIR / "tools" / "traffic_annotation" /
-                              "auditor" / "chromeos" / "safe_list.txt")
+  SAFE_LIST_PATH = SRC_DIR / "tools" / "traffic_annotation" / "safe_list.txt"
 
   def __init__(self, current_platform: str, no_filtering: bool = False):
     if current_platform not in SUPPORTED_PLATFORMS:
@@ -1249,9 +1361,6 @@ class Auditor:
         Auditor.SAFE_LIST_PATH.relative_to(SRC_DIR)))
 
     lines = Auditor.SAFE_LIST_PATH.read_text(encoding="utf-8").splitlines()
-    if self.exporter._current_platform == "chromeos":
-      lines += Auditor.CHROME_OS_SAFE_LIST_PATH.read_text(
-          encoding="utf-8").splitlines()
 
     for line in lines:
       # Ignore comments and empty lines.
@@ -1401,10 +1510,17 @@ class Auditor:
     """Validate the contents of a COMPLETE annotation."""
     assert annotation.type == Annotation.Type.COMPLETE
 
+    is_safe_listed = self._is_safe_listed(annotation.file,
+                                          ExceptionType.MISSING_NEW_FIELDS)
     errors = annotation.check_complete()
+
+    errors.extend(annotation.check_new_fields(is_safe_listed))
 
     if not errors:
       errors = annotation.check_consistent()
+
+    if not errors:
+      errors = annotation.check_last_reviewed_date_format()
 
     return errors
 

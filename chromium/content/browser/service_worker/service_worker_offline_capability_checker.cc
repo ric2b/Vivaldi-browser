@@ -4,8 +4,8 @@
 
 #include "content/browser/service_worker/service_worker_offline_capability_checker.h"
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -35,7 +35,7 @@ void ServiceWorkerOfflineCapabilityChecker::Start(
     ServiceWorkerContext::CheckOfflineCapabilityCallback callback) {
   callback_ = std::move(callback);
   registry->FindRegistrationForClientUrl(
-      url_, key_,
+      ServiceWorkerRegistry::Purpose::kNotForNavigation, url_, key_,
       base::BindOnce(
           &ServiceWorkerOfflineCapabilityChecker::DidFindRegistration,
           // We can use base::Unretained(this) because |this| is expected

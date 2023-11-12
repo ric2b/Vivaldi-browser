@@ -9,9 +9,9 @@
 #include <utility>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/one_shot_event.h"
@@ -384,13 +384,8 @@ void InstallVerifier::GarbageCollect() {
   ExtensionIdSet leftovers = signature_->ids;
   leftovers.insert(signature_->invalid_ids.begin(),
                    signature_->invalid_ids.end());
-  ExtensionIdList all_ids;
-  prefs_->GetExtensions(&all_ids);
-  for (ExtensionIdList::const_iterator i = all_ids.begin(); i != all_ids.end();
-       ++i) {
-    auto found = leftovers.find(*i);
-    if (found != leftovers.end())
-      leftovers.erase(found);
+  for (const auto& extension_id : prefs_->GetExtensions()) {
+    leftovers.erase(extension_id);
   }
   if (!leftovers.empty()) {
     RemoveMany(leftovers);

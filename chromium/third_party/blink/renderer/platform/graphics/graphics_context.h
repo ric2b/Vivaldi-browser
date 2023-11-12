@@ -172,8 +172,8 @@ class PLATFORM_EXPORT GraphicsContext {
   GraphicsContext& operator=(const GraphicsContext&) = delete;
   ~GraphicsContext();
 
-  // Copy configs such as printing, dark mode, device scale factor etc. from
-  // another GraphicsContext.
+  // Copy configs such as printing, dark mode, etc. from another
+  // GraphicsContext.
   void CopyConfigFrom(GraphicsContext&);
 
   void SetPrintingMetafile(printing::MetafileSkia* metafile) {
@@ -260,18 +260,11 @@ class PLATFORM_EXPORT GraphicsContext {
             ImageInterpolationQuality()));
   }
 
-  // Specify the device scale factor which may change the way document markers
-  // and fonts are rendered.
-  void SetDeviceScaleFactor(float factor) { device_scale_factor_ = factor; }
-  float DeviceScaleFactor() const { return device_scale_factor_; }
-
   // Set to true if context is for printing. Bitmaps won't be resampled when
   // printing to keep the best possible quality. When printing text will be
   // provided along with glyphs.
   void SetPrinting(bool printing) { printing_ = printing; }
 
-  SkColorFilter* GetColorFilter() const;
-  void SetColorFilter(ColorFilter);
   // ---------- End state management methods -----------------
 
   // DrawRect() fills and always strokes using a 1-pixel stroke inset from
@@ -330,8 +323,8 @@ class PLATFORM_EXPORT GraphicsContext {
                   float line_width,
                   const AutoDarkMode& auto_dark_mode);
 
-  void DrawRecord(sk_sp<const PaintRecord>);
-  void CompositeRecord(sk_sp<PaintRecord>,
+  void DrawRecord(PaintRecord);
+  void CompositeRecord(PaintRecord,
                        const gfx::RectF& dest,
                        const gfx::RectF& src,
                        SkBlendMode);
@@ -459,14 +452,13 @@ class PLATFORM_EXPORT GraphicsContext {
                        const AutoDarkMode& auto_dark_mode,
                        const cc::PaintFlags* flags = nullptr);
 
-  // beginLayer()/endLayer() behave like save()/restore() for CTM and clip
-  // states. Apply SkBlendMode when the layer is composited on the backdrop
-  // (i.e. endLayer()).
-  void BeginLayer(float opacity = 1.0f,
-                  SkBlendMode = SkBlendMode::kSrcOver,
-                  const gfx::RectF* = nullptr,
-                  ColorFilter = kColorFilterNone,
-                  sk_sp<PaintFilter> = nullptr);
+  // BeginLayer()/EndLayer() behave like Save()/Restore() for CTM and clip
+  // states. Apply opacity, blend mode, filter when the layer is composited on
+  // the backdrop (i.e. EndLayer()).
+  void BeginLayer(float opacity = 1.0f);
+  void BeginLayer(SkBlendMode);
+  void BeginLayer(sk_sp<SkColorFilter>);
+  void BeginLayer(sk_sp<PaintFilter>);
   void EndLayer();
 
   // Instead of being dispatched to the active canvas, draw commands following
@@ -477,7 +469,7 @@ class PLATFORM_EXPORT GraphicsContext {
   // Returns a record with any recorded draw commands since the prerequisite
   // call to beginRecording().  The record is guaranteed to be non-null (but
   // not necessarily non-empty), even when the context is disabled.
-  sk_sp<PaintRecord> EndRecording();
+  PaintRecord EndRecording();
 
   void SetDrawLooper(sk_sp<SkDrawLooper>);
 
@@ -555,8 +547,6 @@ class PLATFORM_EXPORT GraphicsContext {
   DOMNodeId GetDOMNodeId() const;
   bool NeedsDOMNodeId() const { return printing_; }
 
-  static sk_sp<SkColorFilter> WebCoreColorFilterToSkiaColorFilter(ColorFilter);
-
  private:
   const GraphicsContextState* ImmutableState() const { return paint_state_; }
 
@@ -569,6 +559,7 @@ class PLATFORM_EXPORT GraphicsContext {
   void DrawTextInternal(const Font&,
                         const TextPaintInfo&,
                         const gfx::PointF&,
+                        const cc::PaintFlags& flags,
                         DOMNodeId,
                         const AutoDarkMode& auto_dark_mode);
 
@@ -582,14 +573,13 @@ class PLATFORM_EXPORT GraphicsContext {
   template <typename DrawTextFunc>
   void DrawTextPasses(const AutoDarkMode& auto_dark_mode, const DrawTextFunc&);
 
-  void SaveLayer(const SkRect* bounds, const cc::PaintFlags*);
-  void RestoreLayer();
+  void BeginLayer(const cc::PaintFlags&);
 
   // SkCanvas wrappers.
   void ClipRRect(const SkRRect&,
                  AntiAliasingMode = kNotAntiAliased,
                  SkClipOp = SkClipOp::kIntersect);
-  void Concat(const SkMatrix&);
+  void Concat(const SkM44&);
 
   // Apply deferred paint state saves
   void RealizePaintSave() {
@@ -618,7 +608,7 @@ class PLATFORM_EXPORT GraphicsContext {
   PaintController& paint_controller_;
 
   // Paint states stack. The state controls the appearance of drawn content, so
-  // this stack enables local drawing state changes with save()/restore() calls.
+  // this stack enables local drawing state changes with Save()/Restore() calls.
   // We do not delete from this stack to avoid memory churn.
   Vector<std::unique_ptr<GraphicsContextState>> paint_state_stack_;
 
@@ -637,8 +627,6 @@ class PLATFORM_EXPORT GraphicsContext {
   int layer_count_ = 0;
   bool disable_destruction_checks_ = false;
 #endif
-
-  float device_scale_factor_ = 1.0f;
 
   std::unique_ptr<DarkModeFilter> dark_mode_filter_;
 

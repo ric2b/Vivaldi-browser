@@ -28,16 +28,17 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "third_party/blink/renderer/controller/tests/blink_test_suite.h"
+#include "third_party/blink/renderer/platform/wtf/functional.h"
 
 int main(int argc, char** argv) {
   BlinkUnitTestSuite<base::TestSuite> test_suite(argc, argv);
   return base::LaunchUnitTests(
       argc, argv,
-      base::BindOnce(&BlinkUnitTestSuite<base::TestSuite>::Run,
-                     base::Unretained(&test_suite)));
+      WTF::BindOnce(&BlinkUnitTestSuite<base::TestSuite>::Run,
+                    base::Unretained(&test_suite)));
 }

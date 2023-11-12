@@ -20,7 +20,8 @@ import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 import {afterNextRender} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {GooglePhotosEnablementState, WallpaperCollection, WallpaperImage} from '../personalization_app.mojom-webui.js';
+import {GooglePhotosEnablementState, WallpaperCollection, WallpaperImage} from '../../personalization_app.mojom-webui.js';
+import {isDarkLightModeEnabled, isGooglePhotosIntegrationEnabled} from '../load_time_booleans.js';
 import {Paths, PersonalizationRouter} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {getCountText, isImageDataUrl, isNonEmptyArray, isSelectionEvent} from '../utils.js';
@@ -67,6 +68,7 @@ interface OnlineTile {
   count: string;
   disabled: boolean;
   id: string;
+  info: string;
   name: string;
   preview: Url[];
   type: TileType.IMAGE_ONLINE;
@@ -245,13 +247,6 @@ export class WallpaperCollections extends WithPersonalizationStore {
         },
       },
 
-      loadedCollectionIdPhotos_: {
-        type: Set,
-        value() {
-          return new Set<string>();
-        },
-      },
-
       hasError_: Boolean,
     };
   }
@@ -266,7 +261,6 @@ export class WallpaperCollections extends WithPersonalizationStore {
   private localImagesLoading_: boolean;
   private localImageData_: Record<string|DefaultImageSymbol, Url>;
   private tiles_: Tile[];
-  private loadedCollectionIdPhotos_: Set<string>;
   private hasError_: boolean;
 
   static get observers() {
@@ -371,8 +365,7 @@ export class WallpaperCollections extends WithPersonalizationStore {
     // second tile is reserved for Google Photos, provided that the integration
     // is enabled. The tile index of other collections must be `offset` so as
     // not to occupy reserved space.
-    const offset =
-        loadTimeData.getBoolean('isGooglePhotosIntegrationEnabled') ? 2 : 1;
+    const offset = isGooglePhotosIntegrationEnabled() ? 2 : 1;
 
     if (this.tiles_.length < collections.length + offset) {
       this.push(
@@ -384,9 +377,6 @@ export class WallpaperCollections extends WithPersonalizationStore {
     if (this.tiles_.length > collections.length + offset) {
       this.splice('tiles_', collections.length + offset);
     }
-
-    const isDarkLightModeEnabled =
-        loadTimeData.getBoolean('isDarkLightModeEnabled');
 
     collections.forEach((collection, i) => {
       const index = i + offset;
@@ -402,8 +392,8 @@ export class WallpaperCollections extends WithPersonalizationStore {
       if (tile.type !== TileType.IMAGE_ONLINE || count !== tile.count) {
         // Return all the previews in D/L mode to display the split view.
         // Otherwise, only the first preview is needed.
-        const preview = isDarkLightModeEnabled ? collection.previews :
-                                                 [collection.previews[0]];
+        const preview = isDarkLightModeEnabled() ? collection.previews :
+                                                   [collection.previews[0]];
 
         const newTile: OnlineTile = {
           count,
@@ -411,6 +401,7 @@ export class WallpaperCollections extends WithPersonalizationStore {
           // load and the user cannot select it.
           disabled: imageCounts[collection.id] === null,
           id: collection.id,
+          info: collection.description,
           name: collection.name,
           preview,
           type: TileType.IMAGE_ONLINE,
@@ -439,44 +430,6 @@ export class WallpaperCollections extends WithPersonalizationStore {
       localImageData: Record<FilePath['path']|DefaultImageSymbol, Url>) {
     const tile = getLocalTile(localImages, localImagesLoading, localImageData);
     this.set('tiles_.0', tile);
-  }
-
-  private getClassForTile_(tile: OnlineTile|null): string {
-    if (!tile) {
-      return '';
-    }
-    assert(this.isOnlineTile_(tile), 'only online tile allowed');
-    const classes = ['photo-inner-container'];
-    if (tile.disabled) {
-      classes.push('photo-loading-failure');
-    }
-    return classes.join(' ');
-  }
-
-  private getClassForImagesContainer_(tile: LocalTile|OnlineTile): string {
-    if (tile.type === TileType.IMAGE_ONLINE) {
-      // Only apply base class for online collections.
-      return 'photo-images-container';
-    }
-    const numImages =
-        !!tile && Array.isArray(tile.preview) ? tile.preview.length : 0;
-    return `photo-images-container photo-images-container-${
-        Math.min(numImages, kMaximumLocalImagePreviews)}`;
-  }
-
-  /** Apply custom class for <img> to show a split view. */
-  private getClassForImg_(index: number, tile: OnlineTile|LocalTile): string {
-    if (tile.type !== TileType.IMAGE_ONLINE || tile.preview.length < 2) {
-      return '';
-    }
-    switch (index) {
-      case 0:
-        return 'left';
-      case 1:
-        return 'right';
-      default:
-        return '';
-    }
   }
 
   /** Navigate to the correct route based on user selection. */
@@ -525,10 +478,6 @@ export class WallpaperCollections extends WithPersonalizationStore {
     return !!item && item.type === TileType.IMAGE_ONLINE;
   }
 
-  private isLocalOrOnlineTile_(item: Tile|null): item is LocalTile {
-    return this.isLocalTile_(item) || this.isOnlineTile_(item);
-  }
-
   private isGooglePhotosTile_(item: Tile|null): item is GooglePhotosTile {
     return !!item && item.type === TileType.IMAGE_GOOGLE_PHOTOS;
   }
@@ -536,39 +485,6 @@ export class WallpaperCollections extends WithPersonalizationStore {
   private isSelectableTile_(item: Tile|null): item is GooglePhotosTile|LocalTile
       |OnlineTile {
     return !!item && !this.isLoadingTile_(item) && !item.disabled;
-  }
-
-  private isPhotoTextHidden_(
-      item: OnlineTile|LocalTile,
-      loadedCollectionIdPhotos: Set<string>): boolean {
-    // Hide text until the first preview image for this collection has notified
-    // that it finished loading.
-    return !loadedCollectionIdPhotos.has(item.id);
-  }
-
-  /**
-   * Make the text and background gradient visible again after the image has
-   * finished loading. This is called for both on-load and on-error, as either
-   * event should make the text visible again.
-   */
-  private onImgLoad_(event: Event) {
-    const self = event.currentTarget! as HTMLElement;
-    const collectionId = self.dataset['collectionId'];
-    assert(
-        collectionId &&
-            ((this.collections_ ||
-              []).some(collection => collection.id === collectionId) ||
-             collectionId === kLocalCollectionId ||
-             collectionId === kGooglePhotosCollectionId),
-        'valid collection id required');
-    if (!this.loadedCollectionIdPhotos_.has(collectionId)) {
-      this.loadedCollectionIdPhotos_ =
-          new Set([...this.loadedCollectionIdPhotos_, collectionId]);
-    }
-  }
-
-  private getAriaDisabled_(item: Tile|null): string {
-    return (!this.isSelectableTile_(item)).toString();
   }
 
   private getAriaIndex_(index: number): number {

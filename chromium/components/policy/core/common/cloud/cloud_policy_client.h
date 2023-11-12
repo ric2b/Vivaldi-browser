@@ -15,7 +15,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
@@ -62,8 +62,10 @@ class POLICY_EXPORT CloudPolicyClient {
   using ResponseMap = std::map<std::pair<std::string, std::string>,
                                enterprise_management::PolicyFetchResponse>;
 
-  // A callback which receives boolean status of an operation.  If the operation
-  // succeeded, |status| is true.
+  // A callback which receives boolean status of an operation. If the
+  // operation succeeded, |status| is true.
+  // TODO(b/256553070) Use `ResultCallback` instead of `StatusCallback`
+  // everywhere.
   using StatusCallback = base::OnceCallback<void(bool status)>;
 
   // A callback which receives fetched remote commands.
@@ -86,28 +88,10 @@ class POLICY_EXPORT CloudPolicyClient {
   using ResponseCallback =
       base::OnceCallback<void(absl::optional<base::Value::Dict>)>;
 
-  using ClientCertProvisioningStartCsrCallback = base::OnceCallback<void(
+  using ClientCertProvisioningRequestCallback = base::OnceCallback<void(
       DeviceManagementStatus,
-      absl::optional<
-          enterprise_management::ClientCertificateProvisioningResponse::Error>,
-      absl::optional<int64_t> try_later,
-      const std::string& invalidation_topic,
-      const std::string& va_challenge,
-      enterprise_management::HashingAlgorithm hash_algorithm,
-      const std::string& data_to_sign)>;
-
-  using ClientCertProvisioningFinishCsrCallback = base::OnceCallback<void(
-      DeviceManagementStatus,
-      absl::optional<
-          enterprise_management::ClientCertificateProvisioningResponse::Error>,
-      absl::optional<int64_t> try_later)>;
-
-  using ClientCertProvisioningDownloadCertCallback = base::OnceCallback<void(
-      DeviceManagementStatus,
-      absl::optional<
-          enterprise_management::ClientCertificateProvisioningResponse::Error>,
-      absl::optional<int64_t> try_later,
-      const std::string& pem_encoded_certificate)>;
+      const enterprise_management::ClientCertificateProvisioningResponse&
+          response)>;
 
   using MacAddress = std::array<uint8_t, 6>;
 
@@ -133,6 +117,30 @@ class POLICY_EXPORT CloudPolicyClient {
     virtual void OnServiceAccountSet(CloudPolicyClient* client,
                                      const std::string& account_email) {}
   };
+
+  using NotRegistered = absl::monostate;
+
+  class POLICY_EXPORT Result {
+   public:
+    explicit Result(DeviceManagementStatus);
+    explicit Result(NotRegistered);
+
+    bool IsSuccess() const;
+    bool IsClientNotRegisteredError() const;
+    bool IsDMServerError() const;
+
+    DeviceManagementStatus GetDMServerError() const;
+
+    bool operator==(const Result& other) const {
+      return this->result_ == other.result_;
+    }
+
+   private:
+    absl::variant<NotRegistered, DeviceManagementStatus> result_;
+  };
+
+  // A callback which receives the operations result.
+  using ResultCallback = base::OnceCallback<void(Result)>;
 
   struct POLICY_EXPORT RegistrationParameters {
    public:
@@ -297,7 +305,7 @@ class POLICY_EXPORT CloudPolicyClient {
   // will be called when the operation completes.
   virtual void UploadEnterpriseMachineCertificate(
       const std::string& certificate_data,
-      StatusCallback callback);
+      ResultCallback callback);
 
   // Upload an enrollment certificate to the server.  Like FetchPolicy, this
   // method requires that the client is in a registered state.
@@ -305,14 +313,14 @@ class POLICY_EXPORT CloudPolicyClient {
   // server.  The |callback| will be called when the operation completes.
   virtual void UploadEnterpriseEnrollmentCertificate(
       const std::string& certificate_data,
-      StatusCallback callback);
+      ResultCallback callback);
 
   // Upload an enrollment identifier to the server. Like FetchPolicy, this
   // method requires that the client is in a registered state.
   // |enrollment_id| must hold an enrollment identifier. The |callback| will be
   // called when the operation completes.
   virtual void UploadEnterpriseEnrollmentId(const std::string& enrollment_id,
-                                            StatusCallback callback);
+                                            ResultCallback callback);
 
   // Uploads status to the server. The client must be in a registered state.
   // Only non-null statuses will be included in the upload status request. The
@@ -321,7 +329,7 @@ class POLICY_EXPORT CloudPolicyClient {
       const enterprise_management::DeviceStatusReportRequest* device_status,
       const enterprise_management::SessionStatusReportRequest* session_status,
       const enterprise_management::ChildStatusReportRequest* child_status,
-      StatusCallback callback);
+      ResultCallback callback);
 
   // Uploads Chrome Desktop report to the server. As above, the client must be
   // in a registered state. |chrome_desktop_report| will be included in the
@@ -329,7 +337,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void UploadChromeDesktopReport(
       std::unique_ptr<enterprise_management::ChromeDesktopReportRequest>
           chrome_desktop_report,
-      StatusCallback callback);
+      ResultCallback callback);
 
   // Uploads Chrome OS User report to the server. The user's DM token must be
   // set. |chrome_os_user_report| will be included in the upload request. The
@@ -337,7 +345,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void UploadChromeOsUserReport(
       std::unique_ptr<enterprise_management::ChromeOsUserReportRequest>
           chrome_os_user_report,
-      StatusCallback callback);
+      ResultCallback callback);
 
   // Uploads Chrome profile report to the server. The user's DM token must be
   // set. |chrome_profile_report| will be included in the upload request. The
@@ -345,7 +353,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void UploadChromeProfileReport(
       std::unique_ptr<enterprise_management::ChromeProfileReportRequest>
           chrome_profile_report,
-      StatusCallback callback);
+      ResultCallback callback);
 
   // Uploads a report containing enterprise connectors real-time security
   // events for |context|. As above, the client must be in a registered state.
@@ -355,7 +363,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void UploadSecurityEventReport(content::BrowserContext* context,
                                          bool include_device_info,
                                          base::Value::Dict report,
-                                         StatusCallback callback);
+                                         ResultCallback callback);
 
   // Uploads a report containing |merging_payload| (merged into the default
   // payload of the job). The client must be in a registered state. The
@@ -371,7 +379,7 @@ class POLICY_EXPORT CloudPolicyClient {
   // In case the new push-installs report upload is started, the previous one
   // will be canceled.
   virtual void UploadAppInstallReport(base::Value::Dict report,
-                                      StatusCallback callback);
+                                      ResultCallback callback);
 
   // Cancels the pending app push-install status report upload, if exists.
   virtual void CancelAppInstallReportUpload();
@@ -383,22 +391,24 @@ class POLICY_EXPORT CloudPolicyClient {
   // In case the new installs report upload is started, the previous one
   // will be canceled.
   virtual void UploadExtensionInstallReport(base::Value::Dict report,
-                                            StatusCallback callback);
+                                            ResultCallback callback);
 
   // Cancels the pending extension install status report upload, if exists.
   virtual void CancelExtensionInstallReportUpload();
 
   // Attempts to fetch remote commands, with |last_command_id| being the ID of
-  // the last command that finished execution and |command_results| being
-  // results for previous commands which have not been reported yet. The
-  // |callback| will be called when the operation completes.
-  // Note that sending |last_command_id| will acknowledge this command and any
-  // previous commands. A nullptr indicates that no commands have finished
-  // execution.
+  // the last command that finished execution, |command_results| being
+  // results for previous commands which have not been reported yet and
+  // |signature_type| being a security signature type that the server will use
+  // to sign the remote commands. The |callback| will be called when
+  // the operation completes. Note that sending |last_command_id| will
+  // acknowledge this command and any previous commands. A nullptr indicates
+  // that no commands have finished execution.
   virtual void FetchRemoteCommands(
       std::unique_ptr<RemoteCommandJob::UniqueIDType> last_command_id,
       const std::vector<enterprise_management::RemoteCommandResult>&
           command_results,
+      enterprise_management::PolicyFetchRequest::SignatureType signature_type,
       RemoteCommandCallback callback);
 
   // Sends a device attribute update permission request to the server, uses
@@ -425,49 +435,10 @@ class POLICY_EXPORT CloudPolicyClient {
       std::unique_ptr<enterprise_management::UploadEuiccInfoRequest> request,
       StatusCallback callback);
 
-  // Sends certificate provisioning start csr request. It is Step 1 in the
-  // certificate provisioning flow. |cert_scope| defines if it is a user- or
-  // device-level request, |cert_profile_id| defines for which profile from
-  // policies the request applies, |public_key| is used to build the CSR.
-  // |callback| will be called when the operation completes. It is expected to
-  // receive the CSR and VA challenge.
-  virtual void ClientCertProvisioningStartCsr(
-      const std::string& cert_scope,
-      const std::string& cert_profile_id,
-      const std::string& cert_profile_version,
-      const std::string& public_key,
-      ClientCertProvisioningStartCsrCallback callback);
-
-  // Sends certificate provisioning finish csr request. It is Step 2 in the
-  // certificate provisioning flow. |cert_scope| defines if it is a user- or
-  // device-level request, |cert_profile_id| and |public_key| define the
-  // provisioning flow that should be continued. |va_challenge_response| is a
-  // challenge response to the challenge from the previous step. |signature| is
-  // cryptographic signature of the CSR from the previous step, the algorithm
-  // for it is defined in a corresponding certificate profile. |callback| will
-  // be called when the operation completes. It is expected to receive a
-  // confirmation that the request is accepted.
-  virtual void ClientCertProvisioningFinishCsr(
-      const std::string& cert_scope,
-      const std::string& cert_profile_id,
-      const std::string& cert_profile_version,
-      const std::string& public_key,
-      const std::string& va_challenge_response,
-      const std::string& signature,
-      ClientCertProvisioningFinishCsrCallback callback);
-
-  // Sends certificate provisioning download certificate request. It is Step 3
-  // (final) in the certificate provisioning flow. |cert_scope|,
-  // |cert_profile_id|, |public_key| are the same as for finish csr request.
-  // |callback| will be called when the operation completes. It is expected to
-  // receive a certificate that was issued according to the CSR that was
-  // generated during previous steps.
-  virtual void ClientCertProvisioningDownloadCert(
-      const std::string& cert_scope,
-      const std::string& cert_profile_id,
-      const std::string& cert_profile_version,
-      const std::string& public_key,
-      ClientCertProvisioningDownloadCertCallback callback);
+  // Fills `request.device_dm_token` if available.
+  virtual void ClientCertProvisioningRequest(
+      enterprise_management::ClientCertificateProvisioningRequest request,
+      ClientCertProvisioningRequestCallback callback);
 
   // Used the update the current service account email associated with this
   // policy client and notify observers.
@@ -633,7 +604,7 @@ class POLICY_EXPORT CloudPolicyClient {
       const std::string& certificate_data,
       enterprise_management::DeviceCertUploadRequest::CertificateType
           certificate_type,
-      StatusCallback callback);
+      ResultCallback callback);
 
   // This is called when a RegisterWithCertiifcate request has been signed.
   void OnRegisterWithCertificateRequestSigned(
@@ -652,16 +623,16 @@ class POLICY_EXPORT CloudPolicyClient {
                                       DMServerJobResult result);
 
   // Callback for certificate upload requests.
-  void OnCertificateUploadCompleted(StatusCallback callback,
+  void OnCertificateUploadCompleted(ResultCallback callback,
                                     DMServerJobResult result);
 
   // Callback for several types of status/report upload requests.
-  void OnReportUploadCompleted(StatusCallback callback,
+  void OnReportUploadCompleted(ResultCallback callback,
                                DMServerJobResult result);
 
   // Callback for realtime report upload requests.
   void OnRealtimeReportUploadCompleted(
-      StatusCallback callback,
+      ResultCallback callback,
       DeviceManagementService::Job* job,
       DeviceManagementStatus status,
       int net_error,
@@ -693,19 +664,9 @@ class POLICY_EXPORT CloudPolicyClient {
   // Callback for EUICC info upload requests.
   void OnEuiccInfoUploaded(StatusCallback callback, DMServerJobResult result);
 
-  // Callback for certificate provisioning start csr requests.
-  void OnClientCertProvisioningStartCsrResponse(
-      ClientCertProvisioningStartCsrCallback callback,
-      DMServerJobResult result);
-
-  // Callback for certificate provisioning finish csr requests.
-  void OnClientCertProvisioningFinishCsrResponse(
-      ClientCertProvisioningFinishCsrCallback callback,
-      DMServerJobResult result);
-
-  // Callback for certificate provisioning download cert requests.
-  void OnClientCertProvisioningDownloadCertResponse(
-      ClientCertProvisioningDownloadCertCallback callback,
+  // Callback for certificate provisioning requests.
+  void OnClientCertProvisioningRequestResponse(
+      ClientCertProvisioningRequestCallback callback,
       DMServerJobResult result);
 
   // Helper to remove a job from request_jobs_.
@@ -798,7 +759,7 @@ class POLICY_EXPORT CloudPolicyClient {
       const std::string& server_url,
       bool include_device_info,
       bool add_connector_url_params,
-      StatusCallback callback);
+      ResultCallback callback);
 
   void SetClientId(const std::string& client_id);
   // Fills in the common fields of a DeviceRegisterRequest for |Register| and
@@ -817,7 +778,12 @@ class POLICY_EXPORT CloudPolicyClient {
 
   // Creates a job config to upload a certificate.
   std::unique_ptr<DMServerJobConfiguration> CreateCertUploadJobConfiguration(
-      CloudPolicyClient::StatusCallback callback);
+      CloudPolicyClient::ResultCallback callback);
+
+  // Creates a job config to upload a report.
+  std::unique_ptr<DMServerJobConfiguration> CreateReportUploadJobConfiguration(
+      DeviceManagementService::JobConfiguration::JobType type,
+      CloudPolicyClient::ResultCallback callback);
 
   // Executes a job to upload a certificate. Onwership of the job is
   // retained by this method.

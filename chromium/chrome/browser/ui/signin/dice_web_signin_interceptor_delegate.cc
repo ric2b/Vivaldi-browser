@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/feature_list.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -111,6 +111,16 @@ class ForcedEnterpriseSigninInterceptionHandle
 DiceWebSigninInterceptorDelegate::DiceWebSigninInterceptorDelegate() = default;
 
 DiceWebSigninInterceptorDelegate::~DiceWebSigninInterceptorDelegate() = default;
+
+bool DiceWebSigninInterceptorDelegate::IsSigninInterceptionSupported(
+    const content::WebContents& web_contents) {
+  Browser* browser = chrome::FindBrowserWithWebContents(&web_contents);
+  // The profile creation flow has no browser.
+  if (!browser) {
+    return false;
+  }
+  return IsSigninInterceptionSupportedInternal(*browser);
+}
 
 std::unique_ptr<ScopedDiceWebSigninInterceptionBubbleHandle>
 DiceWebSigninInterceptorDelegate::ShowSigninInterceptionBubble(

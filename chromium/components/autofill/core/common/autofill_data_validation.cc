@@ -40,11 +40,10 @@ bool IsValidFormData(const FormData& form) {
 }
 
 bool IsValidPasswordFormFillData(const PasswordFormFillData& form) {
-  return IsValidString16(form.name) && IsValidGURL(form.url) &&
-         IsValidGURL(form.action) &&
-         IsValidFormFieldData(form.username_field) &&
-         IsValidFormFieldData(form.password_field) &&
-         IsValidString(form.preferred_realm) &&
+  return IsValidGURL(form.url) &&
+         IsValidString16(form.preferred_login.username) &&
+         IsValidString16(form.preferred_login.password) &&
+         IsValidString(form.preferred_login.realm) &&
          base::ranges::all_of(form.additional_logins, [](const auto& login) {
            return IsValidString16(login.username) &&
                   IsValidString16(login.password) && IsValidString(login.realm);

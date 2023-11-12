@@ -704,6 +704,8 @@ WGPUFeatureName AsDawnEnum(const V8GPUFeatureName& webgpu_enum) {
       return WGPUFeatureName_ChromiumExperimentalDp4a;
     case V8GPUFeatureName::Enum::kRg11B10UfloatRenderable:
       return WGPUFeatureName_RG11B10UfloatRenderable;
+    case V8GPUFeatureName::Enum::kBgra8UnormStorage:
+      return WGPUFeatureName_BGRA8UnormStorage;
   }
 }
 
@@ -922,6 +924,20 @@ WGPURenderPassTimestampLocation AsDawnEnum(
     case V8GPURenderPassTimestampLocation::Enum::kEnd:
       return WGPURenderPassTimestampLocation_End;
   }
+}
+
+const char* FromDawnEnum(WGPUBufferMapState dawn_enum) {
+  switch (dawn_enum) {
+    case WGPUBufferMapState_Unmapped:
+      return "unmapped";
+    case WGPUBufferMapState_Pending:
+      return "pending";
+    case WGPUBufferMapState_Mapped:
+      return "mapped";
+    case WGPUBufferMapState_Force32:
+      NOTREACHED();
+  }
+  return "";
 }
 
 }  // namespace blink

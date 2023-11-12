@@ -9,13 +9,16 @@
 #include <string>
 #include <utility>
 
+#include "base/check.h"
 #include "base/json/json_reader.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
 #include "components/attribution_reporting/aggregation_keys.h"
+#include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/filters.h"
 #include "components/attribution_reporting/parsing_utils.h"
 #include "components/attribution_reporting/source_registration_error.mojom.h"
@@ -52,29 +55,16 @@ void SerializeTimeDeltaInSeconds(base::Value::Dict& dict,
   }
 }
 
-base::expected<SuitableOrigin, SourceRegistrationError> ParseDestination(
-    const base::Value::Dict& registration) {
-  const base::Value* v = registration.Find(kDestination);
-  if (!v)
-    return base::unexpected(SourceRegistrationError::kDestinationMissing);
-
-  const std::string* s = v->GetIfString();
-  if (!s)
-    return base::unexpected(SourceRegistrationError::kDestinationWrongType);
-
-  auto destination = SuitableOrigin::Deserialize(*s);
-  if (!destination.has_value())
-    return base::unexpected(SourceRegistrationError::kDestinationUntrustworthy);
-
-  return *destination;
-}
-
 }  // namespace
+
+void RecordSourceRegistrationError(mojom::SourceRegistrationError error) {
+  base::UmaHistogramEnumeration("Conversions.SourceRegistrationError2", error);
+}
 
 SourceRegistration::SourceRegistration() = default;
 
-SourceRegistration::SourceRegistration(SuitableOrigin destination)
-    : destination(std::move(destination)) {}
+SourceRegistration::SourceRegistration(DestinationSet destination_set)
+    : destination_set(std::move(destination_set)) {}
 
 SourceRegistration::~SourceRegistration() = default;
 
@@ -91,11 +81,13 @@ SourceRegistration& SourceRegistration::operator=(SourceRegistration&&) =
 // static
 base::expected<SourceRegistration, SourceRegistrationError>
 SourceRegistration::Parse(base::Value::Dict registration) {
-  auto destination = ParseDestination(registration);
-  if (!destination.has_value())
-    return base::unexpected(destination.error());
+  base::expected<DestinationSet, SourceRegistrationError> destination_set =
+      DestinationSet::FromJSON(registration.Find(kDestination));
+  if (!destination_set.has_value()) {
+    return base::unexpected(destination_set.error());
+  }
 
-  SourceRegistration result(std::move(*destination));
+  SourceRegistration result(std::move(*destination_set));
 
   base::expected<FilterData, SourceRegistrationError> filter_data =
       FilterData::FromJSON(registration.Find(kFilterData));
@@ -134,21 +126,31 @@ SourceRegistration::Parse(base::Value::Dict registration) {
 // static
 base::expected<SourceRegistration, SourceRegistrationError>
 SourceRegistration::Parse(base::StringPiece json) {
+  base::expected<SourceRegistration, SourceRegistrationError> source =
+      base::unexpected(SourceRegistrationError::kInvalidJson);
+
   absl::optional<base::Value> value =
       base::JSONReader::Read(json, base::JSON_PARSE_RFC);
-  if (!value)
-    return base::unexpected(SourceRegistrationError::kInvalidJson);
 
-  if (!value->is_dict())
-    return base::unexpected(SourceRegistrationError::kRootWrongType);
+  if (value) {
+    if (value->is_dict()) {
+      source = Parse(std::move(*value).TakeDict());
+    } else {
+      source = base::unexpected(SourceRegistrationError::kRootWrongType);
+    }
+  }
 
-  return Parse(std::move(*value).TakeDict());
+  if (!source.has_value()) {
+    RecordSourceRegistrationError(source.error());
+  }
+
+  return source;
 }
 
 base::Value::Dict SourceRegistration::ToJson() const {
   base::Value::Dict dict;
 
-  dict.Set(kDestination, destination->Serialize());
+  dict.Set(kDestination, destination_set.ToJson());
 
   if (!filter_data.filter_values().empty()) {
     dict.Set(kFilterData, filter_data.ToJson());

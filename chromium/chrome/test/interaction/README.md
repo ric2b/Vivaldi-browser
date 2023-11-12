@@ -81,7 +81,8 @@ Verbs fall into a number of different categories:
     - `CheckView()` [Views]
     - `CheckViewProperty()` [Views]
     - `Screenshot` [Browser] - compares the target against Skia Gold in pixel
-      tests
+      tests. See [Handling Incompatibilities](#handling-incompatibilities) for
+      how to handle this in non-pixel tests.
 - **WaitFor** verbs ensure that the given UI event happens or condition becomes
   true before proceeding. Examples:
     - `WaitForShow()`
@@ -118,10 +119,13 @@ Verbs fall into a number of different categories:
     - `SelectTab()`
     - `SelectDropdownItem()`
     - `EnterText()`
-    - `ActivateSurface()`
     - `SendAccelerator()`
     - `Confirm()`
     - `DoDefaultAction()`
+    - `ActivateSurface()`
+      - ActivateSurface is not always reliable on Linux with the Wayland window
+        manager; see [Handling Incompatibilities](#handling-incompatibilities)
+        for how to correctly deal with this.
 - **Mouse** verbs simulate mouse input to the entire application, and are
   therefore only reliable in test fixtures that run as exclusive processes (e.g.
   interactive_browser_tests). Examples include:
@@ -160,9 +164,14 @@ Verbs fall into a number of different categories:
    - `ExecuteJsAt()` [Browser]
    - `CheckJsResult()` [Browser]
    - `CheckJsResultAt()` [Browser]
-- Utility verbs modify how the test sequence is executed. Currently there is
-  only `FlushEvents()`, which ensures that the next step happens on a fresh
-  message loop rather than being able to chain successive steps.
+- **Utility** verbs modify how the test sequence is executed.
+   - `FlushEvents()` - ensures that the next step happens on a fresh
+     message loop rather than being able to chain successive steps.
+   - `SetOnIncompatibleAction()` changes what the sequence will do when faced
+     with an action that cannot be executed on the current
+     build, environment, or platform. See
+     [Handling Incompatibilities](#handling-incompatibilities) for more
+     information and best practices.
 
 Example with mouse input:
 ```cpp
@@ -234,6 +243,169 @@ RunTestSequence(
     PressButton(kAppMenuButton),
     WaitForShow(kDownloadsMenuItemElementId))));
 ```
+
+### Control Flow
+
+Kombucha now provides two options for control flow:
+ - Conditionals
+ - Parallel execution
+
+#### Conditionals
+
+In some cases, you may want to execute part of a test only if, for example, a
+particular flag is set. In order to do this, we provide the various `If()`
+control-flow statements:
+ - `If(condition, step[s])` - executes `step[s]` if `condition` returns true.
+ - `IfElement(element, condition, step[s])` - executes `step[s]` if `condition`
+   returns true when `element` is passed to it.
+ - `IfView(view, condition, step[s])` - executes `step[s]` if `condition`
+   returns true when `view` is converted to the type accepted by `condition` and
+   passed to it (the element must be of the correct type).
+
+Example:
+```cpp
+RunTestSequence(
+  /* ... */
+  // If MyFeature is enabled, it may interfere with the rest of this test, so
+  // toggle its UI off:
+  If(base::BindOnce([](){ return base::FeatureList::IsEnabled(kMyFeature); }),
+     Steps(PressButton(kFeatureToggleButtonElementId),
+           WaitForHide(kMyFeatureUiElementId))),
+  /* Proceed with test... */
+)
+```
+
+Note that in the case of elements, if the element isn't present/visible, the
+step does not fail; `condition` will simply receive a null value.
+```cpp
+RunTestSequence(
+  /* ... */
+  // If the side panel is still visible, close it.
+  IfView(kSidePanelElementId,
+         base::BindOnce([](const SidePanel* side_panel) {
+              // If the element is visible, it will be passed here, otherwise it
+              // will be null.
+              return side_panel != nullptr;
+            }),
+            PressButton(kSidePanelButtonElementId))
+  /* ... */
+)
+```
+
+#### Parallel Execution
+
+Another common case you might want to handle in a test is when multiple events
+are going to happen, but you can't guarantee the exact order. Because Kombucha
+tests are sequential, if a test needs to respond to two discrete events with
+non-deterministic timing, you need to be able to execute multiple steps in
+parallel.
+
+For this, we provide `InParallel()` and `AnyOf()`:
+ - `InParallel(step[s], step[s], ...)` - Executes each of `step[s]` in parallel
+   with each other. All must complete before the main test sequence can proceed.
+ - `AnyOf(step[s], step[s], ...)` - Executes each of `step[s]` in parallel with
+   each other. Only one must complete, at which point the main test sequence
+   proceeds and the other sequences are scuttled.
+
+Example:
+```cpp
+RunTestSequence(
+  /* ... */
+  // This button press will cause two asynchronous processes to spawn.
+  PressButton(kStartBackgroundProcessesButtonElementId),
+  InParallel(
+    WaitForEvent(kMyFeatureUiElementID, kUserDataUpdatedEvent),
+    WaitForEvent(kMyFeatureUiElementId, kUiUpdated)),
+  // It's now safe to proceed.
+  /* ... */
+)
+```
+
+#### Control Structure Usage Notes and Limitations
+
+Avoid executing steps with side-effects during an `InParallel()` or `AnyOf()`,
+especially if those steps could affect other subsequences running in parallel.
+
+Avoid relying on any side-effects of a step in an `If()` or `AnyOf()` in the
+remainder of the test, as there is no guarantee those steps will be executed
+(or in the case of `AnyOf()`, they may be executed non-deterministically, which
+is worse). For example:
+
+```cpp
+RunTestSequence(
+  /* ... */
+  AnyOf(
+    // WARNING: One or both of these buttons will be pressed, but which is not
+    // deterministic!
+    Steps(WaitForShow(kMyElementId1), PressButton(kMyButtonId1)),
+    Steps(WaitForShow(kMyElementId2), PressButton(kMyButtonId2)))
+)
+```
+
+Triggering conditions for the first step of a conditional or parallel
+subsequence can occur during the previous step. However, the triggering
+condition for the first step of the main test sequence _following_ the control
+structure cannot occur during subsequence execution (it will be lost).
+For example:
+
+```cpp
+RunTestSequence(
+  /* ... */
+  PressButton(kButtonElementId),
+  InParallel(
+    // This is okay, since the first step of a subsequence can trigger during
+    // the previous step.
+    WaitForActivate(kButtonElementId),
+    Steps(WaitForEvent(kButtonElementId, kBackgroundProcessEvent),
+          PressButton(kOtherButtonElementId))),
+  // WARNING: This is unsafe as the PressButton() above occurs in a subsequence,
+  // but this action is in the main sequence.
+  WaitForActivate(kOtherButtonElementId)
+)
+```
+
+Named elements are inherited by conditional or parallel subsequences, but any
+names that are assigned by the subsequence are not guaranteed to be brought back
+to the top level test sequence. **We may change this behavior in the future.**
+
+### Handling Incompatibilities
+
+Sometimes a test won't run on a specific build bot or in a specific environment
+due to a known incompatibility (as opposed to something legitimately failing).
+Current known incompatibilities include:
+ - `ActivateSurface()` does not work on the `linux-wayland` buildbot unless the
+   surface is already active, due to vanilla Wayland not supporting programmatic
+   window activation.
+ - `Screenshot()` only works in specific pixel test jobs on the `win-rel`
+   buildbot.
+
+Normally, if you know that the test won't run on an entire platform (i.e. you
+can use `BUILDFLAG()` to differentiate) you should disable or skip the tests in
+the usual way. But if the distinction is finer-grained (as with the above verbs)
+The `SetOnIncompatibleAction()` verb and `OnIncompatibleAction` enumeration are
+provided.
+ - `OnIncompatibleAction::kFailTest` is the default option; if a step fails
+   because of a known incompatibility, the test will fail, and an error message
+   will be printed.
+ - `OnIncompatibleAction::kSkipTest` immediately skips the test as soon as an
+   incompatibility is detected. Use this option when you know the rest of the
+   test will fail and the test results are invalid. A warning will be printed.
+ - `OnIncompatibleAction::kHaltTest` immediately halts the sequence but does not
+   fail or skip the test. Use this option when all of the steps leading up to
+   the incompatible one are valid and you want to preserve any non-fatal errors
+   that may have occurred. A warning will still be printed.
+ - `OnIncompatibleAction::kIgnoreAndContinue` skips the problematic step, prints
+   a warning, and continues the test as if nothing happened. Use this option
+   when the step is incidental to the test, such as taking a screenshot in the
+   middle of a sequence.
+
+***Do not use `SetOnIncompatibleAction()` unless:***
+ 1. You know the test will fail due to a known incompatibility.
+ 2. The test cannot be disabled or skipped using a simple `BUILDFLAG()` check.
+
+Note that you *must* specify a non-empty `reason` when calling
+`SetOnIncompatibleAction()` with any argument except `kFailTest`. This string
+will be printed out as part of the warning that is produced if the step fails.
 
 ### WebContents Instrumentation
 

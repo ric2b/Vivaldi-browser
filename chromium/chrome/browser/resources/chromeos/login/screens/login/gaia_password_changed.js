@@ -8,18 +8,19 @@
 
 import '//resources/cr_elements/cr_input/cr_input.js';
 import '//resources/polymer/v3_0/iron-icon/iron-icon.js';
-import '../../components/oobe_icons.m.js';
+import '//resources/polymer/v3_0/iron-media-query/iron-media-query.js';
+import '../../components/oobe_icons.html.js';
 import '../../components/buttons/oobe_next_button.js';
-import '../../components/common_styles/oobe_common_styles.m.js';
-import '../../components/common_styles/oobe_dialog_host_styles.m.js';
+import '../../components/common_styles/oobe_common_styles.css.js';
+import '../../components/common_styles/oobe_dialog_host_styles.css.js';
 import '../../components/dialogs/oobe_adaptive_dialog.js';
 import '../../components/dialogs/oobe_loading_dialog.js';
 
 import {loadTimeData} from '//resources/ash/common/load_time_data.m.js';
 import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.m.js';
-import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.m.js';
+import {LoginScreenBehavior, LoginScreenBehaviorInterface} from '../../components/behaviors/login_screen_behavior.js';
+import {MultiStepBehavior, MultiStepBehaviorInterface} from '../../components/behaviors/multi_step_behavior.js';
 import {OobeI18nBehavior, OobeI18nBehaviorInterface} from '../../components/behaviors/oobe_i18n_behavior.js';
 import {OobeTextButton} from '../../components/buttons/oobe_text_button.js';
 import {OOBE_UI_STATE} from '../../components/display_manager_types.js';
@@ -33,6 +34,7 @@ import {addSubmitListener} from '../../login_ui_tools.js';
 const GaiaPasswordChangedUIState = {
   PASSWORD: 'password',
   FORGOT: 'forgot',
+  RECOVERY: 'setup-recovery',
   PROGRESS: 'progress',
 };
 
@@ -97,6 +99,7 @@ class GaiaPasswordChanged extends GaiaPasswordChangedBase {
         type: Boolean,
         value: loadTimeData.getBoolean('isCryptohomeRecoveryUIFlowEnabled'),
       },
+      isDarkModeActive_: {type: Boolean, value: false},
     };
   }
 
@@ -107,6 +110,16 @@ class GaiaPasswordChanged extends GaiaPasswordChangedBase {
   get UI_STEPS() {
     return GaiaPasswordChangedUIState;
   }
+
+  /** Overridden from LoginScreenBehavior. */
+  // clang-format off
+  get EXTERNAL_API() {
+    return [
+      'showWrongPasswordError',
+      'suggestRecovery',
+    ];
+  }
+  // clang-format on
 
   /**
    * @override
@@ -132,7 +145,6 @@ class GaiaPasswordChanged extends GaiaPasswordChangedBase {
     this.email = data && 'email' in data && data.email;
     this.passwordInvalid_ = data && 'showError' in data && data.showError;
     if (this.isCryptohomeRecoveryUIFlowEnabled_) {
-      this.$.cancel.textKey = 'continueWithoutLocalDataButton';
       this.$.tryAgain.textKey = 'oldPasswordHint';
       this.$.proceedAnyway.textKey = 'continueAndDeleteDataButton';
     }
@@ -142,6 +154,46 @@ class GaiaPasswordChanged extends GaiaPasswordChangedBase {
     this.setUIStep(GaiaPasswordChangedUIState.PASSWORD);
     this.clearPassword();
     this.disabled = false;
+  }
+
+  /**
+   * Called when Screen fails to authenticate with
+   * provided password.
+   */
+  showWrongPasswordError() {
+    this.clearPassword();
+    this.disabled = false;
+    this.passwordInvalid_ = true;
+    this.setUIStep(GaiaPasswordChangedUIState.PASSWORD);
+  }
+
+  /**
+   * Called when password was successfully updated
+   * and it is possible to set up recovery for the user.
+   */
+  suggestRecovery() {
+    this.disabled = false;
+    this.setUIStep(GaiaPasswordChangedUIState.RECOVERY);
+  }
+
+  /**
+   * Returns the src of the illustration.
+   * @private
+   */
+  getImageSource_() {
+    return this.isDarkModeActive_ ? 'images/security_lock_dark.svg' :
+                                    'images/security_lock_light.svg';
+  }
+
+  /**
+   * Returns the subtitle message for the data loss warning screen.
+   * @param {string} locale The i18n locale.
+   * @param {string} email The email address that the user is trying to recover.
+   * @returns {string} The translated subtitle message.
+   */
+  getDataLossWarningSubtitleMessage_(locale, email) {
+    return this.i18nAdvancedDynamic(
+        locale, 'dataLossWarningSubtitle', {substitutions: [email]});
   }
 
   /**
@@ -161,12 +213,20 @@ class GaiaPasswordChanged extends GaiaPasswordChangedBase {
 
   /** @private */
   onForgotPasswordClicked_() {
+    if (this.disabled) {
+      return;
+    }
     this.setUIStep(GaiaPasswordChangedUIState.FORGOT);
     this.clearPassword();
   }
 
   /** @private */
   onTryAgainClicked_() {
+    this.setUIStep(GaiaPasswordChangedUIState.PASSWORD);
+  }
+
+  /** @private */
+  onBackButtonClicked_() {
     this.setUIStep(GaiaPasswordChangedUIState.PASSWORD);
   }
 
@@ -189,6 +249,26 @@ class GaiaPasswordChanged extends GaiaPasswordChangedBase {
     this.disabled = true;
     this.clearPassword();
     this.userActed('resync');
+  }
+
+  onNoRecovery_() {
+    if (this.disabled) {
+      return;
+    }
+    this.setUIStep(GaiaPasswordChangedUIState.PROGRESS);
+    this.disabled = true;
+    this.clearPassword();
+    this.userActed('no-recovery');
+  }
+
+  onSetRecovery_() {
+    if (this.disabled) {
+      return;
+    }
+    this.setUIStep(GaiaPasswordChangedUIState.PROGRESS);
+    this.disabled = true;
+    this.clearPassword();
+    this.userActed('setup-recovery');
   }
 
   /** @private */

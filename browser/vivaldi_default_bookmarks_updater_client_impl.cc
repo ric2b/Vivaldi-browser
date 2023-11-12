@@ -10,8 +10,9 @@
 namespace vivaldi_default_bookmarks {
 /*static*/
 std::unique_ptr<UpdaterClientImpl> UpdaterClientImpl::Create(Profile* profile) {
-  if (profile->IsGuestSession()) {
-    LOG(ERROR) << "Attempt to update bookmarks from a guest window";
+  if (profile->IsGuestSession() || profile->IsSystemProfile()) {
+    LOG(ERROR) << "Attempt to update bookmarks from a guest window, or from a "
+                  "system-profile.";
     return nullptr;
   }
 

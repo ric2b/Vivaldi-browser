@@ -23,6 +23,7 @@
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/standalone_browser/lacros_availability.h"
 #include "chromeos/ash/components/system/fake_statistics_provider.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "components/account_id/account_id.h"
@@ -32,7 +33,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using crosapi::browser_util::LacrosAvailability;
+using ash::standalone_browser::LacrosAvailability;
 using crosapi::browser_util::LacrosLaunchSwitchSource;
 using crosapi::browser_util::LacrosSelection;
 using user_manager::User;
@@ -68,6 +69,33 @@ class ScopedLacrosAvailabilityCache {
   }
 };
 
+// This implementation of RAII for LacrosSelection is to make it easy reset
+// the state between runs.
+class ScopedLacrosSelectionCache {
+ public:
+  explicit ScopedLacrosSelectionCache(
+      browser_util::LacrosSelectionPolicy lacros_selection) {
+    SetLacrosSelection(lacros_selection);
+  }
+  ScopedLacrosSelectionCache(const ScopedLacrosSelectionCache&) = delete;
+  ScopedLacrosSelectionCache& operator=(const ScopedLacrosSelectionCache&) =
+      delete;
+  ~ScopedLacrosSelectionCache() {
+    browser_util::ClearLacrosSelectionCacheForTest();
+  }
+
+ private:
+  void SetLacrosSelection(
+      browser_util::LacrosSelectionPolicy lacros_selection) {
+    policy::PolicyMap policy;
+    policy.Set(policy::key::kLacrosSelection, policy::POLICY_LEVEL_MANDATORY,
+               policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+               base::Value(GetLacrosSelectionPolicyName(lacros_selection)),
+               /*external_data_fetcher=*/nullptr);
+    browser_util::CacheLacrosSelection(policy);
+  }
+};
+
 }  // namespace
 
 class BrowserUtilTest : public testing::Test {
@@ -80,12 +108,11 @@ class BrowserUtilTest : public testing::Test {
     scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
         base::WrapUnique(fake_user_manager_));
     browser_util::RegisterLocalStatePrefs(pref_service_.registry());
-    chromeos::system::StatisticsProvider::SetTestProvider(
-        &statistics_provider_);
+    ash::system::StatisticsProvider::SetTestProvider(&statistics_provider_);
   }
 
   void TearDown() override {
-    chromeos::system::StatisticsProvider::SetTestProvider(nullptr);
+    ash::system::StatisticsProvider::SetTestProvider(nullptr);
   }
 
   void AddRegularUser(const std::string& email) {
@@ -105,7 +132,7 @@ class BrowserUtilTest : public testing::Test {
   ash::FakeChromeUserManager* fake_user_manager_ = nullptr;
   std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
   TestingPrefServiceSimple pref_service_;
-  chromeos::system::FakeStatisticsProvider statistics_provider_;
+  ash::system::FakeStatisticsProvider statistics_provider_;
 };
 
 class LacrosSupportBrowserUtilTest : public BrowserUtilTest {
@@ -204,7 +231,8 @@ TEST_F(BrowserUtilTest, LacrosCrosTeamRollout) {
   }
 
   base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({}, {browser_util::kLacrosGooglePolicyRollout});
+  feature_list.InitWithFeatures(
+      {}, {ash::standalone_browser::kLacrosGooglePolicyRollout});
 
   {
     ScopedLacrosAvailabilityCache cache(LacrosAvailability::kSideBySide);
@@ -602,21 +630,23 @@ TEST_F(BrowserUtilTest, GetMissingDataVer) {
 }
 
 TEST_F(BrowserUtilTest, GetCorruptDataVer) {
-  base::DictionaryValue dictionary_value;
+  base::Value::Dict dictionary_value;
   std::string user_id_hash = "1234";
-  dictionary_value.SetStringKey(user_id_hash, "corrupted");
-  pref_service_.Set(browser_util::kDataVerPref, dictionary_value);
+  dictionary_value.Set(user_id_hash, "corrupted");
+  pref_service_.Set(browser_util::kDataVerPref,
+                    base::Value(std::move(dictionary_value)));
   base::Version version =
       browser_util::GetDataVer(&pref_service_, user_id_hash);
   EXPECT_FALSE(version.IsValid());
 }
 
 TEST_F(BrowserUtilTest, GetDataVer) {
-  base::DictionaryValue dictionary_value;
+  base::Value::Dict dictionary_value;
   std::string user_id_hash = "1234";
   base::Version version{"1.1.1.1"};
-  dictionary_value.SetStringKey(user_id_hash, version.GetString());
-  pref_service_.Set(browser_util::kDataVerPref, dictionary_value);
+  dictionary_value.Set(user_id_hash, version.GetString());
+  pref_service_.Set(browser_util::kDataVerPref,
+                    base::Value(std::move(dictionary_value)));
 
   base::Version result_version =
       browser_util::GetDataVer(&pref_service_, user_id_hash);
@@ -628,7 +658,7 @@ TEST_F(BrowserUtilTest, RecordDataVer) {
   base::Version version{"1.1.1.1"};
   browser_util::RecordDataVer(&pref_service_, user_id_hash, version);
 
-  base::Value expected{base::Value::Type::DICTIONARY};
+  base::Value expected{base::Value::Type::DICT};
   expected.SetStringKey(user_id_hash, version.GetString());
   const base::Value::Dict& dict =
       pref_service_.GetDict(browser_util::kDataVerPref);
@@ -643,7 +673,7 @@ TEST_F(BrowserUtilTest, RecordDataVerOverrides) {
   browser_util::RecordDataVer(&pref_service_, user_id_hash, version1);
   browser_util::RecordDataVer(&pref_service_, user_id_hash, version2);
 
-  base::Value expected{base::Value::Type::DICTIONARY};
+  base::Value expected{base::Value::Type::DICT};
   expected.SetStringKey(user_id_hash, version2.GetString());
 
   const base::Value::Dict& dict =
@@ -665,7 +695,7 @@ TEST_F(BrowserUtilTest, RecordDataVerWithMultipleUsers) {
   base::Version version3{"3.3.3.3"};
   browser_util::RecordDataVer(&pref_service_, user_id_hash_1, version3);
 
-  base::Value expected{base::Value::Type::DICTIONARY};
+  base::Value expected{base::Value::Type::DICT};
   expected.SetStringKey(user_id_hash_1, version3.GetString());
   expected.SetStringKey(user_id_hash_2, version2.GetString());
 
@@ -1114,6 +1144,118 @@ TEST_F(BrowserUtilTest, SerialNumber) {
   auto serial_number = browser_init_params->device_properties->serial_number;
   ASSERT_TRUE(serial_number.has_value());
   EXPECT_EQ(serial_number.value(), expected_serial_number);
+}
+
+TEST_F(BrowserUtilTest, LacrosSelection) {
+  // Neither policy nor command line have any preference on Lacros selection.
+  EXPECT_FALSE(browser_util::DetermineLacrosSelection());
+
+  {
+    // LacrosSelection policy has precedence over command line.
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kRootfs);
+    base::test::ScopedCommandLine cmd_line;
+    cmd_line.GetProcessCommandLine()->AppendSwitchASCII(
+        browser_util::kLacrosSelectionSwitch,
+        browser_util::kLacrosSelectionStateful);
+    EXPECT_EQ(browser_util::DetermineLacrosSelection(),
+              LacrosSelection::kRootfs);
+  }
+
+  {
+    // LacrosSelection policy has precedence over command line.
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kStateful);
+    base::test::ScopedCommandLine cmd_line;
+    cmd_line.GetProcessCommandLine()->AppendSwitchASCII(
+        browser_util::kLacrosSelectionSwitch,
+        browser_util::kLacrosSelectionRootfs);
+    EXPECT_EQ(browser_util::DetermineLacrosSelection(),
+              LacrosSelection::kStateful);
+  }
+
+  {
+    // LacrosSelection allows command line check, but command line is not set.
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kUserChoice);
+    EXPECT_FALSE(browser_util::DetermineLacrosSelection());
+  }
+
+  {
+    // LacrosSelection allows command line check.
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kUserChoice);
+    base::test::ScopedCommandLine cmd_line;
+    cmd_line.GetProcessCommandLine()->AppendSwitchASCII(
+        browser_util::kLacrosSelectionSwitch,
+        browser_util::kLacrosSelectionRootfs);
+    EXPECT_EQ(browser_util::DetermineLacrosSelection(),
+              LacrosSelection::kRootfs);
+  }
+
+  {
+    // LacrosSelection allows command line check.
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kUserChoice);
+    base::test::ScopedCommandLine cmd_line;
+    cmd_line.GetProcessCommandLine()->AppendSwitchASCII(
+        browser_util::kLacrosSelectionSwitch,
+        browser_util::kLacrosSelectionStateful);
+    EXPECT_EQ(browser_util::DetermineLacrosSelection(),
+              LacrosSelection::kStateful);
+  }
+}
+
+// LacrosSelection has no effect on non-googlers.
+TEST_F(BrowserUtilTest, LacrosSelectionPolicyIgnoreNonGoogle) {
+  AddRegularUser("user@random.com");
+
+  base::test::ScopedCommandLine cmd_line;
+  cmd_line.GetProcessCommandLine()->AppendSwitch(
+      ash::switches::kLacrosSelectionPolicyIgnore);
+
+  {
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kRootfs);
+    EXPECT_EQ(browser_util::GetCachedLacrosSelectionPolicy(),
+              browser_util::LacrosSelectionPolicy::kRootfs);
+    EXPECT_EQ(browser_util::DetermineLacrosSelection(),
+              LacrosSelection::kRootfs);
+  }
+
+  {
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kStateful);
+    EXPECT_EQ(browser_util::GetCachedLacrosSelectionPolicy(),
+              browser_util::LacrosSelectionPolicy::kStateful);
+    EXPECT_EQ(browser_util::DetermineLacrosSelection(),
+              LacrosSelection::kStateful);
+  }
+}
+
+// LacrosSelection has an effect on googlers.
+TEST_F(BrowserUtilTest, LacrosSelectionPolicyIgnoreGoogleDisableToUserChoice) {
+  AddRegularUser("user@google.com");
+
+  base::test::ScopedCommandLine cmd_line;
+  cmd_line.GetProcessCommandLine()->AppendSwitch(
+      ash::switches::kLacrosSelectionPolicyIgnore);
+
+  {
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kRootfs);
+    EXPECT_EQ(browser_util::GetCachedLacrosSelectionPolicy(),
+              browser_util::LacrosSelectionPolicy::kUserChoice);
+    EXPECT_FALSE(browser_util::DetermineLacrosSelection());
+  }
+
+  {
+    ScopedLacrosSelectionCache cache(
+        browser_util::LacrosSelectionPolicy::kStateful);
+    EXPECT_EQ(browser_util::GetCachedLacrosSelectionPolicy(),
+              browser_util::LacrosSelectionPolicy::kUserChoice);
+    EXPECT_FALSE(browser_util::DetermineLacrosSelection());
+  }
 }
 
 }  // namespace crosapi

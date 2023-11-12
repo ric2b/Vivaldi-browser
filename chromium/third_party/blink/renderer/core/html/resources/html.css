@@ -25,6 +25,9 @@
 
 html {
     display: block;
+}
+
+:root {
     view-transition-name: root;
 }
 
@@ -289,7 +292,14 @@ tr {
 
 td, th {
     display: table-cell;
-    vertical-align: inherit
+    vertical-align: inherit;
+}
+
+/* When the td/th are inside a table (the normal case), the padding is taken
+   care of by HTMLTableCellElement::AdditionalPresentationAttributeStyle(). */
+td:not(table td),
+th:not(table th) {
+  padding: 1px;
 }
 
 th {
@@ -578,7 +588,7 @@ input[type="password" i]::-internal-reveal {
   height: 1.3em;
   cursor: default;
   flex: none;
-  background-image: -webkit-image-set(url(images/password_reveal_on.svg) 1x);
+  background-image: url(images/password_reveal_on.svg);
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
@@ -587,7 +597,7 @@ input[type="password" i]::-internal-reveal {
 }
 
 input[type="password" i]::-internal-reveal.reveal {
-  background-image: -webkit-image-set(url(images/password_reveal_off.svg) 1x);
+  background-image: url(images/password_reveal_off.svg);
 }
 
 input[type="password" i]::-internal-reveal:hover,
@@ -927,8 +937,11 @@ select:not(:-internal-list-box) {
     overflow: visible !important;
 }
 
-select:-internal-list-box optgroup option:before {
-    content: "\00a0\00a0\00a0\00a0";;
+/* The padding here should match the value of
+   |extraPaddingForOptionInsideOptgroup| in list_picker.js, which is the
+   padding for select optgroup option. */
+select:-internal-list-box optgroup option {
+    padding-inline-start: 20px;
 }
 
 select:-internal-list-box option,
@@ -1204,7 +1217,7 @@ input[type="date" i]::-webkit-calendar-picker-indicator,
 input[type="datetime-local" i]::-webkit-calendar-picker-indicator,
 input[type="month" i]::-webkit-calendar-picker-indicator,
 input[type="week" i]::-webkit-calendar-picker-indicator {
-  background-image: -internal-light-dark(-webkit-image-set(url(images/calendar_icon.svg) 1x), -webkit-image-set(url(images/calendar_icon_white.svg) 1x));
+  background-image: -internal-light-dark(url(images/calendar_icon.svg), url(images/calendar_icon_white.svg));
   background-origin: content-box;
   background-repeat: no-repeat;
   background-size: contain;
@@ -1224,7 +1237,7 @@ input[type="week" i]::-webkit-calendar-picker-indicator:focus-visible {
 }
 
 input[type="time" i]::-webkit-calendar-picker-indicator {
-  background-image: -internal-light-dark(-webkit-image-set(url(images/time_icon.svg) 1x), -webkit-image-set(url(images/time_icon_white.svg) 1x));
+  background-image: -internal-light-dark(url(images/time_icon.svg), url(images/time_icon_white.svg));
   background-origin: content-box;
   background-repeat: no-repeat;
   background-size: contain;
@@ -1290,12 +1303,6 @@ a:-webkit-any-link:read-write {
 
 a:-webkit-any-link:focus-visible {
   outline-offset: 1px;
-}
-
-/* ensure that selected links are underlined.*/
-a:-webkit-any-link::target-text {
-    text-decoration:underline;
-    background-color:#E9D2FD;
 }
 
 /* HTML5 ruby elements */
@@ -1404,6 +1411,7 @@ dialog:modal {
     /* https://github.com/w3c/csswg-drafts/issues/6939#issuecomment-1016679588 */
     user-select: text;
     visibility: visible;
+    top-layer: browser !important;
 }
 
 /* TODO(foolip): In the Fullscreen spec, there's a ::backdrop block with the
@@ -1412,7 +1420,8 @@ dialog::backdrop {
     position: fixed;
     inset: 0;
     /* https://html.spec.whatwg.org/multipage/rendering.html#flow-content-3 */
-    background: rgba(0,0,0,0.1)
+    background: rgba(0,0,0,0.1);
+    top-layer: browser !important;
 }
 
 slot {

@@ -4,7 +4,7 @@
 
 #include "extensions/browser/api/web_request/web_request_proxying_websocket.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -524,6 +524,11 @@ void WebRequestProxyingWebSocket::OnMojoConnectionErrorWithCustomReason(
 void WebRequestProxyingWebSocket::OnMojoConnectionError() {
   OnError(net::ERR_FAILED);
   // Deletes |this|.
+}
+
+// static
+void WebRequestProxyingWebSocket::EnsureAssociatedFactoryBuilt() {
+  ShutdownNotifierFactory::GetInstance();
 }
 
 }  // namespace extensions

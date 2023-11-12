@@ -9,10 +9,10 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/escape.h"
@@ -71,6 +71,7 @@
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/network/public/mojom/cors.mojom.h"
 #include "services/network/public/mojom/ip_address_space.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -556,7 +557,7 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTest, SimpleNavigation) {
   // hints activated.
   EXPECT_LE(1u, loading_predictor()->GetTotalHintsActivatedForTesting());
   EXPECT_GE(2u, loading_predictor()->GetTotalHintsActivatedForTesting());
-  observer->WaitForNavigationFinished();
+  ASSERT_TRUE(observer->WaitForNavigationFinished());
   EXPECT_EQ(0u, loading_predictor()->GetActiveNavigationsSizeForTesting());
   EXPECT_EQ(0u, loading_predictor()->GetActiveHintsSizeForTesting());
   EXPECT_LE(1u, loading_predictor()->GetTotalHintsActivatedForTesting());
@@ -578,8 +579,8 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTest, TwoConcurrentNavigations) {
   // hints activated.
   EXPECT_LE(2u, loading_predictor()->GetTotalHintsActivatedForTesting());
   EXPECT_GE(4u, loading_predictor()->GetTotalHintsActivatedForTesting());
-  observer1->WaitForNavigationFinished();
-  observer2->WaitForNavigationFinished();
+  ASSERT_TRUE(observer1->WaitForNavigationFinished());
+  ASSERT_TRUE(observer2->WaitForNavigationFinished());
   EXPECT_EQ(0u, loading_predictor()->GetActiveNavigationsSizeForTesting());
   EXPECT_EQ(0u, loading_predictor()->GetActiveHintsSizeForTesting());
   EXPECT_LE(2u, loading_predictor()->GetTotalHintsActivatedForTesting());
@@ -602,8 +603,8 @@ IN_PROC_BROWSER_TEST_F(LoadingPredictorBrowserTest,
   // second navigation arrives later, then two hints may get activated.
   EXPECT_LE(1u, loading_predictor()->GetTotalHintsActivatedForTesting());
   EXPECT_GE(4u, loading_predictor()->GetTotalHintsActivatedForTesting());
-  observer1->WaitForNavigationFinished();
-  observer2->WaitForNavigationFinished();
+  ASSERT_TRUE(observer1->WaitForNavigationFinished());
+  ASSERT_TRUE(observer2->WaitForNavigationFinished());
   EXPECT_EQ(0u, loading_predictor()->GetActiveNavigationsSizeForTesting());
   EXPECT_EQ(0u, loading_predictor()->GetActiveHintsSizeForTesting());
   EXPECT_LE(1u, loading_predictor()->GetTotalHintsActivatedForTesting());
@@ -1030,7 +1031,7 @@ IN_PROC_BROWSER_TEST_P(LoadingPredictorNetworkIsolationKeyBrowserTest,
     SCOPED_TRACE(predictor_has_state);
 
     auto observer = NavigateToURLAsync(cacheable_url);
-    observer->WaitForNavigationFinished();
+    ASSERT_TRUE(observer->WaitForNavigationFinished());
     connection_tracker()->WaitForAcceptedConnections(2);
     EXPECT_EQ(0u, connection_tracker()->GetReadSocketCount());
 
@@ -1084,7 +1085,7 @@ IN_PROC_BROWSER_TEST_P(LoadingPredictorNetworkIsolationKeyBrowserTest,
   // The next navigation should preconnect. It won't use the preconnected
   // socket, since the destination resource is still in the cache.
   auto observer = NavigateToURLAsync(redirecting_url);
-  observer->WaitForNavigationFinished();
+  ASSERT_TRUE(observer->WaitForNavigationFinished());
   connection_tracker()->WaitForAcceptedConnections(1);
   EXPECT_EQ(0u, connection_tracker()->GetReadSocketCount());
 
@@ -1134,7 +1135,7 @@ IN_PROC_BROWSER_TEST_P(LoadingPredictorNetworkIsolationKeyBrowserTest,
       ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), redirecting_url));
     } else {
       auto observer = NavigateToURLAsync(redirecting_url);
-      observer->WaitForNavigationFinished();
+      ASSERT_TRUE(observer->WaitForNavigationFinished());
     }
     connection_tracker()->WaitForAcceptedConnections(2);
     EXPECT_EQ(0u, connection_tracker()->GetReadSocketCount());
@@ -1306,8 +1307,9 @@ IN_PROC_BROWSER_TEST_P(LoadingPredictorNetworkIsolationKeyBrowserTest,
     EXPECT_EQ(2u, connection_tracker()->GetAcceptedSocketCount());
     EXPECT_EQ(2u, connection_tracker()->GetReadSocketCount());
   } else {
-    // Otherwise, the preconnected socket cannot be used.
-    EXPECT_EQ(3u, connection_tracker()->GetAcceptedSocketCount());
+    // Otherwise, the preconnected socket is used, so counts remain unchanged
+    // since the last check.
+    EXPECT_EQ(2u, connection_tracker()->GetAcceptedSocketCount());
     EXPECT_EQ(2u, connection_tracker()->GetReadSocketCount());
   }
 
@@ -1679,7 +1681,7 @@ IN_PROC_BROWSER_TEST_P(LoadingPredictorBrowserTestWithOptimizationGuide,
   EXPECT_TRUE(observer->WaitForResponse());
   observer->ResumeNavigation();
   content::AwaitDocumentOnLoadCompleted(observer->web_contents());
-  observer->WaitForNavigationFinished();
+  ASSERT_TRUE(observer->WaitForNavigationFinished());
 
   // Navigate to another URL - make sure optimization guide prediction is
   // cleared.
@@ -2204,7 +2206,7 @@ IN_PROC_BROWSER_TEST_F(MultiPageBrowserTest, LoadingPredictor) {
                                           std::string());
   ASSERT_TRUE(first_main_observer->WaitForRequestStart());
   EXPECT_EQ(1u, loading_predictor->GetActiveNavigationsSizeForTesting());
-  first_main_observer->WaitForNavigationFinished();
+  ASSERT_TRUE(first_main_observer->WaitForNavigationFinished());
   EXPECT_EQ(0u, loading_predictor->GetActiveNavigationsSizeForTesting());
   content::WaitForLoadStop(web_contents());
   EXPECT_EQ(1u, loading_predictor->GetTotalHintsActivatedForTesting());
@@ -2222,9 +2224,9 @@ IN_PROC_BROWSER_TEST_F(MultiPageBrowserTest, LoadingPredictor) {
   ASSERT_TRUE(prerender_observer->WaitForRequestStart());
   ASSERT_TRUE(second_main_observer->WaitForRequestStart());
   EXPECT_EQ(1u, loading_predictor->GetActiveNavigationsSizeForTesting());
-  prerender_observer->WaitForNavigationFinished();
+  ASSERT_TRUE(prerender_observer->WaitForNavigationFinished());
   EXPECT_EQ(1u, loading_predictor->GetActiveNavigationsSizeForTesting());
-  second_main_observer->WaitForNavigationFinished();
+  ASSERT_TRUE(second_main_observer->WaitForNavigationFinished());
   EXPECT_EQ(0u, loading_predictor->GetActiveNavigationsSizeForTesting());
 
   content::WaitForLoadStop(web_contents());

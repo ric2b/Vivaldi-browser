@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_APP_REGISTRAR_OBSERVER_H_
 
 #include "base/observer_list_types.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 
@@ -37,10 +37,6 @@ class AppRegistrarObserver : public base::CheckedObserver {
   // a user selecting "always allow" in the prompt or after a policy update.
   virtual void OnWebAppFileHandlerApprovalStateChanged(const AppId& app_id) {}
 
-  virtual void OnWebAppLocallyInstalledStateChanged(const AppId& app_id,
-                                                    bool is_locally_installed) {
-  }
-
   // The disabled status WebApp::chromeos_data().is_disabled of the app backing
   // |app_id| changed.
   virtual void OnWebAppDisabledStateChanged(const AppId& app_id,
@@ -54,7 +50,7 @@ class AppRegistrarObserver : public base::CheckedObserver {
                                           const base::Time& time) {}
   virtual void OnWebAppUserDisplayModeChanged(
       const AppId& app_id,
-      UserDisplayMode user_display_mode) {}
+      mojom::UserDisplayMode user_display_mode) {}
   virtual void OnWebAppRunOnOsLoginModeChanged(
       const AppId& app_id,
       RunOnOsLoginMode run_on_os_login_mode) {}

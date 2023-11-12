@@ -1,9 +1,9 @@
 // Copyright (c) 2022 Vivaldi Technologies AS. All rights reserved
 
-#include "ios/notes/note_empty_background.h"
+#import "ios/notes/note_empty_background.h"
 
-#import "ios/notes/note_ui_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/notes/note_ui_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

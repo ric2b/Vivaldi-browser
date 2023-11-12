@@ -7,8 +7,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
 #include "base/i18n/number_formatting.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -32,6 +32,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/navigation/navigation_params.h"
 #include "third_party/blink/public/common/origin_trials/scoped_test_origin_trial_policy.h"
+#include "third_party/blink/public/common/runtime_feature_state/runtime_feature_state_context.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom.h"
 
 namespace content {
@@ -144,6 +145,22 @@ class NavigationRequestTest : public RenderViewHostImplTestHarness {
     GetNavigationRequest()->WillFailRequest();
   }
 
+  // Helper function to call WillCommitWithoutUrlLoader on |handle|. If this
+  // function returns DEFER, |callback_result_| will be set to the actual result
+  // of the throttle checks when they are finished.
+  void SimulateWillCommitWithoutUrlLoader() {
+    was_callback_called_ = false;
+    callback_result_ = NavigationThrottle::DEFER;
+
+    // It's safe to use base::Unretained since the NavigationRequest is owned by
+    // the NavigationRequestTest.
+    GetNavigationRequest()->set_complete_callback_for_testing(
+        base::BindOnce(&NavigationRequestTest::UpdateThrottleCheckResult,
+                       base::Unretained(this)));
+
+    GetNavigationRequest()->WillCommitWithoutUrlLoader();
+  }
+
   // Whether the callback was called.
   bool was_callback_called() const { return was_callback_called_; }
 
@@ -160,7 +177,8 @@ class NavigationRequestTest : public RenderViewHostImplTestHarness {
                          int start,
                          int redirect,
                          int failure,
-                         int process) {
+                         int process,
+                         int withoutUrlLoader) {
     return start == throttle->GetCallCount(
                         TestNavigationThrottle::WILL_START_REQUEST) &&
            redirect == throttle->GetCallCount(
@@ -168,7 +186,10 @@ class NavigationRequestTest : public RenderViewHostImplTestHarness {
            failure == throttle->GetCallCount(
                           TestNavigationThrottle::WILL_FAIL_REQUEST) &&
            process == throttle->GetCallCount(
-                          TestNavigationThrottle::WILL_PROCESS_RESPONSE);
+                          TestNavigationThrottle::WILL_PROCESS_RESPONSE) &&
+           withoutUrlLoader ==
+               throttle->GetCallCount(
+                   TestNavigationThrottle::WILL_COMMIT_WITHOUT_URL_LOADER);
   }
 
   // Creates, register and returns a TestNavigationThrottle that will
@@ -332,21 +353,21 @@ TEST_F(NavigationRequestTest, CancelDeferredWillStart) {
   TestNavigationThrottle* test_throttle =
       CreateTestNavigationThrottle(NavigationThrottle::DEFER);
   EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
-  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 0));
 
   // Simulate WillStartRequest. The request should be deferred. The callback
   // should not have been called.
   SimulateWillStartRequest();
   EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
   EXPECT_FALSE(was_callback_called());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0, 0));
 
   // Cancel the request. The callback should have been called.
   CancelDeferredNavigation(NavigationThrottle::CANCEL_AND_IGNORE);
   EXPECT_EQ(NavigationRequest::CANCELING, state());
   EXPECT_TRUE(was_callback_called());
   EXPECT_EQ(NavigationThrottle::CANCEL_AND_IGNORE, callback_result());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0, 0));
 }
 
 // Checks that a navigation deferred during WillRedirectRequest can be properly
@@ -355,21 +376,21 @@ TEST_F(NavigationRequestTest, CancelDeferredWillRedirect) {
   TestNavigationThrottle* test_throttle =
       CreateTestNavigationThrottle(NavigationThrottle::DEFER);
   EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
-  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 0));
 
   // Simulate WillRedirectRequest. The request should be deferred. The callback
   // should not have been called.
   SimulateWillRedirectRequest();
   EXPECT_EQ(NavigationRequest::WILL_REDIRECT_REQUEST, state());
   EXPECT_FALSE(was_callback_called());
-  EXPECT_TRUE(call_counts_match(test_throttle, 0, 1, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 1, 0, 0, 0));
 
   // Cancel the request. The callback should have been called.
   CancelDeferredNavigation(NavigationThrottle::CANCEL_AND_IGNORE);
   EXPECT_EQ(NavigationRequest::CANCELING, state());
   EXPECT_TRUE(was_callback_called());
   EXPECT_EQ(NavigationThrottle::CANCEL_AND_IGNORE, callback_result());
-  EXPECT_TRUE(call_counts_match(test_throttle, 0, 1, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 1, 0, 0, 0));
 }
 
 // Checks that a navigation deferred during WillFailRequest can be properly
@@ -378,25 +399,25 @@ TEST_F(NavigationRequestTest, CancelDeferredWillFail) {
   TestNavigationThrottle* test_throttle = CreateTestNavigationThrottle(
       TestNavigationThrottle::WILL_FAIL_REQUEST, NavigationThrottle::DEFER);
   EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
-  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 0));
 
   // Simulate WillStartRequest.
   SimulateWillStartRequest();
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0, 0));
 
   // Simulate WillFailRequest. The request should be deferred. The callback
   // should not have been called.
   SimulateWillFailRequest(net::ERR_CERT_DATE_INVALID);
   EXPECT_EQ(NavigationRequest::WILL_FAIL_REQUEST, state());
   EXPECT_FALSE(was_callback_called());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0, 0));
 
   // Cancel the request. The callback should have been called.
   CancelDeferredNavigation(NavigationThrottle::CANCEL_AND_IGNORE);
   EXPECT_EQ(NavigationRequest::CANCELING, state());
   EXPECT_TRUE(was_callback_called());
   EXPECT_EQ(NavigationThrottle::CANCEL_AND_IGNORE, callback_result());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0, 0));
 }
 
 // Checks that a navigation deferred can be canceled and not ignored.
@@ -404,13 +425,13 @@ TEST_F(NavigationRequestTest, CancelDeferredWillRedirectNoIgnore) {
   TestNavigationThrottle* test_throttle =
       CreateTestNavigationThrottle(NavigationThrottle::DEFER);
   EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
-  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 0));
 
   // Simulate WillStartRequest. The request should be deferred. The callback
   // should not have been called.
   SimulateWillStartRequest();
   EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0, 0));
 
   // Cancel the request. The callback should have been called with CANCEL, and
   // not CANCEL_AND_IGNORE.
@@ -418,7 +439,7 @@ TEST_F(NavigationRequestTest, CancelDeferredWillRedirectNoIgnore) {
   EXPECT_EQ(NavigationRequest::CANCELING, state());
   EXPECT_TRUE(was_callback_called());
   EXPECT_EQ(NavigationThrottle::CANCEL, callback_result());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0, 0));
 }
 
 // Checks that a navigation deferred by WillFailRequest can be canceled and not
@@ -427,18 +448,18 @@ TEST_F(NavigationRequestTest, CancelDeferredWillFailNoIgnore) {
   TestNavigationThrottle* test_throttle = CreateTestNavigationThrottle(
       TestNavigationThrottle::WILL_FAIL_REQUEST, NavigationThrottle::DEFER);
   EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
-  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 0));
 
   // Simulate WillStartRequest.
   SimulateWillStartRequest();
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 0, 0, 0));
 
   // Simulate WillFailRequest. The request should be deferred. The callback
   // should not have been called.
   SimulateWillFailRequest(net::ERR_CERT_DATE_INVALID);
   EXPECT_EQ(NavigationRequest::WILL_FAIL_REQUEST, state());
   EXPECT_FALSE(was_callback_called());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0, 0));
 
   // Cancel the request. The callback should have been called with CANCEL, and
   // not CANCEL_AND_IGNORE.
@@ -446,7 +467,30 @@ TEST_F(NavigationRequestTest, CancelDeferredWillFailNoIgnore) {
   EXPECT_EQ(NavigationRequest::CANCELING, state());
   EXPECT_TRUE(was_callback_called());
   EXPECT_EQ(NavigationThrottle::CANCEL, callback_result());
-  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0));
+  EXPECT_TRUE(call_counts_match(test_throttle, 1, 0, 1, 0, 0));
+}
+
+// Checks that a navigation deferred during WillCommitWithoutUrlLoader can be
+// properly cancelled.
+TEST_F(NavigationRequestTest, CancelDeferredWillCommitWithoutUrlLoader) {
+  TestNavigationThrottle* test_throttle =
+      CreateTestNavigationThrottle(NavigationThrottle::DEFER);
+  EXPECT_EQ(NavigationRequest::WILL_START_REQUEST, state());
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 0));
+
+  // Simulate WillCommitWithoutUrlLoader. The request should be deferred. The
+  // callback should not have been called.
+  SimulateWillCommitWithoutUrlLoader();
+  EXPECT_EQ(NavigationRequest::WILL_COMMIT_WITHOUT_URL_LOADER, state());
+  EXPECT_FALSE(was_callback_called());
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 1));
+
+  // Cancel the request. The callback should have been called.
+  CancelDeferredNavigation(NavigationThrottle::CANCEL_AND_IGNORE);
+  EXPECT_EQ(NavigationRequest::CANCELING, state());
+  EXPECT_TRUE(was_callback_called());
+  EXPECT_EQ(NavigationThrottle::CANCEL_AND_IGNORE, callback_result());
+  EXPECT_TRUE(call_counts_match(test_throttle, 0, 0, 0, 0, 1));
 }
 
 // Checks that data from the SSLInfo passed into SimulateWillStartRequest() is
@@ -668,6 +712,139 @@ TEST_F(NavigationRequestTest, StorageKeyToCommit) {
             child_document->storage_key());
 }
 
+// Test that the StorageKey's value is correctly affected by the
+// RuntimeFeatureStateContext.
+TEST_F(NavigationRequestTest, RuntimeFeatureStateStorageKey) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  // Because the StorageKey's (and Storage Partitioning's) usage of
+  // RuntimeFeatureState is only meant to disable partitioning (i.e.:
+  // first-party only), we need the make sure the net::features is always
+  // enabled.
+  scoped_feature_list.InitAndEnableFeature(
+      net::features::kThirdPartyStoragePartitioning);
+
+  // This lambda performs the navigation and compares the commit_params'
+  // StorageKey against the passed in one. If `disable_sp` is true then it will
+  // also enable the deprecation trial feature in the RFSC. It returns
+  // the new TestRenderFrameHost* to the navigated frame.
+  auto NavigateAndCompareKeys =
+      [](NavigationSimulator* navigation, const blink::StorageKey& key,
+         bool disable_sp = false) -> TestRenderFrameHost* {
+    navigation->Start();
+
+    NavigationRequest* request =
+        NavigationRequest::From(navigation->GetNavigationHandle());
+
+    if (disable_sp) {
+      request->GetMutableRuntimeFeatureStateContext()
+          .SetDisableThirdPartyStoragePartitioningEnabled(true);
+    }
+
+    navigation->ReadyToCommit();
+
+    EXPECT_EQ(key, request->commit_params().storage_key);
+
+    navigation->Commit();
+    return static_cast<TestRenderFrameHost*>(
+        navigation->GetFinalRenderFrameHost());
+  };
+
+  // Throughout the test we'll be creating a frame tree with a main frame, a
+  // child frame, and a grandchild frame.
+  GURL main_url("https://main.com");
+  GURL b_url("https://b.com");
+  GURL c_url("https://c.com");
+
+  url::Origin main_origin = url::Origin::Create(main_url);
+  url::Origin b_origin = url::Origin::Create(b_url);
+  url::Origin c_origin = url::Origin::Create(c_url);
+
+  // Begin by testing with Storage Partitioning enabled.
+
+  auto main_navigation =
+      NavigationSimulatorImpl::CreateBrowserInitiated(main_url, contents());
+
+  // By definition the main frame's StorageKey will always be first party
+  blink::StorageKey main_frame_key =
+      blink::StorageKey::CreateFirstParty(main_origin);
+
+  NavigateAndCompareKeys(main_navigation.get(), main_frame_key);
+
+  TestRenderFrameHost* child_frame = static_cast<TestRenderFrameHost*>(
+      content::RenderFrameHostTester::For(main_rfh())->AppendChild("child"));
+
+  auto child_navigation =
+      NavigationSimulatorImpl::CreateRendererInitiated(b_url, child_frame);
+
+  // The child and grandchild should both be third-party keys.
+  blink::StorageKey child_frame_key =
+      blink::StorageKey::Create(b_origin, net::SchemefulSite(main_origin),
+                                blink::mojom::AncestorChainBit::kCrossSite);
+
+  child_frame = NavigateAndCompareKeys(child_navigation.get(), child_frame_key);
+
+  TestRenderFrameHost* grandchild_frame =
+      child_frame->AppendChild("grandchild");
+
+  auto grandchild_navigation =
+      NavigationSimulatorImpl::CreateRendererInitiated(c_url, grandchild_frame);
+
+  blink::StorageKey grandchild_frame_key =
+      blink::StorageKey::Create(c_origin, net::SchemefulSite(main_origin),
+                                blink::mojom::AncestorChainBit::kCrossSite);
+  grandchild_frame =
+      NavigateAndCompareKeys(grandchild_navigation.get(), grandchild_frame_key);
+
+  // Only the RuntimeFeatureStateContext in the main frame's matters. So
+  // disabling Storage Partitioning in the child_frame shouldn't affect the
+  // child's or the grandchild's StorageKey.
+  child_navigation =
+      NavigationSimulatorImpl::CreateRendererInitiated(b_url, child_frame);
+
+  child_frame = NavigateAndCompareKeys(child_navigation.get(), child_frame_key,
+                                       /*disable_sp=*/true);
+
+  grandchild_frame = child_frame->AppendChild("grandchild");
+
+  grandchild_navigation =
+      NavigationSimulatorImpl::CreateRendererInitiated(c_url, grandchild_frame);
+
+  grandchild_frame =
+      NavigateAndCompareKeys(grandchild_navigation.get(), grandchild_frame_key);
+
+  // Disabling Storage Partitioning on the main frame should cause the child's
+  // and grandchild's StorageKey to be first-party.
+  main_navigation =
+      NavigationSimulatorImpl::CreateBrowserInitiated(main_url, contents());
+
+  NavigateAndCompareKeys(main_navigation.get(), main_frame_key,
+                         /*disable_sp=*/true);
+
+  child_frame = static_cast<TestRenderFrameHost*>(
+      content::RenderFrameHostTester::For(main_rfh())->AppendChild("child"));
+
+  child_navigation =
+      NavigationSimulatorImpl::CreateRendererInitiated(b_url, child_frame);
+
+  // The child and grandchild should both be first-party keys.
+  blink::StorageKey child_frame_key_1p =
+      blink::StorageKey::CreateFirstParty(b_origin);
+
+  child_frame =
+      NavigateAndCompareKeys(child_navigation.get(), child_frame_key_1p);
+
+  grandchild_frame = child_frame->AppendChild("grandchild");
+
+  blink::StorageKey grandchild_frame_key_1p =
+      blink::StorageKey::CreateFirstParty(c_origin);
+
+  grandchild_navigation =
+      NavigationSimulatorImpl::CreateRendererInitiated(c_url, grandchild_frame);
+
+  grandchild_frame = NavigateAndCompareKeys(grandchild_navigation.get(),
+                                            grandchild_frame_key_1p);
+}
+
 TEST_F(NavigationRequestTest,
        NavigationToCredentiallessDocumentNetworkIsolationInfo) {
   auto* child_frame = static_cast<TestRenderFrameHost*>(
@@ -704,10 +881,8 @@ class ScopedIsolatedAppBrowserClient : public ContentBrowserClient {
     SetBrowserClientForTesting(old_client_);
   }
 
-  bool ShouldUrlUseApplicationIsolationLevel(
-      BrowserContext* browser_context,
-      const GURL& url,
-      bool origin_matches_flag) override {
+  bool ShouldUrlUseApplicationIsolationLevel(BrowserContext* browser_context,
+                                             const GURL& url) override {
     return url.host() == isolated_host_;
   }
 
@@ -969,12 +1144,22 @@ class OriginTrialsControllerDelegateMock
 
   void PersistTrialsFromTokens(
       const url::Origin& origin,
+      const url::Origin& partition_origin,
       const base::span<const std::string> header_tokens,
       const base::Time current_time) override {
     persisted_tokens_[origin] =
         std::vector<std::string>(header_tokens.begin(), header_tokens.end());
   }
+  void PersistAdditionalTrialsFromTokens(
+      const url::Origin& origin,
+      const url::Origin& partition_origin,
+      const base::span<const url::Origin> script_origins,
+      const base::span<const std::string> header_tokens,
+      const base::Time current_time) override {
+    NOTREACHED() << "not used by test";
+  }
   bool IsTrialPersistedForOrigin(const url::Origin& origin,
+                                 const url::Origin& partition_origin,
                                  const base::StringPiece trial_name,
                                  const base::Time current_time) override {
     DCHECK(false) << "Method not implemented for test.";
@@ -983,6 +1168,7 @@ class OriginTrialsControllerDelegateMock
 
   base::flat_set<std::string> GetPersistedTrialsForOrigin(
       const url::Origin& origin,
+      const url::Origin& partition_origin,
       base::Time current_time) override {
     DCHECK(false) << "Method not implemented for test.";
     return base::flat_set<std::string>();

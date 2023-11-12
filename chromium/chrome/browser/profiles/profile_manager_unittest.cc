@@ -7,18 +7,17 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -50,6 +49,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
@@ -69,6 +69,7 @@
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/components/arc/session/arc_management_transition.h"
 #include "ash/constants/ash_switches.h"
+#include "chrome/browser/ash/login/users/avatar/user_image_manager_impl.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/login/users/scoped_test_user_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -90,7 +91,7 @@
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #endif
 
 using base::ASCIIToUTF16;
@@ -159,6 +160,7 @@ class ProfileManagerTest : public testing::Test {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kTestType);
+    ash::UserImageManagerImpl::SkipDefaultUserImageDownloadForTesting();
     wallpaper_controller_client_ =
         std::make_unique<WallpaperControllerClientImpl>();
     wallpaper_controller_client_->InitForTesting(&test_wallpaper_controller_);
@@ -169,6 +171,10 @@ class ProfileManagerTest : public testing::Test {
               extensions::GetCurrentFeatureSessionType());
     session_type_ = extensions::ScopedCurrentFeatureSessionType(
         extensions::GetCurrentFeatureSessionType());
+
+    // Initializes ProfileHelper.
+    // TODO(crbug.com/1325210): Migrate into BrowserContextHelper.
+    ash::ProfileHelper::Get();
 #endif
   }
 
@@ -789,8 +795,8 @@ TEST_F(ProfileManagerTest, AddProfileToStorageCheckNotOmitted) {
       temp_dir_.GetPath().AppendASCII("Supervised");
   auto supervised_profile =
       std::make_unique<TestingProfile>(supervised_path, nullptr);
-  supervised_profile->GetPrefs()->SetString(
-      prefs::kSupervisedUserId, supervised_users::kChildAccountSUID);
+  supervised_profile->GetPrefs()->SetString(prefs::kSupervisedUserId,
+                                            supervised_user::kChildAccountSUID);
 
   // RegisterTestingProfile adds the profile to the attributes storage and takes
   // ownership.
@@ -1095,7 +1101,7 @@ TEST_F(ProfileManagerTest, InitProfileForChildOnFirstSignIn) {
       profile->GetPrefs()->GetInteger(arc::prefs::kArcManagementTransition),
       static_cast<int>(arc::ArcManagementTransition::NO_TRANSITION));
   EXPECT_EQ(profile->GetPrefs()->GetString(prefs::kSupervisedUserId),
-            supervised_users::kChildAccountSUID);
+            supervised_user::kChildAccountSUID);
 }
 
 TEST_F(ProfileManagerTest, InitProfileForRegularToChildTransition) {
@@ -1108,7 +1114,7 @@ TEST_F(ProfileManagerTest, InitProfileForRegularToChildTransition) {
       profile->GetPrefs()->GetInteger(arc::prefs::kArcManagementTransition),
       static_cast<int>(arc::ArcManagementTransition::REGULAR_TO_CHILD));
   EXPECT_EQ(profile->GetPrefs()->GetString(prefs::kSupervisedUserId),
-            supervised_users::kChildAccountSUID);
+            supervised_user::kChildAccountSUID);
 }
 
 TEST_F(ProfileManagerTest, InitProfileForChildToRegularTransition) {
@@ -1196,7 +1202,7 @@ TEST_F(ProfileManagerTest, InitProfileForChildUserForFirstSignInOnNewVersion) {
       profile->GetPrefs()->GetInteger(arc::prefs::kArcManagementTransition),
       static_cast<int>(arc::ArcManagementTransition::NO_TRANSITION));
   EXPECT_EQ(profile->GetPrefs()->GetString(prefs::kSupervisedUserId),
-            supervised_users::kChildAccountSUID);
+            supervised_user::kChildAccountSUID);
 }
 
 #endif
@@ -2334,7 +2340,7 @@ TEST_F(ProfileManagerTest, ChildSession) {
 
   ASSERT_TRUE(profile);
   EXPECT_EQ(profile->GetPrefs()->GetString(prefs::kSupervisedUserId),
-            supervised_users::kChildAccountSUID);
+            supervised_user::kChildAccountSUID);
   EXPECT_TRUE(profile->IsChild());
 }
 #endif

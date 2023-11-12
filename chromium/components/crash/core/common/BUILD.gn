@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
-import("//build/config/ios/config.gni")
+import("//build/config/cronet/config.gni")
 import("//components/gwp_asan/buildflags/buildflags.gni")
 
 declare_args() {
@@ -98,7 +98,7 @@ target(crash_key_target_type, "crash_key_lib") {
     sources += [ "crash_key_stubs.cc" ]
   } else if (use_crashpad_annotation) {
     sources += [ "crash_key_crashpad.cc" ]
-    deps += [ "//third_party/crashpad/crashpad/client" ]
+    public_deps += [ "//third_party/crashpad/crashpad/client" ]
   } else {
     include_dirs = [ "//third_party/breakpad/breakpad/src" ]
 

@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chromecast/bindings/public/mojom/api_bindings.mojom.h"
 #include "chromecast/browser/cast_media_blocker.h"
@@ -24,6 +25,7 @@
 #include "chromecast/browser/mojom/cast_web_service.mojom.h"
 #include "chromecast/browser/named_message_port_connector_cast.h"
 #include "chromecast/mojo/remote_interfaces.h"
+#include "components/media_control/browser/media_blocker.h"
 #include "components/on_load_script_injector/browser/on_load_script_injector_host.h"
 #include "components/url_rewrite/browser/url_request_rewrite_rules_manager.h"
 #include "content/public/browser/render_process_host_observer.h"
@@ -63,6 +65,7 @@ class CastWebContentsImpl : public CastWebContents,
   PageState page_state() const override;
   url_rewrite::UrlRequestRewriteRulesManager* url_rewrite_rules_manager()
       override;
+  const media_control::MediaBlocker* media_blocker() const override;
 
   // CastWebContents implementation:
   int tab_id() const override;
@@ -77,7 +80,7 @@ class CastWebContentsImpl : public CastWebContents,
                             additional_feature_permission_origins) override;
   void SetGroupInfo(const std::string& session_id,
                     bool is_multizone_launch) override;
-  void AddRendererFeatures(base::Value features) override;
+  void AddRendererFeatures(base::Value::Dict features) override;
   void SetInterfacesForRenderer(
       mojo::PendingRemote<mojom::RemoteInterfaces> remote_interfaces) override;
   void SetUrlRewriteRules(
@@ -185,7 +188,7 @@ class CastWebContentsImpl : public CastWebContents,
 
   CastWebContents* const parent_cast_web_contents_ = nullptr;
   base::flat_set<std::unique_ptr<CastWebContents>> inner_contents_;
-  base::Value renderer_features_{base::Value::Type::DICTIONARY};
+  base::Value::Dict renderer_features_;
 
   const int tab_id_;
   const int id_;

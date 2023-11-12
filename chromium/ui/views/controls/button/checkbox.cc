@@ -9,7 +9,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -189,9 +189,10 @@ SkPath Checkbox::GetFocusRingPath() const {
 }
 
 SkColor Checkbox::GetIconImageColor(int icon_state) const {
-  SkColor active_color = GetColorProvider()->GetColor(
-      (icon_state & IconState::CHECKED) ? ui::kColorButtonForegroundChecked
-                                        : ui::kColorButtonForegroundUnchecked);
+  SkColor active_color =
+      GetColorProvider()->GetColor((icon_state & IconState::CHECKED)
+                                       ? ui::kColorCheckboxForegroundChecked
+                                       : ui::kColorCheckboxForegroundUnchecked);
 
   // TODO(crbug.com/1394575): Remove block and update the above ColorIds
   if (features::IsChromeRefresh2023()) {
@@ -211,6 +212,10 @@ SkColor Checkbox::GetIconImageColor(int icon_state) const {
 }
 
 const gfx::VectorIcon& Checkbox::GetVectorIcon() const {
+  if (features::IsChromeRefresh2023()) {
+    return GetChecked() ? kCheckboxActiveCr2023Icon : kCheckboxNormalIcon;
+  }
+
   return GetChecked() ? kCheckboxActiveIcon : kCheckboxNormalIcon;
 }
 

@@ -4,7 +4,7 @@
 
 #include "content/browser/notifications/devtools_event_logging.h"
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time_to_iso8601.h"
@@ -65,7 +65,8 @@ DevToolsCallback GetDevToolsCallback(BrowserContext* browser_context,
   auto base_callback = base::BindOnce(
       &DevToolsBackgroundServicesContext::LogBackgroundServiceEvent,
       base::Unretained(devtools_context), data.service_worker_registration_id,
-      blink::StorageKey(origin), DevToolsBackgroundService::kNotifications);
+      blink::StorageKey::CreateFirstParty(origin),
+      DevToolsBackgroundService::kNotifications);
 
   return base::BindOnce(
       [](DevToolsBaseCallback callback, const std::string& notification_id,

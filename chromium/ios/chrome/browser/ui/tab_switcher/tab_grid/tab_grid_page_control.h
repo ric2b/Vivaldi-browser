@@ -10,6 +10,10 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_paging.h"
 
+// Custom control events for the actions on the TabGridPageControl.
+extern UIControlEvents TabGridPageChangeByTapEvent;
+extern UIControlEvents TabGridPageChangeByDragEvent;
+
 // A three-sectioned control for selecting a page in the tab grid.
 // A "slider" is positioned over the section for the selected page.
 // This is a fixed-size control; it's an error to set  or change its size.
@@ -40,10 +44,17 @@
 // but will not cause any UIControl actions to be sent.
 @property(nonatomic, assign) CGFloat sliderPosition;
 
-// The numbers that the control should display in the appropriate sections.
+// The number of regular tabs that the control should display in the appropriate
+// sections.
 // Numbers less than 1 are not displayed.
 // Numbers greated than 99 are displayed as ':-)'.
 @property(nonatomic, assign) NSUInteger regularTabCount;
+
+// The number of pinned tabs that the control should display in the appropriate
+// sections.
+// Numbers less than 1 are not displayed.
+// Numbers greated than 99 are displayed as ':-)'.
+@property(nonatomic, assign) NSUInteger pinnedTabCount;
 
 // Create and return a new instance of this control. This is the preferred way
 // to create instances of this class.

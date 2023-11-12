@@ -27,7 +27,11 @@ export enum CheckupSubpage {
 }
 
 export enum UrlParam {
+  // Parameter which indicates search term.
   SEARCH_TERM = 'q',
+  // If this parameter is true, password check will start automatically when
+  // navigating to Checkup section.
+  START_CHECK = 'start',
 }
 
 export class Route {
@@ -99,12 +103,13 @@ export class Router {
    * Navigates to a page and pushes a new history entry.
    */
   navigateTo(page: Page, details?: any) {
-    if (page === this.currentRoute_.page) {
+    const newRoute = new Route(page, new URLSearchParams(), details);
+    if (this.currentRoute_.path() === newRoute.path()) {
       return;
     }
 
     const oldRoute = this.currentRoute_;
-    this.currentRoute_ = new Route(page, new URLSearchParams(), details);
+    this.currentRoute_ = newRoute;
     const path = this.currentRoute_.path();
     const state = {url: path};
     history.pushState(state, '', path);

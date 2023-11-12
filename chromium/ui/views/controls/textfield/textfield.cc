@@ -10,8 +10,8 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
@@ -45,6 +45,7 @@
 #include "ui/display/screen.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/gesture_event_details.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
@@ -55,6 +56,7 @@
 #include "ui/views/background.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/focusable_border.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
@@ -136,6 +138,8 @@ ui::TextEditCommand GetTextEditCommandFromMenuCommand(int command_id,
       break;
     case Textfield::kSelectAll:
       return ui::TextEditCommand::SELECT_ALL;
+    case Textfield::kSelectWord:
+      return ui::TextEditCommand::SELECT_WORD;
   }
   return ui::TextEditCommand::INVALID_COMMAND;
 }
@@ -232,7 +236,8 @@ Textfield::Textfield()
   GetRenderText()->SetFontList(GetDefaultFontList());
   UpdateBorder();
   SetFocusBehavior(FocusBehavior::ALWAYS);
-
+  views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
+                                                GetCornerRadius());
   FocusRing::Install(this);
 
 #if !BUILDFLAG(IS_MAC)
@@ -360,6 +365,14 @@ void Textfield::SelectAll(bool reversed) {
   model_->SelectAll(reversed);
   if (HasSelection() && performing_user_action_)
     UpdateSelectionClipboard();
+  UpdateAfterChange(TextChangeType::kNone, true);
+}
+
+void Textfield::SelectWord() {
+  model_->SelectWord();
+  if (HasSelection() && performing_user_action_) {
+    UpdateSelectionClipboard();
+  }
   UpdateAfterChange(TextChangeType::kNone, true);
 }
 
@@ -554,19 +567,6 @@ void Textfield::SetInvalid(bool invalid) {
 
 void Textfield::ClearEditHistory() {
   model_->ClearEditHistory();
-}
-
-std::u16string Textfield::GetAccessibleName() const {
-  return accessible_name_;
-}
-
-void Textfield::SetAccessibleName(const std::u16string& name) {
-  if (accessible_name_ == name)
-    return;
-
-  accessible_name_ = name;
-  OnPropertyChanged(&accessible_name_, kPropertyEffectsNone);
-  NotifyAccessibilityEvent(ax::mojom::Event::kTextChanged, true);
 }
 
 void Textfield::SetObscuredGlyphSpacing(int spacing) {
@@ -775,6 +775,12 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
         SelectWordAt(event->location());
         OnAfterUserAction();
         CreateTouchSelectionControllerAndNotifyIt();
+#if BUILDFLAG(IS_CHROMEOS)
+        if (::features::IsTouchTextEditingRedesignEnabled()) {
+          selection_dragging_state_ =
+              SelectionDraggingState::kDraggingSelectionExtent;
+        }
+#endif
         // If touch selection activated successfully, mark event as handled
         // so that the regular context menu is not shown.
         if (touch_selection_controller_)
@@ -789,6 +795,7 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
       }
       break;
     case ui::ET_GESTURE_LONG_TAP:
+      selection_dragging_state_ = SelectionDraggingState::kNone;
       // If touch selection is enabled, the context menu on long tap will be
       // shown by the |touch_selection_controller_|, hence we mark the event
       // handled so Views does not try to show context menu on it.
@@ -800,26 +807,47 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
         touch_handles_hidden_due_to_scroll_ =
             touch_selection_controller_ != nullptr;
         DestroyTouchSelection();
-        drag_start_location_ = event->location();
-        drag_start_display_offset_ =
-            GetRenderText()->GetUpdatedDisplayOffset().x();
+#if BUILDFLAG(IS_CHROMEOS)
+        if (::features::IsTouchTextEditingRedesignEnabled()) {
+          MaybeStartSelectionDragging(event);
+        }
+#endif
+        if (selection_dragging_state_ == SelectionDraggingState::kNone) {
+          drag_start_location_x_ = event->location().x();
+          drag_start_display_offset_ =
+              GetRenderText()->GetUpdatedDisplayOffset().x();
+        }
         event->SetHandled();
       }
       break;
     case ui::ET_GESTURE_SCROLL_UPDATE:
       if (HasFocus()) {
-        int new_offset = drag_start_display_offset_ + event->location().x() -
-                         drag_start_location_.x();
-        GetRenderText()->SetDisplayOffset(new_offset);
-        SchedulePaint();
+        switch (selection_dragging_state_) {
+          case SelectionDraggingState::kDraggingSelectionExtent:
+            MoveRangeSelectionExtent(event->location() +
+                                     selection_dragging_offset_);
+            break;
+          case SelectionDraggingState::kDraggingCursor:
+            MoveCursorTo(event->location(), false);
+            break;
+          case SelectionDraggingState::kNone:
+            int new_display_offset = drag_start_display_offset_ +
+                                     event->location().x() -
+                                     drag_start_location_x_;
+            GetRenderText()->SetDisplayOffset(new_display_offset);
+            SchedulePaint();
+            break;
+        }
         event->SetHandled();
       }
       break;
     case ui::ET_GESTURE_SCROLL_END:
     case ui::ET_SCROLL_FLING_START:
       if (HasFocus()) {
-        if (touch_handles_hidden_due_to_scroll_) {
+        if (selection_dragging_state_ != SelectionDraggingState::kNone ||
+            touch_handles_hidden_due_to_scroll_) {
           CreateTouchSelectionControllerAndNotifyIt();
+          selection_dragging_state_ = SelectionDraggingState::kNone;
           touch_handles_hidden_due_to_scroll_ = false;
         }
         event->SetHandled();
@@ -947,7 +975,7 @@ void Textfield::OnDragDone() {
 void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kTextField;
 
-  node_data->SetName(accessible_name_);
+  node_data->SetName(GetAccessibleName());
   node_data->SetNameFrom(ax::mojom::NameFrom::kAttribute);
 
   // Editable state indicates support of editable interface, and is always set
@@ -1187,23 +1215,96 @@ bool Textfield::HasTextBeingDragged() const {
 ////////////////////////////////////////////////////////////////////////////////
 // Textfield, ui::TouchEditable overrides:
 
-void Textfield::SelectRect(const gfx::Point& start, const gfx::Point& end) {
-  if (GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE)
-    return;
+void Textfield::MoveCaret(const gfx::Point& position) {
+  SelectBetweenCoordinates(position, position);
+}
 
-  gfx::SelectionModel start_caret = GetRenderText()->FindCursorPosition(start);
-  gfx::SelectionModel end_caret = GetRenderText()->FindCursorPosition(end);
-  gfx::SelectionModel selection(
-      gfx::Range(start_caret.caret_pos(), end_caret.caret_pos()),
-      end_caret.caret_affinity());
+void Textfield::MoveRangeSelectionExtent(const gfx::Point& extent) {
+  if (GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE) {
+    return;
+  }
+
+  gfx::SelectionModel new_extent_caret =
+      GetRenderText()->FindCursorPosition(extent);
+  size_t new_extent_pos = new_extent_caret.caret_pos();
+  size_t extent_pos = extent_caret_.caret_pos();
+  if (new_extent_pos == extent_pos) {
+    return;
+  }
+
+  gfx::SelectionModel base_caret =
+      GetRenderText()->GetSelectionModelForSelectionStart();
+  size_t base_pos = base_caret.caret_pos();
+  size_t end_pos = new_extent_pos;
+  gfx::LogicalCursorDirection cursor_direction =
+      new_extent_pos > base_pos ? gfx::CURSOR_FORWARD : gfx::CURSOR_BACKWARD;
+
+#if BUILDFLAG(IS_CHROMEOS)
+  bool selection_shrinking = cursor_direction == gfx::CURSOR_FORWARD
+                                 ? new_extent_pos < extent_pos
+                                 : new_extent_pos > extent_pos;
+
+  gfx::Range word_range =
+      GetRenderText()->ExpandRangeToWordBoundary(gfx::Range(extent_pos));
+  bool extent_moved_past_next_word_boundary =
+      (cursor_direction == gfx::CURSOR_BACKWARD &&
+       new_extent_pos <= word_range.start()) ||
+      (cursor_direction == gfx::CURSOR_FORWARD &&
+       new_extent_pos >= word_range.end());
+
+  if (::features::IsTouchTextEditingRedesignEnabled()) {
+    if (selection_shrinking) {
+      break_type_ = gfx::CHARACTER_BREAK;
+    } else if (extent_moved_past_next_word_boundary) {
+      // Switch to using word breaks only after the selection has expanded past
+      // a word boundary. This ensures that the selection can be adjusted by
+      // character when adjusting within a word after the selection has shrunk.
+      break_type_ = gfx::WORD_BREAK;
+    }
+  }
+
+  if (break_type_ == gfx::WORD_BREAK) {
+    // Compute the closest word boundary to the new extent position.
+    gfx::Range new_word_range =
+        GetRenderText()->ExpandRangeToWordBoundary(gfx::Range(new_extent_pos));
+    DCHECK(new_extent_pos >= new_word_range.start() &&
+           new_extent_pos <= new_word_range.end());
+    end_pos = new_extent_pos - new_word_range.start() <
+                      new_word_range.end() - new_extent_pos
+                  ? new_word_range.start()
+                  : new_word_range.end();
+  }
+#endif
+
+  gfx::SelectionModel selection(gfx::Range(base_pos, end_pos),
+                                cursor_direction);
 
   OnBeforeUserAction();
   SelectSelectionModel(selection);
   OnAfterUserAction();
+
+  extent_caret_ = new_extent_caret;
 }
 
-void Textfield::MoveCaretTo(const gfx::Point& point) {
-  SelectRect(point, point);
+void Textfield::SelectBetweenCoordinates(const gfx::Point& base,
+                                         const gfx::Point& extent) {
+  if (GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE) {
+    return;
+  }
+
+  gfx::SelectionModel base_caret = GetRenderText()->FindCursorPosition(base);
+  gfx::SelectionModel extent_caret =
+      GetRenderText()->FindCursorPosition(extent);
+  gfx::SelectionModel selection(
+      gfx::Range(base_caret.caret_pos(), extent_caret.caret_pos()),
+      extent_caret.caret_affinity());
+
+  OnBeforeUserAction();
+  SelectSelectionModel(selection);
+  OnAfterUserAction();
+
+  extent_caret_ = extent_caret;
+  break_type_ = gfx::CHARACTER_BREAK;
 }
 
 void Textfield::GetSelectionEndPoints(gfx::SelectionBound* anchor,
@@ -1327,6 +1428,15 @@ void Textfield::ExecuteCommand(int command_id, int event_flags) {
 
   Textfield::ExecuteTextEditCommand(
       GetTextEditCommandFromMenuCommand(command_id, HasSelection()));
+
+#if BUILDFLAG(IS_CHROMEOS)
+  if (::features::IsTouchTextEditingRedesignEnabled() &&
+      (event_flags & ui::EF_FROM_TOUCH) &&
+      (command_id == Textfield::kSelectAll ||
+       command_id == Textfield::kSelectWord)) {
+    CreateTouchSelectionControllerAndNotifyIt();
+  }
+#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1667,6 +1777,8 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
     case ui::TextEditCommand::SELECT_ALL:
       return !GetText().empty() &&
              GetSelectedRange().length() != GetText().length();
+    case ui::TextEditCommand::SELECT_WORD:
+      return readable && !GetText().empty() && !HasSelection();
     case ui::TextEditCommand::TRANSPOSE:
       return editable && !HasSelection() && !model_->HasCompositionText();
     case ui::TextEditCommand::YANK:
@@ -1696,8 +1808,7 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
     case ui::TextEditCommand::INVALID_COMMAND:
       return false;
   }
-  NOTREACHED();
-  return false;
+  NOTREACHED_NORETURN();
 }
 
 void Textfield::SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) {
@@ -2048,6 +2159,9 @@ Textfield::EditCommandResult Textfield::DoExecuteTextEditCommand(
     case ui::TextEditCommand::SELECT_ALL:
       SelectAll(false);
       break;
+    case ui::TextEditCommand::SELECT_WORD:
+      SelectWord();
+      break;
     case ui::TextEditCommand::TRANSPOSE:
       changed = cursor_changed = model_->Transpose();
       break;
@@ -2058,8 +2172,7 @@ Textfield::EditCommandResult Textfield::DoExecuteTextEditCommand(
     case ui::TextEditCommand::SET_MARK:
     case ui::TextEditCommand::UNSELECT:
     case ui::TextEditCommand::INVALID_COMMAND:
-      NOTREACHED();
-      break;
+      NOTREACHED_NORETURN();
   }
 
   return {changed, cursor_changed};
@@ -2341,11 +2454,8 @@ void Textfield::UpdateSelectionClipboard() {
 
 void Textfield::UpdateBackgroundColor() {
   const SkColor color = GetBackgroundColor();
-  SetBackground(
-      CreateBackgroundFromPainter(Painter::CreateSolidRoundRectPainter(
-          color, ::features::IsChromeRefresh2023()
-                     ? FocusableBorder::kChromeRefresh2023CornerRadiusDp
-                     : FocusableBorder::kCornerRadiusDp)));
+  SetBackground(CreateBackgroundFromPainter(
+      Painter::CreateSolidRoundRectPainter(color, GetCornerRadius())));
   // Disable subpixel rendering when the background color is not opaque because
   // it draws incorrect colors around the glyphs in that case.
   // See crbug.com/115198
@@ -2366,8 +2476,10 @@ void Textfield::UpdateBorder() {
           provider->GetDistanceMetric(DISTANCE_CONTROL_VERTICAL_TEXT_PADDING),
       extra_insets_.right() + provider->GetDistanceMetric(
                                   DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING)));
-  if (invalid_)
-    border->SetColorId(ui::kColorAlertHighSeverity);
+  if (invalid_) {
+    border->SetColorId(ui::kColorTextfieldInvalidOutline);
+  }
+  border->SetCornerRadius(GetCornerRadius());
   View::SetBorder(std::move(border));
 }
 
@@ -2433,8 +2545,13 @@ void Textfield::UpdateCursorViewPosition() {
 }
 
 int Textfield::GetTextStyle() const {
-  return (GetReadOnly() || !GetEnabled()) ? style::STYLE_DISABLED
-                                          : style::STYLE_PRIMARY;
+  if (GetReadOnly() || !GetEnabled()) {
+    return style::STYLE_DISABLED;
+  } else if (GetInvalid()) {
+    return style::STYLE_INVALID;
+  } else {
+    return style::STYLE_PRIMARY;
+  }
 }
 
 void Textfield::PaintTextAndCursor(gfx::Canvas* canvas) {
@@ -2702,6 +2819,58 @@ void Textfield::DropDraggedText(const ui::DropTargetEvent& event,
   output_drag_op = move ? DragOperation::kMove : DragOperation::kCopy;
 }
 
+float Textfield::GetCornerRadius() {
+  return LayoutProvider::Get()->GetCornerRadiusMetric(
+      ShapeContextTokens::kTextfieldRadius, size());
+}
+
+#if BUILDFLAG(IS_CHROMEOS)
+void Textfield::MaybeStartSelectionDragging(ui::GestureEvent* event) {
+  if (event->type() != ui::ET_GESTURE_SCROLL_BEGIN) {
+    return;
+  }
+
+  const float delta_x = event->details().scroll_x_hint();
+  const float delta_y = event->details().scroll_y_hint();
+  if (selection_dragging_state_ ==
+      SelectionDraggingState::kDraggingSelectionExtent) {
+    gfx::RenderText* render_text = GetRenderText();
+    gfx::SelectionModel start_sel =
+        render_text->GetSelectionModelForSelectionStart();
+    const gfx::SelectionModel& sel = render_text->selection_model();
+    gfx::Point selection_start =
+        render_text->GetCursorBounds(start_sel, true).CenterPoint();
+    gfx::Point selection_end =
+        render_text->GetCursorBounds(sel, true).CenterPoint();
+
+    gfx::LogicalCursorDirection drag_direction = gfx::CURSOR_FORWARD;
+    if (std::fabs(delta_y) > std::fabs(delta_x)) {
+      // If the initial dragging motion is up/down, extend the
+      // selection backwards/forwards.
+      drag_direction = delta_y < 0 ? gfx::CURSOR_BACKWARD : gfx::CURSOR_FORWARD;
+    } else {
+      // Otherwise, extend the selection in the direction of
+      // horizontal movement.
+      drag_direction = delta_x * (selection_end.x() - selection_start.x()) < 0
+                           ? gfx::CURSOR_BACKWARD
+                           : gfx::CURSOR_FORWARD;
+    }
+
+    gfx::Point base =
+        drag_direction == gfx::CURSOR_FORWARD ? selection_start : selection_end;
+    gfx::Point extent =
+        drag_direction == gfx::CURSOR_FORWARD ? selection_end : selection_start;
+    SelectBetweenCoordinates(base, extent);
+    selection_dragging_offset_ = extent - event->location();
+  } else if (std::fabs(delta_x) >= std::fabs(delta_y)) {
+    // Use the scroll sequence for cursor placement if it begins in a
+    // horizontal direction and is not already being used for dragging
+    // the selection.
+    selection_dragging_state_ = SelectionDraggingState::kDraggingCursor;
+  }
+}
+#endif
+
 BEGIN_METADATA(Textfield, View)
 ADD_PROPERTY_METADATA(bool, ReadOnly)
 ADD_PROPERTY_METADATA(std::u16string, Text)
@@ -2720,7 +2889,6 @@ ADD_PROPERTY_METADATA(std::u16string, PlaceholderText)
 ADD_PROPERTY_METADATA(bool, Invalid)
 ADD_PROPERTY_METADATA(gfx::HorizontalAlignment, HorizontalAlignment)
 ADD_PROPERTY_METADATA(gfx::Range, SelectedRange)
-ADD_PROPERTY_METADATA(std::u16string, AccessibleName)
 END_METADATA
 
 }  // namespace views

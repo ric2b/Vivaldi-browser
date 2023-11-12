@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/tick_clock.h"
@@ -150,6 +150,14 @@ class VideoSender : public FrameSender::Client {
   // an explanation of these values.
   double last_reported_encoder_utilization_ = -1.0;
   double last_reported_lossiness_ = -1.0;
+
+  // Used to calculate the percentage of lost frames. We currently report this
+  // metric as the number of frames dropped in the entire session.
+  int number_of_frames_inserted_ = 0;
+  int number_of_frames_dropped_ = 0;
+
+  // Used to throttle metrics reporting of the bitrate.
+  int frames_since_bitrate_reported_ = 0;
 
   // This tracks the time when the request was sent to encoder to encode a key
   // frame on receiving a Pli message. It is used to limit the sender not

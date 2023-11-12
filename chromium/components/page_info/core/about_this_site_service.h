@@ -37,6 +37,7 @@ class AboutThisSiteService : public KeyedService {
   // therefore the interface cannot be used in this service.
   class Client {
    public:
+    virtual bool IsOptimizationGuideAllowed() = 0;
     virtual optimization_guide::OptimizationGuideDecision CanApplyOptimization(
         const GURL& url,
         optimization_guide::OptimizationMetadata* optimization_metadata) = 0;
@@ -54,13 +55,17 @@ class AboutThisSiteService : public KeyedService {
     kClickedWithoutDescription = 4,
     kOpenedDirectlyFromSidePanel = 5,
     kNotShownNonGoogleDSE = 6,
+    kNotShownLocalHost = 7,
+    kNotShownOptimizationGuideNotAllowed = 8,
+    kShownWithoutMsbb = 9,
 
-    kMaxValue = kNotShownNonGoogleDSE,
+    kMaxValue = kShownWithoutMsbb,
   };
 
   explicit AboutThisSiteService(std::unique_ptr<Client> client,
                                 TemplateURLService* template_url_service,
-                                bool allow_missing_description);
+                                bool allow_missing_description,
+                                bool allow_non_msbb_users);
   ~AboutThisSiteService() override;
 
   AboutThisSiteService(const AboutThisSiteService&) = delete;
@@ -80,6 +85,7 @@ class AboutThisSiteService : public KeyedService {
   std::unique_ptr<Client> client_;
   raw_ptr<TemplateURLService> template_url_service_;
   const bool allow_missing_description_;
+  const bool allow_non_msbb_users_;
 
   base::WeakPtrFactory<AboutThisSiteService> weak_ptr_factory_{this};
 };

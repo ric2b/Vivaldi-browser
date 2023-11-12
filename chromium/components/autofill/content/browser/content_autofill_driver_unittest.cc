@@ -12,11 +12,13 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gmock_move_support.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory_test_api.h"
 #include "components/autofill/content/browser/content_autofill_driver_test_api.h"
 #include "components/autofill/content/browser/content_autofill_router.h"
 #include "components/autofill/content/browser/content_autofill_router_test_api.h"
@@ -94,7 +96,7 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
   }
 
   // Returns data received via mojo interface method
-  // mojom::AutofillAent::FieldTypePredictionsAvailable().
+  // mojom::AutofillAgent::FieldTypePredictionsAvailable().
   bool GetFieldTypePredictionsAvailable(
       std::vector<FormDataPredictions>* predictions) {
     if (!predictions_)
@@ -144,6 +146,12 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
       *value = *value_accept_data_;
     return true;
   }
+
+  // mojom::AutofillAgent:
+  MOCK_METHOD(void,
+              TriggerReparseWithResponse,
+              (base::OnceCallback<void(bool)>),
+              (override));
 
  private:
   void CallDone() {
@@ -230,12 +238,6 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
 
   void SetQueryPasswordSuggestion(bool query) override {}
 
-  void GetElementFormAndFieldDataForDevToolsNodeId(
-      int backend_node_id,
-      GetElementFormAndFieldDataForDevToolsNodeIdCallback callback) override {}
-
-  void SetAssistantKeyboardSuppressState(bool suppress) override {}
-
   void SetFieldsEligibleForManualFilling(
       const std::vector<FieldRendererId>& fields) override {}
 
@@ -270,10 +272,7 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
 class MockBrowserAutofillManager : public BrowserAutofillManager {
  public:
   MockBrowserAutofillManager(AutofillDriver* driver, AutofillClient* client)
-      : BrowserAutofillManager(driver,
-                               client,
-                               kAppLocale,
-                               EnableDownloadManager(false)) {}
+      : BrowserAutofillManager(driver, client, kAppLocale) {}
   ~MockBrowserAutofillManager() override = default;
 
   MOCK_METHOD(void, Reset, (), (override));
@@ -672,6 +671,30 @@ TEST_P(ContentAutofillDriverTest, SetShouldSuppressKeyboard) {
 
   driver_->SetShouldSuppressKeyboard(true);
   EXPECT_TRUE(driver_test_api.should_suppress_keyboard());
+}
+
+TEST_P(ContentAutofillDriverTest, TriggerReparseInAllFrames) {
+  base::RunLoop run_loop;
+  fake_agent_.SetQuitLoopClosure(run_loop.QuitClosure());
+  ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
+      web_contents(), test_autofill_client_.get(),
+      ContentAutofillDriverFactory::DriverInitCallback());
+  auto factory_test_api = ContentAutofillDriverFactoryTestApi(
+      ContentAutofillDriverFactory::FromWebContents(web_contents()));
+  content::RenderFrameHost* rfh = driver_->render_frame_host();
+  factory_test_api.SetDriver(rfh, std::move(driver_));
+  ContentAutofillDriver* driver = factory_test_api.GetDriver(rfh);
+  base::OnceCallback<void(bool)> trigger_reparse_finished_callback;
+
+  EXPECT_CALL(fake_agent_, TriggerReparseWithResponse)
+      .WillOnce(MoveArg<0>(&trigger_reparse_finished_callback));
+  driver->browser_events().TriggerReparseInAllFrames(base::BindOnce(
+      [](base::RunLoop* run_loop, bool success) { run_loop->Quit(); },
+      &run_loop));
+  run_loop.RunUntilIdle();
+
+  EXPECT_FALSE(trigger_reparse_finished_callback.is_null());
+  std::move(trigger_reparse_finished_callback).Run(true);
 }
 
 INSTANTIATE_TEST_SUITE_P(ContentAutofillDriverTest,

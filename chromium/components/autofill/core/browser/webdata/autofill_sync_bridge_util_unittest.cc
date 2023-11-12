@@ -115,8 +115,13 @@ TEST_F(AutofillSyncBridgeUtilTest, PopulateWalletTypesFromSyncData) {
   wallet_specifics_card2.mutable_masked_card()
       ->set_virtual_card_enrollment_state(
           sync_pb::WalletMaskedCreditCard::ENROLLED);
+  wallet_specifics_card2.mutable_masked_card()
+      ->set_virtual_card_enrollment_type(
+          sync_pb::WalletMaskedCreditCard::NETWORK);
   wallet_specifics_card2.mutable_masked_card()->set_card_art_url(
       "https://www.example.com/card.png");
+  wallet_specifics_card2.mutable_masked_card()->set_product_description(
+      "fake product description");
   entity_data.push_back(EntityChange::CreateAdd(
       credit_card_id_1,
       SpecificsToEntity(wallet_specifics_card1, /*client_tag=*/"card-card1")));
@@ -172,10 +177,19 @@ TEST_F(AutofillSyncBridgeUtilTest, PopulateWalletTypesFromSyncData) {
   EXPECT_EQ(wallet_cards.back().virtual_card_enrollment_state(),
             CreditCard::ENROLLED);
 
+  // Verify that the virtual_card_enrollment_type is set correctly.
+  EXPECT_EQ(wallet_cards.back().virtual_card_enrollment_type(),
+            CreditCard::NETWORK);
+
   // Verify that the card_art_url is set correctly.
   EXPECT_TRUE(wallet_cards.front().card_art_url().is_empty());
   EXPECT_EQ(wallet_cards.back().card_art_url().spec(),
             "https://www.example.com/card.png");
+
+  // Verify that the product_description is set correctly.
+  EXPECT_TRUE(wallet_cards.front().product_description().empty());
+  EXPECT_EQ(wallet_cards.back().product_description(),
+            u"fake product description");
 }
 
 // Verify that the billing address id from the card saved on disk is kept if it
@@ -435,18 +449,41 @@ TEST_F(AutofillSyncBridgeUtilTest, IsOfferSpecificsValid) {
 TEST_F(AutofillSyncBridgeUtilTest, WalletUsageSpecificsFromWalletUsageData) {
   sync_pb::AutofillWalletUsageSpecifics usage_specifics;
   AutofillWalletUsageData usage_data =
-      test::GetAutofillWalletUsageDataForVirtualCard();
+      AutofillWalletUsageData::ForVirtualCard(test::GetVirtualCardUsageData1());
   SetAutofillWalletUsageSpecificsFromAutofillWalletUsageData(usage_data,
                                                              &usage_specifics);
 
+  EXPECT_EQ(usage_specifics.guid(),
+            *usage_data.virtual_card_usage_data().usage_data_id());
   EXPECT_EQ(usage_specifics.virtual_card_usage_data().instrument_id(),
-            usage_data.virtual_card_usage_data().instrument_id.value());
-  EXPECT_EQ(usage_specifics.virtual_card_usage_data().virtual_card_last_four(),
-            usage_data.virtual_card_usage_data().virtual_card_last_four);
+            *usage_data.virtual_card_usage_data().instrument_id());
+  EXPECT_EQ(
+      base::UTF8ToUTF16(
+          usage_specifics.virtual_card_usage_data().virtual_card_last_four()),
+      *usage_data.virtual_card_usage_data().virtual_card_last_four());
   EXPECT_EQ(usage_specifics.virtual_card_usage_data().merchant_url(),
-            usage_data.virtual_card_usage_data().merchant_origin.Serialize());
-  EXPECT_EQ(usage_specifics.virtual_card_usage_data().merchant_app_package(),
-            usage_data.virtual_card_usage_data().merchant_app_package);
+            usage_data.virtual_card_usage_data().merchant_origin().Serialize());
+}
+
+// Test to ensure that Wallet Usage Data for virtual card retrieval is correctly
+// converted to AutofillWalletUsageSpecifics.
+TEST_F(AutofillSyncBridgeUtilTest, VirtualCardUsageDataFromUsageSpecifics) {
+  sync_pb::AutofillWalletUsageSpecifics usage_specifics;
+  SetAutofillWalletUsageSpecificsFromAutofillWalletUsageData(
+      AutofillWalletUsageData::ForVirtualCard(test::GetVirtualCardUsageData1()),
+      &usage_specifics);
+
+  VirtualCardUsageData virtual_card_usage_data =
+      VirtualCardUsageDataFromUsageSpecifics(usage_specifics);
+
+  EXPECT_EQ(*virtual_card_usage_data.usage_data_id(), usage_specifics.guid());
+  EXPECT_EQ(*virtual_card_usage_data.instrument_id(),
+            usage_specifics.virtual_card_usage_data().instrument_id());
+  EXPECT_EQ(
+      base::UTF16ToUTF8(*virtual_card_usage_data.virtual_card_last_four()),
+      usage_specifics.virtual_card_usage_data().virtual_card_last_four());
+  EXPECT_EQ(virtual_card_usage_data.merchant_origin().Serialize(),
+            usage_specifics.virtual_card_usage_data().merchant_url());
 }
 
 }  // namespace

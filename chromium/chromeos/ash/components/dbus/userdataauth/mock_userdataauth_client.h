@@ -42,24 +42,9 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) MockUserDataAuthClient
                RemoveCallback callback),
               (override));
   MOCK_METHOD(void,
-              GetKeyData,
-              (const ::user_data_auth::GetKeyDataRequest& request,
-               GetKeyDataCallback callback),
-              (override));
-  MOCK_METHOD(void,
               CheckKey,
               (const ::user_data_auth::CheckKeyRequest& request,
                CheckKeyCallback callback),
-              (override));
-  MOCK_METHOD(void,
-              AddKey,
-              (const ::user_data_auth::AddKeyRequest& request,
-               AddKeyCallback callback),
-              (override));
-  MOCK_METHOD(void,
-              RemoveKey,
-              (const ::user_data_auth::RemoveKeyRequest& request,
-               RemoveKeyCallback callback),
               (override));
   MOCK_METHOD(
       void,
@@ -97,21 +82,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) MockUserDataAuthClient
               StartAuthSession,
               (const ::user_data_auth::StartAuthSessionRequest& request,
                StartAuthSessionCallback callback),
-              (override));
-  MOCK_METHOD(void,
-              AuthenticateAuthSession,
-              (const ::user_data_auth::AuthenticateAuthSessionRequest& request,
-               AuthenticateAuthSessionCallback callback),
-              (override));
-  MOCK_METHOD(void,
-              AddCredentials,
-              (const ::user_data_auth::AddCredentialsRequest& request,
-               AddCredentialsCallback callback),
-              (override));
-  MOCK_METHOD(void,
-              UpdateCredential,
-              (const ::user_data_auth::UpdateCredentialRequest& request,
-               UpdateCredentialCallback callback),
               (override));
   MOCK_METHOD(void,
               PrepareGuestVault,

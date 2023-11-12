@@ -6,13 +6,12 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/invalidation/public/invalidation_util.h"
 #include "components/sync/base/features.h"
@@ -100,10 +99,11 @@ void SyncEngineBackend::OnConnectionStatusChange(ConnectionStatus status) {
              status);
 }
 
-void SyncEngineBackend::OnActionableError(const SyncProtocolError& sync_error) {
+void SyncEngineBackend::OnActionableProtocolError(
+    const SyncProtocolError& sync_error) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   host_.Call(FROM_HERE,
-             &SyncEngineImpl::HandleActionableErrorEventOnFrontendLoop,
+             &SyncEngineImpl::HandleActionableProtocolErrorEventOnFrontendLoop,
              sync_error);
 }
 
@@ -134,18 +134,6 @@ void SyncEngineBackend::DoOnInvalidatorStateChange(
                                        invalidation::INVALIDATIONS_ENABLED);
 }
 
-void SyncEngineBackend::RecordRedundantInvalidationsMetric(
-    const invalidation::Invalidation& invalidation,
-    ModelType type) const {
-  auto last_invalidation = last_invalidation_versions_.find(type);
-  if (!invalidation.is_unknown_version() &&
-      last_invalidation != last_invalidation_versions_.end() &&
-      invalidation.version() <= last_invalidation->second) {
-    UMA_HISTOGRAM_ENUMERATION("Sync.RedundantInvalidationPerModelType2",
-                              ModelTypeHistogramValue(type));
-  }
-}
-
 void SyncEngineBackend::DoOnIncomingInvalidation(
     const invalidation::TopicInvalidationMap& invalidation_map) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -166,18 +154,12 @@ void SyncEngineBackend::DoOnIncomingInvalidation(
         // all incoming messages.
         RecordIncomingInvalidationStatus(IncomingInvalidationStatus::kSuccess);
 
-        RecordRedundantInvalidationsMetric(invalidation, type);
         std::unique_ptr<SyncInvalidation> inv_adapter(
             new InvalidationAdapter(invalidation));
         sync_manager_->OnIncomingInvalidation(type, std::move(inv_adapter));
-        if (!invalidation.is_unknown_version())
-          last_invalidation_versions_[type] = invalidation.version();
       }
     }
   }
-
-  host_.Call(FROM_HERE, &SyncEngineImpl::UpdateInvalidationVersions,
-             last_invalidation_versions_);
 }
 
 void SyncEngineBackend::DoInitialize(
@@ -190,10 +172,6 @@ void SyncEngineBackend::DoInitialize(
   if (!base::CreateDirectory(sync_data_folder_)) {
     DLOG(FATAL) << "Sync Data directory creation failed.";
   }
-
-  // Load the previously persisted set of invalidation versions into memory.
-  last_invalidation_versions_ =
-      restored_local_transport_data.invalidation_versions;
 
   authenticated_account_id_ = params.authenticated_account_info.account_id;
 
@@ -360,7 +338,7 @@ void SyncEngineBackend::DoPurgeDisabledTypes(const ModelTypeSet& to_purge) {
     // We are using USS implementation of Nigori and someone asked us to purge
     // it's data. For regular datatypes it's controlled DataTypeManager, but
     // for Nigori we need to do it here.
-    // TODO(crbug.com/922900): try to find better way to implement this logic,
+    // TODO(crbug.com/1142771): try to find better way to implement this logic,
     // it's likely happen only due to BackendMigrator.
     // TODO(crbug.com/1142771): Evaluate whether this logic is necessary at all.
     // There's no "purging" logic for any other data type, so likely it's not
@@ -450,8 +428,7 @@ void SyncEngineBackend::DoOnStandaloneInvalidationReceived(
     const std::string& payload,
     const ModelTypeSet& interested_data_types) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DCHECK(base::FeatureList::IsEnabled(kSyncSendInterestedDataTypes) &&
-         base::FeatureList::IsEnabled(kUseSyncInvalidations));
+  DCHECK(base::FeatureList::IsEnabled(kUseSyncInvalidations));
   const IncomingInvalidationStatus status =
       DoOnStandaloneInvalidationReceivedImpl(payload, interested_data_types);
   RecordIncomingInvalidationStatus(status);
@@ -521,13 +498,13 @@ void SyncEngineBackend::LoadAndConnectNigoriController() {
   ConfigureContext configure_context;
   configure_context.authenticated_account_id = authenticated_account_id_;
   configure_context.cache_guid = sync_manager_->cache_guid();
-  // TODO(crbug.com/922900): investigate whether we want to use
-  // kTransportOnly in Butter mode.
+  // Always use kFull mode: it is actually not relevant for Nigori and switching
+  // modes harder to detect on this level / can make first sync setup more
+  // complicated.
   configure_context.sync_mode = SyncMode::kFull;
   configure_context.configuration_start_time = base::Time::Now();
   nigori_controller_->LoadModels(configure_context, base::DoNothing());
   DCHECK_EQ(nigori_controller_->state(), DataTypeController::MODEL_LOADED);
-  // TODO(crbug.com/922900): Do we need to call RegisterDataType() for Nigori?
   sync_manager_->GetModelTypeConnector()->ConnectDataType(
       NIGORI, nigori_controller_->Connect());
 }

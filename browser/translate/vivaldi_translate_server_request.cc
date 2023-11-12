@@ -60,14 +60,14 @@ std::string VivaldiTranslateServerRequest::GenerateJSON(
     const std::vector<std::string>& data,
     const std::string& source_language,
     const std::string& destination_language) {
-  base::Value request(base::Value::Type::DICTIONARY);
+  base::Value request(base::Value::Type::DICT);
   base::Value string_collection(base::Value::Type::LIST);
 
   request.SetStringKey(kSourceLanguageKey, source_language);
   request.SetStringKey(kTargetLanguageKey, destination_language);
 
   for (auto& item : data) {
-    string_collection.Append(item);
+    string_collection.GetList().Append(item);
   }
   request.SetPath(kStringsLanguageKey, std::move(string_collection));
 

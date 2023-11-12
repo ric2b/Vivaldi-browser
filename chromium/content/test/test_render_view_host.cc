@@ -104,7 +104,12 @@ gfx::NativeViewAccessible TestRenderWidgetHostView::GetNativeViewAccessible() {
 }
 
 ui::TextInputClient* TestRenderWidgetHostView::GetTextInputClient() {
+#if !BUILDFLAG(IS_IOS)
   return &text_input_client_;
+#else
+  NOTREACHED();
+  return nullptr;
+#endif
 }
 
 bool TestRenderWidgetHostView::HasFocus() {
@@ -150,7 +155,7 @@ uint32_t TestRenderWidgetHostView::GetCaptureSequenceNumber() const {
   return latest_capture_sequence_number_;
 }
 
-void TestRenderWidgetHostView::UpdateCursor(const WebCursor& cursor) {
+void TestRenderWidgetHostView::UpdateCursor(const ui::Cursor& cursor) {
   last_cursor_ = cursor;
 }
 
@@ -281,8 +286,10 @@ void TestRenderWidgetHostView::NotifyHostAndDelegateOnWasShown(
   }
 }
 
-void TestRenderWidgetHostView::RequestPresentationTimeFromHostOrDelegate(
-    blink::mojom::RecordContentToVisibleTimeRequestPtr visible_time_request) {
+void TestRenderWidgetHostView::
+    RequestSuccessfulPresentationTimeFromHostOrDelegate(
+        blink::mojom::RecordContentToVisibleTimeRequestPtr
+            visible_time_request) {
   // Should only be called if the view was already shown.
 #if !BUILDFLAG(IS_ANDROID)
   // TODO(jonross): Update the constructor to determine showing state
@@ -302,7 +309,7 @@ void TestRenderWidgetHostView::RequestPresentationTimeFromHostOrDelegate(
 }
 
 void TestRenderWidgetHostView::
-    CancelPresentationTimeRequestForHostAndDelegate() {
+    CancelSuccessfulPresentationTimeRequestForHostAndDelegate() {
   // Should only be called if the view was already shown.
   EXPECT_TRUE(is_showing_);
   EXPECT_FALSE(is_occluded_);
@@ -352,7 +359,8 @@ TestRenderViewHost::TestRenderViewHost(
     RenderViewHostDelegate* delegate,
     int32_t routing_id,
     int32_t main_frame_routing_id,
-    scoped_refptr<BrowsingContextState> main_browsing_context_state)
+    scoped_refptr<BrowsingContextState> main_browsing_context_state,
+    CreateRenderViewHostCase create_case)
     : RenderViewHostImpl(frame_tree,
                          group,
                          storage_partition_config,
@@ -361,7 +369,8 @@ TestRenderViewHost::TestRenderViewHost(
                          routing_id,
                          main_frame_routing_id,
                          false /* has_initialized_audio_host */,
-                         std::move(main_browsing_context_state)),
+                         std::move(main_browsing_context_state),
+                         create_case),
       delete_counter_(nullptr) {
   if (frame_tree->type() == FrameTree::Type::kFencedFrame) {
     // TestRenderWidgetHostViewChildFrame deletes itself in

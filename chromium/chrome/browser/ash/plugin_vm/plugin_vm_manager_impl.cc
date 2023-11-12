@@ -5,8 +5,8 @@
 #include "chrome/browser/ash/plugin_vm/plugin_vm_manager_impl.h"
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ash/guest_os/guest_id.h"
 #include "chrome/browser/ash/guest_os/guest_os_share_path.h"
@@ -124,9 +124,15 @@ PluginVmManagerImpl::PluginVmManagerImpl(Profile* profile)
     : profile_(profile),
       owner_id_(ash::ProfileHelper::GetUserIdHashFromProfile(profile)) {
   ash::VmPluginDispatcherClient::Get()->AddObserver(this);
-  plugin_vm_subscription_ = std::make_unique<PluginVmPolicySubscription>(
-      profile_, base::BindRepeating(&PluginVmManagerImpl::OnPluginVmChanged,
-                                    weak_ptr_factory_.GetWeakPtr()));
+  availability_subscription_ =
+      std::make_unique<PluginVmAvailabilitySubscription>(
+          profile_,
+          base::BindRepeating(&PluginVmManagerImpl::OnAvailabilityChanged,
+                              weak_ptr_factory_.GetWeakPtr()));
+
+  if (PluginVmFeatures::Get()->IsEnabled(profile_)) {
+    OnAvailabilityChanged(true, true);
+  }
 }
 
 PluginVmManagerImpl::~PluginVmManagerImpl() {
@@ -793,10 +799,12 @@ void PluginVmManagerImpl::UninstallFailed(
   uninstaller_notification_.reset();
 }
 
-void PluginVmManagerImpl::OnPluginVmChanged(bool is_allowed) {
+void PluginVmManagerImpl::OnAvailabilityChanged(bool is_allowed,
+                                                bool is_configured) {
+  bool is_enabled = is_allowed && is_configured;
   auto* share_path = guest_os::GuestOsSharePath::GetForProfile(profile_);
   guest_os::GuestId id{guest_os::VmType::PLUGIN_VM, kPluginVmName, ""};
-  if (is_allowed) {
+  if (is_enabled) {
     share_path->RegisterGuest(id);
   } else {
     share_path->UnregisterGuest(id);

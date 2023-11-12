@@ -37,6 +37,9 @@
 [submodule "third_party/ced/src"]
 	path = third_party/ced/src
 	url = ../../external/github.com/google/compact_enc_det.git
+[submodule "third_party/centipede/src"]
+	path = third_party/centipede/src
+	url = ../../external/github.com/google/centipede.git
 [submodule "third_party/cld_3/src"]
 	path = third_party/cld_3/src
 	url = ../../external/github.com/google/cld_3.git
@@ -184,12 +187,6 @@
 [submodule "third_party/material_color_utilities/src"]
 	path = third_party/material_color_utilities/src
 	url = ../../external/github.com/material-foundation/material-color-utilities.git
-[submodule "third_party/minigbm/src"]
-	path = third_party/minigbm/src
-	url = ../../chromiumos/platform/minigbm.git
-[submodule "third_party/minizip/src"]
-	path = third_party/minizip/src
-	url = ../../external/github.com/nmoinvaz/minizip.git
 [submodule "third_party/nasm"]
 	path = third_party/nasm
 	url = ../deps/nasm.git

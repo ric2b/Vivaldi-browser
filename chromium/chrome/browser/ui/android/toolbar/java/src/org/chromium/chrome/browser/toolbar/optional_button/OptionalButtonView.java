@@ -31,10 +31,10 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.view.OneShotPreDrawListener;
 import androidx.core.view.ViewCompat;
+import androidx.core.widget.ImageViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 
-import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.toolbar.ButtonData;
@@ -214,8 +214,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         mClickListener = buttonSpec.getOnClickListener();
         mLongClickListener = buttonSpec.getOnLongClickListener();
         mButton.setEnabled(buttonData.isEnabled());
-        mContentDescription =
-                getContext().getResources().getString(buttonSpec.getContentDescriptionResId());
+        mContentDescription = buttonSpec.getContentDescription();
 
         // If the button hasn't been laid out then try again before the next draw. This may happen
         // if the view gets initialized while the activity is not visible (e.g. when a setting
@@ -256,8 +255,8 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
     }
 
     void setColorStateList(ColorStateList colorStateList) {
-        ApiCompatibilityUtils.setImageTintList(mButton, colorStateList);
-        ApiCompatibilityUtils.setImageTintList(mAnimationImage, colorStateList);
+        ImageViewCompat.setImageTintList(mButton, colorStateList);
+        ImageViewCompat.setImageTintList(mAnimationImage, colorStateList);
         if (colorStateList != null) {
             mActionChipLabel.setTextColor(colorStateList);
         }

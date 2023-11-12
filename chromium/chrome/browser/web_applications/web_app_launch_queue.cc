@@ -11,7 +11,6 @@
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "content/public/browser/file_system_access_entry_factory.h"
 #include "content/public/browser/navigation_handle.h"
@@ -58,7 +57,8 @@ class EntriesBuilder {
                            ->GetProcess()
                            ->GetStoragePartition()
                            ->GetFileSystemAccessEntryFactory()),
-        context_(blink::StorageKey(url::Origin::Create(launch_url)),
+        context_(blink::StorageKey::CreateFirstParty(
+                     url::Origin::Create(launch_url)),
                  launch_url,
                  content::GlobalRenderFrameHostId(
                      web_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),

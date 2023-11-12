@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 inyanga}one{# izinyanga}other{# izinyanga}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 ihora ne- }one{# amahora ne- }other{# amahora ne- }}</translation>
+<translation id="185013357618350178">&amp;Khetha</translation>
 <translation id="1859234291848436338">Ibhala izikhobisi-ndlela</translation>
 <translation id="1860796786778352021">Ukuvala isaziso</translation>
 <translation id="186476001994626254">Okuqukethwe kokunamathisela kwe-Web Smart</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{nge-1h}one{nge-#h}other{nge-#h}}</translation>
 <translation id="2583543531130364912">Sika  isikrini sakho esithintwayo</translation>
 <translation id="2586657967955657006">Ibhodi lokumanathisela</translation>
+<translation id="2653844658857826081">KUSHA</translation>
 <translation id="2666092431469916601">Ngaphezulu</translation>
 <translation id="2701330563083355633">Kwabelwe kusuka ku-<ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Okusha</translation>

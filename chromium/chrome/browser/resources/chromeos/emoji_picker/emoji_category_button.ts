@@ -24,13 +24,14 @@ export class EmojiCategoryButton extends PolymerElement {
       name: {type: String, readonly: true},
       icon: {type: String, readonly: true},
       active: {type: Boolean, value: false},
-      /** @type {!boolean} */
       searchActive: {type: Boolean, value: false},
+      gifSupport: {type: Boolean, value: false},
     };
   }
   name: string;
   icon: string;
   active: boolean;
+  private gifSupport: boolean;
 
 
   private handleClick(): void {
@@ -38,7 +39,10 @@ export class EmojiCategoryButton extends PolymerElement {
         createCustomEvent(CATEGORY_BUTTON_CLICK, {categoryName: this.name}));
   }
 
-  private calculateClassName(active: boolean): string {
+  private calculateClassName(active: boolean, searchActive: boolean): string {
+    if (searchActive) {
+      return 'category-button-primary';
+    }
     return active ? 'category-button-active' : '';
   }
 }

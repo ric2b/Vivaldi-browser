@@ -6,6 +6,7 @@ import("//build/buildflag_header.gni")
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/dcheck_always_on.gni")
+import("//build/config/features.gni")
 import("//build/config/linux/gtk/gtk.gni")
 import("//build/config/linux/pangocairo/pangocairo.gni")
 import("//build/config/locales.gni")
@@ -126,6 +127,7 @@ component("base") {
     "interaction/element_identifier.h",
     "interaction/element_tracker.cc",
     "interaction/element_tracker.h",
+    "interaction/framework_specific_implementation.cc",
     "interaction/framework_specific_implementation.h",
     "interaction/interaction_sequence.cc",
     "interaction/interaction_sequence.h",
@@ -313,8 +315,6 @@ component("base") {
       "cocoa/nswindow_test_util.h",
       "cocoa/permissions_utils.h",
       "cocoa/permissions_utils.mm",
-      "cocoa/quartz_util.h",
-      "cocoa/quartz_util.mm",
       "cocoa/remote_accessibility_api.h",
       "cocoa/remote_accessibility_api.mm",
       "cocoa/remote_layer_api.h",
@@ -349,6 +349,13 @@ component("base") {
     ]
   }
 
+  if (is_apple) {
+    sources += [
+      "cocoa/quartz_util.h",
+      "cocoa/quartz_util.mm",
+    ]
+  }
+
   if (is_chromeos_lacros) {
     sources += [ "resource/resource_bundle_lacros.cc" ]
   }
@@ -361,6 +368,14 @@ component("base") {
   }
 
   if (!is_ios) {
+    sources += [
+      "user_activity/user_activity_detector.cc",
+      "user_activity/user_activity_detector.h",
+      "user_activity/user_activity_observer.h",
+    ]
+  }
+
+  if (use_blink) {
     sources += [
       "accelerators/accelerator.cc",
       "accelerators/accelerator.h",
@@ -385,12 +400,9 @@ component("base") {
       "text/bytes_formatting.h",
       "themed_vector_icon.cc",
       "themed_vector_icon.h",
-      "user_activity/user_activity_detector.cc",
-      "user_activity/user_activity_detector.h",
-      "user_activity/user_activity_observer.h",
     ]
 
-    if (!is_android) {
+    if (!is_android && !is_ios) {
       sources += [
         "menu_source_utils.cc",
         "menu_source_utils.h",
@@ -414,6 +426,20 @@ component("base") {
         "cocoa/bubble_closer.mm",
       ]
     }
+
+    if (is_win) {
+      sources += [ "pointer/pointer_device_win.cc" ]
+    } else if (is_android) {
+      sources += [ "pointer/pointer_device_android.cc" ]
+    } else if (is_ios) {
+      sources += [ "pointer/pointer_device_ios.cc" ]
+    } else if (is_linux || is_chromeos) {
+      sources += [ "pointer/pointer_device_linux.cc" ]
+    } else {
+      # Empty implementation for all other cases.
+      sources += [ "pointer/pointer_device.cc" ]
+      sources -= [ "pointer/pointer_device_util.cc" ]
+    }
   }
 
   if (is_mac) {
@@ -426,20 +452,6 @@ component("base") {
     ]
   } else {
     sources += [ "accelerators/media_keys_listener_stub.cc" ]
-  }
-
-  if (is_win) {
-    sources += [ "pointer/pointer_device_win.cc" ]
-  } else if (is_android) {
-    sources += [ "pointer/pointer_device_android.cc" ]
-  } else if (is_ios) {
-    sources += [ "pointer/pointer_device_ios.cc" ]
-  } else if (is_linux || is_chromeos) {
-    sources += [ "pointer/pointer_device_linux.cc" ]
-  } else {
-    # Empty implementation for all other cases.
-    sources += [ "pointer/pointer_device.cc" ]
-    sources -= [ "pointer/pointer_device_util.cc" ]
   }
 
   if (is_fuchsia) {
@@ -492,7 +504,7 @@ component("base") {
     "//ui/display/util:gpu_info_util",
     "//ui/events",
     "//ui/events/devices",
-    "//ui/resources:webui_generated_resources_grd",
+    "//ui/resources:webui_resources_grd",
     "//ui/strings",
     "//url",
   ]
@@ -501,8 +513,7 @@ component("base") {
     deps += [ "//third_party/re2" ]
   }
 
-  if (!is_ios) {
-    # iOS does not use Chromium-specific code for event handling.
+  if (use_blink) {
     public_deps += [
       "//ui/base/clipboard:file_info",
       "//ui/events:dom_keycode_converter",
@@ -520,10 +531,12 @@ component("base") {
     ]
     public_deps += [ "//ui/events:event_constants" ]
     deps += [ ":l10n_util_ios" ]
-    deps -= [
-      "//ui/events",
-      "//ui/events/devices",
-    ]
+    if (!use_blink) {
+      deps -= [
+        "//ui/events",
+        "//ui/events/devices",
+      ]
+    }
   }
 
   if (is_win) {
@@ -713,7 +726,7 @@ if (is_win || is_mac || is_linux || is_chromeos) {
   }
 }
 
-if (!is_ios) {
+if (use_blink) {
   group("goldctl") {
     data = []
 
@@ -739,6 +752,7 @@ static_library("test_support") {
     "interaction/element_test_util.cc",
     "interaction/element_test_util.h",
     "interaction/expect_call_in_scope.h",
+    "interaction/interaction_sequence_test_util.h",
     "interaction/interaction_test_util.cc",
     "interaction/interaction_test_util.h",
     "interaction/interactive_test.cc",
@@ -791,6 +805,7 @@ static_library("test_support") {
       "test/mock_base_window.h",
       "test/test_dialog_model_host.cc",
       "test/test_dialog_model_host.h",
+      "test/ui_controls.cc",
       "test/ui_controls.h",
       "test/view_tree_validator.h",
     ]
@@ -803,7 +818,7 @@ static_library("test_support") {
     ]
   }
 
-  if (use_aura) {
+  if (use_aura && (is_win || is_chromeos_ash || is_castos)) {
     sources += [
       "test/ui_controls_aura.cc",
       "test/ui_controls_aura.h",
@@ -1055,10 +1070,12 @@ test("ui_base_unittests") {
       "test/ios/ui_image_test_utils_unittest.mm",
     ]
     deps += [ ":l10n_util_ios" ]
-    deps -= [
-      "//ui/events:events_base",
-      "//ui/events:test_support",
-    ]
+    if (!use_blink) {
+      deps -= [
+        "//ui/events:events_base",
+        "//ui/events:test_support",
+      ]
+    }
   } else {  # !is_ios
     sources += [
       "accelerators/accelerator_manager_unittest.cc",

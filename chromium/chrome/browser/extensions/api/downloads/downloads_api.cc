@@ -12,12 +12,12 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -25,6 +25,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task/current_thread.h"
 #include "base/task/single_thread_task_runner.h"
@@ -1514,7 +1515,8 @@ ExtensionFunction::ResponseAction DownloadsOpenFunction::Run() {
   DownloadItem* download_item = GetDownload(
       browser_context(), include_incognito_information(), params->download_id);
   // VB-4457 - gisli@vivaldi.com:  Normally extensions can not call open unless
-  // this is a user gesture.  Make exception for Vivaldi.
+  // this is a user gesture. Make exception for Vivaldi. Note that this might
+  // cause issues as we use GetActiveWebContents below.
   std::string error;
   if (InvalidId(download_item, &error) ||
       (!vivaldi::IsVivaldiApp(extension()->id()) &&
@@ -1537,7 +1539,10 @@ ExtensionFunction::ResponseAction DownloadsOpenFunction::Run() {
   // Extensions with debugger permission could fake user gestures and should
   // not be trusted.
   if (GetSenderWebContents() &&
-      GetSenderWebContents()->HasRecentInteraction() &&
+      // VB-96188 As with the user_gesture() check above, don't require
+      //          a recent interaction in Vivaldi.
+      (vivaldi::IsVivaldiApp(extension()->id()) ||
+       GetSenderWebContents()->HasRecentInteraction()) &&
       !extension()->permissions_data()->HasAPIPermission(
           APIPermissionID::kDebugger)) {
     download_item->OpenDownload();

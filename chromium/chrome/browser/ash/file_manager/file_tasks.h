@@ -98,10 +98,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "chrome/browser/ui/webui/ash/office_fallback/office_fallback_dialog.h"
 #include "chrome/common/extensions/api/file_manager_private.h"
-#include "components/prefs/pref_registry_simple.h"
 #include "url/gurl.h"
 
 using storage::FileSystemURL;
@@ -115,6 +114,10 @@ struct EntryInfo;
 
 namespace storage {
 class FileSystemURL;
+}
+
+namespace user_prefs {
+class PrefRegistrySyncable;
 }
 
 namespace file_manager::file_tasks {
@@ -212,6 +215,7 @@ struct TaskDescriptor {
   TaskDescriptor() = default;
 
   bool operator<(const TaskDescriptor& other) const;
+  bool operator==(const TaskDescriptor& other) const;
 
   std::string app_id;
   TaskType task_type;
@@ -225,7 +229,8 @@ struct FullTaskDescriptor {
                      const GURL& icon_url,
                      bool is_default,
                      bool is_generic_file_handler,
-                     bool is_file_extension_match);
+                     bool is_file_extension_match,
+                     bool is_dlp_blocked = false);
 
   FullTaskDescriptor(const FullTaskDescriptor& other);
   FullTaskDescriptor& operator=(const FullTaskDescriptor& other);
@@ -248,6 +253,8 @@ struct FullTaskDescriptor {
   // that declares no MIME types in its manifest, but matches with the
   // file_handlers "extensions" instead.
   bool is_file_extension_match;
+  // True if this task is blocked by Data Leak Prevention (DLP).
+  bool is_dlp_blocked;
 };
 
 // Describes how admin policy affects the default task in a ResultingTasks.
@@ -274,7 +281,7 @@ struct ResultingTasks {
 };
 
 // Registers profile prefs related to file_manager.
-void RegisterProfilePrefs(PrefRegistrySimple*);
+void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable*);
 
 // Update the default file handler for the given sets of suffixes and MIME
 // types.
@@ -365,10 +372,14 @@ typedef base::OnceCallback<void(
 // If |entries| contains a Google document, only the internal tasks of the
 // Files app (i.e., tasks having the app ID of the Files app) are listed.
 // This is to avoid listing normal file handler and file browser handler tasks,
-// which can handle only normal files.
+// which can handle only normal files. If passed, |dlp_source_urls| should have
+// the same length as |entries| and each element should represent the URL from
+// which the corresponding entry was downloaded from, and are used to check DLP
+// restrictions on the |entries|.
 void FindAllTypesOfTasks(Profile* profile,
                          const std::vector<extensions::EntryInfo>& entries,
                          const std::vector<GURL>& file_urls,
+                         const std::vector<std::string>& dlp_source_urls,
                          FindTasksCallback callback);
 
 // Chooses the default task in |resulting_tasks| and sets it as default, if the
@@ -379,6 +390,10 @@ void ChooseAndSetDefaultTask(Profile* profile,
                              const std::vector<extensions::EntryInfo>& entries,
                              ResultingTasks* resulting_tasks);
 
+bool IsWebDriveOfficeTask(const TaskDescriptor& task);
+
+bool IsOpenInOfficeTask(const TaskDescriptor& task);
+
 bool IsExtensionInstalled(Profile* profile, const std::string& extension_id);
 
 // Returns whether |path| is an HTML file according to its extension.
@@ -387,12 +402,21 @@ bool IsHtmlFile(const base::FilePath& path);
 // Returns whether |path| is a MS Office file according to its extension.
 bool IsOfficeFile(const base::FilePath& path);
 
+// Updates the default task for each of the office file types.
+void SetWordFileHandler(Profile* profile, TaskDescriptor& task);
+void SetExcelFileHandler(Profile* profile, TaskDescriptor& task);
+void SetPowerPointFileHandler(Profile* profile, TaskDescriptor& task);
+
 // TODO(petermarshall): Move these to a new file office_file_tasks.cc/h
-// Updates the default task for each of the office file types. |action_id| must
-// be a valid action registered with the Files app SWA.
-void SetWordFileHandler(Profile* profile, const std::string& action_id);
-void SetExcelFileHandler(Profile* profile, const std::string& action_id);
-void SetPowerPointFileHandler(Profile* profile, const std::string& action_id);
+// Updates the default task for each of the office file types to a Files
+// SWA with |action_id|. |action_id| must be a valid action registered with the
+// Files app SWA.
+void SetWordFileHandlerToFilesSWA(Profile* profile,
+                                  const std::string& action_id);
+void SetExcelFileHandlerToFilesSWA(Profile* profile,
+                                   const std::string& action_id);
+void SetPowerPointFileHandlerToFilesSWA(Profile* profile,
+                                        const std::string& action_id);
 
 // TODO(petermarshall): Move these to a new file office_file_tasks.cc/h
 // Sets the user preference storing whether the setup flow for office files has
@@ -406,6 +430,11 @@ bool OfficeSetupComplete(Profile* profile);
 void SetAlwaysMoveOfficeFiles(Profile* profile, bool complete = true);
 // Whether we should always move office files without first asking the user.
 bool AlwaysMoveOfficeFiles(Profile* profile);
+
+// Sets the preference `office.file_moved_one_drive`.
+void SetOfficeFileMovedToOneDrive(Profile* profile, base::Time moved);
+// Sets the preference `office.file_moved_google_drive`.
+void SetOfficeFileMovedToGoogleDrive(Profile* profile, base::Time moved);
 
 }  // namespace file_manager::file_tasks
 

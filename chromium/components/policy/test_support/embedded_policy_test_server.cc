@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
@@ -26,7 +26,9 @@
 #include "components/policy/test_support/request_handler_for_device_initial_enrollment_state.h"
 #include "components/policy/test_support/request_handler_for_device_state_retrieval.h"
 #include "components/policy/test_support/request_handler_for_policy.h"
+#if BUILDFLAG(IS_CHROMEOS)
 #include "components/policy/test_support/request_handler_for_psm_auto_enrollment.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
 #include "components/policy/test_support/request_handler_for_register_browser.h"
 #include "components/policy/test_support/request_handler_for_register_cert_based.h"
 #include "components/policy/test_support/request_handler_for_register_device_and_user.h"
@@ -114,7 +116,9 @@ EmbeddedPolicyTestServer::EmbeddedPolicyTestServer()
   RegisterHandler(
       std::make_unique<RequestHandlerForDeviceStateRetrieval>(this));
   RegisterHandler(std::make_unique<RequestHandlerForPolicy>(this));
+#if BUILDFLAG(IS_CHROMEOS)
   RegisterHandler(std::make_unique<RequestHandlerForPsmAutoEnrollment>(this));
+#endif  // BUILDFLAG(IS_CHROMEOS)
   RegisterHandler(std::make_unique<RequestHandlerForRegisterBrowser>(this));
   RegisterHandler(std::make_unique<RequestHandlerForRegisterCertBased>(this));
   RegisterHandler(

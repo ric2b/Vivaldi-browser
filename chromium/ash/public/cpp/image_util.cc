@@ -7,9 +7,9 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "ipc/ipc_channel.h"
@@ -42,6 +42,18 @@ void ToImageSkia(DecodeImageCallback callback, const SkBitmap& bitmap) {
   }
   gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
   std::move(callback).Run(image);
+}
+
+void ToFrames(DecodeAnimationCallback callback,
+              std::vector<data_decoder::mojom::AnimationFramePtr> raw_frames) {
+  std::vector<AnimationFrame> frames(raw_frames.size());
+  std::transform(raw_frames.cbegin(), raw_frames.cend(), frames.begin(),
+                 [](const data_decoder::mojom::AnimationFramePtr& frame_ptr) {
+                   return AnimationFrame{
+                       gfx::ImageSkia::CreateFrom1xBitmap(frame_ptr->bitmap),
+                       frame_ptr->duration};
+                 });
+  std::move(callback).Run(std::move(frames));
 }
 
 // EmptyImageSkiaSource --------------------------------------------------------
@@ -80,6 +92,16 @@ void DecodeImageFile(DecodeImageCallback callback,
       base::BindOnce(&DecodeImageData, std::move(callback), codec));
 }
 
+void DecodeAnimationFile(DecodeAnimationCallback callback,
+                         const base::FilePath& file_path) {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::BindOnce(&ReadFileToString, file_path),
+      base::BindOnce(&DecodeAnimationData, std::move(callback)));
+}
+
 void DecodeImageData(DecodeImageCallback callback,
                      data_decoder::mojom::ImageCodec codec,
                      const std::string& data) {
@@ -92,6 +114,20 @@ void DecodeImageData(DecodeImageCallback callback,
       /*shrink_to_fit=*/true, kMaxImageSizeInBytes,
       /*desired_image_frame_size=*/gfx::Size(),
       base::BindOnce(&ToImageSkia, std::move(callback)));
+}
+
+void DecodeAnimationData(DecodeAnimationCallback callback,
+                         const std::string& data) {
+  if (data.empty()) {
+    std::move(callback).Run(std::vector<AnimationFrame>());
+    return;
+  }
+  // `shrink_to_fit` is true here so that animations larger than
+  // `kMaxImageSizeInBytes` will have their resolution downscaled instead of
+  // simply failing to decode.
+  data_decoder::DecodeAnimationIsolated(
+      base::as_bytes(base::make_span(data)), /*shrink_to_fit=*/true,
+      kMaxImageSizeInBytes, base::BindOnce(&ToFrames, std::move(callback)));
 }
 
 }  // namespace image_util

@@ -114,7 +114,6 @@ chromium-metrics-reviews@google.com.
              supported css, html, image, javascript, or video mime types."/>
   <suffix name="Video" label="Resources identified by video/*."/>
   <affected-histogram name="Ads.ResourceUsage.Size.Cache2.Mime"/>
-  <affected-histogram name="Ads.ResourceUsage.Size.Network.Mime"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="AdResourceSizes" separator=".">
@@ -129,7 +128,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="Subframe.VanillaResource"
       label="Subframe resources not tagged as ads."/>
   <affected-histogram name="Ads.ResourceUsage.Size.Cache2"/>
-  <affected-histogram name="Ads.ResourceUsage.Size.Network"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="AdsPageLoadMetricsBytes" separator=".">
@@ -930,16 +928,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="CertificateType2.NonBR"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="CertProvisioningScope" separator=".">
-  <suffix name="Device" label=""/>
-  <suffix name="User" label=""/>
-  <affected-histogram name="ChromeOS.CertProvisioning.CsrSignTime"/>
-  <affected-histogram name="ChromeOS.CertProvisioning.Event"/>
-  <affected-histogram name="ChromeOS.CertProvisioning.KeypairGenerationTime"/>
-  <affected-histogram name="ChromeOS.CertProvisioning.Result"/>
-  <affected-histogram name="ChromeOS.CertProvisioning.VaTime"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="CertVerifyProcImpl" separator=".">
   <suffix name="Android" label="CertVerifyProcAndroid"/>
   <suffix name="Builtin" label="CertVerifyProcBuiltin"/>
@@ -1048,11 +1036,14 @@ chromium-metrics-reviews@google.com.
 </histogram_suffixes>
 
 <histogram_suffixes name="ConnectionMigrationCause" separator=".">
+  <suffix name="ChangePortOnPathDegrading" label=""/>
+  <suffix name="NewNetworkConnectedPostPathDegrading" label=""/>
   <suffix name="OnMigrateBackToDefaultNetwork" label=""/>
   <suffix name="OnNetworkConnected" label=""/>
   <suffix name="OnNetworkDisconnected" label=""/>
   <suffix name="OnNetworkMadeDefault" label=""/>
   <suffix name="OnPathDegrading" label=""/>
+  <suffix name="OnServerPreferredAddressAvailable" label=""/>
   <suffix name="OnWriteError" label=""/>
   <suffix name="Unknown" label=""/>
   <affected-histogram name="Net.QuicSession.ConnectionMigration"/>
@@ -1160,20 +1151,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="ContextMenu.Shown"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="ContextMenuTypeAndroid" separator=".">
-  <suffix name="Image"
-      label="The context menu was shown for a (non-link) image"/>
-  <suffix name="ImageLink"
-      label="The context menu was shown for an image which is also a link"/>
-  <suffix name="Link"
-      label="The context menu was shown for a (non-image) link"/>
-  <suffix name="SharedHighlightingInteraction"
-      label="The context menu was shown from tap on highlighted text."/>
-  <suffix name="Video" label="The context menu was shown for a video"/>
-  <affected-histogram name="ContextMenu.SelectedOptionAndroid"/>
-  <affected-histogram name="ContextMenu.Shown"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="ContextMenuTypeDesktop" separator=".">
   <suffix name="Image"
       label="The context menu was shown for a (non-link) image"/>
@@ -1243,6 +1220,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram_suffixes name="Cras_ClientType" separator=".">
   <suffix name="ARC" label="A client created by ARC++."/>
+  <suffix name="ARCVM" label="A client created by ARCVM."/>
   <suffix name="Chrome" label="A client created by Chrome."/>
   <suffix name="CrOSVM" label="A client created by ChromeOS VM."/>
   <suffix name="InvalidType" label="Invalid client."/>
@@ -1255,6 +1233,8 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="Cras.FetchDelayMilliSeconds"/>
   <affected-histogram name="Cras.StreamCallbackThreshold.Input"/>
   <affected-histogram name="Cras.StreamCallbackThreshold.Output"/>
+  <affected-histogram name="Cras.StreamChannelCount.Input"/>
+  <affected-histogram name="Cras.StreamChannelCount.Output"/>
   <affected-histogram name="Cras.StreamEffects.Input"/>
   <affected-histogram name="Cras.StreamEffects.Output"/>
   <affected-histogram name="Cras.StreamFlags.Input"/>
@@ -1305,6 +1285,7 @@ chromium-metrics-reviews@google.com.
   <suffix name="Input" label="Capture"/>
   <suffix name="Output" label="Playback"/>
   <affected-histogram name="Cras.StreamCallbackThreshold"/>
+  <affected-histogram name="Cras.StreamChannelCount"/>
   <affected-histogram name="Cras.StreamEffects"/>
   <affected-histogram name="Cras.StreamFlags"/>
   <affected-histogram name="Cras.StreamRuntime"/>
@@ -1316,14 +1297,17 @@ chromium-metrics-reviews@google.com.
   <suffix name="Default" label="Default"/>
   <suffix name="VoiceCommunication" label="WebRTC"/>
   <affected-histogram name="Cras.FetchDelayMilliSeconds.ARC"/>
+  <affected-histogram name="Cras.FetchDelayMilliSeconds.ARCVM"/>
   <affected-histogram name="Cras.FetchDelayMilliSeconds.Chrome"/>
   <affected-histogram name="Cras.FetchDelayMilliSeconds.CrOSVM"/>
   <affected-histogram name="Cras.FetchDelayMilliSeconds.LaCrOS"/>
   <affected-histogram name="Cras.StreamRuntime.Input.ARC"/>
+  <affected-histogram name="Cras.StreamRuntime.Input.ARCVM"/>
   <affected-histogram name="Cras.StreamRuntime.Input.Chrome"/>
   <affected-histogram name="Cras.StreamRuntime.Input.CrOSVM"/>
   <affected-histogram name="Cras.StreamRuntime.Input.LaCrOS"/>
   <affected-histogram name="Cras.StreamRuntime.Output.ARC"/>
+  <affected-histogram name="Cras.StreamRuntime.Output.ARCVM"/>
   <affected-histogram name="Cras.StreamRuntime.Output.Chrome"/>
   <affected-histogram name="Cras.StreamRuntime.Output.CrOSVM"/>
   <affected-histogram name="Cras.StreamRuntime.Output.LaCrOS"/>
@@ -1445,24 +1429,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="Unmount" label=""/>
   <suffix name="VerifyBootLockbox" label=""/>
   <affected-histogram name="CryptohomeClient"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="CurrentTabState" separator="_">
-  <suffix name="Active"
-      label="For an active tab which is shown foreground in a browser window."/>
-  <suffix name="Detached"
-      label="For a tab that is being dragged by user to outside of the
-             browser window."/>
-  <suffix name="Inactive"
-      label="For tabs in background and not shown to user."/>
-  <suffix name="Initial" label="For a tab that is just being created."/>
-  <affected-histogram name="Tabs.StateTransfer.Target"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="CustomHttpClientType" separator=".">
-  <suffix name="Notification" label="For request sent for notification."/>
-  <suffix name="Survey" label="For request sent for survey."/>
-  <affected-histogram name="Net.HttpResponseCode.CustomHttpClient"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="CustomTabOpenSource" separator=".">
@@ -1628,20 +1594,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="Network" label="DevTools launched to the Network panel"/>
   <suffix name="Sources" label="DevTools launched to the Sources panel"/>
   <affected-histogram name="DevTools.Launch"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="DialogTypes" separator="." ordering="prefix">
-  <suffix name="BubbleDialogDelegateView"
-      label="Counts dialog boxes created using BubbleDialogDelegateView.
-             These are a subset of those created with DialogDelegateView
-             (which, in turn, are a subset of those created with
-             DialogDelegate)."/>
-  <suffix name="DialogDelegate"
-      label="Counts dialog boxes created using DialogDelegate."/>
-  <suffix name="DialogDelegateView"
-      label="Counts dialog boxes created using DialogDelegateView. These are
-             a subset of those created with DialogDelegate."/>
-  <affected-histogram name="Dialog.Create"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="DiskCacheExperiment1" separator="_">
@@ -2199,19 +2151,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="GridTabSwitcher.MaxFrameInterval"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="GTSCardCount" separator=".">
-  <suffix name="0thumbnails" label="0 thumbnails"/>
-  <suffix name="1~2thumbnails" label="1 ~ 2 thumbnails"/>
-  <suffix name="3~5thumbnails" label="3 ~ 5 thumbnails"/>
-  <suffix name="6~10thumbnails" label="6 ~ 10 thumbnails"/>
-  <suffix name="11~20thumbnails" label="11 ~ 20 thumbnails"/>
-  <suffix name="20+thumbnails" label="20+ thumbnails"/>
-  <affected-histogram
-      name="Startup.Android.TimeToGTSFirstMeaningfulPaint.Cold"/>
-  <affected-histogram
-      name="Startup.Android.TimeToGTSFirstMeaningfulPaint.Warm"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="GwpAsanBackingAllocator" separator=".">
   <suffix name="Malloc" label="From malloc"/>
   <suffix name="PartitionAlloc" label="From PartitionAlloc"/>
@@ -2538,146 +2477,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="LevelDBEnv.MissingFiles"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="LiveTabCountMetrics" separator=".">
-  <suffix name="ByLiveTabCount.0Tab"
-      label="Recorded with 0 live tabs open in the browser.">
-    <obsolete>
-      These suffixes is used to record metrics with live tab count information.
-      As part of crbug.com/1317494, these suffixes are replaced by
-      ByLiveTabCount2.*. The difference are 1. *.ByLiveTabCount2.* include
-      samples from prerendered pages and 2.
-      PageLoad.PaintTiming.NavigationToFirstContentfulPaint.ByLiveTabCount2.*
-      record duration from activation start to first contentful paint for
-      prerendered pages.
-    </obsolete>
-  </suffix>
-  <suffix name="ByLiveTabCount.1Tab"
-      label="Recorded with 1 live tab open in the browser.">
-    <obsolete/>
-  </suffix>
-  <suffix name="ByLiveTabCount.2Tabs"
-      label="Recorded with 2 live tabs open in the browser.">
-    <obsolete>
-      These suffixes are used to record metrics with live tab count information.
-      As part of crbug.com/1317494, these suffixes are replaced by
-      ByLiveTabCount2.*. The difference are 1. *.ByLiveTabCount2.* include
-      samples from prerendered pages and 2.
-      PageLoad.PaintTiming.NavigationToFirstContentfulPaint.ByLiveTabCount2.*
-      record duration from activation start to first contentful paint for
-      prerendered pages.
-    </obsolete>
-  </suffix>
-  <suffix name="ByLiveTabCount.3To4Tabs"
-      label="Recorded with between 3 and 4 live tabs open in the browser.">
-    <obsolete>
-      These suffixes are used to record metrics with live tab count information.
-      As part of crbug.com/1317494, these suffixes are replaced by
-      ByLiveTabCount2.*. The differences are 1. *.ByLiveTabCount2.* include
-      samples from prerendered pages and 2.
-      PageLoad.PaintTiming.NavigationToFirstContentfulPaint.ByLiveTabCount2.*
-      record duration from activation start to first contentful paint for
-      prerendered pages.
-    </obsolete>
-  </suffix>
-  <suffix name="ByLiveTabCount.5To7Tabs"
-      label="Recorded with between 5 and 7 live tabs open in the browser.">
-    <obsolete>
-      These suffixes are used to record metrics with live tab count information.
-      As part of crbug.com/1317494, these suffixes are replaced by
-      ByLiveTabCount2.*. The differences are 1. *.ByLiveTabCount2.* include
-      samples from prerendered pages and 2.
-      PageLoad.PaintTiming.NavigationToFirstContentfulPaint.ByLiveTabCount2.*
-      record duration from activation start to first contentful paint for
-      prerendered pages.
-    </obsolete>
-  </suffix>
-  <suffix name="ByLiveTabCount.8To19Tabs"
-      label="Recorded with between 8 and 19 live tabs open in the browser.">
-    <obsolete>
-      These suffixes are used to record metrics with live tab count information.
-      As part of crbug.com/1317494, these suffixes are replaced by
-      ByLiveTabCount2.*. The differences are 1. *.ByLiveTabCount2.* include
-      samples from prerendered pages and 2.
-      PageLoad.PaintTiming.NavigationToFirstContentfulPaint.ByLiveTabCount2.*
-      record duration from activation start to first contentful paint for
-      prerendered pages.
-    </obsolete>
-  </suffix>
-  <suffix name="ByLiveTabCount.20To39Tabs"
-      label="Recorded with between 20 and 39 live tabs open in the browser.">
-    <obsolete>
-      These suffixes are used to record metrics with live tab count information.
-      As part of crbug.com/1317494, these suffixes are replaced by
-      ByLiveTabCount2.*. The differences are 1. *.ByLiveTabCount2.* include
-      samples from prerendered pages and 2.
-      PageLoad.PaintTiming.NavigationToFirstContentfulPaint.ByLiveTabCount2.*
-      record duration from activation start to first contentful paint for
-      prerendered pages.
-    </obsolete>
-  </suffix>
-  <suffix name="ByLiveTabCount.40OrMoreTabs"
-      label="Recorded with 40 or more live tabs open in the browser.">
-    <obsolete>
-      These suffixes are used to record metrics with live tab count information.
-      As part of crbug.com/1317494, these suffixes are replaced by
-      ByLiveTabCount2.*. The differences are 1. *.ByLiveTabCount2.* include
-      samples from prerendered pages and 2.
-      PageLoad.PaintTiming.NavigationToFirstContentfulPaint.ByLiveTabCount2.*
-      record duration from activation start to first contentful paint for
-      prerendered pages.
-    </obsolete>
-  </suffix>
-  <affected-histogram name="PageLoad.InteractiveTiming.FirstInputDelay4"/>
-  <affected-histogram
-      name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="LiveTabCountMetrics2" separator=".">
-  <suffix name="ByLiveTabCount2.0Tabs"
-      label="Recorded with 0 live tabs open in the browser, including
-             prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <suffix name="ByLiveTabCount2.1Tab"
-      label="Recorded with 1 live tab open in the browser, including
-             prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <suffix name="ByLiveTabCount2.2Tabs"
-      label="Recorded with 2 live tabs open in the browser, including
-             prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <suffix name="ByLiveTabCount2.3To4Tabs"
-      label="Recorded with between 3 and 4 live tabs open in the browser,
-             including prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <suffix name="ByLiveTabCount2.5To7Tabs"
-      label="Recorded with between 5 and 7 live tabs open in the browser,
-             including prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <suffix name="ByLiveTabCount2.8To19Tabs"
-      label="Recorded with between 8 and 19 live tabs open in the browser,
-             including prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <suffix name="ByLiveTabCount2.20To39Tabs"
-      label="Recorded with between 20 and 39 live tabs open in the browser,
-             including prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <suffix name="ByLiveTabCount2.40OrMoreTabs"
-      label="Recorded with 40 or more live tabs open in the browser,
-             including prerendered samples. The recorded value of
-             NavigationToFirstContentfulPaint is prerendered version:
-             duration from activation start to first contentful paint"/>
-  <affected-histogram name="PageLoad.InteractiveTiming.FirstInputDelay4"/>
-  <affected-histogram
-      name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="LoadingPredictorHintOrigin" separator=".">
   <suffix name="Navigation"
       label="Prediction trigged at start of navigation based on what was
@@ -2688,73 +2487,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="LoadingPredictor.PreconnectLearningPrecision"/>
   <affected-histogram name="LoadingPredictor.PreconnectLearningRecall"/>
   <affected-histogram name="LoadingPredictor.PreconnectLearningRedirectStatus"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="LocalNetReqsLocalhostResources" separator=".">
-  <suffix base="true" name="Localhost.DbRequests"
-      label="Requests made to localhost on a database server port."/>
-  <suffix base="true" name="Localhost.DevRequests"
-      label="Requests made to localhost on a development server port."/>
-  <suffix base="true" name="Localhost.OtherRequests"
-      label="Requests made to localhost on any port not otherwise monitored
-             by the other local network request metrics."/>
-  <suffix base="true" name="Localhost.PrinterRequests"
-      label="Requests made to localhost on a printer server port."/>
-  <suffix base="true" name="Localhost.WebRequests"
-      label="Requests made to localhost on a web server port."/>
-  <affected-histogram name="LocalNetworkRequests.PrivatePage"/>
-  <affected-histogram name="LocalNetworkRequests.PublicPage"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="LocalNetReqsPrivatePage" separator=".">
-  <suffix base="true" name="DifferentSubnetRequests"
-      label="Requests made to local resources on a different subnet."/>
-  <suffix base="true" name="PublicRequests"
-      label="Requests made to public resources."/>
-  <suffix base="true" name="SameSubnetRequests"
-      label="Requests made to local resources on the same reserved IP space
-             as the page."/>
-  <affected-histogram name="LocalNetworkRequests.PrivatePage"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="LocalNetReqsPublicPage" separator=".">
-  <suffix base="true" name="PrivateRequests"
-      label="Requests made to private resources."/>
-  <suffix base="true" name="RouterRequests"
-      label="Requests made to resources likely to be routers."/>
-  <affected-histogram name="LocalNetworkRequests.PublicPage"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="LocalNetReqsStatuses" separator=".">
-  <suffix name="Failed" label="Failed requests."/>
-  <suffix name="Successful" label="Successful requests."/>
-  <affected-histogram
-      name="LocalNetworkRequests.PrivatePage.DifferentSubnetRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PrivatePage.Localhost.DbRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PrivatePage.Localhost.DevRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PrivatePage.Localhost.OtherRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PrivatePage.Localhost.PrinterRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PrivatePage.Localhost.WebRequests"/>
-  <affected-histogram name="LocalNetworkRequests.PrivatePage.PublicRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PrivatePage.SameSubnetRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PublicPage.Localhost.DbRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PublicPage.Localhost.DevRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PublicPage.Localhost.OtherRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PublicPage.Localhost.PrinterRequests"/>
-  <affected-histogram
-      name="LocalNetworkRequests.PublicPage.Localhost.WebRequests"/>
-  <affected-histogram name="LocalNetworkRequests.PublicPage.PrivateRequests"/>
-  <affected-histogram name="LocalNetworkRequests.PublicPage.RouterRequests"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="LocationAttachedStatus" separator=".">
@@ -3631,10 +3363,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram
       name="PageLoad.Clients.DocWrite.Block.ParseTiming.ParseBlockedOnScriptLoad"/>
   <affected-histogram
-      name="PageLoad.Clients.DocWrite.Block.ParseTiming.ParseBlockedOnScriptLoadFromDocumentWrite"/>
-  <affected-histogram
-      name="PageLoad.Clients.DocWrite.Block.ParseTiming.ParseDuration"/>
-  <affected-histogram
       name="PageLoad.Clients.MultiTabLoading.DocumentTiming.NavigationToDOMContentLoadedEventFired"/>
   <affected-histogram
       name="PageLoad.Clients.MultiTabLoading.DocumentTiming.NavigationToLoadEventFired"/>
@@ -3654,9 +3382,6 @@ chromium-metrics-reviews@google.com.
       name="PageLoad.PaintTiming.ParseStartToFirstContentfulPaint"/>
   <affected-histogram name="PageLoad.ParseTiming.NavigationToParseStart"/>
   <affected-histogram name="PageLoad.ParseTiming.ParseBlockedOnScriptLoad"/>
-  <affected-histogram
-      name="PageLoad.ParseTiming.ParseBlockedOnScriptLoadFromDocumentWrite"/>
-  <affected-histogram name="PageLoad.ParseTiming.ParseDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsAfterPaint" separator=".">
@@ -3666,14 +3391,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram
       name="PageLoad.Clients.FromGoogleSearch.PageTiming.ForegroundDuration"/>
   <affected-histogram name="PageLoad.PageTiming.ForegroundDuration"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PageLoadMetricsAtTimingCallbackDispatch"
-    separator=".">
-  <suffix name="AtTimingCallbackDispatch"
-      label="Evaluated at the time timing update calls are dispatched to
-             observers."/>
-  <affected-histogram name="PageLoad.Internal.PageLoadTimingStatus"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsCacheInfo" separator=".">
@@ -3709,7 +3426,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="PageLoad.PaintTiming.NavigationToFirstPaint"/>
   <affected-histogram name="PageLoad.ParseTiming.NavigationToParseStart"/>
   <affected-histogram name="PageLoad.ParseTiming.ParseBlockedOnScriptLoad"/>
-  <affected-histogram name="PageLoad.ParseTiming.ParseDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsClientsDocWrite" separator="."
@@ -3727,9 +3443,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram
       name="PageLoad.ParseTiming.ParseBlockedOnScriptExecutionFromDocumentWrite"/>
   <affected-histogram name="PageLoad.ParseTiming.ParseBlockedOnScriptLoad"/>
-  <affected-histogram
-      name="PageLoad.ParseTiming.ParseBlockedOnScriptLoadFromDocumentWrite"/>
-  <affected-histogram name="PageLoad.ParseTiming.ParseDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsClientsFromGoogleSearch" separator="."
@@ -3756,7 +3469,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram
       name="PageLoad.PaintTiming.ParseStartToFirstContentfulPaint"/>
   <affected-histogram name="PageLoad.ParseTiming.NavigationToParseStart"/>
-  <affected-histogram name="PageLoad.ParseTiming.ParseDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsClientsLoadingPredictor2"
@@ -3776,16 +3488,6 @@ chromium-metrics-reviews@google.com.
              page"/>
   <affected-histogram
       name="PageLoad.Clients.LoadingPredictor2.PaintTiming.NavigationToFirstContentfulPaint"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PageLoadMetricsClientsMedia2" separator="."
-    ordering="prefix">
-  <suffix name="Clients.MediaPageLoad2"
-      label="PageLoadMetrics for page loads that involved playing a media
-             element. Includes samples from prerendered pages"/>
-  <affected-histogram name="PageLoad.Experimental.Bytes.Cache2"/>
-  <affected-histogram name="PageLoad.Experimental.Bytes.Network"/>
-  <affected-histogram name="PageLoad.Experimental.Bytes.Total2"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsClientsMultiTabLoading" separator="."
@@ -3821,7 +3523,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram
       name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
   <affected-histogram name="PageLoad.ParseTiming.ParseBlockedOnScriptLoad"/>
-  <affected-histogram name="PageLoad.ParseTiming.ParseDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsClientsProtocol" separator="."
@@ -3858,7 +3559,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram
       name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
   <affected-histogram name="PageLoad.ParseTiming.ParseBlockedOnScriptLoad"/>
-  <affected-histogram name="PageLoad.ParseTiming.ParseDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsClientsScheme" separator="."
@@ -3869,7 +3569,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="Clients.Scheme.HTTPS"
       label="PageLoadMetrics that are a result of a navigation to a main
              resource where the committed URL is HTTPS."/>
-  <affected-histogram name="PageLoad.Internal.NavigationStartedInForeground"/>
   <affected-histogram
       name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
   <affected-histogram
@@ -3916,16 +3615,6 @@ chromium-metrics-reviews@google.com.
       name="PageLoad.Clients.ServiceWorker2.PaintTiming.ParseStartToFirstContentfulPaint"/>
   <affected-histogram
       name="PageLoad.Clients.ServiceWorker2.ParseTiming.NavigationToParseStart"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PageLoadMetricsClientsTabRestore" separator="."
-    ordering="prefix">
-  <suffix name="Clients.TabRestore"
-      label="PageLoadMetrics that are a result of a navigation caused by a
-             tab restore."/>
-  <affected-histogram name="PageLoad.Experimental.Bytes.Cache2"/>
-  <affected-histogram name="PageLoad.Experimental.Bytes.Network"/>
-  <affected-histogram name="PageLoad.Experimental.Bytes.Total2"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadMetricsEarlyHints2" separator="."
@@ -4238,6 +3927,8 @@ chromium-metrics-reviews@google.com.
       label="registerProtocolHandler permission"/>
   <suffix name="SecurityKeyAttestation" label="Security Key attestation"/>
   <suffix name="StorageAccess" label="Storage Access API permission"/>
+  <suffix name="TopLevelStorageAccess"
+      label="Top-level Storage Access API permission"/>
   <suffix name="VideoCapture" label="Camera permission"/>
   <suffix name="VR" label="VR permission"/>
   <suffix name="WindowPlacement" label="Window Management permission"/>
@@ -4264,6 +3955,8 @@ chromium-metrics-reviews@google.com.
   <suffix name="ProtectedMedia" label="Protected media permission actions"/>
   <suffix name="PushMessaging" label="Push messaging permission actions"/>
   <suffix name="StorageAccess" label="Storage Access API permission actions"/>
+  <suffix name="TopLevelStorageAccess"
+      label="Top-level Storage Access API permission actions"/>
   <suffix name="VideoCapture" label="Camera permission actions"/>
   <suffix name="VR" label="VR permission actions"/>
   <suffix name="WindowPlacement" label="Window Management permission actions"/>
@@ -4558,6 +4251,16 @@ chromium-metrics-reviews@google.com.
 </histogram_suffixes>
 
 <histogram_suffixes name="ProcessMemoryAllocator2" separator=".">
+  <suffix name="AndroidOtherPrivateDirty"
+      label="Other private dirty memory, including GPU memory, as reported by
+             Android platform APIs. Only reported on Android, if the value
+             hasn't been collected in the last 5 minutes (otherwise Android
+             produces a stale value, which is not emitted in Chrome)."/>
+  <suffix name="AndroidOtherPss"
+      label="Other PSS, including GPU memory, as reported by Android platform
+             APIs. Only reported on Android, if the value hasn't been
+             collected in the last 5 minutes (otherwise Android produces a
+             stale value, which is not emitted in Chrome)."/>
   <suffix name="BlinkGC" label="Only counting Blink GC memory."/>
   <suffix name="BlinkGC.AllocatedObjects"
       label="Only counting objects allocated using Blink GC."/>
@@ -4815,6 +4518,11 @@ chromium-metrics-reviews@google.com.
       label="All SharedImages memory. Typically accounted for in other
              processes, e.g. renderers, this is the total Chrome-wide memory
              used by SharedImages."/>
+  <suffix name="SharedImages.Purgeable"
+      label="All purgeable SharedImages memory. Typically accounted for in
+             other processes, e.g. renderers, this is the total Chrome-wide
+             memory used by SharedImages. Non-zero only on platforms where
+             SharedImages can be purgeable."/>
   <suffix name="SiteStorage"
       label="Only counting memory used by Web storage API."/>
   <suffix name="SiteStorage.BlobStorage"
@@ -5551,16 +5259,8 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="Security.PageInfo.TimeOpen.Action"/>
   <affected-histogram name="Security.PageInfo.TimeOpen.NoAction"/>
   <affected-histogram name="Security.SafetyTips.Interaction"/>
-  <affected-histogram name="Security.SafetyTips.PageInfo.Action"/>
   <affected-histogram name="Security.SiteEngagement"/>
-  <affected-histogram name="Security.SiteEngagementDelta"/>
   <affected-histogram name="Security.TimeOnPage2"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="SafetyTip_EntryPoint" separator=".">
-  <suffix name="DidFinishNavigation" label="DidFinishNavigation entry point"/>
-  <suffix name="VisibilityChanged" label="VisibilityChanged entry point"/>
-  <affected-histogram name="Security.SafetyTips.ReputationCheckComplete"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="SB2RequestDestinations" separator=".">
@@ -5610,34 +5310,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="Touch" label="Touch"/>
   <suffix name="Wheel" label="Wheel"/>
   <affected-histogram name="Renderer4.ScrollingThread"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="ScrollUpdateHandledThread" separator="_">
-  <suffix name="Impl" label="ScrollUpdate handled on impl thread"/>
-  <suffix name="Main" label="ScrollUpdate handled on main thread"/>
-  <affected-histogram
-      name="Event.Latency.ScrollBegin.Scrollbar.HandledToRendererSwap2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollBegin.Scrollbar.TimeToHandled2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollBegin.Touch.HandledToRendererSwap2"/>
-  <affected-histogram name="Event.Latency.ScrollBegin.Touch.TimeToHandled2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollBegin.Wheel.HandledToRendererSwap2"/>
-  <affected-histogram name="Event.Latency.ScrollBegin.Wheel.TimeToHandled2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollInertial.Touch.HandledToRendererSwap2"/>
-  <affected-histogram name="Event.Latency.ScrollInertial.Touch.TimeToHandled2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollUpdate.Scrollbar.HandledToRendererSwap2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollUpdate.Scrollbar.TimeToHandled2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollUpdate.Touch.HandledToRendererSwap2"/>
-  <affected-histogram name="Event.Latency.ScrollUpdate.Touch.TimeToHandled2"/>
-  <affected-histogram
-      name="Event.Latency.ScrollUpdate.Wheel.HandledToRendererSwap2"/>
-  <affected-histogram name="Event.Latency.ScrollUpdate.Wheel.TimeToHandled2"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="SearchEnginePromoDeviceType" separator=".">
@@ -5749,7 +5421,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="Security.PageInfo.TimeOpen.Action"/>
   <affected-histogram name="Security.PageInfo.TimeOpen.NoAction"/>
   <affected-histogram name="Security.SiteEngagement"/>
-  <affected-histogram name="Security.SiteEngagementDelta"/>
   <affected-histogram name="Security.TimeOnPage2"/>
 </histogram_suffixes>
 
@@ -5888,13 +5559,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="ChromeOS.Settings.Languages.Toggle"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="SettingsResetPromptSettingType" separator="_">
-  <suffix name="DefaultSearch" label="Reset state for default search engine."/>
-  <suffix name="Homepage" label="Reset state for homepage."/>
-  <suffix name="StartupUrls" label="Reset state for startup URLs."/>
-  <affected-histogram name="SettingsResetPrompt.ResetState"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="SharingChannelType" separator=".">
   <suffix name="FcmSenderId" label="FCM Sender ID"/>
   <suffix name="FcmVapid" label="FCM VAPID"/>
@@ -6004,12 +5668,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="wep" label="Network employs WEP (Wired Equivalent Privacy)"/>
   <affected-histogram name="Network.Shill.WiFi.RememberedSystemNetworkCount"/>
   <affected-histogram name="Network.Shill.WiFi.RememberedUserNetworkCount"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="SideloadWipeout" separator="_">
-  <suffix name="Disabled" label="Control group."/>
-  <suffix name="Enabled" label="Sideload Wipeout Active."/>
-  <affected-histogram name="Extensions.InstallSource"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="Signin_Actions" separator=".">
@@ -6130,12 +5788,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="Graphics.Smoothness.Jank.Main"/>
   <affected-histogram name="Graphics.Smoothness.MaxStale"/>
   <affected-histogram
-      name="Graphics.Smoothness.PercentDroppedFrames.CompositorThread"/>
-  <affected-histogram
-      name="Graphics.Smoothness.PercentDroppedFrames.MainThread"/>
-  <affected-histogram
-      name="Graphics.Smoothness.PercentDroppedFrames.ScrollingThread"/>
-  <affected-histogram
       name="Graphics.Smoothness.PercentMissedDeadlineFrames.CompositorThread"/>
   <affected-histogram
       name="Graphics.Smoothness.PercentMissedDeadlineFrames.MainThread"/>
@@ -6150,7 +5802,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="MainThread" label="The throughput of the main thread"/>
   <suffix name="ScrollingThread"
       label="The throughput of the thread responsible for handling the thread"/>
-  <affected-histogram name="Graphics.Smoothness.PercentDroppedFrames"/>
   <affected-histogram name="Graphics.Smoothness.PercentMissedDeadlineFrames"/>
 </histogram_suffixes>
 
@@ -6511,7 +6162,6 @@ chromium-metrics-reviews@google.com.
       label="The session is restricted to the period that browser is
              displaying WebVR contents."/>
   <affected-histogram name="VRSessionTime"/>
-  <affected-histogram name="VRSessionVideoTime"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="WebAppContainerEngagementType" separator=".">

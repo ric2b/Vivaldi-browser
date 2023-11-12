@@ -11,6 +11,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/values.h"
+#include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/time.h"
 #include "components/sync/base/unique_position.h"
@@ -101,6 +102,10 @@ void CommitContributionImpl::AddToCommitMessage(
     // sending password in plain text.
     CHECK(
         !sync_entity->specifics().password().has_client_only_encrypted_data());
+
+    // Record the size of the sync entity being committed.
+    syncer::SyncRecordModelTypeEntitySizeHistogram(
+        type_, sync_entity->specifics().ByteSizeLong());
 
     if (commit_request->entity->is_deleted()) {
       RecordEntityChangeMetrics(type_, ModelTypeEntityChange::kLocalDeletion);
@@ -296,15 +301,17 @@ void CommitContributionImpl::AdjustCommitProto(
     const sync_pb::PasswordSpecificsData& password_data =
         password_specifics.client_only_encrypted_data();
     sync_pb::EntitySpecifics encrypted_password;
-    if (!IsExplicitPassphrase(passphrase_type_) &&
-        password_specifics.unencrypted_metadata().url() !=
-            password_data.signon_realm()) {
+    if (!IsExplicitPassphrase(passphrase_type_)) {
       encrypted_password.mutable_password()
           ->mutable_unencrypted_metadata()
           ->set_url(password_data.signon_realm());
       encrypted_password.mutable_password()
           ->mutable_unencrypted_metadata()
           ->set_blacklisted(password_data.blacklisted());
+      encrypted_password.mutable_password()
+          ->mutable_unencrypted_metadata()
+          ->set_date_last_used_windows_epoch_micros(
+              password_data.date_last_used());
     }
 
     bool result = cryptographer_->Encrypt(

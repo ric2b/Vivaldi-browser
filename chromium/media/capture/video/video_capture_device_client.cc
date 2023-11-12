@@ -7,9 +7,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/ranges/algorithm.h"
@@ -205,6 +205,10 @@ VideoCaptureDevice::Client::Buffer VideoCaptureDeviceClient::MakeBufferStruct(
       std::make_unique<BufferPoolBufferHandleProvider>(buffer_pool, buffer_id),
       std::make_unique<ScopedBufferPoolReservation<ProducerReleaseTraits>>(
           buffer_pool, buffer_id));
+}
+
+void VideoCaptureDeviceClient::OnCaptureConfigurationChanged() {
+  receiver_->OnCaptureConfigurationChanged();
 }
 
 void VideoCaptureDeviceClient::OnIncomingCapturedData(

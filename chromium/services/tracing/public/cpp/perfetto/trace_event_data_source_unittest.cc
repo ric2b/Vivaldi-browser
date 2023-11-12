@@ -10,9 +10,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -23,12 +23,11 @@
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/common/task_annotator.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_id_name_manager.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
-#include "base/trace_event/task_execution_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_log.h"
 #include "base/tracing/trace_time.h"
@@ -233,7 +232,7 @@ class TraceEventDataSourceTest
   }
 
   void StopAndParseTrace() {
-    perfetto::TrackEvent::Flush();
+    base::TrackEvent::Flush();
 
     base::RunLoop wait_for_stop;
     g_tracing_session->SetOnStopCallback(
@@ -913,8 +912,7 @@ void MetadataHasNamedValue(const google::protobuf::RepeatedPtrField<
                                perfetto::protos::ChromeMetadata>& metadata,
                            const char* name,
                            const T& value) {
-  for (int i = 0; i < metadata.size(); i++) {
-    auto& entry = metadata[i];
+  for (const auto& entry : metadata) {
     if (entry.name() == name) {
       HasMetadataValue(entry, value);
       return;
@@ -924,15 +922,15 @@ void MetadataHasNamedValue(const google::protobuf::RepeatedPtrField<
   NOTREACHED();
 }
 
-absl::optional<base::Value> AddJsonMetadataGenerator() {
-  base::Value metadata(base::Value::Type::DICTIONARY);
-  metadata.SetIntKey("foo_int", 42);
-  metadata.SetStringKey("foo_str", "bar");
-  metadata.SetBoolKey("foo_bool", true);
+absl::optional<base::Value::Dict> AddJsonMetadataGenerator() {
+  base::Value::Dict metadata;
+  metadata.Set("foo_int", 42);
+  metadata.Set("foo_str", "bar");
+  metadata.Set("foo_bool", true);
 
-  base::Value child_dict(base::Value::Type::DICTIONARY);
-  child_dict.SetStringKey("child_str", "child_val");
-  metadata.SetKey("child_dict", std::move(child_dict));
+  base::Value::Dict child_dict;
+  child_dict.Set("child_str", "child_val");
+  metadata.Set("child_dict", std::move(child_dict));
   return metadata;
 }
 
@@ -950,7 +948,7 @@ TEST_F(TraceEventDataSourceTest, MetadataGeneratorBeforeTracing) {
   MetadataHasNamedValue(metadata, "foo_str", "bar");
   MetadataHasNamedValue(metadata, "foo_bool", true);
 
-  base::Value child_dict(base::Value::Type::DICTIONARY);
+  base::Value child_dict(base::Value::Type::DICT);
   child_dict.SetStringKey("child_str", "child_val");
   MetadataHasNamedValue(metadata, "child_dict", child_dict);
 }
@@ -969,7 +967,7 @@ TEST_F(TraceEventDataSourceTest, MetadataGeneratorWhileTracing) {
   MetadataHasNamedValue(metadata, "foo_str", "bar");
   MetadataHasNamedValue(metadata, "foo_bool", true);
 
-  base::Value child_dict(base::Value::Type::DICTIONARY);
+  base::Value child_dict(base::Value::Type::DICT);
   child_dict.SetStringKey("child_str", "child_val");
   MetadataHasNamedValue(metadata, "child_dict", child_dict);
 }
@@ -977,9 +975,9 @@ TEST_F(TraceEventDataSourceTest, MetadataGeneratorWhileTracing) {
 TEST_F(TraceEventDataSourceTest, MultipleMetadataGenerators) {
   auto* metadata_source = TraceEventMetadataSource::GetInstance();
   metadata_source->AddGeneratorFunction(base::BindRepeating([]() {
-    base::Value metadata(base::Value::Type::DICTIONARY);
-    metadata.SetIntKey("before_int", 42);
-    return absl::optional<base::Value>(std::move(metadata));
+    base::Value::Dict metadata;
+    metadata.Set("before_int", 42);
+    return absl::optional<base::Value::Dict>(std::move(metadata));
   }));
 
   StartMetaDataSource();
@@ -999,7 +997,7 @@ TEST_F(TraceEventDataSourceTest, MultipleMetadataGenerators) {
   MetadataHasNamedValue(metadata, "foo_str", "bar");
   MetadataHasNamedValue(metadata, "foo_bool", true);
 
-  base::Value child_dict(base::Value::Type::DICTIONARY);
+  base::Value child_dict(base::Value::Type::DICT);
   child_dict.SetStringKey("child_str", "child_val");
   MetadataHasNamedValue(metadata, "child_dict", child_dict);
 
@@ -2050,15 +2048,15 @@ TEST_F(TraceEventDataSourceTest, FilteringEventWithFlagCopy) {
 TEST_F(TraceEventDataSourceTest, FilteringMetadataSource) {
   auto* metadata_source = TraceEventMetadataSource::GetInstance();
   metadata_source->AddGeneratorFunction(base::BindRepeating([]() {
-    base::Value metadata(base::Value::Type::DICTIONARY);
-    metadata.SetIntKey("foo_int", 42);
-    metadata.SetStringKey("foo_str", "bar");
-    metadata.SetBoolKey("foo_bool", true);
+    base::Value::Dict metadata;
+    metadata.Set("foo_int", 42);
+    metadata.Set("foo_str", "bar");
+    metadata.Set("foo_bool", true);
 
-    base::Value child_dict(base::Value::Type::DICTIONARY);
-    child_dict.SetStringKey("child_str", "child_val");
-    metadata.SetKey("child_dict", std::move(child_dict));
-    return absl::optional<base::Value>(std::move(metadata));
+    base::Value::Dict child_dict;
+    child_dict.Set("child_str", "child_val");
+    metadata.Set("child_dict", std::move(child_dict));
+    return absl::optional<base::Value::Dict>(std::move(metadata));
   }));
 
   StartMetaDataSource(/*privacy_filtering_enabled=*/true);

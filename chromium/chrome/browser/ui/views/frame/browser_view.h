@@ -87,16 +87,9 @@ class ToolbarView;
 class TopContainerLoadingBar;
 class TopContainerView;
 class TopControlsSlideControllerTest;
+class WebAppFrameToolbarView;
 class WebContentsCloseHandler;
 class WebUITabStripContainerView;
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-namespace lens {
-class LensSidePanelController;
-}  // namespace lens
-#endif
-
-class SideSearchBrowserController;
 
 namespace ui {
 class NativeTheme;
@@ -136,7 +129,12 @@ class BrowserView : public BrowserWindow,
   BrowserView& operator=(const BrowserView&) = delete;
   ~BrowserView() override;
 
-  void set_frame(BrowserFrame* frame) { frame_ = frame; }
+  void set_frame(BrowserFrame* frame) {
+    frame_ = frame;
+    paint_as_active_subscription_ =
+        frame_->RegisterPaintAsActiveChangedCallback(base::BindRepeating(
+            &BrowserView::PaintAsActiveChanged, base::Unretained(this)));
+  }
   BrowserFrame* frame() const { return frame_; }
 
   // Returns a pointer to the BrowserView* interface implementation (an
@@ -189,11 +187,18 @@ class BrowserView : public BrowserWindow,
   // incognito avatar icon.
   int GetTabStripHeight() const;
 
+  // Returns the preferred size of the Web App Frame Toolbar. Used for example
+  // to determine the height of the title bar.
+  // Returns an empty size if this browser is not for a web app, or if
+  // features::kWebAppFrameToolbarInBrowserView is disabled.
+  gfx::Size GetWebAppFrameToolbarPreferredSize() const;
+
   // Container for the tabstrip, toolbar, etc.
   TopContainerView* top_container() { return top_container_; }
 
 #if BUILDFLAG(IS_MAC)
   views::Widget* overlay_widget() { return overlay_widget_.get(); }
+  views::Widget* tab_overlay_widget() { return tab_overlay_widget_.get(); }
 
   // Returns if this browser view will use immersive fullscreen mode, based
   // on the state of the two relevant base::Features, as well as the type of
@@ -206,28 +211,12 @@ class BrowserView : public BrowserWindow,
 
   SidePanel* unified_side_panel() { return unified_side_panel_; }
 
-  SidePanel* lens_side_panel() { return lens_side_panel_; }
-
   SidePanel* side_search_side_panel_for_testing() {
     return side_search_side_panel_;
   }
 
   SidePanelCoordinator* side_panel_coordinator() {
     return side_panel_coordinator_.get();
-  }
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  lens::LensSidePanelController* lens_side_panel_controller() {
-    return lens_side_panel_controller_.get();
-  }
-  // Creates the Lens side panel controller.
-  void CreateLensSidePanelController();
-  // Deletes the Lens side panel controller.
-  void DeleteLensSidePanelController();
-#endif
-
-  SideSearchBrowserController* side_search_controller() {
-    return side_search_controller_.get();
   }
 
   void set_contents_border_widget(views::Widget* contents_border_widget) {
@@ -421,8 +410,7 @@ class BrowserView : public BrowserWindow,
 
   // Enable or disable the window controls overlay and notify the browser frame
   // view of the update.
-  void ToggleWindowControlsOverlayEnabled(
-      base::OnceClosure done = base::DoNothing());
+  void ToggleWindowControlsOverlayEnabled(base::OnceClosure done);
 
   bool borderless_mode_enabled_for_testing() const {
     return borderless_mode_enabled_;
@@ -438,6 +426,8 @@ class BrowserView : public BrowserWindow,
   // prefs::kSidePanelHorizontalAlignment is changed from the appearance
   // settings page.
   void UpdateSidePanelHorizontalAlignment();
+
+  void UpdateWebAppStatusIconsVisiblity();
 
   // BrowserWindow:
   void Show() override;
@@ -466,7 +456,6 @@ class BrowserView : public BrowserWindow,
   void SetTopControlsGestureScrollInProgress(bool in_progress) override;
   StatusBubble* GetStatusBubble() override;
   void UpdateTitleBar() override;
-  void UpdateFrameColor() override;
   void BookmarkBarStateChanged(
       BookmarkBar::AnimateChangeType change_type) override;
   void UpdateDevTools() override;
@@ -560,6 +549,7 @@ class BrowserView : public BrowserWindow,
       bool show_signin_button) override;
 #if BUILDFLAG(IS_CHROMEOS)
   views::Button* GetSharingHubIconButton() override;
+  void ToggleMultitaskMenu() const override;
 #else
   sharing_hub::SharingHubBubbleView* ShowSharingHubBubble(
       share::ShareAttempt attempt) override;
@@ -785,17 +775,7 @@ class BrowserView : public BrowserWindow,
 
   // Closes an opened right aligned side panel, returns true if there is an open
   // side panel being closed.
-  bool CloseOpenRightAlignedSidePanel(bool exclude_lens = false,
-                                      bool exclude_side_search = false);
-
-  // Clobbers all right aligned side search side panels if
-  // kClobberAllSideSearchSidePanels is enabled.
-  void MaybeClobberAllSideSearchSidePanels();
-
-  // Called by right aligned side panels when they are explicitly closed by
-  // users. This is used to implement improved clobbering logic for the
-  // right aligned side panels.
-  void RightAlignedSidePanelWasClosed();
+  bool CloseOpenRightAlignedSidePanel(bool exclude_side_search = false);
 
   bool should_show_window_controls_overlay_toggle() const {
     return should_show_window_controls_overlay_toggle_;
@@ -803,6 +783,10 @@ class BrowserView : public BrowserWindow,
 
   void SetLoadingAnimationStateChangeClosureForTesting(
       base::OnceClosure closure);
+
+  WebAppFrameToolbarView* web_app_frame_toolbar_for_testing() {
+    return web_app_frame_toolbar();
+  }
 
  private:
   // Do not friend BrowserViewLayout. Use the BrowserViewLayoutDelegate
@@ -977,6 +961,12 @@ class BrowserView : public BrowserWindow,
   // Updates whether the web app is an isolated web app.
   void UpdateIsIsolatedWebApp();
 
+  WebAppFrameToolbarView* web_app_frame_toolbar();
+  const WebAppFrameToolbarView* web_app_frame_toolbar() const;
+
+  void PaintAsActiveChanged();
+  void FrameColorsChanged();
+
   // The BrowserFrame that hosts this view.
   raw_ptr<BrowserFrame, DanglingUntriaged> frame_ = nullptr;
 
@@ -988,6 +978,8 @@ class BrowserView : public BrowserWindow,
   // --------------------------------------------------------------------
   // | TopContainerView (top_container_)                                |
   // |  --------------------------------------------------------------  |
+  // |  | Web App toolbar and title (web_app_frame_toolbar_)         |  |
+  // |  |------------------------------------------------------------|  |
   // |  | Tabs (tabstrip_)                                           |  |
   // |  |------------------------------------------------------------|  |
   // |  | Navigation buttons, address bar, menu (toolbar_)           |  |
@@ -1011,6 +1003,16 @@ class BrowserView : public BrowserWindow,
   // bar. Stacked top in the view hiearachy so it can be used to slide out
   // the top views in immersive fullscreen.
   raw_ptr<TopContainerView, DanglingUntriaged> top_container_ = nullptr;
+
+  // Menu button and page status icons. Only used by web-app windows.
+  raw_ptr<WebAppFrameToolbarView, DanglingUntriaged> web_app_frame_toolbar_ =
+      nullptr;
+
+  // Normally the BrowserNonClientFrameView is responsible for rendering the
+  // title of a window when appropriate. However for web applications the title
+  // needs to be more integrated with other UI components part of BrowserView,
+  // so have a title Label for them here.
+  raw_ptr<views::Label, DanglingUntriaged> web_app_window_title_ = nullptr;
 
   // The view that contains the tabstrip, new tab button, and grab handle space.
   raw_ptr<TabStripRegionView, DanglingUntriaged> tab_strip_region_view_ =
@@ -1045,6 +1047,12 @@ class BrowserView : public BrowserWindow,
   // Its content NSView will be reparented to a NSToolbarFullScreenWindow
   // during fullscreen.
   raw_ptr<views::Widget, DanglingUntriaged> overlay_widget_;
+
+  // Also used when calling CreateMacOverlayView(). This widget will host the
+  // tabstrip contents. Its content NSView will be reparented to a separate
+  // section of the NSToolbarFullScreenWindow allowing for the tabs to live in
+  // the Titlebar.
+  raw_ptr<views::Widget, DanglingUntriaged> tab_overlay_widget_;
 #endif
 
   // The Bookmark Bar View for this window. Lazily created. May be null for
@@ -1089,9 +1097,6 @@ class BrowserView : public BrowserWindow,
   raw_ptr<views::View, DanglingUntriaged> left_aligned_side_panel_separator_ =
       nullptr;
 
-  // The Lens side panel.
-  raw_ptr<SidePanel, DanglingUntriaged> lens_side_panel_ = nullptr;
-
   std::unique_ptr<SidePanelCoordinator> side_panel_coordinator_;
 
   // TODO(pbos): Move this functionality into SidePanel when multiple "panels"
@@ -1108,14 +1113,6 @@ class BrowserView : public BrowserWindow,
   // the contextual panel interacts as expected with the global panels.
   std::unique_ptr<SidePanelVisibilityController>
       side_panel_visibility_controller_;
-
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // A controller that handles content hosted in the Lens side panel.
-  std::unique_ptr<lens::LensSidePanelController> lens_side_panel_controller_;
-#endif
-
-  // Controls the browser window's side panel for the Side Search feature.
-  std::unique_ptr<SideSearchBrowserController> side_search_controller_;
 
   // Provides access to the toolbar buttons this browser view uses. Buttons may
   // appear in a hosted app frame or in a tabbed UI toolbar.
@@ -1239,6 +1236,8 @@ class BrowserView : public BrowserWindow,
   bool is_isolated_web_app_ = false;
   absl::optional<content::PermissionController::SubscriptionId>
       window_management_subscription_id_;
+
+  base::CallbackListSubscription paint_as_active_subscription_;
 
   mutable base::WeakPtrFactory<BrowserView> weak_ptr_factory_{this};
 };

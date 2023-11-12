@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/worker_thread.h"
@@ -158,11 +158,11 @@ WakeEventPage::RequestData::RequestData(int thread_id,
                                         OnResponseCallback on_response)
     : thread_id(thread_id), on_response(std::move(on_response)) {}
 
-WakeEventPage::RequestData::~RequestData() {}
+WakeEventPage::RequestData::~RequestData() = default;
 
-WakeEventPage::WakeEventPage() {}
+WakeEventPage::WakeEventPage() = default;
 
-WakeEventPage::~WakeEventPage() {}
+WakeEventPage::~WakeEventPage() = default;
 
 void WakeEventPage::MakeRequest(const std::string& extension_id,
                                 OnResponseCallback on_response) {

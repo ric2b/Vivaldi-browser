@@ -21,6 +21,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/browser/vivaldi_brand_select.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -215,6 +216,15 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
   }
   registry->RegisterListPref(vivaldiprefs::kVivaldiTranslateLanguageList,
                              base::Value(std::move(args)));
+
+  registry->RegisterIntegerPref(vivaldiprefs::kVivaldiClientHintsBrand,
+                                int(BrandSelection::kNoBrand));
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kVivaldiClientHintsBrandAppendVivaldi, false);
+  registry->RegisterStringPref(
+      vivaldiprefs::kVivaldiClientHintsBrandCustomBrand, "");
+  registry->RegisterStringPref(
+      vivaldiprefs::kVivaldiClientHintsBrandCustomBrandVersion, "");
 }
 
 namespace {
@@ -291,7 +301,7 @@ void RegisterPrefsFromDefinition(base::Value::Dict& definition,
     value_type = base::Value::Type::LIST;
   } else if (type_str == kTypeDictionaryName) {
     pref_kind = PrefKind::kDictionary;
-    value_type = base::Value::Type::DICTIONARY;
+    value_type = base::Value::Type::DICT;
   }
   if (pref_kind == PrefKind::kNone) {
     LOG(FATAL) << "Invalid type value at '" << current_path << "'";
@@ -719,6 +729,9 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   GetRegisteredPrefPropertiesStorage() = std::move(pref_properties_map);
 
   RegisterOldPrefs(registry);
+#else
+  registry->RegisterBooleanPref(
+      vivaldiprefs::kBackgroundMediaPlaybackAllowed, false);
 #endif  // !BUILDFLAG(IS_ANDROID)
 }
 

@@ -8,7 +8,7 @@
 #include <set>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/quads/compositor_render_pass.h"
 #include "components/viz/common/quads/compositor_render_pass_draw_quad.h"
@@ -381,6 +381,12 @@ CompositorFrameBuilder& CompositorFrameBuilder::SetBeginFrameAck(
   return *this;
 }
 
+CompositorFrameBuilder& CompositorFrameBuilder::SetBeginFrameSourceId(
+    uint64_t source_id) {
+  frame_->metadata.begin_frame_ack.frame_id.source_id = source_id;
+  return *this;
+}
+
 CompositorFrameBuilder& CompositorFrameBuilder::SetDeviceScaleFactor(
     float device_scale_factor) {
   frame_->metadata.device_scale_factor = device_scale_factor;
@@ -454,8 +460,11 @@ CompositorRenderPassList CopyRenderPasses(
   return copy_list;
 }
 
-CompositorFrame MakeDefaultCompositorFrame() {
-  return CompositorFrameBuilder().AddDefaultRenderPass().Build();
+CompositorFrame MakeDefaultCompositorFrame(uint64_t source_id) {
+  return CompositorFrameBuilder()
+      .AddDefaultRenderPass()
+      .SetBeginFrameSourceId(source_id)
+      .Build();
 }
 
 CompositorFrame MakeCompositorFrame(

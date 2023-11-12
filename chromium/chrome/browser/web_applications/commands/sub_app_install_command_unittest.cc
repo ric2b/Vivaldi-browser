@@ -87,7 +87,7 @@ class SubAppInstallCommandTest : public WebAppTest {
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->start_url = parent_url_;
     web_app_info->scope = parent_url_.GetWithoutFilename();
-    web_app_info->user_display_mode = UserDisplayMode::kStandalone;
+    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
     web_app_info->title = u"Web App";
     return web_app::test::InstallWebApp(profile(), std::move(web_app_info));
   }
@@ -97,7 +97,7 @@ class SubAppInstallCommandTest : public WebAppTest {
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->start_url = url;
     web_app_info->scope = url.GetWithoutFilename();
-    web_app_info->user_display_mode = UserDisplayMode::kStandalone;
+    web_app_info->user_display_mode = mojom::UserDisplayMode::kStandalone;
     web_app_info->title = u"Sub App";
     return web_app_info;
   }
@@ -149,9 +149,8 @@ TEST_F(SubAppInstallCommandTest, InstallSingleAppSuccess) {
   AppInstallResults command_result = InstallSubAppAndWait(
       parent_app_id, data, GetDataRetrieverWithInfoAndManifest(sub_app_url()));
 
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode> expected_result(
-      unhashed_sub_app_id,
-      blink::mojom::SubAppsServiceAddResultCode::kSuccessNewInstall);
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode> expected_result(
+      unhashed_sub_app_id, blink::mojom::SubAppsServiceResultCode::kSuccess);
 
   // Verify command works fine, single sub_app is installed.
   EXPECT_EQ(1u, command_result.size());
@@ -177,22 +176,20 @@ TEST_F(SubAppInstallCommandTest, InstallSingleAppAlreadyInstalled) {
   // Install first app as sub_app.
   AppInstallResults command_result = InstallSubAppAndWait(
       parent_app_id, data, GetDataRetrieverWithInfoAndManifest(sub_app_url()));
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode> expected_result(
-      unhashed_sub_app_id,
-      blink::mojom::SubAppsServiceAddResultCode::kSuccessNewInstall);
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode> expected_result(
+      unhashed_sub_app_id, blink::mojom::SubAppsServiceResultCode::kSuccess);
   EXPECT_EQ(1u, command_result.size());
   EXPECT_EQ(expected_result, command_result[0]);
   EXPECT_EQ(1ul, GetAllSubAppIds(parent_app_id).size());
   EXPECT_TRUE(registrar().IsInstalled(sub_app_id));
 
-  // Reinstalling the same app as a sub_app should returns a
-  // kSuccessAlreadyInstalled.
+  // Reinstalling the same app as a sub_app should return a kSuccess.
   command_result = InstallSubAppAndWait(
       parent_app_id, data, GetDataRetrieverWithInfoAndManifest(sub_app_url()));
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode>
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode>
       expected_result_installed(
           unhashed_sub_app_id,
-          blink::mojom::SubAppsServiceAddResultCode::kSuccessAlreadyInstalled);
+          blink::mojom::SubAppsServiceResultCode::kSuccess);
   EXPECT_EQ(1u, command_result.size());
   EXPECT_EQ(expected_result_installed, command_result[0]);
   // No extra app is installed, old app is still installed.
@@ -216,11 +213,10 @@ TEST_F(SubAppInstallCommandTest, InstallFailIfDialogNotAccepted) {
       parent_app_id, data, GetDataRetrieverWithInfoAndManifest(sub_app_url()),
       /*dialog_not_accepted=*/true);
 
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode> expected_result(
-      unhashed_sub_app_id,
-      blink::mojom::SubAppsServiceAddResultCode::kUserInstallDeclined);
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode> expected_result(
+      unhashed_sub_app_id, blink::mojom::SubAppsServiceResultCode::kFailure);
 
-  // Verify command works and returns a kUserInstallDeclined.
+  // Verify command works and returns a kFailure.
   EXPECT_EQ(1u, command_result.size());
   EXPECT_EQ(expected_result, command_result[0]);
   EXPECT_EQ(0ul, GetAllSubAppIds(parent_app_id).size());
@@ -242,11 +238,10 @@ TEST_F(SubAppInstallCommandTest, InstallFailIfExpectedAppIdCheckFails) {
   AppInstallResults command_result = InstallSubAppAndWait(
       parent_app_id, data, GetDataRetrieverWithInfoAndManifest(sub_app_url()));
 
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode> expected_result(
-      "http://abc.com/",
-      blink::mojom::SubAppsServiceAddResultCode::kExpectedAppIdCheckFailed);
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode> expected_result(
+      "http://abc.com/", blink::mojom::SubAppsServiceResultCode::kFailure);
 
-  // Verify command works and returns a kExpectedAppIdCheckFailed.
+  // Verify command works and returns a kFailure.
   EXPECT_EQ(1u, command_result.size());
   EXPECT_EQ(expected_result, command_result[0]);
   EXPECT_EQ(0ul, GetAllSubAppIds(parent_app_id).size());
@@ -266,11 +261,10 @@ TEST_F(SubAppInstallCommandTest, InstallFailsIfNoParentApp) {
   AppInstallResults command_result = InstallSubAppAndWait(
       parent_app_id, data, GetDataRetrieverWithInfoAndManifest(sub_app_url()));
 
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode> expected_result(
-      unhashed_sub_app_id,
-      blink::mojom::SubAppsServiceAddResultCode::kParentAppUninstalled);
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode> expected_result(
+      unhashed_sub_app_id, blink::mojom::SubAppsServiceResultCode::kFailure);
 
-  // Verify command works and returns a kParentAppUninstalled.
+  // Verify command works and returns a kFailure.
   EXPECT_EQ(1u, command_result.size());
   EXPECT_EQ(expected_result, command_result[0]);
   EXPECT_EQ(0ul, GetAllSubAppIds(parent_app_id).size());
@@ -294,11 +288,10 @@ TEST_F(SubAppInstallCommandTest, InstallFailsForUrlLoadingFailure) {
       /*dialog_not_accepted=*/false,
       /*url_load_result=*/WebAppUrlLoader::Result::kRedirectedUrlLoaded);
 
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode> expected_result(
-      unhashed_sub_app_id,
-      blink::mojom::SubAppsServiceAddResultCode::kInstallUrlInvalid);
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode> expected_result(
+      unhashed_sub_app_id, blink::mojom::SubAppsServiceResultCode::kFailure);
 
-  // Verify command works and returns a kInstallUrlInvalid.
+  // Verify command works and returns a kFailure.
   EXPECT_EQ(1u, command_result.size());
   EXPECT_EQ(expected_result, command_result[0]);
   EXPECT_EQ(0ul, GetAllSubAppIds(parent_app_id).size());
@@ -322,8 +315,8 @@ TEST_F(SubAppInstallCommandTest, InstallFailsForWebAppInfoNotFound) {
                            GetDataRetrieverWithInfoAndManifest(
                                sub_app_url(), /*disable_web_app_info=*/true));
 
-  std::pair<AppId, blink::mojom::SubAppsServiceAddResultCode> expected_result(
-      unhashed_sub_app_id, blink::mojom::SubAppsServiceAddResultCode::kFailure);
+  std::pair<AppId, blink::mojom::SubAppsServiceResultCode> expected_result(
+      unhashed_sub_app_id, blink::mojom::SubAppsServiceResultCode::kFailure);
 
   // Verify command works and returns a kFailure.
   EXPECT_EQ(1u, command_result.size());

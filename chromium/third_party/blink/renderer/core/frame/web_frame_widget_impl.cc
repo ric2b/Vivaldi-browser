@@ -100,7 +100,6 @@
 #include "third_party/blink/renderer/core/input/context_menu_allowed_scope.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
 #include "third_party/blink/renderer/core/input/touch_action_util.h"
-#include "third_party/blink/renderer/core/layout/deferred_shaping_controller.h"
 #include "third_party/blink/renderer/core/layout/hit_test_location.h"
 #include "third_party/blink/renderer/core/layout/hit_test_request.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
@@ -424,8 +423,6 @@ void WebFrameWidgetImpl::DragTargetDragOver(
 void WebFrameWidgetImpl::DragTargetDragLeave(
     const gfx::PointF& point_in_viewport,
     const gfx::PointF& screen_point) {
-  DCHECK(current_drag_data_);
-
   // TODO(paulmeyer): It shouldn't be possible for |current_drag_data_| to be
   // null here, but this is somehow happening (rarely). This suggests that in
   // some cases drag-leave is happening before drag-enter, which should be
@@ -563,11 +560,17 @@ void WebFrameWidgetImpl::OnStartStylusWriting(
 }
 
 void WebFrameWidgetImpl::HandleStylusWritingGestureAction(
-    mojom::blink::StylusWritingGestureDataPtr gesture_data) {
+    mojom::blink::StylusWritingGestureDataPtr gesture_data,
+    HandleStylusWritingGestureActionCallback callback) {
   LocalFrame* focused_frame = FocusedLocalFrameInWidget();
-  if (!focused_frame)
+  if (!focused_frame) {
+    std::move(callback).Run(mojom::blink::HandwritingGestureResult::kFailed);
     return;
-  StylusWritingGesture::ApplyGesture(focused_frame, std::move(gesture_data));
+  }
+  mojom::blink::HandwritingGestureResult result =
+      StylusWritingGesture::ApplyGesture(focused_frame,
+                                         std::move(gesture_data));
+  std::move(callback).Run(result);
 }
 
 void WebFrameWidgetImpl::SetBackgroundOpaque(bool opaque) {
@@ -957,7 +960,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleMouseUp(
             vivaldi_double_click_menu_->tripple_click_timer_.emplace(
                 base::BindRepeating(&WebFrameWidgetImpl::MouseContextMenu,
                                WrapWeakPersistent(this), event));
-            base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+            base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
                 FROM_HERE,
                 vivaldi_double_click_menu_->tripple_click_timer_->callback(),
                 base::Milliseconds(click_delta * 1.33f));
@@ -1437,7 +1440,7 @@ void WebFrameWidgetImpl::WillBeginMainFrame() {
 
         if (auto* transition =
                 ViewTransitionUtils::GetActiveTransition(*document)) {
-          transition->WillBeginMainFrame();
+          transition->NotifyRenderingHasBegun();
         }
       });
 }
@@ -1743,8 +1746,11 @@ int WebFrameWidgetImpl::GetLayerTreeId() {
   return widget_base_->LayerTreeHost()->GetId();
 }
 
-const cc::LayerTreeSettings& WebFrameWidgetImpl::GetLayerTreeSettings() {
-  return widget_base_->LayerTreeHost()->GetSettings();
+const cc::LayerTreeSettings* WebFrameWidgetImpl::GetLayerTreeSettings() {
+  if (!View()->does_composite()) {
+    return nullptr;
+  }
+  return &widget_base_->LayerTreeHost()->GetSettings();
 }
 
 void WebFrameWidgetImpl::UpdateBrowserControlsState(
@@ -1842,7 +1848,8 @@ void WebFrameWidgetImpl::SetBrowserControlsParams(
 
 void WebFrameWidgetImpl::SynchronouslyCompositeForTesting(
     base::TimeTicks frame_time) {
-  widget_base_->LayerTreeHost()->CompositeForTest(frame_time, false);
+  widget_base_->LayerTreeHost()->CompositeForTest(frame_time, false,
+                                                  base::OnceClosure());
 }
 
 void WebFrameWidgetImpl::SetDeviceColorSpaceForTesting(
@@ -2099,8 +2106,6 @@ bool WebFrameWidgetImpl::ScrollFocusedEditableElementIntoView() {
           /*make_visible_in_visual_viewport=*/false,
           mojom::blink::ScrollBehavior::kInstant);
   params->for_focused_editable = mojom::blink::FocusedEditableParams::New();
-  params->for_focused_editable->relative_location = gfx::Vector2dF();
-  params->for_focused_editable->size = gfx::SizeF();
 
   // When deciding whether to zoom in on a focused text box, we should
   // decide not to zoom in if the user won't be able to zoom out. e.g if the
@@ -2132,6 +2137,10 @@ bool WebFrameWidgetImpl::ScrollFocusedEditableElementIntoView() {
   gfx::Vector2dF editable_offset_from_caret(absolute_element_bounds.offset -
                                             absolute_caret_bounds.offset);
   gfx::SizeF editable_size(absolute_element_bounds.size);
+
+  if (editable_size.IsEmpty()) {
+    return false;
+  }
 
   params->for_focused_editable->relative_location = editable_offset_from_caret;
   params->for_focused_editable->size = editable_size;
@@ -2642,9 +2651,12 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
     return WebInputEventResult::kHandledSuppressed;
   }
 
-  // Don't handle events once we've started shutting down.
-  if (!GetPage())
+  // Don't handle events once we've started shutting down or when the page is in
+  // bfcache.
+  if (!GetPage() ||
+      GetPage()->GetPageLifecycleState()->is_in_back_forward_cache) {
     return WebInputEventResult::kNotHandled;
+  }
 
   if (WebDevToolsAgentImpl* devtools = LocalRootImpl()->DevToolsAgentImpl()) {
     auto result = devtools->HandleInputEvent(input_event);
@@ -3094,7 +3106,7 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
         .presentation_time_callback =
             std::move(promise_callbacks_.presentation_time_callback)};
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
     if (reason == DidNotSwapReason::COMMIT_FAILS &&
         promise_callbacks_.core_animation_error_code_callback) {
       action = DidNotSwapAction::KEEP_ACTIVE;
@@ -3129,7 +3141,7 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
                         swap_time));
       ReportTime(std::move(callbacks.swap_time_callback), swap_time);
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       if (callbacks.core_animation_error_code_callback) {
         widget->widget_base_->AddCoreAnimationErrorCodeCallback(
             frame_token,
@@ -3139,7 +3151,7 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
     } else {
       ReportTime(std::move(callbacks.swap_time_callback), swap_time);
       ReportTime(std::move(callbacks.presentation_time_callback), swap_time);
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
       ReportErrorCode(std::move(callbacks.core_animation_error_code_callback),
                       gfx::kCALayerUnknownNoWidget);
 #endif
@@ -3171,7 +3183,7 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
       std::move(callback).Run(time);
   }
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   static void ReportErrorCode(
       base::OnceCallback<void(gfx::CALayerResult)> callback,
       gfx::CALayerResult error_code) {
@@ -3194,7 +3206,7 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
 
     ReportTime(std::move(callbacks.swap_time_callback), failure_time);
     ReportTime(std::move(callbacks.presentation_time_callback), failure_time);
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
     ReportErrorCode(std::move(callbacks.core_animation_error_code_callback),
                     gfx::kCALayerUnknownDidNotSwap);
 #endif
@@ -3224,7 +3236,7 @@ void WebFrameWidgetImpl::NotifyPresentationTime(
       {.presentation_time_callback = std::move(presentation_callback)});
 }
 
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
 void WebFrameWidgetImpl::NotifyCoreAnimationErrorCode(
     base::OnceCallback<void(gfx::CALayerResult)>
         core_animation_error_code_callback) {
@@ -3270,11 +3282,18 @@ void WebFrameWidgetImpl::AddEditCommandForNextKeyEvent(const WebString& name,
 }
 
 bool WebFrameWidgetImpl::HandleCurrentKeyboardEvent() {
-  bool did_execute_command = false;
+  if (edit_commands_.empty()) {
+    return false;
+  }
   WebLocalFrame* frame = FocusedWebLocalFrameInWidget();
   if (!frame)
     frame = local_root_;
-  for (const auto& command : edit_commands_) {
+  bool did_execute_command = false;
+  // Executing an edit command can run JS and we can end up reassigning
+  // `edit_commands_` so move it to a stack variable before iterating on it.
+  Vector<mojom::blink::EditCommandPtr> edit_commands =
+      std::move(edit_commands_);
+  for (const auto& command : edit_commands) {
     // In gtk and cocoa, it's possible to bind multiple edit commands to one
     // key (but it's the exception). Once one edit command is not executed, it
     // seems safest to not execute the rest.
@@ -3959,7 +3978,6 @@ void WebFrameWidgetImpl::MoveCaret(const gfx::Point& point_in_dips) {
       widget_base_->DIPsToRoundedBlinkSpace(point_in_dips));
 }
 
-#if BUILDFLAG(IS_ANDROID)
 void WebFrameWidgetImpl::SelectAroundCaret(
     mojom::blink::SelectionGranularity granularity,
     bool should_show_handle,
@@ -4024,7 +4042,6 @@ void WebFrameWidgetImpl::SelectAroundCaret(
   result->word_end_adjust = word_end_adjust;
   std::move(callback).Run(std::move(result));
 }
-#endif
 
 void WebFrameWidgetImpl::ForEachRemoteFrameControlledByWidget(
     base::FunctionRef<void(RemoteFrame*)> callback) {
@@ -4429,8 +4446,6 @@ void WebFrameWidgetImpl::PrepareForFinalLifecyclUpdateForTesting() {
         Document* document = core_frame->GetDocument();
         // Similarly, a fully attached frame must always have a document.
         DCHECK(document);
-        if (auto* ds_controller = DeferredShapingController::From(*document))
-          ds_controller->ReshapeAllDeferred(ReshapeReason::kTesting);
       });
 }
 

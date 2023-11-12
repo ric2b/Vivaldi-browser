@@ -25,6 +25,7 @@ GOOGLE_REGEX = [
   REGEXPPATCH(r"\b((?<!OK )(?<!Ok, )(?<!to ))Google(\b|\.?)(?! Chrome\b)(?! (%s))"),
   REGEXPPATCH(r"(?<!\bGoogle )\bChrome\b(?! (OS|%s))"),
   REGEXPPATCH(r"\bChromium\b(?! (OS|%s))"),
+  r"\bGoogle\b(?= Password Manager\b)",
 ]
 
 REPLACE_GOOGLE_EXCEPTIONS =[

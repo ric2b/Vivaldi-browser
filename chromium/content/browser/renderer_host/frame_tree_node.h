@@ -31,6 +31,7 @@
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-forward.h"
+#include "third_party/blink/public/mojom/webauthn/virtual_authenticator.mojom-forward.h"
 
 #include "base/time/time.h"
 #include "url/gurl.h"
@@ -275,13 +276,16 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   const network::mojom::ContentSecurityPolicy* csp_attribute() const {
     return attributes_->parsed_csp_attribute.get();
   }
-  bool credentialless() const { return attributes_->credentialless; }
-  const std::string& html_id() const { return attributes_->id; }
+  const absl::optional<std::string> html_id() const { return attributes_->id; }
   // This tracks iframe's 'name' attribute instead of window.name, which is
   // tracked in FrameReplicationState. See the comment for frame_name() for
   // more details.
-  const std::string& html_name() const { return attributes_->name; }
-  const std::string& html_src() const { return attributes_->src; }
+  const absl::optional<std::string> html_name() const {
+    return attributes_->name;
+  }
+  const absl::optional<std::string> html_src() const {
+    return attributes_->src;
+  }
 
   void SetAttributes(blink::mojom::IframeAttributesPtr attributes);
 
@@ -498,7 +502,14 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
 
   // Helper for GetParentOrOuterDocument/GetParentOrOuterDocumentOrEmbedder.
   // Do not use directly.
-  RenderFrameHostImpl* GetParentOrOuterDocumentHelper(bool escape_guest_view);
+  // `escape_guest_view` determines whether to iterate out of guest views and is
+  // the behaviour distinction between GetParentOrOuterDocument and
+  // GetParentOrOuterDocumentOrEmbedder. See the comment on
+  // GetParentOrOuterDocumentOrEmbedder for details.
+  // `include_prospective` includes embedders which own our frame tree, but have
+  // not yet attached it to the outer frame tree.
+  RenderFrameHostImpl* GetParentOrOuterDocumentHelper(bool escape_guest_view,
+                                                      bool include_prospective);
 
   // Sets the unique_name and name fields on replication_state_. To be used in
   // prerender activation to make sure the FrameTreeNode replication state is
@@ -535,6 +546,13 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   // variable attached to the fenced frame root FrameTreeNode, which may be
   // either this node or an ancestor of it.
   const absl::optional<FencedFrameProperties>& GetFencedFrameProperties();
+
+  // Called from the currently active document via the
+  // `Fence.setReportEventDataForAutomaticBeacons` JS API.
+  void SetFencedFrameAutomaticBeaconReportEventData(
+      const std::string& event_data,
+      const std::vector<blink::FencedFrame::ReportingDestination>& destination)
+      override;
 
   // Return the number of fenced frame boundaries above this frame. The
   // outermost main frame's frame tree has fenced frame depth 0, a topmost
@@ -574,6 +592,16 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   // it can't get on its own.
   bool AncestorOrSelfHasCSPEE() const;
 
+  // Reset every navigation in this frame, and its descendants. This is called
+  // after the <iframe> element has been removed, or after the document owning
+  // this frame has been navigated away.
+  //
+  // This takes into account:
+  // - Non-pending commit NavigationRequest owned by the FrameTreeNode
+  // - Pending commit NavigationRequest owned by the current RenderFrameHost
+  // - Speculative RenderFrameHost and its pending commit NavigationRequests.
+  void ResetAllNavigationsForFrameDetach();
+
   // RenderFrameHostOwner implementation:
   void DidStartLoading(bool should_show_loading_ui,
                        bool was_previously_loading) override;
@@ -583,6 +611,7 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   bool Reload() override;
   Navigator& GetCurrentNavigator() override;
   RenderFrameHostManager& GetRenderFrameHostManager() override;
+  FrameTreeNode* GetOpener() const override;
   void SetFocusedFrame(SiteInstanceGroup* source) override;
   void DidChangeReferrerPolicy(
       network::mojom::ReferrerPolicy referrer_policy) override;
@@ -599,12 +628,15 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
       blink::mojom::UserActivationUpdateType update_type,
       blink::mojom::UserActivationNotificationType notification_type) override;
 
+  void DidConsumeHistoryUserActivation() override;
+
   std::unique_ptr<NavigationRequest>
   CreateNavigationRequestForSynchronousRendererCommit(
       RenderFrameHostImpl* render_frame_host,
       bool is_same_document,
       const GURL& url,
       const url::Origin& origin,
+      const absl::optional<GURL>& initiator_base_url,
       const net::IsolationInfo& isolation_info_for_subresources,
       blink::mojom::ReferrerPtr referrer,
       const ui::PageTransition& transition,
@@ -615,11 +647,16 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
       const std::vector<GURL>& redirects,
       const GURL& original_url,
       std::unique_ptr<CrossOriginEmbedderPolicyReporter> coep_reporter,
-      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info,
       std::unique_ptr<SubresourceWebBundleNavigationInfo>
           subresource_web_bundle_navigation_info,
       int http_response_code) override;
   void CancelNavigation() override;
+  bool Credentialless() const override;
+#if !BUILDFLAG(IS_ANDROID)
+  void GetVirtualAuthenticatorManager(
+      mojo::PendingReceiver<blink::test::mojom::VirtualAuthenticatorManager>
+          receiver) override;
+#endif
 
  private:
   friend class CSPEmbeddedEnforcementUnitTest;
@@ -656,6 +693,8 @@ class CONTENT_EXPORT FrameTreeNode : public RenderFrameHostOwner {
   // should be allowed, this returns true and also clears corresponding pending
   // user activation state in the widget. Otherwise, this returns false.
   bool VerifyUserActivation();
+
+  absl::optional<FencedFrameProperties>& GetFencedFramePropertiesForEditing();
 
   // The next available browser-global FrameTreeNode ID.
   static int next_frame_tree_node_id_;

@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/no_destructor.h"
 #include "base/time/time.h"
 #include "components/autofill/core/browser/personal_data_manager.h"

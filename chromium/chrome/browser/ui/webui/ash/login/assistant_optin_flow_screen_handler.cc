@@ -8,9 +8,9 @@
 
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/tablet_mode.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/values.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
@@ -339,8 +339,11 @@ void AssistantOptInFlowScreenHandler::SendGetSettingsRequest() {
 void AssistantOptInFlowScreenHandler::StopSpeakerIdEnrollment() {
   DCHECK(voice_match_enrollment_started_);
   voice_match_enrollment_started_ = false;
-  CHECK(assistant::AssistantSettings::Get());
-  if (AssistantState::Get()->settings_enabled().value_or(false)) {
+
+  if (AssistantState::Get()->settings_enabled().value_or(false) &&
+      AssistantState::Get()->assistant_status() ==
+          assistant::AssistantStatus::READY) {
+    CHECK(assistant::AssistantSettings::Get());
     assistant::AssistantSettings::Get()->StopSpeakerIdEnrollment();
   }
   // Reset the mojom receiver of |SpeakerIdEnrollmentClient|.
@@ -553,8 +556,11 @@ void AssistantOptInFlowScreenHandler::HandleRelatedInfoScreenUserAction(
 
 void AssistantOptInFlowScreenHandler::HandleVoiceMatchScreenUserAction(
     const std::string& action) {
-  // If the Assistant is disabled, discard the action and end the flow instead.
-  if (!AssistantState::Get()->settings_enabled().value_or(false)) {
+  // If the Assistant is disabled or is not ready, discard the action and end
+  // the flow instead.
+  if (!AssistantState::Get()->settings_enabled().value_or(false) ||
+      AssistantState::Get()->assistant_status() ==
+          assistant::AssistantStatus::NOT_READY) {
     HandleFlowFinished();
     return;
   }

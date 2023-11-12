@@ -15,15 +15,16 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/cancelable_callback.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/lru_cache.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/observer_list.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -37,7 +38,6 @@
 #include "components/history/core/browser/sync/history_backend_for_sync.h"
 #include "components/history/core/browser/visit_tracker.h"
 #include "components/sync/driver/sync_service.h"
-#include "components/version_info/channel.h"
 #include "sql/init_status.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/origin.h"
@@ -283,6 +283,7 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
                                  const std::u16string& search_terms);
   void AddPageMetadataForVisit(VisitID visit_id,
                                const std::string& alternative_title);
+  void SetHasUrlKeyedImageForVisit(VisitID visit_id, bool has_url_keyed_image);
 
   // Querying ------------------------------------------------------------------
 
@@ -523,6 +524,19 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   void AddVisitsToCluster(int64_t cluster_id,
                           const std::vector<ClusterVisit>& visits);
 
+  // Adds `cluster_visit` to the local cluster with `originator_cache_guid` and
+  // `originator_cluster_id`. If an existing cluster does not exist with those
+  // synced details, a new one will be created.
+  void AddVisitToSyncedCluster(const history::ClusterVisit& cluster_visit,
+                               const std::string& originator_cache_guid,
+                               int64_t originator_cluster_id) override;
+
+  void UpdateClusterTriggerability(const std::vector<Cluster>& clusters);
+
+  void HideVisits(const std::vector<VisitID>& visit_ids);
+
+  void UpdateClusterVisit(const history::ClusterVisit& cluster_visit);
+
   std::vector<Cluster> GetMostRecentClusters(
       base::Time inclusive_min_time,
       base::Time exclusive_max_time,
@@ -535,6 +549,11 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // populated if `include_keywords_and_duplicates` is true.
   Cluster GetCluster(int64_t cluster_id,
                      bool include_keywords_and_duplicates = true);
+
+  // Returns the ID of the cluster containing `visit_id`. Returns 0 if
+  // `visit_id` is not in a cluster.
+  // HistoryBackendForSync:
+  int64_t GetClusterIdContainingVisit(VisitID visit_id) override;
 
   // Finds the 1st visit in the redirect chain containing `visit`.
   // Unlike `GetRedirectsToSpecificVisit()`, this only considers actual
@@ -630,7 +649,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // Even though the process is async, only visits that already exist at the
   // time this is called will be deleted. Visits added afterwards will *not* be
   // deleted.
-  bool DeleteAllForeignVisits() override;
+  // This method also resets the `is_known_to_sync` bit for all visits, local
+  // and foreign.
+  void DeleteAllForeignVisitsAndResetIsKnownToSync() override;
 
   bool RemoveVisits(const VisitVector& visits);
 
@@ -809,7 +830,8 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
       absl::optional<std::string> originator_cache_guid = absl::nullopt,
       absl::optional<VisitID> originator_visit_id = absl::nullopt,
       absl::optional<VisitID> originator_referring_visit = absl::nullopt,
-      absl::optional<VisitID> originator_opener_visit = absl::nullopt);
+      absl::optional<VisitID> originator_opener_visit = absl::nullopt,
+      bool is_known_to_sync = false);
 
   // Returns a redirect-or-referral chain in `redirects` for the VisitID
   // `cur_visit`. `cur_visit` is assumed to be valid. Assumes that
@@ -825,6 +847,9 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Updates the visit_duration information in visits table.
   void UpdateVisitDuration(VisitID visit_id, const base::Time end_ts);
+
+  // Flags this visit's `is_known_to_sync` true.
+  void MarkVisitAsKnownToSync(VisitID visit_id) override;
 
   // Returns whether `url` is on an untyped intranet host.
   bool IsUntypedIntranetHost(const GURL& url);
@@ -968,9 +993,6 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Directory where database files will be stored, empty until Init is called.
   base::FilePath history_dir_;
-
-  // Used to control error reporting.
-  version_info::Channel channel_ = version_info::Channel::UNKNOWN;
 
   // The history/favicon databases. Either may be null if the database could
   // not be opened, all users must first check for null and return immediately

@@ -7,13 +7,14 @@
 
 #include <list>
 #include <map>
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/clock.h"
 #include "base/timer/timer.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -74,9 +75,36 @@ class UnusedSitePermissionsService
   // KeyedService implementation.
   void Shutdown() override;
 
+  // If the user clicked "Allow again" for an auto-revoked origin, the
+  // permissions for that site should not be auto-revoked again by the service.
+  void IgnoreOriginForAutoRevocation(const url::Origin& origin);
+
   // Triggers an update of the unused permission map. Automatically registers
   // a delayed task for another update after 24h.
   void StartRepeatedUpdates();
+
+  // Re-grants permissions that are auto-revoked ones and removes the origin
+  // from revoked permissions list.
+  void RegrantPermissionsForOrigin(const url::Origin& origin);
+
+  // Reverse changes made by |RegrantPermissionsForOrigin|. Adds this origin to
+  // the removed permissions list and resets its permissions.
+  void UndoRegrantPermissionsForOrigin(
+      const std::set<ContentSettingsType> permissions,
+      const absl::optional<content_settings::ContentSettingConstraints>
+          constraint,
+      const url::Origin origin);
+
+  // Clear the list of revoked permissions so they will no longer be shown to
+  // the user. Does not change permissions themselves.
+  void ClearRevokedPermissionsList();
+
+  // Stores revoked permissions data on HCSM.
+  void StorePermissionInRevokedPermissionSetting(
+      const std::set<ContentSettingsType> permissions,
+      const absl::optional<content_settings::ContentSettingConstraints>
+          constraint,
+      const url::Origin origin);
 
   // Test support:
   void SetClockForTesting(base::Clock* clock);
@@ -100,6 +128,14 @@ class UnusedSitePermissionsService
   // Revokes permissions that belong to sites that were last visited over 60
   // days ago.
   void RevokeUnusedPermissions();
+
+  // Stores revoked permissions data on HCSM.
+  void StorePermissionInRevokedPermissionSetting(
+      const std::set<ContentSettingsType> permissions,
+      const absl::optional<content_settings::ContentSettingConstraints>
+          constraint,
+      const ContentSettingsPattern& primary_pattern,
+      const ContentSettingsPattern& secondary_pattern);
 
   // Set of permissions that haven't been used for at least a week.
   UnusedPermissionMap recently_unused_permissions_;

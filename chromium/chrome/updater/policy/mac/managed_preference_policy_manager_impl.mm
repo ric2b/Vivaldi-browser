@@ -245,7 +245,8 @@ int TranslateUpdatePolicyValue(int update_policy_from_managed_preferences) {
 }
 
 - (NSString*)source {
-  return @"ManagedPreference";
+  return [NSString
+      stringWithUTF8String:updater::kSourceManagedPreferencePolicyManager];
 }
 
 - (NSString*)downloadPreference {
@@ -298,6 +299,10 @@ int TranslateUpdatePolicyValue(int update_policy_from_managed_preferences) {
   if (![_appPolicies objectForKey:appid])
     return updater::kPolicyNotSet;
   return [_appPolicies objectForKey:appid].rollbackToTargetVersion;
+}
+
+- (NSArray<NSString*>*)appsWithPolicy {
+  return [_appPolicies allKeys];
 }
 
 @end

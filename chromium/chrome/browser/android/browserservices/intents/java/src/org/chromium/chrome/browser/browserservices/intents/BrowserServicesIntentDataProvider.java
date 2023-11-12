@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.browserservices.intents;
 
+import static androidx.browser.customtabs.CustomTabsIntent.CLOSE_BUTTON_POSITION_DEFAULT;
+
 import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -15,6 +17,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.browser.customtabs.CustomTabsIntent;
+import androidx.browser.customtabs.CustomTabsIntent.CloseButtonPosition;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 import androidx.browser.trusted.TrustedWebActivityDisplayMode;
 import androidx.browser.trusted.sharing.ShareData;
@@ -57,6 +60,38 @@ public abstract class BrowserServicesIntentDataProvider {
         int V2_NOTIFICATION_OR_SNACKBAR = 1;
     }
 
+    @IntDef({ACTIVITY_SIDE_SHEET_POSITION_DEFAULT, ACTIVITY_SIDE_SHEET_POSITION_START,
+            ACTIVITY_SIDE_SHEET_POSITION_END})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ActivitySideSheetPosition {}
+    /**
+     * Applies the default position for the Custom Tab Activity when it behaves as a
+     * side sheet. Same as {@link #ACTIVITY_SIDE_SHEET_POSITION_END}.
+     */
+    public static final int ACTIVITY_SIDE_SHEET_POSITION_DEFAULT = 0;
+
+    /** Position the side sheet on the start side of the screen. */
+    public static final int ACTIVITY_SIDE_SHEET_POSITION_START = 1;
+
+    /** Position the side sheet on the end side of the screen. */
+    public static final int ACTIVITY_SIDE_SHEET_POSITION_END = 2;
+
+    @IntDef({ACTIVITY_SIDE_SHEET_SLIDE_IN_DEFAULT, ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_BOTTOM,
+            ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ActivitySideSheetSlideInBehavior {}
+    /**
+     * Side sheet's default slide-in behavior. Same as
+     * {@link ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE}.
+     */
+    public static final int ACTIVITY_SIDE_SHEET_SLIDE_IN_DEFAULT = 0;
+
+    /** Side sheet's slide-in behavior defined for bottom-to-up animation. */
+    public static final int ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_BOTTOM = 1;
+
+    /** Side shset's slide-in behavior for side-wise animation. */
+    public static final int ACTIVITY_SIDE_SHEET_SLIDE_IN_FROM_SIDE = 2;
+
     @IntDef({ACTIVITY_HEIGHT_DEFAULT, ACTIVITY_HEIGHT_ADJUSTABLE, ACTIVITY_HEIGHT_FIXED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface ActivityHeightResizeBehavior {}
@@ -79,24 +114,16 @@ public abstract class BrowserServicesIntentDataProvider {
      */
     public static final int ACTIVITY_HEIGHT_FIXED = 2;
 
-    @IntDef({CLOSE_BUTTON_POSITION_DEFAULT, CLOSE_BUTTON_POSITION_START, CLOSE_BUTTON_POSITION_END})
+    @IntDef({ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DEFAULT, ACTIVITY_SIDE_SHEET_DECORATION_TYPE_NONE,
+            ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW,
+            ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DIVIDER})
     @Retention(RetentionPolicy.SOURCE)
-    public @interface CloseButtonPosition {}
-
-    /** Same as {@link #CLOSE_BUTTON_POSITION_START}. */
-    public static final int CLOSE_BUTTON_POSITION_DEFAULT = 0;
-
-    /** Positions the close button at the start of the toolbar. */
-    public static final int CLOSE_BUTTON_POSITION_START = 1;
-
-    /** Positions the close button at the end of the toolbar. */
-    public static final int CLOSE_BUTTON_POSITION_END = 2;
-
-    /**
-     * Maximum value for the CLOSE_BUTTON_POSITION_* configuration options. For validation purposes
-     * only.
-     */
-    public static final int CLOSE_BUTTON_POSITION_MAX = 2;
+    public @interface SideSheetDecorationType {}
+    public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DEFAULT = 0;
+    public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_NONE = 1;
+    public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_SHADOW = 2;
+    public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DIVIDER = 3;
+    public static final int ACTIVITY_SIDE_SHEET_DECORATION_TYPE_MAX = 3;
 
     /**
      * @return The type of the Activity;
@@ -247,6 +274,15 @@ public abstract class BrowserServicesIntentDataProvider {
      */
     @Nullable
     public PendingIntent getRemoteViewsPendingIntent() {
+        return null;
+    }
+
+    /**
+     * @return The {@link PendingIntent} that is sent when the user swipes up from the secondary
+     *         (bottom) toolbar.
+     */
+    @Nullable
+    public PendingIntent getSecondaryToolbarSwipeUpPendingIntent() {
         return null;
     }
 
@@ -490,18 +526,56 @@ public abstract class BrowserServicesIntentDataProvider {
     }
 
     /**
-     * @return Whether the intent is for partial-height custom tabs.
+     * @return Whether the intent is for partial custom tabs bottom sheet.
      */
     public boolean isPartialHeightCustomTab() {
         return false;
     }
 
     /**
-     * @return The value in pixels  of the initial height of the Activity. It will return 0 if there
+     * @return Whether the intent is for partial custom tabs side sheet.
+     */
+    public boolean isPartialWidthCustomTab() {
+        return false;
+    }
+
+    /**
+     * @return Whether the intent is partial custom tabs side sheet or bottom sheet.
+     */
+
+    public boolean isPartialCustomTab() {
+        return false;
+    }
+
+    /**
+     * @return The value in pixels of the initial height of the Activity. It will return 0 if there
      *         is no value set.
      */
     public @Px int getInitialActivityHeight() {
         return 0;
+    }
+
+    /**
+     * @return The value in pixels of the initial width of the Activity. It will return 0 if there
+     *          is no value set.
+     */
+    public @Px int getInitialActivityWidth() {
+        return 0;
+    }
+
+    /**
+     * @return The value in pixels of the breakpoint where Side Sheets behave as Bottom Sheets.
+     *          It will return 0 if there is no value set.
+     */
+    public int getActivityBreakPoint() {
+        return 0;
+    }
+
+    /**
+     * @return An int representing the side sheet decoration type for the Activity.
+     */
+    public int getActivitySideSheetDecorationType() {
+        return ACTIVITY_SIDE_SHEET_DECORATION_TYPE_DEFAULT;
     }
 
     /**
@@ -538,4 +612,21 @@ public abstract class BrowserServicesIntentDataProvider {
      * background application
      */
     public boolean canInteractWithBackground() { return false; }
+
+    /**
+     * Return false since by default side panel does not show maximize button.
+     */
+    public boolean showSideSheetMaximizeButton() {
+        return false;
+    }
+
+    /** Return the default behavior. */
+    public int getSideSheetSlideInBehavior() {
+        return ACTIVITY_SIDE_SHEET_SLIDE_IN_DEFAULT;
+    }
+
+    /** Return the default position. */
+    public int getSideSheetPosition() {
+        return ACTIVITY_SIDE_SHEET_POSITION_DEFAULT;
+    }
 }

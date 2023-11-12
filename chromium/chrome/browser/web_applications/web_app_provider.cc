@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "base/barrier_closure.h"
-#include "base/bind.h"
 #include "base/check_is_test.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
@@ -23,7 +23,6 @@
 #include "chrome/browser/web_applications/manifest_update_manager.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/os_integration/url_handler_manager.h"
-#include "chrome/browser/web_applications/os_integration/url_handler_manager_impl.h"
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_protocol_handler_manager.h"
 #include "chrome/browser/web_applications/os_integration/web_app_shortcut_manager.h"
@@ -151,21 +150,9 @@ const WebAppRegistrar& WebAppProvider::registrar_unsafe() const {
   return *registrar_;
 }
 
-WebAppRegistrar& WebAppProvider::registrar() {
-  return registrar_unsafe();
-}
-
-const WebAppRegistrar& WebAppProvider::registrar() const {
-  return registrar_unsafe();
-}
-
 WebAppSyncBridge& WebAppProvider::sync_bridge_unsafe() {
   CheckIsConnected();
   return *sync_bridge_;
-}
-
-WebAppSyncBridge& WebAppProvider::sync_bridge() {
-  return sync_bridge_unsafe();
 }
 
 WebAppInstallManager& WebAppProvider::install_manager() {
@@ -294,14 +281,11 @@ void WebAppProvider::CreateSubsystems(Profile* profile) {
         profile, icon_manager_.get(), file_handler_manager.get(),
         protocol_handler_manager.get());
 
-    std::unique_ptr<UrlHandlerManager> url_handler_manager;
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-    url_handler_manager = std::make_unique<UrlHandlerManagerImpl>(profile);
-#endif
-
+    // TODO(crbug.com/1072058): Remove UrlHandlerManager from
+    // OsIntegrationManager.
     os_integration_manager_ = std::make_unique<OsIntegrationManager>(
         profile, std::move(shortcut_manager), std::move(file_handler_manager),
-        std::move(protocol_handler_manager), std::move(url_handler_manager));
+        std::move(protocol_handler_manager), /*url_handler_manager=*/nullptr);
   }
 
   command_manager_ = std::make_unique<WebAppCommandManager>(profile, this);
@@ -315,7 +299,7 @@ void WebAppProvider::ConnectSubsystems() {
   DCHECK(!started_);
 
   sync_bridge_->SetSubsystems(database_factory_.get(), command_manager_.get(),
-                              command_scheduler_.get());
+                              command_scheduler_.get(), install_manager_.get());
   icon_manager_->SetSubsystems(registrar_.get(), install_manager_.get());
   install_finalizer_->SetSubsystems(
       install_manager_.get(), registrar_.get(), ui_manager_.get(),
@@ -326,14 +310,11 @@ void WebAppProvider::ConnectSubsystems() {
       registrar_.get(), os_integration_manager_.get(), command_manager_.get(),
       install_finalizer_.get(), icon_manager_.get(), sync_bridge_.get(),
       translation_manager_.get());
-  manifest_update_manager_->SetSubsystems(
-      install_manager_.get(), registrar_.get(), icon_manager_.get(),
-      ui_manager_.get(), install_finalizer_.get(),
-      os_integration_manager_.get(), sync_bridge_.get(),
-      command_scheduler_.get());
+  manifest_update_manager_->SetSubsystems(install_manager_.get(),
+                                          registrar_.get(), ui_manager_.get(),
+                                          command_scheduler_.get());
   externally_managed_app_manager_->SetSubsystems(
-      registrar_.get(), ui_manager_.get(), install_finalizer_.get(),
-      command_scheduler_.get(), sync_bridge_.get());
+      ui_manager_.get(), install_finalizer_.get(), command_scheduler_.get());
   preinstalled_web_app_manager_->SetSubsystems(
       registrar_.get(), ui_manager_.get(),
       externally_managed_app_manager_.get());

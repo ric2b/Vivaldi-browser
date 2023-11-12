@@ -9,11 +9,12 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/containers/circular_deque.h"
+#include "base/functional/callback.h"
 #include "chromeos/ash/components/multidevice/remote_device_ref.h"
 #include "chromeos/ash/components/multidevice/software_feature.h"
 #include "chromeos/ash/services/device_sync/feature_status_change.h"
+#include "chromeos/ash/services/device_sync/group_private_key_and_better_together_metadata_status.h"
 #include "chromeos/ash/services/device_sync/proto/cryptauth_common.pb.h"
 #include "chromeos/ash/services/device_sync/public/cpp/device_sync_client.h"
 #include "chromeos/ash/services/device_sync/public/mojom/device_sync.mojom.h"
@@ -111,6 +112,8 @@ class FakeDeviceSyncClient : public DeviceSyncClient {
 
   int GetForceEnrollmentNowCallbackQueueSize() const;
   int GetForceSyncNowCallbackQueueSize() const;
+  int GetBetterTogetherMetadataStatusCallbackQueueSize() const;
+  int GetGroupPrivateKeyStatusCallbackQueueSize() const;
   int GetSetSoftwareFeatureStateInputsQueueSize() const;
   int GetSetFeatureStatusInputsQueueSize() const;
   int GetFindEligibleDevicesInputsQueueSize() const;
@@ -119,6 +122,10 @@ class FakeDeviceSyncClient : public DeviceSyncClient {
 
   void InvokePendingForceEnrollmentNowCallback(bool success);
   void InvokePendingForceSyncNowCallback(bool success);
+  void InvokePendingGetBetterTogetherMetadataStatusCallback(
+      BetterTogetherMetadataStatus status);
+  void InvokePendingGetGroupPrivateKeyStatusCallback(
+      GroupPrivateKeyStatus status);
   void InvokePendingSetSoftwareFeatureStateCallback(
       mojom::NetworkRequestResult result_code);
   void InvokePendingSetFeatureStatusCallback(
@@ -153,6 +160,10 @@ class FakeDeviceSyncClient : public DeviceSyncClient {
   void ForceEnrollmentNow(
       mojom::DeviceSync::ForceEnrollmentNowCallback callback) override;
   void ForceSyncNow(mojom::DeviceSync::ForceSyncNowCallback callback) override;
+  void GetBetterTogetherMetadataStatus(
+      mojom::DeviceSync::GetBetterTogetherMetadataStatusCallback) override;
+  void GetGroupPrivateKeyStatus(
+      mojom::DeviceSync::GetGroupPrivateKeyStatusCallback) override;
   multidevice::RemoteDeviceRefList GetSyncedDevices() override;
   absl::optional<multidevice::RemoteDeviceRef> GetLocalDeviceMetadata()
       override;
@@ -185,6 +196,11 @@ class FakeDeviceSyncClient : public DeviceSyncClient {
       force_enrollment_now_callback_queue_;
   base::circular_deque<mojom::DeviceSync::ForceSyncNowCallback>
       force_sync_now_callback_queue_;
+  base::circular_deque<
+      mojom::DeviceSync::GetBetterTogetherMetadataStatusCallback>
+      get_better_together_metadata_status_callback_queue_;
+  base::circular_deque<mojom::DeviceSync::GetGroupPrivateKeyStatusCallback>
+      get_group_private_key_status_callback_queue_;
   base::circular_deque<SetSoftwareFeatureStateInputs>
       set_software_feature_state_inputs_queue_;
   base::circular_deque<SetFeatureStatusInputs> set_feature_status_inputs_queue_;

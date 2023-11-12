@@ -17,8 +17,8 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "ash/wm/resize_shadow_controller.h"
-#include "base/bind.h"
-#include "base/callback_forward.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
@@ -383,6 +383,11 @@ void ArcResizeLockManager::ShowSplashScreenDialog(aura::Window* window,
   WindowActivationObserver::RunOnActivated(
       window, base::BindOnce(&ArcSplashScreenDialogView::Show, window,
                              is_fully_locked));
+}
+
+// static
+void ArcResizeLockManager::EnsureFactoryBuilt() {
+  ArcResizeLockManagerFactory::GetInstance();
 }
 
 }  // namespace arc

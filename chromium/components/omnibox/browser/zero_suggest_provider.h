@@ -82,9 +82,6 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   void DeleteMatch(const AutocompleteMatch& match) override;
   void AddProviderInfo(ProvidersInfo* provider_info) const override;
 
-  // Sets |field_trial_triggered_| to false.
-  void ResetSession() override;
-
   // Returns the list of experiment stats corresponding to |matches_|. Will be
   // logged to SearchboxStats as part of a GWS experiment, if any.
   const SearchSuggestionParser::ExperimentStatsV2s& experiment_stats_v2s()
@@ -117,6 +114,7 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   void OnURLLoadComplete(const AutocompleteInput& input,
                          const ResultType result_type,
                          const network::SimpleURLLoader* source,
+                         const bool response_received,
                          std::unique_ptr<std::string> response_body);
   // Called when the prefetch network request has completed.
   // `input` and `result_type` are bound to this callback. The former is the
@@ -125,6 +123,7 @@ class ZeroSuggestProvider : public BaseSearchProvider {
   void OnPrefetchURLLoadComplete(const AutocompleteInput& input,
                                  const ResultType result_type,
                                  const network::SimpleURLLoader* source,
+                                 const bool response_received,
                                  std::unique_ptr<std::string> response_body);
 
   // Returns an AutocompleteMatch for a navigational suggestion |navigation|.

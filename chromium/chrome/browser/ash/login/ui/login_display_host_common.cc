@@ -8,11 +8,13 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/login_accelerators.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/check_deref.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
+#include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_types.h"
 #include "chrome/browser/ash/language_preferences.h"
 #include "chrome/browser/ash/login/app_mode/kiosk_launch_controller.h"
@@ -31,6 +33,7 @@
 #include "chrome/browser/ash/login/ui/login_feedback.h"
 #include "chrome/browser/ash/login/ui/signin_ui.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
+#include "chrome/browser/ash/nearby/quick_start_connectivity_service_factory.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/ash/profiles/signin_profile_handler.h"
@@ -42,7 +45,6 @@
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/webui/ash/diagnostics_dialog.h"
-#include "chrome/browser/ui/webui/ash/login/eula_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/family_link_notice_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/ash/login/locale_switch_screen_handler.h"
@@ -195,6 +197,8 @@ LoginDisplayHostCommon::LoginDisplayHostCommon()
           &LoginDisplayHostCommon::OnAppTerminating, base::Unretained(this)));
   BrowserList::AddObserver(this);
   AuthMetricsRecorder::Get()->ResetLoginData();
+  AuthMetricsRecorder::Get()->OnAuthenticationSurfaceChange(
+      AuthMetricsRecorder::AuthenticationSurface::kLogin);
 }
 
 LoginDisplayHostCommon::~LoginDisplayHostCommon() {
@@ -299,6 +303,14 @@ void LoginDisplayHostCommon::StartKiosk(const KioskAppId& kiosk_app_id,
     return;
   }
 
+  const auto& existing_user_controller =
+      CHECK_DEREF(GetExistingUserController());
+  if (existing_user_controller.IsSigninInProgress() ||
+      existing_user_controller.IsUserSigninCompleted()) {
+    LOG(ERROR) << "Cancel kiosk launch. Another user signin detected.";
+    return;
+  }
+
   SetKioskLaunchStateCrashKey(KioskLaunchState::kStartLaunch);
 
   OnStartAppLaunch();
@@ -364,6 +376,12 @@ void LoginDisplayHostCommon::SetDisplayAndGivenName(
                                                         given_name);
 }
 
+bool LoginDisplayHostCommon::IsGaiaDialogVisibleForTesting() {
+  return IsOobeUIDialogVisible() &&
+         GetWizardController()->current_screen()->screen_id() ==
+             GaiaView::kScreenId;
+}
+
 void LoginDisplayHostCommon::ShowAllowlistCheckFailedError() {
   StartWizard(GaiaView::kScreenId);
 
@@ -424,13 +442,6 @@ bool LoginDisplayHostCommon::HandleAccelerator(LoginAcceleratorAction action) {
 
   if (kiosk_launch_controller_ &&
       kiosk_launch_controller_->HandleAccelerator(action)) {
-    return true;
-  }
-
-  if (action == LoginAcceleratorAction::kToggleSystemInfo) {
-    if (!GetOobeUI())
-      return false;
-    GetOobeUI()->GetCoreOobeView()->ToggleSystemInfo();
     return true;
   }
 
@@ -512,11 +523,8 @@ void LoginDisplayHostCommon::ShowTosForExistingUser() {
 }
 
 void LoginDisplayHostCommon::ShowNewTermsForFlexUsers() {
-  if (features::IsOobeConsolidatedConsentEnabled()) {
-    SetScreenAfterManagedTos(ConsolidatedConsentScreenView::kScreenId);
-  } else {
-    SetScreenAfterManagedTos(EulaView::kScreenId);
-  }
+  SetScreenAfterManagedTos(ConsolidatedConsentScreenView::kScreenId);
+
   wizard_context_->is_cloud_ready_update_flow = true;
   StartWizard(TermsOfServiceScreenView::kScreenId);
 }
@@ -524,9 +532,10 @@ void LoginDisplayHostCommon::ShowNewTermsForFlexUsers() {
 void LoginDisplayHostCommon::SetAuthSessionForOnboarding(
     const UserContext& user_context) {
   if (PinSetupScreen::ShouldSkipBecauseOfPolicy() &&
-      !features::IsCryptohomeRecoverySetupEnabled() &&
-      RecoveryEligibilityScreen::ShouldSkipRecoverySetupBecauseOfPolicy())
+      !features::IsCryptohomeRecoveryEnabled() &&
+      RecoveryEligibilityScreen::ShouldSkipRecoverySetupBecauseOfPolicy()) {
     return;
+  }
 
   wizard_context_->extra_factors_auth_session =
       std::make_unique<UserContext>(user_context);
@@ -687,8 +696,17 @@ base::WeakPtr<quick_start::TargetDeviceBootstrapController>
 LoginDisplayHostCommon::GetQuickStartBootstrapController() {
   DCHECK(features::IsOobeQuickStartEnabled());
   if (!bootstrap_controller_) {
+    Profile* profile = ProfileManager::GetActiveUserProfile();
+    DCHECK(profile);
+
+    quick_start::QuickStartConnectivityService* service =
+        quick_start::QuickStartConnectivityServiceFactory::GetForProfile(
+            profile);
+    DCHECK(service);
+
     bootstrap_controller_ =
-        std::make_unique<ash::quick_start::TargetDeviceBootstrapController>();
+        std::make_unique<ash::quick_start::TargetDeviceBootstrapController>(
+            service->GetNearbyConnectionsManager());
   }
   return bootstrap_controller_->GetAsWeakPtrForClient();
 }

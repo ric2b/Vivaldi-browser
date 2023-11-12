@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import static androidx.browser.customtabs.CustomTabsIntent.CLOSE_BUTTON_POSITION_END;
 import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_DARK;
 import static androidx.browser.customtabs.CustomTabsIntent.COLOR_SCHEME_LIGHT;
 
@@ -15,6 +16,7 @@ import android.util.Pair;
 import android.view.KeyEvent;
 
 import androidx.activity.OnBackPressedCallback;
+import androidx.annotation.AnimRes;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.browser.customtabs.CustomTabsIntent;
@@ -42,6 +44,7 @@ import org.chromium.chrome.browser.customtabs.content.CustomTabIntentHandler.Int
 import org.chromium.chrome.browser.customtabs.content.TabCreationMode;
 import org.chromium.chrome.browser.customtabs.dependency_injection.BaseCustomTabActivityComponent;
 import org.chromium.chrome.browser.customtabs.dependency_injection.BaseCustomTabActivityModule;
+import org.chromium.chrome.browser.customtabs.features.partialcustomtab.PartialCustomTabDisplayManager;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarCoordinator;
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
 import org.chromium.chrome.browser.dependency_injection.ModuleFactoryOverrides;
@@ -276,8 +279,16 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
 
         super.performPreInflationStartup();
 
-        if (mIntentDataProvider.isPartialHeightCustomTab()) {
-            overridePendingTransition(R.anim.slide_in_up, R.anim.no_anim);
+        if (mIntentDataProvider.isPartialCustomTab()) {
+            if (ChromeFeatureList.sCctResizableSideSheet.isEnabled()) {
+                @AnimRes
+                int startAnimResId = PartialCustomTabDisplayManager.getStartAnimationOverride(this,
+                        getIntentDataProvider(), getIntentDataProvider().getAnimationEnterRes());
+                overridePendingTransition(startAnimResId, R.anim.no_anim);
+            } else if (getIntentDataProvider().isPartialHeightCustomTab()) {
+                // Take care of only the bottom sheet animation if side sheet is not enabled.
+                overridePendingTransition(R.anim.slide_in_up, R.anim.no_anim);
+            }
         }
 
         WebappExtras webappExtras = getIntentDataProvider().getWebappExtras();
@@ -383,8 +394,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     public AppMenuPropertiesDelegate createAppMenuPropertiesDelegate() {
         // Menu icon is at the other side of the toolbar relative to the close button, so it will be
         // at the start when the close button is at the end.
-        boolean isMenuIconAtStart = mIntentDataProvider.getCloseButtonPosition()
-                == BrowserServicesIntentDataProvider.CLOSE_BUTTON_POSITION_END;
+        boolean isMenuIconAtStart =
+                mIntentDataProvider.getCloseButtonPosition() == CLOSE_BUTTON_POSITION_END;
         return new CustomTabAppMenuPropertiesDelegate(this, getActivityTabProvider(),
                 getMultiWindowModeStateDispatcher(), getTabModelSelector(), getToolbarManager(),
                 getWindow().getDecorView(), mBookmarkModelSupplier, mVerifier,
@@ -476,7 +487,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
             // CustomTabActivityNavigationController#FinishHandler. Pass the mode enum into
             // CustomTabActivityModule, so that it can provide the correct implementation.
             getComponent().resolveTwaFinishHandler().onFinish(defaultBehavior);
-        } else if (intentDataProvider.isPartialHeightCustomTab()
+        } else if (intentDataProvider.isPartialCustomTab()
                 && intentDataProvider.shouldAnimateOnFinish()) {
             // WebContents is missing during the close animation due to android:windowIsTranslucent.
             // We let partial CCT handle the animation.
@@ -512,8 +523,10 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
         if (mWebappActivityCoordinator != null) {
             mWebappActivityCoordinator.initDeferredStartupForActivity();
         }
-        DeferredStartupHandler.getInstance().addDeferredTask(
-                () -> { mBaseCustomTabRootUiCoordinator.onDeferredStartup(); });
+        DeferredStartupHandler.getInstance().addDeferredTask(() -> {
+            if (isActivityFinishingOrDestroyed()) return;
+            mBaseCustomTabRootUiCoordinator.onDeferredStartup();
+        });
         super.initDeferredStartupForActivity();
     }
 
@@ -556,8 +569,7 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     @Override
     public boolean onMenuOrKeyboardAction(int id, boolean fromMenu) {
         // Disable creating new tabs, bookmark, history, print, help, focus_url, etc.
-        if (id == R.id.focus_url_bar || id == R.id.all_bookmarks_menu_id
-                || id == R.id.add_to_reading_list_menu_id || id == R.id.help_id
+        if (id == R.id.focus_url_bar || id == R.id.all_bookmarks_menu_id || id == R.id.help_id
                 || id == R.id.recent_tabs_menu_id || id == R.id.new_incognito_tab_menu_id
                 || id == R.id.new_tab_menu_id || id == R.id.open_history_menu_id) {
             return true;

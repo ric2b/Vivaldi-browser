@@ -20,16 +20,12 @@ const char kAllowLegacyExtensionManifests[] =
 
 // Adds the given extension ID to all the permission allowlists.
 const char kAllowlistedExtensionID[] = "allowlisted-extension-id";
-// Provides the same functionality as kAllowlistedExtensionID.
-// TODO(b/204179234): Remove at the end of the deprecation period. Deprecated on
-// 10/2021.
-const char kDEPRECATED_AllowlistedExtensionID[] = "whitelisted-extension-id";
 
 // Enables extension options to be embedded in chrome://extensions rather than
 // a new tab.
 const char kEmbeddedExtensionOptions[] = "embedded-extension-options";
 
-// Enable BLE Advertisiing in apps.
+// Enable BLE Advertising in apps.
 const char kEnableBLEAdvertising[] = "enable-ble-advertising-in-apps";
 
 // Enables extension APIs that are in development.

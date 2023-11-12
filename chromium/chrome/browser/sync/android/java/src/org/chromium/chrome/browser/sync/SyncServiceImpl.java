@@ -316,7 +316,7 @@ public class SyncServiceImpl extends SyncService {
     }
 
     @Override
-    public boolean isSyncingUrlsWithKeystorePassphrase() {
+    public boolean isSyncingUnencryptedUrls() {
         return isEngineInitialized()
                 && (getActiveDataTypes().contains(ModelType.TYPED_URLS)
                         || getActiveDataTypes().contains(ModelType.HISTORY))

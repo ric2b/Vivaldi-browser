@@ -4,7 +4,7 @@
 #import "vivaldi/Sparkle/SUAppcastItem.h"
 #import "vivaldi/Sparkle/SPUUpdaterDelegate.h"
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 
 enum class AutoUpdateStatus;
 

@@ -41,6 +41,7 @@
 #import "ios/chrome/browser/download/vcard_tab_helper.h"
 #import "ios/chrome/browser/favicon/favicon_service_factory.h"
 #import "ios/chrome/browser/find_in_page/find_tab_helper.h"
+#import "ios/chrome/browser/find_in_page/java_script_find_tab_helper.h"
 #import "ios/chrome/browser/follow/follow_tab_helper.h"
 #import "ios/chrome/browser/history/history_service_factory.h"
 #import "ios/chrome/browser/history/history_tab_helper.h"
@@ -53,7 +54,6 @@
 #import "ios/chrome/browser/infobars/overlays/default_infobar_overlay_request_factory.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_inserter.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_tab_helper.h"
-#import "ios/chrome/browser/infobars/overlays/permissions_overlay_tab_helper.h"
 #import "ios/chrome/browser/infobars/overlays/translate_overlay_tab_helper.h"
 #import "ios/chrome/browser/itunes_urls/itunes_urls_handler_tab_helper.h"
 #import "ios/chrome/browser/link_to_text/link_to_text_tab_helper.h"
@@ -66,6 +66,7 @@
 #import "ios/chrome/browser/overscroll_actions/overscroll_actions_tab_helper.h"
 #import "ios/chrome/browser/passwords/password_tab_helper.h"
 #import "ios/chrome/browser/passwords/well_known_change_password_tab_helper.h"
+#import "ios/chrome/browser/permissions/permissions_tab_helper.h"
 #import "ios/chrome/browser/policy_url_blocking/policy_url_blocking_tab_helper.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
@@ -84,7 +85,6 @@
 #import "ios/chrome/browser/voice/voice_search_navigations_tab_helper.h"
 #import "ios/chrome/browser/web/annotations/annotations_tab_helper.h"
 #import "ios/chrome/browser/web/blocked_popup_tab_helper.h"
-#import "ios/chrome/browser/web/error_page_controller_bridge.h"
 #import "ios/chrome/browser/web/font_size/font_size_tab_helper.h"
 #import "ios/chrome/browser/web/image_fetch/image_fetch_tab_helper.h"
 #import "ios/chrome/browser/web/invalid_url_tab_helper.h"
@@ -95,6 +95,7 @@
 #import "ios/chrome/browser/web/sad_tab_tab_helper.h"
 #import "ios/chrome/browser/web/session_state/web_session_state_tab_helper.h"
 #import "ios/chrome/browser/web/web_performance_metrics/web_performance_metrics_tab_helper.h"
+#import "ios/chrome/browser/web_selection/web_selection_tab_helper.h"
 #import "ios/chrome/browser/webui/net_export_tab_helper.h"
 #import "ios/components/security_interstitials/https_only_mode/feature.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_container.h"
@@ -106,7 +107,9 @@
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_query_manager.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_tab_helper.h"
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_unsafe_resource_container.h"
+#import "ios/public/provider/chrome/browser/find_in_page/find_in_page_api.h"
 #import "ios/public/provider/chrome/browser/text_zoom/text_zoom_api.h"
+#import "ios/web/common/annotations_utils.h"
 #import "ios/web/common/features.h"
 #import "ios/web/public/web_state.h"
 
@@ -123,7 +126,11 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
   IOSChromeSyncedTabDelegate::CreateForWebState(web_state);
   InfoBarManagerImpl::CreateForWebState(web_state);
   BlockedPopupTabHelper::CreateForWebState(web_state);
-  FindTabHelper::CreateForWebState(web_state);
+  if (ios::provider::IsNativeFindInPageEnabled()) {
+    FindTabHelper::CreateForWebState(web_state);
+  } else {
+    JavaScriptFindTabHelper::CreateForWebState(web_state);
+  }
   ITunesUrlsHandlerTabHelper::CreateForWebState(web_state);
   HistoryTabHelper::CreateForWebState(web_state);
   LoadTimingTabHelper::CreateForWebState(web_state);
@@ -140,7 +147,6 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
       web_state);
   password_manager::WellKnownChangePasswordTabHelper::CreateForWebState(
       web_state);
-  ErrorPageControllerBridge::CreateForWebState(web_state);
 
   InvalidUrlTabHelper::CreateForWebState(web_state);
 
@@ -157,8 +163,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     BreadcrumbManagerTabHelper::CreateForWebState(web_state);
   }
 
-  if (base::FeatureList::IsEnabled(web::features::kEnableWebPageAnnotations) &&
-      !is_off_the_record) {
+  if (web::WebPageAnnotationsEnabled()) {
     AnnotationsTabHelper::CreateForWebState(web_state);
   }
 
@@ -196,19 +201,8 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
 
   UniqueIDDataTabHelper::CreateForWebState(web_state);
 
-  PasswordTabHelper::CreateForWebState(web_state);
-
-  AutofillTabHelper::CreateForWebState(
-      web_state,
-      PasswordTabHelper::FromWebState(web_state)->GetPasswordManager());
-
   // Depends on favicon::WebFaviconDriver, must be created after it.
-    SearchEngineTabHelper::CreateForWebState(web_state);
-
-  FormSuggestionTabHelper::CreateForWebState(web_state, @[
-    PasswordTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
-    AutofillTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
-  ]);
+  SearchEngineTabHelper::CreateForWebState(web_state);
 
   ukm::InitializeSourceUrlRecorderForWebState(web_state);
 
@@ -237,6 +231,16 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     PagePlaceholderTabHelper::CreateForWebState(web_state);
     PrintTabHelper::CreateForWebState(web_state);
     ChromeIOSTranslateClient::CreateForWebState(web_state);
+
+    PasswordTabHelper::CreateForWebState(web_state);
+    AutofillTabHelper::CreateForWebState(
+        web_state,
+        PasswordTabHelper::FromWebState(web_state)->GetPasswordManager());
+
+    FormSuggestionTabHelper::CreateForWebState(web_state, @[
+      PasswordTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
+      AutofillTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
+    ]);
   }
 
   InfobarBadgeTabHelper::CreateForWebState(web_state);
@@ -245,12 +249,16 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
     LinkToTextTabHelper::CreateForWebState(web_state);
   }
 
+  if (base::FeatureList::IsEnabled(kIOSEditMenuPartialTranslate)) {
+    WebSelectionTabHelper::CreateForWebState(web_state);
+  }
+
   WebSessionStateTabHelper::CreateForWebState(web_state);
   WebPerformanceMetricsTabHelper::CreateForWebState(web_state);
 
   OfflinePageTabHelper::CreateForWebState(
       web_state, ReadingListModelFactory::GetForBrowserState(browser_state));
-  PermissionsOverlayTabHelper::CreateForWebState(web_state);
+  PermissionsTabHelper::CreateForWebState(web_state);
 
   RepostFormTabHelper::CreateForWebState(web_state);
   NetExportTabHelper::CreateForWebState(web_state);
@@ -276,7 +284,7 @@ void AttachTabHelpers(web::WebState* web_state, bool for_prerender) {
 
   CaptivePortalTabHelper::CreateForWebState(web_state);
 
-  if (IsPriceNotificationsEnabled()) {
+  if (IsPriceTrackingEnabled(browser_state)) {
     PriceNotificationsTabHelper::CreateForWebState(web_state);
   }
 }

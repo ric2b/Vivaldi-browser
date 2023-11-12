@@ -18,14 +18,14 @@
 @interface PromosManagerMediator : NSObject
 
 // Designated initializer.
-- (instancetype)
-    initWithPromosManager:(PromosManager*)promosManager
-    promoImpressionLimits:
-        (base::small_map<
-            std::map<promos_manager::Promo, NSArray<ImpressionLimit*>*>>)
-            promoImpressionLimits NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithPromosManager:(PromosManager*)promosManager
+                promoImpressionLimits:(PromoConfigsSet)promoImpressionLimits
+    NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
+
+// Deregisters `promo` (stopping `promo` from being displayed).
+- (void)deregisterPromo:(promos_manager::Promo)promo;
 
 // Records the display impression of `promo`.
 - (void)recordImpression:(promos_manager::Promo)promo;

@@ -16,13 +16,13 @@
 #import "components/bookmarks/vivaldi_bookmark_kit.h"
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/bookmarks_utils.h"
 #import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/main/browser.h"
-#import "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_folder_view_controller.h"
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmark_add_edit_url_view_controller.h"
@@ -42,7 +42,6 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/ui/helpers/vivaldi_snapshot_store_helper.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "prefs/vivaldi_pref_names.h"
 #import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -74,7 +73,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                                               BookmarkModelBridgeObserver,
                                                     SpeedDialHomeConsumer> {
   // Bridge to register for bookmark changes.
-  std::unique_ptr<bookmarks::BookmarkModelBridge> _bridge;
+  std::unique_ptr<BookmarkModelBridge> _bridge;
 }
 // Collection view that holds the children of speed dial folder.
 @property (weak, nonatomic) UICollectionView *collectionView;
@@ -102,7 +101,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 // The Browser in which bookmarks are presented
 @property(nonatomic, assign) Browser* browser;
 // Bookmarks model that holds all the bookmarks data
-@property (assign,nonatomic) BookmarkModel* bookmarks;
+@property (assign,nonatomic) bookmarks::BookmarkModel* bookmarks;
 // Shared state for the speed dial item
 @property(nonatomic, strong)
   VivaldiSpeedDialSharedState* speedDialSharedState;
@@ -167,7 +166,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
     _faviconLoader =
         IOSChromeFaviconLoaderFactory::GetForBrowserState(_browserState);
     _bookmarks = ios::BookmarkModelFactory::GetForBrowserState(_browserState);
-    _bridge.reset(new bookmarks::BookmarkModelBridge(self, _bookmarks));
+    _bridge.reset(new BookmarkModelBridge(self, _bookmarks));
   }
   return self;
 }
@@ -219,18 +218,9 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   // landscape mode. Therefore, this method is triggered after layout is set up
   // to properly resize the top menu within the navigation bar.
   [self refreshTopMenuLayout];
-
+  [self.collectionView.collectionViewLayout invalidateLayout];
   [self.collectionView reloadData];
-}
-
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if ((self.traitCollection.verticalSizeClass !=
-          previousTraitCollection.verticalSizeClass) ||
-      (self.traitCollection.horizontalSizeClass !=
-          previousTraitCollection.horizontalSizeClass)) {
-    [self handleDeviceOrientationChange];
-  }
+  [self scrollToItemWithIndex:self.selectedMenuItemIndex];
 }
 
 #pragma mark - PRIVATE
@@ -321,16 +311,9 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                         bottom:self.view.safeBottomAnchor
                       trailing:self.view.safeRightAnchor];
 
-  UICollectionViewFlowLayout *layout=
-    [[UICollectionViewFlowLayout alloc] init];
-  layout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-  layout.minimumInteritemSpacing = 0;
-  layout.minimumLineSpacing = 0;
-  layout.sectionInset = UIEdgeInsetsZero;
-  layout.estimatedItemSize = UICollectionViewFlowLayoutAutomaticSize;
   UICollectionView* collectionView =
       [[UICollectionView alloc] initWithFrame:CGRectZero
-                         collectionViewLayout:layout];
+                         collectionViewLayout:[self createLayout]];
   _collectionView = collectionView;
   [_collectionView setDataSource: self];
   [_collectionView setDelegate: self];
@@ -348,6 +331,47 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
 
   [bodyContainerView addSubview:_collectionView];
   [_collectionView fillSuperview];
+}
+
+- (UICollectionViewLayout*)createLayout {
+  UICollectionViewCompositionalLayoutSectionProvider sectionProvider =
+    ^NSCollectionLayoutSection* (
+                                 NSInteger sectionIndex,
+                                 id<NSCollectionLayoutEnvironment> environment
+                                 ) {
+         // Item
+         NSCollectionLayoutSize *itemSize =
+            [NSCollectionLayoutSize sizeWithWidthDimension:
+             [NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+             heightDimension:[NSCollectionLayoutDimension
+                              fractionalHeightDimension:1.0]];
+         NSCollectionLayoutItem *item = [NSCollectionLayoutItem
+                                         itemWithLayoutSize:itemSize];
+
+         // Group
+         NSCollectionLayoutSize *groupSize =
+            [NSCollectionLayoutSize sizeWithWidthDimension:
+             [NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+             heightDimension:[NSCollectionLayoutDimension
+                              fractionalHeightDimension:1.0]];
+         NSCollectionLayoutGroup *group =
+            [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize
+                                                           subitem:item
+                                                             count:1];
+
+         // Section
+         NSCollectionLayoutSection *section =
+            [NSCollectionLayoutSection sectionWithGroup:group];
+         return section;
+     };
+
+    UICollectionViewCompositionalLayoutConfiguration *config =
+        [[UICollectionViewCompositionalLayoutConfiguration alloc] init];
+    config.scrollDirection = UICollectionViewScrollDirectionHorizontal;
+    UICollectionViewCompositionalLayout *layout =
+        [[UICollectionViewCompositionalLayout alloc]
+          initWithSectionProvider:sectionProvider configuration:config];
+    return layout;
 }
 
 -(void)setupEmptySpeedDialView {
@@ -452,16 +476,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
                              bookmarkModel:self.bookmarks];
   self.mediator.consumer = self;
   [self.mediator startMediating];
-}
-
-/// Device orientation change handler
-- (void)handleDeviceOrientationChange {
-  // When device is rotated invalidate the height of the top scroll menu
-  // since the navigation bar height is smalled in landscape mode than the
-  // portrait.
-  [self refreshTopMenuLayout];
-  // Invalidate layout to refresh the item position and size.
-  [self.collectionView.collectionViewLayout invalidateLayout];
 }
 
 - (void)refreshTopMenuLayout {
@@ -591,10 +605,6 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   NSIndexPath *indexPath = [NSIndexPath indexPathForRow:index
                                               inSection:0];
   [self.collectionView
-      selectItemAtIndexPath:indexPath
-                   animated:YES
-             scrollPosition:UICollectionViewScrollPositionCenteredHorizontally];
-  [self.collectionView
       scrollToItemAtIndexPath:indexPath
              atScrollPosition:UICollectionViewScrollPositionCenteredHorizontally
                      animated:YES];
@@ -687,8 +697,7 @@ CGSize sortButtonSize = CGSizeMake(30.f, 30.f);
   [cell configureWith:childItems
                parent:parent
         faviconLoader:self.faviconLoader
-          layoutStyle:[self currentLayoutStyle]
-    deviceOrientation:!self.isDevicePortrait];
+          layoutStyle:[self currentLayoutStyle]];
   [cell setCurrentPage: index];
   return cell;
 }

@@ -8,6 +8,7 @@
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -17,6 +18,7 @@
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/test_timeouts.h"
@@ -27,7 +29,6 @@
 #include "chrome/common/mac/launchd.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants_builder.h"
-#include "chrome/updater/mac/xpc_service_names.h"
 #include "chrome/updater/persisted_data.h"
 #include "chrome/updater/prefs.h"
 #include "chrome/updater/test/integration_tests_impl.h"
@@ -35,6 +36,7 @@
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/util/launchd_util.h"
 #import "chrome/updater/util/mac_util.h"
+#include "chrome/updater/util/unittest_util.h"
 #include "chrome/updater/util/util.h"
 #include "components/crx_file/crx_verifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -70,15 +72,6 @@ base::FilePath GetExecutablePath() {
   return out_dir.Append(GetExecutableRelativePath());
 }
 
-absl::optional<base::FilePath> GetProductPath(UpdaterScope scope) {
-  absl::optional<base::FilePath> path = GetLibraryFolderPath(scope);
-  if (!path)
-    return absl::nullopt;
-
-  return path->AppendASCII(COMPANY_SHORTNAME_STRING)
-      .AppendASCII(PRODUCT_FULLNAME_STRING);
-}
-
 absl::optional<base::FilePath> GetActiveFile(UpdaterScope /*scope*/,
                                              const std::string& id) {
   // The active user is always managaged in the updater scope for the user.
@@ -91,20 +84,6 @@ absl::optional<base::FilePath> GetActiveFile(UpdaterScope /*scope*/,
       .AppendASCII(COMPANY_SHORTNAME_STRING "SoftwareUpdate")
       .AppendASCII("Actives")
       .AppendASCII(id);
-}
-
-void ExpectServiceAbsent(UpdaterScope scope, const std::string& service) {
-  VLOG(0) << __func__ << " - scope: " << scope << ". service: " << service;
-  bool success = false;
-  base::RunLoop loop;
-  PollLaunchctlList(scope, service, LaunchctlPresence::kAbsent,
-                    base::Seconds(7),
-                    base::BindLambdaForTesting([&](bool result) {
-                      success = result;
-                      loop.QuitClosure().Run();
-                    }));
-  loop.Run();
-  EXPECT_TRUE(success) << service << " is unexpectedly present.";
 }
 
 }  // namespace
@@ -121,20 +100,8 @@ void EnterTestMode(const GURL& url) {
                   .SetInitialDelay(base::Milliseconds(100))
                   .SetServerKeepAliveTime(base::Seconds(1))
                   .SetCrxVerifierFormat(crx_file::VerifierFormat::CRX3)
-                  .SetOverinstallTimeout(TestTimeouts::action_timeout())
+                  .SetOverinstallTimeout(base::Seconds(5))
                   .Modify());
-}
-
-absl::optional<base::FilePath> GetDataDirPath(UpdaterScope scope) {
-  absl::optional<base::FilePath> app_path =
-      GetApplicationSupportDirectory(scope);
-  if (!app_path) {
-    VLOG(1) << "Failed to get Application support path.";
-    return absl::nullopt;
-  }
-
-  return app_path->AppendASCII(COMPANY_SHORTNAME_STRING)
-      .AppendASCII(PRODUCT_FULLNAME_STRING);
 }
 
 void Clean(UpdaterScope scope) {
@@ -143,17 +110,14 @@ void Clean(UpdaterScope scope) {
   Launchd::Domain launchd_domain = LaunchdDomain(scope);
   Launchd::Type launchd_type = LaunchdType(scope);
 
-  absl::optional<base::FilePath> path = GetProductPath(scope);
+  absl::optional<base::FilePath> path = GetInstallDirectory(scope);
   EXPECT_TRUE(path);
   if (path)
     EXPECT_TRUE(base::DeletePathRecursively(*path));
   EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
       launchd_domain, launchd_type, updater::CopyWakeLaunchdName(scope)));
-  EXPECT_TRUE(Launchd::GetInstance()->DeletePlist(
-      launchd_domain, launchd_type,
-      updater::CopyUpdateServiceLaunchdName(scope)));
 
-  path = GetDataDirPath(scope);
+  path = GetInstallDirectory(scope);
   EXPECT_TRUE(path);
   if (path)
     EXPECT_TRUE(base::DeletePathRecursively(*path));
@@ -166,8 +130,6 @@ void Clean(UpdaterScope scope) {
   @autoreleasepool {
     RemoveJobFromLaunchd(scope, launchd_domain, launchd_type,
                          CopyWakeLaunchdName(scope));
-    RemoveJobFromLaunchd(scope, launchd_domain, launchd_type,
-                         CopyUpdateServiceLaunchdName(scope));
   }
 
   // Also clean up any other versions of the updater that are around.
@@ -195,32 +157,41 @@ void ExpectClean(UpdaterScope scope) {
   Launchd::Type launchd_type = LaunchdType(scope);
 
   // Files must not exist on the file system.
-  absl::optional<base::FilePath> path = GetProductPath(scope);
-  EXPECT_TRUE(path);
-  if (path)
-    EXPECT_FALSE(base::PathExists(*path));
   EXPECT_FALSE(Launchd::GetInstance()->PlistExists(
       launchd_domain, launchd_type, updater::CopyWakeLaunchdName(scope)));
-  EXPECT_FALSE(Launchd::GetInstance()->PlistExists(
-      launchd_domain, launchd_type,
-      updater::CopyUpdateServiceLaunchdName(scope)));
 
-  path = GetDataDirPath(scope);
+  absl::optional<base::FilePath> path = GetInstallDirectory(scope);
   EXPECT_TRUE(path);
   if (path && base::PathExists(*path)) {
-    // If the path exists, then expect only the log file to be present.
+    // If the path exists, then expect only the log and json files to be
+    // present.
     int count = CountDirectoryFiles(*path);
-    EXPECT_LT(count, 2);
-    if (count == 1)
+    EXPECT_LE(count, 2) << base::JoinString(
+        [](const base::FilePath& dir) {
+          base::FileEnumerator it(dir, false, base::FileEnumerator::FILES);
+          std::vector<base::FilePath::StringType> files;
+          for (base::FilePath name = it.Next(); !name.empty();
+               name = it.Next()) {
+            files.push_back(name.value());
+          }
+
+          return files;
+        }(*path),
+        FILE_PATH_LITERAL(","));
+
+    if (count >= 1) {
       EXPECT_TRUE(base::PathExists(path->AppendASCII("updater.log")));
+    }
+    if (count == 2) {
+      EXPECT_TRUE(base::PathExists(path->AppendASCII("prefs.json")));
+    }
   }
   // Keystone must not exist on the file system.
   absl::optional<base::FilePath> keystone_path = GetKeystoneFolderPath(scope);
   EXPECT_TRUE(keystone_path);
   if (keystone_path)
-    EXPECT_FALSE(base::PathExists(*keystone_path));
-
-  ExpectServiceAbsent(scope, GetUpdateServiceLaunchdName(scope));
+    EXPECT_FALSE(
+        base::PathExists(keystone_path->AppendASCII(KEYSTONE_NAME ".bundle")));
 }
 
 void ExpectInstalled(UpdaterScope scope) {
@@ -228,27 +199,13 @@ void ExpectInstalled(UpdaterScope scope) {
   Launchd::Type launchd_type = LaunchdType(scope);
 
   // Files must exist on the file system.
-  absl::optional<base::FilePath> path = GetProductPath(scope);
+  absl::optional<base::FilePath> path = GetInstallDirectory(scope);
   EXPECT_TRUE(path);
   if (path)
     EXPECT_TRUE(base::PathExists(*path));
 
   EXPECT_TRUE(Launchd::GetInstance()->PlistExists(launchd_domain, launchd_type,
                                                   CopyWakeLaunchdName(scope)));
-}
-
-void ExpectActiveUpdater(UpdaterScope scope) {
-  Launchd::Domain launchd_domain = LaunchdDomain(scope);
-  Launchd::Type launchd_type = LaunchdType(scope);
-
-  // Files must exist on the file system.
-  absl::optional<base::FilePath> path = GetProductPath(scope);
-  EXPECT_TRUE(path);
-  if (path)
-    EXPECT_TRUE(base::PathExists(*path));
-
-  EXPECT_TRUE(Launchd::GetInstance()->PlistExists(
-      launchd_domain, launchd_type, CopyUpdateServiceLaunchdName(scope)));
 }
 
 absl::optional<base::FilePath> GetInstalledExecutablePath(UpdaterScope scope) {
@@ -268,14 +225,8 @@ void Uninstall(UpdaterScope scope) {
   base::CommandLine command_line(*path);
   command_line.AppendSwitch(kUninstallSwitch);
   int exit_code = -1;
-  ASSERT_TRUE(Run(scope, command_line, &exit_code));
-  EXPECT_EQ(exit_code, 0);
-}
-
-absl::optional<base::FilePath> GetFakeUpdaterInstallFolderPath(
-    UpdaterScope scope,
-    const base::Version& version) {
-  return GetExecutableFolderPathForVersion(scope, version);
+  Run(scope, command_line, &exit_code);
+  ASSERT_EQ(exit_code, 0);
 }
 
 void SetActive(UpdaterScope scope, const std::string& app_id) {
@@ -338,7 +289,7 @@ void SetupRealUpdaterLowerVersion(UpdaterScope scope) {
           .Append(PRODUCT_FULLNAME_STRING "_test"));
   command_line.AppendSwitch(kInstallSwitch);
   int exit_code = -1;
-  ASSERT_TRUE(Run(scope, command_line, &exit_code));
+  Run(scope, command_line, &exit_code);
   ASSERT_EQ(exit_code, 0);
 }
 
@@ -360,8 +311,8 @@ void SetupFakeLegacyUpdaterData(UpdaterScope scope) {
 
 void ExpectLegacyUpdaterDataMigrated(UpdaterScope scope) {
   scoped_refptr<GlobalPrefs> global_prefs = CreateGlobalPrefs(scope);
-  auto persisted_data =
-      base::MakeRefCounted<PersistedData>(global_prefs->GetPrefService());
+  auto persisted_data = base::MakeRefCounted<PersistedData>(
+      scope, global_prefs->GetPrefService());
 
   // Keystone should not be migrated.
   EXPECT_FALSE(

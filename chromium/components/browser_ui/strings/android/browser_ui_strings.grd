@@ -202,6 +202,9 @@
       <message name="IDS_DELETE" desc="Label for a delete button. Used in multiple contexts. [CHAR_LIMIT=20]">
         Delete
       </message>
+      <message name="IDS_DISMISS" desc="Label for a dismiss button. Used in multiple contexts. [CHAR_LIMIT=20]">
+        Dismiss
+      </message>
       <message name="IDS_REMOVE" desc="Label for a button to remove an item (e.g. a bookmark) from a list. [CHAR_LIMIT=20]">
         Remove
       </message>
@@ -280,9 +283,6 @@
       <message name="IDS_COPY_LINK" desc="The label for a menu item to copy a link. [CHAR_LIMIT=30]">
         Copy link
       </message>
-      <message name="IDS_COPIED" desc="Notification telling the user that something has been copied to the clipboard.">
-        Copied
-      </message>
       <message name="IDS_TRY_AGAIN" desc="The label for a button allowing the user to try an action again. [CHAR_LIMIT=20]">
         Try again
       </message>
@@ -318,6 +318,9 @@
       </message>
       <message name="IDS_SORT_BY" desc="Generic label for a prompt to sort something.">
         Sort by:
+      </message>
+      <message name="IDS_PROVIDED_BY_GOOGLE" desc="Generic label for something that comes from Google servers.">
+        Provided by Google
       </message>
 
       <message name="IDS_ACCESSIBILITY_TOOLBAR_BTN_MENU" desc="Content description for the settings menu button.">
@@ -618,6 +621,21 @@
       <message name="IDS_PAGE_INFO_AD_MANAGE_INTERESTS" desc="The button label of the 'Manage interests' button in Page Info. The button opens a settings page to manage interests for the site.">
         Manage interests
       </message>
+      <message name="IDS_PAGE_INFO_AD_PRIVACY_HEADER" desc="A label that represents the new ad-related settings. 1) Navigate to any site. 2) Click the icon (often a lock) to the left of the URL in the address bar. Information about the page you're viewing appears. The 'Ad privacy' label will appear above the 'Site settings' button.">
+        Ad privacy
+      </message>
+      <message name="IDS_PAGE_INFO_AD_PRIVACY_TOPICS_DESCRIPTION" desc="1 of 3 possible descriptions a user might see when they choose 'Ad privacy' from page info for a specific site. 1) Navigate to any site. 2) Click the icon (often a lock) to the left of the URL in the address bar. Information about the page you're viewing appears. The 'Ad privacy' label will appear above the 'Site settings' button. 3) Click on Ad privacy. This string describes the case that the site being viewed uses the Ad topics setting. What's the Ad topics setting? When on, Chrome will estimate the user's topics of interest based on their recent browsing history and then show up to 3 of those topics with a site so that the site can better personalize ads (a privacy-preserving way to replicate some of the functionality of third-party cookies). In this case, we're informing the user that this site uses the Ad topics API and we're showing the user the ad topics Chrome has shared with the site. A button 'Manage ad privacy' allows the user to turn 'Ad privacy' settings on/off or to block specific ad topics.">
+        This site gets your ad topics from Chrome to show you more relevant ads
+      </message>
+      <message name="IDS_PAGE_INFO_AD_PRIVACY_FLEDGE_DESCRIPTION" desc="2 of 3 possible descriptions a user might see when they choose 'Ad privacy' from page info for a specific site. 1) Navigate to any site. 2) Click the icon (often a lock) to the left of the URL in the address bar. Information about the page you're viewing appears. The 'Ad privacy' label will appear above the 'Site settings' button. 3) Click on Ad privacy. This string describes the case that the site being viewed uses the Site-suggested ads setting. What's the Site-suggested ads setting? When on, a site can determine a user's interests, save info with Chrome relative to those interests. Later, as a user continues browsing, a site can ask Chrome for a user's interests and the first site can (through Chrome) suggest ads the user might like. In this case, we're informing the user that this site uses the Site-suggested ads API. A button 'Manage ad privacy' allows the user to turn 'Ad privacy' settings on/off or to block specific ad topics.">
+        This site determines things you like and then suggests ads to other sites
+      </message>
+      <message name="IDS_PAGE_INFO_AD_PRIVACY_TOPICS_AND_FLEDGE_DESCRIPTION" desc="3 of 3 possible descriptions a user might see when they choose 'Ad privacy' from page info for a specific site. 1) Navigate to any site. 2) Click the icon (often a lock) to the left of the URL in the address bar. Information about the page you're viewing appears. The 'Ad privacy' label will appear above the 'Site settings' button. 3) Click on Ad privacy. This string describes the case that the site being viewed uses both the Ad topics and Site-suggested ads settings. AD TOPICS: When on, Chrome will estimate the user's topics of interest based on their recent browsing history and then show up to 3 of those topics with a site so that the site can better personalize ads (a privacy-preserving way to replicate some of the functionality of third-party cookies). SITE-SUGGESTED ADS: When on, a site can determine a user's interests, save info with Chrome relative to those interests. Later, as a user continues browsing, a site can ask Chrome for a user's interests and the first site can (through Chrome) suggest ads the user might like. In this case, we're informing the user that this site 1) has asked Chrome for the user's interests (the Ad topics setting), and 2) uses the Site-suggested ads API (this site determines the user's interests and then can suggest ads to other sites as the user continues browsing). A button 'Manage ad privacy' allows the user to turn 'Ad privacy' settings on/off or to block specific ad topics or sites.">
+        This site determines things you like and then suggests ads to other sites. This site also gets your ad topics from Chrome to show you more relevant ads.
+      </message>
+      <message name="IDS_PAGE_INFO_AD_PRIVACY_SUBPAGE_MANAGE_BUTTON" desc="A button label that opens the Ad privacy page, allowing a user to turn on / off the ad privacy settings and to manage the topics and sites that influence ad personalization.">
+        Manage ad privacy
+      </message>
 
       <message name="IDS_COOKIES_TITLE" desc="Title for the Cookies settings screen [CHAR_LIMIT=32]">
           Cookies
@@ -630,9 +648,6 @@
       </message>
 
       <!-- Media Capture and Streams -->
-      <message name="IDS_MEDIA_CAPTURE_NOTIFICATION_APP_NAME_SEPARATOR" desc="A separator between the app name and notification message.">
-        <ph name="APP_NAME">%1$s<ex>Chrome</ex></ph> - <ph name="NOTIFICATION_MESSAGE">%2$s<ex>Accessing video input</ex></ph>
-      </message>
       <message name="IDS_VIDEO_CAPTURE_NOTIFICATION_TITLE" desc="Text to be shown as a notification when a WebRTC video call is in progress.">
         A site is using your camera
       </message>
@@ -939,7 +954,7 @@
 
       <!-- Page Zoom -->
       <message name="IDS_PAGE_ZOOM_TITLE" desc="Title of the preference that allows the user to update the accessibility page zoom feature that applies to the web contents.">
-        Zoom
+        Default zoom
       </message>
       <message name="IDS_PAGE_ZOOM_LABEL" desc="Accessibility label for control to allow user to change page zoom">
         Page zoom
@@ -948,7 +963,10 @@
         Current zoom is <ph name="ZOOM_LEVEL">%1$d<ex>100</ex></ph> %%
       </message>
       <message name="IDS_PAGE_ZOOM_SUMMARY" desc="Summary of the preference that allows the user to update the accessibility page zoom feature that applies to the web contents.">
-        Make the default text and images on sites smaller or larger
+        Make text and images larger or smaller for all sites you visit
+      </message>
+      <message name="IDS_PAGE_ZOOM_MENU_TITLE" desc="Menu title of the tool that allows the user to update the accessibility page zoom level on a page's web contents.">
+        Zoom
       </message>
       <message name="IDS_PAGE_ZOOM_DECREASE_ZOOM_BUTTON_TEXT" desc="Accessibility label for button to allow user to decrease page zoom">
         Decrease zoom
@@ -960,10 +978,10 @@
         <ph name="ZOOM_LEVEL">%1$d<ex>100</ex></ph> %%
       </message>
       <message name="IDS_PAGE_ZOOM_ALWAYS_SHOW_PREFERENCE_TITLE" desc="Title of the preference that allows the user to always show the menu item for zoom">
-        Show zoom
+        Show zoom option in main menu
       </message>
       <message name="IDS_PAGE_ZOOM_ALWAYS_SHOW_PREFERENCE_SUMMARY" desc="Summary of the preference that allows the user to always show the menu item for zoom.">
-        Zoom in or out on a page from the main menu
+        Make it easier to zoom in on text and images for a site you visit
       </message>
       <message name="IDS_PAGE_ZOOM_PREVIEW_TITLE" desc="Label of the section of sample text shown to the user to preview zoom level.">
         Preview
@@ -976,6 +994,9 @@
       </message>
       <message name="IDS_PAGE_ZOOM_PREVIEW_TEXT_ITEM" desc="Sample text displayed to user in settings to see/test a desired zoom level.">
         Even with eyes protected by the green spectacles Dorothy and her friends were at first dazzled by the
+      </message>
+      <message name="IDS_PAGE_ZOOM_IPH_MESSAGE" desc="Text for in-product help bubble that appears to alert user of the new Zoom option in the main menu">
+        You can zoom in or out on sites you visit
       </message>
 
       <!-- Search resumption module strings -->

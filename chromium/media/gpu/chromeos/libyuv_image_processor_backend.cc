@@ -10,6 +10,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/checked_math.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "media/gpu/chromeos/fourcc.h"
 #include "media/gpu/macros.h"
@@ -164,6 +166,20 @@ SupportResult IsConversionSupported(Fourcc input_fourcc,
 
 // static
 std::unique_ptr<ImageProcessorBackend> LibYUVImageProcessorBackend::Create(
+    const PortConfig& input_config,
+    const PortConfig& output_config,
+    OutputMode output_mode,
+    VideoRotation relative_rotation,
+    ErrorCB error_cb) {
+  return CreateWithTaskRunner(input_config, output_config, output_mode,
+                              relative_rotation, error_cb,
+                              base::ThreadPool::CreateSequencedTaskRunner(
+                                  {base::TaskPriority::USER_VISIBLE}));
+}
+
+// static
+std::unique_ptr<ImageProcessorBackend>
+LibYUVImageProcessorBackend::CreateWithTaskRunner(
     const PortConfig& input_config,
     const PortConfig& output_config,
     OutputMode output_mode,
@@ -330,6 +346,10 @@ LibYUVImageProcessorBackend::~LibYUVImageProcessorBackend() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(backend_sequence_checker_);
 }
 
+std::string LibYUVImageProcessorBackend::type() const {
+  return "LibYUVImageProcessor";
+}
+
 void LibYUVImageProcessorBackend::Process(
     scoped_refptr<VideoFrame> input_frame,
     scoped_refptr<VideoFrame> output_frame,
@@ -368,7 +388,9 @@ void LibYUVImageProcessorBackend::Process(
 
   int res;
   {
-    TRACE_EVENT0("media", "LibYUVImageProcessorBackend::Process");
+    TRACE_EVENT2("media", "LibYUVImageProcessorBackend::Process", "input_frame",
+                 input_frame->AsHumanReadableString(), "output_frame",
+                 mapped_frame->AsHumanReadableString());
     SCOPED_UMA_HISTOGRAM_TIMER("LibYUVImageProcessorBackend::Process");
     res = DoConversion(input_frame.get(), mapped_frame.get());
   }

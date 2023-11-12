@@ -17,10 +17,12 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/ash/policy/remote_commands/crd_logging.h"
 #include "chrome/browser/ash/policy/remote_commands/crd_remote_command_utils.h"
+#include "chrome/browser/ash/policy/remote_commands/crd_uma_logger.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service.h"
 #include "chrome/browser/device_identity/device_oauth2_token_service_factory.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -34,7 +36,6 @@ namespace policy {
 
 namespace {
 
-using ResultCode = DeviceCommandStartCrdSessionJob::ResultCode;
 using extensions::DictionaryBuilder;
 
 // OAuth2 Token scopes
@@ -74,9 +75,14 @@ const char kResultMessageFieldName[] = "message";
 // FAILURE_NOT_IDLE result code.
 const char kResultLastActivityFieldName[] = "lastActivitySec";
 
-void SendResultCodeToUma(ResultCode result_code) {
+void SendResultCodeToUma(CrdSessionType crd_session_type,
+                         UserSessionType user_session_type,
+                         ResultCode result_code) {
   base::UmaHistogramEnumeration("Enterprise.DeviceRemoteCommand.Crd.Result",
                                 result_code);
+
+  CrdUmaLogger(crd_session_type, user_session_type)
+      .LogSessionLaunchResult(result_code);
 }
 
 void SendSessionTypeToUma(
@@ -124,6 +130,13 @@ CrdSessionType ToCrdSessionTypeOrDefault(absl::optional<int> int_value,
     return default_value;
   }
   return static_cast<CrdSessionType>(int_value.value());
+}
+
+void OnCrdSessionFinished(CrdSessionType crd_session_type,
+                          UserSessionType user_session_type,
+                          base::TimeDelta session_duration) {
+  CrdUmaLogger(crd_session_type, user_session_type)
+      .LogSessionDuration(session_duration);
 }
 
 }  // namespace
@@ -257,8 +270,7 @@ bool DeviceCommandStartCrdSessionJob::ParseCommandPayload(
 }
 
 void DeviceCommandStartCrdSessionJob::RunImpl(
-    CallbackWithResult succeeded_callback,
-    CallbackWithResult failed_callback) {
+    CallbackWithResult result_callback) {
   CRD_LOG(INFO) << "Running start CRD session command";
 
   if (delegate_->HasActiveSession()) {
@@ -266,15 +278,14 @@ void DeviceCommandStartCrdSessionJob::RunImpl(
     terminate_session_attempted_ = true;
 
     CRD_DVLOG(1) << "Terminating active session";
-    delegate_->TerminateSession(base::BindOnce(
-        &DeviceCommandStartCrdSessionJob::RunImpl, weak_factory_.GetWeakPtr(),
-        std::move(succeeded_callback), std::move(failed_callback)));
+    delegate_->TerminateSession(
+        base::BindOnce(&DeviceCommandStartCrdSessionJob::RunImpl,
+                       weak_factory_.GetWeakPtr(), std::move(result_callback)));
     return;
   }
   terminate_session_attempted_ = false;
 
-  failed_callback_ = std::move(failed_callback);
-  succeeded_callback_ = std::move(succeeded_callback);
+  result_callback_ = std::move(result_callback);
 
   if (!UserTypeSupportsCrd()) {
     FinishWithError(ResultCode::FAILURE_UNSUPPORTED_USER_TYPE, "");
@@ -344,21 +355,25 @@ void DeviceCommandStartCrdSessionJob::StartCrdHostAndGetCode(
       base::BindOnce(&DeviceCommandStartCrdSessionJob::FinishWithSuccess,
                      weak_factory_.GetWeakPtr()),
       base::BindOnce(&DeviceCommandStartCrdSessionJob::FinishWithError,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr()),
+      base::BindOnce(&OnCrdSessionFinished, GetCrdSessionType(),
+                     GetCurrentUserSessionType()));
 }
 
 void DeviceCommandStartCrdSessionJob::FinishWithSuccess(
     const std::string& access_code) {
   CRD_LOG(INFO) << "Successfully received CRD access code";
-  if (!succeeded_callback_) {
+  if (!result_callback_) {
     return;  // Task was terminated.
   }
 
-  SendResultCodeToUma(ResultCode::SUCCESS);
+  SendResultCodeToUma(GetCrdSessionType(), GetCurrentUserSessionType(),
+                      ResultCode::SUCCESS);
   SendSessionTypeToUma(GetUmaSessionType());
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(succeeded_callback_),
-                                CreateSuccessPayload(access_code)));
+      FROM_HERE,
+      base::BindOnce(std::move(result_callback_), ResultType::kSuccess,
+                     CreateSuccessPayload(access_code)));
 }
 
 void DeviceCommandStartCrdSessionJob::FinishWithError(
@@ -368,26 +383,30 @@ void DeviceCommandStartCrdSessionJob::FinishWithError(
   CRD_LOG(INFO) << "Not starting CRD session because of error (code "
                 << static_cast<int>(result_code) << ", message '" << message
                 << "')";
-  if (!failed_callback_) {
+  if (!result_callback_) {
     return;  // Task was terminated.
   }
 
-  SendResultCodeToUma(result_code);
+  SendResultCodeToUma(GetCrdSessionType(), GetCurrentUserSessionType(),
+                      result_code);
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(failed_callback_),
-                                CreateErrorPayload(result_code, message)));
+      FROM_HERE,
+      base::BindOnce(std::move(result_callback_), ResultType::kFailure,
+                     CreateErrorPayload(result_code, message)));
 }
 
 void DeviceCommandStartCrdSessionJob::FinishWithNotIdleError() {
   CRD_LOG(INFO) << "Not starting CRD session because device is not idle";
-  if (!failed_callback_) {
+  if (!result_callback_) {
     return;  // Task was terminated.
   }
 
-  SendResultCodeToUma(ResultCode::FAILURE_NOT_IDLE);
+  SendResultCodeToUma(GetCrdSessionType(), GetCurrentUserSessionType(),
+                      ResultCode::FAILURE_NOT_IDLE);
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(std::move(failed_callback_),
-                                CreateNonIdlePayload(GetDeviceIdleTime())));
+      FROM_HERE,
+      base::BindOnce(std::move(result_callback_), ResultType::kFailure,
+                     CreateNonIdlePayload(GetDeviceIdleTime())));
 }
 
 bool DeviceCommandStartCrdSessionJob::UserTypeSupportsCrd() const {
@@ -399,6 +418,13 @@ bool DeviceCommandStartCrdSessionJob::UserTypeSupportsCrd() const {
   } else {
     return UserSessionSupportsRemoteSupport(GetCurrentUserSessionType());
   }
+}
+
+CrdSessionType DeviceCommandStartCrdSessionJob::GetCrdSessionType() const {
+  if (curtain_local_user_session_) {
+    return CrdSessionType::REMOTE_ACCESS_SESSION;
+  }
+  return CrdSessionType::REMOTE_SUPPORT_SESSION;
 }
 
 DeviceCommandStartCrdSessionJob::UmaSessionType
@@ -493,8 +519,7 @@ DeviceCommandStartCrdSessionJob::GetErrorCallback() {
 }
 
 void DeviceCommandStartCrdSessionJob::TerminateImpl() {
-  succeeded_callback_.Reset();
-  failed_callback_.Reset();
+  result_callback_.Reset();
   weak_factory_.InvalidateWeakPtrs();
   delegate_->TerminateSession(base::OnceClosure());
 }

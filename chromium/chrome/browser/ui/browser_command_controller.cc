@@ -8,11 +8,11 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/debug/debugging_buildflags.h"
 #include "base/debug/profiler.h"
+#include "base/functional/bind.h"
 #include "base/metrics/user_metrics.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
@@ -26,7 +26,6 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/sharing_hub/sharing_hub_features.h"
 #include "chrome/browser/shell_integration.h"
@@ -57,9 +56,11 @@
 #include "chrome/common/webui_url_constants.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
+#include "components/lens/buildflags.h"
 #include "components/lens/lens_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/screen_ai/buildflags/buildflags.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -78,6 +79,10 @@
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 #include "ui/accessibility/accessibility_features.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/ui/wm/features.h"
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -122,7 +127,7 @@ namespace {
 
 // Ensures that - if we have not popped up an infobar to prompt the user to e.g.
 // reload the current page - that the content pane of the browser is refocused.
-void AppInfoDialogClosedCallback(content::WebContents* web_contents,
+void AppInfoDialogClosedCallback(SessionID session_id,
                                  views::Widget::ClosedReason closed_reason,
                                  bool reload_prompt) {
   if (reload_prompt)
@@ -135,10 +140,10 @@ void AppInfoDialogClosedCallback(content::WebContents* web_contents,
     return;
   }
 
-  // Ensure that the web contents handle we have is still valid. It's possible
-  // (though unlikely) that either the browser or web contents has been pulled
+  // Ensure that the session id we have is still valid. It's possible
+  // (though unlikely) that either the browser or session has been pulled
   // out from underneath us.
-  Browser* const browser = chrome::FindBrowserWithWebContents(web_contents);
+  Browser* const browser = chrome::FindBrowserWithID(session_id);
   if (!browser)
     return;
 
@@ -385,8 +390,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
   // CommandUpdaterDelegate and CommandUpdater declare this function so we
   // choose to not implement CommandUpdaterDelegate inside this class and
   // therefore command_updater_ doesn't have the delegate set).
-  if (!SupportsCommand(id) || !IsCommandEnabled(id))
+  if (!SupportsCommand(id) || !IsCommandEnabled(id)) {
     return false;
+  }
 
   // No commands are enabled if there is not yet any selected tab.
   // TODO(pkasting): It seems like we should not need this, because either
@@ -524,6 +530,12 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       PromptToNameWindow(browser_);
       break;
 
+#if BUILDFLAG(IS_CHROMEOS)
+    case IDC_TOGGLE_MULTITASK_MENU:
+      ToggleMultitaskMenu(browser_);
+      break;
+#endif
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     case IDC_VISIT_DESKTOP_OF_LRU_USER_2:
     case IDC_VISIT_DESKTOP_OF_LRU_USER_3:
@@ -597,6 +609,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_SAVE_CREDIT_CARD_FOR_PAGE:
       SaveCreditCard(browser_);
+      break;
+    case IDC_SAVE_IBAN_FOR_PAGE:
+      SaveIBAN(browser_);
       break;
     case IDC_MIGRATE_LOCAL_CREDIT_CARD_FOR_PAGE:
       MigrateLocalCards(browser_);
@@ -765,7 +780,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 
     case IDC_SHOW_BOOKMARK_MANAGER:
-      ShowBookmarkManager(browser_);
+      ShowBookmarkManager(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_SHOW_APP_MENU:
       base::RecordAction(base::UserMetricsAction("Accel_Show_App_Menu"));
@@ -775,31 +790,33 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       ShowAvatarMenu(browser_);
       break;
     case IDC_SHOW_HISTORY:
-      ShowHistory(browser_);
+      ShowHistory(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_SHOW_DOWNLOADS:
-      ShowDownloads(browser_);
+      ShowDownloads(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_MANAGE_EXTENSIONS:
-      ShowExtensions(browser_, std::string());
+      ShowExtensions(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_PERFORMANCE:
-      ShowSettingsSubPage(browser_, chrome::kPerformanceSubPage);
+      ShowSettingsSubPage(browser_->GetBrowserForOpeningWebUi(),
+                          chrome::kPerformanceSubPage);
       break;
     case IDC_OPTIONS:
-      ShowSettings(browser_);
+      ShowSettings(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_EDIT_SEARCH_ENGINES:
-      ShowSearchEngineSettings(browser_);
+      ShowSearchEngineSettings(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_VIEW_PASSWORDS:
-      ShowPasswordManager(browser_);
+      ShowPasswordManager(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_CLEAR_BROWSING_DATA: {
       if (profile()->IsIncognitoProfile()) {
-        ShowIncognitoClearBrowsingDataDialog(browser_);
+        ShowIncognitoClearBrowsingDataDialog(
+            browser_->GetBrowserForOpeningWebUi());
       } else {
-        ShowClearBrowsingDataDialog(browser_);
+        ShowClearBrowsingDataDialog(browser_->GetBrowserForOpeningWebUi());
       }
       break;
     }
@@ -810,7 +827,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       ToggleRequestTabletSite(browser_);
       break;
     case IDC_ABOUT:
-      ShowAboutChrome(browser_);
+      ShowAboutChrome(browser_->GetBrowserForOpeningWebUi());
       break;
     case IDC_UPGRADE_DIALOG:
       OpenUpdateChromeDialog(browser_);
@@ -927,7 +944,8 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
         ShowPageInfoDialog(
             web_contents,
             base::BindOnce(&AppInfoDialogClosedCallback,
-                           base::UnsafeDanglingUntriaged(web_contents)),
+                           sessions::SessionTabHelper::IdForWindowContainingTab(
+                               web_contents)),
             bubble_anchor_util::kAppMenuButton);
       }
       break;
@@ -946,11 +964,11 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 #endif
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
     case IDC_CONTENT_CONTEXT_LENS_REGION_SEARCH:
       ExecLensRegionSearch(browser_);
       break;
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
 
     default:
       if (!vivaldi::ExecuteVivaldiCommands(browser_, id)) {
@@ -1052,19 +1070,26 @@ void BrowserCommandController::InitCommandState() {
     return;
 
   // Navigation commands
-  command_updater_.UpdateCommandEnabled(IDC_RELOAD, true);
-  command_updater_.UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE, true);
-  command_updater_.UpdateCommandEnabled(IDC_RELOAD_CLEARING_CACHE, true);
+  const bool can_reload = CanReload(browser_);
+  command_updater_.UpdateCommandEnabled(IDC_RELOAD, can_reload);
+  command_updater_.UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE, can_reload);
+  command_updater_.UpdateCommandEnabled(IDC_RELOAD_CLEARING_CACHE, can_reload);
 
   // Window management commands
   command_updater_.UpdateCommandEnabled(IDC_CLOSE_WINDOW, true);
   command_updater_.UpdateCommandEnabled(IDC_NEW_TAB, true);
   command_updater_.UpdateCommandEnabled(IDC_CLOSE_TAB, true);
-  command_updater_.UpdateCommandEnabled(IDC_DUPLICATE_TAB, true);
+  command_updater_.UpdateCommandEnabled(
+      IDC_DUPLICATE_TAB, !browser_->is_type_picture_in_picture());
   UpdateTabRestoreCommandState();
   command_updater_.UpdateCommandEnabled(IDC_EXIT, true);
   command_updater_.UpdateCommandEnabled(IDC_DEBUG_FRAME_TOGGLE, true);
   command_updater_.UpdateCommandEnabled(IDC_NAME_WINDOW, true);
+#if BUILDFLAG(IS_CHROMEOS)
+  command_updater_.UpdateCommandEnabled(
+      IDC_TOGGLE_MULTITASK_MENU,
+      chromeos::wm::features::IsWindowLayoutMenuEnabled());
+#endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   command_updater_.UpdateCommandEnabled(IDC_MINIMIZE_WINDOW, true);
   // The VisitDesktop command is only supported for up to 5 logged in users
@@ -1111,7 +1136,6 @@ void BrowserCommandController::InitCommandState() {
   DCHECK(!profile()->IsSystemProfile())
       << "Ought to never have browser for the system profile.";
   const bool normal_window = browser_->is_type_normal();
-  command_updater_.UpdateCommandEnabled(IDC_PERFORMANCE, true);
   command_updater_.UpdateCommandEnabled(IDC_OPEN_FILE, CanOpenFile(browser_));
   UpdateCommandsForDevTools();
   command_updater_.UpdateCommandEnabled(IDC_TASK_MANAGER, CanOpenTaskManager());
@@ -1222,7 +1246,7 @@ void BrowserCommandController::InitCommandState() {
                                           true);
   }
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#if BUILDFLAG(ENABLE_LENS_DESKTOP_GOOGLE_BRANDED_FEATURES)
   if (base::FeatureList::IsEnabled(
           lens::features::kEnableRegionSearchKeyboardShortcut)) {
     command_updater_.UpdateCommandEnabled(
@@ -1281,6 +1305,8 @@ void BrowserCommandController::UpdateSharedCommandsForIncognitoAvailability(
                                         !forced_incognito || is_guest);
   command_updater->UpdateCommandEnabled(IDC_SHOW_SIGNIN,
                                         !forced_incognito && !is_guest);
+  command_updater->UpdateCommandEnabled(IDC_PERFORMANCE,
+                                        !forced_incognito && !is_guest);
 }
 
 void BrowserCommandController::UpdateCommandsForIncognitoAvailability() {
@@ -1307,11 +1333,10 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   // Navigation commands
   command_updater_.UpdateCommandEnabled(IDC_BACK, CanGoBack(browser_));
   command_updater_.UpdateCommandEnabled(IDC_FORWARD, CanGoForward(browser_));
-  command_updater_.UpdateCommandEnabled(IDC_RELOAD, CanReload(browser_));
-  command_updater_.UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE,
-                                        CanReload(browser_));
-  command_updater_.UpdateCommandEnabled(IDC_RELOAD_CLEARING_CACHE,
-                                        CanReload(browser_));
+  const bool can_reload = CanReload(browser_);
+  command_updater_.UpdateCommandEnabled(IDC_RELOAD, can_reload);
+  command_updater_.UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE, can_reload);
+  command_updater_.UpdateCommandEnabled(IDC_RELOAD_CLEARING_CACHE, can_reload);
 
   // Window management commands
   bool is_app = browser_->is_type_app() || browser_->is_type_app_popup();
@@ -1466,7 +1491,8 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
   // Window management commands
   command_updater_.UpdateCommandEnabled(
       IDC_SHOW_AS_TAB, !browser_->is_type_normal() && !is_fullscreen &&
-                           !browser_->is_type_devtools());
+                           !browser_->is_type_devtools() &&
+                           !browser_->is_type_picture_in_picture());
 
   // Focus various bits of UI
   command_updater_.UpdateCommandEnabled(IDC_FOCUS_TOOLBAR, show_main_ui);

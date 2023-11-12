@@ -11,6 +11,7 @@ BASE_FEATURE(kDefaultBrowserBlueDotPromo,
 constexpr base::FeatureParam<BlueDotPromoUserGroup>::Option
     kBlueDotPromoUserGroupOptions[] = {
         {BlueDotPromoUserGroup::kAllDBPromosDisabled, "all-db-promos-disabled"},
+        {BlueDotPromoUserGroup::kAllDBPromosEnabled, "all-db-promos-enabled"},
         {BlueDotPromoUserGroup::kOnlyBlueDotPromoEnabled,
          "only-blue-dot-promo-enabled"}};
 
@@ -29,10 +30,6 @@ BASE_FEATURE(kSharedHighlightingIOS,
              "SharedHighlightingIOS",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnableFREDefaultBrowserPromoScreen,
-             "EnableFREDefaultBrowserPromoScreen",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // TODO(crbug.com/1128242): Remove this flag after the refactoring work is
 // finished.
 BASE_FEATURE(kModernTabStrip,
@@ -45,7 +42,7 @@ BASE_FEATURE(kIncognitoNtpRevamp,
 
 BASE_FEATURE(kIOS3PIntentsInIncognito,
              "IOS3pIntentsInIncognito",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDefaultBrowserFullscreenPromoExperiment,
              "DefaultBrowserFullscreenPromoExperiment",
@@ -55,33 +52,27 @@ BASE_FEATURE(kDefaultBrowserIntentsShowSettings,
              "DefaultBrowserIntentsShowSettings",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kIOSCustomBrowserEditMenu,
+             "IOSCustomBrowserEditMenu",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const char kIOSEditMenuPartialTranslateNoIncognitoParam[] =
+    "IOSEditMenuPartialTranslateNoIncognitoParam";
+
+BASE_FEATURE(kIOSEditMenuPartialTranslate,
+             "IOSEditMenuPartialTranslate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kIOSNewOmniboxImplementation,
              "kIOSNewOmniboxImplementation",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kIOSOmniboxUpdatedPopupUI,
-             "IOSOmniboxUpdatedPopupUI",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kRemoveCrashInfobar,
              "RemoveCrashInfobar",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-const char kIOSOmniboxUpdatedPopupUIVariationName[] = "PopupUIVariant";
-
-extern const char kIOSOmniboxUpdatedPopupUIVariation1[] = "variant-one";
-extern const char kIOSOmniboxUpdatedPopupUIVariation2[] = "variant-two";
-extern const char kIOSOmniboxUpdatedPopupUIVariation1UIKit[] =
-    "variant-one-UIKit";
-extern const char kIOSOmniboxUpdatedPopupUIVariation2UIKit[] =
-    "variant-two-UIKit";
-
 BASE_FEATURE(kIOSLocationBarUseNativeContextMenu,
              "IOSLocationBarUseNativeContextMenu",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kUpdateHistoryEntryPointsInIncognito,
-             "UpdateHistoryEntryPointsInIncognito",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kUseLensToSearchForImage,
@@ -98,6 +89,10 @@ BASE_FEATURE(kEnableLensInKeyboard,
 
 BASE_FEATURE(kEnableLensInNTP,
              "EnableLensInNTP",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kEnableLensContextMenuAltText,
+             "EnableLensContextMenuAltText",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableLensInOmniboxCopiedImage,
@@ -126,16 +121,12 @@ BASE_FEATURE(kEnableExpKitAppleCalendar,
              "EnableExpKitAppleCalendar",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kEnablePhoneNumbers,
-             "EnablePhoneNumbers",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 const char kExperienceKitMapsVariationName[] = "ExperienceKitMapsVariant";
 extern const char kEnableExperienceKitMapsVariationSrp[] = "with SRP";
 
 BASE_FEATURE(kMapsExperienceKit,
              "MapsExperienceKit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableMiniMap,
              "EnableMiniMap",
@@ -148,3 +139,54 @@ BASE_FEATURE(kTabGridRecencySort,
 bool IsTabGridSortedByRecency() {
   return base::FeatureList::IsEnabled(kTabGridRecencySort);
 }
+
+BASE_FEATURE(kMultilineFadeTruncatingLabel,
+             "MultilineFadeTruncatingLabel",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kNotificationSettingsMenuItem,
+             "NotificationSettingsMenuItem",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSpotlightReadingListSource,
+             "SpotlightReadingListSource",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kConsistencyNewAccountInterface,
+             "ConsistencyNewAccountInterface",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsConsistencyNewAccountInterfaceEnabled() {
+  return base::FeatureList::IsEnabled(kConsistencyNewAccountInterface);
+}
+
+BASE_FEATURE(kAddToHomeScreen,
+             "AddToHomeScreen",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const char kAddToHomeScreenDisableIncognitoParam[] =
+    "AddToHomeScreenDisableIncognitoParam";
+
+bool ShouldAddToHomeScreen(bool in_incognito) {
+  if (!base::FeatureList::IsEnabled(kAddToHomeScreen)) {
+    return false;
+  }
+  if (!in_incognito) {
+    return true;
+  }
+  return !base::GetFieldTrialParamByFeatureAsBool(
+      kAddToHomeScreen, kAddToHomeScreenDisableIncognitoParam, false);
+}
+
+bool ShouldShowPartialTranslateInIncognito() {
+  if (!base::FeatureList::IsEnabled(kIOSEditMenuPartialTranslate)) {
+    return false;
+  }
+  return !base::GetFieldTrialParamByFeatureAsBool(
+      kIOSEditMenuPartialTranslate,
+      kIOSEditMenuPartialTranslateNoIncognitoParam, false);
+}
+
+BASE_FEATURE(kNewNTPOmniboxLayout,
+             "kNewNTPOmniboxLayout",
+             base::FEATURE_DISABLED_BY_DEFAULT);

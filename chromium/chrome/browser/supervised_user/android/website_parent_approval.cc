@@ -11,7 +11,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -49,6 +49,15 @@ void WebsiteParentApproval::RequestLocalApproval(
     content::WebContents* web_contents,
     const GURL& url,
     base::OnceCallback<void(AndroidLocalWebApprovalFlowOutcome)> callback) {
+  if (!GetOnCompletionCallback()->is_null()) {
+    // There is a pending operation in progress. This is
+    // possible if for example the user clicks the request approval button in
+    // quick succession before the auth bottom sheet is displayed.
+    // Recover by just dropping the second operation.
+    std::move(callback).Run(AndroidLocalWebApprovalFlowOutcome::kIncomplete);
+    return;
+  }
+
   ui::WindowAndroid* window_android =
       web_contents->GetNativeView()->GetWindowAndroid();
 
@@ -65,7 +74,7 @@ void JNI_WebsiteParentApproval_OnCompletion(JNIEnv* env,
   // Check that we have a callback stored from the local approval request and
   // call it.
   auto* cb = GetOnCompletionCallback();
-  DCHECK(cb != nullptr);
+  DCHECK(!cb->is_null());
   AndroidLocalWebApprovalFlowOutcome flow_outcome_enum =
       static_cast<AndroidLocalWebApprovalFlowOutcome>(flow_outcome_value);
   std::move(*cb).Run(flow_outcome_enum);

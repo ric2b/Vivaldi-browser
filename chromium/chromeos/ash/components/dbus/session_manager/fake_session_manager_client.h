@@ -9,13 +9,14 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/component_export.h"
+#include "base/functional/callback_forward.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/dbus/arc/arc.pb.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
@@ -99,7 +100,9 @@ class COMPONENT_EXPORT(SESSION_MANAGER) FakeSessionManagerClient
       const cryptohome::AccountIdentifier& cryptohome_id) override;
   void StartDeviceWipe() override;
   void StartRemoteDeviceWipe(
-      const enterprise_management::SignedData& signed_command) override;
+      const enterprise_management::SignedData& signed_command,
+      enterprise_management::PolicyFetchRequest::SignatureType signature_type)
+      override;
   void ClearForcedReEnrollmentVpd(
       chromeos::VoidDBusMethodCallback callback) override;
   void UnblockDevModeForEnrollment(
@@ -358,7 +361,7 @@ class COMPONENT_EXPORT(SESSION_MANAGER) FakeSessionManagerClient
   }
 
   bool request_browser_data_backward_migration_called() const {
-    return request_browser_data_migration_called_;
+    return request_browser_data_backward_migration_called_;
   }
 
  private:
@@ -481,10 +484,5 @@ class COMPONENT_EXPORT(SESSION_MANAGER) ScopedFakeInMemorySessionManagerClient {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::FakeSessionManagerClient;
-}
 
 #endif  // CHROMEOS_ASH_COMPONENTS_DBUS_SESSION_MANAGER_FAKE_SESSION_MANAGER_CLIENT_H_

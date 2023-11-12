@@ -9,7 +9,8 @@
   const issuanceRequest = `
     fetch('https://trusttoken.test', {
       trustToken: {
-        type: 'token-request'
+        version: 1,
+        operation: 'token-request'
       }
     });
   `;
@@ -17,7 +18,8 @@
   const redemptionRequest = `
     fetch('https://trusttoken.test', {
       trustToken: {
-        type: 'token-redemption'
+        version: 1,
+        operation: 'token-redemption'
       }
     });
   `;
@@ -25,7 +27,8 @@
   const signingRequest = `
     fetch('https://destination.test', {
       trustToken: {
-        type: 'send-redemption-record',
+        version: 1,
+        operation: 'send-redemption-record',
         issuers: ['https://issuer.test']
       }
     });

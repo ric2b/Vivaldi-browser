@@ -155,6 +155,9 @@ class CORE_EXPORT DataTransfer final : public ScriptWrappable,
 
   void Trace(Visitor*) const override;
 
+  // Vivaldi addition
+  void SetURLAndTitle(const String& url, const String& title);
+
  private:
   void setDragImage(ImageResourceContent*, Node*, const gfx::Point&);
 

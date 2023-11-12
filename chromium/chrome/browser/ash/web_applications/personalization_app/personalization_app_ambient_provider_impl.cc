@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "ash/ambient/ambient_controller.h"
-#include "ash/constants/ambient_animation_theme.h"
+#include "ash/constants/ambient_theme.h"
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
@@ -22,9 +22,9 @@
 #include "ash/webui/personalization_app/mojom/personalization_app.mojom.h"
 #include "ash/webui/personalization_app/mojom/personalization_app_mojom_traits.h"
 #include "base/barrier_closure.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/notreached.h"
@@ -52,8 +52,6 @@ constexpr int kBannerHeightPx = 160;
 
 constexpr int kMaxRetries = 3;
 
-constexpr char kRecentHighlightsPhotoContainerId[] = "RECENT_PHOTOS";
-
 constexpr net::BackoffEntry::Policy kRetryBackoffPolicy = {
     0,          // Number of initial errors to ignore.
     500,        // Initial delay in ms.
@@ -78,7 +76,7 @@ PersonalizationAppAmbientProviderImpl::PersonalizationAppAmbientProviderImpl(
           &PersonalizationAppAmbientProviderImpl::OnAmbientModeEnabledChanged,
           base::Unretained(this)));
   pref_change_registrar_.Add(
-      ash::ambient::prefs::kAmbientAnimationTheme,
+      ash::ambient::prefs::kAmbientTheme,
       base::BindRepeating(
           &PersonalizationAppAmbientProviderImpl::OnAnimationThemeChanged,
           base::Unretained(this)));
@@ -114,6 +112,11 @@ void PersonalizationAppAmbientProviderImpl::IsAmbientModeEnabled(
 void PersonalizationAppAmbientProviderImpl::SetAmbientObserver(
     mojo::PendingRemote<ash::personalization_app::mojom::AmbientObserver>
         observer) {
+  if (!AmbientClient::Get() || !AmbientClient::Get()->IsAmbientModeAllowed()) {
+    ambient_receiver_.ReportBadMessage(
+        "Ambient observer set when ambient is not allowed");
+    return;
+  }
   // May already be bound if user refreshes page.
   ambient_observer_remote_.reset();
   ambient_observer_remote_.Bind(std::move(observer));
@@ -135,11 +138,11 @@ void PersonalizationAppAmbientProviderImpl::SetAmbientModeEnabled(
 }
 
 void PersonalizationAppAmbientProviderImpl::SetAnimationTheme(
-    ash::AmbientAnimationTheme animation_theme) {
+    ash::AmbientTheme animation_theme) {
   PrefService* pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
-  LogAmbientModeAnimationTheme(animation_theme);
-  pref_service->SetInteger(ash::ambient::prefs::kAmbientAnimationTheme,
+  LogAmbientModeTheme(animation_theme);
+  pref_service->SetInteger(ash::ambient::prefs::kAmbientTheme,
                            static_cast<int>(animation_theme));
 }
 
@@ -189,13 +192,7 @@ void PersonalizationAppAmbientProviderImpl::SetAlbumSelected(
       settings_->selected_album_ids.clear();
       for (const auto& personal_album : personal_albums_.albums) {
         if (personal_album.selected) {
-          std::string album_id = personal_album.album_id;
-
-          // Convert the fake album ID back to actual ID from IMAX so we can
-          // download the previews.
-          if (album_id == ash::kAmbientModeRecentHighlightsAlbumId)
-            album_id = kRecentHighlightsPhotoContainerId;
-          settings_->selected_album_ids.emplace_back(album_id);
+          settings_->selected_album_ids.push_back(personal_album.album_id);
         }
       }
 
@@ -346,12 +343,12 @@ bool PersonalizationAppAmbientProviderImpl::IsAmbientModeEnabled() {
   return pref_service->GetBoolean(ash::ambient::prefs::kAmbientModeEnabled);
 }
 
-ash::AmbientAnimationTheme
+ash::AmbientTheme
 PersonalizationAppAmbientProviderImpl::GetCurrentAnimationTheme() {
   PrefService* pref_service = profile_->GetPrefs();
   DCHECK(pref_service);
-  return static_cast<ash::AmbientAnimationTheme>(
-      pref_service->GetInteger(ash::ambient::prefs::kAmbientAnimationTheme));
+  return static_cast<ash::AmbientTheme>(
+      pref_service->GetInteger(ash::ambient::prefs::kAmbientTheme));
 }
 
 void PersonalizationAppAmbientProviderImpl::UpdateSettings() {
@@ -523,11 +520,11 @@ void PersonalizationAppAmbientProviderImpl::MaybeUpdateTopicSource(
 
 void PersonalizationAppAmbientProviderImpl::FetchGooglePhotosAlbumsPreviews(
     const std::vector<std::string>& album_ids) {
-  const int num_previews = features::IsAmbientSubpageUIChangeEnabled() ? 3 : 4;
+  const int num_previews = features::IsPersonalizationJellyEnabled() ? 3 : 4;
   const int preview_width =
-      features::IsAmbientSubpageUIChangeEnabled() ? 360 : kBannerWidthPx;
+      features::IsPersonalizationJellyEnabled() ? 360 : kBannerWidthPx;
   const int preview_height =
-      features::IsAmbientSubpageUIChangeEnabled() ? 130 : kBannerHeightPx;
+      features::IsPersonalizationJellyEnabled() ? 130 : kBannerHeightPx;
   DCHECK(!album_ids.empty());
   google_photos_albums_previews_weak_factory_.InvalidateWeakPtrs();
   ash::AmbientBackendController::Get()->GetGooglePhotosAlbumsPreview(

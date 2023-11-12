@@ -10,6 +10,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/time/time.h"
+#include "third_party/abseil-cpp/absl/numeric/int128.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/interest_group/auction_config.h"
@@ -78,42 +79,102 @@ struct BLINK_COMMON_EXPORT
                    blink::DirectFromSellerSignals* out);
 };
 
+template <class View, class Wrapper>
+struct BLINK_COMMON_EXPORT AdConfigMaybePromiseTraitsHelper {
+  using ViewTag = typename View::Tag;
+  using ValueType = typename Wrapper::ValueType;
+  static ViewTag GetTag(const Wrapper& wrapper) {
+    switch (wrapper.tag()) {
+      case Wrapper::Tag::kPromise:
+        return ViewTag::kPromise;
+      case Wrapper::Tag::kValue:
+        return ViewTag::kValue;
+    }
+    NOTREACHED();
+    return View::Tag::kPromise;
+  }
+
+  static uint32_t promise(const Wrapper& wrapper) {
+    return 0u;  // Ignored placeholder value.
+  }
+
+  static const ValueType& value(const Wrapper& wrapper) {
+    return wrapper.value();
+  }
+
+  static bool Read(View in, Wrapper* out);
+};
+
 template <>
 struct BLINK_COMMON_EXPORT
     UnionTraits<blink::mojom::AuctionAdConfigMaybePromiseJsonDataView,
-                blink::AuctionConfig::MaybePromiseJson> {
-  static blink::mojom::AuctionAdConfigMaybePromiseJsonDataView::Tag GetTag(
-      const blink::AuctionConfig::MaybePromiseJson& value) {
-    switch (value.tag()) {
-      case blink::AuctionConfig::MaybePromiseJson::Tag::kNothing:
-        return blink::mojom::AuctionAdConfigMaybePromiseJsonDataView::Tag::
-            kNothing;
-      case blink::AuctionConfig::MaybePromiseJson::Tag::kPromise:
-        return blink::mojom::AuctionAdConfigMaybePromiseJsonDataView::Tag::
-            kPromise;
-      case blink::AuctionConfig::MaybePromiseJson::Tag::kJson:
-        return blink::mojom::AuctionAdConfigMaybePromiseJsonDataView::Tag::
-            kJson;
-    }
-    NOTREACHED();
-    return blink::mojom::AuctionAdConfigMaybePromiseJsonDataView::Tag::kNothing;
+                blink::AuctionConfig::MaybePromiseJson>
+    : public AdConfigMaybePromiseTraitsHelper<
+          blink::mojom::AuctionAdConfigMaybePromiseJsonDataView,
+          blink::AuctionConfig::MaybePromiseJson> {};
+
+template <>
+struct BLINK_COMMON_EXPORT UnionTraits<
+    blink::mojom::AuctionAdConfigMaybePromisePerBuyerSignalsDataView,
+    blink::AuctionConfig::MaybePromisePerBuyerSignals>
+    : public AdConfigMaybePromiseTraitsHelper<
+          blink::mojom::AuctionAdConfigMaybePromisePerBuyerSignalsDataView,
+          blink::AuctionConfig::MaybePromisePerBuyerSignals> {};
+
+template <>
+struct BLINK_COMMON_EXPORT
+    StructTraits<blink::mojom::AuctionAdConfigBuyerTimeoutsDataView,
+                 blink::AuctionConfig::BuyerTimeouts> {
+  static const absl::optional<base::flat_map<url::Origin, base::TimeDelta>>&
+  per_buyer_timeouts(const blink::AuctionConfig::BuyerTimeouts& params) {
+    return params.per_buyer_timeouts;
   }
 
-  static uint32_t nothing(const blink::AuctionConfig::MaybePromiseJson& value) {
-    return 0u;
+  static const absl::optional<base::TimeDelta>& all_buyers_timeout(
+      const blink::AuctionConfig::BuyerTimeouts& params) {
+    return params.all_buyers_timeout;
   }
 
-  static uint32_t promise(const blink::AuctionConfig::MaybePromiseJson& value) {
-    return 0u;
+  static bool Read(blink::mojom::AuctionAdConfigBuyerTimeoutsDataView data,
+                   blink::AuctionConfig::BuyerTimeouts* out);
+};
+
+template <>
+struct BLINK_COMMON_EXPORT
+    UnionTraits<blink::mojom::AuctionAdConfigMaybePromiseBuyerTimeoutsDataView,
+                blink::AuctionConfig::MaybePromiseBuyerTimeouts>
+    : public AdConfigMaybePromiseTraitsHelper<
+          blink::mojom::AuctionAdConfigMaybePromiseBuyerTimeoutsDataView,
+          blink::AuctionConfig::MaybePromiseBuyerTimeouts> {};
+
+template <>
+struct BLINK_COMMON_EXPORT UnionTraits<
+    blink::mojom::AuctionAdConfigMaybePromiseDirectFromSellerSignalsDataView,
+    blink::AuctionConfig::MaybePromiseDirectFromSellerSignals>
+    : public AdConfigMaybePromiseTraitsHelper<
+          blink::mojom::
+              AuctionAdConfigMaybePromiseDirectFromSellerSignalsDataView,
+          blink::AuctionConfig::MaybePromiseDirectFromSellerSignals> {};
+
+template <>
+struct BLINK_COMMON_EXPORT StructTraits<
+    blink::mojom::AuctionReportBuyersConfigDataView,
+    blink::AuctionConfig::NonSharedParams::AuctionReportBuyersConfig> {
+  static absl::uint128 bucket(
+      const blink::AuctionConfig::NonSharedParams::AuctionReportBuyersConfig&
+          params) {
+    return params.bucket;
   }
 
-  static const std::string& json(
-      const blink::AuctionConfig::MaybePromiseJson& value) {
-    return value.json_payload();
+  static double scale(
+      const blink::AuctionConfig::NonSharedParams::AuctionReportBuyersConfig&
+          params) {
+    return params.scale;
   }
 
-  static bool Read(blink::mojom::AuctionAdConfigMaybePromiseJsonDataView in,
-                   blink::AuctionConfig::MaybePromiseJson* out);
+  static bool Read(
+      blink::mojom::AuctionReportBuyersConfigDataView data,
+      blink::AuctionConfig::NonSharedParams::AuctionReportBuyersConfig* out);
 };
 
 template <>
@@ -140,19 +201,20 @@ struct BLINK_COMMON_EXPORT
     return params.seller_timeout;
   }
 
-  static const absl::optional<base::flat_map<url::Origin, std::string>>&
+  static const blink::AuctionConfig::MaybePromisePerBuyerSignals&
   per_buyer_signals(const blink::AuctionConfig::NonSharedParams& params) {
     return params.per_buyer_signals;
   }
 
-  static const absl::optional<base::flat_map<url::Origin, base::TimeDelta>>&
-  per_buyer_timeouts(const blink::AuctionConfig::NonSharedParams& params) {
-    return params.per_buyer_timeouts;
+  static const blink::AuctionConfig::MaybePromiseBuyerTimeouts& buyer_timeouts(
+      const blink::AuctionConfig::NonSharedParams& params) {
+    return params.buyer_timeouts;
   }
 
-  static const absl::optional<base::TimeDelta>& all_buyers_timeout(
+  static const blink::AuctionConfig::MaybePromiseBuyerTimeouts&
+  buyer_cumulative_timeouts(
       const blink::AuctionConfig::NonSharedParams& params) {
-    return params.all_buyers_timeout;
+    return params.buyer_cumulative_timeouts;
   }
 
   static const base::flat_map<url::Origin, std::uint16_t>&
@@ -176,6 +238,19 @@ struct BLINK_COMMON_EXPORT
   all_buyers_priority_signals(
       const blink::AuctionConfig::NonSharedParams& params) {
     return params.all_buyers_priority_signals;
+  }
+
+  static const absl::optional<std::vector<absl::uint128>>&
+  auction_report_buyer_keys(
+      const blink::AuctionConfig::NonSharedParams& params) {
+    return params.auction_report_buyer_keys;
+  }
+
+  static const absl::optional<base::flat_map<
+      blink::AuctionConfig::NonSharedParams::BuyerReportType,
+      blink::AuctionConfig::NonSharedParams::AuctionReportBuyersConfig>>&
+  auction_report_buyers(const blink::AuctionConfig::NonSharedParams& params) {
+    return params.auction_report_buyers;
   }
 
   static const std::vector<blink::AuctionConfig>& component_auctions(
@@ -208,7 +283,7 @@ struct BLINK_COMMON_EXPORT
     return config.non_shared_params;
   }
 
-  static const absl::optional<blink::DirectFromSellerSignals>&
+  static const blink::AuctionConfig::MaybePromiseDirectFromSellerSignals&
   direct_from_seller_signals(const blink::AuctionConfig& params) {
     return params.direct_from_seller_signals;
   }

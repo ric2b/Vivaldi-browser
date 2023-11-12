@@ -25,7 +25,7 @@ update_target("//extensions/renderer:renderer") {
   ]
 
   deps += [
-    "//components/reputation/core:proto",
+    "//components/lookalikes/core:proto",
     "//vivaldi/extensions:resources",
   ]
 }

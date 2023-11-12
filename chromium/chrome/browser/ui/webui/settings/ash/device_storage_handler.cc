@@ -11,6 +11,8 @@
 #include <utility>
 
 #include "ash/components/arc/arc_features.h"
+#include "ash/public/cpp/new_window_delegate.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/notreached.h"
 #include "base/values.h"
 #include "chrome/browser/ash/arc/arc_util.h"
@@ -18,6 +20,7 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/webui/settings/ash/device_storage_util.h"
 #include "chrome/browser/ui/webui/settings/ash/os_settings_features_util.h"
+#include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/ash/components/disks/disk.h"
 #include "content/public/browser/web_ui_data_source.h"
@@ -46,6 +49,8 @@ const char* CalculationTypeToEventName(SizeCalculator::CalculationType x) {
       return "storage-browsing-data-size-changed";
     case SizeCalculator::CalculationType::kAppsExtensions:
       return "storage-apps-size-changed";
+    case SizeCalculator::CalculationType::kDriveOfflineFiles:
+      return "storage-drive-offline-size-changed";
     case SizeCalculator::CalculationType::kCrostini:
       return "storage-crostini-size-changed";
     case SizeCalculator::CalculationType::kOtherUsers:
@@ -64,6 +69,7 @@ StorageHandler::StorageHandler(Profile* profile,
                                content::WebUIDataSource* html_source)
     : total_disk_space_calculator_(profile),
       free_disk_space_calculator_(profile),
+      drive_offline_size_calculator_(profile),
       my_files_size_calculator_(profile),
       browsing_data_size_calculator_(profile),
       apps_size_calculator_(profile),
@@ -104,11 +110,16 @@ void StorageHandler::RegisterMessages() {
       "updateExternalStorages",
       base::BindRepeating(&StorageHandler::HandleUpdateExternalStorages,
                           base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "openBrowsingDataSettings",
+      base::BindRepeating(&StorageHandler::HandleOpenBrowsingDataSettings,
+                          base::Unretained(this)));
 }
 
 void StorageHandler::OnJavascriptAllowed() {
-  if (base::FeatureList::IsEnabled(arc::kUsbStorageUIFeature))
+  if (base::FeatureList::IsEnabled(arc::kUsbStorageUIFeature)) {
     arc_observation_.Observe(arc::ArcSessionManager::Get());
+  }
 
   // Start observing mount/unmount events to update the connected device list.
   DiskMountManager::GetInstance()->AddObserver(this);
@@ -116,6 +127,7 @@ void StorageHandler::OnJavascriptAllowed() {
   // Start observing calculators.
   total_disk_space_calculator_.AddObserver(this);
   free_disk_space_calculator_.AddObserver(this);
+  drive_offline_size_calculator_.AddObserver(this);
   my_files_size_calculator_.AddObserver(this);
   browsing_data_size_calculator_.AddObserver(this);
   apps_size_calculator_.AddObserver(this);
@@ -145,6 +157,7 @@ void StorageHandler::HandleUpdateStorageInfo(const base::Value::List& args) {
   AllowJavascript();
   total_disk_space_calculator_.StartCalculation();
   free_disk_space_calculator_.StartCalculation();
+  drive_offline_size_calculator_.StartCalculation();
   my_files_size_calculator_.StartCalculation();
   browsing_data_size_calculator_.StartCalculation();
   apps_size_calculator_.StartCalculation();
@@ -163,8 +176,18 @@ void StorageHandler::HandleOpenArcStorage(
     const base::Value::List& unused_args) {
   auto* arc_storage_manager =
       arc::ArcStorageManager::GetForBrowserContext(profile_);
-  if (arc_storage_manager)
+  if (arc_storage_manager) {
     arc_storage_manager->OpenPrivateVolumeSettings();
+  }
+}
+
+void StorageHandler::HandleOpenBrowsingDataSettings(
+    const base::Value::List& unused_args) {
+  ash::NewWindowDelegate::GetPrimary()->OpenUrl(
+      GURL(chrome::kChromeUISettingsURL)
+          .Resolve(chrome::kClearBrowserDataSubPage),
+      ash::NewWindowDelegate::OpenUrlFrom::kUserInteraction,
+      ash::NewWindowDelegate::Disposition::kSwitchToTab);
 }
 
 void StorageHandler::HandleUpdateExternalStorages(
@@ -176,8 +199,9 @@ void StorageHandler::UpdateExternalStorages() {
   base::Value::List devices;
   for (const auto& mount_point :
        DiskMountManager::GetInstance()->mount_points()) {
-    if (!IsEligibleForAndroidStorage(mount_point.source_path))
+    if (!IsEligibleForAndroidStorage(mount_point.source_path)) {
       continue;
+    }
 
     const Disk* disk = DiskMountManager::GetInstance()->FindDiskBySourcePath(
         mount_point.source_path);
@@ -211,11 +235,13 @@ void StorageHandler::OnMountEvent(
     DiskMountManager::MountEvent event,
     MountError error_code,
     const DiskMountManager::MountPoint& mount_info) {
-  if (error_code != MountError::kSuccess)
+  if (error_code != MountError::kSuccess) {
     return;
+  }
 
-  if (!IsEligibleForAndroidStorage(mount_info.source_path))
+  if (!IsEligibleForAndroidStorage(mount_info.source_path)) {
     return;
+  }
 
   UpdateExternalStorages();
 }
@@ -244,6 +270,7 @@ void StorageHandler::OnSizeCalculated(
     case SizeCalculator::CalculationType::kMyFiles:
     case SizeCalculator::CalculationType::kBrowsingData:
     case SizeCalculator::CalculationType::kAppsExtensions:
+    case SizeCalculator::CalculationType::kDriveOfflineFiles:
     case SizeCalculator::CalculationType::kCrostini:
     case SizeCalculator::CalculationType::kOtherUsers:
       UpdateStorageItem(calculation_type);
@@ -261,6 +288,7 @@ void StorageHandler::StopObservingEvents() {
   // Stop observing calculators.
   total_disk_space_calculator_.RemoveObserver(this);
   free_disk_space_calculator_.RemoveObserver(this);
+  drive_offline_size_calculator_.RemoveObserver(this);
   my_files_size_calculator_.RemoveObserver(this);
   browsing_data_size_calculator_.RemoveObserver(this);
   apps_size_calculator_.RemoveObserver(this);
@@ -314,17 +342,28 @@ void StorageHandler::UpdateOverallStatistics() {
     return;
   }
 
+  if (in_use_bytes < 0) {
+    // TODO(crbug.com/1409774): This shouldn't happen, but we still need to
+    // clarify when and how often it does. To be replaced with
+    // CHECK_GE(in_use_bytes, 0).
+    LOG(WARNING) << "Calculated total space (" << total_bytes
+                 << ") lower than available space (" << available_bytes << ")";
+    base::debug::DumpWithoutCrashing();
+    return;
+  }
+
   base::Value::Dict size_stat;
   size_stat.Set("availableSize", ui::FormatBytes(available_bytes));
   size_stat.Set("usedSize", ui::FormatBytes(in_use_bytes));
   size_stat.Set("usedRatio", static_cast<double>(in_use_bytes) / total_bytes);
   int storage_space_state =
       static_cast<int>(StorageSpaceState::kStorageSpaceNormal);
-  if (available_bytes < kSpaceCriticallyLowBytes)
+  if (available_bytes < kSpaceCriticallyLowBytes) {
     storage_space_state =
         static_cast<int>(StorageSpaceState::kStorageSpaceCriticallyLow);
-  else if (available_bytes < kSpaceLowBytes)
+  } else if (available_bytes < kSpaceLowBytes) {
     storage_space_state = static_cast<int>(StorageSpaceState::kStorageSpaceLow);
+  }
   size_stat.Set("spaceState", storage_space_state);
 
   FireWebUIListener(
@@ -335,8 +374,9 @@ void StorageHandler::UpdateOverallStatistics() {
 void StorageHandler::UpdateSystemSizeItem() {
   // If some size calculations are pending, return early and wait for all
   // calculations to complete.
-  if (!calculation_state_.all())
+  if (!calculation_state_.all()) {
     return;
+  }
 
   int64_t system_bytes = 0;
   for (int i = 0; i < SizeCalculator::kCalculationTypeCount; ++i) {
@@ -344,15 +384,22 @@ void StorageHandler::UpdateSystemSizeItem() {
         std::max(storage_items_total_bytes_[i], static_cast<int64_t>(0));
     // The total amount of disk space counts positively towards system's size.
     if (i == static_cast<int>(SizeCalculator::CalculationType::kTotal)) {
-      if (total_bytes_for_current_item <= 0)
+      if (total_bytes_for_current_item <= 0) {
         return;
+      }
       system_bytes += total_bytes_for_current_item;
+      continue;
+    }
+    // The size taken by offline files should not affect the system size.
+    if (i ==
+        static_cast<int>(SizeCalculator::CalculationType::kDriveOfflineFiles)) {
       continue;
     }
     // All other items are subtracted from the total amount of disk space.
     if (i == static_cast<int>(SizeCalculator::CalculationType::kAvailable) &&
-        total_bytes_for_current_item < 0)
+        total_bytes_for_current_item < 0) {
       return;
+    }
     system_bytes -= total_bytes_for_current_item;
   }
 

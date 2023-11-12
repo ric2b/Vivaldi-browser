@@ -419,6 +419,9 @@ Additional details:
   <message name="IDS_POLICY_STATUS_ERROR_MANAGED_NO_POLICY" desc="Message to display when a managed device does not have a policy loaded.">
     Managed user or device has no policy loaded.
   </message>
+  <message name="IDS_POLICY_STATUS_FLEX_ORG_NO_POLICY" desc="Message to display when a managed account does not have a policy loaded because the account if from a flex org.">
+    No user policies applied. To add user policies, your organization must <ph name="LINK_BEGIN">&lt;a target="_blank" href="https://support.google.com/chrome/a/answer/9122284"&gt;</ph>verify your domain<ph name="LINK_END">&lt;/a&gt;</ph>.
+  </message>
   <message name="IDS_POLICY_LABEL_MACHINE_ENROLLMENT_DOMAIN" desc="Label for the enrollment domain in the machine policy status box.">
     Enrollment domain:
   </message>
@@ -560,12 +563,15 @@ Additional details:
   <message name="IDS_POLICY_SCOPE_USER" desc="Text displayed in the Applies to column when a policy applies to the current user only.">
     Current user
   </message>
-  <if expr="not is_android and not chromeos_ash">
+  <message name="IDS_POLICY_SCOPE_ALL_USERS" desc="Text displayed in the Applies to column when a policy applies to all the users in the current session.">
+    All users
+  </message>
+  <if expr="not is_android and not is_chromeos">
     <message name="IDS_POLICY_SCOPE_DEVICE" desc="Text displayed in the Applies to column when a policy applies to everyone on the machine.">
       Machine
     </message>
   </if>
-  <if expr="chromeos_ash or is_android">
+  <if expr="is_chromeos or is_android">
     <message name="IDS_POLICY_SCOPE_DEVICE" desc="Mobile: Text displayed in the Applies To column when a policy applies to everyone on the device.">
       Device
     </message>
@@ -721,6 +727,20 @@ Additional details:
   </message>
   <message name="IDS_COPY_POLICIES_JSON" desc="Label for the button that copies policies in JSON format.">
     Copy as JSON
+  </message>
+
+  <!-- Strings for chrome://policy/logs -->
+  <message name="IDS_POLICY_LOGS_TITLE" desc="Title for the page.">
+    Policy Logs
+  </message>
+  <message name="IDS_VERSION_INFO" desc="Label for the section showing the version Information.">
+    Version Information
+  </message>
+  <message name="IDS_EXPORT_POLICY_LOGS_JSON" desc="Label for the button that exports the policy logs as a JSON file.">
+    Export Logs to JSON
+  </message>
+  <message name="IDS_REFRESH_POLICY_LOGS" desc="Label for the button that reloads the logs to add any new logs to the page.">
+    Refresh Logs
   </message>
 
   <!-- Strings for Disabled chrome://.* screen -->

@@ -15,8 +15,6 @@
 
 namespace blink {
 
-class TreeScope;
-
 class CORE_EXPORT CSSLengthResolver {
  public:
   explicit CSSLengthResolver(float zoom) : zoom_(zoom) {}
@@ -27,9 +25,13 @@ class CORE_EXPORT CSSLengthResolver {
   virtual float EmFontSize(float zoom) const = 0;
   virtual float RemFontSize(float zoom) const = 0;
   virtual float ExFontSize(float zoom) const = 0;
+  virtual float RexFontSize(float zoom) const = 0;
   virtual float ChFontSize(float zoom) const = 0;
+  virtual float RchFontSize(float zoom) const = 0;
   virtual float IcFontSize(float zoom) const = 0;
+  virtual float RicFontSize(float zoom) const = 0;
   virtual float LineHeight(float zoom) const = 0;
+  virtual float RootLineHeight(float zoom) const = 0;
 
   // Other sizes are not pre-zoomed.
   virtual double ViewportWidth() const = 0;
@@ -44,10 +46,6 @@ class CORE_EXPORT CSSLengthResolver {
   virtual double ContainerHeight() const = 0;
 
   virtual WritingMode GetWritingMode() const = 0;
-
-  // Some length functions (anchor() and anchor-size()) contain tree-scoped
-  // name references. Returns that tree scope.
-  virtual const TreeScope* GetTreeScope() const { return nullptr; }
 
   float Zoom() const { return zoom_; }
   void SetZoom(float zoom) {

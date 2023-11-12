@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/task/single_thread_task_runner.h"
@@ -102,7 +102,7 @@ void DiskCacheTestWithCache::SimulateCrash() {
   ASSERT_THAT(cb.GetResult(rv), IsOk());
   cache_impl_->ClearRefCountForTest();
 
-  cache_.reset();
+  ResetCaches();
   EXPECT_TRUE(CheckCacheIntegrity(cache_path_, new_eviction_, size_, mask_));
 
   CreateBackend(disk_cache::kNoRandom);
@@ -336,18 +336,29 @@ void DiskCacheTestWithCache::OnExternalCacheHit(const std::string& key) {
   cache_->OnExternalCacheHit(key);
 }
 
+std::unique_ptr<disk_cache::Backend> DiskCacheTestWithCache::TakeCache() {
+  mem_cache_ = nullptr;
+  simple_cache_impl_ = nullptr;
+  cache_impl_ = nullptr;
+  return std::move(cache_);
+}
+
 void DiskCacheTestWithCache::TearDown() {
   RunUntilIdle();
-  cache_.reset();
-
+  ResetCaches();
   if (!memory_only_ && !simple_cache_mode_ && integrity_) {
     EXPECT_TRUE(CheckCacheIntegrity(cache_path_, new_eviction_, size_, mask_));
   }
   RunUntilIdle();
-  if (simple_cache_mode_ && simple_file_tracker_)
+  if (simple_cache_mode_ && simple_file_tracker_) {
     EXPECT_TRUE(simple_file_tracker_->IsEmptyForTesting());
-
+  }
   DiskCacheTest::TearDown();
+}
+
+void DiskCacheTestWithCache::ResetCaches() {
+  // Deletion occurs by `cache` going out of scope.
+  std::unique_ptr<disk_cache::Backend> cache = TakeCache();
 }
 
 void DiskCacheTestWithCache::InitMemoryCache() {

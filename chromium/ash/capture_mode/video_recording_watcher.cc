@@ -42,6 +42,7 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/scoped_canvas.h"
+#include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/public/activation_client.h"
 
@@ -79,10 +80,10 @@ gfx::PointF GetCursorLocationInWindow(aura::Window* window) {
   return cursor_point;
 }
 
-// Gets the location of the given mouse |event| in the coordinates of the given
-// |window|.
+// Gets the location of the given `event` in the coordinates of the given
+// `window`.
 gfx::PointF GetEventLocationInWindow(aura::Window* window,
-                                     const ui::MouseEvent& event) {
+                                     const ui::LocatedEvent& event) {
   aura::Window* target = static_cast<aura::Window*>(event.target());
   gfx::PointF location = event.location_f();
   if (target != window)
@@ -327,6 +328,27 @@ gfx::Rect VideoRecordingWatcher::GetCaptureSurfaceConfineBounds() const {
   }
 }
 
+gfx::Rect VideoRecordingWatcher::GetEffectivePartialRegionBounds() const {
+  DCHECK_EQ(recording_source_, CaptureModeSource::kRegion);
+  // TODO(afakhry): Consider having the region to anchor to the nearest corner,
+  // so that screen rotation doesn't result in the apparent change of the region
+  // position. Discussion with PM/UX determined that this is a low priority for
+  // now.
+  gfx::Rect result = partial_region_bounds_;
+  result.AdjustToFit(current_root_->bounds());
+  return result;
+}
+
+const views::Widget* VideoRecordingWatcher::GetKeyComboWidgetIfVisible() const {
+  if (demo_tools_controller_) {
+    const auto* key_combo_widget = demo_tools_controller_->key_combo_widget();
+    if (key_combo_widget && key_combo_widget->IsVisible()) {
+      return key_combo_widget;
+    }
+  }
+  return nullptr;
+}
+
 void VideoRecordingWatcher::OnWindowParentChanged(aura::Window* window,
                                                   aura::Window* parent) {
   DCHECK_EQ(window, window_being_recorded_);
@@ -346,11 +368,13 @@ void VideoRecordingWatcher::OnWindowBoundsChanged(
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
     ui::PropertyChangeReason reason) {
-  if (is_in_projector_mode_)
+  if (is_in_projector_mode_) {
     recording_overlay_controller_->SetBounds(GetOverlayWidgetBounds());
+  }
 
-  if (recording_source_ != CaptureModeSource::kWindow)
+  if (recording_source_ != CaptureModeSource::kWindow) {
     return;
+  }
 
   // We care only about size changes, since the location of the window won't
   // affect the recorded video frames of it, however, the size of the window
@@ -362,9 +386,13 @@ void VideoRecordingWatcher::OnWindowBoundsChanged(
       FROM_HERE, kWindowSizeChangeThrottleDelay, this,
       &VideoRecordingWatcher::OnWindowSizeChangeThrottleTimerFiring);
 
-  // The bounds of the camera preview should be updated if the bounds of the
-  // window being recorded is changed.
+  // The bounds of the camera preview widget and key combo widget should be
+  // updated if the bounds of the window being recorded is changed.
   controller_->camera_controller()->MaybeUpdatePreviewWidget();
+
+  if (demo_tools_controller_) {
+    demo_tools_controller_->RefreshBounds();
+  }
 }
 
 void VideoRecordingWatcher::OnWindowOpacitySet(
@@ -487,6 +515,10 @@ void VideoRecordingWatcher::OnDisplayMetricsChanged(
   if (recording_source_ != CaptureModeSource::kWindow)
     controller_->camera_controller()->MaybeUpdatePreviewWidget();
 
+  if (demo_tools_controller_) {
+    demo_tools_controller_->RefreshBounds();
+  }
+
   // We don't show a dimming overlay when recording a fullscreen.
   if (recording_source_ == CaptureModeSource::kFullscreen)
     return;
@@ -538,8 +570,9 @@ void VideoRecordingWatcher::OnMouseEvent(ui::MouseEvent* event) {
       if (camera_preview_view)
         camera_preview_view->MaybeBlurFocus(*event);
 
-      if (demo_tools_controller_)
+      if (demo_tools_controller_ && PointerHighlightingEnabled()) {
         demo_tools_controller_->PerformMousePressAnimation(location_in_window);
+      }
     }
       [[fallthrough]];
     case ui::ET_MOUSE_RELEASED:
@@ -549,6 +582,14 @@ void VideoRecordingWatcher::OnMouseEvent(ui::MouseEvent* event) {
 
     default:
       UpdateOrThrottleCursorOverlay(location_in_window);
+  }
+}
+
+void VideoRecordingWatcher::OnTouchEvent(ui::TouchEvent* event) {
+  if (demo_tools_controller_ && PointerHighlightingEnabled()) {
+    demo_tools_controller_->OnTouchEvent(
+        event->type(), event->pointer_details().id,
+        GetEventLocationInWindow(window_being_recorded_, *event));
   }
 }
 
@@ -567,17 +608,6 @@ void VideoRecordingWatcher::OnCursorCompositingStateChanged(bool enabled) {
       force_cursor_overlay_hidden_
           ? gfx::PointF()
           : GetCursorLocationInWindow(window_being_recorded_));
-}
-
-gfx::Rect VideoRecordingWatcher::GetEffectivePartialRegionBounds() const {
-  DCHECK_EQ(recording_source_, CaptureModeSource::kRegion);
-  // TODO(afakhry): Consider having the region to anchor to the nearest corner,
-  // so that screen rotation doesn't result in the apparent change of the region
-  // position. Discussion with PM/UX determined that this is a low priority for
-  // now.
-  gfx::Rect result = partial_region_bounds_;
-  result.AdjustToFit(current_root_->bounds());
-  return result;
 }
 
 bool VideoRecordingWatcher::IsWindowDimmedForTesting(
@@ -848,6 +878,11 @@ gfx::Rect VideoRecordingWatcher::GetOverlayWidgetBounds() const {
                       ->GetTotalMagnifierBoundsForRoot(
                           window_being_recorded_->GetRootWindow()));
   return bounds;
+}
+
+bool VideoRecordingWatcher::PointerHighlightingEnabled() const {
+  return !(recording_overlay_controller_ &&
+           recording_overlay_controller_->is_enabled());
 }
 
 }  // namespace ash

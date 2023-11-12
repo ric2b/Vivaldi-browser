@@ -8,7 +8,7 @@
 
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
@@ -610,6 +610,11 @@ void ArcFileSystemOperationRunner::SetShouldDefer(bool should_defer) {
 
   // No deferred operations should be left at this point.
   DCHECK(deferred_operations_.empty());
+}
+
+// static
+void ArcFileSystemOperationRunner::EnsureFactoryBuilt() {
+  ArcFileSystemOperationRunnerFactory::GetInstance();
 }
 
 }  // namespace arc

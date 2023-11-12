@@ -6,9 +6,9 @@
 
 #include <memory>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_piece.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -176,7 +176,7 @@ void GetMimeTypeForLocalPath(
 MimeTypeCollector::MimeTypeCollector(content::BrowserContext* context)
     : context_(context), left_(0) {}
 
-MimeTypeCollector::~MimeTypeCollector() {}
+MimeTypeCollector::~MimeTypeCollector() = default;
 
 void MimeTypeCollector::CollectForURLs(
     const std::vector<storage::FileSystemURL>& urls,

@@ -7,17 +7,17 @@
 #include <memory>
 #include <utility>
 
-#include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/compiler_specific.h"
 #include "base/allocator/partition_allocator/partition_alloc_base/logging.h"
 #include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/allocator/partition_allocator/partition_alloc_config.h"
+#include "base/allocator/partition_allocator/partition_alloc_for_testing.h"
 #include "base/allocator/partition_allocator/shim/allocator_shim_default_dispatch_to_partition_alloc.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
-    defined(PA_THREAD_CACHE_SUPPORTED)
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && \
+    PA_CONFIG(THREAD_CACHE_SUPPORTED)
 #include "base/allocator/partition_allocator/thread_cache.h"
 #endif
 
@@ -37,28 +37,31 @@ void HandleOOM(size_t unused_size) {
 
 class MemoryReclaimerTest : public ::testing::Test {
  public:
-  MemoryReclaimerTest() = default;
-
- protected:
-  void SetUp() override {
-    PartitionAllocGlobalInit(HandleOOM);
+  MemoryReclaimerTest() {
+    // Since MemoryReclaimer::ResetForTesting() clears partitions_,
+    // we need to make PartitionAllocator after this ResetForTesting().
+    // Otherwise, we will see no PartitionAllocator is registered.
     MemoryReclaimer::Instance()->ResetForTesting();
-    allocator_ = std::make_unique<PartitionAllocator>();
-    allocator_->init({
-        PartitionOptions::AlignedAlloc::kDisallowed,
-        PartitionOptions::ThreadCache::kDisabled,
-        PartitionOptions::Quarantine::kAllowed,
-        PartitionOptions::Cookie::kAllowed,
-        PartitionOptions::BackupRefPtr::kDisabled,
-        PartitionOptions::BackupRefPtrZapping::kDisabled,
-        PartitionOptions::UseConfigurablePool::kNo,
-    });
+
+    allocator_ =
+        std::make_unique<PartitionAllocatorForTesting>(PartitionOptions{
+            PartitionOptions::AlignedAlloc::kDisallowed,
+            PartitionOptions::ThreadCache::kDisabled,
+            PartitionOptions::Quarantine::kAllowed,
+            PartitionOptions::Cookie::kAllowed,
+            PartitionOptions::BackupRefPtr::kDisabled,
+            PartitionOptions::BackupRefPtrZapping::kDisabled,
+            PartitionOptions::UseConfigurablePool::kNo,
+        });
     allocator_->root()->UncapEmptySlotSpanMemoryForTesting();
+    PartitionAllocGlobalInit(HandleOOM);
   }
 
-  void TearDown() override {
+  ~MemoryReclaimerTest() override {
+    // Since MemoryReclaimer::UnregisterPartition() checks whether
+    // the given partition is managed by MemoryReclaimer, need to
+    // destruct |allocator_| before ResetForTesting().
     allocator_ = nullptr;
-    MemoryReclaimer::Instance()->ResetForTesting();
     PartitionAllocGlobalUninitForTesting();
   }
 
@@ -69,7 +72,7 @@ class MemoryReclaimerTest : public ::testing::Test {
     allocator_->root()->Free(data);
   }
 
-  std::unique_ptr<PartitionAllocator> allocator_;
+  std::unique_ptr<PartitionAllocatorForTesting> allocator_;
 };
 
 TEST_F(MemoryReclaimerTest, FreesMemory) {
@@ -104,8 +107,8 @@ TEST_F(MemoryReclaimerTest, Reclaim) {
   }
 }
 
-#if BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
-    defined(PA_THREAD_CACHE_SUPPORTED)
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && \
+    PA_CONFIG(THREAD_CACHE_SUPPORTED)
 
 namespace {
 // malloc() / free() pairs can be removed by the compiler, this is enough (for
@@ -148,8 +151,8 @@ TEST_F(MemoryReclaimerTest, DoNotAlwaysPurgeThreadCache) {
   EXPECT_LT(tcache->CachedMemory(), cached_size / 2);
 }
 
-#endif  // BUILDFLAG(ENABLE_PARTITION_ALLOC_AS_MALLOC_SUPPORT) && \
-        // defined(PA_THREAD_CACHE_SUPPORTED)
+#endif  // BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC) && \
+        // PA_CONFIG(THREAD_CACHE_SUPPORTED)
 
 }  // namespace partition_alloc
 

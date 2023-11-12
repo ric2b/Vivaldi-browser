@@ -7,7 +7,9 @@
 
 #include <string>
 
+#include "base/functional/callback_forward.h"
 #include "base/types/expected.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_location.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "url/gurl.h"
@@ -36,6 +38,17 @@ class IsolatedWebAppUrlInfo {
   static IsolatedWebAppUrlInfo CreateFromSignedWebBundleId(
       const web_package::SignedWebBundleId& web_bundle_id);
 
+  // Creates an IsolatedWebAppUrlInfo instance corresponding to the IWA
+  // located at |location|.
+  //
+  // For proxy-based dev mode IWAs a random hostname will be generated, and
+  // for signed bundles the hostname will be extracted from the bundle's
+  // integrity block.
+  static void CreateFromIsolatedWebAppLocation(
+      const IsolatedWebAppLocation& location,
+      base::OnceCallback<
+          void(base::expected<IsolatedWebAppUrlInfo, std::string>)> callback);
+
   // Returns the origin of the IWA that this URL refers to.
   const url::Origin& origin() const;
 
@@ -51,9 +64,18 @@ class IsolatedWebAppUrlInfo {
   content::StoragePartitionConfig storage_partition_config(
       content::BrowserContext* browser_context) const;
 
+  // Returns the StoragePartitionConfig that should be used by a controlled
+  // frame within the IWA represented by this object.
+  content::StoragePartitionConfig GetStoragePartitionConfigForControlledFrame(
+      content::BrowserContext* browser_context,
+      const std::string& partition_name,
+      bool in_memory) const;
+
  private:
   explicit IsolatedWebAppUrlInfo(
       const web_package::SignedWebBundleId& web_bundle_id);
+
+  std::string partition_domain() const;
 
   url::Origin origin_;
   AppId app_id_;

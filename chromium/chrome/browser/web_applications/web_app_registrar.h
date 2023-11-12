@@ -18,10 +18,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/proto/web_app_os_integration_state.pb.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
@@ -33,9 +32,15 @@
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/skia/include/core/SkColor.h"
 
+class ProfileManager;
+
 namespace apps {
 struct ShareTarget;
 }  // namespace apps
+
+namespace content {
+class StoragePartitionConfig;
+}  // namespace content
 
 namespace webapps {
 enum class WebappInstallSource;
@@ -209,7 +214,7 @@ class WebAppRegistrar : public ProfileManagerObserver {
   absl::optional<GURL> GetAppScopeInternal(const AppId& app_id) const;
 
   DisplayMode GetAppDisplayMode(const AppId& app_id) const;
-  absl::optional<UserDisplayMode> GetAppUserDisplayMode(
+  absl::optional<mojom::UserDisplayMode> GetAppUserDisplayMode(
       const AppId& app_id) const;
   std::vector<DisplayMode> GetAppDisplayModeOverride(const AppId& app_id) const;
 
@@ -337,6 +342,13 @@ class WebAppRegistrar : public ProfileManagerObserver {
   absl::optional<proto::WebAppOsIntegrationState>
   GetAppCurrentOsIntegrationState(const AppId& app_id) const;
 
+  // Returns the StoragePartitionConfig of all StoragePartitions used by
+  // |isolated_web_app_id|. Both the primary and any <controlledframe>
+  // StoragePartitions will be returned.
+  std::vector<content::StoragePartitionConfig>
+  GetIsolatedWebAppStoragePartitionConfigs(
+      const AppId& isolated_web_app_id) const;
+
 #if BUILDFLAG(IS_MAC)
   bool AlwaysShowToolbarInFullscreen(const AppId& app_id) const;
   void NotifyAlwaysShowToolbarInFullscreenChanged(const AppId& app_id,
@@ -350,8 +362,6 @@ class WebAppRegistrar : public ProfileManagerObserver {
   void NotifyWebAppFileHandlerApprovalStateChanged(const AppId& app_id);
   void NotifyWebAppsWillBeUpdatedFromSync(
       const std::vector<const WebApp*>& new_apps_state);
-  void NotifyWebAppLocallyInstalledStateChanged(const AppId& app_id,
-                                                bool is_locally_installed);
   void NotifyWebAppDisabledStateChanged(const AppId& app_id, bool is_disabled);
   void NotifyWebAppsDisabledModeChanged();
   void NotifyWebAppLastBadgingTimeChanged(const AppId& app_id,
@@ -360,8 +370,9 @@ class WebAppRegistrar : public ProfileManagerObserver {
                                          const base::Time& time);
   void NotifyWebAppInstallTimeChanged(const AppId& app_id,
                                       const base::Time& time);
-  void NotifyWebAppUserDisplayModeChanged(const AppId& app_id,
-                                          UserDisplayMode user_display_mode);
+  void NotifyWebAppUserDisplayModeChanged(
+      const AppId& app_id,
+      mojom::UserDisplayMode user_display_mode);
   void NotifyWebAppRunOnOsLoginModeChanged(
       const AppId& app_id,
       RunOnOsLoginMode run_on_os_login_mode);

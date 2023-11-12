@@ -54,8 +54,10 @@ enum class FedCmRequestIdTokenStatus {
   kRpPageNotVisible,
   kShouldEmbargo,
   kNotSignedInWithIdp,
+  kAccountsListEmpty,
+  kWellKnownListEmpty,
 
-  kMaxValue = kNotSignedInWithIdp
+  kMaxValue = kWellKnownListEmpty
 };
 
 // This enum describes whether user sign-in states between IDP and browser
@@ -88,7 +90,7 @@ enum class FedCmIdpSigninMatchStatus {
   kMaxValue = kMismatchWithUnexpectedAccounts
 };
 
-class FedCmMetrics {
+class CONTENT_EXPORT FedCmMetrics {
  public:
   FedCmMetrics(const GURL& provider,
                const ukm::SourceId page_source_id,
@@ -141,6 +143,24 @@ class FedCmMetrics {
   // Records whether a user has left the page where the API is called when the
   // browser is ready to show the accounts dialog.
   void RecordWebContentsVisibilityUponReadyToShowDialog(bool is_visible);
+
+  // This enum is used in histograms. Do not remove or modify existing entries.
+  // You may add entries at the end, and update |kMaxValue|.
+  enum class NumReturningAccounts {
+    kZero = 0,
+    kOne = 1,
+    kMultiple = 2,
+    kMaxValue = kMultiple
+  };
+
+  // Records several auto reauthn metrics using the given parameters.
+  void RecordAutoReauthnMetrics(
+      bool has_single_returning_account,
+      const IdentityRequestAccount* auto_signin_account,
+      bool auto_reauthn_success,
+      bool is_auto_reauthn_setting_blocked,
+      bool is_auto_reauthn_embargoed,
+      absl::optional<base::TimeDelta> time_from_embargo);
 
  private:
   // The page's SourceId. Used to log the UKM event Blink.FedCm.

@@ -12,9 +12,9 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
 #include "base/callback_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/task/sequenced_task_runner_helpers.h"
@@ -77,6 +77,7 @@ class SafeBrowsingDatabaseManager;
 class SafeBrowsingServiceFactory;
 class SafeBrowsingUIManager;
 class TriggerManager;
+class HashRealTimeService;
 
 // Construction needs to happen on the main thread.
 // The SafeBrowsingService owns both the UI and Database managers which do
@@ -172,6 +173,10 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
 
   // Adds |download_manager| to the set monitored by safe browsing.
   void AddDownloadManager(content::DownloadManager* download_manager);
+
+  // Gets the hash-prefix real-time lookup service associated with the profile,
+  // or creates one if one does not already exist.
+  HashRealTimeService* GetHashRealTimeService(Profile* profile);
 
   // Type for subscriptions to SafeBrowsing service state.
   typedef base::RepeatingClosureList::Subscription StateSubscription;
@@ -273,9 +278,6 @@ class SafeBrowsingService : public SafeBrowsingServiceInterface,
   // Creates a configured NetworkContextParams when the network service is in
   // use.
   network::mojom::NetworkContextParamsPtr CreateNetworkContextParams();
-
-  // Logs metrics related to cookies.
-  void RecordCookieMetrics(Profile* profile);
 
   std::unique_ptr<ProxyConfigMonitor> proxy_config_monitor_;
 

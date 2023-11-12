@@ -6,9 +6,9 @@
 
 #include <set>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -52,7 +52,9 @@ std::unique_ptr<VerifiedContents> ReadVerifiedContents(
   std::unique_ptr<VerifiedContents> verified_contents =
       VerifiedContents::CreateFromFile(key.verifier_key,
                                        verified_contents_path);
-  if (!verified_contents) {
+  if (!verified_contents ||
+      verified_contents->extension_id() != key.extension_id ||
+      verified_contents->version() != key.extension_version) {
     if (delete_invalid_file && !base::DeleteFile(verified_contents_path)) {
       LOG(WARNING) << "Failed to delete " << verified_contents_path.value();
     }

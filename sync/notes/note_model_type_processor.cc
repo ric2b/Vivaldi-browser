@@ -8,9 +8,9 @@
 #include <vector>
 
 #include "app/vivaldi_apptools.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
@@ -316,8 +316,16 @@ void NoteModelTypeProcessor::ModelReadyToSync(
   sync_pb::NotesModelMetadata model_metadata;
   model_metadata.ParseFromString(metadata_str);
 
-  if (model_metadata.last_initial_merge_remote_updates_exceeded_limit() &&
-      base::FeatureList::IsEnabled(syncer::kSyncEnforceBookmarksCountLimit)) {
+  if (pending_clear_metadata_) {
+    pending_clear_metadata_ = false;
+    // Schedule save empty metadata, if not already empty.
+    if (!metadata_str.empty()) {
+      schedule_save_closure_.Run();
+    }
+  } else if (model_metadata
+                 .last_initial_merge_remote_updates_exceeded_limit() &&
+             base::FeatureList::IsEnabled(
+                 syncer::kSyncEnforceBookmarksCountLimit)) {
     // Report error if remote updates fetched last time during initial merge
     // exceeded limit. Note that here we are only setting
     // |last_initial_merge_remote_updates_exceeded_limit_|, the actual error
@@ -428,13 +436,10 @@ void NoteModelTypeProcessor::ConnectIfReady() {
 
   if (note_tracker_ &&
       note_tracker_->model_type_state().cache_guid() != cache_guid_) {
-    // TODO(crbug.com/820049): Add basic unit testing  consider using
-    // StopTrackingMetadata().
+    // TODO(crbug.com/820049): Add basic unit testing.
     // In case of a cache guid mismatch, treat it as a corrupted metadata and
     // start clean.
-    notes_model_->RemoveObserver(notes_model_observer_.get());
-    notes_model_observer_.reset();
-    note_tracker_.reset();
+    StopTrackingMetadataAndResetTracker();
   }
 
   auto activation_context =
@@ -476,10 +481,7 @@ void NoteModelTypeProcessor::OnSyncStopping(
       // Stop observing local changes. We'll start observing local changes again
       // when Sync is (re)started in StartTrackingMetadata().
       if (note_tracker_) {
-        DCHECK(notes_model_observer_);
-        notes_model_->RemoveObserver(notes_model_observer_.get());
-        notes_model_observer_.reset();
-        note_tracker_.reset();
+        StopTrackingMetadataAndResetTracker();
       }
       last_initial_merge_remote_updates_exceeded_limit_ = false;
       schedule_save_closure_.Run();
@@ -720,6 +722,34 @@ void NoteModelTypeProcessor::RecordMemoryUsageAndCountsHistograms() {
 
 void NoteModelTypeProcessor::SetMaxNotesTillSyncEnabledForTest(size_t limit) {
   max_notes_till_sync_enabled_ = limit;
+}
+
+void NoteModelTypeProcessor::ClearMetadataWhileStopped() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!notes_model_) {
+    // Defer the clearing until ModelReadyToSync() is invoked.
+    pending_clear_metadata_ = true;
+    return;
+  }
+  if (note_tracker_) {
+    StopTrackingMetadataAndResetTracker();
+    // Schedule save empty metadata.
+    schedule_save_closure_.Run();
+  } else if (last_initial_merge_remote_updates_exceeded_limit_) {
+    last_initial_merge_remote_updates_exceeded_limit_ = false;
+    // Schedule save empty metadata.
+    schedule_save_closure_.Run();
+  }
+}
+
+void NoteModelTypeProcessor::StopTrackingMetadataAndResetTracker() {
+  // DisconnectSync() should have been called by the caller.
+  DCHECK(!worker_);
+  DCHECK(note_tracker_);
+  DCHECK(notes_model_observer_);
+  notes_model_->RemoveObserver(notes_model_observer_.get());
+  notes_model_observer_.reset();
+  note_tracker_.reset();
 }
 
 }  // namespace sync_notes

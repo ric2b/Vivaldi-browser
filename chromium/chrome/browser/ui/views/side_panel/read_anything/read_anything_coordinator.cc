@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_container_view.h"
 #include "chrome/browser/ui/views/side_panel/read_anything/read_anything_controller.h"
@@ -51,13 +52,13 @@ void ReadAnythingCoordinator::InitModelWithUserPrefs() {
       browser->profile()->GetPrefs()->GetInteger(
           prefs::kAccessibilityReadAnythingColorInfo));
 
-  read_anything::mojom::Spacing prefs_line_spacing;
-  prefs_line_spacing = static_cast<read_anything::mojom::Spacing>(
+  read_anything::mojom::LineSpacing prefs_line_spacing;
+  prefs_line_spacing = static_cast<read_anything::mojom::LineSpacing>(
       browser->profile()->GetPrefs()->GetInteger(
           prefs::kAccessibilityReadAnythingLineSpacing));
 
-  read_anything::mojom::Spacing prefs_letter_spacing;
-  prefs_letter_spacing = static_cast<read_anything::mojom::Spacing>(
+  read_anything::mojom::LetterSpacing prefs_letter_spacing;
+  prefs_letter_spacing = static_cast<read_anything::mojom::LetterSpacing>(
       browser->profile()->GetPrefs()->GetInteger(
           prefs::kAccessibilityReadAnythingLetterSpacing));
 
@@ -81,10 +82,8 @@ ReadAnythingCoordinator::~ReadAnythingCoordinator() {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   if (!browser_view)
     return;
-  SidePanelCoordinator* side_panel_coordinator =
-      browser_view->side_panel_coordinator();
   SidePanelRegistry* global_registry =
-      side_panel_coordinator->GetGlobalSidePanelRegistry();
+      SidePanelCoordinator::GetGlobalSidePanelRegistry(browser);
   global_registry->Deregister(
       SidePanelEntry::Key(SidePanelEntry::Id::kReadAnything));
 }
@@ -93,7 +92,7 @@ void ReadAnythingCoordinator::CreateAndRegisterEntry(
     SidePanelRegistry* global_registry) {
   auto side_panel_entry = std::make_unique<SidePanelEntry>(
       SidePanelEntry::Id::kReadAnything,
-      l10n_util::GetStringUTF16(IDS_READ_ANYTHING_TITLE),
+      l10n_util::GetStringUTF16(IDS_READING_MODE_TITLE),
       ui::ImageModel::FromVectorIcon(kReaderModeIcon, ui::kColorIcon),
       base::BindRepeating(&ReadAnythingCoordinator::CreateContainerView,
                           base::Unretained(this)));
@@ -153,7 +152,7 @@ std::unique_ptr<views::View> ReadAnythingCoordinator::CreateContainerView() {
       std::make_unique<BubbleContentsWrapperT<ReadAnythingUI>>(
           /* webui_url= */ GURL(chrome::kChromeUIReadAnythingSidePanelURL),
           /* browser_context= */ browser->profile(),
-          /* task_manager_string_id= */ IDS_READ_ANYTHING_TITLE,
+          /* task_manager_string_id= */ IDS_READING_MODE_TITLE,
           /* webui_resizes_host= */ false,
           /* esc_closes_ui= */ false));
 
@@ -161,7 +160,7 @@ std::unique_ptr<views::View> ReadAnythingCoordinator::CreateContainerView() {
   // Note that a coordinator would normally maintain ownership of these objects,
   // but objects extending {ui/views/view.h} prefer ownership over raw pointers.
   auto container_view = std::make_unique<ReadAnythingContainerView>(
-      std::move(toolbar), std::move(content_web_view));
+      this, std::move(toolbar), std::move(content_web_view));
 
   return std::move(container_view);
 }

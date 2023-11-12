@@ -4,6 +4,10 @@ source_set("cells") {
   sources = [
     "vivaldi_atb_setting_item.h",
     "vivaldi_atb_setting_item.mm",
+    "vivaldi_atb_site_setting_item.h",
+    "vivaldi_atb_site_setting_item.mm",
+    "vivaldi_atb_source_setting_item.h",
+    "vivaldi_atb_source_setting_item.mm",
   ]
 
   deps = [

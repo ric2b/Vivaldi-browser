@@ -116,14 +116,6 @@ bool IsSelectiveUIAEnablementEnabled() {
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-BASE_FEATURE(kDockedMagnifierResizing,
-             "DockedMagnifierResizing",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsDockedMagnifierResizingEnabled() {
-  return base::FeatureList::IsEnabled(::features::kDockedMagnifierResizing);
-}
-
 bool IsDictationOfflineAvailable() {
   return base::FeatureList::IsEnabled(
       ash::features::kOnDeviceSpeechRecognition);
@@ -192,6 +184,15 @@ bool IsAccessibilitySelectToSpeakPageMigrationEnabled() {
       ::features::kAccessibilitySelectToSpeakPageMigration);
 }
 
+BASE_FEATURE(kAccessibilityChromeVoxPageMigration,
+             "AccessibilityChromeVoxPageMigration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsAccessibilityChromeVoxPageMigrationEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityChromeVoxPageMigration);
+}
+
 BASE_FEATURE(kAccessibilitySelectToSpeakPrefsMigration,
              "AccessibilitySelectToSpeakPrefsMigration",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -217,6 +218,15 @@ BASE_FEATURE(kAccessibilitySelectToSpeakHoverTextImprovements,
 bool IsAccessibilitySelectToSpeakHoverTextImprovementsEnabled() {
   return base::FeatureList::IsEnabled(
       ::features::kAccessibilitySelectToSpeakHoverTextImprovements);
+}
+
+BASE_FEATURE(kAccessibilityAcceleratorNotificationsTimeout,
+             "AccessibilityAcceleratorNotificationsTimeout",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsAccessibilityAcceleratorNotificationsTimeoutEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityAcceleratorNotificationsTimeout);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -263,9 +273,18 @@ bool IsComputeAXModeEnabled() {
   return base::FeatureList::IsEnabled(::features::kComputeAXMode);
 }
 
+BASE_FEATURE(kAccessibilityFormControlsMode,
+             "AccessibilityFormControlsAXMode",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool IsAccessibilityFormControlsAXModeEnabled() {
+  return base::FeatureList::IsEnabled(
+      ::features::kAccessibilityFormControlsMode);
+}
+
 BASE_FEATURE(kOptimizeAccessibilityUiThreadWork,
              "OptimizeAccessibilityUiThreadWork",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsOptimizeAccessibilityUiThreadWorkEnabled() {
   return base::FeatureList::IsEnabled(

@@ -14,16 +14,15 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/ash/components/dbus/dlcservice/fake_dlcservice_client.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "dbus/bus.h"
@@ -115,14 +114,17 @@ class DlcserviceClientImpl : public DlcserviceClient {
                ProgressCallback progress_callback) override {
     CheckServiceAvailable("Install");
     const std::string& id = install_request.id();
+    VLOG(1) << "DLC install called for: " << id;
     // If another installation for the same DLC ID was already called, go ahead
     // and hold the installation fields.
     if (installation_holder_.find(id) != installation_holder_.end()) {
+      LOG(WARNING) << "DLC install is already in progress for: " << id;
       HoldInstallation(install_request, std::move(install_callback),
                        std::move(progress_callback));
       return;
     }
     if (installing_) {
+      LOG(WARNING) << "DLC install is getting queued for: " << id;
       EnqueueTask(base::BindOnce(
           &DlcserviceClientImpl::Install, weak_ptr_factory_.GetWeakPtr(),
           std::move(install_request), std::move(install_callback),
@@ -373,6 +375,8 @@ class DlcserviceClientImpl : public DlcserviceClient {
 
     const auto err = DlcserviceErrorResponseHandler(err_response).get_err();
     if (err == dlcservice::kErrorBusy) {
+      // No need to log here, as it can be inferred from error response handler
+      // and the binded callback logging.
       EnqueueTask(base::BindOnce(&DlcserviceClientImpl::Install,
                                  weak_ptr_factory_.GetWeakPtr(),
                                  install_request, std::move(install_callback),

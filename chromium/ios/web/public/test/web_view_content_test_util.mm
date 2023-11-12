@@ -7,7 +7,7 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
-#import "base/bind.h"
+#import "base/functional/bind.h"
 #import "base/run_loop.h"
 #import "base/strings/stringprintf.h"
 #import "base/strings/sys_string_conversions.h"
@@ -116,7 +116,8 @@ bool IsWebViewContainingTextInFrame(web::WebState* web_state,
                                     const std::string& text) {
   __block NSInteger number_frames_processing = 0;
   __block bool text_found = false;
-  for (WebFrame* frame : web_state->GetWebFramesManager()->GetAllWebFrames()) {
+  for (WebFrame* frame :
+       web_state->GetPageWorldWebFramesManager()->GetAllWebFrames()) {
     number_frames_processing++;
 
     FindInPageJavaScriptFeature* find_in_page_feature =

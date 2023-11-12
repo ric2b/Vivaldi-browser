@@ -7,12 +7,12 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -27,6 +27,7 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/net/profile_network_context_service_test_utils.h"
@@ -34,7 +35,6 @@
 #include "chrome/browser/policy/policy_test_utils.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/common/chrome_constants.h"
@@ -45,6 +45,9 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/metrics/content/subprocess_metrics_provider.h"
 #include "components/policy/core/common/policy_map.h"
@@ -74,6 +77,7 @@
 #include "services/network/public/cpp/cors/cors.h"
 #include "services/network/public/cpp/features.h"
 #include "services/network/public/mojom/network_context.mojom.h"
+#include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/test/trust_token_request_handler.h"
 #include "services/network/test/trust_token_test_server_handler_registration.h"
@@ -693,10 +697,9 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextTrustTokensBrowsertest,
       /*incognito=*/browser()->profile()->IsIncognitoProfile());
   privacy_sandbox_settings->SetDelegateForTesting(
       std::move(privacy_sandbox_delegate));
-  privacy_sandbox_settings->SetPrivacySandboxEnabled(true);
-  browser()->profile()->GetPrefs()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kOff));
+  privacy_sandbox_settings->SetAllPrivacySandboxAllowedForTesting();
+  auto* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   Flush();
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
@@ -709,7 +712,8 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextTrustTokensBrowsertest,
   std::string command = content::JsReplace(R"(
   (async () => {
     try {
-      await fetch("/issue", {trustToken: {type: 'token-request'}});
+      await fetch("/issue", {trustToken: {version: 1,
+                                          operation: 'token-request'}});
       return await document.hasPrivateToken($1, 'private-state-token');
     } catch {
       return false;
@@ -719,29 +723,30 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextTrustTokensBrowsertest,
 
   EXPECT_EQ(true, EvalJs(GetActiveWebContents(), command));
 
-  privacy_sandbox_settings->SetPrivacySandboxEnabled(false);
+  host_content_settings_map->SetDefaultContentSetting(
+      ContentSettingsType::ANTI_ABUSE, CONTENT_SETTING_BLOCK);
   Flush();
 
   chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(content::WaitForLoadStop(GetActiveWebContents()));
   EXPECT_EQ(false, EvalJs(GetActiveWebContents(), command));
 
-  privacy_sandbox_settings->SetPrivacySandboxEnabled(true);
-  browser()->profile()->GetPrefs()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
-  Flush();
-
-  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
-  EXPECT_TRUE(content::WaitForLoadStop(GetActiveWebContents()));
-  EXPECT_EQ(false, EvalJs(GetActiveWebContents(), command));
-
-  browser()->profile()->GetPrefs()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kOff));
+  host_content_settings_map->SetDefaultContentSetting(
+      ContentSettingsType::ANTI_ABUSE, CONTENT_SETTING_ALLOW);
   Flush();
 
   chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(content::WaitForLoadStop(GetActiveWebContents()));
   EXPECT_EQ(true, EvalJs(GetActiveWebContents(), command));
+
+  // Trust Tokens are blocked when the top level origin cookie content setting
+  // is blocked
+  GURL top_level_origin = https_test_server()->GetURL("a.test", "/");
+  host_content_settings_map->SetContentSettingDefaultScope(
+      top_level_origin, top_level_origin, ContentSettingsType::COOKIES,
+      CONTENT_SETTING_BLOCK);
+
+  chrome::Reload(browser(), WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(content::WaitForLoadStop(GetActiveWebContents()));
+  EXPECT_EQ(false, EvalJs(GetActiveWebContents(), command));
 }

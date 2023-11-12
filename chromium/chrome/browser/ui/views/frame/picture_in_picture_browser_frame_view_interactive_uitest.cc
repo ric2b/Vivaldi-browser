@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/picture_in_picture_browser_frame_view.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -16,8 +17,11 @@
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
 #include "third_party/blink/public/common/features.h"
+#include "ui/gfx/animation/animation_test_api.h"
 
 namespace {
+
+constexpr base::TimeDelta kAnimationDuration = base::Milliseconds(250);
 
 const base::FilePath::CharType kPictureInPictureDocumentPipPage[] =
     FILE_PATH_LITERAL("media/picture-in-picture/document-pip.html");
@@ -73,6 +77,23 @@ class PictureInPictureBrowserFrameViewTest : public InProcessBrowserTest {
     ASSERT_TRUE(pip_frame_view_);
   }
 
+  void WaitForTopBarAnimations(std::vector<gfx::Animation*> animations) {
+    base::TimeTicks now = base::TimeTicks::Now();
+    for (auto* animation : animations) {
+      gfx::AnimationTestApi animation_api(animation);
+      animation_api.SetStartTime(now);
+      animation_api.Step(now + kAnimationDuration);
+    }
+  }
+
+  bool IsButtonVisible(views::View* button_view) {
+    bool is_button_visible = button_view->GetVisible();
+    if (button_view->layer() != nullptr) {
+      is_button_visible &= (button_view->layer()->opacity() > 0);
+    }
+    return is_button_visible;
+  }
+
   bool IsPointInPIPFrameView(gfx::Point point_in_screen) {
     views::View::ConvertPointFromScreen(pip_frame_view_, &point_in_screen);
     return pip_frame_view_->GetLocalBounds().Contains(point_in_screen);
@@ -82,7 +103,8 @@ class PictureInPictureBrowserFrameViewTest : public InProcessBrowserTest {
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  PictureInPictureBrowserFrameView* pip_frame_view_ = nullptr;
+  raw_ptr<PictureInPictureBrowserFrameView, DanglingUntriaged> pip_frame_view_ =
+      nullptr;
 };
 
 #if BUILDFLAG(IS_WIN)
@@ -103,7 +125,11 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
   gfx::Point center = pip_frame_view()->GetLocalBounds().CenterPoint();
   views::View::ConvertPointToScreen(pip_frame_view(), &center);
   ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(center));
-  ASSERT_TRUE(pip_frame_view()->GetBackToTabButtonForTesting()->GetVisible());
+  WaitForTopBarAnimations(
+      pip_frame_view()->GetRenderActiveAnimationsForTesting());
+  ASSERT_TRUE(
+      IsButtonVisible(pip_frame_view()->GetBackToTabButtonForTesting()));
+  ASSERT_TRUE(IsButtonVisible(pip_frame_view()->GetCloseButtonForTesting()));
 
   // Move mouse to the top-left corner of the main browser window (out side of
   // the pip window) should deactivate the title.
@@ -112,11 +138,19 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureBrowserFrameViewTest,
       static_cast<BrowserView*>(browser()->window()), &outside);
   ASSERT_FALSE(IsPointInPIPFrameView(outside));
   ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(outside));
-  ASSERT_FALSE(pip_frame_view()->GetBackToTabButtonForTesting()->GetVisible());
+  WaitForTopBarAnimations(
+      pip_frame_view()->GetRenderInactiveAnimationsForTesting());
+  ASSERT_FALSE(
+      IsButtonVisible(pip_frame_view()->GetBackToTabButtonForTesting()));
+  ASSERT_FALSE(IsButtonVisible(pip_frame_view()->GetCloseButtonForTesting()));
 
   // Move mouse back in pip window should activate title.
   ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(center));
-  ASSERT_TRUE(pip_frame_view()->GetBackToTabButtonForTesting()->GetVisible());
+  WaitForTopBarAnimations(
+      pip_frame_view()->GetRenderActiveAnimationsForTesting());
+  ASSERT_TRUE(
+      IsButtonVisible(pip_frame_view()->GetBackToTabButtonForTesting()));
+  ASSERT_TRUE(IsButtonVisible(pip_frame_view()->GetCloseButtonForTesting()));
 }
 
 }  // namespace

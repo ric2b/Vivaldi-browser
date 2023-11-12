@@ -147,6 +147,12 @@
             "name": "raw",
             "type": "string",
             "description": "The raw mail content."
+          },
+          {
+            "name": "append",
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether to append to file instead of write."
           }
         ],
         "returns_async": {
@@ -176,6 +182,12 @@
             "name": "raw",
             "type": "binary",
             "description": "The raw mail content as arrayBuffer"
+          },
+          {
+            "name": "append",
+            "type": "boolean",
+            "optional": true,
+            "description": "Whether to append to file instead of write."
           }
         ],
         "returns_async": {

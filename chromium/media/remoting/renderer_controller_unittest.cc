@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/run_loop.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
@@ -209,7 +209,7 @@ TEST_F(RendererControllerTest, ToggleRendererOnDisableChange) {
 }
 
 TEST_F(RendererControllerTest, NotStartForShortContent) {
-  duration_in_sec_ = 30;
+  duration_in_sec_ = 20;
   InitializeControllerAndBecomeDominant(DefaultMetadata(VideoCodec::kVP8),
                                         GetDefaultSinkMetadata(true));
   ExpectInLocalRendering();

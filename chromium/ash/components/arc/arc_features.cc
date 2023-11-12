@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "ash/components/arc/arc_features.h"
+#include "base/feature_list.h"
 
 namespace arc {
 
@@ -40,6 +41,13 @@ BASE_FEATURE(kEnableArcIdleManager,
              "ArcIdleManager",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+
+// For test purposes, ignore battery status changes, allowing Doze mode to
+// kick in even if we do not receive powerd changes related to battery.
+const base::FeatureParam<bool> kEnableArcIdleManagerIgnoreBatteryForPLT{
+    &kEnableArcIdleManager, "ignore_battery_for_test", false};
+
+
 // Controls whether files shared to ARC Nearby Share are shared through the
 // FuseBox filesystem, instead of the default method (through a temporary path
 // managed by file manager).
@@ -75,6 +83,11 @@ BASE_FEATURE(kEnablePerVmCoreScheduling,
              "ArcEnablePerVmCoreScheduling",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Enables use of new endpoint for fetching ARC sign-in token.
+BASE_FEATURE(kEnableTokenBootstrapEndpoint,
+             "ArcEnableTokenBootstrapEndpoint",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Controls whether to use ARC TTS caching to optimize ARC boot.
 BASE_FEATURE(kEnableTTSCaching,
              "ArcEnableTTSCaching",
@@ -84,7 +97,7 @@ BASE_FEATURE(kEnableTTSCaching,
 // also whether or not TTS cache is used.
 BASE_FEATURE(kEnableTTSCacheSetup,
              "ArcEnableTTSCacheSetup",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls whether we should delegate audio focus requests from ARC to Chrome.
 BASE_FEATURE(kEnableUnifiedAudioFocusFeature,
@@ -141,7 +154,7 @@ BASE_FEATURE(kFilePickerExperimentFeature,
 // for a currently-active ARCVM game.
 BASE_FEATURE(kGameModeFeature,
              "ArcGameModeFeature",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls whether the guest zram is enabled. This is only for ARCVM.
 BASE_FEATURE(kGuestZram, "ArcGuestZram", base::FEATURE_DISABLED_BY_DEFAULT);
@@ -232,14 +245,23 @@ BASE_FEATURE(kSaveRawFilesOnTracing,
              "ArcSaveRawFilesOnTracing",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// When enabled, CertStoreService will talk to KeyMint instead of Keymaster on
+// ARC-T.
+// When you change the default, you also need to change whether Keymaster
+// or KeyMint is started in ARC. Otherwise, it will not work properly.
+BASE_FEATURE(kSwitchToKeyMintOnT,
+             "ArcSwitchToKeyMintOnT",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, ARC will pass install priority to Play in sync install
+// requests.
+BASE_FEATURE(kSyncInstallPriority,
+             "ArcSyncInstallPriority",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Controls whether to update the O4C list via A2C2.
 BASE_FEATURE(kArcUpdateO4CListViaA2C2,
              "ArcUpdateO4CListViaA2C2",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// When enabled, unclaimed USB device will be attached to ARCVM by default.
-BASE_FEATURE(kUsbDeviceDefaultAttachToArcVm,
-             "UsbDeviceDefaultAttachToArcVm",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls ARC USB Storage UI feature.
@@ -310,4 +332,8 @@ BASE_FEATURE(kVmBroadcastPreNotifyANR,
              "ArcVmBroadcastPreAnrHandling",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Controls experimental key to enable Vmm swap for ARCVM by keyboard shortcut.
+BASE_FEATURE(kVmmSwapKeyboardShortcut,
+             "ArcvmSwapoutKeyboardShortcut",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 }  // namespace arc

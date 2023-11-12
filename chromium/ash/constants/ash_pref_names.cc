@@ -230,6 +230,113 @@ const char kAccessibilityStickyKeysEnabled[] =
     "settings.a11y.sticky_keys_enabled";
 // A boolean pref which determines whether spoken feedback is enabled.
 const char kAccessibilitySpokenFeedbackEnabled[] = "settings.accessibility";
+// A boolean pref which determines whether automatic reading for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxAutoRead[] =
+    "settings.a11y.chromevox.auto_read";
+// A boolean pref which determines whether announce download notifications for
+// ChromeVox is enabled.
+const char kAccessibilityChromeVoxAnnounceDownloadNotifications[] =
+    "settings.a11y.chromevox.announce_download_notifications";
+// A boolean pref which determines whether announce rich text attributes for
+// ChromeVox is enabled.
+const char kAccessibilityChromeVoxAnnounceRichTextAttributes[] =
+    "settings.a11y.chromevox.announce_rich_text_attributes";
+// A string pref which holds the current audio strategy for ChromeVox.
+const char kAccessibilityChromeVoxAudioStrategy[] =
+    "settings.a11y.chromevox.audio_strategy";
+// A boolean pref which determines whether braille side by side for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxBrailleSideBySide[] =
+    "settings.a11y.chromevox.braille_side_by_side";
+// A string pref which holds the current braille table for ChromeVox.
+const char kAccessibilityChromeVoxBrailleTable[] =
+    "settings.a11y.chromevox.braille_table";
+// A string pref which holds the current 6-dot braille for ChromeVox.
+const char kAccessibilityChromeVoxBrailleTable6[] =
+    "settings.a11y.chromevox.braille_table_6";
+// A string pref which holds the current 8-dot braille for ChromeVox.
+const char kAccessibilityChromeVoxBrailleTable8[] =
+    "settings.a11y.chromevox.braille_table_8";
+// A string pref which holds the current braille table type for ChromeVox.
+const char kAccessibilityChromeVoxBrailleTableType[] =
+    "settings.a11y.chromevox.braille_table_type";
+// A boolean pref which determines whether braille word wrap for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxBrailleWordWrap[] =
+    "settings.a11y.chromevox.braille_word_wrap";
+// A string pref which holds the current capital strategy for ChromeVox.
+const char kAccessibilityChromeVoxCapitalStrategy[] =
+    "settings.a11y.chromevox.capital_strategy";
+// A string pref which holds the current capital strategy backup for ChromeVox.
+const char kAccessibilityChromeVoxCapitalStrategyBackup[] =
+    "settings.a11y.chromevox.capital_strategy_backup";
+// A boolean pref which determines whether braille logging for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxEnableBrailleLogging[] =
+    "settings.a11y.chromevox.enable_braille_logging";
+// A boolean pref which determines whether earcon logging for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxEnableEarconLogging[] =
+    "settings.a11y.chromevox.enable_earcon_logging";
+// A boolean pref which determines whether event stream logging for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxEnableEventStreamLogging[] =
+    "settings.a11y.chromevox.enable_event_stream_logging";
+// A boolean pref which determines whether speech logging for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxEnableSpeechLogging[] =
+    "settings.a11y.chromevox.enable_speech_logging";
+// A dictionary pref that defines which event stream filters in ChromeVox are
+// enabled. (e.g. {clicked: true, focus: false, hover: true})
+const char kAccessibilityChromeVoxEventStreamFilters[] =
+    "settings.a11y.chromevox.event_stream_filters";
+// A boolean pref which determines whether language switching for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxLanguageSwitching[] =
+    "settings.a11y.chromevox.language_switching";
+// A boolean pref which determines whether menu braille commands for ChromeVox
+// are enabled.
+const char kAccessibilityChromeVoxMenuBrailleCommands[] =
+    "settings.a11y.chromevox.menu_braille_commands";
+// A string pref which holds the current number reading style for ChromeVox.
+const char kAccessibilityChromeVoxNumberReadingStyle[] =
+    "settings.a11y.chromevox.number_reading_style";
+// A string pref which holds the current preferred braille display address for
+// ChromeVox.
+const char kAccessibilityChromeVoxPreferredBrailleDisplayAddress[] =
+    "settings.a11y.chromevox.preferred_braille_display_address";
+// An integer pref which holds the value for the current state of punctuation
+// echo for ChromeVox. (0 = None, 1 = Some, 2 = All)
+const char kAccessibilityChromeVoxPunctuationEcho[] =
+    "settings.a11y.chromevox.punctuation_echo";
+// A boolean pref which determines whether smart sticky mode for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxSmartStickyMode[] =
+    "settings.a11y.chromevox.smart_sticky_mode";
+// A boolean pref which determines whether speak text under mouse for ChromeVox
+// is enabled.
+const char kAccessibilityChromeVoxSpeakTextUnderMouse[] =
+    "settings.a11y.chromevox.speak_text_under_mouse";
+// A boolean pref which determines whether use pitch changes for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxUsePitchChanges[] =
+    "settings.a11y.chromevox.use_pitch_changes";
+// A boolean pref which determines whether use verbose mode for ChromeVox is
+// enabled.
+const char kAccessibilityChromeVoxUseVerboseMode[] =
+    "settings.a11y.chromevox.use_verbose_mode";
+// An integer pref which holds the value for the number of virtual braille
+// columns for ChromeVox.
+const char kAccessibilityChromeVoxVirtualBrailleColumns[] =
+    "settings.a11y.chromevox.virtual_braille_columns";
+// An integer pref which holds the value for the number of virtual braille rows
+// for ChromeVox.
+const char kAccessibilityChromeVoxVirtualBrailleRows[] =
+    "settings.a11y.chromevox.virtual_braille_rows";
+// A string pref which holds the current voice name for ChromeVox.
+const char kAccessibilityChromeVoxVoiceName[] =
+    "settings.a11y.chromevox.voice_name";
 // A boolean pref which determines whether high contrast is enabled.
 const char kAccessibilityHighContrastEnabled[] =
     "settings.a11y.high_contrast_enabled";
@@ -449,6 +556,11 @@ const char kContextualTooltips[] = "settings.contextual_tooltip.shown_info";
 // name will appear in this list as an empty string. The desk names are stored
 // as UTF8 strings.
 const char kDesksNamesList[] = "ash.desks.desks_names_list";
+// A list containing the stored virtual desks guids in the same order of the
+// desks in the overview desks bar. This list will be used to restore desk guids
+// for the primary user on first sign-in. The guids are stored as lowercase
+// strings.
+const char kDesksGuidsList[] = "ash.desks.desks_guids_list";
 // This list stores the metrics of virtual desks. Like |kDesksNamesList|, this
 // list stores entries in the same order of the desks in the overview desks bar.
 // Values are stored as dictionaries.
@@ -485,6 +597,26 @@ const char kScreenMagnifierAcceleratorDialogHasBeenAccepted[] =
 // ever been shown.
 const char kDictationAcceleratorDialogHasBeenAccepted[] =
     "settings.a11y.dictation_accelerator_dialog_has_been_accepted";
+// A boolean pref which indicates whether the Dictation DLC success notification
+// has ever been shown.
+const char kDictationDlcSuccessNotificationHasBeenShown[] =
+    "settings.a11y.dictation_dlc_success_notification_has_been_shown";
+// A boolean pref which indicates whether the Dictation DLC only Pumpkin
+// downloaded notification has ever been shown.
+const char kDictationDlcOnlyPumpkinDownloadedNotificationHasBeenShown[] =
+    "settings.a11y.dictation_dlc_only_pumpkin_downloaded_notification_has_been_"
+    "shown";
+// A boolean pref which indicates whether the Dictation DLC only SODA
+// downloaded notification has ever been shown.
+const char kDictationDlcOnlySodaDownloadedNotificationHasBeenShown[] =
+    "settings.a11y.dictation_dlc_only_soda_downloaded_notification_has_been_"
+    "shown";
+// A boolean pref which indicates whether the Dictation No DLCs downloaded
+// notification has ever been shown.
+const char kDictationNoDlcsDownloadedNotificationHasBeenShown[] =
+    "settings.a11y.dictation_dlc_no_dlcs_downloaded_notification_has_been_"
+    "shown";
+
 // A boolean pref which indicates whether the display rotation confirmation
 // dialog has ever been shown.
 // Renamed 10/2019 to force reset the pref to false.
@@ -593,6 +725,14 @@ const char kAmbientColorEnabled[] = "ash.ambient_color.enabled";
 
 // A boolean pref that indicates whether dark mode is enabled.
 const char kDarkModeEnabled[] = "ash.dark_mode.enabled";
+
+// An integer pref that indicates the color scheme used to calculate the dynamic
+// color palette.
+const char kDynamicColorColorScheme[] = "ash.dynamic_color.color_scheme";
+
+// A uint64 pref that indicates the seed color used to calculate the dynamic
+// color palette. It is an ARGB 32-bit unsigned integer stored as a uint64.
+const char kDynamicColorSeedColor[] = "ash.dynamic_color.seed_color";
 
 // An integer pref storing the number of times that dark/light mode educational
 // can still be shown. It will be initialized to the maximum number of times
@@ -826,6 +966,9 @@ const char kWallpaperColors[] = "ash.wallpaper.prominent_colors";
 // A dictionary pref that maps wallpaper file paths to their k mean colors.
 const char kWallpaperMeanColors[] = "ash.wallpaper.k_mean_colors";
 
+// A dictionary pref that maps wallpaper file paths to their celebi colors.
+const char kWallpaperCelebiColors[] = "ash.wallpaper.celebi_colors";
+
 // Boolean pref indicating whether a user has enabled the bluetooth adapter.
 const char kUserBluetoothAdapterEnabled[] =
     "ash.user.bluetooth.adapter_enabled";
@@ -852,6 +995,11 @@ const char kTapDraggingEnabled[] = "settings.touchpad.enable_tap_dragging";
 // Boolean prefs for the status of the touchscreen and the touchpad.
 const char kTouchpadEnabled[] = "events.touch_pad.enabled";
 const char kTouchscreenEnabled[] = "events.touch_screen.enabled";
+
+// Boolean value indicating that the touchpad scroll direction screen should be
+// shown to the user during oobe.
+const char kShowTouchpadScrollScreenEnabled[] =
+    "ash.touchpad_scroll_screen_oobe_enabled";
 
 // Integer prefs indicating the minimum and maximum lengths of the lock screen
 // pin.
@@ -882,7 +1030,7 @@ const char kQuickUnlockPinSecret[] = "quick_unlock.pin.secret";
 
 // Enum that specifies how often a user has to enter their password to continue
 // using quick unlock. These values are the same as the ones in
-// chromeos::quick_unlock::PasswordConfirmationFrequency.
+// `quick_unlock::PasswordConfirmationFrequency`.
 // 0 - six hours. Users will have to enter their password every six hours.
 // 1 - twelve hours. Users will have to enter their password every twelve hours.
 // 2 - two days. Users will have to enter their password every two days.
@@ -1045,6 +1193,10 @@ const char kLacrosProxyControllingExtension[] =
 // A boolean pref which is true if Fast Pair is enabled.
 const char kFastPairEnabled[] = "ash.fast_pair.enabled";
 
+// Boolean pref indicating a user entered Bluetooth pairing flow from a fast
+// pair entry point.
+const char kUserPairedWithFastPair[] = "ash.user.paired_with_fast_pair";
+
 // A boolean pref that controls whether the user is allowed to use the Desk
 // Templates feature - including creating Desks templates and using predefined
 // Desks templates.
@@ -1143,6 +1295,12 @@ const char kUsbDetectorNotificationEnabled[] =
 const char kPersonalizationKeyboardBacklightColor[] =
     "ash.personalization.keyboard_backlight_color";
 
+// A dictionary pref storing the color of each zone of the RGB keyboard. The key
+// specifies the zone .e.g. `zone-1`, `zone-2`, whereas the value is a
+// `personalization_app::mojom::BacklightColor`.
+const char kPersonalizationKeyboardBacklightZoneColors[] =
+    "ash.personalization.keyboard_backlight_zone_colors";
+
 // Integer pref corresponding to the autozoom state, the value should be one of
 // cros::mojom::CameraAutoFramingState.
 const char kAutozoomState[] = "ash.camera.autozoom_state";
@@ -1170,6 +1328,29 @@ const char kBackgroundReplace[] = "ash.camera.background_replace";
 
 // An boolean pref that indicates whether portrait relighting is applied.
 const char kPortraitRelighting[] = "ash.camera.portrait_relighting";
+
+// Specifies if ARC app sync metrics should be recorded, i.e. this is the
+// initial session after sync consent screen.
+const char kRecordArcAppSyncMetrics[] =
+    "ash.should_record_arc_app_sync_metrics";
+
+// A boolean pref set to true if primary mouse button is the left button.
+const char kPrimaryMouseButtonRight[] = "settings.mouse.primary_right";
+
+// A integer pref for the touchpad sensitivity.
+const char kMouseSensitivity[] = "settings.mouse.sensitivity2";
+
+// A boolean pref set to true if mouse acceleration is enabled. When disabled
+// only simple linear scaling is applied based on sensitivity.
+const char kMouseAcceleration[] = "settings.mouse.acceleration";
+
+// A integer pref for the touchpad scroll sensitivity, in the range
+// [PointerSensitivity::kLowest, PointerSensitivity::kHighest].
+const char kMouseScrollSensitivity[] = "settings.mouse.scroll_sensitivity";
+
+// A boolean pref set to true if mouse scroll acceleration is enabled. When
+// disabled, only simple linear scaling is applied based on sensitivity.
+const char kMouseScrollAcceleration[] = "settings.mouse.scroll_acceleration";
 
 // NOTE: New prefs should start with the "ash." prefix. Existing prefs moved
 // into this file should not be renamed, since they may be synced.

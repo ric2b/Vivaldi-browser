@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gl/trace_util.h"
 
@@ -33,8 +34,8 @@ DisplayResourceProvider::DisplayResourceProvider(Mode mode)
     : mode_(mode),
       tracing_id_(g_next_display_resource_provider_tracing_id.GetNext()) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
-  // Don't register a dump provider in these cases.
+  // In certain cases, SingleThreadTaskRunner::CurrentDefaultHandle isn't set
+  // (Android Webview).  Don't register a dump provider in these cases.
   // TODO(crbug.com/517156): Get this working in Android Webview.
   if (base::SingleThreadTaskRunner::HasCurrentDefault()) {
     base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
@@ -85,11 +86,8 @@ bool DisplayResourceProvider::OnMemoryDump(
     // Texture resources may not come with a size, in which case don't report
     // one.
     if (!resource.transferable.size.IsEmpty()) {
-      // TODO (hitawala): Update size check to use multiplanar
-      // SharedImageFormat.
-      uint64_t total_bytes = ResourceSizes::UncheckedSizeInBytesAligned<size_t>(
-          resource.transferable.size,
-          resource.transferable.format.resource_format());
+      uint64_t total_bytes = resource.transferable.format.EstimatedSizeInBytes(
+          resource.transferable.size);
       dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                       base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                       static_cast<uint64_t>(total_bytes));
@@ -168,12 +166,8 @@ const gfx::Size DisplayResourceProvider::GetResourceBackedSize(ResourceId id) {
 }
 
 gfx::BufferFormat DisplayResourceProvider::GetBufferFormat(ResourceId id) {
-  return BufferFormat(GetResourceFormat(id));
-}
-
-ResourceFormat DisplayResourceProvider::GetResourceFormat(ResourceId id) {
   ChildResource* resource = GetResource(id);
-  return resource->transferable.format.resource_format();
+  return gpu::ToBufferFormat(resource->transferable.format);
 }
 
 const gfx::ColorSpace& DisplayResourceProvider::GetOverlayColorSpace(

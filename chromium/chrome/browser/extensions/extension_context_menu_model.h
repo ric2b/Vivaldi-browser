@@ -44,6 +44,7 @@ class ExtensionContextMenuModel : public ui::SimpleMenuModel,
     PAGE_ACCESS_ALL_EXTENSIONS_GRANTED,
     PAGE_ACCESS_ALL_EXTENSIONS_BLOCKED,
     PAGE_ACCESS_PERMISSIONS_PAGE,
+    VIEW_WEB_PERMISSIONS,
     // NOTE: If you update this, you probably need to update the
     // ContextMenuAction enum below.
   };
@@ -69,7 +70,8 @@ class ExtensionContextMenuModel : public ui::SimpleMenuModel,
     kPageAccessRunOnAllSites = 10,
     kPageAccessLearnMore = 11,
     kPageAccessPermissionsPage = 12,
-    kMaxValue = kPageAccessPermissionsPage,
+    kViewWebPermissions = 13,
+    kMaxValue = kViewWebPermissions,
   };
 
   // Location where the context menu is open from.
@@ -77,8 +79,9 @@ class ExtensionContextMenuModel : public ui::SimpleMenuModel,
 
   // The current visibility of the extension; this affects the "pin" / "unpin"
   // strings in the menu.
-  // TODO(devlin): Rename this "PinState" when we finish removing the old UI
-  // bits.
+  // TODO(crbug.com/1416359): Rename this "PinState" when we finish removing the
+  // old UI bits and move outside this class (pin state is not tied to the
+  // context menu).
   enum ButtonVisibility {
     // The extension is pinned on the toolbar.
     PINNED,

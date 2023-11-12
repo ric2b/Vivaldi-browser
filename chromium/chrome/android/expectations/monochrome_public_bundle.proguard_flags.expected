@@ -698,9 +698,6 @@
     @com.google.vr.dynamite.client.UsedByReflection *;
 }
 
-# File: obj/third_party/android_deps/com_google_android_play_core_java/proguard.txt
--keepnames class com.google.android.play.core.review.ReviewInfo
-
 # File: obj/third_party/android_deps/google_android_datatransport_transport_api_java/proguard.txt
 -dontwarn com.google.auto.value.AutoValue
 -dontwarn com.google.auto.value.AutoValue$Builder
@@ -754,6 +751,8 @@
 # non-required dependencies.
 -dontwarn javax.annotation.**
 -dontwarn org.checkerframework.**
+-dontwarn com.google.errorprone.annotations.**
+-dontwarn org.jspecify.nullness.NullMarked
 
 # Proguard flags for consumers of the Google Play services SDK
 # https://developers.google.com/android/guides/setup#add_google_play_services_to_your_project
@@ -888,6 +887,21 @@
   java.util.logging.Logger * return _NONNULL_;
 }
 
+# File: ../../third_party/android_deps/libs/com_android_support_support_annotations/support-annotations-28.0.0.jar:META-INF/proguard/androidx-annotations.pro
+-keep @android.support.annotation.Keep class * {*;}
+
+-keepclasseswithmembers class * {
+    @android.support.annotation.Keep <methods>;
+}
+
+-keepclasseswithmembers class * {
+    @android.support.annotation.Keep <fields>;
+}
+
+-keepclasseswithmembers class * {
+    @android.support.annotation.Keep <init>(...);
+}
+
 # File: ../../third_party/android_deps/libs/org_jetbrains_kotlinx_kotlinx_coroutines_android/kotlinx-coroutines-android-1.6.1.jar:META-INF/com.android.tools/r8-from-1.6.0/coroutines.pro
 # Allow R8 to optimize away the FastServiceLoader.
 # Together with ServiceLoader optimization in R8
@@ -944,6 +958,4 @@
 -dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement
 
 # File: //build/android/gyp/proguard.py (generated rules)
--ignorewarnings
-# THIS LINE WAS OMITTED
 -repackageclasses ''

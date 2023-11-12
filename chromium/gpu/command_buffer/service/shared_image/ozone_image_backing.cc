@@ -36,7 +36,6 @@
 #include "ui/gfx/native_pixmap.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/buildflags.h"
-#include "ui/gl/gl_image_native_pixmap.h"
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "gpu/command_buffer/service/shared_image/skia_vk_ozone_image_representation.h"
@@ -111,8 +110,6 @@ class OzoneImageBacking::OverlayOzoneImageRepresentation
                              std::move(release_fence));
   }
 };
-
-OzoneImageBacking::~OzoneImageBacking() = default;
 
 SharedImageBackingType OzoneImageBacking::GetType() const {
   return SharedImageBackingType::kOzone;
@@ -290,6 +287,14 @@ OzoneImageBacking::OzoneImageBacking(
   }
 }
 
+OzoneImageBacking::~OzoneImageBacking() {
+  if (context_state_->context_lost()) {
+    for (auto& texture_holder : cached_texture_holders_) {
+      texture_holder->MarkContextLost();
+    }
+  }
+}
+
 std::unique_ptr<VaapiImageRepresentation> OzoneImageBacking::ProduceVASurface(
     SharedImageManager* manager,
     MemoryTypeTracker* tracker,
@@ -313,16 +318,16 @@ bool OzoneImageBacking::VaSync() {
   return !has_pending_va_writes_;
 }
 
-bool OzoneImageBacking::UploadFromMemory(const SkPixmap& pixmap) {
-  DCHECK(!pixmap.info().isEmpty());
-
-  if (context_state_->context_lost())
+bool OzoneImageBacking::UploadFromMemory(const std::vector<SkPixmap>& pixmaps) {
+  if (context_state_->context_lost()) {
     return false;
+  }
 
   DCHECK(context_state_->IsCurrent(nullptr));
 
   auto representation = ProduceSkia(
       nullptr, context_state_->memory_type_tracker(), context_state_);
+  DCHECK_EQ(pixmaps.size(), representation->NumPlanesExpected());
 
   std::vector<GrBackendSemaphore> begin_semaphores;
   std::vector<GrBackendSemaphore> end_semaphores;
@@ -341,15 +346,28 @@ bool OzoneImageBacking::UploadFromMemory(const SkPixmap& pixmap) {
     DCHECK(result);
   }
 
-  DCHECK_EQ(size(), representation->size());
-  bool written = context_state_->gr_context()->updateBackendTexture(
-      dest_scoped_access->promise_image_texture()->backendTexture(), &pixmap,
-      /*numLevels=*/1, representation->surface_origin(), nullptr, nullptr);
+  bool written = true;
+  for (int plane = 0; plane < format().NumberOfPlanes(); ++plane) {
+    GrBackendTexture backend_texture =
+        dest_scoped_access->promise_image_texture(plane)->backendTexture();
+    if (!context_state_->gr_context()->updateBackendTexture(
+            backend_texture, &pixmaps[plane],
+            /*numLevels=*/1, surface_origin(), nullptr, nullptr)) {
+      written = false;
+    }
+  }
+
+  if (auto end_state = dest_scoped_access->TakeEndState()) {
+    for (int plane = 0; plane < format().NumberOfPlanes(); ++plane) {
+      context_state_->gr_context()->setBackendTextureState(
+          dest_scoped_access->promise_image_texture(plane)->backendTexture(),
+          *end_state);
+    }
+  }
 
   FlushAndSubmitIfNecessary(std::move(end_semaphores), context_state_.get());
-  if (written && !representation->IsCleared()) {
-    representation->SetClearedRect(
-        gfx::Rect(pixmap.info().width(), pixmap.info().height()));
+  if (written && !IsCleared()) {
+    SetCleared();
   }
   return written;
 }

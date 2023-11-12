@@ -54,6 +54,18 @@ def main(raw_args):
   subparser.set_defaults(func=install_cmd)
 
   subparser = subparsers.add_parser(
+      'uninstall',
+      help='Uninstall all the artifacts associated with the given config.')
+  _add_common_arguments(subparser)
+  _add_avd_config_argument(subparser)
+
+  def uninstall_cmd(args):
+    avd.AvdConfig(args.avd_config).Uninstall()
+    return 0
+
+  subparser.set_defaults(func=uninstall_cmd)
+
+  subparser = subparsers.add_parser(
       'create',
       help='Create an AVD CIPD package according to the given config.')
   _add_common_arguments(subparser)
@@ -159,7 +171,7 @@ def main(raw_args):
       '--debug-tags',
       help='Comma-separated list of debug tags. This can be used to enable or '
       'disable debug messages from specific parts of the emulator, e.g. '
-      'init, snapshot. See "emulator -help-debug-tags" '
+      'init,snapshot. See "emulator -help-debug-tags" '
       'for a full list of tags.')
   subparser.add_argument(
       '--require-fast-start',

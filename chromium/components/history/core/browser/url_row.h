@@ -234,6 +234,12 @@ struct VisitContentModelAnnotations {
 };
 
 // A structure containing the annotations made to page content for a visit.
+//
+// Note: only `page_language` and `password_state` are being synced to remote
+// devices; other fields should not be synced without auditing the usages (
+// e.g. `BrowsingTopicsCalculator` is currently assuming that a visit entry
+// comes from the local history as long as it is associated with a non-empty
+// `annotation_flags`).
 struct VisitContentAnnotations {
   // Values are persisted; do not reorder or reuse, and only add new values at
   // the end.
@@ -251,7 +257,8 @@ struct VisitContentAnnotations {
                           const std::u16string& search_terms,
                           const std::string& alternative_title,
                           const std::string& page_language,
-                          PasswordState password_state);
+                          PasswordState password_state,
+                          bool has_url_keyed_image);
   VisitContentAnnotations(const VisitContentAnnotations& other);
   ~VisitContentAnnotations();
 
@@ -270,6 +277,8 @@ struct VisitContentAnnotations {
   // Whether a password form was found on the page - see also
   // sessions::SerializedNavigationEntry::PasswordState.
   PasswordState password_state = PasswordState::kUnknown;
+  // Whether there is a URL-keyed image for this visit.
+  bool has_url_keyed_image = false;
 };
 
 class URLResult : public URLRow {

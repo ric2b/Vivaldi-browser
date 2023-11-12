@@ -8,17 +8,17 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "build/build_config.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/overlay_processor_interface.h"
 #include "components/viz/service/display/skia_output_surface.h"
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
+#include "ui/gfx/frame_data.h"
 #include "ui/gfx/gpu_fence_handle.h"
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/swap_result.h"
-#include "ui/gl/gl_surface.h"
 
 namespace gpu {
 class SharedImageFactory;
@@ -117,25 +117,21 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
       gfx::Size image_size);
   virtual void SwapBuffers(SwapCompletionCallback completion_callback,
                            BufferPresentedCallback presentation_callback,
-                           gl::FrameData data) = 0;
+                           gfx::FrameData data) = 0;
   virtual void PostSubBuffer(const gfx::Rect& rect,
                              SwapCompletionCallback completion_callback,
                              BufferPresentedCallback presentation_callback,
-                             gl::FrameData data) = 0;
+                             gfx::FrameData data) = 0;
   virtual void CommitOverlayPlanes(
       SwapCompletionCallback completion_callback,
       BufferPresentedCallback presentation_callback,
-      gl::FrameData data) = 0;
+      gfx::FrameData data) = 0;
   virtual void SchedulePrimaryPlane(
       const OverlayProcessorInterface::OutputSurfaceOverlayPlane& plane,
       Image* image,
       bool is_submitted) = 0;
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_OZONE)
-  using OverlayPlaneCandidate = OverlayCandidate;
-#elif BUILDFLAG(IS_APPLE)
+#if BUILDFLAG(IS_APPLE)
   using OverlayPlaneCandidate = CALayerOverlay;
-#elif BUILDFLAG(IS_WIN)
-  using OverlayPlaneCandidate = DCLayerOverlay;
 #else
   // Default.
   using OverlayPlaneCandidate = OverlayCandidate;
@@ -145,7 +141,12 @@ class VIZ_SERVICE_EXPORT OutputPresenter {
       const OverlayPlaneCandidate& overlay_plane_candidate,
       ScopedOverlayAccess* access,
       std::unique_ptr<gfx::GpuFence> acquire_fence) = 0;
-#if BUILDFLAG(IS_MAC)
+
+  virtual bool SupportsGpuVSync() const;
+  virtual void SetGpuVSyncEnabled(bool enabled) {}
+  virtual void SetVSyncDisplayID(int64_t display_id) {}
+
+#if BUILDFLAG(IS_APPLE)
   virtual void SetCALayerErrorCode(gfx::CALayerResult ca_layer_error_code) {}
 #endif
 };

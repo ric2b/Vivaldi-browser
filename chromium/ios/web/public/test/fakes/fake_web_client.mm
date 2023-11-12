@@ -9,7 +9,7 @@
 #import "base/strings/sys_string_conversions.h"
 #import "ios/web/common/uikit_ui_util.h"
 #import "ios/web/public/test/error_test_util.h"
-#import "ios/web/public/test/js_test_util.h"
+#import "ios/web/public/test/fakes/crw_fake_find_session.h"
 #import "ios/web/public/thread/web_task_traits.h"
 #import "ios/web/test/test_url_constants.h"
 #import "ui/base/resource/resource_bundle.h"
@@ -62,11 +62,6 @@ NSString* FakeWebClient::GetDocumentStartScriptForMainFrame(
   return early_page_script_ ? early_page_script_ : @"";
 }
 
-NSString* FakeWebClient::GetDocumentStartScriptForAllFrames(
-    BrowserState* browser_state) const {
-  return web::test::GetPageScript(@"cookie_test");
-}
-
 void FakeWebClient::SetPluginNotSupportedText(const std::u16string& text) {
   plugin_not_supported_text_ = text;
 }
@@ -101,6 +96,29 @@ UIView* FakeWebClient::GetWindowedContainer() {
 UserAgentType FakeWebClient::GetDefaultUserAgent(web::WebState* web_state,
                                                  const GURL& url) const {
   return default_user_agent_;
+}
+
+void FakeWebClient::SetFindSessionPrototype(
+    CRWFakeFindSession* find_session_prototype) API_AVAILABLE(ios(16)) {
+  find_session_prototype_ = find_session_prototype;
+}
+
+id<CRWFindSession> FakeWebClient::CreateFindSessionForWebState(
+    web::WebState* web_state) const API_AVAILABLE(ios(16)) {
+  return find_session_prototype_ ? [find_session_prototype_ copy]
+                                 : [[CRWFakeFindSession alloc] init];
+}
+
+void FakeWebClient::StartTextSearchInWebState(web::WebState* web_state) {
+  text_search_started_ = true;
+}
+
+void FakeWebClient::StopTextSearchInWebState(web::WebState* web_state) {
+  text_search_started_ = false;
+}
+
+bool FakeWebClient::IsTextSearchStarted() const {
+  return text_search_started_;
 }
 
 }  // namespace web

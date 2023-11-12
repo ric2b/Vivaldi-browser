@@ -64,7 +64,7 @@ class ScopedMultiSourceObservation {
   // Remove the object passed to the constructor as an observer from |source|.
   void RemoveObservation(Source* source) {
     auto it = base::ranges::find(sources_, source);
-    DCHECK(it != sources_.end());
+    CHECK(it != sources_.end());
     sources_.erase(it);
     Traits::RemoveObserver(source, observer_);
   }
@@ -95,7 +95,7 @@ class ScopedMultiSourceObservation {
 
   const raw_ptr<Observer> observer_;
 
-  std::vector<Source*> sources_;
+  std::vector<raw_ptr<Source>> sources_;
 };
 
 }  // namespace base

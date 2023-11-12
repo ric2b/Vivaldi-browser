@@ -49,7 +49,7 @@ suite('TextToSpeechPageTests', function() {
           assertTrue(!!subpageButton);
 
           subpageButton.click();
-          assertEquals(route, router.getCurrentRoute());
+          assertEquals(route, router.currentRoute);
           assertNotEquals(
               subpageButton, page.shadowRoot.activeElement,
               `${selector} should not be focused`);
@@ -59,7 +59,7 @@ suite('TextToSpeechPageTests', function() {
           await popStateEventPromise;
           await waitBeforeNextRender(page);
 
-          assertEquals(routes.A11Y_TEXT_TO_SPEECH, router.getCurrentRoute());
+          assertEquals(routes.A11Y_TEXT_TO_SPEECH, router.currentRoute);
           assertEquals(
               subpageButton, page.shadowRoot.activeElement,
               `${selector} should be focused`);
@@ -85,5 +85,22 @@ suite('TextToSpeechPageTests', function() {
         assertTrue(allowed_subpages.includes(subpage.id));
       }
     });
+  });
+
+  test('pdf ocr pref enabled when pdf ocr enabled', async function() {
+    loadTimeData.overrideValues({pdfOcrEnabled: true});
+    await initPage();
+
+    const pdfOcrToggle = page.shadowRoot.querySelector('#crosPdfOcrToggle');
+    assertTrue(!!pdfOcrToggle);
+    assertTrue(isVisible(pdfOcrToggle));
+    assertFalse(pdfOcrToggle.checked);
+    assertFalse(page.prefs.settings.a11y.pdf_ocr_always_active.value);
+    pdfOcrToggle.click();
+
+    await waitBeforeNextRender(page);
+    flush();
+    assertTrue(pdfOcrToggle.checked);
+    assertTrue(page.prefs.settings.a11y.pdf_ocr_always_active.value);
   });
 });

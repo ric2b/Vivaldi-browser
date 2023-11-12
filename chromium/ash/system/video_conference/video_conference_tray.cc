@@ -90,11 +90,24 @@ VideoConferenceTrayButton::VideoConferenceTrayButton(
 
 VideoConferenceTrayButton::~VideoConferenceTrayButton() = default;
 
-void VideoConferenceTrayButton::SetShowPrivacyIndicator(bool show) {
-  if (show_privacy_indicator_ == show)
+void VideoConferenceTrayButton::SetIsCapturing(bool is_capturing) {
+  if (is_capturing_ == is_capturing) {
     return;
+  }
 
-  show_privacy_indicator_ = show;
+  is_capturing_ = is_capturing;
+  UpdateCapturingState();
+}
+
+void VideoConferenceTrayButton::UpdateCapturingState() {
+  // We should only show the privacy indicator when the button is not
+  // muted/untoggled.
+  const bool show_privacy_indicator = is_capturing_ && !toggled();
+  if (show_privacy_indicator_ == show_privacy_indicator) {
+    return;
+  }
+
+  show_privacy_indicator_ = show_privacy_indicator;
   SchedulePaint();
 }
 
@@ -141,12 +154,16 @@ VideoConferenceTray::VideoConferenceTray(Shelf* shelf)
           &kPrivacyIndicatorsMicrophoneIcon,
           &kVideoConferenceMicrophoneMutedIcon,
           IDS_PRIVACY_NOTIFICATION_TITLE_MIC));
+  audio_icon_->SetVisible(false);
+
   camera_icon_ = tray_container()->AddChildView(
       std::make_unique<VideoConferenceTrayButton>(
           base::BindRepeating(&VideoConferenceTray::OnCameraButtonClicked,
                               weak_ptr_factory_.GetWeakPtr()),
           &kPrivacyIndicatorsCameraIcon, &kVideoConferenceCameraMutedIcon,
           IDS_PRIVACY_NOTIFICATION_TITLE_CAMERA));
+  camera_icon_->SetVisible(false);
+
   screen_share_icon_ = tray_container()->AddChildView(
       std::make_unique<VideoConferenceTrayButton>(
           base::BindRepeating(&VideoConferenceTray::OnScreenShareButtonClicked,
@@ -154,12 +171,24 @@ VideoConferenceTray::VideoConferenceTray(Shelf* shelf)
           &kPrivacyIndicatorsScreenShareIcon,
           &kPrivacyIndicatorsScreenShareIcon,
           IDS_ASH_STATUS_TRAY_SCREEN_SHARE_TITLE));
+  screen_share_icon_->SetVisible(false);
+
   toggle_bubble_button_ =
       tray_container()->AddChildView(std::make_unique<ToggleBubbleButton>(
           this, base::BindRepeating(&VideoConferenceTray::ToggleBubble,
                                     weak_ptr_factory_.GetWeakPtr())));
 
-  VideoConferenceTrayController::Get()->AddObserver(this);
+  auto* video_conference_tray_controller = VideoConferenceTrayController::Get();
+  video_conference_tray_controller->AddObserver(this);
+
+  // Update visibility of the tray and all child icons and indicators. If this
+  // lives on a secondary display, it's possible a media session already exists
+  // so force update all state.
+  UpdateTrayAndIconsState();
+
+  DCHECK_EQ(4u, tray_container()->children().size())
+      << "Icons must be updated here in case a media session begins prior to "
+         "connecting a secondary display.";
 }
 
 VideoConferenceTray::~VideoConferenceTray() {
@@ -183,8 +212,10 @@ views::Widget* VideoConferenceTray::GetBubbleWidget() const {
 }
 
 std::u16string VideoConferenceTray::GetAccessibleNameForTray() {
-  // TODO(b/253646076): Finish this function.
-  return std::u16string();
+  // TODO(b/253646076): The following is a temporary fix to pass
+  // https://crrev.com/c/4109611 browsertests and still needs to be replaced
+  // with the proper name.
+  return u"Placeholder";
 }
 
 void VideoConferenceTray::HideBubbleWithView(
@@ -201,16 +232,32 @@ void VideoConferenceTray::HandleLocaleChange() {
   // TODO(b/253646076): Finish this function.
 }
 
-void VideoConferenceTray::UpdateAfterLoginStatusChange() {
-  SetVisiblePreferred(true);
+void VideoConferenceTray::OnHasMediaAppStateChange() {
+  SetVisiblePreferred(VideoConferenceTrayController::Get()->ShouldShowTray());
+}
+
+void VideoConferenceTray::OnCameraPermissionStateChange() {
+  camera_icon_->SetVisible(
+      VideoConferenceTrayController::Get()->GetHasCameraPermissions());
+}
+
+void VideoConferenceTray::OnMicrophonePermissionStateChange() {
+  audio_icon_->SetVisible(
+      VideoConferenceTrayController::Get()->GetHasMicrophonePermissions());
+}
+
+void VideoConferenceTray::OnScreenSharingStateChange(bool is_capturing_screen) {
+  screen_share_icon_->SetVisible(is_capturing_screen);
+  screen_share_icon_->SetIsCapturing(
+      /*is_capturing=*/is_capturing_screen);
 }
 
 void VideoConferenceTray::OnCameraCapturingStateChange(bool is_capturing) {
-  camera_icon_->SetShowPrivacyIndicator(/*show=*/is_capturing);
+  camera_icon_->SetIsCapturing(is_capturing);
 }
 
 void VideoConferenceTray::OnMicrophoneCapturingStateChange(bool is_capturing) {
-  audio_icon_->SetShowPrivacyIndicator(/*show=*/is_capturing);
+  audio_icon_->SetIsCapturing(is_capturing);
 }
 
 SkScalar VideoConferenceTray::GetRotationValueForToggleBubbleButton() {
@@ -223,6 +270,22 @@ SkScalar VideoConferenceTray::GetRotationValueForToggleBubbleButton() {
     case ShelfAlignment::kRight:
       return is_active() ? 90 : 270;
   }
+}
+
+void VideoConferenceTray::UpdateTrayAndIconsState() {
+  auto* controller = VideoConferenceTrayController::Get();
+
+  SetVisiblePreferred(controller->ShouldShowTray());
+
+  camera_icon_->SetVisible(controller->GetHasCameraPermissions());
+  camera_icon_->SetIsCapturing(controller->IsCapturingCamera());
+
+  audio_icon_->SetVisible(controller->GetHasMicrophonePermissions());
+  audio_icon_->SetIsCapturing(controller->IsCapturingMicrophone());
+
+  bool is_capturing_screen = controller->IsCapturingScreen();
+  screen_share_icon_->SetVisible(is_capturing_screen);
+  screen_share_icon_->SetIsCapturing(is_capturing_screen);
 }
 
 void VideoConferenceTray::ToggleBubble(const ui::Event& event) {

@@ -112,6 +112,7 @@ class MODULES_EXPORT MediaStreamTrack
   DEFINE_ATTRIBUTE_EVENT_LISTENER(unmute, kUnmute)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(ended, kEnded)
   DEFINE_ATTRIBUTE_EVENT_LISTENER(capturehandlechange, kCapturehandlechange)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(configurationchange, kConfigurationchange)
 
   virtual MediaStreamSource::ReadyState GetReadyState() = 0;
 
@@ -140,6 +141,10 @@ class MODULES_EXPORT MediaStreamTrack
   // Prepares the track for a potentially cross-renderer transfer. After this
   // is called, the track will be in an ended state and no longer usable.
   virtual void BeingTransferred(const base::UnguessableToken& transfer_id) = 0;
+  // Returns true if this track is allowed to be transferred. If a transfer is
+  //  not allowed, message will contain an explanatory text that can be
+  //  surfaced to the caller.
+  virtual bool TransferAllowed(String& message) const = 0;
 
   virtual void AddObserver(Observer*) = 0;
 

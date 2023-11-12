@@ -28,7 +28,7 @@ import {parseTrashInfoFiles, startIOTask} from './api.js';
 import {isFileSystemDirectoryEntry, isFileSystemFileEntry} from './entry_utils.js';
 import {FakeEntryImpl} from './files_app_entry_types.js';
 import {metrics} from './metrics.js';
-import {util} from './util.js';
+import {str, util} from './util.js';
 import {VolumeManagerCommon} from './volume_manager_types.js';
 
 /**
@@ -65,6 +65,12 @@ const TRASH_CONFIG = [
  * Interval (ms) until items in trash are permanently deleted. 30 days.
  */
 export const AUTO_DELETE_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Interval (ms) when .trashinfo files with no related files entry can be
+ * considered stale and should be removed. 1 hour.
+ */
+const STALE_TRASHINFO_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
  * Returns a list of strings that represent volumes that are enabled for Trash.
@@ -382,10 +388,9 @@ class TrashDirectoryReader implements FileSystemDirectoryReader {
       return null;
     }
 
-    const deletionDate = parsedEntry.deletionDate;
     return new TrashEntry(
-        parsedEntry.restoreEntry.name, deletionDate, filesEntry, infoEntry,
-        parsedEntry.restoreEntry);
+        parsedEntry.restoreEntry.name, new Date(parsedEntry.deletionDate),
+        filesEntry, infoEntry, parsedEntry.restoreEntry);
   }
 
   /**
@@ -482,18 +487,42 @@ class TrashDirectoryReader implements FileSystemDirectoryReader {
         }
         // In the event the parsed entry was deleted more than 30 days ago,
         // schedule them for deletion and don't render them in the view.
-        if (parsedEntry.deletionDate.getTime() <
-            (dateNow - AUTO_DELETE_INTERVAL_MS)) {
+        if (parsedEntry.deletionDate < (dateNow - AUTO_DELETE_INTERVAL_MS)) {
           entriesToDelete.push(infoEntry);
           const trashEntry = this.getFilesEntry(parsedEntry.trashInfoFileName);
           if (trashEntry) {
             entriesToDelete.push(trashEntry);
           }
+          delete infoEntryMap[parsedEntry.trashInfoFileName];
           continue;
         }
         const trashEntry = this.createTrashEntry_(parsedEntry, infoEntry);
         if (trashEntry) {
           result.push(trashEntry);
+        }
+        delete infoEntryMap[parsedEntry.trashInfoFileName];
+      }
+
+      // Any leftover entries in the `infoEntryMap` have no corresponding file
+      // entry. This can be due to 2 possible reasons:
+      // 1. An in progress trash operation that has written the trashinfo file
+      //    but not moved the corresponding item.
+      // 2. The trashinfo has been removed or is dangling from a previously
+      //    failed operation.
+      // To avoid (1) check the `modificationDate` and ensure it's >1 hour old,
+      // given a trash operation is atomic (no cross filesystem trashes) this
+      // should be sufficient time to ensure there is no file to be moved.
+      for (const entry of Object.values(infoEntryMap)) {
+        let itemMetadata = null;
+        try {
+          itemMetadata = await getFileMetadata(entry);
+        } catch (e) {
+          console.warn('Error getting trashinfo metadata:', e);
+          continue;
+        }
+        if (itemMetadata.modificationTime.getTime() <
+            (dateNow - STALE_TRASHINFO_INTERVAL_MS)) {
+          entriesToDelete.push(entry);
         }
       }
     }
@@ -524,7 +553,7 @@ class TrashDirectoryReader implements FileSystemDirectoryReader {
  */
 export class TrashRootEntry extends FakeEntryImpl {
   constructor() {
-    super('Trash', VolumeManagerCommon.RootType.TRASH);
+    super(str('TRASH_ROOT_LABEL'), VolumeManagerCommon.RootType.TRASH);
   }
 }
 
@@ -540,6 +569,15 @@ export function createTrashReaders(volumeManager: VolumeManager) {
     }
   });
   return readers;
+}
+
+/**
+ * Promisifies retrieval of a files metadata.
+ */
+async function getFileMetadata(file: FileSystemEntry): Promise<Metadata> {
+  return new Promise((resolve, reject) => {
+    file.getMetadata(resolve, reject);
+  });
 }
 
 // The UMA to track the enum that is reported below.

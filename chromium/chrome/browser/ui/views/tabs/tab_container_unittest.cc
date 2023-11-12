@@ -90,7 +90,7 @@ class FakeTabContainerController final : public TabContainerController {
     return tab_strip_controller_->GetCount();
   }
 
-  void OnDropIndexUpdate(int index, bool drop_before) override {
+  void OnDropIndexUpdate(absl::optional<int> index, bool drop_before) override {
     tab_strip_controller_->OnDropIndexUpdate(index, drop_before);
   }
 
@@ -536,12 +536,14 @@ TEST_F(TabContainerTest, DropIndexForDragLocationIsCorrect) {
                 MakeEventForDragLocation(tab3->bounds().CenterPoint())));
 
   // Check dragging over group header.
+  // The left half of the header should drop outside the group.
   EXPECT_EQ((DropIndex{1, true, false}),
             tab_container_->GetDropIndex(MakeEventForDragLocation(
-                group_header->bounds().left_center() + gfx::Vector2d(1, 0))));
+                group_header->bounds().CenterPoint() + gfx::Vector2d(-1, 0))));
+  // The right half of the header should drop inside the group.
   EXPECT_EQ((DropIndex{1, true, true}),
             tab_container_->GetDropIndex(MakeEventForDragLocation(
-                group_header->bounds().right_center() + gfx::Vector2d(-1, 0))));
+                group_header->bounds().CenterPoint() + gfx::Vector2d(1, 0))));
 }
 
 TEST_F(TabContainerTest, AccessibilityData) {
@@ -956,6 +958,10 @@ TEST_F(TabContainerTest, PreferredWidthDuringAnimation) {
   // During animations, container preferred size should animate smoothly.
   EXPECT_EQ(initial_pref_width, tab_container_->GetPreferredSize().width());
 
+  // Minimum size should match preferred width during animations.
+  EXPECT_EQ(tab_container_->GetPreferredSize().width(),
+            tab_container_->GetMinimumSize().width());
+
   // Complete the animation and the preferred width should match ideal bounds of
   // the trailingmost tab.
   tab_container_->CompleteAnimationAndLayout();
@@ -965,18 +971,22 @@ TEST_F(TabContainerTest, PreferredWidthDuringAnimation) {
                 .right());
 }
 
-TEST_F(TabContainerTest, PreferredWidthNotAffectedByTransferOut) {
+TEST_F(TabContainerTest, PreferredWidthNotAffectedByTransferTabTo) {
   // Start with two tabs.
   AddTab(0);
   AddTab(1);
   const int initial_pref_width = tab_container_->GetPreferredSize().width();
 
   // Transfer one out, then pretend to animate it.
-  std::unique_ptr<Tab> owned_tab = tab_container_->TransferTabOut(1);
+  std::unique_ptr<views::View> hold_my_tab = std::make_unique<views::View>();
+  hold_my_tab->AddChildView(tab_container_->RemoveTabFromViewModel(1));
   tab_container_controller_->set_is_animating_outside_container(true);
   // Preferred width should be unchanged, even though `owned_tab` is no longer
   // part of `tab_container_`.
   EXPECT_EQ(initial_pref_width, tab_container_->GetPreferredSize().width());
+  // Minimum size should match preferred width during animations.
+  EXPECT_EQ(tab_container_->GetPreferredSize().width(),
+            tab_container_->GetMinimumSize().width());
 
   // Complete the animation and stop pretending.
   tab_container_->CompleteAnimationAndLayout();
@@ -997,6 +1007,9 @@ TEST_F(TabContainerTest, PreferredWidthAddTabToViewModel) {
   tab_container_controller_->set_is_animating_outside_container(true);
   // Preferred width should be unchanged.
   EXPECT_EQ(initial_pref_width, tab_container_->GetPreferredSize().width());
+  // Minimum size should match preferred width during animations.
+  EXPECT_EQ(tab_container_->GetPreferredSize().width(),
+            tab_container_->GetMinimumSize().width());
 
   // Complete animation and stop pretending.
   tab_container_->CompleteAnimationAndLayout();

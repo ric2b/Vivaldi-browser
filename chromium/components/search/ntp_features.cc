@@ -131,6 +131,11 @@ BASE_FEATURE(kNtpModulesLoadTimeoutMilliseconds,
              "NtpModulesLoadTimeoutMilliseconds",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Dummy feature to set param "NtpModulesMaxWidthParam".
+BASE_FEATURE(kNtpModulesParams,
+             "NtpModulesParams",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Dummy feature to set param "NtpModulesOrderParam".
 BASE_FEATURE(kNtpModulesOrder,
              "NtpModulesOrder",
@@ -223,6 +228,33 @@ BASE_FEATURE(kNtpSafeBrowsingModule,
 // If enabled, shortcuts will be shown.
 BASE_FEATURE(kNtpShortcuts, "NtpShortcuts", base::FEATURE_ENABLED_BY_DEFAULT);
 
+// If enabled, the History clusters module will be shown.
+BASE_FEATURE(kNtpHistoryClustersModule,
+             "NtpHistoryClustersModule",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Dummy feature to set kNtpHistoryClustersModuleBeginTimeDurationHoursParam.
+BASE_FEATURE(kNtpHistoryClustersModuleBeginTimeDuration,
+             "NtpHistoryClustersModuleBeginTimeDuration",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Dummy feature to set kNtpHistoryClustersModuleMinimumImagesRequiredParam.
+BASE_FEATURE(kNtpHistoryClustersModuleMinimumImagesRequired,
+             "NtpHistoryClustersModuleMinimumImagesRequired",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Dummy feature to set kNtpHistoryClustersModuleCategoriesParam.
+BASE_FEATURE(kNtpHistoryClustersModuleCategories,
+             "NtpHistoryClustersModuleCategories",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the history clusters module will be loaded but not shown. This is
+// useful to determine if a user would have seen modules in order to
+// counterfactually log or trigger.
+BASE_FEATURE(kNtpHistoryClustersModuleLoad,
+             "NtpHistoryClustersModuleLoad",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 const base::FeatureParam<double>
     kNtpElementLuminosityChangeForLightBackgroundParam{
         &kNtpComprehensiveTheming,
@@ -243,6 +275,7 @@ const char kNtpModulesEligibleForHappinessTrackingSurveyParam[] =
     "NtpModulesEligibleForHappinessTrackingSurveyParam";
 const char kNtpModulesLoadTimeoutMillisecondsParam[] =
     "NtpModulesLoadTimeoutMillisecondsParam";
+const char kNtpModulesMaxWidthParam[] = "NtpModulesMaxWidthParam";
 const char kNtpModulesOrderParam[] = "NtpModulesOrderParam";
 const char kNtpChromeCartModuleDataParam[] = "NtpChromeCartModuleDataParam";
 const char kNtpChromeCartModuleAbandonedCartDiscountParam[] =
@@ -276,6 +309,12 @@ const char kNtpRecipeTasksModuleCacheMaxAgeSParam[] =
     "NtpRecipeTasksModuleCacheMaxAgeSParam";
 const char kNtpRecipeTasksModuleExperimentGroupParam[] =
     "NtpRecipeTasksModuleExperimentGroupParam";
+const char kNtpHistoryClustersModuleBeginTimeDurationHoursParam[] =
+    "NtpHistoryClustersModuleBeginTimeDurationHoursParam";
+const char kNtpHistoryClustersModuleMinimumImagesRequiredParam[] =
+    "NtpHistoryClustersModuleMinimumImagesRequiredParam";
+const char kNtpHistoryClustersModuleCategoriesParam[] =
+    "NtpHistoryClustersModuleCategoriesParam";
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(
@@ -288,6 +327,12 @@ base::TimeDelta GetModulesLoadTimeout() {
     return base::Seconds(3);
   }
   return base::Milliseconds(param_value_as_int);
+}
+
+absl::optional<int> GetModulesMaxWidthPixels() {
+  int max_width_px = base::GetFieldTrialParamByFeatureAsInt(
+      kNtpModulesParams, kNtpModulesMaxWidthParam, -1);
+  return (max_width_px > 0) ? absl::optional<int>{max_width_px} : absl::nullopt;
 }
 
 std::vector<std::string> GetModulesOrder() {

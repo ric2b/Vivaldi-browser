@@ -4,12 +4,13 @@
 
 #include "chrome/browser/signin/dice_response_handler.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "chrome/browser/profiles/profile.h"
@@ -327,9 +328,11 @@ void DiceResponseHandler::ProcessDiceSignoutHeader(
   // If there is a restriction on removing the primary account. Do not remove
   // the account regardless of the consent level. Else, the sync account can
   // only be invalidated.
-  signin::ConsentLevel level = signin_client_->IsClearPrimaryAccountAllowed()
-                                   ? signin::ConsentLevel::kSync
-                                   : signin::ConsentLevel::kSignin;
+  signin::ConsentLevel level =
+      signin_client_->IsClearPrimaryAccountAllowed(
+          identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync))
+          ? signin::ConsentLevel::kSync
+          : signin::ConsentLevel::kSignin;
 
   CoreAccountId primary_account = identity_manager_->GetPrimaryAccountId(level);
   bool primary_account_signed_out = false;
@@ -416,4 +419,9 @@ void DiceResponseHandler::OnTokenExchangeFailure(
   token_fetcher->delegate()->HandleTokenExchangeFailure(email, error);
 
   DeleteTokenFetcher(token_fetcher);
+}
+
+// static
+void DiceResponseHandler::EnsureFactoryBuilt() {
+  DiceResponseHandlerFactory::GetInstance();
 }

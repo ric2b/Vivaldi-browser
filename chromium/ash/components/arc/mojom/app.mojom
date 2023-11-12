@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 56
+// Next MinVersion: 57
 
 module arc.mojom;
 
@@ -87,6 +87,14 @@ struct WindowLayout {
   Rect? bounds;  // Window bounds value.
 };
 
+// ARC package install priority.
+[Extensible]
+enum InstallPriority {
+  [Default] kUndefined = 0,
+  kMedium = 1,
+  kLow = 2,
+};
+
 // Describes ARC package.
 // The list of ArcPackageInfo sent by AppInstance contains all the installed
 // Android packages including ones other than launchable apps (e.g. Google Play
@@ -120,6 +128,8 @@ struct ArcPackageInfo {
   // If the package is pre-installed in the system image. This is true even
   // after the package is updated.
   [MinVersion=55] bool preinstalled;
+
+  [MinVersion=56] InstallPriority priority;
 };
 
 // Describes ARC app shortcut.
@@ -386,7 +396,7 @@ interface AppHost {
 
 // TODO(lhchavez): Migrate all request/response messages to Mojo.
 // Next method ID: 42
-// Deprecated method IDs: 0, 1, 2, 3, 4, 9, 12, 13, 15, 17, 18, 19, 22, 31
+// Deprecated method IDs: 0, 1, 2, 3, 4, 6, 9, 12, 13, 15, 17, 18, 19, 22, 31
 interface AppInstance {
   // Establishes full-duplex communication with the host.
   [MinVersion=26] Init@21(pending_remote<AppHost> host_remote) => ();
@@ -398,9 +408,11 @@ interface AppInstance {
   // Closes the the given task.
   [MinVersion=4] CloseTask@8(int32 task_id);
 
-  // Requests information about task.
-  [MinVersion=3] GetTaskInfo@6(int32 task_id) => (string package_name,
-                                                  string activity);
+  // Requests information about task. Deprecated: b/265158447
+  // Use the kArcPackageNameKey window property to get the package name, and
+  // OnTaskCreated to get the activity.
+  [MinVersion=3] GetTaskInfoDeprecated@6(int32 task_id) =>
+      (string package_name, string activity);
 
   // Sends a request to ARC to install package.
   [MinVersion=8] InstallPackage@11(ArcPackageInfo arcPackageInfo);

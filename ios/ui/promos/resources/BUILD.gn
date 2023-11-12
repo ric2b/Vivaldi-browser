@@ -1,0 +1,69 @@
+# Copyright (c) 2023 Vivaldi Technologies AS. All rights reserved
+
+import("//build/config/ios/asset_catalog.gni")
+
+group("resources") {
+  deps = [
+    ":vivaldi_promo_build_for_ios",
+    ":vivaldi_promo_build_for_ipad",
+    ":vivaldi_promo_switch_to_vivaldi",
+    ":vivaldi_promo_default_browser_non_modal",
+    ":vivaldi_promo_password_suggestions",
+    ":vivaldi_promo_stay_safe",
+    ":vivaldi_promo_all_yout_tabs"
+  ]
+}
+
+imageset("vivaldi_promo_build_for_ios") {
+  sources = [
+    "vivaldi_promo_build_for_ios.imageset/Contents.json",
+    "vivaldi_promo_build_for_ios.imageset/vivaldi_promo_build_for_ios.pdf",
+    "vivaldi_promo_build_for_ios.imageset/vivaldi_promo_build_for_ios_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_promo_build_for_ipad") {
+  sources = [
+    "vivaldi_promo_build_for_ipad.imageset/Contents.json",
+    "vivaldi_promo_build_for_ipad.imageset/vivaldi_promo_build_for_ipad.pdf",
+    "vivaldi_promo_build_for_ipad.imageset/vivaldi_promo_build_for_ipad_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_promo_switch_to_vivaldi") {
+  sources = [
+    "vivaldi_promo_switch_to_vivaldi.imageset/Contents.json",
+    "vivaldi_promo_switch_to_vivaldi.imageset/vivaldi_promo_switch_to_vivaldi.pdf",
+    "vivaldi_promo_switch_to_vivaldi.imageset/vivaldi_promo_switch_to_vivaldi_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_promo_default_browser_non_modal") {
+  sources = [
+    "vivaldi_promo_default_browser_non_modal.imageset/Contents.json",
+    "vivaldi_promo_default_browser_non_modal.imageset/vivaldi_promo_default_browser_non_modal.pdf",
+  ]
+}
+
+imageset("vivaldi_promo_password_suggestions") {
+  sources = [
+    "vivaldi_promo_password_suggestions.imageset/Contents.json",
+    "vivaldi_promo_password_suggestions.imageset/vivaldi_promo_password_suggestions.pdf",
+  ]
+}
+
+imageset("vivaldi_promo_stay_safe") {
+  sources = [
+    "vivaldi_promo_stay_safe.imageset/Contents.json",
+    "vivaldi_promo_stay_safe.imageset/vivaldi_promo_stay_safe.pdf",
+    "vivaldi_promo_stay_safe.imageset/vivaldi_promo_stay_safe_dark.pdf",
+  ]
+}
+
+imageset("vivaldi_promo_all_yout_tabs") {
+  sources = [
+    "vivaldi_promo_all_yout_tabs.imageset/Contents.json",
+    "vivaldi_promo_all_yout_tabs.imageset/vivaldi_promo_all_yout_tabs.pdf",
+    "vivaldi_promo_all_yout_tabs.imageset/vivaldi_promo_all_yout_tabs_dark.pdf",
+  ]
+}

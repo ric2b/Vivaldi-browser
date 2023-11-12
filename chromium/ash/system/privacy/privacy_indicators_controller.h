@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ash/ash_export.h"
+#include "base/functional/callback_forward.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
 
@@ -17,20 +18,39 @@ class Notification;
 
 namespace ash {
 
-using AppActionClosure = base::RepeatingCallback<void(void)>;
-
 // An interface for the delegate of the privacy indicators notification,
-// handling launching the app and its settings.
+// handling launching the app and its settings. Clients that use privacy
+// indicators should provide this delegate when calling the privacy indicators
+// controller API so that the API can add correct buttons to the notification
+// based on the callbacks provided and appropriate actions are performed when
+// clicking the buttons.
 class ASH_EXPORT PrivacyIndicatorsNotificationDelegate
     : public message_center::NotificationDelegate {
  public:
-  PrivacyIndicatorsNotificationDelegate(
-      const AppActionClosure& launch_app,
-      const AppActionClosure& launch_settings);
+  explicit PrivacyIndicatorsNotificationDelegate(
+      absl::optional<base::RepeatingClosure> launch_app_callback =
+          absl::nullopt,
+      absl::optional<base::RepeatingClosure> launch_settings_callback =
+          absl::nullopt);
+
   PrivacyIndicatorsNotificationDelegate(
       const PrivacyIndicatorsNotificationDelegate&) = delete;
   PrivacyIndicatorsNotificationDelegate& operator=(
       const PrivacyIndicatorsNotificationDelegate&) = delete;
+
+  const absl::optional<base::RepeatingClosure>& launch_app_callback() const {
+    return launch_app_callback_;
+  }
+  const absl::optional<base::RepeatingClosure>& launch_settings_callback()
+      const {
+    return launch_settings_callback_;
+  }
+
+  // Sets the value for `launch_app_callback_`/`launch_settings_callback_`. Also
+  // update the button indices.
+  void SetLaunchAppCallback(const base::RepeatingClosure& launch_app_callback);
+  void SetLaunchSettingsCallback(
+      const base::RepeatingClosure& launch_settings_callback);
 
   // message_center::NotificationDelegate:
   void Click(const absl::optional<int>& button_index,
@@ -40,9 +60,27 @@ class ASH_EXPORT PrivacyIndicatorsNotificationDelegate
   ~PrivacyIndicatorsNotificationDelegate() override;
 
  private:
-  const AppActionClosure launch_app_;
-  const AppActionClosure launch_settings_;
+  // Updates the indices of notification buttons.
+  void UpdateButtonIndices();
+
+  // Callbacks for clicking the launch app and launch settings buttons.
+  absl::optional<base::RepeatingClosure> launch_app_callback_;
+  absl::optional<base::RepeatingClosure> launch_settings_callback_;
+
+  // Button indices in the notification for launch app/launch settings.
+  // Will be null if the particular button does not exist in the notification.
+  absl::optional<int> launch_app_button_index_;
+  absl::optional<int> launch_settings_button_index_;
 };
+
+// Updates privacy indicators, including the privacy indicators view and the
+// privacy indicator notification(s).
+void ASH_EXPORT UpdatePrivacyIndicators(
+    const std::string& app_id,
+    absl::optional<std::u16string> app_name,
+    bool is_camera_used,
+    bool is_microphone_used,
+    scoped_refptr<PrivacyIndicatorsNotificationDelegate> delegate);
 
 // Get the id of the privacy indicators notification associated with `app_id`.
 std::string ASH_EXPORT
@@ -58,7 +96,7 @@ CreatePrivacyIndicatorsNotification(
     absl::optional<std::u16string> app_name,
     bool is_camera_used,
     bool is_microphone_used,
-    scoped_refptr<message_center::NotificationDelegate> delegate);
+    scoped_refptr<PrivacyIndicatorsNotificationDelegate> delegate);
 
 // Add, update, or remove the privacy notification associated with the given
 // `app_id`.

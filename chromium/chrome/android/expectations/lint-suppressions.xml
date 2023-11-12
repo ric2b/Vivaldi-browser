@@ -125,6 +125,7 @@ https://chromium.googlesource.com/chromium/src/+/main/build/android/docs/lint.md
   <issue id="TypographyDashes">
     <!-- The double dash in the following file is a command line flag. -->
     <ignore regexp="chrome/app/policy/android/values-v21/restriction_values.xml"/>
+    <ignore regexp="components/strings/components_strings_grd.resources.zip/values-th/components_strings.xml"/>
   </issue>
   <issue id="TypographyEllipsis">
     <ignore regexp="chrome/browser/ui/android/strings/ui_strings_grd.resources.zip/values-uz/android_chrome_strings.xml"/>
@@ -151,11 +152,6 @@ https://chromium.googlesource.com/chromium/src/+/main/build/android/docs/lint.md
     <ignore regexp="The resource `R.string.tab_suggestion_close_stale_message` appears to be unused"/>
     <ignore regexp="The resource `R.string.tab_suggestion_close_tab_action_button` appears to be unused"/>
     <ignore regexp="The resource `R.string.tab_suggestion_review_button` appears to be unused"/>
-    <!-- crbug.com/1076295 remove this line and the following four lines after the bug is resolved -->
-    <ignore regexp="The resource `R.string.undo_tab_strip_closure_message` appears to be unused"/>
-    <ignore regexp="The resource `R.string.tab_strip_info_bar_question` appears to be unused"/>
-    <ignore regexp="The resource `R.string.tab_strip_info_bar_no_reshow` appears to be unused"/>
-    <ignore regexp="The resource `R.string.tab_strip_info_bar_reshow` appears to be unused"/>
     <!-- crbug.com/1117145 remove this line and the following 23 lines after the bug is resolved -->
     <ignore regexp="The resource `R.layout.language_picker` appears to be unused"/>
     <ignore regexp="The resource `R.string.video_tutorials_accessibility_close` appears to be unused"/>
@@ -272,11 +268,6 @@ https://chromium.googlesource.com/chromium/src/+/main/build/android/docs/lint.md
     <ignore regexp="The resource `R.string.quick_action_search_widget_message_no_google_lens` appears to be unused"/>
     <ignore regexp="The resource `R.string.quick_action_search_widget_message_no_incognito` appears to be unused"/>
     <ignore regexp="The resource `R.string.quick_action_search_widget_message_no_voice_search` appears to be unused"/>
-
-    <!-- 1: TODO(crbug.com/1268473): Remove when error is shown in UI.  -->
-    <ignore regexp="The resource `R.string.lightweight_reactions_error_screenshot` appears to be unused"/>
-    <!-- 1: TODO(crbug.com/1268474): Remove when error is shown in UI.  -->
-    <ignore regexp="The resource `R.string.lightweight_reactions_error_asset_fetch` appears to be unused"/>
 
     <!--TODO(crbug.com/1278431): Remove unused resources when UX is finalized. -->
     <ignore regexp="The resource `R.string.price_tracking_title` appears to be unused"/>

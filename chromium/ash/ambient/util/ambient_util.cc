@@ -9,6 +9,7 @@
 #include "ash/public/cpp/ambient/ambient_backend_controller.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
 #include "ash/public/cpp/ambient/proto/photo_cache_entry.pb.h"
+#include "ash/style/ash_color_id.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/utility/lottie_util.h"
 #include "base/no_destructor.h"
@@ -28,26 +29,22 @@ bool IsShowing(LockScreen::ScreenType type) {
   return LockScreen::HasInstance() && LockScreen::Get()->screen_type() == type;
 }
 
-SkColor GetContentLayerColor(
-    AshColorProvider::ContentLayerType content_layer_type) {
-  return GetContentLayerColor(
-      content_layer_type,
-      DarkLightModeControllerImpl::Get()->IsDarkModeEnabled());
+SkColor GetColor(const ui::ColorProvider* color_provider,
+                 ui::ColorId color_id) {
+  return GetColor(color_provider, color_id,
+                  DarkLightModeControllerImpl::Get()->IsDarkModeEnabled());
 }
 
-SkColor GetContentLayerColor(
-    AshColorProvider::ContentLayerType content_layer_type,
-    bool dark_mode_enable) {
-  auto* ash_color_provider = AshColorProvider::Get();
-
-  switch (content_layer_type) {
-    case AshColorProvider::ContentLayerType::kTextColorPrimary:
-    case AshColorProvider::ContentLayerType::kTextColorSecondary:
-    case AshColorProvider::ContentLayerType::kIconColorPrimary:
-    case AshColorProvider::ContentLayerType::kIconColorSecondary:
-      return dark_mode_enable
-                 ? ash_color_provider->GetContentLayerColor(content_layer_type)
-                 : SK_ColorWHITE;
+SkColor GetColor(const ui::ColorProvider* color_provider,
+                 ui::ColorId color_id,
+                 bool dark_mode_enabled) {
+  switch (color_id) {
+    case kColorAshTextColorPrimary:
+    case kColorAshTextColorSecondary:
+    case kColorAshIconColorPrimary:
+    case kColorAshIconColorSecondary:
+      return dark_mode_enabled ? color_provider->GetColor(color_id)
+                               : SK_ColorWHITE;
     default:
       NOTREACHED() << "Unsupported content layer type";
       // Return a very bright color so it's obvious there is a mistake.
@@ -79,20 +76,14 @@ gfx::ShadowValues GetTextShadowValues(const ui::ColorProvider* color_provider,
 
 bool IsAmbientModeTopicTypeAllowed(::ambient::TopicType topic_type) {
   switch (topic_type) {
-    case ::ambient::TopicType::kCurated:
-      return features::kAmbientModeDefaultFeedEnabled.Get();
-    case ::ambient::TopicType::kCapturedOnPixel:
-      return features::kAmbientModeCapturedOnPixelPhotosEnabled.Get();
-    case ::ambient::TopicType::kCulturalInstitute:
-      return features::kAmbientModeCulturalInstitutePhotosEnabled.Get();
     case ::ambient::TopicType::kFeatured:
-      return features::kAmbientModeFeaturedPhotosEnabled.Get();
     case ::ambient::TopicType::kGeo:
-      return features::kAmbientModeGeoPhotosEnabled.Get();
     case ::ambient::TopicType::kPersonal:
-      return features::kAmbientModePersonalPhotosEnabled.Get();
+      return true;
+    case ::ambient::TopicType::kCurated:
+    case ::ambient::TopicType::kCapturedOnPixel:
+    case ::ambient::TopicType::kCulturalInstitute:
     case ::ambient::TopicType::kRss:
-      return features::kAmbientModeRssPhotosEnabled.Get();
     case ::ambient::TopicType::kOther:
       return false;
   }

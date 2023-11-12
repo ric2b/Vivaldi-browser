@@ -67,7 +67,8 @@ class PageTestBase : public testing::Test, public ScopedMockOverlayScrollbars {
   void SetUp(gfx::Size);
   void SetupPageWithClients(ChromeClient* = nullptr,
                             LocalFrameClient* = nullptr,
-                            FrameSettingOverrideFunction = nullptr);
+                            FrameSettingOverrideFunction = nullptr,
+                            gfx::Size size = gfx::Size(800, 600));
   // TODO(shanmuga.m@samsung.com): These two function to be unified.
   void SetBodyContent(const std::string&);
   void SetBodyInnerHTML(const String&);
@@ -100,6 +101,11 @@ class PageTestBase : public testing::Test, public ScopedMockOverlayScrollbars {
   // platforms, but it's not guaranteed to be available.
   // See external/wpt/css/fonts/ahem/README for more about the 'Ahem' font.
   static void LoadAhem(LocalFrame&);
+
+  // Install the font specified by `font_path` as `family_name` in `frame`.
+  static void LoadFontFromFile(LocalFrame& fame,
+                               String font_path,
+                               const AtomicString& family_name);
 
   static void LoadNoto(LocalFrame&);
 

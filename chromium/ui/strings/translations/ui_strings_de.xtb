@@ -26,6 +26,7 @@
 <translation id="1803208670097017349">{MONTHS,plural, =1{1 Monat}other{# Monate}}</translation>
 <translation id="1809410197924942083"><ph name="QUANTITY" /> MB/s</translation>
 <translation id="1830179671306812954">{HOURS,plural, =1{1 Stunde und  }other{# Stunden und  }}</translation>
+<translation id="185013357618350178">Auswählen</translation>
 <translation id="1859234291848436338">Schreibrichtung</translation>
 <translation id="1860796786778352021">Benachrichtigung schließen</translation>
 <translation id="186476001994626254">Web Smart Paste-Inhalt</translation>
@@ -60,6 +61,7 @@
 <translation id="2573731672208488250">{HOURS,plural, =1{in 1 h}other{in # h}}</translation>
 <translation id="2583543531130364912">Touchscreen kalibrieren</translation>
 <translation id="2586657967955657006">Zwischenablage</translation>
+<translation id="2653844658857826081">Neu</translation>
 <translation id="2666092431469916601">Oben</translation>
 <translation id="2701330563083355633">Geteilt von <ph name="DEVICE_NAME" /></translation>
 <translation id="271033894570825754">Neu</translation>
@@ -209,7 +211,7 @@
 <translation id="8867568208303837180">Wird gesendet...</translation>
 <translation id="8876215549894133151">Format:</translation>
 <translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
-<translation id="8996630695507351249">Prüfe, ob "<ph name="TARGET_DEVICE_NAME" />" mit dem Internet verbunden ist.</translation>
+<translation id="8996630695507351249">"<ph name="TARGET_DEVICE_NAME" />" muss mit dem Internet verbunden sein.</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 s}other{# s}}</translation>
 <translation id="9059834730836941392">Benachrichtigung minimieren</translation>
 <translation id="9170848237812810038">&amp;Rückgängig</translation>

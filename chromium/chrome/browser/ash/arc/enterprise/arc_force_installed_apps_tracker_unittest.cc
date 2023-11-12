@@ -8,7 +8,7 @@
 
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "base/barrier_closure.h"
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/bind.h"
 #include "chrome/browser/ash/app_list/arc/arc_app_list_prefs.h"
@@ -71,18 +71,18 @@ class ArcForceInstalledAppsTrackerTest : public testing::Test {
 
   void SetUp() override {
     profile_ = std::make_unique<TestingProfile>();
+
+    arc_app_test_.SetUp(profile_.get());
     policy_bridge_ =
         std::make_unique<arc::ArcPolicyBridge>(profile_.get(), &arc_bridge_);
-    arc_app_test_.SetUp(profile_.get());
     tracker_ = ArcForceInstalledAppsTracker::CreateForTesting(
         prefs(), policy_service(), policy_bridge_.get());
   }
 
   void TearDown() override {
-    arc_app_test_.TearDown();
-
     tracker_.reset();
     policy_bridge_.reset();
+    arc_app_test_.TearDown();
     profile_.reset();
     policy_map_.Clear();
   }

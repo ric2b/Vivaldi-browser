@@ -28,4 +28,9 @@
   _index = index;
 }
 
+- (void)userDismissedFindNavigatorForManager:
+    (web::AbstractFindInPageManager*)manager {
+  _userDismissedFindNavigator = YES;
+}
+
 @end

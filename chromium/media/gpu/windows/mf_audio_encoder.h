@@ -9,9 +9,9 @@
 
 #include <memory>
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "media/base/audio_encoder.h"
@@ -186,6 +186,7 @@ class MEDIA_GPU_EXPORT MFAudioEncoder : public AudioEncoder {
   int input_buffer_alignment_;
   int output_buffer_alignment_;
   bool initialized_ = false;
+  std::vector<uint8_t> codec_desc_;
 
   // We can't produce output until at least `kMinSamplesForOutput` have been
   // provided. Until then, `output_cb_` will not be run.

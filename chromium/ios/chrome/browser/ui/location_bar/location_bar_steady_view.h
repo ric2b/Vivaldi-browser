@@ -8,7 +8,7 @@
 #import <UIKit/UIKit.h>
 
 // Vivaldi
-#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
+#import "ios/chrome/browser/ui/sharing/sharing_positioner.h"
 // End Vivaldi
 
 // A color scheme used for the steady view elements.
@@ -29,7 +29,7 @@
 @interface LocationBarSteadyView : UIView
 
                                         // Vivaldi
-                                        <ActivityServicePositioner>
+                                        <SharingPositioner>
                                         // End Vivaldi
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;

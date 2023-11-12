@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/time/time.h"
 #include "components/account_id/account_id.h"
 #include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
@@ -46,6 +46,8 @@ class TokenHandleFetcher : public gaia::GaiaOAuthClient::Delegate {
 
   // Get token handle for existing user.
   void BackfillToken(Profile* profile, TokenFetchingCallback callback);
+
+  static void EnsureFactoryBuilt();
 
  private:
   // AccessTokenFetcher::TokenCallback for PrimaryAccountAccessTokenFetcher.

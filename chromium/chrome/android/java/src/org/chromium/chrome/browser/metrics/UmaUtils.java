@@ -14,7 +14,6 @@ import android.text.format.DateUtils;
 import androidx.annotation.IntDef;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -30,25 +29,25 @@ public class UmaUtils {
     /** Observer for this class. */
     public interface Observer {
         /**
-         * Called when hasComeToForeground() changes from false to true.
+         * Called when hasComeToForeground() changes from false to true for the first time after
+         * post-native initialization has started.
          */
-        void onHasComeToForeground();
+        void onHasComeToForegroundWithNative();
     }
 
-    private static ObserverList<Observer> sObservers;
+    private static Observer sObserver;
 
-    /** Adds an observer. */
-    public static boolean addObserver(Observer observer) {
+    /** Sets the observer. */
+    public static void setObserver(Observer observer) {
         ThreadUtils.assertOnUiThread();
-        if (sObservers == null) sObservers = new ObserverList<>();
-        return sObservers.addObserver(observer);
+        assert sObserver == null;
+        sObserver = observer;
     }
 
-    /** Removes an observer. */
-    public static boolean removeObserver(Observer observer) {
+    /** Removes the observer. */
+    public static void removeObserver() {
         ThreadUtils.assertOnUiThread();
-        if (sObservers == null) return false;
-        return sObservers.removeObserver(observer);
+        sObserver = null;
     }
 
     // All these values originate from SystemClock.uptimeMillis().
@@ -58,7 +57,7 @@ public class UmaUtils {
 
     private static boolean sSkipRecordingNextForegroundStartTimeForTesting;
 
-    // Will short-circuit out of the next recordForegroundStartTime() call.
+    // Will short-circuit out of the next recordForegroundStartTimeWithNative() call.
     public static void skipRecordingNextForegroundStartTimeForTesting() {
         sSkipRecordingNextForegroundStartTimeForTesting = true;
     }
@@ -71,7 +70,8 @@ public class UmaUtils {
      */
     @IntDef({StandbyBucketStatus.ACTIVE, StandbyBucketStatus.WORKING_SET,
             StandbyBucketStatus.FREQUENT, StandbyBucketStatus.RARE, StandbyBucketStatus.RESTRICTED,
-            StandbyBucketStatus.UNSUPPORTED, StandbyBucketStatus.COUNT})
+            StandbyBucketStatus.UNSUPPORTED, StandbyBucketStatus.EXEMPTED,
+            StandbyBucketStatus.NEVER, StandbyBucketStatus.OTHER, StandbyBucketStatus.COUNT})
     private @interface StandbyBucketStatus {
         int ACTIVE = 0;
         int WORKING_SET = 1;
@@ -79,7 +79,10 @@ public class UmaUtils {
         int RARE = 3;
         int RESTRICTED = 4;
         int UNSUPPORTED = 5;
-        int COUNT = 6;
+        int EXEMPTED = 6;
+        int NEVER = 7;
+        int OTHER = 8;
+        int COUNT = 9;
     }
 
     /**
@@ -113,10 +116,8 @@ public class UmaUtils {
         // Chrome has been sent to background since the last foreground time.
         if (sForegroundStartWithNativeTimeMs == 0
                 || sForegroundStartWithNativeTimeMs < sBackgroundWithNativeTimeMs) {
-            if (sObservers != null && sForegroundStartWithNativeTimeMs == 0) {
-                for (Observer observer : sObservers) {
-                    observer.onHasComeToForeground();
-                }
+            if (sObserver != null && sForegroundStartWithNativeTimeMs == 0) {
+                sObserver.onHasComeToForegroundWithNative();
             }
             sForegroundStartWithNativeTimeMs = SystemClock.uptimeMillis();
         }
@@ -202,6 +203,12 @@ public class UmaUtils {
                 return "Restricted";
             case StandbyBucketStatus.UNSUPPORTED:
                 return "Unsupported";
+            case StandbyBucketStatus.EXEMPTED:
+                return "Exempted";
+            case StandbyBucketStatus.NEVER:
+                return "Never";
+            case StandbyBucketStatus.OTHER:
+                return "Other";
             default:
                 assert false : "Unexpected standby bucket " + standbyBucket;
                 return "Unknown";
@@ -215,7 +222,7 @@ public class UmaUtils {
         UsageStatsManager usageStatsManager =
                 (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         int standbyBucket = usageStatsManager.getAppStandbyBucket();
-        int standbyBucketUma = StandbyBucketStatus.UNSUPPORTED;
+        int standbyBucketUma;
         switch (standbyBucket) {
             case UsageStatsManager.STANDBY_BUCKET_ACTIVE:
                 standbyBucketUma = StandbyBucketStatus.ACTIVE;
@@ -232,8 +239,15 @@ public class UmaUtils {
             case UsageStatsManager.STANDBY_BUCKET_RESTRICTED:
                 standbyBucketUma = StandbyBucketStatus.RESTRICTED;
                 break;
+            case 5: // STANDBY_BUCKET_EXEMPTED
+                standbyBucketUma = StandbyBucketStatus.EXEMPTED;
+                break;
+            case 50: // STANDBY_BUCKET_NEVER
+                standbyBucketUma = StandbyBucketStatus.NEVER;
+                break;
             default:
-                assert false : "Unexpected standby bucket " + standbyBucket;
+                standbyBucketUma = StandbyBucketStatus.OTHER;
+                break;
         }
         return standbyBucketUma;
     }
@@ -254,9 +268,6 @@ public class UmaUtils {
 
     @CalledByNative
     public static long getProcessStartTime() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            return 0;
-        }
         return ApiHelperForN.getStartUptimeMillis();
     }
 

@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/task/sequenced_task_runner.h"
@@ -77,8 +77,10 @@ void UsbDeviceImpl::ReadAllConfigurations() {
         continue;
       }
 
-      if (!usb_descriptor.Parse(base::make_span(buffer, rv)))
+      if (!usb_descriptor.Parse(
+              base::make_span(buffer, static_cast<size_t>(rv)))) {
         USB_LOG(EVENT) << "Config descriptor index " << i << " was corrupt.";
+      }
       free(buffer);
     }
 

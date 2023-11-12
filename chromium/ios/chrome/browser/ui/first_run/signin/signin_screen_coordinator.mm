@@ -32,6 +32,10 @@
 #import "ios/chrome/browser/ui/first_run/uma/uma_coordinator.h"
 #import "ios/chrome/browser/ui/first_run/welcome/tos_coordinator.h"
 
+// Vivaldi
+#import "ios/ui/ad_tracker_blocker/manager/vivaldi_atb_manager.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -135,15 +139,6 @@
   self.authenticationService = nil;
 }
 
-#pragma mark - InterruptibleChromeCoordinator
-
-- (void)interruptWithAction:(SigninCoordinatorInterruptAction)action
-                 completion:(ProceduralBlock)completion {
-  // This coordinator should be used only for FRE or force sign-in. Those cases
-  // should not be interrupted.
-  NOTREACHED();
-}
-
 #pragma mark - Private
 
 // Starts the coordinator to present the Add Account module.
@@ -198,6 +193,20 @@
 
 // Calls the mediator and the delegate when the coordinator is finished.
 - (void)finishPresentingWithSignIn:(BOOL)signIn {
+
+  // Vivaldi
+  // We expect to store a ad blocking setting while onboarding. Here creating
+  // a weak reference of adblock manager and set the setting.
+  // IMPORTANT!! This is temporary. We have to move this to right
+  // page we implement the onboarding pages.
+  // TODO: @prio@vivaldi.com or tomas@vivaldi.com
+  VivaldiATBManager* adblockManager =
+      [[VivaldiATBManager alloc] initWithBrowser:self.browser];
+  if (!adblockManager)
+    return;
+  [adblockManager setExceptionFromBlockingType:ATBSettingNoBlocking];
+  // End Vivaldi
+
   [self.mediator finishPresentingWithSignIn:signIn];
   [self.delegate screenWillFinishPresenting];
 }
@@ -286,24 +295,6 @@
   [self.identityChooserCoordinator start];
   self.identityChooserCoordinator.selectedIdentity =
       self.mediator.selectedIdentity;
-}
-
-- (void)logScrollButtonVisible:(BOOL)scrollButtonVisible
-            withIdentityPicker:(BOOL)identityPickerVisible
-                     andFooter:(BOOL)footerVisible {
-  first_run::FirstRunScreenType screenType;
-  if (identityPickerVisible && footerVisible) {
-    screenType =
-        first_run::FirstRunScreenType::kSignInScreenWithFooterAndIdentityPicker;
-  } else if (identityPickerVisible) {
-    screenType = first_run::FirstRunScreenType::kSignInScreenWithIdentityPicker;
-  } else if (footerVisible) {
-    screenType = first_run::FirstRunScreenType::kSignInScreenWithFooter;
-  } else {
-    screenType = first_run::FirstRunScreenType::
-        kSignInScreenWithoutFooterOrIdentityPicker;
-  }
-  RecordFirstRunScrollButtonVisibilityMetrics(screenType, scrollButtonVisible);
 }
 
 #pragma mark - TOSCommands

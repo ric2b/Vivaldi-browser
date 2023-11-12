@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -18,6 +18,7 @@
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
 #include "content/browser/scheduler/browser_io_thread_delegate.h"
+#include "content/browser/scheduler/browser_task_priority.h"
 #include "content/browser/scheduler/browser_task_queues.h"
 #include "content/browser/scheduler/browser_ui_thread_scheduler.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -187,6 +188,7 @@ class BrowserTaskExecutorWithCustomSchedulerTest : public testing::Test {
    public:
     TaskEnvironmentWithCustomScheduler()
         : base::test::TaskEnvironment(
+              internal::CreateBrowserTaskPrioritySettings(),
               SubclassCreatesDefaultTaskRunner{},
               base::test::TaskEnvironment::MainThreadType::UI,
               base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
@@ -194,7 +196,7 @@ class BrowserTaskExecutorWithCustomSchedulerTest : public testing::Test {
           BrowserUIThreadScheduler::CreateForTesting(sequence_manager());
       DeferredInitFromSubclass(
           browser_ui_thread_scheduler->GetHandle()->GetBrowserTaskRunner(
-              QueueType::kDefault));
+              QueueType::kUserBlocking));
       BrowserTaskExecutor::CreateForTesting(
           std::move(browser_ui_thread_scheduler),
           BrowserIOThreadDelegate::CreateForTesting(sequence_manager()));

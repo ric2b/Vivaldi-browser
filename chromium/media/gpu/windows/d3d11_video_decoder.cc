@@ -8,19 +8,20 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
-#include "media/base/bind_to_current_loop.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/media_log.h"
 #include "media/base/media_switches.h"
@@ -317,13 +318,8 @@ D3D11Status::Or<ComD3D11VideoDecoder> D3D11VideoDecoder::CreateD3D11Decoder() {
   // For more information, please see:
   // https://download.microsoft.com/download/9/2/A/92A4E198-67E0-4ABD-9DB7-635D711C2752/DXVA_VPx.pdf
   // https://download.microsoft.com/download/5/f/c/5fc4ec5c-bd8c-4624-8034-319c1bab7671/DXVA_H264.pdf
-  //
-  // When creating output texture with shared handle supports, we can't use a
-  // texture array. Because the keyed mutex applies on the entire texture array
-  // causing a deadlock when multiple threads try to use different slots of the
-  // array. More info here: https://crbug.com/1238943
   use_single_video_decoder_texture_ =
-      !!(dec_config.ConfigDecoderSpecific & (1 << 14)) || use_shared_handle;
+      !!(dec_config.ConfigDecoderSpecific & (1 << 14));
   if (use_single_video_decoder_texture_)
     MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using single textures";
   else
@@ -414,20 +410,10 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   device_->GetImmediateContext(&device_context_);
 
-  HRESULT hr;
-
   // TODO(liberato): Handle cleanup better.  Also consider being less chatty in
   // the logs, since this will fall back.
 
-  ComD3D11Multithread multi_threaded;
-  hr = device_->QueryInterface(IID_PPV_ARGS(&multi_threaded));
-
-  if (FAILED(hr))
-    return NotifyError({D3D11Status::Codes::kQueryID3D11MultithreadFailed, hr});
-
-  multi_threaded->SetMultithreadProtected(TRUE);
-
-  hr = device_.As(&video_device_);
+  auto hr = device_.As(&video_device_);
   if (FAILED(hr))
     return NotifyError({D3D11Status::Codes::kFailedToGetVideoDevice, hr});
 
@@ -465,7 +451,7 @@ void D3D11VideoDecoder::Initialize(const VideoDecoderConfig& config,
   // Important but subtle note: base::Bind will copy |config_| since it's a
   // const ref.
   impl_.AsyncCall(&D3D11VideoDecoderImpl::Initialize)
-      .WithArgs(BindToCurrentLoop(std::move(impl_init_cb)));
+      .WithArgs(base::BindPostTaskToCurrentDefault(std::move(impl_init_cb)));
 }
 
 void D3D11VideoDecoder::AddLifetimeProgressionStage(
@@ -488,6 +474,23 @@ void D3D11VideoDecoder::ReceivePictureBufferFromClient(
 
   // Also re-start decoding in case it was waiting for more pictures.
   DoDecode();
+}
+
+void D3D11VideoDecoder::PictureBufferGPUResourceInitDone(
+    scoped_refptr<D3D11PictureBuffer> buffer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  TRACE_EVENT0("gpu", "D3D11VideoDecoder::PictureBufferGPUResourceInitDone");
+
+  buffer->remove_client_use();
+
+  // Picture buffer gpu resource may not be ready when D3D11VideoDecoder
+  // initialization finished. In that case, use PictureBuffer::in_client_use()
+  // to pause decoder through media::AcceleratedVideoDecoder::kRanOutOfSurfaces
+  // state. Then restart decoding after picture buffer gpu resource
+  // initialization finished.
+  if (state_ == State::kRunning) {
+    DoDecode();
+  }
 }
 
 void D3D11VideoDecoder::OnGpuInitComplete(
@@ -721,6 +724,18 @@ bool D3D11VideoDecoder::NeedsBitstreamConversion() const {
 bool D3D11VideoDecoder::CanReadWithoutStalling() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  // If picture buffers haven't been created yet, the client can read.
+  if (picture_buffers_.empty()) {
+    return true;
+  }
+
+  // If we haven't given all our picture buffers to the client, it can read.
+  for (const auto& buffer : picture_buffers_) {
+    if (!buffer->in_client_use()) {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -805,9 +820,26 @@ void D3D11VideoDecoder::CreatePictureBuffers() {
     picture_buffers_.push_back(
         new D3D11PictureBuffer(decoder_task_runner_, in_texture, array_slice,
                                std::move(tex_wrapper), size, i /* level */));
+
+    base::OnceCallback<void(scoped_refptr<media::D3D11PictureBuffer>)>
+        picture_buffer_gpu_resource_init_done_cb = base::DoNothing();
+    if (base::FeatureList::IsEnabled(kD3D11VideoDecoderUseSharedHandle)) {
+      // WebGPU requires interop on the picture buffer to achieve zero copy.
+      // This requires a picture buffer to produce a shared image representation
+      // during initialization. Add picture buffer in_client_use count to idle
+      // the decoder until picture buffer finished gpu resource initialization
+      // in gpu thread.
+      picture_buffers_[i]->add_client_use();
+      picture_buffer_gpu_resource_init_done_cb =
+          base::BindPostTaskToCurrentDefault(base::BindOnce(
+              &D3D11VideoDecoder::PictureBufferGPUResourceInitDone,
+              weak_factory_.GetWeakPtr()));
+    }
+
     D3D11Status result = picture_buffers_[i]->Init(
         gpu_task_runner_, get_helper_cb_, video_device_,
-        decoder_configurator_->DecoderGuid(), media_log_->Clone());
+        decoder_configurator_->DecoderGuid(), media_log_->Clone(),
+        std::move(picture_buffer_gpu_resource_init_done_cb));
     if (!result.is_ok()) {
       return NotifyError(std::move(result).AddHere());
     }
@@ -900,7 +932,7 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   // Remember that this will likely thread-hop to the GPU main thread.  Note
   // that |picture_buffer| will delete on sequence, so it's okay even if
   // |wait_complete_cb| doesn't ever run.
-  auto wait_complete_cb = BindToCurrentLoop(
+  auto wait_complete_cb = base::BindPostTaskToCurrentDefault(
       base::BindOnce(&D3D11VideoDecoder::ReceivePictureBufferFromClient,
                      weak_factory_.GetWeakPtr(),
                      scoped_refptr<D3D11PictureBuffer>(picture_buffer)));
@@ -916,8 +948,8 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
   // the finch flag is enabled.  We may not choose to set ALLOW_OVERLAY if the
   // flag is off, however.
   //
-  // Also note that, since we end up binding textures with GLImageDXGI, it's
-  // probably okay just to allow overlay always, and let the swap chain
+  // Also note that, since we end up binding textures with GLImageEGLStream,
+  // it's probably okay just to allow overlay always, and let the swap chain
   // presenter decide if it wants to.
   frame->metadata().allow_overlay = true;
 
@@ -930,6 +962,12 @@ bool D3D11VideoDecoder::OutputResult(const CodecPicture* picture,
                                                     : config_.hdr_metadata());
   }
 
+  // TODO(crbug.com/1236801): WebGPU cannot import and create texture view on
+  // correct slice of texture array. Still some works need to be done in both
+  // chromium side and dawn side.
+  frame->metadata().is_webgpu_compatible =
+      base::FeatureList::IsEnabled(kD3D11VideoDecoderUseSharedHandle) &&
+      use_single_video_decoder_texture_;
   output_cb_.Run(frame);
   return true;
 }

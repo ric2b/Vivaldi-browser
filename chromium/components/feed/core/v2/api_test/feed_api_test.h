@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/strings/string_piece_forward.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -119,8 +119,10 @@ class TestSurfaceBase : public FeedStreamSurface {
  public:
   // Provide some helper functionality to attach/detach the surface.
   // This way we can auto-detach in the destructor.
-  explicit TestSurfaceBase(const StreamType& stream_type,
-                           FeedStream* stream = nullptr);
+  explicit TestSurfaceBase(
+      const StreamType& stream_type,
+      FeedStream* stream = nullptr,
+      SingleWebFeedEntryPoint entry_point = SingleWebFeedEntryPoint::kOther);
 
   ~TestSurfaceBase() override;
 
@@ -183,8 +185,10 @@ class TestWebFeedSurface : public TestSurfaceBase {
 };
 class TestSingleWebFeedSurface : public TestSurfaceBase {
  public:
-  explicit TestSingleWebFeedSurface(FeedStream* stream = nullptr,
-                                    std::string = "");
+  explicit TestSingleWebFeedSurface(
+      FeedStream* stream = nullptr,
+      std::string = "",
+      SingleWebFeedEntryPoint entry_point = SingleWebFeedEntryPoint::kOther);
 };
 
 class TestImageFetcher : public ImageFetcher {
@@ -269,6 +273,12 @@ class TestFeedNetwork : public FeedNetwork {
   }
   void InjectResponse(feedwire::webfeed::ListWebFeedsResponse response) {
     InjectApiResponse<ListWebFeedsDiscoverApi>(std::move(response));
+  }
+  void InjectResponse(const feedwire::webfeed::QueryWebFeedResponse& response) {
+    InjectApiResponse<QueryWebFeedDiscoverApi>(response);
+  }
+  void InjectQueryResponse(const FeedNetwork::RawResponse& response) {
+    InjectApiRawResponse<QueryWebFeedDiscoverApi>(response);
   }
 
   void InjectListWebFeedsResponse(
@@ -427,7 +437,6 @@ class TestMetricsReporter : public MetricsReporter {
                   const ContentStats& content_stats) override;
   void OnBackgroundRefresh(const StreamType& stream_type,
                            LoadStreamStatus final_status) override;
-  void OnClearAll(base::TimeDelta since_last_clear) override;
   void OnUploadActions(UploadActionsStatus status) override;
 
   struct StreamMetrics {
@@ -447,7 +456,6 @@ class TestMetricsReporter : public MetricsReporter {
   absl::optional<SurfaceId> load_more_surface_id;
   absl::optional<LoadStreamStatus> load_more_status;
   absl::optional<LoadStreamStatus> background_refresh_status;
-  absl::optional<base::TimeDelta> time_since_last_clear;
   absl::optional<UploadActionsStatus> upload_action_status;
 
   StreamMetrics web_feed;
@@ -470,6 +478,7 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
   TabGroupEnabledState GetTabGroupEnabledState() override;
   void ClearAll() override;
   AccountInfo GetAccountInfo() override;
+  bool IsSyncOn() override;
   void PrefetchImage(const GURL& url) override;
   void RegisterExperiments(const Experiments& experiments) override {}
   void RegisterFollowingFeedFollowCountFieldTrial(size_t follow_count) override;
@@ -527,6 +536,7 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
   bool is_eula_accepted_ = true;
   bool is_offline_ = false;
   AccountInfo account_info_ = TestAccountInfo();
+  bool is_sync_on_ = false;
   int prefetch_image_call_count_ = 0;
   std::vector<GURL> prefetched_images_;
   base::RepeatingClosure on_clear_all_;

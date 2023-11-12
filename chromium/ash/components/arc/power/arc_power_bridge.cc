@@ -11,7 +11,7 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/shell.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
@@ -411,6 +411,11 @@ void ArcPowerBridge::UpdateAndroidScreenBrightness(double percent) {
   if (!power_instance)
     return;
   power_instance->UpdateScreenBrightnessSettings(percent);
+}
+
+// static
+void ArcPowerBridge::EnsureFactoryBuilt() {
+  ArcPowerBridgeFactory::GetInstance();
 }
 
 }  // namespace arc

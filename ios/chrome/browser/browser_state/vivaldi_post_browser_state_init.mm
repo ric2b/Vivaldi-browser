@@ -6,6 +6,7 @@
 #import "browser/removed_partners_tracker.h"
 #import "browser/vivaldi_default_bookmarks.h"
 #import "components/keyed_service/core/service_access_type.h"
+#import "ios/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/chrome/browser/application_context/application_context.h"
 #import "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -78,5 +79,6 @@ void PostBrowserStateInit(ChromeBrowserState* browser_state) {
       vivaldi_default_bookmarks::UpdaterClientImpl::Create(browser_state));
 
   NotesModelFactory::GetForBrowserState(browser_state);
+  adblock_filter::RuleServiceFactory::GetForBrowserState(browser_state);
 }
 }  // namespace vivaldi

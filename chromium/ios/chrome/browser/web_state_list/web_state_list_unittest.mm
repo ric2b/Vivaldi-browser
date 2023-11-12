@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 
+#import "base/scoped_multi_source_observation.h"
 #import "base/supports_user_data.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer.h"
@@ -33,6 +34,10 @@ class WebStateListTestObserver : public WebStateListObserver {
   WebStateListTestObserver(const WebStateListTestObserver&) = delete;
   WebStateListTestObserver& operator=(const WebStateListTestObserver&) = delete;
 
+  void Observe(WebStateList* web_state_list) {
+    observation_.AddObservation(web_state_list);
+  }
+
   // Reset statistics whether events have been called.
   void ResetStatistics() {
     web_state_inserted_called_ = false;
@@ -42,6 +47,7 @@ class WebStateListTestObserver : public WebStateListObserver {
     web_state_activated_called_ = false;
     batch_operation_started_ = false;
     batch_operation_ended_ = false;
+    web_state_list_destroyed_called_ = false;
   }
 
   // Returns whether WebStateInsertedAt was invoked.
@@ -66,6 +72,10 @@ class WebStateListTestObserver : public WebStateListObserver {
 
   // Returns whether BatchOperationEnded was invoked.
   bool batch_operation_ended() const { return batch_operation_ended_; }
+
+  bool web_state_list_destroyed_called() const {
+    return web_state_list_destroyed_called_;
+  }
 
   // WebStateListObserver implementation.
   void WebStateInsertedAt(WebStateList* web_state_list,
@@ -114,6 +124,11 @@ class WebStateListTestObserver : public WebStateListObserver {
     batch_operation_ended_ = true;
   }
 
+  void WebStateListDestroyed(WebStateList* web_state_list) override {
+    web_state_list_destroyed_called_ = true;
+    observation_.RemoveObservation(web_state_list);
+  }
+
  private:
   bool web_state_inserted_called_ = false;
   bool web_state_moved_called_ = false;
@@ -122,6 +137,9 @@ class WebStateListTestObserver : public WebStateListObserver {
   bool web_state_activated_called_ = false;
   bool batch_operation_started_ = false;
   bool batch_operation_ended_ = false;
+  bool web_state_list_destroyed_called_ = false;
+  base::ScopedMultiSourceObservation<WebStateList, WebStateListObserver>
+      observation_{this};
 };
 
 // A fake NavigationManager used to test opener-opened relationship in the
@@ -164,13 +182,11 @@ class FakeNavigationManager : public web::FakeNavigationManager {
 class WebStateListTest : public PlatformTest {
  public:
   WebStateListTest() : web_state_list_(&web_state_list_delegate_) {
-    web_state_list_.AddObserver(&observer_);
+    observer_.Observe(&web_state_list_);
   }
 
   WebStateListTest(const WebStateListTest&) = delete;
   WebStateListTest& operator=(const WebStateListTest&) = delete;
-
-  ~WebStateListTest() override { web_state_list_.RemoveObserver(&observer_); }
 
  protected:
   FakeWebStateListDelegate web_state_list_delegate_;
@@ -686,8 +702,104 @@ TEST_F(WebStateListTest, OpenersChildsBeforeOpener) {
                    opener, start_index, false));
 }
 
-// Tests closing all webstates.
-TEST_F(WebStateListTest, CloseAllWebStates) {
+// Tests closing all non-pinned webstates (pinned WebStates present).
+TEST_F(WebStateListTest, CloseAllNonPinnedWebStates_PinnedWebStatesPresent) {
+  AppendNewWebState(kURL0);
+  AppendNewWebState(kURL1);
+  AppendNewWebState(kURL2);
+
+  web_state_list_.SetWebStatePinnedAt(0, true);
+
+  // Sanity checks before closing WebStates.
+  EXPECT_EQ(3, web_state_list_.count());
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(0));
+
+  observer_.ResetStatistics();
+  web_state_list_.CloseAllNonPinnedWebStates(WebStateList::CLOSE_USER_ACTION);
+
+  EXPECT_EQ(1, web_state_list_.count());
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(0));
+
+  EXPECT_TRUE(observer_.web_state_detached_called());
+  EXPECT_TRUE(observer_.batch_operation_started());
+  EXPECT_TRUE(observer_.batch_operation_ended());
+}
+
+// Tests closing all non-pinned webstates (non-pinned WebStates not present).
+TEST_F(WebStateListTest,
+       CloseAllNonPinnedWebStates_NonPinnedWebStatesNotPresent) {
+  AppendNewWebState(kURL0);
+  AppendNewWebState(kURL1);
+  AppendNewWebState(kURL2);
+
+  web_state_list_.SetWebStatePinnedAt(0, true);
+  web_state_list_.SetWebStatePinnedAt(1, true);
+  web_state_list_.SetWebStatePinnedAt(2, true);
+
+  // Sanity checks before closing WebStates.
+  EXPECT_EQ(3, web_state_list_.count());
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(0));
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(1));
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(2));
+
+  observer_.ResetStatistics();
+  web_state_list_.CloseAllNonPinnedWebStates(WebStateList::CLOSE_USER_ACTION);
+
+  EXPECT_EQ(3, web_state_list_.count());
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(0));
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(1));
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(2));
+
+  EXPECT_FALSE(observer_.web_state_detached_called());
+  EXPECT_TRUE(observer_.batch_operation_started());
+  EXPECT_TRUE(observer_.batch_operation_ended());
+}
+
+// Tests closing all non-pinned webstates (pinned WebStates not present).
+TEST_F(WebStateListTest, CloseAllNonPinnedWebStates_PinnedWebStatesNotPresent) {
+  AppendNewWebState(kURL0);
+  AppendNewWebState(kURL1);
+  AppendNewWebState(kURL2);
+
+  // Sanity checks before closing WebStates.
+  EXPECT_EQ(3, web_state_list_.count());
+
+  observer_.ResetStatistics();
+  web_state_list_.CloseAllNonPinnedWebStates(WebStateList::CLOSE_USER_ACTION);
+
+  EXPECT_EQ(0, web_state_list_.count());
+
+  EXPECT_TRUE(observer_.web_state_detached_called());
+  EXPECT_TRUE(observer_.batch_operation_started());
+  EXPECT_TRUE(observer_.batch_operation_ended());
+}
+
+// Tests closing all webstates (non-pinned).
+TEST_F(WebStateListTest, CloseAllWebStates_NonPinned) {
+  AppendNewWebState(kURL0);
+  AppendNewWebState(kURL1);
+  AppendNewWebState(kURL2);
+
+  web_state_list_.SetWebStatePinnedAt(0, true);
+  web_state_list_.SetWebStatePinnedAt(1, true);
+
+  // Sanity check before closing WebStates.
+  EXPECT_EQ(3, web_state_list_.count());
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(0));
+  EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(1));
+
+  observer_.ResetStatistics();
+  web_state_list_.CloseAllWebStates(WebStateList::CLOSE_USER_ACTION);
+
+  EXPECT_EQ(0, web_state_list_.count());
+
+  EXPECT_TRUE(observer_.web_state_detached_called());
+  EXPECT_TRUE(observer_.batch_operation_started());
+  EXPECT_TRUE(observer_.batch_operation_ended());
+}
+
+// Tests closing all webstates (pinned and non-pinned).
+TEST_F(WebStateListTest, CloseAllWebStates_PinnedNonPinned) {
   AppendNewWebState(kURL0);
   AppendNewWebState(kURL1);
   AppendNewWebState(kURL2);
@@ -805,7 +917,7 @@ TEST_F(WebStateListTest, SetWebStatePinned_InRandomOrder) {
   // Pin kURL0 WebState.
   EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(2, true), 2);
   // Unpin kURL3 WebState.
-  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(1, false), 2);
+  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(1, false), 3);
 
   EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(0));
   EXPECT_TRUE(web_state_list_.IsWebStatePinnedAt(1));
@@ -814,8 +926,8 @@ TEST_F(WebStateListTest, SetWebStatePinned_InRandomOrder) {
 
   EXPECT_EQ(web_state_list_.GetWebStateAt(0)->GetVisibleURL().spec(), kURL2);
   EXPECT_EQ(web_state_list_.GetWebStateAt(1)->GetVisibleURL().spec(), kURL0);
-  EXPECT_EQ(web_state_list_.GetWebStateAt(2)->GetVisibleURL().spec(), kURL3);
-  EXPECT_EQ(web_state_list_.GetWebStateAt(3)->GetVisibleURL().spec(), kURL1);
+  EXPECT_EQ(web_state_list_.GetWebStateAt(2)->GetVisibleURL().spec(), kURL1);
+  EXPECT_EQ(web_state_list_.GetWebStateAt(3)->GetVisibleURL().spec(), kURL3);
 }
 
 // Tests GetIndexOfFirstNonPinnedWebState returns correct index.
@@ -840,11 +952,11 @@ TEST_F(WebStateListTest, GetIndexOfFirstNonPinnedWebState) {
   EXPECT_EQ(web_state_list_.GetIndexOfFirstNonPinnedWebState(), 4);
 
   EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(0, false), 3);
-  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(0, false), 2);
-  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(0, false), 1);
+  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(0, false), 3);
+  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(0, false), 3);
   EXPECT_EQ(web_state_list_.GetIndexOfFirstNonPinnedWebState(), 1);
 
-  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(0, false), 0);
+  EXPECT_EQ(web_state_list_.SetWebStatePinnedAt(0, false), 3);
   EXPECT_EQ(web_state_list_.GetIndexOfFirstNonPinnedWebState(), 0);
 }
 
@@ -1093,4 +1205,24 @@ TEST_F(WebStateListTest,
   EXPECT_EQ(web_state_list_.GetWebStateAt(1)->GetVisibleURL().spec(), kURL1);
   EXPECT_EQ(web_state_list_.GetWebStateAt(2)->GetVisibleURL().spec(), kURL3);
   EXPECT_EQ(web_state_list_.GetWebStateAt(3)->GetVisibleURL().spec(), kURL2);
+}
+
+TEST_F(WebStateListTest, WebStateListDestroyed) {
+  // Using a local WebStateList to observe its destruction.
+  std::unique_ptr<WebStateList> web_state_list =
+      std::make_unique<WebStateList>(&web_state_list_delegate_);
+  observer_.Observe(web_state_list.get());
+  EXPECT_FALSE(observer_.web_state_list_destroyed_called());
+  web_state_list.reset();
+  EXPECT_TRUE(observer_.web_state_list_destroyed_called());
+}
+
+TEST_F(WebStateListTest, WebStateListAsWeakPtr) {
+  // Using a local WebStateList to observe its destruction.
+  std::unique_ptr<WebStateList> web_state_list =
+      std::make_unique<WebStateList>(&web_state_list_delegate_);
+  base::WeakPtr<WebStateList> weak_web_state_list = web_state_list->AsWeakPtr();
+  EXPECT_TRUE(weak_web_state_list);
+  web_state_list.reset();
+  EXPECT_FALSE(weak_web_state_list);
 }

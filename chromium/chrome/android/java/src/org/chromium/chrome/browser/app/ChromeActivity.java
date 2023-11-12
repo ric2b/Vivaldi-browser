@@ -138,7 +138,6 @@ import org.chromium.chrome.browser.night_mode.WebContentsDarkModeController;
 import org.chromium.chrome.browser.night_mode.WebContentsDarkModeMessageController;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.offlinepages.indicator.OfflineIndicatorController;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.page_info.ChromePageInfo;
 import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
@@ -146,7 +145,6 @@ import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomiza
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.selection.SelectionPopupBackPressHandler;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
@@ -265,6 +263,8 @@ import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 import org.vivaldi.browser.speeddial.SpeedDialUtils;
 import org.vivaldi.browser.sync.SyncReminderHandler;
 import org.vivaldi.browser.thumbnail.CaptureThumbnailHandler;
+
+import java.util.Set;
 
 /**
  * A {@link AsyncInitializationActivity} that builds and manages a {@link CompositorViewHolder}
@@ -418,7 +418,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     // returned by {@link isInPictureInPictureMode}.
     private boolean mLastPictureInPictureModeForTesting;
 
-    protected BackPressManager mBackPressManager = new BackPressManager();
+    protected BackPressManager mBackPressManager = new BackPressManager(this::handleOnBackPressed);
     private TextBubbleBackPressHandler mTextBubbleBackPressHandler;
     private SelectionPopupBackPressHandler mSelectionPopupBackPressHandler;
     private Callback<TabModelSelector> mSelectionPopupBackPressInitCallback;
@@ -498,8 +498,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         });
 
         super.performPreInflationStartup();
-
-        VrModuleProvider.getDelegate().doPreInflationStartup(this, getSavedInstanceState());
 
         // Force a partner customizations refresh if it has yet to be initialized.  This can happen
         // if Chrome is killed and you refocus a previous activity from Android recents, which does
@@ -633,9 +631,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             super.performPostInflationStartup();
 
             Intent intent = getIntent();
-            if (getSavedInstanceState() == null) {
-                VrModuleProvider.getDelegate().maybeHandleVrIntentPreNative(this, intent);
-            }
             if (0 != (intent.getFlags() & Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)) {
                 getLaunchCauseMetrics().onLaunchFromRecents();
             } else {
@@ -658,17 +653,17 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                     mCompositorViewHolderSupplier.get().getCompositorView());
 
             initializeTabModels();
+            if (isFinishing()) return;
+
             TabModelSelector tabModelSelector = mTabModelOrchestrator.getTabModelSelector();
             setTabContentManager(new TabContentManager(this, getContentOffsetProvider(),
                     !SysUtils.isLowEndDevice(),
                     tabModelSelector != null ? tabModelSelector::getTabById : null));
 
-            if (!isFinishing()) {
-                getBrowserControlsManager().initialize(
-                        (ControlContainer) findViewById(R.id.control_container),
-                        getActivityTabProvider(), getTabModelSelector(),
-                        getControlContainerHeightResource());
-            }
+            getBrowserControlsManager().initialize(
+                    (ControlContainer) findViewById(R.id.control_container),
+                    getActivityTabProvider(), getTabModelSelector(),
+                    getControlContainerHeightResource());
 
             mBottomContainer.initialize(getBrowserControlsManager(),
                     getWindowAndroid().getApplicationBottomInsetProvider(),
@@ -713,6 +708,9 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             // and breakpoints as ANRs. To disable this and throw an ANRError even if the debugger
             // is connected, set this to true.
             anrWatchDog.setIgnoreDebugger(false).start();
+            // This will retrieve ANRs from Android and uploads them to our ANR reporting tool.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                ANRWatchDog.uploadLocalANRs();
         }
     }
 
@@ -1029,10 +1027,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     public void onStartWithNative() {
         assert mNativeInitialized : "onStartWithNative was called before native was initialized.";
         super.onStartWithNative();
-        UpdateMenuItemHelper.getInstance().onStart();
         ChromeActivitySessionTracker.getInstance().onStartWithNative();
         ChromeCachedFlags.getInstance().cacheNativeFlags();
-        OfflineIndicatorController.initialize();
 
         // postDeferredStartupIfNeeded() is called in TabModelSelectorTabObsever#onLoadStopped(),
         // #onPageLoadFinished() and #onCrash(). If we are not actively loading a tab (e.g.
@@ -1086,6 +1082,16 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 && tab != null) {
             tab.hide(TabHidingType.ACTIVITY_HIDDEN);
         }
+
+        if (mNativeInitialized
+                && ChromeFeatureList.isEnabled(ChromeFeatureList.KEEP_ANDROID_TINTED_RESOURCES)
+                && mCompositorViewHolderSupplier.hasValue()) {
+            LayoutManagerImpl layoutManager =
+                    mCompositorViewHolderSupplier.get().getLayoutManager();
+            if (layoutManager != null && layoutManager.getResourceManager() != null) {
+                layoutManager.getResourceManager().clearTintedResourceCache();
+            }
+        }
     }
 
     private boolean useWindowFocusForVisibility() {
@@ -1132,7 +1138,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         final SyncService syncService = SyncService.get();
 
-        if (syncService != null && syncService.isSyncingUrlsWithKeystorePassphrase()) {
+        if (syncService != null && syncService.isSyncingUnencryptedUrls()) {
             ContextReporter.SelectionReporter controller =
                     getContextualSearchManagerSupplier().hasValue() ? new ContextReporter.SelectionReporter() {
                         @Override
@@ -1228,7 +1234,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         if (mFullscreenVideoPictureInPictureController != null) {
             mFullscreenVideoPictureInPictureController.onFrameworkExitedPictureInPicture();
         }
-        VrModuleProvider.getDelegate().maybeRegisterVrEntryHook(this);
 
         getManualFillingComponent().onResume();
     }
@@ -1297,7 +1302,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         if (tab != null) getTabContentManager().cacheTabThumbnail(tab);
         getManualFillingComponent().onPause();
 
-        VrModuleProvider.getDelegate().maybeUnregisterVrEntryHook();
         markSessionEnd();
 
         super.onPauseWithNative();
@@ -1325,14 +1329,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     }
 
     @Override
-    public void onNewIntent(Intent intent) {
-        // This should be called before the call to super so that the needed VR flags are set as
-        // soon as the VR intent is received.
-        VrModuleProvider.getDelegate().maybeHandleVrIntentPreNative(this, intent);
-        super.onNewIntent(intent);
-    }
-
-    @Override
     public void onNewIntentWithNative(Intent intent) {
         if (mFullscreenVideoPictureInPictureController != null) {
             mFullscreenVideoPictureInPictureController.onFrameworkExitedPictureInPicture();
@@ -1344,9 +1340,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             return;
         }
 
-        // We send this intent so that we can enter WebVr presentation mode if needed. This
-        // call doesn't consume the intent because it also has the url that we need to load.
-        VrModuleProvider.getDelegate().onNewIntentWithNative(this, intent);
         mIntentHandler.onNewIntent(intent);
     }
 
@@ -1410,6 +1403,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
             FontSizePrefs.getInstance(Profile.getLastUsedRegularProfile())
                     .recordUserFontPrefOnStartup();
+
         });
 
         DeferredStartupHandler.getInstance().addDeferredTask(() -> {
@@ -1419,8 +1413,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         // GSA connection is not needed on low-end devices because Icing is disabled.
         if (!SysUtils.isLowEndDevice()) {
-            if (isActivityFinishingOrDestroyed()) return;
             DeferredStartupHandler.getInstance().addDeferredTask(() -> {
+                if (isActivityFinishingOrDestroyed()) return;
                 if (!GSAState.getInstance().isGsaAvailable()) {
                     ContextReporter.reportStatus(ContextReporter.STATUS_GSA_NOT_AVAILABLE);
                     return;
@@ -1570,7 +1564,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
-        VrModuleProvider.getDelegate().onSaveInstanceState(outState);
     }
 
     /**
@@ -1789,10 +1782,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         PowerMonitor.create();
 
-        if (getSavedInstanceState() == null && getIntent() != null) {
-            VrModuleProvider.getDelegate().onNewIntentWithNative(this, getIntent());
-        }
-
         // The first launch of the screenshot feature benefits from this DFM being installed
         // proactively. However without the isolated split feature there are performance regressions
         // as a result of adding this extra code.
@@ -1845,8 +1834,22 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 mTabModelSelectorSupplier.get(), mRootUiCoordinator.getBottomSheetController());
 
         // (nagamani@vivaldi.com): Show reminder to sign in to Vivaldi Sync
-        mSyncReminderHandler = new SyncReminderHandler(this,
-                mRootUiCoordinator.getBottomSheetController());
+        Intent intent = getIntent();
+        boolean fromVivaldiLauncher = false;
+        if (intent != null && intent.getCategories() != null) {
+            Set<String> categories = intent.getCategories();
+            for (String category : categories) {
+                // Show reminder only when Vivaldi is launched using launcher icon.
+                if (category.equals(Intent.CATEGORY_LAUNCHER)) {
+                    fromVivaldiLauncher = true;
+                    break;
+                }
+            }
+        }
+        if (mBookmarkModelSupplier.hasValue() && fromVivaldiLauncher) {
+            mSyncReminderHandler = new SyncReminderHandler(this,
+                    mRootUiCoordinator.getBottomSheetController(), mBookmarkModelSupplier.get());
+        }
     }
 
     private boolean maybeOnScreenSizeChange() {
@@ -2237,14 +2240,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 return;
             }
 
-            if (newConfig.densityDpi != mConfig.densityDpi) {
-                if (!VrModuleProvider.getDelegate().onDensityChanged(
-                            mConfig.densityDpi, newConfig.densityDpi)) {
-                    recreate();
-                    return;
-                }
-            }
-
             if (newConfig.orientation != mConfig.orientation) {
                 RequestDesktopUtils.recordScreenOrientationChangedUkm(
                         newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE,
@@ -2325,9 +2320,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
     /** Handles back press events for Chrome in various states. */
     protected final boolean handleOnBackPressed() {
-        assert !BackPressManager.isEnabled()
-            : "Back press should be handled by implementors of BackPressHandler if enabled";
-        if (mNativeInitialized) RecordUserAction.record("SystemBack");
+        RecordUserAction.record(
+                mNativeInitialized ? "SystemBack" : "SystemBackBeforeNativeInitialized");
+        if (isActivityFinishingOrDestroyed()) {
+            RecordUserAction.record("SystemBackOnActivityFinishingOrDestroyed");
+        }
 
         if (TextBubble.getCountSupplier().get() != null
                 && TextBubble.getCountSupplier().get() > 0) {
@@ -2580,20 +2577,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             return true;
         }
 
-        if (id == R.id.add_to_reading_list_menu_id) {
-            mTabBookmarkerSupplier.get().addToReadingList(currentTab);
-            RecordUserAction.record("MobileMenuAddToReadingList");
-            return true;
-        }
-
-        if (id == R.id.delete_from_reading_list_menu_id) {
-            assert mBookmarkModelSupplier.hasValue();
-            ReadingListUtils.deleteFromReadingList(
-                    mBookmarkModelSupplier.get(), mSnackbarManager, /*activity=*/this, currentTab);
-            RecordUserAction.record("MobileMenuDeleteFromReadingList");
-            return true;
-        }
-
         if (id == R.id.enable_price_tracking_menu_id) {
             mTabBookmarkerSupplier.get().startOrModifyPriceTracking(currentTab);
             RecordUserAction.record("MobileMenuEnablePriceTracking");
@@ -2657,36 +2640,17 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
         if (id == R.id.add_to_homescreen_id) {
             RecordUserAction.record("MobileMenuAddToHomescreen");
-            PwaBottomSheetController controller =
-                    PwaBottomSheetControllerProvider.from(getWindowAndroid());
-            if (controller != null
-                    && controller.requestOrExpandBottomSheetInstaller(
-                            currentTab.getWebContents(), InstallTrigger.MENU)) {
-                return true;
-            }
-            AddToHomescreenCoordinator.showForAppMenu(this, getWindowAndroid(),
-                    getModalDialogManager(), currentTab.getWebContents(), mMenuItemData);
-            if (ChromeFeatureList.isEnabled(ChromeFeatureList.ADD_TO_HOMESCREEN_IPH)) {
-                Tracker tracker = TrackerFactory.getTrackerForProfile(
-                        Profile.fromWebContents(currentTab.getWebContents()));
-                tracker.notifyEvent(EventConstants.ADD_TO_HOMESCREEN_DIALOG_SHOWN);
-            }
-            return true;
+            return doAddToHomescreenOrInstallWebApp(currentTab);
+        }
+
+        if (id == R.id.install_webapp_id) {
+            RecordUserAction.record("InstallWebAppFromMenu");
+            return doAddToHomescreenOrInstallWebApp(currentTab);
         }
 
         if (id == R.id.open_webapk_id) {
-            Context context = ContextUtils.getApplicationContext();
-            String packageName =
-                    WebApkValidator.queryFirstWebApkPackage(context, currentTab.getUrl().getSpec());
-            Intent launchIntent = WebApkNavigationClient.createLaunchWebApkIntent(
-                    packageName, currentTab.getUrl().getSpec(), false);
-            try {
-                context.startActivity(launchIntent);
-                RecordUserAction.record("MobileMenuOpenWebApk");
-            } catch (ActivityNotFoundException e) {
-                Toast.makeText(context, R.string.open_webapk_failed, Toast.LENGTH_SHORT).show();
-            }
-            return true;
+            RecordUserAction.record("MobileMenuOpenWebApk");
+            return doOpenWebApk(currentTab);
         }
 
         if (id == R.id.request_desktop_site_id || id == R.id.request_desktop_site_check_id) {
@@ -2697,9 +2661,15 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 Profile profile = getCurrentTabModel().getProfile();
                 RequestDesktopUtils.setRequestDesktopSiteContentSettingsForUrl(
                         profile, currentTab.getUrl(), usingDesktopUserAgent);
-                currentTab.reload();
+                // Use TabUtils.switchUserAgent() instead of Tab.reload(). Because we need to reload
+                // with ReloadType::ORIGINAL_REQUEST_URL. See http://crbug/1418587 for details.
+                TabUtils.switchUserAgent(currentTab, usingDesktopUserAgent,
+                        /* forcedByUser */ false,
+                        UseDesktopUserAgentCaller.ON_MENU_OR_KEYBOARD_ACTION);
                 RequestDesktopUtils.maybeShowUserEducationPromptForAppMenuSelection(
                         profile, this, getModalDialogManager());
+                TrackerFactory.getTrackerForProfile(profile).notifyEvent(
+                        EventConstants.APP_MENU_DESKTOP_SITE_EXCEPTION_ADDED);
             } else {
                 TabUtils.switchUserAgent(currentTab, usingDesktopUserAgent, /* forcedByUser */ true,
                         UseDesktopUserAgentCaller.ON_MENU_OR_KEYBOARD_ACTION);
@@ -2932,64 +2902,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
     }
 
-    @Override
-    public void startActivity(Intent intent) {
-        startActivity(intent, null);
-    }
-
-    @Override
-    public void startActivity(Intent intent, Bundle options) {
-        if (VrModuleProvider.getDelegate().canLaunch2DIntents()
-                || VrModuleProvider.getIntentDelegate().isVrIntent(intent)) {
-            if (VrModuleProvider.getDelegate().isInVr()) {
-                VrModuleProvider.getIntentDelegate().setupVrIntent(intent);
-            }
-            super.startActivity(intent, options);
-            return;
-        }
-        VrModuleProvider.getDelegate().requestToExitVrAndRunOnSuccess(() -> {
-            if (!VrModuleProvider.getDelegate().canLaunch2DIntents()) {
-                throw new IllegalStateException("Still in VR after having exited VR.");
-            }
-            super.startActivity(intent, options);
-        });
-    }
-
-    @Override
-    public void startActivityForResult(Intent intent, int requestCode) {
-        startActivityForResult(intent, requestCode, null);
-    }
-
-    @Override
-    public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
-        if (VrModuleProvider.getDelegate().canLaunch2DIntents()
-                || VrModuleProvider.getIntentDelegate().isVrIntent(intent)) {
-            super.startActivityForResult(intent, requestCode, options);
-            return;
-        }
-        VrModuleProvider.getDelegate().requestToExitVrAndRunOnSuccess(() -> {
-            if (!VrModuleProvider.getDelegate().canLaunch2DIntents()) {
-                throw new IllegalStateException("Still in VR after having exited VR.");
-            }
-            super.startActivityForResult(intent, requestCode, options);
-        });
-    }
-
-    @Override
-    public boolean startActivityIfNeeded(Intent intent, int requestCode) {
-        return startActivityIfNeeded(intent, requestCode, null);
-    }
-
-    @Override
-    public boolean startActivityIfNeeded(Intent intent, int requestCode, Bundle options) {
-        // Avoid starting Activities when possible while in VR.
-        if (VrModuleProvider.getDelegate().isInVr()
-                && !VrModuleProvider.getIntentDelegate().isVrIntent(intent)) {
-            return false;
-        }
-        return super.startActivityIfNeeded(intent, requestCode, options);
-    }
-
     /**
      * TODO(https://crbug.com/931496): Revisit this as part of the broader discussion around
      * activity-specific UI customizations.
@@ -3108,10 +3020,50 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         return UserPrefs.get(Profile.getLastUsedRegularProfile());
     }
 
+    /**
+     * Returns whether the Add to Home screen or Install Web App action was successfully started.
+     */
+    private boolean doAddToHomescreenOrInstallWebApp(Tab currentTab) {
+        PwaBottomSheetController controller =
+                PwaBottomSheetControllerProvider.from(getWindowAndroid());
+        if (controller != null
+                && controller.requestOrExpandBottomSheetInstaller(
+                        currentTab.getWebContents(), InstallTrigger.MENU)) {
+            return true;
+        }
+        AddToHomescreenCoordinator.showForAppMenu(this, getWindowAndroid(), getModalDialogManager(),
+                currentTab.getWebContents(), mMenuItemData);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ADD_TO_HOMESCREEN_IPH)) {
+            Tracker tracker = TrackerFactory.getTrackerForProfile(
+                    Profile.fromWebContents(currentTab.getWebContents()));
+            tracker.notifyEvent(EventConstants.ADD_TO_HOMESCREEN_DIALOG_SHOWN);
+        }
+        return true;
+    }
+
+    /** Returns whether the Open WebAPK action was successfully started. */
+    private boolean doOpenWebApk(Tab currentTab) {
+        Context context = ContextUtils.getApplicationContext();
+        String packageName =
+                WebApkValidator.queryFirstWebApkPackage(context, currentTab.getUrl().getSpec());
+        Intent launchIntent = WebApkNavigationClient.createLaunchWebApkIntent(
+                packageName, currentTab.getUrl().getSpec(), false);
+        try {
+            context.startActivity(launchIntent);
+        } catch (ActivityNotFoundException e) {
+            Toast.makeText(context, R.string.open_webapk_failed, Toast.LENGTH_SHORT).show();
+        }
+        return true;
+    }
+
     /** Vivaldi **/
     public void captureThumbnailForSpeedDial(BookmarkModel model, BookmarkItem item) {
         if (!SpeedDialUtils.thumbnailsEnabled()
-                || (item != null && item.isDefaultBookmark())) return;
+                || (item != null && item.isDefaultBookmark())
+                || (item.getThumbnailPath() != null &&
+                    !item.getThumbnailPath().isEmpty())) {
+            return;
+        }
         if (mCaptureThumbnailHandler == null)
             mCaptureThumbnailHandler = new CaptureThumbnailHandler(this);
 
@@ -3120,9 +3072,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         int dpW = DisplayUtil.pxToDp(display, width);
         int dpH = DisplayUtil.pxToDp(display, Math.round(SPEED_DIAL_ASPECT_RATIO * width));
         mCaptureThumbnailHandler.requestCapturePage(item.getGUID(), item.getId(), dpW, dpH);
-        model.setBookmarkThumbnail(item.getId(),
-                SpeedDialUtils.getThumbnailFolderPath() +
-                        item.getGUID() + ".jpg");
+
     }
 
     /** Vivaldi **/

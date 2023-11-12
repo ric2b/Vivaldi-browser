@@ -5,13 +5,16 @@
 import './accelerator_subsection.js';
 import '../css/shortcut_customization_shared.css.js';
 import './shortcut_input.js';
+import './search/search_box.js';
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
+import {PolymerElementProperties} from 'chrome://resources/polymer/v3_0/polymer/interfaces.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {AcceleratorLookupManager} from './accelerator_lookup_manager.js';
 import {AcceleratorSubsectionElement} from './accelerator_subsection.js';
 import {AcceleratorCategory, AcceleratorSubcategory} from './shortcut_types';
+import {isSearchEnabled} from './shortcut_utils.js';
 import {getTemplate} from './shortcuts_page.html.js';
 
 /**
@@ -22,11 +25,11 @@ import {getTemplate} from './shortcuts_page.html.js';
  * TODO(jimmyxgong): Implement this skeleton element.
  */
 export class ShortcutsPageElement extends PolymerElement {
-  static get is() {
+  static get is(): string {
     return 'shortcuts-page';
   }
 
-  static get properties() {
+  static get properties(): PolymerElementProperties {
     return {
       /**
        * Implicit property from NavigationSelector. Contains one Number field,
@@ -34,10 +37,9 @@ export class ShortcutsPageElement extends PolymerElement {
        */
       initialData: {
         type: Object,
-        value: () => {},
       },
 
-      subcategories_: {
+      subcategories: {
         type: Array,
         value: [],
       },
@@ -45,18 +47,18 @@ export class ShortcutsPageElement extends PolymerElement {
   }
 
   initialData: {category: AcceleratorCategory};
-  private subcategories_: AcceleratorSubcategory[];
-  private lookupManager_: AcceleratorLookupManager =
+  private subcategories: AcceleratorSubcategory[];
+  private lookupManager: AcceleratorLookupManager =
       AcceleratorLookupManager.getInstance();
 
-  override connectedCallback() {
+  override connectedCallback(): void {
     super.connectedCallback();
     this.updateAccelerators();
   }
 
-  updateAccelerators() {
+  updateAccelerators(): void {
     const subcatMap =
-        this.lookupManager_.getSubcategories(this.initialData.category);
+        this.lookupManager.getSubcategories(this.initialData.category);
     if (subcatMap === undefined) {
       return;
     }
@@ -65,23 +67,28 @@ export class ShortcutsPageElement extends PolymerElement {
     for (const key of subcatMap.keys()) {
       subcategories.push(key);
     }
-    this.subcategories_ = subcategories;
+    this.subcategories = subcategories;
   }
 
-  private getAllSubsections_(): NodeListOf<AcceleratorSubsectionElement> {
+  private getAllSubsections(): NodeListOf<AcceleratorSubsectionElement> {
     const subsections =
         this.shadowRoot!.querySelectorAll('accelerator-subsection');
     assert(subsections);
     return subsections;
   }
 
-  updateSubsections() {
-    for (const subsection of this.getAllSubsections_()) {
+  updateSubsections(): void {
+    for (const subsection of this.getAllSubsections()) {
       subsection.updateSubsection();
     }
   }
 
-  static get template() {
+  protected shouldHideSearchBox(): boolean {
+    // Hide the search box when flag is disabled.
+    return !isSearchEnabled();
+  }
+
+  static get template(): HTMLTemplateElement {
     return getTemplate();
   }
 }

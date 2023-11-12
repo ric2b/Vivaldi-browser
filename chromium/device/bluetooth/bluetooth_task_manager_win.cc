@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -225,11 +225,9 @@ BluetoothTaskManagerWin::BluetoothTaskManagerWin(
 
 BluetoothTaskManagerWin::BluetoothTaskManagerWin(
     std::unique_ptr<win::BluetoothClassicWrapper> classic_wrapper,
-    std::unique_ptr<win::BluetoothLowEnergyWrapper> le_wrapper,
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner)
     : ui_task_runner_(std::move(ui_task_runner)),
-      classic_wrapper_(std::move(classic_wrapper)),
-      le_wrapper_(std::move(le_wrapper)) {}
+      classic_wrapper_(std::move(classic_wrapper)) {}
 
 BluetoothTaskManagerWin::~BluetoothTaskManagerWin() = default;
 
@@ -237,10 +235,8 @@ BluetoothTaskManagerWin::~BluetoothTaskManagerWin() = default;
 scoped_refptr<BluetoothTaskManagerWin>
 BluetoothTaskManagerWin::CreateForTesting(
     std::unique_ptr<win::BluetoothClassicWrapper> classic_wrapper,
-    std::unique_ptr<win::BluetoothLowEnergyWrapper> le_wrapper,
     scoped_refptr<base::SequencedTaskRunner> ui_task_runner) {
   return new BluetoothTaskManagerWin(std::move(classic_wrapper),
-                                     std::move(le_wrapper),
                                      std::move(ui_task_runner));
 }
 
@@ -562,10 +558,6 @@ bool BluetoothTaskManagerWin::SearchClassicDevices(
 
 bool BluetoothTaskManagerWin::SearchLowEnergyDevices(
     std::vector<std::unique_ptr<DeviceState>>* device_list) {
-  if (!le_wrapper_->IsBluetoothLowEnergySupported()) {
-    return true;  // Bluetooth LE not supported is not an error.
-  }
-
   std::vector<std::unique_ptr<win::BluetoothLowEnergyDeviceInfo>> btle_devices;
   std::string error;
   bool success = le_wrapper_->EnumerateKnownBluetoothLowEnergyDevices(
@@ -722,10 +714,6 @@ int BluetoothTaskManagerWin::DiscoverClassicDeviceServicesWorker(
 bool BluetoothTaskManagerWin::DiscoverLowEnergyDeviceServices(
     const base::FilePath& device_path,
     std::vector<std::unique_ptr<ServiceRecordState>>* service_record_states) {
-  if (!le_wrapper_->IsBluetoothLowEnergySupported()) {
-    return true;  // Bluetooth LE not supported is not an error.
-  }
-
   std::string error;
   std::vector<std::unique_ptr<win::BluetoothLowEnergyServiceInfo>> services;
   bool success = le_wrapper_->EnumerateKnownBluetoothLowEnergyServices(

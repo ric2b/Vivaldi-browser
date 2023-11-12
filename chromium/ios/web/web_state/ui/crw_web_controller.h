@@ -28,6 +28,7 @@ enum class WKNavigationState;
 @protocol CRWScrollableContent;
 @protocol CRWSwipeRecognizerProvider;
 @class CRWWebViewContentView;
+@protocol CRWFindInteraction;
 @protocol CRWWebViewDownload;
 @protocol CRWWebViewDownloadDelegate;
 @protocol CRWWebViewProxy;
@@ -91,6 +92,10 @@ class WebStateImpl;
 // Whether the WebController should attempt to keep the render process alive.
 @property(nonatomic, assign, getter=shouldKeepRenderProcessAlive)
     BOOL keepsRenderProcessAlive;
+
+// Whether or not the web page is in fullscreen mode.
+@property(nonatomic, readonly, getter=isWebPageInFullscreenMode)
+    BOOL webPageInFullscreenMode;
 
 // Designated initializer. Initializes web controller with `webState`. The
 // calling code must retain the ownership of `webState`.
@@ -226,10 +231,6 @@ class WebStateImpl;
 - (NSDictionary<NSNumber*, NSNumber*>*)
     statesForAllPermissions API_AVAILABLE(ios(15.0));
 
-// Injects the windowID into the main frame of the current webpage.
-// TODO(crbug.com/905939): Remove WindowID.
-- (void)injectWindowID;
-
 // Shows a custom iOS context menu with the given `items` for options targeted
 // to the data visible in given window `rect`.
 - (void)showMenuWithItems:(NSArray<CRWContextMenuItem*>*)items
@@ -243,6 +244,24 @@ class WebStateImpl;
                               delegate:(id<CRWWebViewDownloadDelegate>)delegate
                                handler:(void (^)(id<CRWWebViewDownload>))handler
     API_AVAILABLE(ios(14.5));
+
+// Returns whether the Find interaction is supported and can be enabled.
+- (BOOL)findInteractionSupported;
+
+// Returns whether the Find interaction is enabled on the contained web view, if
+// any.
+- (BOOL)findInteractionEnabled;
+
+// Sets the value of `findInteractionEnabled` to `enabled` on the contained web
+// view, if any.
+- (void)setFindInteractionEnabled:(BOOL)enabled;
+
+// Returns the Find interaction of the contained web view, if any.
+- (id<CRWFindInteraction>)findInteraction API_AVAILABLE(ios(16));
+
+// Returns an opaque activity item that can be passed to a
+// UIActivityViewController to add additional share action for the current URL.
+- (id)activityItem;
 
 #pragma mark Navigation Message Handlers
 

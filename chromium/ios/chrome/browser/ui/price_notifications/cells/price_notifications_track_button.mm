@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/price_notifications/cells/price_notifications_track_button.h"
 
+#import "ios/chrome/browser/ui/price_notifications/cells/price_notifications_track_button_util.h"
 #import "ios/chrome/browser/ui/price_notifications/price_notifications_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -14,7 +15,7 @@
 #endif
 
 namespace {
-const CGFloat kTrackButtonSidePadding = 16;
+const CGFloat kTrackButtonTopPadding = 4;
 }  // namespace
 
 @implementation PriceNotificationsTrackButton
@@ -24,6 +25,7 @@ const CGFloat kTrackButtonSidePadding = 16;
   if (self) {
     self.titleLabel.font =
         [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    [self.titleLabel setLineBreakMode:NSLineBreakByTruncatingTail];
     self.tintColor = [UIColor colorNamed:kSolidButtonTextColor];
     self.backgroundColor = [UIColor colorNamed:kBlueColor];
     self.accessibilityIdentifier =
@@ -31,9 +33,6 @@ const CGFloat kTrackButtonSidePadding = 16;
     [self setTitle:l10n_util::GetNSString(
                        IDS_IOS_PRICE_NOTIFICATIONS_PRICE_TRACK_TRACK_BUTTON)
           forState:UIControlStateNormal];
-
-    self.contentEdgeInsets = UIEdgeInsetsMake(0, kTrackButtonSidePadding, 0,
-                                              kTrackButtonSidePadding);
   }
   return self;
 }
@@ -43,6 +42,24 @@ const CGFloat kTrackButtonSidePadding = 16;
 - (void)layoutSubviews {
   [super layoutSubviews];
   self.layer.cornerRadius = self.frame.size.height / 2;
+  size_t horizontalPadding =
+      price_notifications::CalculateTrackButtonHorizontalPadding(
+          self.superview.superview.frame.size.width,
+          self.titleLabel.intrinsicContentSize.width);
+  self.contentEdgeInsets =
+      UIEdgeInsetsMake(kTrackButtonTopPadding, horizontalPadding,
+                       kTrackButtonTopPadding, horizontalPadding);
+
+  price_notifications::WidthConstraintValues constraintValues =
+      price_notifications::CalculateTrackButtonWidthConstraints(
+          self.superview.superview.frame.size.width,
+          self.titleLabel.intrinsicContentSize.width, horizontalPadding);
+  [NSLayoutConstraint activateConstraints:@[
+    [self.widthAnchor
+        constraintLessThanOrEqualToConstant:constraintValues.max_width],
+    [self.widthAnchor
+        constraintGreaterThanOrEqualToConstant:constraintValues.target_width]
+  ]];
 }
 
 @end

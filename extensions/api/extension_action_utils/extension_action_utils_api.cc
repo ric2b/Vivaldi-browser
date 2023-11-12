@@ -300,7 +300,8 @@ void ExtensionActionUtil::FillInfoForTabId(
   // Note, all getters return default values if no explicit value has been set.
   info->badge_tooltip = action->GetTitle(tab_id);
 
-  info->badge_text = action->GetExplicitlySetBadgeText(tab_id);
+  // If the extension has a non-specific tabId badgetext, used for all tabs.
+  info->badge_text = action->GetDisplayBadgeText(tab_id);
 
   info->badge_background_color = color_utils::SkColorToRgbaString(
           action->GetBadgeBackgroundColor(tab_id));
@@ -342,18 +343,6 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
   // Chromium. Yet we always use tabId for the last active window. Is it
   // right? See VB-52519.
 
-  Browser* browser = web_contents
-                         ? chrome::FindBrowserWithWebContents(web_contents)
-                         : chrome::FindBrowserWithID(last_active_tab_window_);
-  if (!browser)
-    return;
-
-  // We only update the browseraction items for the active tab.
-  int tab_id = sessions::SessionTabHelper::IdForTab(
-                   browser->tab_strip_model()->GetActiveWebContents())
-                   .id();
-  SessionID::id_type window_id = browser->session_id().id();
-
   vivaldi::extension_action_utils::ExtensionInfo info;
 
   info.keyboard_shortcut =
@@ -361,8 +350,6 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
 
   // TODO(igor@vivaldi.com): Shall we use the passed browser_context here,
   // not stored profile_? See VB-52519.
-
-  FillInfoForTabId(&info, extension_action, tab_id);
 
   const Extension* extension =
       extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
@@ -372,10 +359,23 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
     FillInfoFromManifest(&info, extension);
   }
 
-  ::vivaldi::BroadcastEvent(
-      vivaldi::extension_action_utils::OnUpdated::kEventName,
-      vivaldi::extension_action_utils::OnUpdated::Create(info, window_id),
-      browser_context);
+  // This is to mirror the update sequence in Chrome. Each action-update will be
+  // triggered in all open browser-windows and be filled in for the action tab.
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    SessionID::id_type window_id = browser->session_id().id();
+
+    int tab_id = sessions::SessionTabHelper::IdForTab(
+                     browser->tab_strip_model()->GetActiveWebContents())
+                     .id();
+
+    FillInfoForTabId(&info, extension_action, tab_id);
+
+    ::vivaldi::BroadcastEvent(
+        vivaldi::extension_action_utils::OnUpdated::kEventName,
+        vivaldi::extension_action_utils::OnUpdated::Create(info, window_id),
+        browser_context);
+  }
+
 }
 
 void ExtensionActionUtil::OnExtensionUninstalled(

@@ -38,9 +38,11 @@ import org.robolectric.annotation.Config;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.FeatureList;
 import org.chromium.base.FeatureList.TestValues;
+import org.chromium.base.IntentUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.url.JUnitTestGURLs;
 
@@ -70,6 +72,7 @@ public class ChromeDragAndDropBrowserDelegateUnitTest {
     public void setup() throws NameNotFoundException {
         mTestValues = new TestValues();
         mTestValues.addFeatureFlagOverride(ContentFeatures.TOUCH_DRAG_AND_CONTEXT_MENU, true);
+        mTestValues.addFeatureFlagOverride(ChromeFeatureList.ANIMATED_IMAGE_DRAG_SHADOW, false);
         FeatureList.setTestValues(mTestValues);
 
         Context mApplicationContext = Mockito.spy(ContextUtils.getApplicationContext());
@@ -91,6 +94,8 @@ public class ChromeDragAndDropBrowserDelegateUnitTest {
                 ChromeDragAndDropBrowserDelegate.PARAM_DROP_IN_CHROME, "true");
         mDelegate = new ChromeDragAndDropBrowserDelegate(mActivity);
         assertTrue("SupportDropInChrome should be true.", mDelegate.getSupportDropInChrome());
+        assertFalse("SupportAnimatedImageDragShadow should be false.",
+                mDelegate.getSupportAnimatedImageDragShadow());
 
         DragAndDropPermissions permissions = mDelegate.getDragAndDropPermissions(mDragEvent);
         assertNotNull("DragAndDropPermissions should not be null.", permissions);
@@ -129,6 +134,8 @@ public class ChromeDragAndDropBrowserDelegateUnitTest {
                 intent.getBooleanExtra(IntentHandler.EXTRA_PREFER_NEW, false));
         assertEquals("The intent should contain Uri data.", Uri.parse(JUnitTestGURLs.EXAMPLE_URL),
                 intent.getData());
+        assertFalse("The intent should not contain the trusted application extra.",
+                intent.hasExtra(IntentUtils.TRUSTED_APPLICATION_CODE_EXTRA));
     }
 
     @Test

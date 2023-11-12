@@ -760,7 +760,7 @@ class AutotestPrivateSetAssistantEnabledFunction
 
   // ash::AssistantStateObserver overrides:
   void OnAssistantStatusChanged(
-      chromeos::assistant::AssistantStatus status) override;
+      ash::assistant::AssistantStatus status) override;
 
   // Called when the Assistant service does not respond in a timely fashion. We
   // will respond with an error.
@@ -1173,7 +1173,7 @@ class AutotestPrivateWaitForDisplayRotationFunction
   ~AutotestPrivateWaitForDisplayRotationFunction() override;
   ResponseAction Run() override;
 
-  ResponseValue CheckScreenRotationAnimation();
+  absl::optional<ResponseValue> CheckScreenRotationAnimation();
 
   int64_t display_id_ = display::kInvalidDisplayId;
   absl::optional<display::Display::Rotation> target_rotation_;

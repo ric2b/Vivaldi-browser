@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ash/net/secure_dns_manager.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -52,13 +52,13 @@ class MockDoHTemplatesUriResolver
 void OnGetProperties(bool* success_out,
                      std::map<std::string, std::string>* props_out,
                      base::OnceClosure callback,
-                     absl::optional<base::Value> result) {
+                     absl::optional<base::Value::Dict> result) {
   *success_out = result.has_value();
   if (result) {
-    base::Value* value = result->FindKeyOfType(
-        shill::kDNSProxyDOHProvidersProperty, base::Value::Type::DICTIONARY);
+    base::Value::Dict* value =
+        result->FindDict(shill::kDNSProxyDOHProvidersProperty);
     if (value != nullptr) {
-      for (const auto kv : value->DictItems()) {
+      for (const auto kv : *value) {
         props_out->emplace(kv.first, kv.second.GetString());
       }
     }

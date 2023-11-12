@@ -111,8 +111,10 @@ struct StructTraits<crosapi::mojom::AppDataView, apps::AppPtr> {
 
   static crosapi::mojom::OptionalBool handles_intents(const apps::AppPtr& r);
 
-  static const apps::Shortcuts& shortcuts(const apps::AppPtr& r) {
-    return r->shortcuts;
+  // This method is required for Ash-Lacros backwards compatibility.
+  static std::vector<crosapi::mojom::ShortcutPtr> deprecated_shortcuts(
+      const apps::AppPtr& r) {
+    return {};
   }
 
   static crosapi::mojom::OptionalBool is_platform_app(const apps::AppPtr& r);
@@ -145,6 +147,10 @@ struct StructTraits<crosapi::mojom::IconKeyDataView, apps::IconKeyPtr> {
     return r->icon_effects;
   }
 
+  static bool raw_icon_updated(const apps::IconKeyPtr& r) {
+    return r->raw_icon_updated;
+  }
+
   static bool Read(crosapi::mojom::IconKeyDataView, apps::IconKeyPtr* out);
 };
 
@@ -153,13 +159,6 @@ struct EnumTraits<crosapi::mojom::InstallReason, apps::InstallReason> {
   static crosapi::mojom::InstallReason ToMojom(apps::InstallReason input);
   static bool FromMojom(crosapi::mojom::InstallReason input,
                         apps::InstallReason* output);
-};
-
-template <>
-struct EnumTraits<crosapi::mojom::OptionalBool, apps::mojom::OptionalBool> {
-  static crosapi::mojom::OptionalBool ToMojom(apps::mojom::OptionalBool input);
-  static bool FromMojom(crosapi::mojom::OptionalBool input,
-                        apps::mojom::OptionalBool* output);
 };
 
 template <>
@@ -277,6 +276,10 @@ struct StructTraits<crosapi::mojom::IconValueDataView, apps::IconValuePtr> {
     return r->is_placeholder_icon;
   }
 
+  static bool is_maskable_icon(const apps::IconValuePtr& r) {
+    return r->is_maskable_icon;
+  }
+
   static bool Read(crosapi::mojom::IconValueDataView, apps::IconValuePtr* out);
 };
 
@@ -384,20 +387,6 @@ struct StructTraits<crosapi::mojom::PreferredAppChangesDataView,
 
   static bool Read(crosapi::mojom::PreferredAppChangesDataView,
                    apps::PreferredAppChangesPtr* out);
-};
-
-template <>
-struct StructTraits<crosapi::mojom::ShortcutDataView, apps::ShortcutPtr> {
-  static const std::string& shortcut_id(const apps::ShortcutPtr& r) {
-    return r->shortcut_id;
-  }
-
-  static const std::string& name(const apps::ShortcutPtr& r) { return r->name; }
-
-  static uint8_t position(const apps::ShortcutPtr& r) { return r->position; }
-
-  static bool Read(crosapi::mojom::ShortcutDataView data,
-                   apps::ShortcutPtr* out);
 };
 
 }  // namespace mojo

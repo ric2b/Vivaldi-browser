@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/sequenced_task_runner_helpers.h"
 #include "components/account_id/account_id.h"
 #include "components/desks_storage/core/desk_model.h"
@@ -148,7 +149,11 @@ class LocalDeskDataManager : public DeskModel {
   // Returns the desk type of the `uuid`.
   ash::DeskTemplateType GetDeskTypeOfUuid(const base::GUID uuid) const;
 
-  // Wrapper method to load the read files into the `saved_desks_list_` cache.
+  // Returns the max entry count of desk type `desk_type`.
+  size_t GetMaxEntryCountByDeskType(ash::DeskTemplateType desk_type) const;
+
+  // Wrapper method to load the read files into the `saved_desks_list_`
+  // cache.
   void MoveEntriesIntoCache(LoadCacheResult cache_result);
 
   // Task runner used to schedule tasks on the IO thread.

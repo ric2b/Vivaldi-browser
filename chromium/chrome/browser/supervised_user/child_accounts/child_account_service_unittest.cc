@@ -6,14 +6,13 @@
 
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service.h"
 #include "chrome/browser/supervised_user/child_accounts/child_account_service_factory.h"
 #include "chrome/browser/supervised_user/child_accounts/family_info_fetcher.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/signin/public/base/list_accounts_test_utils.h"
@@ -21,6 +20,8 @@
 #include "components/signin/public/identity_manager/accounts_cookie_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "components/supervised_user/core/common/pref_names.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -168,13 +169,13 @@ TEST_F(ChildAccountServiceTest, FieldsAreClearedForNonChildAccounts) {
                        "http://profile.url/marge/image");
 
   OnGetFamilyMembersSuccess(members);
-  for (const char* property : supervised_users::kCustodianInfoPrefs) {
+  for (const char* property : supervised_user::kCustodianInfoPrefs) {
     EXPECT_THAT(profile_->GetPrefs()->GetString(property), Not(IsEmpty()));
   }
 
   members.clear();
   OnGetFamilyMembersSuccess(members);
-  for (const char* property : supervised_users::kCustodianInfoPrefs) {
+  for (const char* property : supervised_user::kCustodianInfoPrefs) {
     EXPECT_THAT(profile_->GetPrefs()->GetString(property), IsEmpty());
   }
 }

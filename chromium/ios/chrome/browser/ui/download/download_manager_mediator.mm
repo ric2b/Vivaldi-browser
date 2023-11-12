@@ -6,9 +6,9 @@
 
 #import <UIKit/UIKit.h>
 
-#import "base/bind.h"
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
+#import "base/functional/bind.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/task/thread_pool.h"
@@ -18,6 +18,12 @@
 #import "ios/web/public/download/download_task.h"
 #import "net/base/net_errors.h"
 #import "ui/base/l10n/l10n_util.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -87,9 +93,15 @@ void DownloadManagerMediator::UpdateConsumer() {
             weak_ptr_factory_.GetWeakPtr(), download_path_));
   }
 
+  // Vivaldi: Always hide GDrive install promo.
+  if (IsVivaldiRunning()) {
+    [consumer_ setInstallDriveButtonVisible:NO animated:NO];
+  } else {
   if (state == kDownloadManagerStateSucceeded && !IsGoogleDriveAppInstalled()) {
     [consumer_ setInstallDriveButtonVisible:YES animated:YES];
   }
+  } // End Vivaldi
+
   [consumer_ setState:state];
   [consumer_ setCountOfBytesReceived:task_->GetReceivedBytes()];
   [consumer_ setCountOfBytesExpectedToReceive:task_->GetTotalBytes()];

@@ -6,8 +6,8 @@
 
 #include <algorithm>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -360,7 +360,7 @@ APIBinding::APIBinding(const std::string& api_name,
   }
 }
 
-APIBinding::~APIBinding() {}
+APIBinding::~APIBinding() = default;
 
 v8::Local<v8::Object> APIBinding::CreateInstance(
     v8::Local<v8::Context> context) {

@@ -70,10 +70,7 @@ class CORE_EXPORT StyleSheetContents final
   const AtomicString& NamespaceURIFromPrefix(const AtomicString& prefix) const;
 
   void ParseAuthorStyleSheet(const CSSStyleSheetResource*);
-  ParseSheetResult ParseString(
-      const String&,
-      bool allow_import_rules = true,
-      std::unique_ptr<CachedCSSTokenizer> tokenizer = nullptr);
+  ParseSheetResult ParseString(const String&, bool allow_import_rules = true);
 
   bool IsCacheableForResource() const;
   bool IsCacheableForStyleElement() const;
@@ -95,6 +92,10 @@ class CORE_EXPORT StyleSheetContents final
   // Gets the first owner document in the list of registered clients, or nullptr
   // if there are none.
   Document* AnyOwnerDocument() const;
+
+  // True if any the StyleSheetContents's owner nodes have a *parent* that is
+  // equal to `candidate`.
+  bool HasOwnerParentNode(Node* candidate) const;
 
   const WTF::TextEncoding& Charset() const {
     return parser_context_->Charset();

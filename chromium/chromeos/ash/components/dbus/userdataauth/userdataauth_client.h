@@ -5,8 +5,8 @@
 #ifndef CHROMEOS_ASH_COMPONENTS_DBUS_USERDATAAUTH_USERDATAAUTH_CLIENT_H_
 #define CHROMEOS_ASH_COMPONENTS_DBUS_USERDATAAUTH_USERDATAAUTH_CLIENT_H_
 
-#include "base/callback.h"
 #include "base/component_export.h"
+#include "base/functional/callback.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observation_traits.h"
 #include "chromeos/ash/components/dbus/cryptohome/UserDataAuth.pb.h"
@@ -54,15 +54,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   using RemoveCallback =
       chromeos::DBusMethodCallback<::user_data_auth::RemoveReply>;
 
-  // Key-based API, still used by PIN codepath.
-  // TODO(b/260718534): Remove next group as part of UserAuthFactors cleanup.
-  using GetKeyDataCallback =
-      chromeos::DBusMethodCallback<::user_data_auth::GetKeyDataReply>;
-  using AddKeyCallback =
-      chromeos::DBusMethodCallback<::user_data_auth::AddKeyReply>;
-  using RemoveKeyCallback =
-      chromeos::DBusMethodCallback<::user_data_auth::RemoveKeyReply>;
-
   // This API is still used by old WebAuthN path.
   // TODO(b/260715686): Remove as part of UseAuthsessionForWebAuthN cleanup.
   using CheckKeyCallback =
@@ -76,15 +67,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
       ::user_data_auth::GetSupportedKeyPoliciesReply>;
   using GetAccountDiskUsageCallback =
       chromeos::DBusMethodCallback<::user_data_auth::GetAccountDiskUsageReply>;
-
-  // Key-based API for AuthSessions.
-  // TODO(b/260718534): Remove next group as part of UserAuthFactors cleanup.
-  using AuthenticateAuthSessionCallback = chromeos::DBusMethodCallback<
-      ::user_data_auth::AuthenticateAuthSessionReply>;
-  using AddCredentialsCallback =
-      chromeos::DBusMethodCallback<::user_data_auth::AddCredentialsReply>;
-  using UpdateCredentialCallback =
-      chromeos::DBusMethodCallback<::user_data_auth::UpdateCredentialReply>;
 
   // AuthSession interaction API.
   using StartAuthSessionCallback =
@@ -197,18 +179,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   virtual void CheckKey(const ::user_data_auth::CheckKeyRequest& request,
                         CheckKeyCallback callback) = 0;
 
-  // Key-based API, still used by PIN codepath.
-  // TODO(b/260718534): Remove next group as part of UserAuthFactors cleanup.
-  // Get key metadata for user's vault.
-  virtual void GetKeyData(const ::user_data_auth::GetKeyDataRequest& request,
-                          GetKeyDataCallback callback) = 0;
-  // Add a key to user's vault.
-  virtual void AddKey(const ::user_data_auth::AddKeyRequest& request,
-                      AddKeyCallback callback) = 0;
-  // Remove a key from user's vault.
-  virtual void RemoveKey(const ::user_data_auth::RemoveKeyRequest& request,
-                         RemoveKeyCallback callback) = 0;
-
   // Starts a fingerprint auth session.
   virtual void StartFingerprintAuthSession(
       const ::user_data_auth::StartFingerprintAuthSessionRequest& request,
@@ -244,23 +214,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
   virtual void StartAuthSession(
       const ::user_data_auth::StartAuthSessionRequest& request,
       StartAuthSessionCallback callback) = 0;
-
-  // Key-based API for AuthSessions.
-  // TODO(b/260718534): Remove next group as part of UserAuthFactors cleanup.
-  // Attempts to authenticate with the given auth session.
-  virtual void AuthenticateAuthSession(
-      const ::user_data_auth::AuthenticateAuthSessionRequest& request,
-      AuthenticateAuthSessionCallback callback) = 0;
-  // Attempts to add credentials to the vault identified/authorized by auth
-  // session.
-  virtual void AddCredentials(
-      const ::user_data_auth::AddCredentialsRequest& request,
-      AddCredentialsCallback callback) = 0;
-  // Attempts to update credentials in the vault identified/authorized by auth
-  // session.
-  virtual void UpdateCredential(
-      const ::user_data_auth::UpdateCredentialRequest& request,
-      UpdateCredentialCallback callback) = 0;
 
   // This request is intended to happen when a user wants
   // to login to ChromeOS as a guest.
@@ -371,11 +324,6 @@ class COMPONENT_EXPORT(USERDATAAUTH_CLIENT) UserDataAuthClient {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::UserDataAuthClient;
-}
 
 namespace base {
 

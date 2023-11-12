@@ -5,10 +5,10 @@
 #include "chrome/browser/web_applications/locks/web_app_lock_manager.h"
 #include <memory>
 
-#include "base/bind.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
+#include "base/location.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
@@ -100,6 +100,26 @@ GetLockRequestsForLock(const LockDescription& lock) {
   return requests;
 }
 
+#if DCHECK_IS_ON()
+void LogLockRequest(
+    const LockDescription& description,
+    const base::Location& location,
+    const std::vector<content::PartitionedLockManager::PartitionedLockRequest>&
+        requests,
+    const content::PartitionedLockManager& lock_manager) {
+  DVLOG(1) << "Requesting or upgrading to lock " << description
+           << " for location " << location.ToString();
+  std::vector<base::Location> locations =
+      lock_manager.GetHeldAndQueuedLockLocations(requests);
+  if (!locations.empty()) {
+    DVLOG(1) << "Lock currently held (or queued to be held) by:";
+    for (const auto& held_location : locations) {
+      DVLOG(1) << " " << held_location.ToString();
+    }
+  }
+}
+#endif
+
 }  // namespace
 
 WebAppLockManager::WebAppLockManager(WebAppProvider& provider)
@@ -113,20 +133,25 @@ bool WebAppLockManager::IsSharedWebContentsLockFree() {
 
 void WebAppLockManager::AcquireLock(
     base::WeakPtr<content::PartitionedLockHolder> holder,
-    LockDescription& lock_description,
-    base::OnceClosure on_lock_acquired) {
+    const LockDescription& lock_description,
+    base::OnceClosure on_lock_acquired,
+    const base::Location& location) {
   std::vector<content::PartitionedLockManager::PartitionedLockRequest>
       requests = GetLockRequestsForLock(lock_description);
   content::PartitionedLockManager::AcquireOptions options;
   options.ensure_async = true;
+#if DCHECK_IS_ON()
+  LogLockRequest(lock_description, location, requests, lock_manager_);
+#endif
   lock_manager_.AcquireLocks(std::move(requests), holder,
-                             std::move(on_lock_acquired), options);
+                             std::move(on_lock_acquired), options, location);
 }
 
 template <>
 void WebAppLockManager::AcquireLock(
-    LockDescription& lock_description,
-    base::OnceCallback<void(std::unique_ptr<NoopLock>)> on_lock_acquired) {
+    const LockDescription& lock_description,
+    base::OnceCallback<void(std::unique_ptr<NoopLock>)> on_lock_acquired,
+    const base::Location& location) {
   CHECK(lock_description.type() == LockDescription::Type::kNoOp);
 
   auto lock = std::make_unique<NoopLock>(
@@ -134,14 +159,16 @@ void WebAppLockManager::AcquireLock(
   base::WeakPtr<content::PartitionedLockHolder> holder =
       lock->holder_->AsWeakPtr();
   AcquireLock(holder, lock_description,
-              base::BindOnce(std::move(on_lock_acquired), std::move(lock)));
+              base::BindOnce(std::move(on_lock_acquired), std::move(lock)),
+              location);
 }
 
 template <>
 void WebAppLockManager::AcquireLock(
-    LockDescription& lock_description,
+    const LockDescription& lock_description,
     base::OnceCallback<void(std::unique_ptr<SharedWebContentsLock>)>
-        on_lock_acquired) {
+        on_lock_acquired,
+    const base::Location& location) {
   CHECK(lock_description.type() ==
         LockDescription::Type::kBackgroundWebContents);
 
@@ -152,18 +179,20 @@ void WebAppLockManager::AcquireLock(
   base::WeakPtr<content::PartitionedLockHolder> holder =
       lock->holder_->AsWeakPtr();
   AcquireLock(holder, lock_description,
-              base::BindOnce(std::move(on_lock_acquired), std::move(lock)));
+              base::BindOnce(std::move(on_lock_acquired), std::move(lock)),
+              location);
 }
 
 template <>
 void WebAppLockManager::AcquireLock(
-    LockDescription& lock_description,
-    base::OnceCallback<void(std::unique_ptr<AppLock>)> on_lock_acquired) {
+    const LockDescription& lock_description,
+    base::OnceCallback<void(std::unique_ptr<AppLock>)> on_lock_acquired,
+    const base::Location& location) {
   CHECK(lock_description.type() == LockDescription::Type::kApp);
 
   auto lock = std::make_unique<AppLock>(
       std::make_unique<content::PartitionedLockHolder>(),
-      provider_->registrar_unsafe(), provider_->sync_bridge(),
+      provider_->registrar_unsafe(), provider_->sync_bridge_unsafe(),
       provider_->install_finalizer(), provider_->os_integration_manager(),
       provider_->install_manager(), provider_->icon_manager(),
       provider_->translation_manager(), provider_->ui_manager());
@@ -171,20 +200,22 @@ void WebAppLockManager::AcquireLock(
   base::WeakPtr<content::PartitionedLockHolder> holder =
       lock->holder_->AsWeakPtr();
   AcquireLock(holder, lock_description,
-              base::BindOnce(std::move(on_lock_acquired), std::move(lock)));
+              base::BindOnce(std::move(on_lock_acquired), std::move(lock)),
+              location);
 }
 
 template <>
 void WebAppLockManager::AcquireLock(
-    LockDescription& lock_description,
+    const LockDescription& lock_description,
     base::OnceCallback<void(std::unique_ptr<SharedWebContentsWithAppLock>)>
-        on_lock_acquired) {
+        on_lock_acquired,
+    const base::Location& location) {
   CHECK(lock_description.type() == LockDescription::Type::kAppAndWebContents);
 
   auto lock = std::make_unique<SharedWebContentsWithAppLock>(
       std::make_unique<content::PartitionedLockHolder>(),
       *provider_->command_manager().EnsureWebContentsCreated(PassKey()),
-      provider_->registrar_unsafe(), provider_->sync_bridge(),
+      provider_->registrar_unsafe(), provider_->sync_bridge_unsafe(),
       provider_->install_finalizer(), provider_->os_integration_manager(),
       provider_->install_manager(), provider_->icon_manager(),
       provider_->translation_manager(), provider_->ui_manager());
@@ -192,26 +223,28 @@ void WebAppLockManager::AcquireLock(
   base::WeakPtr<content::PartitionedLockHolder> holder =
       lock->holder_->AsWeakPtr();
   AcquireLock(holder, lock_description,
-              base::BindOnce(std::move(on_lock_acquired), std::move(lock)));
+              base::BindOnce(std::move(on_lock_acquired), std::move(lock)),
+              location);
 }
 
 template <>
 void WebAppLockManager::AcquireLock(
-    LockDescription& lock_description,
-    base::OnceCallback<void(std::unique_ptr<FullSystemLock>)>
-        on_lock_acquired) {
+    const LockDescription& lock_description,
+    base::OnceCallback<void(std::unique_ptr<FullSystemLock>)> on_lock_acquired,
+    const base::Location& location) {
   CHECK(lock_description.type() == LockDescription::Type::kFullSystem);
 
   auto lock = std::make_unique<FullSystemLock>(
       std::make_unique<content::PartitionedLockHolder>(),
-      provider_->registrar_unsafe(), provider_->sync_bridge(),
+      provider_->registrar_unsafe(), provider_->sync_bridge_unsafe(),
       provider_->install_finalizer(), provider_->os_integration_manager(),
       provider_->install_manager(), provider_->icon_manager(),
       provider_->translation_manager(), provider_->ui_manager());
   base::WeakPtr<content::PartitionedLockHolder> holder =
       lock->holder_->AsWeakPtr();
   AcquireLock(holder, lock_description,
-              base::BindOnce(std::move(on_lock_acquired), std::move(lock)));
+              base::BindOnce(std::move(on_lock_acquired), std::move(lock)),
+              location);
 }
 
 std::unique_ptr<SharedWebContentsWithAppLockDescription>
@@ -219,14 +252,15 @@ WebAppLockManager::UpgradeAndAcquireLock(
     std::unique_ptr<SharedWebContentsLock> lock,
     const base::flat_set<AppId>& app_ids,
     base::OnceCallback<void(std::unique_ptr<SharedWebContentsWithAppLock>)>
-        on_lock_acquired) {
+        on_lock_acquired,
+    const base::Location& location) {
   std::unique_ptr<SharedWebContentsWithAppLockDescription>
       result_lock_description =
           std::make_unique<SharedWebContentsWithAppLockDescription>(app_ids);
   auto result_lock = std::make_unique<SharedWebContentsWithAppLock>(
       std::move(lock->holder_),
       *provider_->command_manager().EnsureWebContentsCreated(PassKey()),
-      provider_->registrar_unsafe(), provider_->sync_bridge(),
+      provider_->registrar_unsafe(), provider_->sync_bridge_unsafe(),
       provider_->install_finalizer(), provider_->os_integration_manager(),
       provider_->install_manager(), provider_->icon_manager(),
       provider_->translation_manager(), provider_->ui_manager());
@@ -235,10 +269,14 @@ WebAppLockManager::UpgradeAndAcquireLock(
 
   content::PartitionedLockManager::AcquireOptions options;
   options.ensure_async = true;
+#if DCHECK_IS_ON()
+  LogLockRequest(*result_lock_description, location, GetAppIdLocks(app_ids),
+                 lock_manager_);
+#endif
   lock_manager_.AcquireLocks(
       GetAppIdLocks(app_ids), holder,
       base::BindOnce(std::move(on_lock_acquired), std::move(result_lock)),
-      options);
+      options, location);
 
   return result_lock_description;
 }
@@ -246,13 +284,14 @@ WebAppLockManager::UpgradeAndAcquireLock(
 std::unique_ptr<AppLockDescription> WebAppLockManager::UpgradeAndAcquireLock(
     std::unique_ptr<NoopLock> lock,
     const base::flat_set<AppId>& app_ids,
-    base::OnceCallback<void(std::unique_ptr<AppLock>)> on_lock_acquired) {
+    base::OnceCallback<void(std::unique_ptr<AppLock>)> on_lock_acquired,
+    const base::Location& location) {
   std::unique_ptr<AppLockDescription> result_lock_description =
       std::make_unique<AppLockDescription>(app_ids);
 
   auto result_lock = std::make_unique<AppLock>(
       std::move(lock->holder_), provider_->registrar_unsafe(),
-      provider_->sync_bridge(), provider_->install_finalizer(),
+      provider_->sync_bridge_unsafe(), provider_->install_finalizer(),
       provider_->os_integration_manager(), provider_->install_manager(),
       provider_->icon_manager(), provider_->translation_manager(),
       provider_->ui_manager());
@@ -265,8 +304,13 @@ std::unique_ptr<AppLockDescription> WebAppLockManager::UpgradeAndAcquireLock(
       base::IgnoreResult(&base::TaskRunner::PostTask),
       base::SequencedTaskRunner::GetCurrentDefault(), FROM_HERE,
       base::BindOnce(std::move(on_lock_acquired), std::move(result_lock)));
-  lock_manager_.AcquireLocks(GetAppIdLocks(app_ids), holder,
-                             std::move(posted_callback));
+#if DCHECK_IS_ON()
+  LogLockRequest(*result_lock_description, location, GetAppIdLocks(app_ids),
+                 lock_manager_);
+#endif
+  lock_manager_.AcquireLocks(
+      GetAppIdLocks(app_ids), holder, std::move(posted_callback),
+      content::PartitionedLockManager::AcquireOptions(), location);
   return result_lock_description;
 }
 

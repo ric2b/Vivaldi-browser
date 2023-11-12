@@ -10,9 +10,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -148,9 +148,7 @@ class DownloadFeedbackServiceTest : public testing::Test {
     base::FilePath upload_file_path(temp_dir_.GetPath().AppendASCII(
         "test file " + base::NumberToString(n)));
     const std::string upload_file_data = "data";
-    int wrote = base::WriteFile(upload_file_path, upload_file_data.data(),
-                                upload_file_data.size());
-    EXPECT_EQ(static_cast<int>(upload_file_data.size()), wrote);
+    EXPECT_TRUE(base::WriteFile(upload_file_path, upload_file_data));
     return upload_file_path;
   }
 

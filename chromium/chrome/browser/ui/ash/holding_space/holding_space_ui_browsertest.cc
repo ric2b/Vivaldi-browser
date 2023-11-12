@@ -22,30 +22,30 @@
 #include "ash/public/cpp/holding_space/mock_holding_space_model_observer.h"
 #include "ash/style/dark_light_mode_controller_impl.h"
 #include "ash/test/view_drawn_waiter.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_locale.h"
 #include "build/build_config.h"
-#include "chrome/browser/ash/app_list/search/files/file_suggest_keyed_service.h"
-#include "chrome/browser/ash/app_list/search/files/file_suggest_keyed_service_factory.h"
-#include "chrome/browser/ash/app_list/search/files/local_file_suggestion_provider.h"
 #include "chrome/browser/ash/crosapi/crosapi_ash.h"
 #include "chrome/browser/ash/crosapi/crosapi_manager.h"
 #include "chrome/browser/ash/file_manager/file_tasks_observer.h"
+#include "chrome/browser/ash/file_suggest/file_suggest_keyed_service.h"
+#include "chrome/browser/ash/file_suggest/file_suggest_keyed_service_factory.h"
+#include "chrome/browser/ash/file_suggest/local_file_suggestion_provider.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_core_service.h"
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_browsertest_base.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_downloads_delegate.h"
 #include "chrome/browser/ui/ash/holding_space/holding_space_keyed_service_factory.h"
@@ -53,6 +53,7 @@
 #include "chrome/browser/ui/ash/holding_space/holding_space_util.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "components/download/public/common/mock_download_item.h"
+#include "components/user_manager/user.h"
 #include "content/public/browser/download_item_utils.h"
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/test/browser_test.h"
@@ -1815,11 +1816,6 @@ class HoldingSpaceUiInProgressDownloadsBrowserTestBase
     ON_CALL(*ash_download_item, GetOpenWhenComplete)
         .WillByDefault(testing::ReturnPointee(open_when_complete.get()));
 
-    // Mock `download::DownloadItem::GetRerouteInfo()`.
-    ON_CALL(*ash_download_item, GetRerouteInfo)
-        .WillByDefault(
-            testing::ReturnRefOfCopy(download::DownloadItemRerouteInfo()));
-
     // Mock `download::DownloadItem::GetReceivedBytes()`.
     ON_CALL(*ash_download_item, GetReceivedBytes)
         .WillByDefault(testing::Return(received_bytes));
@@ -2933,9 +2929,24 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, AddScreenshot) {
   EXPECT_EQ(1u, test_api().GetScreenCaptureViews().size());
 }
 
+// Base class for tests of holding space's integration with the capture mode
+// screen recording feature, parameterized by the type of recording.
+class HoldingSpaceScreenRecordingUiBrowserTest
+    : public HoldingSpaceUiBrowserTest,
+      public testing::WithParamInterface<RecordingType> {
+ public:
+  RecordingType recording_type() const { return GetParam(); }
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         HoldingSpaceScreenRecordingUiBrowserTest,
+                         testing::Values(RecordingType::kGif,
+                                         RecordingType::kWebM));
+
 // Verifies that taking a screen recording adds a screen recording holding space
-// item.
-IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, AddScreenRecording) {
+// item. The type of holding space item depends on the type of screen recording.
+IN_PROC_BROWSER_TEST_P(HoldingSpaceScreenRecordingUiBrowserTest,
+                       AddScreenRecording) {
   // Verify that no screen recordings exist in holding space UI.
   test_api().Show();
   ASSERT_TRUE(test_api().IsShowing());
@@ -2944,6 +2955,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, AddScreenRecording) {
   test_api().Close();
   ASSERT_FALSE(test_api().IsShowing());
   ash::CaptureModeTestApi capture_mode_test_api;
+  capture_mode_test_api.SetRecordingType(recording_type());
   capture_mode_test_api.StartForFullscreen(/*for_video=*/true);
   capture_mode_test_api.PerformCapture();
   // Record a 100 ms long video.
@@ -2964,7 +2976,10 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, AddScreenRecording) {
   EXPECT_CALL(mock, OnHoldingSpaceItemsAdded)
       .WillOnce([&](const std::vector<const HoldingSpaceItem*>& items) {
         ASSERT_EQ(items.size(), 1u);
-        ASSERT_EQ(items[0]->type(), HoldingSpaceItem::Type::kScreenRecording);
+        ASSERT_EQ(items[0]->type(),
+                  recording_type() == RecordingType::kGif
+                      ? HoldingSpaceItem::Type::kScreenRecordingGif
+                      : HoldingSpaceItem::Type::kScreenRecording);
         wait_for_item.Quit();
       });
   wait_for_item.Run();
@@ -3014,7 +3029,7 @@ class HoldingSpaceSuggestionUiBrowserTest : public HoldingSpaceUiBrowserTest {
       open_events.push_back(std::move(e));
     }
 
-    app_list::FileSuggestKeyedServiceFactory::GetInstance()
+    FileSuggestKeyedServiceFactory::GetInstance()
         ->GetService(GetProfile())
         ->local_file_suggestion_provider_for_test()
         ->OnFilesOpened(open_events);

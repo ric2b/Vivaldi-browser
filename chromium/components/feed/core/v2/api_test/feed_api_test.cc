@@ -14,10 +14,10 @@
 #include "components/feed/core/v2/types.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -166,8 +166,9 @@ void TestUnreadContentObserver::HasUnreadContentChanged(
 }
 
 TestSurfaceBase::TestSurfaceBase(const StreamType& stream_type,
-                                 FeedStream* stream)
-    : FeedStreamSurface(stream_type) {
+                                 FeedStream* stream,
+                                 SingleWebFeedEntryPoint entry_point)
+    : FeedStreamSurface(stream_type, entry_point) {
   if (stream)
     Attach(stream);
 }
@@ -334,10 +335,14 @@ TestForYouSurface::TestForYouSurface(FeedStream* stream)
     : TestSurfaceBase(StreamType(StreamKind::kForYou), stream) {}
 TestWebFeedSurface::TestWebFeedSurface(FeedStream* stream)
     : TestSurfaceBase(StreamType(StreamKind::kFollowing), stream) {}
-TestSingleWebFeedSurface::TestSingleWebFeedSurface(FeedStream* stream,
-                                                   std::string web_feed_id)
-    : TestSurfaceBase(StreamType(StreamKind::kSingleWebFeed, web_feed_id),
-                      stream) {}
+TestSingleWebFeedSurface::TestSingleWebFeedSurface(
+    FeedStream* stream,
+    std::string web_feed_id,
+    SingleWebFeedEntryPoint entry_point)
+    : TestSurfaceBase(
+          StreamType(StreamKind::kSingleWebFeed, web_feed_id, entry_point),
+          stream,
+          entry_point) {}
 
 TestReliabilityLoggingBridge::TestReliabilityLoggingBridge() = default;
 TestReliabilityLoggingBridge::~TestReliabilityLoggingBridge() = default;
@@ -538,7 +543,8 @@ void TestFeedNetwork::SendDiscoverApiRequest(
       request_type == SingleWebFeedListContentsDiscoverApi::kRequestType ||
       request_type == QueryInteractiveFeedDiscoverApi::kRequestType ||
       request_type == QueryBackgroundFeedDiscoverApi::kRequestType ||
-      request_type == QueryNextPageDiscoverApi::kRequestType;
+      request_type == QueryNextPageDiscoverApi::kRequestType ||
+      request_type == QueryWebFeedDiscoverApi::kRequestType;
 
   if (is_feed_query_request) {
     feedwire::Request request_proto;
@@ -834,10 +840,6 @@ TestMetricsReporter::StreamMetrics& TestMetricsReporter::Stream(
   return for_you;
 }
 
-void TestMetricsReporter::OnClearAll(base::TimeDelta since_last_clear) {
-  time_since_last_clear = since_last_clear;
-  MetricsReporter::OnClearAll(time_since_last_clear.value());
-}
 void TestMetricsReporter::OnUploadActions(UploadActionsStatus status) {
   upload_action_status = status;
   MetricsReporter::OnUploadActions(status);
@@ -897,6 +899,9 @@ bool FeedApiTest::IsOffline() {
 }
 AccountInfo FeedApiTest::GetAccountInfo() {
   return account_info_;
+}
+bool FeedApiTest::IsSyncOn() {
+  return is_sync_on_;
 }
 void FeedApiTest::RegisterFollowingFeedFollowCountFieldTrial(
     size_t follow_count) {

@@ -14,8 +14,8 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -118,7 +118,9 @@ void CreateJavaAXSnapshot(JNIEnv* env,
   // Bounding box.
   ViewStructureBuilder_setViewStructureNodeBounds(
       env, j_view_structure_builder, j_view_structure_node, is_root,
-      node->rect.x(), node->rect.y(), node->rect.width(), node->rect.height());
+      node->rect.x(), node->rect.y(), node->rect.width(), node->rect.height(),
+      node->unclipped_rect.x(), node->unclipped_rect.y(),
+      node->unclipped_rect.width(), node->unclipped_rect.height());
 
   // HTML/CSS attributes.
   ScopedJavaLocalRef<jstring> j_html_tag =
@@ -256,6 +258,16 @@ void WebContentsAndroid::AddDestructionObserver(DestructionObserver* observer) {
 void WebContentsAndroid::RemoveDestructionObserver(
     DestructionObserver* observer) {
   destruction_observers_.RemoveObserver(observer);
+}
+
+// static
+void WebContentsAndroid::ReportDanglingPtrToBrowserContext(
+    JNIEnv* env,
+    WebContents* web_contents) {
+  if (base::android::ScopedJavaLocalRef<jthrowable> java_creator =
+          web_contents->GetJavaCreatorLocation()) {
+    Java_WebContentsImpl_reportDanglingPtrToBrowserContext(env, java_creator);
+  }
 }
 
 base::android::ScopedJavaLocalRef<jobject>

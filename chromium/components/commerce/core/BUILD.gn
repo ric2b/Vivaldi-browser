@@ -202,6 +202,7 @@ static_library("shopping_service") {
     "//components/power_bookmarks/core:proto",
     "//components/prefs:prefs",
     "//components/resources:components_resources_grit",
+    "//components/search:search",
     "//components/session_proto_db:core",
     "//components/signin/public/identity_manager:identity_manager",
     "//services/network/public/cpp:cpp",
@@ -335,5 +336,28 @@ source_set("account_checker_test_support") {
     ":account_checker",
     "//base",
     "//services/network/public/cpp:cpp",
+    "//testing/gmock",
+  ]
+}
+
+source_set("account_checker_unittests") {
+  testonly = true
+  sources = [ "account_checker_unittest.cc" ]
+  deps = [
+    ":account_checker",
+    ":feature_list",
+    ":pref_names",
+    "//base",
+    "//base/test:test_support",
+    "//components/endpoint_fetcher:test_support",
+    "//components/prefs:test_support",
+    "//components/signin/public/identity_manager:test_support",
+    "//net/traffic_annotation:test_support",
+    "//services/data_decoder/public/cpp:test_support",
+    "//services/network:test_support",
+    "//services/network/public/cpp:cpp",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//url:url",
   ]
 }

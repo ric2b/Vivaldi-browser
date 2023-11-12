@@ -12,10 +12,10 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/contains.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -1845,23 +1845,19 @@ AXVirtualView* TableView::GetVirtualAccessibilityBodyRow(size_t row) {
   DCHECK_LT(row, GetRowCount());
   if (header_)
     ++row;
-  if (row < GetViewAccessibility().virtual_children().size()) {
-    const auto& ax_row = GetViewAccessibility().virtual_children()[row];
-    DCHECK(ax_row);
-    DCHECK_EQ(ax_row->GetData().role, ax::mojom::Role::kRow);
-    return ax_row.get();
-  }
-  NOTREACHED() << "|row| not found. Did you forget to call "
-                  "RebuildVirtualAccessibilityChildren()?";
-  return nullptr;
+  CHECK_LT(row, GetViewAccessibility().virtual_children().size())
+      << "|row| not found. Did you forget to call "
+         "RebuildVirtualAccessibilityChildren()?";
+
+  const auto& ax_row = GetViewAccessibility().virtual_children()[row];
+  DCHECK(ax_row);
+  DCHECK_EQ(ax_row->GetData().role, ax::mojom::Role::kRow);
+  return ax_row.get();
 }
 
 AXVirtualView* TableView::GetVirtualAccessibilityHeaderRow() {
-  if (!header_) {
-    NOTREACHED() << "|row| not found. Did you forget to call "
+  CHECK(header_) << "|row| not found. Did you forget to call "
                     "RebuildVirtualAccessibilityChildren()?";
-    return nullptr;
-  }
   // The header row is always the first virtual child.
   const auto& ax_row = GetViewAccessibility().virtual_children()[size_t{0}];
   DCHECK(ax_row);

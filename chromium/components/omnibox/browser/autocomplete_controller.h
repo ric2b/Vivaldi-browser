@@ -164,9 +164,9 @@ class AutocompleteController : public AutocompleteProviderListener,
   void OnProviderUpdate(bool updated_matches,
                         const AutocompleteProvider* provider) override;
 
-  // Called when an omnibox event log entry is generated.
-  // Populates |log.provider_info| with diagnostic information about the status
-  // of various providers and |log.feature_triggered_in_session| with triggered
+  // Called when an omnibox event log entry is generated. Populates
+  // `log.provider_info` with diagnostic information about the status of various
+  // providers and `log.features_triggered[_in_session]` with triggered
   // features.
   void AddProviderAndTriggeringLogs(OmniboxLog* logs) const;
 
@@ -240,9 +240,8 @@ class AutocompleteController : public AutocompleteProviderListener,
                            SupportedProvider_OngoingNonPrefetch);
   FRIEND_TEST_ALL_PREFIXES(AutocompleteProviderPrefetchTest,
                            UnsupportedProvider_Prefetch);
-  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
-                           EmitAccessibilityEvents);
-  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest, EmitAccessibilityEvents);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest,
                            EmitAccessibilityEventsOnButtonFocusHint);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewTest, DoesNotUpdateAutocompleteOnBlur);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag);
@@ -264,8 +263,15 @@ class AutocompleteController : public AutocompleteProviderListener,
                            PopupStepSelectionWithActions);
   FRIEND_TEST_ALL_PREFIXES(OmniboxEditModelPopupTest,
                            PopupInlineAutocompleteAndTemporaryText);
-  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupContentsViewTest,
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest,
                            EmitSelectedChildrenChangedAccessibilityEvent);
+
+  // Helpers called by the constructor. These initialize the specified providers
+  // and add them `providers_`. Split into 2 methods to avoid accidentally
+  // adding providers in the wrong order (async providers should be added first
+  // so that they run first).
+  void InitializeAsyncProviders(int provider_types);
+  void InitializeSyncProviders(int provider_types);
 
   // Updates |result_| to reflect the current provider state and fires
   // notifications.  If |regenerate_result| then we clear the result
@@ -425,8 +431,8 @@ class AutocompleteController : public AutocompleteProviderListener,
   // quick succession. The last call, i.e. when all providers complete and
   // `done_` is set true; and the 1st call, i.e. the sync update, are immune to
   // this restriction. Calls not succeeding a result update (i.e. a call from
-  // closing the popup) bypass the delay as well./ Only applies when the
-  // `kAutocompleteStability` is enabled with the corresponding params set.
+  // closing the popup) bypass the delay as well. Only applies when the
+  // `kUpdateResultDebounce` is enabled.
   AutocompleteProviderDebouncer notify_changed_debouncer_;
 
   // Tracks if any delayed `DelayedNotifyChanged()` call since the last

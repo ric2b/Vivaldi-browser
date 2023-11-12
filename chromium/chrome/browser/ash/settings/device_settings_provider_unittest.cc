@@ -9,7 +9,7 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_path_override.h"
@@ -107,10 +107,12 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     proto->set_report_print_jobs(enable_reporting);
     proto->set_report_login_logout(enable_reporting);
     proto->set_report_crd_sessions(enable_reporting);
+    proto->set_device_activity_heartbeat_enabled(enable_reporting);
     proto->set_report_network_telemetry_collection_rate_ms(frequency);
     proto->set_report_network_telemetry_event_checking_rate_ms(frequency);
     proto->set_device_status_frequency(frequency);
     proto->set_report_device_audio_status_checking_rate_ms(frequency);
+    proto->set_device_activity_heartbeat_collection_rate_ms(frequency);
     BuildAndInstallDevicePolicy();
   }
 
@@ -171,29 +173,18 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
   void VerifyReportingSettings(bool expected_enable_state,
                                int expected_frequency) {
     const char* reporting_settings[] = {
-        kReportDeviceVersionInfo,
-        kReportDeviceActivityTimes,
-        kReportDeviceAudioStatus,
-        kReportDeviceBoardStatus,
+        kReportDeviceVersionInfo, kReportDeviceActivityTimes,
+        kReportDeviceAudioStatus, kReportDeviceBoardStatus,
         kReportDeviceBootMode,
         // Device location reporting is not currently supported.
         // kReportDeviceLocation,
-        kReportDeviceNetworkConfiguration,
-        kReportDeviceNetworkStatus,
-        kReportDeviceUsers,
-        kReportDevicePeripherals,
-        kReportDevicePowerStatus,
-        kReportDeviceStorageStatus,
-        kReportDeviceSessionStatus,
-        kReportDeviceSecurityStatus,
-        kReportDeviceGraphicsStatus,
-        kReportDeviceCrashReportInfo,
-        kReportDeviceAppInfo,
-        kReportDevicePrintJobs,
-        kReportDeviceLoginLogout,
-        kReportOsUpdateStatus,
-        kReportRunningKioskApp,
-    };
+        kReportDeviceNetworkConfiguration, kReportDeviceNetworkStatus,
+        kReportDeviceUsers, kReportDevicePeripherals, kReportDevicePowerStatus,
+        kReportDeviceStorageStatus, kReportDeviceSessionStatus,
+        kReportDeviceSecurityStatus, kReportDeviceGraphicsStatus,
+        kReportDeviceCrashReportInfo, kReportDeviceAppInfo,
+        kReportDevicePrintJobs, kReportDeviceLoginLogout, kReportOsUpdateStatus,
+        kReportRunningKioskApp, kDeviceActivityHeartbeatEnabled};
 
     const base::Value expected_enable_value(expected_enable_state);
     for (auto* setting : reporting_settings) {
@@ -202,11 +193,10 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     }
 
     const char* const reporting_frequency_settings[] = {
-        kReportUploadFrequency,
-        kReportDeviceNetworkTelemetryCollectionRateMs,
+        kReportUploadFrequency, kReportDeviceNetworkTelemetryCollectionRateMs,
         kReportDeviceNetworkTelemetryEventCheckingRateMs,
         kReportDeviceAudioStatusCheckingRateMs,
-    };
+        kDeviceActivityHeartbeatCollectionRateMs};
     const base::Value expected_frequency_value(expected_frequency);
     for (auto* frequency_setting : reporting_frequency_settings) {
       EXPECT_EQ(expected_frequency_value, *provider_->Get(frequency_setting))
@@ -1170,20 +1160,6 @@ TEST_F(DeviceSettingsProviderTest, FeatureFlags) {
   EXPECT_EQ(expected_feature_flags, provider_->Get(kFeatureFlags)->GetList());
 }
 
-TEST_F(DeviceSettingsProviderTest, DecodeBorealisAllowed) {
-  device_policy_->payload().mutable_device_borealis_allowed()->set_allowed(
-      true);
-  BuildAndInstallDevicePolicy();
-  EXPECT_EQ(base::Value(true), *provider_->Get(kBorealisAllowedForDevice));
-}
-
-TEST_F(DeviceSettingsProviderTest, DecodeBorealisDisallowed) {
-  device_policy_->payload().mutable_device_borealis_allowed()->set_allowed(
-      false);
-  BuildAndInstallDevicePolicy();
-  EXPECT_EQ(base::Value(false), *provider_->Get(kBorealisAllowedForDevice));
-}
-
 TEST_F(DeviceSettingsProviderTest, DeviceAllowedBluetoothServices) {
   em::DeviceAllowedBluetoothServicesProto* proto =
       device_policy_->payload().mutable_device_allowed_bluetooth_services();
@@ -1295,6 +1271,37 @@ TEST_F(DeviceSettingsProviderTest, DeviceEncryptedReportingPipelineDisabled) {
   BuildAndInstallDevicePolicy();
   EXPECT_EQ(base::Value(false),
             *provider_->Get(kDeviceEncryptedReportingPipelineEnabled));
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintingClientNameTemplateUnset) {
+  device_policy_->payload().clear_device_printing_client_name_template();
+  BuildAndInstallDevicePolicy();
+  EXPECT_FALSE(provider_->Get(kDevicePrintingClientNameTemplate));
+}
+
+TEST_F(DeviceSettingsProviderTest, DevicePrintingClientNameTemplate) {
+  device_policy_->payload()
+      .mutable_device_printing_client_name_template()
+      ->set_value("chromebook-${DEVICE_ASSET_ID}");
+  BuildAndInstallDevicePolicy();
+  EXPECT_EQ(base::Value("chromebook-${DEVICE_ASSET_ID}"),
+            *provider_->Get(kDevicePrintingClientNameTemplate));
+}
+
+TEST_F(DeviceSettingsProviderTest, DeviceSystemAecEnabled) {
+  device_policy_->payload()
+      .mutable_device_system_aec_enabled()
+      ->set_device_system_aec_enabled(true);
+  BuildAndInstallDevicePolicy();
+  EXPECT_EQ(base::Value(true), *provider_->Get(kDeviceSystemAecEnabled));
+}
+
+TEST_F(DeviceSettingsProviderTest, DeviceSystemAecDisabled) {
+  device_policy_->payload()
+      .mutable_device_system_aec_enabled()
+      ->set_device_system_aec_enabled(false);
+  BuildAndInstallDevicePolicy();
+  EXPECT_EQ(base::Value(false), *provider_->Get(kDeviceSystemAecEnabled));
 }
 
 }  // namespace ash

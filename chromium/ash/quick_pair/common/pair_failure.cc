@@ -94,6 +94,27 @@ std::ostream& operator<<(std::ostream& stream, PairFailure failure) {
       stream
           << "[Potential pairing device lost between GATT connection attempts]";
       break;
+    case PairFailure::kConfirmPasskeyTimeout:
+      stream << "[Timed out while waiting for confirm passkey event from "
+                "Bluetooth adapter]";
+      break;
+    case PairFailure::kFailureToDisconnectGattBetweenRetries:
+      stream << "[Failed to disconnect from GATT before retrying a failed GATT "
+                "connection]";
+      break;
+    case PairFailure::kBluetoothDeviceFailureCreatingGattConnection:
+      stream << "[Bluetooth platform layer has failed to create a GATT "
+                "connection. This is not a complete failure, and Fast Pair may "
+                "retry.]";
+      break;
+    case PairFailure::kDisconnectResponseTimeout:
+      stream << "[Timed out while waiting for a response after attempt to "
+                "disconnect]";
+      break;
+    case PairFailure::kFailedToConnectAfterPairing:
+      stream << "[Failed to connect to discovered device after pairing when "
+                "the device is known to the adapter.]";
+      break;
   }
 
   return stream;

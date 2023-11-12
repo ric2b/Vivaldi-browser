@@ -9,9 +9,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/ranges/algorithm.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_filter.h"
@@ -552,6 +553,13 @@ void FakeCentral::SetDiscoverable(bool discoverable,
                                   ErrorCallback error_callback) {
   NOTREACHED();
 }
+
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+base::TimeDelta FakeCentral::GetDiscoverableTimeout() const {
+  NOTREACHED();
+  return base::Microseconds(0);
+}
+#endif
 
 bool FakeCentral::IsDiscovering() const {
   NOTREACHED();

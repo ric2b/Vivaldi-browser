@@ -19,6 +19,7 @@
 #import "components/autofill/ios/form_util/form_handlers_java_script_feature.h"
 #import "components/dom_distiller/core/url_constants.h"
 #import "components/google/core/common/google_util.h"
+#import "components/language/ios/browser/language_detection_java_script_feature.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/ios/password_manager_java_script_feature.h"
 #import "components/strings/grit/components_strings.h"
@@ -32,6 +33,7 @@
 #import "ios/chrome/browser/link_to_text/link_to_text_java_script_feature.h"
 #import "ios/chrome/browser/ntp/browser_policy_new_tab_page_rewriter.h"
 #import "ios/chrome/browser/ntp/new_tab_page_tab_helper.h"
+#import "ios/chrome/browser/prefs/pref_names.h"
 #import "ios/chrome/browser/prerender/prerender_service.h"
 #import "ios/chrome/browser/prerender/prerender_service_factory.h"
 #import "ios/chrome/browser/reading_list/offline_page_tab_helper.h"
@@ -47,7 +49,6 @@
 #import "ios/chrome/browser/url/url_util.h"
 #import "ios/chrome/browser/web/browser_about_rewriter.h"
 #import "ios/chrome/browser/web/chrome_main_parts.h"
-#import "ios/chrome/browser/web/error_page_controller_bridge.h"
 #import "ios/chrome/browser/web/error_page_util.h"
 #import "ios/chrome/browser/web/features.h"
 #import "ios/chrome/browser/web/font_size/font_size_java_script_feature.h"
@@ -57,12 +58,15 @@
 #import "ios/chrome/browser/web/print/print_java_script_feature.h"
 #import "ios/chrome/browser/web/session_state/web_session_state_tab_helper.h"
 #import "ios/chrome/browser/web/web_performance_metrics/web_performance_metrics_java_script_feature.h"
+#import "ios/chrome/browser/web_selection/web_selection_java_script_feature.h"
+#import "ios/components/security_interstitials/https_only_mode/feature.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_blocking_page.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_container.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_controller_client.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_error.h"
 #import "ios/components/security_interstitials/https_only_mode/https_upgrade_service.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
+#import "ios/components/security_interstitials/ios_security_interstitial_java_script_feature.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_blocking_page.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_container.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_controller_client.h"
@@ -71,9 +75,11 @@
 #import "ios/components/security_interstitials/safe_browsing/safe_browsing_unsafe_resource_container.h"
 #import "ios/components/webui/web_ui_url_constants.h"
 #import "ios/net/protocol_handler_util.h"
+#import "ios/public/provider/chrome/browser/find_in_page/find_in_page_api.h"
 #import "ios/public/provider/chrome/browser/url_rewriters/url_rewriters_api.h"
 #import "ios/web/common/features.h"
 #import "ios/web/common/user_agent.h"
+#import "ios/web/public/find_in_page/crw_find_session.h"
 #import "ios/web/public/navigation/browser_url_rewriter.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
@@ -84,6 +90,8 @@
 #import "ui/base/resource/resource_bundle.h"
 #import "url/gurl.h"
 
+#import <UIKit/UIKit.h>
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -92,24 +100,6 @@ namespace {
 // The tag describing the product name with a placeholder for the version.
 const char kProductTagWithPlaceholder[] = "CriOS/%s";
 
-// Returns an autoreleased string containing the JavaScript loaded from a
-// bundled resource file with the given name (excluding extension).
-NSString* GetPageScript(NSString* script_file_name) {
-  DCHECK(script_file_name);
-  NSString* path =
-      [base::mac::FrameworkBundle() pathForResource:script_file_name
-                                             ofType:@"js"];
-  DCHECK(path) << "Script file not found: "
-               << base::SysNSStringToUTF8(script_file_name) << ".js";
-  NSError* error = nil;
-  NSString* content = [NSString stringWithContentsOfFile:path
-                                                encoding:NSUTF8StringEncoding
-                                                   error:&error];
-  DCHECK(!error) << "Error fetching script: "
-                 << base::SysNSStringToUTF8(error.description);
-  DCHECK(content);
-  return content;
-}
 // Returns the safe browsing error page HTML.
 NSString* GetSafeBrowsingErrorPageHTML(web::WebState* web_state,
                                        int64_t navigation_id) {
@@ -316,22 +306,22 @@ std::vector<web::JavaScriptFeature*> ChromeWebClient::GetJavaScriptFeatures(
   features.push_back(
       password_manager::PasswordManagerJavaScriptFeature::GetInstance());
   features.push_back(LinkToTextJavaScriptFeature::GetInstance());
+  if (base::FeatureList::IsEnabled(kIOSEditMenuPartialTranslate)) {
+    features.push_back(WebSelectionJavaScriptFeature::GetInstance());
+  }
 
   SearchEngineJavaScriptFeature::GetInstance()->SetDelegate(
       SearchEngineTabHelperFactory::GetInstance());
   features.push_back(SearchEngineJavaScriptFeature::GetInstance());
+  features.push_back(
+      security_interstitials::IOSSecurityInterstitialJavaScriptFeature::
+          GetInstance());
+  features.push_back(
+      language::LanguageDetectionJavaScriptFeature::GetInstance());
   features.push_back(translate::TranslateJavaScriptFeature::GetInstance());
   features.push_back(WebPerformanceMetricsJavaScriptFeature::GetInstance());
   features.push_back(FollowJavaScriptFeature::GetInstance());
   return features;
-}
-
-NSString* ChromeWebClient::GetDocumentStartScriptForMainFrame(
-    web::BrowserState* browser_state) const {
-  NSMutableArray* scripts = [NSMutableArray array];
-  [scripts addObject:GetPageScript(@"language_detection")];
-
-  return [scripts componentsJoinedByString:@";"];
 }
 
 void ChromeWebClient::PrepareErrorPage(
@@ -395,13 +385,6 @@ void ChromeWebClient::PrepareErrorPage(
   } else {
     std::move(error_html_callback)
         .Run(GetErrorPage(url, error, is_post, is_off_the_record));
-    ErrorPageControllerBridge* error_page_controller =
-        ErrorPageControllerBridge::FromWebState(web_state);
-    if (error_page_controller) {
-      // ErrorPageControllerBridge may not be created for web_state not attached
-      // to a tab.
-      error_page_controller->StartHandlingJavascriptCommands();
-    }
   }
 }
 
@@ -476,4 +459,35 @@ bool ChromeWebClient::IsPointingToSameDocument(const GURL& url1,
   GURL url_to_compare1 = GetOnlineUrl(url1);
   GURL url_to_compare2 = GetOnlineUrl(url2);
   return url_to_compare1 == url_to_compare2;
+}
+
+id<CRWFindSession> ChromeWebClient::CreateFindSessionForWebState(
+    web::WebState* web_state) const API_AVAILABLE(ios(16)) {
+  id<UITextSearching> searchable_object =
+      ios::provider::GetSearchableObjectForWebState(web_state);
+  UIFindSession* UIFindSession = [[UITextSearchingFindSession alloc]
+      initWithSearchableObject:searchable_object];
+  return [[CRWFindSession alloc] initWithUIFindSession:UIFindSession];
+}
+
+void ChromeWebClient::StartTextSearchInWebState(web::WebState* web_state) {
+  ios::provider::StartTextSearchInWebState(web_state);
+}
+
+void ChromeWebClient::StopTextSearchInWebState(web::WebState* web_state) {
+  ios::provider::StopTextSearchInWebState(web_state);
+}
+
+bool ChromeWebClient::IsMixedContentAutoupgradeEnabled(
+    web::BrowserState* browser_state) const {
+  ChromeBrowserState* chrome_browser_state =
+      ChromeBrowserState::FromBrowserState(browser_state);
+  if (!chrome_browser_state->GetPrefs()->GetBoolean(
+          prefs::kMixedContentAutoupgradeEnabled) &&
+      chrome_browser_state->GetPrefs()->IsManagedPreference(
+          prefs::kMixedContentAutoupgradeEnabled)) {
+    return false;
+  }
+  return base::FeatureList::IsEnabled(
+      security_interstitials::features::kMixedContentAutoupgrade);
 }

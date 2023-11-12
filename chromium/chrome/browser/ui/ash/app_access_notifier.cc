@@ -72,10 +72,6 @@ absl::optional<std::u16string> MapAppIdToShortName(
   return absl::nullopt;
 }
 
-void LaunchApp(const std::string& app_id) {
-  // TODO(crbug/1351250): Finish this function.
-}
-
 // A helper to send `ash::CameraPrivacySwitchController` a notification when an
 // application starts or stops using the camera. `application_added` is true
 // when the application starts using the camera and false when the application
@@ -184,17 +180,16 @@ void AppAccessNotifier::OnCapabilityAccessUpdate(
   }
 
   if (ash::features::IsPrivacyIndicatorsEnabled()) {
-    auto launch_app = base::BindRepeating(&LaunchApp, app_id);
+    // TODO(b/251686202): Finish Launch App functionality.
+    auto launch_app = absl::nullopt;
     auto launch_settings =
         base::BindRepeating(&AppAccessNotifier::LaunchAppSettings, app_id);
-    ash::ModifyPrivacyIndicatorsNotification(
-        app_id, GetAppShortNameFromAppId(app_id), is_camera_used,
-        is_microphone_used,
+
+    ash::UpdatePrivacyIndicators(
+        app_id, /*app_name=*/GetAppShortNameFromAppId(app_id), is_camera_used,
+        is_microphone_used, /*delegate=*/
         base::MakeRefCounted<ash::PrivacyIndicatorsNotificationDelegate>(
             launch_app, launch_settings));
-
-    ash::UpdatePrivacyIndicatorsView(app_id, is_camera_used,
-                                     is_microphone_used);
 
     auto* registry_cache = GetActiveUserAppRegistryCache();
     if (registry_cache) {

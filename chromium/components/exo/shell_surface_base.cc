@@ -59,6 +59,8 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/menu/menu_config.h"
+#include "ui/views/widget/tooltip_manager.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow_controller.h"
 #include "ui/wm/core/shadow_types.h"
@@ -359,10 +361,12 @@ ShellSurfaceBase::~ShellSurfaceBase() {
 void ShellSurfaceBase::Activate() {
   TRACE_EVENT0("exo", "ShellSurfaceBase::Activate");
 
-  if (pending_show_widget_)
+  if (!widget_ || pending_show_widget_) {
     initially_activated_ = true;
+    return;
+  }
 
-  if (!widget_ || widget_->IsActive())
+  if (widget_->IsActive())
     return;
 
   widget_->Activate();
@@ -371,10 +375,12 @@ void ShellSurfaceBase::Activate() {
 void ShellSurfaceBase::Deactivate() {
   TRACE_EVENT0("exo", "ShellSurfaceBase::Deactivate");
 
-  if (pending_show_widget_)
+  if (!widget_ || pending_show_widget_) {
     initially_activated_ = false;
+    return;
+  }
 
-  if (!widget_ || !widget_->IsActive())
+  if (!widget_->IsActive())
     return;
 
   widget_->Deactivate();
@@ -883,15 +889,15 @@ void ShellSurfaceBase::OnSurfaceCommit() {
   if (shadow_bounds_changed_)
     host_window()->AllocateLocalSurfaceId();
 
-  DCHECK(presentation_callbacks().empty());
   root_surface()->CommitSurfaceHierarchy(false);
 
   if (!OnPreWidgetCommit())
     return;
 
+  WillCommit();
+
   CommitWidget();
   OnPostWidgetCommit();
-  DidCommit();
   SubmitCompositorFrame();
 }
 
@@ -1344,6 +1350,15 @@ bool ShellSurfaceBase::AcceleratorPressed(const ui::Accelerator& accelerator) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// SurfaceTreeHost:
+void ShellSurfaceBase::SetRootSurface(Surface* root_surface) {
+  SurfaceTreeHost::SetRootSurface(root_surface);
+  if (widget_) {
+    SetShellRootSurface(widget_->GetNativeWindow(), root_surface);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // ShellSurfaceBase, protected:
 
 void ShellSurfaceBase::CreateShellSurfaceWidget(
@@ -1479,6 +1494,12 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   window->AddChild(host_window());
   window->SetEventTargetingPolicy(
       aura::EventTargetingPolicy::kTargetAndDescendants);
+  if (is_menu_) {
+    // Sets menu config id to kGroupintPropertyKey if the window is menu.
+    window->SetNativeWindowProperty(
+        views::TooltipManager::kGroupingPropertyKey,
+        reinterpret_cast<void*>(views::MenuConfig::kMenuControllerGroupingId));
+  }
   InstallCustomWindowTargeter();
 
   // Start tracking changes to window bounds and window state.

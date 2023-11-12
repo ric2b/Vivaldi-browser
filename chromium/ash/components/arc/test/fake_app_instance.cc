@@ -12,10 +12,10 @@
 #include <vector>
 
 #include "ash/components/arc/app/arc_playstore_search_request_state.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -268,12 +268,6 @@ arc::mojom::RawIconPngDataPtr FakeAppInstance::GetFakeIcon(
   return icon;
 }
 
-void FakeAppInstance::SetTaskInfo(int32_t task_id,
-                                  const std::string& package_name,
-                                  const std::string& activity) {
-  task_id_to_info_[task_id] = std::make_unique<Request>(package_name, activity);
-}
-
 void FakeAppInstance::SendRefreshPackageList(
     std::vector<mojom::ArcPackageInfoPtr> packages) {
   app_host_->OnPackageListRefreshed(std::move(packages));
@@ -316,14 +310,9 @@ void FakeAppInstance::UninstallPackage(const std::string& package_name) {
   app_host_->OnPackageRemoved(package_name);
 }
 
-void FakeAppInstance::GetTaskInfo(int32_t task_id,
-                                  GetTaskInfoCallback callback) {
-  TaskIdToInfo::const_iterator it = task_id_to_info_.find(task_id);
-  if (it == task_id_to_info_.end()) {
-    std::move(callback).Run(std::string(), std::string());
-    return;
-  }
-  std::move(callback).Run(it->second->package_name(), it->second->activity());
+void FakeAppInstance::GetTaskInfoDeprecated(
+    int32_t task_id, GetTaskInfoDeprecatedCallback callback) {
+  LOG(FATAL) << "GetTaskInfo is deprecated: b/265158447";
 }
 
 void FakeAppInstance::SetTaskActive(int32_t task_id) {}

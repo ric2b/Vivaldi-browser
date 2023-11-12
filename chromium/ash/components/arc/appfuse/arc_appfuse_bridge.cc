@@ -10,7 +10,7 @@
 
 #include "ash/components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/singleton.h"
 #include "chromeos/ash/components/dbus/arc/arc_appfuse_provider_client.h"
 #include "mojo/public/cpp/system/platform_handle.h"
@@ -102,6 +102,11 @@ void ArcAppfuseBridge::OpenFile(uint32_t uid,
   ash::ArcAppfuseProviderClient::Get()->OpenFile(
       uid, mount_id, file_id, flags,
       base::BindOnce(&RunWithScopedHandle, std::move(callback)));
+}
+
+// static
+void ArcAppfuseBridge::EnsureFactoryBuilt() {
+  ArcAppfuseBridgeFactory::GetInstance();
 }
 
 }  // namespace arc

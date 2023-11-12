@@ -12,6 +12,7 @@
 #include "base/containers/flat_map.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "content/browser/attribution_reporting/attribution_beacon_id.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/render_frame_host_receiver_set.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -27,6 +28,7 @@ class SuitableOrigin;
 namespace content {
 
 struct AttributionInputEvent;
+class RenderFrameHostImpl;
 class WebContents;
 
 #if BUILDFLAG(IS_ANDROID)
@@ -58,6 +60,16 @@ class CONTENT_EXPORT AttributionHost
   }
 #endif
 
+  // This should be called when the fenced frame reporting beacon was initiated
+  // for reportEvent or for an automatic beacon. It may be cached and sent
+  // later. This should be called before the navigation committed for a
+  // navigation beacon.
+  // This function should only be invoked if Attribution Reporting API is
+  // enabled on the page.
+  void NotifyFencedFrameReportingBeaconStarted(
+      BeaconId beacon_id,
+      RenderFrameHostImpl* initiator_frame_host);
+
  private:
   friend class AttributionHostTestPeer;
   friend class WebContentsUserData<AttributionHost>;
@@ -65,11 +77,10 @@ class CONTENT_EXPORT AttributionHost
   // blink::mojom::ConversionHost:
   void RegisterDataHost(
       mojo::PendingReceiver<blink::mojom::AttributionDataHost>,
-      blink::mojom::AttributionRegistrationType) override;
+      attribution_reporting::mojom::RegistrationType) override;
   void RegisterNavigationDataHost(
       mojo::PendingReceiver<blink::mojom::AttributionDataHost> data_host,
-      const blink::AttributionSrcToken& attribution_src_token,
-      blink::mojom::AttributionNavigationType nav_type) override;
+      const blink::AttributionSrcToken& attribution_src_token) override;
 
   // WebContentsObserver:
   void DidStartNavigation(NavigationHandle* navigation_handle) override;

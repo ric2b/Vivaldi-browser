@@ -342,7 +342,8 @@ const char kHideCrashRestoreBubble[] = "hide-crash-restore-bubble";
 // http://google.com.
 const char kHomePage[] = "homepage";
 
-// Causes the browser to launch directly in incognito mode.
+// Causes the initial browser opened to be in incognito mode. Further browsers
+// may or may not be in incognito mode; see `IncognitoModePrefs`.
 const char kIncognito[] = "incognito";
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -689,6 +690,11 @@ const char kForceUpdateMenuType[] = "force-update-menu-type";
 
 // Forces a custom summary to be displayed below the update menu item.
 const char kForceShowUpdateMenuItemCustomSummary[] = "custom_summary";
+
+// Force hiding non-displayable account email during the FRE flow. Only for
+// testing purposes.
+const char kForceHideNonDisplayableAccountEmailFRE[] =
+    "force-hide-non-displayable-account-email-fre";
 
 // Sets the market URL for Chrome for use in testing.
 const char kMarketUrlForTesting[] = "market-url-for-testing";

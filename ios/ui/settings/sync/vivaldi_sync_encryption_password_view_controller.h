@@ -5,7 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/ui/settings/settings_root_table_view_controller.h"
+#import "ios/ui/settings/sync/settings_root_table_view_controller+vivaldi.h"
 
 @class VivaldiSyncEncryptionPasswordViewController;
 
@@ -32,6 +32,8 @@
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
+
+- (void)setCreatingPasscode:(BOOL)isCreating;
 
 @end
 

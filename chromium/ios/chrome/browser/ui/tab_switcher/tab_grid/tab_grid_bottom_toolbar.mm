@@ -17,7 +17,8 @@
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
-#include "app/vivaldi_apptools.h"
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -299,6 +300,14 @@ using vivaldi::IsVivaldiRunning;
                            target:nil
                            action:nil];
 
+  if (IsVivaldiRunning()) {
+    _smallNewTabButton = [[TabGridNewTabButton alloc]
+        initWithRegularImage:[UIImage
+                                 imageNamed:vMenuNewTab]
+              incognitoImage:
+                  [UIImage
+                      imageNamed:vMenuNewTab]];
+  } else {
   if (UseSymbols()) {
     if (@available(iOS 15, *)) {
       _smallNewTabButton = [[TabGridNewTabButton alloc] initWithLargeSize:NO];
@@ -316,6 +325,7 @@ using vivaldi::IsVivaldiRunning;
               incognitoImage:
                   [UIImage imageNamed:@"new_tab_toolbar_button_incognito"]];
   }
+  } // End Vivaldi
 
   _smallNewTabButton.translatesAutoresizingMaskIntoConstraints = NO;
   _smallNewTabButton.page = self.page;
@@ -333,10 +343,20 @@ using vivaldi::IsVivaldiRunning;
   _addToButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
   _addToButton.title = l10n_util::GetNSString(IDS_IOS_TAB_GRID_ADD_TO_BUTTON);
   _addToButton.accessibilityIdentifier = kTabGridEditAddToButtonIdentifier;
+
+  if (IsVivaldiRunning()) {
+    _shareButton =
+        [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:vMenuShare]
+                                         style:UIBarButtonItemStylePlain
+                                        target:nil
+                                        action:nil];
+  } else {
   _shareButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemAction
                            target:nil
                            action:nil];
+  } // End Vivaldi
+
   _shareButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
   _shareButton.accessibilityIdentifier = kTabGridEditShareButtonIdentifier;
   _closeTabsButton = [[UIBarButtonItem alloc] init];
@@ -366,6 +386,14 @@ using vivaldi::IsVivaldiRunning;
   ];
 
   // For other layout, display a floating new tab button.
+
+  if (IsVivaldiRunning()) {
+    UIImage* incognitoImage =
+        [UIImage imageNamed:vMenuNewTab];
+    _largeNewTabButton = [[TabGridNewTabButton alloc]
+        initWithRegularImage:[UIImage imageNamed:vMenuNewTab]
+              incognitoImage:incognitoImage];
+  } else {
   if (UseSymbols()) {
     if (@available(iOS 15, *)) {
       _largeNewTabButton = [[TabGridNewTabButton alloc] initWithLargeSize:YES];
@@ -403,6 +431,8 @@ using vivaldi::IsVivaldiRunning;
     // resolution.
     _newTabButtonItem.image = incognitoImage;
   }
+  } // End Vivaldi
+
   _largeNewTabButton.translatesAutoresizingMaskIntoConstraints = NO;
   _largeNewTabButton.page = self.page;
 

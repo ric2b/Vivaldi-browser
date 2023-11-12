@@ -249,13 +249,12 @@ class TestImporter(object):
 
     def _trigger_try_jobs(self):
         _log.info('Triggering try jobs for updating expectations.')
-        try_bots = set(self.blink_try_bots())
+        rebaselining_builders = self.host.builders.builders_for_rebaselining()
         wptrunner_builders = {
             builder
-            for builder in try_bots
-            if self.host.builders.is_wpt_builder(builder)
+            for builder in self.host.builders.all_try_builder_names()
+            if self.host.builders.uses_wptrunner(builder)
         }
-        rebaselining_builders = try_bots - wptrunner_builders
         if rebaselining_builders:
             _log.info('For rebaselining:')
             for builder in sorted(rebaselining_builders):
@@ -264,7 +263,8 @@ class TestImporter(object):
             _log.info('For updating WPT metadata:')
             for builder in sorted(wptrunner_builders):
                 _log.info('  %s', builder)
-        self.git_cl.trigger_try_jobs(try_bots)
+        self.git_cl.trigger_try_jobs(rebaselining_builders
+                                     | wptrunner_builders)
 
     def run_commit_queue_for_cl(self):
         """Triggers CQ and either commits or aborts; returns True on success."""
@@ -337,10 +337,6 @@ class TestImporter(object):
             else:
                 raise e
         return False
-
-    def blink_try_bots(self):
-        """Returns the collection of builders used for updating expectations."""
-        return self.host.builders.filter_builders(is_try=True)
 
     def parse_args(self, argv):
         parser = argparse.ArgumentParser()
@@ -669,8 +665,6 @@ class TestImporter(object):
         Assuming that there are some try job results available, this
         adds new expectation lines to TestExpectations and downloads new
         baselines based on the try job results.
-
-        This is the same as invoking the `wpt-update-expectations` script.
         """
         _log.info('Adding test expectations lines to TestExpectations.')
         tests_to_rebaseline = set()
@@ -679,17 +673,12 @@ class TestImporter(object):
             self._expectations_updater.update_expectations())
         tests_to_rebaseline.update(to_rebaseline)
 
-        _log.info('Adding test expectations lines for disable-layout-ng')
-        to_rebaseline, _ = (
-            self._expectations_updater.update_expectations_for_flag_specific(
-                'disable-layout-ng'))
-        tests_to_rebaseline.update(to_rebaseline)
-
-        _log.info('Adding test expectations lines for disable-site-isolation-trials')
-        to_rebaseline, _ = (
-            self._expectations_updater.update_expectations_for_flag_specific(
-                'disable-site-isolation-trials'))
-        tests_to_rebaseline.update(to_rebaseline)
+        flag_spec_options = self.host.builders.all_flag_specific_options()
+        for flag_specific in sorted(flag_spec_options):
+            _log.info('Adding test expectations lines for %s', flag_specific)
+            to_rebaseline, _ = self._expectations_updater.update_expectations(
+                flag_specific)
+            tests_to_rebaseline.update(to_rebaseline)
 
         # commit local changes so that rebaseline tool will be happy
         if self.chromium_git.has_working_directory_changes():

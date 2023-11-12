@@ -42,6 +42,8 @@ const char* SegmentationKeyToUmaName(const std::string& segmentation_key) {
     return kIntentionalUserUmaName;
   } else if (segmentation_key == kResumeHeavyUserKey) {
     return kResumeHeavyUserUmaName;
+  } else if (segmentation_key == kDeviceSwitcherKey) {
+    return kDeviceSwitcherUmaName;
   } else if (base::StartsWith(segmentation_key, "test_key")) {
     return "TestKey";
   }
@@ -80,6 +82,8 @@ std::string SegmentIdToHistogramVariant(proto::SegmentId segment_id) {
       return "ContextualPageActionPriceTracking";
     case proto::SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SEARCH_USER:
       return "SearchUserSegment";
+    case proto::SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_ADAPTIVE_TOOLBAR:
+      return "AdaptiveToolbar";
     case proto::SegmentId::POWER_USER_SEGMENT:
       return "PowerUserSegment";
     case proto::SegmentId::CROSS_DEVICE_USER_SEGMENT:
@@ -93,6 +97,8 @@ std::string SegmentIdToHistogramVariant(proto::SegmentId segment_id) {
     case proto::SegmentId::
         OPTIMIZATION_TARGET_SEGMENTATION_CHROME_START_ANDROID_V2:
       return "ChromeStartAndroidV2";
+    case proto::SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_DEVICE_SWITCHER:
+      return "DeviceSwitcher";
     default:
       // This case is reached when UNKNOWN segment is valid, in case of boolean
       // segment results.

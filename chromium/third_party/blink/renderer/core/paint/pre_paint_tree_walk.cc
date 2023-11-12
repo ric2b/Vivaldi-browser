@@ -27,7 +27,6 @@
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_property_tree_printer.h"
-#include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
@@ -56,11 +55,10 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
 
   PrePaintTreeWalkContext context;
 
-  // GeometryMapper depends on paint properties.
-  bool needs_tree_builder_context_update =
+#if DCHECK_IS_ON()
+  bool needed_tree_builder_context_update =
       NeedsTreeBuilderContextUpdate(root_frame_view, context);
-  if (needs_tree_builder_context_update)
-    GeometryMapper::ClearCache();
+#endif
 
   VisualViewport& visual_viewport =
       root_frame_view.GetPage()->GetVisualViewport();
@@ -74,8 +72,9 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
   paint_invalidator_.ProcessPendingDelayedPaintInvalidations();
 
 #if DCHECK_IS_ON()
-  if (needs_tree_builder_context_update && VLOG_IS_ON(1))
+  if (needed_tree_builder_context_update && VLOG_IS_ON(1)) {
     ShowAllPropertyTrees(root_frame_view);
+  }
 #endif
 
   bool was_opacity_updated = root_frame_view.UpdateAllPendingOpacityUpdates();
@@ -1140,25 +1139,38 @@ void PrePaintTreeWalk::Walk(const LayoutObject& object,
             DynamicTo<LayoutEmbeddedContent>(object)) {
       if (auto* embedded_view =
               layout_embedded_content->GetEmbeddedContentView()) {
-        if (context.tree_builder_context) {
-          auto& current = context.tree_builder_context->fragments[0].current;
-          current.paint_offset = PhysicalOffset(ToRoundedPoint(
-              current.paint_offset +
-              layout_embedded_content->ReplacedContentRect().offset -
-              PhysicalOffset(embedded_view->FrameRect().origin())));
-          // Subpixel accumulation doesn't propagate across embedded view.
-          current.directly_composited_container_paint_offset_subpixel_delta =
-              PhysicalOffset();
-        }
-        if (embedded_view->IsLocalFrameView()) {
-          Walk(*To<LocalFrameView>(embedded_view), context);
-        } else if (embedded_view->IsPluginView()) {
-          // If it is a webview plugin, walk into the content frame view.
-          if (auto* plugin_content_frame_view =
-                  FindWebViewPluginContentFrameView(*layout_embedded_content))
-            Walk(*plugin_content_frame_view, context);
-        } else {
-          // We need to do nothing for RemoteFrameView. See crbug.com/579281.
+        // Embedded content is monolithic and will normally not generate
+        // multiple fragments. However, if this is inside of a repeated table
+        // section or repeated fixed positioned element (printing), it may
+        // generate multiple fragments. In such cases, only update when at the
+        // first fragment if the underlying implementation doesn't support
+        // multiple fragments. We are only going to paint/hit-test the first
+        // fragment, and we need to make sure that the paint offsets inside the
+        // child view are with respect to the first fragment.
+        if (!physical_fragment || physical_fragment->IsFirstForNode() ||
+            CanPaintMultipleFragments(*physical_fragment)) {
+          if (context.tree_builder_context) {
+            auto& current = context.tree_builder_context->fragments[0].current;
+            current.paint_offset = PhysicalOffset(ToRoundedPoint(
+                current.paint_offset +
+                layout_embedded_content->ReplacedContentRect().offset -
+                PhysicalOffset(embedded_view->FrameRect().origin())));
+            // Subpixel accumulation doesn't propagate across embedded view.
+            current.directly_composited_container_paint_offset_subpixel_delta =
+                PhysicalOffset();
+          }
+          if (embedded_view->IsLocalFrameView()) {
+            Walk(*To<LocalFrameView>(embedded_view), context);
+          } else if (embedded_view->IsPluginView()) {
+            // If it is a webview plugin, walk into the content frame view.
+            if (auto* plugin_content_frame_view =
+                    FindWebViewPluginContentFrameView(
+                        *layout_embedded_content)) {
+              Walk(*plugin_content_frame_view, context);
+            }
+          } else {
+            // We need to do nothing for RemoteFrameView. See crbug.com/579281.
+          }
         }
       }
     }

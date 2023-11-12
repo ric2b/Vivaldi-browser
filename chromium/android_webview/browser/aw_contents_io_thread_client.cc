@@ -17,8 +17,8 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
-#include "base/bind.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -424,6 +424,14 @@ bool AwContentsIoThreadClient::ShouldBlockFileUrls() const {
 
   JNIEnv* env = AttachCurrentThread();
   return Java_AwContentsIoThreadClient_shouldBlockFileUrls(env, java_object_);
+}
+
+bool AwContentsIoThreadClient::ShouldBlockSpecialFileUrls() const {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  JNIEnv* env = AttachCurrentThread();
+  return Java_AwContentsIoThreadClient_shouldBlockSpecialFileUrls(env,
+                                                                  java_object_);
 }
 
 bool AwContentsIoThreadClient::ShouldAcceptThirdPartyCookies() const {

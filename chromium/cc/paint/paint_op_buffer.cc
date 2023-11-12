@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/types/optional_util.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image_builder.h"
@@ -131,13 +132,14 @@ void PaintOpBuffer::DestroyOps() {
   if (data_) {
     for (size_t offset = 0; offset < used_;) {
       auto* op = reinterpret_cast<PaintOp*>(data_.get() + offset);
-      offset += op->skip;
+      offset += op->aligned_size;
       op->DestroyThis();
     }
   }
 }
 
 void PaintOpBuffer::Reset() {
+  DCHECK(is_mutable());
   DestroyOps();
   // Leave data_ allocated, reserved_ unchanged. ShrinkToFit() will take care
   // of that if called.
@@ -145,6 +147,7 @@ void PaintOpBuffer::Reset() {
 }
 
 void PaintOpBuffer::ResetRetainingBuffer() {
+  DCHECK(is_mutable());
   used_ = 0;
   op_count_ = 0;
   num_slow_paths_up_to_min_for_MSAA_ = 0;
@@ -168,15 +171,16 @@ void PaintOpBuffer::Playback(SkCanvas* canvas,
   Playback(canvas, params, nullptr);
 }
 
-sk_sp<PaintRecord> PaintOpBuffer::MoveRetainingBufferIfPossible() {
+PaintRecord PaintOpBuffer::ReleaseAsRecord() {
+  DCHECK(is_mutable());
   const size_t old_reserved = reserved_;
-  sk_sp<PaintRecord> result = sk_make_sp<PaintRecord>(std::move(*this));
+  auto result = sk_make_sp<PaintOpBuffer>(std::move(*this));
   if (BufferDataPtr old_data = result->ReallocIfNeededToFit()) {
     // Reuse the original buffer for future recording.
     data_ = std::move(old_data);
     reserved_ = old_reserved;
   }
-  return result;
+  return PaintRecord(std::move(result));
 }
 
 void PaintOpBuffer::Playback(SkCanvas* canvas,
@@ -213,7 +217,7 @@ void PaintOpBuffer::Playback(SkCanvas* canvas,
   new_params.save_layer_alpha_should_preserve_lcd_text =
       save_layer_alpha_should_preserve_lcd_text;
   new_params.is_analyzing = params.is_analyzing;
-  for (PlaybackFoldingIterator iter(this, offsets); iter; ++iter) {
+  for (PlaybackFoldingIterator iter(*this, offsets); iter; ++iter) {
     const PaintOp* op = iter.get();
     if (params.convert_op_callback) {
       op = params.convert_op_callback.Run(*op);
@@ -237,11 +241,11 @@ void PaintOpBuffer::Playback(SkCanvas* canvas,
       auto* context = canvas->recordingContext();
       const ScopedRasterFlags scoped_flags(
           &flags_op.flags, new_params.image_provider, canvas->getTotalMatrix(),
-          context ? context->maxTextureSize() : 0, iter.alpha() / 255.0f);
+          context ? context->maxTextureSize() : 0, iter.alpha());
       if (const auto* raster_flags = scoped_flags.flags())
         flags_op.RasterWithFlags(canvas, raster_flags, new_params);
     } else {
-      DCHECK_EQ(iter.alpha(), 255);
+      DCHECK_EQ(iter.alpha(), 1.0f);
       op->Raster(canvas, new_params);
     }
 
@@ -324,6 +328,8 @@ SkRect PaintOpBuffer::GetFixedScaleBounds(const SkMatrix& ctm,
 
 PaintOpBuffer::BufferDataPtr PaintOpBuffer::ReallocBuffer(size_t new_size) {
   DCHECK_GE(new_size, used_);
+  DCHECK(is_mutable());
+
   std::unique_ptr<char, base::AlignedFreeDeleter> new_data(
       static_cast<char*>(base::AlignedAlloc(new_size, kPaintOpAlign)));
   if (data_)
@@ -334,20 +340,23 @@ PaintOpBuffer::BufferDataPtr PaintOpBuffer::ReallocBuffer(size_t new_size) {
   return old_data;
 }
 
-void* PaintOpBuffer::AllocatePaintOp(size_t skip) {
-  DCHECK_LT(skip, PaintOp::kMaxSkip);
-  if (used_ + skip > reserved_) {
+void* PaintOpBuffer::AllocatePaintOp(uint16_t aligned_size) {
+  DCHECK(is_mutable());
+
+  size_t required_size = used_ + aligned_size;
+  if (required_size > reserved_) {
     // Start reserved_ at kInitialBufferSize and then double.
     // ShrinkToFit() can make this smaller afterwards.
     size_t new_size = reserved_ ? reserved_ : kInitialBufferSize;
-    while (used_ + skip > new_size)
+    while (required_size > new_size) {
       new_size *= 2;
+    }
     ReallocBuffer(new_size);
   }
-  DCHECK_LE(used_ + skip, reserved_);
+  DCHECK_LE(required_size, reserved_);
 
   void* op = data_.get() + used_;
-  used_ += skip;
+  used_ = required_size;
   op_count_++;
   return op;
 }
@@ -367,7 +376,7 @@ PaintOpBuffer::BufferDataPtr PaintOpBuffer::ReallocIfNeededToFit() {
   return ReallocBuffer(used_);
 }
 
-bool PaintOpBuffer::operator==(const PaintOpBuffer& other) const {
+bool PaintOpBuffer::EqualsForTesting(const PaintOpBuffer& other) const {
   // Check status fields first, which is faster than checking equality of
   // paint operations. This doesn't need to be complete, and should not check
   // data buffer capacity related fields because they don't affect equality.
@@ -384,17 +393,10 @@ bool PaintOpBuffer::operator==(const PaintOpBuffer& other) const {
     return false;
   }
 
-  Iterator left_iter(this);
-  Iterator right_iter(&other);
-
-  for (; left_iter != left_iter.end(); ++left_iter, ++right_iter) {
-    if (*left_iter != *right_iter)
-      return false;
-  }
-
-  DCHECK(left_iter == left_iter.end());
-  DCHECK(right_iter == right_iter.end());
-  return true;
+  return base::ranges::equal(*this, other,
+                             [](const PaintOp& a, const PaintOp& b) {
+                               return a.EqualsForTesting(b);  // IN-TEST
+                             });
 }
 
 bool PaintOpBuffer::NeedsAdditionalInvalidationForLCDText(
@@ -430,24 +432,12 @@ void PaintOpBuffer::UpdateSaveLayerBounds(size_t offset, const SkRect& bounds) {
   }
 }
 
-const PaintOp* PaintOpBuffer::GetOpAtForTesting(size_t index,
-                                                PaintOpType type) const {
-  size_t i = 0;
-  for (const auto& op : *this) {
-    if (i == index) {
-      return op.GetType() == type ? &op : nullptr;
-    }
-    i++;
-  }
-  return nullptr;
-}
-
 PaintOpBuffer::Iterator PaintOpBuffer::begin() const {
-  return Iterator(this);
+  return Iterator(*this);
 }
 
 PaintOpBuffer::Iterator PaintOpBuffer::end() const {
-  return Iterator(this).end();
+  return Iterator(*this).end();
 }
 
 }  // namespace cc

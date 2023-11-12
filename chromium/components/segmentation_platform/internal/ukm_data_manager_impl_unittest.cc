@@ -32,7 +32,7 @@ using ukm::builders::PageLoad;
 using ukm::builders::PaintPreviewCapture;
 
 constexpr ukm::SourceId kSourceId = 10;
-constexpr ukm::SourceId kSourceId2 = 12;
+constexpr ukm::SourceId kSourceId2 = 20;
 
 ukm::mojom::UkmEntryPtr GetSamplePageLoadEntry(
     ukm::SourceId source_id = kSourceId) {
@@ -246,7 +246,6 @@ TEST_F(UkmDataManagerImplTest, HistoryNotification) {
   wait_for_remove1.Run();
 
   // Run segment info callbacks that were posted to remove results.
-  platform1.segment_db().GetCallback(true);
   platform1.segment_db().UpdateCallback(true);
 
   // History based segment results should be removed.

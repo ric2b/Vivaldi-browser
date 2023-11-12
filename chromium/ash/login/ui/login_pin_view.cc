@@ -13,8 +13,8 @@
 #include "ash/style/ash_color_id.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/color_util.h"
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "ui/accessibility/ax_action_data.h"
@@ -91,7 +91,8 @@ class BasePinButton : public views::View {
   BasePinButton(const gfx::Size& size,
                 const std::u16string& accessible_name,
                 const base::RepeatingClosure& on_press)
-      : on_press_(on_press), accessible_name_(accessible_name) {
+      : on_press_(on_press) {
+    SetAccessibleName(accessible_name);
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
     SetPreferredSize(size);
 
@@ -127,7 +128,8 @@ class BasePinButton : public views::View {
                                  kInkDropCornerRadiusDp * 2);
 
           return std::make_unique<views::FloodFillInkDropRipple>(
-              host->size(), host->GetLocalBounds().InsetsFrom(bounds),
+              views::InkDrop::Get(host), host->size(),
+              host->GetLocalBounds().InsetsFrom(bounds),
               views::InkDrop::Get(host)->GetInkDropCenterBasedOnLastEvent(),
               host->GetColorProvider()->GetColor(kColorAshInkDrop),
               /*visible_opacity=*/1.f);
@@ -173,14 +175,15 @@ class BasePinButton : public views::View {
 
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
     node_data->role = ax::mojom::Role::kButton;
-    node_data->SetName(accessible_name_);
+    node_data->SetName(GetAccessibleName());
   }
 
  protected:
   // Called when the button has been pressed.
   virtual void DispatchPress(ui::Event* event) {
-    if (event)
+    if (event) {
       event->SetHandled();
+    }
 
     views::InkDrop::Get(this)->AnimateToState(
         views::InkDropState::ACTION_TRIGGERED,
@@ -188,15 +191,13 @@ class BasePinButton : public views::View {
     SchedulePaint();
 
     // |on_press_| may delete us.
-    if (on_press_)
+    if (on_press_) {
       on_press_.Run();
+    }
   }
 
   // Handler for press events. May be null.
   base::RepeatingClosure on_press_;
-
- private:
-  const std::u16string accessible_name_;
 };
 
 }  // namespace
@@ -270,6 +271,14 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
     repeat_timer_ = std::move(repeat_timer);
   }
 
+  views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override {
+    return this;
+  }
+
+  std::u16string GetTooltipText(const gfx::Point& p) const override {
+    return GetAccessibleName();
+  }
+
   void OnEnabledChanged() {
     if (!GetEnabled()) {
       views::InkDrop::Get(this)->AnimateToState(
@@ -287,8 +296,9 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
   // BasePinButton:
   void OnEvent(ui::Event* event) override {
     BasePinButton::OnEvent(event);
-    if (event->handled())
+    if (event->handled()) {
       return;
+    }
     // If this is a button release style event cancel any repeat.
     if (event->type() == ui::ET_GESTURE_TAP_CANCEL ||
         event->type() == ui::ET_GESTURE_END ||
@@ -315,8 +325,9 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
                           base::BindOnce(&BackspacePinButton::DispatchPress,
                                          base::Unretained(this), nullptr));
 
-      if (event)
+      if (event) {
         event->SetHandled();
+      }
 
       views::InkDrop::Get(this)->AnimateToState(
           views::InkDropState::ACTIVATED, ui::LocatedEvent::FromIfValid(event));
@@ -335,24 +346,27 @@ class LoginPinView::BackspacePinButton : public BasePinButton {
     }
 
     // Run handler.
-    if (on_press_)
+    if (on_press_) {
       on_press_.Run();
+    }
   }
 
  private:
   // Cancels a long-press. If the press event has not been triggered yet this
   // will trigger it.
   void CancelRepeat() {
-    if (!is_held_)
+    if (!is_held_) {
       return;
+    }
 
     bool did_submit = !delay_timer_->IsRunning();
     delay_timer_->Stop();
     repeat_timer_->Stop();
     is_held_ = false;
 
-    if (!did_submit && on_press_)
+    if (!did_submit && on_press_) {
       on_press_.Run();
+    }
 
     views::InkDrop::Get(this)->AnimateToState(views::InkDropState::DEACTIVATED,
                                               nullptr);
@@ -509,8 +523,9 @@ void LoginPinView::NotifyAccessibilityLocationChanged() {
 
 void LoginPinView::OnPasswordTextChanged(bool is_empty) {
   backspace_->SetEnabled(!is_empty);
-  if (submit_button_)
+  if (submit_button_) {
     submit_button_->SetEnabled(!is_empty);
+  }
 }
 
 NonAccessibleView* LoginPinView::BuildAndAddRow() {

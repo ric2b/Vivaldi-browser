@@ -4,8 +4,8 @@
 
 #include "chrome/browser/ui/webui/ash/login/base_screen_handler.h"
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
@@ -32,8 +32,9 @@ BaseScreenHandler::BaseScreenHandler(OobeScreenId oobe_screen)
 BaseScreenHandler::~BaseScreenHandler() = default;
 
 void BaseScreenHandler::ShowInWebUI(absl::optional<base::Value::Dict> data) {
-  if (!GetOobeUI())
+  if (!GetOobeUI()) {
     return;
+  }
   GetOobeUI()->GetCoreOobeView()->ShowScreenWithData(oobe_screen_,
                                                      std::move(data));
 }
@@ -54,22 +55,25 @@ void BaseScreenHandler::HandleUserAction(const base::Value::List& args) {
 }
 
 bool BaseScreenHandler::HandleUserActionImpl(const base::Value::List& args) {
-  if (!LoginDisplayHost::default_host())
-    return false;
-
   LoginDisplayHost* host = LoginDisplayHost::default_host();
   if (!host) {
     return false;
   }
 
   WizardController* wizard_controller = host->GetWizardController();
-  if (!wizard_controller) {
-    return false;
+  BaseScreen* screen = nullptr;
+
+  if (wizard_controller) {
+    screen = wizard_controller->GetScreen(oobe_screen_);
+  } else if (WizardController::IsErrorScreen(oobe_screen_)) {
+    // This case happens during auto-launch kiosk, as currently we do not create
+    // a `WizardController` in this flow. See b/267741004 for more details.
+    screen = host->GetOobeUI()->GetErrorScreen();
   }
 
-  BaseScreen* screen = wizard_controller->GetScreen(oobe_screen_);
-  if (!screen)
+  if (!screen) {
     return false;
+  }
 
   screen->HandleUserAction(args);
   return true;

@@ -24,7 +24,7 @@
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/paint/clip_paint_property_node.h"
 #include "third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.h"
-#include "third_party/blink/renderer/platform/graphics/view_transition_shared_element_id.h"
+#include "third_party/blink/renderer/platform/graphics/view_transition_element_id.h"
 #include "third_party/blink/renderer/platform/heap/forward.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 
@@ -89,7 +89,7 @@ class CORE_EXPORT ViewTransition : public ScriptWrappable,
   void skipTransition();
   ScriptPromise finished() const;
   ScriptPromise ready() const;
-  ScriptPromise domUpdated() const;
+  ScriptPromise updateCallbackDone() const;
 
   // GC functionality.
   void Trace(Visitor* visitor) const override;
@@ -97,7 +97,7 @@ class CORE_EXPORT ViewTransition : public ScriptWrappable,
   // Returns true if the pseudo element corresponding to the given id and name
   // is the only child.
   bool MatchForOnlyChild(PseudoId pseudo_id,
-                         AtomicString view_transition_name) const;
+                         const AtomicString& view_transition_name) const;
 
   // ExecutionContextLifecycleObserver implementation.
   void ContextDestroyed() override;
@@ -105,18 +105,18 @@ class CORE_EXPORT ViewTransition : public ScriptWrappable,
   // ActiveScriptWrappable functionality.
   bool HasPendingActivity() const override;
 
-  // Returns true if this object needs to create an EffectNode for the shared
-  // element transition.
-  bool NeedsSharedElementEffectNode(const LayoutObject& object) const;
+  // Returns true if this object needs to create an EffectNode for its element
+  // transition.
+  bool NeedsViewTransitionEffectNode(const LayoutObject& object) const;
 
   // Returns true if this object is painted via pseudo elements. Note that this
-  // is different from NeedsSharedElementFromEffectNode() since the root may not
-  // be a shared element, but require an effect node.
+  // is different from NeedsViewTransitionEffectNode() since the root may not
+  // be a transitioning element, but require an effect node.
   bool IsRepresentedViaPseudoElements(const LayoutObject& object) const;
 
-  // Updates an effect node. This effect populates the shared element id and the
-  // shared element resource id. The return value is a result of updating the
-  // effect node.
+  // Updates an effect node. This effect populates the view transition element
+  // id and the shared element resource id. The return value is a result of
+  // updating the effect node.
   PaintPropertyChangeType UpdateEffect(
       const LayoutObject& object,
       const EffectPaintPropertyNodeOrAlias& current_effect,
@@ -165,8 +165,8 @@ class CORE_EXPORT ViewTransition : public ScriptWrappable,
 
   // In physical pixels. See comments on equivalent methods in
   // ViewTransitionStyleTracker for info.
-  gfx::Rect GetSnapshotViewportRect() const;
-  gfx::Vector2d GetRootSnapshotPaintOffset() const;
+  gfx::Size GetSnapshotRootSize() const;
+  gfx::Vector2d GetFrameToSnapshotRootOffset() const;
 
   bool IsDone() const { return IsTerminalState(state_); }
 
@@ -182,9 +182,15 @@ class CORE_EXPORT ViewTransition : public ScriptWrappable,
     return creation_type_ == CreationType::kScript;
   }
 
+  // Returns true if this object was created for a navigation initiated
+  // transition on the new Document.
+  bool IsForNavigationOnNewDocument() const {
+    return creation_type_ == CreationType::kFromSnapshot;
+  }
+
   // Notifies before the compositor associated with this frame will initiate a
   // lifecycle update.
-  void WillBeginMainFrame();
+  void NotifyRenderingHasBegun();
 
   // Returns true if lifecycle updates should be throttled for the Document
   // associated with this transition.
@@ -195,7 +201,7 @@ class CORE_EXPORT ViewTransition : public ScriptWrappable,
   friend class AXViewTransitionTest;
 
   using PromiseProperty =
-      ScriptPromiseProperty<ToV8UndefinedGenerator, v8::Local<v8::Value>>;
+      ScriptPromiseProperty<ToV8UndefinedGenerator, ScriptValue>;
 
   // Tracks how the ViewTransition object was created.
   enum class CreationType {

@@ -14,9 +14,9 @@
 #include <vector>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/memory_pressure_monitor.h"
@@ -30,6 +30,7 @@
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_source.h"
 #include "base/process/process_metrics.h"
+#include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
 #include "base/strings/string_number_conversions.h"
@@ -101,6 +102,7 @@
 #include "content/browser/webui/content_web_ui_configs.h"
 #include "content/browser/webui/url_data_manager.h"
 #include "content/common/content_switches_internal.h"
+#include "content/common/pseudonymization_salt.h"
 #include "content/common/skia_utils.h"
 #include "content/common/thread_pool_util.h"
 #include "content/public/browser/audio_service.h"
@@ -188,14 +190,13 @@
 #include <shellapi.h>
 #include <windows.h>
 
-#include "content/browser/renderer_host/dwrite_font_lookup_table_builder_win.h"
+#include "base/threading/platform_thread_win.h"
 #include "net/base/winsock_init.h"
 #include "sandbox/policy/win/sandbox_win.h"
 #include "sandbox/win/src/sandbox.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "ash/constants/ash_switches.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #endif
@@ -228,7 +229,7 @@
 #include "content/browser/plugin_service_impl.h"
 #endif
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_ANDROID)
 #include "content/browser/media/cdm_registry_impl.h"
 #endif
 
@@ -366,7 +367,7 @@ std::unique_ptr<base::MemoryPressureMonitor> CreateMemoryPressureMonitor(
 
   std::unique_ptr<memory_pressure::MultiSourceMemoryPressureMonitor> monitor;
 
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_FUCHSIA) || \
+#if BUILDFLAG(IS_APPLE) || BUILDFLAG(IS_WIN) || BUILDFLAG(IS_FUCHSIA) || \
     BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   monitor =
       std::make_unique<memory_pressure::MultiSourceMemoryPressureMonitor>();
@@ -374,7 +375,7 @@ std::unique_ptr<base::MemoryPressureMonitor> CreateMemoryPressureMonitor(
   // No memory monitor on other platforms...
 
   if (monitor)
-    monitor->Start();
+    monitor->MaybeStartPlatformVoter();
 
   return monitor;
 }
@@ -430,6 +431,15 @@ void BindHidManager(mojo::PendingReceiver<device::mojom::HidManager> receiver) {
 
   GetDeviceService().BindHidManager(std::move(receiver));
 #endif
+}
+
+uint32_t GenerateBrowserSalt() {
+  uint32_t salt;
+  do {
+    salt = base::RandUint64();
+  } while (salt == 0);
+
+  return salt;
 }
 
 }  // namespace
@@ -522,7 +532,7 @@ void BrowserMainLoop::Init() {
 int BrowserMainLoop::EarlyInitialization() {
   TRACE_EVENT0("startup", "BrowserMainLoop::EarlyInitialization");
 
-#if BUILDFLAG(USE_ZYGOTE_HANDLE)
+#if BUILDFLAG(USE_ZYGOTE)
   // The initialization of the sandbox host ends up with forking the Zygote
   // process and requires no thread been forked. The initialization has happened
   // by now since a thread to start the ServiceManager has been created
@@ -552,6 +562,12 @@ int BrowserMainLoop::EarlyInitialization() {
     if (pre_early_init_error_code != RESULT_CODE_NORMAL_EXIT)
       return pre_early_init_error_code;
   }
+
+#if BUILDFLAG(IS_WIN)
+  // This assumes FeatureList is initialized, and must happen before
+  // SetCurrentThreadType() below.
+  base::InitializePlatformThreadFeatures();
+#endif
 
   // SetCurrentThreadType relies on CurrentUIThread on some platforms. The
   // MessagePumpForUI needs to be bound to the main thread by this point.
@@ -770,7 +786,7 @@ int BrowserMainLoop::PreCreateThreads() {
   }
 #endif
 
-#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS) || BUILDFLAG(IS_ANDROID)
   // Prior to any processing happening on the IO thread, we create the
   // CDM service as it is predominantly used from the IO thread. This must
   // be called on the main thread since it involves file path checks.
@@ -808,6 +824,12 @@ int BrowserMainLoop::PreCreateThreads() {
   // after base::FeatureList is initialized, but before any navigations can
   // happen.
   SiteIsolationPolicy::ApplyGlobalIsolatedOrigins();
+
+  // Generate the browser process salt. This is then accessible by calls to
+  // GetPseudonymizationSalt in the browser process. This generation is only
+  // needed in the browser process, because for other processes it is
+  // transferred to them over IPC from the relevant process host.
+  SetPseudonymizationSalt(GenerateBrowserSalt());
 
   return result_code_;
 }
@@ -969,16 +991,6 @@ int BrowserMainLoop::PreMainMessageLoopRun() {
   }
 
   variations::MaybeScheduleFakeCrash();
-
-#if BUILDFLAG(IS_WIN)
-  // ShellBrowserMainParts initializes a ShellBrowserContext with a profile
-  // directory only in PreMainMessageLoopRun(). DWriteFontLookupTableBuilder
-  // needs to access this directory, hence triggering after this stage has run.
-  if (base::FeatureList::IsEnabled(features::kFontSrcLocalMatching)) {
-    content::DWriteFontLookupTableBuilder::GetInstance()
-        ->SchedulePrepareFontUniqueNameTableIfNeeded();
-  }
-#endif  // BUILDFLAG(IS_WIN)
 
   // Unretained(this) is safe as the main message loop expected to run it is
   // stopped before ~BrowserMainLoop (in the event the message loop doesn't
@@ -1553,6 +1565,11 @@ SmsProvider* BrowserMainLoop::GetSmsProvider() {
 void BrowserMainLoop::SetSmsProviderForTesting(
     std::unique_ptr<SmsProvider> provider) {
   sms_provider_ = std::move(provider);
+}
+
+base::PlatformThreadId BrowserMainLoop::GetIOThreadId() {
+  CHECK(io_thread_ && io_thread_->IsRunning());
+  return io_thread_->GetThreadId();
 }
 
 }  // namespace content

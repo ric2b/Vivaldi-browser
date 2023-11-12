@@ -6,10 +6,10 @@
 
 #include <utility>
 
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_helpers.h"
 #include "base/guid.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
@@ -55,6 +55,7 @@
 #include "services/device/public/cpp/geolocation/geolocation_manager.h"
 #include "services/device/public/cpp/geolocation/location_provider.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -139,7 +140,7 @@ bool ContentBrowserClient::IsExplicitNavigation(ui::PageTransition transition) {
 }
 
 bool ContentBrowserClient::ShouldUseMobileFlingCurve() {
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   return true;
 #else
   return false;
@@ -173,8 +174,7 @@ bool ContentBrowserClient::ShouldLockProcessToSite(
   return true;
 }
 
-bool ContentBrowserClient::DoesWebUISchemeRequireProcessLock(
-    base::StringPiece scheme) {
+bool ContentBrowserClient::DoesWebUIUrlRequireProcessLock(const GURL& url) {
   return true;
 }
 
@@ -238,7 +238,7 @@ bool ContentBrowserClient::CanCommitURL(RenderProcessHost* process_host,
 
 bool ContentBrowserClient::ShouldStayInParentProcessForNTP(
     const GURL& url,
-    SiteInstance* parent_site_instance) {
+    const GURL& parent_site_url) {
   return false;
 }
 
@@ -310,6 +310,10 @@ bool ContentBrowserClient::OverridesAudioManager() {
   return false;
 }
 
+bool ContentBrowserClient::EnforceSystemAudioEchoCancellation() {
+  return false;
+}
+
 bool ContentBrowserClient::ShouldAssignSiteForURL(const GURL& url) {
   return true;
 }
@@ -339,8 +343,7 @@ ContentBrowserClient::GetAdditionalSiteIsolationModes() {
 
 bool ContentBrowserClient::ShouldUrlUseApplicationIsolationLevel(
     BrowserContext* browser_context,
-    const GURL& url,
-    bool origin_matches_flag) {
+    const GURL& url) {
   return false;
 }
 
@@ -513,6 +516,7 @@ bool ContentBrowserClient::IsInterestGroupAPIAllowed(
 bool ContentBrowserClient::IsAttributionReportingOperationAllowed(
     content::BrowserContext* browser_context,
     AttributionReportingOperation operation,
+    content::RenderFrameHost* rfh,
     const url::Origin* source_origin,
     const url::Origin* destination_origin,
     const url::Origin* reporting_origin) {
@@ -524,9 +528,14 @@ bool ContentBrowserClient::IsSharedStorageAllowed(
     content::RenderFrameHost* rfh,
     const url::Origin& top_frame_origin,
     const url::Origin& accessing_origin) {
-  // TODO(crbug.com/1325103): Change this to false and override in
-  // relevant content_browsertests and web_tests.
-  return true;
+  return false;
+}
+
+bool ContentBrowserClient::IsSharedStorageSelectURLAllowed(
+    content::BrowserContext* browser_context,
+    const url::Origin& top_frame_origin,
+    const url::Origin& accessing_origin) {
+  return false;
 }
 
 bool ContentBrowserClient::IsPrivateAggregationAllowed(
@@ -668,10 +677,6 @@ base::FilePath ContentBrowserClient::GetDefaultDownloadDirectory() {
 
 std::string ContentBrowserClient::GetDefaultDownloadName() {
   return std::string();
-}
-
-base::FilePath ContentBrowserClient::GetFontLookupTableCacheDir() {
-  return base::FilePath();
 }
 
 base::FilePath ContentBrowserClient::GetShaderDiskCacheDirectory() {
@@ -1050,6 +1055,13 @@ FontAccessDelegate* ContentBrowserClient::GetFontAccessDelegate() {
   return nullptr;
 }
 
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
+SmartCardDelegate* ContentBrowserClient::GetSmartCardDelegate(
+    BrowserContext* browser_context) {
+  return nullptr;
+}
+#endif
+
 bool ContentBrowserClient::ShowPaymentHandlerWindow(
     content::BrowserContext* browser_context,
     const GURL& url,
@@ -1144,6 +1156,11 @@ bool ContentBrowserClient::ShouldSandboxNetworkService() {
   return sandbox::policy::features::IsNetworkSandboxEnabled();
 }
 
+bool ContentBrowserClient::ShouldRunOutOfProcessSystemDnsResolution() {
+  return base::FeatureList::IsEnabled(
+      network::features::kOutOfProcessSystemDnsResolution);
+}
+
 std::string ContentBrowserClient::GetProduct() {
   return std::string();
 }
@@ -1224,7 +1241,7 @@ bool ContentBrowserClient::HandleTopicsWebApi(
     bool get_topics,
     bool observe,
     std::vector<blink::mojom::EpochTopicPtr>& topics) {
-  return false;
+  return true;
 }
 
 bool ContentBrowserClient::IsBluetoothScanningBlocked(
@@ -1413,6 +1430,22 @@ bool ContentBrowserClient::ShouldSendOutermostOriginToRenderer(
 bool ContentBrowserClient::IsFileSystemURLNavigationAllowed(
     content::BrowserContext* browser_context,
     const GURL& url) {
+  return false;
+}
+
+#if BUILDFLAG(IS_MAC)
+base::FilePath ContentBrowserClient::GetChildProcessPath(
+    int child_flags,
+    const base::FilePath& helpers_path) {
+  NOTIMPLEMENTED();
+  return base::FilePath();
+}
+#endif
+
+bool ContentBrowserClient::AreIsolatedWebAppsEnabled(
+    BrowserContext* browser_context) {
+  // The whole logic of the IWAs lives in //chrome. So IWAs should be
+  // enabled at that layer.
   return false;
 }
 

@@ -420,6 +420,26 @@ export class RemoteCall {
     return sendTestMessage(
         {appId, name: 'simulateClick', 'clickX': x, 'clickY': y});
   }
+
+  /**
+   * Selects the option given by the index in the menu given by the type. This
+   * only works in V2 version of the search.
+   *
+   * @param {string} appId The ID that identifies the files app.
+   * @param {string} type The search option type (location, recency, type).
+   * @param {number} index The index of the button.
+   * @return {Promise<boolean>} A promise that resolves to true if click was
+   *     successful and false otherwise.
+   */
+  selectSearchOption(appId, type, index) {
+    return this.callRemoteTestUtil('fakeMouseClick', appId, [
+      [
+        'xf-search-options',
+        `xf-select#${type}-selector`,
+        `cr-action-menu cr-button:nth-of-type(${index})`,
+      ],
+    ]);
+  }
 }
 
 /**
@@ -980,5 +1000,61 @@ export class RemoteCallFilesApp extends RemoteCall {
   async expandOpenDropdown(appId) {
     // Wait the OPEN button to have multiple tasks.
     await this.waitAndClickElement(appId, '#tasks[multiple]');
+  }
+
+  /**
+   * Check if an item is pinned on drive or not.
+   * @param {string} appId app window ID.
+   * @param {string} path Path from the drive mount point, e.g. /root/test.txt
+   * @param {boolean} status Pinned status to expect drive item to be.
+   */
+  async expectDriveItemPinnedStatus(appId, path, status) {
+    await this.waitFor('isFileManagerLoaded', appId, true);
+    chrome.test.assertEq(
+        await sendTestMessage({
+          appId,
+          name: 'isItemPinned',
+          path,
+        }),
+        String(status));
+  }
+
+  /**
+   * Send a delete event via the `OnFilesChanged` drivefs delegate method.
+   * @param {string} appId app window ID.
+   * @param {string} path Path from the drive mount point, e.g. /root/test.txt
+   */
+  async sendDriveCloudDeleteEvent(appId, path) {
+    await this.waitFor('isFileManagerLoaded', appId, true);
+    await sendTestMessage({
+      appId,
+      name: 'sendDriveCloudDeleteEvent',
+      path,
+    });
+  }
+
+  /**
+   * Wait for the nudge with the given text to be visible.
+   *
+   * @param {string} appId app window ID.
+   * @param {string} expectedText Text that should be displayed in the Nudge.
+   * @return {!Promise<boolean>}
+   */
+  async waitNudge(appId, expectedText) {
+    const caller = getCaller();
+    return repeatUntil(async () => {
+      const nudgeDot = await this.waitForElementStyles(
+          appId, ['xf-nudge', '#dot'], ['left']);
+      if (nudgeDot.renderedLeft < 0) {
+        return pending(caller, 'Wait nudge to appear');
+      }
+
+      const actualText =
+          await this.waitForElement(appId, ['xf-nudge', '#text']);
+      console.log(actualText);
+      chrome.test.assertEq(actualText.text, expectedText);
+
+      return true;
+    });
   }
 }

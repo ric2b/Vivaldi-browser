@@ -12,7 +12,7 @@
  * If you are looking to add a user command, follow the below steps for best
  * integration with existing components:
  * 1. Add the command to the |Command| enum.
- * 2. Add a command below in CommandStore.CMD_ALLOWLIST. Fill in each of the
+ * 2. Add a command below in CommandStore.COMMAND_DATA. Fill in each of the
  * relevant JSON keys.
  * Be sure to add a msg id and define it in chromevox/messages/messages.js which
  * describes the command. Please also add a category msg id so that the command
@@ -20,76 +20,68 @@
  * 2. Add the command's logic to CommandHandler inside of our switch-based
  * dispatch method (onCommand).
  * 3. Add a key binding to KeySequence.
- *
- * Class description:
- * This class is entirely static and holds a JSON structure that stores
- * commands and their associated metadata.
- *
- * From this metadata, we compute relevant subsets of data such as all present
- * categories.
  */
 
-export const CommandStore = {};
+export class CommandStore {
+  /**
+   * Gets a message given a command.
+   * @param {!Command} command The command to query.
+   * @return {string|undefined} The message id, if any.
+   */
+  static messageForCommand(command) {
+    return (CommandStore.COMMAND_DATA[command] || {}).msgId;
+  }
 
-/**
- * Gets a message given a command.
- * @param {!Command} command The command to query.
- * @return {string|undefined} The message id, if any.
- */
-CommandStore.messageForCommand = function(command) {
-  return (CommandStore.CMD_ALLOWLIST[command] || {}).msgId;
-};
+  /**
+   * Gets a category given a command.
+   * @param {!Command} command The command to query.
+   * @return {string|undefined} The category, if any.
+   */
+  static categoryForCommand(command) {
+    return (CommandStore.COMMAND_DATA[command] || {}).category;
+  }
 
-
-/**
- * Gets a category given a command.
- * @param {!Command} command The command to query.
- * @return {string|undefined} The category, if any.
- */
-CommandStore.categoryForCommand = function(command) {
-  return (CommandStore.CMD_ALLOWLIST[command] || {}).category;
-};
-
-/**
- * Gets the first command associated with the message id
- * @param {string} msgId
- * @return {!Command|undefined} The command, if any.
- */
-CommandStore.commandForMessage = function(msgId) {
-  for (const commandName in CommandStore.CMD_ALLOWLIST) {
-    const command = CommandStore.CMD_ALLOWLIST[commandName];
-    if (command.msgId === msgId) {
-      return commandName;
+  /**
+   * Gets the first command associated with the message id
+   * @param {string} msgId
+   * @return {!Command|undefined} The command, if any.
+   */
+  static commandForMessage(msgId) {
+    for (const commandName in CommandStore.COMMAND_DATA) {
+      const command = CommandStore.COMMAND_DATA[commandName];
+      if (command.msgId === msgId) {
+        return commandName;
+      }
     }
   }
-};
 
-/**
- * Gets all commands for a category.
- * @param {string} category The category to query.
- * @return {Array<!Command>} The commands, if any.
- */
-CommandStore.commandsForCategory = function(category) {
-  const ret = [];
-  for (const cmd in CommandStore.CMD_ALLOWLIST) {
-    const struct = CommandStore.CMD_ALLOWLIST[cmd];
-    if (category === struct.category) {
-      ret.push(cmd);
+  /**
+   * Gets all commands for a category.
+   * @param {string} category The category to query.
+   * @return {Array<!Command>} The commands, if any.
+   */
+  static commandsForCategory(category) {
+    const ret = [];
+    for (const cmd in CommandStore.COMMAND_DATA) {
+      const struct = CommandStore.COMMAND_DATA[cmd];
+      if (category === struct.category) {
+        ret.push(cmd);
+      }
     }
+    return ret;
   }
-  return ret;
-};
 
-/**
- * @param {!Command} command The command to query.
- * @return {boolean} Whether or not this command is denied in the OOBE.
- */
-CommandStore.denySignedOut = function(command) {
-  if (!CommandStore.CMD_ALLOWLIST[command]) {
-    return false;
+  /**
+   * @param {!Command} command The command to query.
+   * @return {boolean} Whether or not this command is denied in the OOBE.
+   */
+  static denySignedOut(command) {
+    if (!CommandStore.COMMAND_DATA[command]) {
+      return false;
+    }
+    return Boolean(CommandStore.COMMAND_DATA[command].denySignedOut);
   }
-  return Boolean(CommandStore.CMD_ALLOWLIST[command].denySignedOut);
-};
+}
 
 /**
  * List of commands. Please keep list alphabetical.
@@ -312,7 +304,7 @@ export const CommandCategory = {
  *  denySignedOut: Explicitly denies this command when on chrome://oobe/* or
  *             other signed-out contexts. Defaults to false.
  */
-CommandStore.CMD_ALLOWLIST = {
+CommandStore.COMMAND_DATA = {
   [Command.TOGGLE_STICKY_MODE]: {
     announce: false,
     msgId: 'toggle_sticky_mode',

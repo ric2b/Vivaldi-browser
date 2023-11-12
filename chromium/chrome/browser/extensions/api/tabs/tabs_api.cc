@@ -12,14 +12,15 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/escape.h"
@@ -637,13 +638,12 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
 
     // Second, resolve, validate and convert them to GURLs.
     for (auto& url_string : url_strings) {
-      GURL url;
-      std::string error;
-      if (!ExtensionTabUtil::PrepareURLForNavigation(url_string, extension(),
-                                                     &url, &error)) {
-        return RespondNow(Error(std::move(error)));
+      auto url =
+          ExtensionTabUtil::PrepareURLForNavigation(url_string, extension());
+      if (!url.has_value()) {
+        return RespondNow(Error(std::move(url.error())));
       }
-      urls.push_back(url);
+      urls.push_back(*url);
     }
   }
 
@@ -769,6 +769,13 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     } //!is_vivaldi
     if (create_data->focused)
       focused = *create_data->focused;
+
+    // Record the window height and width to determine if we
+    // can set a mininimum value for them (crbug.com/1369103).
+    UMA_HISTOGRAM_COUNTS_1000("Extensions.CreateWindowWidth",
+                              window_bounds.width());
+    UMA_HISTOGRAM_COUNTS_1000("Extensions.CreateWindowHeight",
+                              window_bounds.height());
   }
 
   // Create a new BrowserWindow if possible.
@@ -906,6 +913,21 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     if (reset_active && base::Contains(*browser_list, active_browser))
       active_browser->window()->Activate();
   }
+
+// Despite creating the window with initial_show_state() ==
+// ui::SHOW_STATE_MINIMIZED above, on Linux the window is not created as
+// minimized.
+// TODO(crbug.com/1410400): Remove this workaround when linux is fixed.
+#if BUILDFLAG(IS_LINUX)
+// TODO(crbug.com/1410400): Find a fix for wayland as well.
+
+// Must be defined inside IS_LINUX to compile on windows/mac.
+#if BUILDFLAG(OZONE_PLATFORM_X11)
+  if (new_window->initial_show_state() == ui::SHOW_STATE_MINIMIZED) {
+    new_window->window()->Minimize();
+  }
+#endif  // BUILDFLAG(OZONE_PLATFORM_X11)
+#endif  // BUILDFLAG(IS_LINUX)
 
   // Lock the window fullscreen only after the new tab has been created
   // (otherwise the tabstrip is empty), and window()->show() has been called
@@ -1684,22 +1706,19 @@ ExtensionFunction::ResponseAction TabsUpdateFunction::Run() {
 bool TabsUpdateFunction::UpdateURL(const std::string& url_string,
                                    int tab_id,
                                    std::string* error) {
-  GURL url;
-  if (!ExtensionTabUtil::PrepareURLForNavigation(url_string, extension(), &url,
-                                                 error)) {
+  auto url = ExtensionTabUtil::PrepareURLForNavigation(url_string, extension());
+  if (!url.has_value()) {
+    *error = std::move(url.error());
     return false;
   }
 
-  const bool is_javascript_scheme = url.SchemeIs(url::kJavaScriptScheme);
-  UMA_HISTOGRAM_BOOLEAN("Extensions.ApiTabUpdateJavascript",
-                        is_javascript_scheme);
   // JavaScript URLs are forbidden in chrome.tabs.update().
-  if (is_javascript_scheme) {
+  if (url->SchemeIs(url::kJavaScriptScheme)) {
     *error = tabs_constants::kJavaScriptUrlsNotAllowedInTabsUpdate;
     return false;
   }
 
-  NavigationController::LoadURLParams load_params(url);
+  NavigationController::LoadURLParams load_params(*url);
 
   // Treat extension-initiated navigations as renderer-initiated so that the URL
   // does not show in the omnibox until it commits.  This avoids URL spoofs
@@ -1719,7 +1738,7 @@ bool TabsUpdateFunction::UpdateURL(const std::string& url_string,
 
   web_contents_->GetController().LoadURLWithParams(load_params);
 
-  DCHECK_EQ(url,
+  DCHECK_EQ(*url,
             web_contents_->GetController().GetPendingEntry()->GetVirtualURL());
 
   return true;
@@ -2237,10 +2256,8 @@ ExtensionFunction::ResponseAction TabsCaptureVisibleTabFunction::Run() {
   // hence the BindPostTask().
   const CaptureResult capture_result = CaptureAsync(
       contents, image_details.get(),
-      base::BindPostTask(
-          base::SequencedTaskRunner::GetCurrentDefault(),
-          base::BindOnce(
-              &TabsCaptureVisibleTabFunction::CopyFromSurfaceComplete, this)));
+      base::BindPostTaskToCurrentDefault(base::BindOnce(
+          &TabsCaptureVisibleTabFunction::CopyFromSurfaceComplete, this)));
   if (capture_result == OK) {
     // CopyFromSurfaceComplete might have already responded.
     return did_respond() ? AlreadyResponded() : RespondLater();
@@ -2381,7 +2398,7 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
              .empty()) {
       // Delay the callback invocation until after the current JS call has
       // returned.
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
           base::BindOnce(&TabsDetectLanguageFunction::RespondWithLanguage, this,
                          vivaldi_translate_client->GetLanguageState().source_language()));

@@ -42,6 +42,7 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
+#include "base/test/scoped_chromeos_version_info.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
@@ -54,6 +55,7 @@
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/test_utils.h"
+#include "ui/display/display_switches.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/screen.h"
 #include "ui/display/test/display_manager_test_api.h"
@@ -66,6 +68,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/message_center/message_center.h"
+#include "ui/ozone/public/ozone_switches.h"
 #include "ui/views/test/native_widget_factory.h"
 #include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/core/window_util.h"
@@ -82,6 +85,8 @@ constexpr char kTabletModeDisabled[] = "Touchview_Disabled";
 
 constexpr char kEnterHistogram[] = "Ash.TabletMode.AnimationSmoothness.Enter";
 constexpr char kExitHistogram[] = "Ash.TabletMode.AnimationSmoothness.Exit";
+
+constexpr char kLsbReleaseContent[] = "CHROMEOS_RELEASE_NAME=Chromium OS\n";
 
 }  // namespace
 
@@ -203,7 +208,7 @@ class TabletModeControllerTest : public AshTestBase {
   std::unique_ptr<aura::Window> CreateDesktopWindowSnappedLeft(
       const gfx::Rect& bounds = gfx::Rect()) {
     std::unique_ptr<aura::Window> window = CreateTestWindow(bounds);
-    WindowSnapWMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
+    WMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
     WindowState::Get(window.get())->OnWMEvent(&snap_to_left);
     return window;
   }
@@ -212,7 +217,7 @@ class TabletModeControllerTest : public AshTestBase {
   std::unique_ptr<aura::Window> CreateDesktopWindowSnappedRight(
       const gfx::Rect& bounds = gfx::Rect()) {
     std::unique_ptr<aura::Window> window = CreateTestWindow(bounds);
-    WindowSnapWMEvent snap_to_right(WM_EVENT_CYCLE_SNAP_SECONDARY);
+    WMEvent snap_to_right(WM_EVENT_CYCLE_SNAP_SECONDARY);
     WindowState::Get(window.get())->OnWMEvent(&snap_to_right);
     return window;
   }
@@ -1357,7 +1362,7 @@ TEST_F(TabletModeControllerTest,
   WindowState* left_window_state = WindowState::Get(left_window.get());
   ASSERT_TRUE(left_window_state->CanSnap());
   ASSERT_FALSE(split_view_controller()->CanSnapWindow(left_window.get()));
-  WindowSnapWMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  WMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
   left_window_state->OnWMEvent(&snap_to_left);
   std::unique_ptr<aura::Window> right_window =
       CreateDesktopWindowSnappedRight();
@@ -1387,7 +1392,7 @@ TEST_F(TabletModeControllerTest,
   WindowState* right_window_state = WindowState::Get(right_window.get());
   ASSERT_TRUE(right_window_state->CanSnap());
   ASSERT_FALSE(split_view_controller()->CanSnapWindow(right_window.get()));
-  WindowSnapWMEvent snap_to_right(WM_EVENT_CYCLE_SNAP_SECONDARY);
+  WMEvent snap_to_right(WM_EVENT_CYCLE_SNAP_SECONDARY);
   right_window_state->OnWMEvent(&snap_to_right);
   wm::ActivateWindow(right_window.get());
   tablet_mode_controller()->SetEnabledForTest(true);
@@ -1416,7 +1421,7 @@ TEST_F(TabletModeControllerTest,
   WindowState* right_window_state = WindowState::Get(right_window.get());
   ASSERT_TRUE(right_window_state->CanSnap());
   ASSERT_FALSE(split_view_controller()->CanSnapWindow(right_window.get()));
-  WindowSnapWMEvent snap_to_right(WM_EVENT_CYCLE_SNAP_SECONDARY);
+  WMEvent snap_to_right(WM_EVENT_CYCLE_SNAP_SECONDARY);
   right_window_state->OnWMEvent(&snap_to_right);
   ASSERT_EQ(left_window.get(), window_util::GetActiveWindow());
   tablet_mode_controller()->SetEnabledForTest(true);
@@ -1444,7 +1449,7 @@ TEST_F(TabletModeControllerTest,
   WindowState* left_window_state = WindowState::Get(left_window.get());
   ASSERT_TRUE(left_window_state->CanSnap());
   ASSERT_FALSE(split_view_controller()->CanSnapWindow(left_window.get()));
-  WindowSnapWMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
+  WMEvent snap_to_left(WM_EVENT_CYCLE_SNAP_PRIMARY);
   left_window_state->OnWMEvent(&snap_to_left);
   std::unique_ptr<aura::Window> right_window =
       CreateDesktopWindowSnappedRight();
@@ -1737,7 +1742,7 @@ TEST_F(TabletModeControllerTest, ShouldAutoHideTitlebars) {
   EXPECT_TRUE(window_state->CanSnap());
 
   // Snap the window and check that `ShouldAutoHideTitlebars()` is true.
-  WindowSnapWMEvent snap_to_left(WM_EVENT_SNAP_PRIMARY);
+  WMEvent snap_to_left(WM_EVENT_SNAP_PRIMARY);
   window_state->OnWMEvent(&snap_to_left);
   EXPECT_TRUE(window_state->IsSnapped());
   EXPECT_TRUE(Shell::Get()->tablet_mode_controller()->ShouldAutoHideTitlebars(
@@ -1786,8 +1791,13 @@ class TabletModeControllerOnDeviceTest : public TabletModeControllerTest {
 
   void SetUp() override {
     // We need to simulate the real on-device behavior for some tests.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kForceSystemCompositorMode);
+    scoped_version_info_ =
+        std::make_unique<base::test::ScopedChromeOSVersionInfo>(
+            kLsbReleaseContent, base::Time::Now());
+    // TODO(oshima): Disable native events instead of adding offset.
+    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+        ::switches::kHostWindowBounds, "800x600");
+
     TabletModeControllerTest::SetUp();
     // PowerManagerClient callback is a posted task.
     base::RunLoop().RunUntilIdle();
@@ -1796,6 +1806,9 @@ class TabletModeControllerOnDeviceTest : public TabletModeControllerTest {
     TriggerBaseAndLidUpdate(gfx::Vector3dF(kMeanGravityFloat, 0.0f, 0.0f),
                             gfx::Vector3dF(kMeanGravityFloat, 0.0f, 0.0f));
   }
+
+ private:
+  std::unique_ptr<base::test::ScopedChromeOSVersionInfo> scoped_version_info_;
 };
 
 // Tests that if there is no internal and external input device, the device
@@ -2057,7 +2070,7 @@ class TabletModeControllerFloatScreenshotTest
     : public TabletModeControllerScreenshotTest {
  public:
   TabletModeControllerFloatScreenshotTest()
-      : scoped_feature_list_(chromeos::wm::features::kFloatWindow) {}
+      : scoped_feature_list_(chromeos::wm::features::kWindowLayoutMenu) {}
   TabletModeControllerFloatScreenshotTest(
       const TabletModeControllerFloatScreenshotTest&) = delete;
   TabletModeControllerFloatScreenshotTest& operator=(

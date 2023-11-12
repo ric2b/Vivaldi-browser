@@ -8,8 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_helpers.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/functional/callback_helpers.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
 #include "content/common/frame.mojom.h"
@@ -269,7 +268,8 @@ void TestRenderFrame::Navigate(
       std::move(pending_factory_bundle), absl::nullopt,
       blink::mojom::ControllerServiceWorkerInfoPtr(),
       blink::mojom::ServiceWorkerContainerInfoForClientPtr(),
-      mojo::NullRemote() /* prefetch_loader_factory */, blink::DocumentToken(),
+      mojo::NullRemote() /* prefetch_loader_factory */,
+      mojo::NullRemote() /* topics_loader_factory */, blink::DocumentToken(),
       base::UnguessableToken::Create(), blink::ParsedPermissionsPolicy(),
       blink::mojom::PolicyContainer::New(
           blink::mojom::PolicyContainerPolicies::New(),
@@ -358,11 +358,7 @@ void TestRenderFrame::BeginNavigation(
           blink::WebString::FromUTF8(charset), data);
     }
     if (url.IsAboutSrcdoc()) {
-      // If we are loading an about:srcdoc frame in a TestRenderFrame browser
-      // test, then we are guaranteed we have a local parent.
-      blink::WebLocalFrame* parent = GetWebFrame()->Parent()->ToWebLocalFrame();
-      navigation_params->fallback_srcdoc_base_url =
-          parent->GetDocument().BaseURL();
+      navigation_params->fallback_srcdoc_base_url = info->requestor_base_url;
     }
 
     navigation_params->policy_container->policies.sandbox_flags =

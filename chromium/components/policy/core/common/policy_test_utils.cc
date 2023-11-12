@@ -6,9 +6,9 @@
 
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
@@ -82,7 +82,7 @@ CFPropertyListRef ValueToProperty(const base::Value& value) {
       return base::SysUTF8ToCFStringRef(string_value).release();
     }
 
-    case base::Value::Type::DICTIONARY: {
+    case base::Value::Type::DICT: {
       // |dict| is owned by the caller.
       CFMutableDictionaryRef dict = CFDictionaryCreateMutable(
           kCFAllocatorDefault, value.DictSize(), &kCFTypeDictionaryKeyCallBacks,

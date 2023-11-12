@@ -8,10 +8,12 @@
 @protocol VivaldiSyncSettingsCommandHandler
 
 - (void)showActivateAccountView;
-- (void)showSyncEncryptionPasswordView;
+- (void)showSyncCreateAccountUserView;
+- (void)showSyncEncryptionPasswordView:(BOOL)creatingPasscode;
 - (void)showSyncSettingsView;
 - (void)showSyncLoginView;
-- (void)loginFailed;
+- (void)loginFailed:(NSString*)errorMessage;
+- (void)createAccountFailed:(NSString*)errorCode;
 
 @end
 

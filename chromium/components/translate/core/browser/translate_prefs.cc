@@ -38,6 +38,13 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_collator.h"
 
+// Vivaldi
+#include "app/vivaldi_apptools.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
+
 namespace translate {
 
 namespace {
@@ -211,10 +218,26 @@ std::string TranslatePrefs::MapPreferenceName(const std::string& pref_name) {
 }
 
 bool TranslatePrefs::IsOfferTranslateEnabled() const {
+
+  // Vivaldi: Don't allow translate until Vivaldi Translation is ready to be
+  // integrated.
+  #if BUILDFLAG(IS_IOS)
+  if (IsVivaldiRunning())
+    return false; // End Vivaldi
+  #endif
+
   return prefs_->GetBoolean(prefs::kOfferTranslateEnabled);
 }
 
 bool TranslatePrefs::IsTranslateAllowedByPolicy() const {
+
+  // Vivaldi: Don't allow translate until Vivaldi Translation is ready to be
+  // integrated.
+  #if BUILDFLAG(IS_IOS)
+  if (IsVivaldiRunning())
+    return false; // End Vivaldi
+  #endif
+
   const PrefService::Preference* const pref =
       prefs_->FindPreference(prefs::kOfferTranslateEnabled);
   DCHECK(pref);

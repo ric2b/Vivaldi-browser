@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 import {assert, assertInstanceof} from 'chrome://resources/ash/common/assert.js';
 import {NativeEventTarget as EventTarget} from 'chrome://resources/ash/common/event_target.js';
 import {loadTimeData} from 'chrome://resources/ash/common/load_time_data.m.js';
+import {startColorChangeUpdater} from 'chrome://resources/cr_components/color_change_listener/colors_css_updater.js';
 
 import {getDialogCaller, getDlpBlockedComponents, getPreferences} from '../../common/js/api.js';
 import {ArrayDataModel} from '../../common/js/array_data_model.js';
@@ -19,6 +19,7 @@ import {ProgressItemState} from '../../common/js/progress_center_common.js';
 import {TrashRootEntry} from '../../common/js/trash.js';
 import {str, util} from '../../common/js/util.js';
 import {AllowedPaths, VolumeManagerCommon} from '../../common/js/volume_manager_types.js';
+import {NudgeType} from '../../containers/nudge_container.js';
 import {Crostini} from '../../externs/background/crostini.js';
 import {FileManagerBaseInterface} from '../../externs/background/file_manager_base.js';
 import {FileOperationManager} from '../../externs/background/file_operation_manager.js';
@@ -28,7 +29,7 @@ import {FakeEntry, FilesAppDirEntry} from '../../externs/files_app_entry_interfa
 import {ForegroundWindow} from '../../externs/foreground_window.js';
 import {PropStatus} from '../../externs/ts/state.js';
 import {updateSearch} from '../../state/actions.js';
-import {getStore} from '../../state/store.js';
+import {getEmptyState, getStore} from '../../state/store.js';
 
 import {ActionsController} from './actions_controller.js';
 import {AndroidAppListModel} from './android_app_list_model.js';
@@ -875,6 +876,13 @@ export class FileManager extends EventTarget {
     this.document_.documentElement.classList.add('files-ng');
     this.dialogDom_.classList.add('files-ng');
 
+    // Add theme attribute so widgets can render different styles based on
+    // this attribute:
+    // [theme="legacy"] -> Legacy style, [theme="refresh23"] -> Refresh23 style
+    const theme = util.isJellyEnabled() ? 'refresh23' : 'legacy';
+    this.document_.documentElement.setAttribute('theme', theme);
+    this.dialogDom_.setAttribute('theme', theme);
+
     chrome.fileManagerPrivate.isTabletModeEnabled(
         this.onTabletModeChanged_.bind(this));
     chrome.fileManagerPrivate.onTabletModeChanged.addListener(
@@ -886,9 +894,7 @@ export class FileManager extends EventTarget {
     const fileSystemUIPromise = this.initFileSystemUI_();
     // Initialize the Store for the whole app.
     const store = getStore();
-    store.init({
-      allEntries: {},
-    });
+    store.init(getEmptyState());
     this.initUIFocus_();
     metrics.recordInterval('Load.InitUI');
     return fileSystemUIPromise;
@@ -1098,7 +1104,7 @@ export class FileManager extends EventTarget {
     this.recentEntry_ = new FakeEntryImpl(
         str('RECENT_ROOT_LABEL'), VolumeManagerCommon.RootType.RECENT,
         this.getSourceRestriction_(),
-        chrome.fileManagerPrivate.RecentFileType.ALL);
+        chrome.fileManagerPrivate.FileCategory.ALL);
 
     assert(this.launchParams_);
     this.selectionHandler_ = new FileSelectionHandler(
@@ -1266,8 +1272,7 @@ export class FileManager extends EventTarget {
     if (util.isGuestOsEnabled()) {
       this.guestOsController_ = new GuestOsController(
           this.directoryModel_, assert(this.directoryTree),
-          this.volumeManager_.isDisabled(
-              VolumeManagerCommon.VolumeType.GUEST_OS));
+          this.volumeManager_);
       await this.guestOsController_.refresh();
     }
   }
@@ -1334,38 +1339,42 @@ export class FileManager extends EventTarget {
     // Resolve the selectionURL to selectionEntry or to currentDirectoryEntry in
     // case of being a display root or a default directory to open files.
     if (this.launchParams_.selectionURL) {
-      try {
-        const inEntry = await new Promise((resolve, reject) => {
-          window.webkitResolveLocalFileSystemURL(
-              this.launchParams_.selectionURL, resolve, reject);
-        });
-        const locationInfo = this.volumeManager_.getLocationInfo(inEntry);
-        // If location information is not available, then the volume is no
-        // longer (or never) available.
-        if (locationInfo) {
-          // If the selection is root, then use it as a current directory
-          // instead. This is because, selecting a root entry is done as opening
-          // it.
-          if (locationInfo.isRootEntry) {
-            nextCurrentDirEntry = inEntry;
-          }
+      if (this.launchParams_.selectionURL == this.recentEntry_.toURL()) {
+        nextCurrentDirEntry = this.recentEntry_;
+      } else {
+        try {
+          const inEntry = await new Promise((resolve, reject) => {
+            window.webkitResolveLocalFileSystemURL(
+                this.launchParams_.selectionURL, resolve, reject);
+          });
+          const locationInfo = this.volumeManager_.getLocationInfo(inEntry);
+          // If location information is not available, then the volume is no
+          // longer (or never) available.
+          if (locationInfo) {
+            // If the selection is root, use it as a current directory instead.
+            // This is because selecting a root is the same as opening it.
+            if (locationInfo.isRootEntry) {
+              nextCurrentDirEntry = inEntry;
+            }
 
-          // If the |selectionURL| is a directory make it the current directory.
-          if (inEntry.isDirectory) {
-            nextCurrentDirEntry = inEntry;
-          }
+            // If the |selectionURL| is a directory make it the current
+            // directory.
+            if (inEntry.isDirectory) {
+              nextCurrentDirEntry = inEntry;
+            }
 
-          // By default, the selection should be selected entry and the parent
-          // directory of it should be the current directory.
-          if (!nextCurrentDirEntry) {
-            selectionEntry = inEntry;
+            // By default, the selection should be selected entry and the parent
+            // directory of it should be the current directory.
+            if (!nextCurrentDirEntry) {
+              selectionEntry = inEntry;
+            }
           }
-        }
-      } catch (error) {
-        // If `selectionURL` doesn't exist we just don't select it, thus we
-        // don't need to log the failure.
-        if (error.name !== 'NotFoundError') {
-          console.warn(error.stack || error);
+        } catch (error) {
+          // If `selectionURL` doesn't exist we just don't select it, thus we
+          // don't need to log the failure.
+          if (error.name !== 'NotFoundError') {
+            console.warn(error.stack || error);
+          }
         }
       }
     }
@@ -1677,6 +1686,16 @@ export class FileManager extends EventTarget {
       this.toolbarController_.moveToTrashCommand.canExecuteChange(
           this.ui_.listContainer.currentList);
       redraw = true;
+    }
+
+    // These prefs starts with value 0. We only want to display when they're
+    // non-zero and show the most recent (larger value).
+    if (prefs.officeFileMovedOneDrive > prefs.officeFileMovedGoogleDrive) {
+      this.ui_.nudgeContainer.showNudge(
+          NudgeType['ONE_DRIVE_MOVED_FILE_NUDGE']);
+    } else if (
+        prefs.officeFileMovedOneDrive < prefs.officeFileMovedGoogleDrive) {
+      this.ui_.nudgeContainer.showNudge(NudgeType['DRIVE_MOVED_FILE_NUDGE']);
     }
 
     if (redraw) {

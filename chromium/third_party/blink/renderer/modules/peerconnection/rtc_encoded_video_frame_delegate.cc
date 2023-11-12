@@ -57,31 +57,6 @@ void RTCEncodedVideoFrameDelegate::SetData(const DOMArrayBuffer* data) {
   }
 }
 
-DOMArrayBuffer* RTCEncodedVideoFrameDelegate::CreateAdditionalDataBuffer()
-    const {
-  ArrayBufferContents contents;
-  {
-    base::AutoLock lock(lock_);
-    if (!webrtc_frame_)
-      return nullptr;
-
-    auto additional_data = webrtc_frame_->GetAdditionalData();
-    contents = ArrayBufferContents(additional_data.size(), 1,
-                                   ArrayBufferContents::kNotShared,
-                                   ArrayBufferContents::kDontInitialize);
-    if (UNLIKELY(!contents.Data()))
-      OOM_CRASH(additional_data.size());
-    memcpy(contents.Data(), additional_data.data(), additional_data.size());
-  }
-  return DOMArrayBuffer::Create(std::move(contents));
-}
-
-absl::optional<uint32_t> RTCEncodedVideoFrameDelegate::Ssrc() const {
-  base::AutoLock lock(lock_);
-  return webrtc_frame_ ? absl::make_optional(webrtc_frame_->GetSsrc())
-                       : absl::nullopt;
-}
-
 absl::optional<uint8_t> RTCEncodedVideoFrameDelegate::PayloadType() const {
   base::AutoLock lock(lock_);
   return webrtc_frame_ ? absl::make_optional(webrtc_frame_->GetPayloadType())
@@ -92,6 +67,15 @@ const webrtc::VideoFrameMetadata* RTCEncodedVideoFrameDelegate::GetMetadata()
     const {
   base::AutoLock lock(lock_);
   return webrtc_frame_ ? &webrtc_frame_->GetMetadata() : nullptr;
+}
+
+void RTCEncodedVideoFrameDelegate::SetMetadata(
+    const webrtc::VideoFrameMetadata& metadata) {
+  base::AutoLock lock(lock_);
+  if (!webrtc_frame_) {
+    return;
+  }
+  webrtc_frame_->SetMetadata(metadata);
 }
 
 std::unique_ptr<webrtc::TransformableVideoFrameInterface>

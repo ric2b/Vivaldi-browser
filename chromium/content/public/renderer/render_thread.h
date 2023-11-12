@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <memory>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/attribution_reporting/os_support.mojom-forward.h"
@@ -89,7 +89,7 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
   virtual void AddObserver(RenderThreadObserver* observer) = 0;
   virtual void RemoveObserver(RenderThreadObserver* observer) = 0;
 
-  // Set the WebResourceRequestSender delegate object for this process.
+  // Set the ResourceRequestSender delegate object for this process.
   // This does not take the ownership of the delegate. It is expected that the
   // delegate is kept alive while a request may be dispatched.
   virtual void SetResourceRequestSenderDelegate(

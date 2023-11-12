@@ -10,9 +10,11 @@
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "chrome/browser/ash/login/oobe_quick_start/logging/logging.h"
 #include "chrome/browser/ash/login/oobe_quick_start/target_device_bootstrap_controller.h"
 #include "chrome/browser/ash/login/oobe_quick_start/verification_shapes.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
+#include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/ui/webui/ash/login/quick_start_screen_handler.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 
@@ -49,6 +51,11 @@ void QuickStartScreen::ShowImpl() {
       LoginDisplayHost::default_host()->GetQuickStartBootstrapController();
   bootstrap_controller_->AddObserver(this);
   bootstrap_controller_->StartAdvertising();
+
+  // TODO(b/234655072): Delete the call to SavePhoneInstanceID() here once the
+  // Gaia Credentials flow is complete. This is for testing with the
+  // kQuickStartPhoneInstanceIDSwitch only.
+  SavePhoneInstanceID();
 }
 
 void QuickStartScreen::HideImpl() {
@@ -79,6 +86,10 @@ void QuickStartScreen::OnStatusChanged(
       view_->SetQRCode(std::move(qr_code_list));
       return;
     }
+    case Step::GAIA_CREDENTIALS: {
+      SavePhoneInstanceID();
+      return;
+    }
     case Step::NONE:
     case Step::ERROR:
     case Step::ADVERTISING:
@@ -102,6 +113,25 @@ void QuickStartScreen::SendRandomFiguresForTesting() const {
       base::TimeFormatWithPattern(base::Time::Now(), "MMMMdjmmss"));
   const auto& shapes = quick_start::GenerateShapes(token);
   view_->SetShapes(shapes);
+}
+
+void QuickStartScreen::SavePhoneInstanceID() {
+  if (!bootstrap_controller_) {
+    return;
+  }
+
+  std::string phone_instance_id = bootstrap_controller_->GetPhoneInstanceId();
+  if (phone_instance_id.empty()) {
+    return;
+  }
+
+  quick_start::QS_LOG(INFO)
+      << "Adding Phone Instance ID to Wizard Object for Unified "
+         "Setup UI enhancements. quick_start_phone_instance_id: "
+      << phone_instance_id;
+  LoginDisplayHost::default_host()
+      ->GetWizardContext()
+      ->quick_start_phone_instance_id = phone_instance_id;
 }
 
 }  // namespace ash

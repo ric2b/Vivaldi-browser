@@ -6,11 +6,7 @@
 #define GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_GL_TEXTURE_IMAGE_BACKING_H_
 
 #include "gpu/command_buffer/service/shared_image/gl_common_image_backing_factory.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_format_utils.h"
-
-namespace gl {
-class GLImageEGL;
-}
+#include "gpu/command_buffer/service/shared_image/gl_texture_holder.h"
 
 namespace gpu {
 
@@ -34,15 +30,10 @@ class GLTextureImageBacking : public ClearTrackingSharedImageBacking {
   ~GLTextureImageBacking() override;
 
   void InitializeGLTexture(
-      const GLCommonImageBackingFactory::FormatInfo& format_info,
-      bool is_cleared,
+      const std::vector<GLCommonImageBackingFactory::FormatInfo>& format_info,
+      base::span<const uint8_t> pixel_data,
+      gl::ProgressReporter* progress_reporter,
       bool framebuffer_attachment_angle);
-  void SetCompatibilitySwizzle(
-      const gles2::Texture::CompatibilitySwizzle* swizzle);
-
-  GLenum GetGLTarget() const;
-  GLuint GetGLServiceId() const;
-  void CreateEGLImage();
 
  private:
   // SharedImageBacking:
@@ -66,19 +57,15 @@ class GLTextureImageBacking : public ClearTrackingSharedImageBacking {
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state) override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
-  bool UploadFromMemory(const SkPixmap& pixmap) override;
-  bool ReadbackToMemory(SkPixmap& pixmap) override;
+  bool UploadFromMemory(const std::vector<SkPixmap>& pixmaps) override;
+  bool ReadbackToMemory(const std::vector<SkPixmap>& pixmaps) override;
 
   bool IsPassthrough() const { return is_passthrough_; }
 
   const bool is_passthrough_;
-  gles2::Texture* texture_ = nullptr;
-  scoped_refptr<gles2::TexturePassthrough> passthrough_texture_;
 
-  GLFormatDesc format_desc_;
-
-  sk_sp<SkPromiseImageTexture> cached_promise_texture_;
-  scoped_refptr<gl::GLImageEGL> image_egl_;
+  std::vector<GLTextureHolder> textures_;
+  std::vector<sk_sp<SkPromiseImageTexture>> cached_promise_textures_;
 };
 
 }  // namespace gpu

@@ -29,7 +29,13 @@
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
+namespace ash {
+
 namespace {
+
+namespace network_config {
+namespace mojom = ::chromeos::network_config::mojom;
+}
 
 // TODO(tbarzic): Add payment portal method values to shill/dbus-constants.
 constexpr char kPaymentPortalMethodPost[] = "POST";
@@ -51,20 +57,10 @@ bool IsValidConnectionState(const std::string& connection_state) {
          connection_state == shill::kStatePortalSuspected ||
          connection_state == shill::kStateOnline ||
          connection_state == shill::kStateFailure ||
-         connection_state == shill::kStateDisconnect ||
-         // TODO(b/260792466): Empty should not be a valid state,
-         // but e.g. new tether NetworkStates and unit tests use it currently.
-         connection_state.empty();
+         connection_state == shill::kStateDisconnect;
 }
 
 }  // namespace
-
-namespace ash {
-
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
-namespace network_config {
-namespace mojom = ::chromeos::network_config::mojom;
-}
 
 NetworkState::NetworkState(const std::string& path)
     : ManagedState(MANAGED_TYPE_NETWORK, path) {}
@@ -184,13 +180,13 @@ bool NetworkState::PropertyChanged(const std::string& key,
       proxy_config_ = base::Value();
       return true;
     }
-    base::Value proxy_config =
+    absl::optional<base::Value::Dict> proxy_config =
         chromeos::onc::ReadDictionaryFromJson(*proxy_config_str);
-    if (!proxy_config.is_dict()) {
+    if (!proxy_config.has_value()) {
       NET_LOG(ERROR) << "Failed to parse " << path() << "." << key;
       proxy_config_ = base::Value();
     } else {
-      proxy_config_ = std::move(proxy_config);
+      proxy_config_ = base::Value(std::move(*proxy_config));
     }
     return true;
   } else if (key == shill::kProviderProperty) {
@@ -231,14 +227,35 @@ bool NetworkState::PropertyChanged(const std::string& key,
       return false;
     probe_url_ = GURL(probe_url_string);
     return true;
+  } else if (key == shill::kUplinkSpeedPropertyKbps) {
+    uint32_t max_uplink_speed_kbps;
+    if (!GetUInt32Value(key, value, &max_uplink_speed_kbps))
+      return false;
+    if (max_uplink_speed_kbps_.has_value() &&
+        max_uplink_speed_kbps == max_uplink_speed_kbps_.value()) {
+      return false;
+    }
+    max_uplink_speed_kbps_ = max_uplink_speed_kbps;
+    return true;
+  } else if (key == shill::kDownlinkSpeedPropertyKbps) {
+    uint32_t max_downlink_speed_kbps;
+    if (!GetUInt32Value(key, value, &max_downlink_speed_kbps))
+      return false;
+    if (max_downlink_speed_kbps_.has_value() &&
+        max_downlink_speed_kbps == max_downlink_speed_kbps_.value()) {
+      return false;
+    }
+    max_downlink_speed_kbps_ = max_downlink_speed_kbps;
+    return true;
   }
   return false;
 }
 
-bool NetworkState::InitialPropertiesReceived(const base::Value& properties) {
+bool NetworkState::InitialPropertiesReceived(
+    const base::Value::Dict& properties) {
   NET_LOG(EVENT) << "InitialPropertiesReceived: " << NetworkId(this)
                  << " State: " << connection_state_ << " Visible: " << visible_;
-  if (!properties.FindKey(shill::kTypeProperty)) {
+  if (!properties.contains(shill::kTypeProperty)) {
     NET_LOG(ERROR) << "NetworkState has no type: " << NetworkId(this);
     return false;
   }
@@ -276,7 +293,7 @@ void NetworkState::GetStateProperties(base::Value* dictionary) const {
     // Shill sends VPN provider properties in a nested dictionary. |dictionary|
     // must replicate that nested structure.
     std::string provider_type = vpn_provider()->type;
-    base::Value provider_property(base::Value::Type::DICTIONARY);
+    base::Value provider_property(base::Value::Type::DICT);
     provider_property.SetKey(shill::kTypeProperty, base::Value(provider_type));
     if (provider_type == shill::kProviderThirdPartyVpn ||
         provider_type == shill::kProviderArcVpn) {
@@ -344,12 +361,13 @@ bool NetworkState::IsActive() const {
          activation_state() == shill::kActivationStateActivating;
 }
 
-void NetworkState::IPConfigPropertiesChanged(const base::Value& properties) {
-  if (properties.DictEmpty()) {
+void NetworkState::IPConfigPropertiesChanged(
+    const base::Value::Dict& properties) {
+  if (properties.empty()) {
     ipv4_config_ = base::Value();
     return;
   }
-  ipv4_config_ = properties.Clone();
+  ipv4_config_ = base::Value(properties.Clone());
 }
 
 std::string NetworkState::GetIpAddress() const {
@@ -639,7 +657,7 @@ std::unique_ptr<NetworkState> NetworkState::CreateNonShillCellularNetwork(
 
 // Private methods.
 
-bool NetworkState::UpdateName(const base::Value& properties) {
+bool NetworkState::UpdateName(const base::Value::Dict& properties) {
   std::string updated_name =
       shill_property_util::GetNameFromProperties(path(), properties);
   if (updated_name != name()) {
@@ -649,9 +667,17 @@ bool NetworkState::UpdateName(const base::Value& properties) {
   return false;
 }
 
-void NetworkState::UpdateCaptivePortalState(const base::Value& properties) {
+void NetworkState::UpdateCaptivePortalState(
+    const base::Value::Dict& properties) {
+  if (!IsConnectedState()) {
+    // Unconnected networks are in an unknown portal state and should not
+    // update histograms.
+    shill_portal_state_ = PortalState::kUnknown;
+    return;
+  }
+
   int status_code =
-      properties.FindIntKey(shill::kPortalDetectionFailedStatusCodeProperty)
+      properties.FindInt(shill::kPortalDetectionFailedStatusCodeProperty)
           .value_or(0);
   if (connection_state_ == shill::kStateNoConnectivity) {
     shill_portal_state_ = PortalState::kNoInternet;

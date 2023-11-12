@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/features.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//net/features.gni")
 import("//services/network/public/cpp/features.gni")
@@ -123,6 +124,8 @@ component("network_service") {
     "resource_scheduler/resource_scheduler_params_manager.h",
     "restricted_cookie_manager.cc",
     "restricted_cookie_manager.h",
+    "restricted_udp_socket.cc",
+    "restricted_udp_socket.h",
     "sec_header_helpers.cc",
     "sec_header_helpers.h",
     "session_cleanup_cookie_store.cc",
@@ -265,6 +268,7 @@ component("network_service") {
     "//mojo/public/cpp/system",
     "//net",
     "//net:extras",
+    "//services/network/attribution",
     "//services/network/first_party_sets:first_party_sets_manager",
     "//services/network/public/cpp",
     "//services/network/public/cpp:crash_keys",
@@ -408,6 +412,7 @@ source_set("tests") {
 
   if (is_p2p_enabled) {
     sources += [
+      "p2p/socket_manager_unittest.cc",
       "p2p/socket_tcp_unittest.cc",
       "p2p/socket_test_utils.cc",
       "p2p/socket_test_utils.h",
@@ -471,6 +476,8 @@ source_set("tests") {
     "//net:simple_quic_tools",
     "//net:test_support",
     "//net/http:transport_security_state_unittest_data_default",
+    "//services/network/attribution",
+    "//services/network/attribution:tests",
     "//services/network/first_party_sets:first_party_sets_manager",
     "//services/network/first_party_sets:tests",
     "//services/network/public/cpp",
@@ -495,7 +502,7 @@ source_set("tests") {
     deps += [ "//components/certificate_transparency" ]
   }
 
-  if (!is_ios) {
+  if (use_blink) {
     deps += [ "//services/proxy_resolver:lib" ]
   }
 }
@@ -523,9 +530,13 @@ source_set("test_support") {
     "test/test_network_context.h",
     "test/test_network_context_client.cc",
     "test/test_network_context_client.h",
+    "test/test_network_context_with_host_resolver.cc",
+    "test/test_network_context_with_host_resolver.h",
     "test/test_network_quality_tracker.cc",
     "test/test_network_quality_tracker.h",
     "test/test_resource_scheduler.h",
+    "test/test_restricted_udp_socket.cc",
+    "test/test_restricted_udp_socket.h",
     "test/test_shared_url_loader_factory.cc",
     "test/test_shared_url_loader_factory.h",
     "test/test_socket_broker_impl.cc",

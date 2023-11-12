@@ -45,6 +45,7 @@ export class TaskController {
   private fileTransferController_: FileTransferController|null = null;
   private taskHistory_: TaskHistory;
   private canExecuteDefaultTask_: boolean = false;
+  private shouldHideDefaultTask_: boolean = true;
   private canExecuteOpenActions_: boolean = false;
   private defaultTaskCommand_: Command;
   /**
@@ -110,7 +111,6 @@ export class TaskController {
     const keys = newState.currentDirectory?.selection.keys;
     const tasks = newState.currentDirectory?.selection.fileTasks;
     if (keys !== this.selectionKeys_) {
-      // Selection change is throttled by requestAnimationFrame().
       this.selectionKeys_ = keys;
       this.selectionFilesData_ = getFilesData(newState, keys ?? []);
       // Kickoff the async/ActionsProducer to fetch the tasks for the new
@@ -246,8 +246,9 @@ export class TaskController {
   }
 
   /**
-   * Setup a task picker combobutton based on the given tasks. The combobutton
-   * is not shown if there are no tasks, or if any entry is a directory.
+   * Populate the #tasks-menu with the open-with tasks. The menu is managed by
+   * the top task menu Open combobutton, but it is also used as the right-click
+   * open-with context menu.
    */
   private updateTasksDropdown_(fileTasks: FileTasks) {
     const combobutton = this.ui_.taskMenuButton;
@@ -256,8 +257,9 @@ export class TaskController {
     combobutton.hidden =
         tasks.length == 0 || fileTasks.entries.some(e => e.isDirectory);
 
-    // If it's hidden, we don't have to update further the DOM.
-    if (combobutton.hidden) {
+    // Even if the task menu button is hidden, we still update the items if
+    // tasks exist since they are used for the right-click context menu.
+    if (tasks.length == 0) {
       return;
     }
 
@@ -363,6 +365,7 @@ export class TaskController {
           console.assert(false);
           return false;
         },
+        isDlpBlocked: false,
       };
 
       tasks.execute(task);
@@ -442,6 +445,7 @@ export class TaskController {
 
     if (shouldDisableTasks) {
       this.ui_.taskMenuButton.hidden = true;
+      this.updateContextMenuTaskItems_([]);
       if (window.IN_TEST) {
         this.ui_.taskMenuButton.toggleAttribute('get-tasks-completed', true);
       }
@@ -480,7 +484,7 @@ export class TaskController {
 
   async getFileTasks(): Promise<FileTasks> {
     if (util.isFilesAppExperimental()) {
-      this.getFileTasksStore_();
+      return this.getFileTasksStore_();
     }
     const selection = this.selectionHandler_.selection;
     if (this.tasks_ &&
@@ -506,9 +510,12 @@ export class TaskController {
         this.store_,
         (st: State) => st.currentDirectory?.selection.fileTasks.status ===
             PropStatus.SUCCESS);
-    // After the state has been updated it's guaranteed that the
-    // onStateChanged() has run this.tasks_ is updated.
-    return this.tasks_!;
+    const entries = this.selectionFilesData_.map(fd => fd.entry) as Entry[];
+    this.tasks_ = Promise.resolve(FileTasks.fromStoreTasks(
+        this.selectionTasks_!, this.volumeManager_, this.metadataModel_,
+        this.directoryModel_, this.ui_, this.fileTransferController_!, entries,
+        this.taskHistory_, this.progressCenter_, this));
+    return this.tasks_;
   }
 
   /**
@@ -541,6 +548,11 @@ export class TaskController {
   /** Returns whether default task command can be executed or not. */
   canExecuteDefaultTask(): boolean {
     return this.canExecuteDefaultTask_;
+  }
+
+  /** Returns whether default task command should be hidden or not. */
+  shouldHideDefaultTask(): boolean {
+    return this.shouldHideDefaultTask_;
   }
 
   /** Returns whether open with command can be executed or not. */
@@ -598,7 +610,9 @@ export class TaskController {
       }
     }
 
-    this.canExecuteDefaultTask_ = defaultTask != null;
+    this.canExecuteDefaultTask_ =
+        defaultTask != null && !defaultTask.isDlpBlocked;
+    this.shouldHideDefaultTask_ = defaultTask == null;
     this.defaultTaskCommand_.canExecuteChange(this.ui_.listContainer.element);
     this.canExecuteOpenActions_ = taskCount > 1;
     this.openWithCommand_.canExecuteChange(this.ui_.listContainer.element);
@@ -751,6 +765,7 @@ export interface DropdownItem {
   isDefault: boolean;
   isPolicyDefault: boolean;
   isGenericFileHandler?: boolean;
+  isDlpBlocked?: boolean;
 }
 
 /**
@@ -771,5 +786,6 @@ function createDropdownItem(
     isDefault: isDefault || false,
     isPolicyDefault: isPolicyDefault || false,
     isGenericFileHandler: task.isGenericFileHandler,
+    isDlpBlocked: task.isDlpBlocked,
   };
 }

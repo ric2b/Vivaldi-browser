@@ -6,12 +6,12 @@
 
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
@@ -189,7 +189,7 @@ void PrintingAPIHandler::OnPrintJobSubmitted(
     return;
   }
 
-  DCHECK_EQ(print_job->source(), crosapi::mojom::PrintJob::Source::EXTENSION);
+  DCHECK_EQ(print_job->source(), crosapi::mojom::PrintJob::Source::kExtension);
 
   std::string printer_id =
       base::UTF16ToUTF8(document->settings().device_name());

@@ -12,6 +12,7 @@
 #import "components/omnibox/browser/autocomplete_match.h"
 #import "components/omnibox/browser/autocomplete_provider.h"
 #import "components/omnibox/browser/suggestion_answer.h"
+#import "ios/chrome/browser/net/crurl.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_ui_features.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_icon_formatter.h"
@@ -121,8 +122,7 @@ UIColor* DimColorIncognito() {
     // suggestions. For non-search suggestions (URLs), a highlight color is used
     // instead.
     UIColor* suggestionDetailTextColor = nil;
-    if (_match.type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
-        IsOmniboxActionsVisualTreatment2()) {
+    if (_match.type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
       suggestionDetailTextColor = SuggestionDetailTextColor();
     } else {
       suggestionDetailTextColor = SuggestionTextColor();
@@ -238,23 +238,25 @@ UIColor* DimColorIncognito() {
   return _match.has_tab_match.value_or(false);
 }
 
-- (BOOL)isClipboardMatch {
-  return _match.type == AutocompleteMatchType::CLIPBOARD_URL ||
-         _match.type == AutocompleteMatchType::CLIPBOARD_TEXT ||
-         _match.type == AutocompleteMatchType::CLIPBOARD_IMAGE;
-}
-
 - (id<OmniboxPedal>)pedal {
   return self.pedalData;
 }
 
 - (UIImage*)matchTypeIcon {
-  return GetOmniboxSuggestionIconForAutocompleteMatchType(
-      _match.type, /* is_starred */ false);
+  return GetOmniboxSuggestionIconForAutocompleteMatchType(_match.type);
+}
+
+- (NSString*)matchTypeIconAccessibilityIdentifier {
+  return base::SysUTF8ToNSString(AutocompleteMatchType::ToString(_match.type));
 }
 
 - (BOOL)isMatchTypeSearch {
   return AutocompleteMatch::IsSearchType(_match.type);
+}
+
+- (BOOL)isWrapping {
+  return self.isMatchTypeSearch && !self.hasAnswer &&
+         _match.type != AutocompleteMatchType::SEARCH_SUGGEST_ENTITY;
 }
 
 - (CrURL*)destinationUrl {

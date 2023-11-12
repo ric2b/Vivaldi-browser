@@ -19,6 +19,9 @@ const UIEdgeInsets thumbnailPadding =
 // Padding for favicon. In order - Top, Left, Bottom, Right
 const UIEdgeInsets faviconPadding =
     UIEdgeInsetsMake(8.f, 8.f, 8.f, 0.0);
+// Padding for favicon fallback label
+const UIEdgeInsets faviconFallbackLabelPadding =
+    UIEdgeInsetsMake(2.f, 2.f, 2.f, 2.f);
 // Padding for title label. In order - Top, Left, Bottom, Right
 const UIEdgeInsets titleLabelPadding =
     UIEdgeInsetsMake(0.f, 8.f, 0.f, 8.f);
@@ -38,6 +41,8 @@ const UIEdgeInsets titleLabelMaskPadding =
 @property(nonatomic,weak) UIImageView* thumbView;
 // Imageview for the favicon.
 @property(nonatomic,weak) UIImageView* faviconView;
+// The fallback label when there's no favicon available.
+@property(nonatomic,weak) UILabel* fallbackFaviconLabel;
 // Property to hold the resource path
 @property(nonatomic,strong) NSString* resourcePath;
 @end
@@ -49,6 +54,7 @@ const UIEdgeInsets titleLabelMaskPadding =
 @synthesize fallbackTitleLabel = _fallbackTitleLabel;
 @synthesize thumbView = _thumbView;
 @synthesize faviconView = _faviconView;
+@synthesize fallbackFaviconLabel = _fallbackFaviconLabel;
 @synthesize resourcePath = _resourcePath;
 
 #pragma mark - INITIALIZER
@@ -68,10 +74,13 @@ const UIEdgeInsets titleLabelMaskPadding =
   self.titleLabel.text = nil;
   self.fallbackTitleLabel.text = nil;
   self.faviconView.image = nil;
+  self.faviconView.backgroundColor = UIColor.clearColor;
   self.thumbView.image = nil;
   self.titleLabelMaskView.hidden = YES;
   self.thumbView.backgroundColor = UIColor.clearColor;
   self.fallbackTitleLabel.hidden = YES;
+  self.fallbackFaviconLabel.hidden = YES;
+  self.fallbackFaviconLabel.text = nil;
 }
 
 
@@ -127,7 +136,8 @@ const UIEdgeInsets titleLabelMaskPadding =
   fallbackTitleLabel.textAlignment = NSTextAlignmentCenter;
 
   [container addSubview:_fallbackTitleLabel];
-  [_fallbackTitleLabel matchToView:_thumbView];
+  [_fallbackTitleLabel matchToView:_thumbView
+                           padding:titleLabelPadding];
 
   // Favicon view
   UIImageView* faviconView = [[UIImageView alloc] initWithImage:nil];
@@ -143,6 +153,21 @@ const UIEdgeInsets titleLabelMaskPadding =
                  trailing: nil
                   padding: faviconPadding
                      size: vSpeedDialItemFaviconSizeRegularLayout];
+
+  // Fallback favicon label
+  UILabel* fallbackFaviconLabel = [[UILabel alloc] init];
+  _fallbackFaviconLabel = fallbackFaviconLabel;
+  fallbackFaviconLabel.textColor =
+    [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
+  fallbackFaviconLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+  fallbackFaviconLabel.numberOfLines = 0;
+  fallbackFaviconLabel.textAlignment = NSTextAlignmentCenter;
+
+  [container addSubview:fallbackFaviconLabel];
+  [fallbackFaviconLabel matchToView:_faviconView
+                            padding:faviconFallbackLabelPadding];
+  fallbackFaviconLabel.hidden = YES;
 
   // Website title label
   UILabel* titleLabel = [[UILabel alloc] init];
@@ -187,10 +212,14 @@ const UIEdgeInsets titleLabelMaskPadding =
     case VivaldiStartPageLayoutStyleMedium:
       _titleLabel.font =
         [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+      _fallbackFaviconLabel.font =
+        [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
       break;
     case VivaldiStartPageLayoutStyleLarge:
       _titleLabel.font =
         [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+      _fallbackFaviconLabel.font =
+        [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
       break;
     default:
       break;
@@ -215,24 +244,20 @@ const UIEdgeInsets titleLabelMaskPadding =
       self.thumbView.backgroundColor =
         [UIColor colorNamed: vSearchbarBackgroundColor];
       self.fallbackTitleLabel.hidden = NO;
-      self.fallbackTitleLabel.text = item.title;
+      self.fallbackTitleLabel.text = item.host;
     }
   }
 }
 
-- (void)configureCellWithAttributes:(FaviconAttributes*)attributes {
-  // TODO: @prio@vivaldi.com - Discuss
-  // We can pull the favicon from the bundle too initially but it seems at this
-  // moment favicon is a private property of BookmarkNode.
-  if (!attributes) {
-    self.faviconView.backgroundColor = UIColor.grayColor;
-    return;
-  }
-
+- (void)configureCellWithAttributes:(FaviconAttributes*)attributes
+                               item:(VivaldiSpeedDialItem*)item {
   if (attributes.faviconImage) {
+    self.fallbackFaviconLabel.hidden = YES;
+    self.fallbackFaviconLabel.text = nil;
+    self.faviconView.backgroundColor = UIColor.clearColor;
     self.faviconView.image = attributes.faviconImage;
   } else {
-    // Do something for fallback
+    [self showFallbackFavicon:item];
   }
 }
 
@@ -243,4 +268,22 @@ const UIEdgeInsets titleLabelMaskPadding =
   self.titleLabelMaskView.backgroundColor =
     [UIColor.vSystemGray03 colorWithAlphaComponent:0.4];
 }
+
+#pragma mark: PRIVATE
+
+- (void)showFallbackFavicon:(VivaldiSpeedDialItem*)sdItem {
+  if (sdItem.isInternalPage) {
+    self.faviconView.backgroundColor = UIColor.clearColor;
+    self.fallbackFaviconLabel.hidden = YES;
+    self.faviconView.image = [UIImage imageNamed:vNTPSDInternalPageFavicon];
+  } else {
+    self.fallbackFaviconLabel.hidden = NO;
+    self.faviconView.image = nil;
+    self.faviconView.backgroundColor =
+        [UIColor colorNamed: vSearchbarBackgroundColor];
+    NSString *firstLetter = [[sdItem.host substringToIndex:1] uppercaseString];
+    self.fallbackFaviconLabel.text = firstLetter;
+  }
+}
+
 @end

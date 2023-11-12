@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -34,7 +34,7 @@
 namespace {
 
 // Best effort convert |value| to a string.
-std::string ToJSON(const base::Value& value) {
+std::string ToJSON(const base::Value::Dict& value) {
   std::string result;
   JSONStringValueSerializer serializer(&result);
   if (serializer.Serialize(value))
@@ -393,8 +393,7 @@ DiscardsGraphDumpImpl::EnsureFaviconRequestHelper() {
 
 DiscardsGraphDumpImpl::FaviconAvailableCallback
 DiscardsGraphDumpImpl::GetFaviconAvailableCallback(int64_t serialization_id) {
-  return base::BindPostTask(
-      base::SequencedTaskRunner::GetCurrentDefault(),
+  return base::BindPostTaskToCurrentDefault(
       base::BindOnce(&DiscardsGraphDumpImpl::SendFaviconNotification,
                      weak_factory_.GetWeakPtr(), serialization_id));
 }

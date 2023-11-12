@@ -141,9 +141,7 @@ class LenientMockObserver : public ProcessNodeImpl::Observer {
   }
 
  private:
-  // TODO(crbug.com/1298696): Breaks components_unittests.
-  raw_ptr<const ProcessNode, DegradeToNoOpWhenMTE> notified_process_node_ =
-      nullptr;
+  raw_ptr<const ProcessNode> notified_process_node_ = nullptr;
 };
 
 using MockObserver = ::testing::StrictMock<LenientMockObserver>;
@@ -199,21 +197,48 @@ TEST_F(ProcessNodeImplTest, ObserverWorks) {
   graph()->RemoveProcessNodeObserver(&obs);
 }
 
-TEST_F(ProcessNodeImplTest, ConstructionArguments) {
+TEST_F(ProcessNodeImplTest, ConstructionArguments_Browser) {
+  auto process_node = CreateNode<ProcessNodeImpl>(BrowserProcessNodeTag{});
+
+  const ProcessNode* public_process_node = process_node.get();
+
+  EXPECT_EQ(content::PROCESS_TYPE_BROWSER, process_node->process_type());
+  EXPECT_EQ(content::PROCESS_TYPE_BROWSER,
+            public_process_node->GetProcessType());
+}
+
+TEST_F(ProcessNodeImplTest, ConstructionArguments_Renderer) {
   constexpr RenderProcessHostId kRenderProcessHostId =
       RenderProcessHostId(0xF0B);
   auto process_node = CreateNode<ProcessNodeImpl>(
-      content::PROCESS_TYPE_GPU,
       RenderProcessHostProxy::CreateForTesting(kRenderProcessHostId));
+
+  const ProcessNode* public_process_node = process_node.get();
+
+  EXPECT_EQ(content::PROCESS_TYPE_RENDERER, process_node->process_type());
+  EXPECT_EQ(content::PROCESS_TYPE_RENDERER,
+            public_process_node->GetProcessType());
+
+  EXPECT_EQ(kRenderProcessHostId,
+            public_process_node->GetRenderProcessHostProxy()
+                .render_process_host_id());
+}
+
+TEST_F(ProcessNodeImplTest, ConstructionArguments_NonRenderer) {
+  constexpr BrowserChildProcessHostId kBrowserChildProcessHostId =
+      BrowserChildProcessHostId(0xF0B);
+  auto process_node = CreateNode<ProcessNodeImpl>(
+      content::PROCESS_TYPE_GPU, BrowserChildProcessHostProxy::CreateForTesting(
+                                     kBrowserChildProcessHostId));
 
   const ProcessNode* public_process_node = process_node.get();
 
   EXPECT_EQ(content::PROCESS_TYPE_GPU, process_node->process_type());
   EXPECT_EQ(content::PROCESS_TYPE_GPU, public_process_node->GetProcessType());
 
-  EXPECT_EQ(kRenderProcessHostId,
-            public_process_node->GetRenderProcessHostProxy()
-                .render_process_host_id());
+  EXPECT_EQ(kBrowserChildProcessHostId,
+            public_process_node->GetBrowserChildProcessHostProxy()
+                .browser_child_process_host_id());
 }
 
 TEST_F(ProcessNodeImplTest, PublicInterface) {
@@ -258,11 +283,11 @@ TEST_F(ProcessNodeImplTest, PublicInterface) {
   }
 
   decltype(public_frame_nodes) visited_frame_nodes;
-  public_process_node->VisitFrameNodes(base::BindLambdaForTesting(
+  public_process_node->VisitFrameNodes(
       [&visited_frame_nodes](const FrameNode* frame_node) -> bool {
         visited_frame_nodes.insert(frame_node);
         return true;
-      }));
+      });
   EXPECT_EQ(public_frame_nodes, visited_frame_nodes);
 
   process_node->SetMainThreadTaskLoadIsLow(true);

@@ -24,6 +24,7 @@ import static org.mockito.Mockito.when;
 import android.app.Activity;
 import android.view.View;
 
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -294,10 +295,29 @@ public class BrowserControlsManagerUnitTest {
 
         int token = browserControlsManager.hideAndroidControlsAndClearOldToken(
                 TokenHolder.INVALID_TOKEN);
-        verify(mBrowserControlsStateProviderObserver).onAndroidVisibilityChanged(View.INVISIBLE);
+        verify(mContainerView).setVisibility(View.INVISIBLE);
+        verify(mBrowserControlsStateProviderObserver)
+                .onAndroidControlsVisibilityChanged(View.INVISIBLE);
 
         when(mContainerView.getVisibility()).thenReturn(View.INVISIBLE);
         browserControlsManager.releaseAndroidControlsHidingToken(token);
-        verify(mBrowserControlsStateProviderObserver).onAndroidVisibilityChanged(View.VISIBLE);
+        verify(mContainerView).setVisibility(View.VISIBLE);
+        verify(mBrowserControlsStateProviderObserver)
+                .onAndroidControlsVisibilityChanged(View.VISIBLE);
+    }
+
+    @Test
+    public void testGetAndroidControlsVisibility() {
+        BrowserControlsManager browserControlsManager =
+                new BrowserControlsManager(mActivity, BrowserControlsManager.ControlsPosition.TOP);
+        Assert.assertEquals(View.INVISIBLE, browserControlsManager.getAndroidControlsVisibility());
+
+        browserControlsManager.initialize(mControlContainer, mActivityTabProvider,
+                mTabModelSelector, R.dimen.control_container_height);
+        when(mContainerView.getVisibility()).thenReturn(View.VISIBLE);
+        Assert.assertEquals(View.VISIBLE, browserControlsManager.getAndroidControlsVisibility());
+
+        when(mContainerView.getVisibility()).thenReturn(View.INVISIBLE);
+        Assert.assertEquals(View.INVISIBLE, browserControlsManager.getAndroidControlsVisibility());
     }
 }

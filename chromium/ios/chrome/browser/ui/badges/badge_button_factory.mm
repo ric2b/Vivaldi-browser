@@ -7,13 +7,13 @@
 #import <ostream>
 
 #import "base/notreached.h"
+#import "build/build_config.h"
 #import "components/password_manager/core/common/password_manager_features.h"
 #import "ios/chrome/browser/ui/badges/badge_button.h"
 #import "ios/chrome/browser/ui/badges/badge_constants.h"
 #import "ios/chrome/browser/ui/badges/badge_delegate.h"
 #import "ios/chrome/browser/ui/badges/badge_overflow_menu_util.h"
 #import "ios/chrome/browser/ui/icons/symbols.h"
-#import "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -59,8 +59,6 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
       return [self overflowBadgeButton];
     case kBadgeTypeSaveAddressProfile:
       return [self saveAddressProfileBadgeButton];
-    case kBadgeTypeAddToReadingList:
-      return [self readingListBadgeButton];
     case kBadgeTypePermissionsCamera:
       return [self permissionsCameraBadgeButton];
     case kBadgeTypePermissionsMicrophone:
@@ -72,22 +70,16 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 }
 
 #pragma mark - Private
-
-// Convenience getter for the URI asset name of the password_key icon, based on
-// finch flag enable/disable status
-- (NSString*)passwordKeyAssetName {
-  return base::FeatureList::IsEnabled(
-             password_manager::features::
-                 kIOSEnablePasswordManagerBrandingUpdate)
-             ? @"password_key"
-             : @"legacy_password_key";
-}
-
 - (BadgeButton*)passwordsSaveBadgeButton {
   UIImage* image =
-      UseSymbols()
-          ? CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize)
-          : [UIImage imageNamed:[self passwordKeyAssetName]];
+      CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize);
+#if !BUILDFLAG(IS_IOS_MACCATALYST)
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kIOSShowPasswordStorageInSaveInfobar)) {
+    image = CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
+                                      kInfobarSymbolPointSize);
+  }
+#endif  // BUILDFLAG(IS_IOS_MACCATALYST)
   BadgeButton* button =
       [self createButtonForType:kBadgeTypePasswordSave
                           image:[image imageWithRenderingMode:
@@ -104,9 +96,14 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
 - (BadgeButton*)passwordsUpdateBadgeButton {
   UIImage* image =
-      UseSymbols()
-          ? CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize)
-          : [UIImage imageNamed:[self passwordKeyAssetName]];
+      CustomSymbolWithPointSize(kPasswordSymbol, kInfobarSymbolPointSize);
+#if !BUILDFLAG(IS_IOS_MACCATALYST)
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kIOSShowPasswordStorageInSaveInfobar)) {
+    image = CustomSymbolWithPointSize(kMulticolorPasswordSymbol,
+                                      kInfobarSymbolPointSize);
+  }
+#endif  // BUILDFLAG(IS_IOS_MACCATALYST)
   BadgeButton* button =
       [self createButtonForType:kBadgeTypePasswordUpdate
                           image:[image imageWithRenderingMode:
@@ -258,8 +255,8 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
 
 - (BadgeButton*)saveAddressProfileBadgeButton {
   UIImage* image;
-  image = UseSymbols() ? DefaultSymbolWithPointSize(kPinFillSymbol,
-                                                    kInfobarSymbolPointSize)
+  image = UseSymbols() ? CustomSymbolWithPointSize(kLocationFillSymbol,
+                                                   kInfobarSymbolPointSize)
                        : [UIImage imageNamed:@"ic_place"];
 
   BadgeButton* button =
@@ -271,21 +268,6 @@ const CGFloat kSymbolIncognitoFullScreenPointSize = 14.;
       forControlEvents:UIControlEventTouchUpInside];
   button.accessibilityIdentifier =
       kBadgeButtonSaveAddressProfileAccessibilityIdentifier;
-  // TODO(crbug.com/1014652): Create a11y label hint.
-  return button;
-}
-
-- (BadgeButton*)readingListBadgeButton {
-  BadgeButton* button =
-      [self createButtonForType:kBadgeTypeAddToReadingList
-                          image:[[UIImage imageNamed:@"infobar_reading_list"]
-                                    imageWithRenderingMode:
-                                        UIImageRenderingModeAlwaysTemplate]];
-  [button addTarget:self.delegate
-                action:@selector(addToReadingListBadgeButtonTapped:)
-      forControlEvents:UIControlEventTouchUpInside];
-  button.accessibilityIdentifier =
-      kBadgeButtonReadingListAccessibilityIdentifier;
   // TODO(crbug.com/1014652): Create a11y label hint.
   return button;
 }

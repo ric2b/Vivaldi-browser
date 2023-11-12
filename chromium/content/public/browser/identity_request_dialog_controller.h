@@ -8,10 +8,11 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/identity_request_account.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/webid/federated_auth_request.mojom-forward.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
@@ -46,7 +47,8 @@ struct CONTENT_EXPORT IdentityProviderData {
   IdentityProviderData(const std::string& idp_url_for_display,
                        const std::vector<IdentityRequestAccount>& accounts,
                        const IdentityProviderMetadata& idp_metadata,
-                       const ClientMetadata& client_metadata);
+                       const ClientMetadata& client_metadata,
+                       const blink::mojom::RpContext& rp_context);
   IdentityProviderData(const IdentityProviderData& other);
   ~IdentityProviderData();
 
@@ -54,6 +56,7 @@ struct CONTENT_EXPORT IdentityProviderData {
   std::vector<IdentityRequestAccount> accounts;
   IdentityProviderMetadata idp_metadata;
   ClientMetadata client_metadata;
+  blink::mojom::RpContext rp_context;
 };
 
 // IdentityRequestDialogController is in interface for control of the UI
@@ -99,12 +102,13 @@ class CONTENT_EXPORT IdentityRequestDialogController {
 
   // Shows and accounts selections for the given IDP. The |on_selected| callback
   // is called with the selected account id or empty string otherwise.
-  // |sign_in_mode| represents whether this is an auto sign in flow.
+  // |sign_in_mode| represents whether this is an auto re-authn flow.
   virtual void ShowAccountsDialog(
       WebContents* rp_web_contents,
       const std::string& rp_for_display,
       const std::vector<IdentityProviderData>& identity_provider_data,
       IdentityRequestAccount::SignInMode sign_in_mode,
+      bool show_auto_reauthn_checkbox,
       AccountSelectionCallback on_selected,
       DismissCallback dismiss_callback);
 
@@ -115,6 +119,9 @@ class CONTENT_EXPORT IdentityRequestDialogController {
                                  const std::string& rp_for_display,
                                  const std::string& idp_for_display,
                                  DismissCallback dismiss_callback);
+
+  // Show dialog notifying user that IdP sign-in failed.
+  virtual void ShowIdpSigninFailureDialog(base::OnceClosure dismiss_callback);
 };
 
 }  // namespace content

@@ -26,6 +26,7 @@
 
 namespace gpu {
 
+class GLTextureHolder;
 class VulkanCommandPool;
 class VulkanImage;
 
@@ -42,8 +43,7 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
       SkAlphaType alpha_type,
       uint32_t usage,
       const base::flat_map<VkFormat, VkImageUsageFlags>& image_usage_cache,
-      base::span<const uint8_t> pixel_data,
-      bool using_gmb = false);
+      base::span<const uint8_t> pixel_data);
 
   static std::unique_ptr<ExternalVkImageBacking> CreateFromGMB(
       scoped_refptr<SharedContextState> context_state,
@@ -81,10 +81,6 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
     return promise_texture_;
   }
   VulkanImage* image() const { return image_.get(); }
-  const scoped_refptr<gles2::TexturePassthrough>& GetTexturePassthrough()
-      const {
-    return texture_passthrough_;
-  }
   viz::VulkanContextProvider* context_provider() const {
     return context_state()->vk_context_provider();
   }
@@ -104,7 +100,7 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
     }
 
     if (usage() & SHARED_IMAGE_USAGE_GLES2) {
-      return !use_separate_gl_texture() && (texture_ || texture_passthrough_);
+      return !use_separate_gl_texture() && gl_texture_;
     }
 
     if ((usage() & SHARED_IMAGE_USAGE_RASTER) &&
@@ -134,7 +130,7 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
   // SharedImageBacking implementation.
   SharedImageBackingType GetType() const override;
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
-  bool UploadFromMemory(const SkPixmap& pixmap) override;
+  bool UploadFromMemory(const std::vector<SkPixmap>& pixmaps) override;
   scoped_refptr<gfx::NativePixmap> GetNativePixmap() override;
 
   // Add semaphores to a pending list for reusing or being released immediately.
@@ -173,19 +169,13 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
       MemoryTypeTracker* tracker) override;
 
  private:
-  // Returns texture_service_id for ProduceGLTexture and GLTexturePassthrough.
-  GLuint ProduceGLTextureInternal();
+  // Makes GL context current if not already. Will return false if MakeCurrent()
+  // failed.
+  bool MakeGLContextCurrent();
 
-  using WriteBufferCallback = base::OnceCallback<void(void* buffer)>;
-  // TODO(penghuang): Remove it when GrContext::updateBackendTexture() supports
-  // compressed texture and callback.
-  bool WritePixelsWithCallback(size_t data_size,
-                               size_t stride,
-                               WriteBufferCallback callback);
-  using ReadBufferCallback = base::OnceCallback<void(const void* buffer)>;
-  bool ReadPixelsWithCallback(size_t data_size,
-                              size_t stride,
-                              ReadBufferCallback callback);
+  // Allocates GL texture and returns true if successful.
+  bool ProduceGLTextureInternal(bool is_passthrough);
+
   bool UploadToVkImage(const SkPixmap& pixmap);
   void UploadToGLTexture(const SkPixmap& pixmap);
   void CopyPixelsFromGLTextureToVkImage();
@@ -204,8 +194,8 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
   bool is_write_in_progress_ = false;
   uint32_t reads_in_progress_ = 0;
   uint32_t gl_reads_in_progress_ = 0;
-  raw_ptr<gles2::Texture> texture_ = nullptr;
-  scoped_refptr<gles2::TexturePassthrough> texture_passthrough_;
+
+  std::unique_ptr<GLTextureHolder> gl_texture_;
 
   enum LatestContent {
     kInVkImage = 1 << 0,

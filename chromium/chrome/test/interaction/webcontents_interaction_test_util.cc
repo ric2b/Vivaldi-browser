@@ -8,7 +8,7 @@
 #include <sstream>
 #include <string>
 
-#include "base/callback_helpers.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
@@ -511,7 +511,7 @@ bool WebContentsInteractionTestUtil::IsTruthy(const base::Value& value) {
       return value.GetDouble() != 0.0;
     case Type::BINARY:
       return true;
-    case Type::DICTIONARY:
+    case Type::DICT:
       return true;
     case Type::LIST:
       return true;

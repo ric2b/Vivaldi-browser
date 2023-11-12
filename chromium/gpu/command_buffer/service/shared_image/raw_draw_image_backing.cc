@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/service/shared_image/raw_draw_image_backing.h"
 
 #include "base/logging.h"
+#include "base/types/optional_util.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
@@ -181,15 +182,13 @@ bool RawDrawImageBacking::CreateBackendTextureAndFlushPaintOps(bool flush) {
   if (context_state_->context_lost())
     return false;
 
-  auto mipmap = usage() & SHARED_IMAGE_USAGE_MIPMAP ? GrMipMapped::kYes
-                                                    : GrMipMapped::kNo;
   auto sk_color = viz::ToClosestSkColorType(
       /*gpu_compositing=*/true, format());
   const std::string label =
       "RawDrawImageBacking" + CreateLabelForSharedImageUsage(usage());
   backend_texture_ = context_state_->gr_context()->createBackendTexture(
-      size().width(), size().height(), sk_color, mipmap, GrRenderable::kYes,
-      GrProtected::kNo, label);
+      size().width(), size().height(), sk_color, GrMipMapped::kNo,
+      GrRenderable::kYes, GrProtected::kNo, label);
   if (!backend_texture_.isValid()) {
     DLOG(ERROR) << "createBackendTexture() failed with SkColorType:"
                 << sk_color;
@@ -227,8 +226,7 @@ bool RawDrawImageBacking::CreateBackendTextureAndFlushPaintOps(bool flush) {
     surface->resolveMSAA();
   }
 
-  UpdateEstimatedSize(
-      viz::ResourceSizes::UncheckedSizeInBytes<size_t>(size(), format()));
+  UpdateEstimatedSize(format().EstimatedSizeInBytes(size()));
 
   return true;
 }
@@ -267,8 +265,9 @@ cc::PaintOpBuffer* RawDrawImageBacking::BeginRasterWriteAccess(
   // Should we keep the backing?
   DestroyBackendTexture();
 
-  if (!paint_op_buffer_)
-    paint_op_buffer_ = sk_make_sp<cc::PaintOpBuffer>();
+  if (!paint_op_buffer_) {
+    paint_op_buffer_.emplace();
+  }
 
   DCHECK(!context_state_ || context_state_ == context_state);
   context_state_ = std::move(context_state);
@@ -278,7 +277,7 @@ cc::PaintOpBuffer* RawDrawImageBacking::BeginRasterWriteAccess(
   clear_color_ = clear_color;
   visible_ = visible;
 
-  return paint_op_buffer_.get();
+  return base::OptionalToPtr(paint_op_buffer_);
 }
 
 void RawDrawImageBacking::EndRasterWriteAccess(base::OnceClosure callback) {
@@ -340,11 +339,11 @@ cc::PaintOpBuffer* RawDrawImageBacking::BeginRasterReadAccess(
   read_count_++;
 
   if (!paint_op_buffer_) {
-    paint_op_buffer_ = sk_make_sp<cc::PaintOpBuffer>();
+    paint_op_buffer_.emplace();
   }
 
   clear_color = clear_color_;
-  return paint_op_buffer_.get();
+  return base::OptionalToPtr(paint_op_buffer_);
 }
 
 sk_sp<SkPromiseImageTexture> RawDrawImageBacking::BeginSkiaReadAccess() {

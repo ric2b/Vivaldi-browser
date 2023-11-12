@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -103,7 +103,7 @@ std::string CreateFetchScript(
   return content::JsReplace(kFetchScriptTemplate, resource,
                             request_init
                                 ? std::move(*request_init)
-                                : base::Value(base::Value::Type::DICTIONARY));
+                                : base::Value(base::Value::Type::DICT));
 }
 
 std::string PopString(content::DOMMessageQueue* message_queue) {
@@ -881,8 +881,10 @@ class CorbAndCorsUserHostRestrictionsBrowserTest
     : public CorbAndCorsExtensionBrowserTest {
  public:
   CorbAndCorsUserHostRestrictionsBrowserTest() {
-    scoped_feature_list_.InitAndEnableFeature(
-        extensions_features::kExtensionsMenuAccessControl);
+    std::vector<base::test::FeatureRef> enabled_features = {
+        extensions_features::kExtensionsMenuAccessControl,
+        extensions_features::kExtensionsMenuAccessControlWithPermittedSites};
+    scoped_feature_list_.InitWithFeatures(enabled_features, {});
   }
 
  private:
@@ -909,12 +911,15 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsUserHostRestrictionsBrowserTest,
 
   PermissionsManager* permissions_manager = PermissionsManager::Get(profile());
   {
+    // Sites can be set as restricted iff the `host controls` flag is enabled.
     PermissionsManagerWaiter waiter(permissions_manager);
     permissions_manager->AddUserRestrictedSite(
         url::Origin::Create(policy_allowed_resource));
     waiter.WaitForUserPermissionsSettingsChange();
   }
   {
+    // Sites can be set as permitted iff the `host controls` and `permitted
+    // sites` flags are enabled.
     PermissionsManagerWaiter waiter(permissions_manager);
     permissions_manager->AddUserPermittedSite(
         url::Origin::Create(policy_restricted_resource));
@@ -1315,7 +1320,7 @@ IN_PROC_BROWSER_TEST_F(
   {
     content::DOMMessageQueue message_queue(active_web_contents());
 
-    base::Value request_init(base::Value::Type::DICTIONARY);
+    base::Value request_init(base::Value::Type::DICT);
     request_init.SetStringPath("trustToken.type", "token-redemption");
 
     EXPECT_TRUE(ExecuteContentScript(
@@ -1338,7 +1343,7 @@ IN_PROC_BROWSER_TEST_F(
   {
     content::DOMMessageQueue message_queue(active_web_contents());
 
-    base::Value request_init(base::Value::Type::DICTIONARY);
+    base::Value request_init(base::Value::Type::DICT);
     request_init.SetStringPath("trustToken.type", "token-redemption");
 
     EXPECT_TRUE(ExecuteContentScript(
@@ -1524,7 +1529,7 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
   // Performs a cross-origin fetch from the background page in "no-cors" mode.
   GURL cross_site_resource(
       embedded_test_server()->GetURL("cross-site.com", "/nosniff.xml"));
-  base::Value request_init(base::Value::Type::DICTIONARY);
+  base::Value request_init(base::Value::Type::DICT);
   request_init.SetStringPath("mode", "no-cors");
   std::string script =
       CreateFetchScript(cross_site_resource, std::move(request_init));
@@ -1653,7 +1658,7 @@ IN_PROC_BROWSER_TEST_F(CorbAndCorsExtensionBrowserTest,
     GURL cross_site_resource2(
         embedded_test_server()->GetURL("cross-site.com", "/nosniff.xml"));
 
-    base::Value request_init(base::Value::Type::DICTIONARY);
+    base::Value request_init(base::Value::Type::DICT);
     request_init.SetStringPath("method", "GET");
     request_init.SetStringPath("mode", "no-cors");
 

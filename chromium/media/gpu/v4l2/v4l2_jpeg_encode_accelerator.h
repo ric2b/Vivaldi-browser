@@ -15,7 +15,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "components/chromeos_camera/jpeg_encode_accelerator.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
@@ -44,6 +43,12 @@ static_assert(
     kMaxJpegPlane == 1,
     "kMaxJpegPlane must be 1 as output must be V4L2_PIX_FMT_JPEG(_RAW)");
 }  // namespace
+
+namespace base {
+class WaitableEvent;
+class SequencedTaskRunner;
+class SingleThreadTaskRunner;
+}  // namespace base
 
 namespace media {
 
@@ -76,9 +81,8 @@ class MEDIA_GPU_EXPORT V4L2JpegEncodeAccelerator
                         BitstreamBuffer* exif_buffer) override;
 
  private:
-  void InitializeOnTaskRunner(
-      chromeos_camera::JpegEncodeAccelerator::Client* client,
-      InitCB init_cb);
+  void InitializeTask(chromeos_camera::JpegEncodeAccelerator::Client* client,
+                      InitCB init_cb);
 
   // Record for input buffers.
   struct I420BufferRecord {
@@ -146,8 +150,7 @@ class MEDIA_GPU_EXPORT V4L2JpegEncodeAccelerator
   // Encode Instance. One EncodedInstance is used for a specific set of jpeg
   // parameters. The stored parameters are jpeg quality and resolutions of input
   // image.
-  // We execute all EncodedInstance methods on |encoder_task_runner_| except
-  // Initialize().
+  // We execute all EncodedInstance methods on |encoder_task_runner_|.
   class EncodedInstance {
    public:
     EncodedInstance(V4L2JpegEncodeAccelerator* parent);
@@ -262,8 +265,7 @@ class MEDIA_GPU_EXPORT V4L2JpegEncodeAccelerator
   // Encode Instance. One EncodedInstance is used for a specific set of jpeg
   // parameters. The stored parameters are jpeg quality and resolutions of input
   // image.
-  // We execute all EncodedInstance methods on |encoder_task_runner_| except
-  // Initialize().
+  // We execute all EncodedInstance methods on |encoder_task_runner_|.
   class EncodedInstanceDmaBuf {
    public:
     EncodedInstanceDmaBuf(V4L2JpegEncodeAccelerator* parent);
@@ -378,34 +380,18 @@ class MEDIA_GPU_EXPORT V4L2JpegEncodeAccelerator
   void VideoFrameReady(int32_t task_id, size_t encoded_picture_size);
   void NotifyError(int32_t task_id, Status status);
 
-  // Run on |encoder_thread_| to enqueue the incoming frame.
+  // Enqueue the incoming frame.
   void EncodeTask(std::unique_ptr<JobRecord> job_record);
   // TODO(wtlee): To be deprecated. (crbug.com/944705)
   void EncodeTaskLegacy(std::unique_ptr<JobRecord> job_record);
 
-  // Run on |encoder_thread_| to trigger ServiceDevice of EncodedInstance class.
+  // Trigger ServiceDevice of EncodedInstance class.
   void ServiceDeviceTask();
   // TODO(wtlee): To be deprecated. (crbug.com/944705)
   void ServiceDeviceTaskLegacy();
 
-  // Run on |encoder_thread_| to destroy input and output buffers.
-  void DestroyTask();
-
-  // The |latest_input_buffer_coded_size_| and |latest_quality_| are used to
-  // check if we need to open new EncodedInstance.
-
-  // Latest coded size of input buffer.
-  gfx::Size latest_input_buffer_coded_size_;
-  // TODO(wtlee): To be deprecated. (crbug.com/944705)
-  gfx::Size latest_input_buffer_coded_size_legacy_;
-
-  // Latest encode quality.
-  int latest_quality_;
-  // TODO(wtlee): To be deprecated. (crbug.com/944705)
-  int latest_quality_legacy_;
-
-  // ChildThread's task runner.
-  scoped_refptr<base::SingleThreadTaskRunner> child_task_runner_;
+  // Destroy input and output buffers.
+  void DestroyTask(base::WaitableEvent* waiter);
 
   // GPU IO task runner.
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
@@ -413,23 +399,43 @@ class MEDIA_GPU_EXPORT V4L2JpegEncodeAccelerator
   // The client of this class.
   chromeos_camera::JpegEncodeAccelerator::Client* client_;
 
-  // Thread to communicate with the device.
-  base::Thread encoder_thread_;
   // Encode task runner.
-  scoped_refptr<base::SingleThreadTaskRunner> encoder_task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> encoder_task_runner_;
 
-  // All the below members except |weak_factory_| are accessed from
-  // |encoder_thread_| only (if it's running).
+  // All the below members except |weak_factory_| are accessed on
+  // |encoder_task_runner_| only (if it's running).
 
+  // The |latest_input_buffer_coded_size_| and |latest_quality_| are used to
+  // check if we need to open new EncodedInstance.
+  // Latest coded size of input buffer.
+  gfx::Size latest_input_buffer_coded_size_
+      GUARDED_BY_CONTEXT(encoder_sequence_);
+  // TODO(wtlee): To be deprecated. (crbug.com/944705)
+  gfx::Size latest_input_buffer_coded_size_legacy_
+      GUARDED_BY_CONTEXT(encoder_sequence_);
+  // Latest encode quality.
+  int latest_quality_ GUARDED_BY_CONTEXT(encoder_sequence_);
+  // TODO(wtlee): To be deprecated. (crbug.com/944705)
+  int latest_quality_legacy_ GUARDED_BY_CONTEXT(encoder_sequence_);
   // JEA may open multiple devices for different input parameters.
   // We handle the |encoded_instances_| by order for keeping user's input order.
-  std::queue<std::unique_ptr<EncodedInstance>> encoded_instances_;
-  std::queue<std::unique_ptr<EncodedInstanceDmaBuf>> encoded_instances_dma_buf_;
+  std::queue<std::unique_ptr<EncodedInstance>> encoded_instances_
+      GUARDED_BY_CONTEXT(encoder_sequence_);
+  std::queue<std::unique_ptr<EncodedInstanceDmaBuf>> encoded_instances_dma_buf_
+      GUARDED_BY_CONTEXT(encoder_sequence_);
+
+  SEQUENCE_CHECKER(encoder_sequence_);
+
+  // Point to |this| for use in posting tasks to |encoder_task_runner_|.
+  // |weak_ptr_for_encoder_| is required, even though we synchronously destroy
+  // variables on |encoder_task_runner_| in destructor, because a task can be
+  // posted to |encoder_task_runner_| within DestroyTask().
+  base::WeakPtr<V4L2JpegEncodeAccelerator> weak_ptr_for_encoder_;
+  base::WeakPtrFactory<V4L2JpegEncodeAccelerator> weak_factory_for_encoder_;
 
   // Point to |this| for use in posting tasks from the encoder thread back to
-  // the ChildThread.
+  // |io_taask_runner_|.
   base::WeakPtr<V4L2JpegEncodeAccelerator> weak_ptr_;
-  // Weak factory for producing weak pointers on the child thread.
   base::WeakPtrFactory<V4L2JpegEncodeAccelerator> weak_factory_;
 };
 

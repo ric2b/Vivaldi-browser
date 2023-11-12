@@ -34,6 +34,7 @@
 
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/solid_color_scrollbar_layer.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
@@ -560,7 +561,7 @@ bool VisualViewport::DidSetScaleOrLocation(float scale,
   bool notify_page_scale_factor_changed =
       is_pinch_gesture_active_ != is_pinch_gesture_active;
   is_pinch_gesture_active_ = is_pinch_gesture_active;
-  if (!std::isnan(scale) && !std::isinf(scale)) {
+  if (std::isfinite(scale)) {
     float clamped_scale = GetPage()
                               .GetPageScaleConstraintsSet()
                               .FinalConstraints()
@@ -581,9 +582,10 @@ bool VisualViewport::DidSetScaleOrLocation(float scale,
   // recursion as we reenter this function on clamping. It would be cleaner to
   // avoid reentrancy but for now just prevent the stack overflow.
   // crbug.com/702771.
-  if (std::isnan(clamped_offset.x()) || std::isnan(clamped_offset.y()) ||
-      std::isinf(clamped_offset.x()) || std::isinf(clamped_offset.y()))
+  if (!std::isfinite(clamped_offset.x()) ||
+      !std::isfinite(clamped_offset.y())) {
     return false;
+  }
 
   if (clamped_offset != offset_) {
     DCHECK(LocalMainFrame().View());

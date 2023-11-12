@@ -25,7 +25,6 @@ class ResourceRequestBody;
 namespace content {
 
 class SubresourceWebBundleNavigationInfo;
-class WebBundleNavigationInfo;
 
 // Represents a session history item for a particular frame.  It is matched with
 // corresponding FrameTreeNodes using unique name (or by the root position).
@@ -56,12 +55,12 @@ class CONTENT_EXPORT FrameNavigationEntry
       const absl::optional<url::Origin>& origin,
       const Referrer& referrer,
       const absl::optional<url::Origin>& initiator_origin,
+      const absl::optional<GURL>& initiator_base_url,
       const std::vector<GURL>& redirect_chain,
       const blink::PageState& page_state,
       const std::string& method,
       int64_t post_id,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info,
       std::unique_ptr<SubresourceWebBundleNavigationInfo>
           subresource_web_bundle_navigation_info,
       std::unique_ptr<PolicyContainerPolicies> policy_container_policies,
@@ -86,12 +85,12 @@ class CONTENT_EXPORT FrameNavigationEntry
       const absl::optional<url::Origin>& origin,
       const Referrer& referrer,
       const absl::optional<url::Origin>& initiator_origin,
+      const absl::optional<GURL>& initiator_base_url,
       const std::vector<GURL>& redirect_chain,
       const blink::PageState& page_state,
       const std::string& method,
       int64_t post_id,
       scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info,
       std::unique_ptr<SubresourceWebBundleNavigationInfo>
           subresource_web_bundle_navigation_info,
       std::unique_ptr<PolicyContainerPolicies> policy_container_policies,
@@ -166,6 +165,12 @@ class CONTENT_EXPORT FrameNavigationEntry
     return initiator_origin_;
   }
 
+  // The base url of the initiator of the navigation. This is only set if the
+  // url is about:blank or about:srcdoc.
+  const absl::optional<GURL>& initiator_base_url() const {
+    return initiator_base_url_;
+  }
+
   // The origin of the document the frame has committed. It is optional, since
   // pending entries do not have an origin associated with them and the real
   // origin is set at commit time.
@@ -231,10 +236,6 @@ class CONTENT_EXPORT FrameNavigationEntry
     blob_url_loader_factory_ = std::move(factory);
   }
 
-  void set_web_bundle_navigation_info(
-      std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info);
-  WebBundleNavigationInfo* web_bundle_navigation_info() const;
-
   SubresourceWebBundleNavigationInfo* subresource_web_bundle_navigation_info()
       const;
 
@@ -275,6 +276,7 @@ class CONTENT_EXPORT FrameNavigationEntry
   absl::optional<url::Origin> committed_origin_;
   Referrer referrer_;
   absl::optional<url::Origin> initiator_origin_;
+  absl::optional<GURL> initiator_base_url_;
   // This is used when transferring a pending entry from one process to another.
   // We also send the main frame's redirect chain through session sync for
   // offline analysis.
@@ -288,12 +290,6 @@ class CONTENT_EXPORT FrameNavigationEntry
   int64_t post_id_;
   scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory_;
 
-  // Keeps the Web Bundles related information when |this| is for a navigation
-  // within a Web Bundle file. Used when WebBundles feature or
-  // WebBundlesFromNetwork feature is enabled or TrustableWebBundleFileUrl
-  // switch is set.
-  // TODO(995177): Support Session/Tab restore.
-  std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info_;
   // Used when |this| is for a subframe navigation to a resource from the parent
   // frame's subresource web bundle.
   std::unique_ptr<SubresourceWebBundleNavigationInfo>

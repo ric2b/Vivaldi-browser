@@ -2,9 +2,9 @@
 
 #import "ios/ui/settings/tabs/vivaldi_tab_setting_prefs.h"
 
-#include "components/pref_registry/pref_registry_syncable.h"
-#include "components/prefs/pref_service.h"
-#include "prefs/vivaldi_pref_names.h"
+#import "components/pref_registry/pref_registry_syncable.h"
+#import "components/prefs/pref_service.h"
+#import "prefs/vivaldi_pref_names.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."

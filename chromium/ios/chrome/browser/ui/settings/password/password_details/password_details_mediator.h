@@ -12,6 +12,7 @@
 
 namespace password_manager {
 struct CredentialUIEntry;
+class PasswordManagerClient;
 }  // namespace password_manager
 
 class IOSChromePasswordCheckManager;
@@ -42,6 +43,15 @@ class IOSChromePasswordCheckManager;
 
 // Disconnects the mediator from all observers.
 - (void)disconnect;
+
+// Remove credential from credentials cache.
+- (void)removeCredential:(const password_manager::CredentialUIEntry&)credential;
+
+// Moves credential and its duplicates to account store.
+- (void)moveCredentialToAccountStore:
+            (const password_manager::CredentialUIEntry&)credential
+                              client:(password_manager::PasswordManagerClient*)
+                                         client;
 
 @end
 

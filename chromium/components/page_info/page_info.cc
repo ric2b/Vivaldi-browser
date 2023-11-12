@@ -22,6 +22,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/browser_ui/util/android/url_constants.h"
+#include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/browsing_data/content/local_storage_helper.h"
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/browser/ui/cookie_controls_controller.h"
@@ -47,7 +48,10 @@
 #endif
 #include "build/chromeos_buildflags.h"
 #include "components/page_info/core/features.h"
+#include "components/permissions/permission_recovery_success_rate_tracker.h"
 #include "components/permissions/permission_uma_util.h"
+#include "components/permissions/permission_util.h"
+#include "components/permissions/request_type.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/password_protection/password_protection_service.h"
@@ -62,6 +66,7 @@
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/permission_controller.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "net/cert/cert_status_flags.h"
@@ -640,11 +645,11 @@ void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
   // This is technically redundant given the histogram above, but putting the
   // total count of permission changes in another histogram makes it easier to
   // compare it against other kinds of actions in Page Info.
+  HostContentSettingsMap* map = GetContentSettings();
   RecordPageInfoAction(PAGE_INFO_CHANGED_PERMISSION);
-  HostContentSettingsMap* content_settings = GetContentSettings();
   if (type == ContentSettingsType::SOUND) {
-    ContentSetting default_setting = content_settings->GetDefaultContentSetting(
-        ContentSettingsType::SOUND, nullptr);
+    ContentSetting default_setting =
+        map->GetDefaultContentSetting(ContentSettingsType::SOUND, nullptr);
     bool mute = (setting == CONTENT_SETTING_BLOCK) ||
                 (setting == CONTENT_SETTING_DEFAULT &&
                  default_setting == CONTENT_SETTING_BLOCK);
@@ -663,7 +668,7 @@ void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
       permissions::PermissionRequestManager::FromWebContents(
           web_contents_.get());
 
-  if (manager) {
+  if (manager && permissions::IsRequestablePermissionType(type)) {
     // Retrieve latest permission action for the current origin and the current
     // content settings type. Note that these values are only kept in memory and
     // not persisted across browser sessions.
@@ -684,6 +689,9 @@ void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
     }
   }
 
+  ContentSetting setting_old =
+      map->GetContentSetting(site_url_, site_url_, type);
+
   permissions::PermissionUmaUtil::ScopedRevocationReporter
       scoped_revocation_reporter(web_contents_->GetBrowserContext(), site_url_,
                                  site_url_, type,
@@ -696,15 +704,49 @@ void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
         site_url_, type);
   }
   using Constraints = content_settings::ContentSettingConstraints;
-  content_settings->SetNarrowestContentSetting(
+  map->SetNarrowestContentSetting(
       site_url_, site_url_, type, setting,
       is_one_time
           ? Constraints{base::Time(), content_settings::SessionModel::OneTime}
           : Constraints{});
 
+  bool is_subscribed_to_permission_change_event = false;
+
+  // Suppress the infobar only if permission is allowed. Camera and
+  // Microphone support all permission status changes.
+  if (type == ContentSettingsType::MEDIASTREAM_MIC ||
+      type == ContentSettingsType::MEDIASTREAM_CAMERA) {
+    content::PermissionController* permission_controller =
+        web_contents_->GetBrowserContext()->GetPermissionController();
+
+    blink::PermissionType permission_type =
+        permissions::PermissionUtil::ContentSettingTypeToPermissionType(type);
+
+    // An origin should subscribe to a permission status change from the top
+    // frame. Hence we verify only the main frame.
+    is_subscribed_to_permission_change_event =
+        permission_controller->IsSubscribedToPermissionChangeEvent(
+            permission_type, web_contents_->GetPrimaryMainFrame()) ||
+        is_subscribed_to_permission_change_for_testing;
+
+    permissions::PermissionUmaUtil::RecordPageInfoPermissionChange(
+        type, setting_old, setting, is_subscribed_to_permission_change_event);
+  }
+
+  // Show the infobar only if permission's status is not handled by an origin.
   // When the sound setting is changed, no reload is necessary.
-  if (type != ContentSettingsType::SOUND)
+  if (!is_subscribed_to_permission_change_event &&
+      type != ContentSettingsType::SOUND) {
     show_info_bar_ = true;
+  }
+
+  if (permissions::IsRequestablePermissionType(type)) {
+    auto* permission_tracker =
+        permissions::PermissionRecoverySuccessRateTracker::FromWebContents(
+            web_contents_.get());
+
+    permission_tracker->PermissionStatusChanged(type, setting, show_info_bar_);
+  }
 
   // Refresh the UI to reflect the new setting.
   PresentSitePermissions();
@@ -855,21 +897,27 @@ permissions::ObjectPermissionContextBase* PageInfo::GetChooserContextFromUIInfo(
   return delegate_->GetChooserContext(ui_info.content_settings_type);
 }
 
-std::u16string PageInfo::GetSimpleSiteName() const {
-  if (!site_name_for_testing_.empty())
+std::u16string PageInfo::GetSiteNameOrAppNameToDisplay() const {
+  if (!site_name_for_testing_.empty()) {
     return site_name_for_testing_;
+  }
 
-  return url_formatter::FormatUrlForDisplayOmitSchemePathAndTrivialSubdomains(
-      site_url_);
-}
+  if (IsIsolatedWebApp() && !isolated_web_app_name_.empty()) {
+    return isolated_web_app_name_;
+  }
 
-std::u16string PageInfo::GetSiteOriginOrAppNameToDisplay() const {
-  return IsIsolatedWebApp() && !isolated_web_app_name_.empty()
-             ? isolated_web_app_name_
-             : GetSimpleSiteName();
+  return GetSimpleSiteName();
 }
 
 void PageInfo::ComputeUIInputs(const GURL& url) {
+  // TODO(https://crbug.com/1404024): Check |isolated-app| scheme once we have a
+  // definition available for components
+  if (IsIsolatedWebApp()) {
+    site_identity_status_ = SITE_IDENTITY_STATUS_ISOLATED_WEB_APP;
+    site_connection_status_ = SITE_CONNECTION_STATUS_ISOLATED_WEB_APP;
+    return;
+  }
+
   auto security_level = delegate_->GetSecurityLevel();
   auto visible_security_state = delegate_->GetVisibleSecurityState();
 #if !BUILDFLAG(IS_ANDROID)
@@ -1038,7 +1086,7 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
   // weakly encrypted connections.
   site_connection_status_ = SITE_CONNECTION_STATUS_UNKNOWN;
 
-  std::u16string subject_name(GetSimpleSiteName());
+  std::u16string subject_name(GetSiteNameOrAppNameToDisplay());
   if (subject_name.empty()) {
     subject_name.assign(
         l10n_util::GetStringUTF16(IDS_PAGE_INFO_SECURITY_TAB_UNKNOWN_PARTY));
@@ -1297,7 +1345,7 @@ void PageInfo::PresentSiteIdentity() {
   DCHECK_NE(site_identity_status_, SITE_IDENTITY_STATUS_UNKNOWN);
   DCHECK_NE(site_connection_status_, SITE_CONNECTION_STATUS_UNKNOWN);
   PageInfoUI::IdentityInfo info;
-  info.site_identity = UTF16ToUTF8(GetSimpleSiteName());
+  info.site_identity = UTF16ToUTF8(GetSiteNameOrAppNameToDisplay());
 
   info.connection_status = site_connection_status_;
   info.connection_status_description = UTF16ToUTF8(site_connection_details_);
@@ -1356,6 +1404,11 @@ void PageInfo::RecordPasswordReuseEvent() {
 }
 #endif
 
+std::u16string PageInfo::GetSimpleSiteName() const {
+  return url_formatter::FormatUrlForDisplayOmitSchemePathAndTrivialSubdomains(
+      site_url_);
+}
+
 HostContentSettingsMap* PageInfo::GetContentSettings() const {
   return delegate_->GetContentSettings();
 }
@@ -1377,6 +1430,7 @@ void PageInfo::SetIsolatedWebAppNameForTesting(
     const std::u16string& isolated_web_app_name) {
   is_isolated_web_app_for_testing_ = true;
   isolated_web_app_name_ = isolated_web_app_name;
+  PresentSiteIdentity();
 }
 
 void PageInfo::GetSafeBrowsingStatusByMaliciousContentStatus(
@@ -1482,7 +1536,9 @@ int PageInfo::GetSitesWithAllowedCookiesAccessCount() {
   auto* settings = GetPageSpecificContentSettings();
   if (!settings)
     return 0;
-  return settings->allowed_local_shared_objects().GetHostCount();
+  return browsing_data::GetUniqueHostCount(
+      settings->allowed_local_shared_objects(),
+      *(settings->allowed_browsing_data_model()));
 }
 
 int PageInfo::GetThirdPartySitesWithBlockedCookiesAccessCount(

@@ -121,28 +121,6 @@ class NET_EXPORT IsolationInfo {
       absl::optional<std::set<SchemefulSite>> party_context = absl::nullopt,
       const base::UnguessableToken* nonce = nullptr);
 
-  // Create and IsolationInfo from the context of a double key. This should only
-  // be used when we don't have access to the frame_origin because the
-  // IsolationInfo is being created from an existing double keyed IsolationInfo.
-  static IsolationInfo CreateDoubleKey(
-      RequestType request_type,
-      const url::Origin& top_frame_origin,
-      const SiteForCookies& site_for_cookies,
-      absl::optional<std::set<SchemefulSite>> party_context = absl::nullopt,
-      const base::UnguessableToken* nonce = nullptr);
-
-  // Create an IsolationInfos that may not be fully correct - in particular,
-  // the SiteForCookies will always set to null, and if the NetworkIsolationKey
-  // only has a top frame origin, the frame origin will either be set to the top
-  // frame origin, in the kMainFrame case, or be replaced by an opaque
-  // origin in all other cases. If the NetworkIsolationKey is not fully
-  // populated, will create an empty IsolationInfo. This is intended for use
-  // while transitioning from NIKs being set on only some requests to
-  // IsolationInfos being set on all requests.
-  static IsolationInfo CreatePartial(
-      RequestType request_type,
-      const net::NetworkIsolationKey& network_isolation_key);
-
   // TODO(crbug/1372769): Remove this and create a safer way to ensure NIKs
   // created from NAKs aren't used by accident.
   static IsolationInfo DoNotUseCreatePartialFromNak(
@@ -207,9 +185,7 @@ class NET_EXPORT IsolationInfo {
   //          policy. It MUST NEVER be used for any kind of SECURITY check.
   const SiteForCookies& site_for_cookies() const { return site_for_cookies_; }
 
-  // Do not use outside of testing. Returns the `frame_origin_` if
-  // `kForceIsolationInfoFrameOriginToTopLevelFrame` is disabled. Else it
-  // returns the `top_frame_origin_` value.
+  // Do not use outside of testing. Returns the `frame_origin_`.
   const absl::optional<url::Origin>& frame_origin_for_testing() const;
 
   // Return |party_context| which exclude the top frame origin and the frame
@@ -235,6 +211,8 @@ class NET_EXPORT IsolationInfo {
   // Returns true if the IsolationInfo has a triple keyed scheme. This
   // means both `frame_site_` and `top_frame_site_` are populated.
   static bool IsFrameSiteEnabled();
+
+  std::string DebugString() const;
 
  private:
   IsolationInfo(RequestType request_type,

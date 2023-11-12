@@ -37,6 +37,7 @@ source_set("system_web_apps") {
     "//ash/webui/shimless_rma",
     "//ash/webui/shortcut_customization_ui",
     "//ash/webui/system_apps/public:system_web_app_config",
+    "//ash/webui/system_apps/public:system_web_app_type",
     "//base",
     "//chrome/browser:browser_process",
     "//chrome/browser/ash/system_web_apps/types",
@@ -91,6 +92,8 @@ source_set("browser_tests") {
     ":system_web_apps",
     "//base",
     "//chrome/app:command_ids",
+    "//chrome/browser/apps/app_service",
+    "//chrome/browser/ash:test_support",
     "//chrome/browser/ash/system_web_apps/test_support",
     "//chrome/browser/ash/system_web_apps/test_support:test_support_ui",
     "//chrome/browser/ash/system_web_apps/types",
@@ -101,6 +104,7 @@ source_set("browser_tests") {
     "//components/services/app_service/public/cpp:intents",
     "//extensions/browser:test_support",
     "//ui/base/idle:test_support",
+    "//ui/events:test_support",
     "//url",
   ]
 }

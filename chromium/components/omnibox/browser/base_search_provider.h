@@ -26,8 +26,11 @@
 class AutocompleteProviderClient;
 class GURL;
 class SearchTermsData;
-class SuggestionDeletionHandler;
 class TemplateURL;
+
+namespace network {
+class SimpleURLLoader;
+}
 
 // Base functionality for receiving suggestions from a search engine.
 // This class is abstract and should only be used as a base for other
@@ -81,7 +84,7 @@ class BaseSearchProvider : public AutocompleteProvider {
       const TemplateURL* template_url,
       const SearchTermsData& search_terms_data);
 
-  // A helper function to return an AutocompleteMatch for OnDeviceHeadProvider.
+  // A helper function to return an AutocompleteMatch for on device provider.
   static AutocompleteMatch CreateOnDeviceSearchSuggestion(
       AutocompleteProvider* autocomplete_provider,
       const AutocompleteInput& input,
@@ -89,7 +92,8 @@ class BaseSearchProvider : public AutocompleteProvider {
       int relevance,
       const TemplateURL* template_url,
       const SearchTermsData& search_terms_data,
-      int accepted_suggestion);
+      int accepted_suggestion,
+      bool is_tail_suggestion);
 
   // Appends specific suggest client based on page |page_classification| to
   // the additional query params of |search_terms_args| only for Google template
@@ -145,10 +149,6 @@ class BaseSearchProvider : public AutocompleteProvider {
   void DeleteMatch(const AutocompleteMatch& match) override;
   void AddProviderInfo(ProvidersInfo* provider_info) const override;
 
-  bool field_trial_triggered_in_session() const {
-    return field_trial_triggered_in_session_;
-  }
-
  protected:
   // The following keys are used to record additional information on matches.
 
@@ -179,8 +179,6 @@ class BaseSearchProvider : public AutocompleteProvider {
 
   using MatchKey = ACMatchKey<std::u16string, std::string>;
   using MatchMap = std::map<MatchKey, AutocompleteMatch>;
-  using SuggestionDeletionHandlers =
-      std::vector<std::unique_ptr<SuggestionDeletionHandler>>;
 
   // Returns the appropriate value for the fill_into_edit field of an
   // AutcompleteMatch. The result consists of the suggestion text from
@@ -226,15 +224,6 @@ class BaseSearchProvider : public AutocompleteProvider {
   AutocompleteProviderClient* client() { return client_; }
   const AutocompleteProviderClient* client() const { return client_; }
 
-  bool field_trial_triggered() const { return field_trial_triggered_; }
-
-  void set_field_trial_triggered(bool triggered) {
-    field_trial_triggered_ = triggered;
-  }
-  void set_field_trial_triggered_in_session(bool triggered) {
-    field_trial_triggered_in_session_ = triggered;
-  }
-
  private:
   friend class SearchProviderTest;
   FRIEND_TEST_ALL_PREFIXES(SearchProviderTest, TestDeleteMatch);
@@ -245,25 +234,16 @@ class BaseSearchProvider : public AutocompleteProvider {
   // This gets called when we have requested a suggestion deletion from the
   // server to handle the results of the deletion. It will be called after the
   // deletion request completes.
-  void OnDeletionComplete(bool success,
-                          SuggestionDeletionHandler* handler);
+  void OnDeletionComplete(const network::SimpleURLLoader* source,
+                          const bool response_received,
+                          std::unique_ptr<std::string> response_body);
 
   raw_ptr<AutocompleteProviderClient> client_;
 
-  // Whether a field trial, if any, has triggered in the most recent
-  // autocomplete query. This field is set to true only if the suggestion
-  // provider has completed and the response contained
-  // '"google:fieldtrialtriggered":true'.
-  bool field_trial_triggered_;
-
-  // Same as above except that it is maintained across the current Omnibox
-  // session.
-  bool field_trial_triggered_in_session_;
-
-  // Each deletion handler in this vector corresponds to an outstanding request
+  // Each deletion loader in this vector corresponds to an outstanding request
   // that a server delete a personalized suggestion. Making this a vector of
   // unique_ptr causes us to auto-cancel all such requests on shutdown.
-  SuggestionDeletionHandlers deletion_handlers_;
+  std::vector<std::unique_ptr<network::SimpleURLLoader>> deletion_loaders_;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_BASE_SEARCH_PROVIDER_H_

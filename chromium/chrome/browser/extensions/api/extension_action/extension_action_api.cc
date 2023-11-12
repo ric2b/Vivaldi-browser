@@ -9,7 +9,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
@@ -367,7 +367,7 @@ bool ExtensionActionFunction::ExtractDataFromArguments() {
       tab_id_ = first_arg.GetInt();
       break;
 
-    case base::Value::Type::DICTIONARY: {
+    case base::Value::Type::DICT: {
       // Found the details argument.
       details_ = &first_arg.GetDict();
       // Still need to check for the tabId within details.
@@ -437,26 +437,7 @@ void ExtensionActionSetIconFunction::SetReportErrorForInvisibleIconForTesting(
 
 ExtensionFunction::ResponseAction
 ExtensionActionSetIconFunction::RunExtensionAction() {
-  // TODO(devlin): Temporary logging to track down https://crbug.com/1087948.
-  // Remove this (and the redundant `if (!x) { VALIDATE(x); }`) checks after
-  // the bug is fixed.
-  // Don't reorder or remove values.
-  enum class FailureType {
-    kFailedToParseDetails = 0,
-    kFailedToDecodeCanvas = 1,
-    kFailedToUnpickleCanvas = 2,
-    kNoImageDataOrIconIndex = 3,
-    kMaxValue = kNoImageDataOrIconIndex,
-  };
-
-  auto log_set_icon_failure = [](FailureType type) {
-    base::UmaHistogramEnumeration("Extensions.ActionSetIconFailureType", type);
-  };
-
-  if (!details_) {
-    log_set_icon_failure(FailureType::kFailedToParseDetails);
-    EXTENSION_FUNCTION_VALIDATE(details_);
-  }
+  EXTENSION_FUNCTION_VALIDATE(details_);
 
   // setIcon can take a variant argument: either a dictionary of canvas
   // ImageData, or an icon index.
@@ -466,21 +447,8 @@ ExtensionActionSetIconFunction::RunExtensionAction() {
 
     ExtensionAction::IconParseResult parse_result =
         ExtensionAction::ParseIconFromCanvasDictionary(*canvas_set, &icon);
-
-    if (parse_result != ExtensionAction::IconParseResult::kSuccess) {
-      switch (parse_result) {
-        case ExtensionAction::IconParseResult::kDecodeFailure:
-          log_set_icon_failure(FailureType::kFailedToDecodeCanvas);
-          break;
-        case ExtensionAction::IconParseResult::kUnpickleFailure:
-          log_set_icon_failure(FailureType::kFailedToUnpickleCanvas);
-          break;
-        case ExtensionAction::IconParseResult::kSuccess:
-          NOTREACHED();
-          break;
-      }
-      EXTENSION_FUNCTION_VALIDATE(false);
-    }
+    EXTENSION_FUNCTION_VALIDATE(parse_result ==
+                                ExtensionAction::IconParseResult::kSuccess);
 
     if (icon.isNull())
       return RespondNow(Error("Icon invalid."));
@@ -499,9 +467,9 @@ ExtensionActionSetIconFunction::RunExtensionAction() {
     // Obsolete argument: ignore it.
     return RespondNow(NoArguments());
   } else {
-    log_set_icon_failure(FailureType::kNoImageDataOrIconIndex);
     EXTENSION_FUNCTION_VALIDATE(false);
   }
+
   NotifyChange();
   return RespondNow(NoArguments());
 }
@@ -728,22 +696,19 @@ ExtensionFunction::ResponseAction ActionOpenPopupFunction::Run() {
 void ActionOpenPopupFunction::OnShowPopupComplete(ExtensionHost* popup_host) {
   DCHECK(!did_respond());
 
-  ResponseValue response_value;
   if (popup_host) {
     // TODO(https://crbug.com/1245093): Return the tab for which the extension
     // popup was shown?
     DCHECK(popup_host->document_element_available());
-    response_value = NoArguments();
+    Respond(NoArguments());
   } else {
     // NOTE(devlin): We could have the callback pass more information here about
     // why the popup didn't open (e.g., another active popup vs popup closing
     // before display, as may happen if the window closes), but it's not clear
     // whether that would be significantly helpful to developers and it may
     // leak other information about the user's browser.
-    response_value = Error(kFailedToOpenPopupGenericError);
+    Respond(Error(kFailedToOpenPopupGenericError));
   }
-
-  Respond(std::move(response_value));
 }
 
 BrowserActionOpenPopupFunction::BrowserActionOpenPopupFunction() = default;

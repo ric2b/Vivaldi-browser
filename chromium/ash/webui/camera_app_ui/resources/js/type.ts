@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {assertExists, assertInstanceof} from './assert.js';
+import {WaitableEvent} from './waitable_event.js';
 
 /**
  * Photo or video resolution.
@@ -132,7 +133,6 @@ export enum Facing {
 
 export enum ViewName {
   CAMERA = 'view-camera',
-  CROP_DOCUMENT = 'view-crop-document',
   DOCUMENT_MODE_DIALOG = 'view-document-mode-dialog',
   DOCUMENT_REVIEW = 'view-document-review',
   EXPERT_SETTINGS = 'view-expert-settings',
@@ -289,15 +289,8 @@ export function getVideoTrackSettings(videoTrack: MediaStreamTrack):
  * stream is expired.
  */
 export class PreviewVideo {
-  private expired = false;
-
   constructor(
-      readonly video: HTMLVideoElement, readonly onExpired: Promise<void>) {
-    (async () => {
-      await this.onExpired;
-      this.expired = true;
-    })();
-  }
+      readonly video: HTMLVideoElement, readonly onExpired: WaitableEvent) {}
 
   getStream(): MediaStream {
     return assertInstanceof(this.video.srcObject, MediaStream);
@@ -312,7 +305,7 @@ export class PreviewVideo {
   }
 
   isExpired(): boolean {
-    return this.expired;
+    return this.onExpired.isSignaled();
   }
 }
 
@@ -457,6 +450,16 @@ export class NoFrameError extends Error {
  */
 export class PortraitModeProcessError extends Error {
   constructor(message = 'No human face detected in the scene') {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+
+/**
+ * Throws when the camera is suspended while reprocess effects are ongoing.
+ */
+export class CameraSuspendError extends Error {
+  constructor(message = 'camera suspended') {
     super(message);
     this.name = this.constructor.name;
   }

@@ -6,8 +6,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/clock.h"
 #include "components/reading_list/core/proto/reading_list.pb.h"
 #include "components/sync/model/metadata_batch.h"
@@ -67,6 +68,13 @@ ReadingListModelStorageImpl::EnsureBatchCreated() {
   return std::make_unique<ScopedBatchUpdate>(this);
 }
 
+void ReadingListModelStorageImpl::DeleteAllEntriesAndSyncMetadata() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  store_->DeleteAllDataAndMetadata(
+      base::BindOnce(&ReadingListModelStorageImpl::OnDatabaseSave,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
 syncer::MetadataChangeList*
 ReadingListModelStorageImpl::ScopedBatchUpdate::GetSyncMetadataChangeList() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -114,7 +122,7 @@ void ReadingListModelStorageImpl::OnDatabaseLoad(
       // failure.
     }
 
-    std::unique_ptr<ReadingListEntry> entry(
+    scoped_refptr<ReadingListEntry> entry(
         ReadingListEntry::FromReadingListLocal(proto, clock_->Now()));
     if (!entry) {
       continue;
@@ -122,7 +130,7 @@ void ReadingListModelStorageImpl::OnDatabaseLoad(
 
     const GURL& url = entry->URL();
     DCHECK(!loaded_entries.count(url));
-    loaded_entries.emplace(url, std::move(*entry));
+    loaded_entries.emplace(url, std::move(entry));
   }
 
   store_->ReadAllMetadata(base::BindOnce(
@@ -147,7 +155,6 @@ void ReadingListModelStorageImpl::OnReadAllMetadata(
 
 void ReadingListModelStorageImpl::OnDatabaseSave(
     const absl::optional<syncer::ModelError>& error) {
-  // TODO(crbug.com/1386158): Errors should be propagated up.
   return;
 }
 

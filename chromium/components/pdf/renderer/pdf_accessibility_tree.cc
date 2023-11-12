@@ -8,9 +8,9 @@
 #include <iterator>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/cxx20_erase.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/i18n/break_iterator.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -29,6 +29,7 @@
 #include "pdf/pdf_features.h"
 #include "third_party/blink/public/strings/grit/blink_accessibility_strings.h"
 #include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_tree_id.h"
 #include "ui/accessibility/null_ax_action_target.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -703,6 +704,7 @@ class PdfAccessibilityTreeBuilder {
     link_node->AddStringAttribute(ax::mojom::StringAttribute::kName,
                                   std::string());
     link_node->relative_bounds.bounds = link.bounds;
+    link_node->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kJump);
     node_id_to_annotation_info_->emplace(
         link_node->id,
         PdfAccessibilityTree::AnnotationInfo(page_index_, link.index_in_page));
@@ -817,6 +819,9 @@ class PdfAccessibilityTreeBuilder {
                                    button.control_count);
       button_node->AddIntAttribute(ax::mojom::IntAttribute::kPosInSet,
                                    button.control_index + 1);
+      button_node->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kCheck);
+    } else {
+      button_node->SetDefaultActionVerb(ax::mojom::DefaultActionVerb::kPress);
     }
 
     button_node->relative_bounds.bounds = button.bounds;
@@ -835,6 +840,9 @@ class PdfAccessibilityTreeBuilder {
     listbox_option_node->AddBoolAttribute(ax::mojom::BoolAttribute::kSelected,
                                           choice_field_option.is_selected);
     listbox_option_node->AddState(ax::mojom::State::kFocusable);
+    listbox_option_node->SetDefaultActionVerb(
+        ax::mojom::DefaultActionVerb::kSelect);
+
     return listbox_option_node;
   }
 
@@ -901,6 +909,11 @@ class PdfAccessibilityTreeBuilder {
 
     combobox_input_node->AddState(ax::mojom::State::kFocusable);
     combobox_input_node->relative_bounds.bounds = choice_field.bounds;
+    if (input_role == ax::mojom::Role::kComboBoxMenuButton) {
+      combobox_input_node->SetDefaultActionVerb(
+          ax::mojom::DefaultActionVerb::kOpen);
+    }
+
     return combobox_input_node;
   }
 
@@ -1229,6 +1242,8 @@ PdfAccessibilityTree::PdfAccessibilityTree(
         GetRenderAccessibilityIfEnabled();
     // PdfAccessibilityTree is created even when accessibility services are not
     // enabled and we rely on them to use PdfOcr service.
+    // TODO(crbug.com/1278249): Need to create a PdfOcr service only when PDF
+    // OCR is turned on.
     if (render_accessibility) {
       ocr_service_ = std::make_unique<PdfOcrService>(
           render_accessibility->GetTreeIDForPluginHost(), *render_frame);
@@ -1661,13 +1676,11 @@ PdfAccessibilityTree::GetRenderAccessibilityIfEnabled() {
   // we shouldn't use it. This can happen if Blink accessibility is disabled
   // after we started generating the accessible PDF.
   base::WeakPtr<PdfAccessibilityTree> weak_this = GetWeakPtr();
-  if (render_accessibility->GenerateAXID() <= 0)
+  if (!render_accessibility->HasActiveDocument()) {
     return nullptr;
+  }
 
-  // GenerateAXID() above can cause self deletion. Returning nullptr will cause
-  // callers to stop doing work.
-  if (!weak_this)
-    return nullptr;
+  DCHECK(weak_this);
 
   return render_accessibility;
 }
@@ -1721,11 +1734,13 @@ int32_t PdfAccessibilityTree::GetId(const ui::AXNode* node) const {
   return node->id();
 }
 
-void PdfAccessibilityTree::GetChildren(
-    const ui::AXNode* node,
-    std::vector<const ui::AXNode*>* out_children) const {
-  *out_children = std::vector<const ui::AXNode*>(node->children().cbegin(),
-                                                 node->children().cend());
+size_t PdfAccessibilityTree::GetChildCount(const ui::AXNode* node) const {
+  return node->children().size();
+}
+
+const ui::AXNode* PdfAccessibilityTree::ChildAt(const ui::AXNode* node,
+                                                size_t index) const {
+  return node->children()[index];
 }
 
 ui::AXNode* PdfAccessibilityTree::GetParent(const ui::AXNode* node) const {
@@ -1759,8 +1774,16 @@ std::unique_ptr<ui::AXActionTarget> PdfAccessibilityTree::CreateActionTarget(
   return std::make_unique<PdfAXActionTarget>(target_node, this);
 }
 
-void PdfAccessibilityTree::AccessibilityModeChanged(
-    const ui::AXMode& /*mode*/) {
+void PdfAccessibilityTree::AccessibilityModeChanged(const ui::AXMode& mode) {
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  if (mode.has_mode(ui::AXMode::kPDFOcr)) {
+    // TODO(crbug.com/1278249): Need to start OCR. Note that this function will
+    // be called when the user chooses to run PDF OCR once from the context
+    // menu; this function will not be called when the user chooses to set PDF
+    // OCR to be always active.
+    VLOG(2) << "Received a request of running PDF OCR.";
+  }
+#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
   MaybeHandleAccessibilityChange();
 }
 
@@ -1780,7 +1803,13 @@ void PdfAccessibilityTree::OnOcrDataReceived(
   // more convenient and less complex if an `ui::AXTree` was never constructed
   // and if the `ui::AXTreeSource` was able to use the collection of `nodes_`
   // directly.
+  if (child_tree_id == ui::AXTreeIDUnknown()) {
+    VLOG(1) << "Empty OCR data received.";
+    return;
+  }
+
   VLOG(1) << "OCR data received: " << child_tree_id.ToString();
+
   DCHECK_NE(image_node_id, ui::kInvalidAXNodeID);
   DCHECK_NE(parent_node_id, ui::kInvalidAXNodeID);
   DCHECK(!image_bounds.IsEmpty());

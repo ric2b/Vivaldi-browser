@@ -26,6 +26,7 @@ InteractiveTestPrivate::~InteractiveTestPrivate() = default;
 
 void InteractiveTestPrivate::Init(ElementContext initial_context) {
   success_ = false;
+  sequence_skipped_ = false;
   MaybeAddPivotElement(initial_context);
   for (ElementContext context :
        ElementTracker::GetElementTracker()->GetAllContextsForTesting()) {
@@ -58,6 +59,49 @@ void InteractiveTestPrivate::MaybeAddPivotElement(ElementContext context) {
   }
 }
 
+void InteractiveTestPrivate::HandleActionResult(
+    InteractionSequence* seq,
+    const TrackedElement* el,
+    const std::string& operation_name,
+    ActionResult result) {
+  switch (result) {
+    case ActionResult::kSucceeded:
+      break;
+    case ActionResult::kFailed:
+      LOG(ERROR) << operation_name << " failed for " << *el;
+      seq->FailForTesting();
+      break;
+    case ActionResult::kNotAttempted:
+      LOG(ERROR) << operation_name << " could not be applied to " << *el;
+      seq->FailForTesting();
+      break;
+    case ActionResult::kKnownIncompatible:
+      LOG(WARNING) << operation_name
+                   << " failed because it is unsupported on this platform for "
+                   << *el;
+      if (!on_incompatible_action_reason_.empty()) {
+        LOG(WARNING) << "Unsupported action was expected: "
+                     << on_incompatible_action_reason_;
+      } else {
+        LOG(ERROR) << "Unsupported action was unexpected. "
+                      "Did you forget to call SetOnIncompatibleAction()?";
+      }
+      switch (on_incompatible_action_) {
+        case OnIncompatibleAction::kFailTest:
+          seq->FailForTesting();
+          break;
+        case OnIncompatibleAction::kSkipTest:
+        case OnIncompatibleAction::kHaltTest:
+          sequence_skipped_ = true;
+          seq->FailForTesting();
+          break;
+        case OnIncompatibleAction::kIgnoreAndContinue:
+          break;
+      }
+      break;
+  }
+}
+
 TrackedElement* InteractiveTestPrivate::GetPivotElement(
     ElementContext context) const {
   const auto it = pivot_elements_.find(context);
@@ -74,22 +118,21 @@ void InteractiveTestPrivate::OnSequenceComplete() {
 }
 
 void InteractiveTestPrivate::OnSequenceAborted(
-    int active_step,
-    TrackedElement* last_element,
-    ElementIdentifier last_id,
-    InteractionSequence::StepType last_step_type,
-    InteractionSequence::AbortedReason aborted_reason,
-    std::string description) {
+    const InteractionSequence::AbortedData& data) {
   if (aborted_callback_for_testing_) {
-    std::move(aborted_callback_for_testing_)
-        .Run(active_step, last_element, last_id, last_step_type, aborted_reason,
-             description);
+    std::move(aborted_callback_for_testing_).Run(data);
     return;
   }
-  GTEST_FAIL() << "Interactive test failed on step " << active_step
-               << " for reason " << aborted_reason << ". Step type was "
-               << last_step_type << " with element " << last_id
-               << " description: " << description;
+  if (sequence_skipped_) {
+    LOG(WARNING) << "Interactive test halted " << data;
+    if (on_incompatible_action_ == OnIncompatibleAction::kSkipTest) {
+      GTEST_SKIP();
+    } else {
+      DCHECK_EQ(OnIncompatibleAction::kHaltTest, on_incompatible_action_);
+    }
+  } else {
+    GTEST_FAIL() << "Interactive test failed " << data;
+  }
 }
 
 void SpecifyElement(ui::InteractionSequence::StepBuilder& builder,
@@ -109,6 +152,15 @@ std::string DescribeElement(ElementSpecifier element) {
   CHECK(absl::holds_alternative<base::StringPiece>(element));
   return base::StringPrintf("\"%s\"",
                             absl::get<base::StringPiece>(element).data());
+}
+
+InteractionSequence::Builder BuildSubsequence(
+    InteractiveTestPrivate::MultiStep steps) {
+  InteractionSequence::Builder builder;
+  for (auto& step : steps) {
+    builder.AddStep(std::move(step));
+  }
+  return builder;
 }
 
 }  // namespace ui::test::internal

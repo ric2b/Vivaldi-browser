@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "ash/public/cpp/network_config_service.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -21,15 +21,14 @@
 #include "chromeos/ash/components/sync_wifi/synced_network_metrics_logger.h"
 #include "chromeos/ash/components/sync_wifi/synced_network_updater_impl.h"
 #include "chromeos/ash/components/sync_wifi/test_data_generator.h"
-#include "chromeos/services/network_config/cros_network_config.h"
-#include "chromeos/services/network_config/in_process_instance.h"
-#include "chromeos/services/network_config/public/cpp/cros_network_config_test_helper.h"
+#include "chromeos/ash/services/network_config/cros_network_config.h"
+#include "chromeos/ash/services/network_config/in_process_instance.h"
+#include "chromeos/ash/services/network_config/public/cpp/cros_network_config_test_helper.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
 namespace ash::network_config {
 namespace mojom = ::chromeos::network_config::mojom;
 }
@@ -41,15 +40,16 @@ namespace {
 const char kFredSsid[] = "Fred";
 const char kMangoSsid[] = "Mango";
 
-const chromeos::NetworkState* FindLocalNetworkById(
-    const NetworkIdentifier& id) {
-  chromeos::NetworkStateHandler::NetworkStateList network_list;
-  chromeos::NetworkHandler::Get()
-      ->network_state_handler()
-      ->GetNetworkListByType(
-          chromeos::NetworkTypePattern::WiFi(), /* configured_only= */ true,
-          /* visible_only= */ false, /* limit= */ 0, &network_list);
-  for (const chromeos::NetworkState* network : network_list) {
+// Because the identifier is created with `GenerateInvalidPskNetworkId`, this is
+// invalid because it is an invalid hex string.
+const char kInvalidSsid[] = "-423";
+
+const NetworkState* FindLocalNetworkById(const NetworkIdentifier& id) {
+  NetworkStateHandler::NetworkStateList network_list;
+  NetworkHandler::Get()->network_state_handler()->GetNetworkListByType(
+      NetworkTypePattern::WiFi(), /* configured_only= */ true,
+      /* visible_only= */ false, /* limit= */ 0, &network_list);
+  for (const NetworkState* network : network_list) {
     if (network->GetHexSsid() == id.hex_ssid() &&
         network->security_class() == id.security_type()) {
       return network;
@@ -114,11 +114,12 @@ class SyncedNetworkUpdaterImplTest : public testing::Test {
   FakePendingNetworkConfigurationTracker* tracker() { return tracker_; }
   FakeTimerFactory* timer_factory() { return timer_factory_.get(); }
   SyncedNetworkUpdaterImpl* updater() { return updater_.get(); }
-  chromeos::NetworkStateTestHelper* network_state_helper() {
+  NetworkStateTestHelper* network_state_helper() {
     return local_test_helper_->network_state_test_helper();
   }
   NetworkIdentifier fred_network_id() { return fred_network_id_; }
   NetworkIdentifier mango_network_id() { return mango_network_id_; }
+  NetworkIdentifier invalid_network_id() { return invalid_network_id_; }
 
  private:
   base::test::TaskEnvironment task_environment_;
@@ -132,6 +133,8 @@ class SyncedNetworkUpdaterImplTest : public testing::Test {
 
   NetworkIdentifier fred_network_id_ = GeneratePskNetworkId(kFredSsid);
   NetworkIdentifier mango_network_id_ = GeneratePskNetworkId(kMangoSsid);
+  NetworkIdentifier invalid_network_id_ =
+      GenerateInvalidPskNetworkId(kInvalidSsid);
 };
 
 TEST_F(SyncedNetworkUpdaterImplTest, TestAdd_OneNetwork) {
@@ -142,7 +145,7 @@ TEST_F(SyncedNetworkUpdaterImplTest, TestAdd_OneNetwork) {
   updater()->AddOrUpdateNetwork(specifics);
   EXPECT_TRUE(tracker()->GetPendingUpdateById(id));
   base::RunLoop().RunUntilIdle();
-  const chromeos::NetworkState* network = FindLocalNetworkById(id);
+  const NetworkState* network = FindLocalNetworkById(id);
   EXPECT_TRUE(network);
   EXPECT_FALSE(network->hidden_ssid());
   EXPECT_FALSE(tracker()->GetPendingUpdateById(id));
@@ -207,10 +210,8 @@ TEST_F(SyncedNetworkUpdaterImplTest, TestAdd_TwoNetworks) {
   EXPECT_TRUE(tracker()->GetPendingUpdateById(mango_network_id()));
   base::RunLoop().RunUntilIdle();
 
-  const chromeos::NetworkState* fred_network =
-      FindLocalNetworkById(fred_network_id());
-  const chromeos::NetworkState* mango_network =
-      FindLocalNetworkById(mango_network_id());
+  const NetworkState* fred_network = FindLocalNetworkById(fred_network_id());
+  const NetworkState* mango_network = FindLocalNetworkById(mango_network_id());
   EXPECT_TRUE(fred_network);
   EXPECT_TRUE(mango_network);
   EXPECT_TRUE(
@@ -337,6 +338,18 @@ TEST_F(SyncedNetworkUpdaterImplTest, TestFailToRemove) {
   histogram_tester.ExpectBucketCount(kApplyFailureReasonHistogram,
                                      ApplyNetworkFailureReason::kFailedToRemove,
                                      3);
+}
+
+// Regression test for b/268408833
+TEST_F(SyncedNetworkUpdaterImplTest, InvalidSsid) {
+  base::HistogramTester histogram_tester;
+  updater()->AddOrUpdateNetwork(
+      GenerateTestWifiSpecifics(invalid_network_id()));
+
+  EXPECT_EQ(0, tracker()->GetCompletedAttempts(invalid_network_id()));
+  EXPECT_TRUE(tracker()->GetPendingUpdateById(invalid_network_id()));
+  histogram_tester.ExpectBucketCount(kApplyGenerateLocalNetworkConfigHistogram,
+                                     false, 1);
 }
 
 }  // namespace ash::sync_wifi

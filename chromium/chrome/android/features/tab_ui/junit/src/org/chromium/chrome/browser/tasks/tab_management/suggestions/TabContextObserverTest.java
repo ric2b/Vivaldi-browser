@@ -4,7 +4,7 @@
 
 package org.chromium.chrome.browser.tasks.tab_management.suggestions;
 
-import static org.mockito.Mockito.any;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.times;
@@ -78,7 +78,7 @@ public class TabContextObserverTest {
         TabContextObserverTestHelper tabContextObserverTestHelper =
                 new TabContextObserverTestHelper(mTabModelSelector);
         tabContextObserverTestHelper.mTabModelObserver.didAddTab(
-                null, 0, TabCreationState.LIVE_IN_FOREGROUND);
+                null, 0, TabCreationState.LIVE_IN_FOREGROUND, false);
         Assert.assertEquals(TabContextObserver.TabContextChangeReason.TAB_ADDED,
                 tabContextObserverTestHelper.getChangeReason());
     }

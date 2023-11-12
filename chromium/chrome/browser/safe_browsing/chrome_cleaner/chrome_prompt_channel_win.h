@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/launch.h"
@@ -127,7 +127,7 @@ class ChromePromptChannel {
   // be launched. Adds all handles used by the channel to |handles_to_inherit|
   // so that the cleaner process can access them, and adds switches to
   // |command_line| that the cleaner process can use to connect to the channel.
-  bool PrepareForCleaner(base::CommandLine* command_line,
+  bool PrepareForCleaner(base::CommandLine& command_line,
                          base::HandlesToInheritVector* handles_to_inherit);
 
   // Does any cleanup required if the cleaner process fails to launch after

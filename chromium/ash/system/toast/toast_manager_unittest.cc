@@ -22,6 +22,7 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
@@ -279,7 +280,7 @@ TEST_F(ToastManagerImplTest, PositionWithVisibleBottomShelf) {
 
   EXPECT_TRUE(toast_bounds.Intersects(
       GetPrimaryWorkAreaInsets()->user_work_area_bounds()));
-  EXPECT_EQ(root_bounds.right(), toast_bounds.right() + ToastOverlay::kOffset);
+  EXPECT_NEAR(root_bounds.CenterPoint().x(), toast_bounds.CenterPoint().x(), 1);
 
   gfx::Rect shelf_bounds = shelf->GetIdealBounds();
   EXPECT_FALSE(toast_bounds.Intersects(shelf_bounds));
@@ -360,29 +361,6 @@ TEST_F(ToastManagerImplTest, PositionWithHotseatShownForMultipleMonitors) {
             toast_bounds.bottom());
 }
 
-// Tests that `ToastOverlay`'s are cleaned up properly on shutdown with hotseat
-// extended on multi-monitor
-TEST_F(ToastManagerImplTest, ShutdownWithExtendedHotseat) {
-  UpdateDisplay("600x400,600x400");
-  Shelf* const shelf =
-      Shell::GetRootWindowControllerWithDisplayId(GetSecondaryDisplay().id())
-          ->shelf();
-  EXPECT_EQ(ShelfAlignment::kBottom, shelf->alignment());
-  EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
-
-  Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
-  display_manager()->SetMirrorMode(display::MirrorMode::kOff, absl::nullopt);
-
-  std::unique_ptr<aura::Window> window(
-      CreateTestWindow(gfx::Rect(700, 100, 200, 200)));
-
-  GetPrimaryShelf()->hotseat_widget()->SetState(HotseatState::kExtended);
-
-  ShowToast("DUMMY", ToastData::kInfiniteDuration);
-
-  // Shutdown, there should be no crash.
-}
-
 TEST_F(ToastManagerImplTest, PositionWithHotseatExtendedOnSecondMonitor) {
   UpdateDisplay("600x400,600x400");
   Shelf* const shelf =
@@ -433,7 +411,7 @@ TEST_F(ToastManagerImplTest, PositionWithAutoHiddenBottomShelf) {
 
   EXPECT_TRUE(toast_bounds.Intersects(
       GetPrimaryWorkAreaInsets()->user_work_area_bounds()));
-  EXPECT_EQ(root_bounds.right(), toast_bounds.right() + ToastOverlay::kOffset);
+  EXPECT_NEAR(root_bounds.CenterPoint().x(), toast_bounds.CenterPoint().x(), 1);
   EXPECT_EQ(root_bounds.bottom() -
                 ShelfConfig::Get()->hidden_shelf_in_screen_portion() -
                 ToastOverlay::kOffset,
@@ -455,7 +433,7 @@ TEST_F(ToastManagerImplTest, PositionWithHiddenBottomShelf) {
 
   EXPECT_TRUE(toast_bounds.Intersects(
       GetPrimaryWorkAreaInsets()->user_work_area_bounds()));
-  EXPECT_EQ(root_bounds.right(), toast_bounds.right() + ToastOverlay::kOffset);
+  EXPECT_NEAR(root_bounds.CenterPoint().x(), toast_bounds.CenterPoint().x(), 1);
   EXPECT_EQ(root_bounds.bottom() - ToastOverlay::kOffset,
             toast_bounds.bottom());
 }
@@ -480,7 +458,9 @@ TEST_F(ToastManagerImplTest, PositionWithVisibleLeftShelf) {
 
   gfx::Rect shelf_bounds = shelf->GetIdealBounds();
   EXPECT_FALSE(toast_bounds.Intersects(shelf_bounds));
-  EXPECT_EQ(root_bounds.right(), toast_bounds.right() + ToastOverlay::kOffset);
+  EXPECT_NEAR(
+      shelf_bounds.right() + (root_bounds.width() - shelf_bounds.width()) / 2.0,
+      precise_toast_bounds.CenterPoint().x(), 1.f /* accepted error */);
 }
 
 TEST_F(ToastManagerImplTest, PositionWithUnifiedDesktop) {
@@ -501,7 +481,7 @@ TEST_F(ToastManagerImplTest, PositionWithUnifiedDesktop) {
   EXPECT_TRUE(toast_bounds.Intersects(
       GetPrimaryWorkAreaInsets()->user_work_area_bounds()));
   EXPECT_TRUE(root_bounds.Contains(toast_bounds));
-  EXPECT_EQ(root_bounds.right(), toast_bounds.right() + ToastOverlay::kOffset);
+  EXPECT_NEAR(root_bounds.CenterPoint().x(), toast_bounds.CenterPoint().x(), 1);
 
   gfx::Rect shelf_bounds = shelf->GetIdealBounds();
   EXPECT_FALSE(toast_bounds.Intersects(shelf_bounds));

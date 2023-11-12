@@ -7,9 +7,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
@@ -17,8 +17,8 @@
 #include "chrome/browser/printing/printer_query.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/child_process_host.h"
 #include "content/public/browser/global_routing_id.h"
-#include "content/public/common/child_process_host.h"
 #include "printing/metafile_skia.h"
 #include "printing/print_settings.h"
 #include "printing/printed_document.h"
@@ -41,8 +41,8 @@ void CreateQueryOnIOThread(std::unique_ptr<printing::PrintSettings> settings,
                            PrinterQueryCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  auto query = std::make_unique<printing::PrinterQuery>(
-      content::GlobalRenderFrameHostId());
+  auto query =
+      printing::PrinterQuery::Create(content::GlobalRenderFrameHostId());
   auto* query_ptr = query.get();
   query_ptr->SetSettingsFromPOD(
       std::move(settings),
@@ -59,7 +59,7 @@ void StartPrinting(scoped_refptr<printing::PrintJob> job,
   // Save in separate variable because |query| is moved.
   std::u16string title = query->settings().title();
   job->Initialize(std::move(query), title, /*page_count=*/1);
-  job->SetSource(printing::PrintJob::Source::EXTENSION, extension_id);
+  job->SetSource(printing::PrintJob::Source::kExtension, extension_id);
   job->document()->SetDocument(std::move(metafile));
   job->StartPrinting();
 }

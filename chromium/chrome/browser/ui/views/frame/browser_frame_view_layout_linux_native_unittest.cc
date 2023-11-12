@@ -65,6 +65,7 @@ class TestLayoutDelegate : public OpaqueBrowserFrameViewLayoutDelegate {
   bool IsMinimized() const override { return false; }
   bool IsFullscreen() const override { return false; }
   bool IsTabStripVisible() const override { return true; }
+  bool GetBorderlessModeEnabled() const override { return false; }
   int GetTabStripHeight() const override {
     return GetLayoutConstant(TAB_HEIGHT);
   }
@@ -83,6 +84,7 @@ class TestLayoutDelegate : public OpaqueBrowserFrameViewLayoutDelegate {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   ui::WindowTiledEdges GetTiledEdges() const override { return {}; }
 #endif
+  int WebAppButtonHeight() const override { return 0; }
 };
 
 class TestNavButtonProvider : public ui::NavButtonProvider {
@@ -141,6 +143,7 @@ class TestFrameProvider : public ui::WindowFrameProvider {
 
   // ui::WindowFrameProvider:
   int GetTopCornerRadiusDip() override { return 0; }
+  bool IsTopFrameTranslucent() override { return false; }
   gfx::Insets GetFrameThicknessDip() override { return {}; }
   void PaintWindowFrame(gfx::Canvas* canvas,
                         const gfx::Rect& rect,

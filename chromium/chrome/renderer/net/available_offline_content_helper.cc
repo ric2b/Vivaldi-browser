@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_value_converter.h"
 #include "base/json/json_writer.h"
@@ -50,7 +50,7 @@ base::Value AvailableContentToValue(const AvailableOfflineContentPtr& content) {
   // to lessen security risks when this dictionary is passed as a string to
   // |ExecuteJavaScript|.
   std::string base64_encoded;
-  base::Value value(base::Value::Type::DICTIONARY);
+  base::Value value(base::Value::Type::DICT);
   value.SetKey("ID", base::Value(content->id));
   value.SetKey("name_space", base::Value(content->name_space));
   value.SetKey("title_base64",
@@ -71,11 +71,11 @@ base::Value AvailableContentToValue(const AvailableOfflineContentPtr& content) {
 
 base::Value AvailableContentListToValue(
     const std::vector<AvailableOfflineContentPtr>& content_list) {
-  base::Value value(base::Value::Type::LIST);
+  base::Value::List value;
   for (const auto& content : content_list) {
     value.Append(AvailableContentToValue(content));
   }
-  return value;
+  return base::Value(std::move(value));
 }
 
 void RecordSuggestionPresented(
@@ -192,4 +192,3 @@ void AvailableOfflineContentHelper::AvailableContentReceived(
     item->favicon_data_uri = GURL();
   }
 }
-

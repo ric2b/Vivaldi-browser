@@ -401,7 +401,9 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoViewTransitionImagePair);
     DEFINE_STRING_MAPPING(PseudoViewTransitionNew);
     DEFINE_STRING_MAPPING(PseudoViewTransitionOld);
-    DEFINE_STRING_MAPPING(PseudoParent)
+    DEFINE_STRING_MAPPING(PseudoParent);
+    DEFINE_STRING_MAPPING(PseudoParentUnparsed)
+    DEFINE_STRING_MAPPING(PseudoInitial)
 #undef DEFINE_STRING_MAPPING
   }
 
@@ -1160,6 +1162,13 @@ void inspector_commit_load_event::Data(perfetto::TracedValue context,
   auto dict = std::move(context).WriteDictionary();
   FrameEventData(dict, frame);
   FillCommonFrameData(dict, frame);
+}
+
+void inspector_layerize_event::Data(perfetto::TracedValue context,
+                                    LocalFrame* frame) {
+  auto dict = std::move(context).WriteDictionary();
+  FrameEventData(dict, frame);
+  dict.Add("frame", IdentifiersFactory::FrameId(frame));
 }
 
 void inspector_mark_load_event::Data(perfetto::TracedValue context,

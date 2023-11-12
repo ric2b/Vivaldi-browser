@@ -33,7 +33,7 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
   void PrintLog() const override { updater::test::PrintLog(updater_scope_); }
 
   void CopyLog() const override {
-    absl::optional<base::FilePath> path = GetDataDirPath(updater_scope_);
+    absl::optional<base::FilePath> path = GetInstallDirectory(updater_scope_);
     EXPECT_TRUE(path);
     if (path)
       updater::test::CopyLog(*path);
@@ -73,6 +73,17 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
     updater::test::SetGroupPolicies(values);
   }
 
+  void ExpectUpdateCheckSequence(
+      ScopedServer* test_server,
+      const std::string& app_id,
+      const std::string& install_data_index,
+      const base::Version& from_version,
+      const base::Version& to_version) const override {
+    updater::test::ExpectUpdateCheckSequence(updater_scope_, test_server,
+                                             app_id, install_data_index,
+                                             from_version, to_version);
+  }
+
   void ExpectUpdateSequence(ScopedServer* test_server,
                             const std::string& app_id,
                             const std::string& install_data_index,
@@ -83,16 +94,22 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
                                         to_version);
   }
 
+  void ExpectInstallSequence(ScopedServer* test_server,
+                             const std::string& app_id,
+                             const std::string& install_data_index,
+                             const base::Version& from_version,
+                             const base::Version& to_version) const override {
+    updater::test::ExpectInstallSequence(updater_scope_, test_server, app_id,
+                                         install_data_index, from_version,
+                                         to_version);
+  }
+
   void ExpectVersionActive(const std::string& version) const override {
     updater::test::ExpectVersionActive(updater_scope_, version);
   }
 
   void ExpectVersionNotActive(const std::string& version) const override {
     updater::test::ExpectVersionNotActive(updater_scope_, version);
-  }
-
-  void ExpectActiveUpdater() const override {
-    updater::test::ExpectActiveUpdater(updater_scope_);
   }
 
   void SetupFakeUpdaterHigherVersion() const override {
@@ -160,8 +177,10 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
   }
 
   void Update(const std::string& app_id,
-              const std::string& install_data_index) const override {
-    updater::test::Update(updater_scope_, app_id, install_data_index);
+              const std::string& install_data_index,
+              bool do_update_check_only) const override {
+    updater::test::Update(updater_scope_, app_id, install_data_index,
+                          do_update_check_only);
   }
 
   void UpdateAll() const override { updater::test::UpdateAll(updater_scope_); }
@@ -218,6 +237,10 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
   void SetUpTestService() const override {}
 
   void TearDownTestService() const override {}
+
+  void RunHandoff(const std::string& app_id) const override {
+    updater::test::RunHandoff(updater_scope_, app_id);
+  }
 #endif  // BUILDFLAG(IS_WIN)
 
   base::FilePath GetDifferentUserPath() const override {

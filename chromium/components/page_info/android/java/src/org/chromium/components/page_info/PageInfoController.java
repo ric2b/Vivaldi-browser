@@ -480,8 +480,7 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
     }
 
     private boolean isSheet(Context context) {
-        return !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)
-                && (mDelegate.getVrHandler() == null || !mDelegate.getVrHandler().isInVr());
+        return !DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
     }
 
     @VisibleForTesting

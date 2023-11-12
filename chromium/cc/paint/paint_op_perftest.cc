@@ -9,6 +9,7 @@
 #include "base/timer/lap_timer.h"
 #include "cc/paint/paint_op_buffer.h"
 #include "cc/paint/paint_op_buffer_serializer.h"
+#include "cc/paint/paint_op_writer.h"
 #include "cc/paint/paint_shader.h"
 #include "cc/test/test_options_provider.h"
 #include "testing/perf/perf_result_reporter.h"
@@ -32,12 +33,8 @@ class PaintOpPerfTest : public testing::Test {
       : timer_(kNumWarmupRuns,
                base::Milliseconds(kTimeLimitMillis),
                kTimeCheckInterval),
-        serialized_data_(static_cast<char*>(
-            base::AlignedAlloc(kMaxSerializedBufferBytes,
-                               PaintOpBuffer::kPaintOpAlign))),
-        deserialized_data_(static_cast<char*>(
-            base::AlignedAlloc(sizeof(LargestPaintOp),
-                               PaintOpBuffer::kPaintOpAlign))) {}
+        serialized_data_(
+            PaintOpWriter::AllocateAlignedBuffer(kMaxSerializedBufferBytes)) {}
 
   void RunTest(const std::string& name, const PaintOpBuffer& buffer) {
     TestOptionsProvider test_options_provider;
@@ -50,7 +47,7 @@ class PaintOpPerfTest : public testing::Test {
       SimpleBufferSerializer serializer(
           serialized_data_.get(), kMaxSerializedBufferBytes,
           test_options_provider.serialize_options());
-      serializer.Serialize(&buffer, nullptr, preamble);
+      serializer.Serialize(buffer, nullptr, preamble);
       bytes_written = serializer.written();
 
       // Force client paint cache entries to be written every time.
@@ -73,8 +70,8 @@ class PaintOpPerfTest : public testing::Test {
 
       while (true) {
         PaintOp* deserialized_op = PaintOp::Deserialize(
-            to_read, remaining_read_bytes, deserialized_data_.get(),
-            sizeof(LargestPaintOp), &bytes_read,
+            to_read, remaining_read_bytes, deserialized_data_,
+            kLargestPaintOpAlignedSize, &bytes_read,
             test_options_provider.deserialize_options());
         CHECK(deserialized_op);
         deserialized_op->DestroyThis();
@@ -98,7 +95,8 @@ class PaintOpPerfTest : public testing::Test {
  protected:
   base::LapTimer timer_;
   std::unique_ptr<char, base::AlignedFreeDeleter> serialized_data_;
-  std::unique_ptr<char, base::AlignedFreeDeleter> deserialized_data_;
+  alignas(PaintOpBuffer::kPaintOpAlign) char deserialized_data_
+      [kLargestPaintOpAlignedSize];
 };
 
 // Ops that can be memcopied both when serializing and deserializing.

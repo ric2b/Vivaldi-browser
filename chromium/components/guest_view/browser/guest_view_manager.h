@@ -10,7 +10,7 @@
 #include <set>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -115,7 +115,8 @@ class GuestViewManager : public content::BrowserPluginGuestManager,
   std::unique_ptr<content::WebContents> CreateGuestWithWebContentsParams(
       const std::string& view_type,
       content::WebContents* owner_web_contents,
-      const content::WebContents::CreateParams& create_params);
+      const content::WebContents::CreateParams& create_params,
+      int disposition);
 
   content::SiteInstance* GetGuestSiteInstance(
       const content::StoragePartitionConfig& storage_partition_config);
@@ -142,7 +143,9 @@ class GuestViewManager : public content::BrowserPluginGuestManager,
                         content::WebContents* guest_web_contents);
   // If a GuestView is created but never initialized with a guest WebContents,
   // this should still be called to invalidate `guest_instance_id`.
-  void RemoveGuest(int guest_instance_id);
+  // If `invalidate_id` is false, then the id may be reused to associate a guest
+  // with a new guest WebContents.
+  void RemoveGuest(int guest_instance_id, bool invalidate_id);
 
   // This method is called when the embedder process with ID
   // |embedder_process_id| has been destroyed.

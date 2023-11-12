@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -304,6 +304,7 @@ TEST_F(MultiplexRouterTest, LateResponse) {
   base::RunLoop run_loop;
   LazyResponseGenerator generator(run_loop.QuitClosure());
   {
+    MessageQueue message_queue;
     InterfaceEndpointClient client0(
         std::move(endpoint0_), nullptr, std::make_unique<PassThroughFilter>(),
         {}, base::SingleThreadTaskRunner::GetCurrentDefault(), 0u,
@@ -316,8 +317,6 @@ TEST_F(MultiplexRouterTest, LateResponse) {
 
     Message request;
     AllocRequestMessage(1, "hello", &request);
-
-    MessageQueue message_queue;
     client0.AcceptWithResponder(
         &request, std::make_unique<MessageAccumulator>(&message_queue));
 

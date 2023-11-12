@@ -171,9 +171,6 @@ public final class EventConstants {
     /** The keyboard accessory was swiped to reveal more suggestions. */
     public static final String KEYBOARD_ACCESSORY_BAR_SWIPED = "keyboard_accessory_bar_swiped";
 
-    /** The Explore Sites tile was tapped. */
-    public static final String EXPLORE_SITES_TILE_TAPPED = "explore_sites_tile_tapped";
-
     /** User has finished drop-to-merge to create a group. */
     public static final String TAB_DRAG_AND_DROP_TO_GROUP = "tab_drag_and_drop_to_group";
 
@@ -233,6 +230,9 @@ public final class EventConstants {
     /** PageInfoStoreInfo events. */
     public static final String PAGE_INFO_STORE_INFO_ROW_CLICKED =
             "page_info_store_info_row_clicked";
+
+    /** PageZoom events. */
+    public static final String PAGE_ZOOM_OPENED = "page_zoom_opened";
 
     /** Permission events. */
     public static final String PERMISSION_REQUEST_SHOWN = "permission_request_shown";
@@ -316,6 +316,10 @@ public final class EventConstants {
 
     /** Desktop site opt-in message gesture event. */
     public static final String DESKTOP_SITE_OPT_IN_GESTURE = "desktop_site_opt_in_gesture";
+
+    /** An app menu desktop site exception addition event. */
+    public static final String APP_MENU_DESKTOP_SITE_EXCEPTION_ADDED =
+            "app_menu_desktop_site_exception_added";
 
     /**
      * Do not instantiate.

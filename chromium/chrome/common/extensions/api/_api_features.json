@@ -294,7 +294,9 @@
     "matches": [
       "chrome-untrusted://camera-app/*",
       "chrome-untrusted://help-app/*",
-      "chrome-untrusted://media-app/*"
+      "chrome-untrusted://media-app/*",
+      "chrome-untrusted://projector/*",
+      "chrome-untrusted://projector-annotator/*"
     ]
   }],
   "dashboardPrivate": {
@@ -453,21 +455,19 @@
     "contexts": ["blessed_extension", "unblessed_extension", "content_script"],
     "max_manifest_version": 2
   },
-  "extension.getViews": [
+  "extension.getViews": [{
+    "channel": "stable",
+    "contexts": ["blessed_extension"],
+    "extension_types": ["extension", "legacy_packaged_app"],
+    "disallow_for_service_workers": true
+  },
     {
-      "channel": "stable",
-      "contexts": ["blessed_extension"],
-      "extension_types": ["extension", "legacy_packaged_app"],
-      "disallow_for_service_workers": true
-    },
-    {
-      // TODO(yoz): Eliminate this usage.
+      // Vivaldi
       "channel": "stable",
       "contexts": ["blessed_extension"],
       "extension_types": ["platform_app"],
       "allowlist": [
-        "A948368FC53BE437A55FEB414106E207925482F5"  // File manager
-       , "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
+        "A414F2F4543AC9C68DDF663D0A459E6053E3373C" // Vivaldi
       ],
       "disallow_for_service_workers": true
     }
@@ -731,6 +731,10 @@
     "internal": true,
     "contexts": ["blessed_extension"]
   }],
+  "pdfViewerPrivate": {
+    "dependencies": ["permission:pdfViewerPrivate"],
+    "contexts": ["blessed_extension"]
+  },
   "printing": {
     "dependencies": ["permission:printing"],
     "contexts": ["blessed_extension"]
@@ -825,12 +829,20 @@
     "dependencies": ["permission:sidePanel"],
     "contexts": ["blessed_extension"]
   },
+  "smartCardProviderPrivate": {
+    "dependencies": ["permission:smartCardProviderPrivate"],
+    "contexts": ["blessed_extension"]
+  },
   "speechRecognitionPrivate": {
     "dependencies": ["permission:speechRecognitionPrivate"],
     "contexts": ["blessed_extension"]
   },
   "systemIndicator": {
     "dependencies": ["manifest:system_indicator"],
+    "contexts": ["blessed_extension"]
+  },
+  "systemLog": {
+    "dependencies": ["permission:systemLog"],
     "contexts": ["blessed_extension"]
   },
   "systemPrivate": {

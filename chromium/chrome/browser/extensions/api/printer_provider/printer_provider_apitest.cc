@@ -8,13 +8,16 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
+#include "base/test/repeating_test_future.h"
+#include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -39,56 +42,36 @@ namespace {
 
 using ContextType = ExtensionBrowserTest::ContextType;
 
-// Callback for PrinterProviderAPI::DispatchGetPrintersRequested calls.
-// It appends items in `printers` to `printers_out`. If `done` is set, it runs
-// `callback`.
-void AppendPrintersAndRunCallbackIfDone(base::Value::List& printers_out,
-                                        base::RepeatingClosure callback,
-                                        base::Value::List printers,
-                                        bool done) {
-  for (size_t i = 0; i < printers.size(); ++i) {
-    base::Value& printer = printers[i];
-    EXPECT_TRUE(printer.is_dict())
-        << "Found invalid printer value at index " << i << ": " << printers;
-    printers_out.Append(std::move(printer));
+using GetPrintersRepeatingFuture =
+    base::test::RepeatingTestFuture<base::Value::List, bool>;
+
+base::Value::List FetchPrintersFromFuture(
+    std::unique_ptr<GetPrintersRepeatingFuture> future) {
+  base::Value::List printers_out;
+  while (true) {
+    auto [printers, done] = future->Take();
+    for (auto& printer : printers) {
+      EXPECT_TRUE(printer.is_dict());
+      printers_out.Append(std::move(printer));
+    }
+    if (done) {
+      break;
+    }
   }
-  if (done && callback)
-    std::move(callback).Run();
+  return printers_out;
 }
 
-// Callback for PrinterProviderAPI::DispatchPrintRequested calls.
-// It fills the out params based on |status| and runs |callback|.
-void RecordPrintResultAndRunCallback(bool* result_success,
-                                     std::string* result_status,
-                                     base::OnceClosure callback,
-                                     const base::Value& status) {
+std::pair<bool, std::string> ParsePrintResult(const base::Value& status) {
   bool success = status.is_none();
   std::string status_str = success ? "OK" : status.GetString();
-  *result_success = success;
-  *result_status = status_str;
-  if (!callback.is_null())
-    std::move(callback).Run();
+  return {success, status_str};
 }
 
-// Callback for PrinterProviderAPI::DispatchGetCapabilityRequested calls.
-// It saves reported |value| as JSON string to |*result| and runs |callback|.
-void RecordDictAndRunCallback(std::string* result,
-                              base::OnceClosure callback,
-                              base::Value::Dict value) {
-  JSONStringValueSerializer serializer(result);
+std::string SerializeDict(const base::Value::Dict& value) {
+  std::string result;
+  JSONStringValueSerializer serializer(&result);
   EXPECT_TRUE(serializer.Serialize(value));
-  if (callback)
-    std::move(callback).Run();
-}
-
-// Callback for PrinterProvider::DispatchGrantUsbPrinterAccess calls.
-// It expects |value| to equal |expected_value| and runs |callback|.
-void ExpectValueAndRunCallback(const base::Value::Dict& expected_value,
-                               base::OnceClosure callback,
-                               base::Value::Dict value) {
-  EXPECT_EQ(value, expected_value);
-  if (!callback.is_null())
-    std::move(callback).Run();
+  return result;
 }
 
 // Tests for chrome.printerProvider API.
@@ -117,7 +100,7 @@ class PrinterProviderApiTest : public ExtensionApiTest,
                                    PrinterProviderAPI::PrintCallback callback) {
     PrinterProviderPrintJob job;
     job.printer_id = extension_id + ":printer_id";
-    job.ticket = base::Value(base::Value::Type::DICTIONARY);
+    job.ticket = base::Value(base::Value::Type::DICT);
     job.content_type = "application/pdf";
 
     PrinterProviderAPIFactory::GetInstance()
@@ -131,7 +114,7 @@ class PrinterProviderApiTest : public ExtensionApiTest,
     PrinterProviderPrintJob job;
     job.printer_id = extension_id + ":printer_id";
     job.job_title = u"Print job";
-    job.ticket = base::Value(base::Value::Type::DICTIONARY);
+    job.ticket = base::Value(base::Value::Type::DICT);
     job.content_type = "application/pdf";
     const unsigned char kDocumentBytes[] = {'b', 'y', 't', 'e', 's'};
     job.document_bytes =
@@ -195,11 +178,11 @@ class PrinterProviderApiTest : public ExtensionApiTest,
 
     base::RunLoop run_loop;
     bool success;
-    std::string print_status;
-    PrinterProviderAPI::PrintCallback callback =
-        base::BindOnce(&RecordPrintResultAndRunCallback, &success,
-                       &print_status, run_loop.QuitClosure());
-
+    std::string status;
+    // TestFuture cannot be used with <const base::Value&>.
+    auto callback = base::BindLambdaForTesting([&](const base::Value& result) {
+                      std::tie(success, status) = ParsePrintResult(result);
+                    }).Then(run_loop.QuitClosure());
     switch (data_type) {
       case PRINT_REQUEST_DATA_TYPE_NOT_SET:
         StartPrintRequestWithNoData(extension_id, std::move(callback));
@@ -213,7 +196,7 @@ class PrinterProviderApiTest : public ExtensionApiTest,
       ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
     run_loop.Run();
-    EXPECT_EQ(expected_result, print_status);
+    EXPECT_EQ(expected_result, status);
     EXPECT_EQ(expected_result == "OK", success);
   }
 
@@ -231,15 +214,12 @@ class PrinterProviderApiTest : public ExtensionApiTest,
     if (extension_id.empty())
       return;
 
-    base::RunLoop run_loop;
-    std::string result;
-    StartCapabilityRequest(extension_id,
-                           base::BindOnce(&RecordDictAndRunCallback, &result,
-                                          run_loop.QuitClosure()));
+    base::test::TestFuture<base::Value::Dict> capability_future;
+    StartCapabilityRequest(extension_id, capability_future.GetCallback());
 
     ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
-    run_loop.Run();
+    auto result = SerializeDict(capability_future.Get());
     EXPECT_EQ(expected_result, result);
   }
 
@@ -319,11 +299,13 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, PrintRequestExtensionUnloaded) {
   ASSERT_FALSE(extension_id.empty());
 
   base::RunLoop run_loop;
-  bool success = false;
+  bool success;
   std::string status;
+  // TestFuture cannot be used with <const base::Value&>.
   StartPrintRequestUsingDocumentBytes(
-      extension_id, base::BindOnce(&RecordPrintResultAndRunCallback, &success,
-                                   &status, run_loop.QuitClosure()));
+      extension_id, base::BindLambdaForTesting([&](const base::Value& result) {
+                      std::tie(success, status) = ParsePrintResult(result);
+                    }).Then(run_loop.QuitClosure()));
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
@@ -363,16 +345,12 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetCapabilityExtensionUnloaded) {
                                          "IGNORE_CALLBACK", &extension_id);
   ASSERT_FALSE(extension_id.empty());
 
-  base::RunLoop run_loop;
-  std::string result;
-  StartCapabilityRequest(extension_id,
-                         base::BindOnce(&RecordDictAndRunCallback, &result,
-                                        run_loop.QuitClosure()));
-
+  base::test::TestFuture<base::Value::Dict> capability_future;
+  StartCapabilityRequest(extension_id, capability_future.GetCallback());
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
   ASSERT_TRUE(SimulateExtensionUnload(extension_id));
-  run_loop.Run();
+  auto result = SerializeDict(capability_future.Get());
   EXPECT_EQ("{}", result);
 }
 
@@ -384,16 +362,11 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersSuccess) {
                                          "OK", &extension_id);
   ASSERT_FALSE(extension_id.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
-
-  run_loop.Run();
 
   std::vector<base::Value::Dict> expected_printers;
   expected_printers.push_back(
@@ -403,7 +376,7 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersSuccess) {
           .Set("extensionName", "Test printer provider")
           .Set("id", base::StringPrintf("%s:printer1", extension_id.c_str()))
           .Set("name", "Printer 1")
-          .BuildDict());
+          .Build());
   expected_printers.push_back(
       DictionaryBuilder()
           .Set("extensionId", extension_id)
@@ -411,8 +384,10 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersSuccess) {
           .Set("id",
                base::StringPrintf("%s:printerNoDesc", extension_id.c_str()))
           .Set("name", "Printer 2")
-          .BuildDict());
+          .Build());
 
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   ValidatePrinterListValue(printers, expected_printers);
 }
 
@@ -424,16 +399,11 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersAsyncSuccess) {
                                          "ASYNC_RESPONSE", &extension_id);
   ASSERT_FALSE(extension_id.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
-
-  run_loop.Run();
 
   std::vector<base::Value::Dict> expected_printers;
   expected_printers.push_back(
@@ -443,8 +413,10 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersAsyncSuccess) {
           .Set("extensionName", "Test printer provider")
           .Set("id", base::StringPrintf("%s:printer1", extension_id.c_str()))
           .Set("name", "Printer 1")
-          .BuildDict());
+          .Build());
 
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   ValidatePrinterListValue(printers, expected_printers);
 }
 
@@ -461,17 +433,12 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersTwoExtensions) {
       "printer_provider/request_printers_second", "OK", &extension_id_2);
   ASSERT_FALSE(extension_id_2.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
-
-  run_loop.Run();
 
   std::vector<base::Value::Dict> expected_printers;
   expected_printers.push_back(
@@ -481,7 +448,7 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersTwoExtensions) {
           .Set("extensionName", "Test printer provider")
           .Set("id", base::StringPrintf("%s:printer1", extension_id_1.c_str()))
           .Set("name", "Printer 1")
-          .BuildDict());
+          .Build());
   expected_printers.push_back(
       DictionaryBuilder()
           .Set("extensionId", extension_id_1)
@@ -489,7 +456,7 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersTwoExtensions) {
           .Set("id",
                base::StringPrintf("%s:printerNoDesc", extension_id_1.c_str()))
           .Set("name", "Printer 2")
-          .BuildDict());
+          .Build());
   expected_printers.push_back(
       DictionaryBuilder()
           .Set("description", "Test printer")
@@ -497,7 +464,7 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersTwoExtensions) {
           .Set("extensionName", "Test printer provider")
           .Set("id", base::StringPrintf("%s:printer1", extension_id_2.c_str()))
           .Set("name", "Printer 1")
-          .BuildDict());
+          .Build());
   expected_printers.push_back(
       DictionaryBuilder()
           .Set("extensionId", extension_id_2)
@@ -505,8 +472,10 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersTwoExtensions) {
           .Set("id",
                base::StringPrintf("%s:printerNoDesc", extension_id_2.c_str()))
           .Set("name", "Printer 2")
-          .BuildDict());
+          .Build());
 
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   ValidatePrinterListValue(printers, expected_printers);
 }
 
@@ -525,12 +494,9 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
       &extension_id_2);
   ASSERT_FALSE(extension_id_2.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
@@ -538,8 +504,8 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
   ASSERT_TRUE(SimulateExtensionUnload(extension_id_1));
   ASSERT_TRUE(SimulateExtensionUnload(extension_id_2));
 
-  run_loop.Run();
-
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   EXPECT_TRUE(printers.empty());
 }
 
@@ -557,17 +523,12 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
       "printer_provider/request_printers_second", "OK", &extension_id_2);
   ASSERT_FALSE(extension_id_2.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
-
-  run_loop.Run();
 
   std::vector<base::Value::Dict> expected_printers;
   expected_printers.push_back(
@@ -577,7 +538,7 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
           .Set("extensionName", "Test printer provider")
           .Set("id", base::StringPrintf("%s:printer1", extension_id_2.c_str()))
           .Set("name", "Printer 1")
-          .BuildDict());
+          .Build());
   expected_printers.push_back(
       DictionaryBuilder()
           .Set("extensionId", extension_id_2)
@@ -585,8 +546,10 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
           .Set("id",
                base::StringPrintf("%s:printerNoDesc", extension_id_2.c_str()))
           .Set("name", "Printer 2")
-          .BuildDict());
+          .Build());
 
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   ValidatePrinterListValue(printers, expected_printers);
 }
 
@@ -604,17 +567,12 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
       "printer_provider/request_printers_second", "OK", &extension_id_2);
   ASSERT_FALSE(extension_id_2.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
-
-  run_loop.Run();
 
   std::vector<base::Value::Dict> expected_printers;
   expected_printers.push_back(
@@ -624,7 +582,7 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
           .Set("extensionName", "Test printer provider")
           .Set("id", base::StringPrintf("%s:printer1", extension_id_2.c_str()))
           .Set("name", "Printer 1")
-          .BuildDict());
+          .Build());
   expected_printers.push_back(
       DictionaryBuilder()
           .Set("extensionId", extension_id_2)
@@ -632,8 +590,10 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
           .Set("id",
                base::StringPrintf("%s:printerNoDesc", extension_id_2.c_str()))
           .Set("name", "Printer 2")
-          .BuildDict());
+          .Build());
 
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   ValidatePrinterListValue(printers, expected_printers);
 }
 
@@ -645,17 +605,14 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersNoListener) {
                                          "NO_LISTENER", &extension_id);
   ASSERT_FALSE(extension_id.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
-  run_loop.Run();
-
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   EXPECT_TRUE(printers.empty());
 }
 
@@ -667,17 +624,14 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersNotArray) {
                                          "NOT_ARRAY", &extension_id);
   ASSERT_FALSE(extension_id.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
-  run_loop.Run();
-
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   EXPECT_TRUE(printers.empty());
 }
 
@@ -690,17 +644,14 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest,
                                          "INVALID_PRINTER_TYPE", &extension_id);
   ASSERT_FALSE(extension_id.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
-  run_loop.Run();
-
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   EXPECT_TRUE(printers.empty());
 }
 
@@ -712,17 +663,14 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderApiTest, GetPrintersInvalidPrinterValue) {
                                          "INVALID_PRINTER", &extension_id);
   ASSERT_FALSE(extension_id.empty());
 
-  base::RunLoop run_loop;
-  base::Value::List printers;
-
-  StartGetPrintersRequest(
-      base::BindRepeating(&AppendPrintersAndRunCallbackIfDone,
-                          std::ref(printers), run_loop.QuitClosure()));
+  auto get_printers_repeating_future =
+      std::make_unique<GetPrintersRepeatingFuture>();
+  StartGetPrintersRequest(get_printers_repeating_future->GetCallback());
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 
-  run_loop.Run();
-
+  auto printers =
+      FetchPrintersFromFuture(std::move(get_printers_repeating_future));
   EXPECT_TRUE(printers.empty());
 }
 
@@ -760,14 +708,9 @@ class PrinterProviderUsbApiTest : public PrinterProviderApiTest {
                                            test_param, &extension_id);
     ASSERT_FALSE(extension_id.empty());
 
-    base::Value::Dict expected_printer_info;
-    base::RunLoop run_loop;
-    StartGetUsbPrinterInfoRequest(
-        extension_id, *device,
-        base::BindOnce(&ExpectValueAndRunCallback,
-                       std::move(expected_printer_info),
-                       run_loop.QuitClosure()));
-    run_loop.Run();
+    base::test::TestFuture<base::Value::Dict> future;
+    StartGetUsbPrinterInfoRequest(extension_id, *device, future.GetCallback());
+    ASSERT_TRUE(future.Get().empty());
 
     ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
   }
@@ -800,13 +743,10 @@ IN_PROC_BROWSER_TEST_P(PrinterProviderUsbApiTest, GetUsbPrinterInfo) {
                base::StringPrintf("%s:usbDevice-%u", extension_id.c_str(),
                                   device_manager->GetIdFromGuid(device->guid)))
           .Set("name", "Test Printer")
-          .BuildDict();
-  base::RunLoop run_loop;
-  StartGetUsbPrinterInfoRequest(
-      extension_id, *device,
-      base::BindOnce(&ExpectValueAndRunCallback,
-                     std::move(expected_printer_info), run_loop.QuitClosure()));
-  run_loop.Run();
+          .Build();
+  base::test::TestFuture<base::Value::Dict> future;
+  StartGetUsbPrinterInfoRequest(extension_id, *device, future.GetCallback());
+  ASSERT_EQ(future.Get(), expected_printer_info);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
 }

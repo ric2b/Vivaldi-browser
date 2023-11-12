@@ -23,6 +23,7 @@
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/generated_safe_browsing_pref.h"
+#include "chrome/browser/ssl/generated_https_first_mode_pref.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/autofill/core/common/autofill_prefs.h"
@@ -46,7 +47,9 @@
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "components/spellcheck/browser/pref_names.h"
+#include "components/supervised_user/core/common/pref_names.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/unified_consent/pref_names.h"
@@ -64,6 +67,7 @@
 #include "ash/constants/ash_pref_names.h"  // nogncheck
 #include "ash/public/cpp/ambient/ambient_prefs.h"
 #include "chrome/browser/ash/app_restore/full_restore_prefs.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_pref_names.h"
 #include "chrome/browser/ash/crostini/crostini_pref_names.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
@@ -80,6 +84,8 @@
 #include "chromeos/ash/services/assistant/public/cpp/assistant_prefs.h"
 #include "chromeos/components/quick_answers/public/cpp/quick_answers_prefs.h"
 #include "components/account_manager_core/pref_names.h"
+#include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "ui/chromeos/events/pref_names.h"
 #endif
 
@@ -322,12 +328,14 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[::prefs::kHttpsOnlyModeEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[::kGeneratedHttpsFirstModePref] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
 
   // Cookies page
   (*s_allowlist)[::prefs::kCookieControlsMode] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[::content_settings::kCookieDefaultContentSetting] =
-      settings_api::PrefType::PREF_TYPE_NUMBER;
+      settings_api::PrefType::PREF_TYPE_STRING;
   (*s_allowlist)[::content_settings::kCookiePrimarySetting] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[::content_settings::kCookieSessionOnly] =
@@ -389,6 +397,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[ash::prefs::kLastUsedImeShortcutReminderDismissed] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kNextImeShortcutReminderDismissed] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
+
+  // Files page.
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  (*s_allowlist)[::prefs::kOfficeFilesAlwaysMove] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
 #endif
 
@@ -478,6 +492,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::prefs::kLiveCaptionLanguageCode] =
       settings_api::PrefType::PREF_TYPE_STRING;
 #endif
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  (*s_allowlist)[::prefs::kAccessibilityPdfOcrAlwaysActive] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+#endif
 
   (*s_allowlist)[::prefs::kCaretBrowsingEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -538,6 +556,67 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[ash::prefs::kAccessibilityScreenMagnifierScale] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxAutoRead] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)
+      [ash::prefs::kAccessibilityChromeVoxAnnounceDownloadNotifications] =
+          settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)
+      [ash::prefs::kAccessibilityChromeVoxAnnounceRichTextAttributes] =
+          settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxAudioStrategy] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxBrailleSideBySide] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxBrailleTable] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxBrailleTable6] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxBrailleTable8] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxBrailleTableType] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxBrailleWordWrap] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxCapitalStrategy] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxCapitalStrategyBackup] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxEnableBrailleLogging] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxEnableEarconLogging] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxEnableEventStreamLogging] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxEnableSpeechLogging] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxEventStreamFilters] =
+      settings_api::PrefType::PREF_TYPE_DICTIONARY;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxLanguageSwitching] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxMenuBrailleCommands] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxNumberReadingStyle] =
+      settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)
+      [ash::prefs::kAccessibilityChromeVoxPreferredBrailleDisplayAddress] =
+          settings_api::PrefType::PREF_TYPE_STRING;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxPunctuationEcho] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxSmartStickyMode] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxSpeakTextUnderMouse] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxUsePitchChanges] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxUseVerboseMode] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxVirtualBrailleColumns] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxVirtualBrailleRows] =
+      settings_api::PrefType::PREF_TYPE_NUMBER;
+  (*s_allowlist)[ash::prefs::kAccessibilityChromeVoxVoiceName] =
+      settings_api::PrefType::PREF_TYPE_STRING;
   (*s_allowlist)[ash::prefs::kAccessibilitySwitchAccessSelectDeviceKeyCodes] =
       settings_api::PrefType::PREF_TYPE_DICTIONARY;
   (*s_allowlist)[ash::prefs::kAccessibilitySwitchAccessNextDeviceKeyCodes] =
@@ -593,6 +672,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_NUMBER;
 
   // Guest OS
+  (*s_allowlist)[bruschetta::prefs::kBruschettaInstalled] =
+      settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[crostini::prefs::kCrostiniEnabled] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[crostini::prefs::kCrostiniMicAllowed] =
@@ -773,15 +854,15 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kTouchpadHapticClickSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
-  (*s_allowlist)[::prefs::kPrimaryMouseButtonRight] =
+  (*s_allowlist)[ash::prefs::kPrimaryMouseButtonRight] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kPrimaryPointingStickButtonRight] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[ash::prefs::kMouseReverseScroll] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kMouseAcceleration] =
+  (*s_allowlist)[ash::prefs::kMouseAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kMouseScrollAcceleration] =
+  (*s_allowlist)[ash::prefs::kMouseScrollAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kPointingStickAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
@@ -789,9 +870,9 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
   (*s_allowlist)[::prefs::kTouchpadScrollAcceleration] =
       settings_api::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_allowlist)[::prefs::kMouseSensitivity] =
+  (*s_allowlist)[ash::prefs::kMouseSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
-  (*s_allowlist)[::prefs::kMouseScrollSensitivity] =
+  (*s_allowlist)[ash::prefs::kMouseScrollSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
   (*s_allowlist)[::prefs::kPointingStickSensitivity] =
       settings_api::PrefType::PREF_TYPE_NUMBER;
@@ -988,23 +1069,22 @@ settings_api::PrefType PrefsUtil::GetType(const std::string& name,
                                  : settings_api::PrefType::PREF_TYPE_STRING;
     case base::Value::Type::LIST:
       return settings_api::PrefType::PREF_TYPE_LIST;
-    case base::Value::Type::DICTIONARY:
+    case base::Value::Type::DICT:
       return settings_api::PrefType::PREF_TYPE_DICTIONARY;
     default:
       return settings_api::PrefType::PREF_TYPE_NONE;
   }
 }
 
-std::unique_ptr<settings_api::PrefObject> PrefsUtil::GetCrosSettingsPref(
+absl::optional<settings_api::PrefObject> PrefsUtil::GetCrosSettingsPref(
     const std::string& name) {
-  std::unique_ptr<settings_api::PrefObject> pref_object(
-      new settings_api::PrefObject());
+  absl::optional<settings_api::PrefObject> pref_object(absl::in_place);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   const base::Value* value = ash::CrosSettings::Get()->GetPref(name);
   if (!value) {
     LOG(WARNING) << "Cros settings pref not found: " << name;
-    return nullptr;
+    return absl::nullopt;
   }
   pref_object->key = name;
   pref_object->type = GetType(name, value->type());
@@ -1014,29 +1094,29 @@ std::unique_ptr<settings_api::PrefObject> PrefsUtil::GetCrosSettingsPref(
   return pref_object;
 }
 
-std::unique_ptr<settings_api::PrefObject> PrefsUtil::GetPref(
+absl::optional<settings_api::PrefObject> PrefsUtil::GetPref(
     const std::string& name) {
   if (GetAllowlistedPrefType(name) == settings_api::PrefType::PREF_TYPE_NONE) {
-    return nullptr;
+    return absl::nullopt;
   }
 
   settings_private::GeneratedPrefs* generated_prefs =
       settings_private::GeneratedPrefsFactory::GetForBrowserContext(profile_);
 
   const PrefService::Preference* pref = nullptr;
-  std::unique_ptr<settings_api::PrefObject> pref_object;
+  absl::optional<settings_api::PrefObject> pref_object;
   if (IsCrosSetting(name)) {
     pref_object = GetCrosSettingsPref(name);
     if (!pref_object)
-      return nullptr;
+      return absl::nullopt;
   } else if (generated_prefs && generated_prefs->HasPref(name)) {
     return generated_prefs->GetPref(name);
   } else {
     PrefService* pref_service = FindServiceForPref(name);
     pref = pref_service->FindPreference(name);
     if (!pref)
-      return nullptr;
-    pref_object = std::make_unique<settings_api::PrefObject>();
+      return absl::nullopt;
+    pref_object.emplace();
     pref_object->key = pref->name();
     pref_object->type = GetType(name, pref->GetType());
     pref_object->value = pref->GetValue()->Clone();
@@ -1172,7 +1252,7 @@ settings_private::SetPrefResult PrefsUtil::SetPref(const std::string& pref_name,
   switch (pref->GetType()) {
     case base::Value::Type::BOOLEAN:
     case base::Value::Type::LIST:
-    case base::Value::Type::DICTIONARY:
+    case base::Value::Type::DICT:
       pref_service->Set(pref_name, *value);
       break;
     case base::Value::Type::DOUBLE:

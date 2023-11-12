@@ -11,7 +11,7 @@
 
 #include "ash/components/arc/mojom/usb_host.mojom.h"
 #include "ash/components/arc/session/connection_observer.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/sequence_checker.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
@@ -75,6 +75,8 @@ class ArcUsbHostBridge : public KeyedService,
   void Shutdown() override;
 
   void SetUiDelegate(ArcUsbHostUiDelegate* ui_delegate);
+
+  static void EnsureFactoryBuilt();
 
  private:
   // Init |devices_| once the device list has been returned, so that we

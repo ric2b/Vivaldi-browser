@@ -8,8 +8,8 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/public/ash_interfaces.h"
 #include "ash/public/cpp/tablet_mode.h"
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/values.h"
@@ -27,7 +27,9 @@
 #include "chrome/browser/ui/ash/login_screen_client_impl.h"
 #include "chrome/browser/ui/webui/ash/login/hid_detection_screen_handler.h"
 #include "chromeos/ash/components/assistant/buildflags.h"
+#include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/account_id/account_id.h"
+#include "components/login/localized_values_builder.h"
 #include "services/device/public/mojom/input_service.mojom.h"
 
 namespace ash {
@@ -36,7 +38,9 @@ OobeTestAPIHandler::OobeTestAPIHandler() = default;
 OobeTestAPIHandler::~OobeTestAPIHandler() = default;
 
 void OobeTestAPIHandler::DeclareLocalizedValues(
-    ::login::LocalizedValuesBuilder* builder) {}
+    ::login::LocalizedValuesBuilder* builder) {
+  builder->Add("testapi_browseAsGuest", IDS_ASH_BROWSE_AS_GUEST_BUTTON);
+}
 
 void OobeTestAPIHandler::DeclareJSCallbacks() {
   AddCallback("OobeTestApi.loginWithPin", &OobeTestAPIHandler::LoginWithPin);
@@ -49,6 +53,8 @@ void OobeTestAPIHandler::DeclareJSCallbacks() {
   AddCallback("OobeTestApi.loginAsGuest", &OobeTestAPIHandler::LoginAsGuest);
   AddCallback("OobeTestApi.showGaiaDialog",
               &OobeTestAPIHandler::ShowGaiaDialog);
+  AddCallback("OobeTestApi.isGaiaDialogVisible",
+              &OobeTestAPIHandler::IsGaiaDialogVisible);
 
   // Keeping the code in case the test using this will be ported to tast. The
   // function used to be called getPrimaryDisplayNameForTesting. In order to use
@@ -65,11 +71,6 @@ void OobeTestAPIHandler::GetAdditionalParameters(base::Value::Dict* dict) {
             features::IsOobeNetworkScreenSkipEnabled() &&
                 !switches::IsOOBENetworkScreenSkippingDisabledForTesting() &&
                 helper_.IsConnectedToEthernet());
-  dict->Set("testapi_shouldSkipEula",
-            policy::EnrollmentRequisitionManager::IsRemoraRequisition() ||
-                StartupUtils::IsEulaAccepted() ||
-                features::IsOobeConsolidatedConsentEnabled() ||
-                !BUILDFLAG(GOOGLE_CHROME_BRANDING));
 
   dict->Set("testapi_shouldSkipGuestTos",
             StartupUtils::IsEulaAccepted() ||
@@ -169,6 +170,10 @@ void OobeTestAPIHandler::LoginAsGuest() {
 
 void OobeTestAPIHandler::ShowGaiaDialog() {
   LoginDisplayHost::default_host()->ShowGaiaDialog(EmptyAccountId());
+}
+
+void OobeTestAPIHandler::IsGaiaDialogVisible() {
+  LoginDisplayHost::default_host()->IsGaiaDialogVisibleForTesting();  // IN-TEST
 }
 
 void OobeTestAPIHandler::HandleGetPrimaryDisplayName(

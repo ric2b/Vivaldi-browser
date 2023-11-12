@@ -1084,9 +1084,6 @@ const NGLayoutResult* NGTableLayoutAlgorithm::GenerateFragment(
       if (child != grouped_children.header && child != grouped_children.footer)
         continue;
 
-      if (!IsAvoidBreakValue(ConstraintSpace(), child.Style().BreakInside()))
-        continue;
-
       const NGBlockBreakToken* child_break_token = entry.GetBreakToken();
       // If we've already broken inside the section, it's not going to repeat,
       // but rather perform regular fragmentation.
@@ -1124,6 +1121,11 @@ const NGLayoutResult* NGTableLayoutAlgorithm::GenerateFragment(
         if (!ConstraintSpace().HasKnownFragmentainerBlockSize() ||
             block_size > max_section_block_size)
           continue;
+
+        if (!IsAvoidBreakValue(ConstraintSpace(),
+                               child.Style().BreakInside())) {
+          continue;
+        }
       }
 
       if (child == grouped_children.header) {
@@ -1434,22 +1436,24 @@ const NGLayoutResult* NGTableLayoutAlgorithm::GenerateFragment(
     const NGLayoutResult* result = grouped_children.footer.LayoutRepeatableRoot(
         child_space, entry.GetBreakToken());
 
-    LayoutUnit fragmentainer_block_offset =
-        ConstraintSpace().FragmentainerOffset() + offset.block_offset;
-    NGBreakStatus break_status =
-        BreakBeforeChildIfNeeded(ConstraintSpace(), grouped_children.footer,
-                                 *result, fragmentainer_block_offset,
-                                 has_container_separation, &container_builder_);
+    NGBreakStatus break_status = NGBreakStatus::kContinue;
+    if (!entry.GetBreakToken() || entry.GetBreakToken()->IsBreakBefore()) {
+      // Although there are rules that make sure that a footer normally fits (it
+      // should only be a quarter of the fragmentainer's block-size), if the
+      // table box starts near the end of the fragmentainer, we may still run
+      // out of space before a repeatable footer. So insert a break if
+      // necessary.
+      LayoutUnit fragmentainer_block_offset =
+          ConstraintSpace().FragmentainerOffset() + offset.block_offset;
+      break_status = BreakBeforeChildIfNeeded(
+          ConstraintSpace(), grouped_children.footer, *result,
+          fragmentainer_block_offset, has_container_separation,
+          &container_builder_);
+    }
     if (break_status == NGBreakStatus::kContinue) {
       container_builder_.AddResult(*result, offset);
     } else {
       DCHECK_EQ(break_status, NGBreakStatus::kBrokeBefore);
-      // We should only get a break before the footer when laying out the first
-      // table box fragment. While there are rules that make sure that a footer
-      // normally fits (it should only be a quarter of the fragmentainer's
-      // block-size), if the table box starts near the end of the fragmentainer,
-      // we may still run out of space before a repeatable footer.
-      DCHECK(!entry.GetBreakToken());
     }
   }
 
@@ -1600,7 +1604,7 @@ const NGLayoutResult* NGTableLayoutAlgorithm::GenerateFragment(
   }
 
   bool has_entered_table_box = false;
-  if (ConstraintSpace().HasBlockFragmentation()) {
+  if (InvolvedInBlockFragmentation(container_builder_)) {
     LayoutUnit consumed_table_box_block_size =
         previously_consumed_table_box_block_size;
     if (incoming_table_break_data)

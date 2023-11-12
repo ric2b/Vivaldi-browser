@@ -4,9 +4,9 @@
 
 #include "content/browser/notifications/notification_event_dispatcher_impl.h"
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
@@ -185,7 +185,7 @@ void FindServiceWorkerRegistration(
   // NotificationDatabaseData should be changed to use StorageKey.
   service_worker_context->FindReadyRegistrationForId(
       notification_database_data.service_worker_registration_id,
-      blink::StorageKey(origin),
+      blink::StorageKey::CreateFirstParty(origin),
       base::BindOnce(&DispatchNotificationEventOnRegistration,
                      notification_database_data,
                      std::move(notification_action_callback),

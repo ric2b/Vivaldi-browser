@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/views/side_panel/lens/lens_side_panel_coordinator.h"
 #include <iostream>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/scoped_observation.h"
@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/omnibox/browser/favicon_cache.h"
 #include "components/omnibox/browser/vector_icons.h"
@@ -28,6 +29,7 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/util.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/vector_icons.h"
 
@@ -65,9 +67,7 @@ LensSidePanelCoordinator::~LensSidePanelCoordinator() {
 
 void LensSidePanelCoordinator::DeregisterLensFromSidePanel() {
   lens_side_panel_view_ = nullptr;
-  GetBrowserView()
-      ->side_panel_coordinator()
-      ->GetGlobalSidePanelRegistry()
+  SidePanelCoordinator::GetGlobalSidePanelRegistry(&GetBrowser())
       ->Deregister(SidePanelEntry::Key(SidePanelEntry::Id::kLens));
 }
 
@@ -78,11 +78,8 @@ void LensSidePanelCoordinator::OnSidePanelDidClose() {
 }
 
 void LensSidePanelCoordinator::OnFaviconFetched(const gfx::Image& favicon) {
-  auto* side_panel_coordinator = GetBrowserView()->side_panel_coordinator();
-  if (side_panel_coordinator == nullptr)
-    return;
-
-  auto* global_registry = side_panel_coordinator->GetGlobalSidePanelRegistry();
+  auto* global_registry =
+      SidePanelCoordinator::GetGlobalSidePanelRegistry(&GetBrowser());
   if (global_registry == nullptr)
     return;
 
@@ -132,6 +129,9 @@ bool LensSidePanelCoordinator::IsDefaultSearchProviderGoogle() {
 }
 
 std::u16string LensSidePanelCoordinator::GetComboboxLabel() {
+  if (IsDefaultSearchProviderGoogle()) {
+    return l10n_util::GetStringUTF16(IDS_GOOGLE_LENS_TITLE);
+  }
   // Assuming not nullptr because side panel can't be opened if default search
   // provider is not initialized
   DCHECK(current_default_search_provider_);
@@ -171,8 +171,8 @@ const ui::ImageModel LensSidePanelCoordinator::GetFaviconImage() {
 void LensSidePanelCoordinator::RegisterEntryAndShow(
     const content::OpenURLParams& params) {
   base::RecordAction(base::UserMetricsAction("LensUnifiedSidePanel.LensQuery"));
-  auto* side_panel_coordinator = GetBrowserView()->side_panel_coordinator();
-  auto* global_registry = side_panel_coordinator->GetGlobalSidePanelRegistry();
+  auto* global_registry =
+      SidePanelCoordinator::GetGlobalSidePanelRegistry(&GetBrowser());
 
   // check if the view is already registered
   if (global_registry->GetEntryForKey(
@@ -195,6 +195,7 @@ void LensSidePanelCoordinator::RegisterEntryAndShow(
     global_registry->Register(std::move(entry));
   }
 
+  auto* side_panel_coordinator = GetBrowserView()->side_panel_coordinator();
   if (side_panel_coordinator->GetCurrentEntryId() !=
       SidePanelEntry::Id::kLens) {
     if (!side_panel_coordinator->IsSidePanelShowing()) {

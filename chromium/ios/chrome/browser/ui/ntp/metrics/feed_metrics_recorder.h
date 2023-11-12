@@ -11,6 +11,7 @@
 #import "ios/chrome/browser/discover_feed/feed_constants.h"
 #import "ios/chrome/browser/ui/ntp/metrics/feed_metrics_constants.h"
 
+class DiscoverFeedRefresher;
 @protocol FeedControlDelegate;
 @protocol NewTabPageFollowDelegate;
 
@@ -30,12 +31,21 @@ class Time;
 // Whether or not the feed is currently being shown on the Start Surface.
 @property(nonatomic, assign) BOOL isShownOnStartSurface;
 
+// Object that can refresh the feed.
+@property(nonatomic, assign) DiscoverFeedRefresher* feedRefresher;
+
+// Records the trigger where a feed refresh is requested.
++ (void)recordFeedRefreshTrigger:(FeedRefreshTrigger)trigger;
+
 // Record metrics for when the user has scrolled `scrollDistance` in the Feed.
 - (void)recordFeedScrolled:(int)scrollDistance;
 
 // Record metrics for when the user changes the device orientation with the feed
 // visible.
 - (void)recordDeviceOrientationChanged:(UIDeviceOrientation)orientation;
+
+// Tracks time spent in a specific Feed for a Good Visit.
+- (void)recordFeedTypeChangedFromFeed:(FeedType)previousFeed;
 
 // Record when the NTP changes visibility.
 - (void)recordNTPDidChangeVisibility:(BOOL)visible;

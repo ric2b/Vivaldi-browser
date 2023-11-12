@@ -7,11 +7,11 @@
 #include <cstddef>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -93,7 +93,10 @@ class SyncManagerObserverMock : public SyncManager::Observer {
               (const SyncCycleSnapshot&),
               (override));
   MOCK_METHOD(void, OnConnectionStatusChange, (ConnectionStatus), (override));
-  MOCK_METHOD(void, OnActionableError, (const SyncProtocolError&), (override));
+  MOCK_METHOD(void,
+              OnActionableProtocolError,
+              (const SyncProtocolError&),
+              (override));
   MOCK_METHOD(void, OnMigrationRequested, (ModelTypeSet), (override));
   MOCK_METHOD(void, OnProtocolEvent, (const ProtocolEvent&), (override));
   MOCK_METHOD(void, OnSyncStatusChanged, (const SyncStatus&), (override));

@@ -62,7 +62,7 @@ if (is_win) {
     _languages = _languages_json.languages
     _vivaldi_translation_locales = [ ]
     foreach(code_and_names, _languages.list) {
-      _vivaldi_translation_locales += [ code_and_names[0] ]
+      _vivaldi_translation_locales += [  string_replace(code_and_names[0], "@", "-") ]
     }
     _vivaldi_translation_locales -= [ "en-US" ]
 
@@ -83,6 +83,12 @@ if (is_win) {
       [
         "//vivaldi/app/installer/",
         "vivaldi_installer_strings",
+        "strings",
+        _vivaldi_translation_locales
+      ],
+      [
+        "//vivaldi/app/resources/strings",
+        "vivaldi_strings",
         "strings",
         _vivaldi_translation_locales
       ]

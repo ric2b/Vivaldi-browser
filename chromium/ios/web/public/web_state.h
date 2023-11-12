@@ -15,8 +15,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback_forward.h"
-#include "base/callback_list.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/supports_user_data.h"
@@ -34,15 +33,12 @@ class GURL;
 @class CRWSessionStorage;
 @protocol CRWScrollableContent;
 @protocol CRWWebViewDownload;
+@protocol CRWFindInteraction;
 @protocol CRWWebViewDownloadDelegate;
 @protocol CRWWebViewProxy;
 typedef id<CRWWebViewProxy> CRWWebViewProxyType;
 @class UIView;
 typedef UIView<CRWScrollableContent> CRWContentView;
-
-namespace base {
-class Value;
-}
 
 namespace gfx {
 class Image;
@@ -57,7 +53,6 @@ class NavigationManager;
 enum Permission : NSUInteger;
 enum PermissionState : NSUInteger;
 class SessionCertificatePolicyCache;
-class WebFrame;
 class WebFramesManager;
 class WebStateDelegate;
 class WebStateObserver;
@@ -291,8 +286,8 @@ class WebState : public base::SupportsUserData {
 
   // Gets the WebFramesManager associated with this WebState. Can never return
   // null.
-  virtual const WebFramesManager* GetWebFramesManager() const = 0;
-  virtual WebFramesManager* GetWebFramesManager() = 0;
+  virtual const WebFramesManager* GetPageWorldWebFramesManager() const = 0;
+  virtual WebFramesManager* GetPageWorldWebFramesManager() = 0;
 
   // Gets the SessionCertificatePolicyCache for this WebState.  Can never return
   // null.
@@ -355,6 +350,9 @@ class WebState : public base::SupportsUserData {
   // Whether this instance is in the process of being destroyed.
   virtual bool IsBeingDestroyed() const = 0;
 
+  // Whether this instance's web page is in fullscreen mode.
+  virtual bool IsWebPageInFullscreenMode() const = 0;
+
   // Gets/Sets the favicon for the current page displayed by this WebState.
   virtual const FaviconStatus& GetFaviconStatus() const = 0;
   virtual void SetFaviconStatus(const FaviconStatus& favicon_status) = 0;
@@ -381,27 +379,6 @@ class WebState : public base::SupportsUserData {
   // appropriate.  Passing `null` will skip the trust check.
   // TODO(crbug.com/457679): Figure out a clean API for this.
   virtual GURL GetCurrentURL(URLVerificationTrustLevel* trust_level) const = 0;
-
-  // Callback used to handle script commands. `message` is the JS message sent
-  // from the `sender_frame` in the page, `page_url` is the URL of page's main
-  // frame, `user_is_interacting` indicates if the user is interacting with the
-  // page.
-  // TODO(crbug.com/881813): remove `page_url`.
-  using ScriptCommandCallbackSignature = void(const base::Value& message,
-                                              const GURL& page_url,
-                                              bool user_is_interacting,
-                                              web::WebFrame* sender_frame);
-  using ScriptCommandCallback =
-      base::RepeatingCallback<ScriptCommandCallbackSignature>;
-  // Registers `callback` for JS message whose 'command' matches
-  // `command_prefix`. The returned subscription should be stored by the caller.
-  // When the description object is destroyed, it will unregister `callback` if
-  // this WebState is still alive, and do nothing if this WebState is already
-  // destroyed. Therefore if the caller want to stop receiving JS messages it
-  // can just destroy the subscription.
-  [[nodiscard]] virtual base::CallbackListSubscription AddScriptCommandCallback(
-      const ScriptCommandCallback& callback,
-      const std::string& command_prefix) = 0;
 
   // Returns the current CRWWebViewProxy object.
   virtual CRWWebViewProxyType GetWebViewProxy() const = 0;
@@ -483,6 +460,26 @@ class WebState : public base::SupportsUserData {
                                    id<CRWWebViewDownloadDelegate> delegate,
                                    void (^handler)(id<CRWWebViewDownload>))
       API_AVAILABLE(ios(14.5)) = 0;
+
+  // Whether the Find interaction is supported and can be enabled.
+  virtual bool IsFindInteractionSupported() = 0;
+
+  // Whether the Find interaction in the contained web view is enabled. Should
+  // only be called if `IsFindInteractionSupported()` returns `true`.
+  virtual bool IsFindInteractionEnabled() = 0;
+
+  // Enable or disable the Find interaction for the contained web view. Should
+  // only be called if `IsFindInteractionSupported()` returns `true`.
+  virtual void SetFindInteractionEnabled(bool enabled) = 0;
+
+  // Get the Find interaction object associated with the contained web view.
+  // Returns `nil` if the Find interaction is currently disabled. Should only be
+  // called if `IsFindInteractionSupported()` returns `true`.
+  virtual id<CRWFindInteraction> GetFindInteraction() = 0;
+
+  // Get an opaque activity item that can be passed to a
+  // UIActivityViewController to share the current URL.
+  virtual id GetActivityItem() API_AVAILABLE(ios(16.4)) = 0;
 
  protected:
   friend class WebStatePolicyDecider;

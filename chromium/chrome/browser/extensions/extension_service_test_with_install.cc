@@ -4,14 +4,15 @@
 
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/crx_installer.h"
+#include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/notification_service.h"
@@ -43,7 +44,7 @@ ExtensionServiceTestWithInstall::ExtensionServiceTestWithInstall()
 
 ExtensionServiceTestWithInstall::ExtensionServiceTestWithInstall(
     std::unique_ptr<content::BrowserTaskEnvironment> task_environment)
-    : ExtensionServiceTestBase(std::move(task_environment)),
+    : ExtensionServiceUserTestBase(std::move(task_environment)),
       installed_extension_(nullptr),
       was_update_(false),
       unloaded_reason_(UnloadedExtensionReason::UNDEFINED),

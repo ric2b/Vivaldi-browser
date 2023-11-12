@@ -14,8 +14,8 @@
 #include "extensions/common/value_builder.h"
 
 using extensions::DictionaryBuilder;
-using extensions::ListBuilder;
 using extensions::ExtensionBuilder;
+using extensions::ListBuilder;
 
 namespace ash {
 
@@ -44,10 +44,11 @@ scoped_refptr<const extensions::Extension> TestKioskExtensionBuilder::Build()
       .Set("version", version_)
       .Set("manifest_version", 2);
 
-  std::unique_ptr<base::DictionaryValue> background =
+  base::Value background = base::Value(
       DictionaryBuilder()
-          .Set("scripts", ListBuilder().Append("background.js").Build())
-          .Build();
+          .Set("scripts",
+               base::Value(ListBuilder().Append("background.js").Build()))
+          .Build());
 
   switch (type_) {
     case extensions::Manifest::TYPE_PLATFORM_APP:
@@ -63,8 +64,9 @@ scoped_refptr<const extensions::Extension> TestKioskExtensionBuilder::Build()
       return nullptr;
   }
 
-  if (kiosk_enabled_)
+  if (kiosk_enabled_) {
     manifest_builder.Set("kiosk_enabled", kiosk_enabled_);
+  }
 
   manifest_builder.Set("offline_enabled", offline_enabled_);
 

@@ -111,8 +111,7 @@ class FCMHandlerTest : public testing::Test {
     ON_CALL(mock_instance_id_driver_, GetInstanceID(kSyncInvalidationsAppId))
         .WillByDefault(Return(&mock_instance_id_));
     override_features_.InitWithFeatures(
-        /*enabled_features=*/{kSyncSendInterestedDataTypes,
-                              kUseSyncInvalidations},
+        /*enabled_features=*/{kUseSyncInvalidations},
         /*disabled_features=*/{});
   }
 
@@ -277,7 +276,8 @@ TEST_F(FCMHandlerTest, ShouldLimitIncomingMessagesForReplay) {
   }
 
   NiceMock<MockListener> mock_listener;
-  EXPECT_CALL(mock_listener, OnInvalidationReceived).Times(5);
+  // Same as kMaxBufferedLastFcmMessages in fcm_handler.cc.
+  EXPECT_CALL(mock_listener, OnInvalidationReceived).Times(20);
   fcm_handler_.AddListener(&mock_listener);
   fcm_handler_.RemoveListener(&mock_listener);
 }

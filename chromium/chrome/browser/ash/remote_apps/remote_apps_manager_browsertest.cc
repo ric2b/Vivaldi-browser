@@ -18,8 +18,8 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/barrier_closure.h"
-#include "base/callback.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
@@ -50,18 +50,17 @@
 #include "components/account_id/account_id.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
-#include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sync/protocol/app_list_specifics.pb.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/test/fake_sync_change_processor.h"
 #include "components/sync/test/sync_change_processor_wrapper_for_test.h"
-#include "components/sync/test/sync_error_factory_mock.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/layout.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_unittest_util.h"
@@ -150,7 +149,15 @@ gfx::ImageSkia CreateTestIcon(int size, SkColor color) {
   SkBitmap bitmap;
   bitmap.allocN32Pixels(size, size);
   bitmap.eraseColor(color);
-  return gfx::ImageSkia::CreateFromBitmap(bitmap, 1.0f);
+
+  gfx::ImageSkia image_skia;
+  const std::vector<ui::ResourceScaleFactor>& scale_factors =
+      ui::GetSupportedResourceScaleFactors();
+  for (auto& scale : scale_factors) {
+    image_skia.AddRepresentation(
+        gfx::ImageSkiaRep(bitmap, ui::GetScaleForResourceScaleFactor(scale)));
+  }
+  return image_skia;
 }
 
 void CheckIconsEqual(const gfx::ImageSkia& expected,
@@ -362,6 +369,7 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, AddApp) {
   // App has id kId1.
   AddAppAndWaitForIconChange(kExtensionId1, kId1, name, std::string(), icon_url,
                              icon, /*add_to_front=*/false);
+
   ash::AppListItem* item = GetAppListItem(kId1);
   EXPECT_FALSE(item->is_folder());
   EXPECT_EQ(name, item->name());
@@ -391,6 +399,7 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, AddAppPlaceholderIcon) {
   // a placeholder icon.
   AddAppAndWaitForIconChange(kExtensionId1, kId1, name, std::string(), GURL(),
                              gfx::ImageSkia(), /*add_to_front=*/false);
+
   ash::AppListItem* item = GetAppListItem(kId1);
   EXPECT_FALSE(item->is_folder());
   EXPECT_EQ(name, item->name());
@@ -719,9 +728,8 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteAppsNotSynced) {
       std::make_unique<syncer::FakeSyncChangeProcessor>();
   app_list_syncable_service_->MergeDataAndStartSyncing(
       syncer::APP_LIST, {},
-      std::unique_ptr<syncer::SyncChangeProcessor>(
-          new syncer::SyncChangeProcessorWrapperForTest(sync_processor.get())),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::SyncChangeProcessorWrapperForTest>(
+          sync_processor.get()));
   content::RunAllTasksUntilIdle();
 
   // App has id kId1.
@@ -756,9 +764,8 @@ IN_PROC_BROWSER_TEST_F(RemoteAppsManagerBrowsertest, RemoteFoldersNotSynced) {
   app_list_model_updater_->SetActive(true);
   app_list_syncable_service_->MergeDataAndStartSyncing(
       syncer::APP_LIST, {},
-      std::unique_ptr<syncer::SyncChangeProcessor>(
-          new syncer::SyncChangeProcessorWrapperForTest(sync_processor.get())),
-      std::make_unique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::SyncChangeProcessorWrapperForTest>(
+          sync_processor.get()));
   content::RunAllTasksUntilIdle();
 
   // Folder has id kId1.

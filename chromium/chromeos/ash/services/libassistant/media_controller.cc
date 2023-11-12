@@ -5,7 +5,6 @@
 #include "chromeos/ash/services/libassistant/media_controller.h"
 
 #include "base/strings/string_util.h"
-#include "base/threading/sequenced_task_runner_handle.h"
 #include "chromeos/ash/services/libassistant/grpc/assistant_client.h"
 #include "chromeos/ash/services/libassistant/grpc/external_services/grpc_services_observer.h"
 #include "chromeos/ash/services/libassistant/grpc/utils/media_status_utils.h"
@@ -252,6 +251,16 @@ void MediaController::OnAssistantClientRunning(
   // `events_observer_` outlives `assistant_client_`.
   assistant_client->AddDeviceStateEventObserver(events_observer_.get());
   assistant_client->AddMediaActionFallbackEventObserver(events_observer_.get());
+}
+
+void MediaController::SendGrpcMessageForTesting(
+    const ::assistant::api::OnDeviceStateEventRequest& request) {
+  events_observer_->OnGrpcMessage(request);
+}
+
+void MediaController::SendGrpcMessageForTesting(
+    const ::assistant::api::OnMediaActionFallbackEventRequest& request) {
+  events_observer_->OnGrpcMessage(request);
 }
 
 }  // namespace ash::libassistant

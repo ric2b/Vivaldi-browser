@@ -22,8 +22,8 @@ verify_pep425_tag: [
 
 wheel: <
   name: "infra/celab/celab/windows-amd64"
-  # Source: https://ci.chromium.org/ui/p/celab/builders/ci/Windows/b8802565225411928929
-  version: "cCgd-5Z3S4B448lws5gGriMXRvCKBvXhzxOlDSn6VlEC"
+  # Source: https://ci.chromium.org/ui/p/celab/builders/ci/Windows/b8789517951701394881
+  version: "8MbshxUAzzNWYXgEI3Wj6Hz_lfKYMNngVIMcwMwoOoUC"
 >
 
 # googleapiclient
@@ -187,4 +187,10 @@ wheel: <
 wheel: <
   name: "infra/python/wheels/wheel-py2_py3"
   version: "version:0.33.1"
+>
+
+# attrs for simple dataclass
+wheel: <
+  name: "infra/python/wheels/attrs-py2_py3"
+  version: "version:21.4.0"
 >

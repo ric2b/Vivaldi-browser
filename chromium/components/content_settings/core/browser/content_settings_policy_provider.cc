@@ -8,8 +8,8 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/values.h"
@@ -99,9 +99,9 @@ constexpr PrefsForManagedContentSettingsMapEntry
          CONTENT_SETTING_ASK},
         {prefs::kManagedWebHidBlockedForUrls, ContentSettingsType::HID_GUARD,
          CONTENT_SETTING_BLOCK},
-        {prefs::kManagedWindowPlacementAllowedForUrls,
+        {prefs::kManagedWindowManagementAllowedForUrls,
          ContentSettingsType::WINDOW_MANAGEMENT, CONTENT_SETTING_ALLOW},
-        {prefs::kManagedWindowPlacementBlockedForUrls,
+        {prefs::kManagedWindowManagementBlockedForUrls,
          ContentSettingsType::WINDOW_MANAGEMENT, CONTENT_SETTING_BLOCK},
         {prefs::kManagedLocalFontsAllowedForUrls,
          ContentSettingsType::LOCAL_FONTS, CONTENT_SETTING_ALLOW},
@@ -144,8 +144,8 @@ constexpr const char* kManagedPrefs[] = {
     prefs::kManagedWebUsbAllowDevicesForUrls,
     prefs::kManagedWebUsbAskForUrls,
     prefs::kManagedWebUsbBlockedForUrls,
-    prefs::kManagedWindowPlacementAllowedForUrls,
-    prefs::kManagedWindowPlacementBlockedForUrls,
+    prefs::kManagedWindowManagementAllowedForUrls,
+    prefs::kManagedWindowManagementBlockedForUrls,
     prefs::kManagedLocalFontsAllowedForUrls,
     prefs::kManagedLocalFontsBlockedForUrls,
 };
@@ -176,7 +176,7 @@ constexpr const char* kManagedDefaultPrefs[] = {
     prefs::kManagedDefaultWebUsbGuardSetting,
     prefs::kManagedDefaultJavaScriptJitSetting,
     prefs::kManagedDefaultWebHidGuardSetting,
-    prefs::kManagedDefaultWindowPlacementSetting,
+    prefs::kManagedDefaultWindowManagementSetting,
     prefs::kManagedDefaultLocalFontsSetting,
 };
 
@@ -230,7 +230,7 @@ const PolicyProvider::PrefsForManagedDefaultMapEntry
         {ContentSettingsType::HID_GUARD,
          prefs::kManagedDefaultWebHidGuardSetting},
         {ContentSettingsType::WINDOW_MANAGEMENT,
-         prefs::kManagedDefaultWindowPlacementSetting},
+         prefs::kManagedDefaultWindowManagementSetting},
         {ContentSettingsType::LOCAL_FONTS,
          prefs::kManagedDefaultLocalFontsSetting},
 };
@@ -372,7 +372,7 @@ void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences(
   //      }
   //   }
   // }
-  std::unordered_map<std::string, base::DictionaryValue> filters_map;
+  std::unordered_map<std::string, base::Value::Dict> filters_map;
   for (const auto& pattern_filter_str : pref->GetValue()->GetList()) {
     if (!pattern_filter_str.is_string()) {
       NOTREACHED();
@@ -387,27 +387,30 @@ void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences(
       continue;
     }
 
-    const base::Value* pattern = pattern_filter->FindKey("pattern");
-    const base::Value* filter = pattern_filter->FindKey("filter");
+    const base::Value::Dict& pattern_filter_dict = pattern_filter->GetDict();
+    const std::string* pattern = pattern_filter_dict.FindString("pattern");
+    const base::Value* filter = pattern_filter_dict.Find("filter");
     if (!pattern || !filter) {
       VLOG(1) << "Ignoring invalid certificate auto select setting. Reason:"
               << " Missing pattern or filter.";
       continue;
     }
 
-    const std::string& pattern_str = pattern->GetString();
-    if (filters_map.find(pattern_str) == filters_map.end())
-      filters_map[pattern_str].SetKey("filters",
-                                      base::Value(base::Value::Type::LIST));
+    const std::string& pattern_str = *pattern;
+    // This adds a `pattern_str` entry to `filters_map` if not already present,
+    // and gets a pointer to its `filters` list, inserting an entry into the
+    // dictionary if needed.
+    base::Value::List* filter_list =
+        filters_map[pattern_str].EnsureList("filters");
 
     // Don't pass removed values from `pattern_filter`, because base::Values
     // read with JSONReader use a shared string buffer. Instead, Clone() here.
-    filters_map[pattern_str].FindKey("filters")->Append(filter->Clone());
+    filter_list->Append(filter->Clone());
   }
 
   for (const auto& it : filters_map) {
     const std::string& pattern_str = it.first;
-    const base::Value& setting = it.second;
+    const base::Value::Dict& setting = it.second;
 
     ContentSettingsPattern pattern =
         ContentSettingsPattern::FromString(pattern_str);
@@ -420,7 +423,7 @@ void PolicyProvider::GetAutoSelectCertificateSettingsFromPreferences(
 
     value_map->SetValue(pattern, ContentSettingsPattern::Wildcard(),
                         ContentSettingsType::AUTO_SELECT_CERTIFICATE,
-                        setting.Clone(), {});
+                        base::Value(setting.Clone()), {});
   }
 }
 

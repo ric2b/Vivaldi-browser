@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import platform
 import sys
 import util
 
@@ -733,6 +732,10 @@ class ChromeDriver(object):
     params = {'mode': mode}
     return self.ExecuteCommand(Command.SET_SPC_TRANSACTION_MODE, params)
 
+  def SetRPHRegistrationMode(self, mode):
+    params = {'mode': mode}
+    return self.ExecuteCommand(Command.SET_RPH_REGISTRATION_MODE, params)
+
   def GetSessionId(self):
     if not hasattr(self, '_session_id'):
       return None
@@ -747,4 +750,3 @@ class ChromeDriver(object):
 
   def __exit__(self, *args):
     self.Quit()
-

@@ -7,19 +7,28 @@
 
 #include <string>
 
+#include "base/component_export.h"
 #include "base/memory/singleton.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
-// A signleton that provides all the URLs that are used for connecting to GAIA.
+// A singleton that provides all the URLs that are used for connecting to GAIA.
 //
 // Please update InitializeFromConfig() when adding new URLs.
-class GaiaUrls {
+class COMPONENT_EXPORT(GOOGLE_APIS) GaiaUrls {
  public:
   static GaiaUrls* GetInstance();
 
+  // Public for testing, otherwise use singleton above.
+  GaiaUrls();
+  ~GaiaUrls();
+
   GaiaUrls(const GaiaUrls&) = delete;
   GaiaUrls& operator=(const GaiaUrls&) = delete;
+
+  // Simplifies unit tests that depend on `GaiaUrls` singleton. Set to `nullptr`
+  // to reset.
+  static void SetInstanceForTesting(GaiaUrls* gaia_urls);
 
   // The URLs for different calls in the Google Accounts programmatic login API.
   const GURL& google_url() const;
@@ -60,11 +69,7 @@ class GaiaUrls {
   GURL GetCheckConnectionInfoURLWithSource(const std::string& source);
 
  private:
-  GaiaUrls();
-  ~GaiaUrls();
-
   friend struct base::DefaultSingletonTraits<GaiaUrls>;
-  friend class GaiaUrlsTest;
 
   void InitializeDefault();
   void InitializeFromConfig();

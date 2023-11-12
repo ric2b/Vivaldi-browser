@@ -111,8 +111,16 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
   void SetUp() override {
     BlockCleanupTest::SetUp();
     scene_state_ = [[StubSceneState alloc] initWithAppState:nil];
-    scene_state_.window =
-        [[UIApplication sharedApplication].windows firstObject];
+
+    for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
+      UIWindowScene* windowScene =
+          base::mac::ObjCCastStrict<UIWindowScene>(scene);
+      UIWindow* window = [windowScene.windows firstObject];
+      if (window) {
+        scene_state_.window = window;
+        break;
+      }
+    }
 
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
@@ -168,6 +176,7 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
         window.rootViewController;
     [incognito_popup_menu_coordinator_ start];
 
+    // TODO(crbug.com/1414048): Add inactive browser.
     coordinator_ = [[TabGridCoordinator alloc]
                      initWithWindow:window
          applicationCommandEndpoint:OCMProtocolMock(
@@ -175,6 +184,7 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
         browsingDataCommandEndpoint:OCMProtocolMock(
                                         @protocol(BrowsingDataCommands))
                      regularBrowser:browser_.get()
+                    inactiveBrowser:nil
                    incognitoBrowser:incognito_browser_.get()];
     coordinator_.animationsDisabledForTesting = YES;
 

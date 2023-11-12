@@ -5,9 +5,11 @@
 #include "ash/capture_mode/capture_mode_menu_toggle_button.h"
 
 #include "ash/capture_mode/capture_mode_constants.h"
+#include "ash/capture_mode/capture_mode_session_focus_cycler.h"
 #include "ash/capture_mode/capture_mode_util.h"
 #include "ash/style/ash_color_id.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -32,6 +34,7 @@ CaptureModeMenuToggleButton::CaptureModeMenuToggleButton(
       toggle_button_(AddChildView(
           std::make_unique<views::ToggleButton>(std::move(callback)))) {
   toggle_button_->SetAccessibleName(label_text);
+  CaptureModeSessionFocusCycler::HighlightHelper::Install(toggle_button_);
   icon_view_->SetImageSize(capture_mode::kSettingsIconSize);
   icon_view_->SetPreferredSize(capture_mode::kSettingsIconSize);
   icon_view_->SetImage(
@@ -48,8 +51,17 @@ CaptureModeMenuToggleButton::CaptureModeMenuToggleButton(
 
 CaptureModeMenuToggleButton::~CaptureModeMenuToggleButton() = default;
 
-views::View* CaptureModeMenuToggleButton::GetView() {
-  return this;
+void CaptureModeMenuToggleButton::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  auto* color_provider = GetColorProvider();
+  toggle_button_->SetThumbOnColor(
+      color_provider->GetColor(kColorAshSwitchKnobColorActive));
+  toggle_button_->SetThumbOffColor(
+      color_provider->GetColor(kColorAshSwitchKnobColorInactive));
+  toggle_button_->SetTrackOnColor(
+      color_provider->GetColor(kColorAshSwitchTrackColorActive));
+  toggle_button_->SetTrackOffColor(
+      color_provider->GetColor(kColorAshSwitchTrackColorInactive));
 }
 
 BEGIN_METADATA(CaptureModeMenuToggleButton, views::View)

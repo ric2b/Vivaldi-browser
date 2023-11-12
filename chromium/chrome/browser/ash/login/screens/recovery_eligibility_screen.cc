@@ -6,13 +6,14 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "chrome/browser/ash/login/wizard_context.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ash/login/recovery_eligibility_screen_handler.h"
 #include "chromeos/ash/components/login/auth/public/user_context.h"
+#include "chromeos/ash/components/login/auth/recovery/recovery_utils.h"
 #include "components/prefs/pref_service.h"
 
 namespace ash {
@@ -24,12 +25,6 @@ bool IsUserManaged() {
   return ProfileManager::GetActiveUserProfile()
       ->GetProfilePolicyConnector()
       ->IsManaged();
-}
-
-// Returns the boolean value of the RecoveryFactorBehavior policy.
-bool IsRecoveryFactorBehaviorPolicyEnabled() {
-  return ProfileManager::GetActiveUserProfile()->GetPrefs()->GetBoolean(
-      ash::prefs::kRecoveryFactorBehavior);
 }
 
 }  // namespace
@@ -46,7 +41,10 @@ std::string RecoveryEligibilityScreen::GetResultString(Result result) {
 
 // static
 bool RecoveryEligibilityScreen::ShouldSkipRecoverySetupBecauseOfPolicy() {
-  return IsUserManaged() && !IsRecoveryFactorBehaviorPolicyEnabled();
+  return IsUserManaged() &&
+         !GetRecoveryDefaultState(
+             IsUserManaged(),
+             ProfileManager::GetActiveUserProfile()->GetPrefs());
 }
 
 RecoveryEligibilityScreen::RecoveryEligibilityScreen(
@@ -58,8 +56,7 @@ RecoveryEligibilityScreen::RecoveryEligibilityScreen(
 RecoveryEligibilityScreen::~RecoveryEligibilityScreen() = default;
 
 bool RecoveryEligibilityScreen::MaybeSkip(WizardContext& wizard_context) {
-  if (!features::IsUseAuthFactorsEnabled() ||
-      !features::IsCryptohomeRecoverySetupEnabled()) {
+  if (!features::IsCryptohomeRecoveryEnabled()) {
     exit_callback_.Run(Result::NOT_APPLICABLE);
     return true;
   }
@@ -83,9 +80,12 @@ void RecoveryEligibilityScreen::ShowImpl() {
     context()->recovery_setup.is_supported = true;
     // Don't ask about recovery consent for managed users - use the policy value
     // instead.
-    context()->recovery_setup.ask_about_recovery_consent = !IsUserManaged();
+    context()->recovery_setup.ask_about_recovery_consent =
+        IsRecoveryOptInAvailable(IsUserManaged());
     context()->recovery_setup.recovery_factor_opted_in =
-        IsRecoveryFactorBehaviorPolicyEnabled();
+        GetRecoveryDefaultState(
+            IsUserManaged(),
+            ProfileManager::GetActiveUserProfile()->GetPrefs());
   }
   exit_callback_.Run(Result::PROCEED);
 }

@@ -27,7 +27,12 @@
 namespace vivaldi {
 
 struct SessionOptions {
-  bool openInNewWindow_ = false;
+  // Always open a new window and start loading tabs from there
+  bool newWindow_ = false;
+  // Load all tabs into the same window
+  bool oneWindow_ = false;
+  // Include tabs that are part of a workspace
+  bool withWorkspace_ = true;
 };
 
 // We cannot inherit from SessionService, and changing that class to be
@@ -52,7 +57,7 @@ class VivaldiSessionService {
                            bool is_pinned);
   void BuildCommandsForBrowser(Browser* browser, std::vector<int>& ids);
   bool Save(const base::FilePath& file_name);
-  bool Load(const base::FilePath& file_name,
+  int  Load(const base::FilePath& file_name,
             Browser* browser,
             const SessionOptions& opts);
   std::vector<std::unique_ptr<sessions::SessionCommand>> LoadSettingInfo(
@@ -77,6 +82,7 @@ class VivaldiSessionService {
       int initial_tab_count,
       int selected_tab_index,
       std::vector<SessionRestoreDelegate::RestoredTab>* created_contents);
+  bool HasTabs(const sessions::SessionWindow& window);
   void RemoveUnusedRestoreWindows(
       std::vector<std::unique_ptr<sessions::SessionWindow>>* window_list);
   Browser* CreateRestoredBrowser(Browser::Type type,

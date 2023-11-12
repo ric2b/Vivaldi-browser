@@ -65,7 +65,8 @@ public class NotificationUmaTracker {
             SystemNotificationType.PRICE_DROP_ALERTS_CHROME_MANAGED,
             SystemNotificationType.PRICE_DROP_ALERTS_USER_MANAGED,
             SystemNotificationType.CHROME_TIPS, SystemNotificationType.BLUETOOTH,
-            SystemNotificationType.USB, SystemNotificationType.UPM_ERROR})
+            SystemNotificationType.USB, SystemNotificationType.UPM_ERROR,
+            SystemNotificationType.WEBAPK_INSTALL_FAILED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface SystemNotificationType {
         int UNKNOWN = -1;
@@ -107,8 +108,9 @@ public class NotificationUmaTracker {
         int BLUETOOTH = 35;
         int USB = 36;
         int UPM_ERROR = 37;
+        int WEBAPK_INSTALL_FAILED = 38;
 
-        int NUM_ENTRIES = 38;
+        int NUM_ENTRIES = 39;
     }
 
     /*
@@ -124,7 +126,8 @@ public class NotificationUmaTracker {
             ActionType.WEB_APP_ACTION_OPEN_IN_CHROME,
             ActionType.OFFLINE_CONTENT_SUGGESTION_SETTINGS, ActionType.SHARING_TRY_AGAIN,
             ActionType.SETTINGS, ActionType.ANNOUNCEMENT_ACK, ActionType.ANNOUNCEMENT_OPEN,
-            ActionType.PRICE_DROP_VISIT_SITE, ActionType.PRICE_DROP_TURN_OFF_ALERT})
+            ActionType.PRICE_DROP_VISIT_SITE, ActionType.PRICE_DROP_TURN_OFF_ALERT,
+            ActionType.WEB_APK_ACTION_BACK_TO_SITE})
     @Retention(RetentionPolicy.SOURCE)
     public @interface ActionType {
         int UNKNOWN = -1;
@@ -181,7 +184,10 @@ public class NotificationUmaTracker {
         // Cancel button on sharing notification.
         int SHARING_CANCEL = 27;
 
-        int NUM_ENTRIES = 28;
+        // Back to site button on WebAPK install error notification.
+        int WEB_APK_ACTION_BACK_TO_SITE = 28;
+
+        int NUM_ENTRIES = 29;
     }
 
     /**
@@ -194,6 +200,13 @@ public class NotificationUmaTracker {
             NotificationRationaleResult.NAVIGATE_BACK_OR_TOUCH_OUTSIDE,
             NotificationRationaleResult.NOT_ATTACHED_TO_WINDOW,
             NotificationRationaleResult.ACTIVITY_DESTROYED,
+            NotificationRationaleResult.BOTTOM_SHEET_BACK_PRESS,
+            NotificationRationaleResult.BOTTOM_SHEET_SWIPE,
+            NotificationRationaleResult.BOTTOM_SHEET_TAP_SCRIM,
+            NotificationRationaleResult.BOTTOM_SHEET_FAILED_TO_OPEN,
+            NotificationRationaleResult.BOTTOM_SHEET_DESTROYED,
+            NotificationRationaleResult.BOTTOM_SHEET_CLOSED_UNKNOWN,
+            NotificationRationaleResult.BOTTOM_SHEET_NEVER_OPENED,
             NotificationRationaleResult.NUM_ENTRIES})
     @Retention(RetentionPolicy.SOURCE)
     public @interface NotificationRationaleResult {
@@ -202,8 +215,15 @@ public class NotificationUmaTracker {
         int NAVIGATE_BACK_OR_TOUCH_OUTSIDE = 2;
         int ACTIVITY_DESTROYED = 3;
         int NOT_ATTACHED_TO_WINDOW = 4;
+        int BOTTOM_SHEET_BACK_PRESS = 5;
+        int BOTTOM_SHEET_SWIPE = 6;
+        int BOTTOM_SHEET_TAP_SCRIM = 7;
+        int BOTTOM_SHEET_FAILED_TO_OPEN = 8;
+        int BOTTOM_SHEET_DESTROYED = 9;
+        int BOTTOM_SHEET_CLOSED_UNKNOWN = 10;
+        int BOTTOM_SHEET_NEVER_OPENED = 11;
 
-        int NUM_ENTRIES = 5;
+        int NUM_ENTRIES = 12;
     }
 
     /**

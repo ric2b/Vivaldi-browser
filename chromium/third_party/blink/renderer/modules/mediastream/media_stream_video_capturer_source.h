@@ -8,9 +8,10 @@
 #include <memory>
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "base/token.h"
 #include "build/build_config.h"
@@ -75,7 +76,7 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
   FRIEND_TEST_ALL_PREFIXES(MediaStreamVideoCapturerSourceTest, ChangeSource);
 
   // MediaStreamVideoSource overrides.
-  void SetCanDiscardAlpha(bool can_discard_alpha) override;
+  void OnSourceCanDiscardAlpha(bool can_discard_alpha) override;
   void RequestRefreshFrame() override;
   void OnFrameDropped(media::VideoCaptureFrameDropReason reason) override;
   void OnLog(const std::string& message) override;
@@ -141,7 +142,7 @@ class MODULES_EXPORT MediaStreamVideoCapturerSource
   // with a version of 0, both here and in Viz.
   uint32_t current_crop_version_ = 0;
 
-  base::WeakPtrFactory<MediaStreamVideoSource> weak_factory_{this};
+  base::WeakPtrFactory<MediaStreamVideoCapturerSource> weak_factory_{this};
 };
 
 }  // namespace blink

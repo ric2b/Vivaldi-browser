@@ -11,7 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/stl_util.h"
@@ -65,15 +65,23 @@ class AppFinder : public base::SupportsUserData::Data {
     delegate_ = delegate;
     communication_ = communication;
 
-    std::string twa_package_name = delegate_->GetTwaPackageName();
     std::set<std::string> twa_payment_method_names = {
         methods::kGooglePlayBilling,
     };
-    if (twa_package_name.empty() ||
-        base::STLSetIntersection<std::set<std::string>>(
+    if (base::STLSetIntersection<std::set<std::string>>(
             delegate_->GetSpec()->payment_method_identifiers_set(),
             twa_payment_method_names)
             .empty()) {
+      OnDoneCreatingPaymentApps();
+      return;
+    }
+
+    delegate_->GetTwaPackageName(base::BindOnce(
+        &AppFinder::OnGetTwaPackageName, weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  void OnGetTwaPackageName(const std::string& twa_package_name) {
+    if (twa_package_name.empty()) {
       OnDoneCreatingPaymentApps();
       return;
     }
@@ -84,13 +92,21 @@ class AppFinder : public base::SupportsUserData::Data {
   }
 
  private:
+  // Check that our required dependencies are still valid, i.e. that the page
+  // isn't currently being torn down.
+  bool PageIsValid() {
+    return communication_ && delegate_ && delegate_->GetSpec() &&
+           delegate_->GetInitiatorRenderFrameHost();
+  }
+
   void OnGetAppDescriptions(
       const absl::optional<std::string>& error_message,
       std::vector<std::unique_ptr<AndroidAppDescription>> app_descriptions) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
     // The browser could be shutting down.
-    if (!communication_ || !delegate_ || !delegate_->GetSpec())
+    if (!PageIsValid()) {
       return;
+    }
 
     if (error_message.has_value()) {
       delegate_->OnPaymentAppCreationError(error_message.value());
@@ -180,8 +196,7 @@ class AppFinder : public base::SupportsUserData::Data {
     DCHECK_LT(0U, number_of_pending_is_ready_to_pay_queries_);
 
     // The browser could be shutting down.
-    if (!communication_ || !delegate_ || !delegate_->GetSpec() ||
-        !delegate_->GetInitiatorRenderFrameHost()) {
+    if (!PageIsValid()) {
       OnDoneCreatingPaymentApps();
       return;
     }

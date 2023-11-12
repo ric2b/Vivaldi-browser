@@ -8,16 +8,16 @@
 #include <iterator>
 #include <map>
 
-#include "base/callback_forward.h"
 #include "base/containers/enum_set.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ref.h"
+#include "content/public/browser/attribution_data_model.h"
 #include "content/public/browser/interest_group_manager.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "url/origin.h"
 
 namespace content {
-class BrowserContext;
 class StoragePartition;
 }
 
@@ -35,6 +35,7 @@ class BrowsingDataModel {
     kTrustTokens,  // Only issuance information considered.
     kSharedStorage,
     kInterestGroup,
+    kAttributionReporting,
     kPartitionedQuotaStorage,    // Not fetched from disk or deleted.
     kUnpartitionedQuotaStorage,  // Not fetched from disk or deleted.
 
@@ -49,7 +50,8 @@ class BrowsingDataModel {
   // using this information.
   typedef absl::variant<url::Origin,        // Single origin, e.g. Trust Tokens
                         blink::StorageKey,  // Partitioned JS storage
-                        content::InterestGroupManager::InterestGroupDataKey
+                        content::InterestGroupManager::InterestGroupDataKey,
+                        content::AttributionDataModel::DataKey
                         // TODO(crbug.com/1271155): Additional backend keys.
                         >
       DataKey;
@@ -134,16 +136,19 @@ class BrowsingDataModel {
 
   virtual ~BrowsingDataModel();
 
+  // Returns number of entries within the Model.
+  size_t size() const { return browsing_data_entries_.size(); }
+
   // Consults supported storage backends to create and populate a Model based
-  // on the current state of `browser_context`.
+  // on the current state of `storage_partition`.
   static void BuildFromDisk(
-      content::BrowserContext* browser_context,
+      content::StoragePartition* storage_partition,
       base::OnceCallback<void(std::unique_ptr<BrowsingDataModel>)>
           complete_callback);
 
   // Creates and returns an empty model, for population via AddBrowsingData().
   static std::unique_ptr<BrowsingDataModel> BuildEmpty(
-      content::BrowserContext* browser_context);
+      content::StoragePartition* storage_partition);
 
   // Directly add browsing data to the Model. The appropriate BrowsingDataEntry
   // will be created or modified. Typically this should only be used when the

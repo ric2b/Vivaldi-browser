@@ -14,11 +14,12 @@
 #include "ash/components/arc/session/arc_bridge_service.h"
 #include "ash/components/arc/test/connection_holder_util.h"
 #include "ash/components/arc/test/fake_bluetooth_instance.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/system/sys_info.h"
 #include "base/test/scoped_chromeos_version_info.h"
 #include "base/test/task_environment.h"
+#include "chrome/browser/ash/arc/bluetooth/arc_bluez_bridge.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
 #include "device/bluetooth/dbus/fake_bluetooth_adapter_client.h"
 #include "device/bluetooth/dbus/fake_bluetooth_device_client.h"
@@ -40,6 +41,7 @@ namespace arc {
 
 constexpr int kFailureAdvHandle = -1;
 
+// This unittest defaults to testing BlueZ. For Floss, use |ArcFlossBridgeTest|.
 class ArcBluetoothBridgeTest : public testing::Test {
  protected:
   void AddTestDevice() {
@@ -115,8 +117,8 @@ class ArcBluetoothBridgeTest : public testing::Test {
 
     arc_bridge_service_ = std::make_unique<ArcBridgeService>();
     // TODO(hidehiko): Use Singleton instance tied to BrowserContext.
-    arc_bluetooth_bridge_ = std::make_unique<ArcBluetoothBridge>(
-        nullptr, arc_bridge_service_.get());
+    arc_bluetooth_bridge_ =
+        std::make_unique<ArcBluezBridge>(nullptr, arc_bridge_service_.get());
     fake_bluetooth_instance_ = std::make_unique<FakeBluetoothInstance>();
     arc_bridge_service_->bluetooth()->SetInstance(
         fake_bluetooth_instance_.get(), 20);
@@ -508,4 +510,48 @@ TEST_F(ArcBluetoothBridgeTest, ServiceChanged) {
   arc_bluetooth_bridge_->GattServiceChanged(adapter_.get(), service);
   EXPECT_TRUE(fake_bluetooth_instance_->get_service_changed_flag());
 }
+
+TEST_F(ArcBluetoothBridgeTest, ReadMissingDescriptorFailsGracefully) {
+  base::RunLoop run_loop;
+
+  // Pass clearly invalid values to guarantee that we won't be able to find a
+  // valid GATT descriptor.
+  arc_bluetooth_bridge_->ReadGattDescriptor(
+      /*remote_addr=*/mojom::BluetoothAddress::New(),
+      /*service_id=*/mojom::BluetoothGattServiceID::New(),
+      /*char_id=*/mojom::BluetoothGattID::New(),
+      /*desc_id=*/mojom::BluetoothGattID::New(),
+      base::BindOnce(
+          [](base::RepeatingClosure quit_closure,
+             mojom::BluetoothGattValuePtr value) {
+            ASSERT_TRUE(value);
+            EXPECT_TRUE(value->value.empty());
+            EXPECT_EQ(value->status, mojom::BluetoothGattStatus::GATT_FAILURE);
+            quit_closure.Run();
+          },
+          run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
+TEST_F(ArcBluetoothBridgeTest, WritingMissingDescriptorFailsGracefully) {
+  base::RunLoop run_loop;
+
+  // Pass clearly invalid values to guarantee that we won't be able to find a
+  // valid GATT descriptor.
+  arc_bluetooth_bridge_->WriteGattDescriptor(
+      /*remote_addr=*/mojom::BluetoothAddress::New(),
+      /*service_id=*/mojom::BluetoothGattServiceID::New(),
+      /*char_id=*/mojom::BluetoothGattID::New(),
+      /*desc_id=*/mojom::BluetoothGattID::New(),
+      /*value=*/mojom::BluetoothGattValue::New(),
+      base::BindOnce(
+          [](base::RepeatingClosure quit_closure,
+             mojom::BluetoothGattStatus status) {
+            EXPECT_EQ(status, mojom::BluetoothGattStatus::GATT_FAILURE);
+            quit_closure.Run();
+          },
+          run_loop.QuitClosure()));
+  run_loop.Run();
+}
+
 }  // namespace arc

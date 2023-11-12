@@ -7,13 +7,36 @@
 #include <string>
 
 #include "ash/ash_export.h"
+#include "base/environment.h"
 #include "base/i18n/time_formatting.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "google_apis/calendar/calendar_api_response_types.h"
 
 namespace ash {
 
 namespace calendar_test_utils {
+
+ScopedLibcTimeZone::ScopedLibcTimeZone(const std::string& timezone) {
+  auto env = base::Environment::Create();
+  std::string old_timezone_value;
+  if (env->GetVar(kTimeZoneEnvVarName, &old_timezone_value)) {
+    old_timezone_ = old_timezone_value;
+  }
+  if (!env->SetVar(kTimeZoneEnvVarName, timezone)) {
+    success_ = false;
+  }
+  tzset();
+}
+
+ScopedLibcTimeZone::~ScopedLibcTimeZone() {
+  auto env = base::Environment::Create();
+  if (old_timezone_.has_value()) {
+    CHECK(env->SetVar(kTimeZoneEnvVarName, old_timezone_.value()));
+  } else {
+    CHECK(env->UnSetVar(kTimeZoneEnvVarName));
+  }
+}
 
 std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
     const char* id,
@@ -23,7 +46,8 @@ std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
     const google_apis::calendar::CalendarEvent::EventStatus event_status,
     const google_apis::calendar::CalendarEvent::ResponseStatus
         self_response_status,
-    const bool all_day_event) {
+    const bool all_day_event,
+    const std::string hangout_link) {
   auto event = std::make_unique<google_apis::calendar::CalendarEvent>();
   base::Time start_time_base, end_time_base;
   google_apis::calendar::DateTime start_time_date, end_time_date;
@@ -47,6 +71,7 @@ std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
   event->set_status(event_status);
   event->set_self_response_status(self_response_status);
   event->set_all_day_event(all_day_event);
+  event->set_hangout_link(hangout_link);
   return event;
 }
 
@@ -58,7 +83,8 @@ std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
     const google_apis::calendar::CalendarEvent::EventStatus event_status,
     const google_apis::calendar::CalendarEvent::ResponseStatus
         self_response_status,
-    const bool all_day_event) {
+    const bool all_day_event,
+    const std::string hangout_link) {
   auto event = std::make_unique<google_apis::calendar::CalendarEvent>();
   google_apis::calendar::DateTime start_time_date, end_time_date;
   event->set_id(id);
@@ -70,6 +96,7 @@ std::unique_ptr<google_apis::calendar::CalendarEvent> CreateEvent(
   event->set_status(event_status);
   event->set_self_response_status(self_response_status);
   event->set_all_day_event(all_day_event);
+  event->set_hangout_link(hangout_link);
   return event;
 }
 

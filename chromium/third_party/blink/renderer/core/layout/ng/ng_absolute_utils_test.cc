@@ -105,8 +105,8 @@ class NGAbsoluteUtilsTest : public RenderingTest {
                        container_writing_direction.GetWritingMode()));
     NGLogicalAnchorQuery anchor_query;
     NGAnchorEvaluatorImpl anchor_evaluator(
-        anchor_query, /* implicit_anchor */
-        nullptr, container_converter,
+        anchor_query, /* default_anchor_specifier */ nullptr,
+        /* implicit_anchor */ nullptr, container_converter,
         /* self_writing_direction */
         {WritingMode::kHorizontalTb, TextDirection::kLtr},
         /* offset_to_padding_box */
@@ -136,8 +136,8 @@ class NGAbsoluteUtilsTest : public RenderingTest {
                        container_writing_direction.GetWritingMode()));
     NGLogicalAnchorQuery anchor_query;
     NGAnchorEvaluatorImpl anchor_evaluator(
-        anchor_query, /* implicit_anchor */
-        nullptr, container_converter,
+        anchor_query, /* default_anchor_specifier */ nullptr,
+        /* implicit_anchor */ nullptr, container_converter,
         /* self_writing_direction */
         {WritingMode::kHorizontalTb, TextDirection::kLtr},
         /* offset_to_padding_box */
@@ -162,9 +162,6 @@ class NGAbsoluteUtilsTest : public RenderingTest {
 };
 
 TEST_F(NGAbsoluteUtilsTest, Horizontal) {
-  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
   NGBlockNode node(element_->GetLayoutBox());
   element_->SetInlineStyleProperty(CSSPropertyID::kContain, "size");
   element_->SetInlineStyleProperty(CSSPropertyID::kContainIntrinsicSize,
@@ -326,9 +323,6 @@ TEST_F(NGAbsoluteUtilsTest, Horizontal) {
 }
 
 TEST_F(NGAbsoluteUtilsTest, Vertical) {
-  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
   element_->SetInlineStyleProperty(CSSPropertyID::kContain, "size");
   element_->SetInlineStyleProperty(CSSPropertyID::kContainIntrinsicSize,
                                    "60px 4px");
@@ -448,9 +442,6 @@ TEST_F(NGAbsoluteUtilsTest, Vertical) {
 }
 
 TEST_F(NGAbsoluteUtilsTest, CenterStaticPosition) {
-  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
   NGBlockNode node(element_->GetLayoutBox());
   NGLogicalStaticPosition static_position = {
       {LayoutUnit(150), LayoutUnit(200)},
@@ -486,9 +477,6 @@ TEST_F(NGAbsoluteUtilsTest, CenterStaticPosition) {
 }
 
 TEST_F(NGAbsoluteUtilsTest, MinMax) {
-  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
-    return;
-
   element_->SetInlineStyleProperty(CSSPropertyID::kMinWidth, "70px");
   element_->SetInlineStyleProperty(CSSPropertyID::kMaxWidth, "150px");
   element_->SetInlineStyleProperty(CSSPropertyID::kMinHeight, "70px");

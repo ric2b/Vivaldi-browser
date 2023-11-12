@@ -96,9 +96,13 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
           prefix_locale = "in"
         } else if (locale == "ja-KS") {
           prefix_locale = "ja-rKS"
+        } else if (locale == "ca-valencia" || locale == "ca@valencia") {
+          prefix_locale = "b+ca+valencia"
         }
         locale_prefix = _flags.pak_file_locale_prefix+"$prefix_locale/"
         locale_postfix = ""
+      } else if (locale == "ca-valencia" || locale == "ca@valencia") {
+        locale_postfix = "ca-valencia"
       }
       extra_outputs += [ locale_prefix+_flags.pak_file_prefix+"$locale_postfix.$pakext" ]
     }

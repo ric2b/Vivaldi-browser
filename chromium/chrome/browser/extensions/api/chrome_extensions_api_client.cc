@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -43,6 +43,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/signin/core/browser/signin_header_helper.h"
+#include "components/supervised_user/core/common/buildflags.h"
 #include "components/value_store/value_store_factory.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -355,8 +356,10 @@ bool ChromeExtensionsAPIClient::ShouldAllowDetachingUsb(int vid,
   if (ash::CrosSettings::Get()->GetList(ash::kUsbDetachableAllowlist,
                                         &policy_list)) {
     for (const auto& entry : *policy_list) {
-      if (entry.FindIntKey(ash::kUsbDetachableAllowlistKeyVid) == vid &&
-          entry.FindIntKey(ash::kUsbDetachableAllowlistKeyPid) == pid) {
+      const base::Value::Dict* entry_dict = entry.GetIfDict();
+      if (entry_dict &&
+          entry_dict->FindInt(ash::kUsbDetachableAllowlistKeyVid) == vid &&
+          entry_dict->FindInt(ash::kUsbDetachableAllowlistKeyPid) == pid) {
         return true;
       }
     }

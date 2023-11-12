@@ -65,6 +65,7 @@ import org.chromium.android_webview.AwThreadUtils;
 import org.chromium.android_webview.gfx.AwDrawFnImpl;
 import org.chromium.android_webview.renderer_priority.RendererPriority;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.compat.ApiHelperForO;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
 import org.chromium.components.content_capture.ContentCaptureFeatures;
@@ -78,7 +79,6 @@ import org.chromium.url.GURL;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
@@ -487,6 +487,11 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
                             org.chromium.android_webview.R.string.private_browsing_warning));
                     mWebView.addView(warningLabel);
                 }
+            }
+
+            // Needed for https://crbug.com/1417872
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ApiHelperForO.setDefaultFocusHighlightEnabled(mWebView, false);
             }
 
             if (mAppTargetSdkVersion >= Build.VERSION_CODES.JELLY_BEAN_MR2) {
@@ -2119,9 +2124,6 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
             });
             return ret;
         }
-        if (mAwContents.supportsAccessibilityAction(action)) {
-            return mAwContents.performAccessibilityAction(action, arguments);
-        }
         return mWebViewPrivate.super_performAccessibilityAction(action, arguments);
     }
 
@@ -2776,18 +2778,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
 
         @Override
         public void super_startActivityForResult(Intent intent, int requestCode) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                GlueApiHelperForN.super_startActivityForResult(
-                        mWebViewPrivate, intent, requestCode);
-            } else {
-                try {
-                    Method startActivityForResultMethod =
-                            View.class.getMethod("startActivityForResult", Intent.class, int.class);
-                    startActivityForResultMethod.invoke(mWebView, intent, requestCode);
-                } catch (Exception e) {
-                    throw new RuntimeException("Invalid reflection", e);
-                }
-            }
+            mWebViewPrivate.super_startActivityForResult(intent, requestCode);
         }
 
         @Override

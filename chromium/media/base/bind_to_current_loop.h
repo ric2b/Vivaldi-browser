@@ -5,7 +5,7 @@
 #ifndef MEDIA_BASE_BIND_TO_CURRENT_LOOP_H_
 #define MEDIA_BASE_BIND_TO_CURRENT_LOOP_H_
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -19,16 +19,14 @@ template <typename... Args>
 inline base::RepeatingCallback<void(Args...)> BindToCurrentLoop(
     base::RepeatingCallback<void(Args...)> cb,
     const base::Location& location = FROM_HERE) {
-  return base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                            std::move(cb), location);
+  return base::BindPostTaskToCurrentDefault(std::move(cb), location);
 }
 
 template <typename... Args>
 inline base::OnceCallback<void(Args...)> BindToCurrentLoop(
     base::OnceCallback<void(Args...)> cb,
     const base::Location& location = FROM_HERE) {
-  return base::BindPostTask(base::SequencedTaskRunner::GetCurrentDefault(),
-                            std::move(cb), location);
+  return base::BindPostTaskToCurrentDefault(std::move(cb), location);
 }
 
 }  // namespace media

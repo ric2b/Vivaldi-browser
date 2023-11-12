@@ -10,7 +10,9 @@
 #include "base/metrics/histogram_functions.h"
 #include "components/services/storage/shared_storage/public/mojom/shared_storage.mojom.h"
 #include "components/services/storage/shared_storage/shared_storage_manager.h"
+#include "content/browser/attribution_reporting/attribution_data_host_manager.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
+#include "content/browser/fenced_frame/fenced_frame_reporter.h"
 #include "content/browser/private_aggregation/private_aggregation_budget_key.h"
 #include "content/browser/private_aggregation/private_aggregation_host.h"
 #include "content/browser/private_aggregation/private_aggregation_manager.h"
@@ -42,7 +44,9 @@ using SharedStorageURNMappingResult =
 using OperationResult = storage::SharedStorageManager::OperationResult;
 using GetResult = storage::SharedStorageManager::GetResult;
 
-SharedStorageURNMappingResult CalculateSharedStorageURNMappingResult(
+SharedStorageURNMappingResult CreateSharedStorageURNMappingResult(
+    StoragePartition* storage_partition,
+    BrowserContext* browser_context,
     const url::Origin& shared_storage_origin,
     std::vector<blink::mojom::SharedStorageUrlWithMetadataPtr>
         urls_with_metadata,
@@ -65,11 +69,18 @@ SharedStorageURNMappingResult CalculateSharedStorageURNMappingResult(
 
   GURL mapped_url = urls_with_metadata[index]->url;
 
+  scoped_refptr<FencedFrameReporter> fenced_frame_reporter;
+  if (!urls_with_metadata[index]->reporting_metadata.empty()) {
+    fenced_frame_reporter = FencedFrameReporter::CreateForSharedStorage(
+        storage_partition->GetURLLoaderFactoryForBrowserProcess(),
+        AttributionDataHostManager::FromBrowserContext(browser_context),
+        urls_with_metadata[index]->reporting_metadata);
+  }
   return SharedStorageURNMappingResult(
       mapped_url,
       SharedStorageBudgetMetadata{.origin = shared_storage_origin,
                                   .budget_to_charge = budget_to_charge},
-      urls_with_metadata[index]->reporting_metadata);
+      std::move(fenced_frame_reporter));
 }
 
 }  // namespace
@@ -82,17 +93,11 @@ SharedStorageWorkletHost::SharedStorageWorkletHost(
       page_(
           static_cast<PageImpl&>(document_service.render_frame_host().GetPage())
               .GetWeakPtrImpl()),
-      shared_storage_manager_(static_cast<StoragePartitionImpl*>(
-                                  document_service.render_frame_host()
-                                      .GetProcess()
-                                      ->GetStoragePartition())
-                                  ->GetSharedStorageManager()),
+      storage_partition_(static_cast<StoragePartitionImpl*>(
+          document_service.render_frame_host().GetStoragePartition())),
+      shared_storage_manager_(storage_partition_->GetSharedStorageManager()),
       shared_storage_worklet_host_manager_(
-          static_cast<StoragePartitionImpl*>(
-              document_service.render_frame_host()
-                  .GetProcess()
-                  ->GetStoragePartition())
-              ->GetSharedStorageWorkletHostManager()),
+          storage_partition_->GetSharedStorageWorkletHostManager()),
       browser_context_(
           document_service.render_frame_host().GetBrowserContext()),
       shared_storage_origin_(
@@ -131,11 +136,16 @@ SharedStorageWorkletHost::~SharedStorageWorkletHost() {
     const GURL& urn_uuid = it->first;
 
     bool failed_due_to_no_budget = false;
-    page_->fenced_frame_urls_map().OnSharedStorageURNMappingResultDetermined(
-        urn_uuid,
-        CalculateSharedStorageURNMappingResult(
-            shared_storage_origin_, std::move(it->second),
-            /*index=*/0, /*budget_remaining=*/0.0, failed_due_to_no_budget));
+    absl::optional<FencedFrameConfig> config =
+        page_->fenced_frame_urls_map()
+            .OnSharedStorageURNMappingResultDetermined(
+                urn_uuid, CreateSharedStorageURNMappingResult(
+                              storage_partition_, browser_context_,
+                              shared_storage_origin_, std::move(it->second),
+                              /*index=*/0, /*budget_remaining=*/0.0,
+                              failed_due_to_no_budget));
+
+    shared_storage_worklet_host_manager_->NotifyConfigPopulated(config);
 
     it = unresolved_urns_.erase(it);
   }
@@ -216,7 +226,7 @@ void SharedStorageWorkletHost::RunURLSelectionOperationOnWorklet(
         /*success=*/false, /*error_message=*/
         "sharedStorage.worklet.addModule() has to be called before "
         "sharedStorage.selectURL().",
-        /*opaque_url=*/{});
+        /*result_config=*/absl::nullopt);
     return;
   }
 
@@ -235,7 +245,7 @@ void SharedStorageWorkletHost::RunURLSelectionOperationOnWorklet(
         /*success=*/false, /*error_message=*/
         "sharedStorage.selectURL() failed because number of urn::uuid to url "
         "mappings has reached the limit.",
-        /*opaque_url=*/{});
+        /*result_config=*/absl::nullopt);
     return;
   }
 
@@ -252,9 +262,14 @@ void SharedStorageWorkletHost::RunURLSelectionOperationOnWorklet(
   // Assert that `urn_uuid` was not in the set before.
   DCHECK(emplace_succeeded);
 
+  FencedFrameConfig config;
+  config.urn_uuid_ = absl::make_optional(urn_uuid);
   std::move(callback).Run(
       /*success=*/true, /*error_message=*/{},
-      /*opaque_url=*/urn_uuid);
+      /*result_config=*/
+      config.RedactFor(FencedFrameEntity::kEmbedder));
+
+  shared_storage_worklet_host_manager_->NotifyUrnUuidGenerated(urn_uuid);
 
   GetAndConnectToSharedStorageWorkletService()->RunURLSelectionOperation(
       name, urls, serialized_data,
@@ -737,9 +752,10 @@ void SharedStorageWorkletHost::OnRunURLSelectionOperationOnWorkletFinished(
   if (page_) {
     bool failed_due_to_no_budget = false;
     SharedStorageURNMappingResult mapping_result =
-        CalculateSharedStorageURNMappingResult(
-            shared_storage_origin_, std::move(urls_with_metadata), index,
-            budget_result.bits, failed_due_to_no_budget);
+        CreateSharedStorageURNMappingResult(
+            storage_partition_, browser_context_, shared_storage_origin_,
+            std::move(urls_with_metadata), index, budget_result.bits,
+            failed_due_to_no_budget);
 
     if (document_service_) {
       DCHECK(!IsInKeepAlivePhase());
@@ -764,8 +780,12 @@ void SharedStorageWorkletHost::OnRunURLSelectionOperationOnWorkletFinished(
       }
     }
 
-    page_->fenced_frame_urls_map().OnSharedStorageURNMappingResultDetermined(
-        urn_uuid, std::move(mapping_result));
+    absl::optional<FencedFrameConfig> config =
+        page_->fenced_frame_urls_map()
+            .OnSharedStorageURNMappingResultDetermined(
+                urn_uuid, std::move(mapping_result));
+
+    shared_storage_worklet_host_manager_->NotifyConfigPopulated(config);
   }
 
   base::UmaHistogramLongTimes(
@@ -826,12 +846,19 @@ base::TimeDelta SharedStorageWorkletHost::GetKeepAliveTimeout() const {
 
 shared_storage_worklet::mojom::SharedStorageWorkletService*
 SharedStorageWorkletHost::GetAndConnectToSharedStorageWorkletService() {
+  DCHECK(document_service_);
+
   if (!shared_storage_worklet_service_) {
+    bool private_aggregation_permissions_policy_allowed =
+        document_service_->render_frame_host().IsFeatureEnabled(
+            blink::mojom::PermissionsPolicyFeature::kPrivateAggregation);
+
     driver_->StartWorkletService(
         shared_storage_worklet_service_.BindNewPipeAndPassReceiver());
 
     shared_storage_worklet_service_->Initialize(
         shared_storage_worklet_service_client_.BindNewEndpointAndPassRemote(),
+        private_aggregation_permissions_policy_allowed,
         MaybeBindPrivateAggregationHost());
   }
 

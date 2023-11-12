@@ -9,9 +9,10 @@ import {isRTL} from 'chrome://resources/ash/common/util.js';
 import {RateLimiter} from '../../../common/js/async_util.js';
 import {maybeShowTooltip} from '../../../common/js/dom_utils.js';
 import {FileType} from '../../../common/js/file_type.js';
-import {util} from '../../../common/js/util.js';
+import {str, util} from '../../../common/js/util.js';
 import {FilesAppEntry} from '../../../externs/files_app_entry_interfaces.js';
 import {VolumeManager} from '../../../externs/volume_manager.js';
+import {FilesTooltip} from '../../elements/files_tooltip.js';
 import {FileListModel, GROUP_BY_FIELD_DIRECTORY, GROUP_BY_FIELD_MODIFICATION_TIME, GroupValue} from '../file_list_model.js';
 import {ListThumbnailLoader} from '../list_thumbnail_loader.js';
 import {MetadataModel} from '../metadata/metadata_model.js';
@@ -742,6 +743,19 @@ export class FileGrid extends Grid {
       listItem = /** @type {!FileGrid.Item} */ (listItem);
       this.decorateThumbnailBox_(listItem, entry);
       this.updateSharedStatus_(listItem, entry);
+      const {availableOffline, pinned} =
+          this.metadataModel_.getCache(
+              [entry], ['availableOffline', 'pinned'])[0] ||
+          {};
+      const inlineStatus = listItem.querySelector('.inline-status');
+      // Clear the inline status' aria label and set it to "in progress",
+      // "queued", or "available offline" with the respective order of
+      // precedence if applicable.
+      inlineStatus.removeAttribute('aria-label');
+      listItem.classList.toggle('dim-offline', availableOffline === false);
+      listItem.classList.toggle('pinned', pinned);
+      inlineStatus.setAttribute(
+          'aria-label', pinned ? str('OFFLINE_COLUMN_LABEL') : '');
       this.updateInlineSyncStatus_(listItem, entry);
       listItem.toggleAttribute(
           'disabled',
@@ -787,27 +801,22 @@ export class FileGrid extends Grid {
     frame.className = 'thumbnail-frame';
     li.appendChild(frame);
 
-    if (util.isInlineSyncStatusEnabled()) {
-      const syncStatus = li.ownerDocument.createElement('div');
-      syncStatus.className = 'sync-status';
-      frame.appendChild(syncStatus);
-    }
 
     const box = li.ownerDocument.createElement('div');
     box.classList.add('img-container', 'no-thumbnail');
     frame.appendChild(box);
-    if (entry) {
-      this.decorateThumbnailBox_(assertInstanceof(li, HTMLLIElement), entry);
-    }
 
     const bottom = li.ownerDocument.createElement('div');
     bottom.className = 'thumbnail-bottom';
-    const mimeType =
-        this.metadataModel_.getCache([entry], ['contentMimeType'])[0]
-            .contentMimeType;
+
+    const {contentMimeType, availableOffline, pinned} =
+        this.metadataModel_.getCache(
+            [entry], ['contentMimeType', 'availableOffline', 'pinned'])[0] ||
+        {};
+
     const locationInfo = this.volumeManager_.getLocationInfo(entry);
     const detailIcon = filelist.renderFileTypeIcon(
-        li.ownerDocument, entry, locationInfo, mimeType);
+        li.ownerDocument, entry, locationInfo, contentMimeType);
 
     // For FilesNg we add the checkmark in the same location.
     const checkmark = li.ownerDocument.createElement('div');
@@ -819,6 +828,34 @@ export class FileGrid extends Grid {
     frame.appendChild(bottom);
     li.setAttribute('file-name', util.getEntryLabel(locationInfo, entry));
 
+    // The inline status box contains both sync status indicators and available
+    // offline indicators.
+    const inlineStatus = li.ownerDocument.createElement('div');
+    inlineStatus.className = 'inline-status';
+
+    const inlineStatusIcon = li.ownerDocument.createElement('xf-icon');
+    inlineStatusIcon.size = 'extra_small';
+    inlineStatusIcon.type = 'offline';
+    inlineStatus.appendChild(inlineStatusIcon);
+
+    if (util.isInlineSyncStatusEnabled()) {
+      const syncProgress = li.ownerDocument.createElement('xf-pie-progress');
+      syncProgress.className = 'progress';
+      inlineStatus.appendChild(syncProgress);
+    }
+
+    /** @type {!FilesTooltip} */ (
+        li.ownerDocument.querySelector('files-tooltip'))
+        .addTarget(/** @type {!HTMLElement} */ (inlineStatus));
+
+    frame.appendChild(inlineStatus);
+
+    li.classList.toggle('dim-offline', availableOffline === false);
+    li.classList.toggle('pinned', pinned);
+
+    if (entry) {
+      this.decorateThumbnailBox_(assertInstanceof(li, HTMLLIElement), entry);
+    }
     this.updateSharedStatus_(li, entry);
     this.updateInlineSyncStatus_(li, entry);
   }
@@ -892,13 +929,40 @@ export class FileGrid extends Grid {
     if (!util.isInlineSyncStatusEnabled()) {
       return;
     }
-    const frame = li.querySelector('.thumbnail-frame');
-    const syncStatus =
-        this.metadataModel_.getCache([entry], ['syncStatus'])[0].syncStatus;
-    if (frame && syncStatus) {
-      frame.setAttribute('data-sync-status', syncStatus);
-      // TODO(b/255474670): set sync status aria-label.
+
+    const metadata =
+        this.metadataModel_.getCache([entry], ['syncStatus', 'progress'])[0];
+
+    if (!metadata) {
+      return;
     }
+
+    const {syncStatus} = metadata;
+    let progress = metadata.progress ?? 0;
+    const inlineStatus = li.querySelector('.inline-status');
+
+    if (!syncStatus || !inlineStatus) {
+      return;
+    }
+
+    switch (syncStatus) {
+      case chrome.fileManagerPrivate.SyncStatus.QUEUED:
+      case chrome.fileManagerPrivate.SyncStatus.ERROR:
+        progress = 0;
+        inlineStatus.setAttribute('aria-label', str('QUEUED_LABEL'));
+        break;
+      case chrome.fileManagerPrivate.SyncStatus.IN_PROGRESS:
+        inlineStatus.setAttribute(
+            'aria-label',
+            `${str('IN_PROGRESS_LABEL')} - ${(progress * 100).toFixed(0)}%`);
+        break;
+      default:
+        break;
+    }
+
+    li.setAttribute('data-sync-status', syncStatus);
+    inlineStatus.querySelector('.progress')
+        .setAttribute('progress', progress.toFixed(2));
   }
 
   /**
@@ -990,7 +1054,10 @@ export class FileGrid extends Grid {
    */
   setGenericThumbnail_(box, entry, opt_mimeType) {
     if (entry.isDirectory) {
-      box.setAttribute('generic-thumbnail', 'folder');
+      // There is no space to show the thumbnail so don't adde one for Jelly.
+      if (!util.isJellyEnabled()) {
+        box.setAttribute('generic-thumbnail', 'folder');
+      }
     } else {
       box.classList.toggle('no-thumbnail', true);
       const locationInfo = this.volumeManager_.getLocationInfo(entry);

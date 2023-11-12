@@ -18,8 +18,8 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_bus.h"
 #include "media/base/audio_timestamp_helper.h"
@@ -163,6 +163,7 @@ class AudioRendererAlgorithmTest : public testing::Test {
             1, 1, frame_size, kNoTimestamp);
         break;
       case kSampleFormatDts:
+      case kSampleFormatDtse:
       case kSampleFormatDtsxP2:
         buffer = MakeBitstreamAudioBuffer(
             sample_format_, channel_layout_,

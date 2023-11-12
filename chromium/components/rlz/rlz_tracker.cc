@@ -11,8 +11,8 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -219,7 +219,8 @@ class RLZTracker::WrapperURLLoaderFactory
 
 // static
 RLZTracker* RLZTracker::GetInstance() {
-  return tracker_ ? tracker_ : base::Singleton<RLZTracker>::get();
+  static base::NoDestructor<RLZTracker> instance;
+  return tracker_ ? tracker_ : instance.get();
 }
 
 RLZTracker::RLZTracker()
@@ -234,7 +235,7 @@ RLZTracker::RLZTracker()
       app_list_used_(false),
       min_init_delay_(kMinInitDelay),
       background_task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN, base::MayBlock(),
+          {base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN, base::MayBlock(),
            base::TaskPriority::BEST_EFFORT})) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }

@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
+#include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format.h"
@@ -63,6 +64,8 @@ class MemoryTypeTracker;
 class SharedImageFactory;
 class VaapiDependenciesFactory;
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
 enum class SharedImageBackingType {
   kTest = 0,
   kExternalVkImage = 1,
@@ -82,6 +85,7 @@ enum class SharedImageBackingType {
   kIOSurface = 15,
   kDCompSurface = 16,
   kDXGISwapChain = 17,
+  kMaxValue = kDXGISwapChain
 };
 
 #if BUILDFLAG(IS_WIN)
@@ -166,15 +170,18 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   // than allocating and freeing the image. See investigation in
   // https://crbug.com/1347282.
   virtual void SetPurgeable(bool purgeable) {}
+  virtual bool IsPurgeable() const;
 
   virtual void Update(std::unique_ptr<gfx::GpuFence> in_fence);
 
-  // Uploads pixels from memory into GPU texture. Backings must implement this
-  // if they support `SHARED_IMAGE_USAGE_CPU_UPLOAD`.
-  virtual bool UploadFromMemory(const SkPixmap& pixmap);
+  // Uploads pixels from memory into GPU texture. `pixmaps` should have one
+  // pixmap per plane. Backings must implement this if they support
+  // `SHARED_IMAGE_USAGE_CPU_UPLOAD`.
+  virtual bool UploadFromMemory(const std::vector<SkPixmap>& pixmaps);
 
-  // Reads back pixels from GPU texture into memory in `pixmap`.
-  virtual bool ReadbackToMemory(SkPixmap& pixmap);
+  // Reads back pixels from GPU texture into memory. `pixmaps` should have one
+  // pixmap per plane.
+  virtual bool ReadbackToMemory(const std::vector<SkPixmap>& pixmaps);
 
   // Copy from the backing's GPU texture to its GpuMemoryBuffer if present. This
   // is needed on Windows where the renderer process can only create shared
@@ -192,7 +199,7 @@ class GPU_GLES2_EXPORT SharedImageBacking {
   // add additional ownership edges linked to `client_guid` but they must call
   // SharedImageBacking::OnMemoryDump() first (or do something equivalent) to
   // create a MemoryAllocatorDump and ownership edge.
-  virtual void OnMemoryDump(
+  virtual base::trace_event::MemoryAllocatorDump* OnMemoryDump(
       const std::string& dump_name,
       base::trace_event::MemoryAllocatorDumpGuid client_guid,
       base::trace_event::ProcessMemoryDump* pmd,

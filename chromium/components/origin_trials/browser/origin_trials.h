@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/origin_trials/common/origin_trials_persistence_provider.h"
+#include "components/origin_trials/common/persisted_trial_token.h"
 #include "content/public/browser/origin_trials_controller_delegate.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/origin_trials/trial_token_validator.h"
@@ -48,19 +49,36 @@ class OriginTrials : public KeyedService,
   // content::OriginTrialsControllerDelegate
   void PersistTrialsFromTokens(
       const url::Origin& origin,
+      const url::Origin& partition_origin,
+      const base::span<const std::string> header_tokens,
+      const base::Time current_time) override;
+  void PersistAdditionalTrialsFromTokens(
+      const url::Origin& origin,
+      const url::Origin& partition_origin,
+      base::span<const url::Origin> script_origins,
       const base::span<const std::string> header_tokens,
       const base::Time current_time) override;
   bool IsTrialPersistedForOrigin(const url::Origin& origin,
+                                 const url::Origin& partition_origin,
                                  const base::StringPiece trial_name,
                                  const base::Time current_time) override;
   base::flat_set<std::string> GetPersistedTrialsForOrigin(
       const url::Origin& origin,
+      const url::Origin& partition_origin,
       base::Time current_time) override;
   void ClearPersistedTokens() override;
 
  private:
+  friend class OriginTrialsTest;
   std::unique_ptr<OriginTrialsPersistenceProvider> persistence_provider_;
   std::unique_ptr<blink::TrialTokenValidator> trial_token_validator_;
+
+  void PersistTokensInternal(const url::Origin& origin,
+                             const url::Origin& partition_origin,
+                             base::span<const url::Origin> script_origins,
+                             const base::span<const std::string> header_tokens,
+                             const base::Time current_time,
+                             bool append_only);
 
   // Helper to return the still-valid persisted trials, with an optional
   // |trial_name_match| which can be passed to ensure we only validate
@@ -69,8 +87,24 @@ class OriginTrials : public KeyedService,
   // that are still valid.
   base::flat_set<std::string> GetPersistedTrialsForOriginWithMatch(
       const url::Origin& origin,
+      const url::Origin& partition_origin,
       const base::Time current_time,
       const absl::optional<const base::StringPiece> trial_name_match) const;
+
+  // Update the stored tokens for |origin| with the |new_tokens|, partitioned by
+  // |partition_site|.
+  // Will clean any tokens not found in |new_tokens| unless |append_only| is set
+  // to true.
+  void UpdatePersistedTokenSet(const url::Origin& origin,
+                               base::span<const blink::TrialToken> new_tokens,
+                               const std::string& partition_site,
+                               bool append_only);
+
+  // Get the 'site' used as the partitioning key for trial tokens.
+  //
+  // The key is the eTLD+1 of the |origin|, taking private registries such as
+  // blogspot.com into account.
+  static std::string GetTokenPartitionSite(const url::Origin& origin);
 };
 
 }  // namespace origin_trials

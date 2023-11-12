@@ -7,10 +7,13 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "components/autofill/core/browser/autofill_download_manager.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/ssl_status.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "weblayer/browser/translate_client_impl.h"
@@ -18,6 +21,27 @@
 namespace weblayer {
 
 AutofillClientImpl::~AutofillClientImpl() = default;
+
+bool AutofillClientImpl::IsOffTheRecord() {
+  return web_contents()->GetBrowserContext()->IsOffTheRecord();
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+AutofillClientImpl::GetURLLoaderFactory() {
+  return web_contents()
+      ->GetBrowserContext()
+      ->GetDefaultStoragePartition()
+      ->GetURLLoaderFactoryForBrowserProcess();
+}
+
+autofill::AutofillDownloadManager* AutofillClientImpl::GetDownloadManager() {
+  if (!download_manager_) {
+    // Lazy initialization to avoid virtual function calls in the constructor.
+    download_manager_ = std::make_unique<autofill::AutofillDownloadManager>(
+        this, GetChannel(), GetLogManager());
+  }
+  return download_manager_.get();
+}
 
 autofill::PersonalDataManager* AutofillClientImpl::GetPersonalDataManager() {
   NOTREACHED();
@@ -108,7 +132,7 @@ translate::TranslateDriver* AutofillClientImpl::GetTranslateDriver() {
   return nullptr;
 }
 
-void AutofillClientImpl::ShowAutofillSettings(bool show_credit_card_settings) {
+void AutofillClientImpl::ShowAutofillSettings(autofill::PopupType popup_type) {
   NOTREACHED();
 }
 
@@ -248,20 +272,17 @@ bool AutofillClientImpl::IsFastCheckoutSupported() {
   return false;
 }
 
-bool AutofillClientImpl::IsFastCheckoutTriggerForm(
+bool AutofillClientImpl::TryToShowFastCheckout(
     const autofill::FormData& form,
-    const autofill::FormFieldData& field) {
+    const autofill::FormFieldData& field,
+    base::WeakPtr<autofill::AutofillManager> autofill_manager) {
   return false;
 }
 
-bool AutofillClientImpl::ShowFastCheckout(
-    base::WeakPtr<autofill::FastCheckoutDelegate> delegate) {
-  NOTREACHED();
-  return false;
-}
+void AutofillClientImpl::HideFastCheckout(bool allow_further_runs) {}
 
-void AutofillClientImpl::HideFastCheckout() {
-  NOTREACHED();
+bool AutofillClientImpl::IsShowingFastCheckoutUI() {
+  return false;
 }
 
 bool AutofillClientImpl::IsTouchToFillCreditCardSupported() {
@@ -270,7 +291,7 @@ bool AutofillClientImpl::IsTouchToFillCreditCardSupported() {
 
 bool AutofillClientImpl::ShowTouchToFillCreditCard(
     base::WeakPtr<autofill::TouchToFillDelegate> delegate,
-    base::span<const autofill::CreditCard* const> cards_to_suggest) {
+    base::span<const autofill::CreditCard> cards_to_suggest) {
   NOTREACHED();
   return false;
 }
@@ -298,10 +319,10 @@ void AutofillClientImpl::HideAutofillPopup(autofill::PopupHidingReason reason) {
   // take.
 }
 
-base::span<const autofill::Suggestion> AutofillClientImpl::GetPopupSuggestions()
+std::vector<autofill::Suggestion> AutofillClientImpl::GetPopupSuggestions()
     const {
   NOTIMPLEMENTED();
-  return base::span<const autofill::Suggestion>();
+  return {};
 }
 
 void AutofillClientImpl::PinPopupView() {
@@ -345,16 +366,6 @@ void AutofillClientImpl::DidFillOrPreviewField(
 }
 
 bool AutofillClientImpl::IsContextSecure() const {
-  NOTREACHED();
-  return false;
-}
-
-bool AutofillClientImpl::ShouldShowSigninPromo() {
-  NOTREACHED();
-  return false;
-}
-
-bool AutofillClientImpl::AreServerCardsSupported() const {
   NOTREACHED();
   return false;
 }

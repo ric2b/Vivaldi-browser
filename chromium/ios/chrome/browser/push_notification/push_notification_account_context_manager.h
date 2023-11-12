@@ -9,8 +9,6 @@
 
 #import "ios/chrome/browser/browser_state/chrome_browser_state_manager.h"
 
-class BrowserStateInfoCache;
-
 namespace ios {
 class ChromeBrowserStateManager;
 
@@ -21,8 +19,9 @@ class ChromeBrowserStateManager;
 // signed in across BrowserStates.
 @interface PushNotificationAccountContext : NSObject
 // A dictionary that maps the string value of a push notification client id to
-// the perf service value for that push notification enable feature.
-@property(nonatomic, copy) NSDictionary<NSString*, NSNumber*>* preferenceMap;
+// the pref service value for that push notification enable feature.
+@property(nonatomic, readonly)
+    NSDictionary<NSString*, NSNumber*>* preferenceMap;
 // A counter that stores the number of times a given account is used across
 // BrowserStates.
 @property(nonatomic, readonly) NSUInteger occurrencesAcrossBrowserStates;
@@ -32,7 +31,7 @@ class ChromeBrowserStateManager;
 // context data related to push notifications.
 @interface PushNotificationAccountContextManager : NSObject
 
-// The designated initializer. `BrowserStateInfoCache` must not be nil.
+// The designated initializer. `manager` must not be nil.
 - (instancetype)initWithChromeBrowserStateManager:
     (ios::ChromeBrowserStateManager*)manager NS_DESIGNATED_INITIALIZER;
 
@@ -45,7 +44,7 @@ class ChromeBrowserStateManager;
 
 // Removes the account from the manager if the account is not signed into the
 // device in any BrowserState. This function returns a BOOL value indicating
-// whether the account was removed from the maanger.
+// whether the account was removed from the manager.
 - (BOOL)removeAccount:(NSString*)gaiaID;
 
 // A dictionary that maps a user's GAIA ID to an object containing the account's

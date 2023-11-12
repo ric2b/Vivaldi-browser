@@ -8,8 +8,8 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -470,6 +470,13 @@ void PacmanFramePainter::DrawPacman(base::TimeDelta elapsed_time,
                                        2 * radius, 2 * radius);
   canvas.drawArc(rect, 0, end_angle, true, paint);
 
+  if (fake_device_state_->background_blur) {
+    // Draw a shadow circle to show background blur.
+    SkPaint circle_paint;
+    circle_paint.setARGB(20, 0, 127, 0);
+    canvas.drawCircle(rect.center(), radius * 3 / 2, circle_paint);
+  }
+
   // Draw current time.
   const int milliseconds = elapsed_time.InMilliseconds() % 1000;
   const int seconds = elapsed_time.InSeconds() % 60;
@@ -792,6 +799,7 @@ void ClientBufferFrameDeliverer::PaintAndDeliverNextFrame(
   uint8_t* data_ptr = buffer_access->data();
   memset(data_ptr, 0, buffer_access->mapped_size());
   frame_painter()->PaintFrame(timestamp_to_paint, data_ptr);
+  buffer_access.reset();  // Can't outlive `capture_buffer.handle_provider'.
 
   base::TimeTicks now = base::TimeTicks::Now();
   client()->OnIncomingCapturedBuffer(std::move(capture_buffer),

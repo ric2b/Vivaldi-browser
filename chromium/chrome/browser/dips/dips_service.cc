@@ -12,8 +12,10 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/strcat.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/dips/dips_features.h"
@@ -27,8 +29,13 @@
 #include "components/signin/public/base/persistent_repeating_timer.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "components/site_engagement/core/mojom/site_engagement_details.mojom.h"
+#include "content/public/browser/browser_task_traits.h"
+#include "content/public/browser/browser_thread.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 
 namespace {
 
@@ -86,6 +93,59 @@ inline void UmaHistogramBounceCategory(RedirectCategory category,
   base::UmaHistogramEnumeration(histogram_name, category);
 }
 
+inline void UmaHistogramDeletionLatency(base::Time deletion_start) {
+  base::UmaHistogramLongTimes100("Privacy.DIPS.DeletionLatency",
+                                 base::Time::Now() - deletion_start);
+}
+
+class StateClearer : public content::BrowsingDataRemover::Observer {
+ public:
+  StateClearer(const StateClearer&) = delete;
+  StateClearer& operator=(const StateClearer&) = delete;
+
+  ~StateClearer() override { remover_->RemoveObserver(this); }
+
+  // Clears state for the sites specified by 'filter'. Runs |callback| once
+  // clearing is complete.
+  //
+  // NOTE: This deletion task removing rows for `sites_to_clear` from the
+  // DIPSStorage backend relies on the assumption that rows flagged as DIPS
+  // eligible don't have user interaction time values. So even though 'remover'
+  // will only clear the storage timestamps, that's sufficient to delete the
+  // entire row.
+  static void DeleteState(
+      content::BrowsingDataRemover* remover,
+      std::unique_ptr<content::BrowsingDataFilterBuilder> filter,
+      base::OnceClosure callback) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+    // StateClearer manages its own lifetime and deletes itself when finished.
+    auto* state_clearer = new StateClearer(remover, std::move(callback));
+
+    remover->AddObserver(state_clearer);
+    remover->RemoveWithFilterAndReply(
+        base::Time::Min(), base::Time::Max(),
+        chrome_browsing_data_remover::FILTERABLE_DATA_TYPES |
+            content::BrowsingDataRemover::DATA_TYPE_AVOID_CLOSING_CONNECTIONS,
+        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
+            content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
+        std::move(filter), state_clearer);
+  }
+
+ private:
+  StateClearer(content::BrowsingDataRemover* remover,
+               base::OnceClosure callback)
+      : remover_(remover), callback_(std::move(callback)) {}
+
+  void OnBrowsingDataRemoverDone(uint64_t failed_data_types) override {
+    std::move(callback_).Run();
+    delete this;  // Matches the new in DeleteState()
+  }
+
+  raw_ptr<content::BrowsingDataRemover> remover_;
+  base::OnceClosure callback_;
+};
+
 }  // namespace
 
 DIPSService::DIPSService(content::BrowserContext* context)
@@ -94,18 +154,29 @@ DIPSService::DIPSService(content::BrowserContext* context)
           Profile::FromBrowserContext(context))),
       repeating_timer_(CreateTimer(Profile::FromBrowserContext(context))) {
   DCHECK(base::FeatureList::IsEnabled(dips::kFeature));
-  absl::optional<base::FilePath> path;
+  absl::optional<base::FilePath> path_to_use;
+  base::FilePath dips_path = GetDIPSFilePath(browser_context_);
 
   if (dips::kPersistedDatabaseEnabled.Get() &&
       !browser_context_->IsOffTheRecord()) {
-    path = browser_context_->GetPath().Append(kDIPSFilename);
+    path_to_use = dips_path;
+    // Existing database files won't be deleted, so quit the
+    // `wait_for_file_deletion_` RunLoop.
+    wait_for_file_deletion_.Quit();
+  } else {
+    // If opening in-memory, delete any database files that may exist.
+    DIPSStorage::DeleteDatabaseFiles(dips_path,
+                                     wait_for_file_deletion_.QuitClosure());
   }
-  storage_ = base::SequenceBound<DIPSStorage>(CreateTaskRunner(), path);
 
-  // TODO: Prevent use of the DB until prepopulation starts.
-  InitializeStorageWithEngagedSites();
-  if (repeating_timer_)
+  storage_ = base::SequenceBound<DIPSStorage>(CreateTaskRunner(), path_to_use);
+
+  storage_.AsyncCall(&DIPSStorage::IsPrepopulated)
+      .Then(base::BindOnce(&DIPSService::InitializeStorageWithEngagedSites,
+                           weak_factory_.GetWeakPtr()));
+  if (repeating_timer_) {
     repeating_timer_->Start();
+  }
 }
 
 std::unique_ptr<signin::PersistentRepeatingTimer> DIPSService::CreateTimer(
@@ -126,6 +197,7 @@ DIPSService* DIPSService::Get(content::BrowserContext* context) {
 }
 
 void DIPSService::Shutdown() {
+  cached_should_block_3pcs_ = cookie_settings_->ShouldBlockThirdPartyCookies();
   cookie_settings_.reset();
 }
 
@@ -135,20 +207,56 @@ scoped_refptr<base::SequencedTaskRunner> DIPSService::CreateTaskRunner() {
        base::ThreadPolicy::PREFER_BACKGROUND});
 }
 
+bool DIPSService::ShouldBlockThirdPartyCookies() const {
+  if (IsShuttingDown()) {
+    return cached_should_block_3pcs_.value();
+  }
+
+  return cookie_settings_->ShouldBlockThirdPartyCookies();
+}
+
+bool DIPSService::HasCookieException(const std::string& site) const {
+  DCHECK(!IsShuttingDown());
+  GURL url("https://" + site);
+
+  // Checks whether there is an exception allowing all third-parties embedded
+  // under |site| to use cookies.
+  if (cookie_settings_->IsFullCookieAccessAllowed(
+          GURL(), net::SiteForCookies::FromUrl(url), url::Origin::Create(url),
+          net::CookieSettingOverrides())) {
+    return true;
+  }
+
+  // Checks whether there is an exception allowing |site| to use cookies when
+  // embedded by any other site.
+  if (cookie_settings_->IsFullCookieAccessAllowed(
+          url, net::SiteForCookies(), absl::nullopt,
+          net::CookieSettingOverrides())) {
+    return true;
+  }
+
+  return false;
+}
+
 DIPSCookieMode DIPSService::GetCookieMode() const {
   return GetDIPSCookieMode(browser_context_->IsOffTheRecord(),
-                           cookie_settings_->ShouldBlockThirdPartyCookies());
+                           ShouldBlockThirdPartyCookies());
 }
 
 void DIPSService::RemoveEvents(const base::Time& delete_begin,
                                const base::Time& delete_end,
                                network::mojom::ClearDataFilterPtr filter,
                                DIPSEventRemovalType type) {
+  // Storage init should be finished by now, so no need to delay until then.
   storage_.AsyncCall(&DIPSStorage::RemoveEvents)
       .WithArgs(delete_begin, delete_end, std::move(filter), type);
 }
 
-void DIPSService::InitializeStorageWithEngagedSites() {
+void DIPSService::InitializeStorageWithEngagedSites(bool prepopulated) {
+  if (prepopulated) {
+    wait_for_prepopulating_.Quit();
+    return;
+  }
   base::Time now = base::Time::Now();
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
@@ -164,12 +272,20 @@ void DIPSService::InitializeStorageWithEngagedSites() {
 
 void DIPSService::InitializeStorage(base::Time time,
                                     std::vector<std::string> sites) {
-  storage_.AsyncCall(&DIPSStorage::Prepopulate).WithArgs(time, sites);
+  storage_.AsyncCall(&DIPSStorage::Prepopulate)
+      .WithArgs(time, sites, wait_for_prepopulating_.QuitClosure());
 }
 
 void DIPSService::HandleRedirectChain(
     std::vector<DIPSRedirectInfoPtr> redirects,
     DIPSRedirectChainInfoPtr chain) {
+  if (redirects.empty()) {
+    for (auto& observer : observers_) {
+      observer.OnChainHandled(chain);
+    }
+    return;
+  }
+
   chain->cookie_mode = GetCookieMode();
   // Copy the URL out before |redirects| is moved, to avoid use-after-move.
   GURL url = redirects[0]->url;
@@ -187,14 +303,16 @@ void DIPSService::GotState(std::vector<DIPSRedirectInfoPtr> redirects,
 
   DIPSRedirectInfo* redirect = redirects[index].get();
   // If there's any user interaction recorded in the DIPS DB, that's engagement.
-  redirect->has_interaction =
-      url_state.user_interaction_times().last.has_value();
+  redirect->has_interaction = url_state.user_interaction_times().has_value();
   HandleRedirect(
       *redirect, *chain,
       base::BindRepeating(&DIPSService::RecordBounce, base::Unretained(this)));
 
   if (index + 1 >= redirects.size()) {
     // All redirects handled.
+    for (auto& observer : observers_) {
+      observer.OnChainHandled(chain);
+    }
     return;
   }
 
@@ -258,12 +376,94 @@ void DIPSService::HandleRedirect(const DIPSRedirectInfo& redirect,
 
 void DIPSService::OnTimerFired() {
   base::Time start = base::Time::Now();
-  storage_.AsyncCall(&DIPSStorage::DeleteDIPSEligibleState)
-      .WithArgs(GetCookieMode())
-      .Then(base::BindOnce(
-          [](base::Time deletion_start) {
-            base::UmaHistogramLongTimes100("Privacy.DIPS.DeletionLatency",
-                                           base::Time::Now() - deletion_start);
-          },
-          start));
+  // Storage init should be finished by now, so no need to delay until then.
+  storage_.AsyncCall(&DIPSStorage::GetSitesToClear)
+      .Then(base::BindOnce(&DIPSService::DeleteDIPSEligibleState,
+                           weak_factory_.GetWeakPtr(), start));
+}
+
+void DIPSService::DeleteDIPSEligibleState(
+    base::Time deletion_start,
+    std::vector<std::string> sites_to_clear) {
+  base::UmaHistogramCounts1000(
+      base::StrCat({"Privacy.DIPS.ClearedSitesCount",
+                    GetHistogramSuffix(GetCookieMode())}),
+      sites_to_clear.size());
+
+  if (sites_to_clear.empty()) {
+    return;
+  }
+
+  for (const auto& site : sites_to_clear) {
+    const ukm::SourceId source_id = ukm::UkmRecorder::GetSourceIdForDipsSite(
+        base::PassKey<DIPSService>(), site);
+    ukm::builders::DIPS_Deletion(source_id).SetDetected(true).Record(
+        ukm::UkmRecorder::Get());
+  }
+
+  if (ShouldBlockThirdPartyCookies() && dips::kDeletionEnabled.Get()) {
+    if (IsShuttingDown()) {
+      return;
+    }
+
+    std::vector<std::string> excepted_sites;
+    std::vector<std::string> non_excepted_sites;
+
+    for (const auto& site : sites_to_clear) {
+      if (HasCookieException(site)) {
+        excepted_sites.push_back(site);
+      } else {
+        non_excepted_sites.push_back(site);
+      }
+    }
+
+    if (excepted_sites.empty()) {
+      PostDeletionTaskToUIThread(deletion_start, std::move(non_excepted_sites));
+    } else {
+      // Storage init should be finished by now, so no need to delay until then.
+      storage_.AsyncCall(&DIPSStorage::RemoveRows)
+          .WithArgs(std::move(excepted_sites))
+          .Then(base::BindOnce(&DIPSService::PostDeletionTaskToUIThread,
+                               weak_factory_.GetWeakPtr(), deletion_start,
+                               std::move(non_excepted_sites)));
+    }
+  } else {
+    // Storage init should be finished by now, so no need to delay until then.
+    storage_.AsyncCall(&DIPSStorage::RemoveRows)
+        .WithArgs(std::move(sites_to_clear))
+        .Then(base::BindOnce(&UmaHistogramDeletionLatency, deletion_start));
+  }
+}
+
+void DIPSService::PostDeletionTaskToUIThread(base::Time deletion_start,
+                                             std::vector<std::string> sites) {
+  std::unique_ptr<content::BrowsingDataFilterBuilder> filter =
+      content::BrowsingDataFilterBuilder::Create(
+          content::BrowsingDataFilterBuilder::Mode::kDelete);
+  for (const auto& site : sites) {
+    filter->AddRegisterableDomain(site);
+  }
+
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&DIPSService::RunDeletionTaskOnUIThread,
+                                weak_factory_.GetWeakPtr(), std::move(filter),
+                                base::BindOnce(&UmaHistogramDeletionLatency,
+                                               deletion_start)));
+}
+
+void DIPSService::RunDeletionTaskOnUIThread(
+    std::unique_ptr<content::BrowsingDataFilterBuilder> filter,
+    base::OnceClosure callback) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  StateClearer::DeleteState(browser_context_->GetBrowsingDataRemover(),
+                            std::move(filter), std::move(callback));
+}
+
+void DIPSService::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void DIPSService::RemoveObserver(const Observer* observer) {
+  observers_.RemoveObserver(observer);
 }

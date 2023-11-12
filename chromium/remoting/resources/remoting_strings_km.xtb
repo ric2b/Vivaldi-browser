@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">កំណែពិធីការមិនត្រូវគ្នាត្រូវបានរកឃើញ។ សូមប្រាកដថាអ្នកបានដំឡើងកំណែកម្មវិធីចុងក្រោយបំផុតលើកុំព្យូទ័រទាំងពីរ ហើយព្យាយាមម្តងទៀត។</translation>
 <translation id="1008557486741366299">មិនមែនឥឡូវនេះទេ</translation>
 <translation id="1201402288615127009">បន្ទាប់</translation>
+<translation id="1296511125400541222">រក្សាសិទ្ធិ​ដោយ Chromium Authors ឆ្នាំ 2023។ រក្សាសិទ្ធិគ្រប់យ៉ាង។</translation>
 <translation id="1297009705180977556">មានបញ្ហាក្នុងការភា្ជប់ទៅ <ph name="HOSTNAME" /></translation>
 <translation id="1450760146488584666">របស់ដែលបានស្នើមិនមានទេ។</translation>
 <translation id="1480046233931937785">ក្រេឌីត</translation>
@@ -36,7 +37,6 @@
 <translation id="2599300881200251572">សេវាកម្មនេះបើកដំណើរការភ្ជាប់ចូលមកពីអតិថិជន Chrome Remote Desktop។</translation>
 <translation id="2647232381348739934">សេវាកម្ម Chromoting</translation>
 <translation id="2676780859508944670">កំពុងដំណើរការ…</translation>
-<translation id="2692522824157224199">រក្សាសិទ្ធិដោយ Google LLC ឆ្នាំ 2022។ រក្សាសិទ្ធិគ្រប់យ៉ាង។</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2758123043070977469">មានបញ្ហា​ក្នុងការ​ផ្ទៀងផ្ទាត់ សូមចូល​គណនី​ម្តងទៀត។</translation>
 <translation id="2803375539583399270">បញ្ចូលកូដ PIN</translation>
@@ -73,7 +73,6 @@
 <translation id="4257751272692708833">កម្មវិធីបញ្ជូន URL បន្តរបស់ <ph name="PRODUCT_NAME" /></translation>
 <translation id="4277736576214464567">លេខកូូដចូលប្រើគ្មានសុពលភាព។ សូមព្យាយាមម្តងទៀត។</translation>
 <translation id="4281844954008187215">លក្ខខណ្ឌសេវាកម្ម</translation>
-<translation id="4372650392690220936">រក្សាសិទ្ធិដោយ Chromium Authors ឆ្នាំ 2022។ រក្សាសិទ្ធិគ្រប់យ៉ាង។</translation>
 <translation id="4405930547258349619">បណ្ណាល័យស្នូល</translation>
 <translation id="443560535555262820">បើក​ចំណូលចិត្ត "ភាពងាយស្រួល"</translation>
 <translation id="4450893287417543264">កុំបង្ហាញម្ដងទៀត</translation>
@@ -90,6 +89,7 @@
 <translation id="4808503597364150972">សូមបញ្ចូលលេខសម្គាល់របស់អ្នកសម្រាប់ <ph name="HOSTNAME" />។</translation>
 <translation id="4812684235631257312">ឧបករណ៍ចែករំលែកបណ្តាញ</translation>
 <translation id="4867841927763172006">ផ្ញើ PrtScn</translation>
+<translation id="4960795469833295568">រក្សាសិទ្ធិ​ដោយ Google LLC ឆ្នាំ 2023។ រក្សាសិទ្ធិ​គ្រប់យ៉ាង។</translation>
 <translation id="4974476491460646149">បានបិទការតភ្ជាប់សម្រាប់ <ph name="HOSTNAME" /></translation>
 <translation id="4985296110227979402">អ្នកត្រូវតែដំឡើងកុំព្យូទ័ររបស់អ្នកជាមុនសិនសម្រាប់ការចូលប្រើពីចម្ងាយ</translation>
 <translation id="4987330545941822761">Chrome Remote Desktop មិនអាចកំណត់​កម្មវិធីរុករកតាម​អ៊ីនធឺណិត ដើម្បីបើក URL ក្នុងឧបករណ៍​បានទេ។ សូមជ្រើសរើសកម្មវិធីរុករក​តាមអ៊ីនធឺណិតពីបញ្ជីខាងក្រោម។</translation>

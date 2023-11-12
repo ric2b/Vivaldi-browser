@@ -5,7 +5,7 @@
 import 'chrome://personalization/strings.m.js';
 import 'chrome://webui-test/mojo_webui_test_support.js';
 
-import {cancelPreviewWallpaper, DefaultImageSymbol, DisplayableImage, fetchCollections, fetchGooglePhotosAlbum, fetchGooglePhotosAlbums, fetchLocalData, getDefaultImageThumbnail, GooglePhotosAlbum, GooglePhotosEnablementState, GooglePhotosPhoto, initializeBackdropData, initializeGooglePhotosData, isDefaultImage, isFilePath, isGooglePhotosPhoto, isWallpaperImage, kDefaultImageSymbol, selectGooglePhotosAlbum, selectWallpaper, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
+import {cancelPreviewWallpaper, DailyRefreshType, DefaultImageSymbol, DisplayableImage, fetchCollections, fetchGooglePhotosAlbum, fetchGooglePhotosAlbums, fetchLocalData, getDefaultImageThumbnail, GooglePhotosEnablementState, GooglePhotosPhoto, initializeBackdropData, initializeGooglePhotosData, isDefaultImage, isFilePath, isGooglePhotosPhoto, isWallpaperImage, kDefaultImageSymbol, selectGooglePhotosAlbum, selectWallpaper, updateDailyRefreshWallpaper, WallpaperLayout, WallpaperType} from 'chrome://personalization/js/personalization_app.js';
 import {assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
@@ -48,74 +48,89 @@ suite('Personalization app controller', () => {
     personalizationStore.setReducersEnabled(true);
   });
 
-  [true, false].forEach(isGooglePhotosIntegrationEnabled => {
-    test('initializes Google Photos data in store', async () => {
-      loadTimeData.overrideValues({isGooglePhotosIntegrationEnabled});
+  test('initializes Google Photos data in store', async () => {
+    loadTimeData.overrideValues({isGooglePhotosIntegrationEnabled: true});
 
-      await initializeGooglePhotosData(wallpaperProvider, personalizationStore);
+    await initializeGooglePhotosData(wallpaperProvider, personalizationStore);
 
-      const expectedEnabled = isGooglePhotosIntegrationEnabled ?
-          GooglePhotosEnablementState.kEnabled :
-          GooglePhotosEnablementState.kError;
+    const expectedEnabled = GooglePhotosEnablementState.kEnabled;
 
-      assertDeepEquals(
-          [
-            {
-              name: 'begin_load_google_photos_enabled',
+    assertDeepEquals(
+        [
+          {
+            name: 'begin_load_google_photos_enabled',
+          },
+          {
+            name: 'set_google_photos_enabled',
+            enabled: expectedEnabled,
+          },
+        ],
+        personalizationStore.actions);
+
+    assertDeepEquals(
+        [
+          // BEGIN_LOAD_GOOGLE_PHOTOS_ENABLED.
+          {
+            'wallpaper.loading.googlePhotos': {
+              enabled: true,
+              albums: false,
+              albumsShared: false,
+              photos: false,
+              photosByAlbumId: {},
             },
-            {
-              name: 'set_google_photos_enabled',
+            'wallpaper.googlePhotos': {
+              enabled: undefined,
+              albums: undefined,
+              albumsShared: undefined,
+              photos: undefined,
+              photosByAlbumId: {},
+              resumeTokens: {
+                albums: null,
+                albumsShared: null,
+                photos: null,
+                photosByAlbumId: {},
+              },
+            },
+          },
+          // SET_GOOGLE_PHOTOS_ENABLED.
+          {
+            'wallpaper.loading.googlePhotos': {
+              enabled: false,
+              albums: false,
+              albumsShared: false,
+              photos: false,
+              photosByAlbumId: {},
+            },
+            'wallpaper.googlePhotos': {
               enabled: expectedEnabled,
-            },
-          ],
-          personalizationStore.actions);
-
-      assertDeepEquals(
-          [
-            // BEGIN_LOAD_GOOGLE_PHOTOS_ENABLED.
-            {
-              'wallpaper.loading.googlePhotos': {
-                enabled: true,
-                albums: false,
-                photos: false,
+              albums: undefined,
+              albumsShared: undefined,
+              photos: undefined,
+              photosByAlbumId: {},
+              resumeTokens: {
+                albums: null,
+                albumsShared: null,
+                photos: null,
                 photosByAlbumId: {},
-              },
-              'wallpaper.googlePhotos': {
-                enabled: undefined,
-                albums: undefined,
-                photos: undefined,
-                photosByAlbumId: {},
-                resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
               },
             },
-            // SET_GOOGLE_PHOTOS_ENABLED.
-            {
-              'wallpaper.loading.googlePhotos': {
-                enabled: false,
-                albums: false,
-                photos: false,
-                photosByAlbumId: {},
-              },
-              'wallpaper.googlePhotos': {
-                enabled: expectedEnabled,
-                albums: undefined,
-                photos: undefined,
-                photosByAlbumId: {},
-                resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
-              },
-            },
-          ],
-          personalizationStore.states.map(filterAndFlattenState(
-              ['wallpaper.googlePhotos', 'wallpaper.loading.googlePhotos'])));
-    });
+          },
+        ],
+        personalizationStore.states.map(filterAndFlattenState(
+            ['wallpaper.googlePhotos', 'wallpaper.loading.googlePhotos'])));
   });
 
   test('sets Google Photos album in store', async () => {
     loadTimeData.overrideValues({isGooglePhotosIntegrationEnabled: true});
 
-    const album = new GooglePhotosAlbum();
-    album.id = '9bd1d7a3-f995-4445-be47-53c5b58ce1cb';
-    album.preview = {url: 'bar.com'};
+    const album = {
+      id: '9bd1d7a3-f995-4445-be47-53c5b58ce1cb',
+      title: '',
+      photoCount: 0,
+      isShared: false,
+      preview: {url: 'bar.com'},
+      timestamp: {internalValue: BigInt(0)},
+    };
 
     const photos: GooglePhotosPhoto[] = [{
       id: '9bd1d7a3-f995-4445-be47-53c5b58ce1cb',
@@ -164,6 +179,7 @@ suite('Personalization app controller', () => {
             'wallpaper.loading.googlePhotos': {
               enabled: false,
               albums: false,
+              albumsShared: false,
               photos: false,
               photosByAlbumId: {
                 [album.id]: true,
@@ -174,12 +190,22 @@ suite('Personalization app controller', () => {
               albums: [
                 {
                   id: album.id,
+                  title: album.title,
                   preview: album.preview,
+                  photoCount: album.photoCount,
+                  isShared: album.isShared,
+                  timestamp: album.timestamp,
                 },
               ],
+              albumsShared: undefined,
               photos: undefined,
               photosByAlbumId: {},
-              resumeTokens: {albums: null, photos: null, photosByAlbumId: {}},
+              resumeTokens: {
+                albums: null,
+                albumsShared: null,
+                photos: null,
+                photosByAlbumId: {},
+              },
             },
           },
           // APPEND_GOOGLE_PHOTOS_ALBUM
@@ -187,6 +213,7 @@ suite('Personalization app controller', () => {
             'wallpaper.loading.googlePhotos': {
               enabled: false,
               albums: false,
+              albumsShared: false,
               photos: false,
               photosByAlbumId: {
                 [album.id]: false,
@@ -197,15 +224,21 @@ suite('Personalization app controller', () => {
               albums: [
                 {
                   id: album.id,
+                  title: album.title,
+                  photoCount: album.photoCount,
+                  isShared: album.isShared,
                   preview: album.preview,
+                  timestamp: album.timestamp,
                 },
               ],
+              albumsShared: undefined,
               photos: undefined,
               photosByAlbumId: {
                 [album.id]: photos,
               },
               resumeTokens: {
                 albums: null,
+                albumsShared: null,
                 photos: null,
                 photosByAlbumId: {[album.id]: null},
               },
@@ -531,11 +564,76 @@ suite('Personalization app controller', () => {
             .data[kDefaultImageSymbol],
         'default image is not loading');
   });
+
+  test('fails to enable Google Photos daily refresh', async () => {
+    wallpaperProvider.selectGooglePhotosAlbumResponse = {
+      success: false,
+      forceRefresh: true,
+    };
+
+    wallpaperProvider.albumId = 'albumId';
+    wallpaperProvider.collectionId = '';
+
+    const selectGooglePhotosAlbumPromise = selectGooglePhotosAlbum(
+        'albumId', wallpaperProvider, personalizationStore);
+
+    await Promise.all([
+      wallpaperProvider.getDailyRefreshCollectionId(),
+      wallpaperProvider.getGooglePhotosDailyRefreshAlbumId(),
+    ]);
+
+    await selectGooglePhotosAlbumPromise;
+
+    assertDeepEquals(
+        [
+          // Set error action when daily refresh failed.
+          {
+            name: 'set_error',
+            error: {message: loadTimeData.getString('googlePhotosError')},
+          },
+          // Set daily refresh enabled for the selected Google Photos album.
+          {
+            name: 'set_google_photos_daily_refresh_album_id',
+            albumId: 'albumId',
+          },
+        ],
+        personalizationStore.actions);
+  });
+
+  test(
+      'fails to refresh a new wallpaper in a Google Photos album', async () => {
+        personalizationStore.data.wallpaper.dailyRefresh = {
+          id: 'abumId',
+          type: DailyRefreshType.GOOGLE_PHOTOS,
+        };
+        wallpaperProvider.updateDailyRefreshWallpaperResponse = false;
+        await updateDailyRefreshWallpaper(
+            wallpaperProvider, personalizationStore);
+        assertDeepEquals(
+            [
+              {
+                name: 'begin_update_daily_refresh_image',
+              },
+              {
+                name: 'begin_load_selected_image',
+              },
+              {
+                name: 'set_updated_daily_refreshed_image',
+              },
+              {
+                name: 'set_selected_image',
+                image: personalizationStore.data.wallpaper.currentSelected,
+              },
+              {
+                name: 'set_error',
+                error: {message: loadTimeData.getString('googlePhotosError')},
+              },
+            ],
+            personalizationStore.actions);
+      });
 });
 
 suite('full screen mode', () => {
-  const fullscreenPreviewFeature = 'fullScreenPreviewEnabled';
-
   let wallpaperProvider: TestWallpaperProvider;
   let personalizationStore: TestPersonalizationStore;
 
@@ -545,67 +643,36 @@ suite('full screen mode', () => {
     personalizationStore.setReducersEnabled(true);
   });
 
-  test(
-      'enters full screen mode when in tablet and preview flag is set',
-      async () => {
-        await initializeBackdropData(wallpaperProvider, personalizationStore);
+  test('enters full screen mode when in tablet', async () => {
+    await initializeBackdropData(wallpaperProvider, personalizationStore);
 
-        assertFalse(personalizationStore.data.wallpaper.fullscreen);
+    assertFalse(personalizationStore.data.wallpaper.fullscreen);
 
-        loadTimeData.overrideValues({[fullscreenPreviewFeature]: false});
-        wallpaperProvider.isInTabletModeResponse = true;
+    wallpaperProvider.isInTabletModeResponse = true;
 
-        {
-          const selectWallpaperPromise = selectWallpaper(
-              wallpaperProvider.images![0]!, wallpaperProvider,
-              personalizationStore);
-          const [assetId, previewMode] =
-              await wallpaperProvider.whenCalled('selectWallpaper');
-          assertFalse(previewMode);
-          assertEquals(wallpaperProvider.images![0]!.assetId, assetId);
+    assertEquals(0, wallpaperProvider.getCallCount('makeTransparent'));
+    assertEquals(0, wallpaperProvider.getCallCount('makeOpaque'));
 
-          await selectWallpaperPromise;
-          assertEquals(
-              0, wallpaperProvider.getCallCount('makeTransparent'),
-              'makeTransparent is not called when fullscreen preview is off');
-          assertEquals(
-              0, wallpaperProvider.getCallCount('makeOpaque'),
-              'makeOpaque is not called when fullscreen preview is off');
+    const selectWallpaperPromise = selectWallpaper(
+        wallpaperProvider.images![0]!, wallpaperProvider, personalizationStore);
 
-          assertFalse(personalizationStore.data.wallpaper.fullscreen);
-        }
+    const [assetId, previewMode] =
+        await wallpaperProvider.whenCalled('selectWallpaper');
+    assertTrue(previewMode);
+    assertEquals(wallpaperProvider.images![0]!.assetId, assetId);
 
-        wallpaperProvider.reset();
+    await selectWallpaperPromise;
+    assertEquals(
+        1, wallpaperProvider.getCallCount('makeTransparent'),
+        'makeTransparent is called while calling selectWallpaper');
 
-        {
-          // Now with flag turned on.
-          loadTimeData.overrideValues({[fullscreenPreviewFeature]: true});
+    assertTrue(personalizationStore.data.wallpaper.fullscreen);
 
-          assertEquals(0, wallpaperProvider.getCallCount('makeTransparent'));
-          assertEquals(0, wallpaperProvider.getCallCount('makeOpaque'));
-
-          const selectWallpaperPromise = selectWallpaper(
-              wallpaperProvider.images![0]!, wallpaperProvider,
-              personalizationStore);
-
-          const [assetId, previewMode] =
-              await wallpaperProvider.whenCalled('selectWallpaper');
-          assertTrue(previewMode);
-          assertEquals(wallpaperProvider.images![0]!.assetId, assetId);
-
-          await selectWallpaperPromise;
-          assertEquals(
-              1, wallpaperProvider.getCallCount('makeTransparent'),
-              'makeTransparent is called while calling selectWallpaper');
-
-          assertTrue(personalizationStore.data.wallpaper.fullscreen);
-
-          await cancelPreviewWallpaper(wallpaperProvider);
-          assertEquals(
-              1, wallpaperProvider.getCallCount('makeOpaque'),
-              'makeOpaque is called while calling cancelPreviewWallpaper');
-        }
-      });
+    await cancelPreviewWallpaper(wallpaperProvider);
+    assertEquals(
+        1, wallpaperProvider.getCallCount('makeOpaque'),
+        'makeOpaque is called while calling cancelPreviewWallpaper');
+  });
 });
 
 suite('observes pendingState during wallpaper selection', () => {
@@ -849,7 +916,10 @@ suite('does not respond to re-selecting the current wallpaper', () => {
     const pendingSelected = personalizationStore.data.wallpaper.pendingSelected;
     assertEquals(pendingSelected, image);
     personalizationStore.data.wallpaper.currentSelected = {
-      key: getImageKey(image),
+      attribution: [],
+      description: undefined,
+      key: getImageKey(image)!,
+      layout: WallpaperLayout.kCenterCropped,
       type: getImageType(image),
     };
     personalizationStore.data.wallpaper.pendingSelected = null;
@@ -929,6 +999,9 @@ suite('updates default image', () => {
     // state.
     personalizationStore.reset(personalizationStore.data);
 
+    assertTrue(
+        Array.isArray(personalizationStore.data.wallpaper.local.images),
+        'wallpaper.local.images is not array');
     assertTrue(
         personalizationStore.data.wallpaper.local.images.every(
             (image: FilePath|DefaultImageSymbol) => isFilePath(image) &&

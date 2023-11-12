@@ -31,13 +31,13 @@ using InsetValueSequence =
 
 namespace {
 
-double ComputeOffset(LayoutBox* subject,
-                     LayoutBox* source,
+double ComputeOffset(Element* source_element,
+                     LayoutBox* subject_layout,
+                     LayoutBox* source_layout,
                      ScrollOrientation physical_orientation) {
-  Element* source_element = DynamicTo<Element>(source->GetNode());
   MapCoordinatesFlags flags = kIgnoreScrollOffset;
-  gfx::PointF point = gfx::PointF(
-      subject->LocalToAncestorPoint(PhysicalOffset(), source, flags));
+  gfx::PointF point = gfx::PointF(subject_layout->LocalToAncestorPoint(
+      PhysicalOffset(), source_layout, flags));
 
   // We can not call the regular clientLeft/Top functions here, because we
   // may reach this function during style resolution, and clientLeft/Top
@@ -159,11 +159,14 @@ Length InsetValueToLength(const CSSValue* inset_value,
   if (inset_value->IsPrimitiveValue()) {
     ElementResolveContext element_resolve_context(*subject);
     Document& document = subject->GetDocument();
+    // Flags can be ignored, because we re-resolve any value that's not px or
+    // percentage, see IsStyleDependent.
+    CSSToLengthConversionData::Flags ignored_flags = 0;
     CSSToLengthConversionData length_conversion_data(
-        subject->GetComputedStyle(), element_resolve_context.ParentStyle(),
+        subject->ComputedStyleRef(), element_resolve_context.ParentStyle(),
         element_resolve_context.RootElementStyle(), document.GetLayoutView(),
         CSSToLengthConversionData::ContainerSizes(subject),
-        subject->GetComputedStyle()->EffectiveZoom());
+        subject->GetComputedStyle()->EffectiveZoom(), ignored_flags);
 
     return DynamicTo<CSSPrimitiveValue>(inset_value)
         ->ConvertToLength(length_conversion_data);
@@ -178,7 +181,7 @@ Length InsetValueToLength(const CSSValue* inset_value,
 ViewTimeline* ViewTimeline::Create(Document& document,
                                    ViewTimelineOptions* options,
                                    ExceptionState& exception_state) {
-  Element* subject = options->subject();
+  Element* subject = options->hasSubject() ? options->subject() : nullptr;
 
   ScrollAxis axis =
       options->hasAxis() ? options->axis().AsEnum() : ScrollAxis::kBlock;
@@ -247,18 +250,34 @@ ViewTimeline::ViewTimeline(Document* document,
 }
 
 AnimationTimeDelta ViewTimeline::CalculateIntrinsicIterationDuration(
+    const Animation* animation,
     const Timing& timing) {
   absl::optional<AnimationTimeDelta> duration = GetDuration();
 
   // Only run calculation for progress based scroll timelines
   if (duration && timing.iteration_count > 0) {
     double active_interval = 1;
-    absl::optional<double> start_delay = ToFractionalOffset(timing.start_delay);
-    if (start_delay)
-      active_interval -= start_delay.value();
-    absl::optional<double> end_delay = ToFractionalOffset(timing.end_delay);
-    if (end_delay)
-      active_interval -= (1 - end_delay.value());
+
+    double start = animation->GetRangeStart()
+                       ? ToFractionalOffset(animation->GetRangeStart().value())
+                       : 0;
+    double end = animation->GetRangeEnd()
+                     ? ToFractionalOffset(animation->GetRangeEnd().value())
+                     : 1;
+
+    active_interval -= start;
+    active_interval -= (1 - end);
+
+    // Start and end delays are proportional to the active interval.
+    double start_delay = timing.start_delay.relative_delay.value_or(0);
+    double end_delay = timing.end_delay.relative_delay.value_or(0);
+    double delay = start_delay + end_delay;
+
+    if (delay >= 1) {
+      return AnimationTimeDelta();
+    }
+
+    active_interval *= (1 - delay);
     return duration.value() * active_interval / timing.iteration_count;
   }
   return AnimationTimeDelta();
@@ -267,18 +286,25 @@ AnimationTimeDelta ViewTimeline::CalculateIntrinsicIterationDuration(
 absl::optional<ScrollTimeline::ScrollOffsets> ViewTimeline::CalculateOffsets(
     PaintLayerScrollableArea* scrollable_area,
     ScrollOrientation physical_orientation) const {
+  // Do not call this method with an inactive timeline.
+  // Called from ScrollTimeline::ComputeTimelineState, which has safeguard.
+  // Any new call sites will require a similar safeguard.
+  DCHECK(ComputeIsActive());
   DCHECK(subject());
   LayoutBox* layout_box = subject()->GetLayoutBox();
   DCHECK(layout_box);
   Element* source = SourceInternal();
+  Node* resolved_source = ResolvedSource();
   DCHECK(source);
-  LayoutBox* source_layout = source->GetLayoutBox();
+  DCHECK(resolved_source);
+  LayoutBox* source_layout = resolved_source->GetLayoutBox();
   DCHECK(source_layout);
 
   LayoutUnit viewport_size;
 
   target_offset_ =
-      ComputeOffset(layout_box, source_layout, physical_orientation);
+      ComputeOffset(source, layout_box, source_layout, physical_orientation);
+
   if (physical_orientation == kHorizontalScroll) {
     target_size_ = layout_box->Size().Width().ToDouble();
     viewport_size = scrollable_area->LayoutContentRect().Width();
@@ -329,26 +355,30 @@ CSSNumericValue* ViewTimeline::getCurrentTime(const String& rangeName) {
   if (!IsActive())
     return nullptr;
 
-  Timing::Delay range_start;
-  Timing::Delay range_end;
+  TimelineOffset range_start;
+  TimelineOffset range_end;
   if (rangeName == "cover") {
-    range_start.phase = Timing::TimelineNamedPhase::kCover;
+    range_start.name = TimelineOffset::NamedRange::kCover;
   } else if (rangeName == "contain") {
-    range_start.phase = Timing::TimelineNamedPhase::kContain;
-  } else if (rangeName == "enter") {
-    range_start.phase = Timing::TimelineNamedPhase::kEnter;
+    range_start.name = TimelineOffset::NamedRange::kContain;
+  } else if (rangeName == "entry") {
+    range_start.name = TimelineOffset::NamedRange::kEntry;
+  } else if (rangeName == "entry-crossing") {
+    range_start.name = TimelineOffset::NamedRange::kEntryCrossing;
   } else if (rangeName == "exit") {
-    range_start.phase = Timing::TimelineNamedPhase::kExit;
+    range_start.name = TimelineOffset::NamedRange::kExit;
+  } else if (rangeName == "exit-crossing") {
+    range_start.name = TimelineOffset::NamedRange::kExitCrossing;
   } else {
     return nullptr;
   }
 
-  range_start.relative_offset = 0;
-  range_end.phase = range_start.phase;
-  range_end.relative_offset = 1;
+  range_start.offset = Length::Percent(0);
+  range_end.name = range_start.name;
+  range_end.offset = Length::Percent(100);
 
-  double relative_start_offset = ToFractionalOffset(range_start).value();
-  double relative_end_offset = ToFractionalOffset(range_end).value();
+  double relative_start_offset = ToFractionalOffset(range_start);
+  double relative_end_offset = ToFractionalOffset(range_end);
   double range = relative_end_offset - relative_start_offset;
 
   // TODO(https://github.com/w3c/csswg-drafts/issues/8114): Update and add tests
@@ -372,12 +402,8 @@ CSSNumericValue* ViewTimeline::getCurrentTime(const String& rangeName) {
   return CSSUnitValues::percent(named_range_progress * 100);
 }
 
-absl::optional<double> ViewTimeline::ToFractionalOffset(
-    const Timing::Delay& delay) const {
-  absl::optional<double> result;
-  if (delay.phase == Timing::TimelineNamedPhase::kNone)
-    return result;
-
+double ViewTimeline::ToFractionalOffset(
+    const TimelineOffset& timeline_offset) const {
   // https://drafts.csswg.org/scroll-animations-1/#view-timelines-ranges
   double align_subject_start_view_end =
       target_offset_ - viewport_size_ + end_side_inset_;
@@ -392,10 +418,11 @@ absl::optional<double> ViewTimeline::ToFractionalOffset(
   if (!range)
     return 0;
 
-  double phase_start = 0;
-  double phase_end = 0;
-  switch (delay.phase) {
-    case Timing::TimelineNamedPhase::kCover:
+  double range_start = 0;
+  double range_end = 0;
+  switch (timeline_offset.name) {
+    case TimelineOffset::NamedRange::kNone:
+    case TimelineOffset::NamedRange::kCover:
       // Represents the full range of the view progress timeline:
       //   0% progress represents the position at which the start border edge of
       //   the element’s principal box coincides with the end edge of its view
@@ -403,11 +430,11 @@ absl::optional<double> ViewTimeline::ToFractionalOffset(
       //   100% progress represents the position at which the end border edge of
       //   the element’s principal box coincides with the start edge of its view
       //   progress visibility range.
-      phase_start = align_subject_start_view_end;
-      phase_end = align_subject_end_view_start;
+      range_start = align_subject_start_view_end;
+      range_end = align_subject_end_view_start;
       break;
 
-    case Timing::TimelineNamedPhase::kContain:
+    case TimelineOffset::NamedRange::kContain:
       // Represents the range during which the principal box is either fully
       // contained by, or fully covers, its view progress visibility range
       // within the scrollport.
@@ -421,54 +448,86 @@ absl::optional<double> ViewTimeline::ToFractionalOffset(
       //      with the start edge of its view progress visibility range.
       //   2. the end border edge of the element’s principal box coincides with
       //      the end edge of its view progress visibility range.
-      phase_start =
+      range_start =
           std::min(align_subject_start_view_start, align_subject_end_view_end);
-      phase_end =
+      range_end =
           std::max(align_subject_start_view_start, align_subject_end_view_end);
       break;
 
-    case Timing::TimelineNamedPhase::kEnter:
+    case TimelineOffset::NamedRange::kEntry:
       // Represents the range during which the principal box is entering the
       // view progress visibility range.
       //   0% is equivalent to 0% of the cover range.
       //   100% is equivalent to 0% of the contain range.
-      phase_start = align_subject_start_view_end;
-      phase_end =
+      range_start = align_subject_start_view_end;
+      range_end =
           std::min(align_subject_start_view_start, align_subject_end_view_end);
       break;
 
-    case Timing::TimelineNamedPhase::kExit:
+    case TimelineOffset::NamedRange::kEntryCrossing:
+      // Represents the range during which the principal box is crossing the
+      // entry edge of the viewport.
+      //   0% is equivalent to 0% of the cover range.
+      range_start = align_subject_start_view_end;
+      range_end = align_subject_end_view_end;
+      break;
+
+    case TimelineOffset::NamedRange::kExit:
       // Represents the range during which the principal box is exiting the view
       // progress visibility range.
       //   0% is equivalent to 100% of the contain range.
       //   100% is equivalent to 100% of the cover range.
-      phase_start =
+      range_start =
           std::max(align_subject_start_view_start, align_subject_end_view_end);
-      phase_end = align_subject_end_view_start;
+      range_end = align_subject_end_view_start;
       break;
 
-    case Timing::TimelineNamedPhase::kNone:
-      NOTREACHED();
+    case TimelineOffset::NamedRange::kExitCrossing:
+      // Represents the range during which the principal box is exiting the view
+      // progress visibility range.
+      //   100% is equivalent to 100% of the cover range.
+      range_start = align_subject_start_view_start;
+      range_end = align_subject_end_view_start;
+      break;
   }
 
-  DCHECK(phase_end >= phase_start);
+  DCHECK(range_end >= range_start);
   DCHECK_GT(range, 0);
+
   double offset =
-      phase_start + (phase_end - phase_start) * delay.relative_offset;
+      range_start + MinimumValueForLength(timeline_offset.offset,
+                                          LayoutUnit(range_end - range_start));
   return (offset - align_subject_start_view_end) / range;
 }
 
-AnimationTimeline::TimeDelayPair ViewTimeline::TimelineOffsetsToTimeDelays(
+AnimationTimeline::TimeDelayPair ViewTimeline::ComputeEffectiveAnimationDelays(
+    const Animation* animation,
     const Timing& timing) const {
   absl::optional<AnimationTimeDelta> duration = GetDuration();
   if (!duration)
     return std::make_pair(AnimationTimeDelta(), AnimationTimeDelta());
+  double range_start =
+      animation->GetRangeStart()
+          ? ToFractionalOffset(animation->GetRangeStart().value())
+          : 0;
+  double range_end = animation->GetRangeEnd()
+                         ? ToFractionalOffset(animation->GetRangeEnd().value())
+                         : 1;
 
-  absl::optional<double> start_fraction =
-      ToFractionalOffset(timing.start_delay);
-  absl::optional<double> end_fraction = ToFractionalOffset(timing.end_delay);
-  return std::make_pair(start_fraction.value_or(0) * duration.value(),
-                        (1 - end_fraction.value_or(1)) * duration.value());
+  // Timeline range is relative to cover 0% to 100% range.
+  double timeline_range = range_end - range_start;
+
+  // Animation delays are effectively insets on the animation range.
+  // Delays must be expressed as percentages. Time-based delays are ignored.
+  double start_delay =
+      timing.start_delay.relative_delay.value_or(0) * timeline_range;
+  double end_delay =
+      timing.end_delay.relative_delay.value_or(0) * timeline_range;
+
+  // TODO(kevers): Check if additional safeguards are required for delays
+  // summing > 100%.
+  return std::make_pair((range_start + start_delay) * duration.value(),
+                        (1 - range_end + end_delay) * duration.value());
 }
 
 CSSNumericValue* ViewTimeline::startOffset() const {

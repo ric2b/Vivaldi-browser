@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -27,6 +28,7 @@
 #if BUILDFLAG(IS_WIN)
 #include <windows.h>
 
+#include "base/strings/sys_string_conversions.h"
 #include "chrome/updater/util/win_util.h"
 #endif
 
@@ -40,6 +42,7 @@ constexpr char kBP[] = "bp";    // Key for storing brand path.
 constexpr char kAP[] = "ap";    // Key for storing ap.
 
 constexpr char kHadApps[] = "had_apps";
+constexpr char kUsageStatsEnabledKey[] = "usage_stats_enabled";
 
 constexpr char kLastChecked[] = "last_checked";
 constexpr char kLastStarted[] = "last_started";
@@ -49,8 +52,8 @@ constexpr char kLastOSVersion[] = "last_os_version";
 
 namespace updater {
 
-PersistedData::PersistedData(PrefService* pref_service)
-    : pref_service_(pref_service) {
+PersistedData::PersistedData(UpdaterScope scope, PrefService* pref_service)
+    : scope_(scope), pref_service_(pref_service) {
   DCHECK(pref_service_);
   DCHECK(
       pref_service_->FindPreference(update_client::kPersistedDataPreference));
@@ -124,16 +127,42 @@ std::string PersistedData::GetAP(const std::string& id) const {
 void PersistedData::SetAP(const std::string& id, const std::string& ap) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   SetString(id, kAP, ap);
+
+#if BUILDFLAG(IS_WIN)
+  // For backwards compatibility, we record the AP in ClientState as well.
+  // (Some applications read it from there.)
+
+  // Chromium Updater has both local and global pref stores. In practice, if
+  // this `PersistedData` is using a local pref store, `id` will be the
+  // qualification app and the ClientState value is not important, so it is
+  // acceptable for each instance of the updater to overwrite it with various
+  // values. Else, this is the global pref store and reflecting the value in
+  // registry is correct. Clients should transition to requesting the
+  // registration info for their application via RPC.
+  SetRegistryKey(UpdaterScopeToHKeyRoot(scope_),
+                 GetAppClientStateKey(base::SysUTF8ToWide(id)), L"ap",
+                 base::SysUTF8ToWide(ap));
+#endif
 }
 
 void PersistedData::RegisterApp(const RegistrationRequest& rq) {
   VLOG(2) << __func__ << ": Registering " << rq.app_id << " at version "
           << rq.version;
-  SetProductVersion(rq.app_id, rq.version);
-  SetExistenceCheckerPath(rq.app_id, rq.existence_checker_path);
-  SetBrandCode(rq.app_id, rq.brand_code);
-  SetBrandPath(rq.app_id, rq.brand_path);
-  SetAP(rq.app_id, rq.ap);
+  if (rq.version.IsValid()) {
+    SetProductVersion(rq.app_id, rq.version);
+  }
+  if (!rq.existence_checker_path.empty()) {
+    SetExistenceCheckerPath(rq.app_id, rq.existence_checker_path);
+  }
+  if (!rq.brand_code.empty()) {
+    SetBrandCode(rq.app_id, rq.brand_code);
+  }
+  if (!rq.brand_path.empty()) {
+    SetBrandPath(rq.app_id, rq.brand_path);
+  }
+  if (!rq.ap.empty()) {
+    SetAP(rq.app_id, rq.ap);
+  }
 }
 
 bool PersistedData::RemoveApp(const std::string& id) {
@@ -178,7 +207,7 @@ const base::Value::Dict* PersistedData::GetAppKey(const std::string& id) const {
   const base::Value::Dict* apps = dict.FindDict("apps");
   if (!apps)
     return nullptr;
-  return apps->FindDict(id);
+  return apps->FindDict(base::ToLowerASCII(id));
 }
 
 std::string PersistedData::GetString(const std::string& id,
@@ -197,7 +226,7 @@ base::Value::Dict* PersistedData::GetOrCreateAppKey(const std::string& id,
                                                     base::Value::Dict& root) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::Value::Dict* apps = root.EnsureDict("apps");
-  base::Value::Dict* app = apps->EnsureDict(id);
+  base::Value::Dict* app = apps->EnsureDict(base::ToLowerASCII(id));
   return app;
 }
 
@@ -221,6 +250,18 @@ void PersistedData::SetHadApps() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (pref_service_)
     pref_service_->SetBoolean(kHadApps, true);
+}
+
+bool PersistedData::GetUsageStatsEnabled() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return pref_service_ && pref_service_->GetBoolean(kUsageStatsEnabledKey);
+}
+
+void PersistedData::SetUsageStatsEnabled(bool usage_stats_enabled) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (pref_service_) {
+    pref_service_->SetBoolean(kUsageStatsEnabledKey, usage_stats_enabled);
+  }
 }
 
 base::Time PersistedData::GetLastChecked() const {
@@ -291,6 +332,7 @@ void PersistedData::SetLastOSVersion() {
 // kPersistedDataPreference is registered by update_client::RegisterPrefs.
 void RegisterPersistedDataPrefs(scoped_refptr<PrefRegistrySimple> registry) {
   registry->RegisterBooleanPref(kHadApps, false);
+  registry->RegisterBooleanPref(kUsageStatsEnabledKey, false);
   registry->RegisterTimePref(kLastChecked, {});
   registry->RegisterTimePref(kLastStarted, {});
   registry->RegisterStringPref(kLastOSVersion, {});

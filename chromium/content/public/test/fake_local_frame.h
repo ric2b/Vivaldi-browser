@@ -60,14 +60,14 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
   void EnableViewSourceMode() override;
   void Focus() override;
   void ClearFocusedElement() override;
-  void GetResourceSnapshotForWebBundle(
-      mojo::PendingReceiver<data_decoder::mojom::ResourceSnapshotForWebBundle>
-          receiver) override;
   void CopyImageAt(const gfx::Point& window_point) override;
   void SaveImageAt(const gfx::Point& window_point) override;
   void ReportBlinkFeatureUsage(
       const std::vector<blink::mojom::WebFeature>&) override;
   void RenderFallbackContent() override;
+  void AddResourceTimingEntryFromNonNavigatedFrame(
+      blink::mojom::ResourceTimingInfoPtr timing,
+      blink::FrameOwnerElementType parent_frame_element_type) override;
   void RenderFallbackContentWithResourceTiming(
       blink::mojom::ResourceTimingInfoPtr,
       const std::string& server_timing_value) override;

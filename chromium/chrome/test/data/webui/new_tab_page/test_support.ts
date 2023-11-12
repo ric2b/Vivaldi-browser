@@ -3,12 +3,11 @@
 // found in the LICENSE file.
 
 import {DomIf} from 'chrome://new-tab-page/new_tab_page.js';
-import {BackgroundImage, Theme} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
+import {BackgroundImage, NtpBackgroundImageSource, Theme} from 'chrome://new-tab-page/new_tab_page.mojom-webui.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
 import {keyDownOn} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
-
 import {assertEquals, assertNotEquals} from 'chrome://webui-test/chai_assert.js';
-import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
+import {TestMock} from 'chrome://webui-test/test_mock.js';
 
 export const NONE_ANIMATION: string = 'none 0s ease 0s 1 normal none running';
 
@@ -45,10 +44,10 @@ type Constructor<T> = new (...args: any[]) => T;
 type Installer<T> = (instance: T) => void;
 
 export function installMock<T extends object>(
-    clazz: Constructor<T>, installer?: Installer<T>): TestBrowserProxy<T> {
+    clazz: Constructor<T>, installer?: Installer<T>): TestMock<T> {
   installer = installer ||
       (clazz as unknown as {setInstance: Installer<T>}).setInstance;
-  const mock = TestBrowserProxy.fromClass(clazz);
+  const mock = TestMock.fromClass(clazz);
   installer!(mock);
   return mock;
 }
@@ -56,6 +55,7 @@ export function installMock<T extends object>(
 export function createBackgroundImage(url: string): BackgroundImage {
   return {
     url: {url},
+    imageSource: NtpBackgroundImageSource.kNoImage,
   };
 }
 
@@ -70,7 +70,8 @@ export function createTheme(isDark: boolean = false): Theme {
     backgroundColor: {value: 0xffff0000},
     backgroundImageAttribution1: '',
     backgroundImageAttribution2: '',
-    dailyRefreshCollectionId: '',
+    dailyRefreshEnabled: false,
+    backgroundImageCollectionId: '',
     isDark,
     mostVisited: mostVisited,
     textColor: {value: 0xff0000ff},

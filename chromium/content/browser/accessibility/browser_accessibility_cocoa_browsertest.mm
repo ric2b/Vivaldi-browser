@@ -5,6 +5,7 @@
 #include "content/browser/accessibility/browser_accessibility_cocoa.h"
 
 #include "base/check.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_mac.h"
@@ -126,10 +127,11 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   AXTextEdit text_edit = [cocoa_text_field computeTextEdit];
   EXPECT_NE(text_edit.edit_text_marker, nil);
 
-  EXPECT_EQ(
-      ui::AXTextMarkerToAXPosition(text_edit.edit_text_marker)->ToString(),
-      "TextPosition anchor_id=4 text_offset=1 affinity=downstream "
-      "annotated_text=B<>");
+  auto ax_position = ui::AXTextMarkerToAXPosition(text_edit.edit_text_marker);
+  std::string expected_string = "TextPosition anchor_id=";
+  expected_string += base::NumberToString(ax_position->anchor_id());
+  expected_string += " text_offset=1 affinity=downstream annotated_text=B<>";
+  EXPECT_EQ(ax_position->ToString(), expected_string);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
@@ -550,6 +552,56 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
 
   EXPECT_NSEQ(@"AXRow", [row_nodes[1] role]);
   EXPECT_NSEQ(@"row2", [row_nodes[1] accessibilityLabel]);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
+                       TestAXHeadersShouldOnlyIncludeColHeaders) {
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ax::mojom::Event::kLoadComplete);
+
+  GURL url(
+      R"HTML(data:text/html,
+      <table aria-label="Population per country">
+        <thead style=display:block>
+          <tr>
+            <th aria-label="Country">Country</th>
+            <th aria-label="Population">Population</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td role=rowheader>Canada</td>
+            <td>37</td>
+          </tr>
+          <tr>
+            <td role=rowheader>USA</td>
+            <td>331</td>
+          </tr>
+        </tbody>
+      </table>
+  )HTML");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+  ASSERT_TRUE(waiter.WaitForNotification());
+
+  BrowserAccessibility* table = FindNode(ax::mojom::Role::kTable);
+  base::scoped_nsobject<BrowserAccessibilityCocoa> table_obj(
+      [table->GetNativeViewAccessible() retain]);
+
+  EXPECT_NSEQ(@"AXTable", [table_obj role]);
+  EXPECT_NSEQ(@"Population per country", [table_obj accessibilityLabel]);
+  base::scoped_nsobject<BrowserAccessibilityCocoa> table_header(
+      [[table_obj header] retain]);
+
+  NSArray* children = [table_header children];
+  EXPECT_EQ(2U, [children count]);
+
+  EXPECT_NSEQ(@"AXCell", [children[0] role]);
+  EXPECT_NSEQ(@"Country", [children[0] accessibilityLabel]);
+
+  EXPECT_NSEQ(@"AXCell", [children[1] role]);
+  EXPECT_NSEQ(@"Population", [children[1] accessibilityLabel]);
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,

@@ -12,8 +12,8 @@
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/side_panel_resources.h"
-#include "chrome/grit/side_panel_resources_map.h"
+#include "chrome/grit/side_panel_read_anything_resources.h"
+#include "chrome/grit/side_panel_read_anything_resources_map.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -24,19 +24,20 @@
 
 ReadAnythingUI::ReadAnythingUI(content::WebUI* web_ui)
     : ui::MojoBubbleWebUIController(web_ui) {
-  content::WebUIDataSource* source = content::WebUIDataSource::Create(
+  content::WebUIDataSource* source = content::WebUIDataSource::CreateAndAdd(
+      web_ui->GetWebContents()->GetBrowserContext(),
       chrome::kChromeUIReadAnythingSidePanelHost);
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"readAnythingTabTitle", IDS_READ_ANYTHING_TITLE},
+      {"readAnythingTabTitle", IDS_READING_MODE_TITLE},
   };
   for (const auto& str : kLocalizedStrings)
     webui::AddLocalizedString(source, str.name, str.id);
 
   webui::SetupWebUIDataSource(
-      source, base::make_span(kSidePanelResources, kSidePanelResourcesSize),
+      source,
+      base::make_span(kSidePanelReadAnythingResources,
+                      kSidePanelReadAnythingResourcesSize),
       IDR_SIDE_PANEL_READ_ANYTHING_READ_ANYTHING_HTML);
-  content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
-                                source);
 }
 
 ReadAnythingUI::~ReadAnythingUI() = default;

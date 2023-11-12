@@ -12,10 +12,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
@@ -35,6 +35,7 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "third_party/blink/public/common/interest_group/interest_group.h"
+#include "third_party/blink/public/common/interest_group/interest_group_utils.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -175,26 +176,25 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
   if (!maybe_dict->is_dict())
     return false;
 
-  std::vector<
-      std::pair<url::Origin, blink::InterestGroup::SellerCapabilitiesType>>
+  std::vector<std::pair<url::Origin, blink::SellerCapabilitiesType>>
       seller_capabilities_vec;
   for (const std::pair<const std::string&, const base::Value&> pair :
        maybe_dict->GetDict()) {
     if (!pair.second.is_list())
       return false;
-    blink::InterestGroup::SellerCapabilitiesType capabilities;
+    blink::SellerCapabilitiesType capabilities;
     for (const base::Value& maybe_capability : pair.second.GetList()) {
       if (!maybe_capability.is_string())
         return false;
       const std::string& capability = maybe_capability.GetString();
-      if (capability == "interestGroupCounts") {
-        capabilities.Put(
-            blink::InterestGroup::SellerCapabilities::kInterestGroupCounts);
-      } else if (capability == "latencyStats") {
-        capabilities.Put(
-            blink::InterestGroup::SellerCapabilities::kLatencyStats);
+      if (capability == "interest-group-counts" ||
+          capability == "interestGroupCounts") {
+        capabilities.Put(blink::SellerCapabilities::kInterestGroupCounts);
+      } else if (capability == "latency-stats" ||
+                 capability == "latencyStats") {
+        capabilities.Put(blink::SellerCapabilities::kLatencyStats);
       } else {
-        return false;
+        continue;
       }
     }
     if (pair.first == "*") {
@@ -312,6 +312,65 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
   return true;
 }
 
+[[nodiscard]] bool TryToCopyAdSizes(
+    const base::Value::Dict& dict,
+    InterestGroupUpdate& interest_group_update) {
+  const base::Value::Dict* maybe_sizes = dict.FindDict("adSizes");
+  if (!maybe_sizes) {
+    return true;
+  }
+  base::flat_map<std::string, blink::InterestGroup::Size> size_map;
+  for (std::pair<const std::string&, const base::Value&> pair : *maybe_sizes) {
+    const base::Value::Dict* maybe_size = pair.second.GetIfDict();
+    if (!maybe_size) {
+      return false;
+    }
+    const std::string* width_str = maybe_size->FindString("width");
+    const std::string* height_str = maybe_size->FindString("height");
+    if (!width_str || !height_str) {
+      return false;
+    }
+
+    auto [width_val, width_units] =
+        blink::ParseInterestGroupSizeString(*width_str);
+    auto [height_val, height_units] =
+        blink::ParseInterestGroupSizeString(*height_str);
+
+    size_map.emplace(pair.first,
+                     blink::InterestGroup::Size(width_val, width_units,
+                                                height_val, height_units));
+  }
+  interest_group_update.ad_sizes.emplace(size_map);
+  return true;
+}
+
+[[nodiscard]] bool TryToCopySizeGroups(
+    const base::Value::Dict& dict,
+    InterestGroupUpdate& interest_group_update) {
+  const base::Value::Dict* maybe_groups = dict.FindDict("sizeGroups");
+  if (!maybe_groups) {
+    return true;
+  }
+  base::flat_map<std::string, std::vector<std::string>> group_map;
+  for (std::pair<const std::string&, const base::Value&> pair : *maybe_groups) {
+    const base::Value::List* maybe_sizes = pair.second.GetIfList();
+    if (!maybe_sizes) {
+      return false;
+    }
+    std::vector<std::string> pair_sizes;
+    for (const base::Value& size : *maybe_sizes) {
+      const std::string* maybe_string = size.GetIfString();
+      if (!maybe_string) {
+        return false;
+      }
+      pair_sizes.emplace_back(*maybe_string);
+    }
+    group_map.emplace(pair.first, pair_sizes);
+  }
+  interest_group_update.size_groups.emplace(group_map);
+  return true;
+}
+
 absl::optional<InterestGroupUpdate> ParseUpdateJson(
     const blink::InterestGroupKey& group_key,
     const data_decoder::DataDecoder::ValueOrError& result) {
@@ -374,6 +433,12 @@ absl::optional<InterestGroupUpdate> ParseUpdateJson(
     return absl::nullopt;
   }
   if (!TryToCopyAdComponents(*dict, interest_group_update)) {
+    return absl::nullopt;
+  }
+  if (!TryToCopyAdSizes(*dict, interest_group_update)) {
+    return absl::nullopt;
+  }
+  if (!TryToCopySizeGroups(*dict, interest_group_update)) {
     return absl::nullopt;
   }
   return interest_group_update;

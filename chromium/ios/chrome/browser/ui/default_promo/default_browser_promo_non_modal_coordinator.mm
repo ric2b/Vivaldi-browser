@@ -5,10 +5,13 @@
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_coordinator.h"
 
 #import "base/notreached.h"
+#import "components/feature_engagement/public/tracker.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_promo_non_modal_scheduler.h"
+#import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #import "ios/chrome/browser/ui/infobars/banners/infobar_banner_view_controller.h"
 #import "ios/chrome/browser/ui/infobars/coordinators/infobar_coordinator+subclassing.h"
 #import "ios/chrome/browser/ui/infobars/coordinators/infobar_coordinator_implementation.h"
@@ -18,6 +21,13 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/branded_images/branded_images_api.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -56,12 +66,23 @@
         [[InfobarBannerViewController alloc] initWithDelegate:self
                                                 presentsModal:NO
                                                          type:self.infobarType];
+
+    if (IsVivaldiRunning()) {
+      [self.bannerViewController
+          setTitleText:l10n_util::GetNSString(
+                IDS_VIVALDI_IOS_DEFAULT_BROWSER_NON_MODAL_TITLE)];
+      [self.bannerViewController
+          setSubtitleText:l10n_util::GetNSString(
+                IDS_VIVALDI_IOS_DEFAULT_BROWSER_NON_MODAL_DESCRIPTION)];
+    } else {
     [self.bannerViewController
         setTitleText:l10n_util::GetNSString(
                          IDS_IOS_DEFAULT_BROWSER_NON_MODAL_TITLE)];
     [self.bannerViewController
         setSubtitleText:l10n_util::GetNSString(
                             IDS_IOS_DEFAULT_BROWSER_NON_MODAL_DESCRIPTION)];
+    } // End Vivaldi
+
     [self.bannerViewController
         setButtonText:l10n_util::GetNSString(
                           IDS_IOS_DEFAULT_NON_MODAL_PRIMARY_BUTTON_TEXT)];
@@ -70,6 +91,7 @@
     [self.bannerViewController setIconImage:image];
     [self.bannerViewController setUseIconBackgroundTint:NO];
     [self.bannerViewController setPresentsModal:NO];
+    [self recordDefaultBrowserPromoShown];
   }
 }
 
@@ -141,6 +163,15 @@
   // The non-modal promo should never have a modal.
   NOTREACHED();
   return 0;
+}
+
+#pragma mark - private
+
+// Records that a default browser promo has been shown.
+- (void)recordDefaultBrowserPromoShown {
+  ChromeBrowserState* browserState = self.browser->GetBrowserState();
+  LogToFETDefaultBrowserPromoShown(
+      feature_engagement::TrackerFactory::GetForBrowserState(browserState));
 }
 
 @end

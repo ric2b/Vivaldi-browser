@@ -10,14 +10,15 @@
 
 #include <string>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/bind_post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/version.h"
@@ -346,6 +347,7 @@ HRESULT UpdaterImpl::Update(const wchar_t* app_id,
                             const wchar_t* install_data_index,
                             LONG priority,
                             BOOL same_version_update_allowed,
+                            BOOL do_update_check_only,
                             IUpdaterObserver* observer) {
   // This task runner is responsible for sequencing the callbacks posted
   // by the `UpdateService` and calling the outbound COM functions to
@@ -364,12 +366,13 @@ HRESULT UpdaterImpl::Update(const wchar_t* app_id,
              scoped_refptr<base::SequencedTaskRunner> task_runner,
              const std::string& app_id, const std::string& install_data_index,
              UpdateService::Priority priority, bool same_version_update_allowed,
-             IUpdaterObserverPtr observer) {
+             bool do_update_check_only, IUpdaterObserverPtr observer) {
             update_service->Update(
                 app_id, install_data_index, priority,
                 same_version_update_allowed
                     ? UpdateService::PolicySameVersionUpdate::kAllowed
                     : UpdateService::PolicySameVersionUpdate::kNotAllowed,
+                do_update_check_only,
                 base::BindRepeating(&StateChangeCallbackFilter::OnStateChange,
                                     base::Owned(new StateChangeCallbackFilter(
                                         task_runner, observer))),
@@ -393,7 +396,7 @@ HRESULT UpdaterImpl::Update(const wchar_t* app_id,
           com_server->update_service(), task_runner, base::WideToUTF8(app_id),
           base::WideToUTF8(install_data_index),
           static_cast<UpdateService::Priority>(priority),
-          same_version_update_allowed, observer_local));
+          same_version_update_allowed, do_update_check_only, observer_local));
 
   // Always return S_OK from this function. Errors must be reported using the
   // observer interface.

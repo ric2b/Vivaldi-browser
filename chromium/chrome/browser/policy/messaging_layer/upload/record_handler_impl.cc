@@ -4,28 +4,41 @@
 
 #include "chrome/browser/policy/messaging_layer/upload/record_handler_impl.h"
 
+#include <memory>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/containers/queue.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/thread_annotations.h"
 #include "base/token.h"
 #include "base/values.h"
-#include "chrome/browser/policy/messaging_layer/upload/dm_server_upload_service.h"
+#include "chrome/browser/policy/messaging_layer/proto/synced/log_upload_event.pb.h"
+#include "chrome/browser/policy/messaging_layer/public/report_client.h"
+#include "chrome/browser/policy/messaging_layer/upload/dm_server_uploader.h"
 #include "chrome/browser/policy/messaging_layer/upload/event_upload_size_controller.h"
+#include "chrome/browser/policy/messaging_layer/upload/file_upload_job.h"
 #include "chrome/browser/policy/messaging_layer/upload/record_upload_request_builder.h"
 #include "chrome/browser/policy/messaging_layer/util/reporting_server_connector.h"
+#include "components/reporting/client/report_queue_provider.h"
 #include "components/reporting/proto/synced/record.pb.h"
 #include "components/reporting/proto/synced/record_constants.pb.h"
+#include "components/reporting/proto/synced/upload_tracker.pb.h"
 #include "components/reporting/resources/resource_manager.h"
+#include "components/reporting/storage/storage_module_interface.h"
 #include "components/reporting/util/status.h"
 #include "components/reporting/util/status_macros.h"
 #include "components/reporting/util/statusor.h"
@@ -63,33 +76,189 @@ absl::optional<Priority> GetPriorityProtoFromSequenceInformationValue(
   }
   return priority;
 }
+
+// Reposts updated copy of LOG_UPLOAD event. Called back once the FileUploadJob
+// is located/created.
+void RepostLogUploadEvent(base::WeakPtr<FileUploadJob> job,
+                          scoped_refptr<StorageModuleInterface> storage,
+                          Priority priority,
+                          Record record_copy,
+                          ::ash::reporting::LogUploadEvent log_upload_event,
+                          base::OnceCallback<void(Status)> done_cb) {
+  // Post a new event reflecting its state to track later.
+  // If job is not available, do not allow to upload the current event.
+  if (!job) {
+    std::move(done_cb).Run(
+        Status(error::DATA_LOSS, "Upload Job has been removed"));
+    return;
+  }
+  // Job is still around.
+  if (job->tracker().access_parameters().empty() &&
+      !job->tracker().has_status()) {
+    // The job is in progress (not succeeded and not failed),
+    // flag the new tracking event to be processed when reaching uploader.
+    record_copy.set_needs_local_unencrypted_copy(true);
+  }
+  // Copy it tracking state to the new event.
+  *log_upload_event.mutable_upload_settings() = job->settings();
+  *log_upload_event.mutable_upload_tracker() = job->tracker();
+  // Patch the copy event.
+  if (!log_upload_event.SerializeToString(record_copy.mutable_data())) {
+    std::move(done_cb).Run(
+        Status(error::INVALID_ARGUMENT,
+               base::StrCat({"Updated event ",
+                             Destination_Name(record_copy.destination()),
+                             " failed to serialize"})));
+    return;
+  }
+  // Repost the copy event, and if succeeded, `done_cb` will allow the current
+  // event to be uploaded.
+  storage->AddRecord(priority, std::move(record_copy), std::move(done_cb));
+}
+
+// FileUploadJob progresses based on the last recorded state.
+// Called back once the job is located or created.
+// `done_cb` is going to post update as the next tracking event.
+void RunJob(FileUploadJob* job,
+            const ::ash::reporting::LogUploadEvent log_upload_event,
+            base::OnceClosure done_cb) {
+  base::ScopedClosureRunner done(std::move(done_cb));
+  // Check the job's state, schedule the action.
+  if (job->tracker().has_status()) {
+    // The job already failed before.
+    return;
+  }
+  if (!job->tracker().access_parameters().empty()) {
+    // Job complete, nothing left to do.
+    return;
+  }
+  if (job->tracker().session_token().empty()) {
+    // Job not initiated yet, do it now.
+    job->Initiate(done.Release());
+    return;
+  }
+  if (log_upload_event.upload_tracker().session_token().empty()) {
+    // Event refers to the job before it was initiated. Nothing to do.
+    return;
+  }
+  // Job in progress check what was uploaded.
+  if (job->tracker().uploaded() >
+      log_upload_event.upload_tracker().uploaded()) {
+    // The job is more advanced than the event implies.
+    return;
+  }
+  if (job->tracker().uploaded() <
+      log_upload_event.upload_tracker().uploaded()) {
+    // The job is less advanced than the event implies, it should not be
+    // possible unless the job is corrupt.
+    LOG(WARNING) << "Corrupt FileUploadJob";
+    return;
+  }
+  // Exact match, resume the job-> Note that if the job is already active,
+  // this will be a no-op.
+  if (job->tracker().uploaded() < job->tracker().total()) {
+    // Job in progress, perform next step.
+    job->NextStep(done.Release());
+    return;
+  }
+  // Upload complete, finalize the job.
+  job->Finalize(done.Release());
+}
+
+// Processes LOG_UPLOAD event.
+void ProcessFileUpload(FileUploadJob::Delegate* delegate,
+                       scoped_refptr<StorageModuleInterface> storage,
+                       Priority priority,
+                       Record record_copy,
+                       base::OnceCallback<void(Status)> done_cb) {
+  // Here we need to determine which events we got. It would be better to
+  // use protobuf reflection and detect upload_settings presence in the event,
+  // but protobuf_lite library included in Chrome does not expose reflection.
+  switch (record_copy.destination()) {
+    case LOG_UPLOAD: {
+      // Parse `record_copy.data()` string into the event.
+      ::ash::reporting::LogUploadEvent log_upload_event;
+      if (!log_upload_event.ParseFromArray(record_copy.data().data(),
+                                           record_copy.data().size())) {
+        LOG(WARNING) << "Event " << Destination_Name(record_copy.destination())
+                     << " is not parseable";
+        // The event is corrupt, ignore upload settings, upload with the event.
+        std::move(done_cb).Run(Status::StatusOK());
+        return;
+      }
+      // Check whether this upload is already being processed, based on the
+      // whole `upload_settings` (including retry count).
+      const auto settings = log_upload_event.upload_settings();
+      const auto tracker = log_upload_event.upload_tracker();
+      FileUploadJob::Manager::GetInstance()->Register(
+          settings, tracker, delegate,
+          base::BindOnce(
+              [](Priority priority, Record record,
+                 ::ash::reporting::LogUploadEvent log_upload_event,
+                 scoped_refptr<StorageModuleInterface> storage,
+                 base::OnceCallback<void(Status)> done_cb,
+                 StatusOr<FileUploadJob*> job_or_error) {
+                if (!job_or_error.ok()) {
+                  LOG(WARNING) << "Failed to locate/create upload job, status="
+                               << job_or_error.status();
+                  // Upload the event as is.
+                  std::move(done_cb).Run(Status::StatusOK());
+                  return;
+                }
+                // Job has been located or created.
+                auto* const job = job_or_error.ValueOrDie();
+                // Prepare a callback that will repost event with updates based
+                // on the job status, if it is still available. It will be
+                // invoked on the sequenced_task_runner of the job manager,
+                // so we can use weak pointer there.
+                auto processed_cb = base::BindOnce(
+                    &RepostLogUploadEvent, job->GetWeakPtr(), storage, priority,
+                    std::move(record), log_upload_event,  // Copy, not move!
+                    std::move(done_cb));
+                // Run the next step.
+                RunJob(job_or_error.ValueOrDie(), std::move(log_upload_event),
+                       std::move(processed_cb));
+              },
+              priority, std::move(record_copy), std::move(log_upload_event),
+              storage, std::move(done_cb)));
+      break;
+    }
+    default:
+      LOG(WARNING) << "Event " << Destination_Name(record_copy.destination())
+                   << " is not expected to have log upload settings";
+      // Ignore upload settings, proceed with the event.
+      std::move(done_cb).Run(Status::StatusOK());
+  }
+}
 }  // namespace
 
 // ReportUploader handles enqueuing events on the `report_queue_`.
 class RecordHandlerImpl::ReportUploader
-    : public TaskRunnerContext<DmServerUploadService::CompletionResponse> {
+    : public TaskRunnerContext<CompletionResponse> {
  public:
   ReportUploader(
+      FileUploadJob::Delegate* delegate,
+      scoped_refptr<StorageModuleInterface> storage,
       bool need_encryption_key,
       std::vector<EncryptedRecord> records,
       ScopedReservation scoped_reservation,
-      DmServerUploadService::CompletionCallback upload_complete_cb,
-      DmServerUploadService::EncryptionKeyAttachedCallback
-          encryption_key_attached_cb,
+      CompletionCallback upload_complete_cb,
+      EncryptionKeyAttachedCallback encryption_key_attached_cb,
       scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner);
 
  private:
   ~ReportUploader() override;
 
   void OnStart() override;
-  void OnCompletion(
-      const DmServerUploadService::CompletionResponse& result) override;
+  void OnCompletion(const CompletionResponse& result) override;
 
   void StartUpload();
+  void ResumeUpload(size_t next_record);
+  void FinalizeUpload();
   void OnUploadComplete(StatusOr<base::Value::Dict> response);
   void HandleFailedUpload(Status status);
-  void HandleSuccessfulUpload();
-  void Complete(DmServerUploadService::CompletionResponse result);
+  void HandleSuccessfulUpload(base::Value::Dict last_response);
+  void Complete(CompletionResponse result);
 
   // Returns a gap record if it is necessary. Expects the contents of the
   // failedUploadedRecord field in the response:
@@ -107,50 +276,55 @@ class RecordHandlerImpl::ReportUploader
   StatusOr<SequenceInformation> SequenceInformationValueToProto(
       const base::Value::Dict& value);
 
-  bool need_encryption_key_;
-  std::vector<EncryptedRecord> records_;
-  ScopedReservation scoped_reservation_;
+  const raw_ptr<FileUploadJob::Delegate> delegate_;
+
+  const scoped_refptr<StorageModuleInterface> storage_;
+
+  bool need_encryption_key_ GUARDED_BY_CONTEXT(sequence_checker_);
+  std::vector<EncryptedRecord> records_ GUARDED_BY_CONTEXT(sequence_checker_);
+  ScopedReservation scoped_reservation_ GUARDED_BY_CONTEXT(sequence_checker_);
+
+  std::unique_ptr<UploadEncryptedReportingRequestBuilder> request_builder_
+      GUARDED_BY_CONTEXT(sequence_checker_);
 
   // Encryption key delivery callback.
-  DmServerUploadService::EncryptionKeyAttachedCallback
-      encryption_key_attached_cb_;
-
-  // Last successful response to be processed.
-  // Note: I could not find a way to pass it as a parameter,
-  // so it is a class member variable. |last_response_| must be processed before
-  // any attempt to retry calling the client, otherwise it will be overwritten.
-  base::Value::Dict last_response_;
-
-  // When a record fails to be processed on the server, |ReportUploader| creates
-  // a gap record to upload in its place.
-  EncryptedRecord gap_record_;
+  EncryptionKeyAttachedCallback encryption_key_attached_cb_
+      GUARDED_BY_CONTEXT(sequence_checker_);
 
   // Set for the highest record being uploaded.
-  absl::optional<SequenceInformation> highest_sequence_information_;
+  absl::optional<SequenceInformation> highest_sequence_information_
+      GUARDED_BY_CONTEXT(sequence_checker_);
 
   // Set to |true| if force_confirm flag is present. |false| by default.
-  bool force_confirm_{false};
+  bool force_confirm_ GUARDED_BY_CONTEXT(sequence_checker_) = false;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 };
 
 RecordHandlerImpl::ReportUploader::ReportUploader(
+    FileUploadJob::Delegate* delegate,
+    scoped_refptr<StorageModuleInterface> storage,
     bool need_encryption_key,
     std::vector<EncryptedRecord> records,
     ScopedReservation scoped_reservation,
-    DmServerUploadService::CompletionCallback completion_cb,
-    DmServerUploadService::EncryptionKeyAttachedCallback
-        encryption_key_attached_cb,
+    CompletionCallback completion_cb,
+    EncryptionKeyAttachedCallback encryption_key_attached_cb,
     scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner)
-    : TaskRunnerContext<DmServerUploadService::CompletionResponse>(
-          std::move(completion_cb),
-          sequenced_task_runner),
+    : TaskRunnerContext<CompletionResponse>(std::move(completion_cb),
+                                            sequenced_task_runner),
+      delegate_(delegate),
+      storage_(storage),
       need_encryption_key_(need_encryption_key),
       records_(std::move(records)),
       scoped_reservation_(std::move(scoped_reservation)),
-      encryption_key_attached_cb_(std::move(encryption_key_attached_cb)) {}
+      encryption_key_attached_cb_(std::move(encryption_key_attached_cb)) {
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+}
 
 RecordHandlerImpl::ReportUploader::~ReportUploader() = default;
 
 void RecordHandlerImpl::ReportUploader::OnStart() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (records_.empty() && !need_encryption_key_) {
     Status empty_records =
         Status(error::INVALID_ARGUMENT, "records_ was empty");
@@ -162,30 +336,88 @@ void RecordHandlerImpl::ReportUploader::OnStart() {
   StartUpload();
 }
 
+void RecordHandlerImpl::ReportUploader::OnCompletion(
+    const CompletionResponse& result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // In case `OnUploadComplete` was skipped for whatever reason,
+  // release the reservation (do not wait for destructor to do that).
+  ScopedReservation release(std::move(scoped_reservation_));
+}
+
 void RecordHandlerImpl::ReportUploader::StartUpload() {
-  auto response_cb =
-      base::BindOnce(&RecordHandlerImpl::ReportUploader::OnUploadComplete,
-                     base::Unretained(this));
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  UploadEncryptedReportingRequestBuilder request_builder{need_encryption_key_};
-  for (auto record : records_) {
-    request_builder.AddRecord(std::move(record), scoped_reservation_);
+  base::UmaHistogramCounts1000("Browser.ERP.RecordsPerUpload", records_.size());
+
+  request_builder_ = std::make_unique<UploadEncryptedReportingRequestBuilder>(
+      need_encryption_key_);
+  ResumeUpload(/*next_record=*/0);
+}
+
+void RecordHandlerImpl::ReportUploader::ResumeUpload(size_t next_record) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  while (next_record < records_.size()) {
+    auto& record = records_.at(next_record++);
+    if (!record.has_record_copy()) {
+      // Regular event, add it and proceed.
+      request_builder_->AddRecord(std::move(record), scoped_reservation_);
+      continue;
+    }
+    // Upload event, attempt to asynchronously process it.
+    const auto priority = record.sequence_information().priority();
+    auto record_copy = std::move(*record.mutable_record_copy());
+    record.clear_record_copy();
+    auto resume_cb = base::BindPostTaskToCurrentDefault(base::BindOnce(
+        [](RecordHandlerImpl::ReportUploader* self, EncryptedRecord record,
+           size_t next_record, Status processed_status) {
+          if (!processed_status.ok()) {
+            // Event not processed, stop before it.
+            // Do not add the current event and any later ones.
+            self->FinalizeUpload();
+            return;
+          }
+          // Event processed (next upload tracking event posted, if needed),
+          // add current event to upload (`record_copy` has been removed
+          // from it) and proceed.
+          DCHECK_CALLED_ON_VALID_SEQUENCE(self->sequence_checker_);
+          self->request_builder_->AddRecord(std::move(record),
+                                            self->scoped_reservation_);
+          self->ResumeUpload(next_record);  // Already advanced!
+        },
+        base::Unretained(this),  // `ReportUploader` destructs on completion.
+        std::move(record), next_record));
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+        base::BindOnce(&ProcessFileUpload, base::Unretained(delegate_.get()),
+                       storage_, priority, std::move(record_copy),
+                       std::move(resume_cb)));
+    return;  // We will resume on `resume_cb`
   }
 
-  // Assign random UUID as the request id for server side log correlation
-  const auto request_id = base::Token::CreateRandom().ToString();
-  request_builder.SetRequestId(request_id);
+  FinalizeUpload();
+}
 
-  auto request_result = request_builder.Build();
-  if (!request_result.has_value()) {
-    std::move(response_cb)
-        .Run(Status(error::FAILED_PRECONDITION, "Failure to build request"));
-    return;
-  }
-
+void RecordHandlerImpl::ReportUploader::FinalizeUpload() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Records have been captured in the request, safe to clear the vector.
   records_.clear();
 
+  // Assign random UUID as the request id for server side log correlation
+  const auto request_id = base::Token::CreateRandom().ToString();
+  request_builder_->SetRequestId(request_id);
+
+  auto request_result = request_builder_->Build();
+  request_builder_.reset();
+  if (!request_result.has_value()) {
+    HandleFailedUpload(
+        Status(error::FAILED_PRECONDITION, "Failure to build request"));
+    return;
+  }
+
+  auto response_cb = base::BindPostTask(
+      base::SequencedTaskRunner::GetCurrentDefault(),
+      base::BindOnce(&RecordHandlerImpl::ReportUploader::OnUploadComplete,
+                     base::Unretained(this)));
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(
@@ -197,31 +429,25 @@ void RecordHandlerImpl::ReportUploader::StartUpload() {
           std::move(request_result.value()), std::move(response_cb)));
 }
 
-void RecordHandlerImpl::ReportUploader::OnCompletion(
-    const DmServerUploadService::CompletionResponse& result) {
-  // In case |OnUploadComplete| was skipped for whatever reason.
-  ScopedReservation release(std::move(scoped_reservation_));
-}
-
 void RecordHandlerImpl::ReportUploader::OnUploadComplete(
     StatusOr<base::Value::Dict> response) {
-  // Release reservation right away, since we no londer keep
-  // |base::Value::Dict request| it was referring to.
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Release reservation right away, since we no londer need to keep
+  // `base::Value::Dict request` it was referring to.
   scoped_reservation_.Reduce(0uL);
 
   if (!response.ok()) {
-    Schedule(&RecordHandlerImpl::ReportUploader::HandleFailedUpload,
-             base::Unretained(this), response.status());
+    HandleFailedUpload(response.status());
     return;
   }
-  last_response_ = std::move(response.ValueOrDie());
-  Schedule(&RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload,
-           base::Unretained(this));
+
+  HandleSuccessfulUpload(std::move(response.ValueOrDie()));
 }
 
 void RecordHandlerImpl::ReportUploader::HandleFailedUpload(Status status) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (highest_sequence_information_.has_value()) {
-    Complete(DmServerUploadService::SuccessfulUploadResponse{
+    Complete(SuccessfulUploadResponse{
         .sequence_information =
             std::move(highest_sequence_information_.value()),
         .force_confirm = force_confirm_});
@@ -231,7 +457,9 @@ void RecordHandlerImpl::ReportUploader::HandleFailedUpload(Status status) {
   Complete(status);
 }
 
-void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
+void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload(
+    base::Value::Dict last_response) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // {{{Note}}} ERP Response Payload Overview
   //
   //  {
@@ -248,7 +476,7 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
   //                                         // adjustment is enabled.
   //  }
   const base::Value::Dict* last_succeed_uploaded_record =
-      last_response_.FindDict("lastSucceedUploadedRecord");
+      last_response.FindDict("lastSucceedUploadedRecord");
   if (last_succeed_uploaded_record != nullptr) {
     auto seq_info_result =
         SequenceInformationValueToProto(*last_succeed_uploaded_record);
@@ -262,14 +490,14 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
   }
 
   // Handle forceConfirm flag, if present.
-  const auto force_confirm_flag = last_response_.FindBool("forceConfirm");
+  const auto force_confirm_flag = last_response.FindBool("forceConfirm");
   if (force_confirm_flag.has_value() && force_confirm_flag.value()) {
     force_confirm_ = true;
   }
 
   // Handle enableUploadSizeAdjustment flag, if present.
   const auto enable_upload_size_adjustment =
-      last_response_.FindBool("enableUploadSizeAdjustment");
+      last_response.FindBool("enableUploadSizeAdjustment");
   if (enable_upload_size_adjustment.has_value()) {
     EventUploadSizeController::Enabler::Set(
         enable_upload_size_adjustment.value());
@@ -280,7 +508,7 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
   // the response indicates success or failure, and whether the client
   // set attach_encryption_settings to true in request.
   const base::Value::Dict* signed_encryption_key_record =
-      last_response_.FindDict("encryptionSettings");
+      last_response.FindDict("encryptionSettings");
   if (signed_encryption_key_record != nullptr) {
     const std::string* public_key_str =
         signed_encryption_key_record->FindString("publicKey");
@@ -306,7 +534,7 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
 
   // Check if a record was unprocessable on the server.
   const base::Value::Dict* failed_uploaded_record =
-      last_response_.FindDictByDottedPath(
+      last_response.FindDictByDottedPath(
           "firstFailedUploadedRecord.failedUploadedRecord");
   if (!force_confirm_ && failed_uploaded_record != nullptr) {
     // The record we uploaded previously was unprocessable by the server, if the
@@ -334,7 +562,7 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
   // No more records to process. Return the highest_sequence_information_ if
   // available.
   if (highest_sequence_information_.has_value()) {
-    Complete(DmServerUploadService::SuccessfulUploadResponse{
+    Complete(SuccessfulUploadResponse{
         .sequence_information =
             std::move(highest_sequence_information_.value()),
         .force_confirm = force_confirm_});
@@ -347,6 +575,7 @@ void RecordHandlerImpl::ReportUploader::HandleSuccessfulUpload() {
 absl::optional<EncryptedRecord>
 RecordHandlerImpl::ReportUploader::HandleFailedUploadedSequenceInformation(
     const base::Value::Dict& sequence_information) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!highest_sequence_information_.has_value()) {
     LOG(ERROR) << "highest_sequence_information_ has no value.";
     return absl::nullopt;
@@ -379,7 +608,7 @@ RecordHandlerImpl::ReportUploader::HandleFailedUploadedSequenceInformation(
 }
 
 void RecordHandlerImpl::ReportUploader::Complete(
-    DmServerUploadService::CompletionResponse completion_result) {
+    CompletionResponse completion_result) {
   Schedule(&RecordHandlerImpl::ReportUploader::Response, base::Unretained(this),
            completion_result);
 }
@@ -431,8 +660,13 @@ RecordHandlerImpl::ReportUploader::SequenceInformationValueToProto(
   return proto;
 }
 
-RecordHandlerImpl::RecordHandlerImpl()
-    : sequenced_task_runner_(base::ThreadPool::CreateSequencedTaskRunner({})) {}
+RecordHandlerImpl::RecordHandlerImpl(
+    scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner,
+    std::unique_ptr<FileUploadJob::Delegate> delegate,
+    scoped_refptr<StorageModuleInterface> storage)
+    : sequenced_task_runner_(sequenced_task_runner),
+      delegate_(std::move(delegate)),
+      storage_(storage) {}
 
 RecordHandlerImpl::~RecordHandlerImpl() = default;
 
@@ -440,13 +674,12 @@ void RecordHandlerImpl::HandleRecords(
     bool need_encryption_key,
     std::vector<EncryptedRecord> records,
     ScopedReservation scoped_reservation,
-    DmServerUploadService::CompletionCallback upload_complete_cb,
-    DmServerUploadService::EncryptionKeyAttachedCallback
-        encryption_key_attached_cb) {
+    CompletionCallback upload_complete_cb,
+    EncryptionKeyAttachedCallback encryption_key_attached_cb) {
   Start<RecordHandlerImpl::ReportUploader>(
-      need_encryption_key, std::move(records), std::move(scoped_reservation),
-      std::move(upload_complete_cb), std::move(encryption_key_attached_cb),
-      sequenced_task_runner_);
+      delegate_.get(), storage_, need_encryption_key, std::move(records),
+      std::move(scoped_reservation), std::move(upload_complete_cb),
+      std::move(encryption_key_attached_cb), sequenced_task_runner_);
 }
 
 }  // namespace reporting

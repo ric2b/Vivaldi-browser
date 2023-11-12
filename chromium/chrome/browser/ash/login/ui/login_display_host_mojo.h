@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/scoped_observation.h"
@@ -95,9 +95,10 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   void RequestSystemInfoUpdate() override;
   bool HasUserPods() override;
   void VerifyOwnerForKiosk(base::OnceClosure on_success) override;
-  void ShowPasswordChangedDialog(const AccountId& account_id,
-                                 bool show_password_error) override;
-  void StartCryptohomeRecovery(const AccountId& account_id) override;
+  void ShowPasswordChangedDialogLegacy(const AccountId& account_id,
+                                       bool show_password_error) override;
+  void StartCryptohomeRecovery(
+      std::unique_ptr<UserContext> user_context) override;
   void StartBrowserDataMigration() override;
   void AddObserver(LoginDisplayHost::Observer* observer) override;
   void RemoveObserver(LoginDisplayHost::Observer* observer) override;
@@ -106,6 +107,9 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   bool GetKeyboardRemappedPrefValue(const std::string& pref_name,
                                     int* value) const final;
   bool IsWebUIStarted() const final;
+
+  // LoginDisplayHostCommon:
+  bool HandleAccelerator(LoginAcceleratorAction action) final;
 
   // LoginScreenClientImpl::Delegate:
   void HandleAuthenticateUserWithPasswordOrPin(
@@ -130,7 +134,8 @@ class LoginDisplayHostMojo : public LoginDisplayHostCommon,
   // AuthStatusConsumer:
   void OnAuthFailure(const AuthFailure& error) override;
   void OnAuthSuccess(const UserContext& user_context) override;
-  void OnPasswordChangeDetected(const UserContext& user_context) override;
+  void OnPasswordChangeDetectedLegacy(const UserContext& user_context) override;
+  void OnPasswordChangeDetectedFor(const AccountId& account) override;
   void OnOldEncryptionDetected(std::unique_ptr<UserContext> user_context,
                                bool has_incomplete_migration) override;
 

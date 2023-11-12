@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "components/viz/common/frame_timing_details_map.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -38,8 +38,11 @@ class MockCompositorFrameSinkClient : public mojom::CompositorFrameSinkClient {
   // mojom::CompositorFrameSinkClient implementation.
   MOCK_METHOD1(DidReceiveCompositorFrameAck,
                void(std::vector<ReturnedResource>));
-  MOCK_METHOD2(OnBeginFrame,
-               void(const BeginFrameArgs&, const FrameTimingDetailsMap&));
+  MOCK_METHOD4(OnBeginFrame,
+               void(const BeginFrameArgs&,
+                    const FrameTimingDetailsMap&,
+                    bool frame_ack,
+                    std::vector<ReturnedResource>));
   MOCK_METHOD1(ReclaimResources, void(std::vector<ReturnedResource>));
   MOCK_METHOD2(WillDrawSurface, void(const LocalSurfaceId&, const gfx::Rect&));
   MOCK_METHOD1(OnBeginFramePausedChanged, void(bool paused));

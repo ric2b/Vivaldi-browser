@@ -10,10 +10,10 @@
 #include <unordered_set>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/notreached.h"
 #include "base/one_shot_event.h"
@@ -186,18 +186,18 @@ void ExtensionGarbageCollector::GarbageCollectExtensions() {
     return;
   }
 
-  std::unique_ptr<ExtensionPrefs::ExtensionsInfo> info(
-      extension_prefs->GetInstalledExtensionsInfo());
+  ExtensionPrefs::ExtensionsInfo extensions_info =
+      extension_prefs->GetInstalledExtensionsInfo();
   std::multimap<std::string, base::FilePath> extension_paths;
-  for (size_t i = 0; i < info->size(); ++i) {
+  for (const auto& info : extensions_info) {
     extension_paths.insert(
-        std::make_pair(info->at(i)->extension_id, info->at(i)->extension_path));
+        std::make_pair(info->extension_id, info->extension_path));
   }
 
-  info = extension_prefs->GetAllDelayedInstallInfo();
-  for (size_t i = 0; i < info->size(); ++i) {
+  extensions_info = extension_prefs->GetAllDelayedInstallInfo();
+  for (const auto& info : extensions_info) {
     extension_paths.insert(
-        std::make_pair(info->at(i)->extension_id, info->at(i)->extension_path));
+        std::make_pair(info->extension_id, info->extension_path));
   }
 
   ExtensionService* service =

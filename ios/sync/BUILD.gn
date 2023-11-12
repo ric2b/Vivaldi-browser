@@ -9,6 +9,7 @@ source_set("sync_notes") {
   deps = [
     "//ios/chrome/browser/browser_state",
     "//vivaldi/ios/sync:file_sync",
+    "//vivaldi/notes:browser",
     "//vivaldi/sync/notes:sync_notes",
   ]
 }
@@ -93,8 +94,6 @@ source_set("sync") {
     "//ios/chrome/browser/webdata_services",
     "//ios/chrome/common",
     "//ios/components/webui:url_constants",
-    "//ios/public/provider/chrome/browser",
-    "//ios/public/provider/chrome/browser/signin",
     "//ios/web",
     "//ios/web/public/session",
     "//net",

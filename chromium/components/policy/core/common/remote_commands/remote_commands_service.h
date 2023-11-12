@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/circular_deque.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
@@ -69,9 +69,16 @@ class POLICY_EXPORT RemoteCommandsService
     kDeviceResetEuicc = 19,
     kBrowserRotateAttestationCredential = 20,
     kFetchCrdAvailabilityInfo = 21,
+    kFetchSupportPacket = 22,
     // Used by UMA histograms. Shall refer to the last enumeration.
-    kMaxValue = kFetchCrdAvailabilityInfo
+    kMaxValue = kFetchSupportPacket
   };
+
+  // Signature type that will be used for the requests.
+  static constexpr enterprise_management::PolicyFetchRequest::SignatureType
+  GetSignatureType() {
+    return enterprise_management::PolicyFetchRequest::SHA256_RSA;
+  }
 
   // Returns the metric name to report received commands.
   static const char* GetMetricNameReceivedRemoteCommand(

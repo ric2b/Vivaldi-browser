@@ -103,12 +103,8 @@ results from try jobs, by using the command-tool
 2. Trigger try jobs by running `blink_tool.py rebaseline-cl`. This should
    trigger jobs on
    [tryserver.blink](https://ci.chromium.org/p/chromium/g/tryserver.blink/builders).
-   In addition, this will also trigger the CQ try builders that run blink web tests.
-   linux-rel, mac-rel and win-rel.
 3. Wait for all try jobs to finish.
 4. Run `blink_tool.py rebaseline-cl` again to fetch new baselines.
-   By default, this will download new baselines for any failing tests
-   in the blink try jobs and CQ try bots.
 5. Commit the new baselines and upload a new patch.
 
 This way, the new baselines can be reviewed along with the changes, which helps
@@ -283,7 +279,9 @@ The syntax of a line is roughly:
   enclose them in brackets.
 * If test_name_or_directory is a directory, it should be ended with '/*', and all
   tests under the directory will have the expectations, unless overridden by
-  more specific expectation lines.
+  more specific expectation lines. **The wildcard is intentionally only allowed at the
+  end of test_name_or_directory, so that it will be easy to reason about
+  which test(s) a test expectation will apply to.**
 * Lines are expected to have one or more bug identifiers, and the linter will
   complain about lines missing them. Bug identifiers are of the form
   `crbug.com/12345`, `code.google.com/p/v8/issues/detail?id=12345` or
@@ -292,8 +290,8 @@ The syntax of a line is roughly:
   applicable to that file.
 * If specified, modifiers must be one of `Fuchsia`, `Mac`, `Mac10.13`,
   `Mac10.14`, `Mac10.15`, `Mac11`, `Mac11-arm64`, `Mac12`, `Mac12-arm64`,
-  `Linux`, `Trusty`, `Win`, `Win10.20h2`, `Win11`, and, optionally,
-  `Release`, or `Debug`. Check the top of
+  `Mac13`, `Mac13-arm64`, `Linux`, `Trusty`, `Win`, `Win10.20h2`,
+  `Win11`, and, optionally, `Release`, or `Debug`. Check the top of
   [TestExpectations](../../third_party/blink/web_tests/TestExpectations) or the
   `ALL_SYSTEMS` macro in
   [third_party/blink/tools/blinkpy/web_tests/port/base.py](../../third_party/blink/tools/blinkpy/web_tests/port/base.py)

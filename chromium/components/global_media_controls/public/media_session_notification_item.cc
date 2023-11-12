@@ -4,17 +4,17 @@
 
 #include "components/global_media_controls/public/media_session_notification_item.h"
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "components/global_media_controls/public/constants.h"
+#include "components/media_message_center/media_notification_util.h"
 #include "components/media_message_center/media_notification_view.h"
-#include "components/url_formatter/elide_url.h"
-#include "components/url_formatter/url_formatter.h"
 #include "components/vector_icons/vector_icons.h"
 #include "media/base/media_switches.h"
+#include "media/remoting/remoting_constants.h"
 #include "services/media_session/public/cpp/util.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
@@ -138,6 +138,10 @@ void MediaSessionNotificationItem::MediaSessionPositionChanged(
 
 void MediaSessionNotificationItem::UpdatePresentationRequestOrigin(
     const url::Origin& origin) {
+  if (!media_message_center::IsOriginGoodForDisplay(origin)) {
+    return;
+  }
+
   optional_presentation_request_origin_ = origin;
   if (view_ && !frozen_)
     view_->UpdateWithMediaMetadata(GetSessionMetadata());
@@ -282,11 +286,22 @@ void MediaSessionNotificationItem::Freeze(base::OnceClosure unfrozen_callback) {
 }
 
 media_session::mojom::RemotePlaybackMetadataPtr
-MediaSessionNotificationItem::GetRemotePlaybackMetadata() {
+MediaSessionNotificationItem::GetRemotePlaybackMetadata() const {
+  // Return nullptr if Remote Playback is disabled or the media element is
+  // encrypted.
   if (!session_info_ || !session_info_->remote_playback_metadata ||
-      session_info_->remote_playback_metadata->remote_playback_disabled) {
+      session_info_->remote_playback_metadata->remote_playback_disabled ||
+      session_info_->remote_playback_metadata->is_encrypted_media) {
     return nullptr;
   }
+
+  // Return nullptr if the media is too short.
+  if (session_position_.has_value() &&
+      session_position_.value().duration() <=
+          base::Seconds(media::remoting::kMinRemotingMediaDurationInSec)) {
+    return nullptr;
+  }
+
   return session_info_->remote_playback_metadata.Clone();
 }
 
@@ -298,9 +313,8 @@ media_session::MediaMetadata MediaSessionNotificationItem::GetSessionMetadata()
     const {
   media_session::MediaMetadata data = session_metadata_;
   if (optional_presentation_request_origin_.has_value()) {
-    data.source_title = url_formatter::FormatOriginForSecurityDisplay(
-        optional_presentation_request_origin_.value(),
-        url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS);
+    data.source_title = media_message_center::GetOriginNameForDisplay(
+        optional_presentation_request_origin_.value());
   }
 
   if (GetRemotePlaybackStarted(session_info_)) {

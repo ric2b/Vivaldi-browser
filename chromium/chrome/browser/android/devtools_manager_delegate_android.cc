@@ -7,7 +7,7 @@
 #include <map>
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -54,14 +54,17 @@ class ClientProxy : public content::DevToolsAgentHostClient {
 
 class TabProxyDelegate : public content::DevToolsExternalAgentProxyDelegate {
  public:
-  explicit TabProxyDelegate(TabAndroid* tab)
+  explicit TabProxyDelegate(TabAndroid* tab, bool use_tab_target)
       : tab_id_(tab->GetAndroidId()),
         title_(base::UTF16ToUTF8(tab->GetTitle())),
-        url_(tab->GetURL()),
-        agent_host_(tab->web_contents()
-                        ? DevToolsAgentHost::GetOrCreateFor(tab->web_contents())
-                        : nullptr) {}
-
+        url_(tab->GetURL()) {
+    if (tab->web_contents()) {
+      agent_host_ =
+          use_tab_target
+              ? DevToolsAgentHost::GetOrCreateForTab(tab->web_contents())
+              : DevToolsAgentHost::GetOrCreateFor(tab->web_contents());
+    }
+  }
   TabProxyDelegate(const TabProxyDelegate&) = delete;
   TabProxyDelegate& operator=(const TabProxyDelegate&) = delete;
 
@@ -182,15 +185,29 @@ class TabProxyDelegate : public content::DevToolsExternalAgentProxyDelegate {
       proxies_;
 };
 
-scoped_refptr<DevToolsAgentHost> DevToolsAgentHostForTab(TabAndroid* tab) {
+scoped_refptr<DevToolsAgentHost> DevToolsAgentHostForTab(TabAndroid* tab,
+                                                         bool use_tab_target) {
   scoped_refptr<DevToolsAgentHost> result = tab->GetDevToolsAgentHost();
   if (result)
     return result;
 
-  result = DevToolsAgentHost::Forward(base::NumberToString(tab->GetAndroidId()),
-                                      std::make_unique<TabProxyDelegate>(tab));
+  result = DevToolsAgentHost::Forward(
+      base::NumberToString(tab->GetAndroidId()),
+      std::make_unique<TabProxyDelegate>(tab, use_tab_target));
   tab->SetDevToolsAgentHost(result);
   return result;
+}
+
+static const void* const kCreatedByDevTools = &kCreatedByDevTools;
+
+bool IsCreatedByDevTools(const WebContents& web_contents) {
+  return !!web_contents.GetUserData(kCreatedByDevTools);
+}
+
+void MarkCreatedByDevTools(WebContents& web_contents) {
+  DCHECK(!IsCreatedByDevTools(web_contents));
+  web_contents.SetUserData(kCreatedByDevTools,
+                           std::make_unique<base::SupportsUserData::Data>());
 }
 
 } //  namespace
@@ -223,9 +240,16 @@ DevToolsManagerDelegateAndroid::RemoteDebuggingTargets() {
       if (!tab)
         continue;
 
-      if (tab->web_contents())
-        tab_web_contents.insert(tab->web_contents());
-      result.push_back(DevToolsAgentHostForTab(tab));
+      WebContents* wc = tab->web_contents();
+      // For web contents created programmatically by CDP clients, do not create
+      // tab proxies to avoid clients being confused by the fact they get more
+      // targets than they create and match the behavior of desktop chrome.
+      if (!wc || !IsCreatedByDevTools(*wc)) {
+        result.push_back(DevToolsAgentHostForTab(tab, false));
+        if (wc) {
+          tab_web_contents.insert(wc);
+        }
+      }
     }
   }
 
@@ -244,7 +268,7 @@ DevToolsManagerDelegateAndroid::RemoteDebuggingTargets() {
 }
 
 scoped_refptr<DevToolsAgentHost>
-DevToolsManagerDelegateAndroid::CreateNewTarget(const GURL& url) {
+DevToolsManagerDelegateAndroid::CreateNewTarget(const GURL& url, bool for_tab) {
   if (TabModelList::models().empty())
     return nullptr;
 
@@ -256,8 +280,9 @@ DevToolsManagerDelegateAndroid::CreateNewTarget(const GURL& url) {
   if (!web_contents)
     return nullptr;
 
-  TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
-  return tab ? DevToolsAgentHostForTab(tab) : nullptr;
+  MarkCreatedByDevTools(*web_contents);
+  return for_tab ? DevToolsAgentHost::GetOrCreateForTab(web_contents)
+                 : DevToolsAgentHost::GetOrCreateFor(web_contents);
 }
 
 bool DevToolsManagerDelegateAndroid::IsBrowserTargetDiscoverable() {

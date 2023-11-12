@@ -4,8 +4,8 @@
 
 #include "extensions/browser/events/lazy_event_dispatcher.h"
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -23,7 +23,7 @@ LazyEventDispatcher::LazyEventDispatcher(BrowserContext* browser_context,
     : browser_context_(browser_context),
       dispatch_function_(std::move(dispatch_function)) {}
 
-LazyEventDispatcher::~LazyEventDispatcher() {}
+LazyEventDispatcher::~LazyEventDispatcher() = default;
 
 void LazyEventDispatcher::Dispatch(const Event& event,
                                    const LazyContextId& dispatch_context,

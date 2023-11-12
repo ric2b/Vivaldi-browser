@@ -34,6 +34,9 @@ config("features") {
   if (is_vivaldi_automotive) {
     defines += [ "OEM_AUTOMOTIVE_BUILD" ]
   }
+  if (is_vivaldi_preloaded) {
+    defines += [ "OEM_PRELOADED_BUILD" ]
+  }
   if (is_vivaldi_polestar) {
     defines += [ "OEM_POLESTAR_BUILD" ]
   }
@@ -46,8 +49,8 @@ config("features") {
   if (is_vivaldi_mercedes) {
     defines += [ "OEM_MERCEDES_BUILD" ]
   }
-  if (is_vivaldi_preloaded) {
-    defines += [ "OEM_PRELOADED_BUILD" ]
+  if (is_vivaldi_volvo) {
+    defines += [ "OEM_VOLVO_BUILD" ]
   }
 }
 

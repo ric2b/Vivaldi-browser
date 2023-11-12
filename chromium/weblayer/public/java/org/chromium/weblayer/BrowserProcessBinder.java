@@ -9,8 +9,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
 
-import org.chromium.webengine.interfaces.IFragmentParams;
-import org.chromium.webengine.interfaces.IWebFragmentDelegate;
+import org.chromium.webengine.interfaces.IBooleanCallback;
+import org.chromium.webengine.interfaces.IStringCallback;
+import org.chromium.webengine.interfaces.IWebEngineDelegateClient;
+import org.chromium.webengine.interfaces.IWebEngineParams;
 import org.chromium.webengine.interfaces.IWebSandboxCallback;
 import org.chromium.webengine.interfaces.IWebSandboxService;
 
@@ -27,9 +29,46 @@ class BrowserProcessBinder extends IWebSandboxService.Stub {
     }
 
     @Override
+    public void isAvailable(IBooleanCallback callback) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                callback.onResult(WebLayer.isAvailable(mContext));
+            } catch (RemoteException e) {
+            }
+        });
+    }
+
+    @Override
+    public void getVersion(IStringCallback callback) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                callback.onResult(WebLayer.getSupportedFullVersion(mContext));
+            } catch (RemoteException e) {
+            }
+        });
+    }
+
+    @Override
+    public void getProviderPackageName(IStringCallback callback) {
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                callback.onResult(WebLayer.getProviderPackageName(mContext));
+            } catch (RemoteException e) {
+            }
+        });
+    }
+
+    @Override
     public void initializeBrowserProcess(IWebSandboxCallback callback) {
         new Handler(Looper.getMainLooper()).post(() -> {
-            WebLayer.loadAsync(mContext, (webLayer) -> onWebLayerReady(webLayer, callback));
+            try {
+                WebLayer.loadAsync(mContext, (webLayer) -> onWebLayerReady(webLayer, callback));
+            } catch (Exception e) {
+                try {
+                    callback.onBrowserProcessInitializationFailure();
+                } catch (RemoteException re) {
+                }
+            }
         });
     }
 
@@ -42,10 +81,11 @@ class BrowserProcessBinder extends IWebSandboxService.Stub {
     }
 
     @Override
-    public IWebFragmentDelegate createFragmentDelegate(IFragmentParams params) {
+    public void createWebEngineDelegate(
+            IWebEngineParams params, IWebEngineDelegateClient webEngineClient) {
         assert mWebLayer != null;
 
-        return new WebFragmentDelegate(mContext, mWebLayer, params);
+        WebEngineDelegate.create(mContext, mWebLayer, params, webEngineClient);
     }
 
     @Override

@@ -91,12 +91,12 @@ class TestCascade {
       : state_(document, target ? *target : *document.body()),
         cascade_(InitState(state_)) {}
 
-  scoped_refptr<ComputedStyle> TakeStyle() { return state_.TakeStyle(); }
+  scoped_refptr<const ComputedStyle> TakeStyle() { return state_.TakeStyle(); }
 
   StyleResolverState& State() { return state_; }
   StyleCascade& InnerCascade() { return cascade_; }
 
-  void InheritFrom(scoped_refptr<ComputedStyle> parent) {
+  void InheritFrom(scoped_refptr<const ComputedStyle> parent) {
     state_.SetParentStyle(parent);
     state_.StyleBuilder().InheritFrom(*parent);
   }
@@ -190,8 +190,9 @@ class TestCascade {
 
     // Add to cascade:
     const auto& update = state_.AnimationUpdate();
-    if (update.IsEmpty())
+    if (update.IsEmpty()) {
       return;
+    }
 
     cascade_.AddInterpolations(&update.ActiveInterpolationsForAnimations(),
                                CascadeOrigin::kAnimation);
@@ -225,12 +226,13 @@ class TestCascade {
   Element* Body() const { return GetDocument().body(); }
 
   static StyleResolverState& InitState(StyleResolverState& state) {
-    state.SetStyle(InitialStyle(state.GetDocument()));
+    state.SetStyle(*InitialStyle(state.GetDocument()));
     state.SetParentStyle(InitialStyle(state.GetDocument()));
+    state.SetOldStyle(state.GetElement().GetComputedStyle());
     return state;
   }
 
-  static scoped_refptr<ComputedStyle> InitialStyle(Document& document) {
+  static scoped_refptr<const ComputedStyle> InitialStyle(Document& document) {
     return document.GetStyleResolver().InitialStyleForElement();
   }
 
@@ -262,13 +264,15 @@ class TestCascade {
   }
 
   void EnsureAtLeast(CascadeOrigin origin) {
-    while (current_origin_ < origin)
+    while (current_origin_ < origin) {
       FinishOrigin();
+    }
   }
 
   void CalculateInterpolationUpdate() {
     CSSAnimations::CalculateTransitionUpdate(
-        state_.AnimationUpdate(), state_.GetElement(), state_.StyleBuilder());
+        state_.AnimationUpdate(), state_.GetElement(), state_.StyleBuilder(),
+        state_.OldStyle());
     CSSAnimations::CalculateAnimationUpdate(
         state_.AnimationUpdate(), state_.GetElement(), state_.GetElement(),
         state_.StyleBuilder(), state_.ParentStyle(),
@@ -2946,6 +2950,26 @@ TEST_F(StyleCascadeTest, WebkitTransformOriginMixedCascadeOrder) {
   EXPECT_EQ(nullptr, cascade.ComputedValue("-webkit-transform-origin-z"));
 }
 
+TEST_F(StyleCascadeTest, VerticalAlignBaselineSource) {
+  TestCascade cascade(GetDocument());
+  cascade.Add("vertical-align", "top");
+  cascade.Add("baseline-source", "first");
+  cascade.Apply();
+
+  EXPECT_EQ("top", cascade.ComputedValue("vertical-align"));
+  EXPECT_EQ("first", cascade.ComputedValue("baseline-source"));
+}
+
+TEST_F(StyleCascadeTest, VerticalAlignBaselineSourceReversed) {
+  TestCascade cascade(GetDocument());
+  cascade.Add("baseline-source", "first");
+  cascade.Add("vertical-align", "top");
+  cascade.Apply();
+
+  EXPECT_EQ("top", cascade.ComputedValue("vertical-align"));
+  EXPECT_EQ("auto", cascade.ComputedValue("baseline-source"));
+}
+
 TEST_F(StyleCascadeTest, InitialDirection) {
   TestCascade cascade(GetDocument());
   cascade.Add("margin-inline-start:10px");
@@ -3486,8 +3510,9 @@ TEST_F(StyleCascadeTest, InitialColor) {
 
 TEST_F(StyleCascadeTest, MaxSubstitutionTokens) {
   StringBuilder builder;
-  for (size_t i = 0; i < StyleCascade::kMaxSubstitutionTokens; ++i)
+  for (size_t i = 0; i < StyleCascade::kMaxSubstitutionTokens; ++i) {
     builder.Append(':');  // <colon-token>
+  }
 
   String at_limit = builder.ToString();
   String above_limit = builder.ToString() + ":";

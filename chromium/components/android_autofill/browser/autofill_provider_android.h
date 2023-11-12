@@ -80,14 +80,14 @@ class AutofillProviderAndroid : public AutofillProvider {
   void OnDidFillAutofillFormData(AndroidAutofillManager* manager,
                                  const FormData& form,
                                  base::TimeTicks timestamp) override;
-  void OnFormsSeen(AndroidAutofillManager* manager,
-                   const std::vector<FormData>& forms) override;
   void OnHidePopup(AndroidAutofillManager* manager) override;
   void OnServerPredictionsAvailable(AndroidAutofillManager* manager) override;
   void OnServerQueryRequestError(AndroidAutofillManager* manager,
                                  FormSignature form_signature) override;
 
   void Reset(AndroidAutofillManager* manager) override;
+
+  bool GetCachedIsAutofilled(const FormFieldData& field) const override;
 
   // Methods called by Java.
   void OnAutofillAvailable(JNIEnv* env, jobject jcaller, jobject form_data);
@@ -133,8 +133,12 @@ class AutofillProviderAndroid : public AutofillProvider {
 
   // The form of the current session (queried input or changed select box).
   std::unique_ptr<FormDataAndroid> form_;
-  // The field of the current session (queried input or changed select box).
+
+  // Properties of the field of the current session (queried input or changed
+  // select box).
   FieldGlobalId field_id_;
+  FieldTypeGroup field_type_group_{FieldTypeGroup::kNoGroup};
+
   // The origin of the field of the current session (cf. `field_id_`). This is
   // determines which fields are safe to be filled in cross-frame forms.
   url::Origin triggered_origin_;

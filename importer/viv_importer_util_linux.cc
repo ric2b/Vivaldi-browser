@@ -2,8 +2,8 @@
 
 #include <string>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/shell_integration.h"
 
 #include "importer/viv_importer_utils.h"

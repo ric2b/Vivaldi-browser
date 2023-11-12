@@ -20,7 +20,6 @@
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_policy_builder.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
@@ -97,9 +96,10 @@ class KioskCrashRestoreTest : public MixinBasedInProcessBrowserTest,
     g_browser_process->local_state()->SetString(prefs::kDeviceSettingsCache,
                                                 encoded);
 
-    base::Value accounts(base::Value::Type::LIST);
+    base::Value::List accounts;
     accounts.Append(GetTestAppUserId());
-    g_browser_process->local_state()->Set("PublicAccounts", accounts);
+    g_browser_process->local_state()->SetList("PublicAccounts",
+                                              std::move(accounts));
   }
 
   policy::DevicePolicyBuilder device_policy_;

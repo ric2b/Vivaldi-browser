@@ -27,7 +27,6 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/task/sequence_manager/work_queue.h"
 #include "build/build_config.h"
 
 namespace base {
@@ -595,8 +594,6 @@ void FeatureList::SetInstance(std::unique_ptr<FeatureList> instance) {
   g_cache_override_state =
       base::FeatureList::IsEnabled(kCacheFeatureOverrideState);
 
-  base::sequence_manager::internal::WorkQueue::ConfigureCapacityFieldTrial();
-
 #if BUILDFLAG(DCHECK_IS_CONFIGURABLE)
   // Update the behaviour of LOGGING_DCHECK to match the Feature configuration.
   // DCHECK is also forced to be FATAL if we are running a death-test.
@@ -673,7 +670,12 @@ FeatureList::OverrideState FeatureList::GetOverrideState(
     const Feature& feature) const {
   DCHECK(initialized_);
   DCHECK(IsValidFeatureOrFieldTrialName(feature.name)) << feature.name;
-  DCHECK(CheckFeatureIdentity(feature)) << feature.name;
+  DCHECK(CheckFeatureIdentity(feature))
+      << feature.name
+      << " has multiple definitions. Either it is defined more than once in "
+         "code or (for component builds) the code is built into multiple "
+         "components (shared libraries) without a corresponding export "
+         "statement";
 
   // If caching is disabled, always perform the full lookup.
   if (!g_cache_override_state)

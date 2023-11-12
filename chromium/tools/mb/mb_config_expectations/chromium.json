@@ -101,6 +101,16 @@
       "use_remoteexec": true
     }
   },
+  "linux-lacros-archive-rel": {
+    "gn_args": {
+      "chromeos_is_browser_only": true,
+      "dcheck_always_on": false,
+      "is_component_build": false,
+      "is_debug": false,
+      "target_os": "chromeos",
+      "use_remoteexec": true
+    }
+  },
   "linux-official": {
     "gn_args": {
       "is_official_build": true,
@@ -164,7 +174,6 @@
       "dcheck_always_on": false,
       "is_component_build": false,
       "is_debug": false,
-      "skip_archive_compression": false,
       "symbol_level": 1,
       "use_remoteexec": true
     }
@@ -190,7 +199,6 @@
       "dcheck_always_on": false,
       "is_component_build": false,
       "is_debug": false,
-      "skip_archive_compression": false,
       "symbol_level": 1,
       "target_cpu": "x86",
       "use_remoteexec": true

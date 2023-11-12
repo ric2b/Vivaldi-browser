@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "ash/ash_export.h"
 #include "ash/capture_mode/capture_mode_metrics.h"
@@ -14,8 +15,8 @@
 #include "ash/capture_mode/video_recording_watcher.h"
 #include "ash/public/cpp/capture_mode/capture_mode_delegate.h"
 #include "ash/public/cpp/session/session_observer.h"
-#include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -236,14 +237,18 @@ class ASH_EXPORT CaptureModeController
 
   // Returns the current parent window for the on-capture-surface widgets such
   // as `CaptureModeCameraController::camera_preview_widget_` and
-  // `CaptureModeDemoToolsController::demo_tools_widget_`.
+  // `CaptureModeDemoToolsController::key_combo_widget_`.
   aura::Window* GetOnCaptureSurfaceWidgetParentWindow() const;
 
   // Returns the bounds, within which the on-capture-surface widgets (such as
-  // the camera preview and the demo tools widget) will be confined. The bounds
-  // is in screen coordinate when capture source is `kFullscreen` or 'kRegion',
-  // but in window's coordinate when it is 'kWindow' type.
+  // the camera preview widget and the key combo widget) will be confined. The
+  // bounds is in screen coordinate when capture source is `kFullscreen` or
+  // 'kRegion', but in window's coordinate when it is 'kWindow' type.
   gfx::Rect GetCaptureSurfaceConfineBounds() const;
+
+  // Returns the windows that to be avoided for collision with other system
+  // windows such as the PIP window and the automatic click bubble menu.
+  std::vector<aura::Window*> GetWindowsForCollisionAvoidance() const;
 
   // recording::mojom::RecordingServiceClient:
   void OnRecordingEnded(recording::mojom::RecordingStatus status,
@@ -266,8 +271,9 @@ class ASH_EXPORT CaptureModeController
   void StartVideoRecordingImmediatelyForTesting();
 
   // Restores the capture mode configurations that include the `type_`,
-  // `source_` and `enable_audio_recording_` if any of them gets overridden in
-  // the projector-initiated capture mode session.
+  // `source_`, `enable_audio_recording_`, `recording_type_` and
+  // `enable_demo_tools_` if any of them gets overridden in the
+  // projector-initiated capture mode session.
   void MaybeRestoreCachedCaptureConfigurations();
 
   CaptureModeDelegate* delegate_for_testing() const { return delegate_.get(); }
@@ -285,7 +291,9 @@ class ASH_EXPORT CaptureModeController
   struct CaptureSessionConfigs {
     CaptureModeType type;
     CaptureModeSource source;
+    RecordingType recording_type;
     bool audio_on;
+    bool demo_tools_enabled;
   };
 
   // Called by |video_recording_watcher_| when the display on which recording is

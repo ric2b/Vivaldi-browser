@@ -45,6 +45,11 @@
       #safeBrowsingEnhanced .bullet-line:last-of-type {
         padding-bottom: 12px;
       }
+
+      #safeBrowsingEnhanced {
+        --cr-radio-button-unchecked-ripple-color: 
+            var(--cr-radio-button-checked-ripple-color);
+      }
     </style>
     <picture>
       <source
@@ -158,10 +163,11 @@
     </div>
     <template is="dom-if" if="[[showHttpsOnlyModeSetting_]]">
       <settings-toggle-button
-        id="httpsOnlyModeToggle"
-        pref="{{prefs.https_only_mode_enabled}}"
-        label="$i18n{httpsOnlyModeTitle}"
-        sub-label="$i18n{httpsOnlyModeDescription}">
+         id="httpsOnlyModeToggle"
+         pref="{{prefs.generated.https_first_mode_enabled}}"
+         label="$i18n{httpsOnlyModeTitle}"
+         sub-label="[[getHttpsFirstModeSubLabel_(
+                        prefs.generated.https_first_mode_enabled.*)]]">
       </settings-toggle-button>
     </template>
     <template is="dom-if" if="[[showSecureDnsSetting_]]">
@@ -171,6 +177,7 @@
     <template is="dom-if" if="[[showSecureDnsSettingLink_]]">
         <cr-link-row id="openChromeOSSecureDnsSettings"
             on-click="onOpenChromeOsSecureDnsSettingsClicked_"
+            button-aria-description="$i18n{opensInNewTab}"
             label="$i18n{openChromeOSSecureDnsSettingsLabel}" external>
         </cr-link-row>
     </template>
@@ -199,6 +206,7 @@
         class="hr"
 <if expr="not use_nss_certs">
         external
+        button-aria-description="$i18n{opensInNewTab}"
 </if>
 <if expr="use_nss_certs">
         role-description="$i18n{subpageArrowRoleDescription}"
@@ -213,6 +221,7 @@
       <cr-link-row id="manageCertificates"
           class="hr"
           external
+          button-aria-description="$i18n{opensInNewTab}"
           label="$i18n{manageCertificates}"
           sub-label="$i18n{manageCertificatesDescription}"
           on-click="onManageCertificatesClick_"></cr-link-row>
@@ -222,6 +231,7 @@
       <cr-link-row id="manageCertificates"
           class="hr"
           external
+          button-aria-description="$i18n{opensInNewTab}"
           label="$i18n{manageDeviceCertificates}"
           sub-label="$i18n{manageDeviceCertificatesDescription}"
           on-click="onManageCertificatesClick_"></cr-link-row>
@@ -229,6 +239,7 @@
       <cr-link-row id="chromeCertificates"
           class="hr"
           external
+          button-aria-description="$i18n{opensInNewTab}"
           label="$i18n{chromeCertificates}"
           sub-label="$i18n{chromeCertificatesDescription}"
           on-click="onChromeCertificatesClick_"></cr-link-row>
@@ -241,6 +252,7 @@
         label="$i18n{advancedProtectionProgramTitle}"
         sub-label="$i18n{advancedProtectionProgramDesc}"
         on-click="onAdvancedProtectionProgramLinkClick_"
+        button-aria-description="$i18n{opensInNewTab}"
         external>
     </cr-link-row>
     <template is="dom-if" if="[[showDisableSafebrowsingDialog_]]" restamp>

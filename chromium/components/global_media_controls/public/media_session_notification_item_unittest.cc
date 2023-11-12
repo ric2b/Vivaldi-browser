@@ -10,6 +10,7 @@
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "components/global_media_controls/public/test/mock_media_session_notification_item_delegate.h"
 #include "components/media_message_center/mock_media_notification_view.h"
 #include "media/base/media_switches.h"
 #include "services/media_session/public/cpp/test/test_media_controller.h"
@@ -24,25 +25,6 @@ using testing::NiceMock;
 namespace global_media_controls {
 
 namespace {
-
-class MockMediaSessionNotificationItemDelegate
-    : public MediaSessionNotificationItem::Delegate {
- public:
-  MockMediaSessionNotificationItemDelegate() = default;
-  MockMediaSessionNotificationItemDelegate(
-      const MockMediaSessionNotificationItemDelegate&) = delete;
-  MockMediaSessionNotificationItemDelegate& operator=(
-      const MockMediaSessionNotificationItemDelegate&) = delete;
-  ~MockMediaSessionNotificationItemDelegate() override = default;
-
-  MOCK_METHOD(void, ActivateItem, (const std::string&));
-  MOCK_METHOD(void, HideItem, (const std::string&));
-  MOCK_METHOD(void, RemoveItem, (const std::string&));
-  MOCK_METHOD(void, RefreshItem, (const std::string&));
-  MOCK_METHOD(void,
-              LogMediaSessionActionButtonPressed,
-              (const std::string&, MediaSessionAction));
-};
 
 const char kRequestId[] = "requestid";
 
@@ -70,7 +52,9 @@ class MediaSessionNotificationItemTest : public testing::Test {
     return view_;
   }
 
-  MockMediaSessionNotificationItemDelegate& delegate() { return delegate_; }
+  test::MockMediaSessionNotificationItemDelegate& delegate() {
+    return delegate_;
+  }
 
   media_session::test::TestMediaController& controller() { return controller_; }
 
@@ -82,7 +66,7 @@ class MediaSessionNotificationItemTest : public testing::Test {
 
  private:
   NiceMock<media_message_center::test::MockMediaNotificationView> view_;
-  NiceMock<MockMediaSessionNotificationItemDelegate> delegate_;
+  NiceMock<test::MockMediaSessionNotificationItemDelegate> delegate_;
   media_session::test::TestMediaController controller_;
   std::unique_ptr<MediaSessionNotificationItem> item_;
 
@@ -449,7 +433,8 @@ TEST_F(MediaSessionNotificationItemTest, GetMediaSessionActions) {
   auto session_info = media_session::mojom::MediaSessionInfo::New();
   auto remote_playback_metadata =
       media_session::mojom::RemotePlaybackMetadata::New(
-          "video_codec", "audio_codec", false, true, "device_friendly_name");
+          "video_codec", "audio_codec", false, true, "device_friendly_name",
+          false);
   session_info->remote_playback_metadata = std::move(remote_playback_metadata);
   item().MediaSessionInfoChanged(std::move(session_info));
   EXPECT_FALSE(item().GetMediaSessionActions().contains(
@@ -468,7 +453,8 @@ TEST_F(MediaSessionNotificationItemTest, GetSessionMetadata) {
   auto session_info = media_session::mojom::MediaSessionInfo::New();
   auto remote_playback_metadata =
       media_session::mojom::RemotePlaybackMetadata::New(
-          "video_codec", "audio_codec", false, true, "device_friendly_name");
+          "video_codec", "audio_codec", false, true, "device_friendly_name",
+          false);
   session_info->remote_playback_metadata = std::move(remote_playback_metadata);
   item().MediaSessionInfoChanged(std::move(session_info));
 
@@ -476,4 +462,42 @@ TEST_F(MediaSessionNotificationItemTest, GetSessionMetadata) {
             item().GetSessionMetadata().source_title);
 }
 
+TEST_F(MediaSessionNotificationItemTest, GetRemotePlaybackMetadata) {
+  auto session_info = media_session::mojom::MediaSessionInfo::New();
+  item().MediaSessionInfoChanged(session_info.Clone());
+  EXPECT_TRUE(item().GetRemotePlaybackMetadata().is_null());
+
+  // Remote Playback disabled.
+  session_info->remote_playback_metadata =
+      media_session::mojom::RemotePlaybackMetadata::New(
+          "video_codec", "audio_codec", /* remote_playback_disabled */ true,
+          /* remote_playback_started */ true, "device_friendly_name",
+          /* is_encrypted_media */ false);
+  item().MediaSessionInfoChanged(session_info.Clone());
+  EXPECT_TRUE(item().GetRemotePlaybackMetadata().is_null());
+
+  // Encrypted media.
+  session_info->remote_playback_metadata =
+      media_session::mojom::RemotePlaybackMetadata::New(
+          "video_codec", "audio_codec", /* remote_playback_disabled */ false,
+          /* remote_playback_started */ true, "device_friendly_name",
+          /* is_encrypted_media */ true);
+  item().MediaSessionInfoChanged(session_info.Clone());
+  EXPECT_TRUE(item().GetRemotePlaybackMetadata().is_null());
+
+  // All criteria are met.
+  session_info->remote_playback_metadata =
+      media_session::mojom::RemotePlaybackMetadata::New(
+          "video_codec", "audio_codec", /* remote_playback_disabled */ false,
+          /* remote_playback_started */ true, "device_friendly_name",
+          /* is_encrypted_media */ false);
+  item().MediaSessionInfoChanged(session_info.Clone());
+  EXPECT_FALSE(item().GetRemotePlaybackMetadata().is_null());
+
+  // Content's duration is too short.
+  item().MediaSessionPositionChanged(media_session::MediaPosition(
+      /*playback_rate=*/1, /*duration=*/base::Seconds(10),
+      /*position=*/base::Seconds(1), /*end_of_media=*/false));
+  EXPECT_TRUE(item().GetRemotePlaybackMetadata().is_null());
+}
 }  // namespace global_media_controls

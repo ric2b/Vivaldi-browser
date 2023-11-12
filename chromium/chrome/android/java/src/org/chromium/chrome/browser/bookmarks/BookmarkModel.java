@@ -174,10 +174,7 @@ public class BookmarkModel extends BookmarkBridge {
      * @return The id of the default folder to view bookmarks.
      */
     public BookmarkId getDefaultFolderViewLocation() {
-        if (ReadingListFeatures.shouldUseRootFolderAsDefaultForReadLater()) {
-            return getRootFolderId();
-        }
-        return getMobileFolderId();
+        return getRootFolderId();
     }
 
     /** Vivaldi **/

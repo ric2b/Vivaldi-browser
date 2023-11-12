@@ -61,8 +61,9 @@ bool StructTraits<printing::mojom::PageSetupDataView, printing::PageSetup>::
     return false;
   if (page_setup.content_area() != content_area)
     return false;
-  if (!effective_margins.Equals(page_setup.effective_margins()))
+  if (page_setup.effective_margins() != effective_margins) {
     return false;
+  }
 
   *out = page_setup;
   return true;
@@ -117,6 +118,9 @@ bool StructTraits<
     return false;
   out->set_requested_media(requested_media);
 
+  // Must set orientation before page setup, otherwise it can introduce an extra
+  // flipping of landscape page size dimensions.
+  out->SetOrientation(data.landscape());
   printing::PageSetup page_setup;
   if (!data.ReadPageSetupDeviceUnits(&page_setup))
     return false;
@@ -130,7 +134,6 @@ bool StructTraits<
   out->set_scale_factor(data.scale_factor());
   out->set_rasterize_pdf(data.rasterize_pdf());
 
-  out->SetOrientation(data.landscape());
   out->set_supports_alpha_blend(data.supports_alpha_blend());
 #if BUILDFLAG(IS_WIN)
   out->set_printer_language_type(data.printer_language_type());

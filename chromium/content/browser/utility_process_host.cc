@@ -8,10 +8,10 @@
 #include <utility>
 
 #include "base/base_switches.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/base_i18n_switches.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
@@ -19,11 +19,10 @@
 #include "build/build_config.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
+#include "content/browser/child_process_host_impl.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/utility_sandbox_delegate.h"
-#include "content/browser/v8_snapshot_files.h"
-#include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -34,6 +33,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+#include "content/public/common/zygote/zygote_buildflags.h"
 #include "media/base/media_switches.h"
 #include "media/webrtc/webrtc_features.h"
 #include "sandbox/policy/mojom/sandbox.mojom.h"
@@ -50,6 +50,10 @@
 
 #if BUILDFLAG(IS_MAC)
 #include "components/os_crypt/os_crypt_switches.h"
+#endif
+
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
+#include "content/browser/v8_snapshot_files.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -79,6 +83,7 @@ UtilityProcessHost::UtilityProcessHost(std::unique_ptr<Client> client)
 #endif
       started_(false),
       name_(u"utility process"),
+      file_data_(std::make_unique<ChildProcessLauncherFileData>()),
       client_(std::move(client)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   process_ = std::make_unique<BrowserChildProcessHostImpl>(
@@ -148,6 +153,21 @@ void UtilityProcessHost::SetExtraCommandLineSwitches(
   extra_switches_ = std::move(switches);
 }
 
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
+void UtilityProcessHost::AddFileToPreload(
+    std::string key,
+    absl::variant<base::FilePath, base::ScopedFD> file) {
+  DCHECK_EQ(file_data_->files_to_preload.count(key), 0u);
+  file_data_->files_to_preload.insert({std::move(key), std::move(file)});
+}
+#endif  // BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(USE_ZYGOTE)
+void UtilityProcessHost::SetZygoteForTesting(ZygoteCommunication* handle) {
+  zygote_for_testing_ = handle;
+}
+#endif  // BUILDFLAG(USE_ZYGOTE)
+
 mojom::ChildProcess* UtilityProcessHost::GetChildProcess() {
   return static_cast<ChildProcessHostImpl*>(process_->GetHost())
       ->child_process();
@@ -186,7 +206,7 @@ bool UtilityProcessHost::StartProcess() {
         base::FeatureList::IsEnabled(features::kWarmUpNetworkProcess)) {
       process_->EnableWarmUpConnection();
     }
-#else
+#else  // BUILDFLAG(IS_ANDROID)
 #if BUILDFLAG(IS_MAC)
     if (sandbox_type_ == sandbox::mojom::Sandbox::kServiceWithJit)
       DCHECK_EQ(child_flags_, ChildProcessHost::CHILD_RENDERER);
@@ -209,7 +229,7 @@ bool UtilityProcessHost::StartProcess() {
 
     std::unique_ptr<base::CommandLine> cmd_line =
         std::make_unique<base::CommandLine>(exe_path);
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
 
     cmd_line->AppendSwitchASCII(switches::kProcessType,
                                 switches::kUtilityProcess);
@@ -335,17 +355,22 @@ bool UtilityProcessHost::StartProcess() {
     }
 #endif
 
-    auto file_data = std::make_unique<ChildProcessLauncherFileData>();
-#if BUILDFLAG(IS_POSIX)
-    file_data->files_to_preload = GetV8SnapshotFilesToPreload();
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_MAC)
+    file_data_->files_to_preload.merge(GetV8SnapshotFilesToPreload());
 #endif  // BUILDFLAG(IS_POSIX)
 
     std::unique_ptr<UtilitySandboxedProcessLauncherDelegate> delegate =
         std::make_unique<UtilitySandboxedProcessLauncherDelegate>(
             sandbox_type_, env_, *cmd_line);
 
+#if BUILDFLAG(USE_ZYGOTE)
+    if (zygote_for_testing_.has_value()) {
+      delegate->SetZygote(zygote_for_testing_.value());
+    }
+#endif
+
     process_->LaunchWithFileData(std::move(delegate), std::move(cmd_line),
-                                 std::move(file_data), true);
+                                 std::move(file_data_), true);
   }
 
   return true;

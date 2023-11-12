@@ -5,7 +5,7 @@
 #include "chromeos/ash/components/login/auth/stub_authenticator.h"
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/notreached.h"
 #include "base/task/single_thread_task_runner.h"
@@ -53,11 +53,6 @@ void StubAuthenticator::AuthenticateToLogin(
             FROM_HERE, base::BindOnce(&StubAuthenticator::OnAuthFailure, this,
                                       AuthFailure(failure_reason_)));
         break;
-      case AuthAction::kPasswordChange:
-        task_runner_->PostTask(
-            FROM_HERE,
-            base::BindOnce(&StubAuthenticator::OnPasswordChangeDetected, this));
-        break;
       case AuthAction::kOldEncryption:
         if (user_context->IsForcingDircrypto()) {
           task_runner_->PostTask(
@@ -94,7 +89,6 @@ void StubAuthenticator::AuthenticateToUnlock(
                                       AuthFailure(failure_reason_)));
         break;
       case AuthAction::kAuthSuccess:
-      case AuthAction::kPasswordChange:
       case AuthAction::kOldEncryption:
         // The distinction between fields other than AuthAction::kAuthFailure
         // only matter for login.
@@ -175,24 +169,18 @@ void StubAuthenticator::RecoverEncryptedData(
     std::unique_ptr<UserContext> user_context,
     const std::string& old_password) {
   if (old_password_ != old_password) {
-    if (data_recovery_notifier_)
-      data_recovery_notifier_.Run(DataRecoveryStatus::kRecoveryFailed);
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&StubAuthenticator::OnPasswordChangeDetected, this));
     return;
   }
 
-  if (data_recovery_notifier_)
-    data_recovery_notifier_.Run(DataRecoveryStatus::kRecovered);
   task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&StubAuthenticator::OnAuthSuccess, this));
 }
 
 void StubAuthenticator::ResyncEncryptedData(
     std::unique_ptr<UserContext> user_context) {
-  if (data_recovery_notifier_)
-    data_recovery_notifier_.Run(DataRecoveryStatus::kResynced);
   task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&StubAuthenticator::OnAuthSuccess, this));
 }
@@ -215,25 +203,26 @@ UserContext StubAuthenticator::ExpectedUserContextWithTransformedKey() const {
       expected_user_context_.GetAccountId().GetUserEmail() + kUserIdHashSuffix);
   user_context.GetKey()->Transform(Key::KEY_TYPE_SALTED_SHA256_TOP_HALF,
                                    "some-salt");
-  if (features::IsUseAuthFactorsEnabled()) {
-    cryptohome::AuthFactorsSet factors;
-    factors.Put(cryptohome::AuthFactorType::kPassword);
-    factors.Put(cryptohome::AuthFactorType::kPin);
-    factors.Put(cryptohome::AuthFactorType::kRecovery);
-    cryptohome::AuthFactorRef ref(
-        cryptohome::AuthFactorType::kPassword,
-        cryptohome::KeyLabel{kCryptohomeGaiaKeyLabel});
-    cryptohome::AuthFactor password(ref,
-                                    cryptohome::AuthFactorCommonMetadata());
-    user_context.SetAuthFactorsConfiguration(
-        AuthFactorsConfiguration{{password}, factors});
-    user_context.SetAuthSessionId("someauthsessionid");
-  }
+  cryptohome::AuthFactorsSet factors;
+  factors.Put(cryptohome::AuthFactorType::kPassword);
+  factors.Put(cryptohome::AuthFactorType::kPin);
+  factors.Put(cryptohome::AuthFactorType::kRecovery);
+  cryptohome::AuthFactorRef ref(cryptohome::AuthFactorType::kPassword,
+                                cryptohome::KeyLabel{kCryptohomeGaiaKeyLabel});
+  cryptohome::AuthFactor password(ref, cryptohome::AuthFactorCommonMetadata());
+  user_context.SetAuthFactorsConfiguration(
+      AuthFactorsConfiguration{{password}, factors});
+  user_context.SetAuthSessionId("someauthsessionid");
   return user_context;
 }
 
 void StubAuthenticator::OnPasswordChangeDetected() {
-  consumer_->OnPasswordChangeDetected(expected_user_context_);
+  if (ash::features::IsCryptohomeRecoveryEnabled()) {
+    consumer_->OnPasswordChangeDetected(
+        std::make_unique<UserContext>(expected_user_context_));
+  } else {
+    consumer_->OnPasswordChangeDetectedLegacy(expected_user_context_);
+  }
 }
 
 void StubAuthenticator::OnOldEncryptionDetected() {

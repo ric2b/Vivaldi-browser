@@ -74,7 +74,7 @@ import java.util.concurrent.TimeoutException;
                 + ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study",
         "force-fieldtrials=Study/Group"})
 @Features.EnableFeatures({ChromeFeatureList.TAB_GRID_LAYOUT_ANDROID})
-// TODO(1347089): make this test suite works for both TabSwitcherAndStartSurfaceLayout and
+// TODO(1315676): make this test suite works for both TabSwitcherAndStartSurfaceLayout and
 // TabSwitcherLayout.
 @DisableFeatures({ChromeFeatureList.START_SURFACE_REFACTOR})
 @Restriction(
@@ -84,7 +84,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
     private static final String TAG = "SSLayoutPerfTest";
     private static final String BASE_PARAMS = "force-fieldtrial-params="
             + "Study.Group:soft-cleanup-delay/0/cleanup-delay/0/skip-slow-zooming/false"
-            + "/zooming-min-sdk-version/19/zooming-min-memory-mb/512";
+            + "/zooming-min-memory-mb/512";
 
     /** Flip this to {@code true} to run performance tests locally. */
     private static final boolean PERF_RUN = false;
@@ -314,10 +314,7 @@ public class TabSwitcherAndStartSurfaceLayoutPerfTest {
                     LayoutType.TAB_SWITCHER));
 
             mTabSwitcherAndStartSurfaceLayout.setPerfListenerForTesting(null);
-            // Make sure the fading animation is done.
-            Thread.sleep(1000);
-            TestThreadUtils.runOnUiThreadBlocking(() -> { startSurface.onBackPressed(); });
-            Thread.sleep(1000);
+            TabUiTestHelper.pressBackOnGts(startSurface);
             LayoutTestUtils.waitForLayout(
                     mActivityTestRule.getActivity().getLayoutManager(), LayoutType.BROWSING);
         }

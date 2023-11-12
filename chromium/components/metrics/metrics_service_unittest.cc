@@ -10,11 +10,11 @@
 #include <memory>
 #include <string>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_functions.h"
@@ -22,15 +22,16 @@
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/platform_thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/metrics/clean_exit_beacon.h"
 #include "components/metrics/client_info.h"
+#include "components/metrics/cloned_install_detector.h"
 #include "components/metrics/environment_recorder.h"
 #include "components/metrics/log_decoder.h"
 #include "components/metrics/metrics_features.h"
@@ -225,7 +226,7 @@ class MetricsServiceTest : public testing::Test {
  public:
   MetricsServiceTest()
       : task_runner_(new base::TestSimpleTaskRunner),
-        task_runner_handle_(task_runner_),
+        task_runner_current_default_handle_(task_runner_),
         enabled_state_provider_(new TestEnabledStateProvider(false, false)) {
     base::SetRecordActionTaskRunner(task_runner_);
     MetricsService::RegisterPrefs(testing_local_state_.registry());
@@ -334,7 +335,8 @@ class MetricsServiceTest : public testing::Test {
 
  protected:
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
-  base::ThreadTaskRunnerHandle task_runner_handle_;
+  base::SingleThreadTaskRunner::CurrentDefaultHandle
+      task_runner_current_default_handle_;
   base::test::ScopedFeatureList feature_list_;
 
  private:
@@ -344,37 +346,46 @@ class MetricsServiceTest : public testing::Test {
   base::ScopedTempDir temp_dir_;
 };
 
-struct MetricsServiceTestWithFeaturesParams {
-  bool emit_histograms_earlier;
-  bool emit_for_independent_logs;
-};
-
 class MetricsServiceTestWithFeatures
     : public MetricsServiceTest,
-      public ::testing::WithParamInterface<
-          MetricsServiceTestWithFeaturesParams> {
+      public ::testing::WithParamInterface<std::tuple<bool, bool, bool>> {
  public:
   MetricsServiceTestWithFeatures() = default;
   ~MetricsServiceTestWithFeatures() override = default;
 
-  bool ShouldEmitHistogramsEarlier() {
-    return GetParam().emit_histograms_earlier;
-  }
+  bool ShouldEmitHistogramsEarlier() { return std::get<0>(GetParam()); }
+
   bool ShouldEmitHistogramsForIndependentLogs() {
-    return GetParam().emit_for_independent_logs;
+    return std::get<1>(GetParam());
   }
+
+  bool ShouldClearLogsOnClonedInstall() { return std::get<2>(GetParam()); }
 
   void SetUp() override {
     MetricsServiceTest::SetUp();
+    std::vector<base::test::FeatureRefAndParams> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
     if (ShouldEmitHistogramsEarlier()) {
       const std::map<std::string, std::string> params = {
           {"emit_for_independent_logs",
            ShouldEmitHistogramsForIndependentLogs() ? "true" : "false"}};
-      feature_list_.InitWithFeaturesAndParameters(
-          {{features::kEmitHistogramsEarlier, params}}, {});
+      enabled_features.emplace_back(features::kEmitHistogramsEarlier, params);
     } else {
-      feature_list_.InitWithFeatures({}, {features::kEmitHistogramsEarlier});
+      disabled_features.emplace_back(features::kEmitHistogramsEarlier);
     }
+
+    if (ShouldClearLogsOnClonedInstall()) {
+      enabled_features.emplace_back(
+          features::kMetricsClearLogsOnClonedInstall,
+          /*params=*/std::map<std::string, std::string>());
+    } else {
+      disabled_features.emplace_back(
+          features::kMetricsClearLogsOnClonedInstall);
+    }
+
+    feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                disabled_features);
   }
 
  private:
@@ -382,38 +393,56 @@ class MetricsServiceTestWithFeatures
 };
 
 struct StartupVisibilityTestParams {
-  const std::string test_name;
   metrics::StartupVisibility startup_visibility;
-  bool emit_histograms_earlier;
-  bool emit_for_independent_logs;
   bool expected_beacon_value;
 };
 
 class MetricsServiceTestWithStartupVisibility
     : public MetricsServiceTest,
-      public ::testing::WithParamInterface<StartupVisibilityTestParams> {
+      public ::testing::WithParamInterface<
+          std::tuple<StartupVisibilityTestParams,
+                     std::tuple<bool, bool, bool>>> {
  public:
   MetricsServiceTestWithStartupVisibility() = default;
   ~MetricsServiceTestWithStartupVisibility() override = default;
 
   bool ShouldEmitHistogramsEarlier() {
-    return GetParam().emit_histograms_earlier;
+    return std::get<0>(std::get<1>(GetParam()));
   }
+
   bool ShouldEmitHistogramsForIndependentLogs() {
-    return GetParam().emit_for_independent_logs;
+    return std::get<1>(std::get<1>(GetParam()));
+  }
+
+  bool ShouldClearLogsOnClonedInstall() {
+    return std::get<2>(std::get<1>(GetParam()));
   }
 
   void SetUp() override {
     MetricsServiceTest::SetUp();
+    std::vector<base::test::FeatureRefAndParams> enabled_features;
+    std::vector<base::test::FeatureRef> disabled_features;
+
     if (ShouldEmitHistogramsEarlier()) {
       const std::map<std::string, std::string> params = {
           {"emit_for_independent_logs",
            ShouldEmitHistogramsForIndependentLogs() ? "true" : "false"}};
-      feature_list_.InitWithFeaturesAndParameters(
-          {{features::kEmitHistogramsEarlier, params}}, {});
+      enabled_features.emplace_back(features::kEmitHistogramsEarlier, params);
     } else {
-      feature_list_.InitWithFeatures({}, {features::kEmitHistogramsEarlier});
+      disabled_features.emplace_back(features::kEmitHistogramsEarlier);
     }
+
+    if (ShouldClearLogsOnClonedInstall()) {
+      enabled_features.emplace_back(
+          features::kMetricsClearLogsOnClonedInstall,
+          /*params=*/std::map<std::string, std::string>());
+    } else {
+      disabled_features.emplace_back(
+          features::kMetricsClearLogsOnClonedInstall);
+    }
+
+    feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                disabled_features);
   }
 
  private:
@@ -459,12 +488,11 @@ base::HistogramBase::Count GetHistogramDeltaTotalCount(base::StringPiece name) {
 
 }  // namespace
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    MetricsServiceTestWithFeatures,
-    testing::Values(MetricsServiceTestWithFeaturesParams{true, true},
-                    MetricsServiceTestWithFeaturesParams{true, false},
-                    MetricsServiceTestWithFeaturesParams{false, false}));
+INSTANTIATE_TEST_SUITE_P(All,
+                         MetricsServiceTestWithFeatures,
+                         testing::Combine(testing::Bool(),
+                                          testing::Bool(),
+                                          testing::Bool()));
 
 TEST_P(MetricsServiceTestWithFeatures, InitialStabilityLogAfterCleanShutDown) {
   base::HistogramTester histogram_tester;
@@ -663,7 +691,9 @@ TEST_P(MetricsServiceTestWithFeatures, OnDidCreateMetricsLogAtShutdown) {
   // will be called during shutdown to emit histograms.
   histogram_tester.ExpectBucketCount(
       kOnDidCreateMetricsLogHistogramName, true,
-      ShouldEmitHistogramsForIndependentLogs() ? 2 : 1);
+      ShouldEmitHistogramsEarlier() && ShouldEmitHistogramsForIndependentLogs()
+          ? 2
+          : 1);
 
   // Clean up histograms.
   base::StatisticsRecorder::ForgetHistogramForTesting(
@@ -748,64 +778,20 @@ TEST_P(MetricsServiceTestWithFeatures, ProvideHistogramsEarlyReturn) {
 INSTANTIATE_TEST_SUITE_P(
     All,
     MetricsServiceTestWithStartupVisibility,
-    ::testing::Values(
-        StartupVisibilityTestParams{
-            .test_name = "UnknownVisibilityEarlyEmissionIndependentLogs",
-            .startup_visibility = StartupVisibility::kUnknown,
-            .emit_histograms_earlier = true,
-            .emit_for_independent_logs = true,
-            .expected_beacon_value = true},
-        StartupVisibilityTestParams{
-            .test_name = "BackgroundVisibilityEarlyEmissionIndependentLogs",
-            .startup_visibility = StartupVisibility::kBackground,
-            .emit_histograms_earlier = true,
-            .emit_for_independent_logs = true,
-            .expected_beacon_value = true},
-        StartupVisibilityTestParams{
-            .test_name = "ForegroundVisibilityEarlyEmissionIndependentLogs",
-            .startup_visibility = StartupVisibility::kForeground,
-            .emit_histograms_earlier = true,
-            .emit_for_independent_logs = true,
-            .expected_beacon_value = false},
-        StartupVisibilityTestParams{
-            .test_name = "UnknownVisibilityEarlyEmission",
-            .startup_visibility = StartupVisibility::kUnknown,
-            .emit_histograms_earlier = true,
-            .emit_for_independent_logs = false,
-            .expected_beacon_value = true},
-        StartupVisibilityTestParams{
-            .test_name = "BackgroundVisibilityEarlyEmission",
-            .startup_visibility = StartupVisibility::kBackground,
-            .emit_histograms_earlier = true,
-            .emit_for_independent_logs = false,
-            .expected_beacon_value = true},
-        StartupVisibilityTestParams{
-            .test_name = "ForegroundVisibilityEarlyEmission",
-            .startup_visibility = StartupVisibility::kForeground,
-            .emit_histograms_earlier = true,
-            .emit_for_independent_logs = false,
-            .expected_beacon_value = false},
-        StartupVisibilityTestParams{
-            .test_name = "UnknownVisibility",
-            .startup_visibility = StartupVisibility::kUnknown,
-            .emit_histograms_earlier = false,
-            .emit_for_independent_logs = false,
-            .expected_beacon_value = true},
-        StartupVisibilityTestParams{
-            .test_name = "BackgroundVisibility",
-            .startup_visibility = StartupVisibility::kBackground,
-            .emit_histograms_earlier = false,
-            .emit_for_independent_logs = false,
-            .expected_beacon_value = true},
-        StartupVisibilityTestParams{
-            .test_name = "ForegroundVisibility",
-            .startup_visibility = StartupVisibility::kForeground,
-            .emit_histograms_earlier = false,
-            .emit_for_independent_logs = false,
-            .expected_beacon_value = false}),
-    [](const ::testing::TestParamInfo<StartupVisibilityTestParams>& params) {
-      return params.param.test_name;
-    });
+    ::testing::Combine(
+        ::testing::Values(
+            StartupVisibilityTestParams{
+                .startup_visibility = StartupVisibility::kUnknown,
+                .expected_beacon_value = true},
+            StartupVisibilityTestParams{
+                .startup_visibility = StartupVisibility::kBackground,
+                .expected_beacon_value = true},
+            StartupVisibilityTestParams{
+                .startup_visibility = StartupVisibility::kForeground,
+                .expected_beacon_value = false}),
+        ::testing::Combine(::testing::Bool(),
+                           ::testing::Bool(),
+                           ::testing::Bool())));
 
 TEST_P(MetricsServiceTestWithStartupVisibility, InitialStabilityLogAfterCrash) {
   base::HistogramTester histogram_tester;
@@ -843,7 +829,7 @@ TEST_P(MetricsServiceTestWithStartupVisibility, InitialStabilityLogAfterCrash) {
   const std::string kCurrentVersion = "5.0.322.0-64-devel";
   client.set_version_string(kCurrentVersion);
 
-  StartupVisibilityTestParams params = GetParam();
+  StartupVisibilityTestParams params = std::get<0>(GetParam());
   TestMetricsService service(
       GetMetricsStateManager(user_data_dir_path(), params.startup_visibility),
       &client, local_state);
@@ -1072,7 +1058,8 @@ TEST_P(MetricsServiceTestWithFeatures, FirstLogCreatedBeforeUnsentLogsSent) {
   // is never deserialized to proto, so we're just passing some dummy content.
   ASSERT_EQ(0u, test_log_store->initial_log_count());
   ASSERT_EQ(0u, test_log_store->ongoing_log_count());
-  test_log_store->StoreLog("blah_blah", MetricsLog::ONGOING_LOG, LogMetadata());
+  test_log_store->StoreLog("blah_blah", MetricsLog::ONGOING_LOG, LogMetadata(),
+                           MetricsLogsEventManager::CreateReason::kUnknown);
   // Note: |initial_log_count()| refers to initial stability logs, so the above
   // log is counted an ongoing log (per its type).
   ASSERT_EQ(0u, test_log_store->initial_log_count());
@@ -1287,6 +1274,61 @@ TEST_P(MetricsServiceTestWithFeatures, EnablementObserverNotification) {
   service.Stop();
   ASSERT_TRUE(enabled.has_value());
   EXPECT_FALSE(enabled.value());
+}
+
+// Verifies that when a cloned install is detected, logs are purged.
+TEST_P(MetricsServiceTestWithFeatures, PurgeLogsOnClonedInstallDetected) {
+  EnableMetricsReporting();
+  TestMetricsServiceClient client;
+  TestMetricsService service(GetMetricsStateManager(), &client,
+                             GetLocalState());
+  service.InitializeMetricsRecordingState();
+
+  // Store various logs.
+  MetricsLogStore* test_log_store = service.LogStoreForTest();
+  test_log_store->StoreLog("dummy log data", MetricsLog::ONGOING_LOG,
+                           LogMetadata(),
+                           MetricsLogsEventManager::CreateReason::kUnknown);
+  test_log_store->StageNextLog();
+  test_log_store->StoreLog("more dummy log data", MetricsLog::ONGOING_LOG,
+                           LogMetadata(),
+                           MetricsLogsEventManager::CreateReason::kUnknown);
+  test_log_store->StoreLog("dummy stability log",
+                           MetricsLog::INITIAL_STABILITY_LOG, LogMetadata(),
+                           MetricsLogsEventManager::CreateReason::kUnknown);
+  test_log_store->SetAlternateOngoingLogStore(InitializeTestLogStoreAndGet());
+  test_log_store->StoreLog("dummy log for alternate ongoing log store",
+                           MetricsLog::ONGOING_LOG, LogMetadata(),
+                           MetricsLogsEventManager::CreateReason::kUnknown);
+  EXPECT_TRUE(test_log_store->has_staged_log());
+  EXPECT_TRUE(test_log_store->has_unsent_logs());
+
+  ClonedInstallDetector* cloned_install_detector =
+      GetMetricsStateManager()->cloned_install_detector_for_testing();
+
+  static constexpr char kTestRawId[] = "test";
+  // Hashed machine id for |kTestRawId|.
+  static constexpr int kTestHashedId = 2216819;
+
+  // Save a machine id that will not cause a clone to be detected.
+  GetLocalState()->SetInteger(prefs::kMetricsMachineId, kTestHashedId);
+  cloned_install_detector->SaveMachineId(GetLocalState(), kTestRawId);
+  // Verify that the logs are still present.
+  EXPECT_TRUE(test_log_store->has_staged_log());
+  EXPECT_TRUE(test_log_store->has_unsent_logs());
+
+  // Save a machine id that will cause a clone to be detected.
+  GetLocalState()->SetInteger(prefs::kMetricsMachineId, kTestHashedId + 1);
+  cloned_install_detector->SaveMachineId(GetLocalState(), kTestRawId);
+  // Verify that the logs were purged if the |kMetricsClearLogsOnClonedInstall|
+  // feature is enabled.
+  if (ShouldClearLogsOnClonedInstall()) {
+    EXPECT_FALSE(test_log_store->has_staged_log());
+    EXPECT_FALSE(test_log_store->has_unsent_logs());
+  } else {
+    EXPECT_TRUE(test_log_store->has_staged_log());
+    EXPECT_TRUE(test_log_store->has_unsent_logs());
+  }
 }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)

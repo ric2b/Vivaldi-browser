@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/ash/login/user_flow.h"
@@ -42,7 +42,8 @@ class FakeChromeUserManager : public ChromeUserManager {
   user_manager::User* AddKioskAppUser(const AccountId& account_id);
   user_manager::User* AddArcKioskAppUser(const AccountId& account_id);
   user_manager::User* AddWebKioskAppUser(const AccountId& account_id);
-  user_manager::User* AddPublicAccountUser(const AccountId& account_id);
+  user_manager::User* AddPublicAccountUser(const AccountId& account_id,
+                                           bool with_saml = false);
   user_manager::User* AddActiveDirectoryUser(const AccountId& account_id);
 
   // Calculates the user name hash and calls UserLoggedIn to login a user.
@@ -179,7 +180,6 @@ class FakeChromeUserManager : public ChromeUserManager {
   void SetUserAffiliation(
       const AccountId& account_id,
       const AffiliationIDSet& user_affiliation_ids) override;
-  bool ShouldReportUser(const std::string& user_id) const override;
   bool IsFullManagementDisclosureNeeded(
       policy::DeviceLocalAccountPolicyBroker* broker) const override;
   void CacheRemovedUser(const std::string& user_email,

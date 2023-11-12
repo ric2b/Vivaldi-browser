@@ -16,12 +16,11 @@ namespace autofill {
 // Unicode characters used in IBAN value obfuscation:
 //  - \u2022 - Bullet.
 //  - \u2006 - SIX-PER-EM SPACE (small space between bullets).
-constexpr char16_t kEllipsisOneDot[] = u"\u2022";
-constexpr char16_t kEllipsisOneSpace[] = u"\u2006";
+constexpr char16_t kEllipsisOneDot = u'\u2022';
+constexpr char16_t kEllipsisOneSpace = u'\u2006';
 
 IBAN::IBAN(const std::string& guid)
-    : AutofillDataModel(guid, /*origin=*/std::string()),
-      record_type_(LOCAL_IBAN) {}
+    : AutofillDataModel(guid, /*origin=*/std::string()) {}
 
 IBAN::IBAN() : IBAN(base::GenerateGUID()) {}
 
@@ -35,15 +34,13 @@ IBAN& IBAN::operator=(const IBAN& iban) = default;
 
 AutofillMetadata IBAN::GetMetadata() const {
   AutofillMetadata metadata = AutofillDataModel::GetMetadata();
-  metadata.id = (record_type_ == LOCAL_IBAN ? guid() : server_id_);
+  metadata.id = guid();
   return metadata;
 }
 
 bool IBAN::SetMetadata(const AutofillMetadata& metadata) {
   // Make sure the ids match.
-  return ((metadata.id !=
-           (record_type_ == LOCAL_IBAN ? guid() : server_id_))) &&
-         AutofillDataModel::SetMetadata(metadata);
+  return metadata.id != guid() && AutofillDataModel::SetMetadata(metadata);
 }
 
 bool IBAN::IsDeletable() const {
@@ -59,10 +56,9 @@ std::u16string IBAN::GetRawInfo(ServerFieldType type) const {
   return std::u16string();
 }
 
-void IBAN::SetRawInfoWithVerificationStatus(
-    ServerFieldType type,
-    const std::u16string& value,
-    structured_address::VerificationStatus status) {
+void IBAN::SetRawInfoWithVerificationStatus(ServerFieldType type,
+                                            const std::u16string& value,
+                                            VerificationStatus status) {
   if (type == IBAN_VALUE) {
     set_value(value);
   } else {
@@ -95,8 +91,7 @@ int IBAN::Compare(const IBAN& iban) const {
 }
 
 bool IBAN::operator==(const IBAN& iban) const {
-  return guid() == iban.guid() && record_type() == iban.record_type() &&
-         Compare(iban) == 0;
+  return guid() == iban.guid() && Compare(iban) == 0;
 }
 
 bool IBAN::operator!=(const IBAN& iban) const {
@@ -115,26 +110,27 @@ void IBAN::set_nickname(const std::u16string& nickname) {
                                /*trim_sequences_with_line_breaks=*/true);
 }
 
-std::u16string IBAN::GetIdentifierStringForAutofillDisplay() const {
+std::u16string IBAN::GetIdentifierStringForAutofillDisplay(
+    bool is_value_masked) const {
   const std::u16string stripped_value = GetStrippedValue();
   size_t value_length = stripped_value.size();
   // Directly return an empty string if the length of IBAN value is invalid.
   if (value_length < 9 || value_length > 34)
     return std::u16string();
 
-  auto ShouldObfuscate = [&](size_t i) {
+  auto ShouldMask = [&](size_t i) {
     // The first 2-letter country code and 2 IBAN check digits will stay
-    // unmasked, the last four digits will be shown as-is too.
-    return 4 <= i && i < value_length - 4;
+    // unmasked, the last four digits will be shown as-is too. The rest of the
+    // digits will not be masked if `is_value_masked` is false
+    return 4 <= i && i < value_length - 4 && is_value_masked;
   };
 
   std::u16string output;
   output.reserve(stripped_value.size() + (stripped_value.size() - 1) / 4);
   for (size_t i = 0; i < stripped_value.size(); ++i) {
     if (i % 4 == 0 && i > 0)
-      output.append(kEllipsisOneSpace);
-    output.append(ShouldObfuscate(i) ? kEllipsisOneDot
-                                     : stripped_value.substr(i, 1));
+      output.push_back(kEllipsisOneSpace);
+    output.push_back(ShouldMask(i) ? kEllipsisOneDot : stripped_value[i]);
   }
   return output;
 }

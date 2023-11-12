@@ -12,7 +12,6 @@
 #include "chrome/browser/ash/input_method/assistive_window_controller_delegate.h"
 #include "chrome/browser/ash/input_method/ui/assistive_accessibility_view.h"
 #include "chrome/browser/ash/input_method/ui/suggestion_details.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
 #include "chrome/test/base/testing_profile.h"
@@ -74,7 +73,7 @@ class AssistiveWindowControllerTest : public ChromeAshTestBase {
     accessibility_view_ = std::make_unique<TestAccessibilityView>();
     controller_ = std::make_unique<AssistiveWindowController>(
         delegate_.get(), profile_.get(), accessibility_view_.get());
-    ui::IMEBridge::Get()->SetAssistiveWindowHandler(controller_.get());
+    IMEBridge::Get()->SetAssistiveWindowHandler(controller_.get());
 
     // TODO(crbug/1102283): Create MockSuggestionWindowView to be independent of
     // SuggestionWindowView's implementation.

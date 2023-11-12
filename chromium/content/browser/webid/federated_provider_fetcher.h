@@ -9,8 +9,8 @@
 #include <set>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/webid/fedcm_metrics.h"
@@ -56,7 +56,7 @@ class FederatedProviderFetcher {
 
   // Starts fetch of config and well-known files. Start() should be called at
   // most once per FederatedProviderFetcher instance.
-  void Start(const std::vector<GURL>& identity_provider_config_urls,
+  void Start(const std::set<GURL>& identity_provider_config_urls,
              int icon_ideal_size,
              int icon_minimum_size,
              RequesterCallback callback);

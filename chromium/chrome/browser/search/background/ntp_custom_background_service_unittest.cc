@@ -25,6 +25,7 @@
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image.h"
 #include "url/gurl.h"
@@ -38,17 +39,17 @@ class MockNtpCustomBackgroundServiceObserver
   MOCK_METHOD0(OnNtpCustomBackgroundServiceShuttingDown, void());
 };
 
-base::DictionaryValue GetBackgroundInfoAsDict(const GURL& background_url,
-                                              const GURL& thumbnail_url) {
-  base::DictionaryValue background_info;
-  background_info.SetKey("background_url", base::Value(background_url.spec()));
-  background_info.SetKey("thumbnail_url", base::Value(thumbnail_url.spec()));
-  background_info.SetKey("attribution_line_1", base::Value(std::string()));
-  background_info.SetKey("attribution_line_2", base::Value(std::string()));
-  background_info.SetKey("attribution_action_url", base::Value(std::string()));
-  background_info.SetKey("collection_id", base::Value(std::string()));
-  background_info.SetKey("resume_token", base::Value(std::string()));
-  background_info.SetKey("refresh_timestamp", base::Value(0));
+base::Value::Dict GetBackgroundInfoAsDict(const GURL& background_url,
+                                          const GURL& thumbnail_url) {
+  base::Value::Dict background_info;
+  background_info.Set("background_url", base::Value(background_url.spec()));
+  background_info.Set("thumbnail_url", base::Value(thumbnail_url.spec()));
+  background_info.Set("attribution_line_1", base::Value(std::string()));
+  background_info.Set("attribution_line_2", base::Value(std::string()));
+  background_info.Set("attribution_action_url", base::Value(std::string()));
+  background_info.Set("collection_id", base::Value(std::string()));
+  background_info.Set("resume_token", base::Value(std::string()));
+  background_info.Set("refresh_timestamp", base::Value(0));
   return background_info;
 }
 
@@ -100,7 +101,8 @@ TEST_F(NtpCustomBackgroundServiceTest, SetCustomBackgroundURL) {
 
   auto custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_EQ(kUrl, custom_background->custom_background_url);
-  EXPECT_EQ(false, custom_background->is_uploaded_image);
+  EXPECT_FALSE(custom_background->is_uploaded_image);
+  EXPECT_FALSE(custom_background->daily_refresh_enabled);
   EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
 }
 
@@ -158,7 +160,7 @@ TEST_F(NtpCustomBackgroundServiceTest, LocalBackgroundImageCopyCreated) {
   base::FilePath copy_path(profile_path.AppendASCII(
       chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
 
-  base::WriteFile(path, "background_image", 16);
+  base::WriteFile(path, "background_image");
 
   custom_background_service_->SelectLocalBackgroundImage(path);
 
@@ -184,7 +186,7 @@ TEST_F(NtpCustomBackgroundServiceTest,
   base::FilePath path(profile_path.AppendASCII(
       chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
 
-  base::WriteFile(path, "background_image", 16);
+  base::WriteFile(path, "background_image");
 
   custom_background_service_->AddValidBackdropUrlForTesting(kUrl);
   custom_background_service_->SetCustomBackgroundInfo(kUrl, GURL(), "", "",
@@ -210,17 +212,15 @@ TEST_F(NtpCustomBackgroundServiceTest, UpdatingPrefUpdatesNtpTheme) {
 
   sync_preferences::TestingPrefServiceSyncable* pref_service =
       profile_.GetTestingPrefService();
-  pref_service->SetUserPref(
-      prefs::kNtpCustomBackgroundDict,
-      std::make_unique<base::Value>(GetBackgroundInfoAsDict(kUrlFoo, GURL())));
+  pref_service->SetUserPref(prefs::kNtpCustomBackgroundDict,
+                            GetBackgroundInfoAsDict(kUrlFoo, GURL()));
 
   auto custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_EQ(kUrlFoo, custom_background->custom_background_url);
   EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
 
-  pref_service->SetUserPref(
-      prefs::kNtpCustomBackgroundDict,
-      std::make_unique<base::Value>(GetBackgroundInfoAsDict(kUrlBar, GURL())));
+  pref_service->SetUserPref(prefs::kNtpCustomBackgroundDict,
+                            GetBackgroundInfoAsDict(kUrlBar, GURL()));
 
   custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_EQ(kUrlBar, custom_background->custom_background_url);
@@ -240,7 +240,7 @@ TEST_F(NtpCustomBackgroundServiceTest, SetLocalImage) {
   base::FilePath profile_path = profile_.GetPath();
   base::FilePath path(profile_path.AppendASCII(
       chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
-  base::WriteFile(path, "background_image", 16);
+  base::WriteFile(path, "background_image");
   base::ThreadPoolInstance::Get()->FlushForTesting();
 
   custom_background_service_->SelectLocalBackgroundImage(path);
@@ -268,7 +268,7 @@ TEST_F(NtpCustomBackgroundServiceTest, SyncPrefOverridesAndRemovesLocalImage) {
   base::FilePath profile_path = profile_.GetPath();
   base::FilePath path(profile_path.AppendASCII(
       chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
-  base::WriteFile(path, "background_image", 16);
+  base::WriteFile(path, "background_image");
   base::ThreadPoolInstance::Get()->FlushForTesting();
 
   custom_background_service_->SelectLocalBackgroundImage(path);
@@ -279,9 +279,8 @@ TEST_F(NtpCustomBackgroundServiceTest, SyncPrefOverridesAndRemovesLocalImage) {
   EXPECT_TRUE(base::PathExists(path));
 
   // Update custom_background info via Sync.
-  pref_service->SetUserPref(
-      prefs::kNtpCustomBackgroundDict,
-      std::make_unique<base::Value>(GetBackgroundInfoAsDict(kUrl, GURL())));
+  pref_service->SetUserPref(prefs::kNtpCustomBackgroundDict,
+                            GetBackgroundInfoAsDict(kUrl, GURL()));
   task_environment_.RunUntilIdle();
 
   auto custom_background = custom_background_service_->GetCustomBackground();
@@ -355,7 +354,7 @@ TEST_F(NtpCustomBackgroundServiceTest, LocalImageDoesNotHaveAttribution) {
   base::FilePath profile_path = profile_.GetPath();
   base::FilePath path(profile_path.AppendASCII(
       chrome::kChromeUIUntrustedNewTabPageBackgroundFilename));
-  base::WriteFile(path, "background_image", 16);
+  base::WriteFile(path, "background_image");
   base::ThreadPoolInstance::Get()->FlushForTesting();
 
   custom_background_service_->SelectLocalBackgroundImage(path);
@@ -395,6 +394,7 @@ TEST_F(NtpCustomBackgroundServiceTest, SetCustomBackgroundCollectionId) {
 
   auto custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_EQ(kValidId, custom_background->collection_id);
+  EXPECT_TRUE(custom_background->daily_refresh_enabled);
   EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
 
   // An invalid id should clear the pref/background.
@@ -407,30 +407,6 @@ TEST_F(NtpCustomBackgroundServiceTest, SetCustomBackgroundCollectionId) {
   custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_FALSE(custom_background.has_value());
   EXPECT_FALSE(custom_background_service_->IsCustomBackgroundSet());
-}
-
-TEST_F(NtpCustomBackgroundServiceTest,
-       CollectionIdTakePriorityOverBackgroundURL) {
-  EXPECT_CALL(observer_, OnCustomBackgroundImageUpdated).Times(1);
-  ASSERT_FALSE(custom_background_service_->IsCustomBackgroundSet());
-  const std::string kValidId("art");
-  const GURL kUrl("https://www.foo.com/");
-
-  CollectionImage image;
-  image.collection_id = kValidId;
-  image.image_url = GURL("https://www.test.com/");
-  custom_background_service_->SetNextCollectionImageForTesting(image);
-  custom_background_service_->AddValidBackdropUrlForTesting(kUrl);
-  custom_background_service_->AddValidBackdropCollectionForTesting(kValidId);
-
-  custom_background_service_->SetCustomBackgroundInfo(kUrl, GURL(), "", "",
-                                                      GURL(), kValidId);
-  task_environment_.RunUntilIdle();
-
-  auto custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_EQ(kValidId, custom_background->collection_id);
-  EXPECT_EQ("https://www.test.com/", custom_background->custom_background_url);
-  EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
 }
 
 TEST_F(NtpCustomBackgroundServiceTest, RefreshesBackgroundAfter24Hours) {
@@ -479,6 +455,7 @@ TEST_F(NtpCustomBackgroundServiceTest, RefreshesBackgroundAfter24Hours) {
   custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_EQ(kValidId, custom_background->collection_id);
   EXPECT_EQ(kImageUrl2, custom_background->custom_background_url);
+  EXPECT_TRUE(custom_background->daily_refresh_enabled);
   EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
 }
 
@@ -566,7 +543,7 @@ TEST_F(NtpCustomBackgroundServiceTest, TestUpdateCustomBackgroundColor) {
   scoped_feature_list.InitAndEnableFeature(
       ntp_features::kCustomizeChromeColorExtraction);
 
-  EXPECT_CALL(observer_, OnCustomBackgroundImageUpdated).Times(4);
+  EXPECT_CALL(observer_, OnCustomBackgroundImageUpdated).Times(2);
   SkBitmap bitmap;
   bitmap.allocN32Pixels(32, 32);
   bitmap.eraseColor(SK_ColorRED);
@@ -580,8 +557,9 @@ TEST_F(NtpCustomBackgroundServiceTest, TestUpdateCustomBackgroundColor) {
   task_environment_.RunUntilIdle();
   auto custom_background = custom_background_service_->GetCustomBackground();
   auto custom_background_main_color =
-      custom_background ? custom_background->custom_background_main_color : 0;
-  EXPECT_NE(SK_ColorRED, custom_background_main_color);
+      custom_background ? custom_background->custom_background_main_color
+                        : SK_ColorWHITE;
+  EXPECT_NE(SK_ColorRED, custom_background_main_color.value_or(SK_ColorWHITE));
 
   const GURL kUrl("https://www.foo.com");
   const GURL kThumbnailUrl("https://www.thumbnail.com");
@@ -595,17 +573,35 @@ TEST_F(NtpCustomBackgroundServiceTest, TestUpdateCustomBackgroundColor) {
       kUrl, kThumbnailUrl, kAttributionLine1, kAttributionLine2, kActionUrl,
       "");
 
-  // Background color will not update if current background url changed.
-  custom_background_service_->UpdateCustomBackgroundColorAsync(
-      GURL("different_url"), image, image_fetcher::RequestMetadata());
+  image_fetcher::RequestMetadata metadata = image_fetcher::RequestMetadata();
+
+  // Background color will not update if metadata http code invalid.
+  metadata.http_response_code =
+      image_fetcher::RequestMetadata::ResponseCode::RESPONSE_CODE_INVALID;
+  custom_background_service_->UpdateCustomBackgroundColorAsync(kUrl, image,
+                                                               metadata);
   task_environment_.RunUntilIdle();
   custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_NE(SK_ColorRED, custom_background->custom_background_main_color);
+  EXPECT_NE(
+      SK_ColorRED,
+      custom_background->custom_background_main_color.value_or(SK_ColorWHITE));
+
+  // Background color will not update if current background url changed.
+  metadata.http_response_code = 200;
+  custom_background_service_->UpdateCustomBackgroundColorAsync(
+      GURL("different_url"), image, metadata);
+  task_environment_.RunUntilIdle();
+  custom_background = custom_background_service_->GetCustomBackground();
+  EXPECT_NE(
+      SK_ColorRED,
+      custom_background->custom_background_main_color.value_or(SK_ColorWHITE));
 
   // Background color should update.
-  custom_background_service_->UpdateCustomBackgroundColorAsync(
-      kUrl, image, image_fetcher::RequestMetadata());
+  custom_background_service_->UpdateCustomBackgroundColorAsync(kUrl, image,
+                                                               metadata);
   task_environment_.RunUntilIdle();
   custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_EQ(SK_ColorRED, custom_background->custom_background_main_color);
+  EXPECT_EQ(
+      SK_ColorRED,
+      custom_background->custom_background_main_color.value_or(SK_ColorWHITE));
 }

@@ -2,7 +2,7 @@
 
 #include "ui/lights/razer_chroma_handler.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"

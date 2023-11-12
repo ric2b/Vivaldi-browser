@@ -8,10 +8,11 @@
 #include <windows.foundation.h>
 #include <wrl/event.h>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/win/core_winrt_util.h"
 #include "services/device/public/cpp/device_features.h"
 #include "services/device/public/cpp/geolocation/geoposition.h"
@@ -64,11 +65,6 @@ enum WindowsRTLocationRequestEvent {
 
 void RecordUmaEvent(WindowsRTLocationRequestEvent event) {
   base::UmaHistogramEnumeration("Windows.RT.LocationRequest.Event", event);
-}
-
-bool IsWinRTSupported() {
-  return base::win::ResolveCoreWinRTDelayload() &&
-         base::win::ScopedHString::ResolveCoreWinRTStringDelayload();
 }
 
 template <typename F>
@@ -463,7 +459,8 @@ std::unique_ptr<LocationProvider> NewSystemLocationProvider(
     GeolocationManager* geolocation_manager) {
   if (!base::FeatureList::IsEnabled(
           features::kWinrtGeolocationImplementation) ||
-      !IsWinRTSupported() || !IsSystemLocationSettingEnabled()) {
+      !base::win::ResolveCoreWinRTDelayload() ||
+      !IsSystemLocationSettingEnabled()) {
     return nullptr;
   }
 

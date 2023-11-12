@@ -15,9 +15,9 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "base/barrier_closure.h"
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
 #include "ui/display/display.h"
@@ -135,7 +135,6 @@ AmbientTopicQueue::AmbientTopicQueue(
       delegate_(std::move(delegate)),
       backend_controller_(backend_controller),
       fetch_topic_retry_backoff_(&kFetchTopicRetryBackoffPolicy) {
-  DCHECK_GT(topic_fetch_limit_, 0);
   DCHECK_GT(topic_fetch_size_, 0);
   DCHECK(backend_controller_);
   FetchTopics();

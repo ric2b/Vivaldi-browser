@@ -9,8 +9,6 @@ import android.app.job.JobParameters;
 import android.app.job.JobScheduler;
 import android.content.ComponentName;
 import android.content.Context;
-import android.os.Build;
-import android.os.Bundle;
 import android.os.PersistableBundle;
 
 import androidx.annotation.VisibleForTesting;
@@ -62,12 +60,6 @@ class BackgroundTaskSchedulerJobService implements BackgroundTaskSchedulerDelega
             return TaskInfo.OneOffInfo.getExpirationStatus(
                     scheduleTimeMs, endTimeMs, currentTimeMs);
         } else {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-                // Before Android N, there was no control over when the job will execute within
-                // the given interval. This makes it impossible to check for an expiration time.
-                return false;
-            }
-
             long intervalTimeMs = extras.getLong(BACKGROUND_TASK_INTERVAL_TIME_KEY);
             // Based on the JobInfo documentation, attempting to declare a smaller period than
             // this when scheduling a job will result in a job that is still periodic, but will
@@ -103,7 +95,7 @@ class BackgroundTaskSchedulerJobService implements BackgroundTaskSchedulerDelega
         PersistableBundle persistableTaskExtras =
                 jobExtras.getPersistableBundle(BACKGROUND_TASK_EXTRAS_KEY);
 
-        Bundle taskExtras = new Bundle();
+        PersistableBundle taskExtras = new PersistableBundle();
         taskExtras.putAll(persistableTaskExtras);
         builder.addExtras(taskExtras);
 
@@ -114,7 +106,7 @@ class BackgroundTaskSchedulerJobService implements BackgroundTaskSchedulerDelega
     static JobInfo createJobInfoFromTaskInfo(Context context, TaskInfo taskInfo) {
         PersistableBundle jobExtras = new PersistableBundle();
 
-        PersistableBundle persistableBundle = getTaskExtrasAsPersistableBundle(taskInfo);
+        PersistableBundle persistableBundle = taskInfo.getExtras();
         jobExtras.putPersistableBundle(BACKGROUND_TASK_EXTRAS_KEY, persistableBundle);
 
         JobInfo.Builder builder =
@@ -179,17 +171,11 @@ class BackgroundTaskSchedulerJobService implements BackgroundTaskSchedulerDelega
             }
             mBuilder.setExtras(mJobExtras);
 
-            if (periodicInfo.hasFlex() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            if (periodicInfo.hasFlex()) {
                 mBuilder.setPeriodic(periodicInfo.getIntervalMs(), periodicInfo.getFlexMs());
                 return;
             }
             mBuilder.setPeriodic(periodicInfo.getIntervalMs());
-        }
-
-        @Override
-        public void visit(TaskInfo.ExactInfo exactInfo) {
-            throw new RuntimeException("Exact tasks should not be scheduled with "
-                    + "JobScheduler.");
         }
     }
 
@@ -197,18 +183,6 @@ class BackgroundTaskSchedulerJobService implements BackgroundTaskSchedulerDelega
             @TaskInfo.NetworkType int networkType) {
         // The values are hard coded to represent the same as the network type from JobService.
         return networkType;
-    }
-
-    private static PersistableBundle getTaskExtrasAsPersistableBundle(TaskInfo taskInfo) {
-        Bundle taskExtras = taskInfo.getExtras();
-        BundleToPersistableBundleConverter.Result convertedData =
-                BundleToPersistableBundleConverter.convert(taskExtras);
-        if (convertedData.hasErrors()) {
-            Log.w(TAG,
-                    "Failed converting extras to PersistableBundle: "
-                            + convertedData.getFailedKeysErrorString());
-        }
-        return convertedData.getPersistableBundle();
     }
 
     @Override

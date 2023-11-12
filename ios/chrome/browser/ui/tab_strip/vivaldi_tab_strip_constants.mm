@@ -29,4 +29,4 @@ CGFloat const vTabViewBackgroundCornerRadius = 6.f;
 // Padding for the vivaldi tab view background.
 // In order - (Top, Left, Bottom, Right)
 UIEdgeInsets const vTabViewBackgroundPadding =
-    UIEdgeInsetsMake(0.f, 16.f, -1.f, 16.f);
+    UIEdgeInsetsMake(0.f, 14.f, -1.f, 14.f);

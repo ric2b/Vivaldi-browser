@@ -30,8 +30,9 @@
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
-#include "base/bind.h"
+#include "ash/style/ash_color_id.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
@@ -87,7 +88,7 @@ constexpr int kTimeFontSizeDip = 32;
 constexpr SkColor kDarkModeShieldColor =
     SkColorSetA(gfx::kGoogleGrey900, SK_AlphaOPAQUE / 10);
 
-void LogCompositorThroughput(AmbientAnimationTheme theme, int smoothness) {
+void LogCompositorThroughput(AmbientTheme theme, int smoothness) {
   // Use VLOG instead of DVLOG since this log is performance-related and
   // developers will almost certainly only care about this log on non-debug
   // builds.
@@ -97,7 +98,7 @@ void LogCompositorThroughput(AmbientAnimationTheme theme, int smoothness) {
 
 void OnCompositorThroughputReported(
     base::TimeTicks logging_start_time,
-    AmbientAnimationTheme theme,
+    AmbientTheme theme,
     const cc::FrameSequenceMetrics::CustomReportData& data) {
   base::TimeDelta duration = base::TimeTicks::Now() - logging_start_time;
   float duration_sec = duration.InSecondsF();
@@ -290,8 +291,7 @@ void AmbientAnimationView::Init(
       views::BoxLayout::CrossAxisAlignment::kStart);
   glanceable_info_container_->SetBorder(CreateGlanceableInfoBorder());
   glanceable_info_container_->AddChildView(std::make_unique<GlanceableInfoView>(
-      view_delegate_.get(), kTimeFontSizeDip,
-      /*time_temperature_font_color=*/gfx::kGoogleGrey900));
+      view_delegate_.get(), this, kTimeFontSizeDip));
 
   // Media string should appear in the top-right corner of the
   // AmbientAnimationView's bounds.
@@ -305,12 +305,7 @@ void AmbientAnimationView::Init(
       views::BoxLayout::CrossAxisAlignment::kEnd);
   media_string_container_->SetBorder(CreateMediaStringBorder());
   MediaStringView* media_string_view = media_string_container_->AddChildView(
-      std::make_unique<MediaStringView>(MediaStringView::Settings(
-          {/*icon_light_mode_color=*/gfx::kGoogleGrey600,
-           /*icon_dark_mode_color=*/gfx::kGoogleGrey500,
-           /*text_light_mode_color=*/gfx::kGoogleGrey600,
-           /*text_dark_mode_color=*/gfx::kGoogleGrey500,
-           kMediaStringTextElevation})));
+      std::make_unique<MediaStringView>(this));
   media_string_view->SetVisible(false);
 }
 
@@ -353,8 +348,7 @@ void AmbientAnimationView::OnViewBoundsChanged(View* observed_view) {
   // gets cut off at the top when doing this, making it look strange. UX
   // decision is to just omit the tree shadow in portrait mode. If/when
   // portrait versions of the animation are made, this logic can be removed.
-  if (static_resources_->GetAmbientAnimationTheme() ==
-      AmbientAnimationTheme::kFeelTheBreeze) {
+  if (static_resources_->GetAmbientTheme() == AmbientTheme::kFeelTheBreeze) {
     bool tree_shadow_toggled = animation_photo_provider_.ToggleStaticImageAsset(
         cc::HashSkottieResourceId(ambient::resources::kTreeShadowAssetId),
         /*enabled=*/content_bounds.width() >= content_bounds.height());
@@ -391,6 +385,19 @@ void AmbientAnimationView::OnViewAddedToWidget(View* observed_view) {
       window_to_throttle, animated_image_view_->animated_image());
 }
 
+SkColor AmbientAnimationView::GetTimeTemperatureFontColor() {
+  return gfx::kGoogleGrey900;
+}
+
+MediaStringView::Settings AmbientAnimationView::GetSettings() {
+  return MediaStringView::Settings(
+      {/*icon_light_mode_color=*/gfx::kGoogleGrey600,
+       /*icon_dark_mode_color=*/gfx::kGoogleGrey500,
+       /*text_light_mode_color=*/gfx::kGoogleGrey600,
+       /*text_dark_mode_color=*/gfx::kGoogleGrey500,
+       kMediaStringTextElevation});
+}
+
 void AmbientAnimationView::StartPlayingAnimation() {
   // There should only be one active AmbientAnimationPlayer at any given time,
   // otherwise multiple active players can lead to confusing simultaneous state
@@ -419,7 +426,7 @@ void AmbientAnimationView::RestartThroughputTracking() {
   throughput_tracker_->Start(
       base::BindOnce(&OnCompositorThroughputReported,
                      /*logging_start_time=*/base::TimeTicks::Now(),
-                     static_resources_->GetAmbientAnimationTheme()));
+                     static_resources_->GetAmbientTheme()));
 }
 
 void AmbientAnimationView::ApplyJitter() {
@@ -430,6 +437,10 @@ void AmbientAnimationView::ApplyJitter() {
   animated_image_view_->SetAdditionalTranslation(jitter);
   glanceable_info_container_->SetBorder(CreateGlanceableInfoBorder(jitter));
   media_string_container_->SetBorder(CreateMediaStringBorder(jitter));
+}
+
+JitterCalculator* AmbientAnimationView::GetJitterCalculatorForTesting() {
+  return &animation_jitter_calculator_;
 }
 
 BEGIN_METADATA(AmbientAnimationView, views::View)

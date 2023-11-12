@@ -9,9 +9,9 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/path_service.h"
 #include "base/task/task_traits.h"
@@ -254,15 +254,11 @@ bool BrowserDataMigratorImpl::MaybeRestartToMigrateInternal(
     return false;
   }
 
-  //  Currently we turn on profile migration only for Googlers. To test profile
-  //  migration without @google.com account, enable feature
-  //  `kLacrosProfileMigrationForAnyUser` defined in browser_util.
-  // TODO(crbug.com/1266669): Remove this check once profile migration is
-  // enabled for all users.
-  if (!crosapi::browser_util::IsProfileMigrationEnabled(account_id)) {
+  if (base::FeatureList::IsEnabled(
+          ash::features::kLacrosProfileMigrationForceOff)) {
     // TODO(crbug.com/1277848): Once `BrowserDataMigrator` stabilises, remove
     // this log message.
-    LOG(WARNING) << "Profile migration is disabled.";
+    LOG(WARNING) << "Profile migration is disabled by a flag.";
     return false;
   }
 

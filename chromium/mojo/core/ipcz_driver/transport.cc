@@ -13,6 +13,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/process/process.h"
+#include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "mojo/core/core.h"
 #include "mojo/core/ipcz_driver/data_pipe.h"
@@ -26,6 +27,10 @@
 #include "mojo/public/cpp/platform/platform_handle.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/ipcz/include/ipcz/ipcz.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "mojo/core/platform_handle_security_util_win.h"
+#endif
 
 namespace mojo::core::ipcz_driver {
 
@@ -131,9 +136,7 @@ bool EncodeHandle(PlatformHandle& handle,
   DCHECK(remote_process.IsValid());
 #if BUILDFLAG(IS_WIN)
   if (is_remote_process_untrusted) {
-    // TODO(https://crbug.com/1335974): Implement additional constraints
-    // regarding what type of handles may or may not be transferred to untrusted
-    // processes.
+    DcheckIfFileHandleIsUnsafe(handle.GetHandle().get());
   }
 #endif
 
@@ -194,9 +197,11 @@ Transport::Transport(EndpointTypes endpoint_types,
 // static
 scoped_refptr<Transport> Transport::Create(EndpointTypes endpoint_types,
                                            Channel::Endpoint endpoint,
-                                           base::Process remote_process) {
+                                           base::Process remote_process,
+                                           bool is_remote_process_untrusted) {
   return base::MakeRefCounted<Transport>(endpoint_types, std::move(endpoint),
-                                         std::move(remote_process));
+                                         std::move(remote_process),
+                                         is_remote_process_untrusted);
 }
 
 // static

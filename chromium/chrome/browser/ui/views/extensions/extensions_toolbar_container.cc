@@ -6,13 +6,14 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/cxx17_backports.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
 #include "build/build_config.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/extensions/extension_action_view_controller.h"
@@ -36,6 +37,7 @@
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/layout/flex_layout.h"
@@ -317,14 +319,15 @@ void ExtensionsToolbarContainer::UpdateIconVisibility(
   }
 
   if (must_show ||
-      (CanShowIconInToolbar() && model_->IsActionPinned(extension_id)))
+      (CanShowActionsInToolbar() && model_->IsActionPinned(extension_id))) {
     GetAnimatingLayoutManager()->FadeIn(action_view);
-  else
+  } else {
     GetAnimatingLayoutManager()->FadeOut(action_view);
+  }
 }
 
 void ExtensionsToolbarContainer::AnchorAndShowWidgetImmediately(
-    views::Widget* widget) {
+    MayBeDangling<views::Widget> widget) {
   auto iter =
       base::ranges::find(anchored_widgets_, widget, &AnchoredWidget::widget);
 
@@ -363,7 +366,7 @@ ToolbarActionViewController* ExtensionsToolbarContainer::GetPoppedOutAction()
 }
 
 void ExtensionsToolbarContainer::OnContextMenuShown(
-    ToolbarActionViewController* extension) {
+    const std::string& action_id) {
   // Only update the extension's toolbar visibility if the context menu is being
   // shown from an extension visible in the toolbar.
   if (!IsExtensionsMenuShowing()) {
@@ -372,13 +375,12 @@ void ExtensionsToolbarContainer::OnContextMenuShown(
     // fixed.
     HideActivePopup();
 #endif
-    extension_with_open_context_menu_id_ = extension->GetId();
+    extension_with_open_context_menu_id_ = action_id;
     UpdateIconVisibility(extension_with_open_context_menu_id_.value());
   }
 }
 
-void ExtensionsToolbarContainer::OnContextMenuClosed(
-    ToolbarActionViewController* extension) {
+void ExtensionsToolbarContainer::OnContextMenuClosed() {
   // |extension_with_open_context_menu_id_| does not have a value when a context
   // menu is being shown from within the extensions menu.
   if (extension_with_open_context_menu_id_.has_value()) {
@@ -389,26 +391,29 @@ void ExtensionsToolbarContainer::OnContextMenuClosed(
   }
 }
 
+bool ExtensionsToolbarContainer::CanShowActionsInToolbar() const {
+  // Pinning extensions is not available in PWAs.
+  return !browser_->app_controller();
+}
+
 bool ExtensionsToolbarContainer::IsActionVisibleOnToolbar(
-    const ToolbarActionViewController* action) const {
-  const std::string& extension_id = action->GetId();
-  return ShouldForceVisibility(extension_id) ||
-         model_->IsActionPinned(extension_id);
+    const std::string& action_id) const {
+  return GetActionVisibility(action_id) !=
+         extensions::ExtensionContextMenuModel::UNPINNED;
 }
 
 extensions::ExtensionContextMenuModel::ButtonVisibility
 ExtensionsToolbarContainer::GetActionVisibility(
-    const ToolbarActionViewController* action) const {
-  extensions::ExtensionContextMenuModel::ButtonVisibility visibility =
-      extensions::ExtensionContextMenuModel::PINNED;
-
-  if (ShouldForceVisibility(action->GetId()) &&
-      !model_->IsActionPinned(action->GetId())) {
-    visibility = extensions::ExtensionContextMenuModel::TRANSITIVELY_VISIBLE;
-  } else if (!IsActionVisibleOnToolbar(action)) {
-    visibility = extensions::ExtensionContextMenuModel::UNPINNED;
+    const std::string& action_id) const {
+  if (model_->IsActionPinned(action_id)) {
+    return extensions::ExtensionContextMenuModel::PINNED;
   }
-  return visibility;
+
+  if (ShouldForceVisibility(action_id)) {
+    return extensions::ExtensionContextMenuModel::TRANSITIVELY_VISIBLE;
+  }
+
+  return extensions::ExtensionContextMenuModel::UNPINNED;
 }
 
 void ExtensionsToolbarContainer::UndoPopOut() {
@@ -624,18 +629,14 @@ void ExtensionsToolbarContainer::CreateActionForId(
       ExtensionActionViewController::Create(action_id, browser_, this));
   auto icon = std::make_unique<ToolbarActionView>(actions_.back().get(), this);
   // Set visibility before adding to prevent extraneous animation.
-  icon->SetVisible(CanShowIconInToolbar() && model_->IsActionPinned(action_id));
+  icon->SetVisible(CanShowActionsInToolbar() &&
+                   model_->IsActionPinned(action_id));
   ObserveButton(icon.get());
   icons_.insert({action_id, AddChildView(std::move(icon))});
 }
 
 content::WebContents* ExtensionsToolbarContainer::GetCurrentWebContents() {
   return browser_->tab_strip_model()->GetActiveWebContents();
-}
-
-bool ExtensionsToolbarContainer::CanShowIconInToolbar() const {
-  // Pinning extensions is not available in PWAs.
-  return !browser_->app_controller();
 }
 
 views::LabelButton* ExtensionsToolbarContainer::GetOverflowReferenceView()
@@ -662,13 +663,14 @@ void ExtensionsToolbarContainer::WriteDragDataForView(
       model_->pinned_action_ids(), sender,
       [this](const std::string& action_id) { return GetViewForId(action_id); });
   DCHECK(it != model_->pinned_action_ids().cend());
-
-  size_t index = it - model_->pinned_action_ids().cbegin();
-
   ToolbarActionView* extension_view = GetViewForId(*it);
-  data->provider().SetDragImage(GetExtensionIcon(extension_view),
+
+  ui::ImageModel icon = GetExtensionIcon(extension_view);
+  data->provider().SetDragImage(icon.Rasterize(GetColorProvider()),
                                 press_pt.OffsetFromOrigin());
+
   // Fill in the remaining info.
+  size_t index = it - model_->pinned_action_ids().cbegin();
   BrowserActionDragData drag_data(extension_view->view_controller()->GetId(),
                                   index);
   drag_data.Write(browser_->profile(), data);
@@ -686,8 +688,9 @@ bool ExtensionsToolbarContainer::CanStartDragForView(View* sender,
   // We don't allow dragging if the container isn't in the toolbar, or if
   // the profile is incognito (to avoid changing state from an incognito
   // window).
-  if (!CanShowIconInToolbar() || browser_->profile()->IsOffTheRecord())
+  if (!CanShowActionsInToolbar() || browser_->profile()->IsOffTheRecord()) {
     return false;
+  }
 
   // Only pinned extensions should be draggable.
   auto it = base::ranges::find(
@@ -805,11 +808,10 @@ size_t ExtensionsToolbarContainer::WidthToIconCount(int x_offset) {
   return std::min(unclamped_count, actions_.size());
 }
 
-gfx::ImageSkia ExtensionsToolbarContainer::GetExtensionIcon(
+ui::ImageModel ExtensionsToolbarContainer::GetExtensionIcon(
     ToolbarActionView* extension_view) {
-  return extension_view->view_controller()
-      ->GetIcon(GetCurrentWebContents(), GetToolbarActionSize())
-      .AsImageSkia();
+  return extension_view->view_controller()->GetIcon(GetCurrentWebContents(),
+                                                    GetToolbarActionSize());
 }
 
 void ExtensionsToolbarContainer::SetExtensionIconVisibility(
@@ -827,8 +829,7 @@ void ExtensionsToolbarContainer::SetExtensionIconVisibility(
 
   extension_view->SetImageModel(
       views::Button::STATE_NORMAL,
-      visible ? ui::ImageModel::FromImageSkia(GetExtensionIcon(extension_view))
-              : ui::ImageModel());
+      visible ? GetExtensionIcon(extension_view) : ui::ImageModel());
 }
 
 void ExtensionsToolbarContainer::UpdateContainerVisibility() {

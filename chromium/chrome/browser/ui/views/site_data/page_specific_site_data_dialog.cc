@@ -28,6 +28,8 @@
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/omnibox/browser/favicon_cache.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
+#include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/cookies/cookie_util.h"
@@ -65,14 +67,9 @@ int GetContentSettingRowOrder(ContentSetting setting) {
 // copying each of them.
 std::unique_ptr<CookiesTreeModel> CreateCookiesTreeModel(
     const browsing_data::LocalSharedObjectsContainer& shared_objects) {
-  auto container = std::make_unique<LocalDataContainer>(
-      shared_objects.cookies(), shared_objects.databases(),
-      shared_objects.local_storages(), shared_objects.session_storages(),
-      shared_objects.indexed_dbs(), shared_objects.file_systems(), nullptr,
-      shared_objects.service_workers(), shared_objects.shared_workers(),
-      shared_objects.cache_storages());
-
-  return std::make_unique<CookiesTreeModel>(std::move(container), nullptr);
+  return std::make_unique<CookiesTreeModel>(
+      LocalDataContainer::CreateFromLocalSharedObjectsContainer(shared_objects),
+      /*special_storage_policy=*/nullptr);
 }
 
 // Returns the registable domain (eTLD+1) for the |origin|. If it doesn't exist,
@@ -143,11 +140,6 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
     blocked_cookies_tree_model_ = CreateCookiesTreeModel(
         content_settings->blocked_local_shared_objects());
 
-    allowed_browsing_data_model_ =
-        content_settings->allowed_browsing_data_model();
-    blocked_browsing_data_model_ =
-        content_settings->blocked_browsing_data_model();
-
     Profile* profile =
         Profile::FromBrowserContext(web_contents_->GetBrowserContext());
     favicon_cache_ = std::make_unique<FaviconCache>(
@@ -191,8 +183,8 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
 
   void SetBrowsingDataModelsForTesting(BrowsingDataModel* allowed,  // IN-TEST
                                        BrowsingDataModel* blocked) {
-    allowed_browsing_data_model_ = allowed;
-    blocked_browsing_data_model_ = blocked;
+    allowed_browsing_data_model_for_testing_ = allowed;
+    blocked_browsing_data_model_for_testing_ = blocked;
   }
 
   std::vector<PageSpecificSiteDataDialogSite> GetAllSites() {
@@ -216,7 +208,7 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
           CreateSiteFromHostNode(node.get(), /*from_allowed_tree=*/true));
     }
     for (const BrowsingDataModel::BrowsingDataEntryView& entry :
-         *allowed_browsing_data_model_) {
+         *allowed_browsing_data_model()) {
       auto existing_site = sites_map.find(*entry.primary_host);
       if (existing_site == sites_map.end()) {
         sites_map.emplace(
@@ -246,7 +238,7 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
       }
     }
     for (const BrowsingDataModel::BrowsingDataEntryView& entry :
-         *blocked_browsing_data_model_) {
+         *blocked_browsing_data_model()) {
       auto existing_site = sites_map.find(*entry.primary_host);
       if (existing_site == sites_map.end()) {
         // If there are multiple entries from the same tree, ignore the entry
@@ -290,15 +282,20 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
     DeleteMatchingHostNodeFromModel(allowed_cookies_tree_model_.get(), origin);
     DeleteMatchingHostNodeFromModel(blocked_cookies_tree_model_.get(), origin);
 
+    // Correctly remove partitioned storage (needs to be done separately), since
+    // the existing calls don't apply the necessary filtering.
+    DeletePartitionedStorage(origin);
+
     // Removing origin from Browsing Data Model to support new storage types.
     // The UI assumes deletion completed successfully, so we're passing
     // `base::DoNothing` callback.
     // TODO(crbug.com/1394352): Future tests will need to know when the deletion
     // is completed, this will require a callback to be passed here.
-    allowed_browsing_data_model_->RemoveBrowsingData(origin.host(),
-                                                     base::DoNothing());
-    blocked_browsing_data_model_->RemoveBrowsingData(origin.host(),
-                                                     base::DoNothing());
+
+    allowed_browsing_data_model()->RemoveBrowsingData(origin.host(),
+                                                      base::DoNothing());
+    blocked_browsing_data_model()->RemoveBrowsingData(origin.host(),
+                                                      base::DoNothing());
 
     RecordPageSpecificSiteDataDialogAction(
         PageSpecificSiteDataDialogAction::kSiteDeleted);
@@ -335,6 +332,23 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
                 CookieTreeNode::DetailedInfo::TYPE_HOST);
       model->DeleteCookieNode(node_to_delete);
     }
+  }
+
+  // TODO(crbug.com/1405808): Add an end-to-end browser test for this.
+  void DeletePartitionedStorage(const url::Origin& origin) {
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+    content::BrowsingDataRemover* remover = profile->GetBrowsingDataRemover();
+    auto filter = content::BrowsingDataFilterBuilder::Create(
+        content::BrowsingDataFilterBuilder::Mode::kDelete,
+        content::BrowsingDataFilterBuilder::OriginMatchingMode::
+            kOriginInAllContexts);
+    filter->AddOrigin(origin);
+    remover->RemoveWithFilter(
+        base::Time::Min(), base::Time::Max(),
+        content::BrowsingDataRemover::DATA_TYPE_DOM_STORAGE,
+        content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+        std::move(filter));
   }
 
   bool CanCreateContentException(GURL url) const { return !url.SchemeIsFile(); }
@@ -392,12 +406,9 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
       // clear-on-exit state. If the dialog is reopened after making changes but
       // before reloading the page, it will show the state of accesses on the
       // page load.
-      site.setting =
-          cookie_settings_->IsCookieSessionOnly(
-              site.origin.GetURL(),
-              content_settings::CookieSettings::QueryReason::kSetting)
-              ? CONTENT_SETTING_SESSION_ONLY
-              : CONTENT_SETTING_ALLOW;
+      site.setting = cookie_settings_->IsCookieSessionOnly(site.origin.GetURL())
+                         ? CONTENT_SETTING_SESSION_ONLY
+                         : CONTENT_SETTING_ALLOW;
     } else {
       site.setting = CONTENT_SETTING_BLOCK;
     }
@@ -460,14 +471,36 @@ class PageSpecificSiteDataDialogModelDelegate : public ui::DialogModelDelegate {
     return all_partitioned;
   }
 
+  BrowsingDataModel* allowed_browsing_data_model() {
+    if (allowed_browsing_data_model_for_testing_) {
+      return allowed_browsing_data_model_for_testing_;
+    }
+
+    auto* content_settings =
+        content_settings::PageSpecificContentSettings::GetForFrame(
+            web_contents_->GetPrimaryMainFrame());
+    return content_settings->allowed_browsing_data_model();
+  }
+
+  BrowsingDataModel* blocked_browsing_data_model() {
+    if (blocked_browsing_data_model_for_testing_) {
+      return blocked_browsing_data_model_for_testing_;
+    }
+
+    auto* content_settings =
+        content_settings::PageSpecificContentSettings::GetForFrame(
+            web_contents_->GetPrimaryMainFrame());
+    return content_settings->blocked_browsing_data_model();
+  }
+
   base::WeakPtr<content::WebContents> web_contents_;
   // Each model represent separate local storage container. The implementation
   // doesn't make a difference between allowed and blocked models and checks
   // the actual content settings to determine the state.
   std::unique_ptr<CookiesTreeModel> allowed_cookies_tree_model_;
   std::unique_ptr<CookiesTreeModel> blocked_cookies_tree_model_;
-  raw_ptr<BrowsingDataModel, DanglingUntriaged> allowed_browsing_data_model_;
-  raw_ptr<BrowsingDataModel, DanglingUntriaged> blocked_browsing_data_model_;
+  raw_ptr<BrowsingDataModel> allowed_browsing_data_model_for_testing_ = nullptr;
+  raw_ptr<BrowsingDataModel> blocked_browsing_data_model_for_testing_ = nullptr;
   std::unique_ptr<FaviconCache> favicon_cache_;
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
   raw_ptr<HostContentSettingsMap> host_content_settings_map_;

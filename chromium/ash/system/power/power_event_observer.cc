@@ -18,7 +18,7 @@
 #include "ash/wallpaper/wallpaper_widget_controller.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/lock_state_observer.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/scoped_multi_source_observation.h"
 #include "base/task/single_thread_task_runner.h"
@@ -341,7 +341,8 @@ void PowerEventObserver::SuspendDoneEx(
   // to launch the resume image. Dismiss the lock screen here to avoid making
   // them log in twice.
   if (proto.deepest_state() ==
-      power_manager::SuspendDone_SuspendState_TO_DISK) {
+          power_manager::SuspendDone_SuspendState_TO_DISK &&
+      Shell::Get()->session_controller()->IsScreenLocked()) {
     Shell::Get()->session_controller()->HideLockScreen();
   }
 }

@@ -67,6 +67,7 @@ class FrameNodeImpl
   void SetHasNonEmptyBeforeUnload(bool has_nonempty_beforeunload) override;
   void SetIsAdFrame(bool is_ad_frame) override;
   void SetHadFormInteraction() override;
+  void SetHadUserEdits() override;
   void OnNonPersistentNotificationCreated() override;
   void OnFirstContentfulPaint(
       base::TimeDelta time_since_navigation_start) override;
@@ -103,10 +104,12 @@ class FrameNodeImpl
   const base::flat_set<WorkerNodeImpl*>& child_worker_nodes() const;
   const PriorityAndReason& priority_and_reason() const;
   bool had_form_interaction() const;
+  bool had_user_edits() const;
   bool is_audible() const;
   const absl::optional<gfx::Rect>& viewport_intersection() const;
   Visibility visibility() const;
   uint64_t resident_set_kb_estimate() const;
+  uint64_t private_footprint_kb_estimate() const;
 
   // Setters are not thread safe.
   void SetIsCurrent(bool is_current);
@@ -116,6 +119,7 @@ class FrameNodeImpl
   void SetViewportIntersection(const gfx::Rect& viewport_intersection);
   void SetVisibility(Visibility visibility);
   void SetResidentSetKbEstimate(uint64_t rss_estimate);
+  void SetPrivateFootprintKbEstimate(uint64_t private_footprint_estimate);
 
   // Invoked when a navigation is committed in the frame.
   void OnNavigationCommitted(const GURL& url, bool same_document);
@@ -187,10 +191,12 @@ class FrameNodeImpl
       const WorkerNodeVisitor& visitor) const override;
   const PriorityAndReason& GetPriorityAndReason() const override;
   bool HadFormInteraction() const override;
+  bool HadUserEdits() const override;
   bool IsAudible() const override;
   const absl::optional<gfx::Rect>& GetViewportIntersection() const override;
   Visibility GetVisibility() const override;
   uint64_t GetResidentSetKbEstimate() const override;
+  uint64_t GetPrivateFootprintKbEstimate() const override;
 
   // Properties associated with a Document, which are reset when a
   // different-document navigation is committed in the frame.
@@ -215,10 +221,19 @@ class FrameNodeImpl
         network_almost_idle{false};
 
     // Indicates if a form in the frame has been interacted with.
+    // TODO(crbug.com/1156388): Remove this once HadUserEdits is known to cover
+    // all existing cases.
     ObservedProperty::NotifiesOnlyOnChanges<
         bool,
         &FrameNodeObserver::OnHadFormInteractionChanged>
         had_form_interaction{false};
+
+    // Indicates that the user has made edits to the page. This is a superset of
+    // `had_form_interaction`, but can also represent changes to
+    // `contenteditable` elements.
+    ObservedProperty::
+        NotifiesOnlyOnChanges<bool, &FrameNodeObserver::OnHadUserEditsChanged>
+            had_user_edits{false};
   };
 
   // Invoked by subframes on joining/leaving the graph.
@@ -284,6 +299,8 @@ class FrameNodeImpl
   base::flat_set<PageNodeImpl*> embedded_page_nodes_;
 
   uint64_t resident_set_kb_estimate_ = 0;
+
+  uint64_t private_footprint_kb_estimate_ = 0;
 
   // Does *not* change when a navigation is committed.
   ObservedProperty::NotifiesOnlyOnChanges<

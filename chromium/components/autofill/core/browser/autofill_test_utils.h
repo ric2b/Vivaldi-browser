@@ -18,6 +18,7 @@
 #include "components/autofill/core/browser/data_model/iban.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
+#include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
@@ -65,8 +66,7 @@ namespace test {
 struct FormGroupValue {
   ServerFieldType type;
   std::string value;
-  structured_address::VerificationStatus verification_status =
-      structured_address::VerificationStatus::kNoStatus;
+  VerificationStatus verification_status = VerificationStatus::kNoStatus;
 };
 
 // Convenience declaration for multiple FormGroup values.
@@ -267,6 +267,10 @@ AutofillProfile GetServerProfile();
 // Returns a server profile full of dummy info, different to the above.
 AutofillProfile GetServerProfile2();
 
+// Sets the `profile`s source and initial creator to match `category`.
+void SetProfileCategory(AutofillProfile& profile,
+                        AutofillProfileSourceCategory category);
+
 // Returns an IBAN full of dummy info.
 IBAN GetIBAN();
 
@@ -289,6 +293,7 @@ CreditCard GetMaskedServerCardWithNonLegacyId();
 CreditCard GetMaskedServerCardWithLegacyId();
 CreditCard GetMaskedServerCardAmex();
 CreditCard GetMaskedServerCardWithNickname();
+CreditCard GetMaskedServerCardEnrolledIntoVirtualCardNumber();
 
 // Returns a full server card full of dummy info.
 CreditCard GetFullServerCard();
@@ -323,9 +328,9 @@ AutofillOfferData GetPromoCodeOfferData(
     bool is_expired = false,
     int64_t offer_id = 333);
 
-// Return an Autofill Wallet Usage Data with dummy info specifically for a
-// Virtual Card.
-AutofillWalletUsageData GetAutofillWalletUsageDataForVirtualCard();
+// Return an Usage Data with dummy info specifically for a Virtual Card.
+VirtualCardUsageData GetVirtualCardUsageData1();
+VirtualCardUsageData GetVirtualCardUsageData2();
 
 // For each type in `types`, this function creates a challenge option with dummy
 // info that has the specific type.
@@ -350,8 +355,7 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* country,
                     const char* phone,
                     bool finalize = true,
-                    structured_address::VerificationStatus =
-                        structured_address::VerificationStatus::kObserved);
+                    VerificationStatus status = VerificationStatus::kObserved);
 
 // This one doesn't require the |dependent_locality|.
 void SetProfileInfo(AutofillProfile* profile,
@@ -368,27 +372,24 @@ void SetProfileInfo(AutofillProfile* profile,
                     const char* country,
                     const char* phone,
                     bool finalize = true,
-                    structured_address::VerificationStatus =
-                        structured_address::VerificationStatus::kObserved);
+                    VerificationStatus status = VerificationStatus::kObserved);
 
-void SetProfileInfoWithGuid(
-    AutofillProfile* profile,
-    const char* guid,
-    const char* first_name,
-    const char* middle_name,
-    const char* last_name,
-    const char* email,
-    const char* company,
-    const char* address1,
-    const char* address2,
-    const char* city,
-    const char* state,
-    const char* zipcode,
-    const char* country,
-    const char* phone,
-    bool finalize = true,
-    structured_address::VerificationStatus =
-        structured_address::VerificationStatus::kObserved);
+void SetProfileInfoWithGuid(AutofillProfile* profile,
+                            const char* guid,
+                            const char* first_name,
+                            const char* middle_name,
+                            const char* last_name,
+                            const char* email,
+                            const char* company,
+                            const char* address1,
+                            const char* address2,
+                            const char* city,
+                            const char* state,
+                            const char* zipcode,
+                            const char* country,
+                            const char* phone,
+                            bool finalize = true,
+                            VerificationStatus = VerificationStatus::kObserved);
 
 // A unit testing utility that is common to a number of the Autofill unit
 // tests.  |SetCreditCardInfo| provides a quick way to populate a credit card

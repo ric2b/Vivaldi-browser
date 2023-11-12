@@ -26,7 +26,7 @@
 
 class OmniboxEditModel;
 class OmniboxMatchCellView;
-class OmniboxPopupContentsView;
+class OmniboxPopupViewViews;
 class OmniboxSuggestionButtonRowView;
 class OmniboxResultSelectionIndicator;
 enum class OmniboxPart;
@@ -44,7 +44,7 @@ class ImageButton;
 class OmniboxResultView : public views::View {
  public:
   METADATA_HEADER(OmniboxResultView);
-  OmniboxResultView(OmniboxPopupContentsView* popup_contents_view,
+  OmniboxResultView(OmniboxPopupViewViews* popup_contents_view,
                     OmniboxEditModel* model,
                     size_t model_index);
   OmniboxResultView(const OmniboxResultView&) = delete;
@@ -116,7 +116,7 @@ class OmniboxResultView : public views::View {
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
 
   // The parent view.
-  const raw_ptr<OmniboxPopupContentsView> popup_contents_view_;
+  const raw_ptr<OmniboxPopupViewViews> popup_view_;
 
   // The model containing results.
   raw_ptr<OmniboxEditModel> model_;
@@ -136,6 +136,7 @@ class OmniboxResultView : public views::View {
   // Weak pointers for easy reference.
   raw_ptr<OmniboxMatchCellView>
       suggestion_view_;                         // The leading (or left) view.
+  // TODO(manukh) No longer used as of crrev.com/c/3381302. Remove.
   raw_ptr<OmniboxMatchCellView> keyword_view_;  // The trailing (or right) view.
 
   // The blue bar used to indicate selection.

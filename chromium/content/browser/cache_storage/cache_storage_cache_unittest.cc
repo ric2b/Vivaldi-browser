@@ -10,10 +10,10 @@
 #include <set>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
@@ -22,6 +22,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -587,7 +588,8 @@ class CacheStorageCacheTest : public testing::Test {
   }
 
   storage::BucketLocator GetOrCreateBucket(const GURL& url) {
-    auto storage_key = blink::StorageKey(url::Origin::Create(url));
+    const auto storage_key =
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(url));
     base::test::TestFuture<storage::QuotaErrorOr<storage::BucketInfo>> future;
     quota_manager_proxy_->UpdateOrCreateBucket(
         storage::BucketInitParams(storage_key, storage::kDefaultBucketName),
@@ -997,7 +999,7 @@ class CacheStorageCacheTest : public testing::Test {
 
   void SetQuota(uint64_t quota) {
     mock_quota_manager_->SetQuota(
-        blink::StorageKey(url::Origin::Create(kTestUrl)),
+        blink::StorageKey::CreateFirstParty(url::Origin::Create(kTestUrl)),
         blink::mojom::StorageType::kTemporary, quota);
   }
 

@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "base/callback.h"
+#import "base/functional/callback.h"
 #import "ios/public/provider/chrome/browser/lens/lens_query.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "third_party/abseil-cpp/absl/types/optional.h"
@@ -31,6 +31,9 @@ enum class LensEntrypoint;
 - (void)lensControllerDidGenerateLoadParams:
     (const web::NavigationManager::WebLoadParams&)params;
 
+// Returns the frame of the web content area of the browser.
+- (CGRect)webContentFrame;
+
 @end
 
 // A controller that can facilitate communication with the downstream Lens
@@ -40,10 +43,11 @@ enum class LensEntrypoint;
 // A delegate that can receive Lens events forwarded by the controller.
 @property(nonatomic, weak) id<ChromeLensControllerDelegate> delegate;
 
-// Returns an input selection UIViewController with the provided
-// web content frame.
-- (UIViewController*)inputSelectionViewControllerWithWebContentFrame:
-    (CGRect)webContentFrame;
+// Returns an input selection UIViewController.
+- (UIViewController*)inputSelectionViewController;
+
+// Triggers the secondary transition animation from native LVF to Lens Web.
+- (void)triggerSecondaryTransitionAnimation;
 
 @end
 

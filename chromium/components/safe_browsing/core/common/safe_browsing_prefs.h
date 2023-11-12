@@ -131,6 +131,14 @@ extern const char kEnhancedProtectionEnabledViaTailoredSecurity[];
 // uploaded its data.
 extern const char kExtensionTelemetryLastUploadTime[];
 
+// The saved copy of the current configuration that will be used by
+// the Extension Telemetry Service.
+extern const char kExtensionTelemetryConfig[];
+
+// A dictionary of extension ids and their file data from the
+// Telemetry Service's file processor.
+extern const char kExtensionTelemetryFileData[];
+
 }  // namespace prefs
 
 namespace safe_browsing {
@@ -258,6 +266,18 @@ void SetExtendedReportingPrefAndMetric(PrefService* prefs,
 
 // This variant is used to simplify test code by omitting the location.
 void SetExtendedReportingPrefForTests(PrefService* prefs, bool value);
+
+// Set the current configuration being used by the Extension Telemetry Service
+void SetExtensionTelemetryConfig(PrefService& prefs,
+                                 const base::Value::Dict& config);
+
+// Get the current configuration being used by the Extension Telemetry Service
+const base::Value::Dict& GetExtensionTelemetryConfig(const PrefService& prefs);
+
+// Get the current processed file data stored in the Extension Telemetry
+// Service.
+const base::Value::Dict& GetExtensionTelemetryFileData(
+    const PrefService& prefs);
 
 // Sets the last time the Extension Telemetry Service successfully uploaded
 // its data.

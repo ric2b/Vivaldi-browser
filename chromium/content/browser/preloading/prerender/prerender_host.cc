@@ -25,7 +25,6 @@
 #include "content/browser/renderer_host/navigation_entry_restore_context_impl.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
-#include "content/browser/site_info.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
@@ -96,13 +95,6 @@ bool AreHttpRequestHeadersCompatible(
                      std::move(prerender_headers), trigger_type,
                      embedder_histogram_suffix));
   return false;
-}
-
-PreloadingFailureReason ToPreloadingFailureReason(PrerenderFinalStatus status) {
-  return static_cast<PreloadingFailureReason>(
-      static_cast<int>(status) +
-      static_cast<int>(
-          PreloadingFailureReason::kPreloadingFailureReasonCommonEnd));
 }
 
 }  // namespace
@@ -176,14 +168,12 @@ PrerenderHost::PrerenderHost(const PrerenderAttributes& attributes,
   // host can be pending until the host starts or is cancelled. So the outcome
   // is set here to track the pending status.
   if (base::FeatureList::IsEnabled(
-          blink::features::kPrerender2SequentialPrerendering) &&
-      attempt_) {
-    attempt_->SetTriggeringOutcome(
-        PreloadingTriggeringOutcome::kTriggeredButPending);
+          blink::features::kPrerender2SequentialPrerendering)) {
+    SetTriggeringOutcome(PreloadingTriggeringOutcome::kTriggeredButPending);
   }
 
-  scoped_refptr<SiteInstance> site_instance =
-      SiteInstance::Create(web_contents.GetBrowserContext());
+  scoped_refptr<SiteInstanceImpl> site_instance =
+      SiteInstanceImpl::Create(web_contents.GetBrowserContext());
   frame_tree_->Init(site_instance.get(),
                     /*renderer_initiated_creation=*/false,
                     /*main_frame_name=*/"", /*opener_for_origin=*/nullptr,
@@ -264,6 +254,11 @@ int PrerenderHost::GetOuterDelegateFrameTreeNodeId() {
   return FrameTreeNode::kFrameTreeNodeInvalidId;
 }
 
+RenderFrameHostImpl* PrerenderHost::GetProspectiveOuterDocument() {
+  // A prerendered FrameTree never has an outer document.
+  return nullptr;
+}
+
 bool PrerenderHost::IsPortal() {
   return false;
 }
@@ -303,8 +298,11 @@ bool PrerenderHost::StartPrerendering() {
   // Just use the referrer from attributes, as NoStatePrefetch does.
   load_url_params.referrer = attributes_.referrer;
 
-  // TODO(https://crbug.com/1189034): Should we set `override_user_agent` here?
-  // Things seem to work without it.
+  // TODO(https://crbug.com/1406149, https://crbug.com/1378921): Set
+  // `override_user_agent` for Android. This field is determined on the Java
+  // side based on the URL and we should mimic Java code and set it to the
+  // correct value. After fixing this, we can remove the check for UA headers
+  // upon activation.
 
   // TODO(https://crbug.com/1132746): Set up other fields of `load_url_params`
   // as well, and add tests for them.
@@ -346,6 +344,25 @@ bool PrerenderHost::StartPrerendering() {
   DCHECK_GE(navigation_request->state(),
             NavigationRequest::WAITING_FOR_RENDERER_RESPONSE);
   return true;
+}
+
+void PrerenderHost::DidStartNavigation(NavigationHandle* navigation_handle) {
+  DCHECK(base::FeatureList::IsEnabled(
+      blink::features::kPrerender2MainFrameNavigation));
+
+  auto* navigation_request = NavigationRequest::From(navigation_handle);
+  DCHECK(navigation_request->IsInPrerenderedMainFrame());
+
+  // Do nothing for the initial navigation.
+  if (GetInitialNavigationId() == navigation_request->GetNavigationId()) {
+    return;
+  }
+
+  // Reset `is_ready_for_activation_` since it can be set to true more than once
+  // and DCHECK will fail when the main frame navigation happens in a
+  // prerendered page and PrerenderHost::DidFinishNavigation is called multiple
+  // times.
+  is_ready_for_activation_ = false;
 }
 
 void PrerenderHost::DidFinishNavigation(NavigationHandle* navigation_handle) {
@@ -723,7 +740,12 @@ PrerenderHost::AreCommonNavigationParamsCompatibleWithNavigation(
     return ActivationNavigationParamsMatch::kInitiatorOrigin;
   }
 
-  if (potential_activation.transition != common_params_->transition) {
+  // The transition must match with the exception of the client redirect flag.
+  // The renderer may add the client redirect flag when it has enough
+  // information to be certain that this navigation would replace the current
+  // history entry (e.g., a renderer-initiated navigation to the current URL).
+  if ((potential_activation.transition &
+       ~ui::PAGE_TRANSITION_CLIENT_REDIRECT) != common_params_->transition) {
     return ActivationNavigationParamsMatch::kTransition;
   }
 
@@ -898,6 +920,9 @@ void PrerenderHost::SetInitialNavigation(NavigationRequest* navigation) {
 }
 
 void PrerenderHost::SetTriggeringOutcome(PreloadingTriggeringOutcome outcome) {
+  devtools_instrumentation::DidUpdatePrerenderStatus(
+      initiator_frame_tree_node_id(), prerendering_url(), outcome);
+
   if (!attempt_)
     return;
 
@@ -912,9 +937,6 @@ void PrerenderHost::SetEligibility(PreloadingEligibility eligibility) {
 }
 
 void PrerenderHost::SetFailureReason(PrerenderFinalStatus status) {
-  if (!attempt_)
-    return;
-
   switch (status) {
     // When adding a new failure reason, consider whether it should be
     // propagated to `attempt_`. Most values should be propagated, but we
@@ -925,6 +947,8 @@ void PrerenderHost::SetFailureReason(PrerenderFinalStatus status) {
     //    activated (kActivatedBeforeStarted).
     case PrerenderFinalStatus::kTriggerDestroyed:
     case PrerenderFinalStatus::kActivatedBeforeStarted:
+    case PrerenderFinalStatus::kTabClosedByUserGesture:
+    case PrerenderFinalStatus::kTabClosedWithoutUserGesture:
       return;
     case PrerenderFinalStatus::kDestroyed:
     case PrerenderFinalStatus::kLowEndDevice:
@@ -969,11 +993,26 @@ void PrerenderHost::SetFailureReason(PrerenderFinalStatus status) {
     case PrerenderFinalStatus::kActivationNavigationParameterMismatch:
     case PrerenderFinalStatus::kActivatedInBackground:
     case PrerenderFinalStatus::kEmbedderHostDisallowed:
-      attempt_->SetFailureReason(ToPreloadingFailureReason(status));
-      // We reset the attempt to ensure we don't update once we have reported it
-      // as failure or accidentally use it for any other prerender attempts as
-      // PrerenderHost deletion is async.
-      attempt_.reset();
+    case PrerenderFinalStatus::kActivationNavigationDestroyedBeforeSuccess:
+    case PrerenderFinalStatus::kPrimaryMainFrameRendererProcessCrashed:
+    case PrerenderFinalStatus::kPrimaryMainFrameRendererProcessKilled:
+    case PrerenderFinalStatus::kActivationFramePolicyNotCompatible:
+    case PrerenderFinalStatus::kPreloadingDisabled:
+    case PrerenderFinalStatus::kBatterySaverEnabled:
+    case PrerenderFinalStatus::kActivatedDuringMainFrameNavigation:
+    case PrerenderFinalStatus::kPreloadingUnsupportedByWebContents:
+      // SetFailureReason() will call SetTriggeringOutcome() with kFailure.
+      devtools_instrumentation::DidUpdatePrerenderStatus(
+          initiator_frame_tree_node_id(), prerendering_url(),
+          PreloadingTriggeringOutcome::kFailure);
+
+      if (attempt_) {
+        attempt_->SetFailureReason(ToPreloadingFailureReason(status));
+        // We reset the attempt to ensure we don't update once we have reported
+        // it as failure or accidentally use it for any other prerender attempts
+        // as PrerenderHost deletion is async.
+        attempt_.reset();
+      }
       return;
     case PrerenderFinalStatus::kActivated:
       // The activation path does not call this method, so it should never reach

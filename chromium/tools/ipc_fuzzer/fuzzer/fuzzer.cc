@@ -490,7 +490,7 @@ template <>
 struct FuzzTraits<base::Value> {
   static bool Fuzz(base::Value* p, Fuzzer* fuzzer) {
     DCHECK(p->type() == base::Value::Type::LIST ||
-           p->type() == base::Value::Type::DICTIONARY);
+           p->type() == base::Value::Type::DICT);
 
     // TODO(mbarbella): Support mutation.
     if (!fuzzer->ShouldGenerate())
@@ -538,8 +538,8 @@ struct FuzzTraits<base::Value> {
           fuzzer->FuzzString(&random_value.GetString());
           break;
         }
-        case base::Value::Type::DICTIONARY: {
-          random_value = base::Value(base::Value::Type::DICTIONARY);
+        case base::Value::Type::DICT: {
+          random_value = base::Value(base::Value::Type::DICT);
           FuzzParam(&random_value, fuzzer);
           break;
         }
@@ -555,12 +555,12 @@ struct FuzzTraits<base::Value> {
 
       // Add |random_value| to the container.
       if (p->type() == base::Value::Type::LIST) {
-        p->Append(std::move(random_value));
+        p->GetList().Append(std::move(random_value));
       } else {
         // |p| is a dictionary, a fuzzed key is also required.
         std::string key;
         fuzzer->FuzzString(&key);
-        p->SetKey(key, std::move(random_value));
+        p->GetDict().Set(key, std::move(random_value));
       }
     }
 
@@ -582,7 +582,7 @@ struct FuzzTraits<base::UnguessableToken> {
       FuzzParam(&low, fuzzer);
       FuzzParam(&high, fuzzer);
     }
-    *p = base::UnguessableToken::Deserialize(high, low);
+    *p = base::UnguessableToken::Deserialize(high, low).value();
     return true;
   }
 };
@@ -1554,7 +1554,13 @@ struct FuzzTraits<url::Origin> {
       if (auto* nonce = p->GetNonceForSerialization()) {
         token = *nonce;
       } else {
-        token = base::UnguessableToken::Deserialize(RandU64(), RandU64());
+        auto high = RandU64();
+        auto low = RandU64();
+        while (high == 0 && low == 0) {
+          high = RandU64();
+          low = RandU64();
+        }
+        token = base::UnguessableToken::Deserialize(high, low).value();
       }
       if (!FuzzParam(&(*token), fuzzer))
         return false;

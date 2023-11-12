@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/containers/contains.h"
 #include "base/memory/raw_ptr.h"
 #include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
@@ -135,8 +136,9 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, IndividualAttestation) {
         Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
     if (!test.permit_attestation_policy_values.empty()) {
       base::Value::List policy_values;
-      for (const std::string& v : test.permit_attestation_policy_values)
+      for (const std::string& v : test.permit_attestation_policy_values) {
         policy_values.Append(v);
+      }
       prefs->SetList(prefs::kSecurityKeyPermitAttestation,
                      std::move(policy_values));
     } else {
@@ -484,80 +486,6 @@ TEST_F(ChromeAuthenticatorRequestDelegateTest, ShouldPromptForAttestationWin) {
   EXPECT_EQ(cb.value(), true);
 }
 
-class ChromeAuthenticatorRequestDelegateWindowsBehaviorTest
-    : public ChromeAuthenticatorRequestDelegateTest {
- public:
-  ChromeAuthenticatorRequestDelegateWindowsBehaviorTest() {
-    scoped_feature_list_.InitAndDisableFeature(
-        device::kWebAuthnNewDiscoverableCredentialsUi);
-  }
-
-  void CreateObjectsUnderTest() {
-    delegate_.emplace(main_rfh());
-    delegate_->SetRelyingPartyId("example.com");
-
-    AuthenticatorRequestDialogModel* const model = delegate_->dialog_model();
-    observer_.emplace(model);
-    model->AddObserver(&observer_.value());
-    CHECK_EQ(observer_->last_step(),
-             AuthenticatorRequestDialogModel::Step::kNotStarted);
-  }
-
-  absl::optional<ChromeAuthenticatorRequestDelegate> delegate_;
-  absl::optional<TestAuthenticatorModelObserver> observer_;
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-TEST_F(ChromeAuthenticatorRequestDelegateWindowsBehaviorTest,
-       CancelAfterMechanismSelection) {
-  // Test that, on Windows, the `ChromeAuthenticatorRequestDelegate` should
-  // remember whether the last successful operation was with the native API or
-  // not and immediately trigger that UI for the next operation accordingly.
-
-  // Setup the Windows native authenticator and configure caBLE such that adding
-  // a phone is an option.
-  AuthenticatorRequestDialogModel::TransportAvailabilityInfo tai;
-  tai.has_win_native_api_authenticator = true;
-  tai.win_native_api_authenticator_id = "ID";
-  tai.available_transports.insert(device::FidoTransportProtocol::kHybrid);
-
-  CreateObjectsUnderTest();
-  delegate_->dialog_model()->set_cable_transport_info(
-      absl::nullopt, {}, base::DoNothing(), "fido:/1234");
-  delegate_->OnTransportAvailabilityEnumerated(tai);
-
-  // Since there are two options, the mechanism selection sheet should be shown.
-  EXPECT_EQ(observer_->last_step(),
-            AuthenticatorRequestDialogModel::Step::kMechanismSelection);
-
-  // Simulate the Windows native API being used successfully.
-  ChromeWebAuthenticationDelegate non_request_delegate;
-  non_request_delegate.OperationSucceeded(profile(), /* used_win_api= */ true);
-
-  CreateObjectsUnderTest();
-  delegate_->dialog_model()->set_cable_transport_info(
-      absl::nullopt, {}, base::DoNothing(), "fido:/1234");
-  delegate_->OnTransportAvailabilityEnumerated(tai);
-
-  // Since the Windows API was used successfully last time, it should jump
-  // directly to the native UI this time.
-  EXPECT_EQ(observer_->last_step(),
-            AuthenticatorRequestDialogModel::Step::kNotStarted);
-
-  // Simulate that caBLE was used successfully.
-  non_request_delegate.OperationSucceeded(profile(), /* used_win_api= */ false);
-
-  CreateObjectsUnderTest();
-  delegate_->dialog_model()->set_cable_transport_info(
-      absl::nullopt, {}, base::DoNothing(), "fido:/1234");
-  delegate_->OnTransportAvailabilityEnumerated(tai);
-
-  // Should show the mechanism selection sheet again.
-  EXPECT_EQ(observer_->last_step(),
-            AuthenticatorRequestDialogModel::Step::kMechanismSelection);
-}
-
 #endif  // BUILDFLAG(IS_WIN)
 
 class OriginMayUseRemoteDesktopClientOverrideTest
@@ -565,6 +493,10 @@ class OriginMayUseRemoteDesktopClientOverrideTest
  protected:
   static constexpr char kCorpCrdOrigin[] =
       "https://remotedesktop.corp.google.com";
+  static constexpr char kCorpCrdAutopushOrigin[] =
+      "https://remotedesktop-autopush.corp.google.com/";
+  static constexpr char kCorpCrdDailyOrigin[] =
+      "https://remotedesktop-daily-6.corp.google.com/";
   static constexpr char kExampleOrigin[] = "https://example.com";
 
   base::test::ScopedFeatureList scoped_feature_list_{
@@ -584,7 +516,8 @@ TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
   ChromeWebAuthenticationDelegate delegate;
   PrefService* prefs =
       Profile::FromBrowserContext(GetBrowserContext())->GetPrefs();
-  for (auto* origin : {kCorpCrdOrigin, kExampleOrigin}) {
+  for (auto* origin : {kCorpCrdOrigin, kCorpCrdAutopushOrigin,
+                       kCorpCrdDailyOrigin, kExampleOrigin}) {
     for (const auto policy :
          {Policy::kUnset, Policy::kDisabled, Policy::kEnabled}) {
       switch (policy) {
@@ -601,9 +534,15 @@ TEST_F(OriginMayUseRemoteDesktopClientOverrideTest,
           break;
       }
 
-      EXPECT_EQ(delegate.OriginMayUseRemoteDesktopClientOverride(
-                    browser_context(), url::Origin::Create(GURL(origin))),
-                origin == kCorpCrdOrigin && policy == Policy::kEnabled);
+      constexpr const char* const crd_origins[] = {
+          kCorpCrdOrigin,
+          kCorpCrdAutopushOrigin,
+          kCorpCrdDailyOrigin,
+      };
+      EXPECT_EQ(
+          delegate.OriginMayUseRemoteDesktopClientOverride(
+              browser_context(), url::Origin::Create(GURL(origin))),
+          base::Contains(crd_origins, origin) && policy == Policy::kEnabled);
     }
   }
 }

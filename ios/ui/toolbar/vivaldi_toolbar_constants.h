@@ -13,5 +13,6 @@ extern const CGFloat vivaldiNonDynamicToolbarHeightFullscreen;
 #pragma mark - ICONS
 
 extern NSString* vToolbarPanelButtonIcon;
+extern NSString* vToolbarSearchButtonIcon;
 
 #endif  // IOS_UI_TOOLBAR_VIVALDI_TOOLBAR_CONSTANTS_H_

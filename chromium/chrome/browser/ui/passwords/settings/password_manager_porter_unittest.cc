@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
@@ -174,8 +174,8 @@ class MockPasswordManagerExporter
   MockPasswordManagerExporter()
       : password_manager::PasswordManagerExporter(
             nullptr,
-            base::BindRepeating([](password_manager::ExportProgressStatus,
-                                   const std::string&) -> void {}),
+            base::BindRepeating(
+                [](const password_manager::PasswordExportInfo&) -> void {}),
             base::MockOnceClosure().Get()) {}
 
   MockPasswordManagerExporter(const MockPasswordManagerExporter&) = delete;

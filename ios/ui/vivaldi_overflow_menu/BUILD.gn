@@ -1,0 +1,17 @@
+
+# Copyright 2023 Vivaldi Technologies. All rights reserved.
+
+source_set("vivaldi_overflow_menu") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "vivaldi_oveflow_menu_constants.h",
+    "vivaldi_oveflow_menu_constants.mm",
+  ]
+
+  deps = [
+    "//base",
+    "resources:resources",
+  ]
+
+ frameworks = [ "UIKit.framework" ]
+}

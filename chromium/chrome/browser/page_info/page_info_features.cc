@@ -12,12 +12,6 @@
 namespace page_info {
 
 bool IsMoreAboutThisSiteFeatureEnabled() {
-#if !BUILDFLAG(IS_ANDROID)
-  // MoreAbout may only be enabled when the side panel is on.
-  if (!base::FeatureList::IsEnabled(features::kUnifiedSidePanel))
-    return false;
-#endif
-
   if (!page_info::IsAboutThisSiteFeatureEnabled(
           g_browser_process->GetApplicationLocale())) {
     return false;
@@ -31,6 +25,18 @@ bool IsDescriptionPlaceholderFeatureEnabled() {
   return IsMoreAboutThisSiteFeatureEnabled() &&
          base::FeatureList::IsEnabled(
              page_info::kPageInfoAboutThisSiteDescriptionPlaceholder);
+}
+
+bool IsAboutThisSiteNewIconFeatureEnabled() {
+  return IsMoreAboutThisSiteFeatureEnabled() &&
+         base::FeatureList::IsEnabled(page_info::kPageInfoAboutThisSiteNewIcon);
+}
+
+bool IsAboutThisSiteForNonMsbbFeatureEnabled() {
+  return IsMoreAboutThisSiteFeatureEnabled() &&
+         IsDescriptionPlaceholderFeatureEnabled() &&
+         IsAboutThisSiteNewIconFeatureEnabled() &&
+         base::FeatureList::IsEnabled(page_info::kPageInfoAboutThisSiteNonMsbb);
 }
 
 #if !BUILDFLAG(IS_ANDROID)

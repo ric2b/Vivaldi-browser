@@ -8,10 +8,10 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/functional/bind.h"
 #include "base/json/string_escape.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
@@ -164,11 +164,16 @@ void TranslateAgent::SeedLanguageDetectionModelForTesting(
 }
 
 void TranslateAgent::PrepareForUrl(const GURL& url) {
-  // Navigated to a new url, reset current page translation.
+  // Navigated to a new url, reset current page translation and related state.
+  page_contents_length_ = 0;
   ResetPage();
 }
 
 void TranslateAgent::PageCaptured(const std::u16string& contents) {
+  // This method should only be called if it was not already run on captured
+  // content on the page.
+  DCHECK(!WasPageContentCapturedForUrl());
+
   // Get the document language as set by WebKit from the http-equiv
   // meta tag for "content-language".  This may or may not also
   // have a value derived from the actual Content-Language HTTP
@@ -215,6 +220,7 @@ void TranslateAgent::PageCaptured(const std::u16string& contents) {
     LanguageDetectionDetails details;
     details.adopted_language = language;
     details.contents = contents;
+    details.has_run_lang_detection = true;
     ResetPage();
     GetTranslateHandler()->RegisterPage(
         receiver_.BindNewPipeAndPassRemote(
@@ -223,8 +229,15 @@ void TranslateAgent::PageCaptured(const std::u16string& contents) {
     return;
   }
 
+  LanguageDetectionDetails details;
   std::string language;
-  if (translate::IsTFLiteLanguageDetectionEnabled()) {
+  // Under kSkipLanguageDetectionOnEmptyContent, if captured content is empty,
+  // default to using "und" instead of attempting language detection.
+  if (base::FeatureList::IsEnabled(
+          translate::kSkipLanguageDetectionOnEmptyContent) &&
+      page_contents_length_ == 0) {
+    language = translate::kUnknownLanguageCode;
+  } else if (translate::IsTFLiteLanguageDetectionEnabled()) {
     translate::LanguageDetectionModel& language_detection_model =
         GetLanguageDetectionModel();
     bool is_available = language_detection_model.IsAvailable();
@@ -240,11 +253,13 @@ void TranslateAgent::PageCaptured(const std::u16string& contents) {
         "LanguageDetection.TFLiteModel.WasModelUnavailableDueToDeferredLoad",
         !is_available && waiting_for_first_foreground_);
     detection_model_version = language_detection_model.GetModelVersion();
+    details.has_run_lang_detection = true;
   } else {
     language = DeterminePageLanguage(
         content_language, html_lang, contents, &model_detected_language,
         &is_model_reliable, model_reliability_score);
     detection_model_version = kCLDModelVersion;
+    details.has_run_lang_detection = true;
   }
 
   if (language.empty())
@@ -254,7 +269,6 @@ void TranslateAgent::PageCaptured(const std::u16string& contents) {
 
   // TODO(crbug.com/1157983): Update the language detection details struct to be
   // model agnostic.
-  LanguageDetectionDetails details;
   details.time = base::Time::Now();
   details.url = web_detection_details.url;
   details.content_language = content_language;
@@ -355,7 +369,6 @@ bool TranslateAgent::ExecuteScriptAndGetBoolResult(const std::string& script,
       main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(
           world_id_, source, blink::BackForwardCacheAware::kAllow);
   if (result.IsEmpty() || !result->IsBoolean()) {
-    NOTREACHED();
     return fallback;
   }
 
@@ -375,7 +388,6 @@ std::string TranslateAgent::ExecuteScriptAndGetStringResult(
       main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(
           world_id_, source, blink::BackForwardCacheAware::kAllow);
   if (result.IsEmpty() || !result->IsString()) {
-    NOTREACHED();
     return std::string();
   }
 
@@ -401,7 +413,6 @@ double TranslateAgent::ExecuteScriptAndGetDoubleResult(
       main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(
           world_id_, source, blink::BackForwardCacheAware::kAllow);
   if (result.IsEmpty() || !result->IsNumber()) {
-    NOTREACHED();
     return 0.0;
   }
 
@@ -420,7 +431,6 @@ int64_t TranslateAgent::ExecuteScriptAndGetIntegerResult(
       main_frame->ExecuteScriptInIsolatedWorldAndReturnValue(
           world_id_, source, blink::BackForwardCacheAware::kAllow);
   if (result.IsEmpty() || !result->IsNumber()) {
-    NOTREACHED();
     return 0;
   }
 

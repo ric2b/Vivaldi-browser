@@ -4,12 +4,16 @@
 
 #import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 
-#import "base/feature_list.h"
 #import "base/ios/ios_util.h"
 #import "base/mac/foundation_util.h"
 #import "base/metrics/field_trial_params.h"
+#import "base/metrics/user_metrics.h"
 #import "base/notreached.h"
 #import "base/time/time.h"
+#import "components/feature_engagement/public/event_constants.h"
+#import "components/feature_engagement/public/feature_constants.h"
+#import "components/feature_engagement/public/tracker.h"
+#import "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -17,10 +21,6 @@
 #endif
 
 #import <UIKit/UIKit.h>
-
-// List of all key used to store data in NSUserDefaults. Still used as key
-// in the NSDictionary stored under `kBrowserDefaultsKey`.
-extern NSArray<NSString*>* const kDefaultBrowserUtilsLegacyKeysForTesting;
 
 // Key in NSUserDefaults containing an NSDictionary used to store all the
 // information.
@@ -92,6 +92,15 @@ NSString* const kRemindMeLaterPromoActionInteraction =
 NSString* const kOpenSettingsActionInteraction =
     @"openSettingsActionInteraction";
 
+// Key in storage containing the timestamp of the last time the user opened the
+// app via first-party intent.
+NSString* const kTimestampAppLastOpenedViaFirstPartyIntent =
+    @"TimestampAppLastOpenedViaFirstPartyIntent";
+
+// Key in storage containing the timestamp of the last time the user pasted a
+// valid URL into the omnibox.
+NSString* const kTimestampLastValidURLPasted = @"TimestampLastValidURLPasted";
+
 const char kDefaultBrowserFullscreenPromoExperimentChangeStringsGroupParam[] =
     "show_switch_description";
 
@@ -115,6 +124,16 @@ constexpr base::TimeDelta kFullscreenPromoCoolDown = base::Days(14);
 // Short cool down between promos.
 constexpr base::TimeDelta kPromosShortCoolDown = base::Days(3);
 
+// Maximum time range between first-party app launches to notify the FET.
+constexpr base::TimeDelta kMaximumTimeBetweenFirstPartyAppLaunches =
+    base::Days(7);
+
+// Maximum time representing one user session.
+constexpr base::TimeDelta kMaximumTimeOneUserSession = base::Hours(6);
+
+// Maximum time range between valid user URL pastes to notify the FET.
+constexpr base::TimeDelta kMaximumTimeBetweenValidURLPastes = base::Days(7);
+
 // List of DefaultPromoType considered by MostRecentInterestDefaultPromoType.
 const DefaultPromoType kDefaultPromoTypes[] = {
     DefaultPromoTypeStaySafe,
@@ -128,7 +147,7 @@ NSMutableDictionary<NSString*, NSObject*>* CreateStorageObjectFromLegacyKeys() {
       [[NSMutableDictionary alloc] init];
 
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-  for (NSString* key in kDefaultBrowserUtilsLegacyKeysForTesting) {
+  for (NSString* key in DefaultBrowserUtilsLegacyKeysForTesting()) {
     NSObject* object = [defaults objectForKey:key];
     if (object) {
       dictionary[key] = object;
@@ -322,6 +341,28 @@ void LogRemindMeLaterPromoActionInteraction() {
                              [NSDate date]);
 }
 
+void LogToFETDefaultBrowserPromoShown(feature_engagement::Tracker* tracker) {
+  // OTR browsers can sometimes pass a null tracker, check for that here.
+  if (!tracker) {
+    return;
+  }
+  tracker->NotifyEvent(feature_engagement::events::kDefaultBrowserPromoShown);
+}
+
+void LogToFETUserPastedURLIntoOmnibox(feature_engagement::Tracker* tracker) {
+  base::RecordAction(
+      base::UserMetricsAction("Mobile.Omnibox.iOS.PastedValidURL"));
+
+  // OTR browsers can sometimes pass a null tracker, check for that here.
+  if (!tracker) {
+    return;
+  }
+
+  if (HasRecentValidURLPastesAndRecordsCurrentPaste()) {
+    tracker->NotifyEvent(feature_engagement::events::kBlueDotPromoCriterionMet);
+  }
+}
+
 bool ShouldShowRemindMeLaterDefaultBrowserFullscreenPromo() {
   if (!IsInRemindMeLaterGroup()) {
     return false;
@@ -329,6 +370,35 @@ bool ShouldShowRemindMeLaterDefaultBrowserFullscreenPromo() {
 
   return HasRecordedEventForKeyMoreThanDelay(
       kRemindMeLaterPromoActionInteraction, kRemindMeLaterPresentationDelay);
+}
+
+bool ShouldTriggerDefaultBrowserBlueDotBadgeFeature(
+    const base::Feature& feature,
+    feature_engagement::Tracker* tracker) {
+  // TODO(crbug.com/1410229) clean-up experiment code when fully launched.
+  if (!IsBlueDotPromoEnabled() || IsChromeLikelyDefaultBrowser()) {
+    return false;
+  }
+
+  // We need to ask the FET whether or not we should show this IPH because if
+  // yes, this will automatically notify the other dependent FET features that
+  // their criteria have been met. We then automatically dismiss it. Since it's
+  // just a shadow feature to enable the other two needed for the blue dot
+  // promo, we ignore `ShouldTriggerHelpUI`'s return value.
+  if (tracker->ShouldTriggerHelpUI(
+          feature_engagement::kIPHiOSDefaultBrowserBadgeEligibilityFeature)) {
+    tracker->Dismissed(
+        feature_engagement::kIPHiOSDefaultBrowserBadgeEligibilityFeature);
+  }
+
+  // Now, we ask the appropriate FET feature if it should trigger, i.e. if we
+  // should show the blue dot promo badge.
+  if (tracker->ShouldTriggerHelpUI(feature)) {
+    tracker->Dismissed(feature);
+    return true;
+  }
+
+  return false;
 }
 
 bool IsInRemindMeLaterGroup() {
@@ -343,6 +413,26 @@ bool IsInModifiedStringsGroup() {
       kDefaultBrowserFullscreenPromoExperiment,
       kDefaultBrowserFullscreenPromoExperimentChangeStringsGroupParam);
   return !paramValue.empty();
+}
+
+bool AreDefaultBrowserPromosEnabled() {
+  if (base::FeatureList::IsEnabled(kDefaultBrowserBlueDotPromo)) {
+    return kBlueDotPromoUserGroupParam.Get() ==
+           BlueDotPromoUserGroup::kAllDBPromosEnabled;
+  }
+
+  return true;
+}
+
+bool IsBlueDotPromoEnabled() {
+  if (base::FeatureList::IsEnabled(kDefaultBrowserBlueDotPromo)) {
+    return kBlueDotPromoUserGroupParam.Get() ==
+               BlueDotPromoUserGroup::kOnlyBlueDotPromoEnabled ||
+           kBlueDotPromoUserGroupParam.Get() ==
+               BlueDotPromoUserGroup::kAllDBPromosEnabled;
+  }
+
+  return false;
 }
 
 bool NonModalPromosEnabled() {
@@ -420,6 +510,47 @@ void LogUserInteractionWithFirstRunPromo(BOOL openedSettings) {
   });
 }
 
+bool HasRecentFirstPartyIntentLaunchesAndRecordsCurrentLaunch() {
+  if (HasRecordedEventForKeyLessThanDelay(
+          kTimestampAppLastOpenedViaFirstPartyIntent,
+          kMaximumTimeBetweenFirstPartyAppLaunches)) {
+    if (HasRecordedEventForKeyMoreThanDelay(
+            kTimestampAppLastOpenedViaFirstPartyIntent,
+            kMaximumTimeOneUserSession)) {
+      SetObjectIntoStorageForKey(kTimestampAppLastOpenedViaFirstPartyIntent,
+                                 [NSDate date]);
+      return YES;
+    }
+
+    return NO;
+  }
+
+  SetObjectIntoStorageForKey(kTimestampAppLastOpenedViaFirstPartyIntent,
+                             [NSDate date]);
+  return NO;
+}
+
+bool HasRecentValidURLPastesAndRecordsCurrentPaste() {
+  if (HasRecordedEventForKeyLessThanDelay(kTimestampLastValidURLPasted,
+                                          kMaximumTimeBetweenValidURLPastes)) {
+    SetObjectIntoStorageForKey(kTimestampLastValidURLPasted, [NSDate date]);
+    return YES;
+  }
+
+  SetObjectIntoStorageForKey(kTimestampLastValidURLPasted, [NSDate date]);
+  return NO;
+}
+
+bool HasRecentTimestampForKey(NSString* eventKey) {
+  if (HasRecordedEventForKeyLessThanDelay(eventKey,
+                                          kMaximumTimeOneUserSession)) {
+    return YES;
+  }
+
+  SetObjectIntoStorageForKey(eventKey, [NSDate date]);
+  return NO;
+}
+
 bool IsChromeLikelyDefaultBrowser7Days() {
   return HasRecordedEventForKeyLessThanDelay(kLastHTTPURLOpenTime,
                                              base::Days(7));
@@ -467,20 +598,24 @@ bool UserInPromoCooldown() {
 NSString* const kDefaultBrowserUtilsKey = @"DefaultBrowserUtils";
 
 // Visible for testing.
-NSArray<NSString*>* const kDefaultBrowserUtilsLegacyKeysForTesting = @[
-  // clang-format off
-  kLastHTTPURLOpenTime,
-  kLastSignificantUserEventGeneral,
-  kLastSignificantUserEventStaySafe,
-  kLastSignificantUserEventMadeForIOS,
-  kLastSignificantUserEventAllTabs,
-  kLastTimeUserInteractedWithPromo,
-  kUserHasInteractedWithFullscreenPromo,
-  kUserHasInteractedWithTailoredFullscreenPromo,
-  kUserHasInteractedWithFirstRunPromo,
-  kUserInteractedWithNonModalPromoCount,
-  kDisplayedPromoCount,
-  kRemindMeLaterPromoActionInteraction,
-  kOpenSettingsActionInteraction,
-  // clang-format on
-];
+const NSArray<NSString*>* DefaultBrowserUtilsLegacyKeysForTesting() {
+  NSArray<NSString*>* const keysForTesting = @[
+    // clang-format off
+    kLastHTTPURLOpenTime,
+    kLastSignificantUserEventGeneral,
+    kLastSignificantUserEventStaySafe,
+    kLastSignificantUserEventMadeForIOS,
+    kLastSignificantUserEventAllTabs,
+    kLastTimeUserInteractedWithPromo,
+    kUserHasInteractedWithFullscreenPromo,
+    kUserHasInteractedWithTailoredFullscreenPromo,
+    kUserHasInteractedWithFirstRunPromo,
+    kUserInteractedWithNonModalPromoCount,
+    kDisplayedPromoCount,
+    kRemindMeLaterPromoActionInteraction,
+    kOpenSettingsActionInteraction,
+    // clang-format on
+  ];
+
+  return keysForTesting;
+}

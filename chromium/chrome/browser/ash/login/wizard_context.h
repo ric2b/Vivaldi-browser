@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_ASH_LOGIN_WIZARD_CONTEXT_H_
 
 #include <memory>
+#include <string>
 
 #include "base/values.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
@@ -125,6 +126,12 @@ class WizardContext {
   // ash::OOBE_SCREEN_UNKNOWN.
   OobeScreenId screen_after_managed_tos;
 
+  // This ID maps onto the instance_id used in
+  // ash::multidevice::RemoteDevice. If a user connects their phone during Quick
+  // Start, Quick Start saves this ID. After Quick Start, the multidevice screen
+  // will show UI enhancements if this quick_start_phone_instance_id is present.
+  std::string quick_start_phone_instance_id;
+
   // If this is a first login after update from CloudReady to a new version.
   // During such an update show users license agreement and data collection
   // consent.
@@ -137,6 +144,18 @@ class WizardContext {
 
   // True when gesture navigation screen was shown during the OOBE.
   bool is_gesture_navigation_screen_was_shown = false;
+
+  // True when user is inside the "Add Person" flow.
+  bool is_add_person_flow = false;
+
+  // Information that is used during Cryptohome recovery or password changed
+  // flow.
+  std::unique_ptr<UserContext> user_context;
+
+  // Indicates whether there is error when fetching Gaia reauth request token.
+  // This flag helps us determine the reason when the reauth proof token is
+  // missing and if we should ask the user to login again.
+  bool gaia_reauth_token_fetch_error = false;
 };
 
 // Returns |true| if this is an OOBE flow after enterprise enrollment.

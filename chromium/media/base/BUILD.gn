@@ -253,8 +253,6 @@ source_set("base") {
     "null_video_sink.h",
     "offloading_audio_encoder.cc",
     "offloading_audio_encoder.h",
-    "offloading_video_encoder.cc",
-    "offloading_video_encoder.h",
     "output_device_info.cc",
     "output_device_info.h",
     "overlay_info.cc",
@@ -386,6 +384,7 @@ source_set("base") {
     "//gpu/command_buffer/client:raster_interface",
     "//gpu/command_buffer/common",
     "//gpu/ipc/common:common",
+    "//media/cdm:clear_key_cdm_common",
     "//net",
     "//skia",
     "//third_party/libyuv",
@@ -462,8 +461,6 @@ source_set("base") {
     sources += [ "demuxer_memory_limit_android.cc" ]
   } else if (is_castos) {
     sources += [ "demuxer_memory_limit_cast.cc" ]
-  } else if (is_fuchsia) {
-    sources += [ "demuxer_memory_limit_low.cc" ]
   } else {
     sources += [ "demuxer_memory_limit_default.cc" ]
   }
@@ -611,7 +608,6 @@ source_set("unit_tests") {
     "multi_channel_resampler_unittest.cc",
     "null_video_sink_unittest.cc",
     "offloading_audio_encoder_unittest.cc",
-    "offloading_video_encoder_unittest.cc",
     "pipeline_impl_unittest.cc",
     "ranges_unittest.cc",
     "reentrancy_checker_unittest.cc",

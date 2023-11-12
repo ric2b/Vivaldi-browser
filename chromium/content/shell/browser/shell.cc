@@ -11,15 +11,14 @@
 #include <string>
 #include <utility>
 
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/no_destructor.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/custom_handlers/protocol_handler.h"
 #include "components/custom_handlers/protocol_handler_registry.h"
@@ -217,8 +216,7 @@ Shell* Shell::CreateNewWindow(BrowserContext* browser_context,
   WebContents::CreateParams create_params(browser_context, site_instance);
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kForcePresentationReceiverForTesting)) {
-    create_params.starting_sandbox_flags =
-        content::kPresentationReceiverSandboxFlags;
+    create_params.starting_sandbox_flags = kPresentationReceiverSandboxFlags;
   }
   std::unique_ptr<WebContents> web_contents =
       WebContents::Create(create_params);
@@ -471,7 +469,7 @@ void Shell::ExitFullscreenModeForTab(WebContents* web_contents) {
 
 void Shell::ToggleFullscreenModeForTab(WebContents* web_contents,
                                        bool enter_fullscreen) {
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   g_platform->ToggleFullscreenModeForTab(this, web_contents, enter_fullscreen);
 #endif
   if (is_fullscreen_ != enter_fullscreen) {
@@ -484,7 +482,7 @@ void Shell::ToggleFullscreenModeForTab(WebContents* web_contents,
 }
 
 bool Shell::IsFullscreenForTabOrPending(const WebContents* web_contents) {
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   return g_platform->IsFullscreenForTabOrPending(this, web_contents);
 #else
   return is_fullscreen_;
@@ -506,7 +504,7 @@ void Shell::RegisterProtocolHandler(RenderFrameHost* requesting_frame,
                                     const std::string& protocol,
                                     const GURL& url,
                                     bool user_gesture) {
-  content::BrowserContext* context = requesting_frame->GetBrowserContext();
+  BrowserContext* context = requesting_frame->GetBrowserContext();
   if (context->IsOffTheRecord())
     return;
 
@@ -544,7 +542,10 @@ void Shell::RegisterProtocolHandler(RenderFrameHost* requesting_frame,
 
   // TODO(jfernandez): Are we interested at all on using the
   // PermissionRequestManager in the ContentShell ?
-  registry->OnAcceptRegisterProtocolHandler(handler);
+  if (registry->registration_mode() ==
+      custom_handlers::RphRegistrationMode::kAutoAccept) {
+    registry->OnAcceptRegisterProtocolHandler(handler);
+  }
 }
 #endif
 
@@ -595,8 +596,9 @@ JavaScriptDialogManager* Shell::GetJavaScriptDialogManager(
 }
 
 #if BUILDFLAG(IS_MAC)
-void Shell::DidNavigatePrimaryMainFramePostCommit(WebContents* contents) {
-  g_platform->DidNavigatePrimaryMainFramePostCommit(this, contents);
+void Shell::PrimaryPageChanged(Page& page) {
+  g_platform->DidNavigatePrimaryMainFramePostCommit(
+      this, WebContents::FromRenderFrameHost(&page.GetMainDocument()));
 }
 
 bool Shell::HandleKeyboardEvent(WebContents* source,
@@ -641,8 +643,8 @@ bool Shell::IsBackForwardCacheSupported() {
   return true;
 }
 
-bool Shell::IsPrerender2Supported(WebContents& web_contents) {
-  return true;
+PreloadingEligibility Shell::IsPrerender2Supported(WebContents& web_contents) {
+  return PreloadingEligibility::kEligible;
 }
 
 std::unique_ptr<WebContents> Shell::ActivatePortalWebContents(
@@ -672,8 +674,8 @@ class PendingCallback : public base::RefCounted<PendingCallback> {
 }  // namespace
 
 void Shell::UpdateInspectedWebContentsIfNecessary(
-    content::WebContents* old_contents,
-    content::WebContents* new_contents,
+    WebContents* old_contents,
+    WebContents* new_contents,
     base::OnceCallback<void()> callback) {
   scoped_refptr<PendingCallback> pending_callback =
       base::MakeRefCounted<PendingCallback>(std::move(callback));

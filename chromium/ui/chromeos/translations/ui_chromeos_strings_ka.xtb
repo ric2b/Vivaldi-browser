@@ -27,12 +27,12 @@
 <translation id="1201402288615127009">შემდეგი</translation>
 <translation id="1209796539517632982">ავტომატური სახელის სერვერები</translation>
 <translation id="1210831758834677569">ლაოსური</translation>
+<translation id="1221555006497674479">მეხსიერება იწურება. საზიარო დისკზე <ph name="TOTAL_SPACE" /> მეხსიერებიდან <ph name="REMAINING_PERCENTAGE" />% დაგრჩათ.</translation>
 <translation id="1243314992276662751">ატვირთვა</translation>
 <translation id="1249250836236328755">ჟანრი</translation>
 <translation id="1254593899333212300">პირდაპირი ინტერნეტ კავშირი</translation>
 <translation id="1272293450992660632">PIN-კოდების მნიშვნელობები არ ემთხვევა.</translation>
 <translation id="1280820357415527819">მიმდინარეობს მობილური ქსელების ძიება</translation>
-<translation id="1291603679744561561">SIM ბარათი ჩაკეტილია</translation>
 <translation id="1293556467332435079">ფაილები</translation>
 <translation id="1297922636971898492">Google Drive ამჟამად მიუწვდომელია. ატვირთვა ავტომატურად განახლდება Google Drive-ის დაბრუნების შემდეგ.</translation>
 <translation id="1307931752636661898">Linux ფაილების ნახვა ვერ ხერხდება</translation>
@@ -51,6 +51,7 @@
 <translation id="1433628812591023318">Parallels Desktop-ში ფაილის ჩავლებით გადასატანად ის უნდა გადაიტანოთ Windows ფაილებში.</translation>
 <translation id="1435838927755162558">საქაღალდის გაზიარება Parallels Desktop-თან</translation>
 <translation id="1439919885608649279">პიროვნება ყვავილებით</translation>
+<translation id="1458457385801829801"><ph name="TARGET_NAME" />-ის ამოღება</translation>
 <translation id="1471718551822868769">სლოვაკური</translation>
 <translation id="1482884275703521657">ფინური</translation>
 <translation id="148466539719134488">შვეიცარიული</translation>
@@ -73,6 +74,7 @@
 <translation id="1641780993263690097">ჩინური პინ-ინი</translation>
 <translation id="1646019627374511909">მიმდინარეობს <ph name="NUMBER_OF_ITEMS" /> ფაილის ხაზგარეშე ხელმისაწვდომად გარდაქმნა</translation>
 <translation id="164969095109328410">Chrome მოწყობილობა</translation>
+<translation id="1661207570040737402">საზიარო დისკზე მთლიანად გამოყენებული გაქვთ Google Workspace მეხსიერება.</translation>
 <translation id="1661867754829461514">PIN არ არის</translation>
 <translation id="166439687370499867">ზიარი ქსელების კონფიგურაციების შეცვლა დაუშვებელია</translation>
 <translation id="1665611772925418501">ფაილის შეცვლა შეუძლებელია.</translation>
@@ -145,6 +147,7 @@
 <translation id="2208919847696382164">დააინსტალირეთ Linux-ის მეშვეობით</translation>
 <translation id="2225536596944493418">ნამდვილად გსურთ, წაშალოთ <ph name="NUMBER_OF_ITEMS" /> ერთეული?</translation>
 <translation id="2230062665678605299">ვერ შეიქმნა საქაღალდე „<ph name="FOLDER_NAME" />“. <ph name="ERROR_MESSAGE" /></translation>
+<translation id="2236732657580416950">თქვენი Google Drive-ის ქეში გასუფთავდა.</translation>
 <translation id="2239068707900391003">პიროვნება ყავით</translation>
 <translation id="2251368349685848079">წაშლილებიდან აღდგენა</translation>
 <translation id="2282155092769082568">ავტოკონფიგურაციის URL:</translation>
@@ -190,6 +193,7 @@
 <translation id="2574327434504608656">Bruschetta-სთან გაზიარებულია 1 საქაღალდე</translation>
 <translation id="2578394532502990878">ტამილური ფონეტიკური</translation>
 <translation id="2579959351793446050">ორია</translation>
+<translation id="2587195714949534472">მიმდინარეობს „<ph name="FILE_NAME" />“-ის სინქრონიზაციისთვის მომზადება...</translation>
 <translation id="2602810353103180630">ქსელი <ph name="NETWORK_INDEX" /> / <ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, სიგნალის სიძლიერე: <ph name="SIGNAL_STRENGTH" />%, დაბლოკილია თქვენი ადმინისტრატორის მიერ, დეტალები</translation>
 <translation id="2614589611416690597"><ph name="VIDEO_TYPE" /> ვიდეო</translation>
 <translation id="2620090360073999360">Google Drive-ზე წვდომა ამჟამად შეუძლებელია.</translation>
@@ -219,6 +223,7 @@
 <translation id="2888807692577297075">&lt;b&gt;„<ph name="SEARCH_STRING" />“&lt;/b&gt;-ის შესაბამისი ელემენტები ვერ მოიძებნა</translation>
 <translation id="2894654529758326923">ინფორმაცია</translation>
 <translation id="2902734494705624966">აშშ გაფართოებით</translation>
+<translation id="2904378509913846215">საქაღალდე, სახელად „<ph name="FILENAME" />“, უკვე არსებობს. გსურთ, ჩაანაცვლოთ ის იმ საქაღალდით, რომელიც გადაგაქვთ?</translation>
 <translation id="290843123675549676">მარათული</translation>
 <translation id="2923240520113693977">ესტონური</translation>
 <translation id="2938685643439809023">მონღოლური</translation>
@@ -290,6 +295,7 @@
 <translation id="3486821258960016770">მონღოლური</translation>
 <translation id="3495304270784461826"><ph name="COUNT" /> შეცდომა.</translation>
 <translation id="3509680540198371098">ქსელი <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, <ph name="SECURITY_STATUS" />, <ph name="CONNECTION_STATUS" />, სიგნალის სიძლიერე: <ph name="SIGNAL_STRENGTH" />%, დეტალები</translation>
+<translation id="3511705761158917664">მიმდინარეობს <ph name="NUMBER_OF_ITEMS" /> ერთეულის სინქრონიზაციისთვის მომზადება...</translation>
 <translation id="3522708245912499433">პორტუგალიური</translation>
 <translation id="3524311639100184459">გაფრთხილება: ეს ფაილები დროებითია და შეიძლება ავტომატურად წაიშალოს დისკზე ადგილის გასათავისუფლებლად.  <ph name="BEGIN_LINK" />შეიტყვეთ მეტი<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">საქაღალდე</translation>
@@ -349,6 +355,7 @@
 <translation id="3971140002794351170">მობილური პროფილის ჩამოტვირთვა, ქსელი <ph name="NETWORK_INDEX" /> / <ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" /></translation>
 <translation id="3973925058222872294">ინგლისური (გაერთიანებული სამეფო)</translation>
 <translation id="3975895378829046965">ბენგალური ფონეტიკური</translation>
+<translation id="3999574733850440202">ბოლო დროს გახსნილი Microsoft-ის ფაილები გადატანილია OneDrive-ზე</translation>
 <translation id="4002066346123236978">სათაური</translation>
 <translation id="4017788180641807848">ინგლისური (აშშ) Workman კლავიატურით</translation>
 <translation id="4019998208269143058">სწრაფ ფაილებში ჩამაგრება</translation>
@@ -357,6 +364,7 @@
 <translation id="4092890906744441904">ირლანდიური</translation>
 <translation id="4124935795427217608">ზღაპრული მარტორქა</translation>
 <translation id="4131235941541910880">გადაიტანეთ არასაჭირო ერთეულები წაშლილებში</translation>
+<translation id="4134804435730168042">ქსელი <ph name="NETWORK_INDEX" /> / <ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, გაააქტიურეთ მოწყობილობის დაყენების შემდეგ</translation>
 <translation id="4153015322587141338">თაროდან თქვენს ფაილებზე სწრაფი წვდომა რომ იქონიოთ, მარჯვენა ღილაკით დააწკაპუნეთ ფაილზე და აირჩიეთ „<ph name="PIN_COMMAND" />“.</translation>
 <translation id="4157569377477607576">ადმინისტრატორის წესების მიხედვით რეკომენდებული არ არის:</translation>
 <translation id="4159731583141908892"><ph name="FILE_NAME" /> გადატანილია.</translation>
@@ -399,11 +407,13 @@
 <translation id="4414834425328380570">„<ph name="FILE_NAME" />“ წაიშლება და მის აღდგენას ვერ შეძლებთ.</translation>
 <translation id="4418686080762064601">შექმენით თქვენი ფაილების მალსახმობი</translation>
 <translation id="4425149324548788773">ჩემი Drive</translation>
+<translation id="4432921877815220091">ქსელი <ph name="NETWORK_INDEX" /> / <ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, გაააქტიურეთ მოწყობილობის დაყენების შემდეგ, მართავს თქვენი ადმინისტრატორი</translation>
 <translation id="4439427728133035643">ქსელი <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, სიგნალის სიძლიერე: <ph name="SIGNAL_STRENGTH" />%, დაკავშირება</translation>
 <translation id="4442424173763614572">DNS ძიება ვერ განხორციელდა</translation>
 <translation id="4462159676511157176">ინდივიდუალური სახელთა სერვერები</translation>
 <translation id="4465725236958772856">ქსელი <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, მართავს თქვენი ადმინისტრატორი, დაკავშირება</translation>
 <translation id="4470564870223067757">ჰანგული ნაკრები 2</translation>
+<translation id="4474142134969976028">შესატყვისი შედეგები არ არის</translation>
 <translation id="4477002475007461989">რუმინული</translation>
 <translation id="4477219268485577442">ბულგარული ფონეტიკური</translation>
 <translation id="4508265954913339219">აქტივაცია ვერ მოხერხდა</translation>
@@ -475,6 +485,7 @@
 <translation id="4973523518332075481">სახელის სიგრძე უნდა იყოს <ph name="MAX_LENGTH" /> ან ნაკლები სიმბოლო</translation>
 <translation id="4973970068702235170">დაარქივება ვერ მოხერხდა, მოულოდნელი შეცდომა: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="4984616446166309645">იაპონური</translation>
+<translation id="4987699874727873250">ინგლისური (ინდოეთი)</translation>
 <translation id="4988205478593450158">ნამდვილად გსურთ, წაშალოთ „<ph name="FILE_NAME" />“?</translation>
 <translation id="498902553138568924">წითელი პეპელა</translation>
 <translation id="4992066212339426712">დადუმების მოხსნა</translation>
@@ -605,6 +616,7 @@
 <translation id="5913638992615760742">კოპირების ოპერაცია ვერ შესრულდა, მოულოდნელი შეცდომა: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="5926082595146149752">ნიდერლანდური (ნიდერლანდები) აშშ-ის საერთაშორისო (PC) კლავიატურით</translation>
 <translation id="5932901536148835538">Chromebit</translation>
+<translation id="5948255720516436063">ქსელი <ph name="NETWORK_INDEX" /> / <ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, გაააქტიურეთ მოწყობილობის დაყენების შემდეგ</translation>
 <translation id="5955954492236143329"><ph name="NUMBER_OF_ITEMS" /> ერთეული</translation>
 <translation id="5957366693331451795">Chromebox-ები</translation>
 <translation id="5982621672636444458">დალაგების ვარიანტები</translation>
@@ -639,6 +651,7 @@
 <translation id="6241349547798190358">ნიდერლანდური (ბელგია)</translation>
 <translation id="6267547857941397424">ქსელი <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />-დან, <ph name="PHONE_NAME" />, სიგნალის სიძლიერე: <ph name="SIGNAL_STRENGTH" />%, ტელეფონის ბატარეა: <ph name="BATTERY_STATUS" />%, დაკავშირება</translation>
 <translation id="6269630227984243955">მალაიური</translation>
+<translation id="6271903698064569429">ფაილების ატვირთვა შეუძლებელია, რადგან <ph name="SHARED_DRIVE_NAME" />-ს არ აქვს საკმარისი მეხსიერება.</translation>
 <translation id="6287852322318138013">აირჩიეთ პროგრამა ამ ფაილის გასახსნელად</translation>
 <translation id="6295542640242147836">SIM ბარათის ჩაკეტვა</translation>
 <translation id="6296410173147755564">PUK-კოდი არასწორია</translation>
@@ -684,6 +697,7 @@
 <translation id="6657585470893396449">პაროლი</translation>
 <translation id="6658865850469097484">30 დღის წინ წაშლილი ფაილები ავტომატურად წაიშლება.</translation>
 <translation id="6673674183150363784">ფრანგული (საფრანგეთი) Bépo კლავიატურით</translation>
+<translation id="670380500182402678">ყველას ჩანაცვლება</translation>
 <translation id="6710022688720561421">რობოტი</translation>
 <translation id="6710213216561001401">წინა</translation>
 <translation id="6732801395666424405">სერტიფიკატები ვერ ჩაიტვირთა</translation>
@@ -749,6 +763,7 @@
 <translation id="7126604456862387217">„&lt;b&gt;<ph name="SEARCH_STRING" />&lt;/b&gt;“ - &lt;em&gt;ძიება Drive-ზე&lt;/em&gt;</translation>
 <translation id="7135561821015524160">კანადა ფონეტიკური</translation>
 <translation id="714034171374937760">Chromebase</translation>
+<translation id="7162080671816799010">ავტორიზაციის სერვერის დადასტურებისთვის აკლია „სუბიექტის ალტერნატიული სახელის დამთხვევა“ ან „დომენის სუფიქსის დამთხვევა“</translation>
 <translation id="7165320105431587207">ქსელის კონფიგურაცია ვერ მოხერხდა</translation>
 <translation id="7170041865419449892">დიაპაზონს მიღმა</translation>
 <translation id="7180611975245234373">განახლება</translation>
@@ -781,6 +796,7 @@
 <translation id="7458955835361612701">ბოლოდროინდელი სურათები არ არის</translation>
 <translation id="7460898608667578234">უკრაინული</translation>
 <translation id="7469894403370665791">ამ ქსელთან ავტომატური დაკავშირება</translation>
+<translation id="7481358317100446445">მზად არის</translation>
 <translation id="7486315294984620427">Parallels Desktop-ში ფაილის ჩავლებით გადასატანად ის უნდა დააკოპიროთ Windows ფაილებში.</translation>
 <translation id="749452993132003881">ჰირაგანა</translation>
 <translation id="7495372004724182530">მალაიალამური ფონეტიკური</translation>
@@ -806,6 +822,7 @@
 <translation id="7655441028674523381">იქონიეთ მარტივი წვდომა Google Photos-ზე</translation>
 <translation id="7658239707568436148">გაუქმება</translation>
 <translation id="7663224033570512922">ჰინდი</translation>
+<translation id="7665680517722058469">ცადეთ, მოიძიოთ სხვა რამ</translation>
 <translation id="7689532716264131859"><ph name="NUMBER_OF_ITEMS" /> ერთეული გადატანილია წაშლილებში</translation>
 <translation id="7693909743393669729">დისკის დაფორმატება ამოშლის მასში შენახულ ყველა მონაცემს, მათ შორის, დანაყოფებს, რომლებიც შეიძლება არ ჩანდეს. ამ მოქმედებას ვერ გააუქმებთ.</translation>
 <translation id="7695430100978772476"><ph name="DRIVE_NAME" /> ვერ დაფორმატდა</translation>
@@ -817,6 +834,7 @@
 <translation id="7724603315864178912">ამოჭრა</translation>
 <translation id="7732111077498238432">ქსელი იმართება წესებით</translation>
 <translation id="7736003208887389532">გსურთ, სამუდამოდ წაშალოთ ეს ფაილები?</translation>
+<translation id="7740287852186792672">ძიების შედეგები</translation>
 <translation id="7748626145866214022">დამატებითი ვარიანტები ხელმისაწვდომია ქმედებათა ზოლში. ქმედებათა ზოლის ფოკუსში მოსაქცევად გამოიყენეთ კლავიშთა კომბინაცია: Alt + A.</translation>
 <translation id="7760449188139285140">ჩინური Wubi</translation>
 <translation id="7765158879357617694">გადატანა</translation>
@@ -868,6 +886,7 @@
 <translation id="8116072619078571545">გაყინული წყალი</translation>
 <translation id="8128733386027980860">ინგლისური (გაერთიანებული სამეფო) Dvorak კლავიატურით</translation>
 <translation id="8137331602592933310">„<ph name="FILENAME" />“ გაზიარებულია თქვენთვის. მისი წაშლა შეუძლებელია, რადგან ის თქვენ არ გეკუთვნით.</translation>
+<translation id="8138705869659070104">გააქტიურება მოწყობილობის დაყენების შემდეგ</translation>
 <translation id="813913629614996137">მიმდინარეობს ინიცირება…</translation>
 <translation id="8147028810663464959">სიმბოლოთა სიგანე სავსეა</translation>
 <translation id="8151638057146502721">კონფიგურირება</translation>
@@ -893,6 +912,7 @@
 <translation id="8300849813060516376">OTASP ვერ შესრულდა</translation>
 <translation id="8312871300878166382">ჩასმა საქაღალდეში</translation>
 <translation id="8329978297633540474">ჩვეულებრივი ტექსტი</translation>
+<translation id="8332007959299458842">ბოლო დროს გახსნილი Microsoft-ის ფაილები გადატანილია Google Drive-ზე</translation>
 <translation id="8335587457941836791">მოხსენით თაროდან</translation>
 <translation id="8335837413233998004">ბელარუსული</translation>
 <translation id="8336153091935557858">გუშინ <ph name="YESTERDAY_DAYTIME" /></translation>
@@ -902,6 +922,7 @@
 <translation id="8386903983509584791">სკანირება დასრულდა</translation>
 <translation id="8387733224523483503"><ph name="FILE_NAME" /> ამოღებულია.</translation>
 <translation id="8395901698320285466">ზომები</translation>
+<translation id="8404498045299006085">ყველას შენარჩუნება</translation>
 <translation id="8408068190360279472"><ph name="NETWORK_TYPE" /> ქსელი, მიმდინარეობს დაკავშირება</translation>
 <translation id="8425213833346101688">შეცვლა</translation>
 <translation id="8431909052837336408">SIM ბარათის PIN-კოდის შეცვლა</translation>
@@ -918,6 +939,7 @@
 <translation id="8487700953926739672">ოფლაინში ხელმისაწვდომი</translation>
 <translation id="8492972329130824181">სახლის ქსელი მიუწვდომელია. დასაკავშირებლად საჭიროა მობილური ინტერნეტის როუმინგის ჩართვა.</translation>
 <translation id="8499098729323186194">მიმდინარეობს <ph name="NUMBER_OF_ITEMS" /> ერთეულის ამოღება...</translation>
+<translation id="8502913769543567768">ქსელი <ph name="NETWORK_INDEX" /> / <ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, <ph name="NETWORK_PROVIDER_NAME" />, გაააქტიურეთ მოწყობილობის დაყენების შემდეგ, მართავს თქვენი ადმინისტრატორი</translation>
 <translation id="8521441079177373948">დიდი ბრიტანეთი</translation>
 <translation id="853494022971700746">ფრანგული (საფრანგეთი)</translation>
 <translation id="8540608333167683902">ქსელი <ph name="NETWORK_INDEX" />/<ph name="NETWORK_COUNT" />-დან, <ph name="NETWORK_NAME" />, <ph name="CONNECTION_STATUS" />, სიგნალის სიძლიერე: <ph name="SIGNAL_STRENGTH" />%, დეტალები</translation>
@@ -961,6 +983,7 @@
 <translation id="8866284467018526531">არაბული ტრანსლიტერაცია</translation>
 <translation id="8873014196523807561">ამ ერთეულების აღსადგენად ჩავლებით გადაიტანეთ ისინი ახალ საქაღალდეში. ზოგიერთი ამ ერთეულის თავდაპირველი საქაღალდეები წაიშალა.</translation>
 <translation id="8874184842967597500">არ არის დაკავშირებული</translation>
+<translation id="8876368061475701452">რიგშია</translation>
 <translation id="8900820606136623064">უნგრული</translation>
 <translation id="8903931173357132290">კურსდამთავრებული</translation>
 <translation id="8912078710089354287">ძაღლი, რომელიც კუდს აქიცინებს</translation>
@@ -978,6 +1001,7 @@
 <translation id="9046895021617826162">დაკავშირება ვერ მოხერხდა</translation>
 <translation id="9065512565307033593">თუ დადასტურებას ვერ მოახერხებთ, ქსელზე წვდომა გაითიშება.</translation>
 <translation id="908378762078012445">რუსული ფონეტიკური AATSEEL კლავიატურით</translation>
+<translation id="9086302186042011942">სინქრონიზაცია</translation>
 <translation id="9099674669267916096">გვერდების რაოდენობა</translation>
 <translation id="9100610230175265781">აუცილებელია კოდური ფრაზის მითითება</translation>
 <translation id="9110990317705400362">ჩვენ მუდამ ვზრუნავთ იმაზე, თუ როგორ გავზარდოთ ჩვენი ბრაუზერის უსაფრთხოება. ადრე ნებისმიერ საიტს შეეძლო თქვენთვის ბრაუზერში გაფართოების დამატების შემოთავაზება. Google Chrome-ის უახლეს ვერსიებში პირდაპირ უნდა მიუთითოთ Chrome-ს, რომ გსურთ გაფართოების დაინსტალირება, გაფართოების გევრდზე მისი დამატების გზით. <ph name="BEGIN_LINK" />შეიტყვეთ მეტი<ph name="END_LINK" /></translation>

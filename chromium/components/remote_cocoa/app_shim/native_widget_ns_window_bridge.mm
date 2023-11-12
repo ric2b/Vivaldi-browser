@@ -4,6 +4,7 @@
 
 #include "base/memory/raw_ptr.h"
 
+#import "base/task/single_thread_task_runner.h"
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h"
 
 #import <objc/runtime.h>
@@ -13,8 +14,8 @@
 #include <cmath>
 #include <memory>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #import "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
@@ -32,7 +33,6 @@
 #import "components/remote_cocoa/app_shim/native_widget_ns_window_host_helper.h"
 #include "components/remote_cocoa/app_shim/select_file_dialog_bridge.h"
 #import "components/remote_cocoa/app_shim/views_nswindow_delegate.h"
-#import "components/remote_cocoa/app_shim/window_controls_overlay_nsview.h"
 #import "components/remote_cocoa/app_shim/window_move_loop.h"
 #include "components/remote_cocoa/common/native_widget_ns_window_host.mojom.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -686,11 +686,23 @@ void NativeWidgetNSWindowBridge::SetVisibilityState(
   // In headless mode the platform window is always hidden, so instead of
   // changing its visibility state just maintain a local flag to track the
   // expected visibility state and lie to the upper layer pretending the
-  // window did change its visibility state.
+  // window did change its visibility and activation state.
   if (headless_mode_window_) {
     headless_mode_window_->visibility_state =
         new_state != WindowVisibilityState::kHideWindow;
     host_->OnVisibilityChanged(headless_mode_window_->visibility_state);
+    if (new_state == WindowVisibilityState::kShowAndActivateWindow) {
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](WeakPtrNSObject* handle) {
+                if (auto* bridge = ui::WeakPtrNSObjectFactory<
+                        NativeWidgetNSWindowBridge>::Get(handle)) {
+                  bridge->OnWindowKeyStatusChangedTo(/*is_key*/ true);
+                }
+              },
+              ns_weak_factory_.handle()));
+    }
     return;
   }
 
@@ -783,9 +795,8 @@ void NativeWidgetNSWindowBridge::SetVisibilityState(
     [NSApp activateIgnoringOtherApps:YES];
   } else if (new_state == WindowVisibilityState::kShowInactive && !parent_ &&
              ![window_ isMiniaturized]) {
-    NSWindow* mainWindow = [NSApp mainWindow];
-    if (mainWindow && ([mainWindow screen] == [window_ screen] ||
-                       ![mainWindow isKeyWindow])) {
+    if ([[NSApp mainWindow] screen] == [window_ screen] ||
+        ![[NSApp mainWindow] isKeyWindow]) {
       // When the new window is on the same display as the main window or the
       // main window is inactive, order the window relative to the main window.
       // Avoid making it the front window (with e.g. orderFront:), which can
@@ -931,11 +942,27 @@ void NativeWidgetNSWindowBridge::SetCursor(const ui::Cursor& cursor) {
 
 void NativeWidgetNSWindowBridge::EnableImmersiveFullscreen(
     uint64_t fullscreen_overlay_widget_id,
+    uint64_t tab_widget_id,
     EnableImmersiveFullscreenCallback callback) {
-  immersive_mode_controller_ = std::make_unique<ImmersiveModeController>(
-      ns_window(), GetFromId(fullscreen_overlay_widget_id)->ns_window(),
-      std::move(callback));
+  NativeWidgetNSWindowBridge* tab_widget_bridge = GetFromId(tab_widget_id);
+  if (tab_widget_bridge) {
+    NSWindow* tab_window = tab_widget_bridge->ns_window();
+    immersive_mode_controller_ =
+        std::make_unique<ImmersiveModeTabbedController>(
+            ns_window(), GetFromId(fullscreen_overlay_widget_id)->ns_window(),
+            tab_window, std::move(callback));
+  } else {
+    immersive_mode_controller_ = std::make_unique<ImmersiveModeController>(
+        ns_window(), GetFromId(fullscreen_overlay_widget_id)->ns_window(),
+        std::move(callback));
+  }
   immersive_mode_controller_->Enable();
+
+  // Reveal locks can outlive immersive_mode_controller_, re-establish any
+  // outstanding locks.
+  for (int i = 0; i < immersive_fullscreen_reveal_lock_count_; ++i) {
+    immersive_mode_controller_->RevealLock();
+  }
 }
 
 void NativeWidgetNSWindowBridge::DisableImmersiveFullscreen() {
@@ -957,12 +984,15 @@ void NativeWidgetNSWindowBridge::OnTopContainerViewBoundsChanged(
 }
 
 void NativeWidgetNSWindowBridge::ImmersiveFullscreenRevealLock() {
+  ++immersive_fullscreen_reveal_lock_count_;
   if (immersive_mode_controller_) {
     immersive_mode_controller_->RevealLock();
   }
 }
 
 void NativeWidgetNSWindowBridge::ImmersiveFullscreenRevealUnlock() {
+  --immersive_fullscreen_reveal_lock_count_;
+  DCHECK(immersive_fullscreen_reveal_lock_count_ >= 0);
   if (immersive_mode_controller_) {
     immersive_mode_controller_->RevealUnlock();
   }
@@ -978,6 +1008,11 @@ void NativeWidgetNSWindowBridge::SetCanGoForward(bool can_go_forward) {
 
 void NativeWidgetNSWindowBridge::OnWindowWillClose() {
   fullscreen_controller_.OnWindowWillClose();
+  // Immersive full screen needs to be disabled synchronously when the window
+  // is closing. So disable it right away, rather than waiting for the browser
+  // process to signal us to disable immersive fullscreen after being informed
+  // of the window closing.
+  DisableImmersiveFullscreen();
 
   [window_ setCommandHandler:nil];
   [window_ setCommandDispatcherDelegate:nil];
@@ -1056,12 +1091,6 @@ void NativeWidgetNSWindowBridge::OnVisibilityChanged() {
 
   NotifyVisibilityChangeDown();
   host_->OnVisibilityChanged(window_visible_);
-
-  // Toolkit-views suppresses redraws while not visible. To prevent Cocoa asking
-  // for an "empty" draw, disable auto-display while hidden. For example, this
-  // prevents Cocoa drawing just *after* a minimize, resulting in a blank window
-  // represented in the deminiaturize animation.
-  [window_ setAutodisplay:window_visible_];
 }
 
 void NativeWidgetNSWindowBridge::OnSystemControlTintChanged() {
@@ -1189,49 +1218,6 @@ bool NativeWidgetNSWindowBridge::RedispatchKeyEvent(NSEvent* event) {
   return [[window_ commandDispatcher] redispatchKeyEvent:event];
 }
 
-void NativeWidgetNSWindowBridge::CreateWindowControlsOverlayNSView(
-    const mojom::WindowControlsOverlayNSViewType overlay_type) {
-  switch (overlay_type) {
-    case mojom::WindowControlsOverlayNSViewType::kCaptionButtonContainer:
-      caption_buttons_overlay_nsview_.reset(
-          [[WindowControlsOverlayNSView alloc] initWithBridge:this]);
-      [bridged_view_ addSubview:caption_buttons_overlay_nsview_];
-      break;
-    case mojom::WindowControlsOverlayNSViewType::kWebAppFrameToolbar:
-      web_app_frame_toolbar_overlay_nsview_.reset(
-          [[WindowControlsOverlayNSView alloc] initWithBridge:this]);
-      [bridged_view_ addSubview:web_app_frame_toolbar_overlay_nsview_];
-      break;
-  }
-}
-
-void NativeWidgetNSWindowBridge::UpdateWindowControlsOverlayNSView(
-    const gfx::Rect& bounds,
-    const mojom::WindowControlsOverlayNSViewType overlay_type) {
-  switch (overlay_type) {
-    case mojom::WindowControlsOverlayNSViewType::kCaptionButtonContainer:
-      [caption_buttons_overlay_nsview_ updateBounds:bounds];
-      break;
-    case mojom::WindowControlsOverlayNSViewType::kWebAppFrameToolbar:
-      [web_app_frame_toolbar_overlay_nsview_ updateBounds:bounds];
-      break;
-  }
-}
-
-void NativeWidgetNSWindowBridge::RemoveWindowControlsOverlayNSView(
-    const mojom::WindowControlsOverlayNSViewType overlay_type) {
-  switch (overlay_type) {
-    case mojom::WindowControlsOverlayNSViewType::kCaptionButtonContainer:
-      [caption_buttons_overlay_nsview_ removeFromSuperview];
-      caption_buttons_overlay_nsview_.reset();
-      break;
-    case mojom::WindowControlsOverlayNSViewType::kWebAppFrameToolbar:
-      [web_app_frame_toolbar_overlay_nsview_ removeFromSuperview];
-      web_app_frame_toolbar_overlay_nsview_.reset();
-      break;
-  }
-}
-
 NSWindow* NativeWidgetNSWindowBridge::ns_window() {
   return window_.get();
 }
@@ -1268,6 +1254,13 @@ void NativeWidgetNSWindowBridge::OnDisplayMetricsChanged(
 void NativeWidgetNSWindowBridge::FullscreenControllerTransitionStart(
     bool is_target_fullscreen) {
   host_->OnWindowFullscreenTransitionStart(is_target_fullscreen);
+  if (!is_target_fullscreen) {
+    // Immersive full screen needs to be disabled synchronously during the
+    // fullscreen transition. So disable it right away, rather than waiting for
+    // the browser process to signal us to disable immersive fullscreen after
+    // being informed of the start of the transition.
+    DisableImmersiveFullscreen();
+  }
 }
 
 void NativeWidgetNSWindowBridge::FullscreenControllerTransitionComplete(
@@ -1695,11 +1688,22 @@ void NativeWidgetNSWindowBridge::UpdateWindowGeometry() {
 }
 
 void NativeWidgetNSWindowBridge::MoveChildrenTo(
-    NativeWidgetNSWindowBridge* target) {
+    NativeWidgetNSWindowBridge* target,
+    bool anchored_only) {
   // Make a copy of `child_windows_` because it will be updated during the loop.
   std::vector<NativeWidgetNSWindowBridge*> child_windows(child_windows_);
   for (NativeWidgetNSWindowBridge* child : child_windows) {
     if (child != target) {
+      // If anchored_only is true, skip windows that are not anchored to the
+      // target window.
+      if (anchored_only) {
+        bool contained = false;
+        child->host()->BubbleAnchorViewContainedInWidget(target->id_,
+                                                         &contained);
+        if (!contained) {
+          continue;
+        }
+      }
       child->SetParent(target->id_);
       child->host()->OnWindowParentChanged(target->id_);
     }

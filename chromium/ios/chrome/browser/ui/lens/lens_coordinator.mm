@@ -194,8 +194,8 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
     contentArea = [delegate webContentAreaForLensCoordinator:self];
   }
 
-  UIViewController* viewController = [lensController
-      inputSelectionViewControllerWithWebContentFrame:contentArea];
+  UIViewController* viewController =
+      [lensController inputSelectionViewController];
 
   // TODO(crbug.com/1353430): the returned UIViewController
   // must not be nil, remove this check once the internal
@@ -283,6 +283,15 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
   [self dismissViewController];
 }
 
+- (CGRect)webContentFrame {
+  id<LensPresentationDelegate> delegate = self.delegate;
+  if (delegate) {
+    return [delegate webContentAreaForLensCoordinator:self];
+  }
+
+  return [UIScreen mainScreen].bounds;
+}
+
 #pragma mark - WebStateListObserving methods
 
 - (void)webStateList:(WebStateList*)webStateList
@@ -313,6 +322,13 @@ const base::TimeDelta kCloseLensViewTimeout = base::Seconds(10);
     id<ToolbarCommands> toolbarCommandsHandler =
         HandlerForProtocol(dispatcher, ToolbarCommands);
     [toolbarCommandsHandler triggerToolbarSlideInAnimation];
+  }
+}
+
+- (void)webStateDidStartLoading:(web::WebState*)webState {
+  const id<ChromeLensController> lensController = self.lensController;
+  if (self.lensWebPageLoadTriggeredFromInputSelection && lensController) {
+    [lensController triggerSecondaryTransitionAnimation];
   }
 }
 

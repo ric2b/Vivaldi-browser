@@ -11,9 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -162,7 +162,7 @@ void LogHTMLForm(Logger* logger,
 bool CanShowUsernameSuggestion(const PasswordFormFillData& fill_data,
                                const std::u16string& typed_username) {
   std::u16string typed_username_lower = base::i18n::ToLower(typed_username);
-  if (base::StartsWith(base::i18n::ToLower(fill_data.username_field.value),
+  if (base::StartsWith(base::i18n::ToLower(fill_data.preferred_login.username),
                        typed_username_lower, base::CompareCase::SENSITIVE)) {
     return true;
   }
@@ -187,10 +187,10 @@ void FindMatchesByUsername(const PasswordFormFillData& fill_data,
                            std::u16string* username,
                            std::u16string* password) {
   // Look for any suitable matches to current field text.
-  if (DoUsernamesMatch(fill_data.username_field.value, current_username,
+  if (DoUsernamesMatch(fill_data.preferred_login.username, current_username,
                        exact_username_match)) {
-    *username = fill_data.username_field.value;
-    *password = fill_data.password_field.value;
+    *username = fill_data.preferred_login.username;
+    *password = fill_data.preferred_login.password;
     LogMessage(logger, Logger::STRING_USERNAMES_MATCH);
   } else {
     // Scan additional logins for a match.
@@ -475,7 +475,9 @@ mojom::SubmissionReadinessState CalculateSubmissionReadiness(
     const FormData& form_data,
     WebInputElement& username_element,
     WebInputElement& password_element) {
-  DCHECK(!password_element.IsNull());
+  if (password_element.IsNull()) {
+    return mojom::SubmissionReadinessState::kNoPasswordField;
+  }
 
   if (username_element.IsNull())
     return mojom::SubmissionReadinessState::kNoUsernameField;
@@ -1054,32 +1056,34 @@ bool PasswordAutofillAgent::TryToShowTouchToFill(
   WebInputElement username_element;
   WebInputElement password_element;
   PasswordInfo* password_info = nullptr;
-  if (input_element.IsNull() ||
+  if (input_element.IsNull() || !IsElementEditable(input_element) ||
       !FindPasswordInfoForElement(input_element, UseFallbackData(false),
                                   &username_element, &password_element,
                                   &password_info)) {
     return false;
   }
 
-  // Don't trigger Touch To Fill when there is no password element or it is not
-  // editable.
-  if (password_element.IsNull() || !IsElementEditable(password_element))
-    return false;
+  bool has_amendable_username_element = IsUsernameAmendable(
+      username_element, input_element.IsPasswordFieldForAutofill());
+  bool has_editable_password_element =
+      !password_element.IsNull() && IsElementEditable(password_element);
+  DCHECK(has_amendable_username_element || has_editable_password_element);
 
   // Highlight the fields that are about to be filled by the user and remember
   // the old autofill state of |username_element| and |password_element|.
-  if (IsUsernameAmendable(username_element,
-                          input_element.IsPasswordFieldForAutofill())) {
+  if (has_amendable_username_element) {
     username_autofill_state_ = username_element.GetAutofillState();
     username_element.SetAutofillState(WebAutofillState::kPreviewed);
   }
-
-  password_autofill_state_ = password_element.GetAutofillState();
-  password_element.SetAutofillState(WebAutofillState::kPreviewed);
+  if (has_editable_password_element) {
+    password_autofill_state_ = password_element.GetAutofillState();
+    password_element.SetAutofillState(WebAutofillState::kPreviewed);
+  }
 
   focused_input_element_ = input_element;
 
-  WebFormElement form = password_element.Form();
+  WebFormElement form = !password_element.IsNull() ? password_element.Form()
+                                                   : username_element.Form();
   std::unique_ptr<FormData> form_data =
       form.IsNull() ? GetFormDataFromUnownedInputElements()
                     : GetFormDataFromWebForm(form);
@@ -1452,8 +1456,8 @@ void PasswordAutofillAgent::SetPasswordFillData(
   }
 
   bool username_password_fields_not_set =
-      form_data.username_field.unique_renderer_id.is_null() &&
-      form_data.password_field.unique_renderer_id.is_null();
+      form_data.username_element_renderer_id.is_null() &&
+      form_data.password_element_renderer_id.is_null();
   if (username_password_fields_not_set) {
     // No fields for filling were found during parsing, which means filling
     // fallback case. So save data for fallback filling.
@@ -1465,7 +1469,7 @@ void PasswordAutofillAgent::SetPasswordFillData(
   std::tie(username_element, password_element) =
       FindUsernamePasswordElements(form_data);
   bool is_single_username_fill =
-      form_data.password_field.unique_renderer_id.is_null();
+      form_data.password_element_renderer_id.is_null();
   WebElement main_element =
       is_single_username_fill ? username_element : password_element;
   if (main_element.IsNull()) {
@@ -1487,6 +1491,19 @@ void PasswordAutofillAgent::SetPasswordFillData(
 
   FillUserNameAndPassword(username_element, password_element, form_data,
                           logger.get());
+}
+
+void PasswordAutofillAgent::PasswordFieldHasNoAssociatedUsername(
+    autofill::FieldRendererId password_element_renderer_id) {
+  WebDocument doc = render_frame()->GetWebFrame()->GetDocument();
+  WebFormControlElement element = FindFormControlElementByUniqueRendererId(
+      doc, password_element_renderer_id);
+  if (!element.IsNull()) {
+    element.GetDocument().GetFrame()->AddGenericIssue(
+        blink::mojom::GenericIssueErrorType::
+            kFormHasPasswordFieldWithoutUsernameFieldError,
+        element.GetDevToolsNodeId());
+  }
 }
 
 void PasswordAutofillAgent::SetLoggingState(bool active) {
@@ -1859,7 +1876,7 @@ bool PasswordAutofillAgent::FillUserNameAndPassword(
       // data that this value is placeholder.
       current_username = username_element.Value().Utf16();
     } else if (IsElementEditable(username_element)) {
-      current_username = fill_data.username_field.value;
+      current_username = fill_data.preferred_login.username;
     }
   }
 
@@ -2020,9 +2037,9 @@ std::pair<WebInputElement, WebInputElement>
 PasswordAutofillAgent::FindUsernamePasswordElements(
     const PasswordFormFillData& form_data) {
   const FieldRendererId username_renderer_id =
-      form_data.username_field.unique_renderer_id;
+      form_data.username_element_renderer_id;
   const FieldRendererId password_renderer_id =
-      form_data.password_field.unique_renderer_id;
+      form_data.password_element_renderer_id;
   const bool is_username_present = !username_renderer_id.is_null();
   const bool is_password_present = !password_renderer_id.is_null();
 

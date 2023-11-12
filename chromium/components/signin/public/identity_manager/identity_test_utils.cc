@@ -177,7 +177,9 @@ CoreAccountInfo SetPrimaryAccount(IdentityManager* identity_manager,
 
   PrimaryAccountManager* primary_account_manager =
       identity_manager->GetPrimaryAccountManager();
-  primary_account_manager->SetPrimaryAccountInfo(account_info, consent_level);
+  primary_account_manager->SetPrimaryAccountInfo(
+      account_info, consent_level,
+      signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN);
 
   DCHECK(identity_manager->HasPrimaryAccount(consent_level));
   DCHECK_EQ(account_info.gaia,
@@ -229,6 +231,7 @@ AccountInfo MakePrimaryAccountAvailable(IdentityManager* identity_manager,
   return primary_account_info;
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void RevokeSyncConsent(IdentityManager* identity_manager) {
   if (!identity_manager->HasPrimaryAccount(ConsentLevel::kSync))
     return;
@@ -245,10 +248,11 @@ void RevokeSyncConsent(IdentityManager* identity_manager) {
       },
       &run_loop));
   identity_manager->GetPrimaryAccountMutator()->RevokeSyncConsent(
-      signin_metrics::SIGNOUT_TEST,
+      signin_metrics::ProfileSignout::kTest,
       signin_metrics::SignoutDelete::kIgnoreMetric);
   run_loop.Run();
 }
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 void ClearPrimaryAccount(IdentityManager* identity_manager) {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -272,7 +276,7 @@ void ClearPrimaryAccount(IdentityManager* identity_manager) {
       },
       &run_loop));
   identity_manager->GetPrimaryAccountMutator()->ClearPrimaryAccount(
-      signin_metrics::SIGNOUT_TEST,
+      signin_metrics::ProfileSignout::kTest,
       signin_metrics::SignoutDelete::kIgnoreMetric);
 
   run_loop.Run();

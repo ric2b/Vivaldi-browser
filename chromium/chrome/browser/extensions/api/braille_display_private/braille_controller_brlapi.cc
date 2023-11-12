@@ -14,16 +14,19 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/command_line.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "base/time/time.h"
 #include "chrome/browser/extensions/api/braille_display_private/brlapi_connection.h"
 #include "chrome/browser/extensions/api/braille_display_private/brlapi_keycode_map.h"
+#include "chrome/browser/extensions/api/braille_display_private/stub_braille_controller.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_switches.h"
 
 namespace extensions {
 using content::BrowserThread;
@@ -44,7 +47,14 @@ constexpr base::TimeDelta kConnectRetryTimeout = base::Seconds(20);
 
 // static
 BrailleController* BrailleController::GetInstance() {
-  return BrailleControllerImpl::GetInstance();
+  BrailleControllerImpl* instance = BrailleControllerImpl::GetInstance();
+  if (!instance->use_self_in_tests()) {
+    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+    if (command_line->HasSwitch(::switches::kTestType)) {
+      return api::braille_display_private::StubBrailleController::GetInstance();
+    }
+  }
+  return instance;
 }
 
 // static

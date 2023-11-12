@@ -6,17 +6,17 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/image_editor/screenshot_flow.h"
-#include "chrome/browser/lens/metrics/lens_metrics.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/lens/lens_side_panel_helper.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "components/lens/lens_entrypoints.h"
 #include "components/lens/lens_features.h"
 #include "components/lens/lens_metadata.mojom.h"
+#include "components/lens/lens_metrics.h"
 #include "components/lens/lens_rendering_environment.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -221,19 +221,14 @@ void LensRegionSearchController::OnCaptureCompleted(
     return;
   }
 
+  lens::RecordAmbientSearchQuery(
+      is_google_default_search_provider_
+          ? lens::AmbientSearchEntryPoint::
+                CONTEXT_MENU_SEARCH_REGION_WITH_GOOGLE_LENS
+          : lens::AmbientSearchEntryPoint::CONTEXT_MENU_SEARCH_REGION_WITH_WEB);
   if (is_google_default_search_provider_) {
-    // Do not show the side panel on region searches and modify the entry point
-    // if Lens fullscreen search features are enabled.
-    lens::EntryPoint entry_point =
-        lens::features::IsLensFullscreenSearchEnabled()
-            ? lens::EntryPoint::CHROME_FULLSCREEN_SEARCH_MENU_ITEM
-            : lens::EntryPoint::CHROME_REGION_SEARCH_MENU_ITEM;
-    core_tab_helper->SearchWithLens(
-        image, captured_image.Size(), entry_point,
-        /* is_region_search_request= */ true,
-        /* is_side_panel_enabled_for_feature= */
-        lens::features::IsLensSidePanelEnabledForRegionSearch(),
-        std::move(log_data));
+    core_tab_helper->RegionSearchWithLens(image, captured_image.Size(),
+                                          std::move(log_data));
   } else {
     core_tab_helper->SearchByImage(image, captured_image.Size());
   }

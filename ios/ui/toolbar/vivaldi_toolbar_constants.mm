@@ -14,3 +14,4 @@ const CGFloat vivaldiNonDynamicToolbarHeightFullscreen = 0;
 #pragma mark - ICONS
 
 NSString* vToolbarPanelButtonIcon = @"toolbar_panel";
+NSString* vToolbarSearchButtonIcon = @"toolbar_search";

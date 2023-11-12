@@ -9,13 +9,15 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/containers/queue.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/features.h"
@@ -284,7 +286,7 @@ void FrameSinkManagerImpl::UnregisterFrameSinkHierarchy(
   }
 
   auto iter = frame_sink_source_map_.find(parent_frame_sink_id);
-  DCHECK(iter != frame_sink_source_map_.end());
+  CHECK(iter != frame_sink_source_map_.end());
 
   // Remove |child_frame_sink_id| from parents list of children.
   auto& mapping = iter->second;
@@ -828,9 +830,10 @@ FrameSinkManagerImpl::TakeSurfaceAnimationManager(NavigationID navigation_id) {
 }
 
 void FrameSinkManagerImpl::StartFrameCountingForTest(
+    base::TimeTicks start_time,
     base::TimeDelta bucket_size) {
   DCHECK(!frame_counter_.has_value());
-  frame_counter_.emplace(bucket_size);
+  frame_counter_.emplace(start_time, bucket_size);
 
   for (auto& [sink_id, support] : support_map_) {
     DCHECK_EQ(sink_id, support->frame_sink_id());
@@ -841,7 +844,14 @@ void FrameSinkManagerImpl::StartFrameCountingForTest(
 
 void FrameSinkManagerImpl::StopFrameCountingForTest(
     StopFrameCountingForTestCallback callback) {
-  DCHECK(frame_counter_.has_value());
+  // Returns empty data if `frame_counter_` has no value. This could happen
+  // when gpu-process is restarted in middle of test and test scripts still
+  // calls this at the end.
+  if (!frame_counter_.has_value()) {
+    std::move(callback).Run(nullptr);
+    return;
+  }
+
   std::move(callback).Run(frame_counter_->TakeData());
   frame_counter_.reset();
 }

@@ -4,8 +4,8 @@
 
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
 
-#import "base/bind.h"
-#import "base/callback.h"
+#import "base/functional/bind.h"
+#import "base/functional/callback.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/task/thread_pool.h"
@@ -84,65 +84,6 @@ void RecordFirstRunSignInMetrics(
   }
   base::UmaHistogramEnumeration("FirstRun.SignIn", sign_in_status,
                                 first_run::SIGNIN_SIZE);
-}
-
-void RecordFirstRunScrollButtonVisibilityMetrics(
-    first_run::FirstRunScreenType screen_type,
-    BOOL scroll_button_visible) {
-  switch (screen_type) {
-    case first_run::FirstRunScreenType::kDefaultBrowserPromoScreen:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.DefaultBrowserPromoScreen",
-          scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::kSignInScreenWithFooter:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.SignInScreenWithFooter",
-          scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::
-        kSignInScreenWithFooterAndIdentityPicker:
-      base::UmaHistogramBoolean("IOS.FirstRun.ScrollButtonVisible."
-                                "SignInScreenWithFooterAndIdentityPicker",
-                                scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::kSignInScreenWithIdentityPicker:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.SignInScreenWithIdentityPicker",
-          scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::
-        kSignInScreenWithoutFooterOrIdentityPicker:
-      base::UmaHistogramBoolean("IOS.FirstRun.ScrollButtonVisible."
-                                "SignInScreenWithoutFooterOrIdentityPicker",
-                                scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::kSyncScreenWithoutIdentityPicker:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.SyncScreenWithoutIdentityPicker",
-          scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::kSyncScreenWithIdentityPicker:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.SyncScreenWithIdentityPicker",
-          scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::kWelcomeScreenWithoutUMACheckbox:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.WelcomeScreenWithoutUMACheckbox",
-          scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::kWelcomeScreenWithUMACheckbox:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.WelcomeScreenWithUMACheckbox",
-          scroll_button_visible);
-      break;
-    case first_run::FirstRunScreenType::kTangibleSyncScreen:
-      base::UmaHistogramBoolean(
-          "IOS.FirstRun.ScrollButtonVisible.TangibleSyncScreen",
-          scroll_button_visible);
-      break;
-  }
 }
 
 void WriteFirstRunSentinel() {

@@ -16,7 +16,6 @@
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
 #include "base/win/scoped_handle.h"
-#include "base/win/windows_version.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
@@ -34,18 +33,6 @@ std::string FailureMessage(const std::string& msg) {
 #else
   return msg;
 #endif  // defined(NDEBUG) && defined(OFFICIAL_BUILD)
-}
-
-// Death tests don't seem to work on Windows 7 32-bit native with hooks enabled.
-bool DoDeathTestsWork() {
-#if defined(ARCH_CPU_32_BITS)
-    const auto* os_info = base::win::OSInfo::GetInstance();
-    if (os_info->version() <= base::win::Version::WIN7 &&
-        os_info->IsWowDisabled()) {
-      return false;
-    }
-#endif  // defined(ARCH_CPU_32_BITS)
-    return true;
 }
 
 }  // namespace
@@ -83,20 +70,13 @@ TEST_F(ScopedHandleTest, ScopedHandle) {
 }
 
 TEST_F(ScopedHandleDeathTest, HandleVerifierTrackedHasBeenClosed) {
-  // This test is only valid if hooks are enabled.
-  if (!DoDeathTestsWork())
-    return;
   HANDLE handle = ::CreateMutex(nullptr, false, nullptr);
   ASSERT_NE(HANDLE(nullptr), handle);
-  using NtCloseFunc = decltype(&::NtClose);
-  NtCloseFunc ntclose = reinterpret_cast<NtCloseFunc>(
-      GetProcAddress(GetModuleHandle(L"ntdll.dll"), "NtClose"));
-  ASSERT_NE(nullptr, ntclose);
 
   ASSERT_DEATH(
       {
         base::win::ScopedHandle handle_holder(handle);
-        ntclose(handle);
+        ::NtClose(handle);
         // Destructing a ScopedHandle with an illegally closed handle should
         // fail.
       },
@@ -104,10 +84,6 @@ TEST_F(ScopedHandleDeathTest, HandleVerifierTrackedHasBeenClosed) {
 }
 
 TEST_F(ScopedHandleDeathTest, HandleVerifierCloseTrackedHandle) {
-  // This test is only valid if hooks are enabled.
-  if (!DoDeathTestsWork())
-    return;
-
   ASSERT_DEATH(
       {
         HANDLE handle = ::CreateMutex(nullptr, false, nullptr);
@@ -130,9 +106,6 @@ TEST_F(ScopedHandleDeathTest, HandleVerifierCloseTrackedHandle) {
 }
 
 TEST_F(ScopedHandleDeathTest, HandleVerifierDoubleTracking) {
-  if (!DoDeathTestsWork())
-    return;
-
   HANDLE handle = ::CreateMutex(nullptr, false, nullptr);
   ASSERT_NE(HANDLE(nullptr), handle);
 
@@ -143,9 +116,6 @@ TEST_F(ScopedHandleDeathTest, HandleVerifierDoubleTracking) {
 }
 
 TEST_F(ScopedHandleDeathTest, HandleVerifierWrongOwner) {
-  if (!DoDeathTestsWork())
-    return;
-
   HANDLE handle = ::CreateMutex(nullptr, false, nullptr);
   ASSERT_NE(HANDLE(nullptr), handle);
 
@@ -161,9 +131,6 @@ TEST_F(ScopedHandleDeathTest, HandleVerifierWrongOwner) {
 }
 
 TEST_F(ScopedHandleDeathTest, HandleVerifierUntrackedHandle) {
-  if (!DoDeathTestsWork())
-    return;
-
   HANDLE handle = ::CreateMutex(nullptr, false, nullptr);
   ASSERT_NE(HANDLE(nullptr), handle);
 

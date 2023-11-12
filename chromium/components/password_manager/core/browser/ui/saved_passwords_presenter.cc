@@ -11,15 +11,15 @@
 
 #include "base/barrier_callback.h"
 #include "base/barrier_closure.h"
-#include "base/bind.h"
 #include "base/check.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/ranges/algorithm.h"
 #include "base/task/sequenced_task_runner.h"
-#include "components/password_manager/core/browser/affiliation/affiliation_service.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
 #include "components/password_manager/core/browser/import/csv_password.h"
 #include "components/password_manager/core/browser/password_form.h"
@@ -28,6 +28,7 @@
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "components/password_manager/core/browser/ui/password_undo_helper.h"
+#include "components/password_manager/core/browser/ui/passwords_grouper.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/sync/base/features.h"
 #include "url/gurl.h"
@@ -89,22 +90,6 @@ IsPasswordNoteChanged IsNoteChanged(const password_manager::PasswordForm& form,
       new_note);
 }
 
-PasswordNoteAction NoteChangeResultToPasswordNoteEditDialogAction(
-    password_manager::PasswordNoteChangeResult result) {
-  switch (result) {
-    case password_manager::PasswordNoteChangeResult::kNoteAdded:
-      return PasswordNoteAction::kNoteAddedInEditDialog;
-    case password_manager::PasswordNoteChangeResult::kNoteEdited:
-      return PasswordNoteAction::kNoteEditedInEditDialog;
-    case password_manager::PasswordNoteChangeResult::kNoteRemoved:
-      return PasswordNoteAction::kNoteRemovedInEditDialog;
-    case password_manager::PasswordNoteChangeResult::kNoteNotChanged:
-      return PasswordNoteAction::kNoteNotChanged;
-  }
-  NOTREACHED();
-  return PasswordNoteAction::kNoteNotChanged;
-}
-
 }  // namespace
 
 namespace password_manager {
@@ -115,11 +100,11 @@ SavedPasswordsPresenter::SavedPasswordsPresenter(
     scoped_refptr<PasswordStoreInterface> account_store)
     : profile_store_(std::move(profile_store)),
       account_store_(std::move(account_store)),
-      affiliation_service_(affiliation_service),
       undo_helper_(std::make_unique<PasswordUndoHelper>(profile_store_.get(),
-                                                        account_store_.get())) {
+                                                        account_store_.get())),
+      passwords_grouper_(
+          std::make_unique<PasswordsGrouper>(affiliation_service)) {
   DCHECK(profile_store_);
-  DCHECK(affiliation_service_);
 }
 
 SavedPasswordsPresenter::~SavedPasswordsPresenter() {
@@ -129,6 +114,7 @@ SavedPasswordsPresenter::~SavedPasswordsPresenter() {
 void SavedPasswordsPresenter::Init() {
   // Clear old cache.
   sort_key_to_password_forms_.clear();
+  passwords_grouper_->ClearCache();
 
   profile_store_->AddObserver(this);
   if (account_store_)
@@ -155,24 +141,21 @@ void SavedPasswordsPresenter::RemoveObservers() {
 
 bool SavedPasswordsPresenter::RemoveCredential(
     const CredentialUIEntry& credential) {
-  const auto range =
-      sort_key_to_password_forms_.equal_range(CreateSortKey(credential));
-  bool removed = false;
+  std::vector<PasswordForm> forms_to_delete =
+      GetCorrespondingPasswordForms(credential);
   undo_helper_->StartGroupingActions();
-  std::for_each(range.first, range.second, [&](const auto& pair) {
-    const auto& current_form = pair.second;
+  for (const auto& current_form : forms_to_delete) {
     // Make sure |credential| and |current_form| share the same store.
     if (credential.stored_in.contains(current_form.in_store)) {
       // |current_form| is unchanged result obtained from
-      // 'OnGetPasswordStoreResultsFrom'. So it can be present only in one store
-      // at a time..
+      // 'OnGetPasswordStoreResultsFrom'. So it can be present only in one
+      // store at a time.
       GetStoreFor(current_form).RemoveLogin(current_form);
       undo_helper_->PasswordRemoved(current_form);
-      removed = true;
     }
-  });
+  }
   undo_helper_->EndGroupingActions();
-  return removed;
+  return !forms_to_delete.empty();
 }
 
 void SavedPasswordsPresenter::UndoLastRemoval() {
@@ -254,14 +237,6 @@ bool SavedPasswordsPresenter::AddCredential(
   PasswordForm form = GenerateFormFromCredential(credential, type);
 
   GetStoreFor(form).AddLogin(form);
-
-  if (form.type == password_manager::PasswordForm::Type::kManuallyAdded) {
-    if (!form.notes.empty() && form.notes[0].value.length() > 0) {
-      password_manager::metrics_util::LogPasswordNoteActionInSettings(
-          PasswordNoteAction::kNoteAddedInAddDialog);
-    }
-  }
-
   return true;
 }
 
@@ -315,14 +290,14 @@ void SavedPasswordsPresenter::AddCredentials(
   RemoveObservers();
 
   // Reinitialize presenter after all add operations are complete.
-  base::RepeatingClosure barrier_closure = base::BarrierClosure(
+  base::RepeatingClosure completion_barrier_closure = base::BarrierClosure(
       valid_credentials.size(),
       base::BindOnce(&SavedPasswordsPresenter::Init,
                      weak_ptr_factory_.GetWeakPtr())
           .Then(base::BindOnce(std::move(completion), std::move(results))));
 
   for (CredentialUIEntry& credential : valid_credentials)
-    AddCredentialAsync(std::move(credential), type, barrier_closure);
+    AddCredentialAsync(std::move(credential), type, completion_barrier_closure);
 }
 
 SavedPasswordsPresenter::EditResult
@@ -358,9 +333,16 @@ SavedPasswordsPresenter::EditSavedCredentials(
   // Nothing changed.
   if (!username_changed && !password_changed && !note_changed &&
       !issues_changed) {
-    password_manager::metrics_util::LogPasswordEditResult(username_changed,
-                                                          password_changed);
     return EditResult::kNothingChanged;
+  }
+
+  base::RepeatingClosure completion_barrier_closure = base::DoNothing();
+  // Only change in username or password is interesting for OnEdited listeners.
+  if (username_changed || password_changed) {
+    completion_barrier_closure = base::BarrierClosure(
+        forms_to_change.size(),
+        base::BindOnce(&SavedPasswordsPresenter::NotifyEdited,
+                       weak_ptr_factory_.GetWeakPtr(), updated_credential));
   }
 
   for (const auto& old_form : forms_to_change) {
@@ -377,16 +359,9 @@ SavedPasswordsPresenter::EditSavedCredentials(
       new_form.password_issues.clear();
     }
 
-    if (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup)) {
-      if (note_changed) {
-        password_manager::PasswordNoteChangeResult note_change_result =
-            new_form.SetNoteWithEmptyUniqueDisplayName(updated_credential.note);
-        metrics_util::LogPasswordNoteActionInSettings(
-            NoteChangeResultToPasswordNoteEditDialogAction(note_change_result));
-      } else {
-        metrics_util::LogPasswordNoteActionInSettings(
-            PasswordNoteAction::kNoteNotChanged);
-      }
+    if (base::FeatureList::IsEnabled(syncer::kPasswordNotesWithBackup) &&
+        note_changed) {
+      new_form.SetNoteWithEmptyUniqueDisplayName(updated_credential.note);
     }
 
     // An updated username implies a change in the primary key, thus we need
@@ -399,26 +374,23 @@ SavedPasswordsPresenter::EditSavedCredentials(
       new_form.password_issues.erase(InsecureType::kLeaked);
       // Changing username requires deleting old form and adding new one. So
       // the different API should be called.
-      store.UpdateLoginWithPrimaryKey(new_form, old_form);
+      store.UpdateLoginWithPrimaryKey(new_form, old_form,
+                                      completion_barrier_closure);
     } else {
-      store.UpdateLogin(new_form);
+      store.UpdateLogin(new_form, completion_barrier_closure);
     }
   }
 
-  // Only change in username or password is interesting for OnEdited listeners.
-  if (username_changed || password_changed) {
-    NotifyEdited(updated_credential);
-  }
-
-  password_manager::metrics_util::LogPasswordEditResult(username_changed,
-                                                        password_changed);
   return EditResult::kSuccess;
 }
 
 std::vector<CredentialUIEntry> SavedPasswordsPresenter::GetSavedCredentials()
     const {
-  std::vector<CredentialUIEntry> credentials;
+  if (base::FeatureList::IsEnabled(features::kPasswordsGrouping)) {
+    return passwords_grouper_->GetAllCredentials();
+  }
 
+  std::vector<CredentialUIEntry> credentials;
   auto it = sort_key_to_password_forms_.begin();
   while (it != sort_key_to_password_forms_.end()) {
     auto current_key = it->first;
@@ -435,12 +407,7 @@ std::vector<CredentialUIEntry> SavedPasswordsPresenter::GetSavedCredentials()
 }
 
 std::vector<AffiliatedGroup> SavedPasswordsPresenter::GetAffiliatedGroups() {
-  // Sort affiliated groups.
-  std::sort(affiliated_groups_.begin(), affiliated_groups_.end(),
-            [](const AffiliatedGroup& lhs, const AffiliatedGroup& rhs) {
-              return lhs.GetDisplayName() < rhs.GetDisplayName();
-            });
-  return affiliated_groups_;
+  return passwords_grouper_->GetAffiliatedGroupsWithGroupingInfo();
 }
 
 std::vector<CredentialUIEntry> SavedPasswordsPresenter::GetSavedPasswords()
@@ -454,20 +421,23 @@ std::vector<CredentialUIEntry> SavedPasswordsPresenter::GetSavedPasswords()
 
 std::vector<CredentialUIEntry> SavedPasswordsPresenter::GetBlockedSites() {
   DCHECK(base::FeatureList::IsEnabled(features::kPasswordsGrouping));
-  // Sort blocked sites.
-  std::sort(password_grouping_info_.blocked_sites.begin(),
-            password_grouping_info_.blocked_sites.end());
-  return password_grouping_info_.blocked_sites;
+  return passwords_grouper_->GetBlockedSites();
 }
 
 std::vector<PasswordForm>
 SavedPasswordsPresenter::GetCorrespondingPasswordForms(
     const CredentialUIEntry& credential) const {
-  const auto range =
-      sort_key_to_password_forms_.equal_range(CreateSortKey(credential));
   std::vector<PasswordForm> forms;
-  base::ranges::transform(range.first, range.second, std::back_inserter(forms),
-                          [](const auto& pair) { return pair.second; });
+  if (base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordsGrouping)) {
+    forms = passwords_grouper_->GetPasswordFormsFor(credential);
+  } else {
+    const auto range =
+        sort_key_to_password_forms_.equal_range(CreateSortKey(credential));
+    base::ranges::transform(range.first, range.second,
+                            std::back_inserter(forms),
+                            [](const auto& pair) { return pair.second; });
+  }
   return forms;
 }
 
@@ -553,18 +523,6 @@ void SavedPasswordsPresenter::OnGetPasswordStoreResultsFrom(
   AddForms(forms);
 }
 
-void SavedPasswordsPresenter::OnGetAllGroupsResultsFrom(
-    const std::vector<GroupedFacets>& groups) {
-  // Call grouping algorithm.
-  password_grouping_info_ = GroupPasswords(groups, sort_key_to_password_forms_);
-
-  // Update affiliated groups cache.
-  affiliated_groups_ =
-      GetAffiliatedGroupsWithGroupingInfo(password_grouping_info_);
-
-  NotifySavedPasswordsChanged();
-}
-
 PasswordStoreInterface& SavedPasswordsPresenter::GetStoreFor(
     const PasswordForm& form) {
   DCHECK_NE(form.IsUsingAccountStore(), form.IsUsingProfileStore());
@@ -601,11 +559,11 @@ void SavedPasswordsPresenter::AddForms(const std::vector<PasswordForm>& forms) {
     return;
   }
 
-  // Don't notify observers about changes until we group credentials.
-  AffiliationService::GroupsCallback groups_callback =
-      base::BindOnce(&SavedPasswordsPresenter::OnGetAllGroupsResultsFrom,
-                     weak_ptr_factory_.GetWeakPtr());
-  affiliation_service_->GetAllGroups(std::move(groups_callback));
+  // Notify observers after grouping is complete.
+  passwords_grouper_->GroupPasswords(
+      sort_key_to_password_forms_,
+      base::BindOnce(&SavedPasswordsPresenter::NotifySavedPasswordsChanged,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 }  // namespace password_manager

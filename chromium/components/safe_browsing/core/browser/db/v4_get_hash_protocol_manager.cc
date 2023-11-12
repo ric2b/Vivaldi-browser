@@ -8,8 +8,8 @@
 #include <utility>
 
 #include "base/base64url.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -17,6 +17,7 @@
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
+#include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/utils.h"
 #include "net/base/load_flags.h"
@@ -41,8 +42,8 @@ void RecordGetHashResult(safe_browsing::V4OperationResult result) {
 
 // Record a backoff error count
 void RecordBackoffErrorCountResult(size_t count) {
-  base::UmaHistogramCounts100(
-      "SafeBrowsing.V4GetHash.Result.BackoffErrorCount", count);
+  base::UmaHistogramCounts100("SafeBrowsing.V4GetHash.Result.BackoffErrorCount",
+                              count);
 }
 
 // Enumerate parsing failures for histogramming purposes.  DO NOT CHANGE
@@ -209,25 +210,28 @@ FullHashCallbackInfo::FullHashCallbackInfo() {}
 
 FullHashCallbackInfo::FullHashCallbackInfo(
     const std::vector<FullHashInfo>& cached_full_hash_infos,
-    const std::vector<HashPrefix>& prefixes_requested,
+    const std::vector<HashPrefixStr>& prefixes_requested,
     std::unique_ptr<network::SimpleURLLoader> loader,
     const FullHashToStoreAndHashPrefixesMap&
         full_hash_to_store_and_hash_prefixes,
     FullHashCallback callback,
-    const base::Time& network_start_time)
+    const base::Time& network_start_time,
+    MechanismExperimentHashDatabaseCache mechanism_experiment_cache_selection)
     : cached_full_hash_infos(cached_full_hash_infos),
       callback(std::move(callback)),
       loader(std::move(loader)),
       full_hash_to_store_and_hash_prefixes(
           full_hash_to_store_and_hash_prefixes),
       network_start_time(network_start_time),
-      prefixes_requested(prefixes_requested) {}
+      prefixes_requested(prefixes_requested),
+      mechanism_experiment_cache_selection(
+          mechanism_experiment_cache_selection) {}
 
 FullHashCallbackInfo::~FullHashCallbackInfo() {}
 
 // ----------------------------------------------------------------
 
-FullHashInfo::FullHashInfo(const FullHash& full_hash,
+FullHashInfo::FullHashInfo(const FullHashStr& full_hash,
                            const ListIdentifier& list_id,
                            const base::Time& positive_expiry)
     : full_hash(full_hash),
@@ -303,14 +307,16 @@ void V4GetHashProtocolManager::GetFullHashes(
     const FullHashToStoreAndHashPrefixesMap
         full_hash_to_store_and_hash_prefixes,
     const std::vector<std::string>& list_client_states,
-    FullHashCallback callback) {
+    FullHashCallback callback,
+    MechanismExperimentHashDatabaseCache mechanism_experiment_cache_selection) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!full_hash_to_store_and_hash_prefixes.empty());
 
-  std::vector<HashPrefix> prefixes_to_request;
+  std::vector<HashPrefixStr> prefixes_to_request;
   std::vector<FullHashInfo> cached_full_hash_infos;
   GetFullHashCachedResults(full_hash_to_store_and_hash_prefixes, Time::Now(),
-                           &prefixes_to_request, &cached_full_hash_infos);
+                           &prefixes_to_request, &cached_full_hash_infos,
+                           mechanism_experiment_cache_selection);
 
   if (prefixes_to_request.empty()) {
     // 100% cache hits (positive or negative) so we can call the callback right
@@ -386,7 +392,8 @@ void V4GetHashProtocolManager::GetFullHashes(
 
   pending_hash_requests_[loader] = std::make_unique<FullHashCallbackInfo>(
       cached_full_hash_infos, prefixes_to_request, std::move(owned_loader),
-      full_hash_to_store_and_hash_prefixes, std::move(callback), clock_->Now());
+      full_hash_to_store_and_hash_prefixes, std::move(callback), clock_->Now(),
+      mechanism_experiment_cache_selection);
   UMA_HISTOGRAM_COUNTS_100("SafeBrowsing.V4GetHash.CountOfPrefixes",
                            prefixes_to_request.size());
 }
@@ -398,13 +405,13 @@ void V4GetHashProtocolManager::GetFullHashesWithApis(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(url.SchemeIs(url::kHttpScheme) || url.SchemeIs(url::kHttpsScheme));
 
-  std::vector<FullHash> full_hashes;
+  std::vector<FullHashStr> full_hashes;
   V4ProtocolManagerUtil::UrlToFullHashes(url.DeprecatedGetOriginAsURL(),
                                          &full_hashes);
 
   FullHashToStoreAndHashPrefixesMap full_hash_to_store_and_hash_prefixes;
-  for (const FullHash& full_hash : full_hashes) {
-    HashPrefix prefix;
+  for (const FullHashStr& full_hash : full_hashes) {
+    HashPrefixStr prefix;
     bool result =
         V4ProtocolManagerUtil::FullHashToSmallestHashPrefix(full_hash, &prefix);
     DCHECK(result);
@@ -415,15 +422,17 @@ void V4GetHashProtocolManager::GetFullHashesWithApis(
   GetFullHashes(full_hash_to_store_and_hash_prefixes, list_client_states,
                 base::BindOnce(&V4GetHashProtocolManager::OnFullHashForApi,
                                base::Unretained(this), std::move(api_callback),
-                               full_hashes));
+                               full_hashes),
+                MechanismExperimentHashDatabaseCache::kNoExperiment);
 }
 
 void V4GetHashProtocolManager::GetFullHashCachedResults(
     const FullHashToStoreAndHashPrefixesMap&
         full_hash_to_store_and_hash_prefixes,
     const Time& now,
-    std::vector<HashPrefix>* prefixes_to_request,
-    std::vector<FullHashInfo>* cached_full_hash_infos) {
+    std::vector<HashPrefixStr>* prefixes_to_request,
+    std::vector<FullHashInfo>* cached_full_hash_infos,
+    MechanismExperimentHashDatabaseCache mechanism_experiment_cache_selection) {
   DCHECK(!full_hash_to_store_and_hash_prefixes.empty());
   DCHECK(prefixes_to_request->empty());
   DCHECK(cached_full_hash_infos->empty());
@@ -457,15 +466,42 @@ void V4GetHashProtocolManager::GetFullHashCachedResults(
   //   cache entry if they expire AND their expire time is after the negative
   //   cache expire time.
 
-  std::unordered_set<HashPrefix> unique_prefixes_to_request;
+  // See comments above MechanismExperimentHashDatabaseCache's definition for
+  // more context.
+  //  - Outside the context of the experiment, always read from the main cache.
+  //  - Inside the context of the experiment, read from the cache corresponding
+  //    to the specific mechanism.
+  FullHashCache& full_hash_cache = full_hash_cache_;
+  DCHECK(is_lookup_mechanism_experiment_enabled_ ||
+         mechanism_experiment_cache_selection ==
+             MechanismExperimentHashDatabaseCache::kNoExperiment);
+  switch (mechanism_experiment_cache_selection) {
+    case MechanismExperimentHashDatabaseCache::kNoExperiment:
+    case MechanismExperimentHashDatabaseCache::kUrlRealTimeOnly:
+      full_hash_cache = full_hash_cache_;
+      break;
+    case MechanismExperimentHashDatabaseCache::kHashRealTimeOnly:
+      full_hash_cache =
+          lookup_mechanism_experiment_hash_realtime_full_hash_cache_;
+      break;
+    case MechanismExperimentHashDatabaseCache::kHashDatabaseOnly:
+      full_hash_cache =
+          lookup_mechanism_experiment_hash_database_full_hash_cache_;
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+
+  std::unordered_set<HashPrefixStr> unique_prefixes_to_request;
   for (const auto& it : full_hash_to_store_and_hash_prefixes) {
-    const FullHash& full_hash = it.first;
+    const FullHashStr& full_hash = it.first;
     const StoreAndHashPrefixes& matched = it.second;
     for (const StoreAndHashPrefix& matched_it : matched) {
       const ListIdentifier& list_id = matched_it.list_id;
-      const HashPrefix& prefix = matched_it.hash_prefix;
-      auto prefix_entry = full_hash_cache_.find(prefix);
-      if (prefix_entry != full_hash_cache_.end()) {
+      const HashPrefixStr& prefix = matched_it.hash_prefix;
+      auto prefix_entry = full_hash_cache.find(prefix);
+      if (prefix_entry != full_hash_cache.end()) {
         // Case 1.
         const CachedHashPrefixInfo& cached_prefix_info = prefix_entry->second;
         bool found_full_hash = false;
@@ -514,7 +550,7 @@ void V4GetHashProtocolManager::GetFullHashCachedResults(
 }
 
 std::string V4GetHashProtocolManager::GetHashRequest(
-    const std::vector<HashPrefix>& prefixes_to_request,
+    const std::vector<HashPrefixStr>& prefixes_to_request,
     const std::vector<std::string>& list_client_states) {
   DCHECK(!prefixes_to_request.empty());
 
@@ -536,7 +572,7 @@ std::string V4GetHashProtocolManager::GetHashRequest(
   for (const ThreatType tt : threat_types_) {
     info->add_threat_types(tt);
   }
-  for (const HashPrefix& prefix : prefixes_to_request) {
+  for (const HashPrefixStr& prefix : prefixes_to_request) {
     info->add_threat_entries()->set_hash(prefix);
   }
 
@@ -565,7 +601,7 @@ void V4GetHashProtocolManager::HandleGetHashError(const Time& now) {
 
 void V4GetHashProtocolManager::OnFullHashForApi(
     ThreatMetadataForApiCallback api_callback,
-    const std::vector<FullHash>& full_hashes,
+    const std::vector<FullHashStr>& full_hashes,
     const std::vector<FullHashInfo>& full_hash_infos) {
   ThreatMetadata md;
   for (const FullHashInfo& full_hash_info : full_hash_infos) {
@@ -752,9 +788,10 @@ void V4GetHashProtocolManager::SetClockForTests(base::Clock* clock) {
 }
 
 void V4GetHashProtocolManager::UpdateCache(
-    const std::vector<HashPrefix>& prefixes_requested,
+    const std::vector<HashPrefixStr>& prefixes_requested,
     const std::vector<FullHashInfo>& full_hash_infos,
-    const Time& negative_cache_expire) {
+    const Time& negative_cache_expire,
+    MechanismExperimentHashDatabaseCache mechanism_experiment_cache_selection) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // If negative_cache_expire is null, don't cache the results since it's not
@@ -763,18 +800,64 @@ void V4GetHashProtocolManager::UpdateCache(
     return;
   }
 
-  for (const HashPrefix& prefix : prefixes_requested) {
-    // Create or reset the cached result for this prefix.
-    CachedHashPrefixInfo& chpi = full_hash_cache_[prefix];
-    chpi.full_hash_infos.clear();
-    chpi.negative_expiry = negative_cache_expire;
+  auto update_individual_cache =
+      [prefixes_requested, negative_cache_expire,
+       full_hash_infos](FullHashCache& full_hash_cache) {
+        for (const HashPrefixStr& prefix : prefixes_requested) {
+          // Create or reset the cached result for this prefix.
+          CachedHashPrefixInfo& chpi = full_hash_cache[prefix];
+          chpi.full_hash_infos.clear();
+          chpi.negative_expiry = negative_cache_expire;
 
-    for (const FullHashInfo& full_hash_info : full_hash_infos) {
-      if (V4ProtocolManagerUtil::FullHashMatchesHashPrefix(
-              full_hash_info.full_hash, prefix)) {
-        chpi.full_hash_infos.push_back(full_hash_info);
-      }
+          for (const FullHashInfo& full_hash_info : full_hash_infos) {
+            if (V4ProtocolManagerUtil::FullHashMatchesHashPrefix(
+                    full_hash_info.full_hash, prefix)) {
+              chpi.full_hash_infos.push_back(full_hash_info);
+            }
+          }
+        }
+      };
+
+  // See comments above MechanismExperimentHashDatabaseCache's definition for
+  // more context.
+  if (is_lookup_mechanism_experiment_enabled_) {
+    switch (mechanism_experiment_cache_selection) {
+      // If this request is outside the scope of the experiment, update all
+      // three caches. We still want to update the experiment's backgrounded
+      // caches because there may be cache entries added outside the experiment
+      // that end up helping with the experiment's cache hits.
+      case MechanismExperimentHashDatabaseCache::kNoExperiment:
+        update_individual_cache(full_hash_cache_);
+        update_individual_cache(
+            lookup_mechanism_experiment_hash_realtime_full_hash_cache_);
+        update_individual_cache(
+            lookup_mechanism_experiment_hash_database_full_hash_cache_);
+        break;
+      // If this request is in the scope of the experiment and it's for the main
+      // request, we only want to update the main cache.
+      case MechanismExperimentHashDatabaseCache::kUrlRealTimeOnly:
+        update_individual_cache(full_hash_cache_);
+        break;
+      // If this request is in the scope of the experiment and it's for the
+      // backgrounded hash real-time request, we only want to update that
+      // backgrounded cache.
+      case MechanismExperimentHashDatabaseCache::kHashRealTimeOnly:
+        update_individual_cache(
+            lookup_mechanism_experiment_hash_realtime_full_hash_cache_);
+        break;
+      // If this request is in the scope of the experiment and it's for the
+      // backgrounded hash database request, we only want to update that
+      // backgrounded cache.
+      case MechanismExperimentHashDatabaseCache::kHashDatabaseOnly:
+        update_individual_cache(
+            lookup_mechanism_experiment_hash_database_full_hash_cache_);
+        break;
+      default:
+        NOTREACHED();
+        break;
     }
+  } else {
+    update_individual_cache(full_hash_cache_);
   }
 }
 
@@ -838,7 +921,8 @@ void V4GetHashProtocolManager::OnURLLoaderCompleteInternal(
   Time negative_cache_expire;
   if (net_error == net::OK && response_code == net::HTTP_OK) {
     RecordGetHashResult(V4OperationResult::STATUS_200);
-    if (gethash_error_count_) RecordBackoffErrorCountResult(backoff_error_count_);
+    if (gethash_error_count_)
+      RecordBackoffErrorCountResult(backoff_error_count_);
     ResetGetHashErrors();
     if (!ParseHashResponse(data, &full_hash_infos, &negative_cache_expire)) {
       full_hash_infos.clear();
@@ -867,7 +951,8 @@ void V4GetHashProtocolManager::OnURLLoaderCompleteInternal(
   const std::unique_ptr<FullHashCallbackInfo>& fhci = it->second;
   UMA_HISTOGRAM_LONG_TIMES("SafeBrowsing.V4GetHash.Network.Time",
                            clock_->Now() - fhci->network_start_time);
-  UpdateCache(fhci->prefixes_requested, full_hash_infos, negative_cache_expire);
+  UpdateCache(fhci->prefixes_requested, full_hash_infos, negative_cache_expire,
+              fhci->mechanism_experiment_cache_selection);
   MergeResults(fhci->full_hash_to_store_and_hash_prefixes, full_hash_infos,
                &fhci->cached_full_hash_infos);
 
@@ -903,6 +988,10 @@ void V4GetHashProtocolManager::CollectFullHashCacheInfo(
           static_cast<int>(full_hash_infos_it.list_id.threat_type()));
     }
   }
+}
+
+void V4GetHashProtocolManager::SetLookupMechanismExperimentIsEnabled() {
+  is_lookup_mechanism_experiment_enabled_ = true;
 }
 
 #ifndef DEBUG

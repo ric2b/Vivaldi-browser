@@ -102,6 +102,64 @@ extern const char kAccessibilityStickyKeysEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAccessibilitySpokenFeedbackEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxAutoRead[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxAnnounceDownloadNotifications[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxAnnounceRichTextAttributes[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxAudioStrategy[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxBrailleSideBySide[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxBrailleTable[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxBrailleTable6[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxBrailleTable8[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxBrailleTableType[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxBrailleWordWrap[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxCapitalStrategy[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxCapitalStrategyBackup[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxEnableBrailleLogging[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxEnableEarconLogging[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxEnableEventStreamLogging[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxEnableSpeechLogging[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxEventStreamFilters[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxLanguageSwitching[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxMenuBrailleCommands[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxNumberReadingStyle[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxPreferredBrailleDisplayAddress[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxPunctuationEcho[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxSmartStickyMode[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxSpeakTextUnderMouse[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxUsePitchChanges[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxUseVerboseMode[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxVirtualBrailleColumns[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxVirtualBrailleRows[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kAccessibilityChromeVoxVoiceName[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAccessibilityHighContrastEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAccessibilityScreenMagnifierCenterFocus[];
@@ -210,6 +268,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAltTabPerDesk[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kContextualTooltips[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDesksNamesList[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDesksGuidsList[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDesksMetricsList[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kDesksWeeklyActiveDesksMetrics[];
@@ -227,6 +286,14 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kScreenMagnifierAcceleratorDialogHasBeenAccepted[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kDictationAcceleratorDialogHasBeenAccepted[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kDictationDlcSuccessNotificationHasBeenShown[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kDictationDlcOnlyPumpkinDownloadedNotificationHasBeenShown[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kDictationDlcOnlySodaDownloadedNotificationHasBeenShown[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kDictationNoDlcsDownloadedNotificationHasBeenShown[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kDisplayRotationAcceleratorDialogHasBeenAccepted[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
@@ -299,6 +366,9 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kNightLightCachedLongitude[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kAutoNightLightNotificationDismissed[];
 
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDynamicColorColorScheme[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDynamicColorSeedColor[];
+
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kOsSettingsEnabled[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAllowScreenLock[];
@@ -369,6 +439,7 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kRecentDailyGooglePhotosWallpapers[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kWallpaperColors[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kWallpaperMeanColors[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kWallpaperCelebiColors[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSyncableWallpaperInfo[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
@@ -473,6 +544,9 @@ extern const char kLacrosProxyControllingExtension[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kFastPairEnabled[];
 
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kUserPairedWithFastPair[];
+
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDeskTemplatesEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPreconfiguredDeskTemplates[];
 
@@ -524,6 +598,12 @@ extern const char kUsbDetectorNotificationEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kPersonalizationKeyboardBacklightColor[];
 
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kPersonalizationKeyboardBacklightZoneColors[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kShowTouchpadScrollScreenEnabled[];
+
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAutozoomState[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAutozoomNudges[];
@@ -537,6 +617,19 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kBackgroundBlur[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kBackgroundReplace[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPortraitRelighting[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kRecordArcAppSyncMetrics[];
+
+// Input device settings.
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPrimaryMouseButtonRight[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kMouseSensitivity[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kMouseAcceleration[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kMouseScrollSensitivity[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kMouseScrollAcceleration[];
 
 }  // namespace prefs
 }  // namespace ash

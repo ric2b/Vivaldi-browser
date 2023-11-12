@@ -9,6 +9,7 @@
 import argparse
 import logging
 import os
+import posixpath
 import shutil
 import sys
 import tempfile
@@ -128,6 +129,9 @@ def _ParseArgs(args):
   options.library_always_compress = build_utils.ParseGnList(
       options.library_always_compress)
 
+  options.uncompress_shared_libraries = \
+      options.uncompress_shared_libraries in [ 'true', 'True' ]
+
   if not options.android_abi and (options.native_libs or
                                   options.native_lib_placeholders):
     raise Exception('Must specify --android-abi with --native-libs')
@@ -178,7 +182,8 @@ def _ExpandPaths(paths):
 def _GetAssetsToAdd(path_tuples,
                     fast_align,
                     disable_compression=False,
-                    allow_reads=True):
+                    allow_reads=True,
+                    apk_root_dir=''):
   """Returns the list of file_detail tuples for assets in the apk.
 
   Args:
@@ -207,7 +212,11 @@ def _GetAssetsToAdd(path_tuples,
         if allow_reads and compress and os.path.getsize(src_path) < 16:
           compress = False
 
-        apk_path = 'assets/' + dest_path
+        if dest_path.startswith('../'):
+          # posixpath.join('', 'foo') == 'foo'
+          apk_path = posixpath.join(apk_root_dir, dest_path[3:])
+        else:
+          apk_path = 'assets/' + dest_path
         alignment = 0 if compress and not fast_align else 4
         assets_to_add.append((apk_path, src_path, compress, alignment))
   return assets_to_add
@@ -238,7 +247,7 @@ def _AddFiles(apk, details):
           alignment=alignment)
 
 
-def _GetNativeLibrariesToAdd(native_libs, android_abi, fast_align,
+def _GetNativeLibrariesToAdd(native_libs, android_abi, uncompress, fast_align,
                              lib_always_compress):
   """Returns the list of file_detail tuples for native libraries in the apk.
 
@@ -250,7 +259,8 @@ def _GetNativeLibrariesToAdd(native_libs, android_abi, fast_align,
 
   for path in native_libs:
     basename = os.path.basename(path)
-    compress = any(lib_name in basename for lib_name in lib_always_compress)
+    compress = not uncompress or any(lib_name in basename
+                                     for lib_name in lib_always_compress)
     lib_android_abi = android_abi
     if path.startswith('android_clang_arm64_hwasan/'):
       lib_android_abi = 'arm64-v8a-hwasan'
@@ -347,21 +357,25 @@ def main(args):
     ret = _GetAssetsToAdd(assets,
                           fast_align,
                           disable_compression=False,
-                          allow_reads=allow_reads)
+                          allow_reads=allow_reads,
+                          apk_root_dir=apk_root_dir)
     ret.extend(
         _GetAssetsToAdd(uncompressed_assets,
                         fast_align,
                         disable_compression=True,
-                        allow_reads=allow_reads))
+                        allow_reads=allow_reads,
+                        apk_root_dir=apk_root_dir))
     return ret
 
   libs_to_add = _GetNativeLibrariesToAdd(native_libs, options.android_abi,
+                                         options.uncompress_shared_libraries,
                                          fast_align,
                                          options.library_always_compress)
   if options.secondary_android_abi:
     libs_to_add.extend(
         _GetNativeLibrariesToAdd(secondary_native_libs,
                                  options.secondary_android_abi,
+                                 options.uncompress_shared_libraries,
                                  fast_align, options.library_always_compress))
 
   if options.expected_file:

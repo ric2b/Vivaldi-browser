@@ -7,14 +7,14 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/login/enrollment/auto_enrollment_check_screen_view.h"
-#include "chrome/browser/ash/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/ash/login/screens/base_screen.h"
 #include "chrome/browser/ash/login/screens/error_screen.h"
 #include "chrome/browser/ash/login/screens/network_error.h"
+#include "chrome/browser/ash/policy/enrollment/auto_enrollment_controller.h"
 #include "chromeos/ash/components/network/network_state_handler_observer.h"
 
 namespace ash {
@@ -52,7 +52,7 @@ class AutoEnrollmentCheckScreen : public BaseScreen,
   void ClearState();
 
   void set_auto_enrollment_controller(
-      AutoEnrollmentController* auto_enrollment_controller) {
+      policy::AutoEnrollmentController* auto_enrollment_controller) {
     auto_enrollment_controller_ = auto_enrollment_controller;
   }
 
@@ -122,14 +122,13 @@ class AutoEnrollmentCheckScreen : public BaseScreen,
   base::WeakPtr<AutoEnrollmentCheckScreenView> view_;
   ErrorScreen* error_screen_;
   base::RepeatingCallback<void(Result result)> exit_callback_;
-  base::raw_ptr<AutoEnrollmentController> auto_enrollment_controller_ = nullptr;
+  base::raw_ptr<policy::AutoEnrollmentController> auto_enrollment_controller_ =
+      nullptr;
 
   base::CallbackListSubscription auto_enrollment_progress_subscription_;
 
   NetworkState::PortalState captive_portal_state_ =
       NetworkState::PortalState::kUnknown;
-  policy::AutoEnrollmentState auto_enrollment_state_ =
-      policy::AutoEnrollmentState::kIdle;
 
   std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
 

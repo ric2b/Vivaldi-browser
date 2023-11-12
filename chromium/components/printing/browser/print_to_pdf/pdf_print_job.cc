@@ -4,7 +4,7 @@
 
 #include "components/printing/browser/print_to_pdf/pdf_print_job.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "components/printing/browser/print_composite_client.h"
 #include "components/printing/browser/print_to_pdf/pdf_print_utils.h"
@@ -95,14 +95,10 @@ void PdfPrintJob::OnDidPrintWithParams(
       ->DoCompositeDocumentToPdf(
           params->document_cookie, printing_rfh_, content,
           base::BindOnce(&PdfPrintJob::OnCompositeDocumentToPdfDone,
-                         weak_ptr_factory_.GetWeakPtr(), params->page_size,
-                         params->content_area, params->physical_offsets));
+                         weak_ptr_factory_.GetWeakPtr()));
 }
 
 void PdfPrintJob::OnCompositeDocumentToPdfDone(
-    const gfx::Size& page_size,
-    const gfx::Rect& content_area,
-    const gfx::Point& physical_offsets,
     printing::mojom::PrintCompositor::Status status,
     base::ReadOnlySharedMemoryRegion region) {
   if (status != printing::mojom::PrintCompositor::Status::kSuccess) {

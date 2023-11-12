@@ -14,10 +14,13 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "components/aggregation_service/aggregation_service.mojom.h"
+#include "components/attribution_reporting/aggregatable_dedup_key.h"
 #include "components/attribution_reporting/os_support.mojom.h"
+#include "components/attribution_reporting/registration_type.mojom.h"
 #include "components/attribution_reporting/source_registration.h"
 #include "components/attribution_reporting/suitable_origin.h"
 #include "components/attribution_reporting/test_utils.h"
+#include "content/browser/attribution_reporting/attribution_constants.h"
 #include "content/browser/attribution_reporting/attribution_manager_impl.h"
 #include "content/browser/attribution_reporting/attribution_test_utils.h"
 #include "content/public/browser/navigation_handle.h"
@@ -28,10 +31,10 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/prerender_test_util.h"
-#include "content/public/test/test_frame_navigation_observer.h"
 #include "content/shell/browser/shell.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "net/base/net_errors.h"
+#include "net/base/schemeful_site.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/default_handlers.h"
@@ -49,8 +52,8 @@ namespace content {
 
 namespace {
 
-using ::attribution_reporting::SuitableOrigin;
-using ::blink::mojom::AttributionRegistrationType;
+using ::attribution_reporting::FilterPair;
+using ::attribution_reporting::mojom::RegistrationType;
 using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::Eq;
@@ -114,7 +117,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest, SourceRegistered) {
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -124,15 +127,16 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest, SourceRegistered) {
 
   EXPECT_TRUE(ExecJs(web_contents(),
                      JsReplace("createAttributionSrcImg($1);", register_url)));
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForSourceData(/*num_source_data=*/1);
   const auto& source_data = data_host->source_data();
 
   EXPECT_EQ(source_data.size(), 1u);
   EXPECT_EQ(source_data.front().source_event_id, 5UL);
-  EXPECT_EQ(source_data.front().destination,
-            *SuitableOrigin::Deserialize("https://d.test"));
+  EXPECT_THAT(source_data.front().destination_set.destinations(),
+              ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
   EXPECT_EQ(source_data.front().priority, 0);
   EXPECT_EQ(source_data.front().expiry, absl::nullopt);
   EXPECT_FALSE(source_data.front().debug_key);
@@ -157,7 +161,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
     EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
         .WillOnce(
             [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-                AttributionRegistrationType) {
+                RegistrationType) {
               data_host = GetRegisteredDataHost(std::move(host));
               data_host->receiver().set_disconnect_handler(
                   disconnect_loop.QuitClosure());
@@ -169,8 +173,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
     EXPECT_TRUE(
         ExecJs(web_contents(), JsReplace(registration_js, register_url)));
-    if (!data_host)
+    if (!data_host) {
       loop.Run();
+    }
     data_host->WaitForSourceData(/*num_source_data=*/1);
     const auto& source_data = data_host->source_data();
     // Regression test for crbug.com/1336797. This will timeout flakily if the
@@ -179,8 +184,8 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
     EXPECT_EQ(source_data.size(), 1u);
     EXPECT_EQ(source_data.front().source_event_id, 5UL);
-    EXPECT_EQ(source_data.front().destination,
-              *SuitableOrigin::Deserialize("https://d.test"));
+    EXPECT_THAT(source_data.front().destination_set.destinations(),
+                ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
     EXPECT_EQ(source_data.front().priority, 0);
     EXPECT_EQ(source_data.front().expiry, absl::nullopt);
     EXPECT_FALSE(source_data.front().debug_key);
@@ -207,7 +212,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillRepeatedly(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             if (!source_data_host) {
               source_data_host = GetRegisteredDataHost(std::move(host));
               source_loop.Quit();
@@ -223,12 +228,14 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_TRUE(
       ExecJs(web_contents(),
              JsReplace("createAttributionEligibleImgSrc($1);", register_url)));
-  if (!source_data_host)
+  if (!source_data_host) {
     source_loop.Run();
+  }
   source_data_host->WaitForSourceData(/*num_source_data=*/1);
 
-  if (!trigger_data_host)
+  if (!trigger_data_host) {
     trigger_loop.Run();
+  }
   trigger_data_host->WaitForTriggerData(/*num_trigger_data=*/1);
 }
 
@@ -244,12 +251,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterNavigationDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              const blink::AttributionSrcToken& attribution_src_token,
-              blink::mojom::AttributionNavigationType nav_type) {
+              const blink::AttributionSrcToken& attribution_src_token) {
             data_host = GetRegisteredDataHost(std::move(host));
             expected_token = attribution_src_token;
-            EXPECT_EQ(nav_type,
-                      blink::mojom::AttributionNavigationType::kAnchor);
           });
 
   GURL register_url =
@@ -288,12 +292,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterNavigationDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              const blink::AttributionSrcToken& attribution_src_token,
-              blink::mojom::AttributionNavigationType nav_type) {
+              const blink::AttributionSrcToken& attribution_src_token) {
             data_host = GetRegisteredDataHost(std::move(host));
             expected_token = attribution_src_token;
-            EXPECT_EQ(nav_type,
-                      blink::mojom::AttributionNavigationType::kWindowOpen);
           });
 
   GURL register_url =
@@ -373,8 +374,6 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
       https_server->GetURL("b.test", "/page_with_impression_creator.html");
   EXPECT_TRUE(NavigateToURL(web_contents(), page_url));
 
-  TestNavigationObserver observer(web_contents());
-
   // This attributionsrc will only be handled properly if the value is
   // URL-decoded before being passed to the attributionsrc loader.
   EXPECT_TRUE(ExecJs(web_contents(), R"(
@@ -383,9 +382,6 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   register_response->WaitForRequest();
   register_response->Done();
-
-  // TODO(crbug.com/1322525): Remove this once we use a pure mock.
-  observer.Wait();
 
   EXPECT_EQ(register_response->http_request()->relative_url,
             "/register_source?a=b&c=d");
@@ -411,8 +407,6 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
       https_server->GetURL("b.test", "/page_with_impression_creator.html");
   EXPECT_TRUE(NavigateToURL(web_contents(), page_url));
 
-  TestNavigationObserver observer(web_contents());
-
   // This attributionsrc will only be handled properly if the URL's original
   // case is retained before being passed to the attributionsrc loader.
   EXPECT_TRUE(ExecJs(web_contents(), R"(
@@ -421,9 +415,6 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   register_response->WaitForRequest();
   register_response->Done();
-
-  // TODO(crbug.com/1322525): Remove this once we use a pure mock.
-  observer.Wait();
 
   EXPECT_EQ(register_response->http_request()->relative_url,
             "/register_source?a=B&C=d");
@@ -449,8 +440,6 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
       https_server->GetURL("b.test", "/page_with_impression_creator.html");
   EXPECT_TRUE(NavigateToURL(web_contents(), page_url));
 
-  TestNavigationObserver observer(web_contents());
-
   // Ensure that the special handling of the original case for attributionsrc
   // features works with non-ASCII characters.
   EXPECT_TRUE(ExecJs(web_contents(), R"(
@@ -459,9 +448,6 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   register_response->WaitForRequest();
   register_response->Done();
-
-  // TODO(crbug.com/1322525): Remove this once we use a pure mock.
-  observer.Wait();
 
   EXPECT_EQ(register_response->http_request()->relative_url, "/%F0%9F%98%80");
 }
@@ -479,8 +465,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_CALL(mock_attribution_host(), RegisterNavigationDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              const blink::AttributionSrcToken& attribution_src_token,
-              blink::mojom::AttributionNavigationType nav_type) {
+              const blink::AttributionSrcToken& attribution_src_token) {
             data_host = GetRegisteredDataHost(std::move(host));
             expected_token = attribution_src_token;
           });
@@ -508,7 +493,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -518,18 +503,19 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   EXPECT_TRUE(ExecJs(web_contents(),
                      JsReplace("createAttributionSrcImg($1);", register_url)));
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForSourceData(/*num_source_data=*/2);
   const auto& source_data = data_host->source_data();
 
   EXPECT_EQ(source_data.size(), 2u);
   EXPECT_EQ(source_data.front().source_event_id, 1UL);
-  EXPECT_EQ(source_data.front().destination,
-            *SuitableOrigin::Deserialize("https://d.test"));
+  EXPECT_THAT(source_data.front().destination_set.destinations(),
+              ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
   EXPECT_EQ(source_data.back().source_event_id, 5UL);
-  EXPECT_EQ(source_data.back().destination,
-            *SuitableOrigin::Deserialize("https://d.test"));
+  EXPECT_THAT(source_data.back().destination_set.destinations(),
+              ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
 }
 
 IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
@@ -543,7 +529,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -553,16 +539,17 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   EXPECT_TRUE(ExecJs(web_contents(),
                      JsReplace("createAttributionSrcImg($1);", register_url)));
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForSourceData(/*num_source_data=*/1);
   const auto& source_data = data_host->source_data();
 
   // Only the second source is registered.
   EXPECT_EQ(source_data.size(), 1u);
   EXPECT_EQ(source_data.back().source_event_id, 5UL);
-  EXPECT_EQ(source_data.back().destination,
-            *SuitableOrigin::Deserialize("https://d.test"));
+  EXPECT_THAT(source_data.back().destination_set.destinations(),
+              ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
 }
 
 IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
@@ -591,7 +578,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -610,21 +597,22 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   http_response->set_code(net::HTTP_OK);
   http_response->AddCustomHeader("Access-Control-Allow-Origin", "*");
   http_response->AddCustomHeader(
-      "Attribution-Reporting-Register-Source",
+      kAttributionReportingRegisterSourceHeader,
       R"({"source_event_id":"5", "destination":"https://d.test"})");
   register_response->Send(http_response->ToResponseString());
   register_response->Done();
 
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForSourceData(/*num_source_data=*/1);
   const auto& source_data = data_host->source_data();
 
   // Only the second source is registered.
   EXPECT_EQ(source_data.size(), 1u);
   EXPECT_EQ(source_data.back().source_event_id, 5UL);
-  EXPECT_EQ(source_data.back().destination,
-            *SuitableOrigin::Deserialize("https://d.test"));
+  EXPECT_THAT(source_data.back().destination_set.destinations(),
+              ElementsAre(net::SchemefulSite::Deserialize("https://d.test")));
 }
 
 IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
@@ -836,7 +824,7 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBasicTriggerBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -846,20 +834,20 @@ IN_PROC_BROWSER_TEST_P(AttributionSrcBasicTriggerBrowserTest,
 
   const std::string& js_template = GetParam().second;
   EXPECT_TRUE(ExecJs(web_contents(), JsReplace(js_template, register_url)));
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForTriggerData(/*num_trigger_data=*/1);
 
   EXPECT_THAT(
       data_host->trigger_data(),
       ElementsAre(TriggerRegistrationMatches(TriggerRegistrationMatcherConfig(
-          /*filters=*/attribution_reporting::Filters(),
-          /*not_filters=*/attribution_reporting::Filters(),
+          FilterPair(),
           /*debug_key=*/Eq(absl::nullopt),
           EventTriggerDataListMatches(EventTriggerDataListMatcherConfig(
               ElementsAre(EventTriggerDataMatches(EventTriggerDataMatcherConfig(
                   /*data=*/7))))),
-          /*aggregatable_dedup_key=*/Eq(absl::nullopt),
+          attribution_reporting::AggregatableDedupKeyList(),
           /*debug_reporting=*/false,
           /*aggregatable_trigger_data=*/
           attribution_reporting::AggregatableTriggerDataList(),
@@ -898,7 +886,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -908,43 +896,44 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   EXPECT_TRUE(ExecJs(web_contents(),
                      JsReplace("createAttributionSrcImg($1);", register_url)));
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForTriggerData(/*num_trigger_data=*/1);
 
   EXPECT_THAT(
       data_host->trigger_data(),
       ElementsAre(TriggerRegistrationMatches(TriggerRegistrationMatcherConfig(
-          /*filters=*/
-          *attribution_reporting::Filters::Create(
-              {{"w", {}}, {"x", {"y", "z"}}}),
-          /*not_filters=*/
-          *attribution_reporting::Filters::Create({{"a", {"b"}}}),
+          FilterPair{.positive = *attribution_reporting::Filters::Create(
+                         {{"w", {}}, {"x", {"y", "z"}}}),
+                     .negative = *attribution_reporting::Filters::Create(
+                         {{"a", {"b"}}})},
           /*debug_key=*/Optional(789),
           EventTriggerDataListMatches(
               EventTriggerDataListMatcherConfig(ElementsAre(
                   attribution_reporting::EventTriggerData(
                       /*data=*/1,
-                      /*priority=*/5, /*dedup_key=*/1024, /*filters=*/
-                      *attribution_reporting::Filters::Create({{"a", {"b"}}}),
-                      /*not_filters=*/
-                      *attribution_reporting::Filters::Create({{"c", {}}})),
+                      /*priority=*/5, /*dedup_key=*/1024,
+                      FilterPair{
+                          .positive = *attribution_reporting::Filters::Create(
+                              {{"a", {"b"}}}),
+                          .negative = *attribution_reporting::Filters::Create(
+                              {{"c", {}}})}),
                   attribution_reporting::EventTriggerData(
                       /*data=*/2, /*priority=*/10,
                       /*dedup_key=*/absl::nullopt,
-                      /*filters=*/attribution_reporting::Filters(),
-                      /*not_filters=*/
-                      *attribution_reporting::Filters::Create(
-                          {{"d", {"e", "f"}}, {"g", {}}}))))),
-          /*aggregatable_dedup_key=*/Optional(123),
+                      FilterPair{.negative =
+                                     *attribution_reporting::Filters::Create(
+                                         {{"d", {"e", "f"}}, {"g", {}}})})))),
+          *attribution_reporting::AggregatableDedupKeyList::Create(
+              {attribution_reporting::AggregatableDedupKey(
+                  /*dedup_key=*/123, FilterPair())}),
           /*debug_reporting=*/true,
           /*aggregatable_trigger_data=*/
           *attribution_reporting::AggregatableTriggerDataList::Create(
               {*attribution_reporting::AggregatableTriggerData::Create(
                   /*key_piece=*/absl::MakeUint128(/*high=*/0, /*low=*/1),
-                  /*source_keys=*/{"key"},
-                  /*filters=*/attribution_reporting::Filters(),
-                  /*not_filters=*/attribution_reporting::Filters())}),
+                  /*source_keys=*/{"key"}, FilterPair())}),
           /*aggregatable_values=*/
           *attribution_reporting::AggregatableValues::Create({{"key", 123}}),
           ::aggregation_service::mojom::AggregationCoordinator::kAwsCloud))));
@@ -961,7 +950,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -971,8 +960,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   EXPECT_TRUE(ExecJs(web_contents(),
                      JsReplace("createAttributionSrcImg($1);", register_url)));
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForTriggerData(/*num_trigger_data=*/1);
   const auto& trigger_data = data_host->trigger_data();
 
@@ -992,7 +982,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -1002,8 +992,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcBrowserTest,
 
   EXPECT_TRUE(ExecJs(web_contents(),
                      JsReplace("createAttributionSrcImg($1);", register_url)));
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForTriggerData(/*num_trigger_data=*/2);
   const auto& trigger_data = data_host->trigger_data();
 
@@ -1065,7 +1056,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcPrerenderBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -1092,8 +1083,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcPrerenderBrowserTest,
   prerender_helper_.NavigatePrimaryPage(page_url);
   ASSERT_EQ(page_url, web_contents()->GetLastCommittedURL());
 
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForSourceData(/*num_source_data=*/1);
   const auto& source_data = data_host->source_data();
 
@@ -1136,7 +1128,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcPrerenderBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -1171,8 +1163,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcPrerenderBrowserTest,
   ASSERT_EQ(page_url, web_contents()->GetLastCommittedURL());
   ASSERT_TRUE(host_observer.was_activated());
 
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
   data_host->WaitForTriggerData(/*num_trigger_data=*/1);
   const auto& trigger_data = data_host->trigger_data();
 
@@ -1245,7 +1238,7 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcFencedFrameBrowserTest,
   EXPECT_CALL(mock_attribution_host(), RegisterDataHost)
       .WillOnce(
           [&](mojo::PendingReceiver<blink::mojom::AttributionDataHost> host,
-              AttributionRegistrationType) {
+              RegistrationType) {
             data_host = GetRegisteredDataHost(std::move(host));
             loop.Quit();
           });
@@ -1256,8 +1249,9 @@ IN_PROC_BROWSER_TEST_F(AttributionSrcFencedFrameBrowserTest,
           "createAttributionSrcImg($1);",
           https_server()->GetURL("c.test", "/register_source_headers.html"))));
 
-  if (!data_host)
+  if (!data_host) {
     loop.Run();
+  }
 
   data_host->WaitForSourceData(/*num_source_data=*/1);
   EXPECT_EQ(data_host->source_data().size(), 1u);

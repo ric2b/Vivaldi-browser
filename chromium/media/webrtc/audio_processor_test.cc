@@ -17,6 +17,7 @@
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -25,6 +26,7 @@
 #include "media/base/audio_parameters.h"
 #include "media/base/audio_processing.h"
 #include "media/webrtc/constants.h"
+#include "media/webrtc/webrtc_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/webrtc/api/make_ref_counted.h"
@@ -178,8 +180,8 @@ class AudioProcessorTest : public ::testing::Test {
     EXPECT_EQ(config.noise_suppression.level,
               webrtc::AudioProcessing::Config::NoiseSuppression::kHigh);
 
-#if BUILDFLAG(IS_ANDROID)
-    // Android uses echo cancellation optimized for mobiles, and does not
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+    // Android and iOS use echo cancellation optimized for mobiles, and does not
     // support keytap suppression.
     EXPECT_TRUE(config.echo_canceller.mobile_mode);
     EXPECT_FALSE(config.transient_suppression.enabled);
@@ -364,7 +366,15 @@ TEST_P(AudioProcessorTestMultichannelAndFormat, TestStereoAudio) {
   }
 
   // Test without and with audio processing enabled.
-  for (bool use_apm : {false, true}) {
+  constexpr bool kUseApmValues[] =
+#if BUILDFLAG(IS_IOS)
+      // TODO(https://crbug.com/1417474): `false` fails on ios-blink platform
+      // due to a special case for iOS in settings.NeedWebrtcAudioProcessing()
+      {true};
+#else
+      {false, true};
+#endif
+  for (bool use_apm : kUseApmValues) {
     // No need to test stereo with APM if disabled.
     if (use_apm && !use_multichannel_processing) {
       continue;
@@ -513,7 +523,8 @@ class AudioProcessorPlayoutTest : public AudioProcessorTest {
                          params_,
                          params_,
                          mock_webrtc_apm_,
-                         false) {}
+                         /*stereo_mirroring=*/false,
+                         /*needs_playout_reference=*/true) {}
 
   rtc::scoped_refptr<webrtc::test::MockAudioProcessing> mock_webrtc_apm_;
   AudioProcessor audio_processor_;
@@ -744,4 +755,67 @@ TEST(AudioProcessorCallbackTest,
   audio_processor->ProcessCapturedAudio(*data_bus, base::TimeTicks::Now(), -1,
                                         1.0, false);
 }
+
+class ApmTellsIfPlayoutReferenceIsNeededParametrizedTest
+    : public ::testing::TestWithParam<bool> {
+ public:
+  ApmTellsIfPlayoutReferenceIsNeededParametrizedTest() {
+    if (GetParam()) {
+      feature_list_.InitAndEnableFeature(
+          features::kWebRtcApmTellsIfPlayoutReferenceIsNeeded);
+    } else {
+      feature_list_.InitAndDisableFeature(
+          features::kWebRtcApmTellsIfPlayoutReferenceIsNeeded);
+    }
+  }
+
+ private:
+  ::base::test::ScopedFeatureList feature_list_;
+};
+
+// Checks that, when all the audio processing settings are disabled, APM does
+// not need the playout reference.
+TEST_P(ApmTellsIfPlayoutReferenceIsNeededParametrizedTest,
+       DoesNotNeedPlayoutReference) {
+  AudioProcessingSettings settings;
+  DisableDefaultSettings(settings);
+
+  MockProcessedCaptureCallback mock_capture_callback;
+  media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                                ChannelLayoutConfig::Stereo(), 48000, 480);
+  std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
+      mock_capture_callback.Get(), LogCallbackForTesting(), settings, params,
+      AudioProcessor::GetDefaultOutputFormat(params, settings));
+
+  EXPECT_FALSE(audio_processor->needs_playout_reference());
+}
+
+// Checks that, with echo cancellation, APM always needs the playout reference.
+#if BUILDFLAG(IS_IOS)
+#define MAYBE_NeedsPlayoutReference DISABLED_NeedsPlayoutReference
+#else
+#define MAYBE_NeedsPlayoutReference NeedsPlayoutReference
+#endif
+// TODO: This test is disabled for ios-blink platform as per the discussion on
+// bug https://crbug.com/1417474
+TEST_P(ApmTellsIfPlayoutReferenceIsNeededParametrizedTest,
+       MAYBE_NeedsPlayoutReference) {
+  AudioProcessingSettings settings;
+  DisableDefaultSettings(settings);
+  settings.echo_cancellation = true;
+
+  MockProcessedCaptureCallback mock_capture_callback;
+  media::AudioParameters params(media::AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                                ChannelLayoutConfig::Stereo(), 48000, 480);
+  std::unique_ptr<AudioProcessor> audio_processor = AudioProcessor::Create(
+      mock_capture_callback.Get(), LogCallbackForTesting(), settings, params,
+      AudioProcessor::GetDefaultOutputFormat(params, settings));
+
+  EXPECT_TRUE(audio_processor->needs_playout_reference());
+}
+
+INSTANTIATE_TEST_SUITE_P(AudioProcessor,
+                         ApmTellsIfPlayoutReferenceIsNeededParametrizedTest,
+                         ::testing::Bool());
+
 }  // namespace media

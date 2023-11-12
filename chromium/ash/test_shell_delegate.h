@@ -9,7 +9,7 @@
 #include <string>
 
 #include "ash/shell_delegate.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "chromeos/ash/services/multidevice_setup/public/mojom/multidevice_setup.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "url/gurl.h"
@@ -43,10 +43,11 @@ class TestShellDelegate : public ShellDelegate {
   std::unique_ptr<BackGestureContextualNudgeDelegate>
   CreateBackGestureContextualNudgeDelegate(
       BackGestureContextualNudgeController* controller) override;
+  std::unique_ptr<MediaNotificationProvider> CreateMediaNotificationProvider()
+      override;
   std::unique_ptr<NearbyShareDelegate> CreateNearbyShareDelegate(
       NearbyShareController* controller) const override;
-  std::unique_ptr<DesksTemplatesDelegate> CreateDesksTemplatesDelegate()
-      const override;
+  std::unique_ptr<SavedDeskDelegate> CreateSavedDeskDelegate() const override;
   std::unique_ptr<SystemSoundsDelegate> CreateSystemSoundsDelegate()
       const override;
   scoped_refptr<network::SharedURLLoaderFactory>
@@ -76,7 +77,8 @@ class TestShellDelegate : public ShellDelegate {
   void SetSessionRestoreInProgress(bool in_progress);
   bool IsLoggingRedirectDisabled() const override;
   base::FilePath GetPrimaryUserDownloadsFolder() const override;
-  void OpenFeedbackPageForPersistentDesksBar() override {}
+  void OpenFeedbackDialog(FeedbackSource source,
+                          const std::string& description_template) override {}
   void SetLastCommittedURLForWindow(const GURL& url);
   version_info::Channel GetChannel() override;
   std::string GetVersionString() override;

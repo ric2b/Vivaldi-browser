@@ -15,9 +15,10 @@
 #include "ash/public/cpp/session/session_controller.h"
 #include "ash/public/cpp/session/session_types.h"
 #include "ash/session/session_activation_observer_holder.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 
 class AccountId;
@@ -26,6 +27,7 @@ class PrefService;
 namespace ash {
 
 class FullscreenController;
+class ScopedScreenLockBlocker;
 class SessionControllerClient;
 class SessionObserver;
 class SignoutScreenshotHandler;
@@ -128,9 +130,6 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   // device (i.e. first time login on the device).
   bool IsUserFirstLogin() const;
 
-  // Returns true if the device is enterprise managed.
-  bool IsEnterpriseManaged() const;
-
   // Returns true if should display managed icon for current session,
   // and false otherwise.
   bool ShouldDisplayManagedUI() const;
@@ -187,6 +186,10 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   // SessionState more closes matches the state in chrome.
   LoginStatus login_status() const { return login_status_; }
 
+  // Returns an object of `ScopedScreenLockBlocker`.
+  // `CanLockScreen()` returns false while there is one or more living object.
+  std::unique_ptr<ScopedScreenLockBlocker> GetScopedScreenLockBlocker();
+
   // SessionController
   void SetClient(SessionControllerClient* client) override;
   void SetSessionInfo(const SessionInfo& info) override;
@@ -216,6 +219,8 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   void AddObserver(SessionObserver* observer) override;
   void RemoveObserver(SessionObserver* observer) override;
   bool IsScreenLocked() const override;
+  bool IsEnterpriseManaged() const override;
+  absl::optional<int> GetExistingUsersCount() const override;
 
   // Test helpers.
   void ClearUserSessionsForTest();
@@ -224,6 +229,11 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
 
  private:
   friend class TestSessionControllerClient;
+
+  // Provides the implementation of `ScopedScreenLockBlocker`.
+  // Defined as a private class of `SessionControllerImpl` so that it can call
+  // `RemoveScopedScreenLockBlocker()` in its dtor.
+  class ScopedScreenLockBlockerImpl;
 
   // Marks the session as a demo session for Demo Mode.
   void SetIsDemoSession();
@@ -268,6 +278,9 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
   // Proceeds with restart to update after the (optional) signout screenshot is
   // taken.
   void ProceedWithRestartToUpdate();
+
+  // Called when an object of `ScopedScreenLockBlockerImpl` is destroyed.
+  void RemoveScopedScreenLockBlocker();
 
   // Client interface to session manager code (chrome).
   SessionControllerClient* client_ = nullptr;
@@ -330,6 +343,10 @@ class ASH_EXPORT SessionControllerImpl : public SessionController {
 
   // May be null if glanceables are not enabled.
   std::unique_ptr<SignoutScreenshotHandler> signout_screenshot_handler_;
+
+  int scoped_screen_lock_blocker_count_ = 0;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<SessionControllerImpl> weak_ptr_factory_{this};
 };

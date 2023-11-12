@@ -11,7 +11,9 @@
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/google_accounts_private_api_util.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/common/sync_encryption_keys_extension.mojom.h"
 #include "components/sync/base/features.h"
@@ -21,33 +23,10 @@
 #include "content/public/browser/render_frame_host_receiver_set.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/core_account_id.h"
-#include "google_apis/gaia/gaia_urls.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "url/origin.h"
 
 namespace {
-
-const url::Origin& GetAllowedOrigin() {
-  const url::Origin& origin = GaiaUrls::GetInstance()->gaia_origin();
-  CHECK(!origin.opaque());
-  return origin;
-}
-
-bool ShouldExposeMojoApi(content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->HasCommitted() || navigation_handle->IsErrorPage()) {
-    return false;
-  }
-
-  content::RenderFrameHost* rfh = navigation_handle->GetRenderFrameHost();
-  const url::Origin rfh_origin = rfh->GetLastCommittedOrigin();
-  // Restrict to allowed origin and only if site isolation requires a dedicated
-  // process. The host is compared explicitly to confirm that the allowed origin
-  // uses a dedicated process, rather than sharing process with eTLD+1.
-  return rfh_origin == GetAllowedOrigin() &&
-         rfh->GetSiteInstance()->RequiresDedicatedProcess() &&
-         rfh->GetSiteInstance()->GetSiteURL().host() ==
-             GetAllowedOrigin().host();
-}
 
 // EncryptionKeyApi represents the actual exposure of the Mojo API (i.e.
 // chrome::mojom::SyncEncryptionKeysExtension) to the renderer. Instantiated
@@ -72,12 +51,16 @@ class EncryptionKeyApi : public chrome::mojom::SyncEncryptionKeysExtension,
       SetEncryptionKeysCallback callback) override {
     // Extra safeguard.
     if (receivers_.GetCurrentTargetFrame()->GetLastCommittedOrigin() !=
-        GetAllowedOrigin()) {
+        GetAllowedGoogleAccountsOrigin()) {
       return;
     }
 
-    sync_service_->AddTrustedVaultDecryptionKeysFromWeb(
-        gaia_id, encryption_keys, last_key_version);
+    // Guard against incognito (where `sync_service_` is null).
+    if (sync_service_) {
+      sync_service_->AddTrustedVaultDecryptionKeysFromWeb(
+          gaia_id, encryption_keys, last_key_version);
+    }
+
     std::move(callback).Run();
   }
 
@@ -86,14 +69,19 @@ class EncryptionKeyApi : public chrome::mojom::SyncEncryptionKeysExtension,
       const std::vector<uint8_t>& public_key,
       int method_type_hint,
       AddTrustedRecoveryMethodCallback callback) override {
-    if (!base::FeatureList::IsEnabled(
-            syncer::kSyncTrustedVaultPassphraseRecovery)) {
+    // Extra safeguard.
+    if (receivers_.GetCurrentTargetFrame()->GetLastCommittedOrigin() !=
+        GetAllowedGoogleAccountsOrigin()) {
       return;
     }
 
-    // Extra safeguard.
-    if (receivers_.GetCurrentTargetFrame()->GetLastCommittedOrigin() !=
-        GetAllowedOrigin()) {
+    base::UmaHistogramBoolean(
+        "Sync.TrustedVaultJavascriptAddRecoveryMethodIsIncognito",
+        sync_service_ == nullptr);
+
+    // Handle incognito separately (where `sync_service_` is null).
+    if (!sync_service_) {
+      std::move(callback).Run();
       return;
     }
 
@@ -102,17 +90,18 @@ class EncryptionKeyApi : public chrome::mojom::SyncEncryptionKeysExtension,
   }
 
  private:
+  // Null `sync_service` is interpreted as incognito (when it comes to metrics).
   EncryptionKeyApi(content::RenderFrameHost* rfh,
                    syncer::SyncService* sync_service)
       : DocumentUserData<EncryptionKeyApi>(rfh),
         sync_service_(sync_service),
-        receivers_(content::WebContents::FromRenderFrameHost(rfh), this) {
-    DCHECK(sync_service);
-  }
+        receivers_(content::WebContents::FromRenderFrameHost(rfh), this) {}
 
   friend DocumentUserData;
   DOCUMENT_USER_DATA_KEY_DECL();
 
+  // Null `sync_service_` is interpreted as incognito (when it comes to
+  // metrics).
   const raw_ptr<syncer::SyncService> sync_service_;
 
   content::RenderFrameHostReceiverSet<
@@ -133,14 +122,18 @@ void SyncEncryptionKeysTabHelper::CreateForWebContents(
     return;
   }
 
-  if (web_contents->GetBrowserContext()->IsOffTheRecord()) {
-    return;
-  }
+  syncer::SyncService* sync_service = nullptr;
 
-  syncer::SyncService* sync_service = SyncServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(web_contents->GetBrowserContext()));
-  if (!sync_service) {
-    return;
+  if (!web_contents->GetBrowserContext()->IsOffTheRecord()) {
+    sync_service = SyncServiceFactory::GetForProfile(
+        Profile::FromBrowserContext(web_contents->GetBrowserContext()));
+    if (!sync_service) {
+      // Other than incognito, there are a few advanced cases (e.g.
+      // command-line flags) that can lead to a null SyncService. In these
+      // cases, avoid instantiating the tab helper altogether to avoid polluting
+      // metrics.
+      return;
+    }
   }
 
   web_contents->SetUserData(UserDataKey(),
@@ -166,9 +159,7 @@ SyncEncryptionKeysTabHelper::SyncEncryptionKeysTabHelper(
     syncer::SyncService* sync_service)
     : content::WebContentsUserData<SyncEncryptionKeysTabHelper>(*web_contents),
       content::WebContentsObserver(web_contents),
-      sync_service_(sync_service) {
-  DCHECK(sync_service);
-}
+      sync_service_(sync_service) {}
 
 SyncEncryptionKeysTabHelper::~SyncEncryptionKeysTabHelper() = default;
 
@@ -178,7 +169,7 @@ void SyncEncryptionKeysTabHelper::DidFinishNavigation(
     return;
   }
 
-  if (ShouldExposeMojoApi(navigation_handle)) {
+  if (ShouldExposeGoogleAccountsPrivateApi(navigation_handle)) {
     EncryptionKeyApi::CreateForCurrentDocument(
         navigation_handle->GetRenderFrameHost(), sync_service_);
   } else {

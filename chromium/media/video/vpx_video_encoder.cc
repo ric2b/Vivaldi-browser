@@ -15,6 +15,7 @@
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
+#include "media/video/video_encoder_info.h"
 #include "third_party/libvpx/source/libvpx/vpx/vp8cx.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
 
@@ -133,6 +134,9 @@ EncoderStatus SetUpVpxConfig(const VideoEncoder::Options& opts,
     return EncoderStatus::Codes::kOk;
 
   switch (opts.scalability_mode.value()) {
+    case SVCScalabilityMode::kL1T1:
+      // Nothing to do
+      break;
     case SVCScalabilityMode::kL1T2:
       // Frame Pattern:
       // Layer Index 0: |0| |2| |4| |6| |8|
@@ -245,6 +249,7 @@ VpxVideoEncoder::VpxVideoEncoder() : codec_(nullptr, FreeCodecCtx) {}
 
 void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
                                  const Options& options,
+                                 EncoderInfoCB info_cb,
                                  OutputCB output_cb,
                                  EncoderStatusCB done_cb) {
   done_cb = BindCallbackToCurrentLoopIfNeeded(std::move(done_cb));
@@ -385,6 +390,12 @@ void VpxVideoEncoder::Initialize(VideoCodecProfile profile,
   originally_configured_size_ = options.frame_size;
   output_cb_ = BindCallbackToCurrentLoopIfNeeded(std::move(output_cb));
   codec_ = std::move(codec);
+
+  VideoEncoderInfo info;
+  info.implementation_name = "VpxVideoEncoder";
+  info.is_hardware_accelerated = false;
+  BindCallbackToCurrentLoopIfNeeded(std::move(info_cb)).Run(info);
+
   std::move(done_cb).Run(EncoderStatus::Codes::kOk);
 }
 
@@ -430,12 +441,20 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
     }
   }
 
-  const bool is_yuv = IsYuvPlanar(frame->format());
-  if (frame->visible_rect().size() != options_.frame_size || !is_yuv) {
+  // Unfortunately libyuv lacks direct NV12 to I010 conversion, and we
+  // have to do an extra conversion to I420.
+  // TODO(https://crbug.com/libyuv/954) Use NV12ToI010() when implemented
+  const bool vp9_p2_needs_nv12_to_i420 =
+      frame->format() == PIXEL_FORMAT_NV12 && profile_ == VP9PROFILE_PROFILE2;
+  const bool needs_conversion_to_i420 =
+      !IsYuvPlanar(frame->format()) || vp9_p2_needs_nv12_to_i420;
+  if (frame->visible_rect().size() != options_.frame_size ||
+      needs_conversion_to_i420) {
+    auto new_pixel_format =
+        needs_conversion_to_i420 ? PIXEL_FORMAT_I420 : frame->format();
     auto resized_frame = frame_pool_.CreateFrame(
-        is_yuv ? frame->format() : PIXEL_FORMAT_I420, options_.frame_size,
-        gfx::Rect(options_.frame_size), options_.frame_size,
-        frame->timestamp());
+        new_pixel_format, options_.frame_size, gfx::Rect(options_.frame_size),
+        options_.frame_size, frame->timestamp());
 
     if (!resized_frame) {
       std::move(done_cb).Run(
@@ -457,6 +476,7 @@ void VpxVideoEncoder::Encode(scoped_refptr<VideoFrame> frame,
 
   switch (profile_) {
     case VP9PROFILE_PROFILE2:
+      DCHECK_EQ(frame->format(), PIXEL_FORMAT_I420);
       // Profile 2 uses 10bit color,
       libyuv::I420ToI010(
           frame->visible_data(VideoFrame::kYPlane),

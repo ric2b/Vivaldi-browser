@@ -7,9 +7,8 @@
 #include <stddef.h>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/sys_byteorder.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/webrtc/fake_ssl_client_socket.h"
 #include "net/base/io_buffer.h"
@@ -331,7 +330,7 @@ bool P2PSocketTcpBase::HandleReadResult(int result) {
     size_t bytes_consumed = 0;
     if (!ProcessInput(
             base::make_span(reinterpret_cast<const uint8_t*>(head + pos),
-                            read_buffer_->offset() - pos),
+                            static_cast<size_t>(read_buffer_->offset() - pos)),
             &bytes_consumed)) {
       return false;
     }

@@ -15,6 +15,7 @@
 #include "ui/views/bubble/bubble_border.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "ui/vivaldi_browser_window.h"

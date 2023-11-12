@@ -13,10 +13,10 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
 #include "base/check.h"
 #include "base/component_export.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece_forward.h"
@@ -69,6 +69,10 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
     // Indicates whether this is a GetAssertion request with an empty allow
     // list.
     bool has_empty_allow_list = false;
+
+    // is_only_hybrid_or_internal is true if credentials in the allow-list only
+    // contain the hybrid or internal transports.
+    bool is_only_hybrid_or_internal = false;
 
     // The intersection of transports supported by the client and allowed by the
     // relying party.
@@ -330,7 +334,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) FidoRequestHandlerBase
   // and whether it has responsive credentials at all.
   void OnHavePlatformCredentialStatus(
       std::vector<DiscoverableCredentialMetadata> user_entities,
-      bool have_credential);
+      RecognizedCredential has_credentials);
 
  private:
   friend class FidoRequestHandlerTest;

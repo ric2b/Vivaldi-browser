@@ -32,6 +32,9 @@ namespace ui {
 
 namespace {
 
+static_assert(sizeof(uint32_t) == sizeof(float),
+              "Sizes much match for reinterpret cast to be meaningful");
+
 XDGToplevelWrapperImpl::DecorationMode ToDecorationMode(uint32_t mode) {
   switch (mode) {
     case ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE:
@@ -269,6 +272,7 @@ void XDGToplevelWrapperImpl::ConfigureTopLevel(
           CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_ACTIVATED),
   };
 
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (xdg_toplevel_get_version(xdg_toplevel) >=
       XDG_TOPLEVEL_STATE_TILED_LEFT_SINCE_VERSION) {
     // All four tiled states have the same since version, so it is enough to
@@ -280,6 +284,7 @@ void XDGToplevelWrapperImpl::ConfigureTopLevel(
         .bottom =
             CheckIfWlArrayHasValue(states, XDG_TOPLEVEL_STATE_TILED_BOTTOM)};
   }
+#endif  // IS_LINUX || IS_CHROMEOS_LACROS
 
   surface->wayland_window_->HandleToplevelConfigure(width, height,
                                                     window_states);
@@ -329,6 +334,18 @@ void XDGToplevelWrapperImpl::OnOriginChange(
   auto* wayland_toplevel_window =
       static_cast<WaylandToplevelWindow*>(surface->wayland_window_);
   wayland_toplevel_window->SetOrigin(gfx::Point(x, y));
+}
+
+// static
+void XDGToplevelWrapperImpl::ConfigureRasterScale(
+    void* data,
+    struct zaura_toplevel* zaura_toplevel,
+    uint32_t scale_as_uint) {
+  auto* surface = static_cast<XDGToplevelWrapperImpl*>(data);
+  DCHECK(surface);
+  auto* wayland_window = static_cast<WaylandWindow*>(surface->wayland_window_);
+  float scale = *reinterpret_cast<float*>(&scale_as_uint);
+  wayland_window->SetPendingRasterScale(scale);
 }
 
 // static
@@ -487,9 +504,7 @@ void XDGToplevelWrapperImpl::EnableScreenCoordinates() {
   zaura_toplevel_set_supports_screen_coordinates(aura_toplevel_.get());
 
   static constexpr zaura_toplevel_listener aura_toplevel_listener = {
-      &ConfigureAuraTopLevel,
-      &OnOriginChange,
-  };
+      &ConfigureAuraTopLevel, &OnOriginChange, &ConfigureRasterScale};
 
   zaura_toplevel_add_listener(aura_toplevel_.get(), &aura_toplevel_listener,
                               this);
@@ -574,14 +589,15 @@ void XDGToplevelWrapperImpl::CommitSnap(
     return;
   }
 
-  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
-                            ZAURA_TOPLEVEL_UNSET_SNAP_SINCE_VERSION) {
+  if (zaura_toplevel_get_version(aura_toplevel_.get()) >=
+          ZAURA_TOPLEVEL_UNSET_SNAP_SINCE_VERSION &&
+      snap_direction == WaylandWindowSnapDirection::kNone) {
     zaura_toplevel_unset_snap(aura_toplevel_.get());
     return;
   }
 
-  if (aura_toplevel_ && zaura_toplevel_get_version(aura_toplevel_.get()) >=
-                            ZAURA_TOPLEVEL_SET_SNAP_PRIMARY_SINCE_VERSION) {
+  if (zaura_toplevel_get_version(aura_toplevel_.get()) >=
+      ZAURA_TOPLEVEL_SET_SNAP_PRIMARY_SINCE_VERSION) {
     uint32_t value = *reinterpret_cast<uint32_t*>(&snap_ratio);
     switch (snap_direction) {
       case WaylandWindowSnapDirection::kPrimary:
@@ -617,6 +633,10 @@ void XDGToplevelWrapperImpl::ShowSnapPreview(
                                   zaura_shell_snap_direction);
     return;
   }
+}
+
+XDGToplevelWrapperImpl* XDGToplevelWrapperImpl::AsXDGToplevelWrapper() {
+  return this;
 }
 
 }  // namespace ui

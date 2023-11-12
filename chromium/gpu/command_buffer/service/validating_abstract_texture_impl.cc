@@ -52,49 +52,46 @@ void ValidatingAbstractTextureImpl::SetParameteri(GLenum pname, GLint param) {
                                      texture_ref_.get(), pname, param);
 }
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE)
 void ValidatingAbstractTextureImpl::SetUnboundImage(gl::GLImage* image) {
-  BindImageInternal(image, /*client_managed=*/false);
-}
-#else
-void ValidatingAbstractTextureImpl::SetBoundImage(gl::GLImage* image) {
-  BindImageInternal(image, /*client_managed=*/true);
-}
-#endif
-
-void ValidatingAbstractTextureImpl::BindImageInternal(gl::GLImage* image,
-                                                      bool client_managed) {
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
-  CHECK(!client_managed);
-#else
-  CHECK(client_managed);
-#endif
-
   if (!texture_ref_)
     return;
 
   const GLuint target = texture_ref_->texture()->target();
   const GLint level = 0;
 
-  // If there is a decoder-managed image bound, release it.
-  if (decoder_managed_image_) {
-    Texture::ImageState image_state;
-    gl::GLImage* current_image =
-        texture_ref_->texture()->GetLevelImage(target, 0, &image_state);
-    if (current_image && image_state == Texture::BOUND)
-      current_image->ReleaseTexImage(target);
+  // Configure the new image.
+  if (image) {
+    GetTextureManager()->SetUnboundLevelImage(texture_ref_.get(), target, level,
+                                              image);
+  } else {
+    GetTextureManager()->UnsetLevelImage(texture_ref_.get(), target, level);
   }
 
-  // Configure the new image.
-  decoder_managed_image_ = image && !client_managed;
-  Texture::ImageState state = image && client_managed
-                                  ? Texture::ImageState::BOUND
-                                  : Texture::ImageState::UNBOUND;
-  GetTextureManager()->SetLevelImage(texture_ref_.get(), target, level, image,
-                                     state);
   GetTextureManager()->SetLevelCleared(texture_ref_.get(), target, level,
                                        image);
 }
+#else
+void ValidatingAbstractTextureImpl::SetBoundImage(gl::GLImage* image) {
+  if (!texture_ref_) {
+    return;
+  }
+
+  const GLuint target = texture_ref_->texture()->target();
+  const GLint level = 0;
+
+  // Configure the new image.
+  if (image) {
+    GetTextureManager()->SetBoundLevelImage(texture_ref_.get(), target, level,
+                                            image);
+  } else {
+    GetTextureManager()->UnsetLevelImage(texture_ref_.get(), target, level);
+  }
+
+  GetTextureManager()->SetLevelCleared(texture_ref_.get(), target, level,
+                                       image);
+}
+#endif
 
 gl::GLImage* ValidatingAbstractTextureImpl::GetImageForTesting() const {
   if (!texture_ref_)
@@ -102,7 +99,7 @@ gl::GLImage* ValidatingAbstractTextureImpl::GetImageForTesting() const {
 
   const GLuint target = texture_ref_->texture()->target();
   const GLint level = 0;
-  return texture_ref_->texture()->GetLevelImage(target, level, nullptr);
+  return texture_ref_->texture()->GetLevelImage(target, level);
 }
 
 void ValidatingAbstractTextureImpl::SetCleared() {

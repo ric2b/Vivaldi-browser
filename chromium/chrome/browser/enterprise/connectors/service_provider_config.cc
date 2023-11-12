@@ -2,26 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <array>
 #include <iterator>
 
 #include "chrome/browser/enterprise/connectors/service_provider_config.h"
 #include "base/json/json_reader.h"
 
-#if defined(USE_OFFICIAL_ENTERPRISE_CONNECTORS_API_KEYS)
-#include "google_apis/internal/enterprise_connectors_api_keys.h"
-#endif
-
 // Used to indicate an unset key/id/secret.  This works better with
 // various unit tests than leaving the token empty.
 #define DUMMY_API_TOKEN "dummytoken"
-
-#if !defined(CLIENT_ID_CONNECTOR_PARTNER_BOX)
-#define CLIENT_ID_CONNECTOR_PARTNER_BOX DUMMY_API_TOKEN
-#endif
-
-#if !defined(CLIENT_SECRET_CONNECTOR_PARTNER_BOX)
-#define CLIENT_SECRET_CONNECTOR_PARTNER_BOX DUMMY_API_TOKEN
-#endif
 
 namespace enterprise_connectors {
 
@@ -73,25 +62,18 @@ constexpr AnalysisConfig kLocalTestSystemAnalysisConfig = {
     .user_specific = false,
 };
 
+constexpr std::array<const char*, 1> kBrcmChrmCasSubjectNames = {
+    {"Broadcom Inc"}};
+
 constexpr AnalysisConfig kBrcmChrmCasAnalysisConfig = {
     .local_path = "brcm_chrm_cas",
     .supported_tags = base::span<const SupportedTag>(kBrcmChrmCasSupportedTags),
     .user_specific = false,
+    .subject_names = base::span<const char* const>(kBrcmChrmCasSubjectNames),
 };
 
 constexpr ReportingConfig kGoogleReportingConfig = {
     .url = "https://chromereporting-pa.googleapis.com/v1/events",
-};
-
-constexpr FileSystemConfig kBoxFileSystemConfig = {
-    .home = "https://box.com",
-    .authorization_endpoint = "https://account.box.com/api/oauth2/authorize",
-    .token_endpoint = "https://api.box.com/oauth2/token",
-    .max_direct_size = 20971520,
-    .scopes = {},
-    .disable = {"box.com", "boxcloud.com"},
-    .client_id = CLIENT_ID_CONNECTOR_PARTNER_BOX,
-    .client_secret = CLIENT_SECRET_CONNECTOR_PARTNER_BOX,
 };
 
 }  // namespace
@@ -105,13 +87,6 @@ const ServiceProviderConfig* GetServiceProviderConfig() {
                   .display_name = "Google Cloud",
                   .analysis = &kGoogleAnalysisConfig,
                   .reporting = &kGoogleReportingConfig,
-              },
-          },
-          {
-              "box",
-              {
-                  .display_name = "Box",
-                  .file_system = &kBoxFileSystemConfig,
               },
           },
           // TODO(b/226560946): Add the actual local content analysis service

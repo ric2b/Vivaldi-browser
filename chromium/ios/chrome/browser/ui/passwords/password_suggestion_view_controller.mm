@@ -13,6 +13,11 @@
 #import "ios/public/provider/chrome/browser/branded_images/branded_images_api.h"
 #import "ui/base/l10n/l10n_util.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+// End Vivaldi
+
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
@@ -28,7 +33,7 @@
 @end
 
 namespace {
-constexpr CGFloat customSpacingBeforeImageIfNoToolbar = 24;
+constexpr CGFloat customSpacingBeforeImageIfNoNavigationBar = 24;
 constexpr CGFloat customSpacingAfterImage = 1;
 }  // namespace
 
@@ -50,17 +55,24 @@ constexpr CGFloat customSpacingAfterImage = 1;
       ios::provider::BrandedImage::kPasswordSuggestionKey);
   self.imageHasFixedSize = YES;
   self.showDismissBarButton = NO;
-  self.customSpacingBeforeImageIfNoToolbar =
-      customSpacingBeforeImageIfNoToolbar;
+  self.customSpacingBeforeImageIfNoNavigationBar =
+      customSpacingBeforeImageIfNoNavigationBar;
   self.customSpacingAfterImage = customSpacingAfterImage;
   self.titleTextStyle = UIFontTextStyleTitle2;
   self.topAlignedLayout = YES;
 
   self.titleString = l10n_util::GetNSString(IDS_IOS_SUGGESTED_STRONG_PASSWORD);
   self.secondaryTitleString = self.passwordSuggestion;
+
+  if (vivaldi::IsVivaldiRunning()) {
+    self.subtitleString =
+        l10n_util::GetNSString(IDS_VIVALDI_SUGGESTED_STRONG_PASSWORD_HINT);
+  } else {
   self.subtitleString = l10n_util::GetNSStringF(
       IDS_IOS_SUGGESTED_STRONG_PASSWORD_HINT_DISPLAYING_EMAIL,
       base::SysNSStringToUTF16(self.userEmail));
+  } // End Vivaldi
+
   self.primaryActionString =
       l10n_util::GetNSString(IDS_IOS_USE_SUGGESTED_STRONG_PASSWORD);
   self.secondaryActionString = l10n_util::GetNSString(IDS_CANCEL);

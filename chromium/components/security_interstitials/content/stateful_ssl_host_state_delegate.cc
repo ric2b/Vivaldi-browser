@@ -13,10 +13,10 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/json/values_util.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
@@ -230,7 +230,7 @@ void StatefulSSLHostStateDelegate::AllowCert(
       url, url, ContentSettingsType::SSL_CERT_DECISIONS, nullptr));
 
   if (!value.is_dict())
-    value = base::Value(base::Value::Type::DICTIONARY);
+    value = base::Value(base::Value::Type::DICT);
 
   base::Value::Dict* cert_dict =
       GetValidCertDecisionsDict(CREATE_DICTIONARY_ENTRIES, value.GetDict());

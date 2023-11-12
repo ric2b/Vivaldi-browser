@@ -8,9 +8,9 @@
 
 #include <utility>
 
-#include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/values.h"
 #include "chrome/browser/ash/file_system_provider/mount_path_util.h"
 #include "chrome/browser/ash/file_system_provider/observer.h"
@@ -265,6 +265,7 @@ bool Service::RequestMount(const ProviderId& provider_id,
 
   ProviderInterface* const provider = GetProvider(provider_id);
   if (!provider) {
+    LOG(ERROR) << "Provider id " << provider_id.ToString() << " not found";
     std::move(callback).Run(base::File::FILE_ERROR_FAILED);
     return false;
   }

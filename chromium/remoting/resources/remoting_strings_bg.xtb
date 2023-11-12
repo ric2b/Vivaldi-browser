@@ -4,6 +4,7 @@
 <translation id="1002108253973310084">Открита е несъвместима версия на протокол. Моля, уверете се, че най-новата версия на софтуера е инсталирана и на двата компютъра, и опитайте отново.</translation>
 <translation id="1008557486741366299">Не сега</translation>
 <translation id="1201402288615127009">Напред</translation>
+<translation id="1296511125400541222">Авторски права 2023 г. Авторите на Chromium. Всички права запазени.</translation>
 <translation id="1297009705180977556">Грешка при свързването с хоста „<ph name="HOSTNAME" />“</translation>
 <translation id="1450760146488584666">Заявеният обект не съществува.</translation>
 <translation id="1480046233931937785">Признание</translation>
@@ -36,7 +37,6 @@
 <translation id="2599300881200251572">Тази услуга активира входящите връзки от клиентски програми за отдалечен работен плот на Chrome.</translation>
 <translation id="2647232381348739934">Услуга за Chromoting</translation>
 <translation id="2676780859508944670">В процес на работа…</translation>
-<translation id="2692522824157224199">Авторски права 2022 г. Google LLC. Всички права запазени.</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2758123043070977469">При удостоверяването възникна проблем. Моля, влезте отново в профила си.</translation>
 <translation id="2803375539583399270">Въведете ПИН кодa</translation>
@@ -73,7 +73,6 @@
 <translation id="4257751272692708833">Пренасочване на URL адреси за „<ph name="PRODUCT_NAME" />“</translation>
 <translation id="4277736576214464567">Кодът за достъп е невалиден. Моля, опитайте отново.</translation>
 <translation id="4281844954008187215">Условия за ползване</translation>
-<translation id="4372650392690220936">Авторски права 2022 г. Авторите на Chromium. Всички права запазени.</translation>
 <translation id="4405930547258349619">Библиотека на ядрото</translation>
 <translation id="443560535555262820">Отваряне на предпочитанията за достъпност</translation>
 <translation id="4450893287417543264">Да не се показва отново</translation>
@@ -90,6 +89,7 @@
 <translation id="4808503597364150972">Моля, въведете ПИН кода си за <ph name="HOSTNAME" />.</translation>
 <translation id="4812684235631257312">Хост</translation>
 <translation id="4867841927763172006">Изпращане на PrtScn</translation>
+<translation id="4960795469833295568">Авторски права 2023 г. Google LLC. Всички права запазени.</translation>
 <translation id="4974476491460646149">Връзката с хоста „<ph name="HOSTNAME" />“ е прекратена</translation>
 <translation id="4985296110227979402">Трябва първо да настроите компютъра си за отдалечен достъп</translation>
 <translation id="4987330545941822761">Отдалеченият работен плот на Chrome не може да избере браузъра, с който да се отварят URL адреси локално. Моля, изберете браузър от списъка по-долу.</translation>

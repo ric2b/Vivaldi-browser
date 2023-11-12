@@ -11,9 +11,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
+#include "base/functional/callback_forward.h"
 #include "base/pickle.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -109,7 +109,7 @@ class TestDataTransferPolicyController : ui::DataTransferPolicyController {
                       content::RenderFrameHost* web_contents,
                       base::OnceCallback<void(bool)> callback) override {}
 
-  void DropIfAllowed(const ui::DataTransferEndpoint* const data_src,
+  void DropIfAllowed(const ui::OSExchangeData* const drag_data,
                      const ui::DataTransferEndpoint* const data_dst,
                      base::OnceClosure drop_cb) override {
     std::move(drop_cb).Run();
@@ -754,7 +754,7 @@ TEST_F(DataOfferTest, SetClipboardDataHTML) {
   TestDataExchangeDelegate data_exchange_delegate;
   {
     ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
-    writer.WriteHTML(u"Test data", "");
+    writer.WriteHTML(u"Test data", "", ui::ClipboardContentType::kSanitized);
   }
 
   auto* window = CreateTestWindowInShellWithBounds(gfx::Rect());
@@ -850,8 +850,7 @@ TEST_F(DataOfferTest, SetClipboardDataImage) {
   ASSERT_TRUE(gfx::PNGCodec::Decode(
       reinterpret_cast<const unsigned char*>(result.data()), result.size(),
       &decoded));
-  EXPECT_TRUE(cc::MatchesBitmap(
-      image, decoded, cc::ExactPixelComparator(/*discard_alpha=*/false)));
+  EXPECT_TRUE(cc::MatchesBitmap(image, decoded, cc::ExactPixelComparator()));
   std::string good = result;
   ASSERT_TRUE(ReadString(std::move(read_pipe2), &result));
   EXPECT_EQ(good, result);

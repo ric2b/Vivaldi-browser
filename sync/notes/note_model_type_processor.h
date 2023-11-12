@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "components/sync/engine/model_type_processor.h"
@@ -64,6 +64,7 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
       base::OnceCallback<void(const syncer::TypeEntitiesCount&)> callback)
       const override;
   void RecordMemoryUsageAndCountsHistograms() override;
+  void ClearMetadataWhileStopped() override;
 
   // Encodes all sync metadata into a string, representing a state that can be
   // restored via ModelReadyToSync() below.
@@ -117,7 +118,9 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
   void StartTrackingMetadata();
   void StopTrackingMetadata();
 
-  // Resets note tracker in addition to stopping metadata tracking.
+  // Resets note tracker in addition to stopping metadata tracking. Note
+  // that unlike StopTrackingMetadata(), this does not disconnect sync and
+  // instead the caller must meet this precondition.
   void StopTrackingMetadataAndResetTracker();
 
   // Creates a DictionaryValue for local and remote debugging information about
@@ -179,6 +182,10 @@ class NoteModelTypeProcessor : public syncer::ModelTypeProcessor,
 
   // This member variable exists only to allow tests to override the limit.
   size_t max_notes_till_sync_enabled_;
+
+  // Marks whether metadata should be cleared upon ModelReadyToSync(). True if
+  // ClearMetadataWhileStopped() is called before ModelReadyToSync().
+  bool pending_clear_metadata_ = false;
 
   // WeakPtrFactory for this processor for ModelTypeController.
   base::WeakPtrFactory<NoteModelTypeProcessor> weak_ptr_factory_for_controller_{

@@ -8,10 +8,11 @@
 
 #include "base/strings/string_piece.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/supervised_user/kids_chrome_management/kidschromemanagement_messages.pb.h"
-#include "chrome/browser/supervised_user/supervised_user_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/supervised_user/core/browser/proto/kidschromemanagement_messages.pb.h"
+#include "components/supervised_user/core/common/pref_names.h"
+#include "components/supervised_user/core/common/supervised_user_constants.h"
 
 namespace {
 using ::base::StringPiece;
@@ -50,7 +51,7 @@ bool KidsProfileManager::IsChildAccount() const {
 void KidsProfileManager::UpdateChildAccountStatus(bool is_child_account) {
   if (IsChildAccount() != is_child_account) {
     if (is_child_account) {
-      supervised_user_id_.Set(StringPiece(supervised_users::kChildAccountSUID));
+      supervised_user_id_.Set(StringPiece(supervised_user::kChildAccountSUID));
     } else {
       supervised_user_id_.Clear();
       primary_custodian_.Clear();

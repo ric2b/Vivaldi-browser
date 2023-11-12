@@ -4,8 +4,8 @@
 
 #include "chromeos/ash/components/dbus/arc/fake_arcvm_data_migrator_client.h"
 
-#include "base/bind.h"
 #include "base/check_op.h"
+#include "base/functional/bind.h"
 #include "base/task/single_thread_task_runner.h"
 
 namespace ash {
@@ -30,6 +30,13 @@ FakeArcVmDataMigratorClient::~FakeArcVmDataMigratorClient() {
 // static
 FakeArcVmDataMigratorClient* FakeArcVmDataMigratorClient::Get() {
   return g_instance;
+}
+
+void FakeArcVmDataMigratorClient::HasDataToMigrate(
+    const arc::data_migrator::HasDataToMigrateRequest& request,
+    chromeos::DBusMethodCallback<bool> callback) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), has_data_to_migrate_));
 }
 
 void FakeArcVmDataMigratorClient::StartMigration(

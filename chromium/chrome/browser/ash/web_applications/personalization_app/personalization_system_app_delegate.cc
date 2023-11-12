@@ -7,12 +7,14 @@
 #include <memory>
 
 #include "ash/constants/ash_features.h"
+#include "ash/rgb_keyboard/rgb_keyboard_manager.h"
+#include "ash/shell.h"
 #include "ash/webui/grit/ash_personalization_app_resources.h"
 #include "ash/webui/personalization_app/personalization_app_url_constants.h"
 #include "chrome/browser/ash/web_applications/personalization_app/personalization_app_utils.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/web_applications/user_display_mode.h"
+#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -66,7 +68,7 @@ PersonalizationSystemAppDelegate::GetWebAppInfo() const {
       *info);
 
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
-  info->user_display_mode = web_app::UserDisplayMode::kStandalone;
+  info->user_display_mode = web_app::mojom::UserDisplayMode::kStandalone;
 
   return info;
 }
@@ -79,7 +81,17 @@ gfx::Rect PersonalizationSystemAppDelegate::GetDefaultBounds(
     Browser* browser) const {
   gfx::Rect bounds =
       display::Screen::GetScreen()->GetDisplayForNewWindows().work_area();
-  bounds.ClampToCenteredSize({826, 745});
+  if (ash::features::IsPersonalizationJellyEnabled()) {
+    // TODO(b/267332833): The sizing does not look right. May need updating as
+    // Jelly is implemented.
+    if (ash::Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported()) {
+      bounds.ClampToCenteredSize({826, 881});
+    } else {
+      bounds.ClampToCenteredSize({826, 608});
+    }
+  } else {
+    bounds.ClampToCenteredSize({826, 745});
+  }
   return bounds;
 }
 

@@ -27,12 +27,17 @@ public interface Stream {
          * Allows the switching to another Stream.
          * @param streamKind The {@link StreamKind} of the stream to switch to.
          */
-        void switchToStreamKind(@StreamKind int streamKind);
+        default void switchToStreamKind(@StreamKind int streamKind) {}
 
         /**
          * Request the immediate refresh of the contents of the active stream.
          */
-        void refreshStream();
+        default void refreshStream() {}
+
+        /**
+         * Disable the follow button, used in case of an error scenario.
+         */
+        default void disableFollowButton() {}
     }
     /** Called when the Stream is no longer needed. */
     default void destroy() {}
@@ -115,8 +120,7 @@ public interface Stream {
      */
     void bind(RecyclerView view, NtpListContentManager manager, FeedScrollState savedInstanceState,
             SurfaceScope surfaceScope, HybridListRenderer renderer,
-            FeedLaunchReliabilityLogger launchReliabilityLogger, int headerCount,
-            boolean shouldScrollToTop);
+            FeedLaunchReliabilityLogger launchReliabilityLogger, int headerCount);
 
     /**
      * Unbinds the feed. Stops this feed from updating the RecyclerView.

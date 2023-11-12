@@ -110,10 +110,6 @@ bool IsOutsideAppWindow(int screen_x, int screen_y) {
 }
 
 Browser* FindBrowserForPersistentTabs(Browser* current_browser) {
-  if (current_browser->profile()->IsOffTheRecord()) {
-    // Pinned tabs can never be moved to another browser
-    return nullptr;
-  }
   if (browser_shutdown::IsTryingToQuit() ||
       browser_shutdown::GetShutdownType() !=
           browser_shutdown::ShutdownType::kNotValid) {

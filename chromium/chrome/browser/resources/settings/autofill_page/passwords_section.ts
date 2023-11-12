@@ -36,36 +36,36 @@ import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_element
 import {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
 import {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
-import {I18nMixin, I18nMixinInterface} from 'chrome://resources/cr_elements/i18n_mixin.js';
-import {WebUiListenerMixin, WebUiListenerMixinInterface} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
+import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
 import {focusWithoutInk} from 'chrome://resources/js/focus_without_ink.js';
-import {getDeepActiveElement} from 'chrome://resources/js/util_ts.js';
+import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
+import {getDeepActiveElement, isUndoKeyboardEvent} from 'chrome://resources/js/util_ts.js';
 import {DomRepeat, DomRepeatEvent, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import {FocusConfig} from '../focus_config.js';
-import {GlobalScrollTargetMixin, GlobalScrollTargetMixinInterface} from '../global_scroll_target_mixin.js';
+import {GlobalScrollTargetMixin} from '../global_scroll_target_mixin.js';
 import {HatsBrowserProxyImpl, TrustSafetyInteraction} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
-import {OpenWindowProxyImpl} from '../open_window_proxy.js';
 import {SyncBrowserProxyImpl, TrustedVaultBannerState} from '../people_page/sync_browser_proxy.js';
-import {PrefsMixin, PrefsMixinInterface} from '../prefs/prefs_mixin.js';
+import {PrefsMixin} from '../prefs/prefs_mixin.js';
 import {routes} from '../route.js';
-import {Route, RouteObserverMixin, RouteObserverMixinInterface, Router} from '../router.js';
+import {Route, RouteObserverMixin, Router} from '../router.js';
 
-import {MergePasswordsStoreCopiesMixin, MergePasswordsStoreCopiesMixinInterface} from './merge_passwords_store_copies_mixin.js';
+import {MergePasswordsStoreCopiesMixin} from './merge_passwords_store_copies_mixin.js';
 // <if expr="is_win or is_macosx">
 import {PasskeysBrowserProxy, PasskeysBrowserProxyImpl} from './passkeys_browser_proxy.js';
 // </if>
-import {PasswordCheckMixin, PasswordCheckMixinInterface} from './password_check_mixin.js';
+import {PasswordCheckMixin} from './password_check_mixin.js';
 import {AddCredentialFromSettingsUserInteractions, PasswordEditDialogElement} from './password_edit_dialog.js';
 import {PasswordCheckReferrer, PasswordExceptionListChangedListener, PasswordManagerImpl, PasswordManagerProxy} from './password_manager_proxy.js';
 import {PASSWORD_MANAGER_AUTH_TIMEOUT_PARAM} from './password_view.js';
 import {PasswordsImportDesktopInteractions, recordPasswordsImportInteraction} from './passwords_import_dialog.js';
 import {PasswordsListHandlerElement} from './passwords_list_handler.js';
 import {getTemplate} from './passwords_section.html.js';
-import {UserUtilMixin, UserUtilMixinInterface} from './user_util_mixin.js';
+import {UserUtilMixin} from './user_util_mixin.js';
 
 /**
  * Checks if an HTML element is an editable. An editable is either a text
@@ -114,13 +114,7 @@ export interface PasswordsSectionElement {
 const PasswordsSectionElementBase =
     UserUtilMixin(MergePasswordsStoreCopiesMixin(PrefsMixin(
         GlobalScrollTargetMixin(RouteObserverMixin(WebUiListenerMixin(
-            I18nMixin(PasswordCheckMixin(PolymerElement)))))))) as {
-      new (): PolymerElement & PasswordCheckMixinInterface &
-          I18nMixinInterface & WebUiListenerMixinInterface &
-          RouteObserverMixinInterface & GlobalScrollTargetMixinInterface &
-          PrefsMixinInterface & MergePasswordsStoreCopiesMixinInterface &
-          UserUtilMixinInterface,
-    };
+            I18nMixin(PasswordCheckMixin(PolymerElement))))))));
 
 export class PasswordsSectionElement extends PasswordsSectionElementBase {
   static get is() {
@@ -246,10 +240,8 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
 
       showImportPasswords_: {
         type: Boolean,
-        value() {
-          return loadTimeData.valueExists('showImportPasswords') &&
-              loadTimeData.getBoolean('showImportPasswords');
-        },
+        computed:
+            'computeShowImportPasswords_(passwordManagerDisabledByPolicy_)',
       },
 
       /** An array of blocked sites to display. */
@@ -263,9 +255,9 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
 
       showAddPasswordDialog_: Boolean,
 
-      showAddPasswordButton_: {
+      passwordManagerDisabledByPolicy_: {
         type: Boolean,
-        computed: 'computeShowAddPasswordButton_(' +
+        computed: 'computePasswordManagerDisabledByPolicy_(' +
             'prefs.credentials_enable_service.enforcement, ' +
             'prefs.credentials_enable_service.value)',
       },
@@ -294,7 +286,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   private showPasswordsExportDialog_: boolean;
   private showPasswordsImportDialog_: boolean;
   private showAddPasswordDialog_: boolean;
-  private showAddPasswordButton_: boolean;
+  private passwordManagerDisabledByPolicy_: boolean;
 
   private passwordManager_: PasswordManagerProxy =
       PasswordManagerImpl.getInstance();
@@ -308,17 +300,10 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   override ready() {
     super.ready();
 
-    document.addEventListener('keydown', e => {
-      // <if expr="is_macosx">
-      if (e.metaKey && e.key === 'z') {
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (isUndoKeyboardEvent(e)) {
         this.onUndoKeyBinding_(e);
       }
-      // </if>
-      // <if expr="not is_macosx">
-      if (e.ctrlKey && e.key === 'z') {
-        this.onUndoKeyBinding_(e);
-      }
-      // </if>
     });
 
     // <if expr="is_win or is_macosx">
@@ -400,12 +385,17 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
     this.$.authTimeoutDialog.close();
   }
 
-  private computeShowAddPasswordButton_(): boolean {
+  private computeShowImportPasswords_(): boolean {
+    return !this.passwordManagerDisabledByPolicy_ &&
+        loadTimeData.valueExists('showImportPasswords') &&
+        loadTimeData.getBoolean('showImportPasswords');
+  }
+
+  private computePasswordManagerDisabledByPolicy_(): boolean {
     // Don't show add button if password manager is disabled by policy.
-    return !(
-        this.prefs.credentials_enable_service.enforcement ===
-            chrome.settingsPrivate.Enforcement.ENFORCED &&
-        !this.prefs.credentials_enable_service.value);
+    return this.prefs.credentials_enable_service.enforcement ===
+        chrome.settingsPrivate.Enforcement.ENFORCED &&
+        !this.prefs.credentials_enable_service.value;
   }
 
   private computeHasSavedPasswords_(): boolean {

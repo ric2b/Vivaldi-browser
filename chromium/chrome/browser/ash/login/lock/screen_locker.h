@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "ash/public/cpp/login_types.h"
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/sequenced_task_runner_helpers.h"
@@ -191,6 +191,7 @@ class ScreenLocker
 
   // device::mojom::FingerprintObserver:
   void OnRestarted() override;
+  void OnStatusChanged(device::mojom::BiometricsManagerStatus status) override;
   void OnEnrollScanDone(device::mojom::ScanResult scan_result,
                         bool is_complete,
                         int32_t percent_complete) override;

@@ -209,8 +209,8 @@ public class SearchActivity extends AsyncInitializationActivity
         }
 
         OverrideUrlLoadingDelegate overrideUrlLoadingDelegate =
-                (String url, @PageTransition int transition, String postDataType, byte[] postData,
-                        boolean incognito) -> {
+                (String url, @PageTransition int transition, long inputStart, String postDataType,
+                        byte[] postData, boolean incognito) -> {
             loadUrl(url, transition, postDataType, postData);
             return true;
         };
@@ -230,7 +230,8 @@ public class SearchActivity extends AsyncInitializationActivity
                 SearchEngineLogoUtils.getInstance(), /*launchAssistanceSettingsAction=*/() -> {},
                 /*pageInfoAction=*/(tab, pageInfoHighlight) -> {},
                 IntentHandler::bringTabToFront,
-                /*saveOfflineButtonState=*/(tab) -> false, /*omniboxUma*/(url, transition) -> {},
+                /*saveOfflineButtonState=*/(tab) -> false,
+                /*omniboxUma*/(url, transition, isNtp) -> {},
                 TabWindowManagerSingleton::getInstance, /*bookmarkState=*/(url) -> false,
                 VoiceToolbarButtonController::isToolbarMicEnabled, new DummyJankTracker(),
                 /*merchantTrustSignalsCoordinatorSupplier=*/null,
@@ -255,6 +256,9 @@ public class SearchActivity extends AsyncInitializationActivity
 
     @Override
     public void finishNativeInitialization() {
+        Profile profile = Profile.getLastUsedRegularProfile();
+        mProfileSupplier.set(profile);
+
         super.finishNativeInitialization();
 
         TabDelegateFactory factory = new TabDelegateFactory() {
@@ -311,8 +315,7 @@ public class SearchActivity extends AsyncInitializationActivity
             }
         };
 
-        WebContents webContents =
-                WebContentsFactory.createWebContents(Profile.getLastUsedRegularProfile(), false);
+        WebContents webContents = WebContentsFactory.createWebContents(profile, false);
         mTab = new TabBuilder()
                        .setWindow(getWindowAndroid())
                        .setLaunchType(TabLaunchType.FROM_EXTERNAL_APP)
@@ -322,7 +325,6 @@ public class SearchActivity extends AsyncInitializationActivity
         mTab.loadUrl(new LoadUrlParams(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL));
 
         mSearchBoxDataProvider.onNativeLibraryReady(mTab);
-        mProfileSupplier.set(Profile.fromWebContents(webContents));
 
         // Force the user to choose a search engine if they have to.
         final Callback<Boolean> onSearchEngineFinalizedCallback = (result) -> {

@@ -7,10 +7,11 @@
  */
 import {CursorRange} from '../../common/cursors/range.js';
 
-import {ChromeVoxState} from './chromevox_state.js';
+import {ChromeVoxRange} from './chromevox_range.js';
 import {Output} from './output/output.js';
 import {OutputCustomEvent} from './output/output_types.js';
 
+const MarkerType = chrome.automation.MarkerType;
 const TreeChangeObserverFilter = chrome.automation.TreeChangeObserverFilter;
 
 export class FindHandler {
@@ -51,7 +52,7 @@ export class FindHandler {
    */
   onTextMatch_(evt) {
     if (!evt.target.markers.some(
-            marker => marker.flags[chrome.automation.MarkerType.TEXT_MATCH])) {
+            marker => marker.flags[MarkerType.TEXT_MATCH])) {
       return;
     }
 
@@ -60,24 +61,26 @@ export class FindHandler {
     // there's only one marker changed ever sent.
     const delta = new Date() - this.lastFindMarkerReceived;
     this.lastFindMarkerReceived = new Date();
-    if (delta < FindHandler.DROP_MATCH_WITHIN_TIME_MS) {
+    if (delta < DROP_MATCH_WITHIN_TIME_MS) {
       return;
     }
 
     const range = CursorRange.fromNode(evt.target);
-    ChromeVoxState.instance.setCurrentRange(range);
+    ChromeVoxRange.set(range);
     new Output()
         .withRichSpeechAndBraille(range, null, OutputCustomEvent.NAVIGATE)
         .go();
   }
 }
 
+/** @type {FindHandler} */
+FindHandler.instance;
+
+// Local to module.
+
 /**
  * The amount of time where a subsequent find text marker is dropped from
  * output.
  * @const {number}
  */
-FindHandler.DROP_MATCH_WITHIN_TIME_MS = 50;
-
-/** @type {FindHandler} */
-FindHandler.instance;
+const DROP_MATCH_WITHIN_TIME_MS = 50;

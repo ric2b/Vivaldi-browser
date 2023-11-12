@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -52,6 +52,7 @@ class SyncEngineImpl : public SyncEngine,
  public:
   using Status = SyncStatus;
 
+  // |sync_invalidations_service| must not be null.
   SyncEngineImpl(const std::string& name,
                  invalidation::InvalidationService* invalidator,
                  SyncInvalidationsService* sync_invalidations_service,
@@ -141,11 +142,6 @@ class SyncEngineImpl : public SyncEngine,
   // these events.
   void HandleProtocolEventOnFrontendLoop(std::unique_ptr<ProtocolEvent> event);
 
-  // Overwrites the kSyncInvalidationVersions preference with the most recent
-  // set of invalidation versions for each type.
-  void UpdateInvalidationVersions(
-      const std::map<ModelType, int64_t>& invalidation_versions);
-
   void HandleSyncStatusChanged(const SyncStatus& status);
 
   // Handles backend initialization failure.
@@ -157,7 +153,7 @@ class SyncEngineImpl : public SyncEngine,
       const SyncCycleSnapshot& snapshot);
 
   // Let the front end handle the actionable error event.
-  void HandleActionableErrorEventOnFrontendLoop(
+  void HandleActionableProtocolErrorEventOnFrontendLoop(
       const SyncProtocolError& sync_error);
 
   // Handle a migration request.
@@ -213,10 +209,6 @@ class SyncEngineImpl : public SyncEngine,
   raw_ptr<invalidation::InvalidationService> invalidator_ = nullptr;
   bool invalidation_handler_registered_ = false;
 
-  // Sync invalidation service, it may be nullptr if sync invalidations are
-  // disabled or not supported. It doesn't need to have the same as
-  // |invalidation_handler_registered_| flag as the service doesn't have topics
-  // to unsibscribe.
   raw_ptr<SyncInvalidationsService> sync_invalidations_service_ = nullptr;
 
   ModelTypeSet last_enabled_types_;

@@ -58,7 +58,7 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   // and UI would be updated since it also observe ItemIconChanged.
   void SetIconVersion(int icon_version);
 
-  SkColor GetNotificationBadgeColor(views::View* view) const;
+  SkColor GetNotificationBadgeColor() const;
   void SetNotificationBadgeColor(const SkColor color);
 
   const std::string& GetDisplayName() const {
@@ -144,11 +144,6 @@ class APP_LIST_MODEL_EXPORT AppListItem {
 
   // Sets the full name of the item. Clears any shortened name.
   void SetName(const std::string& name);
-
-  // Sets the full name and an optional shortened name of the item (e.g. to use
-  // if the full name is too long to fit in a view).
-  void SetNameAndShortName(const std::string& name,
-                           const std::string& short_name);
 
   // Updates whether the notification badge is shown on the view.
   void UpdateNotificationBadge(bool has_badge);

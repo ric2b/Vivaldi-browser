@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/system/sys_info.h"
 #include "base/types/cxx23_to_underlying.h"
 #include "remoting/base/logging.h"
 #include "remoting/host/desktop_display_layout_util.h"
@@ -86,6 +87,15 @@ std::string GetModeNameForOutput(x11::RandR::Output output) {
   return "CRD_" + base::NumberToString(base::to_underlying(output));
 }
 
+uint32_t GetDotClockForModeInfo() {
+  static int proc_num = base::SysInfo::NumberOfProcessors();
+  // Keep the proc_num logic in sync with linux_me2me_host.py
+  if (proc_num > 16) {
+    return 120 * 1e6;
+  }
+  return 60 * 1e6;
+}
+
 }  // namespace
 
 namespace remoting {
@@ -96,8 +106,9 @@ ScreenResources::~ScreenResources() = default;
 
 bool ScreenResources::Refresh(x11::RandR* randr, x11::Window window) {
   resources_ = nullptr;
-  if (auto response = randr->GetScreenResourcesCurrent({window}).Sync())
+  if (auto response = randr->GetScreenResourcesCurrent({window}).Sync()) {
     resources_ = std::move(response.reply);
+  }
   return resources_ != nullptr;
 }
 
@@ -107,8 +118,9 @@ x11::RandR::Mode ScreenResources::GetIdForMode(const std::string& name) {
   for (const auto& mode_info : resources_->modes) {
     std::string mode_name(names, mode_info.name_len);
     names += mode_info.name_len;
-    if (name == mode_name)
+    if (name == mode_name) {
       return static_cast<x11::RandR::Mode>(mode_info.id);
+    }
   }
   return kInvalidMode;
 }
@@ -124,8 +136,9 @@ DesktopResizerX11::DesktopResizerX11()
       root_(screen_->root),
       is_virtual_session_(IsVirtualSession(connection_)) {
   has_randr_ = randr_->present();
-  if (!has_randr_)
+  if (!has_randr_) {
     return;
+  }
   // Let the server know the client version so it sends us data consistent with
   // xcbproto's definitions.  We don't care about the returned server version,
   // so no need to sync.
@@ -139,8 +152,9 @@ ScreenResolution DesktopResizerX11::GetCurrentResolution(
     webrtc::ScreenId screen_id) {
   // Process pending events so that the connection setup data is updated
   // with the correct display metrics.
-  if (has_randr_)
+  if (has_randr_) {
     connection_->DispatchAll();
+  }
 
   // RANDR does not allow fetching information on a particular monitor. So
   // fetch all of them and try to find the requested monitor.
@@ -170,8 +184,9 @@ std::list<ScreenResolution> DesktopResizerX11::GetSupportedResolutions(
     const ScreenResolution& preferred,
     webrtc::ScreenId screen_id) {
   std::list<ScreenResolution> result;
-  if (!has_randr_ || !is_virtual_session_)
+  if (!has_randr_ || !is_virtual_session_) {
     return result;
+  }
 
   // Clamp the specified size to something valid for the X server.
   if (auto response = randr_->GetScreenSizeRange({root_}).Sync()) {
@@ -193,15 +208,17 @@ std::list<ScreenResolution> DesktopResizerX11::GetSupportedResolutions(
 
 void DesktopResizerX11::SetResolution(const ScreenResolution& resolution,
                                       webrtc::ScreenId screen_id) {
-  if (!has_randr_ || !is_virtual_session_)
+  if (!has_randr_ || !is_virtual_session_) {
     return;
+  }
 
   // Grab the X server while we're changing the display resolution. This ensures
   // that the display configuration doesn't change under our feet.
   ScopedXGrabServer grabber(connection_);
 
-  if (!resources_.Refresh(randr_, root_))
+  if (!resources_.Refresh(randr_, root_)) {
     return;
+  }
 
   // RANDR does not allow fetching information on a particular monitor. So
   // fetch all of them and try to find the requested monitor.
@@ -248,15 +265,17 @@ void DesktopResizerX11::RestoreResolution(const ScreenResolution& original,
 }
 
 void DesktopResizerX11::SetVideoLayout(const protocol::VideoLayout& layout) {
-  if (!has_randr_ || !is_virtual_session_)
+  if (!has_randr_ || !is_virtual_session_) {
     return;
+  }
 
   // Grab the X server while we're changing the display resolution. This ensures
   // that the display configuration doesn't change under our feet.
   ScopedXGrabServer grabber(connection_);
 
-  if (!resources_.Refresh(randr_, root_))
+  if (!resources_.Refresh(randr_, root_)) {
     return;
+  }
 
   auto reply = randr_->GetMonitors({root_}).Sync();
   if (!reply) {
@@ -430,7 +449,7 @@ x11::RandR::Mode DesktopResizerX11::UpdateMode(x11::RandR::Output output,
   x11::RandR::ModeInfo mode;
   mode.width = width;
   mode.height = height;
-  mode.dot_clock = 60 * 1e6;
+  mode.dot_clock = GetDotClockForModeInfo();
   mode.htotal = 1000;
   mode.vtotal = 1000;
   mode.name_len = mode_name.size();
@@ -498,11 +517,6 @@ DesktopResizerX11::OutputInfoList DesktopResizerX11::GetDisabledOutputs() {
     }
   }
   return disabled_outputs;
-}
-
-// static
-std::unique_ptr<DesktopResizer> DesktopResizer::Create() {
-  return std::make_unique<DesktopResizerX11>();
 }
 
 }  // namespace remoting

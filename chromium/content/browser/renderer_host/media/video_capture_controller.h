@@ -8,7 +8,7 @@
 #include <list>
 #include <memory>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -119,6 +119,7 @@ class CONTENT_EXPORT VideoCaptureController
   bool has_received_frames() const { return has_received_frames_; }
 
   // Implementation of media::VideoFrameReceiver interface:
+  void OnCaptureConfigurationChanged() override;
   void OnNewBuffer(int32_t buffer_id,
                    media::mojom::VideoBufferHandlePtr buffer_handle) override;
   void OnFrameReadyInBuffer(

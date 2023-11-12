@@ -7,8 +7,21 @@
 
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
+// Vivaldi
+#import "ios/chrome/browser/ui/table_view/table_view_navigation_controller.h"
+#import "ios/panel/panel_interaction_controller.h"
+// End Vivaldi
+
 // Coordinator for Reading List, displaying the Reading List when starting.
 @interface ReadingListCoordinator : ChromeCoordinator
+
+// Vivaldi
+@property(nonatomic, weak) PanelInteractionController* panelDelegate;
+
+// The navigation controller displaying self.tableViewController.
+@property(nonatomic, strong)
+    TableViewNavigationController* navigationController;
+// End Vivaldi
 
 @end
 

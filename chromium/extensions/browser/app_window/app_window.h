@@ -71,7 +71,7 @@ class AppWindowContents {
   // Called when the native window changes.
   virtual void NativeWindowChanged(NativeAppWindow* native_app_window) = 0;
 
-  // Called when the native window closes. |send_oncloded| is flag to indicate
+  // Called when the native window closes. |send_onclosed| is flag to indicate
   // whether the OnClosed event should be sent. It is true except when the
   // native window is closed before AppWindowCreateFunction responds.
   virtual void NativeWindowClosed(bool send_onclosed) = 0;
@@ -367,7 +367,7 @@ class AppWindow : public content::WebContentsDelegate,
 
   // Retrieve the current state of the app window as a dictionary, to pass to
   // the renderer.
-  void GetSerializedState(base::Value* properties) const;
+  void GetSerializedState(base::Value::Dict* properties) const;
 
   // Whether the app window wants to be alpha enabled.
   bool requested_alpha_enabled() const { return requested_alpha_enabled_; }

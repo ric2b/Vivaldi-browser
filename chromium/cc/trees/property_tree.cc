@@ -29,6 +29,7 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/transform_util.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 
 namespace cc {
 
@@ -36,6 +37,22 @@ void AnimationUpdateOnMissingPropertyNodeUMALog(bool missing_property_node) {
   UMA_HISTOGRAM_BOOLEAN(
       "Compositing.Renderer.AnimationUpdateOnMissingPropertyNode",
       missing_property_node);
+}
+
+AnchorScrollContainersData::AnchorScrollContainersData() = default;
+AnchorScrollContainersData::~AnchorScrollContainersData() = default;
+AnchorScrollContainersData::AnchorScrollContainersData(
+    const AnchorScrollContainersData&) = default;
+
+bool AnchorScrollContainersData::operator==(
+    const AnchorScrollContainersData& other) const {
+  return accumulated_scroll_origin == other.accumulated_scroll_origin &&
+         scroll_container_ids == other.scroll_container_ids;
+}
+
+bool AnchorScrollContainersData::operator!=(
+    const AnchorScrollContainersData& other) const {
+  return !operator==(other);
 }
 
 template <typename T>
@@ -490,17 +507,15 @@ gfx::Vector2dF TransformTree::AnchorScrollOffset(TransformNode* node) {
   if (!data)
     return gfx::Vector2dF();
   gfx::Vector2dF accumulated_scroll_offset(0, 0);
-  for (int scroller_id = data->inner_most_scroll_container_id;
-       scroller_id != kInvalidPropertyNodeId;) {
+  for (ElementId scroller_id : data->scroll_container_ids) {
     const ScrollNode* scroll_node =
-        property_trees()->scroll_tree().Node(scroller_id);
+        property_trees()->scroll_tree().FindNodeFromElementId(scroller_id);
+    if (!scroll_node) {
+      continue;
+    }
     const TransformNode* transform_node = Node(scroll_node->transform_id);
     accumulated_scroll_offset +=
         transform_node->scroll_offset.OffsetFromOrigin();
-
-    if (scroller_id == data->outer_most_scroll_container_id)
-      break;
-    scroller_id = scroll_node->parent_id;
   }
   return data->accumulated_scroll_origin - accumulated_scroll_offset;
 }
@@ -604,6 +619,7 @@ void TransformTree::UndoSnapping(TransformNode* node) {
   // We need to undo it and use the un-snapped transform to compute current
   // target and screen space transforms.
   node->to_parent.Translate(-node->snap_amount.x(), -node->snap_amount.y());
+  node->snap_amount = gfx::Vector2dF();
 }
 
 void TransformTree::UpdateSnapping(TransformNode* node) {
@@ -1417,8 +1433,9 @@ bool ScrollTree::CanRealizeScrollsOnCompositor(const ScrollNode& node) const {
 
 uint32_t ScrollTree::GetMainThreadRepaintReasons(const ScrollNode& node) const {
   uint32_t reasons = node.main_thread_scrolling_reasons;
-  if (!node.is_composited)
-    reasons |= MainThreadScrollingReason::kNoScrollingLayer;
+  if (!reasons && !node.is_composited) {
+    return MainThreadScrollingReason::kNoScrollingLayer;
+  }
   return reasons;
 }
 
@@ -1882,6 +1899,8 @@ const gfx::Vector2dF ScrollTree::GetScrollOffsetDeltaForTesting(
 gfx::Vector2dF ScrollTree::ScrollBy(const ScrollNode& scroll_node,
                                     const gfx::Vector2dF& scroll,
                                     LayerTreeImpl* layer_tree_impl) {
+  TRACE_EVENT_BEGIN("input", "ScrollTree::ScrollBy", "scroll", scroll,
+                    "scroll_node_id", scroll_node.id);
   gfx::Vector2dF adjusted_scroll(scroll);
   if (!scroll_node.user_scrollable_horizontal)
     adjusted_scroll.set_x(0);
@@ -1893,6 +1912,9 @@ gfx::Vector2dF ScrollTree::ScrollBy(const ScrollNode& scroll_node,
       ClampScrollOffsetToLimits(old_offset + adjusted_scroll, scroll_node);
   if (SetScrollOffset(scroll_node.element_id, new_offset))
     layer_tree_impl->DidUpdateScrollOffset(scroll_node.element_id);
+
+  TRACE_EVENT_END("input", /* ScrollTree::ScrollBy */
+                  "old_offset", old_offset, "new_offset", new_offset);
 
   // Return the amount of scroll delta we could not consume for this node.
   return old_offset + scroll - new_offset;

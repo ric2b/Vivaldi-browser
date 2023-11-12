@@ -21,6 +21,8 @@
 #include "sandbox/win/src/sandbox_types.h"
 #include "sandbox/win/src/target_process.h"
 
+#include "components/sandbox/vivaldi_module_name.h"
+
 // This code executes on the broker side, as a callback from the policy on the
 // target side (the child).
 
@@ -61,6 +63,9 @@ bool SetupBasicInterceptions(InterceptionManager* manager,
                        28))
       return false;
   }
+
+  if (!VivaldiSetupBasicInterceptions(manager))
+    return false;
 
   return true;
 }

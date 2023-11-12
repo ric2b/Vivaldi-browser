@@ -7,6 +7,7 @@
 #import "ios/chrome/browser/ui/bookmarks/vivaldi_bookmarks_constants.h"
 #import "ios/chrome/browser/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/ui/custom_views/vivaldi_search_bar_view.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
@@ -18,9 +19,9 @@
 using l10n_util::GetNSString;
 
 namespace {
-// Padding for the search bar
+// Padding for the container holds the label and switch.
 // In order: Top, Left, Bottom, Right
-UIEdgeInsets searchBarPadding = UIEdgeInsetsMake(8, 12, 0, 12);
+UIEdgeInsets sdSelectionViewPadding = UIEdgeInsetsMake(0, 16, 0, 16);
 // Padding for speed dial toggle
 UIEdgeInsets speedDialTogglePadding = UIEdgeInsetsMake(0, 0, 8, 4);
 // Padding for the speed dial selection label
@@ -28,9 +29,10 @@ UIEdgeInsets speedDialSelectionLabelPadding = UIEdgeInsetsMake(0, 4, 0, 8);
 
 }  // namespace
 
-@interface VivaldiBookmarkFolderSelectionHeaderView()<UISearchBarDelegate>
+@interface VivaldiBookmarkFolderSelectionHeaderView()
+                                                  <VivaldiSearchBarViewDelegate>
 // Label for the folder name.
-@property (nonatomic,weak) UISearchBar* searchBar;
+@property (nonatomic,weak) VivaldiSearchBarView* searchBar;
 // The label that describes the text for speed dial selection.
 @property (nonatomic,weak) UILabel* speedDialSelectionLabel;
 // Speed dial toggle.
@@ -56,25 +58,18 @@ UIEdgeInsets speedDialSelectionLabelPadding = UIEdgeInsetsMake(0, 4, 0, 8);
 - (void)setUpUI {
 
   // Search bar
-  UISearchBar* searchBar = [UISearchBar new];
+  VivaldiSearchBarView* searchBar = [VivaldiSearchBarView new];
   _searchBar = searchBar;
-  [searchBar setDelegate:self];
   NSString* placeholderString =
     GetNSString(IDS_IOS_BOOKMARK_FOLDER_SELECTION_SEARCHBAR_PLACEHOLDER);
   [searchBar setPlaceholder:placeholderString];
-  [searchBar setBarTintColor:[UIColor clearColor]];
-  searchBar.autoresizingMask =
-      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  searchBar.backgroundColor =
-      [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-  searchBar.searchBarStyle = UISearchBarStyleMinimal;
+  searchBar.delegate = self;
 
   [self addSubview:searchBar];
   [searchBar anchorTop:self.topAnchor
                leading:self.leadingAnchor
                 bottom:nil
-              trailing:self.trailingAnchor
-               padding:searchBarPadding];
+              trailing:self.trailingAnchor];
 
 
   // Speed dial selection view that holds the description label and the toggle.
@@ -83,10 +78,10 @@ UIEdgeInsets speedDialSelectionLabelPadding = UIEdgeInsetsMake(0, 4, 0, 8);
 
   [self addSubview:speedDialSelectionView];
   [speedDialSelectionView anchorTop:searchBar.bottomAnchor
-                            leading:searchBar.leadingAnchor
+                            leading:searchBar.safeLeftAnchor
                              bottom:self.bottomAnchor
-                           trailing:searchBar.trailingAnchor
-                            padding:searchBarPadding];
+                           trailing:searchBar.safeRightAnchor
+                            padding:sdSelectionViewPadding];
 
   // Toggle button
   UISwitch* toggle = [UISwitch new];
@@ -130,31 +125,10 @@ UIEdgeInsets speedDialSelectionLabelPadding = UIEdgeInsetsMake(0, 4, 0, 8);
     [self.delegate didChangeShowOnlySpeedDialFoldersState:sender.isOn];
 }
 
-// Only remove focus from the search bar when cancel or search button on
-// the keyboard is tapped. We are showing the results as user types on the
-// tableview, therefore no search tap action is required.
-- (void)defocusSearchBar {
-  [self.searchBar setShowsCancelButton:false animated:true];
-  [self.searchBar resignFirstResponder];
-}
-
-#pragma mark - UISEARCHBAR DELEGATE
-- (void)searchBar:(UISearchBar*)searchBar
-    textDidChange:(NSString*)searchText {
+#pragma mark - VivaldiSearchBarViewDelegate
+- (void)searchBarTextDidChange:(NSString*)searchText {
   if (self.delegate)
     [self.delegate searchBarTextDidChange:searchText];
-}
-
-- (void)searchBarTextDidBeginEditing:(UISearchBar*)searchBar {
-  [self.searchBar setShowsCancelButton:true animated:true];
-}
-
-- (void)searchBarSearchButtonClicked:(UISearchBar*)searchBar {
-  [self defocusSearchBar];
-}
-
-- (void)searchBarCancelButtonClicked:(UISearchBar*)searchBar {
-  [self defocusSearchBar];
 }
 
 #pragma mark - GETTERS

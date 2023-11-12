@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile.h"
@@ -106,7 +106,7 @@ void ThumbnailCaptureContents::Start(content::BrowserContext* browser_context,
   offscreen_tab_web_contents_->GetController().LoadURLWithParams(load_params);
 
   // Start load timeout.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ThumbnailCaptureContents::OnPageLoadTimeout,
                      weak_ptr_factory_.GetWeakPtr()),
@@ -238,7 +238,7 @@ void ThumbnailCaptureContents::DidFinishLoad(
   }
 
   next_capture_try_wait_ = base::Seconds(1);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ThumbnailCaptureContents::TryCapture,
                      weak_ptr_factory_.GetWeakPtr(), false),
@@ -266,7 +266,7 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
     }
     // Exponential delay increase.
     next_capture_try_wait_ += next_capture_try_wait_;
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&ThumbnailCaptureContents::TryCapture,
                        weak_ptr_factory_.GetWeakPtr(), false),
@@ -301,7 +301,7 @@ void ThumbnailCaptureContents::TryCapture(bool last_try) {
   }
 
   // Start capture timeout.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&ThumbnailCaptureContents::OnCaptureTimeout,
                      weak_ptr_factory_.GetWeakPtr()),

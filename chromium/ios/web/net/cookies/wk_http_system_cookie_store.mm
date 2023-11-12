@@ -4,7 +4,7 @@
 
 #import "ios/web/net/cookies/wk_http_system_cookie_store.h"
 
-#import "base/bind.h"
+#import "base/functional/bind.h"
 #import "base/ios/block_types.h"
 #import "ios/net/cookies/cookie_creation_time_manager.h"
 #import "ios/net/cookies/system_cookie_util.h"
@@ -83,8 +83,6 @@ WKHTTPSystemCookieStore::~WKHTTPSystemCookieStore() = default;
 void WKHTTPSystemCookieStore::GetCookiesForURLAsync(
     const GURL& url,
     SystemCookieCallbackForCookies callback) {
-  net::ReportGetCookiesForURLCall(
-      net::SystemCookieStoreType::kWKHTTPSystemCookieStore);
   GetCookiesAsyncInternal(url, std::move(callback));
 }
 
@@ -249,9 +247,6 @@ void WKHTTPSystemCookieStore::ProcessGetCookiesResultInIOThread(
           [filtered_cookies addObject:cookie];
         }
       }
-      net::ReportGetCookiesForURLResult(
-          net::SystemCookieStoreType::kWKHTTPSystemCookieStore,
-          filtered_cookies.count != 0);
       block_cookies = filtered_cookies;
     }
 

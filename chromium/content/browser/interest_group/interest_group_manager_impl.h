@@ -10,9 +10,9 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/threading/sequence_bound.h"
@@ -60,6 +60,15 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // re-use regular renderers following the normal site isolation policy.
   enum class ProcessMode { kDedicated, kInRenderer };
 
+  // Types of even-level reports, for use with EnqueueReports(). Currently only
+  // used for histograms. Raw values are not logged directly in histograms, so
+  // values do not need to be consistent across versions.
+  enum class ReportType {
+    kSendReportTo,
+    kDebugWin,
+    kDebugLoss,
+  };
+
   // Creates an interest group manager using the provided directory path for
   // persistent storage. If `in_memory` is true the path is ignored and only
   // in-memory storage is used.
@@ -74,13 +83,12 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   InterestGroupManagerImpl& operator=(const InterestGroupManagerImpl& other) =
       delete;
 
-  class CONTENT_EXPORT InterestGroupObserverInterface
-      : public base::CheckedObserver {
+  class CONTENT_EXPORT InterestGroupObserver : public base::CheckedObserver {
    public:
     enum AccessType { kJoin, kLeave, kUpdate, kLoaded, kBid, kWin };
     virtual void OnInterestGroupAccessed(const base::Time& access_time,
                                          AccessType type,
-                                         const std::string& owner_origin,
+                                         const url::Origin& owner_origin,
                                          const std::string& name) = 0;
   };
 
@@ -187,40 +195,46 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   void GetInterestGroup(
       const blink::InterestGroupKey& group_key,
       base::OnceCallback<void(absl::optional<StorageInterestGroup>)> callback);
+
   // Gets a single interest group.
   void GetInterestGroup(
       const url::Origin& owner,
       const std::string& name,
       base::OnceCallback<void(absl::optional<StorageInterestGroup>)> callback);
+
   // Gets a list of all interest group owners. Each owner will only appear
   // once.
   void GetAllInterestGroupOwners(
       base::OnceCallback<void(std::vector<url::Origin>)> callback);
+
   // Gets a list of all interest groups with their bidding information
   // associated with the provided owner.
   void GetInterestGroupsForOwner(
       const url::Origin& owner,
       base::OnceCallback<void(std::vector<StorageInterestGroup>)> callback);
+
   // Clear out storage for the matching owning storage key. If the matcher is
   // empty then apply to all storage keys.
   void DeleteInterestGroupData(
       StoragePartition::StorageKeyMatcherFunction storage_key_matcher,
       base::OnceClosure completion_callback);
+
   // Completely delete all interest group data, including k-anonymity data that
   // is not cleared by DeleteInterestGroupData.
   void DeleteAllInterestGroupData(base::OnceClosure completion_callback);
+
   // Get the last maintenance time from the underlying InterestGroupStorage.
   void GetLastMaintenanceTimeForTesting(
       base::RepeatingCallback<void(base::Time)> callback) const;
-  // Enqueues report requests. Using `client_security_state` when fetching
-  // report URLs from the network.
-  void EnqueueReports(
-      const std::vector<GURL>& report_urls,
-      const std::vector<GURL>& debug_win_report_urls,
-      const std::vector<GURL>& debug_loss_report_urls,
+
+  // Enqueues reports for the specified URLs. Virtual for testing.
+  virtual void EnqueueReports(
+      ReportType report_type,
+      std::vector<GURL> report_urls,
       const url::Origin& frame_origin,
-      network::mojom::ClientSecurityStatePtr client_security_state,
+      const network::mojom::ClientSecurityState& client_security_state,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
+
   // Update the interest group priority.
   void SetInterestGroupPriority(const blink::InterestGroupKey& group,
                                 double priority);
@@ -241,11 +255,11 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
     return *auction_process_manager_;
   }
 
-  void AddInterestGroupObserver(InterestGroupObserverInterface* observer) {
+  void AddInterestGroupObserver(InterestGroupObserver* observer) {
     observers_.AddObserver(observer);
   }
 
-  void RemoveInterestGroupObserver(InterestGroupObserverInterface* observer) {
+  void RemoveInterestGroupObserver(InterestGroupObserver* observer) {
     observers_.RemoveObserver(observer);
   }
 
@@ -378,22 +392,13 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // To be called only by `update_manager_`.
   void ReportUpdateFailed(const blink::InterestGroupKey& group_key,
                           bool parse_failure);
-  void NotifyInterestGroupAccessed(
-      InterestGroupObserverInterface::AccessType type,
-      const std::string& owner_origin,
-      const std::string& name);
+  void NotifyInterestGroupAccessed(InterestGroupObserver::AccessType type,
+                                   const url::Origin& owner_origin,
+                                   const std::string& name);
 
   void OnGetInterestGroupsComplete(
       base::OnceCallback<void(std::vector<StorageInterestGroup>)> callback,
       std::vector<StorageInterestGroup> groups);
-
-  // Enqueues each of `report_urls` to the `report_requests_` queue.
-  void EnqueueReportsInternal(
-      const std::vector<GURL>& report_urls,
-      const url::Origin& frame_origin,
-      const network::mojom::ClientSecurityStatePtr& client_security_state,
-      const char* name,
-      scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory);
 
   // Dequeues and sends the first report request in `report_requests_` queue,
   // if the queue is not empty.
@@ -420,7 +425,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // Stored as pointer so that tests can override it.
   std::unique_ptr<AuctionProcessManager> auction_process_manager_;
 
-  base::ObserverList<InterestGroupObserverInterface> observers_;
+  base::ObserverList<InterestGroupObserver> observers_;
 
   // Manages the logic required to support UpdateInterestGroupsOfOwner().
   //

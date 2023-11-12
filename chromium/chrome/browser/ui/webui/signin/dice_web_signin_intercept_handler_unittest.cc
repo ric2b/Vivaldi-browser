@@ -4,10 +4,10 @@
 
 #include "chrome/browser/ui/webui/signin/dice_web_signin_intercept_handler.h"
 
-#include "base/bind.h"
-#include "base/callback_forward.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/browser_features.h"
@@ -85,13 +85,14 @@ const ExpectedStringGenerator common_v2_strings_generator =
           /*header_text=*/"",
           /*body_title=*/
           l10n_util::GetStringUTF8(
-              IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE_V2),
+              IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE),
           /*body_text=*/
-          l10n_util::GetStringUTF8(
-              IDS_SIGNIN_DICE_WEB_INTERCEPT_CONSUMER_BUBBLE_DESC_V2),
+          l10n_util::GetStringFUTF8(
+              IDS_SIGNIN_DICE_WEB_INTERCEPT_CONSUMER_BUBBLE_DESC,
+              base::UTF8ToUTF16(primary_account.given_name)),
           /*confirm_button_label=*/
           l10n_util::GetStringUTF8(
-              IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL_V2),
+              IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL),
           /*cancel_button_label=*/
           l10n_util::GetStringUTF8(
               IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL),
@@ -145,7 +146,25 @@ const TestParam kTestParams[] = {
                   IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL),
           };
         }),
-        /*expected_strings_v2=*/common_v2_strings_generator,
+        /*expected_strings_v2=*/base::BindRepeating([] {
+          return BubbleStrings{
+              /*header_text=*/"",
+              /*body_title=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE),
+              /*body_text=*/
+              l10n_util::GetStringFUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_CONSUMER_BUBBLE_DESC_MANAGED_DEVICE,
+                  base::UTF8ToUTF16(primary_account.given_name),
+                  base::UTF8ToUTF16(intercepted_account.email)),
+              /*confirm_button_label=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL),
+              /*cancel_button_label=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL),
+          };
+        }),
     },
     {
         DiceWebSigninInterceptor::SigninInterceptionType::kEnterprise,
@@ -168,7 +187,24 @@ const TestParam kTestParams[] = {
                   IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL),
           };
         }),
-        /*expected_strings_v2=*/common_v2_strings_generator,
+        /*expected_strings_v2=*/base::BindRepeating([] {
+          return BubbleStrings{
+              /*header_text=*/"",
+              /*body_title=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE),
+              /*body_text=*/
+              l10n_util::GetStringFUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_ENTERPRISE_BUBBLE_DESC,
+                  base::UTF8ToUTF16(primary_account.email)),
+              /*confirm_button_label=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL),
+              /*cancel_button_label=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL),
+          };
+        }),
     },
     {
         DiceWebSigninInterceptor::SigninInterceptionType::kEnterprise,
@@ -191,7 +227,24 @@ const TestParam kTestParams[] = {
                   IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL),
           };
         }),
-        /*expected_strings_v2=*/common_v2_strings_generator,
+        /*expected_strings_v2=*/base::BindRepeating([] {
+          return BubbleStrings{
+              /*header_text=*/"",
+              /*body_title=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_CREATE_BUBBLE_TITLE),
+              /*body_text=*/
+              l10n_util::GetStringFUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_ENTERPRISE_BUBBLE_DESC_MANAGED_DEVICE,
+                  base::UTF8ToUTF16(intercepted_account.email)),
+              /*confirm_button_label=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_NEW_PROFILE_BUTTON_LABEL),
+              /*cancel_button_label=*/
+              l10n_util::GetStringUTF8(
+                  IDS_SIGNIN_DICE_WEB_INTERCEPT_BUBBLE_CANCEL_BUTTON_LABEL),
+          };
+        }),
     },
 };
 
@@ -221,7 +274,7 @@ class DiceWebSigninInterceptHandlerTest
 
     DiceWebSigninInterceptHandler handler(
         {GetParam().interception_type, intercepted_account, primary_account},
-        base::DoNothing());
+        base::DoNothing(), base::DoNothing());
     handler.set_web_ui(&web_ui_);
 
     return handler.GetInterceptionParametersValue();

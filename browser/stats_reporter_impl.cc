@@ -762,7 +762,7 @@ void StatsReporterImpl::DoReporting(FileHolder os_profile_reporting_data_file,
   }
   if (!os_profile_reporting_data_json ||
       !os_profile_reporting_data_json->is_dict()) {
-    os_profile_reporting_data_json.emplace(base::Value::Type::DICTIONARY);
+    os_profile_reporting_data_json.emplace(base::Value::Type::DICT);
   }
 
   std::string request_url;

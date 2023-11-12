@@ -129,6 +129,7 @@ These store data for our system. Some of it is per-web-app, and some of it is gl
 - **Prefs**: The `PrefService` is used to store information that is either global, or needs to persist after a web app is uninstalled. Most of these prefs live on the `Profile` (`profile->GetPrefs()`), but some prefs are in the global browser prefs (`g_browser_process->local_state()`). Some users of prefs:
   - AppShimRegistry
   - UserUninstalledPreinstalledWebAppPrefs
+  - [`url_handler_prefs`][53]
 - **OS Integration**: Various OS integration requires storing state on the operating system. Sometimes we are able to read this state back, sometimes not.
 
 None of this information should be accessed without an applicable 'lock' on the system.
@@ -143,12 +144,17 @@ Commands are used to encapsulate operations in the system, and use Locks to ensu
 
 - If you need to change something in the WebAppProvider system, you should probably use a command.
 - Commands talk to the system using locks they are granted. The locks should offer access to "managers" that the commands can use.
+- Commands expose a `ToDebugValue()` method that is logged on completion and exposed in the chrome://web-app-internals. This can be very helpful for debugging and bug reports.
+
+Note: There are DVLOGs in the `WebAppCommandManager` that can be helpful.
 
 ### Locks / `WebAppLockManager`
 
 Locks allow operations to receive appropriate protections for what they are doing. For example, an `AppLock` will guarantee that no one is modifying (or uninstalling) an app while it is granted.
 
 Locks contain assessors that allow the user to access parts of the web app system. This is the safest way to read from the system.
+
+Note: There are DVLOGs in the `WebAppLockManager` that can be helpful.
 
 ### OS Integration
 
@@ -162,6 +168,7 @@ Anything that involves talking to the operating system. Usually has to do with a
 - [/docs/webapps/os_integration.md][50]
 - [/docs/webapps/manifest_update_process.md][51]
 - [/docs/webapps/isolated_web_apps.md][52]
+- [/docs/webapps/webui_web_apps.md][54]
 
 ## How To Use
 
@@ -185,6 +192,22 @@ Other guides:
 
 - [/docs/webapps/why-is-this-test-failing.md][36]
 - [/docs/webapps/how-to-create-webapp-integration-tests.md][37]
+
+## Debugging
+
+### chrome://web-app-internals
+
+This page allows you to see all of the internal information about the WebAppProvider system, including a truncated log of the debug information of the last run commands.
+
+It is often very useful to ask users to attach a copy of this page in bug reports.
+
+The integration tests will print out the [contents of this page][57] if a test fails, which can help debug that failure as well.
+
+### DVLOGs
+
+The codebase has a number of useful DVLOGs:
+- web_app_command_manager.cc: These will log various state changes of commands and the debug values on completion.
+- web_app_lock_manager.cc: This will log lock requests and any 'held or pending' lock holders for the requested lock at the time of the request. This does not necessarily mean those locks are blocking (as they may be shared locks) so you will have to look at the request locations to determine the status.
 
 ## Testing
 
@@ -210,6 +233,7 @@ Notes
 
 - WebContents and other UI elements do not work in unit tests, and the appropriate fakes must be used (see [External Dependencies][49]).
 - If one of the external dependencies of the system cannot be faked out yet or the feature is tightly coupled to this, then it might make sense to use a browser test instead (or make that dependency fake-able).
+- Please use the [`WebAppTest`][56] base class to help ensure things are set up well for you.
 
 ### Browser tests
 
@@ -222,7 +246,7 @@ Creating an integration test (using the integration framework) should satisfy th
 
 Browser tests are much more expensive to run, as they basically run a fully functional browser with it's own profile directory. These tests are usually only created to test functionality that requires multiple parts of the system to be running or dependencies like the Sync service to be fully running and functional. It is good practice to have browsertests be as true-to-user-action as possible, to make sure that as much of our stack is exercised.
 
-An example set of browser tests are in [`web_app_browsertest.cc`][38]
+An example set of browser tests are in [`web_app_browsertest.cc`][38]. Please use the [`WebAppControllerBrowserTest`][55] base class to help ensure the system is set up correctly.
 
 ### Integration tests
 
@@ -257,6 +281,13 @@ Sometimes classes use a dependency that either doesn't work or isn't fake-able i
     - e.g. if it's a `KeyedService`, and the authors have a fake version you can use, then use that. See how it is used elsewhere.
 1. Create a new interface for this new external dependency, put it on the `WebAppProvider`, and create a fake for it so that you can test with it faked.
 1. If all else fails, use a browser test.
+
+### Common Testing Utilities
+
+* UrlLoadObserver - Waits for given url to load anywhere.
+* AllBrowserTabAddedWaiter - Waits for a tab to be added anywhere (works for both app browser and regular browser).
+* BrowserChangeObserver - Waits for a browser to add or remove.
+* content::TestNavigationObserver - Waits for a navigation anywhere or in given WebContents. See StartWatchingNewWebContents to watch all web contents.
 
 ## Relevant Classes
 
@@ -358,3 +389,8 @@ This information is used when launching a web app (to determine what profile or 
 [50]: os-integration.md
 [51]: manifest_update_process.md
 [52]: isolated_web_apps.md
+[53]: /chrome/browser/web_applications/url_handler_prefs.h
+[54]: webui_web_apps.md
+[55]: https://source.chromium.org/search?q=WebAppControllerBrowserTest
+[56]: https://source.chromium.org/search?q=web_app_test.h
+[57]: https://source.chromium.org/search?q=WebAppInternalsHandler::BuildDebugInfo

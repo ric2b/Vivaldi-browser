@@ -8,14 +8,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "components/attribution_reporting/registration_type.mojom-blink-forward.h"
+#include "services/network/public/cpp/trigger_attestation.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-#include "third_party/blink/public/mojom/conversions/attribution_data_host.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/conversions/attribution_reporting.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/platform/heap/forward.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
+
+namespace network {
+class TriggerAttestation;
+}  // namespace network
 
 namespace attribution_reporting {
 class SuitableOrigin;
@@ -35,11 +40,6 @@ struct Impression;
 class CORE_EXPORT AttributionSrcLoader
     : public GarbageCollected<AttributionSrcLoader> {
  public:
-  static constexpr const char* kAttributionEligibleEventSource = "event-source";
-  static constexpr const char* kAttributionEligibleNavigationSource =
-      "navigation-source";
-  static constexpr const char* kAttributionEligibleTrigger = "trigger";
-
   explicit AttributionSrcLoader(LocalFrame* frame);
   AttributionSrcLoader(const AttributionSrcLoader&) = delete;
   AttributionSrcLoader& operator=(const AttributionSrcLoader&) = delete;
@@ -95,8 +95,8 @@ class CORE_EXPORT AttributionSrcLoader
 
   ResourceClient* DoRegistration(
       const KURL& src_url,
-      mojom::blink::AttributionRegistrationType,
-      absl::optional<mojom::blink::AttributionNavigationType> nav_type);
+      attribution_reporting::mojom::blink::RegistrationType,
+      bool associated_with_navigation);
 
   // Returns the reporting origin corresponding to `url` if its protocol is in
   // the HTTP family, its origin is potentially trustworthy, and attribution is
@@ -111,18 +111,19 @@ class CORE_EXPORT AttributionSrcLoader
   ResourceClient* CreateAndSendRequest(
       const KURL& src_url,
       HTMLElement* element,
-      mojom::blink::AttributionRegistrationType,
-      absl::optional<mojom::blink::AttributionNavigationType> nav_type);
+      attribution_reporting::mojom::blink::RegistrationType,
+      bool associated_with_navigation);
 
   // Returns whether OS-level attribution is supported.
   bool HasOsSupport() const;
 
   void RegisterAttributionHeaders(
-      mojom::blink::AttributionRegistrationType,
+      attribution_reporting::mojom::blink::RegistrationType,
       attribution_reporting::SuitableOrigin reporting_origin,
       const AtomicString& source_json,
       const AtomicString& trigger_json,
-      uint64_t request_id);
+      uint64_t request_id,
+      const absl::optional<network::TriggerAttestation>& trigger_attestation);
 
   const Member<LocalFrame> local_frame_;
   size_t num_resource_clients_ = 0;

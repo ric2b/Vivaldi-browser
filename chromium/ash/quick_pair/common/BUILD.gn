@@ -41,9 +41,11 @@ component("common") {
 
   deps = [
     "//ash/constants:constants",
+    "//ash/quick_pair/proto:fastpair_proto",
     "//base",
     "//chromeos/ash/components/feature_usage",
     "//chromeos/ash/services/quick_pair/public/mojom",
+    "//components/metrics/structured:structured_events",
     "//components/prefs",
     "//device/bluetooth",
     "//device/bluetooth/public/cpp",
@@ -57,6 +59,8 @@ static_library("test_support") {
   testonly = true
 
   sources = [
+    "fake_bluetooth_adapter.cc",
+    "fake_bluetooth_adapter.h",
     "fast_pair/fast_pair_service_data_creator.cc",
     "fast_pair/fast_pair_service_data_creator.h",
     "mock_quick_pair_browser_delegate.cc",
@@ -68,6 +72,7 @@ static_library("test_support") {
     "//base/test:test_support",
     "//chromeos/ash/services/quick_pair/public/mojom",
     "//components/image_fetcher/core",
+    "//device/bluetooth:mocks",
     "//services/network/public/cpp",
     "//testing/gtest",
   ]

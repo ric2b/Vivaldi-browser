@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/values.h"
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "chromeos/ash/components/proximity_auth/proximity_auth_pref_names.h"
@@ -76,7 +76,7 @@ void ProximityAuthProfilePrefManager::StartSyncingToLocalState(
 }
 
 void ProximityAuthProfilePrefManager::SyncPrefsToLocalState() {
-  base::Value user_prefs_dict(base::Value::Type::DICTIONARY);
+  base::Value user_prefs_dict(base::Value::Type::DICT);
 
   user_prefs_dict.SetBoolKey(ash::multidevice_setup::kSmartLockAllowedPrefName,
                              IsEasyUnlockAllowed());

@@ -32,11 +32,12 @@
 #include <algorithm>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/numerics/safe_conversions.h"
+#include "base/numerics/checked_math.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/unguessable_token.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
@@ -54,7 +55,6 @@
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
-#include "third_party/blink/public/platform/web_blob_info.h"
 #include "third_party/blink/public/platform/web_code_cache_loader.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -245,7 +245,7 @@ class ResourceLoader::CodeCacheRequest {
   ~CodeCacheRequest() = default;
 
   // Request data from code cache.
-  bool FetchFromCodeCache(WebURLLoader* url_loader,
+  bool FetchFromCodeCache(URLLoader* url_loader,
                           ResourceLoader* resource_loader);
 
   // Notifies about the response from webURLLoader. Stores the
@@ -280,7 +280,7 @@ class ResourceLoader::CodeCacheRequest {
                                 ResourceLoader* resource_loader);
 
   // Send |cache_code| if we got a response from code_cache_loader and the
-  // web_url_loader.
+  // url_loader.
   void MaybeSendCachedCode(mojo_base::BigBuffer data,
                            ResourceLoader* resource_loader);
 
@@ -304,7 +304,7 @@ class ResourceLoader::CodeCacheRequest {
 };
 
 bool ResourceLoader::CodeCacheRequest::FetchFromCodeCache(
-    WebURLLoader* url_loader,
+    URLLoader* url_loader,
     ResourceLoader* resource_loader) {
   if (!code_cache_loader_)
     return false;
@@ -313,8 +313,8 @@ bool ResourceLoader::CodeCacheRequest::FetchFromCodeCache(
 
   // Set defers loading before fetching data from code cache. This is to
   // ensure that the resource receives cached code before the response data.
-  // This directly calls the WebURLLoader's SetDefersLoading without going
-  // through ResourceLoader.
+  // This directly calls the URLLoader's SetDefersLoading without going through
+  // ResourceLoader.
   url_loader->Freeze(LoaderFreezeMode::kStrict);
 
   WebCodeCacheLoader::FetchCodeCacheCallback callback =
@@ -326,8 +326,8 @@ bool ResourceLoader::CodeCacheRequest::FetchFromCodeCache(
   return true;
 }
 
-// This is called when a response is received from the WebURLLoader. We buffer
-// the response_time if the response from code cache is not available yet.
+// This is called when a response is received from the URLLoader. We buffer the
+// response_time if the response from code cache is not available yet.
 void ResourceLoader::CodeCacheRequest::DidReceiveResponse(
     const base::Time& resource_response_time,
     bool use_isolated_code_cache,
@@ -613,13 +613,13 @@ void ResourceLoader::Run() {
 }
 
 void ResourceLoader::DidReceiveData(base::span<const char> data) {
-  DidReceiveData(data.data(), base::checked_cast<int>(data.size()));
+  DidReceiveData(data.data(), data.size());
 }
 
 void ResourceLoader::DidReceiveDecodedData(
     const String& data,
-    std::unique_ptr<Resource::DecodedDataInfo> info) {
-  resource_->DidReceiveDecodedData(data, std::move(info));
+    std::unique_ptr<ParkableStringImpl::SecureDigest> digest) {
+  resource_->DidReceiveDecodedData(data, std::move(digest));
 }
 
 void ResourceLoader::DidFinishLoadingBody() {
@@ -631,7 +631,8 @@ void ResourceLoader::DidFinishLoadingBody() {
         deferred_finish_loading_info_->response_end_time,
         response.EncodedDataLength(), response.EncodedBodyLength(),
         response.DecodedBodyLength(),
-        deferred_finish_loading_info_->should_report_corb_blocking);
+        deferred_finish_loading_info_->should_report_corb_blocking,
+        deferred_finish_loading_info_->pervasive_payload_requested);
   }
 }
 
@@ -803,6 +804,14 @@ bool ResourceLoader::WillFollowRedirect(
   if (passed_redirect_response.HasAuthorizationCoveredByWildcardOnPreflight()) {
     fetcher_->GetUseCounter().CountDeprecation(
         mojom::WebFeature::kAuthorizationCoveredByWildcard);
+  }
+
+  if (resource_->GetResourceRequest().HttpHeaderFields().Contains(
+          net::HttpRequestHeaders::kAuthorization) &&
+      !SecurityOrigin::AreSameOrigin(resource_->LastResourceRequest().Url(),
+                                     new_url)) {
+    fetcher_->GetUseCounter().CountUse(
+        mojom::WebFeature::kAuthorizationCrossOrigin);
   }
 
   if (removed_headers) {
@@ -1203,9 +1212,7 @@ void ResourceLoader::DidStartLoadingResponseBody(
   data_pipe_completion_notifier_ = completion_notifier;
 }
 
-void ResourceLoader::DidReceiveData(const char* data, int length) {
-  CHECK_GE(length, 0);
-
+void ResourceLoader::DidReceiveData(const char* data, size_t length) {
   if (auto* observer = fetcher_->GetResourceLoadObserver()) {
     observer->DidReceiveData(resource_->InspectorId(),
                              base::make_span(data, length));
@@ -1216,7 +1223,15 @@ void ResourceLoader::DidReceiveData(const char* data, int length) {
   if (resource_->response_.WasFetchedViaServiceWorker() &&
       resource_->response_.GetType() !=
           network::mojom::FetchResponseType::kOpaque) {
-    received_body_length_from_service_worker_ += length;
+    // `received_body_length_from_service_worker_` needs to fit into both a
+    // uint64_t and an int64_t so must be >= 0 and also <=
+    // std::numeric_limits<int64_t>::max(); Since `length` is guaranteed never
+    // to be negative, the value must always increase, giving assurance that it
+    // will always be >= 0, but the CheckAdd is used to enforce the second
+    // constraint.
+    received_body_length_from_service_worker_ =
+        base::CheckAdd(received_body_length_from_service_worker_, length)
+            .ValueOrDie<int64_t>();
   }
 }
 
@@ -1236,13 +1251,13 @@ void ResourceLoader::DidFinishLoadingFirstPartInMultipart() {
 
   fetcher_->HandleLoaderFinish(resource_.Get(), base::TimeTicks(),
                                ResourceFetcher::kDidFinishFirstPartInMultipart,
-                               0, false);
+                               0, false, false, 0);
 }
 
 void ResourceLoader::DidFinishLoading(
     base::TimeTicks response_end_time,
     int64_t encoded_data_length,
-    int64_t encoded_body_length,
+    uint64_t encoded_body_length,
     int64_t decoded_body_length,
     bool should_report_corb_blocking,
     absl::optional<bool> pervasive_payload_requested) {
@@ -1255,16 +1270,6 @@ void ResourceLoader::DidFinishLoading(
   resource_->SetEncodedBodyLength(encoded_body_length);
   resource_->SetDecodedBodyLength(decoded_body_length);
 
-  if (pervasive_payload_requested.has_value()) {
-    ukm::SourceId ukm_source_id =
-        resource_->GetResourceRequest().GetUkmSourceId();
-    ukm::builders::Network_CacheTransparency builder(ukm_source_id);
-    builder.SetFoundPervasivePayload(pervasive_payload_requested.value());
-    builder.SetTotalBytesFetched(
-        ukm::GetExponentialBucketMinForBytes(encoded_data_length));
-    builder.Record(fetcher_->UkmRecorder());
-  }
-
   response_end_time_for_error_cases_ = response_end_time;
 
   if ((response_body_loader_ && !has_seen_end_of_body_ &&
@@ -1273,7 +1278,8 @@ void ResourceLoader::DidFinishLoading(
     // If the body is still being loaded, we defer the completion until all the
     // body is received.
     deferred_finish_loading_info_ = DeferredFinishLoadingInfo{
-        response_end_time, should_report_corb_blocking};
+        response_end_time, should_report_corb_blocking,
+        pervasive_payload_requested};
 
     if (data_pipe_completion_notifier_)
       data_pipe_completion_notifier_->SignalComplete();
@@ -1297,13 +1303,14 @@ void ResourceLoader::DidFinishLoading(
 
   fetcher_->HandleLoaderFinish(
       resource_.Get(), response_end_time, ResourceFetcher::kDidFinishLoading,
-      inflight_keepalive_bytes_, should_report_corb_blocking);
+      inflight_keepalive_bytes_, should_report_corb_blocking,
+      pervasive_payload_requested.value_or(false), encoded_data_length);
 }
 
 void ResourceLoader::DidFail(const WebURLError& error,
                              base::TimeTicks response_end_time,
                              int64_t encoded_data_length,
-                             int64_t encoded_body_length,
+                             uint64_t encoded_body_length,
                              int64_t decoded_body_length) {
   const ResourceRequestHead& request = resource_->GetResourceRequest();
   response_end_time_for_error_cases_ = response_end_time;
@@ -1317,6 +1324,10 @@ void ResourceLoader::DidFail(const WebURLError& error,
   resource_->SetEncodedBodyLength(encoded_body_length);
   resource_->SetDecodedBodyLength(decoded_body_length);
   HandleError(ResourceError(error));
+}
+
+void ResourceLoader::CountFeature(blink::mojom::WebFeature feature) {
+  fetcher_->GetUseCounter().CountUse(feature);
 }
 
 void ResourceLoader::HandleError(const ResourceError& error) {
@@ -1390,10 +1401,10 @@ void ResourceLoader::RequestSynchronously(const ResourceRequestHead& request) {
     request_body_ = ResourceRequestBody(std::move(form_body));
   WebURLResponse response_out;
   absl::optional<WebURLError> error_out;
-  WebData data_out;
-  int64_t encoded_data_length = WebURLLoaderClient::kUnknownEncodedDataLength;
-  int64_t encoded_body_length = 0;
-  WebBlobInfo downloaded_blob;
+  scoped_refptr<SharedBuffer> data_out;
+  int64_t encoded_data_length = URLLoaderClient::kUnknownEncodedDataLength;
+  uint64_t encoded_body_length = 0;
+  scoped_refptr<BlobDataHandle> downloaded_blob;
 
   if (CanHandleDataURLRequestLocally(request)) {
     // We don't have to verify mime type again since it's allowed to handle
@@ -1406,7 +1417,7 @@ void ResourceLoader::RequestSynchronously(const ResourceRequestHead& request) {
       error_out = WebURLError(result, resource_->Url());
     } else {
       response_out = WrappedResourceResponse(response);
-      data_out = WebData(std::move(data));
+      data_out = std::move(data);
     }
   } else {
     // Don't do mime sniffing for fetch (crbug.com/2016)
@@ -1423,7 +1434,7 @@ void ResourceLoader::RequestSynchronously(const ResourceRequestHead& request) {
   // can bring about the cancellation of this load.
   if (!IsLoading())
     return;
-  int64_t decoded_body_length = data_out.size();
+  int64_t decoded_body_length = data_out ? data_out->size() : 0;
   if (error_out) {
     DidFail(*error_out, base::TimeTicks::Now(), encoded_data_length,
             encoded_body_length, decoded_body_length);
@@ -1438,19 +1449,17 @@ void ResourceLoader::RequestSynchronously(const ResourceRequestHead& request) {
   // appending data to m_resource if the response body is empty. Copying the
   // empty buffer is a noop in most cases, but is destructive in the case of
   // a 304, where it will overwrite the cached data we should be reusing.
-  if (data_out.size()) {
-    data_out.ForEachSegment([this](const char* segment, size_t segment_size,
-                                   size_t segment_offset) {
-      DidReceiveData(segment, base::checked_cast<int>(segment_size));
-      return true;
-    });
+  if (data_out && data_out->size()) {
+    for (const auto& span : *data_out) {
+      DidReceiveData(span.data(), span.size());
+    }
   }
 
   if (request.DownloadToBlob()) {
-    auto blob = downloaded_blob.GetBlobHandle();
-    if (blob)
-      OnProgress(blob->size());
-    FinishedCreatingBlob(blob);
+    if (downloaded_blob) {
+      OnProgress(downloaded_blob->size());
+    }
+    FinishedCreatingBlob(std::move(downloaded_blob));
   }
   DidFinishLoading(base::TimeTicks::Now(), encoded_data_length,
                    encoded_body_length, decoded_body_length, false);

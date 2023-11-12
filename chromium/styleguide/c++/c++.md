@@ -230,7 +230,7 @@ code when you find it, or at least not make such usage any more widespread.
 
 Use `const raw_ref<T>` or `raw_ptr<T>` for class and struct fields in place of a
 raw C++ reference `T&` or pointer `T*` whenever possible, except in paths that include
-`/renderer/` or `blink/public/web/`.  These a non-owning smart pointers that
+`/renderer/` or `blink/public/web/`.  These are non-owning smart pointers that
 have improved memory-safety over raw pointers and references, and can prevent
 exploitation of a significant percentage of Use-after-Free bugs.
 
@@ -291,12 +291,18 @@ The `CHECK()` macro will cause an immediate crash if its condition is not met.
 (debug builds and some bot configurations, but not end-user builds).
 `NOTREACHED()` is equivalent to `DCHECK(false)`. Here are some rules for using
 these:
+  * Never use them to validate data that is provided by end-users or website
+    developers. Such data is untrusted, and must be validated by standard
+    control flow.
   * Use `DCHECK()` or `NOTREACHED()` as assertions, e.g. to document pre- and
     post-conditions. A `DCHECK()` means "this condition must always be true",
     not "this condition is normally true, but perhaps not in exceptional
-    cases." Things like disk corruption or strange network errors are examples
-    of exceptional circumstances that nevertheless should not result in
-    `DCHECK()` failure.
+    cases."
+    * Another way of thinking about this is that a failed `CHECK()` or
+      `DCHECK()` must only mean that a Chromium engineer failed to write correct
+      code to handle all cases. Situations like encountering disk corruption,
+      strange network errors, or users providing weird data should be handled
+      with standard error checking.
   * A consequence of this is that you should not handle DCHECK() failures, even
     if failure would result in a crash. Attempting to handle a `DCHECK()`
     failure is a statement that the `DCHECK()` can fail, which contradicts the

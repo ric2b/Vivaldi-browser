@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/containers/contains.h"
+#include "base/containers/cxx20_erase.h"
 #include "base/i18n/case_conversion.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_piece.h"
@@ -16,6 +17,7 @@
 #include "components/history/core/browser/visitsegment_database.h"
 #include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/features.h"
+#include "components/history_clusters/core/history_clusters_types.h"
 #include "components/query_parser/query_parser.h"
 #include "components/query_parser/snippet.h"
 #include "components/url_formatter/url_formatter.h"
@@ -54,6 +56,12 @@ float MarkMatchesAndGetScore(const query_parser::QueryNodeVector& find_nodes,
   }
 
   for (auto& visit : cluster->visits) {
+    // 0-scored visits should not be considered; they should not be shown even
+    // if the cluster matches the query; nor should they surface the cluster
+    // even if the visit matches the query.
+    if (visit.score == 0)
+      continue;
+
     bool match_found = false;
 
     // Search through the visible elements and highlight match positions.
@@ -88,7 +96,7 @@ float MarkMatchesAndGetScore(const query_parser::QueryNodeVector& find_nodes,
 
     if (match_found) {
       visit.matches_search_query = true;
-      DCHECK_GE(visit.score, 0);
+      DCHECK_GT(visit.score, 0);
       total_matching_visit_score += visit.score;
     }
   }
@@ -255,54 +263,42 @@ void CullNonProminentOrDuplicateClusters(
     // For the empty-query state, only show clusters with
     // `should_show_on_prominent_ui_surfaces` set to true. This restriction is
     // NOT applied when the user is searching for a specific keyword.
-    clusters.erase(base::ranges::remove_if(
-                       clusters,
-                       [](const history::Cluster& cluster) {
-                         return !cluster.should_show_on_prominent_ui_surfaces;
-                       }),
-                   clusters.end());
+    base::EraseIf(clusters, [](const history::Cluster& cluster) {
+      return !cluster.should_show_on_prominent_ui_surfaces;
+    });
   } else {
-    clusters.erase(base::ranges::remove_if(
-                       clusters,
-                       [&](const history::Cluster& cluster) {
-                         // Erase all duplicate single-visit non-prominent
-                         // clusters.
-                         if (!cluster.should_show_on_prominent_ui_surfaces &&
-                             cluster.visits.size() == 1) {
-                           auto [unused_iterator, newly_inserted] =
-                               seen_single_visit_cluster_urls->insert(
-                                   cluster.visits[0].url_for_deduping);
-                           return !newly_inserted;
-                         }
+    base::EraseIf(clusters, [&](const history::Cluster& cluster) {
+      // Erase all duplicate single-visit non-prominent
+      // clusters.
+      if (!cluster.should_show_on_prominent_ui_surfaces &&
+          cluster.visits.size() == 1) {
+        auto [unused_iterator, newly_inserted] =
+            seen_single_visit_cluster_urls->insert(
+                cluster.visits[0].url_for_deduping);
+        return !newly_inserted;
+      }
 
-                         return false;
-                       }),
-                   clusters.end());
+      return false;
+    });
   }
 }
 
-void HideAndCullLowScoringVisits(std::vector<history::Cluster>& clusters) {
-  for (auto& cluster : clusters) {
-    for (size_t i = 0; i < cluster.visits.size(); ++i) {
-      auto& visit = cluster.visits[i];
-      // Even a 0.0 visit shouldn't be hidden if this is the first visit we
-      // encounter. The assumption is that the visits are always ranked by score
-      // in a descending order.
-      // TODO(crbug.com/1313631): Simplify this after removing "Show More" UI.
-      if ((visit.score == 0.0 && i != 0) ||
-          (visit.score < GetConfig().min_score_to_always_show_above_the_fold &&
-           i >= GetConfig().num_visits_to_always_show_above_the_fold)) {
-        visit.hidden = true;
-      }
-    }
-
-    if (GetConfig().drop_hidden_visits) {
-      cluster.visits.erase(
-          base::ranges::remove_if(
-              cluster.visits, [](const auto& visit) { return visit.hidden; }),
-          cluster.visits.end());
-    }
-  }
+void HideAndCullLowScoringVisits(std::vector<history::Cluster>& clusters,
+                                 size_t min_visits) {
+  DCHECK_GT(min_visits, 0u);
+  base::EraseIf(clusters, [&](auto& cluster) {
+    int index = -1;
+    base::EraseIf(cluster.visits, [&](auto& visit) {
+      index++;
+      return visit.score == 0.0 ||
+             (visit.score <
+                  GetConfig().min_score_to_always_show_above_the_fold &&
+              index >=
+                  static_cast<int>(
+                      GetConfig().num_visits_to_always_show_above_the_fold));
+    });
+    return cluster.visits.size() < min_visits;
+  });
 }
 
 void CoalesceRelatedSearches(std::vector<history::Cluster>& clusters) {
@@ -349,6 +345,51 @@ void SortClusters(std::vector<history::Cluster>* clusters) {
     // Use c1 > c2 to get more recent clusters BEFORE older clusters.
     return c1_time > c2_time;
   });
+}
+
+bool ShouldUseNavigationContextClustersFromPersistence() {
+  return GetConfig().persist_clusters_in_history_db &&
+         GetConfig().use_navigation_context_clusters;
+}
+
+bool IsTransitionUserVisible(int32_t transition) {
+  ui::PageTransition page_transition = ui::PageTransitionFromInt(transition);
+  return (ui::PAGE_TRANSITION_CHAIN_END & transition) != 0 &&
+         ui::PageTransitionIsMainFrame(page_transition) &&
+         !ui::PageTransitionCoreTypeIs(page_transition,
+                                       ui::PAGE_TRANSITION_KEYWORD_GENERATED);
+}
+
+std::string GetHistogramNameSliceForRequestSource(
+    ClusteringRequestSource source) {
+  switch (source) {
+    case ClusteringRequestSource::kAllKeywordCacheRefresh:
+      return ".AllKeywordCacheRefresh";
+    case ClusteringRequestSource::kShortKeywordCacheRefresh:
+      return ".ShortKeywordCacheRefresh";
+    case ClusteringRequestSource::kJourneysPage:
+      // This is named WebUI for legacy purposes.
+      return ".WebUI";
+    case ClusteringRequestSource::kNewTabPage:
+      return ".NewTabPage";
+    // If you add something here, add to the ClusteringRequestSource variant at
+    // the top of history/histograms.xml.
+    default:
+      NOTREACHED();
+  }
+}
+
+bool IsUIRequestSource(ClusteringRequestSource source) {
+  // This is done as a switch statement as a forcing function for new sources to
+  // get added here.
+  switch (source) {
+    case ClusteringRequestSource::kAllKeywordCacheRefresh:
+    case ClusteringRequestSource::kShortKeywordCacheRefresh:
+      return false;
+    case ClusteringRequestSource::kJourneysPage:
+    case ClusteringRequestSource::kNewTabPage:
+      return true;
+  }
 }
 
 }  // namespace history_clusters

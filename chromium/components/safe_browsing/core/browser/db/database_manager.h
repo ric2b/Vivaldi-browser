@@ -18,6 +18,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
+#include "base/task/sequenced_task_runner.h"
 #include "components/safe_browsing/core/browser/db/hit_report.h"
 #include "components/safe_browsing/core/browser/db/util.h"
 #include "components/safe_browsing/core/browser/db/v4_protocol_manager_util.h"
@@ -149,10 +150,14 @@ class SafeBrowsingDatabaseManager
   // can synchronously determine that the url is safe, CheckUrl returns true.
   // Otherwise it returns false, and |client| is called asynchronously with the
   // result when it is ready. The URL will only be checked for the threat types
-  // in |threat_types|.
-  virtual bool CheckBrowseUrl(const GURL& url,
-                              const SBThreatTypeSet& threat_types,
-                              Client* client) = 0;
+  // in |threat_types|. |experiment_cache_selection| specifies which cache to
+  // use. See comments above MechanismExperimentHashDatabaseCache's definition
+  // for more details.
+  virtual bool CheckBrowseUrl(
+      const GURL& url,
+      const SBThreatTypeSet& threat_types,
+      Client* client,
+      MechanismExperimentHashDatabaseCache experiment_cache_selection) = 0;
 
   // Check if the prefix for |url| is in safebrowsing download add lists.
   // Result will be passed to callback in |client|.
@@ -183,8 +188,11 @@ class SafeBrowsingDatabaseManager
   // matches the allowlist, and is false if it does not. The high confidence
   // allowlist is a list of full hashes of URLs that are expected to be safe so
   // in the case of a match on this list, the realtime full URL Safe Browsing
-  // lookup isn't performed.
-  virtual bool CheckUrlForHighConfidenceAllowlist(const GURL& url) = 0;
+  // lookup isn't performed. |metric_variation| is used for logging purposes to
+  // specify the consumer mechanism performing this check in histograms.
+  virtual bool CheckUrlForHighConfidenceAllowlist(
+      const GURL& url,
+      const std::string& metric_variation) = 0;
 
   //
   // Match*(): Methods to synchronously check if various types are safe.
@@ -216,6 +224,9 @@ class SafeBrowsingDatabaseManager
 
   // Returns whether download protection is enabled.
   virtual bool IsDownloadProtectionEnabled() const = 0;
+
+  // Calls the method with the same name in |v4_get_hash_protocol_manager_|.
+  virtual void SetLookupMechanismExperimentIsEnabled();
 
   //
   // Methods to indicate when to start or suspend the SafeBrowsing operations.

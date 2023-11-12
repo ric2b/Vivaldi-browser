@@ -7,10 +7,10 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
 #include "base/containers/circular_deque.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -194,7 +194,7 @@ class VideoRendererImplTest : public testing::Test {
     // Test hook for to specify a custom buffer duration.
     decoder_buffer->set_duration(buffer_duration_);
 
-    std::move(read_cb).Run(DemuxerStream::kOk, decoder_buffer);
+    std::move(read_cb).Run(DemuxerStream::kOk, {std::move(decoder_buffer)});
   }
 
   bool IsDemuxerStalled() { return !!stalled_demixer_read_cb_; }
@@ -209,6 +209,8 @@ class VideoRendererImplTest : public testing::Test {
   //
   // Syntax:
   //   nn - Queue a decoder buffer with timestamp nn * 1000us
+  //   nndmm - Queue a decoder buffer with timestamp nn * 1000us
+  //           and mm * 1000us duration
   //   abort - Queue an aborted read
   //   error - Queue a decoder error
   //
@@ -216,9 +218,8 @@ class VideoRendererImplTest : public testing::Test {
   //   A clip that is four frames long: "0 10 20 30"
   //   A clip that has a decode error: "60 70 error"
   void QueueFrames(const std::string& str) {
-    for (const std::string& token :
-         base::SplitString(str, " ", base::TRIM_WHITESPACE,
-                           base::SPLIT_WANT_ALL)) {
+    for (base::StringPiece token : base::SplitString(
+             str, " ", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
       if (token == "abort") {
         scoped_refptr<VideoFrame> null_frame;
         QueueFrame(DecoderStatus::Codes::kAborted, null_frame);
@@ -231,12 +232,25 @@ class VideoRendererImplTest : public testing::Test {
         continue;
       }
 
+      auto ts_tokens = base::SplitStringPiece(token, "d", base::TRIM_WHITESPACE,
+                                              base::SPLIT_WANT_ALL);
+      if (ts_tokens.size() > 1) {
+        token = ts_tokens[0];
+      }
+
       int timestamp_in_ms = 0;
       if (base::StringToInt(token, &timestamp_in_ms)) {
         gfx::Size natural_size = TestVideoConfig::NormalCodedSize();
         scoped_refptr<VideoFrame> frame = VideoFrame::CreateFrame(
             PIXEL_FORMAT_I420, natural_size, gfx::Rect(natural_size),
             natural_size, base::Milliseconds(timestamp_in_ms));
+
+        int duration_in_ms = 0;
+        if (ts_tokens.size() > 1 &&
+            base::StringToInt(ts_tokens[1], &duration_in_ms)) {
+          frame->metadata().frame_duration = base::Milliseconds(duration_in_ms);
+        }
+
         QueueFrame(DecoderStatus::Codes::kOk, frame);
         continue;
       }
@@ -307,9 +321,10 @@ class VideoRendererImplTest : public testing::Test {
     DCHECK(decode_cb_);
 
     // Return EOS buffer to trigger EOS frame.
+    DemuxerStream::DecoderBufferVector buffers;
+    buffers.emplace_back(DecoderBuffer::CreateEOSBuffer());
     EXPECT_CALL(demuxer_stream_, OnRead(_))
-        .WillOnce(RunOnceCallback<0>(DemuxerStream::kOk,
-                                     DecoderBuffer::CreateEOSBuffer()));
+        .WillOnce(RunOnceCallback<0>(DemuxerStream::kOk, buffers));
 
     // Satify pending |decode_cb_| to trigger a new DemuxerStream::Read().
     task_environment_.GetMainThreadTaskRunner()->PostTask(
@@ -449,6 +464,19 @@ TEST_F(VideoRendererImplTest, InitializeAndStartPlayingFrom) {
   EXPECT_CALL(mock_cb_, OnVideoNaturalSizeChange(_)).Times(1);
   EXPECT_CALL(mock_cb_, OnVideoOpacityChange(_)).Times(1);
   StartPlayingFrom(0);
+  Destroy();
+}
+
+TEST_F(VideoRendererImplTest, InitializeAndStartPlayingFromWithDuration) {
+  Initialize();
+  QueueFrames("0d10 10d10 20d10 30d10 40d10");
+  EXPECT_CALL(mock_cb_, FrameReceived(HasTimestampMatcher(10)));
+  EXPECT_CALL(mock_cb_, OnBufferingStateChange(BUFFERING_HAVE_ENOUGH, _));
+  EXPECT_CALL(mock_cb_, OnStatisticsUpdate(_)).Times(AnyNumber());
+  EXPECT_CALL(mock_cb_, OnVideoNaturalSizeChange(_)).Times(1);
+  EXPECT_CALL(mock_cb_, OnVideoOpacityChange(_)).Times(1);
+  EXPECT_CALL(mock_cb_, OnVideoFrameRateChange(absl::optional<int>(100)));
+  StartPlayingFrom(10);
   Destroy();
 }
 
@@ -996,8 +1024,9 @@ TEST_F(VideoRendererImplTest, VideoConfigChange) {
       .WillRepeatedly(Return(true));
 
   // Signal a config change at the next DemuxerStream::Read().
+  DemuxerStream::DecoderBufferVector buffers;
   EXPECT_CALL(demuxer_stream_, OnRead(_))
-      .WillOnce(RunOnceCallback<0>(DemuxerStream::kConfigChanged, nullptr));
+      .WillOnce(RunOnceCallback<0>(DemuxerStream::kConfigChanged, buffers));
 
   // Use LargeEncrypted config (non-default) to ensure its plumbed through to
   // callback.

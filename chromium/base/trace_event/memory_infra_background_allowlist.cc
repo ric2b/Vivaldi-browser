@@ -9,10 +9,14 @@
 
 #include <string>
 
-#include "base/allocator/buildflags.h"
+#include "base/allocator/partition_allocator/partition_alloc_buildflags.h"
 #include "base/containers/fixed_flat_set.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/android/meminfo_dump_provider.h"
+#endif
 
 namespace base {
 namespace trace_event {
@@ -25,8 +29,11 @@ namespace {
 // dump. So, the effective size will not be correct.
 constexpr auto kDumpProviderAllowlist =
     base::MakeFixedFlatSet<base::StringPiece>({
-      // clang-format off
+// clang-format off
+#if BUILDFLAG(IS_ANDROID)
+        base::android::MeminfoDumpProvider::kDumpProviderName,
         "android::ResourceManagerImpl",
+#endif
         "AutocompleteController",
         "BlinkGC",
         "BlinkObjectCounters",
@@ -70,6 +77,7 @@ constexpr auto kDumpProviderAllowlist =
         "PartitionAlloc.AddressSpace",
         "ProcessMemoryMetrics",
         "SharedContextState",
+        "SharedImageManager",
         "SharedMemoryTracker",
         "Skia",
         "Sql",
@@ -85,9 +93,12 @@ constexpr auto kDumpProviderAllowlist =
 // background mode.
 constexpr auto kAllocatorDumpNameAllowlist = base::MakeFixedFlatSet<
     base::StringPiece>({
-  // clang-format off
+// clang-format off
         // Some of the blink values vary based on compile time flags. The
-        // compile timeflags are not in base, so all are listed here.
+        // compile time flags are not in base, so all are listed here.
+#if BUILDFLAG(IS_ANDROID)
+        base::android::MeminfoDumpProvider::kDumpName,
+#endif
         "blink_gc/main/allocated_objects",
         "blink_gc/main/heap",
         "blink_gc/workers/heap/worker_0x?",

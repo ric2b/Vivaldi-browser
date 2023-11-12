@@ -18,6 +18,10 @@ if (enable_library_cdms) {
   import("//media/cdm/library_cdm/cdm_paths.gni")
 }
 
+if (is_ios) {
+  import("//build/config/ios/bundle_data_from_filelist.gni")
+}
+
 buildflag_header("media_buildflags") {
   header = "media_buildflags.h"
 
@@ -25,6 +29,8 @@ buildflag_header("media_buildflags") {
       enable_platform_dts_audio && (is_win || is_linux)
 
   flags = [
+    "ALLOW_OOP_VIDEO_DECODER=$allow_oop_video_decoder",
+    "ALLOW_HOSTING_OOP_VIDEO_DECODER=$allow_hosting_oop_video_decoder",
     "ALTERNATE_CDM_STORAGE_ID_KEY=\"$alternate_cdm_storage_id_key\"",
     "CHROME_WIDE_ECHO_CANCELLATION=$chrome_wide_echo_cancellation_supported",
     "ENABLE_PLATFORM_AC3_EAC3_AUDIO=$enable_platform_ac3_eac3_audio",
@@ -51,6 +57,7 @@ buildflag_header("media_buildflags") {
     "ENABLE_PLATFORM_DTS_AUDIO=$enable_platform_dts_audio",
     "ENABLE_PLATFORM_MPEG_H_AUDIO=$enable_platform_mpeg_h_audio",
     "ENABLE_MSE_MPEG2TS_STREAM_PARSER=$enable_mse_mpeg2ts_stream_parser",
+    "PLATFORM_HAS_OPTIONAL_HEVC_SUPPORT=$platform_has_optional_hevc_support",
     "USE_ARC_PROTECTED_MEDIA=$use_arc_protected_media",
     "USE_CHROMEOS_MEDIA_ACCELERATION=$use_vaapi||$use_v4l2_codec",
     "USE_CHROMEOS_PROTECTED_AV1=$use_chromeos_protected_av1",
@@ -164,6 +171,13 @@ source_set("test_support") {
   ]
 }
 
+if (is_ios) {
+  bundle_data_from_filelist("unit_tests_bundle_data") {
+    testonly = true
+    filelist_name = "unit_tests_bundle_data.filelist"
+  }
+}
+
 # Contains tests for all targets in the "media" folder.
 # TODO(xhwang): Move mojo/capture/remoting tests here where applicable.
 test("media_unittests") {
@@ -218,10 +232,7 @@ test("media_unittests") {
   }
 
   if (is_fuchsia) {
-    deps += [
-      "//media/fuchsia/cdm/service:unittests",
-      "//media/fuchsia/video:unittests",
-    ]
+    deps += [ "//media/fuchsia/video:unittests" ]
 
     # PaintCanvasVideoRendererWithGLTest.* uses SwiftShader, which generates
     # machine code.
@@ -245,6 +256,10 @@ test("media_unittests") {
 
   # The test needs OPUS_FIXED_POINT conditional define.
   configs += [ "//third_party/opus:opus_config" ]
+
+  if (is_ios) {
+    deps += [ ":unit_tests_bundle_data" ]
+  }
 }
 
 test("media_perftests") {

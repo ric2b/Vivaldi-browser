@@ -10,16 +10,13 @@
 #include <stddef.h>
 
 #include "base/base64.h"
-#include "base/bind.h"
-#include "base/callback.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
+#include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
-#include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "base/values.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "chromeos/ash/components/network/onc/network_onc_utils.h"
 #include "chromeos/components/onc/onc_parsed_certificates.h"
@@ -144,7 +141,7 @@ bool CertificateImporterImpl::StoreServerOrCaCertificateUserInitiated(
       net::x509_util::CreateCERTCertificateFromX509Certificate(
           certificate.certificate().get());
   if (!x509_cert ||
-      net::x509_util::GetCertIsPerm(x509_cert.get(), &is_perm) != SECSuccess) {
+      CERT_GetCertIsPerm(x509_cert.get(), &is_perm) != SECSuccess) {
     NET_LOG(ERROR) << "Unable to create certificate: " << certificate.guid();
     return false;
   }

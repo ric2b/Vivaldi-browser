@@ -8,19 +8,21 @@
 
 #include "base/containers/contains.h"
 #include "base/logging.h"
-#include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/linux/drm_util_linux.h"
 #include "ui/gfx/linux/gbm_buffer.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_device.h"
 #include "ui/ozone/platform/drm/gpu/hardware_display_plane_manager.h"
 
+namespace ui {
+
 namespace {
+
 // Some Display Controllers (e.g. Intel Gen 9.5) don't support AR/B30
 // framebuffers, only XR/B30; this function indicates if an opaque format should
 // be used instead of the non-opaque |buffer_format| for AddFramebuffer2().
 bool ForceUsingOpaqueFormatWorkaround(
-    const scoped_refptr<ui::DrmDevice>& drm_device,
+    const scoped_refptr<DrmDevice>& drm_device,
     uint32_t drm_fourcc) {
   constexpr uint32_t kHighBitDepthARGBFormats[] = {
       DRM_FORMAT_ARGB2101010, DRM_FORMAT_ABGR2101010, DRM_FORMAT_RGBA1010102,
@@ -36,8 +38,6 @@ bool ForceUsingOpaqueFormatWorkaround(
 }
 
 }  // namespace
-
-namespace ui {
 
 DrmFramebuffer::AddFramebufferParams::AddFramebufferParams() = default;
 DrmFramebuffer::AddFramebufferParams::AddFramebufferParams(
@@ -115,7 +115,7 @@ scoped_refptr<DrmFramebuffer> DrmFramebuffer::AddFramebuffer(
   // a bo with modifiers, otherwise, we rely on the "no modifiers"
   // behavior doing the right thing.
   params.flags = 0;
-  if (drm->allow_addfb2_modifiers() &&
+  if (IsAddfb2ModifierCapable(*drm) &&
       params.modifier != DRM_FORMAT_MOD_INVALID) {
     params.flags |= DRM_MODE_FB_MODIFIERS;
   }

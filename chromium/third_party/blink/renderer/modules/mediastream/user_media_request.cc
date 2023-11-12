@@ -50,7 +50,6 @@
 #include "third_party/blink/renderer/modules/mediastream/capture_controller.h"
 #include "third_party/blink/renderer/modules/mediastream/identifiability_metrics.h"
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
-#include "third_party/blink/renderer/modules/mediastream/media_error_state.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_set.h"
 #include "third_party/blink/renderer/modules/mediastream/overconstrained_error.h"
@@ -385,7 +384,7 @@ void RecordSuppressLocalAudioPlaybackConstraintUma(
 MediaConstraints ParseOptions(
     ExecutionContext* execution_context,
     const V8UnionBooleanOrMediaTrackConstraints* options,
-    MediaErrorState& error_state) {
+    ExceptionState& exception_state) {
   if (!options)
     return MediaConstraints();
   switch (options->GetContentType()) {
@@ -396,9 +395,14 @@ MediaConstraints ParseOptions(
         return MediaConstraints();
     case V8UnionBooleanOrMediaTrackConstraints::ContentType::
         kMediaTrackConstraints:
-      return media_constraints_impl::Create(
+      String error_message;
+      auto constraints = media_constraints_impl::Create(
           execution_context, options->GetAsMediaTrackConstraints(),
-          error_state);
+          error_message);
+      if (constraints.IsNull()) {
+        exception_state.ThrowTypeError(error_message);
+      }
+      return constraints;
   }
   NOTREACHED();
   return MediaConstraints();
@@ -412,29 +416,33 @@ UserMediaRequest* UserMediaRequest::Create(
     UserMediaRequestType media_type,
     const MediaStreamConstraints* options,
     Callbacks* callbacks,
-    MediaErrorState& error_state,
+    ExceptionState& exception_state,
     IdentifiableSurface surface) {
-  MediaConstraints audio = ParseOptions(context, options->audio(), error_state);
-  if (error_state.HadException())
+  MediaConstraints audio =
+      ParseOptions(context, options->audio(), exception_state);
+  if (exception_state.HadException()) {
     return nullptr;
+  }
 
-  MediaConstraints video = ParseOptions(context, options->video(), error_state);
-  if (error_state.HadException())
+  MediaConstraints video =
+      ParseOptions(context, options->video(), exception_state);
+  if (exception_state.HadException()) {
     return nullptr;
+  }
 
   std::string display_surface_constraint;
   absl::optional<bool> suppress_local_audio_playback;
 
   if (media_type == UserMediaRequestType::kUserMedia) {
     if (audio.IsNull() && video.IsNull()) {
-      error_state.ThrowTypeError(
+      exception_state.ThrowTypeError(
           "At least one of audio and video must be requested");
       return nullptr;
     } else if (!video.IsNull()) {
       if (video.Basic().pan.HasMandatory() ||
           video.Basic().tilt.HasMandatory() ||
           video.Basic().zoom.HasMandatory()) {
-        error_state.ThrowTypeError(
+        exception_state.ThrowTypeError(
             "Mandatory pan-tilt-zoom constraints are not supported");
         return nullptr;
       }
@@ -456,33 +464,33 @@ UserMediaRequest* UserMediaRequest::Create(
     // either a dictionary value or a value of true.
     if (media_type == UserMediaRequestType::kDisplayMediaSet) {
       if (!audio.IsNull()) {
-        error_state.ThrowTypeError("Audio requests are not supported");
+        exception_state.ThrowTypeError("Audio requests are not supported");
         return nullptr;
       } else if (options->preferCurrentTab()) {
-        error_state.ThrowTypeError("preferCurrentTab is not supported");
+        exception_state.ThrowTypeError("preferCurrentTab is not supported");
         return nullptr;
       }
     }
 
     if (video.IsNull()) {
-      error_state.ThrowTypeError("video must be requested");
+      exception_state.ThrowTypeError("video must be requested");
       return nullptr;
     }
 
     if ((!audio.IsNull() && !audio.Advanced().empty()) ||
         !video.Advanced().empty()) {
-      error_state.ThrowTypeError("Advanced constraints are not supported");
+      exception_state.ThrowTypeError("Advanced constraints are not supported");
       return nullptr;
     }
 
     if ((!audio.IsNull() && audio.Basic().HasMin()) || video.Basic().HasMin()) {
-      error_state.ThrowTypeError("min constraints are not supported");
+      exception_state.ThrowTypeError("min constraints are not supported");
       return nullptr;
     }
 
     if ((!audio.IsNull() && audio.Basic().HasExact()) ||
         video.Basic().HasExact()) {
-      error_state.ThrowTypeError("exact constraints are not supported");
+      exception_state.ThrowTypeError("exact constraints are not supported");
       return nullptr;
     }
 
@@ -524,7 +532,7 @@ UserMediaRequest* UserMediaRequest::Create(
       options->selfBrowserSurface().AsEnum() ==
           V8SelfCapturePreferenceEnum::Enum::kExclude;
   if (exclude_self_browser_surface && options->preferCurrentTab()) {
-    error_state.ThrowTypeError(
+    exception_state.ThrowTypeError(
         "Self-contradictory configuration (preferCurrentTab and "
         "selfBrowserSurface=exclude).");
     return nullptr;
@@ -818,7 +826,7 @@ void UserMediaRequest::FailConstraint(const String& constraint_name,
       nullptr,
       MakeGarbageCollected<V8MediaStreamError>(
           OverconstrainedError::Create(constraint_name, message)),
-      capture_controller_);
+      capture_controller_, UserMediaRequestResult::kOverConstrainedError);
   is_resolved_ = true;
 }
 
@@ -827,6 +835,8 @@ void UserMediaRequest::Fail(Result error, const String& message) {
   if (!GetExecutionContext())
     return;
   DOMExceptionCode exception_code = DOMExceptionCode::kNotSupportedError;
+  UserMediaRequestResult result_enum =
+      UserMediaRequestResult::kNotSupportedError;
   switch (error) {
     case Result::PERMISSION_DENIED:
     case Result::PERMISSION_DISMISSED:
@@ -835,25 +845,31 @@ void UserMediaRequest::Fail(Result error, const String& message) {
     case Result::KILL_SWITCH_ON:
     case Result::SYSTEM_PERMISSION_DENIED:
       exception_code = DOMExceptionCode::kNotAllowedError;
+      result_enum = UserMediaRequestResult::kNotAllowedError;
       break;
     case Result::NO_HARDWARE:
       exception_code = DOMExceptionCode::kNotFoundError;
+      result_enum = UserMediaRequestResult::kNotFoundError;
       break;
     case Result::TAB_CAPTURE_FAILURE:
     case Result::SCREEN_CAPTURE_FAILURE:
     case Result::CAPTURE_FAILURE:
       exception_code = DOMExceptionCode::kAbortError;
+      result_enum = UserMediaRequestResult::kAbortError;
       break;
     case Result::TRACK_START_FAILURE_AUDIO:
     case Result::TRACK_START_FAILURE_VIDEO:
     case Result::DEVICE_IN_USE:
       exception_code = DOMExceptionCode::kNotReadableError;
+      result_enum = UserMediaRequestResult::kNotReadableError;
       break;
     case Result::NOT_SUPPORTED:
       exception_code = DOMExceptionCode::kNotSupportedError;
+      result_enum = UserMediaRequestResult::kNotSupportedError;
       break;
     case Result::INVALID_SECURITY_ORIGIN:
       exception_code = DOMExceptionCode::kSecurityError;
+      result_enum = UserMediaRequestResult::kSecurityError;
       break;
     default:
       NOTREACHED();
@@ -879,7 +895,7 @@ void UserMediaRequest::Fail(Result error, const String& message) {
       nullptr,
       MakeGarbageCollected<V8MediaStreamError>(
           MakeGarbageCollected<DOMException>(exception_code, message)),
-      capture_controller_);
+      capture_controller_, result_enum);
   is_resolved_ = true;
 }
 
@@ -899,7 +915,7 @@ void UserMediaRequest::ContextDestroyed() {
           MakeGarbageCollected<V8MediaStreamError>(
               MakeGarbageCollected<DOMException>(DOMExceptionCode::kAbortError,
                                                  "Context destroyed")),
-          capture_controller_);
+          capture_controller_, UserMediaRequestResult::kContextDestroyed);
     }
     client_ = nullptr;
   }

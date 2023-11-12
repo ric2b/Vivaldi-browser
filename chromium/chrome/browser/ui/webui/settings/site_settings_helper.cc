@@ -48,6 +48,7 @@
 #include "components/permissions/permission_util.h"
 #include "components/permissions/permissions_client.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
@@ -123,6 +124,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::PRIVATE_NETWORK_GUARD, "private-network-devices"},
     {ContentSettingsType::PRIVATE_NETWORK_CHOOSER_DATA,
      "private-network-devices-data"},
+    {ContentSettingsType::ANTI_ABUSE, "anti-abuse"},
 
     // Add new content settings here if a corresponding Javascript string
     // representation for it is not required, for example if the content setting
@@ -176,6 +178,12 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     // called from UI, so we don't need a representation JS string.
     {ContentSettingsType::DEPRECATED_PPAPI_BROKER, nullptr},
     {ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS, nullptr},
+    {ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS, nullptr},
+    // TODO(crbug.com/1408520): Update JavaScript string representation when
+    // desktop UI is implemented.
+    {ContentSettingsType::FEDERATED_IDENTITY_AUTO_REAUTHN_PERMISSION, nullptr},
+    {ContentSettingsType::FEDERATED_IDENTITY_IDENTITY_PROVIDER_REGISTRATION,
+     nullptr},
 };
 
 static_assert(std::size(kContentSettingsTypeGroupNames) ==
@@ -572,35 +580,18 @@ base::Value::Dict GetExceptionForPage(
   return exception;
 }
 
-std::string GetDisplayNameForExtension(
-    const GURL& url,
-    const extensions::ExtensionRegistry* extension_registry) {
-  if (extension_registry && url.SchemeIs(extensions::kExtensionScheme)) {
-    // For the extension scheme, the pattern must be a valid URL.
-    DCHECK(url.is_valid());
-    const extensions::Extension* extension =
-        extension_registry->GetExtensionById(
-            url.host(), extensions::ExtensionRegistry::EVERYTHING);
-    if (extension)
-      return extension->name();
-  }
-  return std::string();
-}
-
 // Takes |url| and converts it into an individual origin string or retrieves
 // name of the extension it belongs to.
-std::string GetDisplayNameForGURL(
-    const GURL& url,
-    const extensions::ExtensionRegistry* extension_registry) {
+std::string GetDisplayNameForGURL(Profile* profile, const GURL& url) {
   const url::Origin origin = url::Origin::Create(url);
   if (origin.opaque())
     return url.spec();
 
-  std::string display_name =
-      GetDisplayNameForExtension(url, extension_registry);
-  if (!display_name.empty())
-    return display_name;
-
+  absl::optional<std::string> extension_display_name =
+      GetExtensionDisplayName(profile, url);
+  if (extension_display_name.has_value()) {
+    return extension_display_name.value();
+  }
   auto url_16 = url_formatter::FormatUrl(
       url,
       url_formatter::kFormatUrlOmitDefaults |
@@ -613,14 +604,13 @@ std::string GetDisplayNameForGURL(
 
 // If the given |pattern| represents an individual origin or extension, retrieve
 // a string to display it as such. If not, return the pattern as a string.
-std::string GetDisplayNameForPattern(
-    const ContentSettingsPattern& pattern,
-    const extensions::ExtensionRegistry* extension_registry) {
-  const GURL url(pattern.ToString());
-  const std::string extension_display_name =
-      GetDisplayNameForExtension(url, extension_registry);
-  if (!extension_display_name.empty())
-    return extension_display_name;
+std::string GetDisplayNameForPattern(Profile* profile,
+                                     const ContentSettingsPattern& pattern) {
+  absl::optional<std::string> extension_display_name =
+      GetExtensionDisplayName(profile, GURL(pattern.ToString()));
+  if (extension_display_name.has_value()) {
+    return extension_display_name.value();
+  }
   return pattern.ToString();
 }
 
@@ -659,9 +649,26 @@ void GetExceptionsForContentType(
       continue;
     }
 
+    auto content_setting = setting.GetContentSetting();
+
+    if (type == ContentSettingsType::COOKIES &&
+        base::FeatureList::IsEnabled(
+            privacy_sandbox::kPrivacySandboxSettings4)) {
+      // With the changes to settings introduced in PrivacySandboxSettings4,
+      // there is no user-facing concept of SESSION_ONLY cookie exceptions that
+      // use secondary patterns. These are instead presented as ALLOW.
+      // TODO(crbug.com/1404436): Perform a one time migration of the actual
+      // content settings when the extension API no-longer allows them to be
+      // created.
+      if (content_setting == ContentSetting::CONTENT_SETTING_SESSION_ONLY &&
+          setting.secondary_pattern != ContentSettingsPattern::Wildcard()) {
+        content_setting = ContentSetting::CONTENT_SETTING_ALLOW;
+      }
+    }
+
     all_patterns_settings[std::make_pair(
         setting.primary_pattern, setting.source)][setting.secondary_pattern] =
-        setting.GetContentSetting();
+        content_setting;
   }
 
   ContentSettingsForOneType embargo_settings;
@@ -708,34 +715,12 @@ void GetExceptionsForContentType(
        base::Reversed(all_patterns_settings)) {
     const auto& [primary_pattern, source] = primary_pattern_and_source;
     const std::string display_name =
-        GetDisplayNameForPattern(primary_pattern, extension_registry);
-
-    // The "parent" entry either has an identical primary and secondary pattern,
-    // or has a wildcard secondary. The two cases are indistinguishable in the
-    // UI.
-    auto parent = one_settings.find(primary_pattern);
-    if (parent == one_settings.end())
-      parent = one_settings.find(ContentSettingsPattern::Wildcard());
+        GetDisplayNameForPattern(profile, primary_pattern);
 
     auto& this_provider_exceptions = all_provider_exceptions
         [HostContentSettingsMap::GetProviderTypeFromSource(source)];
 
-    // Add the "parent" entry for the non-embedded setting.
-    ContentSetting parent_setting =
-        parent == one_settings.end() ? CONTENT_SETTING_DEFAULT : parent->second;
-    const ContentSettingsPattern& secondary_pattern =
-        parent == one_settings.end() ? primary_pattern : parent->first;
-    this_provider_exceptions.push_back(GetExceptionForPage(
-        type, profile, primary_pattern, secondary_pattern, display_name,
-        parent_setting, source, incognito,
-        base::Contains(origins_under_embargo, primary_pattern)));
-
-    // Add the "children" for any embedded settings.
     for (auto j = one_settings.begin(); j != one_settings.end(); ++j) {
-      // Skip the non-embedded setting which we already added above.
-      if (j == parent)
-        continue;
-
       ContentSetting content_setting = j->second;
       this_provider_exceptions.push_back(GetExceptionForPage(
           type, profile, primary_pattern, j->first, display_name,
@@ -787,14 +772,12 @@ void GetContentCategorySetting(const HostContentSettingsMap* map,
     object->Set(kSource, provider);
 }
 
-ContentSetting GetContentSettingForOrigin(
-    Profile* profile,
-    const HostContentSettingsMap* map,
-    const GURL& origin,
-    ContentSettingsType content_type,
-    std::string* source_string,
-    const extensions::ExtensionRegistry* extension_registry,
-    std::string* display_name) {
+ContentSetting GetContentSettingForOrigin(Profile* profile,
+                                          const HostContentSettingsMap* map,
+                                          const GURL& origin,
+                                          ContentSettingsType content_type,
+                                          std::string* source_string,
+                                          std::string* display_name) {
   // TODO(patricialor): In future, PermissionManager should know about all
   // content settings, not just the permissions, plus all the possible sources,
   // and the calls to HostContentSettingsMap should be removed.
@@ -831,7 +814,7 @@ ContentSetting GetContentSettingForOrigin(
   // Retrieve the source of the content setting.
   *source_string = SiteSettingSourceToString(
       CalculateSiteSettingSource(profile, content_type, origin, info, result));
-  *display_name = GetDisplayNameForGURL(origin, extension_registry);
+  *display_name = GetDisplayNameForGURL(profile, origin);
 
   if (info.metadata.session_model == content_settings::SessionModel::OneTime) {
     DCHECK_EQ(content_type, ContentSettingsType::GEOLOCATION);
@@ -921,8 +904,7 @@ void GetPolicyAllowedUrls(
             std::greater<ContentSettingsPattern>());
 
   for (const ContentSettingsPattern& pattern : patterns) {
-    std::string display_name =
-        GetDisplayNameForPattern(pattern, extension_registry);
+    std::string display_name = GetDisplayNameForPattern(profile, pattern);
     exceptions->push_back(GetExceptionForPage(
         type, profile, pattern, ContentSettingsPattern(), display_name,
         CONTENT_SETTING_ALLOW,
@@ -930,7 +912,7 @@ void GetPolicyAllowedUrls(
   }
 }
 
-const ChooserTypeNameEntry* ChooserTypeFromGroupName(const std::string& name) {
+const ChooserTypeNameEntry* ChooserTypeFromGroupName(base::StringPiece name) {
   for (const auto& chooser_type : kChooserTypeGroupNames) {
     if (chooser_type.name == name)
       return &chooser_type;
@@ -945,7 +927,8 @@ base::Value::Dict CreateChooserExceptionObject(
     const std::u16string& display_name,
     const base::Value& object,
     const std::string& chooser_type,
-    const ChooserExceptionDetails& chooser_exception_details) {
+    const ChooserExceptionDetails& chooser_exception_details,
+    Profile* profile) {
   base::Value::Dict exception;
 
   std::string setting_string =
@@ -960,28 +943,38 @@ base::Value::Dict CreateChooserExceptionObject(
   std::vector<base::Value::Dict>
       all_provider_sites[HostContentSettingsMap::NUM_PROVIDER_TYPES];
   for (const auto& details : chooser_exception_details) {
-    const GURL& requesting_origin = details.first.first;
-    const std::string& source = details.first.second;
+    const GURL& origin = std::get<0>(details);
+    const std::string& source = std::get<1>(details);
+    const bool incognito = std::get<2>(details);
+
+    std::string site_display_name = origin.spec();
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+    // Set the |site_display_name| to the extension's name which is more clear
+    // to the user if the |origin| is for an extension and the extension name
+    // can be found in the |profile|.
+    if (origin.SchemeIs(extensions::kExtensionScheme)) {
+      DCHECK(profile);
+      const auto* extension_registry =
+          extensions::ExtensionRegistry::Get(profile);
+      const extensions::Extension* extension =
+          extension_registry->GetExtensionById(
+              origin.host(), extensions::ExtensionRegistry::EVERYTHING);
+      if (extension) {
+        site_display_name = extension->name();
+      }
+    }
+#endif
 
     auto& this_provider_sites =
         all_provider_sites[HostContentSettingsMap::GetProviderTypeFromSource(
             source)];
-
-    for (const auto& embedding_origin_incognito_pair : details.second) {
-      const GURL& embedding_origin = embedding_origin_incognito_pair.first;
-      const bool incognito = embedding_origin_incognito_pair.second;
-      base::Value::Dict site;
-
-      site.Set(kOrigin, requesting_origin.spec());
-      site.Set(kDisplayName, requesting_origin.spec());
-      site.Set(kEmbeddingOrigin, embedding_origin.is_empty()
-                                     ? std::string()
-                                     : embedding_origin.spec());
-      site.Set(kSetting, setting_string);
-      site.Set(kSource, source);
-      site.Set(kIncognito, incognito);
-      this_provider_sites.push_back(std::move(site));
-    }
+    base::Value::Dict site;
+    site.Set(kOrigin, origin.spec());
+    site.Set(kDisplayName, site_display_name);
+    site.Set(kSetting, setting_string);
+    site.Set(kSource, source);
+    site.Set(kIncognito, incognito);
+    this_provider_sites.push_back(std::move(site));
   }
 
   base::Value::List sites;
@@ -1044,13 +1037,8 @@ base::Value::List GetChooserExceptionListFromProfile(
     std::string source = GetSourceStringForChooserException(
         profile, content_type, object->source);
 
-    const auto origin_source_pair = std::make_pair(object->origin, source);
-    auto& origin_incognito_pair_set =
-        chooser_exception_details[origin_source_pair];
-
-    const auto origin_incognito_pair =
-        std::make_pair(object->origin, object->incognito);
-    origin_incognito_pair_set.insert(origin_incognito_pair);
+    chooser_exception_details.insert(
+        {object->origin, source, object->incognito});
   }
 
   for (const auto& all_chooser_objects_entry : all_chooser_objects) {
@@ -1059,7 +1047,7 @@ base::Value::List GetChooserExceptionListFromProfile(
     const ChooserExceptionDetails& chooser_exception_details =
         all_chooser_objects_entry.second;
     exceptions.Append(CreateChooserExceptionObject(
-        name, object, chooser_type.name, chooser_exception_details));
+        name, object, chooser_type.name, chooser_exception_details, profile));
   }
 
   return exceptions;
@@ -1078,6 +1066,25 @@ absl::optional<std::string> GetIsolatedWebAppName(Profile* profile,
     }
   }
   return app_name;
+}
+
+absl::optional<std::string> GetExtensionDisplayName(Profile* profile,
+                                                    GURL url) {
+  if (!url.SchemeIs(extensions::kExtensionScheme)) {
+    return {};
+  }
+  auto* extension_registry = extensions::ExtensionRegistry::Get(profile);
+  if (!extension_registry) {
+    return {};
+  }
+  // For the extension scheme, the pattern must be a valid URL.
+  DCHECK(url.is_valid());
+  const extensions::Extension* extension = extension_registry->GetExtensionById(
+      url.host(), extensions::ExtensionRegistry::EVERYTHING);
+  if (!extension) {
+    return {};
+  }
+  return extension->name();
 }
 
 }  // namespace site_settings

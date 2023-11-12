@@ -5,6 +5,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 
 #include <stdint.h>
+#include <utility>
 
 #include <algorithm>
 #include <deque>
@@ -82,7 +83,7 @@ namespace {
 bool HasAllowedScheme(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS() ||
          base::FeatureList::IsEnabled(
-             features::kAutofillAllowNonHttpActivation);
+             features::test::kAutofillAllowNonHttpActivation);
 }
 
 // Helper for |EncodeUploadRequest()| that creates a bit field corresponding to
@@ -358,6 +359,22 @@ void FormStructure::DetermineHeuristicTypes(
   }
   rationalizer.RationalizeFieldTypePredictions(log_manager);
 
+  // Log the field type predicted by rationalization.
+  // The sections are mapped to consecutive natural numbers starting at 1.
+  std::map<Section, size_t> section_id_map;
+  for (const auto& field : fields_) {
+    if (!base::Contains(section_id_map, field->section)) {
+      size_t next_section_id = section_id_map.size() + 1;
+      section_id_map[field->section] = next_section_id;
+    }
+    field->AppendLogEventIfNotRepeated(RationalizationFieldLogEvent{
+        .field_type = field->Type().GetStorableType(),
+        .section_id = section_id_map[field->section],
+        .type_changed = field->Type().GetStorableType() !=
+                        field->ComputedType().GetStorableType(),
+    });
+  }
+
   LogDetermineHeuristicTypesMetrics();
 }
 
@@ -581,6 +598,9 @@ void FormStructure::ProcessQueryResponse(
 
   // Copy the field types into the actual form.
   for (FormStructure* form : forms) {
+    // Fields can share the same field signature. This map records for each
+    // signature how many fields with the same signature have been observed.
+    std::map<FieldSignature, size_t> field_rank_map;
     for (auto& field : form->fields_) {
       // Get the field prediction for |form|'s signature and the |field|'s
       // host_form_signature. The former takes precedence over the latter.
@@ -619,6 +639,27 @@ void FormStructure::ProcessQueryResponse(
 
       if (current_field->has_password_requirements())
         field->SetPasswordRequirements(current_field->password_requirements());
+
+      ++field_rank_map[field->GetFieldSignature()];
+      // Log the field type predicted from Autofill crowdsourced server.
+      field->AppendLogEventIfNotRepeated(ServerPredictionFieldLogEvent{
+          .server_type1 = field->server_type(),
+          .prediction_source1 = field->server_predictions().empty()
+                                    ? FieldPrediction::SOURCE_UNSPECIFIED
+                                    : field->server_predictions()[0].source(),
+          .server_type2 =
+              field->server_predictions().size() >= 2
+                  ? ToSafeServerFieldType(field->server_predictions()[1].type(),
+                                          NO_SERVER_DATA)
+                  : NO_SERVER_DATA,
+          .prediction_source2 = field->server_predictions().size() >= 2
+                                    ? field->server_predictions()[1].source()
+                                    : FieldPrediction::SOURCE_UNSPECIFIED,
+          .server_type_prediction_is_override =
+              field->server_type_prediction_is_override(),
+          .rank_in_field_signature_group =
+              field_rank_map[field->GetFieldSignature()],
+      });
     }
 
     AutofillMetrics::LogServerResponseHasDataForForm(base::ranges::any_of(
@@ -639,6 +680,22 @@ void FormStructure::ProcessQueryResponse(
     // since generally only this sectioning result is used.
     LogSectioningMetrics(form->form_signature(), form->fields_,
                          form_interactions_ukm_logger);
+
+    // Log the field type predicted by rationalization.
+    // The sections are mapped to consecutive natural numbers starting at 1.
+    std::map<Section, size_t> section_id_map;
+    for (const auto& field : form->fields_) {
+      if (!base::Contains(section_id_map, field->section)) {
+        size_t next_section_id = section_id_map.size() + 1;
+        section_id_map[field->section] = next_section_id;
+      }
+      field->AppendLogEventIfNotRepeated(RationalizationFieldLogEvent{
+          .field_type = field->Type().GetStorableType(),
+          .section_id = section_id_map[field->section],
+          .type_changed = field->Type().GetStorableType() !=
+                          field->ComputedType().GetStorableType(),
+      });
+    }
   }
 
   AutofillMetrics::ServerQueryMetric metric;
@@ -909,6 +966,10 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         field->is_autofilled = cached_field->is_autofilled;
     }
 
+    if (cached_field->autofill_source_profile_guid()) {
+      field->set_autofill_source_profile_guid(
+          *cached_field->autofill_source_profile_guid());
+    }
     field->set_previously_autofilled(cached_field->previously_autofilled());
     field->set_was_context_menu_shown(cached_field->was_context_menu_shown());
     if (cached_field->value_not_autofilled_over_existing_value_hash()) {
@@ -945,6 +1006,7 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         field->SetTypeTo(cached_field->Type());
       }
     }
+    field->set_field_log_events(cached_field->field_log_events());
   }
 
   UpdateAutofillCount();
@@ -1132,12 +1194,12 @@ void FormStructure::LogQualityMetrics(
     // launched.
     if (field->is_autofilled) {
       ++num_of_accepted_autofilled_fields;
-      if (field->ShouldSuppressPromptDueToUnrecognizedAutocompleteAttribute()) {
+      if (field->HasPredictionDespiteUnrecognizedAutocompleteAttribute()) {
         ++num_of_accepted_autofilled_fields_with_autocomplete_unrecognized;
       }
     } else if (field->previously_autofilled()) {
       ++num_of_corrected_autofilled_fields;
-      if (field->ShouldSuppressPromptDueToUnrecognizedAutocompleteAttribute()) {
+      if (field->HasPredictionDespiteUnrecognizedAutocompleteAttribute()) {
         ++num_of_corrected_autofilled_fields_with_autocomplete_unrecognized;
       }
     }
@@ -1166,22 +1228,6 @@ void FormStructure::LogQualityMetrics(
         // confitioned on having a possible field type. Remove after M112.
         AutofillMetrics::LogEditedAutofilledFieldAtSubmissionDeprecated(
             form_interactions_ukm_logger, *this, *field);
-
-        // If the field was a |ADDRESS_HOME_STATE| field which was autofilled,
-        // record the source of the autofilled value between
-        // |AlternativeStateNameMap| or the profile value.
-        if (field->is_autofilled &&
-            type.GetStorableType() == ADDRESS_HOME_STATE) {
-          AutofillMetrics::
-              LogAutofillingSourceForStateSelectionFieldAtSubmission(
-                  field->state_is_a_matching_type()
-                      ? AutofillMetrics::
-                            AutofilledSourceMetricForStateSelectionField::
-                                AUTOFILL_BY_ALTERNATIVE_STATE_NAME_MAP
-                      : AutofillMetrics::
-                            AutofilledSourceMetricForStateSelectionField::
-                                AUTOFILL_BY_VALUE);
-        }
       }
     }
   }
@@ -1339,6 +1385,7 @@ void FormStructure::LogDetermineHeuristicTypesMetrics() {
 void FormStructure::SetFieldTypesFromAutocompleteAttribute() {
   has_author_specified_types_ = false;
   has_author_specified_upi_vpa_hint_ = false;
+  std::map<FieldSignature, size_t> field_rank_map;
   for (const std::unique_ptr<AutofillField>& field : fields_) {
     if (!field->parsed_autocomplete)
       continue;
@@ -1359,6 +1406,15 @@ void FormStructure::SetFieldTypesFromAutocompleteAttribute() {
 
     field->SetHtmlType(field->parsed_autocomplete->field_type,
                        field->parsed_autocomplete->mode);
+
+    // Log the field type predicted from autocomplete attribute.
+    ++field_rank_map[field->GetFieldSignature()];
+    field->AppendLogEventIfNotRepeated(AutocompleteAttributeFieldLogEvent{
+        .html_type = field->parsed_autocomplete->field_type,
+        .html_mode = field->parsed_autocomplete->mode,
+        .rank_in_field_signature_group =
+            field_rank_map[field->GetFieldSignature()],
+    });
   }
 }
 
@@ -1393,12 +1449,25 @@ void FormStructure::ParseFieldTypesWithPatterns(PatternSource pattern_source,
   if (field_type_map.empty())
     return;
 
+  // Fields can share the same field signature. This map records for each
+  // signature how many fields with the same signature have been observed.
+  std::map<FieldSignature, size_t> field_rank_map;
   for (const auto& field : fields_) {
     auto iter = field_type_map.find(field->global_id());
     if (iter == field_type_map.end())
       continue;
     const FieldCandidates& candidates = iter->second;
     field->set_heuristic_type(pattern_source, candidates.BestHeuristicType());
+
+    ++field_rank_map[field->GetFieldSignature()];
+    // Log the field type predicted from local heuristics.
+    field->AppendLogEventIfNotRepeated(HeuristicPredictionFieldLogEvent{
+        .field_type = field->heuristic_type(pattern_source),
+        .pattern_source = pattern_source,
+        .is_active_pattern_source = GetActivePatternSource() == pattern_source,
+        .rank_in_field_signature_group =
+            field_rank_map[field->GetFieldSignature()],
+    });
   }
 }
 
@@ -1407,17 +1476,26 @@ const AutofillField* FormStructure::field(size_t index) const {
     NOTREACHED();
     return nullptr;
   }
-
   return fields_[index].get();
 }
 
 AutofillField* FormStructure::field(size_t index) {
-  return const_cast<AutofillField*>(
-      static_cast<const FormStructure*>(this)->field(index));
+  return const_cast<AutofillField*>(std::as_const(*this).field(index));
 }
 
 size_t FormStructure::field_count() const {
   return fields_.size();
+}
+
+const AutofillField* FormStructure::GetFieldById(FieldGlobalId field_id) const {
+  auto it = base::ranges::find(
+      fields_, field_id, [](const auto& field) { return field->global_id(); });
+  return it != fields_.end() ? it->get() : nullptr;
+}
+
+AutofillField* FormStructure::GetFieldById(FieldGlobalId field_id) {
+  return const_cast<AutofillField*>(
+      std::as_const(*this).GetFieldById(field_id));
 }
 
 size_t FormStructure::active_field_count() const {

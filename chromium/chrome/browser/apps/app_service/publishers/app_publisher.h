@@ -27,6 +27,10 @@
 namespace apps {
 
 struct AppLaunchParams;
+class PackageId;
+
+struct PromiseApp;
+using PromiseAppPtr = std::unique_ptr<PromiseApp>;
 
 // AppPublisher parent class (in the App Service sense) for all app publishers.
 // See components/services/app_service/README.md.
@@ -47,6 +51,9 @@ class AppPublisher {
                         InstallReason install_reason,
                         InstallSource install_source);
 
+  // Creates and returns a promise app object.
+  static PromiseAppPtr MakePromiseApp(const PackageId& package_id);
+
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
   // Registers this AppPublisher to AppServiceProxy, allowing it to receive App
   // Service API calls. This function must be called after the object's
@@ -55,6 +62,9 @@ class AppPublisher {
   // be called immediately before the first call to AppPublisher::Publish that
   // sends the initial list of apps to the App Service.
   void RegisterPublisher(AppType app_type);
+
+  // Publishes a single promise app to the Promise App Registry Cache.
+  void PublishPromiseApp(PromiseAppPtr app);
 #endif
 
   // Requests an icon for an app identified by |app_id|. The icon is identified
@@ -186,17 +196,6 @@ class AppPublisher {
   // available in App Management.
   virtual void OpenNativeSettings(const std::string& app_id);
 
-  // Indicates that the app identified by |app_id| has been set as a preferred
-  // app for |intent_filter|, and the |replaced_app_preferences| is the apps
-  // that are no longer preferred apps for their corresponding |intent_filters|.
-  // This method is used by the App Service to sync the change to publishers.
-  // |intent| is needed to set the preferred app in ARC.
-  virtual void OnPreferredAppSet(
-      const std::string& app_id,
-      IntentFilterPtr intent_filter,
-      IntentPtr intent,
-      ReplacedAppPreferences replaced_app_preferences) {}
-
   // Indicates that the app identified by |app_id| has had its supported links
   // preference changed, so that all supported link filters are either preferred
   // (|open_in_app| is true) or not preferred (|open_in_app| is false). This
@@ -247,7 +246,7 @@ class AppPublisher {
   AppServiceProxy* proxy() { return proxy_; }
 
  private:
-  const raw_ptr<AppServiceProxy> proxy_;
+  const raw_ptr<AppServiceProxy, DanglingUntriaged> proxy_;
 };
 
 }  // namespace apps

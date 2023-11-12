@@ -508,12 +508,14 @@ void LocalFrameClientImpl::DispatchDidFinishLoadForPrinting() {
 
 void LocalFrameClientImpl::BeginNavigation(
     const ResourceRequest& request,
+    const KURL& requestor_base_url,
     mojom::RequestContextFrameType frame_type,
     LocalDOMWindow* origin_window,
     DocumentLoader* document_loader,
     WebNavigationType type,
     NavigationPolicy policy,
     WebFrameLoadType frame_load_type,
+    mojom::blink::ForceHistoryPush force_history_push,
     bool is_client_redirect,
     bool is_unfenced_top_navigation,
     mojom::blink::TriggeringEventInfo triggering_event_info,
@@ -538,7 +540,9 @@ void LocalFrameClientImpl::BeginNavigation(
 
   auto navigation_info = std::make_unique<WebNavigationInfo>();
   navigation_info->url_request.CopyFrom(WrappedResourceRequest(request));
+  navigation_info->requestor_base_url = requestor_base_url;
   navigation_info->frame_type = frame_type;
+  navigation_info->force_history_push = force_history_push;
   navigation_info->navigation_type = type;
   navigation_info->navigation_policy = static_cast<WebNavigationPolicy>(policy);
   navigation_info->has_transient_user_activation = request.HasUserGesture();
@@ -575,6 +579,19 @@ void LocalFrameClientImpl::BeginNavigation(
   }
 
   navigation_info->impression = impression;
+
+  // Propagate `has_storage_access` to the next document under certain
+  // circumstances. This corresponds to the "snapshotting source snapshot
+  // params" change and some of the "create navigation params by fetching"
+  // changes in the Storage Access API spec:
+  // https://privacycg.github.io/storage-access/#navigation
+  navigation_info->has_storage_access =
+      origin_window && origin_window->HasStorageAccess() &&
+      navigation_info->initiator_frame_token.has_value() &&
+      navigation_info->initiator_frame_token.value() ==
+          web_frame_->GetLocalFrameToken() &&
+      web_frame_->GetSecurityOrigin().IsSameOriginWith(
+          WebSecurityOrigin::Create(navigation_info->url_request.Url()));
 
   // Can be null.
   LocalFrame* local_parent_frame = GetLocalParentFrame(web_frame_);
@@ -747,11 +764,16 @@ void LocalFrameClientImpl::DidObserveLoadingBehavior(
 
 void LocalFrameClientImpl::DidObserveSubresourceLoad(
     uint32_t number_of_subresources_loaded,
-    uint32_t number_of_subresource_loads_handled_by_service_worker) {
+    uint32_t number_of_subresource_loads_handled_by_service_worker,
+    bool pervasive_payload_requested,
+    int64_t pervasive_bytes_fetched,
+    int64_t total_bytes_fetched) {
   if (web_frame_->Client()) {
     web_frame_->Client()->DidObserveSubresourceLoad(
         number_of_subresources_loaded,
-        number_of_subresource_loads_handled_by_service_worker);
+        number_of_subresource_loads_handled_by_service_worker,
+        pervasive_payload_requested, pervasive_bytes_fetched,
+        total_bytes_fetched);
   }
 }
 
@@ -775,8 +797,7 @@ void LocalFrameClientImpl::DidObserveLayoutShift(double score,
 }
 
 void LocalFrameClientImpl::PreloadSubresourceOptimizationsForOrigins(
-    const WTF::HashSet<scoped_refptr<const SecurityOrigin>, SecurityOriginHash>&
-        origins) {
+    const WTF::HashSet<scoped_refptr<const SecurityOrigin>>& origins) {
   if (WebLocalFrameClient* client = web_frame_->Client()) {
     std::vector<WebSecurityOrigin> origins_list;
     for (const auto& origin : origins) {
@@ -1037,9 +1058,13 @@ WebTextCheckClient* LocalFrameClientImpl::GetTextCheckerClient() const {
   return web_frame_->GetTextCheckerClient();
 }
 
-std::unique_ptr<blink::WebURLLoaderFactory>
-LocalFrameClientImpl::CreateURLLoaderFactory() {
-  return web_frame_->Client()->CreateURLLoaderFactory();
+scoped_refptr<network::SharedURLLoaderFactory>
+LocalFrameClientImpl::GetURLLoaderFactory() {
+  return web_frame_->Client()->GetURLLoaderFactory();
+}
+
+std::unique_ptr<URLLoader> LocalFrameClientImpl::CreateURLLoaderForTesting() {
+  return web_frame_->Client()->CreateURLLoaderForTesting();
 }
 
 blink::BrowserInterfaceBrokerProxy&
@@ -1107,6 +1132,14 @@ void LocalFrameClientImpl::OnMainFrameViewportRectangleChanged(
   DCHECK(web_frame_->Client());
   web_frame_->Client()->OnMainFrameViewportRectangleChanged(
       main_frame_viewport_rect);
+}
+
+void LocalFrameClientImpl::OnMainFrameImageAdRectangleChanged(
+    DOMNodeId element_id,
+    const gfx::Rect& image_ad_rect) {
+  DCHECK(web_frame_->Client());
+  web_frame_->Client()->OnMainFrameImageAdRectangleChanged(element_id,
+                                                           image_ad_rect);
 }
 
 void LocalFrameClientImpl::OnOverlayPopupAdDetected() {

@@ -96,8 +96,7 @@ public final class MockUrlRequestJobFactory {
 
     private static native String nativeGetMockUrlWithFailure(int phase, int netError);
 
-    private static native String nativeGetMockUrlForData(String data,
-            int dataRepeatCount);
+    private static native String nativeGetMockUrlForData(String data, int dataRepeatCount);
 
     private static native String nativeGetMockUrlForClientCertificateRequest();
 

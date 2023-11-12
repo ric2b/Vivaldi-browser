@@ -5,9 +5,11 @@
 #include "chrome/browser/media/webrtc/capture_policy_utils.h"
 
 #include "base/containers/cxx20_erase_vector.h"
+#include "base/ranges/algorithm.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -58,6 +60,16 @@ bool IsOriginInList(const GURL& request_origin,
 AllowedScreenCaptureLevel GetAllowedCaptureLevel(
     const GURL& request_origin,
     content::WebContents* capturer_web_contents) {
+  // Since the UI for capture doesn't clip against picture in picture windows
+  // properly on all platforms, and since it's not clear that we actually want
+  // to support this anyway, turn it off for now.  Note that direct calls into
+  // `GetAllowedCaptureLevel(..., PrefService)` will miss this check.
+  // TODO(crbug.com/1410382): Consider turning this back on.
+  if (PictureInPictureWindowManager::IsChildWebContents(
+          capturer_web_contents)) {
+    return AllowedScreenCaptureLevel::kDisallowed;
+  }
+
   // If we can't get the PrefService, then we won't apply any restrictions.
   Profile* profile =
       Profile::FromBrowserContext(capturer_web_contents->GetBrowserContext());
@@ -104,10 +116,36 @@ AllowedScreenCaptureLevel GetAllowedCaptureLevel(const GURL& request_origin,
   return AllowedScreenCaptureLevel::kDisallowed;
 }
 
+bool IsGetDisplayMediaSetSelectAllScreensAllowedForAnySite(
+    content::BrowserContext* context) {
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
+  Profile* profile = Profile::FromBrowserContext(context);
+  if (!profile) {
+    return false;
+  }
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  if (!host_content_settings_map) {
+    return false;
+  }
+  ContentSettingsForOneType content_settings;
+  host_content_settings_map->GetSettingsForOneType(
+      ContentSettingsType::GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS,
+      &content_settings);
+  return base::ranges::any_of(content_settings,
+                              [](const ContentSettingPatternSource& source) {
+                                return source.GetContentSetting() ==
+                                       ContentSetting::CONTENT_SETTING_ALLOW;
+                              });
+#else
+  return false;
+#endif
+}
+
 bool IsGetDisplayMediaSetSelectAllScreensAllowed(
     content::BrowserContext* context,
     const GURL& url) {
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   Profile* profile = Profile::FromBrowserContext(context);
   if (!profile)
     return false;
@@ -121,7 +159,7 @@ bool IsGetDisplayMediaSetSelectAllScreensAllowed(
           ContentSettingsType::GET_DISPLAY_MEDIA_SET_SELECT_ALL_SCREENS);
   return auto_accept_enabled == ContentSetting::CONTENT_SETTING_ALLOW;
 #else
-  // This API is currently only available on ChromeOS.
+  // This API is currently only available on ChromeOS and Linux.
   return false;
 #endif
 }
@@ -137,13 +175,18 @@ DesktopMediaList::WebContentsFilter GetIncludableWebContentsFilter(
       return base::BindRepeating(
           [](const GURL& request_origin, content::WebContents* web_contents) {
             DCHECK(web_contents);
-            return url::IsSameOriginWith(
-                request_origin,
-                web_contents->GetLastCommittedURL().DeprecatedGetOriginAsURL());
+            return !PictureInPictureWindowManager::IsChildWebContents(
+                       web_contents) &&
+                   url::IsSameOriginWith(request_origin,
+                                         web_contents->GetLastCommittedURL()
+                                             .DeprecatedGetOriginAsURL());
           },
           request_origin);
     default:
-      return base::BindRepeating([](content::WebContents* wc) { return true; });
+      return base::BindRepeating([](content::WebContents* web_contents) {
+        DCHECK(web_contents);
+        return !PictureInPictureWindowManager::IsChildWebContents(web_contents);
+      });
   }
 }
 

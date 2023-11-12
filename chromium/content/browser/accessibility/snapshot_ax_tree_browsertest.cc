@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/fenced_frame/fenced_frame.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -494,7 +494,7 @@ IN_PROC_BROWSER_TEST_F(SnapshotAXTreeBrowserTest, ExcludeOffscreen) {
 
   // Dump the whole tree if one of the assertions below fails
   // to aid in debugging why it failed.
-  SCOPED_TRACE(waiter.snapshot().ToString());
+  //  SCOPED_TRACE(waiter.snapshot().ToString());
 
   // If we didn't exclude offscreen nodes, thee would be at least 200 nodes on
   // the page (2 for every paragraph). By excluding offscreen nodes, we should

@@ -5,8 +5,8 @@
 #ifndef CONTENT_PUBLIC_TEST_TEST_STORAGE_PARTITION_H_
 #define CONTENT_PUBLIC_TEST_TEST_STORAGE_PARTITION_H_
 
-#include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "components/services/storage/privileged/mojom/indexed_db_control.mojom.h"
@@ -142,6 +142,8 @@ class TestStoragePartition : public StoragePartition {
 
   InterestGroupManager* GetInterestGroupManager() override;
 
+  AttributionDataModel* GetAttributionDataModel() override;
+
   void set_browsing_topics_site_data_manager(
       BrowsingTopicsSiteDataManager* manager) {
     browsing_topics_site_data_manager_ = manager;
@@ -167,8 +169,6 @@ class TestStoragePartition : public StoragePartition {
   }
   ContentIndexContext* GetContentIndexContext() override;
 
-  NativeIOContext* GetNativeIOContext() override;
-
   void set_host_zoom_map(HostZoomMap* map) { host_zoom_map_ = map; }
   HostZoomMap* GetHostZoomMap() override;
 
@@ -186,6 +186,8 @@ class TestStoragePartition : public StoragePartition {
                           uint32_t quota_storage_remove_mask,
                           const GURL& storage_origin,
                           base::OnceClosure callback) override;
+  void ClearDataForAllBuckets(const blink::StorageKey& storage_key,
+                              base::OnceClosure callback) override;
   void ClearDataForBuckets(const blink::StorageKey& storage_key,
                            const std::set<std::string>& buckets,
                            base::OnceClosure callback) override;
@@ -257,7 +259,6 @@ class TestStoragePartition : public StoragePartition {
   raw_ptr<DevToolsBackgroundServicesContext>
       devtools_background_services_context_ = nullptr;
   raw_ptr<ContentIndexContext> content_index_context_ = nullptr;
-  raw_ptr<NativeIOContext> native_io_context_ = nullptr;
   raw_ptr<HostZoomMap> host_zoom_map_ = nullptr;
   raw_ptr<HostZoomLevelContext> host_zoom_level_context_ = nullptr;
   raw_ptr<ZoomLevelDelegate> zoom_level_delegate_ = nullptr;

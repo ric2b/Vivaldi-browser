@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/process/launch.h"
@@ -29,7 +29,9 @@
 #include "chrome/updater/update_service_internal_impl_qualifying.h"
 #include "chrome/updater/updater_scope.h"
 #include "chrome/updater/updater_version.h"
+#include "chrome/updater/util/util.h"
 #include "components/prefs/pref_service.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace updater {
 
@@ -93,8 +95,9 @@ base::OnceClosure AppServer::ModeCheck() {
   }
 
   if (this_version > active_version || global_prefs->GetSwapping()) {
-    if (!SwapVersions(global_prefs.get()))
+    if (!SwapVersions(global_prefs.get())) {
       return base::BindOnce(&AppServer::Shutdown, this, kErrorFailedToSwap);
+    }
   }
 
   if (IsInternalService()) {
@@ -111,8 +114,9 @@ base::OnceClosure AppServer::ModeCheck() {
 }
 
 void AppServer::Uninitialize() {
-  if (prefs_)
+  if (prefs_) {
     PrefsCommitPendingWrites(prefs_->GetPrefService());
+  }
   if (uninstall_self_) {
     VLOG(1) << "Uninstalling version " << kUpdaterVersion;
     UninstallSelf();
@@ -122,28 +126,33 @@ void AppServer::Uninitialize() {
 }
 
 void AppServer::MaybeUninstall() {
-  if (!prefs_)
+  if (!prefs_) {
     return;
+  }
 
-  auto persisted_data =
-      base::MakeRefCounted<PersistedData>(prefs_->GetPrefService());
+  auto persisted_data = base::MakeRefCounted<PersistedData>(
+      updater_scope(), prefs_->GetPrefService());
   if (ShouldUninstall(persisted_data->GetAppIds(), server_starts_,
                       persisted_data->GetHadApps())) {
-    base::CommandLine command_line(
-        base::CommandLine::ForCurrentProcess()->GetProgram());
-    command_line.AppendSwitch(kUninstallIfUnusedSwitch);
-    if (IsSystemInstall(updater_scope()))
-      command_line.AppendSwitch(kSystemSwitch);
-    command_line.AppendSwitch(kEnableLoggingSwitch);
-    command_line.AppendSwitchASCII(kLoggingModuleSwitch,
-                                   kLoggingModuleSwitchValue);
-    VLOG(2) << "Launching uninstall command: "
-            << command_line.GetCommandLineString();
-
-    base::Process process = base::LaunchProcess(command_line, {});
-    if (!process.IsValid()) {
-      VLOG(2) << "Invalid process launching command: "
+    absl::optional<base::FilePath> executable =
+        GetUpdaterExecutablePath(updater_scope());
+    if (executable) {
+      base::CommandLine command_line(*executable);
+      command_line.AppendSwitch(kUninstallIfUnusedSwitch);
+      if (IsSystemInstall(updater_scope())) {
+        command_line.AppendSwitch(kSystemSwitch);
+      }
+      command_line.AppendSwitch(kEnableLoggingSwitch);
+      command_line.AppendSwitchASCII(kLoggingModuleSwitch,
+                                     kLoggingModuleSwitchValue);
+      VLOG(2) << "Launching uninstall command: "
               << command_line.GetCommandLineString();
+
+      base::Process process = base::LaunchProcess(command_line, {});
+      if (!process.IsValid()) {
+        VLOG(2) << "Invalid process launching command: "
+                << command_line.GetCommandLineString();
+      }
     }
   }
 }
@@ -155,13 +164,14 @@ void AppServer::FirstTaskRun() {
 bool AppServer::SwapVersions(GlobalPrefs* global_prefs) {
   global_prefs->SetSwapping(true);
   PrefsCommitPendingWrites(global_prefs->GetPrefService());
-  if (!SwapInNewVersion())
+  if (!SwapInNewVersion()) {
     return false;
+  }
   if (!global_prefs->GetMigratedLegacyUpdaters()) {
-    if (!MigrateLegacyUpdaters(
-            base::BindRepeating(&PersistedData::RegisterApp,
-                                base::MakeRefCounted<PersistedData>(
-                                    global_prefs->GetPrefService())))) {
+    if (!MigrateLegacyUpdaters(base::BindRepeating(
+            &PersistedData::RegisterApp,
+            base::MakeRefCounted<PersistedData>(
+                updater_scope(), global_prefs->GetPrefService())))) {
       return false;
     }
     global_prefs->SetMigratedLegacyUpdaters();

@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
@@ -100,12 +100,12 @@ void GeolocationHandler::OnPropertyChanged(const std::string& key,
 // Private methods
 
 void GeolocationHandler::ManagerPropertiesCallback(
-    absl::optional<base::Value> properties) {
+    absl::optional<base::Value::Dict> properties) {
   if (!properties)
     return;
 
   const base::Value* value =
-      properties->FindKey(shill::kEnabledTechnologiesProperty);
+      properties->Find(shill::kEnabledTechnologiesProperty);
   if (value)
     HandlePropertyChanged(shill::kEnabledTechnologiesProperty, *value);
 }
@@ -145,15 +145,16 @@ void GeolocationHandler::RequestGeolocationObjects() {
 }
 
 void GeolocationHandler::GeolocationCallback(
-    absl::optional<base::Value> properties) {
-  if (!properties || !properties->is_dict()) {
+    absl::optional<base::Value::Dict> properties) {
+  if (!properties) {
     LOG(ERROR) << "Failed to get Geolocation data";
     return;
   }
   wifi_access_points_.clear();
   cell_towers_.clear();
-  if (properties->DictEmpty())
+  if (properties->empty()) {
     return;  // No enabled devices, don't update received time.
+  }
 
   // Dictionary<device_type, entry_list>
   // Example dict returned from shill:
@@ -164,19 +165,17 @@ void GeolocationHandler::GeolocationCallback(
   //   kGeoCellTowersProperty: [ {kGeoCellIdProperty: cell_id_value, ...}, ... ]
   // }
   for (auto* device_type : kDevicePropertyNames) {
-    const base::Value* entry_list = properties->FindKey(device_type);
+    const base::Value::List* entry_list = properties->FindList(device_type);
     if (!entry_list) {
-      continue;
-    }
-
-    if (!entry_list->is_list()) {
-      LOG(WARNING) << "Geolocation dictionary value not a List: "
-                   << device_type;
+      if (properties->contains(device_type)) {
+        LOG(WARNING) << "Geolocation dictionary value not a List: "
+                     << device_type;
+      }
       continue;
     }
 
     // List[Dictionary<key, value_str>]
-    for (const auto& entry : entry_list->GetList()) {
+    for (const auto& entry : *entry_list) {
       if (!entry.is_dict()) {
         LOG(WARNING) << "Geolocation list value not a Dictionary";
         continue;

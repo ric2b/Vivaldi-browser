@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
+#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
@@ -78,38 +79,6 @@ TEST_F(SelectionModifierTest, MoveByLineBlockInInline) {
             MoveBackwardByLine(modifier));
 }
 
-TEST_F(SelectionModifierTest, MoveByLineBlockInInlineCulled) {
-  // |LayoutNGBlockInInline| prevents the inline box from culling. This test is
-  // exactly the same as |MoveByLineBlockInInline| above.
-  if (RuntimeEnabledFeatures::LayoutNGBlockInInlineEnabled())
-    return;
-
-  LoadAhem();
-  InsertStyleElement(
-      "div {"
-      "font: 10px/20px Ahem;"
-      "padding: 10px;"
-      "writing-mode: horizontal-tb;"
-      "}");
-  const SelectionInDOMTree selection =
-      SetSelectionTextToBody("<div>ab|c<b><p>ABC</p><p>DEF</p>def</b></div>");
-  SelectionModifier modifier(GetFrame(), selection);
-
-  EXPECT_EQ("<div>abc<b><p>AB|C</p><p>DEF</p>def</b></div>",
-            MoveForwardByLine(modifier));
-  EXPECT_EQ("<div>abc<b><p>ABC</p><p>DE|F</p>def</b></div>",
-            MoveForwardByLine(modifier));
-  EXPECT_EQ("<div>abc<b><p>ABC</p><p>DEF</p>de|f</b></div>",
-            MoveForwardByLine(modifier));
-
-  EXPECT_EQ("<div>abc<b><p>ABC</p><p>DE|F</p>def</b></div>",
-            MoveBackwardByLine(modifier));
-  EXPECT_EQ("<div>abc<b><p>AB|C</p><p>DEF</p>def</b></div>",
-            MoveBackwardByLine(modifier));
-  EXPECT_EQ("<div>ab|c<b><p>ABC</p><p>DEF</p>def</b></div>",
-            MoveBackwardByLine(modifier));
-}
-
 TEST_F(SelectionModifierTest, MoveByLineHorizontal) {
   LoadAhem();
   InsertStyleElement(
@@ -132,8 +101,6 @@ TEST_F(SelectionModifierTest, MoveByLineHorizontal) {
 }
 
 TEST_F(SelectionModifierTest, MoveByLineMultiColumnSingleText) {
-  RuntimeEnabledFeaturesTestHelpers::ScopedLayoutNGBlockFragmentation
-      block_fragmentation(RuntimeEnabledFeatures::LayoutNGEnabled());
   LoadAhem();
   InsertStyleElement(
       "div { font: 10px/15px Ahem; column-count: 3; width: 20ch; }");
@@ -463,7 +430,8 @@ TEST_F(SelectionModifierTest, OptgroupAndTable) {
 
   Element* optgroup = GetDocument().QuerySelector("optgroup");
   ShadowRoot* shadow_root = optgroup->GetShadowRoot();
-  Element* label = shadow_root->getElementById("optgroup-label");
+  Element* label =
+      shadow_root->getElementById(shadow_element_names::kIdOptGroupLabel);
   EXPECT_EQ(Position(label, 0), selection.Base());
   EXPECT_EQ(Position(shadow_root, 1), selection.Extent());
 }

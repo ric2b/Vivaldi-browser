@@ -28,12 +28,15 @@ namespace {
 
 // TODO(penghuang): Fix vulkan with one copy or zero copy
 // https://crbug.com/979703
+// TODO(crbug.com/1417268): Fix SkiaGL with zero copy
 std::vector<RasterTestConfig> const kTestCases = {
     {viz::RendererType::kSoftware, TestRasterType::kBitmap},
 #if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
     {viz::RendererType::kSkiaGL, TestRasterType::kGpu},
     {viz::RendererType::kSkiaGL, TestRasterType::kOneCopy},
+#if !BUILDFLAG(IS_IOS)
     {viz::RendererType::kSkiaGL, TestRasterType::kZeroCopy},
+#endif  // !BUILDFLAG(IS_IOS)
 #endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
 #if BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
     {viz::RendererType::kSkiaVk, TestRasterType::kGpu},
@@ -105,7 +108,8 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfLayer) {
   mask->SetIsDrawable(true);
   green->SetMaskLayer(mask);
 
-  pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
+  pixel_comparator_ =
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
 
   RunPixelResourceTest(background,
                        base::FilePath(FILE_PATH_LITERAL("mask_of_layer.png")));
@@ -163,7 +167,7 @@ TEST_P(LayerTreeHostMaskPixelTestWithLayerList, MaskWithEffect) {
   mask_layer_ = PictureLayer::Create(&client);
 
   pixel_comparator_ =
-      std::make_unique<FuzzyPixelOffByOneComparator>(true /* discard_alpha */);
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
   RunPixelResourceTestWithLayerList(
       base::FilePath(FILE_PATH_LITERAL("mask_with_effect.png")));
 }
@@ -298,7 +302,7 @@ TEST_P(LayerTreeHostMaskPixelTest_ScaledMaskWithEffect, Test) {
   mask_layer_ = PictureLayer::Create(&client);
 
   pixel_comparator_ =
-      std::make_unique<FuzzyPixelOffByOneComparator>(true /* discard_alpha */);
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
 
   RunPixelResourceTestWithLayerList(
       base::FilePath(FILE_PATH_LITERAL("scaled_mask_with_effect_.png"))
@@ -311,7 +315,7 @@ TEST_P(LayerTreeHostMaskPixelTestWithLayerList, MaskWithEffectDifferentSize) {
   mask_layer_ = PictureLayer::Create(&client);
 
   pixel_comparator_ =
-      std::make_unique<FuzzyPixelOffByOneComparator>(true /* discard_alpha */);
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
 
   // The mask is half the size of thing it's masking. In layer-list mode,
   // the mask is not automatically scaled to match the other layer.
@@ -334,7 +338,7 @@ TEST_P(LayerTreeHostMaskPixelTestWithLayerList, ImageMaskWithEffect) {
   mask_layer_ = FakePictureLayer::Create(&layer_client);
 
   pixel_comparator_ =
-      std::make_unique<FuzzyPixelOffByOneComparator>(true /* discard_alpha */);
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
 
   // The mask is half the size of thing it's masking. In layer-list mode,
   // the mask is not automatically scaled to match the other layer.
@@ -368,7 +372,7 @@ TEST_P(LayerTreeHostMasksPixelTest, ImageMaskOfLayer) {
   background->AddChild(green);
 
   pixel_comparator_ =
-      std::make_unique<FuzzyPixelOffByOneComparator>(true /* discard_alpha */);
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
 
   RunPixelResourceTest(
       background, base::FilePath(FILE_PATH_LITERAL("image_mask_of_layer.png")));
@@ -397,7 +401,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfClippedLayer) {
   green->SetMaskLayer(mask);
 
   pixel_comparator_ =
-      std::make_unique<FuzzyPixelOffByOneComparator>(true /* discard_alpha */);
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
 
   RunPixelResourceTest(
       background,
@@ -421,7 +425,7 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfLayerNonExactTextureSize) {
   green->SetMaskLayer(mask);
 
   pixel_comparator_ =
-      std::make_unique<FuzzyPixelOffByOneComparator>(true /* discard_alpha */);
+      std::make_unique<AlphaDiscardingFuzzyPixelOffByOneComparator>();
 
   RunPixelResourceTest(background,
                        base::FilePath(FILE_PATH_LITERAL(
@@ -577,15 +581,11 @@ TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerList, Test) {
   if (use_skia_vulkan() && use_accelerated_raster()) {
     // Vulkan with OOP raster has 3 pixels errors (the circle mask shape is
     // slightly different).
-    float percentage_pixels_large_error = 0.031f;  // 3px / (100*100)
-    float percentage_pixels_small_error = 0.0f;
-    float average_error_allowed_in_bad_pixels = 182.f;
-    int large_error_allowed = 182;
-    int small_error_allowed = 0;
     pixel_comparator_ = std::make_unique<FuzzyPixelComparator>(
-        true /* discard_alpha */, percentage_pixels_large_error,
-        percentage_pixels_small_error, average_error_allowed_in_bad_pixels,
-        large_error_allowed, small_error_allowed);
+        FuzzyPixelComparator()
+            .DiscardAlpha()
+            .SetErrorPixelsPercentageLimit(0.031f)  // 3px / (100*100)
+            .SetAbsErrorLimit(182));
   }
 
   RunPixelResourceTestWithLayerList(image_name);
@@ -637,15 +637,11 @@ TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerTree, Test) {
   if (use_skia_vulkan() && use_accelerated_raster()) {
     // Vulkan with OOP raster has 3 pixels errors (the circle mask shape is
     // slightly different).
-    float percentage_pixels_large_error = 0.031f;  // 3px / (100*100)
-    float percentage_pixels_small_error = 0.0f;
-    float average_error_allowed_in_bad_pixels = 182.f;
-    int large_error_allowed = 182;
-    int small_error_allowed = 0;
     pixel_comparator_ = std::make_unique<FuzzyPixelComparator>(
-        true /* discard_alpha */, percentage_pixels_large_error,
-        percentage_pixels_small_error, average_error_allowed_in_bad_pixels,
-        large_error_allowed, small_error_allowed);
+        FuzzyPixelComparator()
+            .DiscardAlpha()
+            .SetErrorPixelsPercentageLimit(0.031f)  // 3px / (100*100)
+            .SetAbsErrorLimit(182));
   }
 
   RunPixelResourceTest(background, image_name);
@@ -682,18 +678,11 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfLayerWithBlend) {
   mask->SetIsDrawable(true);
   picture_horizontal->SetMaskLayer(mask);
 
-  float percentage_pixels_large_error = 0.04f;  // 0.04%, ~6px / (128*128)
-  float percentage_pixels_small_error = 0.0f;
-  float average_error_allowed_in_bad_pixels = 256.0f;
-  int large_error_allowed = 256;
-  int small_error_allowed = 0;
   pixel_comparator_ = std::make_unique<FuzzyPixelComparator>(
-      true,  // discard_alpha
-      percentage_pixels_large_error,
-      percentage_pixels_small_error,
-      average_error_allowed_in_bad_pixels,
-      large_error_allowed,
-      small_error_allowed);
+      FuzzyPixelComparator()
+          .DiscardAlpha()
+          .SetErrorPixelsPercentageLimit(0.04f)  // 0.04%, ~6px / (128*128)
+          .SetAbsErrorLimit(255));
 
   RunPixelResourceTest(background,
                        base::FilePath(
@@ -744,14 +733,14 @@ class LayerTreeHostMaskAsBlendingPixelTest
       : LayerTreeHostPixelResourceTest(GetParam().test_config),
         use_antialiasing_(GetParam().flags & kUseAntialiasing),
         force_shaders_(GetParam().flags & kForceShaders) {
-    float percentage_pixels_error = 0.f;
+    float percentage_pixels_large_error = 0.f;
     float percentage_pixels_small_error = 0.f;
     float average_error_allowed_in_bad_pixels = 0.f;
     int large_error_allowed = 0;
     int small_error_allowed = 0;
     if (!use_software_renderer()) {
-      percentage_pixels_error = 6.0f;
-      percentage_pixels_small_error = 2.f;
+      percentage_pixels_large_error = 4.0f;
+      percentage_pixels_small_error = 2.0f;
       average_error_allowed_in_bad_pixels = 2.1f;
       large_error_allowed = 11;
       small_error_allowed = 1;
@@ -761,13 +750,13 @@ class LayerTreeHostMaskAsBlendingPixelTest
       // ARM Windows, macOS, and Fuchsia has some pixels difference
       // Affected tests: RotatedClippedCircle, RotatedClippedCircleUnderflow
       // crbug.com/1030244, crbug.com/1048249, crbug.com/1128443
-      percentage_pixels_error = 7.f;
+      percentage_pixels_large_error = 7.f;
       average_error_allowed_in_bad_pixels = 5.f;
       large_error_allowed = 20;
 #else
       // Differences in floating point calculation on ARM means a small
       // percentage of pixels will be off by 1.
-      percentage_pixels_error = 0.112f;
+      percentage_pixels_large_error = 0.112f;
       average_error_allowed_in_bad_pixels = 1.f;
       large_error_allowed = 1;
 #endif
@@ -775,10 +764,11 @@ class LayerTreeHostMaskAsBlendingPixelTest
     }
 
     pixel_comparator_ = std::make_unique<FuzzyPixelComparator>(
-        false,  // discard_alpha
-        percentage_pixels_error, percentage_pixels_small_error,
-        average_error_allowed_in_bad_pixels, large_error_allowed,
-        small_error_allowed);
+        FuzzyPixelComparator()
+            .SetErrorPixelsPercentageLimit(percentage_pixels_large_error,
+                                           percentage_pixels_small_error)
+            .SetAvgAbsErrorLimit(average_error_allowed_in_bad_pixels)
+            .SetAbsErrorLimit(large_error_allowed, small_error_allowed));
   }
 
   static scoped_refptr<Layer> CreateCheckerboardLayer(const gfx::Size& bounds) {
@@ -867,9 +857,10 @@ class LayerTreeHostMaskAsBlendingPixelTest
   bool force_shaders_;
 };
 
+// TODO(crbug.com/1417268): Fix SkiaGL with zero copy
 MaskTestConfig const kTestConfigs[] = {
     MaskTestConfig{{viz::RendererType::kSoftware, TestRasterType::kBitmap}, 0},
-#if BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+#if BUILDFLAG(ENABLE_GL_BACKEND_TESTS) && !BUILDFLAG(IS_IOS)
     MaskTestConfig{{viz::RendererType::kSkiaGL, TestRasterType::kZeroCopy}, 0},
     MaskTestConfig{{viz::RendererType::kSkiaGL, TestRasterType::kZeroCopy},
                    kUseAntialiasing},
@@ -877,7 +868,7 @@ MaskTestConfig const kTestConfigs[] = {
                    kForceShaders},
     MaskTestConfig{{viz::RendererType::kSkiaGL, TestRasterType::kZeroCopy},
                    kUseAntialiasing | kForceShaders},
-#endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS)
+#endif  // BUILDFLAG(ENABLE_GL_BACKEND_TESTS) && !BUILDFLAG(IS_IOS)
 #if BUILDFLAG(ENABLE_VULKAN_BACKEND_TESTS)
     MaskTestConfig{{viz::RendererType::kSkiaVk, TestRasterType::kZeroCopy}, 0},
     MaskTestConfig{{viz::RendererType::kSkiaVk, TestRasterType::kZeroCopy},

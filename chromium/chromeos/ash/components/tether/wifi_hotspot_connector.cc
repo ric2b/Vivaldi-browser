@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/guid.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/single_thread_task_runner.h"
@@ -14,18 +14,22 @@
 #include "chromeos/ash/components/multidevice/logging/logging.h"
 #include "chromeos/ash/components/network/device_state.h"
 #include "chromeos/ash/components/network/network_connect.h"
+#include "chromeos/ash/components/network/network_handler.h"
 #include "chromeos/ash/components/network/network_state.h"
 #include "chromeos/ash/components/network/network_state_handler.h"
 #include "chromeos/ash/components/network/network_type_pattern.h"
 #include "chromeos/ash/components/network/shill_property_util.h"
+#include "chromeos/ash/components/network/technology_state_controller.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 namespace ash::tether {
 
 WifiHotspotConnector::WifiHotspotConnector(
     NetworkStateHandler* network_state_handler,
+    TechnologyStateController* technology_state_controller,
     NetworkConnect* network_connect)
     : network_state_handler_(network_state_handler),
+      technology_state_controller_(technology_state_controller),
       network_connect_(network_connect),
       timer_(std::make_unique<base::OneShotTimer>()),
       clock_(base::DefaultClock::GetInstance()),
@@ -94,7 +98,7 @@ void WifiHotspotConnector::ConnectToWifiHotspot(
     is_waiting_for_wifi_to_enable_ = true;
 
     // Once Wi-Fi is enabled, UpdateWaitingForWifi will be called.
-    network_state_handler_->SetTechnologyEnabled(
+    technology_state_controller_->SetTechnologiesEnabled(
         NetworkTypePattern::WiFi(), true /*enabled */,
         base::BindRepeating(&WifiHotspotConnector::OnEnableWifiError,
                             weak_ptr_factory_.GetWeakPtr()));
@@ -247,15 +251,15 @@ void WifiHotspotConnector::CompleteActiveConnectionAttempt(bool success) {
 }
 
 void WifiHotspotConnector::CreateWifiConfiguration() {
-  base::DictionaryValue properties =
-      CreateWifiPropertyDictionary(ssid_, password_);
+  base::Value::Dict properties = CreateWifiPropertyDictionary(ssid_, password_);
 
   // This newly configured network will eventually be passed as an argument to
   // NetworkPropertiesUpdated().
-  network_connect_->CreateConfiguration(&properties, false /* shared */);
+  network_connect_->CreateConfiguration(std::move(properties),
+                                        /* shared */ false);
 }
 
-base::DictionaryValue WifiHotspotConnector::CreateWifiPropertyDictionary(
+base::Value::Dict WifiHotspotConnector::CreateWifiPropertyDictionary(
     const std::string& ssid,
     const std::string& password) {
   PA_LOG(VERBOSE) << "Creating network configuration. "
@@ -263,21 +267,19 @@ base::DictionaryValue WifiHotspotConnector::CreateWifiPropertyDictionary(
                   << "Password: " << password << ", "
                   << "Wi-Fi network GUID: " << wifi_network_guid_;
 
-  base::DictionaryValue properties;
+  base::Value::Dict properties;
 
   shill_property_util::SetSSID(ssid, &properties);
-  properties.SetKey(shill::kGuidProperty, base::Value(wifi_network_guid_));
-  properties.SetKey(shill::kAutoConnectProperty, base::Value(false));
-  properties.SetKey(shill::kTypeProperty, base::Value(shill::kTypeWifi));
-  properties.SetKey(shill::kSaveCredentialsProperty, base::Value(true));
+  properties.Set(shill::kGuidProperty, wifi_network_guid_);
+  properties.Set(shill::kAutoConnectProperty, false);
+  properties.Set(shill::kTypeProperty, shill::kTypeWifi);
+  properties.Set(shill::kSaveCredentialsProperty, true);
 
   if (password.empty()) {
-    properties.SetKey(shill::kSecurityClassProperty,
-                      base::Value(shill::kSecurityClassNone));
+    properties.Set(shill::kSecurityClassProperty, shill::kSecurityClassNone);
   } else {
-    properties.SetKey(shill::kSecurityClassProperty,
-                      base::Value(shill::kSecurityClassPsk));
-    properties.SetKey(shill::kPassphraseProperty, base::Value(password));
+    properties.Set(shill::kSecurityClassProperty, shill::kSecurityClassPsk);
+    properties.Set(shill::kPassphraseProperty, password);
   }
 
   return properties;

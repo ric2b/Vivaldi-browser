@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/memory/weak_ptr.h"
+#include "base/task/single_thread_task_runner.h"
 #include "third_party/blink/public/platform/web_audio_latency_hint.h"
 #include "third_party/blink/public/platform/web_audio_sink_descriptor.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_destination_node.h"
@@ -52,6 +53,7 @@ class RealtimeAudioDestinationHandler final
   void RestartRendering() override;
   uint32_t MaxChannelCount() const override;
   double SampleRate() const override;
+  void PrepareTaskRunnerForWorklet() override;
 
   // For AudioIOCallback. This is invoked by the platform audio destination to
   // get the next render quantum into `destination_bus` and update

@@ -9,7 +9,7 @@ Standard: Cpp11
 
 # TODO(crbug.com/1392808): Remove when InsertBraces has been upstreamed into
 # the Chromium style (is implied by BasedOnStyle: Chromium).
-InsertBraces: true
+#InsertBraces: true
 
 # Make sure code like:
 # IPC_BEGIN_MESSAGE_MAP()
@@ -38,7 +38,3 @@ IPC_STRUCT_END|\
 IPC_STRUCT_TRAITS_END|\
 POLPARAMS_END|\
 PPAPI_END_MESSAGE_MAP$"
-
-# TODO: Remove this once clang-format r357700 is rolled in.
-# Vivaldi: Disable this in order to use clang-format for Java files.
-# JavaImportGroups: ['android', 'androidx', 'com', 'dalvik', 'junit', 'org', 'com.google.android.apps.chrome', 'org.chromium', 'java', 'javax']

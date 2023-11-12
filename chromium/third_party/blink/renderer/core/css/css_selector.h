@@ -35,7 +35,7 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/heap/member.h"
 #include "third_party/blink/renderer/platform/heap/visitor.h"
-#include "third_party/blink/renderer/platform/wtf/gc_plugin_ignore.h"
+#include "third_party/blink/renderer/platform/wtf/gc_plugin.h"
 
 namespace blink {
 
@@ -116,6 +116,7 @@ class CORE_EXPORT CSSSelector {
   ~CSSSelector();
 
   String SelectorText() const;
+  String SimpleSelectorTextForDebug() const;
 
   CSSSelector& operator=(const CSSSelector&) = delete;
   CSSSelector& operator=(CSSSelector&&);
@@ -136,8 +137,8 @@ class CORE_EXPORT CSSSelector {
     kInvalidList,       // Used as a marker in CSSSelectorList.
     kTag,               // Example: div
     kId,                // Example: #id
-    kClass,             // example: .class
-    kPseudoClass,       // Example:  :nth-child(2)
+    kClass,             // Example: .class
+    kPseudoClass,       // Example: :nth-child(2)
     kPseudoElement,     // Example: ::first-line
     kPagePseudoClass,   // ??
     kAttributeExact,    // Example: E[foo="bar"]
@@ -223,6 +224,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoHover,
     kPseudoIncrement,
     kPseudoIndeterminate,
+    kPseudoInitial,
     kPseudoInvalid,
     kPseudoIs,
     kPseudoLang,
@@ -234,7 +236,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoModal,
     kPseudoNoButton,
     kPseudoNot,
-    kPseudoNthChild,
+    kPseudoNthChild,  // Includes :nth-child(An+B of <selector>)
     kPseudoNthLastChild,
     kPseudoNthLastOfType,
     kPseudoNthOfType,
@@ -242,6 +244,9 @@ class CORE_EXPORT CSSSelector {
     kPseudoOnlyOfType,
     kPseudoOptional,
     kPseudoParent,  // Written as & (in nested rules).
+    // Something that was unparsable, but contained a & and thus must be kept
+    // for serialization purposes.
+    kPseudoParentUnparsed,
     kPseudoPart,
     kPseudoPlaceholder,
     kPseudoPlaceholderShown,
@@ -341,6 +346,7 @@ class CORE_EXPORT CSSSelector {
                         const CSSParserContext&,
                         bool has_arguments,
                         CSSParserMode);
+  void SetUnparsedPlaceholder(const AtomicString&);
   void UpdatePseudoPage(const AtomicString&, const Document*);
   static PseudoType NameToPseudoType(const AtomicString&,
                                      bool has_arguments,
@@ -356,6 +362,9 @@ class CORE_EXPORT CSSSelector {
   // Selectors are kept in an array by CSSSelectorList. The next component of
   // the selector is the next item in the array.
   const CSSSelector* TagHistory() const {
+    return is_last_in_tag_history_ ? nullptr : this + 1;
+  }
+  CSSSelector* TagHistory() {
     return is_last_in_tag_history_ ? nullptr : this + 1;
   }
 
@@ -421,7 +430,7 @@ class CORE_EXPORT CSSSelector {
   void SetContainsPseudoInsideHasPseudoClass();
   void SetContainsComplexLogicalCombinationsInsideHasPseudoClass();
 
-  void SetNth(int a, int b);
+  void SetNth(int a, int b, CSSSelectorList* sub_selector);
   bool MatchNth(unsigned count) const;
 
   static bool IsAdjacentRelation(RelationType relation) {
@@ -473,6 +482,9 @@ class CORE_EXPORT CSSSelector {
   bool IsForPage() const { return is_for_page_; }
   void SetForPage() { is_for_page_ = true; }
 
+  bool IsCoveredByBucketing() const { return is_covered_by_bucketing_; }
+  void SetCoveredByBucketing(bool value) { is_covered_by_bucketing_ = value; }
+
   bool MatchesPseudoElement() const;
   bool IsTreeAbidingPseudoElement() const;
   bool IsAllowedAfterPart() const;
@@ -496,6 +508,25 @@ class CORE_EXPORT CSSSelector {
   unsigned is_for_page_ : 1;
   unsigned is_implicitly_added_ : 1;
 
+  // If set, we don't need to check this simple selector when matching;
+  // it will always match, since we can only see the selector if we
+  // checked a given bucket. For instance, if we have a rule like
+  // #foo.bar, it will be put in the rule set bucket for #foo
+  // (ID selectors are prioritized over nearly everything), and we can
+  // mark #foo as covered by bucketing (but still need to check .bar).
+  // Of course, this doesn't cover ancestors or siblings; if we have
+  // something like .c .c.c, only the two rightmost selectors will get
+  // this bit set. Also, we often get into things like namespaces which
+  // makes this more conservative than we'd like (bucketing on e.g.
+  // tag names do not generally care about it).
+  //
+  // Furthermore, as a convention, matching such a rule would never set
+  // flags in MatchResult.
+  //
+  // This always starts out false, and is set when we bucket a given
+  // RuleData (by calling ComputeEntirelyCoveredByBucketing()).
+  unsigned is_covered_by_bucketing_ : 1;
+
   void SetPseudoType(PseudoType pseudo_type) {
     pseudo_type_ = pseudo_type;
     DCHECK_EQ(static_cast<PseudoType>(pseudo_type_),
@@ -504,6 +535,7 @@ class CORE_EXPORT CSSSelector {
 
   unsigned SpecificityForOneSelector() const;
   unsigned SpecificityForPage() const;
+  bool SerializeSimpleSelector(StringBuilder& builder) const;
   const CSSSelector* SerializeCompound(StringBuilder&) const;
 
   struct RareData : public GarbageCollected<RareData> {
@@ -537,8 +569,8 @@ class CORE_EXPORT CSSSelector {
         bool contains_complex_logical_combinations_;
       } has_;
     } bits_;
-    QualifiedName attribute_;  // used for attribute selector
-    AtomicString argument_;    // Used for :contains, :lang, :nth-*, :toggle()
+    QualifiedName attribute_;  // Used for attribute selector
+    AtomicString argument_;    // Used for :contains, :lang, :dir, :toggle, etc.
     Member<CSSSelectorList>
         selector_list_;  // Used :is, :not, :-webkit-any, etc.
     std::unique_ptr<Vector<AtomicString>>
@@ -609,8 +641,9 @@ inline bool CSSSelector::IsCaseSensitiveAttribute() const {
 
 inline bool CSSSelector::IsASCIILower(const AtomicString& value) {
   for (wtf_size_t i = 0; i < value.length(); ++i) {
-    if (IsASCIIUpper(value[i]))
+    if (IsASCIIUpper(value[i])) {
       return false;
+    }
   }
   return true;
 }
@@ -641,6 +674,7 @@ inline CSSSelector::CSSSelector()
       has_rare_data_(false),
       is_for_page_(false),
       is_implicitly_added_(false),
+      is_covered_by_bucketing_(false),
       data_(DataUnion::kConstructEmptyValue) {}
 
 inline CSSSelector::CSSSelector(const QualifiedName& tag_q_name,
@@ -653,6 +687,7 @@ inline CSSSelector::CSSSelector(const QualifiedName& tag_q_name,
       has_rare_data_(false),
       is_for_page_(false),
       is_implicitly_added_(tag_is_implicit),
+      is_covered_by_bucketing_(false),
       data_(tag_q_name) {}
 
 inline CSSSelector::CSSSelector(const StyleRule* parent_rule, bool is_implicit)
@@ -664,6 +699,7 @@ inline CSSSelector::CSSSelector(const StyleRule* parent_rule, bool is_implicit)
       has_rare_data_(false),
       is_for_page_(false),
       is_implicitly_added_(is_implicit),
+      is_covered_by_bucketing_(false),
       data_(parent_rule) {}
 
 inline CSSSelector::CSSSelector(const CSSSelector& o)
@@ -675,6 +711,7 @@ inline CSSSelector::CSSSelector(const CSSSelector& o)
       has_rare_data_(o.has_rare_data_),
       is_for_page_(o.is_for_page_),
       is_implicitly_added_(o.is_implicitly_added_),
+      is_covered_by_bucketing_(o.is_covered_by_bucketing_),
       data_(DataUnion::kConstructUninitialized) {
   if (o.match_ == kTag) {
     new (&data_.tag_q_name_) QualifiedName(o.data_.tag_q_name_);
@@ -698,14 +735,15 @@ inline CSSSelector::CSSSelector(CSSSelector&& o)
 }
 
 inline CSSSelector::~CSSSelector() {
-  if (match_ == kTag)
+  if (match_ == kTag) {
     data_.tag_q_name_.~QualifiedName();
-  else if (match_ == kPseudoClass && pseudo_type_ == kPseudoParent)
+  } else if (match_ == kPseudoClass && pseudo_type_ == kPseudoParent)
     ;  // Nothing to do.
   else if (has_rare_data_)
     ;  // Nothing to do.
-  else
+  else {
     data_.value_.~AtomicString();
+  }
 }
 
 inline CSSSelector& CSSSelector::operator=(CSSSelector&& other) {
@@ -727,15 +765,17 @@ inline const StyleRule* CSSSelector::ParentRule() const {
 
 inline const AtomicString& CSSSelector::Value() const {
   DCHECK_NE(match_, static_cast<unsigned>(kTag));
-  if (has_rare_data_)
+  if (has_rare_data_) {
     return data_.rare_data_->matching_value_;
+  }
   return data_.value_;
 }
 
 inline const AtomicString& CSSSelector::SerializingValue() const {
   DCHECK_NE(match_, static_cast<unsigned>(kTag));
-  if (has_rare_data_)
+  if (has_rare_data_) {
     return data_.rare_data_->serializing_value_;
+  }
   return data_.value_;
 }
 
@@ -773,7 +813,6 @@ struct VectorTraits<blink::CSSSelector> : VectorTraitsBase<blink::CSSSelector> {
   static const bool kCanInitializeWithMemset = true;
   static const bool kCanClearUnusedSlotsWithMemset = true;
   static const bool kCanMoveWithMemcpy = true;
-  static const bool kCanTraceConcurrently = true;
 };
 }  // namespace WTF
 

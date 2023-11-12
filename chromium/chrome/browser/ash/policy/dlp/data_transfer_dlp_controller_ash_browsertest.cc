@@ -26,7 +26,6 @@
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_factory.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_impl.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_rules_manager_test_utils.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/policy/core/common/policy_pref_names.h"
@@ -52,6 +51,8 @@ namespace {
 constexpr char16_t kClipboardText116[] = u"Hello World";
 
 constexpr char kMailUrl[] = "https://mail.google.com";
+constexpr char kRuleName[] = "rule #1";
+constexpr char kRuleId[] = "testid1";
 
 class FakeClipboardNotifier : public DlpClipboardNotifier {
  public:
@@ -115,8 +116,9 @@ class FakeDlpController : public DataTransferDlpController,
 
   bool ShouldPasteOnWarn(
       const ui::DataTransferEndpoint* const data_dst) override {
-    if (force_paste_on_warn_)
+    if (force_paste_on_warn_) {
       return true;
+    }
     return helper_->DidUserApproveDst(data_dst);
   }
 
@@ -231,22 +233,16 @@ class DataTransferDlpAshBrowserTest : public InProcessBrowserTest {
 #endif
 IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_BlockComponent) {
   SetupCrostini();
-  {
+  {  // Do not remove the brackets, policy update is triggered on
+     // ScopedListPrefUpdate destructor.
     ScopedListPrefUpdate update(g_browser_process->local_state(),
                                 policy_prefs::kDlpRulesList);
-
-    base::Value src_urls(base::Value::Type::LIST);
-    src_urls.Append(kMailUrl);
-    base::Value dst_components(base::Value::Type::LIST);
-    dst_components.Append(dlp::kArc);
-    dst_components.Append(dlp::kCrostini);
-    base::Value restrictions(base::Value::Type::LIST);
-    restrictions.Append(dlp_test_util::CreateRestrictionWithLevel(
-        dlp::kClipboardRestriction, dlp::kBlockLevel));
-    update->Append(dlp_test_util::CreateRule(
-        "rule #1", "Block Gmail", std::move(src_urls),
-        /*dst_urls=*/base::Value(base::Value::Type::LIST),
-        std::move(dst_components), std::move(restrictions)));
+    dlp_test_util::DlpRule rule(kRuleName, "Block Gmail", kRuleId);
+    rule.AddSrcUrl(kMailUrl)
+        .AddDstComponent(dlp::kArc)
+        .AddDstComponent(dlp::kCrostini)
+        .AddRestriction(dlp::kClipboardRestriction, dlp::kBlockLevel);
+    update->Append(rule.Create());
   }
 
   {
@@ -267,10 +263,11 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_BlockComponent) {
       ui::ClipboardBuffer::kCopyPaste, &data_dst2, &result2);
   EXPECT_EQ(std::u16string(), result2);
   ASSERT_EQ(events.size(), 1u);
-  EXPECT_THAT(events[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                             kMailUrl, DlpRulesManager::Component::kArc,
-                             DlpRulesManager::Restriction::kClipboard,
-                             DlpRulesManager::Level::kBlock)));
+  EXPECT_THAT(events[0],
+              IsDlpPolicyEvent(CreateDlpPolicyEvent(
+                  kMailUrl, DlpRulesManager::Component::kArc,
+                  DlpRulesManager::Restriction::kClipboard, kRuleName, kRuleId,
+                  DlpRulesManager::Level::kBlock)));
 
   ui::DataTransferEndpoint data_dst3(ui::EndpointType::kCrostini);
   std::u16string result3;
@@ -278,10 +275,11 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_BlockComponent) {
       ui::ClipboardBuffer::kCopyPaste, &data_dst3, &result3);
   EXPECT_EQ(std::u16string(), result3);
   ASSERT_EQ(events.size(), 2u);
-  EXPECT_THAT(events[1], IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                             kMailUrl, DlpRulesManager::Component::kCrostini,
-                             DlpRulesManager::Restriction::kClipboard,
-                             DlpRulesManager::Level::kBlock)));
+  EXPECT_THAT(events[1],
+              IsDlpPolicyEvent(CreateDlpPolicyEvent(
+                  kMailUrl, DlpRulesManager::Component::kCrostini,
+                  DlpRulesManager::Restriction::kClipboard, kRuleName, kRuleId,
+                  DlpRulesManager::Level::kBlock)));
 }
 
 // Flaky on MSan bots: http://crbug.com/1178328
@@ -293,33 +291,18 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_BlockComponent) {
 IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_WarnComponent) {
   SetupCrostini();
 
-  {
+  {  // Do not remove the brackets, policy update is triggered on
+     // ScopedListPrefUpdate destructor.
     ScopedListPrefUpdate update(g_browser_process->local_state(),
                                 policy_prefs::kDlpRulesList);
-    base::Value rule(base::Value::Type::DICTIONARY);
-    base::Value src_urls(base::Value::Type::DICTIONARY);
-    base::Value src_urls_list(base::Value::Type::LIST);
-    src_urls_list.Append(base::Value(kMailUrl));
-    src_urls.SetKey("urls", std::move(src_urls_list));
-    rule.SetKey("sources", std::move(src_urls));
 
-    base::Value dst_components(base::Value::Type::DICTIONARY);
-    base::Value dst_components_list(base::Value::Type::LIST);
-    dst_components_list.Append(base::Value("ARC"));
-    dst_components_list.Append(base::Value("CROSTINI"));
-    dst_components_list.Append(base::Value("PLUGIN_VM"));
-    dst_components.SetKey("components", std::move(dst_components_list));
-    rule.SetKey("destinations", std::move(dst_components));
-
-    base::Value restrictions(base::Value::Type::DICTIONARY);
-    base::Value restrictions_list(base::Value::Type::LIST);
-    base::Value class_level_dict(base::Value::Type::DICTIONARY);
-    class_level_dict.SetKey("class", base::Value("CLIPBOARD"));
-    class_level_dict.SetKey("level", base::Value("WARN"));
-    restrictions_list.Append(std::move(class_level_dict));
-    rule.SetKey("restrictions", std::move(restrictions_list));
-
-    update->Append(std::move(rule));
+    dlp_test_util::DlpRule rule(kRuleName, "Block Gmail", kRuleId);
+    rule.AddSrcUrl(kMailUrl)
+        .AddDstComponent(dlp::kArc)
+        .AddDstComponent(dlp::kCrostini)
+        .AddDstComponent(dlp::kPluginVm)
+        .AddRestriction(dlp::kClipboardRestriction, dlp::kWarnLevel);
+    update->Append(rule.Create());
   }
 
   {
@@ -335,10 +318,11 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_WarnComponent) {
       ui::ClipboardBuffer::kCopyPaste, &arc_endpoint, &result);
   EXPECT_EQ(kClipboardText116, result);
   ASSERT_EQ(events.size(), 1u);
-  EXPECT_THAT(events[0], IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                             kMailUrl, DlpRulesManager::Component::kArc,
-                             DlpRulesManager::Restriction::kClipboard,
-                             DlpRulesManager::Level::kWarn)));
+  EXPECT_THAT(events[0],
+              IsDlpPolicyEvent(CreateDlpPolicyEvent(
+                  kMailUrl, DlpRulesManager::Component::kArc,
+                  DlpRulesManager::Restriction::kClipboard, kRuleName, kRuleId,
+                  DlpRulesManager::Level::kWarn)));
 
   ui::DataTransferEndpoint crostini_endpoint(ui::EndpointType::kCrostini);
   result.clear();
@@ -346,10 +330,11 @@ IN_PROC_BROWSER_TEST_F(DataTransferDlpAshBrowserTest, MAYBE_WarnComponent) {
       ui::ClipboardBuffer::kCopyPaste, &crostini_endpoint, &result);
   EXPECT_EQ(kClipboardText116, result);
   ASSERT_EQ(events.size(), 2u);
-  EXPECT_THAT(events[1], IsDlpPolicyEvent(CreateDlpPolicyEvent(
-                             kMailUrl, DlpRulesManager::Component::kCrostini,
-                             DlpRulesManager::Restriction::kClipboard,
-                             DlpRulesManager::Level::kWarn)));
+  EXPECT_THAT(events[1],
+              IsDlpPolicyEvent(CreateDlpPolicyEvent(
+                  kMailUrl, DlpRulesManager::Component::kCrostini,
+                  DlpRulesManager::Restriction::kClipboard, kRuleName, kRuleId,
+                  DlpRulesManager::Level::kWarn)));
 }
 
 }  // namespace policy

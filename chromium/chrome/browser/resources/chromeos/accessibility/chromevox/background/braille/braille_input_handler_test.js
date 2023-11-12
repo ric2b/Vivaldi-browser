@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 // Include test fixture.
-GEN_INCLUDE(['../../testing/chromevox_next_e2e_test_base.js']);
+GEN_INCLUDE(['../../testing/chromevox_e2e_test_base.js']);
 GEN_INCLUDE(['../../testing/fake_objects.js']);
 GEN_INCLUDE(['../../../common/testing/common.js']);
 
@@ -426,7 +426,7 @@ function cellsToArray(cells) {
 /**
  * Test fixture.
  */
-ChromeVoxBrailleInputHandlerTest = class extends ChromeVoxNextE2ETest {
+ChromeVoxBrailleInputHandlerTest = class extends ChromeVoxE2ETest {
   /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
@@ -458,8 +458,8 @@ ChromeVoxBrailleInputHandlerTest = class extends ChromeVoxNextE2ETest {
     chrome.accessibilityPrivate.SyntheticKeyboardEventType = {};
     chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN = 'keydown';
     chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYUP = 'keyup';
-    this.translatorManager = new FakeTranslatorManager();
-    this.inputHandler = new BrailleInputHandler(this.translatorManager);
+    BrailleTranslatorManager.instance = new FakeTranslatorManager();
+    this.inputHandler = new BrailleInputHandler();
     this.uncontractedTranslator = new FakeTranslator(UNCONTRACTED_TABLE);
     this.contractedTranslator = new FakeTranslator(CONTRACTED_TABLE, true);
     this.keyEvents = [];
@@ -563,7 +563,8 @@ AX_TEST_F('ChromeVoxBrailleInputHandlerTest', 'NoTranslator', function() {
 });
 
 AX_TEST_F('ChromeVoxBrailleInputHandlerTest', 'InputUncontracted', function() {
-  this.translatorManager.setTranslators(this.uncontractedTranslator, null);
+  BrailleTranslatorManager.instance.setTranslators(
+      this.uncontractedTranslator, null);
   const editor = this.createEditor();
   editor.setActive(true);
 
@@ -590,7 +591,7 @@ AX_TEST_F('ChromeVoxBrailleInputHandlerTest', 'InputUncontracted', function() {
 
 AX_TEST_F('ChromeVoxBrailleInputHandlerTest', 'InputContracted', function() {
   const editor = this.createEditor();
-  this.translatorManager.setTranslators(
+  BrailleTranslatorManager.instance.setTranslators(
       this.contractedTranslator, this.uncontractedTranslator);
   editor.setContent('', 0);
   editor.setActive(true);
@@ -650,7 +651,7 @@ AX_TEST_F('ChromeVoxBrailleInputHandlerTest', 'InputContracted', function() {
 AX_TEST_F(
     'ChromeVoxBrailleInputHandlerTest', 'TypingUrlWithContracted', function() {
       const editor = this.createEditor();
-      this.translatorManager.setTranslators(
+      BrailleTranslatorManager.instance.setTranslators(
           this.contractedTranslator, this.uncontractedTranslator);
       editor.setActive(true);
       editor.focus('url');
@@ -672,7 +673,7 @@ AX_TEST_F(
 
 AX_TEST_F('ChromeVoxBrailleInputHandlerTest', 'Backspace', function() {
   const editor = this.createEditor();
-  this.translatorManager.setTranslators(
+  BrailleTranslatorManager.instance.setTranslators(
       this.contractedTranslator, this.uncontractedTranslator);
   editor.setActive(true);
   editor.focus('text');

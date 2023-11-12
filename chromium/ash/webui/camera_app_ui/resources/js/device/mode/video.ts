@@ -219,9 +219,14 @@ export class Video extends ModeBase {
   private autoStopped = false;
 
   /**
+   * Whether the current recording should be stopped.
+   */
+  private stopped = false;
+
+  /**
    * HTMLElement displaying warning about low storage.
    */
-  private lowStorageWarningNudge = dom.get('#nudge', HTMLDivElement);
+  private readonly lowStorageWarningNudge = dom.get('#nudge', HTMLDivElement);
 
   constructor(
       video: PreviewVideo,
@@ -461,6 +466,7 @@ export class Video extends ModeBase {
     this.togglePausedInternal = null;
     this.everPaused = false;
     this.autoStopped = false;
+    this.stopped = false;
 
     if (this.recordingType === RecordType.NORMAL) {
       const canStart = await this.startMonitorStorage();
@@ -499,6 +505,10 @@ export class Video extends ModeBase {
     } catch (e) {
       toast.show(I18nString.ERROR_MSG_RECORD_START_FAILED);
       throw e;
+    }
+
+    if (this.stopped) {
+      throw new CanceledError('Recording stopped');
     }
 
     this.recordingType = this.getToggledRecordOption();
@@ -581,6 +591,7 @@ export class Video extends ModeBase {
   }
 
   override stop(): void {
+    this.stopped = true;
     if (loadTimeData.getChromeFlag(Flag.LOW_STORAGE_WARNING)) {
       ChromeHelper.getInstance().stopMonitorStorage();
     }
@@ -612,6 +623,7 @@ export class Video extends ModeBase {
     // TODO(b/191950622): Grab frames from capture stream when multistream
     // enabled.
     const video = this.video.video;
+    const videoTrack = this.getVideoTrack();
     let {videoWidth: width, videoHeight: height} = video;
     if (width > GIF_MAX_SIDE || height > GIF_MAX_SIDE) {
       const ratio = GIF_MAX_SIDE / Math.max(width, height);
@@ -622,12 +634,21 @@ export class Video extends ModeBase {
     const canvas = new OffscreenCanvas(width, height);
     const context = assertInstanceof(
         canvas.getContext('2d'), OffscreenCanvasRenderingContext2D);
+    if (videoTrack.readyState === 'ended') {
+      throw new NoFrameError();
+    }
     const frames = await new Promise<number>((resolve) => {
       let encodedFrames = 0;
       let writtenFrames = 0;
+      let handle = 0;
+      function stopRecording() {
+        video.cancelVideoFrameCallback(handle);
+        videoTrack.removeEventListener('ended', stopRecording);
+        resolve(writtenFrames);
+      }
       function updateCanvas() {
         if (!state.get(state.State.RECORDING)) {
-          resolve(writtenFrames);
+          stopRecording();
           return;
         }
         encodedFrames++;
@@ -636,9 +657,10 @@ export class Video extends ModeBase {
           context.drawImage(video, 0, 0, width, height);
           gifSaver.write(context.getImageData(0, 0, width, height).data);
         }
-        video.requestVideoFrameCallback(updateCanvas);
+        handle = video.requestVideoFrameCallback(updateCanvas);
       }
-      video.requestVideoFrameCallback(updateCanvas);
+      videoTrack.addEventListener('ended', stopRecording);
+      handle = video.requestVideoFrameCallback(updateCanvas);
     });
     if (frames === 0) {
       throw new NoFrameError();
@@ -687,14 +709,18 @@ export class Video extends ModeBase {
         const onStart = () => {
           assert(this.mediaRecorder !== null);
 
+          if (this.stopped) {
+            this.mediaRecorder.stop();
+            window.removeEventListener('beforeunload', beforeUnloadListener);
+            return;
+          }
           state.set(state.State.RECORDING, true);
-          this.mediaRecorder.removeEventListener('start', onStart);
         };
 
         assert(this.mediaRecorder !== null);
         this.mediaRecorder.addEventListener('dataavailable', onDataAvailable);
         this.mediaRecorder.addEventListener('stop', onStop);
-        this.mediaRecorder.addEventListener('start', onStart);
+        this.mediaRecorder.addEventListener('start', onStart, {once: true});
 
         window.addEventListener('beforeunload', beforeUnloadListener);
 

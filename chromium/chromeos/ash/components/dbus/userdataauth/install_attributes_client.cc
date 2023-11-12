@@ -9,7 +9,7 @@
 
 #include <google/protobuf/message_lite.h>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
@@ -115,6 +115,14 @@ class InstallAttributesClientImpl : public InstallAttributesClient {
       const ::user_data_auth::SetFirmwareManagementParametersRequest& request,
       SetFirmwareManagementParametersCallback callback) override {
     CallProtoMethod(::user_data_auth::kSetFirmwareManagementParameters,
+                    ::user_data_auth::kInstallAttributesInterface, request,
+                    std::move(callback));
+  }
+
+  void GetFirmwareManagementParameters(
+      const ::user_data_auth::GetFirmwareManagementParametersRequest& request,
+      GetFirmwareManagementParametersCallback callback) override {
+    CallProtoMethod(::user_data_auth::kGetFirmwareManagementParameters,
                     ::user_data_auth::kInstallAttributesInterface, request,
                     std::move(callback));
   }

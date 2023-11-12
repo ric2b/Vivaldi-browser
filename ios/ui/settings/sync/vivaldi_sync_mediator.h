@@ -21,6 +21,7 @@ typedef NS_ENUM(NSInteger, SimplifiedState) {
 
 class VivaldiAccountManagerObserverBridge;
 class VivaldiSyncServiceObserverBridge;
+class PrefService;
 
 namespace vivaldi {
   class VivaldiAccountManager;
@@ -43,6 +44,7 @@ namespace syncer {
 - (instancetype)initWithAccountManager:
       (vivaldi::VivaldiAccountManager*)vivaldiAccountManager
       syncService:(vivaldi::VivaldiSyncServiceImpl*)syncService
+      prefService:(PrefService*)prefService
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -50,11 +52,24 @@ namespace syncer {
 - (void)startMediating;
 - (void)disconnect;
 
+- (void)requestPendingRegistrationLogin;
+- (NSString*)getPendingRegistrationUsername;
+- (NSString*)getPendingRegistrationEmail;
+- (void)clearPendingRegistration;
+
 - (void)login:(std::string)username
-      password:(std::string)password
-      save_password:(BOOL)save_password;
+        password:(std::string)password
+        save_password:(BOOL)save_password;
 
 - (void)setEncryptionPassword:(std::string)password;
+
+- (void)storeUsername:(NSString*)username
+                  age:(int)age
+                email:(NSString*)recoveryEmailAddress;
+
+- (void)createAccount:(NSString*)password
+           deviceName:(NSString*)deviceName
+      wantsNewsletter:(BOOL)wantsNewsletter;
 
 @property(nonatomic, weak) id<VivaldiSyncSettingsCommandHandler> commandHandler;
 

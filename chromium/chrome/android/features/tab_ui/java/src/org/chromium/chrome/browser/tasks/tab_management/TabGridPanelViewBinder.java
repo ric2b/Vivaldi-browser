@@ -34,9 +34,11 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -127,8 +129,13 @@ class TabGridPanelViewBinder {
             }
         } else if (INITIAL_SCROLL_INDEX == propertyKey) {
             int index = (Integer) model.get(INITIAL_SCROLL_INDEX);
-            ((LinearLayoutManager) viewHolder.contentView.getLayoutManager())
-                    .scrollToPositionWithOffset(index, 0);
+            RecyclerView view = viewHolder.contentView;
+            if (view.getWidth() == 0 || view.getHeight() == 0) {
+                // If layout hasn't happened post the scroll index change until layout happens.
+                view.post(() -> setScrollIndex(view, index));
+                return;
+            }
+            setScrollIndex(viewHolder.contentView, index);
         } else if (IS_MAIN_CONTENT_VISIBLE == propertyKey) {
             viewHolder.contentView.setVisibility(View.VISIBLE);
         } else if (MENU_CLICK_LISTENER == propertyKey) {
@@ -164,5 +171,27 @@ class TabGridPanelViewBinder {
                         model.get(COLLAPSE_BUTTON_CONTENT_DESCRIPTION));
             }
         }
+    }
+
+    private static void setScrollIndex(RecyclerView view, int index) {
+        LinearLayoutManager layoutManager = (LinearLayoutManager) view.getLayoutManager();
+        int offset = computeOffset(view, layoutManager);
+        layoutManager.scrollToPositionWithOffset(index, offset);
+    }
+
+    private static int computeOffset(RecyclerView view, LinearLayoutManager layoutManager) {
+        int width = view.getWidth();
+        int height = view.getHeight();
+        int cardHeight = 0;
+        if (layoutManager instanceof GridLayoutManager) {
+            int cardWidth = width / ((GridLayoutManager) layoutManager).getSpanCount();
+            cardHeight = TabUtils.deriveGridCardHeight(cardWidth, view.getContext());
+        } else {
+            // Avoid divide by 0 when there are no tabs.
+            if (layoutManager.getItemCount() == 0) return 0;
+
+            cardHeight = view.computeVerticalScrollRange() / layoutManager.getItemCount();
+        }
+        return Math.max(0, height / 2 - cardHeight / 2);
     }
 }

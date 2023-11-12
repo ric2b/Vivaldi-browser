@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/i18n/string_compare.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -22,7 +22,6 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -104,9 +103,9 @@ bool CalendarService::Init(
 
   // Create the calendar backend.
   scoped_refptr<CalendarBackend> backend(new CalendarBackend(
-      new CalendarBackendDelegate(weak_ptr_factory_.GetWeakPtr(),
-                                  base::ThreadTaskRunnerHandle::Get()),
-      backend_task_runner_));
+    new CalendarBackendDelegate(weak_ptr_factory_.GetWeakPtr(),
+      base::SingleThreadTaskRunner::GetCurrentDefault()),
+    backend_task_runner_));
   calendar_backend_.swap(backend);
 
   ScheduleTask(base::BindOnce(&CalendarBackend::Init, calendar_backend_, no_db,
@@ -128,7 +127,7 @@ base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvent(
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&CalendarBackend::CreateCalendarEvent, calendar_backend_,
-                     ev, create_results),
+                     ev, true, create_results),
       base::BindOnce(std::move(callback), create_results));
 }
 

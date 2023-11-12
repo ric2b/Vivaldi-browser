@@ -16,19 +16,7 @@
 #include "components/history/core/browser/history_types.h"
 #include "components/history_clusters/core/config.h"
 #include "components/history_clusters/core/history_clusters_types.h"
-
-namespace {
-
-// Is the transition user-visible.
-bool IsTransitionUserVisible(int32_t transition) {
-  ui::PageTransition page_transition = ui::PageTransitionFromInt(transition);
-  return (ui::PAGE_TRANSITION_CHAIN_END & transition) != 0 &&
-         ui::PageTransitionIsMainFrame(page_transition) &&
-         !ui::PageTransitionCoreTypeIs(page_transition,
-                                       ui::PAGE_TRANSITION_KEYWORD_GENERATED);
-}
-
-}  // namespace
+#include "components/history_clusters/core/history_clusters_util.h"
 
 namespace history_clusters {
 
@@ -318,7 +306,7 @@ void GetAnnotatedVisitsToCluster::AddClusteredVisits(
   // unclustered visits.
   const auto cluster_ids = db->GetMostRecentClusterIds(
       unclustered_begin_time - base::Days(days_of_clustered_visits_),
-      unclustered_begin_time, 1000);
+      base::Time::Max(), 1000);
 
   // If we found a cluster and are iterating recent_first_, then we've reached
   // the cluster threshold and have no more unclustered visits remaining.

@@ -197,6 +197,12 @@ The video license is [libaom LICENSE].
 The first frame of blackwhite\_yuv444p.mp4 coded in AV1 by the following command.
 `ffmpeg -i blackwhite_yuv444p.mp4 -strict -2 -vcodec av1 -vframes 1 blackwhite_yuv444p-frame.av1.ivf`
 
+#### blackwhite_yuv444p_av1.mp4
+`ffmpeg -i blackwhite_yuv444p-frame.av1.ivf -y -vcodec copy blackwhite_yuv444p_av1.mp4`
+
+#### blackwhite_yuv444p_av1.webm
+`ffmpeg -i blackwhite_yuv444p-frame.av1.ivf -y -vcodec copy blackwhite_yuv444p_av1.webm`
+
 #### av1-film\_grain.ivf
 AV1 data where film grain feature is used.
 This is the same as av1-1-b8-23-film\_grain-50.ivf in [libaom test vectors].
@@ -1283,3 +1289,50 @@ https://people.xiph.org/~greg/opus_testvectors/
 
 #### dts.bin
 A single DTS Coherent Acoustics audio frame
+
+#### dtsx.bin
+A single DTS:X P2 Coherent Acoustics audio frame
+
+#### bear_dtsc.mp4
+Moov box with track of DTS Coherent Acoustics Audio, no mdat box.
+
+Generated using the following commands:
+```
+# start with ~1 second long PCM 2 channel audio and extend to three seconds
+ffmpeg -i bear_pcm.wav -y bear.ts
+ffmpeg -i "concat:bear.ts|bear.ts|bear.ts" -c copy bear2.wav
+# make a 6 channel WAV
+ffmpeg -i bear2.wav -i bear2.wav -i bear2.wav -ar 48000 -filter_complex 'amerge=inputs=3' -y bear6.wav
+ffmpeg -i bear6.wav -c:a dtsS -movflags frag_keyframe -y bear_dtsc.mp4
+# truncate to size of moov box (truncate -s)
+```
+
+#### bear_dtse.mp4
+Moov box with track of DTS Express Audio, no mdat box.
+
+Generated using the following commands:
+```
+# start with ~1 second long PCM 2 channel audio and extend to three seconds
+ffmpeg -i bear_pcm.wav -y bear.ts
+ffmpeg -i "concat:bear.ts|bear.ts|bear.ts" -c copy bear2.wav
+# make a 6 channel WAV
+ffmpeg -i bear2.wav -i bear2.wav -i bear2.wav -ar 48000 -filter_complex 'amerge=inputs=3' -y bear6.wav
+# create DTS CA, DTS Express, DTS:X P2 mp4 files
+ffmpeg -i bear6.wav -c:a dtsS -b:a 255000 -movflags frag_keyframe -y bear_dtse.mp4
+# truncate to size of moov box (truncate -s)
+```
+
+#### bear_dtsx.mp4
+Moov box with track of DTS:X Profile 2 Audio, no mdat box.
+
+Generated using the following commands:
+```
+# start with ~1 second long PCM 2 channel audio and extend to three seconds
+ffmpeg -i bear_pcm.wav -y bear.ts
+ffmpeg -i "concat:bear.ts|bear.ts|bear.ts" -c copy bear2.wav
+# make a 6 channel WAV
+ffmpeg -i bear2.wav -i bear2.wav -i bear2.wav -ar 48000 -filter_complex 'amerge=inputs=3' -y bear6.wav
+# create DTS CA, DTS Express, DTS:X P2 mp4 files
+ffmpeg -i bear6.wav -c:a dtsxS -b:a 160000 -movflags frag_keyframe -y bear_dtsx.mp4
+# truncate to size of moov box (truncate -s)
+```

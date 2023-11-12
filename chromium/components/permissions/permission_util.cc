@@ -9,6 +9,7 @@
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_result.h"
@@ -20,6 +21,7 @@
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -53,8 +55,10 @@ PermissionDelegationMode GetPermissionDelegationMode(
   // durable storage, background sync, etc.
   if (permission == ContentSettingsType::NOTIFICATIONS)
     return PermissionDelegationMode::kUndelegated;
-  if (permission == ContentSettingsType::STORAGE_ACCESS)
+  if (permission == ContentSettingsType::STORAGE_ACCESS ||
+      permission == ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS) {
     return PermissionDelegationMode::kDoubleKeyed;
+  }
   return PermissionDelegationMode::kDelegated;
 }
 }  // namespace
@@ -73,6 +77,17 @@ std::string PermissionUtil::GetPermissionString(
 PermissionRequestGestureType PermissionUtil::GetGestureType(bool user_gesture) {
   return user_gesture ? PermissionRequestGestureType::GESTURE
                       : PermissionRequestGestureType::NO_GESTURE;
+}
+
+absl::optional<blink::mojom::PermissionsPolicyFeature>
+PermissionUtil::GetPermissionsPolicyFeature(ContentSettingsType permission) {
+  PermissionType permission_type;
+  bool success =
+      PermissionUtil::GetPermissionType(permission, &permission_type);
+  DCHECK(success);
+  return success
+             ? blink::PermissionTypeToPermissionsPolicyFeature(permission_type)
+             : absl::nullopt;
 }
 
 bool PermissionUtil::GetPermissionType(ContentSettingsType type,
@@ -146,6 +161,9 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
       break;
     case ContentSettingsType::STORAGE_ACCESS:
       *out = PermissionType::STORAGE_ACCESS_GRANT;
+      break;
+    case ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS:
+      *out = PermissionType::TOP_LEVEL_STORAGE_ACCESS;
       break;
     case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
       *out = PermissionType::CAMERA_PAN_TILT_ZOOM;
@@ -280,6 +298,8 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingTypeSafe(
       return ContentSettingsType::AR;
     case PermissionType::STORAGE_ACCESS_GRANT:
       return ContentSettingsType::STORAGE_ACCESS;
+    case PermissionType::TOP_LEVEL_STORAGE_ACCESS:
+      return ContentSettingsType::TOP_LEVEL_STORAGE_ACCESS;
     case PermissionType::CAMERA_PAN_TILT_ZOOM:
       return ContentSettingsType::CAMERA_PAN_TILT_ZOOM;
     case PermissionType::WINDOW_MANAGEMENT:
@@ -307,11 +327,12 @@ ContentSettingsType PermissionUtil::PermissionTypeToContentSettingType(
 
 PermissionType PermissionUtil::ContentSettingTypeToPermissionType(
     ContentSettingsType permission) {
-  PermissionType permissionType;
-  bool success = PermissionUtil::GetPermissionType(permission, &permissionType);
+  PermissionType permission_type;
+  bool success =
+      PermissionUtil::GetPermissionType(permission, &permission_type);
   DCHECK(success);
 
-  return permissionType;
+  return permission_type;
 }
 
 ContentSetting PermissionUtil::PermissionStatusToContentSetting(

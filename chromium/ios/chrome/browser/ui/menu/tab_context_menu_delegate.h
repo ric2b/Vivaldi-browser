@@ -7,7 +7,7 @@
 
 #import <Foundation/Foundation.h>
 
-#import "ios/chrome/browser/ui/activity_services/activity_scenario.h"
+#import "ios/chrome/browser/ui/sharing/sharing_scenario.h"
 
 class GURL;
 
@@ -23,7 +23,7 @@ class DistantSession;
 // TODO(crbug.com/1196956): Investigate removing `view` as a parameter.
 - (void)shareURL:(const GURL&)URL
            title:(NSString*)title
-        scenario:(ActivityScenario)scenario
+        scenario:(SharingScenario)scenario
         fromView:(UIView*)view;
 
 // Tells the delegate to remove Sessions corresponding to the given the table
@@ -49,10 +49,17 @@ class DistantSession;
 - (void)selectTabs;
 
 // Tells the delegate to pin a tab with the item identifier `identifier`.
-- (void)pinTabWithIdentifier:(NSString*)identifier incognito:(BOOL)incognito;
+- (void)pinTabWithIdentifier:(NSString*)identifier;
+
+// Tells the delegate to unpin a tab with the item identifier `identifier`.
+- (void)unpinTabWithIdentifier:(NSString*)identifier;
 
 // Tells the delegate to close the tab with the item identifier `identifier`.
-- (void)closeTabWithIdentifier:(NSString*)identifier incognito:(BOOL)incognito;
+// `incognito`tracks the incognito state of the tab.
+// `pinned` tracks the pinned state of the tab.
+- (void)closeTabWithIdentifier:(NSString*)identifier
+                     incognito:(BOOL)incognito
+                        pinned:(BOOL)pinned;
 
 @end
 

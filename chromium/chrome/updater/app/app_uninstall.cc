@@ -8,11 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/process/launch.h"
@@ -41,7 +41,7 @@ namespace {
 // given `scope`.
 void UninstallOtherVersions(UpdaterScope scope) {
   const absl::optional<base::FilePath> updater_folder_path =
-      GetBaseInstallDirectory(scope);
+      GetInstallDirectory(scope);
   if (!updater_folder_path) {
     LOG(ERROR) << "Failed to get updater folder path.";
     return;
@@ -72,6 +72,7 @@ void UninstallOtherVersions(UpdaterScope scope) {
     }
   }
 }
+
 }  // namespace
 
 // AppUninstall uninstalls the updater.
@@ -84,6 +85,8 @@ class AppUninstall : public App {
   void Initialize() override;
   void Uninitialize() override;
   void FirstTaskRun() override;
+
+  void UninstallAll();
 
   // Conditionally set, if prefs must be acquired for some uninstall scenarios.
   // Creating the prefs instance may result in deadlocks. Therefore, the prefs
@@ -102,21 +105,25 @@ void AppUninstall::Uninitialize() {
   global_prefs_ = nullptr;
 }
 
+void AppUninstall::UninstallAll() {
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(
+          [](UpdaterScope scope) {
+            UninstallOtherVersions(scope);
+            return Uninstall(scope);
+          },
+          updater_scope()),
+      base::BindOnce(&AppUninstall::Shutdown, this));
+}
+
 void AppUninstall::FirstTaskRun() {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
 
   if (command_line->HasSwitch(kUninstallSwitch)) {
     CHECK(!global_prefs_);
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::MayBlock()},
-        base::BindOnce(
-            [](UpdaterScope scope) {
-              UninstallOtherVersions(scope);
-              return Uninstall(scope);
-            },
-            updater_scope()),
-        base::BindOnce(&AppUninstall::Shutdown, this));
+    UninstallAll();
     return;
   }
 
@@ -131,17 +138,14 @@ void AppUninstall::FirstTaskRun() {
 
   if (command_line->HasSwitch(kUninstallIfUnusedSwitch)) {
     CHECK(global_prefs_);
-    auto persisted_data =
-        base::MakeRefCounted<PersistedData>(global_prefs_->GetPrefService());
+    auto persisted_data = base::MakeRefCounted<PersistedData>(
+        updater_scope(), global_prefs_->GetPrefService());
     const bool should_uninstall = ShouldUninstall(
         persisted_data->GetAppIds(), global_prefs_->CountServerStarts(),
         persisted_data->GetHadApps());
     VLOG(1) << "ShouldUninstall returned: " << should_uninstall;
     if (should_uninstall) {
-      base::ThreadPool::PostTaskAndReplyWithResult(
-          FROM_HERE, {base::MayBlock()},
-          base::BindOnce(&Uninstall, updater_scope()),
-          base::BindOnce(&AppUninstall::Shutdown, this));
+      UninstallAll();
     } else {
       base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE, base::BindOnce(&AppUninstall::Shutdown, this, 0));

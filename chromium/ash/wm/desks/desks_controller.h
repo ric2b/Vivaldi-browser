@@ -255,6 +255,9 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   // users are not allowed to set empty names.
   void RestoreNameOfDeskAtIndex(std::u16string name, size_t index);
 
+  // Sets the `uuid_` of the desk at `index` to the supplied `guid`.
+  void RestoreGuidOfDeskAtIndex(base::GUID guid, size_t index);
+
   // Restores the creation time of the desk at |index|.
   void RestoreCreationTimeOfDeskAtIndex(base::Time creation_time, size_t index);
 
@@ -300,7 +303,7 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   // Captures the active desk and returns it as a saved desk (of type
   // `template_type`) containing necessary information that can be used to
   // create a same desk via provided `callback`, `root_window_to_show` is used
-  // to determine which monitor to show template related dialog.
+  // to determine which monitor to show saved desk related dialog.
   void CaptureActiveDeskAsSavedDesk(GetDeskTemplateCallback callback,
                                     DeskTemplateType template_type,
                                     aura::Window* root_window_to_show) const;
@@ -376,6 +379,11 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   // Otherwise returns `base`.
   std::u16string CreateUniqueDeskName(const std::u16string& base) const;
 
+  // Saves metrics and resets `temporary_removed_desk_` if `toast_id` is empty
+  // or it matches the toast ID stored in `temporary_removed_desk_`.
+  void MaybeCommitPendingDeskRemoval(
+      const std::string& toast_id = std::string());
+
  private:
   class DeskTraversalsMetricsHelper;
   class RemovedDeskData;
@@ -419,11 +427,6 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   // closing all windows in the desk would become a no-op, so we can still use
   // this function in the combine desks process.
   void FinalizeDeskRemoval(RemovedDeskData* removed_desk_data);
-
-  // Saves metrics and resets `temporary_removed_desk_` if `toast_id` is empty
-  // or it matches the toast ID stored in `temporary_removed_desk_`.
-  void MaybeCommitPendingDeskRemoval(
-      const std::string& toast_id = std::string());
 
   // Forcefully cleans up app windows that should be closed.
   void CleanUpClosedAppWindowsTask(
@@ -473,6 +476,9 @@ class ASH_EXPORT DesksController : public chromeos::DesksHelper,
   std::vector<std::unique_ptr<Desk>> desks_;
 
   Desk* active_desk_ = nullptr;
+
+  // Target desk if in middle of desk activation, `nullptr` otherwise.
+  Desk* desk_to_activate_ = nullptr;
 
   // The account ID of the current active user.
   AccountId current_account_id_;

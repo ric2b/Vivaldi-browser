@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -33,9 +33,7 @@ class WeblayerPingManagerTest : public WebLayerBrowserTest {
  public:
   WeblayerPingManagerTest() {
     feature_list_.InitWithFeatures(
-        {safe_browsing::kSafeBrowsingRemoveCookiesInAuthRequests,
-         safe_browsing::kSafeBrowsingCsbrrWithToken},
-        {});
+        {safe_browsing::kSafeBrowsingRemoveCookiesInAuthRequests}, {});
   }
 
  protected:
@@ -45,7 +43,6 @@ class WeblayerPingManagerTest : public WebLayerBrowserTest {
                                   bool expect_cookies_removed);
 
   base::test::ScopedFeatureList feature_list_;
-  bool is_csbrr_token_feature_enabled_ = true;
   bool is_remove_cookies_feature_enabled_ = true;
 
  private:
@@ -58,20 +55,8 @@ class RemoveCookiesFeatureDisabledWeblayerPingManagerTest
   RemoveCookiesFeatureDisabledWeblayerPingManagerTest() {
     feature_list_.Reset();
     feature_list_.InitWithFeatures(
-        {safe_browsing::kSafeBrowsingCsbrrWithToken},
-        {safe_browsing::kSafeBrowsingRemoveCookiesInAuthRequests});
+        {safe_browsing::kSafeBrowsingRemoveCookiesInAuthRequests}, {});
     is_remove_cookies_feature_enabled_ = false;
-  }
-};
-class CsbrrTokenFeatureDisabledWeblayerPingManagerTest
-    : public WeblayerPingManagerTest {
- public:
-  CsbrrTokenFeatureDisabledWeblayerPingManagerTest() {
-    feature_list_.Reset();
-    feature_list_.InitWithFeatures(
-        {safe_browsing::kSafeBrowsingRemoveCookiesInAuthRequests},
-        {safe_browsing::kSafeBrowsingCsbrrWithToken});
-    is_csbrr_token_feature_enabled_ = false;
   }
 };
 class IncognitoModeWeblayerPingManagerTest : public WeblayerPingManagerTest {
@@ -164,7 +149,7 @@ void WeblayerPingManagerTest::RunReportThreatDetailsTest(
 }
 
 IN_PROC_BROWSER_TEST_F(WeblayerPingManagerTest,
-                       ReportThreatDetailsWithAccessToken) {
+                       DISABLED_ReportThreatDetailsWithAccessToken) {
   RunReportThreatDetailsTest(/*is_enhanced_protection=*/true,
                              /*is_signed_in=*/true,
                              /*expect_access_token=*/true,
@@ -172,7 +157,7 @@ IN_PROC_BROWSER_TEST_F(WeblayerPingManagerTest,
 }
 IN_PROC_BROWSER_TEST_F(
     RemoveCookiesFeatureDisabledWeblayerPingManagerTest,
-    ReportThreatDetailsWithAccessToken_RemoveCookiesFeatureDisabled) {
+    DISABLED_ReportThreatDetailsWithAccessToken_RemoveCookiesFeatureDisabled) {
   RunReportThreatDetailsTest(/*is_enhanced_protection=*/true,
                              /*is_signed_in=*/true,
                              /*expect_access_token=*/true,
@@ -186,33 +171,23 @@ IN_PROC_BROWSER_TEST_F(IncognitoModeWeblayerPingManagerTest,
 }
 IN_PROC_BROWSER_TEST_F(
     WeblayerPingManagerTest,
-    ReportThreatDetailsWithoutAccessToken_NotEnhancedProtection) {
+    DISABLED_ReportThreatDetailsWithoutAccessToken_NotEnhancedProtection) {
   RunReportThreatDetailsTest(/*is_enhanced_protection=*/false,
                              /*is_signed_in=*/true,
                              /*expect_access_token=*/false,
                              /*expect_cookies_removed=*/false);
 }
-IN_PROC_BROWSER_TEST_F(WeblayerPingManagerTest,
-                       ReportThreatDetailsWithoutAccessToken_NotSignedIn) {
+IN_PROC_BROWSER_TEST_F(
+    WeblayerPingManagerTest,
+    DISABLED_ReportThreatDetailsWithoutAccessToken_NotSignedIn) {
   RunReportThreatDetailsTest(/*is_enhanced_protection=*/true,
                              /*is_signed_in=*/false,
                              /*expect_access_token=*/false,
                              /*expect_cookies_removed=*/false);
 }
-// TODO(crbug.com/1296615): remove test case,
-// CsbrrTokenFeatureDisabledWeblayerPingManagerTest class, and
-// is_csbrr_token_feature_enabled_ property when deprecating
-// kSafeBrowsingCsbrrWithToken feature
-IN_PROC_BROWSER_TEST_F(
-    CsbrrTokenFeatureDisabledWeblayerPingManagerTest,
-    ReportThreatDetailsWithoutAccessToken_CsbrrTokenFeatureDisabled) {
-  RunReportThreatDetailsTest(/*is_enhanced_protection=*/true,
-                             /*is_signed_in=*/true,
-                             /*expect_access_token=*/false,
-                             /*expect_cookies_removed=*/false);
-}
 
-IN_PROC_BROWSER_TEST_F(WeblayerPingManagerTest, ReportSafeBrowsingHit) {
+IN_PROC_BROWSER_TEST_F(WeblayerPingManagerTest,
+                       DISABLED_ReportSafeBrowsingHit) {
   safe_browsing::HitReport hit_report;
   hit_report.post_data = "testing_hit_report_post_data";
   // Threat type and source are arbitrary but specified so that determining the

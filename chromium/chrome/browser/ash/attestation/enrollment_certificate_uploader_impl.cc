@@ -7,8 +7,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/time/time.h"
@@ -194,8 +194,9 @@ void EnrollmentCertificateUploaderImpl::UploadCertificateIfNeeded(
                      weak_factory_.GetWeakPtr()));
 }
 
-void EnrollmentCertificateUploaderImpl::OnUploadComplete(bool status) {
-  if (status) {
+void EnrollmentCertificateUploaderImpl::OnUploadComplete(
+    policy::CloudPolicyClient::Result result) {
+  if (result.IsSuccess()) {
     has_already_uploaded_ = true;
     if (num_retries_ != 0) {
       LOG(WARNING) << "Enterprise Enrollment Certificate uploaded to DMServer "

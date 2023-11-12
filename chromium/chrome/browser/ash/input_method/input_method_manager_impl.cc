@@ -12,9 +12,9 @@
 #include <utility>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/hash/hash.h"
 #include "base/i18n/string_compare.h"
 #include "base/location.h"
@@ -38,11 +38,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_ash.h"
 #include "chrome/browser/lifetime/termination_notification.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/ash/components/system/devicemode.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "third_party/icu/source/common/unicode/uloc.h"
@@ -548,7 +546,7 @@ void InputMethodManagerImpl::StateImpl::ToggleInputMethodForJpIme() {
 void InputMethodManagerImpl::StateImpl::AddInputMethodExtension(
     const std::string& extension_id,
     const InputMethodDescriptors& descriptors,
-    ui::TextInputMethod* engine) {
+    TextInputMethod* engine) {
   if (IsShuttingDown())
     return;
 
@@ -575,7 +573,7 @@ void InputMethodManagerImpl::StateImpl::AddInputMethodExtension(
   if (IsActive()) {
     if (extension_id == extension_ime_util::GetExtensionIDFromInputMethodID(
                             current_input_method_.id())) {
-      ui::IMEBridge::Get()->SetCurrentEngineHandler(engine);
+      IMEBridge::Get()->SetCurrentEngineHandler(engine);
       engine->Enable(extension_ime_util::GetComponentIDByInputMethodID(
           current_input_method_.id()));
     }
@@ -610,9 +608,9 @@ void InputMethodManagerImpl::StateImpl::RemoveInputMethodExtension(
   available_input_methods_.swap(new_available_input_methods);
 
   if (IsActive()) {
-    if (ui::IMEBridge::Get()->GetCurrentEngineHandler() ==
+    if (IMEBridge::Get()->GetCurrentEngineHandler() ==
         manager_->engine_map_[profile_][extension_id]) {
-      ui::IMEBridge::Get()->SetCurrentEngineHandler(nullptr);
+      IMEBridge::Get()->SetCurrentEngineHandler(nullptr);
     }
     manager_->engine_map_[profile_].erase(extension_id);
   }
@@ -987,7 +985,7 @@ InputMethodManagerImpl::InputMethodManagerImpl(
     }
   }
 
-  if (chromeos::IsRunningAsSystemCompositor()) {
+  if (base::SysInfo::IsRunningOnChromeOS()) {
     keyboard_ = std::make_unique<ImeKeyboardImpl>(
         ui::OzonePlatform::GetInstance()->GetInputController());
   } else {
@@ -1083,7 +1081,7 @@ void InputMethodManagerImpl::ChangeInputMethodInternalFromActiveState(
   }
 
   // Disable the current engine handler.
-  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  TextInputMethod* engine = IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->Disable();
 
@@ -1103,7 +1101,7 @@ void InputMethodManagerImpl::ChangeInputMethodInternalFromActiveState(
   }
   engine = engine_map_[state_->GetProfile()][extension_id];
 
-  ui::IMEBridge::Get()->SetCurrentEngineHandler(engine);
+  IMEBridge::Get()->SetCurrentEngineHandler(engine);
 
   if (engine) {
     engine->Enable(component_id);
@@ -1134,8 +1132,7 @@ void InputMethodManagerImpl::ActivateInputMethodMenuItem(
 
   if (ui::ime::InputMethodMenuManager::GetInstance()->
       HasInputMethodMenuItemForKey(key)) {
-    ui::TextInputMethod* engine =
-        ui::IMEBridge::Get()->GetCurrentEngineHandler();
+    TextInputMethod* engine = IMEBridge::Get()->GetCurrentEngineHandler();
     if (engine)
       engine->PropertyActivate(key);
     return;
@@ -1231,12 +1228,12 @@ void InputMethodManagerImpl::OnAppTerminating() {
 
   if (assistive_window_controller_.get()) {
     assistive_window_controller_.reset();
-    ui::IMEBridge::Get()->SetAssistiveWindowHandler(nullptr);
+    IMEBridge::Get()->SetAssistiveWindowHandler(nullptr);
   }
 }
 
 void InputMethodManagerImpl::CandidateClicked(int index) {
-  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  TextInputMethod* engine = IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->CandidateClicked(index);
 }
@@ -1253,14 +1250,14 @@ void InputMethodManagerImpl::CandidateWindowClosed() {
 
 void InputMethodManagerImpl::AssistiveWindowButtonClicked(
     const ui::ime::AssistiveWindowButton& button) const {
-  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  TextInputMethod* engine = IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->AssistiveWindowButtonClicked(button);
 }
 
 void InputMethodManagerImpl::AssistiveWindowChanged(
     const ash::ime::AssistiveWindow& window) const {
-  ui::TextInputMethod* engine = ui::IMEBridge::Get()->GetCurrentEngineHandler();
+  TextInputMethod* engine = IMEBridge::Get()->GetCurrentEngineHandler();
   if (engine)
     engine->AssistiveWindowChanged(window);
 }
@@ -1304,7 +1301,7 @@ void InputMethodManagerImpl::MaybeInitializeAssistiveWindowController() {
 
   assistive_window_controller_ =
       std::make_unique<AssistiveWindowController>(this, state_->GetProfile());
-  ui::IMEBridge::Get()->SetAssistiveWindowHandler(
+  IMEBridge::Get()->SetAssistiveWindowHandler(
       assistive_window_controller_.get());
 }
 

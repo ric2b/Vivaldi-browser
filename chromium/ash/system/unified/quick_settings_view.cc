@@ -6,8 +6,6 @@
 
 #include <numeric>
 
-#include "ash/constants/ash_features.h"
-#include "ash/style/pill_button.h"
 #include "ash/system/media/unified_media_controls_container.h"
 #include "ash/system/tray/interacted_by_tap_recorder.h"
 #include "ash/system/tray/tray_constants.h"
@@ -26,15 +24,20 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout_view.h"
+#include "ui/views/view_class_properties.h"
 
 namespace ash {
 
 namespace {
+
+constexpr auto kPageIndicatorMargin = gfx::Insets::TLBR(0, 0, 8, 0);
+constexpr auto kSlidersContainerMargin = gfx::Insets::TLBR(4, 0, 0, 0);
 
 class DetailedViewContainer : public views::View {
  public:
@@ -52,8 +55,9 @@ class DetailedViewContainer : public views::View {
 
   // views::View:
   void Layout() override {
-    for (auto* child : children())
+    for (auto* child : children()) {
       child->SetBoundsRect(GetContentsBounds());
+    }
     views::View::Layout();
   }
 };
@@ -120,6 +124,7 @@ QuickSettingsView::QuickSettingsView(UnifiedSystemTrayController* controller)
       interacted_by_tap_recorder_(
           std::make_unique<InteractedByTapRecorder>(this)) {
   DCHECK(controller_);
+  controller_->model()->pagination_model()->AddObserver(this);
 
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
@@ -134,14 +139,16 @@ QuickSettingsView::QuickSettingsView(UnifiedSystemTrayController* controller)
       scroll_view->SetContents(std::make_unique<views::FlexLayoutView>());
   system_tray_container_->SetOrientation(views::LayoutOrientation::kVertical);
 
-  AddTemporaryDetailedViewButtons();
-
   header_ = system_tray_container_->AddChildView(
       std::make_unique<QuickSettingsHeader>(controller_));
   feature_tiles_container_ = system_tray_container_->AddChildView(
       std::make_unique<FeatureTilesContainerView>(controller_));
-  page_indicator_view_ = system_tray_container_->AddChildView(
-      std::make_unique<PageIndicatorView>(controller_, true));
+  page_indicator_view_ =
+      system_tray_container_->AddChildView(std::make_unique<PageIndicatorView>(
+          controller_, /*initially_expanded=*/controller_->model()
+                               ->pagination_model()
+                               ->total_pages() > 1));
+  page_indicator_view_->SetProperty(views::kMarginsKey, kPageIndicatorMargin);
 
   if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsForChromeOS)) {
     media_controls_container_ = system_tray_container_->AddChildView(
@@ -152,6 +159,7 @@ QuickSettingsView::QuickSettingsView(UnifiedSystemTrayController* controller)
   sliders_container_ = system_tray_container_->AddChildView(
       std::make_unique<views::FlexLayoutView>());
   sliders_container_->SetOrientation(views::LayoutOrientation::kVertical);
+  sliders_container_->SetProperty(views::kMarginsKey, kSlidersContainerMargin);
 
   footer_ = system_tray_container_->AddChildView(
       std::make_unique<QuickSettingsFooter>(controller_));
@@ -164,7 +172,9 @@ QuickSettingsView::QuickSettingsView(UnifiedSystemTrayController* controller)
       std::make_unique<AccessibilityFocusHelperView>(controller_));
 }
 
-QuickSettingsView::~QuickSettingsView() = default;
+QuickSettingsView::~QuickSettingsView() {
+  controller_->model()->pagination_model()->RemoveObserver(this);
+}
 
 void QuickSettingsView::SetMaxHeight(int max_height) {
   max_height_ = max_height;
@@ -193,11 +203,16 @@ void QuickSettingsView::AddMediaControlsView(views::View* media_controls) {
 void QuickSettingsView::ShowMediaControls() {
   media_controls_container_->SetShouldShowMediaControls(true);
 
-  if (detailed_view_container_->GetVisible())
+  if (detailed_view_container_->GetVisible()) {
     return;
+  }
 
-  if (media_controls_container_->MaybeShowMediaControls())
+  if (media_controls_container_->MaybeShowMediaControls()) {
     PreferredSizeChanged();
+  }
+
+  feature_tiles_container_->SetRowsFromHeight(
+      CalculateHeightForFeatureTilesContainer());
 }
 
 void QuickSettingsView::SetDetailedView(
@@ -217,22 +232,25 @@ void QuickSettingsView::SetDetailedView(
 void QuickSettingsView::ResetDetailedView() {
   detailed_view_container_->RemoveAllChildViews();
   detailed_view_container_->SetVisible(false);
-  if (media_controls_container_)
+  if (media_controls_container_) {
     media_controls_container_->MaybeShowMediaControls();
+  }
   system_tray_container_->SetVisible(true);
 }
 
 void QuickSettingsView::SaveFocus() {
   auto* focus_manager = GetFocusManager();
-  if (!focus_manager)
+  if (!focus_manager) {
     return;
+  }
 
   saved_focused_view_ = focus_manager->GetFocusedView();
 }
 
 void QuickSettingsView::RestoreFocus() {
-  if (saved_focused_view_)
+  if (saved_focused_view_) {
     saved_focused_view_->RequestFocus();
+  }
 }
 
 int QuickSettingsView::GetCurrentHeight() const {
@@ -247,9 +265,8 @@ int QuickSettingsView::CalculateHeightForFeatureTilesContainer() {
       media_controls_container_ ? media_controls_container_->GetExpandedHeight()
                                 : 0;
 
-  return max_height_ -
-         temporary_buttons_container_->GetPreferredSize().height() -
-         header_->GetPreferredSize().height() -
+  return max_height_ - header_->GetPreferredSize().height() -
+         footer_->GetPreferredSize().height() -
          page_indicator_view_->GetPreferredSize().height() -
          sliders_container_->GetPreferredSize().height() -
          media_controls_container_height - footer_->GetPreferredSize().height();
@@ -263,56 +280,15 @@ bool QuickSettingsView::IsDetailedViewShown() const {
   return detailed_view_container_->GetVisible();
 }
 
-void QuickSettingsView::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_SCROLL_FLING_START)
-    controller_->Fling(event->details().velocity_y());
+void QuickSettingsView::TotalPagesChanged(int previous_page_count,
+                                          int new_page_count) {
+  page_indicator_view_->SetVisible(new_page_count > 1);
 }
 
-void QuickSettingsView::AddTemporaryDetailedViewButtons() {
-  // While feature tiles are under development, provide some temporary buttons
-  // that allow access to tray detail pages.
-  DCHECK(system_tray_container_);
-  temporary_buttons_container_ =
-      system_tray_container_->AddChildView(std::make_unique<views::View>());
-  auto* layout = temporary_buttons_container_->SetLayoutManager(
-      std::make_unique<views::BoxLayout>());
-  layout->set_between_child_spacing(4);
-
-  temporary_buttons_container_->AddChildView(std::make_unique<PillButton>(
-      base::BindRepeating(
-          [](UnifiedSystemTrayController* controller) {
-            controller->ShowNetworkDetailedView(/*force=*/true);
-          },
-          controller_),
-      u"Net"));
-  temporary_buttons_container_->AddChildView(std::make_unique<PillButton>(
-      base::BindRepeating(
-          [](UnifiedSystemTrayController* controller) {
-            controller->ShowBluetoothDetailedView();
-          },
-          controller_),
-      u"Bluetooth"));
-  temporary_buttons_container_->AddChildView(std::make_unique<PillButton>(
-      base::BindRepeating(
-          [](UnifiedSystemTrayController* controller) {
-            controller->ShowIMEDetailedView();
-          },
-          controller_),
-      u"IME"));
-  temporary_buttons_container_->AddChildView(std::make_unique<PillButton>(
-      base::BindRepeating(
-          [](UnifiedSystemTrayController* controller) {
-            controller->ShowAccessibilityDetailedView();
-          },
-          controller_),
-      u"A11y"));
-  temporary_buttons_container_->AddChildView(std::make_unique<PillButton>(
-      base::BindRepeating(
-          [](UnifiedSystemTrayController* controller) {
-            controller->ShowCastDetailedView();
-          },
-          controller_),
-      u"Cast"));
+void QuickSettingsView::OnGestureEvent(ui::GestureEvent* event) {
+  if (event->type() == ui::ET_SCROLL_FLING_START) {
+    controller_->Fling(event->details().velocity_y());
+  }
 }
 
 BEGIN_METADATA(QuickSettingsView, views::View)

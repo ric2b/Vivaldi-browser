@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/task/single_thread_task_runner.h"
@@ -33,6 +33,27 @@ DrmDisplayHost::~DrmDisplayHost() {
 void DrmDisplayHost::UpdateDisplaySnapshot(
     std::unique_ptr<display::DisplaySnapshot> params) {
   snapshot_ = std::move(params);
+}
+
+void DrmDisplayHost::SetHdcpKeyProp(const std::string& key,
+                                    display::SetHdcpKeyPropCallback callback) {
+  set_hdcp_key_prop_callback_ = std::move(callback);
+  if (!sender_->GpuSetHdcpKeyProp(snapshot_->display_id(), key)) {
+    OnHdcpKeyPropSetReceived(false);
+  }
+}
+
+void DrmDisplayHost::OnHdcpKeyPropSetReceived(bool success) {
+  if (!set_hdcp_key_prop_callback_.is_null()) {
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(set_hdcp_key_prop_callback_), success));
+  } else {
+    LOG(ERROR) << "Got unexpected event for display "
+               << snapshot_->display_id();
+  }
+
+  set_hdcp_key_prop_callback_.Reset();
 }
 
 void DrmDisplayHost::GetHDCPState(display::GetHDCPStateCallback callback) {

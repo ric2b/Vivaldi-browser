@@ -64,8 +64,9 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/panel/panel_constants.h"
+#import "ios/ui/custom_views/vivaldi_search_bar_view.h"
+#import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
-#import "ios/ui/helpers/vivaldi_uiviewcontroller_helper.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -99,14 +100,14 @@ const CGFloat kButtonHorizontalPadding = 30.0;
                                           TableViewURLDragDataSource,
                                           UISearchControllerDelegate,
                                           UISearchResultsUpdating,
+
+                                          // Vivaldi
+                                          VivaldiSearchBarViewDelegate,
+                                          // End Vivaldi
+
                                           UISearchBarDelegate> {
   // Closure to request next page of history.
   base::OnceClosure _query_history_continuation;
-
-  // Vivaldi
-  UIView* searchBarContainer;
-  // End Vivaldi
-
 }
 
 // Object to manage insertion of history entries into the table view model.
@@ -145,6 +146,10 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 // Handler for URL drag interactions.
 @property(nonatomic, strong) TableViewURLDragDropHandler* dragDropHandler;
 
+// Vivaldi
+// Custom Vivaldi tableHeaderView to host search bar.
+@property(nonatomic, strong) VivaldiSearchBarView* vivaldiSearchBarView;
+// End Vivaldi
 
 @end
 
@@ -156,13 +161,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   UITableViewStyle style = ChromeTableViewStyle();
   return [super initWithStyle:style];
 }
-
-// Vivaldi
-- (void)viewDidLayoutSubviews{
-    if (vivaldi::IsVivaldiRunning())
-      self.searchController.searchBar.frame = searchBarContainer.bounds;
-}
-// End Vivaldi
 
 - (void)viewDidLoad {
   [super viewDidLoad];
@@ -232,13 +230,7 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   self.definesPresentationContext = YES;
 
   // Vivaldi
-  if (vivaldi::IsVivaldiRunning()) {
-    self.searchController.hidesNavigationBarDuringPresentation = NO;
-    if (self.isDeviceIPad)
-      [self setupHeaderWithSearchForIPad];
-    else
-      [self setupHeaderWithSearch];
-  }
+  [self setupHeaderWithSearch];
   // End Vivaldi
 
   self.scrimView = [[UIControl alloc] init];
@@ -1055,14 +1047,14 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 
     // Vivaldi
     if (vivaldi::IsVivaldiRunning())
-      self.searchController.searchBar.hidden = YES;
+      self.vivaldiSearchBarView.hidden = YES;
   } else {
 
     // Vivaldi
     if (!vivaldi::IsVivaldiRunning())
     self.navigationItem.searchController = self.searchController;
     else
-      self.searchController.searchBar.hidden = NO;
+      self.vivaldiSearchBarView.hidden = NO;
     // End Vivaldi
 
     self.navigationItem.largeTitleDisplayMode =
@@ -1278,11 +1270,6 @@ const CGFloat kButtonHorizontalPadding = 30.0;
 - (void)dismissHistory {
   base::RecordAction(base::UserMetricsAction("MobileHistoryClose"));
 
-  // Vivaldi
-  if (self.searchController.active)
-      self.searchController.active = NO;
-  // End Vivaldi
-
   [self.delegate dismissHistoryWithCompletion:nil];
 }
 
@@ -1450,63 +1437,36 @@ const CGFloat kButtonHorizontalPadding = 30.0;
   return [UIMenu menuWithTitle:@"" children:menuElements];
 }
 
-#pragma mark VIVALDI
-
-- (void)setupSearchBarWithStyle {
-    searchBarContainer = [[UIView alloc] init];
-    searchBarContainer.frame = CGRectMake(0, 0, 0, search_bar_height);
-    searchBarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    [searchBarContainer addSubview:self.searchController.searchBar];
-    self.searchController.searchBar.autoresizingMask =
-        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.searchController.searchBar.backgroundColor =
-        [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-    self.searchController.searchBar.alpha = 1.0;
-    self.searchController.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    [self.searchController.searchBar sizeToFit];
-}
-
-- (void)setupHeaderWithSearchForIPad {
-    [self setupSearchBarWithStyle];
-    self.tableView.tableHeaderView = searchBarContainer;
-    [searchBarContainer.topAnchor
-      constraintEqualToAnchor:self.tableView.topAnchor].active = YES;
-    [searchBarContainer.leadingAnchor
-      constraintEqualToAnchor:self.view.leadingAnchor].active = YES;
-    [searchBarContainer.trailingAnchor
-       constraintEqualToAnchor:self.view.trailingAnchor].active = YES;
-    [searchBarContainer.heightAnchor
-      constraintEqualToConstant:search_bar_height].active = YES;
-    [searchBarContainer.widthAnchor
-      constraintEqualToAnchor:self.view.widthAnchor].active = YES;
-}
-
 - (void)setupHeaderWithSearch {
-  UIView* headerView = [[UIView alloc] init];
-  headerView.frame = CGRectMake(0, 0,0, panel_header_height);
-  UIView* topView = [[UIView alloc] init];
-  topView.frame = CGRectMake(0, 0, 0, panel_search_view_height);
-  [headerView addSubview:topView];
-  [topView fillSuperviewWithPadding:UIEdgeInsetsMake(
-                                                  search_bar_height, 0,0,0)];
+  UIView* tableHeaderView =
+      [[UIView alloc] initWithFrame:
+       CGRectMake(0, 0,self.tableView.bounds.size.width,
+                  self.showingSidePanel ? panel_search_view_height :
+                  panel_header_height)];
+  VivaldiSearchBarView* searchBarView = [VivaldiSearchBarView new];
+  _vivaldiSearchBarView = searchBarView;
+  [tableHeaderView addSubview:searchBarView];
+  [searchBarView
+      fillSuperviewWithPadding:UIEdgeInsetsMake(self.showingSidePanel ? 0 :
+                                                search_bar_height, 0, 0, 0)];
+  searchBarView.delegate = self;
+  [searchBarView setPlaceholder:
+        l10n_util::GetNSString(IDS_VIVALDI_SEARCHBAR_PLACEHOLDER)];
+  self.tableView.tableHeaderView = tableHeaderView;
+}
 
-  [self setupSearchBarWithStyle];
-  [headerView addSubview:searchBarContainer];
-  [searchBarContainer fillSuperviewWithPadding:UIEdgeInsetsMake(
-                                                   search_bar_height, 0, 0, 0)];
-  self.tableView.tableHeaderView = headerView;
+#pragma mark: VIVALDI_SEARCH_BAR_VIEW_DELEGATE
+- (void)searchBarTextDidChange:(NSString*)searchText {
+  if (searchText.length != 0) {
+    self.searchInProgress = YES;
+  }
+  [self showHistoryMatchingQuery:searchText];
+}
 
-  headerView.translatesAutoresizingMaskIntoConstraints = NO;
-  [headerView.leadingAnchor constraintEqualToAnchor:
-      self.tableView.leadingAnchor].active = YES;
-  [headerView.trailingAnchor constraintEqualToAnchor:
-      self.tableView.trailingAnchor].active = YES;
-  [headerView.topAnchor constraintEqualToAnchor:
-      self.tableView.topAnchor].active = YES;
-  [headerView.heightAnchor constraintEqualToConstant:panel_header_height]
-      .active = YES;
-  [headerView.widthAnchor
-      constraintEqualToAnchor:self.view.widthAnchor].active = YES;
+/// Returns true if device is iPad and multitasking UI has
+/// enough space to show iPad side panel.
+- (BOOL)showingSidePanel {
+  return VivaldiGlobalHelpers.canShowSidePanel;
 }
 
 @end

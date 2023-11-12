@@ -13,9 +13,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/context_cache_controller.h"
@@ -129,7 +129,7 @@ TestSharedImageInterface::TestSharedImageInterface() = default;
 TestSharedImageInterface::~TestSharedImageInterface() = default;
 
 gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
-    ResourceFormat format,
+    SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -144,7 +144,7 @@ gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
 }
 
 gpu::Mailbox TestSharedImageInterface::CreateSharedImage(
-    ResourceFormat format,
+    SharedImageFormat format,
     const gfx::Size& size,
     const gfx::ColorSpace& color_space,
     GrSurfaceOrigin surface_origin,
@@ -380,7 +380,8 @@ TestContextProvider::TestContextProvider(
   if (!raster_interface_gles_) {
     raster_interface_gles_ =
         std::make_unique<gpu::raster::RasterImplementationGLES>(
-            context_gl_.get(), support_.get());
+            context_gl_.get(), support_.get(),
+            context_gl_->test_capabilities());
   }
   // Just pass nullptr to the ContextCacheController for its task runner.
   // Idle handling is tested directly in ContextCacheController's

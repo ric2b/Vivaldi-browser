@@ -17,12 +17,12 @@
 #include "ash/components/arc/test/fake_arc_session.h"
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
@@ -38,6 +38,7 @@
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/test/test_arc_session_manager.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
+#include "chrome/browser/ash/login/demo_mode/demo_setup_test_utils.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -619,7 +620,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForPublicAccounts) {
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundFetch) {
   base::HistogramTester histogram_tester;
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
-  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+  test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          GetFakeAuthTokenResponse());
 
   base::RunLoop run_loop;
@@ -654,13 +655,13 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, SuccessfulBackgroundProxyBypass) {
           case 0:
             // Reply with broken PAC script state.
             test_url_loader_factory()->AddResponse(
-                GURL(arc::kAuthTokenExchangeEndPoint),
+                GURL(arc::kTokenBootstrapEndPoint),
                 network::mojom::URLResponseHead::New(), "response", status);
             break;
           case 1:
             // Reply with the auth token.
-            test_url_loader_factory()->AddResponse(
-                arc::kAuthTokenExchangeEndPoint, GetFakeAuthTokenResponse());
+            test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
+                                                   GetFakeAuthTokenResponse());
             break;
           default:
             NOTREACHED();
@@ -693,7 +694,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
                        ReAuthenticatePrimaryAccountSucceeds) {
   base::HistogramTester tester;
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
-  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+  test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          GetFakeAuthTokenResponse());
 
   base::RunLoop run_loop;
@@ -723,15 +724,15 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   auth_instance().RequestAccountInfo(kFakeUserName, run_loop.QuitClosure());
 
   EXPECT_TRUE(
-      test_url_loader_factory()->IsPending(arc::kAuthTokenExchangeEndPoint));
+      test_url_loader_factory()->IsPending(arc::kTokenBootstrapEndPoint));
   test_url_loader_factory()->SimulateResponseForPendingRequest(
-      arc::kAuthTokenExchangeEndPoint, std::string(), net::HTTP_UNAUTHORIZED);
+      arc::kTokenBootstrapEndPoint, std::string(), net::HTTP_UNAUTHORIZED);
 
   // Should retry auth token exchange request
   EXPECT_TRUE(
-      test_url_loader_factory()->IsPending(arc::kAuthTokenExchangeEndPoint));
+      test_url_loader_factory()->IsPending(arc::kTokenBootstrapEndPoint));
   test_url_loader_factory()->SimulateResponseForPendingRequest(
-      arc::kAuthTokenExchangeEndPoint, GetFakeAuthTokenResponse());
+      arc::kTokenBootstrapEndPoint, GetFakeAuthTokenResponse());
   run_loop.Run();
 
   ASSERT_TRUE(auth_instance().account_info());
@@ -744,7 +745,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
                        ReAuthenticatePrimaryAccountFailsForInvalidAccount) {
   base::HistogramTester tester;
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
-  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+  test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          std::string() /* response */,
                                          net::HTTP_UNAUTHORIZED);
 
@@ -765,7 +766,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, FetchSecondaryAccountInfoSucceeds) {
   // Add a Secondary Account.
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   SeedAccountInfo(kSecondaryAccountEmail);
-  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+  test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          GetFakeAuthTokenResponse());
 
   base::RunLoop run_loop;
@@ -793,7 +794,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   // Add a Secondary Account.
   SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
   SeedAccountInfo(kSecondaryAccountEmail);
-  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+  test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          std::string() /* response */,
                                          net::HTTP_UNAUTHORIZED);
 
@@ -815,7 +816,7 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
   base::HistogramTester tester;
   const AccountInfo account_info = SetupGaiaAccount(kSecondaryAccountEmail);
   SetInvalidRefreshTokenForAccount(account_info.account_id);
-  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+  test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          std::string() /* response */,
                                          net::HTTP_UNAUTHORIZED);
 
@@ -1170,6 +1171,7 @@ class ArcRobotAccountAuthServiceTest : public ArcAuthServiceTest {
 IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest, GetDemoAccount) {
   ash::DemoSession::SetDemoConfigForTesting(
       ash::DemoSession::DemoModeConfig::kOnline);
+  ash::test::LockDemoDeviceInstallAttributes();
   ash::DemoSession::StartIfInDemoMode();
 
   SetAccountAndProfile(user_manager::USER_TYPE_PUBLIC_ACCOUNT);
@@ -1196,6 +1198,7 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,
                        GetDemoAccountOnAuthTokenFetchFailure) {
   ash::DemoSession::SetDemoConfigForTesting(
       ash::DemoSession::DemoModeConfig::kOnline);
+  ash::test::LockDemoDeviceInstallAttributes();
   ash::DemoSession::StartIfInDemoMode();
 
   SetAccountAndProfile(user_manager::USER_TYPE_PUBLIC_ACCOUNT);
@@ -1227,6 +1230,7 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,
 
   ash::DemoSession::SetDemoConfigForTesting(
       ash::DemoSession::DemoModeConfig::kOnline);
+  ash::test::LockDemoDeviceInstallAttributes();
   ash::DemoSession::StartIfInDemoMode();
 
   SetAccountAndProfile(user_manager::USER_TYPE_PUBLIC_ACCOUNT);
@@ -1278,7 +1282,7 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,
 IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, ChildAccountFetch) {
   SetAccountAndProfile(user_manager::USER_TYPE_CHILD);
   EXPECT_TRUE(profile()->IsChild());
-  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+  test_url_loader_factory()->AddResponse(arc::kTokenBootstrapEndPoint,
                                          GetFakeAuthTokenResponse());
 
   base::RunLoop run_loop;

@@ -8,13 +8,13 @@
 #include <string>
 
 #include "ash/constants/ash_paths.h"
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -62,20 +62,17 @@ void WaitForAutomaticRebootManagerInit(system::AutomaticRebootManager* manager,
   std::move(quit_closure).Run();
 }
 
-} // namespace
+}  // namespace
 
 class KioskAppUpdateServiceTest
     : public extensions::PlatformAppBrowserTest,
       public system::AutomaticRebootManagerObserver {
  public:
-  KioskAppUpdateServiceTest()
-      : app_(nullptr),
-        update_service_(nullptr),
-        automatic_reboot_manager_(nullptr) {}
+  KioskAppUpdateServiceTest() = default;
   KioskAppUpdateServiceTest(const KioskAppUpdateServiceTest&) = delete;
   KioskAppUpdateServiceTest& operator=(const KioskAppUpdateServiceTest&) =
       delete;
-  ~KioskAppUpdateServiceTest() override {}
+  ~KioskAppUpdateServiceTest() override = default;
 
   // extensions::PlatformAppBrowserTest overrides:
   void SetUpInProcessBrowserTestFixture() override {
@@ -127,8 +124,9 @@ class KioskAppUpdateServiceTest
   // system::AutomaticRebootManagerObserver:
   void OnRebootRequested(
       system::AutomaticRebootManagerObserver::Reason) override {
-    if (run_loop_)
+    if (run_loop_) {
       run_loop_->Quit();
+    }
   }
 
   void WillDestroyAutomaticRebootManager() override {
@@ -141,9 +139,7 @@ class KioskAppUpdateServiceTest
     update_service_->Init(app_->id());
   }
 
-  void FireAppUpdateAvailable() {
-    update_service_->OnAppUpdateAvailable(app_);
-  }
+  void FireAppUpdateAvailable() { update_service_->OnAppUpdateAvailable(app_); }
 
   void FireUpdatedNeedReboot() {
     update_engine::StatusResult status;
@@ -163,9 +159,10 @@ class KioskAppUpdateServiceTest
  private:
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<base::ScopedPathOverride> uptime_file_override_;
-  const extensions::Extension* app_;  // Not owned.
-  KioskAppUpdateService* update_service_;  // Not owned.
-  system::AutomaticRebootManager* automatic_reboot_manager_;  // Not owned.
+  const extensions::Extension* app_ = nullptr;       // Not owned.
+  KioskAppUpdateService* update_service_ = nullptr;  // Not owned.
+  system::AutomaticRebootManager* automatic_reboot_manager_ =
+      nullptr;  // Not owned.
   std::unique_ptr<base::RunLoop> run_loop_;
 };
 

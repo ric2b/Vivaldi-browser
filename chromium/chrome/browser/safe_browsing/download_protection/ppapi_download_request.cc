@@ -6,13 +6,12 @@
 
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/escape.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/policy/chrome_browser_policy_connector.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "components/safe_browsing/content/common/file_type_policies.h"
@@ -124,7 +123,7 @@ void PPAPIDownloadRequest::Start() {
       FROM_HERE,
       base::BindOnce(&PPAPIDownloadRequest::OnRequestTimedOut,
                      weakptr_factory_.GetWeakPtr()),
-      base::Milliseconds(service_->download_request_timeout_ms()));
+      service_->GetDownloadRequestTimeout());
 
   content::GetIOThreadTaskRunner({})->PostTask(
       FROM_HERE,
@@ -194,8 +193,8 @@ void PPAPIDownloadRequest::SendRequest() {
   request.set_download_type(ClientDownloadRequest::PPAPI_SAVE_REQUEST);
   ClientDownloadRequest::Resource* resource = request.add_resources();
   resource->set_type(ClientDownloadRequest::PPAPI_DOCUMENT);
-  resource->set_url(requestor_url_.spec());
-  request.set_url(requestor_url_.spec());
+  resource->set_url(ShortURLForReporting(requestor_url_));
+  request.set_url(ShortURLForReporting(requestor_url_));
   request.set_file_basename(supported_path_.BaseName().AsUTF8Unsafe());
   request.set_length(0);
   request.mutable_digests()->set_md5(std::string());

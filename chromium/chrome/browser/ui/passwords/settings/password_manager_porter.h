@@ -16,6 +16,7 @@
 
 namespace password_manager {
 class PasswordManagerExporter;
+struct PasswordExportInfo;
 }  // namespace password_manager
 
 class Profile;
@@ -25,9 +26,8 @@ class Profile;
 class PasswordManagerPorter : public PasswordManagerPorterInterface,
                               public ui::SelectFileDialog::Listener {
  public:
-  using ExportProgressCallback =
-      base::RepeatingCallback<void(password_manager::ExportProgressStatus,
-                                   const std::string&)>;
+  using ExportProgressCallback = base::RepeatingCallback<void(
+      const password_manager::PasswordExportInfo&)>;
 
   // |profile| for which credentials to be importerd.
   // |presenter| provides the credentials which can be exported.
@@ -80,7 +80,7 @@ class PasswordManagerPorter : public PasswordManagerPorterInterface,
 
   void ExportPasswordsToPath(const base::FilePath& path);
 
-  void ImportDone(const password_manager::ImportResults&);
+  void ImportDone();
 
   void ExportDone();
 

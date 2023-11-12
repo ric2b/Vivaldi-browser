@@ -8,6 +8,17 @@
 
 export class StringUtil {
   /**
+   * @param {string} str
+   * @return {string}
+   */
+  static toUpperCamelCase(str) {
+    const wordRegex = /(?:^\w|[A-Z]|(?:\b|_)\w)/g;
+    const underscoreAndWhitespaceRegex = /(\s|_)+/g;
+    return str.replace(wordRegex, word => word.toUpperCase())
+        .replace(underscoreAndWhitespaceRegex, '');
+  }
+
+  /**
    * Returns the length of the longest common prefix of two strings.
    * @param {string} first The first string.
    * @param {string} second The second string.
@@ -79,6 +90,15 @@ export class StringUtil {
       result += textSymbolArray[i];
     }
     return result;
+  }
+
+  /**
+   * Converts a camel case string to snake case.
+   * @param {string} s A camel case string, e.g. 'brailleTable8'.
+   * @return {string} A snake case string, e.g. 'braille_table_8'.
+   */
+  static camelToSnake(s) {
+    return s.replace(/([A-Z0-9])/g, '_$1').toLowerCase();
   }
 }
 

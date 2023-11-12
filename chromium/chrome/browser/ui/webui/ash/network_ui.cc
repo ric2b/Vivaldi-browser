@@ -14,7 +14,7 @@
 #include "ash/webui/network_ui/network_diagnostics_resource_provider.h"
 #include "ash/webui/network_ui/network_health_resource_provider.h"
 #include "ash/webui/network_ui/traffic_counters_resource_provider.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -64,21 +64,6 @@
 #include "ui/chromeos/strings/network/network_element_localized_strings_provider.h"
 
 namespace ash {
-
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
-namespace network_config {
-namespace mojom = ::chromeos::network_config::mojom;
-}
-
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
-namespace network_health {
-namespace mojom = ::chromeos::network_health::mojom;
-}
-
-// TODO(https://crbug.com/1164001): remove after migrating to ash.
-namespace network_diagnostics {
-namespace mojom = ::chromeos::network_diagnostics::mojom;
-}
 
 namespace {
 
@@ -344,15 +329,15 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
   void OnGetShillNetworkProperties(const std::string& callback_id,
                                    const std::string& guid,
                                    const std::string& service_path,
-                                   absl::optional<base::Value> result) {
+                                   absl::optional<base::Value::Dict> result) {
     if (!result) {
       RunErrorCallback(callback_id, guid, kGetNetworkProperties, "Error.DBus");
       return;
     }
     // Set the 'service_path' property for debugging.
-    result->GetDict().Set("service_path", base::Value(service_path));
+    result->Set("service_path", service_path);
     // Set the device properties for debugging.
-    SetDeviceProperties(result->GetIfDict());
+    SetDeviceProperties(&result.value());
     base::Value::List return_arg_list;
     return_arg_list.Append(std::move(*result));
     Respond(callback_id, return_arg_list);
@@ -481,7 +466,7 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
   void OnGetShillDeviceProperties(const std::string& callback_id,
                                   const std::string& type,
                                   const std::string& device_path,
-                                  absl::optional<base::Value> result) {
+                                  absl::optional<base::Value::Dict> result) {
     if (!result) {
       RunErrorCallback(callback_id, type, kGetDeviceProperties,
                        "GetDeviceProperties failed");
@@ -489,7 +474,7 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
     }
 
     // Set the 'device_path' property for debugging.
-    result->GetDict().Set("device_path", base::Value(device_path));
+    result->Set("device_path", device_path);
 
     base::Value::List return_arg_list;
     return_arg_list.Append(std::move(*result));
@@ -641,7 +626,7 @@ class HotspotConfigMessageHandler : public content::WebUIMessageHandler {
     ShillManagerClient::Get()->SetTetheringEnabled(
         enabled,
         base::BindOnce(&HotspotConfigMessageHandler::RespondStringResult,
-                       weak_ptr_factory_.GetWeakPtr(), callback_id, "success"),
+                       weak_ptr_factory_.GetWeakPtr(), callback_id),
         base::BindOnce(&HotspotConfigMessageHandler::RespondError,
                        weak_ptr_factory_.GetWeakPtr(), callback_id,
                        kSetTetheringEnabled));
@@ -682,7 +667,7 @@ class HotspotConfigMessageHandler : public content::WebUIMessageHandler {
   void OnGetShillManagerDictPropertiesByKey(
       const std::string& callback_id,
       const std::string& dict_key,
-      absl::optional<base::Value> properties) {
+      absl::optional<base::Value::Dict> properties) {
     if (!properties) {
       NET_LOG(ERROR) << "Error getting Shill manager properties.";
       Respond(callback_id,
@@ -690,7 +675,7 @@ class HotspotConfigMessageHandler : public content::WebUIMessageHandler {
       return;
     }
 
-    base::Value::Dict* value = properties->GetDict().FindDict(dict_key);
+    base::Value::Dict* value = properties->FindDict(dict_key);
     if (value) {
       const std::string* ssid =
           value->FindString(shill::kTetheringConfSSIDProperty);
@@ -973,8 +958,9 @@ NetworkUI::NetworkUI(content::WebUI* web_ui)
 
   base::Value::Dict localized_strings = GetLocalizedStrings();
 
-  content::WebUIDataSource* html =
-      content::WebUIDataSource::Create(chrome::kChromeUINetworkHost);
+  content::WebUIDataSource* html = content::WebUIDataSource::CreateAndAdd(
+      web_ui->GetWebContents()->GetBrowserContext(),
+      chrome::kChromeUINetworkHost);
 
   html->DisableTrustedTypesCSP();
 
@@ -990,25 +976,22 @@ NetworkUI::NetworkUI(content::WebUI* web_ui)
   ui::network_element::AddLocalizedStrings(html);
   ui::network_element::AddOncLocalizedStrings(html);
   traffic_counters::AddResources(html);
-  html->UseStringsJs();
 
   webui::SetupWebUIDataSource(
       html, base::make_span(kNetworkUiResources, kNetworkUiResourcesSize),
       IDR_NETWORK_UI_NETWORK_HTML);
-
-  content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
-                                html);
 }
 
 NetworkUI::~NetworkUI() = default;
 
 void NetworkUI::BindInterface(
-    mojo::PendingReceiver<network_config::mojom::CrosNetworkConfig> receiver) {
+    mojo::PendingReceiver<chromeos::network_config::mojom::CrosNetworkConfig>
+        receiver) {
   GetNetworkConfigService(std::move(receiver));
 }
 
 void NetworkUI::BindInterface(
-    mojo::PendingReceiver<network_health::mojom::NetworkHealthService>
+    mojo::PendingReceiver<chromeos::network_health::mojom::NetworkHealthService>
         receiver) {
   network_health::NetworkHealthManager::GetInstance()->BindHealthReceiver(
       std::move(receiver));
@@ -1016,7 +999,8 @@ void NetworkUI::BindInterface(
 
 void NetworkUI::BindInterface(
     mojo::PendingReceiver<
-        network_diagnostics::mojom::NetworkDiagnosticsRoutines> receiver) {
+        chromeos::network_diagnostics::mojom::NetworkDiagnosticsRoutines>
+        receiver) {
   network_health::NetworkHealthManager::GetInstance()->BindDiagnosticsReceiver(
       std::move(receiver));
 }

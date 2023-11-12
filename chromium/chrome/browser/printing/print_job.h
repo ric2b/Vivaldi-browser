@@ -8,17 +8,22 @@
 #include <memory>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "content/public/browser/global_routing_id.h"
 #include "printing/print_settings.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chromeos/crosapi/mojom/local_printer.mojom.h"
+#endif
+
+#if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
+#include "chrome/browser/printing/print_backend_service_manager.h"
 #endif
 
 namespace base {
@@ -53,6 +58,7 @@ class PrintJob : public base::RefCountedThreadSafe<PrintJob> {
    public:
     virtual void OnDocDone(int job_id, PrintedDocument* document) {}
     virtual void OnJobDone() {}
+    virtual void OnCanceling() {}
     virtual void OnFailed() {}
     virtual void OnDestruction() {}
   };
@@ -80,6 +86,14 @@ class PrintJob : public base::RefCountedThreadSafe<PrintJob> {
   virtual void Initialize(std::unique_ptr<PrinterQuery> query,
                           const std::u16string& name,
                           uint32_t page_count);
+
+#if BUILDFLAG(ENABLE_OOP_BASIC_PRINT_DIALOG)
+  // Called to notify the print job that it has already been registered with the
+  // PrintBackendServiceManager as a print document client.  The PrintJob takes
+  // responsibility for (and passes along to PrintJobWorker) unregistering the
+  // client ID with PrintBackendServiceManager once printing is completed.
+  void SetPrintDocumentClient(PrintBackendServiceManager::ClientId client_id);
+#endif
 
 #if BUILDFLAG(IS_WIN)
   void StartConversionToNativeFormat(
@@ -233,6 +247,8 @@ class PrintJob : public base::RefCountedThreadSafe<PrintJob> {
   // worker thread per print job.
   std::unique_ptr<PrintJobWorker> worker_;
 
+  content::GlobalRenderFrameHostId rfh_id_;
+
   // The global PrintJobManager. May be null in testing contexts
   // only. Otherwise guaranteed to outlive this object.
   raw_ptr<PrintJobManager, DanglingUntriaged> print_job_manager_ = nullptr;
@@ -258,7 +274,7 @@ class PrintJob : public base::RefCountedThreadSafe<PrintJob> {
   Source source_;
 
   // ID of the source.
-  // This should be blank if the source is PRINT_PREVIEW or ARC.
+  // This should be blank if the source is kPrintPreview or kArc.
   std::string source_id_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

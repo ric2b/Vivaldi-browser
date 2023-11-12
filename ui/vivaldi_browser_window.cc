@@ -16,6 +16,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "browser/sessions/vivaldi_session_utils.h"
 #include "browser/vivaldi_runtime_feature.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/platform_apps/audio_focus_web_contents_observer.h"
@@ -84,6 +85,7 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/mojom/app_window.mojom.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "sessions/index_service_factory.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/devtools/devtools_connector.h"
@@ -133,6 +135,19 @@
 
 #include "browser/win/vivaldi_utils.h"
 #endif
+
+namespace {
+
+Browser* FindActiveBrowser() {
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->window()->IsActive()) {
+      return browser;
+    }
+  }
+  return nullptr;
+}
+}
+
 
 // The document loaded in the browser-window content.
 #define VIVALDI_BROWSER_DOCUMENT "browser.html"
@@ -228,6 +243,13 @@ class VivaldiBrowserWindow::InterfaceHelper final
       content::WebContents* web_contents,
       autofill::LocalCardMigrationBubbleController* controller,
       bool is_user_gesture) override {
+    return nullptr;
+  }
+
+  autofill::AutofillBubbleBase* ShowIbanBubble(content::WebContents* web_contents,
+    autofill::IbanBubbleController* controller,
+    bool is_user_gesture,
+    autofill::IbanBubbleType bubble_type) override {
     return nullptr;
   }
 
@@ -581,6 +603,10 @@ VivaldiBrowserWindow::~VivaldiBrowserWindow() {
   DCHECK(root_doc_handler_);
   root_doc_handler_->RemoveObserver(interface_helper_.get());
   OnDidFinishNavigation(false);
+
+  if (quit_dialog_owner_ == this) {
+    SetQuitDialogOwner(nullptr);
+  }
 }
 
 // static
@@ -743,6 +769,10 @@ void VivaldiBrowserWindow::CreateWebContents(
 
   DCHECK(root_doc_handler_);
   root_doc_handler_->AddObserver(interface_helper_.get());
+
+  PrefService* prefs = GetProfile()->GetPrefs();
+  prompt_on_quit_ = prefs->GetBoolean(
+    vivaldiprefs::kSystemShowExitConfirmationDialog);
 }
 
 void VivaldiBrowserWindow::InitWidget(
@@ -941,12 +971,13 @@ void VivaldiBrowserWindow::SetBounds(const gfx::Rect& bounds) {
   widget_->SetBounds(bounds);
 }
 
+// Close can be called three times when closing a window:
+// WM-'x' button -> Close() -> ConfirmWindowClose() -> Close() ->
+// ConfirmWindowClose() -> Browser::ShouldCloseWindow() -> Close() ->
+// ConfirmWindowClose()
+// Any dialogs in ConfirmWindowClose() are only showed the first time but it
+// is broken due to that onbeforeunload can interfere.
 void VivaldiBrowserWindow::Close() {
-  MovePersistentTabsToOtherWindowIfNeeded();
-
-  extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(GetProfile(),
-                                                            browser());
-
 #if BUILDFLAG(IS_WIN)
   // This must be as early as possible.
   bool should_quit_if_last_browser =
@@ -958,8 +989,24 @@ void VivaldiBrowserWindow::Close() {
 #endif  // BUILDFLAG(IS_WIN)
 
   if (widget_) {
+    // This can trigger our confirm dialogs and onbeforeunload events.
     widget_->Close();
+  } else {
+    // No widget - no callback to ConfirmWindowClose() or its delegate.
+    CloseCleanup();
   }
+}
+
+// This function should:
+// 1 Ideally be called only once during the window-close-sequence.
+// 2 Must be called before any tabs have been removed.
+// 3 Must be called after any dialog or code that can abort the close-sequence
+//   (note: onbeforeunload)
+void VivaldiBrowserWindow::CloseCleanup() {
+  AutoSaveSession();
+  MovePersistentTabsToOtherWindowIfNeeded();
+  extensions::DevtoolsConnectorAPI::CloseDevtoolsForBrowser(GetProfile(),
+                                                            browser());
 }
 
 void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
@@ -1026,69 +1073,76 @@ void VivaldiBrowserWindow::MovePersistentTabsToOtherWindowIfNeeded() {
   is_moving_persistent_tabs_ = false;
 }
 
+// Saves to session when the last window is about to be closed. Disabled for
+// Mac as that platform allows no windows to be open while the program keeps
+// running.
+void VivaldiBrowserWindow::AutoSaveSession() {
+#if !BUILDFLAG(IS_MAC)
+  Profile* profile = GetProfile();
+  if (vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL) == 1 &&
+      !profile->IsGuestSession()) {
+    if (sessions::IndexServiceFactory::GetForBrowserContextIfExists(profile)) {
+      sessions::AutoSave(profile);
+    }
+  }
+#endif  // !IS_MAC
+}
+
 // Similar to `CanClose()` and `OnWindowCloseRequested()` in views::BrowserView
 bool VivaldiBrowserWindow::ConfirmWindowClose() {
   if (is_moving_persistent_tabs_) {
+    // Returning false means the window will not be closed.
     return false;
   }
-#if !BUILDFLAG(IS_MAC)
-  // Is window closing due to a profile being closed?
-  bool closed_due_to_profile =
-      extensions::VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(
-          browser());
 
+#if !BUILDFLAG(IS_MAC)
   int tabbed_windows_cnt = vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL);
-  const PrefService* prefs = GetProfile()->GetPrefs();
-  // Don't show exit dialog if the user explicitly selected exit
-  // from the menu.
-  if (!browser_shutdown::IsTryingToQuit() && !GetProfile()->IsGuestSession()) {
-    if (prefs->GetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog)) {
-      if (!quit_dialog_shown_ && browser()->type() == Browser::TYPE_NORMAL &&
-          tabbed_windows_cnt == 1) {
-        if (IsMinimized()) {
-          // Dialog is not visible if the window is minimized, so restore it
-          // now.
-          Restore();
-        }
-        bool quiting = true;
-        new vivaldi::VivaldiQuitConfirmationDialog(
-            base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
-                           weak_ptr_factory_.GetWeakPtr(), quiting),
-            nullptr, GetNativeWindow(),
-            new vivaldi::VivaldiDialogQuitDelegate());
-        return false;
+  bool isQuit = browser_shutdown::IsTryingToQuit() || tabbed_windows_cnt == 1;
+  if (isQuit && ShouldShowDialogOnQuit()) {
+    // Only one window (in case there are more) shall open dialog.
+    bool show = AcquireQuitDialog();
+    if (show) {
+      // Dialog needs a visible window.
+      if (IsMinimized()) {
+        Restore();
       }
+      bool quiting = true;
+      new vivaldi::VivaldiQuitConfirmationDialog(
+          base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
+                         weak_ptr_factory_.GetWeakPtr(), quiting),
+          nullptr, GetNativeWindow(),
+          new vivaldi::VivaldiDialogQuitDelegate());
     }
+    return false;
   }
-  // If all tabs are gone there is no need to show a confirmation dialog. This
-  // is most likely a window that has been the source window of a move-tab
-  // operation.
-  if (!browser()->tab_strip_model()->empty() &&
-      !GetProfile()->IsGuestSession() && !closed_due_to_profile) {
-    if (prefs->GetBoolean(
-            vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog)) {
-      if (!close_dialog_shown_ && !quit_dialog_shown_ &&
-          !browser_shutdown::IsTryingToQuit() &&
-          browser()->type() == Browser::TYPE_NORMAL &&
-          tabbed_windows_cnt >= 1) {
-        if (IsMinimized()) {
-          // Dialog is not visible if the window is minimized, so restore it
-          // now.
-          Restore();
-        }
-        bool quiting = false;
-        new vivaldi::VivaldiQuitConfirmationDialog(
-            base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
-                           weak_ptr_factory_.GetWeakPtr(), quiting),
-            nullptr, GetNativeWindow(),
-            new vivaldi::VivaldiDialogCloseWindowDelegate());
-        return false;
+  if (!browser_shutdown::IsTryingToQuit() && tabbed_windows_cnt >= 1) {
+    if (ShouldShowDialogOnCloseWindow()) {
+      // Dialog needs a visible window.
+      if (IsMinimized()) {
+        Restore();
       }
+      bool quiting = false;
+      new vivaldi::VivaldiQuitConfirmationDialog(
+          base::BindOnce(&VivaldiBrowserWindow::ContinueClose,
+                         weak_ptr_factory_.GetWeakPtr(), quiting),
+          nullptr, GetNativeWindow(),
+          new vivaldi::VivaldiDialogCloseWindowDelegate());
+      return false;
     }
   }
 #endif  // !BUILDFLAG(IS_MAC)
-  if (!browser()->ShouldCloseWindow())
+
+  // Since we do not show any dialog we have to call code that the delegate
+  // would otherwise do.
+  // TODO: This is too early (because of ShouldCloseWindow() below), but we do
+  // not have a later hook at the moment that can be used with all tabs in place.
+  CloseCleanup();
+
+  if (!browser()->ShouldCloseWindow()) {
+    // Onbeforunload events may have been fired with the call above. This means
+    // the whole close operation can still be called off.
     return false;
+  }
 
   // This adds a quick hide code path to avoid VB-33480
   int count;
@@ -1109,6 +1163,7 @@ void VivaldiBrowserWindow::ContinueClose(bool quiting,
                                          bool stop_asking) {
   PrefService* prefs = GetProfile()->GetPrefs();
   if (quiting) {
+    SetQuitDialogOwner(nullptr);
     prefs->SetBoolean(vivaldiprefs::kSystemShowExitConfirmationDialog,
                       !stop_asking);
     quit_dialog_shown_ = close;
@@ -1119,14 +1174,115 @@ void VivaldiBrowserWindow::ContinueClose(bool quiting,
   }
 
   if (close) {
+    if (quiting) {
+      // Only one window shows a dialog and the rest must follow.
+      AcceptQuitForAllWindows();
+    }
+    else {
+    // TODO: This is too early as the browser() may fire onbeforeunload events
+    // that again can abort the close sequence.
+    CloseCleanup();
+
     Close();
+    }
   } else {
+    browser_shutdown::SetTryingToQuit(false);
+    // We may have overriden this value when calling quit from menu.
+    SetPromptOnQuit(prefs->GetBoolean(
+        vivaldiprefs::kSystemShowExitConfirmationDialog));
+
     // Notify about the cancellation of window close so
     // events can be sent to the web ui.
     // content::NotificationService::current()->Notify(
     //  chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
     //  content::Source<Browser>(browser()),
     //  content::NotificationService::NoDetails());
+  }
+}
+
+// static
+void VivaldiBrowserWindow::SetPromptOnQuit(bool prompt) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->is_vivaldi()) {
+      VivaldiBrowserWindow* window =
+          static_cast<VivaldiBrowserWindow*>(browser->window());
+      window->prompt_on_quit_ = prompt;
+    }
+  }
+}
+
+// static
+void VivaldiBrowserWindow::CancelWindowClose() {
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->is_vivaldi()) {
+      VivaldiBrowserWindow* window =
+          static_cast<VivaldiBrowserWindow*>(browser->window());
+      window->quit_dialog_shown_ = false;
+      window->close_dialog_shown_ = false;
+    }
+  }
+}
+
+bool VivaldiBrowserWindow::ShouldShowDialogOnQuit() {
+  return prompt_on_quit_ &&
+         !quit_dialog_shown_ &&
+         browser()->type() == Browser::TYPE_NORMAL &&
+         !GetProfile()->IsGuestSession();
+}
+
+bool VivaldiBrowserWindow::ShouldShowDialogOnCloseWindow() {
+  const PrefService* prefs = GetProfile()->GetPrefs();
+  bool prompt_on_close = prefs->GetBoolean(
+      vivaldiprefs::kWindowsShowWindowCloseConfirmationDialog);
+  bool closed_due_to_profile =
+      extensions::VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(
+          browser());
+  return prompt_on_close  &&
+         !closed_due_to_profile &&
+         !quit_dialog_shown_ &&
+         !close_dialog_shown_ &&
+         // Can happen if all tabs have been moved (eg, if all are pinned)
+         !browser()->tab_strip_model()->empty() &&
+         browser()->type() == Browser::TYPE_NORMAL &&
+         !GetProfile()->IsGuestSession();
+}
+
+void VivaldiBrowserWindow::SetQuitDialogOwner(VivaldiBrowserWindow* owner) {
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->is_vivaldi()) {
+      static_cast<VivaldiBrowserWindow*>(browser->window())->quit_dialog_owner_
+          = owner;
+    }
+  }
+}
+
+// We may have several windows. They will all call this function almost at the
+// same time on quit. Only one will show the dialog.
+bool VivaldiBrowserWindow::AcquireQuitDialog() {
+  if (!quit_dialog_owner_) {
+    if (vivaldi::GetBrowserCountOfType(Browser::TYPE_NORMAL) == 1) {
+      SetQuitDialogOwner(this);
+    } else {
+      Browser* browser = FindActiveBrowser();
+      if (!browser || browser == browser_.get()) {
+        SetQuitDialogOwner(this);
+      }
+    }
+  }
+  return quit_dialog_owner_ == this;
+}
+
+// This is to signal a quit to all windows. Even those the do not show the
+// dialog.
+void VivaldiBrowserWindow::AcceptQuitForAllWindows() {
+  for (Browser* browser : *BrowserList::GetInstance()) {
+    if (browser->is_vivaldi()) {
+      VivaldiBrowserWindow* window =
+          static_cast<VivaldiBrowserWindow*>(browser->window());
+      window->quit_dialog_shown_ = true;
+      window->CloseCleanup();
+      window->Close();
+    }
   }
 }
 
@@ -1968,7 +2124,7 @@ bool VivaldiBrowserWindow::IsBorderlessModeEnabled() const {
 void VivaldiBrowserWindow::BeforeUnloadFired(content::WebContents* source) {
   // web_contents_delegate_ calls back when unload has fired and we can self
   // destruct. Note we cannot destruct here since cleanup is done.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&VivaldiBrowserWindow::DeleteThis,
                                 base::Unretained(this)));
 }

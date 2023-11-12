@@ -31,9 +31,9 @@
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wm/work_area_insets.h"
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/check.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -490,7 +490,7 @@ void Shelf::SetAlignment(ShelfAlignment alignment) {
 
   if (shelf_locking_manager_.is_locked() &&
       alignment != ShelfAlignment::kBottomLocked) {
-    shelf_locking_manager_.set_stored_alignment(alignment);
+    shelf_locking_manager_.set_in_session_alignment(alignment);
     return;
   }
 

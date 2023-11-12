@@ -8,9 +8,7 @@
    "app_size_in_bytes": "",
    "background_color": "none",
    "capture_links": "kUndefined",
-   "chromeos_data": null,
-   "client_data": {
-      "system_web_app_data": null
+   "current_os_integration_states": {
    },
    "dark_mode_background_color": "none",
    "dark_mode_theme_color": "none",
@@ -32,8 +30,7 @@
    "install_time": "1601-01-01 00:00:00.000 UTC",
    "is_from_sync_and_pending_installation": false,
    "is_generated_icon": false,
-   "is_locally_installed": true,
-   "is_storage_isolated": false,
+   "is_locally_installed": false,
    "is_uninstalling": false,
    "last_badging_time": "1601-01-01 00:00:00.000 UTC",
    "last_launch_time": "1601-01-01 00:00:00.000 UTC",
@@ -52,6 +49,7 @@
    "run_on_os_login_mode": "not run",
    "run_on_os_login_os_integration_state": "not set",
    "scope": "",
+   "scope_extensions": [  ],
    "share_target": null,
    "shortcuts_menu_item_infos": [  ],
    "sources": [  ],

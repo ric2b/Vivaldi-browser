@@ -13,13 +13,13 @@
 
 #include "base/base_paths.h"
 #include "base/base_switches.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/page_size.h"
 #include "base/path_service.h"
@@ -333,14 +333,7 @@ TEST_F(NativeMessagingTest, EchoConnect) {
 
 // Test send message with a real client. The args passed when launching the
 // native messaging host should contain reconnect args.
-//
-// TODO(crbug.com/1026121): Fix it. This test is flaky on Win7 bots.
-#if BUILDFLAG(IS_WIN)
-#define MAYBE_ReconnectArgs DISABLED_ReconnectArgs
-#else
-#define MAYBE_ReconnectArgs ReconnectArgs
-#endif
-TEST_F(NativeMessagingTest, MAYBE_ReconnectArgs) {
+TEST_F(NativeMessagingTest, ReconnectArgs) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(features::kOnConnectNative);
   ScopedAllowNativeAppConnectionForTest allow_native_app_connection(true);

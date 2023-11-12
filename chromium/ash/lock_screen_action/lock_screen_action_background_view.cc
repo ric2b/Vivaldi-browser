@@ -7,15 +7,15 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/i18n/rtl.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop.h"
-#include "ui/views/animation/ink_drop_host_view.h"
+#include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/animation/ink_drop_impl.h"
 #include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_state.h"
@@ -48,8 +48,8 @@ class LockScreenActionBackgroundView::NoteBackground : public views::View {
                                         : host->GetLocalBounds().top_right();
           auto ink_drop_ripple =
               std::make_unique<views::FloodFillInkDropRipple>(
-                  host->size(), gfx::Insets(), center,
-                  views::InkDrop::Get(host)->GetBaseColor(), 1);
+                  views::InkDrop::Get(host), host->size(), gfx::Insets(),
+                  center, views::InkDrop::Get(host)->GetBaseColor(), 1);
           ink_drop_ripple->set_use_hide_transform_duration_for_hide_fade_out(
               true);
           ink_drop_ripple->set_duration_factor(1.5);

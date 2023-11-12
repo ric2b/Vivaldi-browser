@@ -19,9 +19,9 @@
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_fetch_throttler_delegate.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_fetcher_delegate.h"
+#include "components/password_manager/core/browser/affiliation/affiliation_service.h"
 #include "components/password_manager/core/browser/affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/affiliation/facet_manager_host.h"
-#include "components/password_manager/core/browser/affiliation/affiliation_service.h"
 
 namespace base {
 class Clock;
@@ -95,6 +95,9 @@ class AffiliationBackend : public FacetManagerHost,
   void TrimCacheForFacetURI(const FacetURI& facet_uri);
   void TrimUnusedCache(std::vector<FacetURI> facet_uris);
   std::vector<GroupedFacets> GetAllGroups() const;
+  std::vector<std::string> GetPSLExtensions() const;
+  void UpdateAffiliationsAndBranding(const std::vector<FacetURI>& facets,
+                                     base::OnceClosure callback);
 
   // Deletes the cache database file at |db_path|, and all auxiliary files. The
   // database must be closed before calling this.

@@ -184,7 +184,7 @@ bool DiceAccountReconcilorDelegate::
       identity_manager_, GetConsentLevelForPrimaryAccount(),
       signin_metrics::SourceForRefreshTokenOperation::
           kAccountReconcilor_Reconcile,
-      signin_metrics::ProfileSignout::ACCOUNT_RECONCILOR_RECONCILE,
+      signin_metrics::ProfileSignout::kAccountReconcilorReconcile,
       /*revoke_only_if_in_error=*/false);
   return true;
 }
@@ -195,8 +195,10 @@ ConsentLevel DiceAccountReconcilorDelegate::GetConsentLevelForPrimaryAccount()
   // the consent level (e.g. cloud-managed profiles). In these cases, the dice
   // account reconcilor delegate should never remove the primary account
   // regardless of the consent.
-  return signin_client_->IsClearPrimaryAccountAllowed() ? ConsentLevel::kSync
-                                                        : ConsentLevel::kSignin;
+  return signin_client_->IsClearPrimaryAccountAllowed(
+             identity_manager_->HasPrimaryAccount(ConsentLevel::kSync))
+             ? ConsentLevel::kSync
+             : ConsentLevel::kSignin;
 }
 
 bool DiceAccountReconcilorDelegate::ShouldRevokeTokensBeforeMultilogin(
@@ -305,7 +307,7 @@ void DiceAccountReconcilorDelegate::
                            GetConsentLevelForPrimaryAccount(),
                            signin_metrics::SourceForRefreshTokenOperation::
                                kAccountReconcilor_GaiaCookiesUpdated,
-                           signin_metrics::ProfileSignout::GAIA_COOKIE_UPDATED,
+                           signin_metrics::ProfileSignout::kGaiaCookieUpdated,
                            /*revoke_only_if_in_error=*/true);
 }
 
@@ -317,7 +319,7 @@ void DiceAccountReconcilorDelegate::OnAccountsCookieDeletedByUserAction(
       identity_manager_, consent_level,
       signin_metrics::SourceForRefreshTokenOperation::
           kAccountReconcilor_GaiaCookiesDeletedByUser,
-      signin_metrics::ProfileSignout::USER_DELETED_ACCOUNT_COOKIES,
+      signin_metrics::ProfileSignout::kUserDeletedAccountCookies,
       /*revoke_only_if_in_error=*/false);
 
   if (!identity_manager_->HasPrimaryAccount(consent_level))

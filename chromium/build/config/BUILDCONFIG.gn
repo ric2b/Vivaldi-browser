@@ -398,14 +398,16 @@ if (is_debug) {
 # Static libraries and source sets use only the compiler ones.
 set_defaults("static_library") {
   configs = default_compiler_configs
+
+  # For Rust, a static library involves linking in all dependencies, and it
+  # performs LTO. But since we will perform LTO in the C++ linker which
+  # consumes the library, we defer LTO from Rust into the linker.
+  configs += [ "//build/config/compiler:rust_defer_lto_to_linker" ]
 }
 set_defaults("source_set") {
   configs = default_compiler_configs
 }
 set_defaults("rust_library") {
-  configs = default_compiler_configs
-}
-set_defaults("rust_proc_macro") {
   configs = default_compiler_configs
 }
 
@@ -470,6 +472,22 @@ set_defaults("loadable_module") {
   if (is_android) {
     configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
   }
+}
+
+default_rust_proc_macro_configs =
+    default_shared_library_configs + [ "//build/rust:proc_macro_extern" ] +
+    # Rust proc macros don't support (Thin)LTO, so always remove it.
+    [
+      "//build/config/compiler:thinlto_optimize_default",
+      "//build/config/compiler:thinlto_optimize_max",
+    ] -
+    [
+      "//build/config/compiler:thinlto_optimize_default",
+      "//build/config/compiler:thinlto_optimize_max",
+    ]
+
+set_defaults("rust_proc_macro") {
+  configs = default_rust_proc_macro_configs
 }
 
 # A helper for forwarding testonly and visibility.
@@ -572,6 +590,16 @@ foreach(_target_type,
 template("component") {
   if (is_component_build) {
     _component_mode = "shared_library"
+
+    # Generate a unique output_name for a shared library if not set by invoker.
+    if (!defined(invoker.output_name)) {
+      _output_name = get_label_info(":$target_name", "label_no_toolchain")
+      _output_name =
+          string_replace(_output_name, "$target_name:$target_name", target_name)
+      _output_name = string_replace(_output_name, "//", "")
+      _output_name = string_replace(_output_name, "/", "_")
+      _output_name = string_replace(_output_name, ":", "_")
+    }
   } else if (defined(invoker.static_component_type)) {
     assert(invoker.static_component_type == "static_library" ||
            invoker.static_component_type == "source_set")
@@ -584,6 +612,9 @@ template("component") {
     _component_mode = "static_library"
   }
   target(_component_mode, target_name) {
+    if (defined(_output_name)) {
+      output_name = _output_name
+    }
     forward_variables_from(invoker, TESTONLY_AND_VISIBILITY)
     forward_variables_from(invoker, "*", TESTONLY_AND_VISIBILITY)
   }

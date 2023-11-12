@@ -7,14 +7,15 @@
 #include <algorithm>
 
 #include "ash/constants/ash_features.h"
-#include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chromeos/ash/components/network/network_configuration_handler.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "chromeos/ash/components/network/network_metadata_store.h"
@@ -457,7 +458,7 @@ void WifiConfigurationBridge::OnFirstConnectionToNetwork(
 
 void WifiConfigurationBridge::OnNetworkUpdate(
     const std::string& guid,
-    const base::Value* set_properties) {
+    const base::Value::Dict* set_properties) {
   if (!set_properties)
     return;
 
@@ -470,11 +471,11 @@ void WifiConfigurationBridge::OnNetworkUpdate(
     return;
   }
 
-  if (!set_properties->FindKey(shill::kAutoConnectProperty) &&
-      !set_properties->FindKey(shill::kPriorityProperty) &&
-      !set_properties->FindKey(shill::kProxyConfigProperty) &&
-      !set_properties->FindKey(shill::kMeteredProperty) &&
-      !set_properties->FindPath(
+  if (!set_properties->contains(shill::kAutoConnectProperty) &&
+      !set_properties->contains(shill::kPriorityProperty) &&
+      !set_properties->contains(shill::kProxyConfigProperty) &&
+      !set_properties->contains(shill::kMeteredProperty) &&
+      !set_properties->FindByDottedPath(
           base::StringPrintf("%s.%s", shill::kStaticIPConfigProperty,
                              shill::kNameServersProperty))) {
     NET_LOG(EVENT) << "Not uploading change to " << NetworkGuidId(guid)

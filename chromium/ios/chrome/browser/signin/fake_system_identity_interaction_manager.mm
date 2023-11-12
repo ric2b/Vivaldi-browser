@@ -7,13 +7,24 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/signin/fake_system_identity_manager.h"
+#import "ios/chrome/browser/signin/test_constants.h"
 #import "ios/public/provider/chrome/browser/signin/signin_error_api.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-@interface FakeAuthActivityViewController : UIViewController
+namespace {
+
+// Global used to store the +identity of FakeSystemIdentityInteractionManager.
+id<SystemIdentity> gFakeSystemIdentityInteractionManagerIdentity = nil;
+
+}  // namespace
+
+@interface FakeAuthActivityViewController : UIViewController {
+  __weak FakeSystemIdentityInteractionManager* _manager;
+  UIButton* _cancelButton;
+}
 
 - (instancetype)initWithManager:(FakeSystemIdentityInteractionManager*)manager
     NS_DESIGNATED_INITIALIZER;
@@ -25,28 +36,13 @@
 
 @end
 
-@implementation FakeAuthActivityViewController {
-  __weak FakeSystemIdentityInteractionManager* _manager;
-  UIButton* _cancelButton;
-  UIButton* _signInButton;
-}
+@implementation FakeAuthActivityViewController
 
 - (instancetype)initWithManager:(FakeSystemIdentityInteractionManager*)manager {
   if ((self = [super initWithNibName:nil bundle:nil])) {
     _manager = manager;
   }
   return self;
-}
-
-#pragma mark - NSObject
-
-- (void)dealloc {
-  [_signInButton removeTarget:self
-                       action:@selector(didTapSignIn:)
-             forControlEvents:UIControlEventTouchUpInside];
-  [_cancelButton removeTarget:self
-                       action:@selector(didTapCancel:)
-             forControlEvents:UIControlEventTouchUpInside];
 }
 
 #pragma mark - UIViewController
@@ -57,22 +53,11 @@
   // Obnovious color, this is a test screen.
   UIView* mainView = self.view;
   mainView.backgroundColor = [UIColor magentaColor];
-  mainView.accessibilityIdentifier = @"FakeAddAccountViewIdentifier";
-
-  // TODO(crbug.com/1400696): Since those buttons have no accessibility
-  // identitifer, EarlGrey probably can't interact with them. So they
-  // likely are not useful (unless EarlGrey select them by their title).
-  //
-  // Investigate whether they can be removed or whether they should be
-  // given accessibility identifier to allow EarlGrey to interact with
-  // them.
-  _signInButton = [self addButtonWithTitle:@"Sign in"
-                                    action:@selector(didTapSignIn:)
-                    accessibilitIdentifier:nil];
+  mainView.accessibilityIdentifier = kFakeAuthActivityViewIdentifier;
 
   _cancelButton = [self addButtonWithTitle:@"Cancel"
                                     action:@selector(didTapCancel:)
-                    accessibilitIdentifier:@"cancel"];
+                    accessibilitIdentifier:kFakeAuthCancelButtonIdentifier];
 }
 
 - (void)viewWillLayoutSubviews {
@@ -82,10 +67,7 @@
   const CGFloat midX = CGRectGetMidX(bounds);
   const CGFloat midY = CGRectGetMidY(bounds);
 
-  [self sizeButtonToFitWithCenter:CGPointMake(midX, midY - 50)
-                           button:_signInButton];
-  [self sizeButtonToFitWithCenter:CGPointMake(midX, midY + 50)
-                           button:_cancelButton];
+  [self sizeButtonToFitWithCenter:CGPointMake(midX, midY) button:_cancelButton];
 }
 
 #pragma mark - Private methods
@@ -106,10 +88,6 @@
 - (void)sizeButtonToFitWithCenter:(CGPoint)center button:(UIButton*)button {
   [button setCenter:center];
   [button sizeToFit];
-}
-
-- (void)didTapSignIn:(id)sender {
-  [_manager simulateDidTapAddAccount];
 }
 
 - (void)didTapCancel:(id)sender {
@@ -134,9 +112,8 @@
 }
 
 - (void)simulateDidTapAddAccount {
-  using std::swap;
-  id<SystemIdentity> identity;
-  swap(_identity, identity);
+  id<SystemIdentity> identity = nil;
+  std::swap(gFakeSystemIdentityInteractionManagerIdentity, identity);
 
   [self dismissAndRunCompletionCallbackWithError:nil
                                         identity:identity
@@ -194,6 +171,14 @@
   return _isActivityViewPresented;
 }
 
++ (id<SystemIdentity>)identity {
+  return gFakeSystemIdentityInteractionManagerIdentity;
+}
+
++ (void)setIdentity:(id<SystemIdentity>)identity {
+  gFakeSystemIdentityInteractionManagerIdentity = identity;
+}
+
 #pragma mark - Private methods
 
 - (void)dismissAndRunCompletionCallbackWithError:(NSError*)error
@@ -204,6 +189,9 @@
   DCHECK(_isActivityViewPresented);
   DCHECK(error || identity)
       << "An identity must be set to close the dialog successfully";
+
+  // Clear the global identity before next interaction.
+  gFakeSystemIdentityInteractionManagerIdentity = nil;
 
   if (identity) {
     FakeSystemIdentityManager* manager = _manager.get();

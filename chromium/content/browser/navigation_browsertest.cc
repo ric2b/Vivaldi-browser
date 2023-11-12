@@ -6,12 +6,12 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -19,6 +19,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_timeouts.h"
@@ -55,6 +56,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
+#include "content/public/test/content_browser_test_content_browser_client.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/content_mock_cert_verifier.h"
 #include "content/public/test/download_test_observer.h"
@@ -67,13 +69,11 @@
 #include "content/public/test/test_utils.h"
 #include "content/public/test/url_loader_monitor.h"
 #include "content/shell/browser/shell.h"
-#include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
 #include "content/test/content_browser_test_utils_internal.h"
 #include "content/test/did_commit_navigation_interceptor.h"
 #include "content/test/fake_network_url_loader_factory.h"
 #include "content/test/task_runner_deferring_throttle.h"
-#include "content/test/test_content_browser_client.h"
 #include "content/test/test_render_frame_host_factory.h"
 #include "ipc/ipc_security_test_util.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -151,7 +151,7 @@ class RenderFrameHostImplForHistoryBackInterceptor
   void GoToEntryAtOffset(int32_t offset,
                          bool has_user_gesture,
                          absl::optional<blink::scheduler::TaskAttributionId>
-                             soft_navigation_heuristic_task_id) override {
+                             soft_navigation_heuristics_task_id) override {
     if (quit_handler_)
       std::move(quit_handler_).Run();
   }
@@ -347,26 +347,6 @@ class NetworkIsolationNavigationBrowserTest : public ContentBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
     ContentBrowserTest::SetUpOnMainThread();
   }
-};
-
-class NetworkDoubleKeyIsolationNavigationBrowserTest
-    : public ContentBrowserTest {
- public:
-  NetworkDoubleKeyIsolationNavigationBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
-         net::features::kEnableDoubleKeyNetworkAnonymizationKey},
-        {});
-  }
-
- protected:
-  void SetUpOnMainThread() override {
-    ASSERT_TRUE(embedded_test_server()->Start());
-    ContentBrowserTest::SetUpOnMainThread();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class NavigationBrowserTestReferrerPolicy
@@ -684,7 +664,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, SanitizeReferrer) {
 
   // The navigation should commit without being blocked.
   EXPECT_TRUE(manager.WaitForResponse());
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
   EXPECT_EQ(kInsecureUrl, web_contents()->GetLastCommittedURL());
 }
 
@@ -732,7 +712,7 @@ IN_PROC_BROWSER_TEST_P(NavigationBrowserTestReferrerPolicy, ReferrerPolicy) {
 
   // The navigation should commit without being blocked.
   EXPECT_TRUE(manager.WaitForResponse());
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
   EXPECT_EQ(kDestination, web_contents()->GetLastCommittedURL());
 }
 
@@ -868,7 +848,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBaseBrowserTest,
 
   // The renderer commits the navigation and the browser deletes its
   // NavigationRequest.
-  navigation_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
   EXPECT_FALSE(main_frame()->navigation_request());
 
   // The NavigationURLLoader has been deleted by now. Check that the renderer
@@ -948,46 +928,6 @@ IN_PROC_BROWSER_TEST_F(NetworkIsolationNavigationBrowserTest,
                                  net::SiteForCookies::FromOrigin(origin),
                                  std::set<net::SchemefulSite>())
           .IsEqualForTesting(iframe_request->trusted_params->isolation_info));
-}
-
-IN_PROC_BROWSER_TEST_F(NetworkDoubleKeyIsolationNavigationBrowserTest,
-                       SubframeDoubleKeyNetworkIsolation) {
-  GURL url_top(embedded_test_server()->GetURL("/page_with_iframe.html"));
-  GURL url_iframe = embedded_test_server()->GetURL("/title1.html");
-  url::Origin origin = url::Origin::Create(url_top);
-  URLLoaderMonitor monitor({url_iframe});
-  EXPECT_TRUE(NavigateToURL(shell(), url_top));
-  monitor.WaitForUrls();
-
-  absl::optional<network::ResourceRequest> main_frame_request =
-      monitor.GetRequestInfo(url_top);
-  ASSERT_TRUE(main_frame_request.has_value());
-  ASSERT_TRUE(main_frame_request->trusted_params);
-  EXPECT_TRUE(net::IsolationInfo::Create(
-                  net::IsolationInfo::RequestType::kMainFrame, origin, origin,
-                  net::SiteForCookies::FromOrigin(origin),
-                  std::set<net::SchemefulSite>())
-                  .IsEqualForTesting(
-                      main_frame_request->trusted_params->isolation_info));
-
-  absl::optional<network::ResourceRequest> iframe_request =
-      monitor.GetRequestInfo(url_iframe);
-  ASSERT_TRUE(iframe_request->trusted_params);
-
-  // IsolationInfo and NIK of subframe should only reflect the main_frame's
-  // origin when these flags are on because double key does not include the
-  // subframe's origin.
-  EXPECT_TRUE(
-      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kSubFrame,
-                                 origin, origin,
-                                 net::SiteForCookies::FromOrigin(origin),
-                                 std::set<net::SchemefulSite>())
-          .IsEqualForTesting(iframe_request->trusted_params->isolation_info));
-
-  EXPECT_EQ(
-      main_frame_request->trusted_params->isolation_info
-          .network_isolation_key(),
-      iframe_request->trusted_params->isolation_info.network_isolation_key());
 }
 
 // Tests that the initiator is not set for a browser initiated top frame
@@ -1333,10 +1273,10 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
     // begins and ends.
     TestNavigationManager push_state_navigation(web_contents(), main_url);
     ExecuteScriptAsync(shell(), "window.history.pushState({}, null);");
-    push_state_navigation.WaitForNavigationFinished();
+    ASSERT_TRUE(push_state_navigation.WaitForNavigationFinished());
 
     // The iframe navigation is resumed.
-    iframe_navigation.WaitForNavigationFinished();
+    ASSERT_TRUE(iframe_navigation.WaitForNavigationFinished());
   }
 
   // 3) history.back() must work.
@@ -1600,7 +1540,7 @@ IN_PROC_BROWSER_TEST_F(NavigationGoToEntryAtOffsetBrowserTest,
   shell()->LoadURL(url_2);
   run_loop.Run();
 
-  navigation.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation.WaitForNavigationFinished());
 
   EXPECT_TRUE(navigation.was_successful());
 }
@@ -1625,7 +1565,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
                      EXECUTE_SCRIPT_NO_USER_GESTURE));
 
   // 3) The first pending navigation is not canceled and can continue.
-  navigation.WaitForNavigationFinished();  // Resume navigation.
+  ASSERT_TRUE(navigation.WaitForNavigationFinished());  // Resume navigation.
   EXPECT_TRUE(navigation.was_successful());
 }
 
@@ -1648,7 +1588,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
                      "history.back();"));
 
   // 3) Check the first pending navigation has been canceled.
-  navigation.WaitForNavigationFinished();  // Resume navigation.
+  ASSERT_TRUE(navigation.WaitForNavigationFinished());  // Resume navigation.
   EXPECT_FALSE(navigation.was_successful());
 }
 
@@ -1775,7 +1715,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   TestNavigationManager manager(web_contents(), data_url);
   EXPECT_TRUE(ExecJs(popup, base::StringPrintf("window.opener.location ='%s'",
                                                data_url.spec().c_str())));
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
 
   EXPECT_FALSE(manager.was_successful());
 
@@ -1974,7 +1914,7 @@ class CorsInjectingUrlLoader : public blink::URLLoaderThrottle {
 };
 
 // ContentBrowserClient responsible for creating CorsInjectingUrlLoader.
-class CorsContentBrowserClient : public TestContentBrowserClient {
+class CorsContentBrowserClient : public ContentBrowserTestContentBrowserClient {
  public:
   explicit CorsContentBrowserClient(std::string* last_cors_header_value)
       : last_cors_header_value_(last_cors_header_value) {}
@@ -2013,13 +1953,12 @@ class NavigationCorsExemptBrowserTest : public NavigationBaseBrowserTest {
     NavigationBaseBrowserTest::SetUpCommandLine(command_line);
   }
   void SetUpOnMainThread() override {
-    original_client_ =
-        SetBrowserClientForTesting(&cors_content_browser_client_);
+    cors_content_browser_client_ =
+        std::make_unique<CorsContentBrowserClient>(&last_cors_header_value_);
     host_resolver()->AddRule("*", "127.0.0.1");
   }
   void TearDownOnMainThread() override {
-    if (original_client_)
-      SetBrowserClientForTesting(original_client_);
+    cors_content_browser_client_.reset();
     ShellContentBrowserClient::set_allow_any_cors_exempt_header_for_browser(
         false);
   }
@@ -2027,9 +1966,7 @@ class NavigationCorsExemptBrowserTest : public NavigationBaseBrowserTest {
  private:
   // Last value of kCorsHeaderName. Set by CorsInjectingUrlLoader.
   std::string last_cors_header_value_;
-  CorsContentBrowserClient cors_content_browser_client_{
-      &last_cors_header_value_};
-  raw_ptr<ContentBrowserClient> original_client_ = nullptr;
+  std::unique_ptr<CorsContentBrowserClient> cors_content_browser_client_;
 };
 
 // Verifies a header added by way of SetRequestHeader() makes it into
@@ -2141,7 +2078,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, WebViewRendererKillReload) {
 
   // Wait for navigation in new WebContents to finish.
   NewWebContentsData data = crash_observer.TakeNewWebContentsData();
-  data.manager->WaitForNavigationFinished();
+  ASSERT_TRUE(data.manager->WaitForNavigationFinished());
 
   // Test passes if renderer is still alive.
   EXPECT_TRUE(ExecJs(data.new_web_contents.get(), "true;"));
@@ -2325,7 +2262,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       let subwindow = document.querySelector('iframe').contentWindow;
       subwindow.location.search = "1";
     )"));
-    commit_waiter.WaitForNavigationFinished();
+    ASSERT_TRUE(commit_waiter.WaitForNavigationFinished());
   }
 
   //  3) Cross-document navigation to about:srcdoc?2.
@@ -2335,7 +2272,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       let subwindow = document.querySelector('iframe').contentWindow;
       subwindow.location.search = "2";
     )"));
-    commit_waiter.WaitForNavigationFinished();
+    ASSERT_TRUE(commit_waiter.WaitForNavigationFinished());
   }
 
   // Inspect the session history.
@@ -2627,7 +2564,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       main_frame()->navigation_request()->GetNextPageUkmSourceId();
 
   EXPECT_TRUE(manager.WaitForResponse());
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
   EXPECT_EQ(current_frame_host()->GetPageUkmSourceId(), nav_request_id);
 }
 
@@ -2652,7 +2589,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
       subframe->navigation_request()->GetNextPageUkmSourceId();
 
   EXPECT_TRUE(manager.WaitForResponse());
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
 
   // Should have the same page UKM ID in navigation as page post commit, and as
   // the top-level frame.
@@ -3200,7 +3137,7 @@ class NavigationUrlRewriteBrowserTest : public NavigationBaseBrowserTest {
   static constexpr const char* kNoAccessScheme = "no-access";
   static constexpr const char* kNoAccessURL = "no-access://testing/";
 
-  class BrowserClient : public ContentBrowserClient {
+  class BrowserClient : public ContentBrowserTestContentBrowserClient {
    public:
     void BrowserURLHandlerCreated(BrowserURLHandler* handler) override {
       handler->AddHandlerPair(RewriteUrl,
@@ -3247,12 +3184,9 @@ class NavigationUrlRewriteBrowserTest : public NavigationBaseBrowserTest {
     ASSERT_TRUE(embedded_test_server()->Start());
 
     browser_client_ = std::make_unique<BrowserClient>();
-    old_browser_client_ = SetBrowserClientForTesting(browser_client_.get());
   }
 
   void TearDownOnMainThread() override {
-    SetBrowserClientForTesting(old_browser_client_);
-    old_browser_client_ = nullptr;
     browser_client_.reset();
 
     NavigationBaseBrowserTest::TearDownOnMainThread();
@@ -3262,7 +3196,6 @@ class NavigationUrlRewriteBrowserTest : public NavigationBaseBrowserTest {
 
  private:
   std::unique_ptr<BrowserClient> browser_client_;
-  raw_ptr<ContentBrowserClient> old_browser_client_;
   url::ScopedSchemeRegistryForTests scoped_registry_;
 };
 
@@ -3571,7 +3504,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   EXPECT_FALSE(navigation_2.was_same_document());
 }
 
-class GetEffectiveUrlClient : public ContentBrowserClient {
+class GetEffectiveUrlClient : public ContentBrowserTestContentBrowserClient {
  public:
   GURL GetEffectiveURL(content::BrowserContext* browser_context,
                        const GURL& url) override {
@@ -3608,8 +3541,6 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   GURL url1 = embedded_test_server()->GetURL("a.com", "/title1.html#ref2");
 
   GetEffectiveUrlClient new_client;
-  ContentBrowserClient* old_client =
-      content::SetBrowserClientForTesting(&new_client);
 
   NavigationHandleCommitObserver navigation_0(wc, url0);
   EXPECT_TRUE(NavigateToURL(shell(), url0));
@@ -3636,8 +3567,6 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   // navigation in the currently loaded document.
   EXPECT_EQ(main_frame_host, wc->GetPrimaryMainFrame());
   EXPECT_EQ(main_frame_process_host, wc->GetPrimaryMainFrame()->GetProcess());
-
-  content::SetBrowserClientForTesting(old_client);
 }
 
 // This tests the same ideas as the above test except in this case the same-
@@ -3653,8 +3582,6 @@ IN_PROC_BROWSER_TEST_F(
   NavigationHandleCommitObserver navigation_1(wc, url1);
 
   GetEffectiveUrlClient new_client;
-  ContentBrowserClient* old_client =
-      content::SetBrowserClientForTesting(&new_client);
 
   EXPECT_TRUE(NavigateToURL(shell(), url0));
   EXPECT_TRUE(navigation_0.has_committed());
@@ -3686,8 +3613,6 @@ IN_PROC_BROWSER_TEST_F(
   // navigation in the currently loaded document.
   EXPECT_EQ(main_frame_host, wc->GetPrimaryMainFrame());
   EXPECT_EQ(main_frame_process_host, wc->GetPrimaryMainFrame()->GetProcess());
-
-  content::SetBrowserClientForTesting(old_client);
 }
 
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
@@ -4067,7 +3992,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
 
   EXPECT_TRUE(navigation_manager.WaitForResponse());
   navigation_manager.ResumeNavigation();
-  navigation_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   EXPECT_TRUE(WaitForRenderFrameReady(current_frame_host()));
 
@@ -4123,7 +4048,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
 
   EXPECT_TRUE(navigation_manager.WaitForResponse());
   navigation_manager.ResumeNavigation();
-  navigation_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   EXPECT_TRUE(WaitForRenderFrameReady(current_frame_host()));
 
@@ -4178,7 +4103,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
 
   EXPECT_TRUE(navigation_manager.WaitForResponse());
   navigation_manager.ResumeNavigation();
-  navigation_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
 
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   EXPECT_TRUE(WaitForRenderFrameReady(current_frame_host()));
@@ -4225,7 +4150,7 @@ IN_PROC_BROWSER_TEST_F(DocumentPolicyBrowserTest,
 
   EXPECT_TRUE(navigation_manager.WaitForResponse());
   navigation_manager.ResumeNavigation();
-  navigation_manager.WaitForNavigationFinished();
+  ASSERT_TRUE(navigation_manager.WaitForNavigationFinished());
 
   EXPECT_TRUE(WaitForLoadStop(web_contents()));
   EXPECT_TRUE(WaitForRenderFrameReady(current_frame_host()));
@@ -4246,7 +4171,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, OriginToCommitBasic) {
   absl::optional<url::Origin> origin_to_commit =
       navigation->GetOriginToCommit();
   ASSERT_TRUE(origin_to_commit.has_value());
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
   url::Origin origin_committed = current_frame_host()->GetLastCommittedOrigin();
 
   EXPECT_FALSE(origin_to_commit->opaque());
@@ -4264,7 +4189,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, OriginToCommit204) {
   absl::optional<url::Origin> origin_to_commit =
       navigation->GetOriginToCommit();
   EXPECT_FALSE(origin_to_commit.has_value());
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
 }
 
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
@@ -4276,7 +4201,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   EXPECT_TRUE(manager.WaitForResponse());
   NavigationRequest* navigation = main_frame()->navigation_request();
   url::Origin origin_to_commit = navigation->GetOriginToCommit().value();
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
   url::Origin origin_committed = current_frame_host()->GetLastCommittedOrigin();
 
   EXPECT_TRUE(origin_to_commit.opaque());
@@ -4301,7 +4226,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   FrameTreeNode* iframe = current_frame_host()->child_at(0);
   NavigationRequest* navigation = iframe->navigation_request();
   url::Origin origin_to_commit = navigation->GetOriginToCommit().value();
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
   url::Origin origin_committed =
       iframe->current_frame_host()->GetLastCommittedOrigin();
 
@@ -4328,7 +4253,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, ErrorPageFromCspSandboxResponse) {
       "a.com", "/set-header?Content-Security-Policy: sandbox");
   TestNavigationManager manager(web_contents(), url);
   shell()->LoadURL(url);
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
 
   // An error page committed. It doesn't have any sandbox flags, despite the
   // original response headers.
@@ -4463,7 +4388,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, ErrorPageFromInSandboxedIframe) {
     iframe.sandbox = "allow-orientation-lock";
     document.body.appendChild(iframe);
   )");
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
 
   RenderFrameHostImpl* child_rfh =
       current_frame_host()->child_at(0)->current_frame_host();
@@ -4487,7 +4412,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, OriginToCommitSandboxFromFrame) {
   FrameTreeNode* iframe = current_frame_host()->child_at(0);
   NavigationRequest* navigation = iframe->navigation_request();
   url::Origin origin_to_commit = navigation->GetOriginToCommit().value();
-  manager.WaitForNavigationFinished();
+  ASSERT_TRUE(manager.WaitForNavigationFinished());
   url::Origin origin_committed =
       iframe->current_frame_host()->GetLastCommittedOrigin();
 
@@ -4513,8 +4438,8 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   TestNavigationManager manager_1(popup_contents, url_b);
   TestNavigationManager manager_2(popup_contents, GURL("about:blank"));
 
-  manager_1.WaitForNavigationFinished();
-  manager_2.WaitForNavigationFinished();
+  ASSERT_TRUE(manager_1.WaitForNavigationFinished());
+  ASSERT_TRUE(manager_2.WaitForNavigationFinished());
 
   EXPECT_EQ(popup_contents->GetLastCommittedURL(), "about:blank");
 }
@@ -4523,10 +4448,8 @@ class NetworkIsolationSplitCacheAppendIframeOrigin
     : public NavigationBaseBrowserTest {
  public:
   NetworkIsolationSplitCacheAppendIframeOrigin() {
-    feature_list_.InitWithFeatures(
-        {net::features::kSplitCacheByNetworkIsolationKey},
-        {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame,
-         net::features::kEnableDoubleKeyNetworkAnonymizationKey});
+    feature_list_.InitAndEnableFeature(
+        net::features::kSplitCacheByNetworkIsolationKey);
   }
 
  private:
@@ -5880,7 +5803,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
   EXPECT_EQ(1U, main_frame()->child_count());
   FrameTreeNode* child = main_frame()->child_at(0);
   EXPECT_EQ(iframe_url_1, child->current_url());
-  EXPECT_FALSE(child->credentialless());
+  EXPECT_FALSE(child->Credentialless());
   EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
             EvalJs(child->current_frame_host(), "window.credentialless"));
@@ -5890,7 +5813,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
   EXPECT_TRUE(
       ExecJs(main_frame(),
              "document.getElementById('test_iframe').credentialless = true;"));
-  EXPECT_TRUE(child->credentialless());
+  EXPECT_TRUE(child->Credentialless());
   EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
             EvalJs(child->current_frame_host(), "window.credentialless"));
@@ -5908,7 +5831,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
   // The grandchild FrameTreeNode does not set the 'credentialless'
   // attribute. The grandchild RenderFrameHost is not credentialless, since its
   // parent RenderFrameHost is not credentialless.
-  EXPECT_FALSE(grandchild->credentialless());
+  EXPECT_FALSE(grandchild->Credentialless());
   EXPECT_FALSE(grandchild->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
             EvalJs(grandchild->current_frame_host(), "window.credentialless"));
@@ -5919,7 +5842,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
                                "        .contentWindow.location.href = $1;",
                                iframe_url_1.Resolve("#here").spec())));
   WaitForLoadStop(web_contents());
-  EXPECT_TRUE(child->credentialless());
+  EXPECT_TRUE(child->Credentialless());
   EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
             EvalJs(child->current_frame_host(), "window.credentialless"));
@@ -5929,7 +5852,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
       main_frame(), JsReplace("document.getElementById('test_iframe').src = $1",
                               iframe_url_2)));
   WaitForLoadStop(web_contents());
-  EXPECT_TRUE(child->credentialless());
+  EXPECT_TRUE(child->Credentialless());
   EXPECT_TRUE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(true, EvalJs(child->current_frame_host(), "window.credentialless"));
   // A credentialless document has a storage key with a nonce.
@@ -5950,7 +5873,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
 
   // The grandchild does not set the 'credentialless' attribute, but the
   // grandchild document is credentialless.
-  EXPECT_FALSE(grandchild->credentialless());
+  EXPECT_FALSE(grandchild->Credentialless());
   EXPECT_TRUE(grandchild->current_frame_host()->IsCredentialless());
   EXPECT_EQ(true,
             EvalJs(grandchild->current_frame_host(), "window.credentialless"));
@@ -5981,7 +5904,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
   EXPECT_TRUE(
       ExecJs(main_frame(),
              "document.getElementById('test_iframe').credentialless = false;"));
-  EXPECT_FALSE(child->credentialless());
+  EXPECT_FALSE(child->Credentialless());
   EXPECT_TRUE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(true, EvalJs(child->current_frame_host(), "window.credentialless"));
   EXPECT_TRUE(child->current_frame_host()->storage_key().nonce().has_value());
@@ -5998,7 +5921,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
                        iframe_url_1)));
   EXPECT_EQ(2U, child->child_count());
   FrameTreeNode* grandchild2 = child->child_at(1);
-  EXPECT_FALSE(grandchild2->credentialless());
+  EXPECT_FALSE(grandchild2->Credentialless());
   EXPECT_TRUE(grandchild2->current_frame_host()->IsCredentialless());
   EXPECT_EQ(true,
             EvalJs(grandchild2->current_frame_host(), "window.credentialless"));
@@ -6015,7 +5938,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
              JsReplace("document.getElementById('test_iframe').src = $1;",
                        iframe_url_2)));
   WaitForLoadStop(web_contents());
-  EXPECT_FALSE(child->credentialless());
+  EXPECT_FALSE(child->Credentialless());
   EXPECT_FALSE(child->current_frame_host()->IsCredentialless());
   EXPECT_EQ(false,
             EvalJs(child->current_frame_host(), "window.credentialless"));
@@ -6031,7 +5954,7 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTestCredentiallessIframe,
   EXPECT_EQ(1U, main_frame()->child_count());
   FrameTreeNode* child_b = main_frame()->child_at(0);
   EXPECT_EQ(iframe_url_b, child_b->current_url());
-  EXPECT_TRUE(child_b->credentialless());
+  EXPECT_TRUE(child_b->Credentialless());
   EXPECT_TRUE(child_b->current_frame_host()->IsCredentialless());
   EXPECT_EQ(true,
             EvalJs(child_b->current_frame_host(), "window.credentialless"));
@@ -6099,6 +6022,57 @@ IN_PROC_BROWSER_TEST_F(
             second_tab_handle->GetRedirectChain());
 }
 
+// Regression test for https://crbug.com/1392653.  Ensure that loading a URL
+// that doesn't go through the network stack but does assign a site for its
+// SiteInstance in an unassigned SiteInstance does not fail.  An example of
+// such a URL is about:srcdoc. This ensures that the SiteInstance's site is set
+// even on the WillCommitWithoutUrlLoader() path in NavigationRequest.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
+                       AboutSrcdocInjectedOnAboutBlankPage) {
+  // Start on an about:blank page, which should stay in an unassigned
+  // SiteInstance.
+  EXPECT_TRUE(NavigateToURL(shell(), GURL(url::kAboutBlankURL)));
+  SiteInstanceImpl* site_instance = current_frame_host()->GetSiteInstance();
+  EXPECT_FALSE(site_instance->HasSite());
+
+  // Inject a srcdoc iframe into the blank document.  This shouldn't really be
+  // possible on the open web, since an about:blank page with an unassigned
+  // SiteInstance shouldn't be scriptable by other pages, but it could still
+  // happen in automation scenarios or through DevTools.
+  TestNavigationObserver navigation_observer(web_contents());
+  EXPECT_TRUE(ExecJs(current_frame_host(), JsReplace(R"(
+    let frame = document.createElement('iframe');
+    frame.srcdoc = 'test';
+    document.body.appendChild(frame);
+  )")));
+  navigation_observer.Wait();
+  EXPECT_TRUE(navigation_observer.last_navigation_succeeded());
+  EXPECT_EQ("about:srcdoc", navigation_observer.last_navigation_url());
+
+  // The srcdoc child should stay in its about:blank parent SiteInstance.
+  EXPECT_EQ(1U, main_frame()->child_count());
+  FrameTreeNode* child = main_frame()->child_at(0);
+  EXPECT_EQ(child->current_frame_host()->GetSiteInstance(), site_instance);
+
+  // Committing an about:srcdoc navigation currently forces the SiteInstance's
+  // site to be set. Prior to fixing https://crbug.com/1392653, this happened
+  // after the actual commit was processed at DidNavigate() time, which is a
+  // path that is no longer supported, and hence this triggered a NOTREACHED().
+  // Now, the site should be set before we send the CommitNavigation IPC.
+  EXPECT_TRUE(site_instance->HasSite());
+
+  if (AreDefaultSiteInstancesEnabled()) {
+    EXPECT_TRUE(site_instance->IsDefaultSiteInstance());
+    EXPECT_EQ(SiteInstanceImpl::GetDefaultSiteURL(),
+              site_instance->GetSiteInfo().site_url());
+  } else {
+    // When we get into this situation with strict site isolation, the site URL
+    // currently used is "about:". This may be changed in the future (e.g., to
+    // an opaque ID).
+    EXPECT_EQ("about:", site_instance->GetSiteInfo().site_url());
+  }
+}
+
 class CacheTransparencyNavigationBrowserTest : public ContentBrowserTest {
  public:
   CacheTransparencyNavigationBrowserTest() {
@@ -6130,7 +6104,7 @@ class CacheTransparencyNavigationBrowserTest : public ContentBrowserTest {
   static constexpr char kPervasivePayload[] =
       "/cache_transparency/pervasive.js";
   static constexpr char kCacheUsedHistogram[] =
-      "Network.CacheTransparency.SingleKeyedCacheIsUsed";
+      "Network.CacheTransparency2.SingleKeyedCacheIsUsed";
 
   base::test::ScopedFeatureList feature_list_;
   GURL pervasive_payload_url_;

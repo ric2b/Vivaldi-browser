@@ -15,10 +15,13 @@
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/menu_separator_types.h"
 #include "ui/base/themed_vector_icon.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/controls/menu/menu_controller.h"
 #include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/view.h"
@@ -282,11 +285,6 @@ class VIEWS_EXPORT MenuItemView : public View {
   }
   bool may_have_mnemonics() const { return may_have_mnemonics_; }
 
-  void set_accessible_name(std::u16string accessible_name) {
-    accessible_name_ = std::move(accessible_name);
-  }
-  const std::u16string& accessible_name() const { return accessible_name_; }
-
   // Called when the drop or selection status (as determined by SubmenuView) may
   // have changed.
   void OnDropOrSelectionStatusMayHaveChanged();
@@ -379,6 +377,8 @@ class VIEWS_EXPORT MenuItemView : public View {
   bool last_paint_as_selected_for_testing() const {
     return last_paint_as_selected_;
   }
+
+  static std::u16string GetNewBadgeAccessibleDescription();
 
  protected:
   // Creates a MenuItemView. This is used by the various AddXXX methods.
@@ -483,8 +483,8 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Returns the colors used in painting.
   Colors CalculateColors(bool paint_as_selected) const;
 
-  // Returns the accessible name for this menu item.
-  std::u16string GetAccessibleName() const;
+  // Calculates and returns the accessible name for this menu item.
+  std::u16string CalculateAccessibleName() const;
 
   // Calculates and returns the MenuItemDimensions.
   MenuItemDimensions CalculateDimensions() const;
@@ -594,7 +594,6 @@ class VIEWS_EXPORT MenuItemView : public View {
   std::u16string secondary_title_;
   std::u16string minor_text_;
   ui::ImageModel minor_icon_;
-  std::u16string accessible_name_;
 
   // Does the title have a mnemonic? Only useful on the root menu item.
   bool has_mnemonics_ = false;
@@ -676,6 +675,10 @@ class VIEWS_EXPORT MenuItemView : public View {
   // `update_selection_based_state_in_view_herarchy_changed_` is set to false
   // and SetIconView() explicitly calls UpdateSelectionBasedStateIfChanged().
   bool update_selection_based_state_in_view_herarchy_changed_ = true;
+
+  const std::u16string new_badge_text_ = l10n_util::GetStringUTF16(
+      features::IsChromeRefresh2023() ? IDS_NEW_BADGE_UPPERCASE
+                                      : IDS_NEW_BADGE);
 };
 
 }  // namespace views

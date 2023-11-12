@@ -16,10 +16,10 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/web_contents_ns_view_bridge.mojom.h"
+#include "content/public/browser/child_process_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "content/public/browser/web_drag_dest_delegate.h"
-#include "content/public/common/child_process_host.h"
 #include "content/public/common/drop_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -42,12 +42,11 @@ using remote_cocoa::mojom::DraggingInfo;
 
 namespace content {
 
-DropContext::DropContext(
-    const content::DropData drop_data,
-    const gfx::PointF client_pt,
-    const gfx::PointF screen_pt,
-    int modifier_flags,
-    base::WeakPtr<content::RenderWidgetHostImpl> target_rwh)
+DropContext::DropContext(const DropData drop_data,
+                         const gfx::PointF client_pt,
+                         const gfx::PointF screen_pt,
+                         int modifier_flags,
+                         base::WeakPtr<RenderWidgetHostImpl> target_rwh)
     : drop_data(drop_data),
       client_pt(client_pt),
       screen_pt(screen_pt),
@@ -417,57 +416,57 @@ void DropCompletionCallback(WebDragDest* drag_dest,
 
 namespace content {
 
-void PopulateDropDataFromPasteboard(content::DropData* data,
-                                    NSPasteboard* pboard) {
-  DCHECK(data);
+DropData PopulateDropDataFromPasteboard(NSPasteboard* pboard) {
   DCHECK(pboard);
+  DropData drop_data;
+
   // https://crbug.com/1016740#c21
   base::scoped_nsobject<NSArray> types([[pboard types] retain]);
 
-  data->did_originate_from_renderer =
-      [types containsObject:ui::kUTTypeChromiumInitiatedDrag];
+  drop_data.did_originate_from_renderer =
+      [types containsObject:ui::kUTTypeChromiumRendererInitiatedDrag];
+  drop_data.is_from_privileged =
+      [types containsObject:ui::kUTTypeChromiumPrivilegedInitiatedDrag];
 
   // Get URL if possible. To avoid exposing file system paths to web content,
   // filenames in the drag are not converted to file URLs.
-
   NSArray<NSString*>* urls;
   NSArray<NSString*>* titles;
   if (ui::ClipboardUtil::URLsAndTitlesFromPasteboard(
           pboard, /*include_files=*/false, &urls, &titles)) {
-    data->url = GURL(base::SysNSStringToUTF8(urls.firstObject));
-    data->url_title = base::SysNSStringToUTF16(titles.firstObject);
+    drop_data.url = GURL(base::SysNSStringToUTF8(urls.firstObject));
+    drop_data.url_title = base::SysNSStringToUTF16(titles.firstObject);
   }
 
   // Get plain text.
   if ([types containsObject:NSPasteboardTypeString]) {
-    data->text =
+    drop_data.text =
         base::SysNSStringToUTF16([pboard stringForType:NSPasteboardTypeString]);
   }
 
   // Get HTML. If there's no HTML, try RTF.
   if ([types containsObject:NSPasteboardTypeHTML]) {
     NSString* html = [pboard stringForType:NSPasteboardTypeHTML];
-    data->html = base::SysNSStringToUTF16(html);
+    drop_data.html = base::SysNSStringToUTF16(html);
   } else if ([types containsObject:ui::kUTTypeChromiumImageAndHTML]) {
     NSString* html = [pboard stringForType:ui::kUTTypeChromiumImageAndHTML];
-    data->html = base::SysNSStringToUTF16(html);
+    drop_data.html = base::SysNSStringToUTF16(html);
   } else if ([types containsObject:NSPasteboardTypeRTF]) {
     NSString* html = ui::ClipboardUtil::GetHTMLFromRTFOnPasteboard(pboard);
-    data->html = base::SysNSStringToUTF16(html);
+    drop_data.html = base::SysNSStringToUTF16(html);
   }
 
   // Get files.
-  std::vector<ui::FileInfo> files =
-      ui::ClipboardUtil::FilesFromPasteboard(pboard);
-  base::ranges::move(files, std::back_inserter(data->filenames));
+  drop_data.filenames = ui::ClipboardUtil::FilesFromPasteboard(pboard);
 
   // Get custom MIME data.
   if ([types containsObject:ui::kUTTypeChromiumWebCustomData]) {
     NSData* customData = [pboard dataForType:ui::kUTTypeChromiumWebCustomData];
-    ui::ReadCustomDataIntoMap([customData bytes],
-                              [customData length],
-                              &data->custom_data);
+    ui::ReadCustomDataIntoMap(customData.bytes, customData.length,
+                              &drop_data.custom_data);
   }
+
+  return drop_data;
 }
 
 }  // namespace content

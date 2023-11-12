@@ -31,8 +31,8 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
-import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeProvider;
+import org.chromium.chrome.browser.tasks.tab_management.TabManagementFieldTrial;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.base.LocalizationUtils;
@@ -185,13 +185,18 @@ public class StripLayoutTab implements VirtualView {
     // Animation/Timer Constants
     private static final int ANIM_TAB_CLOSE_BUTTON_FADE_MS = 150;
 
-    // Close button width
+    // Close Button Constants
+    // Close button padding value comes from the built-in padding in the source png.
+    private static final int CLOSE_BUTTON_PADDING_DP = 7;
     private static final int CLOSE_BUTTON_WIDTH_DP = 24;
     private static final int CLOSE_BUTTON_WIDTH_SCROLLING_STRIP_DP = 48;
 
+    // Tab strip content y offset
+    private static final float FOLIO_CONTENT_OFFSET_Y = 8.f;
+    private static final float DETACHED_CONTENT_OFFSET_Y = 10.f;
+
     // Divider Constants
-    // TODO(crbug.com/1373632): Temp value until the 9-patches are updated.
-    private static final int DIVIDER_OFFSET_X = 9;
+    private static final int DIVIDER_OFFSET_X = 13;
     @VisibleForTesting
     static final float DIVIDER_FOLIO_LIGHT_OPACITY = 0.2f;
 
@@ -206,12 +211,15 @@ public class StripLayoutTab implements VirtualView {
 
     private boolean mVisible = true;
     private boolean mIsDying;
+    private boolean mIsReordering;
     private boolean mCanShowCloseButton = true;
     private boolean mFolioAttached = true;
+    private boolean mStartDividerVisible;
+    private boolean mEndDividerVisible;
     private final boolean mIncognito;
     private float mBottomMargin;
+    private float mContainerOpacity;
     private float mContentOffsetX;
-    private float mDividerOpacity;
     private float mVisiblePercentage = 1.f;
     private String mAccessibilityDescription;
 
@@ -345,6 +353,14 @@ public class StripLayoutTab implements VirtualView {
     }
 
     /**
+     * Marks if we are currently reordering this tab.
+     * @param isReordering Whether the tab is reordering.
+     */
+    public void setIsReordering(boolean isReordering) {
+        mIsReordering = isReordering;
+    }
+
+    /**
      * Marks if tab container is attached to the toolbar for the Tab Strip Redesign folio treatment.
      * @param folioAttached Whether the tab should be attached or not.
      */
@@ -363,10 +379,10 @@ public class StripLayoutTab implements VirtualView {
      * @return The Android resource that represents the tab background.
      */
     public int getResourceId() {
-        if (TabUiFeatureUtilities.isTabStripDetachedEnabled() || !mFolioAttached) {
-            return R.drawable.bg_tabstrip_tab_detached;
-        } else if (TabUiFeatureUtilities.isTabStripFolioEnabled()) {
-            return R.drawable.bg_tabstrip_tab_folio;
+        if (TabManagementFieldTrial.isTabStripDetachedEnabled() || !mFolioAttached) {
+            return TabUiThemeUtil.getTSRDetachedResource();
+        } else if (TabManagementFieldTrial.isTabStripFolioEnabled()) {
+            return TabUiThemeUtil.getTSRFolioResource();
         }
 
         // Note(david@vivaldi.com): Get appropriate resources and set the opacity.
@@ -430,15 +446,11 @@ public class StripLayoutTab implements VirtualView {
      * @return The tint color resource that represents the tab background.
      */
     public int getTint(boolean foreground) {
+        // TODO(https://crbug.com/1408276): Avoid calculating every time. Instead, store the tab's
+        //  color and only re-determine when the color could have changed (i.e. on selection).
         if (ChromeFeatureList.sTabStripRedesign.isEnabled()) {
-            // Inactive tabs have no container in TSR. Return arbitrary color to avoid calculation.
-            if (!foreground) return Color.TRANSPARENT;
-
-            if (TabUiFeatureUtilities.isTabStripFolioEnabled()) {
-                return ChromeColors.getDefaultThemeColor(mContext, mIncognito);
-            } else if (TabUiFeatureUtilities.isTabStripDetachedEnabled()) {
-                return TabUiThemeProvider.getTabStripDetachedTabColor(mContext, mIncognito);
-            }
+            return TabUiThemeUtil.getTabStripContainerColor(
+                    mContext, mIncognito, foreground, mIsReordering);
         }
 
         if (foreground) {
@@ -496,7 +508,7 @@ public class StripLayoutTab implements VirtualView {
             return mContext.getColor(R.color.divider_line_bg_color_light);
         }
 
-        if (TabUiFeatureUtilities.isTabStripFolioEnabled() && !ColorUtils.inNightMode(mContext)
+        if (TabManagementFieldTrial.isTabStripFolioEnabled() && !ColorUtils.inNightMode(mContext)
                 && !mIncognito) {
             // This color will not be used at full opacity. We can't set this using the alpha
             // component of the {@code @ColorInt}, since it is ignored when loading resources
@@ -512,17 +524,31 @@ public class StripLayoutTab implements VirtualView {
     }
 
     /**
-     * @param dividerOpacity The new opacity for the tab divider.
+     * @param visible Visibility of tab's start divider.
      */
-    public void setDividerOpacity(float dividerOpacity) {
-        mDividerOpacity = dividerOpacity;
+    public void setStartDividerVisible(boolean visible) {
+        mStartDividerVisible = visible;
     }
 
     /**
-     * @return The opacity of the tab divider.
+     * @return Visibility of tab's start divider.
      */
-    public float getDividerOpacity() {
-        return mDividerOpacity;
+    public boolean isStartDividerVisible() {
+        return mStartDividerVisible;
+    }
+
+    /**
+     * @param visible Visibility of end divider.
+     */
+    public void setEndDividerVisible(boolean visible) {
+        mEndDividerVisible = visible;
+    }
+
+    /**
+     * @return Visibility of tab's end divider.
+     */
+    public boolean isEndDividerVisible() {
+        return mEndDividerVisible;
     }
 
     /**
@@ -626,18 +652,35 @@ public class StripLayoutTab implements VirtualView {
     }
 
     /**
-     * @param foreground Whether or not this tab is a foreground tab.
-     * @return The fraction (from 0.f to 1.f) of how opaque the tab should be.
+     * @param opacity The fraction (from 0.f to 1.f) of how opaque the tab container should be.
      */
-    public float getOpacity(boolean foreground) {
+    public void setContainerOpacity(float opacity) {
+        mContainerOpacity = opacity;
+    }
+
+    /**
+     * @return The fraction (from 0.f to 1.f) of how opaque the tab container should be.
+     */
+    public float getContainerOpacity() {
         if (ChromeFeatureList.sTabStripRedesign.isEnabled()) {
-            if (foreground) {
-                return 1.0f;
-            } else {
-                return 0.0f;
-            }
+            return mContainerOpacity;
+        } else {
+            return 1.f;
         }
-        return 1.0f;
+    }
+
+    /**
+     * @return How far to vertically offset the tab content.
+     */
+    public float getContentOffsetY() {
+        if (TabManagementFieldTrial.isTabStripDetachedEnabled()) {
+            return DETACHED_CONTENT_OFFSET_Y;
+        } else if (TabManagementFieldTrial.isTabStripFolioEnabled()) {
+            return FOLIO_CONTENT_OFFSET_Y;
+        } else {
+            // If TSR is disabled, contentOffsetY will not be used. Default to 0.
+            return 0.f;
+        }
     }
 
     /**
@@ -928,6 +971,10 @@ public class StripLayoutTab implements VirtualView {
 
         mClosePlacement.offset(getDrawX() + xOffset, getDrawY());
         return mClosePlacement;
+    }
+
+    public int getCloseButtonPadding() {
+        return ChromeFeatureList.sTabStripRedesign.isEnabled() ? CLOSE_BUTTON_PADDING_DP : 0;
     }
 
     // TODO(dtrainor): Don't animate this if we're selecting or deselecting this tab.

@@ -4,12 +4,11 @@
 
 package org.chromium.components.translate;
 
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
 
 import android.app.Activity;
 import android.content.Context;
@@ -162,7 +161,7 @@ public final class TranslateMessageTest {
                 .when(mMockJni)
                 .handlePrimaryAction(NATIVE_TRANSLATE_MESSAGE);
 
-        Assert.assertEquals(new Integer(PrimaryActionClickBehavior.DO_NOT_DISMISS),
+        Assert.assertEquals(Integer.valueOf(PrimaryActionClickBehavior.DO_NOT_DISMISS),
                 messageProperties.get(MessageBannerProperties.ON_PRIMARY_ACTION).get());
 
         verifyNoMoreInteractions(mMessageDispatcher);
@@ -277,7 +276,7 @@ public final class TranslateMessageTest {
         Assert.assertNull(translateMessage.handleSecondaryMenuItemClicked(
                 new TranslateMessage.MenuItem("More languages", "", false, 2, "")));
 
-        verifyZeroInteractions(mMockJni);
+        verifyNoMoreInteractions(mMockJni);
     }
 
     @Test

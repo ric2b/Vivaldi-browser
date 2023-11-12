@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/strings/strcat.h"
@@ -18,6 +18,30 @@ namespace ash::language_packs {
 // All Language Pack IDs are listed here.
 constexpr char kHandwritingFeatureId[] = "LP_ID_HANDWRITING";
 constexpr char kTtsFeatureId[] = "LP_ID_TTS";
+
+// Feature IDs.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// See enum LanguagePackFeatureIds in tools/metrics/histograms/enums.xml.
+enum class FeatureIdsEnum {
+  kUnknown = 0,
+  kHandwriting = 1,
+  kTts = 2,
+  kMaxValue = kTts,
+};
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// See enum LanguagePackFeatureSuccess in tools/metrics/histograms/enums.xml.
+enum class FeatureSuccessEnum {
+  kUnknownSuccess = 0,
+  kUnknownFailure = 1,
+  kHandwritingSuccess = 2,
+  kHandwritingFailure = 3,
+  kTtsSuccess = 4,
+  kTtsFailure = 5,
+  kMaxValue = kTtsFailure,
+};
 
 // Status contains information about the status of a Language Pack operation.
 struct PackResult {

@@ -17,7 +17,6 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.metrics.RecordHistogram;
@@ -36,7 +35,6 @@ import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbar
 import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbarBlockCaptureReason;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer.ToolbarViewResourceAdapter;
 import org.chromium.chrome.browser.toolbar.top.ToolbarControlContainer.ToolbarViewResourceAdapter.ToolbarInMotionStage;
-import org.chromium.chrome.browser.toolbar.top.ToolbarSnapshotState.ToolbarSnapshotDifference;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.Features.JUnitProcessor;
@@ -46,7 +44,6 @@ import java.util.function.BooleanSupplier;
 
 /** Unit tests for ToolbarControlContainer. */
 @RunWith(BaseRobolectricTestRunner.class)
-@Config(shadows = {HomeButtonCoordinatorTest.ShadowChromeFeatureList.class})
 @EnableFeatures(ChromeFeatureList.SUPPRESS_TOOLBAR_CAPTURES)
 public class ToolbarControlContainerTest {
     @Rule
@@ -152,7 +149,7 @@ public class ToolbarControlContainerTest {
     @Test
     public void testIsDirty() {
         ToolbarViewResourceAdapter adapter = makeAdapter();
-        adapter.setOnResourceReadyCallback((resource) -> {});
+        adapter.addOnResourceReadyCallback((resource) -> {});
 
         Assert.assertEquals(0,
                 RecordHistogram.getHistogramTotalCountForTesting(

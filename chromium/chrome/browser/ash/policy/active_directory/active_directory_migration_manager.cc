@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "ash/constants/ash_pref_names.h"
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/time/time.h"
 #include "chrome/common/pref_names.h"
@@ -185,8 +185,10 @@ void ActiveDirectoryMigrationManager::StartPowerwash() {
   local_state_->SetTime(prefs::kLastChromadMigrationAttemptTime,
                         base::Time::Now());
 
-  // Unsigned remote powerwash requests are allowed in AD mode.
-  ash::SessionManagerClient::Get()->StartRemoteDeviceWipe(em::SignedData());
+  // Unsigned remote powerwash requests and em::PolicyFetchRequest::NONE
+  // signature type are allowed in AD mode.
+  ash::SessionManagerClient::Get()->StartRemoteDeviceWipe(
+      em::SignedData(), em::PolicyFetchRequest::NONE);
 }
 
 void ActiveDirectoryMigrationManager::MaybeRunStatusCallback(bool started,

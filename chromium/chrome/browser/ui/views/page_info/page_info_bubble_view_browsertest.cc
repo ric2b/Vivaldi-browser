@@ -763,11 +763,12 @@ class PageInfoBubbleViewAboutThisSiteBrowserTest : public InProcessBrowserTest {
 
   virtual void InitFeatureList() {
     feature_list_.InitWithFeatures(
-        {page_info::kPageInfoAboutThisSiteEn,
-         page_info::kPageInfoAboutThisSiteNonEn,
-         page_info::kPageInfoAboutThisSiteMoreInfo,
-         page_info::kPageInfoAboutThisSiteDescriptionPlaceholder,
-         features::kUnifiedSidePanel},
+        {
+            page_info::kPageInfoAboutThisSiteEn,
+            page_info::kPageInfoAboutThisSiteNonEn,
+            page_info::kPageInfoAboutThisSiteMoreInfo,
+            page_info::kPageInfoAboutThisSiteDescriptionPlaceholder,
+        },
         {});
   }
 
@@ -958,8 +959,8 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
   base::RunLoop().RunUntilIdle();
 }
 
-// Test that no info is shown and "kUnknown" is logged when hints fetching is
-// disabled.
+// Test that no info is shown and "kNotShownOptimizationGuideNotAllowed" is
+// logged when hints fetching is disabled.
 class PageInfoBubbleViewAboutThisSiteDisabledBrowserTest
     : public PageInfoBubbleViewAboutThisSiteBrowserTest {
   void SetUpCommandLine(base::CommandLine* cmd) override {
@@ -969,8 +970,7 @@ class PageInfoBubbleViewAboutThisSiteDisabledBrowserTest
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDisabledBrowserTest,
                        AboutThisSiteWithoutOptin) {
-  ukm::TestAutoSetUkmRecorder ukm_recorder;
-
+  base::HistogramTester histograms;
   auto url = https_server_.GetURL("a.test", "/title1.html");
   AddHintForTesting(browser(), url, CreateValidSiteInfo());
 
@@ -984,41 +984,48 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteDisabledBrowserTest,
   EXPECT_FALSE(page_info->GetViewByID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON));
 
-  auto entries = ukm_recorder.GetEntriesByName(
-      ukm::builders::AboutThisSiteStatus::kEntryName);
-  EXPECT_EQ(1u, entries.size());
-  ukm_recorder.ExpectEntrySourceHasUrl(entries[0], url);
-  ukm_recorder.ExpectEntryMetric(
-      entries[0], ukm::builders::AboutThisSiteStatus::kStatusName,
-      static_cast<int>(AboutThisSiteStatus::kUnknown));
+  histograms.ExpectBucketCount(
+      "Security.PageInfo.AboutThisSiteInteraction",
+      AboutThisSiteInteraction::kNotShownOptimizationGuideNotAllowed, 1);
 }
 
-class PageInfoBubbleViewAboutThisSiteWithoutSidePanelBrowserTest
+// Test that info is shown and "kShownWithoutMsbb" and
+// "kClickedWithoutDescription" are logged when users that have disabled hints
+// fetching are supported (e.g. non-MSBB users)
+class PageInfoBubbleViewAboutThisSiteAllowNonMsbbBrowserTest
     : public PageInfoBubbleViewAboutThisSiteBrowserTest {
  public:
-  void InitFeatureList() override {
+  PageInfoBubbleViewAboutThisSiteAllowNonMsbbBrowserTest() {
     feature_list_.InitWithFeatures(
         {
-            page_info::kPageInfoAboutThisSiteEn,
-            page_info::kPageInfoAboutThisSiteNonEn,
             page_info::kPageInfoAboutThisSiteMoreInfo,
             page_info::kPageInfoAboutThisSiteDescriptionPlaceholder,
+            page_info::kPageInfoAboutThisSiteNewIcon,
+            page_info::kPageInfoAboutThisSiteNonMsbb,
         },
-        {features::kUnifiedSidePanel});
+        {});
   }
 
-  page_info::proto::SiteInfo CreateSiteInfoWithoutDescription() {
-    auto site_info = CreateValidSiteInfo();
-    site_info.mutable_description()->clear_description();
-    return site_info;
+  void SetUpCommandLine(base::CommandLine* cmd) override {
+    // Don't set the flag to enable hints fetching.
   }
+
+ protected:
+  base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(
-    PageInfoBubbleViewAboutThisSiteWithoutSidePanelBrowserTest,
-    AboutThisSiteInteraction) {
+IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteAllowNonMsbbBrowserTest,
+                       AboutThisSiteWithoutOptinAndWithNonMsbbUsers) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  base::HistogramTester histograms;
+
   auto url = https_server_.GetURL("a.test", "/title1.html");
-  AddHintForTesting(browser(), url, CreateValidSiteInfo());
+  auto site_info = CreateValidSiteInfo();
+  site_info.clear_description();
+  EXPECT_EQ(page_info::about_this_site_validation::ValidateSiteInfo(
+                site_info, page_info::IsDescriptionPlaceholderFeatureEnabled()),
+            AboutThisSiteStatus::kValid);
+  AddHintForTesting(browser(), url, site_info);
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   OpenPageInfoBubble(browser());
@@ -1027,24 +1034,15 @@ IN_PROC_BROWSER_TEST_F(
   views::View* button = page_info->GetViewByID(
       PageInfoViewFactory::VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON);
   ASSERT_TRUE(button);
+
+  histograms.ExpectUniqueSample("Security.PageInfo.AboutThisSiteInteraction",
+                                AboutThisSiteInteraction::kShownWithoutMsbb, 1);
+
   PerformMouseClickOnView(button);
-  // PageInfo should stay open since the side panel is disabled.
-  EXPECT_TRUE(PageInfoBubbleView::GetPageInfoBubbleForTesting());
-}
-
-IN_PROC_BROWSER_TEST_F(
-    PageInfoBubbleViewAboutThisSiteWithoutSidePanelBrowserTest,
-    AboutThisSiteWithoutDescription) {
-  auto url = https_server_.GetURL("a.test", "/title1.html");
-  AddHintForTesting(browser(), url, CreateSiteInfoWithoutDescription());
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  OpenPageInfoBubble(browser());
-
-  auto* page_info = PageInfoBubbleView::GetPageInfoBubbleForTesting();
-  views::View* button = page_info->GetViewByID(
-      PageInfoViewFactory::VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON);
-  EXPECT_FALSE(button);
+  histograms.ExpectTotalCount("Security.PageInfo.AboutThisSiteInteraction", 2);
+  histograms.ExpectBucketCount(
+      "Security.PageInfo.AboutThisSiteInteraction",
+      AboutThisSiteInteraction::kClickedWithoutDescription, 1);
 }
 
 class PageInfoBubbleViewSiteSettingsBrowserTest : public InProcessBrowserTest {

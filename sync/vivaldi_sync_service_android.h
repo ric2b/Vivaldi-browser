@@ -21,31 +21,24 @@ class VivaldiSyncServiceAndroid : public syncer::SyncServiceObserver {
   VivaldiSyncServiceAndroid& operator=(const VivaldiSyncServiceAndroid&) =
       delete;
 
-  bool Init();
+  bool Init(JNIEnv* env);
 
   jboolean SetEncryptionPassword(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& password);
 
-  void ClearServerData(JNIEnv* env,
-                       const base::android::JavaParamRef<jobject>& obj);
+  void ClearServerData(JNIEnv* env);
 
-  void StopAndClear(JNIEnv* env,
-                    const base::android::JavaParamRef<jobject>& obj);
+  void StopAndClear(JNIEnv* env);
 
-  jboolean HasServerError(JNIEnv* env,
-                          const base::android::JavaParamRef<jobject>& obj);
+  jboolean HasServerError(JNIEnv* env);
 
-  jboolean IsSetupInProgress(JNIEnv* env,
-                             const base::android::JavaParamRef<jobject>& obj);
+  jboolean IsSetupInProgress(JNIEnv* env);
 
   base::android::ScopedJavaLocalRef<jstring> GetBackupEncryptionToken(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
+      JNIEnv* env);
   jboolean RestoreEncryptionToken(
       JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& token);
 
   // syncer::SyncServiceObserver implementation.

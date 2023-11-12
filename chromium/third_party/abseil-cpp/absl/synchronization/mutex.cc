@@ -54,6 +54,7 @@
 #include "absl/base/internal/sysinfo.h"
 #include "absl/base/internal/thread_identity.h"
 #include "absl/base/internal/tsan_mutex_interface.h"
+#include "absl/base/optimization.h"
 #include "absl/base/port.h"
 #include "absl/debugging/stacktrace.h"
 #include "absl/debugging/symbolize.h"
@@ -634,21 +635,6 @@ void Mutex::InternalAttemptToUseMutexInFatalSignalHandler() {
                                  std::memory_order_release);
 }
 
-// --------------------------time support
-
-// Return the current time plus the timeout.  Use the same clock as
-// PerThreadSem::Wait() for consistency.  Unfortunately, we don't have
-// such a choice when a deadline is given directly.
-static absl::Time DeadlineFromTimeout(absl::Duration timeout) {
-#ifndef _WIN32
-  struct timeval tv;
-  gettimeofday(&tv, nullptr);
-  return absl::TimeFromTimeval(tv) + timeout;
-#else
-  return absl::Now() + timeout;
-#endif
-}
-
 // --------------------------Mutexes
 
 // In the layout below, the msb of the bottom byte is currently unused.  Also,
@@ -1154,7 +1140,7 @@ void Mutex::TryRemove(PerThreadSynch *s) {
 // if the wait extends past the absolute time specified, even if "s" is still
 // on the mutex queue.  In this case, remove "s" from the queue and return
 // true, otherwise return false.
-ABSL_XRAY_LOG_ARGS(1) void Mutex::Block(PerThreadSynch *s) {
+void Mutex::Block(PerThreadSynch *s) {
   while (s->state.load(std::memory_order_acquire) == PerThreadSynch::kQueued) {
     if (!DecrementSynchSem(this, s, s->waitp->timeout)) {
       // After a timeout, we go into a spin loop until we remove ourselves
@@ -1503,7 +1489,7 @@ static bool TryAcquireWithSpinning(std::atomic<intptr_t>* mu) {
   return false;
 }
 
-ABSL_XRAY_LOG_ARGS(1) void Mutex::Lock() {
+void Mutex::Lock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this, 0);
   GraphId id = DebugOnlyDeadlockCheck(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1521,7 +1507,7 @@ ABSL_XRAY_LOG_ARGS(1) void Mutex::Lock() {
   ABSL_TSAN_MUTEX_POST_LOCK(this, 0, 0);
 }
 
-ABSL_XRAY_LOG_ARGS(1) void Mutex::ReaderLock() {
+void Mutex::ReaderLock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_read_lock);
   GraphId id = DebugOnlyDeadlockCheck(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1545,7 +1531,13 @@ void Mutex::LockWhen(const Condition &cond) {
 }
 
 bool Mutex::LockWhenWithTimeout(const Condition &cond, absl::Duration timeout) {
-  return LockWhenWithDeadline(cond, DeadlineFromTimeout(timeout));
+  ABSL_TSAN_MUTEX_PRE_LOCK(this, 0);
+  GraphId id = DebugOnlyDeadlockCheck(this);
+  bool res = LockSlowWithDeadline(kExclusive, &cond,
+                                  KernelTimeout(timeout), 0);
+  DebugOnlyLockEnter(this, id);
+  ABSL_TSAN_MUTEX_POST_LOCK(this, 0, 0);
+  return res;
 }
 
 bool Mutex::LockWhenWithDeadline(const Condition &cond, absl::Time deadline) {
@@ -1568,7 +1560,12 @@ void Mutex::ReaderLockWhen(const Condition &cond) {
 
 bool Mutex::ReaderLockWhenWithTimeout(const Condition &cond,
                                       absl::Duration timeout) {
-  return ReaderLockWhenWithDeadline(cond, DeadlineFromTimeout(timeout));
+  ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_read_lock);
+  GraphId id = DebugOnlyDeadlockCheck(this);
+  bool res = LockSlowWithDeadline(kShared, &cond, KernelTimeout(timeout), 0);
+  DebugOnlyLockEnter(this, id);
+  ABSL_TSAN_MUTEX_POST_LOCK(this, __tsan_mutex_read_lock, 0);
+  return res;
 }
 
 bool Mutex::ReaderLockWhenWithDeadline(const Condition &cond,
@@ -1593,7 +1590,18 @@ void Mutex::Await(const Condition &cond) {
 }
 
 bool Mutex::AwaitWithTimeout(const Condition &cond, absl::Duration timeout) {
-  return AwaitWithDeadline(cond, DeadlineFromTimeout(timeout));
+  if (cond.Eval()) {      // condition already true; nothing to do
+    if (kDebugMode) {
+      this->AssertReaderHeld();
+    }
+    return true;
+  }
+
+  KernelTimeout t{timeout};
+  bool res = this->AwaitCommon(cond, t);
+  ABSL_RAW_CHECK(res || t.has_timeout(),
+                 "condition untrue on return from Await");
+  return res;
 }
 
 bool Mutex::AwaitWithDeadline(const Condition &cond, absl::Time deadline) {
@@ -1634,7 +1642,7 @@ bool Mutex::AwaitCommon(const Condition &cond, KernelTimeout t) {
   return res;
 }
 
-ABSL_XRAY_LOG_ARGS(1) bool Mutex::TryLock() {
+bool Mutex::TryLock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_try_lock);
   intptr_t v = mu_.load(std::memory_order_relaxed);
   if ((v & (kMuWriter | kMuReader | kMuEvent)) == 0 &&  // try fast acquire
@@ -1663,7 +1671,7 @@ ABSL_XRAY_LOG_ARGS(1) bool Mutex::TryLock() {
   return false;
 }
 
-ABSL_XRAY_LOG_ARGS(1) bool Mutex::ReaderTryLock() {
+bool Mutex::ReaderTryLock() {
   ABSL_TSAN_MUTEX_PRE_LOCK(this,
                            __tsan_mutex_read_lock | __tsan_mutex_try_lock);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1709,7 +1717,7 @@ ABSL_XRAY_LOG_ARGS(1) bool Mutex::ReaderTryLock() {
   return false;
 }
 
-ABSL_XRAY_LOG_ARGS(1) void Mutex::Unlock() {
+void Mutex::Unlock() {
   ABSL_TSAN_MUTEX_PRE_UNLOCK(this, 0);
   DebugOnlyLockLeave(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1761,7 +1769,7 @@ static bool ExactlyOneReader(intptr_t v) {
   return (v & kMuMultipleWaitersMask) == 0;
 }
 
-ABSL_XRAY_LOG_ARGS(1) void Mutex::ReaderUnlock() {
+void Mutex::ReaderUnlock() {
   ABSL_TSAN_MUTEX_PRE_UNLOCK(this, __tsan_mutex_read_lock);
   DebugOnlyLockLeave(this);
   intptr_t v = mu_.load(std::memory_order_relaxed);
@@ -1791,7 +1799,7 @@ static intptr_t ClearDesignatedWakerMask(int flag) {
     case 1:  // blocked; turn off the designated waker bit
       return ~static_cast<intptr_t>(kMuDesig);
   }
-  ABSL_INTERNAL_UNREACHABLE;
+  ABSL_UNREACHABLE();
 }
 
 // Conditionally ignores the existence of waiting writers if a reader that has
@@ -1805,7 +1813,7 @@ static intptr_t IgnoreWaitingWritersMask(int flag) {
     case 1:  // blocked; pretend there are no waiting writers
       return ~static_cast<intptr_t>(kMuWrWait);
   }
-  ABSL_INTERNAL_UNREACHABLE;
+  ABSL_UNREACHABLE();
 }
 
 // Internal version of LockWhen().  See LockSlowWithDeadline()
@@ -2659,7 +2667,7 @@ bool CondVar::WaitCommon(Mutex *mutex, KernelTimeout t) {
 }
 
 bool CondVar::WaitWithTimeout(Mutex *mu, absl::Duration timeout) {
-  return WaitWithDeadline(mu, DeadlineFromTimeout(timeout));
+  return WaitCommon(mu, KernelTimeout(timeout));
 }
 
 bool CondVar::WaitWithDeadline(Mutex *mu, absl::Time deadline) {
@@ -2822,7 +2830,7 @@ bool Condition::GuaranteedEqual(const Condition *a, const Condition *b) {
   // kTrue logic.
   if (a == nullptr || a->eval_ == nullptr) {
     return b == nullptr || b->eval_ == nullptr;
-  }else  if (b == nullptr || b->eval_ == nullptr) {
+  } else if (b == nullptr || b->eval_ == nullptr) {
     return false;
   }
   // Check equality of the representative fields.

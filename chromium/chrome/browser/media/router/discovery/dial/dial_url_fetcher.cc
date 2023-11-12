@@ -4,7 +4,7 @@
 
 #include "chrome/browser/media/router/discovery/dial/dial_url_fetcher.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -186,6 +186,7 @@ absl::optional<int> DialURLFetcher::GetHttpResponseCode() const {
 }
 
 void DialURLFetcher::ReportRedirectError(
+    const GURL& url_before_redirect,
     const net::RedirectInfo& redirect_info,
     const network::mojom::URLResponseHead& response_head,
     std::vector<std::string>* to_be_removed_headers) {

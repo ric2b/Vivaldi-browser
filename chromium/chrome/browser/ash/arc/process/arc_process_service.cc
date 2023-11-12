@@ -20,10 +20,10 @@
 #include "ash/components/arc/arc_util.h"
 #include "ash/components/arc/mojom/process.mojom.h"
 #include "ash/components/arc/session/arc_bridge_service.h"
-#include "base/bind.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/queue.h"
+#include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/singleton.h"
@@ -143,8 +143,9 @@ void UpdateNspidToPidMap(
       if (nspid != kNullProcessId && pid_map->find(nspid) != pid_map->end())
         (*pid_map)[nspid] = pid;
 
-      for (ProcessId child_pid : process_tree[pid])
+      for (ProcessId child_pid : process_tree[pid]) {
         queue.push(child_pid);
+      }
     }
   }
 }
@@ -536,6 +537,11 @@ void ArcProcessService::ContinueSystemMemoryInfoRequest(
       base::BindOnce(&GetArcSystemProcessList, cached_process_snapshot_),
       base::BindOnce(&ArcProcessService::OnGetSystemProcessList,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+// static
+void ArcProcessService::EnsureFactoryBuilt() {
+  ArcProcessServiceFactory::GetInstance();
 }
 
 // -----------------------------------------------------------------------------

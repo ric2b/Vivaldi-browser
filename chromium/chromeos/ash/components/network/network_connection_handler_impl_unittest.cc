@@ -8,8 +8,8 @@
 #include <memory>
 #include <set>
 
-#include "base/bind.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -63,6 +63,7 @@ const char kTestEid[] = "123456789012345678901234567890123";
 
 const char kTestCellularServicePath2[] = "cellular_service_path_2";
 const char kTestIccid2[] = "9876543210987654321";
+constexpr base::TimeDelta kCellularAutoConnectTimeout = base::Seconds(120);
 
 class TestNetworkConnectionObserver : public NetworkConnectionObserver {
  public:
@@ -335,29 +336,29 @@ class NetworkConnectionHandlerImplTest : public testing::Test {
   }
 
   void SetupUserPolicy(const std::string& network_configs_json) {
-    base::Value network_configs(base::Value::Type::LIST);
+    base::Value::List network_configs;
     if (!network_configs_json.empty()) {
       auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(
           network_configs_json, base::JSON_ALLOW_TRAILING_COMMAS);
       ASSERT_TRUE(parsed_json.has_value()) << parsed_json.error().message;
       ASSERT_TRUE(parsed_json->is_list());
-      network_configs = std::move(*parsed_json);
+      network_configs = std::move(parsed_json->GetList());
     }
     managed_config_handler_->SetPolicy(
         ::onc::ONC_SOURCE_USER_POLICY, helper_.UserHash(), network_configs,
-        /*global_config=*/base::Value(base::Value::Type::DICTIONARY));
+        /*global_network_config=*/base::Value::Dict());
     task_environment_.RunUntilIdle();
   }
 
   void SetupDevicePolicy(const std::string& network_configs_json,
-                         const base::Value& global_config) {
-    base::Value network_configs(base::Value::Type::LIST);
+                         const base::Value::Dict& global_config) {
+    base::Value::List network_configs;
     if (!network_configs_json.empty()) {
       auto parsed_json = base::JSONReader::ReadAndReturnValueWithError(
           network_configs_json, base::JSON_ALLOW_TRAILING_COMMAS);
       ASSERT_TRUE(parsed_json.has_value()) << parsed_json.error().message;
       ASSERT_TRUE(parsed_json->is_list());
-      network_configs = std::move(*parsed_json);
+      network_configs = std::move(parsed_json->GetList());
     }
     managed_config_handler_->SetPolicy(::onc::ONC_SOURCE_DEVICE_POLICY,
                                        std::string(),  // no username hash
@@ -594,10 +595,9 @@ TEST_F(NetworkConnectionHandlerImplTest,
 
   std::string wifi0_service_path = ConfigureService(kConfigWifi0Connectable);
   ASSERT_FALSE(wifi0_service_path.empty());
-  base::Value global_config(base::Value::Type::DICTIONARY);
-  global_config.SetKey(
-      ::onc::global_network_config::kAllowOnlyPolicyWiFiToConnect,
-      base::Value(true));
+  base::Value::Dict global_config;
+  global_config.Set(::onc::global_network_config::kAllowOnlyPolicyWiFiToConnect,
+                    true);
   SetupDevicePolicy("[]", global_config);
   SetupUserPolicy("[]");
   LoginToRegularUser();
@@ -623,7 +623,7 @@ TEST_F(NetworkConnectionHandlerImplTest,
   base::Value::Dict global_config;
   global_config.Set(::onc::global_network_config::kBlockedHexSSIDs,
                     std::move(blocked));
-  SetupDevicePolicy("[]", base::Value(std::move(global_config)));
+  SetupDevicePolicy("[]", global_config);
   SetupUserPolicy("[]");
 
   LoginToRegularUser();
@@ -701,7 +701,8 @@ TEST_F(NetworkConnectionHandlerImplTest,
 TEST_F(NetworkConnectionHandlerImplTest, IgnoreConnectInProgressError_Fails) {
   Init();
 
-  AddCellularServiceWithESimProfile();
+  AddNonConnectablePSimService();
+  SetCellularServiceConnectable();
   SetShillConnectError(shill::kErrorResultInProgress);
   Connect(kTestCellularServicePath);
   EXPECT_TRUE(GetResultAndReset().empty());
@@ -1169,7 +1170,8 @@ TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_AlreadyConnectable) {
   EXPECT_EQ(kSuccessResult, GetResultAndReset());
 }
 
-TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_EnableProfile) {
+TEST_F(NetworkConnectionHandlerImplTest,
+       ESimProfile_EnableProfileAndWaitForAutoconnect) {
   Init();
   AddCellularServiceWithESimProfile();
 
@@ -1177,6 +1179,23 @@ TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_EnableProfile) {
   // connection is initiated, we attempt to enable the profile via Hermes.
   Connect(kTestCellularServicePath);
   SetCellularServiceConnectable();
+  // Set cellular service to connected state.
+  SetCellularServiceState(shill::kStateOnline);
+  EXPECT_EQ(kSuccessResult, GetResultAndReset());
+}
+
+TEST_F(NetworkConnectionHandlerImplTest,
+       ESimProfile_EnableProfileAndAutoconnectTimeout) {
+  Init();
+  AddCellularServiceWithESimProfile();
+
+  // Do not set the service to be connectable before trying to connect. When a
+  // connection is initiated, we attempt to enable the profile via Hermes.
+  Connect(kTestCellularServicePath);
+  SetCellularServiceConnectable();
+  EXPECT_TRUE(GetResultAndReset().empty());
+
+  AdvanceClock(kCellularAutoConnectTimeout);
   EXPECT_EQ(kSuccessResult, GetResultAndReset());
 }
 
@@ -1191,6 +1210,8 @@ TEST_F(NetworkConnectionHandlerImplTest, ESimProfile_StubToShillBacked) {
   // Now, create a non-stub service and make it connectable.
   AddNonConnectableESimService();
   SetCellularServiceConnectable();
+  // Set cellular service to connected state.
+  SetCellularServiceState(shill::kStateOnline);
 
   EXPECT_EQ(kSuccessResult, GetResultAndReset());
 

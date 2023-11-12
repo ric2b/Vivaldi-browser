@@ -9,17 +9,20 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
 #include "chrome/browser/ui/autofill/payments/save_card_ui.h"
+#include "chrome/browser/ui/autofill/payments/save_iban_ui.h"
 #include "chrome/browser/ui/autofill/payments/save_upi_bubble.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/autofill/edit_address_profile_view.h"
 #include "chrome/browser/ui/views/autofill/payments/local_card_migration_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/local_card_migration_icon_view.h"
+#include "chrome/browser/ui/views/autofill/payments/manage_saved_iban_bubble_view.h"
 #include "chrome/browser/ui/views/autofill/payments/offer_notification_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/offer_notification_icon_view.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_failure_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_manage_cards_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/save_card_offer_bubble_views.h"
+#include "chrome/browser/ui/views/autofill/payments/save_iban_bubble_view.h"
 #include "chrome/browser/ui/views/autofill/payments/save_upi_offer_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/virtual_card_enroll_bubble_views.h"
 #include "chrome/browser/ui/views/autofill/payments/virtual_card_enroll_icon_view.h"
@@ -101,6 +104,51 @@ AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowSaveCreditCardBubble(
   bubble->Show(is_user_gesture ? LocationBarBubbleDelegateView::USER_GESTURE
                                : LocationBarBubbleDelegateView::AUTOMATIC);
   return bubble;
+}
+
+AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowIbanBubble(
+    content::WebContents* web_contents,
+    IbanBubbleController* controller,
+    bool is_user_gesture,
+    IbanBubbleType bubble_type) {
+  PageActionIconView* icon_view =
+      toolbar_button_provider_->GetPageActionIconView(
+          PageActionIconType::kSaveIban);
+  DCHECK(icon_view);
+  views::View* anchor_view =
+      toolbar_button_provider_->GetAnchorView(PageActionIconType::kSaveIban);
+
+  // TODO(crbug.com/1416270): Add Show() to AutofillBubbleBase and refactor
+  // below.
+  switch (bubble_type) {
+    case IbanBubbleType::kLocalSave: {
+      SaveIbanBubbleView* bubble =
+          new SaveIbanBubbleView(anchor_view, web_contents, controller);
+
+      DCHECK(bubble);
+      bubble->SetHighlightedButton(icon_view);
+
+      views::BubbleDialogDelegateView::CreateBubble(bubble);
+      bubble->Show(is_user_gesture ? LocationBarBubbleDelegateView::USER_GESTURE
+                                   : LocationBarBubbleDelegateView::AUTOMATIC);
+      return bubble;
+    }
+    case IbanBubbleType::kManageSavedIban: {
+      ManageSavedIbanBubbleView* bubble =
+          new ManageSavedIbanBubbleView(anchor_view, web_contents, controller);
+
+      DCHECK(bubble);
+      bubble->SetHighlightedButton(icon_view);
+
+      views::BubbleDialogDelegateView::CreateBubble(bubble);
+      bubble->Show(is_user_gesture ? LocationBarBubbleDelegateView::USER_GESTURE
+                                   : LocationBarBubbleDelegateView::AUTOMATIC);
+      return bubble;
+    }
+    case IbanBubbleType::kInactive:
+      NOTREACHED();
+      return nullptr;
+  }
 }
 
 AutofillBubbleBase* AutofillBubbleHandlerImpl::ShowLocalCardMigrationBubble(

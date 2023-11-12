@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 
 #include "chrome/browser/chromeos/extensions/printing_metrics/printing_metrics_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
@@ -107,7 +107,7 @@ class PrintingMetricsApiTest : public ExtensionApiTest {
         std::make_unique<ash::CupsPrintJob>(
             chromeos::Printer(), /*job_id=*/0, job_title,
             /*total_page_number=*/1,
-            ::printing::PrintJob::Source::PRINT_PREVIEW,
+            ::printing::PrintJob::Source::kPrintPreview,
             /*source_id=*/"", ash::printing::proto::PrintSettings());
     ash::TestCupsPrintJobManager* print_job_manager =
         static_cast<ash::TestCupsPrintJobManager*>(

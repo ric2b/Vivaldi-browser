@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "base/base_export.h"
-#include "base/callback.h"
 #include "base/dcheck_is_on.h"
+#include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_piece.h"
@@ -54,8 +54,11 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   explicit ThreadPoolImpl(StringPiece histogram_label);
 
   // For testing only. Creates a ThreadPoolImpl with a custom TaskTracker.
+  // If |!use_background_threads|, background threads will run with default
+  // priority.
   ThreadPoolImpl(StringPiece histogram_label,
-                 std::unique_ptr<TaskTrackerImpl> task_tracker);
+                 std::unique_ptr<TaskTrackerImpl> task_tracker,
+                 bool use_background_threads = true);
 
   ThreadPoolImpl(const ThreadPoolImpl&) = delete;
   ThreadPoolImpl& operator=(const ThreadPoolImpl&) = delete;
@@ -76,6 +79,8 @@ class BASE_EXPORT ThreadPoolImpl : public ThreadPoolInstance,
   void EndFence() override;
   void BeginBestEffortFence() override;
   void EndBestEffortFence() override;
+  void BeginFizzlingBlockShutdownTasks() override;
+  void EndFizzlingBlockShutdownTasks() override;
 
   // TaskExecutor:
   bool PostDelayedTask(const Location& from_here,

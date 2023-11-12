@@ -5,10 +5,7 @@
 
 #import <UIKit/UIKit.h>
 
-@protocol VivaldiATBSummeryHeaderViewDelegate
-- (void)didTapAds;
-- (void)didTapTrackers;
-@end
+#import "ios/ui/ad_tracker_blocker/vivaldi_atb_setting_type.h"
 
 // A view to hold the summery of the tracker and blocker blocked for the visited
 // site.
@@ -19,12 +16,8 @@
 - (instancetype)initWithFrame:(CGRect)frame NS_UNAVAILABLE;
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
-// DELEGATE
-@property(nonatomic, weak) id<VivaldiATBSummeryHeaderViewDelegate> delegate;
-
 // SETTERS
-- (void)setValueWithBlockedTrackers:(NSInteger)trackers
-                                ads:(NSInteger)ads;
+- (void)setStatusFromSetting:(ATBSettingType)settingType;
 
 @end
 

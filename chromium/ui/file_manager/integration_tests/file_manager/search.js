@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 import {FilesAppState} from '../files_app_state.js';
-import {addEntries, ENTRIES, getCaller, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
+import {addEntries, ENTRIES, EntryType, getCaller, pending, repeatUntil, RootPath, sendTestMessage, TestEntryInfo} from '../test_util.js';
 import {testcase} from '../testcase.js';
 
-import {remoteCall, setupAndWaitUntilReady} from './background.js';
-import {BASIC_DRIVE_ENTRY_SET, BASIC_LOCAL_ENTRY_SET} from './test_data.js';
+import {navigateWithDirectoryTree, remoteCall, setupAndWaitUntilReady} from './background.js';
+import {BASIC_DRIVE_ENTRY_SET, BASIC_FAKE_ENTRY_SET, BASIC_LOCAL_ENTRY_SET, NESTED_ENTRY_SET} from './test_data.js';
 
 /**
  * Expected files shown in the search results for 'hello'
@@ -18,6 +18,28 @@ import {BASIC_DRIVE_ENTRY_SET, BASIC_LOCAL_ENTRY_SET} from './test_data.js';
 const SEARCH_RESULTS_ENTRY_SET = [
   ENTRIES.hello,
 ];
+
+/**
+ * @param {string} appId The ID that identifies the files app.
+ * @param {string} type The search option type (location, recency, type).
+ * @return {Promise<string>} The text of the element with 'selected-option' ID.
+ */
+async function getSelectedOptionText(appId, type) {
+  // Force refresh of the element by showing the dropdown menu.
+  await remoteCall.callRemoteTestUtil('fakeMouseClick', appId, [
+    [
+      'xf-search-options',
+      `xf-select#${type}-selector`,
+    ],
+  ]);
+  // Fetch the current selected item.
+  const option = await remoteCall.waitForElement(appId, [
+    'xf-search-options',
+    `xf-select#${type}-selector`,
+    '#selected-option',
+  ]);
+  return option.text;
+}
 
 /**
  * Tests searching inside Downloads with results.
@@ -100,7 +122,9 @@ testcase.searchDownloadsClearSearch = async () => {
   // Check that a11y message for clearing the search term has been issued.
   const a11yMessages =
       await remoteCall.callRemoteTestUtil('getA11yAnnounces', appId, []);
-  chrome.test.assertEq(2, a11yMessages.length, 'Missing a11y message');
+  chrome.test.assertEq(
+      2, a11yMessages.length,
+      `Want 2 messages got ${JSON.stringify(a11yMessages)}`);
   chrome.test.assertEq(
       'Search text cleared, showing all files and folders.', a11yMessages[1]);
 };
@@ -312,15 +336,244 @@ testcase.searchQueryLaunchParam = async () => {
 };
 
 /**
- * Checks that the search options are shown as expected.
+ * Checks that changing location options correctly filters search results.
  */
-testcase.searchOptions = async () => {
+testcase.searchWithLocationOptions = async () => {
   // Open Files app on Downloads.
   const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
 
-  // Enter some text in the search box. Minimum one character is needed.
-  await remoteCall.typeSearchText(appId, 'x');
+  // Modify the basic entry set by adding nested directories and
+  // a copy of the hello entry.
+  const nestedHello = ENTRIES.hello.cloneWith({
+    targetPath: 'A/hello.txt',
+  });
+  addEntries(['local'], [ENTRIES.directoryA, nestedHello]);
+
+  // Start in the nested directory, as the default search location
+  // is THIS_FOLDER. Expect to find one hello file. Then search on
+  // THIS_CHROMEBOOK and expect to find two.
+  await navigateWithDirectoryTree(appId, '/My files/Downloads/A');
+
+  // Search for all files with "hello" in their name.
+  await remoteCall.typeSearchText(appId, 'hello');
 
   // Verify that the search options are visible.
   await remoteCall.waitForElement(appId, 'xf-search-options:not([hidden])');
+
+  // Expect only the nested hello to be found.
+  await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows([
+    nestedHello,
+  ]));
+
+  // Click the second button, which is This Chromebook.
+  chrome.test.assertTrue(
+      !!await remoteCall.selectSearchOption(appId, 'location', 2),
+      'Failed to click "This Chromebook" location selector');
+
+  // Expect all hello files to be found.
+  await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows([
+    ENTRIES.hello,
+    nestedHello,
+  ]));
+};
+
+/**
+ * Checks that changing recency options correctly filters search results.
+ */
+testcase.searchWithRecencyOptions = async () => {
+  // Open Files app on Downloads.
+  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+
+  // Modify the basic entry set by adding another hello file with
+  // a recent date. We cannot make it today's date as those dates
+  // are rendered with 'Today' string rather than actual date string.
+  const recentHello = ENTRIES.hello.cloneWith({
+    nameText: 'hello-recent.txt',
+    lastModifiedTime: new Date().toDateString(),
+    targetPath: 'hello-recent.txt',
+  });
+  await addEntries(['local'], [recentHello]);
+  // Unfortunately, today's files use custom date string. Make it so.
+  const todayHello = recentHello.cloneWith({
+    lastModifiedTime: 'Today 12:00 AM',
+  });
+
+  // Search for all files with "hello" in their name.
+  await remoteCall.typeSearchText(appId, 'hello');
+
+  // Expect two files, with no recency restrictions.
+  await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows([
+    ENTRIES.hello,
+    todayHello,
+  ]));
+
+  // Click the fourth button, which is "Last week" option.
+  chrome.test.assertTrue(
+      !!await remoteCall.selectSearchOption(appId, 'recency', 4),
+      'Failed to click "Last week" recency selector');
+
+  // Expect only the recent hello file to be found.
+  await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows([
+    todayHello,
+  ]));
+};
+
+/**
+ * Checks that changing file types options correctly filters local
+ * search results.
+ */
+testcase.searchLocalWithTypeOptions = async () => {
+  // Open Files app on Downloads.
+  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+
+  // Search for all files with "hello" in their name.
+  await remoteCall.typeSearchText(appId, 'o');
+
+  // Expect all basic files, with no type restrictions.
+  await remoteCall.waitForFiles(
+      appId, TestEntryInfo.getExpectedRows(BASIC_LOCAL_ENTRY_SET));
+
+  // Click the fifth button, which is "Video" option.
+  chrome.test.assertTrue(
+      !!await remoteCall.selectSearchOption(appId, 'type', 5),
+      'Failed to click "Videos" type selector');
+
+  // Expect only world, which is a video file.
+  await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows([
+    ENTRIES.world,
+  ]));
+};
+
+/**
+ * Checks that changing file types options correctly filters
+ * Drive search results.
+ */
+testcase.searchDriveWithTypeOptions = async () => {
+  // Open Files app on Downloads.
+  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+
+  // Navigate to Google Drive; make sure we have the desired files.
+  await navigateWithDirectoryTree(appId, '/My Drive');
+  await remoteCall.waitForFiles(
+      appId, TestEntryInfo.getExpectedRows(BASIC_DRIVE_ENTRY_SET));
+
+  // Search the Drive for all files with "b" in their name.
+  await remoteCall.typeSearchText(appId, 'b');
+
+  await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows([
+    ENTRIES.desktop,
+    ENTRIES.beautiful,
+  ]));
+
+  // Click the second button, which is "Audio" option.
+  chrome.test.assertTrue(
+      !!await remoteCall.selectSearchOption(appId, 'type', 2),
+      'Failed to click "Audio" type selector');
+
+  await remoteCall.waitForFiles(appId, TestEntryInfo.getExpectedRows([
+    ENTRIES.beautiful,
+  ]));
+};
+
+/**
+ * Checks that the new search correctly finds files on a USB drive.
+ */
+testcase.searchRemovableDevice = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+  const USB_VOLUME_QUERY = '#directory-tree [volume-type-icon="removable"]';
+
+  // Mount a USB volume.
+  await sendTestMessage({name: 'mountFakeUsb'});
+
+  // Wait for the USB volume to mount.
+  await remoteCall.waitForElement(appId, USB_VOLUME_QUERY);
+
+  // Click to open the USB volume.
+  await navigateWithDirectoryTree(appId, '/fake-usb');
+
+  // Check: the USB files should appear in the file list.
+  const files = TestEntryInfo.getExpectedRows(BASIC_FAKE_ENTRY_SET);
+  await remoteCall.waitForFiles(appId, files, {ignoreLastModifiedTime: true});
+
+  // Search the USB for all files with "hello" in their name.
+  await remoteCall.typeSearchText(appId, 'hello');
+
+  await remoteCall.waitForFiles(
+      appId, TestEntryInfo.getExpectedRows([
+        ENTRIES.hello,
+      ]),
+      {ignoreLastModifiedTime: true});
+};
+
+/**
+ * Checks that the search options are reset to default on folder change.
+ */
+testcase.resetSearchOptionsOnFolderChange = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+
+  // Type something into the search query to see search options.
+  await remoteCall.typeSearchText(appId, 'b');
+
+  // Check the defaults.
+  chrome.test.assertEq(
+      'This folder', await getSelectedOptionText(appId, 'location'));
+  chrome.test.assertEq(
+      'All time', await getSelectedOptionText(appId, 'recency'));
+  chrome.test.assertEq('All types', await getSelectedOptionText(appId, 'type'));
+
+  // Change options.
+  chrome.test.assertTrue(
+      !!await remoteCall.selectSearchOption(appId, 'type', 2),
+      'Failed to change to "Audio" type selector');
+  chrome.test.assertTrue(
+      !!await remoteCall.selectSearchOption(appId, 'recency', 4),
+      'Failed to change to "Last week" recency selector');
+
+  await navigateWithDirectoryTree(appId, '/My files/Downloads/photos');
+
+  // Start search again.
+  await remoteCall.typeSearchText(appId, 'b');
+
+  // Check that we are back to defaults.
+  chrome.test.assertEq(
+      'This folder', await getSelectedOptionText(appId, 'location'));
+  chrome.test.assertEq(
+      'All time', await getSelectedOptionText(appId, 'recency'));
+  chrome.test.assertEq('All types', await getSelectedOptionText(appId, 'type'));
+};
+
+/**
+ * Checks that we are showing the correct message in breadcrumbs when search is
+ * active.
+ */
+testcase.showSearchResultMessageWhenSearching = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DOWNLOADS);
+
+  // Check that we start with My Files
+  const beforeSearchPath =
+      await remoteCall.callRemoteTestUtil('getBreadcrumbPath', appId, []);
+  chrome.test.assertEq('/My files/Downloads', beforeSearchPath);
+
+  // Type something into the search query to start search.
+  await remoteCall.typeSearchText(appId, 'b');
+
+  // Wait for the search to fully expand.
+  await remoteCall.waitForElementLost(appId, '#search-wrapper[collapsed]');
+
+  // Check that the breadcumb shows that we are searching.
+  const duringSearchPath =
+      await remoteCall.callRemoteTestUtil('getBreadcrumbPath', appId, []);
+  chrome.test.assertEq('/Search results', duringSearchPath);
+
+  // Clear and close search.
+  await remoteCall.waitAndClickElement(appId, '#search-box .clear');
+  await remoteCall.waitAndClickElement(appId, '#search-button');
+
+  // Wait for the search to fully close.
+  await remoteCall.waitForElement(appId, '#search-wrapper[collapsed]');
+
+  // Expect the path to return to the original path.
+  const afterSearchPath =
+      await remoteCall.callRemoteTestUtil('getBreadcrumbPath', appId, []);
+  chrome.test.assertEq(beforeSearchPath, afterSearchPath);
 };

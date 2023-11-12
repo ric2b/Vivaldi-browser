@@ -103,4 +103,9 @@ extern NSString* const kToolsMenuWhatsNewId;
 // Open Price Notifications accessibility Identifier.
 extern NSString* const kToolsMenuPriceNotifications;
 
+// Vivaldi
+// About Vivaldi accessibility Identifier.
+extern NSString* const kToolsMenuAboutVivaldiId;
+// End Vivaldi
+
 #endif  // IOS_CHROME_BROWSER_UI_POPUP_MENU_POPUP_MENU_CONSTANTS_H_

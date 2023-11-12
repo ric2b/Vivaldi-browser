@@ -4,7 +4,7 @@
 
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/optional_trace_event.h"
 #include "components/viz/common/features.h"
@@ -24,6 +24,7 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom.h"
 #include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/gfx/geometry/dip_util.h"
 
 namespace content {
@@ -218,7 +219,7 @@ void CrossProcessFrameConnector::SynchronizeVisualProperties(
   render_widget_host->UpdateVisualProperties(propagate);
 }
 
-void CrossProcessFrameConnector::UpdateCursor(const WebCursor& cursor) {
+void CrossProcessFrameConnector::UpdateCursor(const ui::Cursor& cursor) {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
   // UpdateCursor messages are ignored if the root view does not support
   // cursors.
@@ -473,7 +474,8 @@ CrossProcessFrameConnector::GetRootRenderWidgetHostView() {
     return nullptr;
 
   RenderFrameHostImpl* root =
-      current_child_frame_host()->GetOutermostMainFrameOrEmbedder();
+      current_child_frame_host()
+          ->GetOutermostMainFrameOrEmbedderExcludingProspectiveOwners();
   return static_cast<RenderWidgetHostViewBase*>(root->GetView());
 }
 
@@ -483,7 +485,8 @@ CrossProcessFrameConnector::GetParentRenderWidgetHostView() {
   // escape to an embedder.
   RenderFrameHostImpl* parent =
       current_child_frame_host()
-          ? current_child_frame_host()->GetParentOrOuterDocumentOrEmbedder()
+          ? current_child_frame_host()
+                ->GetParentOrOuterDocumentOrEmbedderExcludingProspectiveOwners()
           : nullptr;
   return parent ? static_cast<RenderWidgetHostViewBase*>(parent->GetView())
                 : nullptr;

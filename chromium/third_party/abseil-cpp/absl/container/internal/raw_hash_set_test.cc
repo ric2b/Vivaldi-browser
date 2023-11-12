@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <iostream>
 #include <iterator>
 #include <list>
 #include <map>
@@ -39,8 +40,8 @@
 #include "absl/base/attributes.h"
 #include "absl/base/config.h"
 #include "absl/base/internal/cycleclock.h"
-#include "absl/base/internal/prefetch.h"
 #include "absl/base/internal/raw_logging.h"
+#include "absl/base/prefetch.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/internal/container_memory.h"
@@ -476,27 +477,37 @@ TEST(Table, EmptyFunctorOptimization) {
     size_t dummy;
   };
 
-  if (std::is_empty<HashtablezInfoHandle>::value) {
-    EXPECT_EQ(sizeof(MockTableInfozDisabled),
-              sizeof(raw_hash_set<StringPolicy, StatelessHash,
-                                  std::equal_to<absl::string_view>,
-                                  std::allocator<int>>));
+  struct GenerationData {
+    size_t reserved_growth;
+    GenerationType* generation;
+  };
 
-    EXPECT_EQ(sizeof(MockTableInfozDisabled) + sizeof(StatefulHash),
-              sizeof(raw_hash_set<StringPolicy, StatefulHash,
-                                  std::equal_to<absl::string_view>,
-                                  std::allocator<int>>));
-  } else {
-    EXPECT_EQ(sizeof(MockTable),
-              sizeof(raw_hash_set<StringPolicy, StatelessHash,
-                                  std::equal_to<absl::string_view>,
-                                  std::allocator<int>>));
+// Ignore unreachable-code warning. Compiler thinks one branch of each ternary
+// conditional is unreachable.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunreachable-code"
+#endif
+  constexpr size_t mock_size = std::is_empty<HashtablezInfoHandle>()
+                                   ? sizeof(MockTableInfozDisabled)
+                                   : sizeof(MockTable);
+  constexpr size_t generation_size =
+      SwisstableGenerationsEnabled() ? sizeof(GenerationData) : 0;
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
-    EXPECT_EQ(sizeof(MockTable) + sizeof(StatefulHash),
-              sizeof(raw_hash_set<StringPolicy, StatefulHash,
-                                  std::equal_to<absl::string_view>,
-                                  std::allocator<int>>));
-  }
+  EXPECT_EQ(
+      mock_size + generation_size,
+      sizeof(
+          raw_hash_set<StringPolicy, StatelessHash,
+                       std::equal_to<absl::string_view>, std::allocator<int>>));
+
+  EXPECT_EQ(
+      mock_size + sizeof(StatefulHash) + generation_size,
+      sizeof(
+          raw_hash_set<StringPolicy, StatefulHash,
+                       std::equal_to<absl::string_view>, std::allocator<int>>));
 }
 
 TEST(Table, Empty) {
@@ -854,6 +865,10 @@ void TestDecompose(bool construct_three) {
 }
 
 TEST(Table, Decompose) {
+  if (SwisstableGenerationsEnabled()) {
+    GTEST_SKIP() << "Generations being enabled causes extra rehashes.";
+  }
+
   TestDecompose<DecomposeHash, DecomposeEq>(false);
 
   struct TransparentHashIntOverload {
@@ -892,6 +907,10 @@ struct Modulo1000HashTable
 
 // Test that rehash with no resize happen in case of many deleted slots.
 TEST(Table, RehashWithNoResize) {
+  if (SwisstableGenerationsEnabled()) {
+    GTEST_SKIP() << "Generations being enabled causes extra rehashes.";
+  }
+
   Modulo1000HashTable t;
   // Adding the same length (and the same hash) strings
   // to have at least kMinFullGroups groups
@@ -985,6 +1004,10 @@ TEST(Table, EnsureNonQuadraticAsInRust) {
 }
 
 TEST(Table, ClearBug) {
+  if (SwisstableGenerationsEnabled()) {
+    GTEST_SKIP() << "Generations being enabled causes extra rehashes.";
+  }
+
   IntTable t;
   constexpr size_t capacity = container_internal::Group::kWidth - 1;
   constexpr size_t max_size = capacity / 2 + 1;
@@ -1809,7 +1832,6 @@ TEST(Table, HeterogeneousLookupOverloads) {
   EXPECT_TRUE((VerifyResultOf<CallCount, TransparentTable>()));
 }
 
-// TODO(alkis): Expand iterator tests.
 TEST(Iterator, IsDefaultConstructible) {
   StringTable::iterator i;
   EXPECT_TRUE(i == StringTable::iterator());
@@ -2034,30 +2056,43 @@ bool IsAssertEnabled() {
 }
 
 TEST(TableDeathTest, InvalidIteratorAsserts) {
-  if (!IsAssertEnabled()) GTEST_SKIP() << "Assertions not enabled.";
+  if (!IsAssertEnabled() && !SwisstableGenerationsEnabled())
+    GTEST_SKIP() << "Assertions not enabled.";
 
   IntTable t;
   // Extra simple "regexp" as regexp support is highly varied across platforms.
-  EXPECT_DEATH_IF_SUPPORTED(
-      t.erase(t.end()),
-      "erase.* called on invalid iterator. The iterator might be an "
-      "end.*iterator or may have been default constructed.");
+  EXPECT_DEATH_IF_SUPPORTED(t.erase(t.end()),
+                            "erase.* called on end.. iterator.");
   typename IntTable::iterator iter;
   EXPECT_DEATH_IF_SUPPORTED(
-      ++iter,
-      "operator.* called on invalid iterator. The iterator might be an "
-      "end.*iterator or may have been default constructed.");
+      ++iter, "operator.* called on default-constructed iterator.");
   t.insert(0);
   iter = t.begin();
   t.erase(iter);
-  EXPECT_DEATH_IF_SUPPORTED(
-      ++iter,
-      "operator.* called on invalid iterator. The element might have been "
-      "erased or .*the table might have rehashed.");
+  const char* const kErasedDeathMessage =
+      SwisstableGenerationsEnabled()
+          ? "operator.* called on invalid iterator.*was likely erased"
+          : "operator.* called on invalid iterator.*might have been "
+            "erased.*config=asan";
+  EXPECT_DEATH_IF_SUPPORTED(++iter, kErasedDeathMessage);
 }
 
+// Invalid iterator use can trigger heap-use-after-free in asan,
+// use-of-uninitialized-value in msan, or invalidated iterator assertions.
+constexpr const char* kInvalidIteratorDeathMessage =
+    "heap-use-after-free|use-of-uninitialized-value|invalidated "
+    "iterator|Invalid iterator";
+
+// MSVC doesn't support | in regex.
+#if defined(_MSC_VER)
+constexpr bool kMsvc = true;
+#else
+constexpr bool kMsvc = false;
+#endif
+
 TEST(TableDeathTest, IteratorInvalidAssertsEqualityOperator) {
-  if (!IsAssertEnabled()) GTEST_SKIP() << "Assertions not enabled.";
+  if (!IsAssertEnabled() && !SwisstableGenerationsEnabled())
+    GTEST_SKIP() << "Assertions not enabled.";
 
   IntTable t;
   t.insert(1);
@@ -2070,8 +2105,9 @@ TEST(TableDeathTest, IteratorInvalidAssertsEqualityOperator) {
   t.erase(iter1);
   // Extra simple "regexp" as regexp support is highly varied across platforms.
   const char* const kErasedDeathMessage =
-      "Invalid iterator comparison. The element might have .*been erased or "
-      "the table might have rehashed.";
+      SwisstableGenerationsEnabled()
+          ? "Invalid iterator comparison.*was likely erased"
+          : "Invalid iterator comparison.*might have been erased.*config=asan";
   EXPECT_DEATH_IF_SUPPORTED(void(iter1 == iter2), kErasedDeathMessage);
   EXPECT_DEATH_IF_SUPPORTED(void(iter2 != iter1), kErasedDeathMessage);
   t.erase(iter2);
@@ -2083,15 +2119,21 @@ TEST(TableDeathTest, IteratorInvalidAssertsEqualityOperator) {
   iter1 = t1.begin();
   iter2 = t2.begin();
   const char* const kContainerDiffDeathMessage =
-      "Invalid iterator comparison. The iterators may be from different "
-      ".*containers or the container might have rehashed.";
+      SwisstableGenerationsEnabled()
+          ? "Invalid iterator comparison.*iterators from different hashtables"
+          : "Invalid iterator comparison.*may be from different "
+            ".*containers.*config=asan";
   EXPECT_DEATH_IF_SUPPORTED(void(iter1 == iter2), kContainerDiffDeathMessage);
   EXPECT_DEATH_IF_SUPPORTED(void(iter2 == iter1), kContainerDiffDeathMessage);
 
   for (int i = 0; i < 10; ++i) t1.insert(i);
   // There should have been a rehash in t1.
-  EXPECT_DEATH_IF_SUPPORTED(void(iter1 == t1.begin()),
-                            kContainerDiffDeathMessage);
+  if (kMsvc) return;  // MSVC doesn't support | in regex.
+  const char* const kRehashedDeathMessage =
+      SwisstableGenerationsEnabled()
+          ? kInvalidIteratorDeathMessage
+          : "Invalid iterator comparison.*might have rehashed.*config=asan";
+  EXPECT_DEATH_IF_SUPPORTED(void(iter1 == t1.begin()), kRehashedDeathMessage);
 }
 
 #if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
@@ -2234,6 +2276,109 @@ TEST(Table, AlignOne) {
   for (uint8_t u : t) {
     EXPECT_EQ(verifier.count(u), 1);
   }
+}
+
+TEST(Iterator, InvalidUseCrashesWithSanitizers) {
+  if (!SwisstableGenerationsEnabled()) GTEST_SKIP() << "Generations disabled.";
+  if (kMsvc) GTEST_SKIP() << "MSVC doesn't support | in regexp.";
+
+  IntTable t;
+  // Start with 1 element so that `it` is never an end iterator.
+  t.insert(-1);
+  for (int i = 0; i < 10; ++i) {
+    auto it = t.begin();
+    t.insert(i);
+    EXPECT_DEATH_IF_SUPPORTED(*it, kInvalidIteratorDeathMessage);
+    EXPECT_DEATH_IF_SUPPORTED(void(it == t.begin()),
+                              kInvalidIteratorDeathMessage);
+  }
+}
+
+TEST(Iterator, InvalidUseWithReserveCrashesWithSanitizers) {
+  if (!SwisstableGenerationsEnabled()) GTEST_SKIP() << "Generations disabled.";
+  if (kMsvc) GTEST_SKIP() << "MSVC doesn't support | in regexp.";
+
+  IntTable t;
+  t.reserve(10);
+  t.insert(0);
+  auto it = t.begin();
+  // Reserved growth can't rehash.
+  for (int i = 1; i < 10; ++i) {
+    t.insert(i);
+    EXPECT_EQ(*it, 0);
+  }
+  // ptr will become invalidated on rehash.
+  const int64_t* ptr = &*it;
+
+  // erase decreases size but does not decrease reserved growth so the next
+  // insertion still invalidates iterators.
+  t.erase(0);
+  // The first insert after reserved growth is 0 is guaranteed to rehash when
+  // generations are enabled.
+  t.insert(10);
+  EXPECT_DEATH_IF_SUPPORTED(*it, kInvalidIteratorDeathMessage);
+  EXPECT_DEATH_IF_SUPPORTED(void(it == t.begin()),
+                            kInvalidIteratorDeathMessage);
+  EXPECT_DEATH_IF_SUPPORTED(std::cout << *ptr,
+                            "heap-use-after-free|use-of-uninitialized-value");
+}
+
+TEST(Table, ReservedGrowthUpdatesWhenTableDoesntGrow) {
+  IntTable t;
+  for (int i = 0; i < 8; ++i) t.insert(i);
+  // Want to insert twice without invalidating iterators so reserve.
+  const size_t cap = t.capacity();
+  t.reserve(t.size() + 2);
+  // We want to be testing the case in which the reserve doesn't grow the table.
+  ASSERT_EQ(cap, t.capacity());
+  auto it = t.find(0);
+  t.insert(100);
+  t.insert(200);
+  // `it` shouldn't have been invalidated.
+  EXPECT_EQ(*it, 0);
+}
+
+TEST(Table, InvalidReferenceUseCrashesWithSanitizers) {
+  if (!SwisstableGenerationsEnabled()) GTEST_SKIP() << "Generations disabled.";
+#ifdef ABSL_HAVE_MEMORY_SANITIZER
+  GTEST_SKIP() << "MSan fails to detect some of these rehashes.";
+#endif
+
+  IntTable t;
+  t.insert(0);
+  // Rehashing is guaranteed on every insertion while capacity is less than
+  // RehashProbabilityConstant().
+  int64_t i = 0;
+  while (t.capacity() <= RehashProbabilityConstant()) {
+    // ptr will become invalidated on rehash.
+    const int64_t* ptr = &*t.begin();
+    t.insert(++i);
+    EXPECT_DEATH_IF_SUPPORTED(std::cout << *ptr, "heap-use-after-free") << i;
+  }
+}
+
+TEST(Iterator, InvalidComparisonDifferentTables) {
+  if (!SwisstableGenerationsEnabled()) GTEST_SKIP() << "Generations disabled.";
+
+  IntTable t1, t2;
+  IntTable::iterator default_constructed_iter;
+  // TODO(b/254649633): Currently, we can't detect when end iterators from
+  // different empty tables are compared. If we allocate generations separately
+  // from control bytes, then we could do so.
+  // EXPECT_DEATH_IF_SUPPORTED(void(t1.end() == t2.end()),
+  //                           "Invalid iterator comparison.*empty hashtable");
+  EXPECT_DEATH_IF_SUPPORTED(void(t1.end() == default_constructed_iter),
+                            "Invalid iterator comparison.*default-constructed");
+  t1.insert(0);
+  EXPECT_DEATH_IF_SUPPORTED(void(t1.begin() == t2.end()),
+                            "Invalid iterator comparison.*empty hashtable");
+  EXPECT_DEATH_IF_SUPPORTED(void(t1.begin() == default_constructed_iter),
+                            "Invalid iterator comparison.*default-constructed");
+  t2.insert(0);
+  EXPECT_DEATH_IF_SUPPORTED(void(t1.begin() == t2.end()),
+                            "Invalid iterator comparison.*end.. iterator");
+  EXPECT_DEATH_IF_SUPPORTED(void(t1.begin() == t2.begin()),
+                            "Invalid iterator comparison.*non-end");
 }
 
 }  // namespace

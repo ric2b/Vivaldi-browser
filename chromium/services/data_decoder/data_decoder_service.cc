@@ -6,8 +6,7 @@
 
 #include <memory>
 
-#include "base/bind.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/functional/bind.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
@@ -18,7 +17,6 @@
 #include "services/data_decoder/json_parser_impl.h"
 #include "services/data_decoder/public/mojom/image_decoder.mojom.h"
 #include "services/data_decoder/structured_headers_parser_impl.h"
-#include "services/data_decoder/web_bundler.h"
 #include "services/data_decoder/xml_parser.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -86,16 +84,6 @@ void DataDecoderService::BindWebBundleParserFactory(
     mojo::MakeSelfOwnedReceiver(
         std::make_unique<web_package::WebBundleParserFactory>(),
         std::move(receiver));
-  }
-}
-
-void DataDecoderService::BindWebBundler(
-    mojo::PendingReceiver<mojom::WebBundler> receiver) {
-  if (web_bundler_binder_) {
-    web_bundler_binder_.Run(std::move(receiver));
-  } else {
-    mojo::MakeSelfOwnedReceiver(std::make_unique<WebBundler>(),
-                                std::move(receiver));
   }
 }
 

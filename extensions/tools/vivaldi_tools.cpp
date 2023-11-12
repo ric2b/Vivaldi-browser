@@ -501,7 +501,7 @@ void SetImagePathForProfilePath(const std::string& preferences_path,
     }
   }
   if (!updated) {
-    base::Value dict(base::Value::Type::DICTIONARY);
+    base::Value dict(base::Value::Type::DICT);
     dict.SetKey(kProfilePathKey, base::Value(profile_path));
     dict.SetKey(kImagePathKey, base::Value(avatar_path));
     update_pref_data.Append(std::move(dict));

@@ -26,6 +26,7 @@
 #include "components/autofill/core/browser/data_model/autofill_metadata.h"
 #include "components/autofill/core/browser/data_model/autofill_offer_data.h"
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
+#include "components/autofill/core/browser/data_model/autofill_wallet_usage_data.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/data_model/credit_card_cloud_token_data.h"
 #include "components/autofill/core/browser/payments/payments_customer_data.h"
@@ -45,6 +46,7 @@
 #include "sql/statement.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/origin.h"
 
 using base::Time;
 using sync_pb::EntityMetadata;
@@ -55,8 +57,6 @@ using testing::ElementsAre;
 using testing::UnorderedElementsAre;
 
 namespace autofill {
-
-using structured_address::VerificationStatus;
 
 // So we can compare AutofillKeys with EXPECT_EQ().
 std::ostream& operator<<(std::ostream& os, const AutofillKey& key) {
@@ -1905,6 +1905,8 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
   inputs[0].set_instrument_id(321);
   inputs[0].set_virtual_card_enrollment_state(
       CreditCard::VirtualCardEnrollmentState::UNENROLLED);
+  inputs[0].set_virtual_card_enrollment_type(
+      CreditCard::VirtualCardEnrollmentType::ISSUER);
   inputs[0].set_product_description(u"Fake description");
 
   inputs.push_back(CreditCard(CreditCard::MASKED_SERVER_CARD, "b456"));
@@ -1920,6 +1922,8 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
   inputs[1].set_instrument_id(123);
   inputs[1].set_virtual_card_enrollment_state(
       CreditCard::VirtualCardEnrollmentState::ENROLLED);
+  inputs[1].set_virtual_card_enrollment_type(
+      CreditCard::VirtualCardEnrollmentType::NETWORK);
   inputs[1].set_card_art_url(GURL("https://www.example.com"));
 
   test::SetServerCreditCards(table_.get(), inputs);
@@ -1958,6 +1962,11 @@ TEST_F(AutofillTableTest, SetGetServerCards) {
             outputs[0]->virtual_card_enrollment_state());
   EXPECT_EQ(CreditCard::VirtualCardEnrollmentState::ENROLLED,
             outputs[1]->virtual_card_enrollment_state());
+
+  EXPECT_EQ(CreditCard::VirtualCardEnrollmentType::ISSUER,
+            outputs[0]->virtual_card_enrollment_type());
+  EXPECT_EQ(CreditCard::VirtualCardEnrollmentType::NETWORK,
+            outputs[1]->virtual_card_enrollment_type());
 
   EXPECT_EQ(GURL(), outputs[0]->card_art_url());
   EXPECT_EQ(GURL("https://www.example.com"), outputs[1]->card_art_url());
@@ -2176,6 +2185,8 @@ TEST_F(AutofillTableTest, SetServerCardsData) {
   inputs[0].set_instrument_id(1);
   inputs[0].set_virtual_card_enrollment_state(
       CreditCard::VirtualCardEnrollmentState::ENROLLED);
+  inputs[0].set_virtual_card_enrollment_type(
+      CreditCard::VirtualCardEnrollmentType::ISSUER);
   inputs[0].set_card_art_url(GURL("https://www.example.com"));
   inputs[0].set_product_description(u"Fake description");
 
@@ -2196,6 +2207,9 @@ TEST_F(AutofillTableTest, SetServerCardsData) {
 
   EXPECT_EQ(CreditCard::VirtualCardEnrollmentState::ENROLLED,
             outputs[0]->virtual_card_enrollment_state());
+
+  EXPECT_EQ(CreditCard::VirtualCardEnrollmentType::ISSUER,
+            outputs[0]->virtual_card_enrollment_type());
 
   EXPECT_EQ(CreditCard::Issuer::EXTERNAL_ISSUER, outputs[0]->card_issuer());
   EXPECT_EQ("amex", outputs[0]->issuer_id());
@@ -3223,6 +3237,84 @@ TEST_F(AutofillTableTest, SetAndGetCreditCardOfferData) {
         testing::UnorderedElementsAreArray(
             output_offer_data[output_index]->GetEligibleInstrumentIds()));
   }
+}
+
+TEST_F(AutofillTableTest, SetAndGetVirtualCardUsageData) {
+  // Create test data.
+  VirtualCardUsageData virtual_card_usage_data_1 =
+      test::GetVirtualCardUsageData1();
+  VirtualCardUsageData virtual_card_usage_data_2 =
+      test::GetVirtualCardUsageData2();
+
+  // Create vector of VCN usage data.
+  std::vector<VirtualCardUsageData> virtual_card_usage_data;
+  virtual_card_usage_data.push_back(virtual_card_usage_data_1);
+  virtual_card_usage_data.push_back(virtual_card_usage_data_2);
+
+  table_->SetVirtualCardUsageData(virtual_card_usage_data);
+
+  std::vector<std::unique_ptr<VirtualCardUsageData>> output_data;
+
+  EXPECT_TRUE(table_->GetAllVirtualCardUsageData(&output_data));
+  EXPECT_EQ(virtual_card_usage_data.size(), output_data.size());
+
+  for (const auto& data : virtual_card_usage_data) {
+    // Find output data with corresponding data.
+    auto it = base::ranges::find(output_data, data.instrument_id(),
+                                 &VirtualCardUsageData::instrument_id);
+
+    // Expect to find a usage data match in the vector.
+    EXPECT_NE(it, output_data.end());
+
+    // All corresponding fields must be equal.
+    EXPECT_EQ(data.usage_data_id(), (*it)->usage_data_id());
+    EXPECT_EQ(data.instrument_id(), (*it)->instrument_id());
+    EXPECT_EQ(data.virtual_card_last_four(), (*it)->virtual_card_last_four());
+    EXPECT_EQ(data.merchant_origin().Serialize(),
+              (*it)->merchant_origin().Serialize());
+  }
+}
+
+TEST_F(AutofillTableTest, AddUpdateRemoveVirtualCardUsageData) {
+  // Add a valid VirtualCardUsageData.
+  VirtualCardUsageData virtual_card_usage_data =
+      test::GetVirtualCardUsageData1();
+  EXPECT_TRUE(table_->AddVirtualCardUsageData(virtual_card_usage_data));
+
+  // Get the inserted VirtualCardUsageData.
+  std::string usage_data_id = *virtual_card_usage_data.usage_data_id();
+  std::unique_ptr<VirtualCardUsageData> usage_data =
+      table_->GetVirtualCardUsageData(usage_data_id);
+  ASSERT_TRUE(usage_data);
+  EXPECT_EQ(virtual_card_usage_data, *usage_data);
+
+  // Update the virtual card usage data.
+  VirtualCardUsageData virtual_card_usage_data_update =
+      VirtualCardUsageData(virtual_card_usage_data.usage_data_id(),
+                           virtual_card_usage_data.instrument_id(),
+                           VirtualCardUsageData::VirtualCardLastFour(u"4444"),
+                           virtual_card_usage_data.merchant_origin());
+  EXPECT_TRUE(
+      table_->UpdateVirtualCardUsageData(virtual_card_usage_data_update));
+  usage_data = table_->GetVirtualCardUsageData(usage_data_id);
+  ASSERT_TRUE(usage_data);
+  EXPECT_EQ(virtual_card_usage_data_update, *usage_data);
+
+  // Remove the virtual card usage data.
+  EXPECT_TRUE(table_->RemoveVirtualCardUsageData(usage_data_id));
+  usage_data = table_->GetVirtualCardUsageData(usage_data_id);
+  EXPECT_FALSE(usage_data);
+}
+
+TEST_F(AutofillTableTest, RemoveAllVirtualCardUsageData) {
+  EXPECT_TRUE(
+      table_->AddVirtualCardUsageData(test::GetVirtualCardUsageData1()));
+
+  EXPECT_TRUE(table_->RemoveAllVirtualCardUsageData());
+
+  std::vector<std::unique_ptr<VirtualCardUsageData>> usage_data;
+  EXPECT_TRUE(table_->GetAllVirtualCardUsageData(&usage_data));
+  EXPECT_TRUE(usage_data.empty());
 }
 
 }  // namespace autofill

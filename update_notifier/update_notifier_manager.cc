@@ -13,10 +13,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
@@ -26,7 +26,6 @@
 #include "base/process/launch.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "base/win/message_window.h"
 #include "base/win/registry.h"
@@ -380,7 +379,7 @@ UpdateNotifierManager& UpdateNotifierManager::GetInstance() {
 
 void UpdateNotifierManager::InitEvents(bool& already_runs) {
   DCHECK(!already_runs);
-  main_thread_runner_ = base::ThreadTaskRunnerHandle::Get();
+  main_thread_runner_ = base::SingleThreadTaskRunner::GetCurrentDefault();
 
   // Create the check for updates event first as we use it both to ensure
   // uniqueness and to ask the initial process to do the check from another

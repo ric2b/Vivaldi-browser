@@ -36,9 +36,6 @@
   "app/ios/vivaldi_ios_native_strings.grd": {
     "messages": [40000],
   },
-  "app/mobile_common/vivaldi_mobile_common_native_strings.grd": {
-    "messages": [41000],
-  },
   "app/resources/strings/vivaldi_strings.grd": {
     "messages": [90100],
   },
@@ -103,5 +100,8 @@
   },
   "app/resources/android-tab-ui/vivaldi_android_chrome_tab_ui_strings.grd": {
     "messages": [92100],
+  },
+  "app/resources/android-browser-ui/vivaldi_browser_ui_string.grd": {
+    "messages": [92200],
   }
 }

@@ -12,11 +12,11 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/component_updater/fake_cros_component_manager.h"
-#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/standalone_browser/lacros_availability.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom-test-utils.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "components/account_id/account_id.h"
@@ -181,7 +181,7 @@ class BrowserManagerTest : public testing::Test {
     // been loaded. As such we claim that the Lacros availability is allowed
     // to be set by the user.
     crosapi::browser_util::SetLacrosLaunchSwitchSourceForTest(
-        crosapi::browser_util::LacrosAvailability::kUserChoice);
+        ash::standalone_browser::LacrosAvailability::kUserChoice);
 
     EXPECT_CALL(mock_browser_service_, NewWindow(_, _, _, _)).Times(0);
     EXPECT_CALL(mock_browser_service_, OpenForFullRestore(_)).Times(0);

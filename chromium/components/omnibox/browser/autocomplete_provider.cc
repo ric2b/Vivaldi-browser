@@ -5,13 +5,8 @@
 #include "components/omnibox/browser/autocomplete_provider.h"
 
 #include <algorithm>
-#include <set>
 #include <string>
 
-#include "base/feature_list.h"
-#include "base/i18n/case_conversion.h"
-#include "base/logging.h"
-#include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
@@ -23,8 +18,6 @@
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
 #include "components/omnibox/browser/history_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/scored_history_match.h"
-#include "components/omnibox/common/omnibox_features.h"
 #include "components/url_formatter/url_fixer.h"
 #include "url/gurl.h"
 
@@ -199,8 +192,6 @@ void AutocompleteProvider::DeleteMatchElement(const AutocompleteMatch& match,
 void AutocompleteProvider::AddProviderInfo(ProvidersInfo* provider_info) const {
 }
 
-void AutocompleteProvider::ResetSession() {}
-
 size_t AutocompleteProvider::EstimateMemoryUsage() const {
   return base::trace_event::EstimateMemoryUsage(matches_);
 }
@@ -342,4 +333,26 @@ bool AutocompleteProvider::InExplicitKeywordMode(
                 metrics::OmniboxEventProto::SPACE_IN_MIDDLE) &&
            !input.prevent_inline_autocomplete()) ||
           input.text().size() > keyword.size() + 1);
+}
+
+void AutocompleteProvider::ResizeMatches(size_t max_matches,
+                                         bool ml_scoring_enabled) {
+  if (matches_.size() <= max_matches) {
+    return;
+  }
+
+  // When ML Scoring is not enabled, simply resize the `matches_` list.
+  if (!ml_scoring_enabled) {
+    matches_.resize(max_matches);
+    return;
+  }
+
+  // The provider should pass all match candidates to the controller if ML
+  // scoring is enabled. Mark any matches over `max_matches` with zero relevance
+  // and `culled_by_provider` set to true to simulate the resizing.
+  base::ranges::for_each(std::next(matches_.begin(), max_matches),
+                         matches_.end(), [&](auto& match) {
+                           match.relevance = 0;
+                           match.culled_by_provider = true;
+                         });
 }

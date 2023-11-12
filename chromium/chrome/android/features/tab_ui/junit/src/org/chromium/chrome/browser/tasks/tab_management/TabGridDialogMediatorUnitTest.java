@@ -20,7 +20,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
@@ -29,6 +29,7 @@ import android.text.TextWatcher;
 import android.view.View;
 import android.widget.EditText;
 
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -470,7 +471,7 @@ public class TabGridDialogMediatorUnitTest {
 
         doReturn(true).when(mTabModelSelector).isTabStateInitialized();
         mTabModelObserverCaptor.getValue().didAddTab(
-                newTab, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND);
+                newTab, TabLaunchType.FROM_CHROME_UI, TabCreationState.LIVE_IN_FOREGROUND, false);
 
         assertThat(mModel.get(TabGridPanelProperties.ANIMATION_SOURCE_VIEW), equalTo(null));
         verify(mDialogController).resetWithListOfTabs(null);
@@ -806,7 +807,7 @@ public class TabGridDialogMediatorUnitTest {
         // Animation source view should not be specified.
         assertThat(mModel.get(TabGridPanelProperties.ANIMATION_SOURCE_VIEW), equalTo(null));
         assertThat(mModel.get(TabGridPanelProperties.IS_DIALOG_VISIBLE), equalTo(false));
-        verifyZeroInteractions(mDialogController);
+        verifyNoMoreInteractions(mDialogController);
     }
 
     @Test
@@ -835,7 +836,7 @@ public class TabGridDialogMediatorUnitTest {
         // Animation source view should not be specified.
         assertThat(mModel.get(TabGridPanelProperties.ANIMATION_SOURCE_VIEW), equalTo(null));
         assertThat(mModel.get(TabGridPanelProperties.IS_DIALOG_VISIBLE), equalTo(false));
-        verifyZeroInteractions(mDialogController);
+        verifyNoMoreInteractions(mDialogController);
     }
 
     @Test
@@ -1002,7 +1003,7 @@ public class TabGridDialogMediatorUnitTest {
 
         mMediator.onReset(null);
 
-        verifyZeroInteractions(mDialogController);
+        verifyNoMoreInteractions(mDialogController);
     }
 
     @Test
@@ -1267,6 +1268,26 @@ public class TabGridDialogMediatorUnitTest {
 
         verify(mTabModel).commitTabClosure(eq(TAB1_ID));
         verify(mTabModel).commitTabClosure(eq(TAB2_ID));
+    }
+
+    @Test
+    public void testScrollToTab() {
+        // Mock that tab1, tab2 and newTab are in the same group and newTab is the root tab.
+        TabImpl newTab = prepareTab(TAB3_ID, TAB3_TITLE);
+        List<Tab> tabgroup = new ArrayList<>(Arrays.asList(mTab1, mTab2, newTab));
+        createTabGroup(tabgroup, TAB2_ID);
+
+        // Mock that mTab2 is the current tab for the dialog.
+        doReturn(0).when(mTabGroupModelFilter).indexOf(mTab1);
+        doReturn(mTab2).when(mTabGroupModelFilter).getTabAt(0);
+        doReturn(TAB2_ID).when(mTabModelSelector).getCurrentTabId();
+        doReturn(mTab2).when(mTabModelSelector).getTabById(TAB2_ID);
+        doReturn(tabgroup).when(mTabGroupModelFilter).getRelatedTabList(TAB2_ID);
+
+        // Reset and confirm scroll index.
+        mMediator.onReset(tabgroup);
+
+        Assert.assertEquals(1, mModel.get(TabGridPanelProperties.INITIAL_SCROLL_INDEX).intValue());
     }
 
     @Test

@@ -102,8 +102,9 @@ int RunElevated() {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   for (base::CommandLine::SwitchMap::const_iterator i = switches.begin();
        i != switches.end(); ++i) {
-    if (i->first != kElevateSwitchName)
+    if (i->first != kElevateSwitchName) {
       command_line.AppendSwitchNative(i->first, i->second);
+    }
   }
   for (base::CommandLine::StringVector::const_iterator i = args.begin();
        i != args.end(); ++i) {
@@ -246,7 +247,7 @@ int HostMain(int argc, char** argv) {
 
   remoting::LoadResources("");
 
-  mojo::core::Init();
+  mojo::core::Init(mojo::core::Configuration{.disable_ipcz = true});
 
   // Invoke the entry point.
   int exit_code = main_routine();

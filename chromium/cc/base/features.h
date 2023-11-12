@@ -97,6 +97,14 @@ CC_BASE_EXPORT BASE_DECLARE_FEATURE(kRasterTilePriorityQueue);
 // renderers.
 CC_BASE_EXPORT BASE_DECLARE_FEATURE(kUIEnableSharedImageCacheForGpu);
 
+// When LayerTreeHostImpl::ReclaimResources() is called in background, trigger a
+// flush to actually reclaim resources.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kReclaimResourcesFlushInBackground);
+
+// Try to play a longer list of ops before giving up in solid color analysis for
+// tiles.
+CC_BASE_EXPORT BASE_DECLARE_FEATURE(kMoreAggressiveSolidColorDetection);
+
 }  // namespace features
 
 #endif  // CC_BASE_FEATURES_H_

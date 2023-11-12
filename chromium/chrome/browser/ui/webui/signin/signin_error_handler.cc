@@ -4,8 +4,7 @@
 
 #include "chrome/browser/ui/webui/signin/signin_error_handler.h"
 
-#include "base/bind.h"
-#include "chrome/browser/profiles/profile_manager.h"
+#include "base/functional/bind.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/signin/signin_ui_util.h"
 #include "chrome/browser/ui/browser_list.h"

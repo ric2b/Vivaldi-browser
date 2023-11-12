@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "ash/components/arc/mojom/intent_helper.mojom.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 
@@ -74,10 +74,6 @@ class FakeIntentHelperInstance : public mojom::IntentHelperInstance {
   ~FakeIntentHelperInstance() override;
 
   void AddPreferredPackage(const std::string& package_name) override;
-
-  void AddPreferredApp(const std::string& package_name,
-                       IntentFilter intent_filter,
-                       mojom::IntentInfoPtr intent) override;
 
   void SetVerifiedLinks(const std::vector<std::string>& package_names,
                         bool always_open) override;

@@ -284,6 +284,6 @@ void WebViewFindHelper::FindInfo::SendResponse(bool canceled) {
   find_function_->ForwardResponse(std::move(results));
 }
 
-WebViewFindHelper::FindInfo::~FindInfo() {}
+WebViewFindHelper::FindInfo::~FindInfo() = default;
 
 }  // namespace extensions

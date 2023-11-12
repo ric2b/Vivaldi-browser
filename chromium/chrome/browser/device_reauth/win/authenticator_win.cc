@@ -21,7 +21,6 @@
 #include "base/win/registry.h"
 #include "base/win/scoped_hstring.h"
 #include "base/win/scoped_winrt_initializer.h"
-#include "base/win/windows_version.h"
 #include "chrome/browser/password_manager/password_manager_util_win.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -45,11 +44,6 @@ using ABI::Windows::Security::Credentials::UI::
 using ABI::Windows::Security::Credentials::UI::
     UserConsentVerifierAvailability_NotConfiguredForUser;
 using Microsoft::WRL::ComPtr;
-
-bool ResolveCoreWinRT() {
-  return base::win::ResolveCoreWinRTDelayload() &&
-         base::win::ScopedHString::ResolveCoreWinRTStringDelayload();
-}
 
 BiometricAuthenticationStatusWin ConvertUserConsentVerifierAvailability(
     UserConsentVerifierAvailability availability) {
@@ -95,12 +89,7 @@ void ReportCantCheckAvailability(
 void GetBiometricAvailabilityFromWindows(
     AvailabilityCallback callback,
     scoped_refptr<base::SequencedTaskRunner> thread) {
-  // UserConsentVerifier class is only available in Win 10 onwards.
-  if (base::win::GetVersion() < base::win::Version::WIN10) {
-    ReportCantCheckAvailability(thread, std::move(callback));
-    return;
-  }
-  if (!ResolveCoreWinRT()) {
+  if (!base::win::ResolveCoreWinRTDelayload()) {
     ReportCantCheckAvailability(thread, std::move(callback));
     return;
   }

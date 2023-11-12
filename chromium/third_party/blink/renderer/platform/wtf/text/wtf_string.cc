@@ -27,7 +27,7 @@
 
 #include <algorithm>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
@@ -142,6 +142,13 @@ String String::UpperASCII() const {
   if (!impl_)
     return String();
   return impl_->UpperASCII();
+}
+
+unsigned String::LengthWithStrippedWhiteSpace() const {
+  if (!impl_) {
+    return 0;
+  }
+  return impl_->LengthWithStrippedWhiteSpace();
 }
 
 String String::StripWhiteSpace() const {

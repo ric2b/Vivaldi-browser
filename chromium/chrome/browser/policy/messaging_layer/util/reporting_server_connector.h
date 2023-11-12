@@ -5,17 +5,25 @@
 #ifndef CHROME_BROWSER_POLICY_MESSAGING_LAYER_UTIL_REPORTING_SERVER_CONNECTOR_H_
 #define CHROME_BROWSER_POLICY_MESSAGING_LAYER_UTIL_REPORTING_SERVER_CONNECTOR_H_
 
-#include "base/callback.h"
+#include <memory>
+
+#include "base/feature_list.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
+#include "components/policy/core/common/cloud/cloud_policy_manager.h"
 #include "components/reporting/util/status.h"
 #include "components/reporting/util/statusor.h"
 
 namespace reporting {
+
+class EncryptedReportingClient;
+
+BASE_DECLARE_FEATURE(kEnableEncryptedReportingClientForUpload);
 
 // Singleton wrapper of a client used for uploading events to the reporting
 // server. Enables safe access to the client with an ability to detect when it
@@ -25,8 +33,6 @@ class ReportingServerConnector : public ::policy::CloudPolicyCore::Observer {
  public:
   using ResponseCallback =
       base::OnceCallback<void(StatusOr<base::Value::Dict>)>;
-
-  friend struct base::DefaultSingletonTraits<ReportingServerConnector>;
 
   // RAII class for testing ReportingServerConnector - substitutes cloud policy
   // client instead of getting it from the cloud policy core. Resets client when
@@ -49,6 +55,11 @@ class ReportingServerConnector : public ::policy::CloudPolicyCore::Observer {
                                     ResponseCallback callback);
 
  private:
+  using ResponseCallbackInternal =
+      base::OnceCallback<void(absl::optional<base::Value::Dict>)>;
+
+  friend struct base::DefaultSingletonTraits<ReportingServerConnector>;
+
   // Manages reporting accumulated payload sizes per hour via UMA.
   class PayloadSizePerHourUmaReporter {
    public:
@@ -95,6 +106,9 @@ class ReportingServerConnector : public ::policy::CloudPolicyCore::Observer {
   // Constructor to be used by singleton only.
   ReportingServerConnector();
 
+  // Returns cloud policy manager or Status in case of error.
+  StatusOr<::policy::CloudPolicyManager*> GetUserCloudPolicyManager();
+
   // Returns OK if `CloudPolicyCore` instance is usable, or error status
   // otherwise. If successful, caches the core and registers `this` as its
   // observer.
@@ -104,25 +118,27 @@ class ReportingServerConnector : public ::policy::CloudPolicyCore::Observer {
   // error status otherwise. If successful, caches the client.
   Status EnsureUsableClient();
 
-  // ::policy::CloudPolicyCore::Observer implementation
+  // ::policy::CloudPolicyCore::Observer implementation.
   void OnCoreConnected(::policy::CloudPolicyCore* core) override;
   void OnRefreshSchedulerStarted(::policy::CloudPolicyCore* core) override;
   void OnCoreDisconnecting(::policy::CloudPolicyCore* core) override;
   void OnCoreDestruction(::policy::CloudPolicyCore* core) override;
 
-  // Gets `payload_size_per_hour_uma_reporter_`'s weak pointer.
-  base::WeakPtr<PayloadSizePerHourUmaReporter>
-  GetPayloadSizePerHourUmaReporter();
+  void UploadEncryptedReportInternal(base::Value::Dict merging_payload,
+                                     absl::optional<base::Value::Dict> context,
+                                     ResponseCallbackInternal callback);
 
   // Manages reporting accumulated payload sizes per hour via UMA.
   PayloadSizePerHourUmaReporter payload_size_per_hour_uma_reporter_;
 
-  // Set only in production (on UI task runner), not in tests.
+  // Onwed by CloudPolicyManager. Cached here (only on UI task runner).
   raw_ptr<::policy::CloudPolicyCore> core_ = nullptr;
 
-  // Used by `UploadEncryptedReport` - must be non-null by then.
-  // Set only on UI task runner.
+  // Onwed by CloudPolicyCore. Used by `UploadEncryptedReport` - must be
+  // non-null by then. Cached here (only on UI task runner).
   raw_ptr<::policy::CloudPolicyClient> client_ = nullptr;
+
+  std::unique_ptr<EncryptedReportingClient> encrypted_reporting_client_;
 };
 }  // namespace reporting
 

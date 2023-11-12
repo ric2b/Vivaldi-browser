@@ -10,10 +10,10 @@
 #include <objbase.h>
 #include <wrl/event.h>
 
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/hash/hash.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -168,9 +168,7 @@ class NotificationPlatformBridgeWinImpl
  public:
   explicit NotificationPlatformBridgeWinImpl(
       scoped_refptr<base::SequencedTaskRunner> notification_task_runner)
-      : com_functions_initialized_(
-            base::win::ResolveCoreWinRTDelayload() &&
-            ScopedHString::ResolveCoreWinRTStringDelayload()),
+      : com_functions_initialized_(base::win::ResolveCoreWinRTDelayload()),
         notification_task_runner_(std::move(notification_task_runner)),
         image_retainer_(std::make_unique<NotificationImageRetainer>()) {
     // Delete any remaining temp files in the image folder from the previous

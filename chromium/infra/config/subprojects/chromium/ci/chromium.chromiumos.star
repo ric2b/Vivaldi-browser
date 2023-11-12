@@ -6,27 +6,29 @@
 load("//lib/args.star", "args")
 load("//lib/branches.star", "branches")
 load("//lib/builder_config.star", "builder_config")
+load("//lib/builder_health_indicators.star", "DEFAULT_HEALTH_SPEC")
 load("//lib/builders.star", "goma", "os", "reclient", "sheriff_rotations")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 
 ci.defaults.set(
-    builder_group = "chromium.chromiumos",
     executable = ci.DEFAULT_EXECUTABLE,
+    builder_group = "chromium.chromiumos",
+    pool = ci.DEFAULT_POOL,
     cores = 8,
     os = os.LINUX_DEFAULT,
-    pool = ci.DEFAULT_POOL,
     sheriff_rotations = sheriff_rotations.CHROMIUM,
     tree_closing = True,
-    service_account = ci.DEFAULT_SERVICE_ACCOUNT,
     execution_timeout = ci.DEFAULT_EXECUTION_TIMEOUT,
+    health_spec = DEFAULT_HEALTH_SPEC,
     reclient_instance = reclient.instance.DEFAULT_TRUSTED,
     reclient_jobs = reclient.jobs.DEFAULT,
+    service_account = ci.DEFAULT_SERVICE_ACCOUNT,
 )
 
 consoles.console_view(
     name = "chromium.chromiumos",
-    branch_selector = branches.CROS_LTS_MILESTONE,
+    branch_selector = branches.selector.CROS_LTS_BRANCHES,
     ordering = {
         None: ["default"],
         "default": consoles.ordering(short_names = ["ful", "rel"]),
@@ -36,6 +38,8 @@ consoles.console_view(
 
 ci.builder(
     name = "linux-ash-chromium-generator-rel",
+    schedule = "triggered",
+    triggered_by = [],
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -50,7 +54,6 @@ ci.builder(
         ),
         build_gs_bucket = "chromium-chromiumos-archive",
     ),
-    triggered_by = [],
     sheriff_rotations = args.ignore_default(None),
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
@@ -84,7 +87,6 @@ ci.builder(
             ],
         },
     },
-    schedule = "triggered",
 )
 
 ci.builder(
@@ -193,7 +195,7 @@ ci.builder(
 
 ci.builder(
     name = "chromeos-amd64-generic-dbg",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -227,7 +229,7 @@ ci.builder(
 
 ci.builder(
     name = "chromeos-amd64-generic-lacros-dbg",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -262,7 +264,7 @@ ci.builder(
 
 ci.builder(
     name = "chromeos-amd64-generic-rel",
-    branch_selector = branches.CROS_LTS_MILESTONE,
+    branch_selector = branches.selector.CROS_LTS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -325,7 +327,7 @@ ci.builder(
 
 ci.builder(
     name = "chromeos-arm-generic-rel",
-    branch_selector = branches.CROS_LTS_MILESTONE,
+    branch_selector = branches.selector.CROS_LTS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -352,7 +354,7 @@ ci.builder(
 
 ci.builder(
     name = "chromeos-arm64-generic-rel",
-    branch_selector = branches.CROS_LTS_MILESTONE,
+    branch_selector = branches.selector.CROS_LTS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -377,7 +379,7 @@ ci.builder(
 
 ci.builder(
     name = "chromeos-jacuzzi-rel",
-    branch_selector = branches.CROS_LTS_MILESTONE,
+    branch_selector = branches.selector.CROS_LTS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -414,7 +416,7 @@ ci.builder(
 
 ci.builder(
     name = "chromeos-octopus-rel",
-    branch_selector = branches.CROS_LTS_MILESTONE,
+    branch_selector = branches.selector.CROS_LTS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -510,7 +512,7 @@ ci.builder(
 
 ci.builder(
     name = "lacros-amd64-generic-rel",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -587,8 +589,76 @@ ci.builder(
 )
 
 ci.builder(
+    name = "lacros-arm-generic-rel-skylab",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "chromeos",
+                "checkout_lacros_sdk",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb", "mb_no_luci_auth"],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 32,
+            target_platform = builder_config.target_platform.CHROMEOS,
+            target_cros_boards = "jacuzzi:arm-generic",
+        ),
+        build_gs_bucket = "chromium-chromiumos-archive",
+        skylab_upload_location = builder_config.skylab_upload_location(
+            gs_bucket = "chromium-ci-skylab",
+        ),
+    ),
+    os = os.LINUX_DEFAULT,
+    console_view_entry = consoles.console_view_entry(
+        category = "lacros|arm",
+        short_name = "sky",
+    ),
+    main_console_view = "main",
+    cq_mirrors_console_view = "mirrors",
+    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+)
+
+ci.builder(
+    name = "lacros-arm64-generic-rel-skylab",
+    builder_spec = builder_config.builder_spec(
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+            apply_configs = [
+                "chromeos",
+                "checkout_lacros_sdk",
+            ],
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = ["mb", "mb_no_luci_auth"],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.CHROMEOS,
+            target_cros_boards = "kevin:arm64-generic",
+        ),
+        build_gs_bucket = "chromium-chromiumos-archive",
+        skylab_upload_location = builder_config.skylab_upload_location(
+            gs_bucket = "chromium-ci-skylab",
+        ),
+    ),
+    os = os.LINUX_DEFAULT,
+    console_view_entry = consoles.console_view_entry(
+        category = "lacros|arm64",
+        short_name = "sky",
+    ),
+    main_console_view = "main",
+    cq_mirrors_console_view = "mirrors",
+    reclient_jobs = reclient.jobs.HIGH_JOBS_FOR_CI,
+)
+
+ci.builder(
     name = "lacros-arm-generic-rel",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -626,7 +696,7 @@ ci.builder(
 
 ci.builder(
     name = "lacros-arm64-generic-rel",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -665,7 +735,7 @@ ci.builder(
 
 ci.builder(
     name = "linux-chromeos-dbg",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -695,7 +765,7 @@ ci.builder(
 
 ci.builder(
     name = "linux-chromeos-rel",
-    branch_selector = branches.CROS_LTS_MILESTONE,
+    branch_selector = branches.selector.CROS_LTS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -728,7 +798,7 @@ ci.builder(
 
 ci.builder(
     name = "linux-lacros-builder-rel",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium_no_telemetry_dependencies",
@@ -760,7 +830,8 @@ ci.builder(
 
 ci.thin_tester(
     name = "linux-lacros-tester-rel",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
+    triggered_by = ["linux-lacros-builder-rel"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
         gclient_config = builder_config.gclient_config(
@@ -781,7 +852,6 @@ ci.thin_tester(
         ),
         build_gs_bucket = "chromium-chromiumos-archive",
     ),
-    triggered_by = ["linux-lacros-builder-rel"],
     tree_closing = False,
     console_view_entry = consoles.console_view_entry(
         category = "default",
@@ -793,7 +863,7 @@ ci.thin_tester(
 
 ci.builder(
     name = "linux-lacros-dbg",
-    branch_selector = branches.STANDARD_MILESTONE,
+    branch_selector = branches.selector.CROS_BRANCHES,
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",

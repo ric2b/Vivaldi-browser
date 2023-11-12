@@ -7,8 +7,8 @@
 
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/containers/flat_set.h"
+#include "base/functional/callback_forward.h"
 #include "components/optimization_guide/core/optimization_guide_decision.h"
 #include "components/optimization_guide/proto/common_types.pb.h"
 #include "components/optimization_guide/proto/hints.pb.h"
@@ -18,6 +18,10 @@ class GURL;
 namespace commerce {
 class ShoppingService;
 }  // namespace commerce
+
+namespace image_service {
+class ImageService;
+}  // namespace image_service
 
 namespace optimization_guide {
 
@@ -55,9 +59,9 @@ class NewOptimizationGuideDecider {
   virtual ~NewOptimizationGuideDecider() = default;
 
  private:
-  // ShoppingService is a friend class since it is a consumer of the
-  // CanApplyOptimizationOnDemand API.
+  // These friend are consumers of the CanApplyOptimizationOnDemand API.
   friend class commerce::ShoppingService;
+  friend class image_service::ImageService;
 
   // Invokes |callback| with the decision for all types contained in
   // |optimization_types| for each URL contained in |urls|, when sufficient

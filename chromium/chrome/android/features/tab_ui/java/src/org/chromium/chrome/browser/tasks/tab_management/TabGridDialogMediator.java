@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.tasks.tab_management;
 
-import static org.chromium.chrome.browser.tasks.tab_management.TabSwitcherMediator.INITIAL_SCROLL_INDEX_OFFSET_GTS;
-
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
@@ -21,7 +19,6 @@ import androidx.appcompat.content.res.AppCompatResources;
 import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.share.ChromeShareExtras;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
@@ -43,6 +40,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabSelectionEditorAction
 import org.chromium.chrome.browser.tasks.tab_management.TabSelectionEditorAction.IconPosition;
 import org.chromium.chrome.browser.tasks.tab_management.TabSelectionEditorAction.ShowMode;
 import org.chromium.chrome.browser.tasks.tab_management.TabSelectionEditorCoordinator.TabSelectionEditorController;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiMetricsHelper.TabSelectionEditorOpenMetricGroups;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.tab_ui.R;
@@ -67,7 +65,8 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
  * for dialog show/hide.
  */
 public class TabGridDialogMediator
-        implements SnackbarManager.SnackbarController, TabGridDialogView.VisibilityListener {
+        implements SnackbarManager.SnackbarController, TabGridDialogView.VisibilityListener,
+                   TabGridItemTouchHelperCallback.OnLongPressTabItemEventListener {
     /**
      * Defines an interface for a {@link TabGridDialogMediator} to control dialog.
      */
@@ -169,8 +168,8 @@ public class TabGridDialogMediator
         // Register for tab model.
         mTabModelObserver = new TabModelObserver() {
             @Override
-            public void didAddTab(
-                    Tab tab, @TabLaunchType int type, @TabCreationState int creationState) {
+            public void didAddTab(Tab tab, @TabLaunchType int type,
+                    @TabCreationState int creationState, boolean markedForSelection) {
                 if (!mTabModelSelector.isTabStateInitialized()) {
                     return;
                 }
@@ -315,20 +314,9 @@ public class TabGridDialogMediator
                     mModel.set(TabGridPanelProperties.IS_KEYBOARD_VISIBLE, false);
                 }
                 mModel.set(TabGridPanelProperties.IS_TITLE_TEXT_FOCUSED, false);
-                List<Tab> tabs = getRelatedTabs(mCurrentTabId);
-                // Setup dialog selection editor.
-                setupDialogSelectionEditor();
-                if (mTabSelectionEditorControllerSupplier.get() != null) {
-                    boolean v2Enabled =
-                            TabUiFeatureUtilities.isTabSelectionEditorV2Enabled(mContext);
-                    mTabSelectionEditorControllerSupplier.get().show(tabs,
-                            /*preSelectedTabCount=*/0,
-                            v2Enabled ? mRecyclerViewPositionSupplier.get() : null);
-                    if (v2Enabled) {
-                        RecordUserAction.record("TabMultiSelectV2.OpenFromDialog");
-                    } else {
-                        RecordUserAction.record("TabMultiSelect.OpenFromDialog");
-                    }
+                if (setupAndShowTabSelectionEditorV2(mCurrentTabId)) {
+                    TabUiMetricsHelper.recordSelectionEditorOpenMetrics(
+                            TabSelectionEditorOpenMetricGroups.OPEN_FROM_DIALOG, mContext);
                 }
             } else if (result == R.id.share_tab_group) {
                 Tab tab = mTabModelSelector.getTabById(mCurrentTabId);
@@ -414,10 +402,8 @@ public class TabGridDialogMediator
     public void finishedHidingDialogView() {
         mDialogController.resetWithListOfTabs(null);
         mDialogController.postHiding();
-        if (ChromeFeatureList.sDiscardOccludedBitmaps.isEnabled()) {
-            // Purge the bitmap reference in the animation.
-            mModel.set(TabGridPanelProperties.ANIMATION_SOURCE_VIEW, null);
-        }
+        // Purge the bitmap reference in the animation.
+        mModel.set(TabGridPanelProperties.ANIMATION_SOURCE_VIEW, null);
     }
 
     void onReset(@Nullable List<Tab> tabs) {
@@ -444,10 +430,8 @@ public class TabGridDialogMediator
         } else if (mModel.get(TabGridPanelProperties.IS_DIALOG_VISIBLE)) {
             mModel.set(TabGridPanelProperties.IS_DIALOG_VISIBLE, false);
             mDialogController.postHiding();
-            if (ChromeFeatureList.sDiscardOccludedBitmaps.isEnabled()) {
-                // Purge the bitmap reference in the animation.
-                mModel.set(TabGridPanelProperties.ANIMATION_SOURCE_VIEW, null);
-            }
+            // Purge the bitmap reference in the animation.
+            mModel.set(TabGridPanelProperties.ANIMATION_SOURCE_VIEW, null);
         }
     }
 
@@ -547,8 +531,7 @@ public class TabGridDialogMediator
         }
         List<Tab> relatedTabs = getRelatedTabs(mCurrentTabId);
         Tab currentTab = mTabModelSelector.getTabById(mCurrentTabId);
-        int initialPosition =
-                Math.max(relatedTabs.indexOf(currentTab) - INITIAL_SCROLL_INDEX_OFFSET_GTS, 0);
+        int initialPosition = relatedTabs.indexOf(currentTab);
         mModel.set(TabGridPanelProperties.INITIAL_SCROLL_INDEX, initialPosition);
     }
 
@@ -781,6 +764,26 @@ public class TabGridDialogMediator
                 model.commitTabClosure(tab.getId());
             }
         }
+    }
+
+    // OnLongPressTabItemEventListener implementation
+    @Override
+    public void onLongPressEvent(int tabId) {
+        if (setupAndShowTabSelectionEditorV2(tabId)) {
+            RecordUserAction.record("TabMultiSelectV2.OpenLongPressInDialog");
+        }
+    }
+
+    private boolean setupAndShowTabSelectionEditorV2(int currentTabId) {
+        if (mTabSelectionEditorControllerSupplier == null) return false;
+
+        List<Tab> tabs = getRelatedTabs(currentTabId);
+        // Setup dialog selection editor.
+        setupDialogSelectionEditor();
+        boolean v2Enabled = TabUiFeatureUtilities.isTabSelectionEditorV2Enabled(mContext);
+        mTabSelectionEditorControllerSupplier.get().show(tabs,
+                /*preSelectedTabCount=*/0, v2Enabled ? mRecyclerViewPositionSupplier.get() : null);
+        return true;
     }
 
     /**

@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/check.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/test/test_cookie_manager.h"
@@ -32,16 +31,6 @@ void TestSigninClient::DoFinalInit() {}
 
 PrefService* TestSigninClient::GetPrefs() {
   return pref_service_;
-}
-
-bool TestSigninClient::IsClearPrimaryAccountAllowed() const {
-  return is_clear_primary_account_allowed_ == SignoutDecision::ALLOW;
-}
-
-void TestSigninClient::PreSignOut(
-    base::OnceCallback<void(SignoutDecision)> on_signout_decision_reached,
-    signin_metrics::ProfileSignout signout_source_metric) {
-  std::move(on_signout_decision_reached).Run(is_clear_primary_account_allowed_);
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>

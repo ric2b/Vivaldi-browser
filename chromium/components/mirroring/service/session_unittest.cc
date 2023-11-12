@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
@@ -31,6 +31,7 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/ip_address.h"
+#include "services/network/public/mojom/clear_data_filter.mojom.h"
 #include "services/viz/public/cpp/gpu/gpu.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -327,6 +328,15 @@ class SessionTest : public mojom::ResourceProvider,
     Mock::VerifyAndClear(this);
   }
 
+  void RemotePlaybackSessionTimeOut() {
+    EXPECT_TRUE(video_host_);
+    EXPECT_CALL(*video_host_, OnStopped());
+    EXPECT_CALL(*this, DidStop());
+    task_environment_.AdvanceClock(base::Seconds(5));
+    task_environment_.RunUntilIdle();
+    Mock::VerifyAndClear(this);
+  }
+
   void CaptureOneVideoFrame() {
     ASSERT_EQ(cast_mode_, "mirroring");
     ASSERT_TRUE(video_host_);
@@ -386,6 +396,9 @@ class SessionTest : public mojom::ResourceProvider,
     EXPECT_CALL(*this, OnOutboundMessage("GET_CAPABILITIES")).Times(0);
     EXPECT_CALL(*this, OnOutboundMessage("OFFER"))
         .WillOnce(InvokeWithoutArgs(&run_loop, &base::RunLoop::Quit));
+    if (is_remote_playback_) {
+      EXPECT_TRUE(video_host_ && video_host_->paused());
+    }
     remoter_->Start();
     run_loop.Run();
     task_environment_.RunUntilIdle();
@@ -478,7 +491,8 @@ class SessionTest : public mojom::ResourceProvider,
   std::unique_ptr<FakeVideoCaptureHost> video_host_;
 
  private:
-  base::test::TaskEnvironment task_environment_;
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   const net::IPEndPoint receiver_endpoint_ =
       media::cast::test::GetFreeLocalPort();
   mojo::Receiver<mojom::ResourceProvider> resource_provider_receiver_{this};
@@ -629,6 +643,12 @@ TEST_F(SessionTest, SwitchSourceTabFromRemoting) {
   RemotingStarted();
   SwitchSourceTab();
   StopSession();
+}
+
+TEST_F(SessionTest, StartRemotePlaybackTimeOut) {
+  CreateSession(SessionType::AUDIO_AND_VIDEO, true);
+  StartSession();
+  RemotePlaybackSessionTimeOut();
 }
 
 }  // namespace mirroring

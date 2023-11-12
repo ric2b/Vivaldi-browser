@@ -88,10 +88,17 @@ class COMPONENT_EXPORT(DEVICE_FIDO) AuthenticatorMakeCredentialResponse {
   // nullopt for cases where we cannot determine the transport (Windows).
   absl::optional<FidoTransportProtocol> transport_used;
 
-  // The large blob key associated to the credential. This value is only
-  // returned if the credential is created with the largeBlobKey extension on a
-  // capable authenticator.
-  absl::optional<std::array<uint8_t, kLargeBlobKeyLength>> large_blob_key;
+  // Whether the credential that was created has an associated large blob key or
+  // supports the largeBlob extension. This can only be true if the credential
+  // is created with the largeBlob or largeBlobKey extension on a capable
+  // authenticator.
+  absl::optional<LargeBlobSupportType> large_blob_type;
+
+  // Whether a PRF is configured for this credential. This only reflects the
+  // output of the `prf` extension. Any output from the `hmac-secret` extension
+  // is in the authenticator data. However, note that the WebAuthn-level prf
+  // extension may be using the `hmac-secret` extension at the CTAP layer.
+  bool prf_enabled = false;
 };
 
 // Through cbor::Writer, produces a CTAP style CBOR-encoded byte array

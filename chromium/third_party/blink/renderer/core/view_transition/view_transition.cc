@@ -116,23 +116,27 @@ void ViewTransition::ScriptBoundState::HandlePromise(
       break;
     case Response::kRejectAbort: {
       ScriptState::Scope scope(script_state);
-      property->Reject(V8ThrowDOMException::CreateOrEmpty(
-          script_state->GetIsolate(), DOMExceptionCode::kAbortError,
-          kAbortedMessage));
+      auto value = ScriptValue::From(
+          script_state, MakeGarbageCollected<DOMException>(
+                            DOMExceptionCode::kAbortError, kAbortedMessage));
+      property->Reject(value);
       break;
     }
     case Response::kRejectInvalidState: {
       ScriptState::Scope scope(script_state);
-      property->Reject(V8ThrowDOMException::CreateOrEmpty(
-          script_state->GetIsolate(), DOMExceptionCode::kInvalidStateError,
-          kInvalidStateMessage));
+      auto value = ScriptValue::From(
+          script_state,
+          MakeGarbageCollected<DOMException>(
+              DOMExceptionCode::kInvalidStateError, kInvalidStateMessage));
+      property->Reject(value);
       break;
     }
     case Response::kRejectTimeout: {
       ScriptState::Scope scope(script_state);
-      property->Reject(V8ThrowDOMException::CreateOrEmpty(
-          script_state->GetIsolate(), DOMExceptionCode::kTimeoutError,
-          kTimeoutMessage));
+      auto value = ScriptValue::From(
+          script_state, MakeGarbageCollected<DOMException>(
+                            DOMExceptionCode::kTimeoutError, kTimeoutMessage));
+      property->Reject(value);
       break;
     }
   }
@@ -297,8 +301,8 @@ void ViewTransition::SkipTransitionInternal(
     }
 
     // If we haven't run the dom change callback yet, schedule a task to do so.
-    // The finished promise will propagate the result of the domUpdated promise
-    // when this callback runs.
+    // The finished promise will propagate the result of the updateCallbackDone
+    // promise when this callback runs.
     if (static_cast<int>(state_) <
         static_cast<int>(State::kDOMCallbackRunning)) {
       DCHECK(!dom_callback_succeeded_);
@@ -311,7 +315,7 @@ void ViewTransition::SkipTransitionInternal(
     } else if (static_cast<int>(state_) >=
                static_cast<int>(State::kDOMCallbackFinished)) {
       // If the DOM callback finished and there was a failure then the finished
-      // promise should have been rejected with domUpdated.
+      // promise should have been rejected with updateCallbackDone.
       if (!dom_callback_succeeded_) {
         DCHECK_EQ(script_bound_state_->finished_promise_property->GetState(),
                   PromiseProperty::State::kRejected);
@@ -364,7 +368,7 @@ ScriptPromise ViewTransition::ready() const {
       script_bound_state_->script_state->World());
 }
 
-ScriptPromise ViewTransition::domUpdated() const {
+ScriptPromise ViewTransition::updateCallbackDone() const {
   DCHECK(script_bound_state_);
   return script_bound_state_->dom_updated_promise_property->Promise(
       script_bound_state_->script_state->World());
@@ -495,17 +499,24 @@ void ViewTransition::ProcessCurrentState() {
     switch (state_) {
       // Initial state: nothing to do, just advance the state
       case State::kInitial:
+        // We require a new effect node to be generated for the LayoutView when
+        // a transition is not in terminal state. Dirty paint to ensure
+        // generation of this effect node.
+        if (auto* layout_view = document_->GetLayoutView()) {
+          layout_view->SetNeedsPaintPropertyUpdate();
+        }
+
         process_next_state = AdvanceTo(State::kCaptureTagDiscovery);
         DCHECK(!process_next_state);
         break;
 
       // Update the lifecycle if needed and discover the elements (deferred to
-      // AddSharedElementsFromCSS).
+      // AddTransitionElementsFromCSS).
       case State::kCaptureTagDiscovery:
         DCHECK(in_main_lifecycle_update_);
         DCHECK_GE(document_->Lifecycle().GetState(),
                   DocumentLifecycle::kCompositingInputsClean);
-        style_tracker_->AddSharedElementsFromCSS();
+        style_tracker_->AddTransitionElementsFromCSS();
         process_next_state = AdvanceTo(State::kCaptureRequestPending);
         DCHECK(process_next_state);
         break;
@@ -526,6 +537,9 @@ void ViewTransition::ProcessCurrentState() {
                                     MakeUnwrappingCrossThreadHandle(this)))));
 
         if (document_->GetFrame()->IsLocalRoot()) {
+          // We need to ensure commits aren't deferred since we rely on commits
+          // to send directives to the compositor and initiate pause of
+          // rendering after one frame.
           document_->GetPage()->GetChromeClient().StopDeferringCommits(
               *document_->GetFrame(),
               cc::PaintHoldingCommitTrigger::kViewTransition);
@@ -607,7 +621,7 @@ void ViewTransition::ProcessCurrentState() {
             DocumentUpdateReason::kViewTransition);
         DCHECK_GE(document_->Lifecycle().GetState(),
                   DocumentLifecycle::kPrePaintClean);
-        style_tracker_->AddSharedElementsFromCSS();
+        style_tracker_->AddTransitionElementsFromCSS();
         process_next_state = AdvanceTo(State::kAnimateRequestPending);
         DCHECK(process_next_state);
         break;
@@ -682,7 +696,7 @@ void ViewTransition::Trace(Visitor* visitor) const {
 
 bool ViewTransition::MatchForOnlyChild(
     PseudoId pseudo_id,
-    AtomicString view_transition_name) const {
+    const AtomicString& view_transition_name) const {
   if (!style_tracker_)
     return false;
   return style_tracker_->MatchForOnlyChild(pseudo_id, view_transition_name);
@@ -763,16 +777,16 @@ void ViewTransition::NotifyDOMCallbackFinished(bool success,
     if (IsDone())
       script_bound_state_->finished_promise_property->ResolveWithUndefined();
   } else {
-    script_bound_state_->dom_updated_promise_property->Reject(value.V8Value());
+    script_bound_state_->dom_updated_promise_property->Reject(value);
 
-    // The ready promise rejects with the value of domUpdated callback if it's
-    // skipped because of an error in the callback.
+    // The ready promise rejects with the value of updateCallbackDone callback
+    // if it's skipped because of an error in the callback.
     if (!IsDone())
-      script_bound_state_->ready_promise_property->Reject(value.V8Value());
+      script_bound_state_->ready_promise_property->Reject(value);
 
     // If the domUpdate callback fails the transition is skipped. The finish
-    // promise should mirror the result of domUpdated.
-    script_bound_state_->finished_promise_property->Reject(value.V8Value());
+    // promise should mirror the result of updateCallbackDone.
+    script_bound_state_->finished_promise_property->Reject(value);
   }
 
   dom_callback_succeeded_ = success;
@@ -784,7 +798,7 @@ void ViewTransition::NotifyDOMCallbackFinished(bool success,
   ProcessCurrentState();
 }
 
-bool ViewTransition::NeedsSharedElementEffectNode(
+bool ViewTransition::NeedsViewTransitionEffectNode(
     const LayoutObject& object) const {
   // Layout view always needs an effect node, even if root itself is not
   // transitioning. The reason for this is that we want the root to have an
@@ -793,9 +807,10 @@ bool ViewTransition::NeedsSharedElementEffectNode(
   if (IsA<LayoutView>(object))
     return !IsTerminalState(state_);
 
-  // Otherwise check if the layout object has an active shared element.
+  // Otherwise check if the layout object has an active transition element.
   auto* element = DynamicTo<Element>(object.GetNode());
-  return element && style_tracker_ && style_tracker_->IsSharedElement(element);
+  return element && style_tracker_ &&
+         style_tracker_->IsTransitionElement(element);
 }
 
 bool ViewTransition::IsRepresentedViaPseudoElements(
@@ -807,7 +822,7 @@ bool ViewTransition::IsRepresentedViaPseudoElements(
     return style_tracker_->IsRootTransitioning();
 
   auto* element = DynamicTo<Element>(object.GetNode());
-  return element && style_tracker_->IsSharedElement(element);
+  return element && style_tracker_->IsTransitionElement(element);
 }
 
 PaintPropertyChangeType ViewTransition::UpdateEffect(
@@ -815,35 +830,32 @@ PaintPropertyChangeType ViewTransition::UpdateEffect(
     const EffectPaintPropertyNodeOrAlias& current_effect,
     const ClipPaintPropertyNodeOrAlias* current_clip,
     const TransformPaintPropertyNodeOrAlias* current_transform) {
-  DCHECK(NeedsSharedElementEffectNode(object));
+  DCHECK(NeedsViewTransitionEffectNode(object));
   DCHECK(current_transform);
   DCHECK(current_clip);
 
   EffectPaintPropertyNode::State state;
-  state.direct_compositing_reasons =
-      CompositingReason::kViewTransitionSharedElement;
+  state.direct_compositing_reasons = CompositingReason::kViewTransitionElement;
   state.local_transform_space = current_transform;
   state.output_clip = current_clip;
-  state.view_transition_shared_element_id =
-      ViewTransitionElementId(document_tag_);
+  state.view_transition_element_id = ViewTransitionElementId(document_tag_);
   state.compositor_element_id = CompositorElementIdFromUniqueObjectId(
-      object.UniqueId(),
-      CompositorElementIdNamespace::kSharedElementTransition);
+      object.UniqueId(), CompositorElementIdNamespace::kViewTransitionElement);
   auto* element = DynamicTo<Element>(object.GetNode());
   if (!element) {
     // The only non-element participant is the layout view.
     DCHECK(object.IsLayoutView());
 
     style_tracker_->UpdateRootIndexAndSnapshotId(
-        state.view_transition_shared_element_id,
+        state.view_transition_element_id,
         state.view_transition_element_resource_id);
-    DCHECK(state.view_transition_shared_element_id.valid() ||
+    DCHECK(state.view_transition_element_id.valid() ||
            !style_tracker_->IsRootTransitioning());
     return style_tracker_->UpdateRootEffect(std::move(state), current_effect);
   }
 
   style_tracker_->UpdateElementIndicesAndSnapshotId(
-      element, state.view_transition_shared_element_id,
+      element, state.view_transition_element_id,
       state.view_transition_element_resource_id);
   return style_tracker_->UpdateEffect(element, std::move(state),
                                       current_effect);
@@ -851,7 +863,7 @@ PaintPropertyChangeType ViewTransition::UpdateEffect(
 
 EffectPaintPropertyNode* ViewTransition::GetEffect(
     const LayoutObject& object) const {
-  DCHECK(NeedsSharedElementEffectNode(object));
+  DCHECK(NeedsViewTransitionEffectNode(object));
 
   auto* element = DynamicTo<Element>(object.GetNode());
   if (!element)
@@ -917,18 +929,18 @@ void ViewTransition::WillCommitCompositorFrame() {
     PauseRendering();
 }
 
-gfx::Rect ViewTransition::GetSnapshotViewportRect() const {
+gfx::Size ViewTransition::GetSnapshotRootSize() const {
   if (!style_tracker_)
-    return gfx::Rect();
+    return gfx::Size();
 
-  return style_tracker_->GetSnapshotViewportRect();
+  return style_tracker_->GetSnapshotRootSize();
 }
 
-gfx::Vector2d ViewTransition::GetRootSnapshotPaintOffset() const {
+gfx::Vector2d ViewTransition::GetFrameToSnapshotRootOffset() const {
   if (!style_tracker_)
     return gfx::Vector2d();
 
-  return style_tracker_->GetRootSnapshotPaintOffset();
+  return style_tracker_->GetFrameToSnapshotRootOffset();
 }
 
 void ViewTransition::PauseRendering() {
@@ -944,8 +956,7 @@ void ViewTransition::PauseRendering() {
                                     this);
   const base::TimeDelta kTimeout = [this]() {
     if (auto* settings = document_->GetFrame()->GetContentSettingsClient();
-        settings &&
-        settings->IncreaseSharedElementTransitionCallbackTimeout()) {
+        settings && settings->IncreaseViewTransitionCallbackTimeout()) {
       return base::Seconds(15);
     } else {
       return base::Seconds(4);
@@ -984,11 +995,11 @@ void ViewTransition::AtMicrotask(ScriptBoundState::Response response,
                     WrapPersistent(property)));
 }
 
-void ViewTransition::WillBeginMainFrame() {
+void ViewTransition::NotifyRenderingHasBegun() {
   if (state_ != State::kWaitForRenderBlock)
     return;
 
-  // WillBeginMainFrame() implies that rendering has started. If we were waiting
+  // This function implies that rendering has started. If we were waiting
   // for render-blocking resources to be loaded, they must have been fetched (or
   // timed out) before rendering is started.
   DCHECK(document_->RenderingHasBegun());

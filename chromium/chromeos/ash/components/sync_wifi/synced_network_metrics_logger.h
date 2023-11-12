@@ -34,6 +34,8 @@ const char kConnectionResultManualHistogram[] =
 
 const char kApplyFailureReasonHistogram[] =
     "Network.Wifi.Synced.UpdateOperation.FailureReason";
+const char kApplyGenerateLocalNetworkConfigHistogram[] =
+    "Network.Wifi.Synced.UpdateOperation.GenerateLocalNetworkConfig.Result";
 const char kApplyResultHistogram[] =
     "Network.Wifi.Synced.UpdateOperation.Result";
 const char kZeroNetworksSyncedReasonHistogram[] =
@@ -114,6 +116,7 @@ class SyncedNetworkMetricsLogger : public NetworkConnectionObserver,
   void RecordApplyNetworkFailureReason(ApplyNetworkFailureReason error_enum,
                                        const std::string& error_string);
   void RecordApplyNetworkSuccess();
+  void RecordApplyGenerateLocalNetworkConfig(bool success);
   void RecordTotalCount(int count);
   void RecordZeroNetworksEligibleForSync(
       base::flat_set<NetworkEligibilityStatus>
@@ -128,7 +131,7 @@ class SyncedNetworkMetricsLogger : public NetworkConnectionObserver,
   void OnConnectErrorGetProperties(
       const std::string& error_name,
       const std::string& service_path,
-      absl::optional<base::Value> shill_properties);
+      absl::optional<base::Value::Dict> shill_properties);
 
   bool IsEligible(const NetworkState* network);
 

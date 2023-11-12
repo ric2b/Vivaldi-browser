@@ -16,6 +16,10 @@ const UIEdgeInsets titleLabelPadding =
     UIEdgeInsetsMake(0.f, 4.f, 0.f, 4.f);
 const CGFloat titleLabelBottomPadding = 6.f;
 
+// Padding for favicon fallback label
+const UIEdgeInsets faviconFallbackLabelPadding =
+    UIEdgeInsetsMake(2.f, 2.f, 2.f, 2.f);
+
 // Preview mask constants
 const UIEdgeInsets titleLabelMaskViewPadding =
     UIEdgeInsetsMake(0.f, 8.f, 0.f, 8.f);
@@ -34,6 +38,8 @@ const CGSize faviconMaskSizeiPad = CGSizeMake(16.f, 16.f);
 @property(nonatomic,weak) UIView* titleLabelMaskView;
 // Imageview for the favicon.
 @property(nonatomic,weak) UIImageView* faviconView;
+// The fallback label when there's no favicon available.
+@property(nonatomic,weak) UILabel* fallbackFaviconLabel;
 // Bottom constraint for title label
 @property(nonatomic,strong) NSLayoutConstraint* titleLabelBottomConstraint;
 // Bottom constraint for title label mask for iPhone
@@ -54,6 +60,7 @@ const CGSize faviconMaskSizeiPad = CGSizeMake(16.f, 16.f);
 @synthesize titleLabel = _titleLabel;
 @synthesize titleLabelMaskView = _titleLabelMaskView;
 @synthesize faviconView = _faviconView;
+@synthesize fallbackFaviconLabel = _fallbackFaviconLabel;
 @synthesize titleLabelBottomConstraint = _titleLabelBottomConstraint;
 @synthesize titleLabelMaskBottomConstraint = _titleLabelMaskBottomConstraint;
 @synthesize titleLabelMaskBottomConstraintiPad =
@@ -76,6 +83,9 @@ const CGSize faviconMaskSizeiPad = CGSizeMake(16.f, 16.f);
   self.titleLabel.text = nil;
   self.faviconView.image = nil;
   self.titleLabelMaskView.hidden = YES;
+  self.faviconView.backgroundColor = UIColor.clearColor;
+  self.fallbackFaviconLabel.hidden = YES;
+  self.fallbackFaviconLabel.text = nil;
 }
 
 
@@ -133,11 +143,25 @@ const CGSize faviconMaskSizeiPad = CGSizeMake(16.f, 16.f);
   [self.faviconWidthConstraint setActive:YES];
   [self.faviconHeightConstraint setActive:YES];
 
+  // Fallback favicon label
+  UILabel* fallbackFaviconLabel = [[UILabel alloc] init];
+  _fallbackFaviconLabel = fallbackFaviconLabel;
+  fallbackFaviconLabel.textColor =
+    [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
+  fallbackFaviconLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+  fallbackFaviconLabel.numberOfLines = 0;
+  fallbackFaviconLabel.textAlignment = NSTextAlignmentCenter;
+
+  [faviconContainerView addSubview:fallbackFaviconLabel];
+  [fallbackFaviconLabel matchToView:_faviconView
+                            padding:faviconFallbackLabelPadding];
+  fallbackFaviconLabel.hidden = YES;
+
   // Website title label
   UILabel* titleLabel = [[UILabel alloc] init];
   _titleLabel = titleLabel;
   titleLabel.textColor = [UIColor colorNamed:vNTPSpeedDialDomainTextColor];
-  titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
   titleLabel.numberOfLines = 1;
   titleLabel.textAlignment = NSTextAlignmentCenter;
 
@@ -188,24 +212,44 @@ const CGSize faviconMaskSizeiPad = CGSizeMake(16.f, 16.f);
 
 #pragma mark - SETTERS
 
-- (void)configureCellWith:(VivaldiSpeedDialItem*)item {
+- (void)configureCellWith:(VivaldiSpeedDialItem*)item
+                 isTablet:(BOOL)isTablet {
   self.titleLabel.text = item.title;
+
+  if (isTablet) {
+    self.faviconWidthConstraint.constant =
+        vSpeedDialItemFaviconSizeSmallLayoutTablet.width;
+    self.faviconHeightConstraint.constant =
+        vSpeedDialItemFaviconSizeSmallLayoutTablet.height;
+    self.titleLabel.font =
+        [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
+  } else {
+    self.faviconWidthConstraint.constant =
+        vSpeedDialItemFaviconSizeSmallLayout.width;
+    self.faviconHeightConstraint.constant =
+        vSpeedDialItemFaviconSizeSmallLayout.height;
+    self.titleLabel.font =
+        [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+  }
+
+  _fallbackFaviconLabel.font =
+    [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+
   // Activate title label constraint and deactivate mask.
   [self.titleLabelBottomConstraint setActive:YES];
   [self.titleLabelMaskBottomConstraint setActive:NO];
   [self.titleLabelMaskBottomConstraintiPad setActive:NO];
 }
 
-- (void)configureCellWithAttributes:(FaviconAttributes*)attributes {
-  if (!attributes) {
-    self.faviconView.backgroundColor = UIColor.grayColor;
-    return;
-  }
-
+- (void)configureCellWithAttributes:(FaviconAttributes*)attributes
+                               item:(VivaldiSpeedDialItem*)item {
   if (attributes.faviconImage) {
+    self.fallbackFaviconLabel.hidden = YES;
+    self.fallbackFaviconLabel.text = nil;
+    self.faviconView.backgroundColor = UIColor.clearColor;
     self.faviconView.image = attributes.faviconImage;
   } else {
-    // Do something for fallback
+    [self showFallbackFavicon:item];
   }
 }
 
@@ -236,4 +280,23 @@ const CGSize faviconMaskSizeiPad = CGSizeMake(16.f, 16.f);
   self.titleLabelMaskView.backgroundColor =
     [UIColor.vSystemGray03 colorWithAlphaComponent:0.4];
 }
+
+#pragma mark: PRIVATE
+
+- (void)showFallbackFavicon:(VivaldiSpeedDialItem*)sdItem {
+  if (sdItem.isInternalPage) {
+    self.faviconView.backgroundColor = UIColor.clearColor;
+    self.fallbackFaviconLabel.hidden = YES;
+    self.faviconView.image = [UIImage imageNamed:vNTPSDInternalPageFavicon];
+  } else {
+    self.fallbackFaviconLabel.hidden = NO;
+    self.faviconView.image = nil;
+    self.faviconView.backgroundColor =
+        [UIColor colorNamed: vSearchbarBackgroundColor];
+    NSString *firstLetter = [[sdItem.host substringToIndex:1] uppercaseString];
+    self.fallbackFaviconLabel.text = firstLetter;
+  }
+}
+
+
 @end

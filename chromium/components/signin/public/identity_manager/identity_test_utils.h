@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "build/build_config.h"
 #include "components/signin/public/base/consent_level.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -90,10 +90,12 @@ AccountInfo MakePrimaryAccountAvailable(IdentityManager* identity_manager,
                                         const std::string& email,
                                         ConsentLevel consent_level);
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 // Revokes sync consent from the primary account: the primary account is left
 // at ConsentLevel::kSignin.
 // NOTE: See disclaimer at top of file re: direct usage.
 void RevokeSyncConsent(IdentityManager* identity_manager);
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Clears the primary account, removes all accounts and revokes the sync
 // consent. Blocks until the primary account is cleared.

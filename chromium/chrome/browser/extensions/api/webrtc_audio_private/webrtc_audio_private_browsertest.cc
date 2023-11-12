@@ -7,13 +7,14 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/bind.h"
+#include "base/test/test_future.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -70,19 +71,13 @@ namespace {
 // resulting from that call.
 void GetAudioDeviceDescriptions(bool for_input,
                                 AudioDeviceDescriptions* device_descriptions) {
-  base::RunLoop run_loop;
+  base::test::TestFuture<AudioDeviceDescriptions>
+      audio_device_descriptions_future;
   std::unique_ptr<media::AudioSystem> audio_system =
       content::CreateAudioSystemForAudioService();
   audio_system->GetDeviceDescriptions(
-      for_input, base::BindOnce(
-                     [](base::OnceClosure finished_callback,
-                        AudioDeviceDescriptions* result,
-                        AudioDeviceDescriptions received) {
-                       *result = std::move(received);
-                       std::move(finished_callback).Run();
-                     },
-                     run_loop.QuitClosure(), device_descriptions));
-  run_loop.Run();
+      for_input, audio_device_descriptions_future.GetCallback());
+  *device_descriptions = audio_device_descriptions_future.Take();
 }
 
 }  // namespace
@@ -107,8 +102,6 @@ class AudioWaitingExtensionTest : public ExtensionApiTest {
 
 class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
  public:
-  WebrtcAudioPrivateTest() {}
-
   void SetUpOnMainThread() override {
     AudioWaitingExtensionTest::SetUpOnMainThread();
     // Needs to happen after chrome's schemes are added.
@@ -116,7 +109,7 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
   }
 
  protected:
-  void AppendTabIdToRequestInfo(base::ListValue* params, int tab_id) {
+  void AppendTabIdToRequestInfo(base::Value::List* params, int tab_id) {
     base::Value::Dict request_info;
     request_info.Set("tabId", tab_id);
     params->Append(base::Value(std::move(request_info)));
@@ -203,7 +196,7 @@ IN_PROC_BROWSER_TEST_F(WebrtcAudioPrivateTest, GetAssociatedSink) {
         profile()->GetMediaDeviceIDSalt(), url::Origin::Create(origin),
         raw_device_id);
 
-    base::ListValue parameters;
+    base::Value::List parameters;
     parameters.Append(origin.spec());
     parameters.Append(source_id_in_origin);
     std::string parameter_string;

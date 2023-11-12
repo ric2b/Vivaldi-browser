@@ -16,12 +16,12 @@ namespace ash {
 namespace file_system_provider {
 namespace operations {
 
-WriteFile::WriteFile(EventDispatcher* dispatcher,
+WriteFile::WriteFile(RequestDispatcher* dispatcher,
                      const ProvidedFileSystemInfo& file_system_info,
                      int file_handle,
                      scoped_refptr<net::IOBuffer> buffer,
                      int64_t offset,
-                     int length,
+                     size_t length,
                      storage::AsyncFileUtil::StatusCallback callback)
     : Operation(dispatcher, file_system_info),
       file_handle_(file_handle),

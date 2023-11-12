@@ -42,6 +42,11 @@ const char kVivaldiSyncServerUrl[] = "vivaldi.sync.server_url";
 const char kVivaldiSyncNotificationsServerUrl[] =
     "vivaldi.sync.notifications.server_url";
 
+const char kVivaldiClientHintsBrand[] = "vivaldi.ClientHintsBrand";
+const char kVivaldiClientHintsBrandAppendVivaldi[] = "vivaldi.ClientHintsBrandAppendVivaldi";
+const char kVivaldiClientHintsBrandCustomBrand[] = "vivaldi.ClientHintsCustomBrand";
+const char kVivaldiClientHintsBrandCustomBrandVersion[] = "vivaldi.ClientHintsCustomBrandVersion";
+
 // Old pref names that have been changed during the migration
 // to the new prefs api.
 const char kOldAlwaysLoadPinnedTabAfterRestore[] =
@@ -87,6 +92,10 @@ const char kVivaldiBookmarkFoldersViewMode[] =
 const char kVivaldiDesktopTabsEnabled[] = "vivaldi.desktop_tabs.mode";
 // Tab stack use status
 const char kVivaldiTabStackEnabled[] = "vivaldi.desktop_tabs.tab_stack";
+#endif
 
+#if BUILDFLAG(IS_ANDROID)
+const char kBackgroundMediaPlaybackAllowed[] =
+  "vivaldi.background.media_playback.allowed";
 #endif
 }  // namespace vivaldiprefs

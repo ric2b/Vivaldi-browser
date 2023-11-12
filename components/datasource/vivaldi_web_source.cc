@@ -6,7 +6,7 @@
 #include <string>
 
 #include "app/vivaldi_constants.h"
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/strcat.h"

@@ -15,9 +15,9 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -37,7 +37,7 @@
 #include "components/autofill/core/browser/payments/payments_util.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_manager.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
-#include "components/autofill/core/browser/strike_database.h"
+#include "components/autofill/core/browser/strike_databases/strike_database.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -277,23 +277,6 @@ void CreditCardSaveManager::AttemptToOfferCardUploadSave(
   show_save_prompt_ = !GetCreditCardSaveStrikeDatabase()->ShouldBlockFeature(
       base::UTF16ToUTF8(upload_request_.card.LastFourDigits()));
 
-#if !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
-
-  int save_card_ui_experiment_arm =
-      features::kAutofillSaveCardUiExperimentSelectorInNumber.Get();
-
-  // Adding the Save Card UI Experiment to the active experiments in upload
-  // request if the experiment is active. If 3rd save card ui experiment, aka
-  // Current with Avatar and Email, is selected then we would not add
-  // AutofillSaveCardUiExperiment to the active experiments list, as we want the
-  // current footer to be displayed.
-  if (base::FeatureList::IsEnabled(features::kAutofillSaveCardUiExperiment) &&
-      (save_card_ui_experiment_arm == 1 || save_card_ui_experiment_arm == 2)) {
-    upload_request_.active_experiments.push_back(
-        "AutofillSaveCardUiExperiment");
-  }
-#endif
-
   payments_client_->GetUploadDetails(
       country_only_profiles, upload_request_.detected_values,
       upload_request_.active_experiments, app_locale_,
@@ -325,12 +308,6 @@ void CreditCardSaveManager::OnDidUploadCard(
         upload_card_response_details) {
   if (observer_for_testing_)
     observer_for_testing_->OnReceivedUploadCardResponse();
-
-  if (result == AutofillClient::PaymentsRpcResult::kSuccess &&
-      upload_request_.card.HasFirstAndLastName()) {
-    autofill_metrics::LogSaveCardWithFirstAndLastNameComplete(
-        /*is_local=*/false);
-  }
 
   if (result == AutofillClient::PaymentsRpcResult::kSuccess) {
     // Log how many strikes the card had when it was saved.
@@ -414,7 +391,7 @@ CreditCardSaveManager::GetLocalCardMigrationStrikeDatabase() {
 void CreditCardSaveManager::OnDidGetUploadDetails(
     AutofillClient::PaymentsRpcResult result,
     const std::u16string& context_token,
-    std::unique_ptr<base::Value> legal_message,
+    std::unique_ptr<base::Value::Dict> legal_message,
     std::vector<std::pair<int, int>> supported_card_bin_ranges) {
   if (observer_for_testing_)
     observer_for_testing_->OnReceivedGetUploadDetailsResponse();
@@ -508,10 +485,6 @@ void CreditCardSaveManager::OfferCardLocalSave() {
             .with_has_non_focusable_field(has_non_focusable_field_),
         base::BindOnce(&CreditCardSaveManager::OnUserDidDecideOnLocalSave,
                        weak_ptr_factory_.GetWeakPtr()));
-    // Log metrics.
-    if (local_card_save_candidate_.HasFirstAndLastName())
-      autofill_metrics::LogSaveCardWithFirstAndLastNameOffered(
-          /*is_local=*/true);
   }
   if (show_save_prompt_.has_value() && !show_save_prompt_.value()) {
     autofill_metrics::LogCreditCardSaveNotOfferedDueToMaxStrikesMetric(
@@ -552,10 +525,7 @@ void CreditCardSaveManager::OfferCardUploadSave() {
     AutofillMetrics::LogUploadOfferedCardOriginMetric(
         uploading_local_card_ ? AutofillMetrics::OFFERING_UPLOAD_OF_LOCAL_CARD
                               : AutofillMetrics::OFFERING_UPLOAD_OF_NEW_CARD);
-    if (upload_request_.card.HasFirstAndLastName()) {
-      autofill_metrics::LogSaveCardWithFirstAndLastNameOffered(
-          /*is_local=*/false);
-    }
+
     // Set that upload was offered.
     upload_decision_metrics_ |= autofill_metrics::UPLOAD_OFFERED;
   } else {
@@ -575,9 +545,6 @@ void CreditCardSaveManager::OnUserDidDecideOnLocalSave(
     AutofillClient::SaveCardOfferUserDecision user_decision) {
   switch (user_decision) {
     case AutofillClient::SaveCardOfferUserDecision::kAccepted:
-      if (local_card_save_candidate_.HasFirstAndLastName())
-        autofill_metrics::LogSaveCardWithFirstAndLastNameComplete(
-            /*is_local=*/true);
       // Log how many CreditCardSave strikes the card had when it was saved.
       LogStrikesPresentWhenCardSaved(
           /*is_local=*/true,

@@ -9,6 +9,7 @@
 #import "components/browsing_data/core/pref_names.h"
 #import "components/prefs/pref_member.h"
 #import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/ui/settings/clear_browsing_data/time_range_selector_table_view_controller+private.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/ui/table_view/chrome_table_view_styler.h"
 #import "ios/chrome/browser/ui/table_view/table_view_utils.h"
@@ -42,9 +43,14 @@ const int kStringIDS[] = {
     IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_OPTION_BEGINNING_OF_TIME,
     IDS_IOS_CLEAR_BROWSING_DATA_TIME_RANGE_OPTION_OLDER_THAN_30_DAYS};
 
+const browsing_data::TimePeriod kTimePeriodUnused[]{
+    // Last 15 Minutes is not yet available on iOS.
+    browsing_data::TimePeriod::LAST_15_MINUTES};
+
 static_assert(
     std::size(kStringIDS) ==
-        static_cast<int>(browsing_data::TimePeriod::TIME_PERIOD_LAST) + 1,
+        static_cast<int>(browsing_data::TimePeriod::TIME_PERIOD_LAST) -
+            std::size(kTimePeriodUnused) + 1,
     "Strings have to match the enum values.");
 
 }  // namespace

@@ -8,11 +8,11 @@
 #include <string>
 #include <vector>
 
-#include "base/bind.h"
 #include "base/containers/flat_map.h"
 #include "base/cxx17_backports.h"
 #include "base/enterprise_util.h"
 #include "base/files/file_path.h"
+#include "base/functional/bind.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/rand_util.h"
 #include "base/time/time.h"
@@ -223,7 +223,7 @@ update_client::UpdaterStateProvider Configurator::GetUpdaterStateProvider()
 #if BUILDFLAG(ENABLE_PUFFIN_PATCHES)
 absl::optional<base::FilePath> Configurator::GetCrxCachePath() const {
   absl::optional<base::FilePath> optional_result =
-      updater::GetBaseDataDirectory(GetUpdaterScope());
+      updater::GetInstallDirectory(GetUpdaterScope());
   return optional_result.has_value()
              ? absl::optional<base::FilePath>(
                    optional_result.value().AppendASCII(kCrxCachePath))

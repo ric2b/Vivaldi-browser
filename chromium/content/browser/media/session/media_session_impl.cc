@@ -7,9 +7,9 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
 #include "base/cxx17_backports.h"
+#include "base/functional/bind.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -1122,8 +1122,12 @@ MediaSessionImpl::GetMediaSessionInfoSync() {
 
   info->muted = is_muted_;
   info->has_presentation = has_presentation_;
-  info->remote_playback_metadata = remote_playback_metadata_.Clone();
 
+  // Disable Remote Playback by passing empty RemotePlaybackMetadata when there
+  // are multiple media players.
+  if (normal_players_.size() == 1u) {
+    info->remote_playback_metadata = remote_playback_metadata_.Clone();
+  }
   return info;
 }
 

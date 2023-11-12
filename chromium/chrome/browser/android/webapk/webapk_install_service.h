@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-#include "base/callback.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -145,6 +145,15 @@ class WebApkInstallService : public KeyedService {
                                         const SkBitmap& primary_icon,
                                         bool is_primary_icon_maskable,
                                         const std::string& package_name);
+
+  // Shows a notification that an install is failed.
+  static void ShowInstallFailedNotification(
+      const GURL& manifest_url,
+      const std::u16string& short_name,
+      const GURL& url,
+      const SkBitmap& primary_icon,
+      bool is_primary_icon_maskable,
+      webapps::WebApkInstallResult result);
 
   raw_ptr<content::BrowserContext> browser_context_;
 

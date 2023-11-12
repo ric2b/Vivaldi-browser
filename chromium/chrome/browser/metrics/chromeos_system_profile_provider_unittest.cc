@@ -8,7 +8,7 @@
 
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/ash/components/install_attributes/stub_install_attributes.h"
 #include "chromeos/ash/components/login/login_state/login_state.h"
 #include "chromeos/ash/components/multidevice/remote_device_test_util.h"
 #include "chromeos/ash/components/system/fake_statistics_provider.h"
@@ -119,7 +120,7 @@ class ChromeOSSystemProfileProviderTest : public testing::Test {
     testing_profile_ = profile_manager_->CreateTestingProfile("test_name");
 
     // Set statistic provider for hardware class tests.
-    chromeos::system::StatisticsProvider::SetTestProvider(
+    ash::system::StatisticsProvider::SetTestProvider(
         &fake_statistics_provider_);
 
     // Initialize the login state trackers.
@@ -141,7 +142,7 @@ class ChromeOSSystemProfileProviderTest : public testing::Test {
   ash::multidevice_setup::FakeMultiDeviceSetupClient*
       fake_multidevice_setup_client_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  chromeos::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
+  ash::system::ScopedFakeStatisticsProvider fake_statistics_provider_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
   TestingProfile* testing_profile_ = nullptr;
   std::unique_ptr<FakeMultiDeviceSetupClientImplFactory>
@@ -254,8 +255,9 @@ TEST_F(ChromeOSSystemProfileProviderTest, FullHardwareClass) {
 }
 
 TEST_F(ChromeOSSystemProfileProviderTest, DemoModeDimensions) {
-  ash::DemoSession::SetDemoConfigForTesting(
-      ash::DemoSession::DemoModeConfig::kOnline);
+  testing_profile_->ScopedCrosSettingsTestHelper()
+      ->InstallAttributes()
+      ->SetDemoMode();
   const std::string expected_country = "CA";
   const std::string expected_retailer_id = "ABC";
   const std::string expected_store_id = "12345";

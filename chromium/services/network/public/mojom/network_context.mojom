@@ -13,13 +13,16 @@ import "sandbox/policy/mojom/context.mojom";
 import "services/network/public/mojom/address_list.mojom";
 import "services/network/public/mojom/url_loader_network_service_observer.mojom";
 import "services/network/public/mojom/cert_verifier_service.mojom";
+import "services/network/public/mojom/clear_data_filter.mojom";
 import "services/network/public/mojom/client_security_state.mojom";
 import "services/network/public/mojom/cookie_access_observer.mojom";
 import "services/network/public/mojom/cookie_manager.mojom";
+import "services/network/public/mojom/cookie_setting_overrides.mojom";
 import "services/network/public/mojom/cors_origin_pattern.mojom";
 import "services/network/public/mojom/cross_origin_embedder_policy.mojom";
 import "services/network/public/mojom/default_credentials.mojom";
 import "services/network/public/mojom/devtools_observer.mojom";
+import "services/network/public/mojom/restricted_udp_socket.mojom";
 import "services/network/public/mojom/first_party_sets_access_delegate.mojom";
 import "services/network/public/mojom/host_resolver.mojom";
 import "services/network/public/mojom/http_cache_backend_file_operations.mojom";
@@ -48,6 +51,7 @@ import "services/network/public/mojom/ssl_config.mojom";
 import "services/network/public/mojom/tcp_socket.mojom";
 import "services/network/public/mojom/transferable_directory.mojom";
 import "services/network/public/mojom/trust_tokens.mojom";
+import "services/network/public/mojom/trust_token_access_observer.mojom";
 import "services/network/public/mojom/udp_socket.mojom";
 import "services/network/public/mojom/url_loader.mojom";
 import "services/network/public/mojom/url_loader_factory.mojom";
@@ -564,24 +568,6 @@ struct NetworkConditions {
   double upload_throughput;
 };
 
-// Used in some clearing methods of URL-keyed data to specify the resources to
-// keep/delete.
-struct ClearDataFilter {
-  enum Type {DELETE_MATCHES, KEEP_MATCHES};
-
-  Type type;
-
-  // A list of registrable domains (e.g. google.com), internal hostnames
-  // (e.g. localhost), or IP addresses (e.g. 127.0.0.1). Other domains, such as
-  // third and lower level domains (e.g. www.google.com) are not accepted.
-  // Formally, it must hold that GetDomainAndRegistry(|domain|, _) is |domain|
-  // itself or an empty string.
-  array<string> domains;
-
-  // List of URL origins.
-  array<url.mojom.Origin> origins;
-};
-
 // Represents a signed exchange report.
 // Spec: https://wicg.github.io/webpackage/loading.html#queue-report
 struct SignedExchangeReport {
@@ -745,6 +731,9 @@ struct URLLoaderFactoryParams {
   // Used to notify clients about cookie reads or writes.
   pending_remote<CookieAccessObserver>? cookie_observer;
 
+  // Used to notify clients about Trust Token accesses.
+  pending_remote<TrustTokenAccessObserver>? trust_token_observer;
+
   // Used to notify clients about authentication and certificate events.
   pending_remote<URLLoaderNetworkServiceObserver>? url_loader_network_observer;
 
@@ -778,6 +767,10 @@ struct URLLoaderFactoryParams {
   // TODO(lukasza): https://crbug.com/1151008: Consider removing this
   // diagnostic aid once the bug is understood.
   string debug_tag = "";
+
+  // Lists all the cookie setting overrides that should be specified on
+  // each URLRequest.
+  CookieSettingOverrides cookie_setting_overrides;
 };
 
 // Callback interface for NetworkContext when routing identifiers aren't
@@ -1121,6 +1114,30 @@ interface NetworkContext {
   // when NetworkContext goes away.
   CreateUDPSocket(pending_receiver<UDPSocket> receiver,
                   pending_remote<UDPSocketListener>? listener);
+
+  // Creates a Restricted UDP socket that wraps an internal UDP Socket connected
+  // or bound to |addr| with |options| depending on the provided |mode|.
+  //
+  // The socket created can only be used for the purpose specified in
+  // |traffic_annotation|, and cannot be re-used for other purposes.
+  //
+  // Caller can supply a |listener| interface pointer to listen for incoming
+  // datagrams. A null |listener| is acceptable if caller is not interested in
+  // incoming data.
+  //
+  // On success, the resulting local address will be written to |local_addr_out|
+  // and |result| is net::OK. On failure, |result| is a network error code.
+  //
+  // Any sockets that are created but are yet to be destroyed will be destroyed
+  // when NetworkContext goes away.
+  CreateRestrictedUDPSocket(
+      IPEndPoint addr,
+      RestrictedUDPSocketMode mode,
+      MutableNetworkTrafficAnnotationTag traffic_annotation,
+      UDPSocketOptions? options,
+      pending_receiver<RestrictedUDPSocket> receiver,
+      pending_remote<UDPSocketListener>? listener)
+      => (int32 result, IPEndPoint? local_addr_out);
 
   // Creates a TCP server socket that listens on |local_addr|. The socket
   // created can only be used for the purpose specified in |traffic_annotation|,

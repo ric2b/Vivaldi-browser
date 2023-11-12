@@ -10,8 +10,9 @@
 #include <limits>
 #include <string>
 
-#include "base/bind.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/task/single_thread_task_runner.h"
 #include "cc/benchmarks/rasterize_and_record_benchmark_impl.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer.h"
@@ -72,7 +73,7 @@ void RasterizeAndRecordBenchmark::DidUpdateLayers(
                                                paint_benchmark_result);
 
   DCHECK(results_.is_none());
-  results_ = base::Value(base::Value::Type::DICTIONARY);
+  results_ = base::Value(base::Value::Type::DICT);
   results_.SetIntKey("pixels_recorded", record_results_.pixels_recorded);
   results_.SetIntKey("paint_op_memory_usage",
                      static_cast<int>(record_results_.paint_op_memory_usage));

@@ -7,6 +7,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/clipboard/clipboard_history_util.h"
+#include "base/unguessable_token.h"
+#include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 #include "ui/views/view_targeter_delegate.h"
 
@@ -15,6 +17,7 @@ class MenuItemView;
 }  // namespace views
 
 namespace ash {
+class ClipboardHistory;
 class ClipboardHistoryDeleteButton;
 class ClipboardHistoryItem;
 class ClipboardHistoryMainButton;
@@ -23,9 +26,11 @@ class ClipboardHistoryResourceManager;
 // The base class for menu items of the clipboard history menu.
 class ASH_EXPORT ClipboardHistoryItemView : public views::View {
  public:
+  METADATA_HEADER(ClipboardHistoryItemView);
   static std::unique_ptr<ClipboardHistoryItemView>
   CreateFromClipboardHistoryItem(
-      const ClipboardHistoryItem& item,
+      const base::UnguessableToken& item_id,
+      const ClipboardHistory* clipboard_history,
       const ClipboardHistoryResourceManager* resource_manager,
       views::MenuItemView* container);
 
@@ -71,6 +76,7 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
   // Used by subclasses to draw contents, such as text or bitmaps.
   class ContentsView : public views::View, public views::ViewTargeterDelegate {
    public:
+    METADATA_HEADER(ContentsView);
     explicit ContentsView(ClipboardHistoryItemView* container);
     ContentsView(const ContentsView& rhs) = delete;
     ContentsView& operator=(const ContentsView& rhs) = delete;
@@ -92,9 +98,6 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
     ClipboardHistoryItemView* container() { return container_; }
 
    private:
-    // views::View:
-    const char* GetClassName() const override;
-
     // views::ViewTargeterDelegate:
     bool DoesIntersectRect(const views::View* target,
                            const gfx::Rect& rect) const override;
@@ -106,21 +109,14 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
     ClipboardHistoryItemView* const container_;
   };
 
-  ClipboardHistoryItemView(const ClipboardHistoryItem* clipboard_history_item,
+  ClipboardHistoryItemView(const base::UnguessableToken& item_id,
+                           const ClipboardHistory* clipboard_history,
                            views::MenuItemView* container);
-
-  // Maybe record histograms after the button is pressed.
-  void MaybeRecordButtonPressedHistogram() const;
 
   // Creates the contents view.
   virtual std::unique_ptr<ContentsView> CreateContentsView() = 0;
 
-  // Returns the name of the accessible node.
-  virtual std::u16string GetAccessibleName() const = 0;
-
-  const ClipboardHistoryItem* clipboard_history_item() const {
-    return clipboard_history_item_;
-  }
+  const ClipboardHistoryItem* GetClipboardHistoryItem() const;
 
  private:
   // Indicates the child under pseudo focus, i.e. the view responding to the
@@ -160,8 +156,11 @@ class ASH_EXPORT ClipboardHistoryItemView : public views::View {
   // Updates `pseudo_focus_` and children visibility.
   void SetPseudoFocus(PseudoFocus new_pseudo_focus);
 
-  // Owned by ClipboardHistoryMenuModelAdapter.
-  const ClipboardHistoryItem* const clipboard_history_item_;
+  // Unique identifier for the `ClipboardHistoryItem` this view represents.
+  const base::UnguessableToken item_id_;
+
+  // Owned by `ClipboardHistoryControllerImpl`.
+  const base::raw_ptr<const ClipboardHistory> clipboard_history_;
 
   views::MenuItemView* const container_;
 

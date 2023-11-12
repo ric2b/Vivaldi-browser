@@ -113,6 +113,11 @@ message NetworkHostnameProto {
   optional string device_hostname_template = 1;
 }
 
+message DeviceHindiInscriptLayoutEnabledProto {
+  // Determines if Hindi Inscript Layout is available
+  optional bool enabled = 1 [default = false];
+}
+
 message HostnameUserConfigurableProto {
   // Determines if user is allowed to configure the device hostname
   optional bool device_hostname_user_configurable = 1 [default = false];
@@ -182,6 +187,11 @@ message DeviceReportingProto {
       [default = 600000];
 
   optional StringList report_signal_strength_event_driven_telemetry = 38;
+
+  // Device activity heartbeat policies.
+  optional bool device_activity_heartbeat_enabled = 39 [default = false];
+  optional int64 device_activity_heartbeat_collection_rate_ms = 40
+      [default = 900000];
 }
 
 message EphemeralUsersEnabledProto {
@@ -1106,6 +1116,18 @@ message DeviceLoginScreenExtensionsProto {
   repeated string device_login_screen_extensions = 1;
 }
 
+// A boolean indicate if manifest v2 extension is available.
+message LoginScreenExtensionManifestV2AvailabilityProto {
+  enum Availability {
+    DEFAULT = 0;
+    DISABLE = 1;
+    ENABLE = 2;
+    ENABLE_FOR_FORCED_EXTENSIONS = 3;
+  }
+
+  optional Availability login_screen_extension_manifest_v2_availability = 1;
+}
+
 // A list of allowed locales on the login screen.
 message LoginScreenLocalesProto {
   repeated string login_screen_locales = 1;
@@ -1121,6 +1143,28 @@ message LoginScreenInputMethodsProto {
 message DeviceWallpaperImageProto {
   optional string device_wallpaper_image = 1;
 }
+
+message DeviceScreensaverIdleTimeoutSecondsProto {
+  optional int64 device_screensaver_idle_timeout_seconds = 1;
+};
+
+message DeviceScreensaverImageDisplayIntervalSecondsProto {
+  optional int64 device_screensaver_image_display_interval_seconds = 1;
+};
+
+// A list of URLs referencing the images to be displayed on the
+// sign-in screen screensaver.
+message DeviceScreensaverImagesProto {
+  repeated string device_screensaver_images = 1;
+};
+
+message DeviceSystemAecEnabledProto {
+  optional bool device_system_aec_enabled = 1;
+};
+
+message DeviceScreensaverEnabledProto {
+  optional bool device_screensaver_enabled = 1;
+};
 
 // Migration strategy for the case when ARC(N+) needs the ext4 encryption while
 // the device used ecryptfs in the past.
@@ -1661,7 +1705,7 @@ message DevicePciPeripheralDataAccessEnabledProtoV2 {
 }
 
 // Setting that controls whether Borealis will be allowed on the device.
-message DeviceBorealisAllowedProto {
+message OBSOLETE_DeviceBorealisAllowedProto {
   optional bool allowed = 1 [default = true];
 }
 
@@ -1875,7 +1919,8 @@ message ChromeDeviceSettingsProto {
       device_system_wide_tracing_enabled = 117;
   optional DevicePciPeripheralDataAccessEnabledProto
       device_pci_peripheral_data_access_enabled = 118;
-  optional DeviceBorealisAllowedProto device_borealis_allowed = 119;
+  optional OBSOLETE_DeviceBorealisAllowedProto device_borealis_allowed = 119
+      [deprecated = true];
   optional DeviceAllowedBluetoothServicesProto
       device_allowed_bluetooth_services = 120;
   optional DeviceDebugPacketCaptureAllowedProto
@@ -1905,4 +1950,15 @@ message ChromeDeviceSettingsProto {
   optional StringPolicyProto device_printing_client_name_template = 137;
   optional DeviceReportXDREventsProto device_report_xdr_events = 138;
   optional KeyboardBacklightColorProto keyboard_backlight_color = 139;
+  optional DeviceHindiInscriptLayoutEnabledProto
+      device_hindi_inscript_layout_enabled = 140;
+  optional LoginScreenExtensionManifestV2AvailabilityProto
+      login_screen_extension_manifest_v2_availability = 141;
+  optional DeviceScreensaverEnabledProto device_screensaver_enabled = 142;
+  optional DeviceScreensaverIdleTimeoutSecondsProto
+      device_screensaver_idle_timeout_seconds = 143;
+  optional DeviceScreensaverImageDisplayIntervalSecondsProto
+      device_screensaver_image_display_interval_seconds = 144;
+  optional DeviceScreensaverImagesProto device_screensaver_images = 145;
+  optional DeviceSystemAecEnabledProto device_system_aec_enabled = 146;
 }

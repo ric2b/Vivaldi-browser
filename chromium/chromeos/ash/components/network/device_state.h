@@ -33,7 +33,7 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) DeviceState : public ManagedState {
   bool IsActive() const override;
 
   void IPConfigPropertiesChanged(const std::string& ip_config_path,
-                                 base::Value properties);
+                                 base::Value::Dict properties);
 
   // Accessors
   const std::string& mac_address() const { return mac_address_; }
@@ -142,10 +142,5 @@ class COMPONENT_EXPORT(CHROMEOS_NETWORK) DeviceState : public ManagedState {
 };
 
 }  // namespace ash
-
-// TODO(https://crbug.com/1164001): remove when the migration is finished.
-namespace chromeos {
-using ::ash::DeviceState;
-}
 
 #endif  // CHROMEOS_ASH_COMPONENTS_NETWORK_DEVICE_STATE_H_

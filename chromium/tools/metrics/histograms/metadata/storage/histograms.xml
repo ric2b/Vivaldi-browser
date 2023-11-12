@@ -41,7 +41,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="API.StorageAccess.AllowedRequests2" enum="StorageAccessResult"
-    expires_after="2023-05-14">
+    expires_after="2023-07-16">
   <owner>mkwst@chromium.org</owner>
   <owner>brandm@microsoft.com</owner>
   <summary>
@@ -52,6 +52,30 @@ chromium-metrics-reviews@google.com.
 
     Warning: this histogram was expired from 2022-03-27 to 08-12-2022; data may
     be missing.
+  </summary>
+</histogram>
+
+<histogram name="API.StorageAccess.DocumentInheritedStorageAccess"
+    enum="BooleanInherited" expires_after="M124">
+  <owner>cfredric@chromium.org</owner>
+  <owner>johannhof@chromium.org</owner>
+  <summary>
+    Records whether or not a document inherited the `has_storage_access` bit
+    from the previous document.
+
+    Recorded once at document commit, for every document.
+  </summary>
+</histogram>
+
+<histogram name="API.StorageAccess.DocumentLoadedWithStorageAccess"
+    enum="Boolean" expires_after="M124">
+  <owner>cfredric@chromium.org</owner>
+  <owner>johannhof@chromium.org</owner>
+  <summary>
+    Records whether or not a document was loaded with the `has_storage_access`
+    bit set to true.
+
+    Recorded once at document commit, for every document.
   </summary>
 </histogram>
 
@@ -80,7 +104,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="API.StorageAccess.RequestStorageAccess"
-    enum="RequestStorageResult" expires_after="2023-03-12">
+    enum="RequestStorageResult" expires_after="2023-08-20">
   <owner>mkwst@chromium.org</owner>
   <owner>brandm@microsoft.com</owner>
   <summary>
@@ -93,10 +117,40 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="API.StorageAccess.RequestStorageAccessForOrigin"
-    enum="RequestStorageResult" expires_after="2023-03-12">
+    enum="RequestStorageResult" expires_after="2023-07-16">
+  <obsolete>
+    Metric collection is being separated from the standard Storage Access API.
+    See API.TopLevelStorageAccess.RequestStorageAccessForOrigin. Note that
+    future re-consolidation of these metrics may be possible.
+  </obsolete>
   <owner>cfredric@chromium.org</owner>
   <owner>mreichhoff@chromium.org</owner>
   <owner>brandm@microsoft.com</owner>
+  <summary>
+    Records invocations of document.requestStorageAccessForOrigin and reasons
+    the request was approved or rejected. Recorded for every call to the
+    function, regardless of outcome. Note that
+    API.StorageAccess.RequestStorageAccess is similar, but for the other variant
+    of this API.
+  </summary>
+</histogram>
+
+<histogram name="API.TopLevelStorageAccess.RequestOutcome"
+    enum="StorageAccessAPIRequestOutcome" expires_after="2023-08-31">
+  <owner>cfredric@chromium.org</owner>
+  <owner>mreichhoff@chromium.org</owner>
+  <summary>
+    Records the outcome of a particular Top-Level Storage Access API permission
+    request.
+
+    Recorded at the time of the request, for every request.
+  </summary>
+</histogram>
+
+<histogram name="API.TopLevelStorageAccess.RequestStorageAccessForOrigin"
+    enum="RequestStorageResult" expires_after="2023-08-31">
+  <owner>cfredric@chromium.org</owner>
+  <owner>mreichhoff@chromium.org</owner>
   <summary>
     Records invocations of document.requestStorageAccessForOrigin and reasons
     the request was approved or rejected. Recorded for every call to the
@@ -120,7 +174,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Clipboard.Read" enum="ClipboardFormatRead"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>huangdarwin@chromium.org</owner>
   <owner>src/ui/base/clipboard/OWNERS</owner>
   <summary>
@@ -148,7 +202,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Clipboard.TimeIntervalBetweenCommitAndRead" units="ms"
-    expires_after="2023-04-16">
+    expires_after="2023-06-18">
   <owner>dcheng@chromium.org</owner>
   <owner>src/ui/base/clipboard/OWNERS</owner>
   <summary>
@@ -161,23 +215,13 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Clipboard.Write" enum="ClipboardFormatWrite"
-    expires_after="2023-04-16">
+    expires_after="2023-08-20">
   <owner>huangdarwin@chromium.org</owner>
   <owner>src/ui/base/clipboard/OWNERS</owner>
   <summary>
     Counts how often each Clipboard format is written by the platform clipboard.
     These writes all imply that an application had this format available, and
     therefore wrote this format.
-  </summary>
-</histogram>
-
-<histogram name="Clipboard.X11StoreCopyPasteDuration" units="ms"
-    expires_after="M95">
-  <owner>dcheng@chromium.org</owner>
-  <owner>pkotwicz@chromium.org</owner>
-  <summary>
-    The length of time that it takes to transfer ownership of Chrome's CLIPBOARD
-    selection to the clipboard manager when Chrome exits.
   </summary>
 </histogram>
 
@@ -259,6 +303,35 @@ chromium-metrics-reviews@google.com.
     site to the user that the user then chose to exclude from clearing. This
     histogram has expired between M95-M106.
   </summary>
+</histogram>
+
+<histogram name="Storage.Blob.RegisterURLTimeWithoutPartitioningSupport"
+    units="ms" expires_after="M115">
+  <owner>awillia@chromium.org</owner>
+  <owner>chrome-owp-storage@chromium.org</owner>
+  <summary>
+    Recorded when the PublicURLManager::RegisterURL method calls the per-process
+    BlobURLStore::Register mojo interface method. The value recorded is the time
+    taken for the call to complete. This histogram is only logged when the
+    SupportPartitionedBlobUrl feature is disabled.
+  </summary>
+</histogram>
+
+<histogram name="Storage.Blob.RegisterURLTimeWithPartitioningSupport.{Type}"
+    units="ms" expires_after="M115">
+  <owner>awillia@chromium.org</owner>
+  <owner>chrome-owp-storage@chromium.org</owner>
+  <summary>
+    Recorded when the PublicURLManager::RegisterURL method calls the
+    BlobURLStore::Register mojo interface method. The value recorded is the time
+    taken for the call to complete. This variation of the histogram records
+    results from {Type}. This histogram is only logged when the
+    SupportPartitionedBlobUrl feature is enabled.
+  </summary>
+  <token key="Type">
+    <variant name="Frame" summary="frame execution contexts"/>
+    <variant name="Worker" summary="worker execution contexts"/>
+  </token>
 </histogram>
 
 <histogram name="Storage.FileSystemAccess.PersistedPermissions.Age.{Type}"
@@ -432,7 +505,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.InterestGroup.DBErrors" units="count"
-    expires_after="2023-06-04">
+    expires_after="2023-08-08">
   <owner>behamilton@google.com</owner>
   <owner>pauljensen@chromium.org</owner>
   <summary>
@@ -455,7 +528,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.InterestGroup.DBSize" units="KB"
-    expires_after="2023-04-30">
+    expires_after="2023-07-30">
   <owner>behamilton@google.com</owner>
   <owner>pauljensen@chromium.org</owner>
   <summary>
@@ -465,7 +538,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.InterestGroup.PerSiteCount" units="groups"
-    expires_after="2023-04-30">
+    expires_after="2023-07-30">
   <owner>behamilton@google.com</owner>
   <owner>pauljensen@chromium.org</owner>
   <summary>
@@ -521,7 +594,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.SharedStorage.Database.Destruction"
-    units="BooleanDestroyed" expires_after="2023-06-04">
+    units="BooleanDestroyed" expires_after="2023-08-08">
   <owner>cammie@chromium.org</owner>
   <owner>yaoxia@chromium.org</owner>
   <owner>chrome-ads-histograms@google.com</owner>
@@ -535,7 +608,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.SharedStorage.Database.Error" enum="SqliteErrorCode"
-    expires_after="2023-04-30">
+    expires_after="2023-07-02">
   <owner>cammie@chromium.org</owner>
   <owner>yaoxia@chromium.org</owner>
   <owner>chrome-ads-histograms@google.com</owner>
@@ -1064,7 +1137,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Storage.StoragePressure.Bubble"
-    enum="StoragePressureBubbleUserAction" expires_after="2023-03-09">
+    enum="StoragePressureBubbleUserAction" expires_after="2024-02-01">
   <owner>ayui@chromium.org</owner>
   <owner>chrome-owp-storage@google.com</owner>
   <summary>

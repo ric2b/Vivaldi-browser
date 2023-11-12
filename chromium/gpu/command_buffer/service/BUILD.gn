@@ -46,8 +46,6 @@ target(link_target_type, "service_sources") {
     "decoder_client.h",
     "gpu_switches.cc",
     "gpu_switches.h",
-    "image_factory.cc",
-    "image_factory.h",
     "mailbox_manager.h",
     "memory_tracking.cc",
     "memory_tracking.h",
@@ -105,9 +103,6 @@ target(link_target_type, "gles2_sources") {
 
   deps = []
   sources = [
-    "abstract_texture.h",
-    "abstract_texture_impl.cc",
-    "abstract_texture_impl.h",
     "buffer_manager.cc",
     "buffer_manager.h",
     "client_service_map.h",
@@ -119,6 +114,8 @@ target(link_target_type, "gles2_sources") {
     "context_state.h",
     "context_state_autogen.h",
     "context_state_impl_autogen.h",
+    "copy_shared_image_helper.cc",
+    "copy_shared_image_helper.h",
     "decoder_context.h",
     "display_compositor_memory_and_task_controller_on_gpu.cc",
     "display_compositor_memory_and_task_controller_on_gpu.h",
@@ -239,6 +236,8 @@ target(link_target_type, "gles2_sources") {
     "shared_image/gl_repack_utils.h",
     "shared_image/gl_texture_common_representations.cc",
     "shared_image/gl_texture_common_representations.h",
+    "shared_image/gl_texture_holder.cc",
+    "shared_image/gl_texture_holder.h",
     "shared_image/gl_texture_image_backing.cc",
     "shared_image/gl_texture_image_backing.h",
     "shared_image/gl_texture_image_backing_factory.cc",
@@ -267,6 +266,8 @@ target(link_target_type, "gles2_sources") {
     "shared_image/shared_memory_image_backing_factory.h",
     "shared_image/skia_gl_image_representation.cc",
     "shared_image/skia_gl_image_representation.h",
+    "shared_image/wrapped_sk_image_backing.cc",
+    "shared_image/wrapped_sk_image_backing.h",
     "shared_image/wrapped_sk_image_backing_factory.cc",
     "shared_image/wrapped_sk_image_backing_factory.h",
     "shared_image_interface_in_process.cc",
@@ -295,10 +296,16 @@ target(link_target_type, "gles2_sources") {
 
   if (!is_android) {
     sources += [
+      "abstract_texture.h",
       "passthrough_abstract_texture_impl.cc",
       "passthrough_abstract_texture_impl.h",
       "validating_abstract_texture_impl.cc",
       "validating_abstract_texture_impl.h",
+    ]
+  } else {
+    sources += [
+      "abstract_texture_android.cc",
+      "abstract_texture_android.h",
     ]
   }
 
@@ -390,6 +397,8 @@ target(link_target_type, "gles2_sources") {
 
   if (use_ozone) {
     sources += [
+      "shared_image/gl_image_native_pixmap.cc",
+      "shared_image/gl_image_native_pixmap.h",
       "shared_image/gl_ozone_image_representation.cc",
       "shared_image/gl_ozone_image_representation.h",
       "shared_image/ozone_image_backing.cc",
@@ -472,7 +481,7 @@ target(link_target_type, "gles2_sources") {
     }
   }
 
-  if (is_mac) {
+  if (is_apple) {
     deps += [ "//components/viz/common:metal_context_provider" ]
     sources += [
       "shared_image/iosurface_image_backing.h",
@@ -482,13 +491,17 @@ target(link_target_type, "gles2_sources") {
       "shared_image/shared_image_format_utils_mac.mm",
     ]
 
-    # Required by gles2_cmd_decoder.cc on Mac.
+    # Required by gles2_cmd_decoder.cc on Apple.
     frameworks = [
-      "Cocoa.framework",
       "IOSurface.framework",
       "Metal.framework",
-      "OpenGL.framework",
     ]
+    if (is_mac) {
+      frameworks += [
+        "Cocoa.framework",
+        "OpenGL.framework",
+      ]
+    }
   }
 
   if (skia_use_dawn) {
@@ -592,8 +605,6 @@ if (is_android) {
   static_library("android_texture_owner_test_support") {
     testonly = true
     sources = [
-      "mock_abstract_texture.cc",
-      "mock_abstract_texture.h",
       "mock_texture_owner.cc",
       "mock_texture_owner.h",
       "ref_counted_lock_for_test.cc",

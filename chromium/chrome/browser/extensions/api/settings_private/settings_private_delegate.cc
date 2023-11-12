@@ -31,24 +31,24 @@ SettingsPrivateDelegate::~SettingsPrivateDelegate() {
 }
 
 base::Value SettingsPrivateDelegate::GetPref(const std::string& name) {
-  std::unique_ptr<api::settings_private::PrefObject> pref =
+  absl::optional<api::settings_private::PrefObject> pref =
       prefs_util_->GetPref(name);
   if (!pref)
     return base::Value();
   return base::Value(pref->ToValue());
 }
 
-std::unique_ptr<base::Value> SettingsPrivateDelegate::GetAllPrefs() {
-  std::unique_ptr<base::ListValue> prefs(new base::ListValue());
+base::Value::List SettingsPrivateDelegate::GetAllPrefs() {
+  base::Value::List prefs;
 
   const TypedPrefMap& keys = prefs_util_->GetAllowlistedKeys();
   for (const auto& it : keys) {
     base::Value pref = GetPref(it.first);
     if (!pref.is_none())
-      prefs->Append(std::move(pref));
+      prefs.Append(std::move(pref));
   }
 
-  return std::move(prefs);
+  return prefs;
 }
 
 settings_private::SetPrefResult SettingsPrivateDelegate::SetPref(

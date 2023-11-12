@@ -8,6 +8,7 @@
 #include "ash/quick_pair/common/account_key_failure.h"
 #include "ash/quick_pair/common/fast_pair/fast_pair_http_result.h"
 #include "ash/quick_pair/common/pair_failure.h"
+#include "ash/quick_pair/proto/fastpair.pb.h"
 #include "base/component_export.h"
 #include "base/time/time.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -17,7 +18,7 @@
 namespace ash {
 namespace quick_pair {
 
-struct Device;
+class Device;
 
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused. The numbers here correspond to the
@@ -194,14 +195,26 @@ enum class COMPONENT_EXPORT(QUICK_PAIR_COMMON) FastPairProtocolPairingSteps {
   kPairingStarted = 0,
   kExhaustedRetries = 1,
   kAlreadyPaired = 2,
-  kBondSuccessful = 3,
+  kPairingComplete = 3,
   kPasskeyNegotiated = 4,
   kRecievedPasskeyResponse = 5,
   kPasskeyValidated = 6,
   kPasskeyConfirmed = 7,
-  kPairingComplete = 8,
-  kMaxValue = kPairingComplete,
+  kDeviceConnected = 8,
+  kMaxValue = kDeviceConnected,
 };
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordFastPairDeviceAndNotificationSpecificEngagementFlow(
+    const Device& device,
+    const nearby::fastpair::Device& device_details,
+    FastPairEngagementFlowEvent event);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordFastPairDeviceAndNotificationSpecificRetroactiveEngagementFlow(
+    const Device& device,
+    const nearby::fastpair::Device& device_details,
+    FastPairRetroactiveEngagementFlowEvent event);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
 void AttemptRecordingFastPairEngagementFlow(const Device& device,
@@ -260,6 +273,9 @@ void RecordEffectiveGattConnectionSuccess(bool success);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
 void RecordGattConnectionAttemptCount(int num_attempts);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordGattRetryFailureReason(PairFailure failure);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
 void RecordPairingFailureReason(const Device& device, PairFailure failure);
@@ -368,6 +384,12 @@ void RecordGattInitializationStep(
     FastPairGattConnectionSteps initialization_step);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordEffectiveHandshakeSuccess(bool success);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordHandshakeAttemptCount(int num_attempts);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
 void RecordHandshakeResult(bool success);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
@@ -414,6 +436,27 @@ COMPONENT_EXPORT(QUICK_PAIR_COMMON)
 void RecordConfirmPasskeyAskTime(base::TimeDelta total_ask_time);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordGattServiceDiscoveryTime(
+    base::TimeDelta total_gatt_service_discovery_time);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordCreateBondTime(base::TimeDelta total_create_bond_time);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordPasskeyNotifyTime(base::TimeDelta total_passkey_notify_time);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordKeyBasedNotifyTime(base::TimeDelta total_key_based_notify_time);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordPasskeyWriteRequestTime(
+    base::TimeDelta total_passkey_write_request_time);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordKeyBasedWriteRequestTime(
+    base::TimeDelta total_key_based_write_request_time);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
 void RecordPairFailureRetry(int num_retries);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
@@ -431,6 +474,15 @@ void RecordSavedDevicesTotalUxLoadTime(base::TimeDelta total_load_time);
 
 COMPONENT_EXPORT(QUICK_PAIR_COMMON)
 void RecordSavedDevicesCount(int num_devices);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordStructuredPairingStarted(const Device& device);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordStructuredPairingComplete(const Device& device);
+
+COMPONENT_EXPORT(QUICK_PAIR_COMMON)
+void RecordStructuredPairFailure(const Device& device, PairFailure failure);
 
 }  // namespace quick_pair
 }  // namespace ash

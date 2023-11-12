@@ -6,8 +6,8 @@
 
 #include <tuple>
 
-#include "base/bind.h"
 #include "base/containers/contains.h"
+#include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
@@ -213,8 +213,9 @@ void P2PSocketUdp::OnRecv(int result) {
 
 bool P2PSocketUdp::HandleReadResult(int result) {
   if (result > 0) {
-    base::span<const uint8_t> data = base::make_span(
-        reinterpret_cast<const uint8_t*>(recv_buffer_->data()), result);
+    base::span<const uint8_t> data =
+        base::make_span(reinterpret_cast<const uint8_t*>(recv_buffer_->data()),
+                        static_cast<size_t>(result));
 
     if (!base::Contains(connected_peers_, recv_address_)) {
       P2PSocket::StunMessageType type;

@@ -20,9 +20,9 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/wm/window_util.h"
-#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -429,11 +429,6 @@ aura::Window* KeyboardControllerImpl::GetContainerForDefaultDisplay() {
 
 void KeyboardControllerImpl::TransferGestureEventToShelf(
     const ui::GestureEvent& e) {
-  if (!base::FeatureList::IsEnabled(
-          features::kShelfGesturesWithVirtualKeyboard)) {
-    return;
-  }
-
   ash::Shelf* shelf =
       ash::Shelf::ForWindow(keyboard_ui_controller_->GetKeyboardWindow());
   if (shelf) {

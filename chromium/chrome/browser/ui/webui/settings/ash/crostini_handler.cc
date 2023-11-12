@@ -7,9 +7,11 @@
 #include <string>
 #include <utility>
 
-#include "base/bind.h"
-#include "base/callback_helpers.h"
+#include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_features.h"
+#include "chrome/browser/ash/bruschetta/bruschetta_util.h"
 #include "chrome/browser/ash/crostini/crostini_disk.h"
 #include "chrome/browser/ash/crostini/crostini_features.h"
 #include "chrome/browser/ash/crostini/crostini_installer.h"
@@ -18,19 +20,19 @@
 #include "chrome/browser/ash/crostini/crostini_shared_devices.h"
 #include "chrome/browser/ash/crostini/crostini_types.mojom.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
-#include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/guest_os/guest_os_pref_names.h"
 #include "chrome/browser/ash/guest_os/guest_os_session_tracker.h"
 #include "chrome/browser/ash/guest_os/guest_os_terminal.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/views/bruschetta/bruschetta_installer_view.h"
+#include "chrome/browser/ui/views/bruschetta/bruschetta_uninstaller_view.h"
+#include "chrome/browser/ui/views/crostini/crostini_uninstaller_view.h"
 #include "chrome/browser/ui/webui/ash/crostini_upgrader/crostini_upgrader_dialog.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
-#include "components/user_manager/user_manager.h"
-#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
@@ -194,6 +196,18 @@ void CrostiniHandler::RegisterMessages() {
         "setVmDeviceShared",
         base::BindRepeating(&CrostiniHandler::HandleSetVmDeviceShared,
                             handler_weak_ptr_factory_.GetWeakPtr()));
+  }
+  if (bruschetta::BruschettaFeatures::Get()->IsEnabled()) {
+    web_ui()->RegisterMessageCallback(
+        "requestBruschettaInstallerView",
+        base::BindRepeating(
+            &CrostiniHandler::HandleRequestBruschettaInstallerView,
+            handler_weak_ptr_factory_.GetWeakPtr()));
+    web_ui()->RegisterMessageCallback(
+        "requestBruschettaUninstallerView",
+        base::BindRepeating(
+            &CrostiniHandler::HandleRequestBruschettaUninstallerView,
+            handler_weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
@@ -701,10 +715,8 @@ void CrostiniHandler::OnContainerShutdown(
 void CrostiniHandler::HandleShutdownCrostini(const base::Value::List& args) {
   CHECK_EQ(0U, args.size());
 
-  const std::string vm_name = "termina";
-
-  crostini::CrostiniManager::GetForProfile(profile_)->StopVm(std::move(vm_name),
-                                                             base::DoNothing());
+  crostini::CrostiniManager::GetForProfile(profile_)->StopRunningVms(
+      base::DoNothing());
 }
 
 void CrostiniHandler::HandleCreateContainer(const base::Value::List& args) {
@@ -945,6 +957,20 @@ void CrostiniHandler::HandleSetVmDeviceShared(const base::Value::List& args) {
             }
           },
           callback_weak_ptr_factory_.GetWeakPtr(), callback_id));
+}
+
+void CrostiniHandler::HandleRequestBruschettaInstallerView(
+    const base::Value::List& args) {
+  AllowJavascript();
+  BruschettaInstallerView::Show(Profile::FromWebUI(web_ui()),
+                                bruschetta::GetBruschettaAlphaId());
+}
+
+void CrostiniHandler::HandleRequestBruschettaUninstallerView(
+    const base::Value::List& args) {
+  AllowJavascript();
+  BruschettaUninstallerView::Show(Profile::FromWebUI(web_ui()),
+                                  bruschetta::GetBruschettaAlphaId());
 }
 
 }  // namespace ash::settings

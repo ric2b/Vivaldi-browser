@@ -9,7 +9,7 @@
 #include <tuple>
 #include <vector>
 
-#include "base/callback_forward.h"
+#include "base/functional/callback_forward.h"
 #include "base/observer_list.h"
 #include "content/public/browser/service_worker_context.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
@@ -63,7 +63,7 @@ class FakeServiceWorkerContext : public ServiceWorkerContext {
       int64_t service_worker_version_id,
       ServiceWorkerScriptExecutionCallback callback) override;
   bool MaybeHasRegistrationForStorageKey(const blink::StorageKey& key) override;
-  void GetAllOriginsInfo(GetUsageInfoCallback callback) override;
+  void GetAllStorageKeysInfo(GetUsageInfoCallback callback) override;
   void DeleteForStorageKey(const blink::StorageKey& key,
                            ResultCallback callback) override;
   void CheckHasServiceWorker(const GURL& url,
